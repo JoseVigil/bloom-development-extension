@@ -1,0 +1,51 @@
+{
+  "name": "bloom-development-extension",
+  "displayName": "Bloom Development Extension",
+  "description": "Adds a command to open Markdown preview to the side",
+  "version": "0.0.1",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tuusuario/bloom-development-extension.git"  // Reemplaza con tu URL real
+  },
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:bloom.openMarkdownPreview"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "bloom.openMarkdownPreview",
+        "title": "Bloom: Open Markdown Preview"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "bloom.openMarkdownPreview",
+          "group": "navigation",
+          "when": "resourceFilename =~ /\\.md$/"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.80.0",
+    "@types/node": "20.x",
+    "typescript": "^5.1.0",
+    "vsce": "^2.15.0"
+  }
+}
