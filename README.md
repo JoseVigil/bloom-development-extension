@@ -9,7 +9,7 @@
 - **Visual Studio Code** (versión 1.80.0 o superior)
 - **TypeScript** y `vsce` instalados globalmente o en el proyecto
 
-### Compilar e Instalar
+### Compilar e Instalar 
 1. Clona el repositorio:
    ```bash
    git clone https://github.com/JoseVigil/bloom-development-extension.git
