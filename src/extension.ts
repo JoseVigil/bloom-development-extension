@@ -1,8 +1,8 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import 'punycode/punycode'; 
 
 export function activate(context: vscode.ExtensionContext) {
-  // Mapa para asociar documentos con sus paneles de vista previa
   const previewPanels = new Map<vscode.TextDocument, vscode.WebviewPanel>();
 
   let disposable = vscode.commands.registerCommand('bloom.openMarkdownPreview', async () => {
@@ -18,22 +18,9 @@ export function activate(context: vscode.ExtensionContext) {
     }
     await document.save();
 
-    // Dynamically import marked to avoid ESM issues
-    let marked;
-    try {
-      const markedModule = await import('marked');
-      marked = markedModule.marked;
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      vscode.window.showErrorMessage(`Failed to load marked module: ${errorMessage}`);
-      return;
-    }
-
-    // Crear un nuevo grupo de editores a la derecha
     await vscode.commands.executeCommand('workbench.action.newGroupRight');
     await vscode.commands.executeCommand('workbench.action.focusRightGroup');
 
-    // Crear el panel de vista previa
     const panel = vscode.window.createWebviewPanel(
       'bloomMarkdownPreview',
       'Bloom Preview: ' + path.basename(document.fileName),
@@ -41,71 +28,94 @@ export function activate(context: vscode.ExtensionContext) {
       {
         enableScripts: true,
         retainContextWhenHidden: true,
-        localResourceRoots: [vscode.Uri.file(path.dirname(document.fileName))]
+        localResourceRoots: [
+          vscode.Uri.file(path.dirname(document.fileName)),
+          context.extensionUri // Incluye toda la raíz de la extensión
+        ]
       }
     );
 
-    // Guardar el panel en el mapa
     previewPanels.set(document, panel);
 
-    // Función para actualizar el contenido del webview
-    const updateWebview = () => {
-      const htmlContent = marked(document.getText());
-      panel.webview.html = `
-        <!DOCTYPE html>
-        <html lang="en">
-        <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Bloom Markdown Preview</title>
-          <style>
-            body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); background: var(--vscode-editor-background); padding: 20px; }
-            a { color: var(--vscode-textLink-foreground); }
-          </style>
-        </head>
-        <body>
-          ${htmlContent}
-          <script>
-            const vscode = acquireVsCodeApi();
-            document.addEventListener('click', (event) => {
-              if (event.target.tagName === 'A') {
-                const href = event.target.getAttribute('href');
-                if (href && !href.startsWith('#') && href.endsWith('.md')) {
-                  vscode.postMessage({ command: 'openLink', href: href });
-                  event.preventDefault();
+    const codiconUri = panel.webview.asWebviewUri(
+      vscode.Uri.joinPath(context.extensionUri, 'node_modules', '@vscode', 'codicons', 'dist', 'codicon.css')
+    );
+    const markdownStylesUri = panel.webview.asWebviewUri(
+      vscode.Uri.joinPath(context.extensionUri, 'src', 'styles', 'markdown.css')
+    );
+    const highlightStylesUri = panel.webview.asWebviewUri(
+      vscode.Uri.joinPath(context.extensionUri, 'src', 'styles', 'highlight.css')
+    );
+
+    // Depuración
+    vscode.window.showInformationMessage(`Codicon URI: ${codiconUri.toString()}`);
+    vscode.window.showInformationMessage(`Markdown Styles URI: ${markdownStylesUri.toString()}`);
+
+    const updateWebview = async () => {
+      try {
+        const result = await vscode.commands.executeCommand<string>('markdown.api.render', document.getText());
+        if (!result) {
+          throw new Error('Markdown rendering returned empty result');
+        }
+        panel.webview.html = `
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${panel.webview.cspSource} 'unsafe-inline'; font-src ${panel.webview.cspSource}; script-src ${panel.webview.cspSource} 'unsafe-inline'; img-src ${panel.webview.cspSource} data:;">
+            <title>Bloom Markdown Preview</title>
+            <link href="${codiconUri}" rel="stylesheet" onerror="console.error('Failed to load codicon.css')">            
+            <link href="${markdownStylesUri}" rel="stylesheet" onerror="console.error('Failed to load markdown.css')">
+            <link href="${highlightStylesUri}" rel="stylesheet" onerror="console.error('Failed to load highlight.css')">
+          </head>
+          <body class="markdown-body">
+            ${result}
+            <script>
+              const vscode = acquireVsCodeApi();
+              document.addEventListener('click', (event) => {
+                if (event.target.tagName === 'A') {
+                  const href = event.target.getAttribute('href');
+                  if (href && href.startsWith('#')) {
+                    const anchor = href.substring(1);
+                    const element = document.getElementById(anchor) || document.querySelector(\`[name="\${anchor}"]\`);
+                    if (element) {
+                      element.scrollIntoView({ behavior: 'smooth' });
+                      event.preventDefault();
+                    }
+                  } else if (href && !href.startsWith('#') && href.endsWith('.md')) {
+                    vscode.postMessage({ command: 'openLink', href: href });
+                    event.preventDefault();
+                  }
                 }
-              }
-            });
-          </script>
-        </body>
-        </html>
-      `;
+              });
+            </script>
+          </body>
+          </html>
+        `;
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        vscode.window.showErrorMessage(`Failed to render Markdown: ${errorMessage}`);
+      }
     };
 
-    // Actualizar la vista previa inicialmente
-    updateWebview();
+    await updateWebview();
 
-    // Escuchar cambios en el documento y actualizar la vista previa
     const changeListener = vscode.workspace.onDidChangeTextDocument((event) => {
       if (event.document === document && previewPanels.get(document) === panel) {
         updateWebview();
       }
     });
 
-    // Manejar mensajes del webview (clics en enlaces .md)
     panel.webview.onDidReceiveMessage(
       async (message) => {
         if (message.command === 'openLink') {
           const linkUri = vscode.Uri.file(path.resolve(path.dirname(document.fileName), message.href));
           try {
-            // Abrir el documento linkeado solo para leer su contenido
             const linkedDocument = await vscode.workspace.openTextDocument(linkUri);
-
-            // Crear un nuevo grupo para la vista previa del documento linkeado
             await vscode.commands.executeCommand('workbench.action.newGroupRight');
             await vscode.commands.executeCommand('workbench.action.focusRightGroup');
 
-            // Crear un nuevo webview para el documento linkeado
             const newPanel = vscode.window.createWebviewPanel(
               'bloomMarkdownPreview',
               'Bloom Preview: ' + path.basename(linkUri.fsPath),
@@ -113,162 +123,85 @@ export function activate(context: vscode.ExtensionContext) {
               {
                 enableScripts: true,
                 retainContextWhenHidden: true,
-                localResourceRoots: [vscode.Uri.file(path.dirname(linkUri.fsPath))]
+                localResourceRoots: [
+                  vscode.Uri.file(path.dirname(linkUri.fsPath)),
+                  context.extensionUri
+                ]
               }
             );
 
-            // Guardar el nuevo panel en el mapa
             previewPanels.set(linkedDocument, newPanel);
 
-            // Actualizar el contenido del nuevo webview
-            const updateNewWebview = () => {
-              const newHtmlContent = marked(linkedDocument.getText());
-              newPanel.webview.html = `
-                <!DOCTYPE html>
-                <html lang="en">
-                <head>
-                  <meta charset="UTF-8">
-                  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                  <title>Bloom Markdown Preview</title>
-                  <style>
-                    body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); background: var(--vscode-editor-background); padding: 20px; }
-                    a { color: var(--vscode-textLink-foreground); }
-                  </style>
-                </head>
-                <body>
-                  ${newHtmlContent}
-                  <script>
-                    const vscode = acquireVsCodeApi();
-                    document.addEventListener('click', (event) => {
-                      if (event.target.tagName === 'A') {
-                        const href = event.target.getAttribute('href');
-                        if (href && !href.startsWith('#') && href.endsWith('.md')) {
-                          vscode.postMessage({ command: 'openLink', href: href });
-                          event.preventDefault();
+            const newCodiconUri = newPanel.webview.asWebviewUri(
+              vscode.Uri.joinPath(context.extensionUri, 'node_modules', '@vscode', 'codicons', 'dist', 'codicon.css')
+            );
+            const newMarkdownStylesUri = newPanel.webview.asWebviewUri(
+              vscode.Uri.joinPath(context.extensionUri, 'src', 'styles', 'markdown.css')
+            );
+
+            vscode.window.showInformationMessage(`New Codicon URI: ${newCodiconUri.toString()}`);
+            vscode.window.showInformationMessage(`New Markdown Styles URI: ${newMarkdownStylesUri.toString()}`);
+
+            const updateNewWebview = async () => {
+              try {
+                const newHtmlContent = await vscode.commands.executeCommand<string>('markdown.api.render', linkedDocument.getText());
+                if (!newHtmlContent) {
+                  throw new Error('Markdown rendering returned empty result');
+                }
+                newPanel.webview.html = `
+                  <!DOCTYPE html>
+                  <html lang="en">
+                  <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${newPanel.webview.cspSource} 'unsafe-inline'; font-src ${newPanel.webview.cspSource}; script-src ${newPanel.webview.cspSource} 'unsafe-inline';">
+                    <title>Bloom Markdown Preview</title>
+                    <link href="${newCodiconUri}" rel="stylesheet" onerror="console.error('Failed to load codicon.css')">
+                    <link href="${newMarkdownStylesUri}" rel="stylesheet" onerror="console.error('Failed to load markdown.css')">
+                  </head>
+                  <body class="markdown-body">
+                    ${newHtmlContent}
+                    <script>
+                      const vscode = acquireVsCodeApi();
+                      document.addEventListener('click', (event) => {
+                        if (event.target.tagName === 'A') {
+                          const href = event.target.getAttribute('href');
+                          if (href && href.startsWith('#')) {
+                            const anchor = href.substring(1);
+                            const element = document.getElementById(anchor) || document.querySelector(\`[name="\${anchor}"]\`);
+                            if (element) {
+                              element.scrollIntoView({ behavior: 'smooth' });
+                              event.preventDefault();
+                            }
+                          } else if (href && !href.startsWith('#') && href.endsWith('.md')) {
+                            vscode.postMessage({ command: 'openLink', href: href });
+                            event.preventDefault();
+                          }
                         }
-                      }
-                    });
-                  </script>
-                </body>
-                </html>
-              `;
+                      });
+                    </script>
+                  </body>
+                  </html>
+                `;
+              } catch (error: unknown) {
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                vscode.window.showErrorMessage(`Failed to render Markdown: ${errorMessage}`);
+              }
             };
 
-            // Actualizar la vista previa del nuevo documento
-            updateNewWebview();
+            await updateNewWebview();
 
-            // Escuchar cambios en el documento linkeado
             const newChangeListener = vscode.workspace.onDidChangeTextDocument((event) => {
               if (event.document === linkedDocument && previewPanels.get(linkedDocument) === newPanel) {
                 updateNewWebview();
               }
             });
 
-            // Limpiar el listener cuando el panel se cierre
             newPanel.onDidDispose(() => {
               previewPanels.delete(linkedDocument);
               newChangeListener.dispose();
             }, undefined, context.subscriptions);
-
-            // Manejar clics en enlaces del nuevo webview
-            newPanel.webview.onDidReceiveMessage(
-              async (newMessage) => {
-                if (newMessage.command === 'openLink') {
-                  const newLinkUri = vscode.Uri.file(path.resolve(path.dirname(linkUri.fsPath), newMessage.href));
-                  const newLinkedDocument = await vscode.workspace.openTextDocument(newLinkUri);
-                  // Crear un nuevo grupo para la vista previa del nuevo documento linkeado
-                  await vscode.commands.executeCommand('workbench.action.newGroupRight');
-                  await vscode.commands.executeCommand('workbench.action.focusRightGroup');
-                  // Crear un nuevo webview
-                  const newerPanel = vscode.window.createWebviewPanel(
-                    'bloomMarkdownPreview',
-                    'Bloom Preview: ' + path.basename(newLinkUri.fsPath),
-                    vscode.ViewColumn.Active,
-                    {
-                      enableScripts: true,
-                      retainContextWhenHidden: true,
-                      localResourceRoots: [vscode.Uri.file(path.dirname(newLinkUri.fsPath))]
-                    }
-                  );
-                  // Guardar el nuevo panel
-                  previewPanels.set(newLinkedDocument, newerPanel);
-                  // Actualizar el contenido
-                  const newerHtmlContent = marked(newLinkedDocument.getText());
-                  newerPanel.webview.html = `
-                    <!DOCTYPE html>
-                    <html lang="en">
-                    <head>
-                      <meta charset="UTF-8">
-                      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                      <title>Bloom Markdown Preview</title>
-                      <style>
-                        body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); background: var(--vscode-editor-background); padding: 20px; }
-                        a { color: var(--vscode-textLink-foreground); }
-                      </style>
-                    </head>
-                    <body>
-                      ${newerHtmlContent}
-                      <script>
-                        const vscode = acquireVsCodeApi();
-                        document.addEventListener('click', (event) => {
-                          if (event.target.tagName === 'A') {
-                            const href = event.target.getAttribute('href');
-                            if (href && !href.startsWith('#') && href.endsWith('.md')) {
-                              vscode.postMessage({ command: 'openLink', href: href });
-                              event.preventDefault();
-                            }
-                          }
-                        });
-                      </script>
-                    </body>
-                    </html>
-                  `;
-                  // Escuchar cambios en el nuevo documento
-                  const newerChangeListener = vscode.workspace.onDidChangeTextDocument((event) => {
-                    if (event.document === newLinkedDocument && previewPanels.get(newLinkedDocument) === newerPanel) {
-                      const newerContent = marked(newLinkedDocument.getText());
-                      newerPanel.webview.html = `
-                        <!DOCTYPE html>
-                        <html lang="en">
-                        <head>
-                          <meta charset="UTF-8">
-                          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                          <title>Bloom Markdown Preview</title>
-                          <style>
-                            body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); background: var(--vscode-editor-background); padding: 20px; }
-                            a { color: var(--vscode-textLink-foreground); }
-                          </style>
-                        </head>
-                        <body>
-                          ${newerContent}
-                          <script>
-                            const vscode = acquireVsCodeApi();
-                            document.addEventListener('click', (event) => {
-                              if (event.target.tagName === 'A') {
-                                const href = event.target.getAttribute('href');
-                                if (href && !href.startsWith('#') && href.endsWith('.md')) {
-                                  vscode.postMessage({ command: 'openLink', href: href });
-                                  event.preventDefault();
-                                }
-                              }
-                            });
-                          </script>
-                        </body>
-                        </html>
-                      `;
-                    }
-                  });
-                  // Limpiar el listener cuando el panel se cierre
-                  newerPanel.onDidDispose(() => {
-                    previewPanels.delete(newLinkedDocument);
-                    newerChangeListener.dispose();
-                  }, undefined, context.subscriptions);
-                }
-              },
-              undefined,
-              context.subscriptions
-            );
-          } catch (error) {
+          } catch (error: unknown) {
             const errorMessage = error instanceof Error ? error.message : String(error);
             vscode.window.showErrorMessage(`Failed to open document: ${message.href}: ${errorMessage}`);
           }
@@ -278,7 +211,6 @@ export function activate(context: vscode.ExtensionContext) {
       context.subscriptions
     );
 
-    // Limpiar el panel y el listener cuando se cierre
     panel.onDidDispose(() => {
       previewPanels.delete(document);
       changeListener.dispose();
@@ -288,6 +220,4 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(disposable);
 }
 
-export function deactivate() {
-  // Limpiar todos los paneles al desactivar la extensión
-}
+export function deactivate() {}

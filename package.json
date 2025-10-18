@@ -1,7 +1,7 @@
 {
   "name": "bloom-development-extension",
   "displayName": "Bloom Development Extension",
-  "description": "Adds a command to open Markdown preview to the side",
+  "description": "Adds a command to open Markdown preview to the side with native VS Code styling and internal link support",
   "version": "0.0.1",
   "repository": {
     "type": "git",
@@ -44,18 +44,20 @@
     "test": "vscode-test"
   },
   "devDependencies": {
-    "@types/marked": "^6.0.0",
     "@types/mocha": "^10.0.0",
-    "@types/node": "20.x",
+    "@types/node": "^20.19.22",
     "@types/vscode": "^1.80.0",
+    "@vscode/test-electron": "^2.4.1",
     "typescript": "^5.1.0",
     "vsce": "^2.15.0"
   },
   "dependencies": {
-    "marked": "^13.0.0"
+    "@vscode/codicons": "^0.0.40",
+    "punycode": "^2.3.1"
   },
   "files": [
     "out",
-    "node_modules/marked"
+    "node_modules/@vscode/codicons/dist",
+    "src/styles/**"
   ]
 }
