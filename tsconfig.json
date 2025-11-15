@@ -8,7 +8,20 @@
     ],
     "sourceMap": true,
     "rootDir": "src",
-    "strict": true,
-    "types": ["node", "vscode", "mocha"]
-  }
+    "strict": true,   
+    // Agregar estas opciones para mejor compatibilidad
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "moduleResolution": "Node16"
+  },
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    ".vscode-test",
+    "out"
+  ] 
 }
