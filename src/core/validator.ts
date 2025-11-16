@@ -18,12 +18,12 @@ export class Validator {
         } else if (data.name.length > this.MAX_NAME_LENGTH) {
             errors.push(`El nombre del intent no puede exceder ${this.MAX_NAME_LENGTH} caracteres`);
         } else {
-            // Verificar que no existe carpeta con ese nombre
+            // Verificar que no existe carpeta con ese nombre (nueva ruta)
             const intentPath = path.join(workspaceFolder.uri.fsPath, '.bloom', 'intents', data.name);
             try {
                 const fs = require('fs');
                 if (fs.existsSync(intentPath)) {
-                    errors.push(`Ya existe una carpeta con el nombre "${data.name}" en intents/`);
+                    errors.push(`Ya existe una carpeta con el nombre "${data.name}" en .bloom/intents/`);
                 }
             } catch (error) {
                 // Si hay error al verificar, continuar

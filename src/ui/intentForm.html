@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generate Intent</title>
+    <!-- CSS_PLACEHOLDER -->
+</head>
+<body>
+    <h1>Generar Bloom Intent</h1>
+
+    <div id="errorBanner" class="error-banner"></div>
+
+    <!-- Sección de archivos (placeholder para botones dinámicos) -->
+    <div class="file-section">
+        <label>Archivos seleccionados (clic para insertar):</label>
+        <div class="file-buttons">
+            <!-- FILE_BUTTONS_PLACEHOLDER -->
+        </div>
+    </div>
+
+    <form id="intentForm">
+        <div class="form-section">
+            <label for="name">Nombre del Intent <span class="required">*</span></label>
+            <input type="text" id="name" name="name" required>
+            <div class="help-text">Nombre corto sin espacios (ej: fix-authentication)</div>
+            <div class="error-message" id="name-error"></div>
+        </div>
+
+        <div class="form-section">
+            <label for="problem">Problema <span class="required">*</span></label>
+            <textarea id="problem" name="problem" required></textarea>
+            <div class="help-text">Describe el problema que se busca resolver (mínimo 10 caracteres)</div>
+            <div class="error-message" id="problem-error"></div>
+        </div>
+
+        <div class="form-section">
+            <label for="context">Contexto <span class="required">*</span></label>
+            <textarea id="context" name="context" required></textarea>
+            <div class="help-text">Proporciona contexto relevante del proyecto (mínimo 10 caracteres)</div>
+            <div class="error-message" id="context-error"></div>
+        </div>
+
+        <div class="form-section">
+            <label>Comportamiento Actual <span class="required">*</span></label>
+            <div class="list-container" id="currentBehavior">
+                <div class="list-item">
+                    <input type="text" placeholder="Describe el comportamiento actual">
+                    <button type="button" class="btn-remove" onclick="removeItem(this)">×</button>
+                </div>
+            </div>
+            <button type="button" class="btn-add" onclick="addCurrentBehavior()">+ Agregar item</button>
+            <div class="error-message" id="currentBehavior-error"></div>
+        </div>
+
+        <div class="form-section">
+            <label>Comportamiento Deseado <span class="required">*</span></label>
+            <div class="list-container" id="desiredBehavior">
+                <div class="list-item">
+                    <input type="text" placeholder="Describe el comportamiento deseado">
+                    <button type="button" class="btn-remove" onclick="removeItem(this)">×</button>
+                </div>
+            </div>
+            <button type="button" class="btn-add" onclick="addDesiredBehavior()">+ Agregar item</button>
+            <div class="error-message" id="desiredBehavior-error"></div>
+        </div>
+
+        <div class="form-section">
+            <label for="objective">Objetivo <span class="required">*</span></label>
+            <textarea id="objective" name="objective" required></textarea>
+            <div class="help-text">Define el objetivo específico (mínimo 10 caracteres)</div>
+            <div class="error-message" id="objective-error"></div>
+        </div>
+
+        <div class="form-section">
+            <label>Alcance y Restricciones</label>
+            <div class="list-container" id="scope">
+                <div class="list-item">
+                    <input type="text" placeholder="Define restricciones o límites">
+                    <button type="button" class="btn-remove" onclick="removeItem(this)">×</button>
+                </div>
+            </div>
+            <button type="button" class="btn-add" onclick="addScope()">+ Agregar restricción</button>
+        </div>
+
+        <div class="form-section">
+            <label for="considerations">Hipótesis / Consideraciones</label>
+            <textarea id="considerations" name="considerations"></textarea>
+            <div class="help-text">Opcional: consideraciones adicionales</div>
+        </div>
+
+        <div class="form-section">
+            <label>Tests / Validación Necesaria</label>
+            <div class="list-container" id="tests">
+                <div class="list-item">
+                    <input type="text" placeholder="Criterio de validación">
+                    <button type="button" class="btn-remove" onclick="removeItem(this)">×</button>
+                </div>
+            </div>
+            <button type="button" class="btn-add" onclick="addTest()">+ Agregar test</button>
+        </div>
+
+        <div class="form-section">
+            <label for="expectedOutput">Salida Esperada del Modelo <span class="required">*</span></label>
+            <textarea id="expectedOutput" name="expectedOutput" required></textarea>
+            <div class="help-text">Describe qué esperas que genere el modelo (mínimo 10 caracteres)</div>
+            <div class="error-message" id="expectedOutput-error"></div>
+        </div>
+
+        <div class="button-group">
+            <button type="submit" class="btn-primary">Generar Intent</button>
+            <button type="button" class="btn-secondary" onclick="cancel()">Cancelar</button>
+        </div>
+    </form>
+
+    <!-- JS_PLACEHOLDER -->
+</body>
+</html>
