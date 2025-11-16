@@ -1,3 +1,4 @@
+// Archivo creado autom�ticamente
 import * as vscode from 'vscode';
 import { Logger } from '../utils/logger';
 import { IntentFormData } from '../ui/intentFormPanel';

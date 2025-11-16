@@ -50,22 +50,24 @@ export class MarkdownPreviewPanel {
             }
 
             const codiconUri = this.panel.webview.asWebviewUri(
-                vscode.Uri.joinPath(
-                    this.context.extensionUri,
-                    'node_modules',
-                    '@vscode',
-                    'codicons',
-                    'dist',
-                    'codicon.css'
+                vscode.Uri.file(
+                    path.join(
+                        this.context.extensionUri.fsPath,
+                        'node_modules',
+                        '@vscode',
+                        'codicons',
+                        'dist',
+                        'codicon.css'
+                    )
                 )
             );
 
             const markdownStylesUri = this.panel.webview.asWebviewUri(
-                vscode.Uri.joinPath(this.context.extensionUri, 'src', 'styles', 'markdown.css')
+                vscode.Uri.file(path.join(this.context.extensionUri.fsPath, 'src', 'styles', 'markdown.css'))
             );
 
             const highlightStylesUri = this.panel.webview.asWebviewUri(
-                vscode.Uri.joinPath(this.context.extensionUri, 'src', 'styles', 'highlight.css')
+                vscode.Uri.file(path.join(this.context.extensionUri.fsPath, 'src', 'styles', 'highlight.css'))
             );
 
             this.panel.webview.html = this.getHtmlContent(

@@ -1,109 +1,113 @@
+// VSCode API
 const vscode = acquireVsCodeApi();
 
-// Funciones para listas
-function addCurrentBehavior() { addListItem('currentBehavior', 'Describe el comportamiento actual'); }
-function addDesiredBehavior() { addListItem('desiredBehavior', 'Describe el comportamiento deseado'); }
-function addScope() { addListItem('scope', 'Define restricciones o límites'); }
-function addTest() { addListItem('tests', 'Criterio de validación'); }
+// Contadores para IDs únicos de items en listas
+let listCounters = {
+    currentBehavior: 0,
+    desiredBehavior: 0,
+    scope: 0,
+    tests: 0
+};
 
-function addListItem(containerId, placeholder) {
-    const container = document.getElementById(containerId);
-    const div = document.createElement('div');
-    div.className = 'list-item';
-
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.placeholder = placeholder;
-
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'btn-remove';
-    button.textContent = '×';
-    button.onclick = function() { removeItem(button); };
-
-    div.appendChild(input);
-    div.appendChild(button);
-    container.appendChild(div);
-}
-
-function removeItem(button) {
-    const container = button.closest('.list-container');
-    const items = container.querySelectorAll('.list-item');
-    if (items.length > 1) {
-        button.closest('.list-item').remove();
+/**
+ * Agrega un nuevo item a una lista dinámica
+ */
+function addListItem(listName) {
+    const listContainer = document.getElementById(listName + 'List');
+    const itemId = listName + '_' + listCounters[listName]++;
+    
+    const itemDiv = document.createElement('div');
+    itemDiv.className = 'list-item';
+    itemDiv.id = itemId;
+    itemDiv.innerHTML = `
+        <input type="text" placeholder="Escribir aquí..." />
+        <button type="button" class="btn-remove" onclick="removeListItem('${itemId}')" title="Eliminar">×</button>
+    `;
+    
+    listContainer.appendChild(itemDiv);
+    
+    // Focus en el input recién creado
+    const newInput = itemDiv.querySelector('input');
+    if (newInput) {
+        newInput.focus();
     }
 }
 
-function getListValues(containerId) {
-    const container = document.getElementById(containerId);
-    const inputs = container.querySelectorAll('input');
-    return Array.from(inputs).map(i => i.value.trim()).filter(v => v.length > 0);
+/**
+ * Elimina un item de una lista dinámica
+ */
+function removeListItem(itemId) {
+    const item = document.getElementById(itemId);
+    if (item) {
+        item.remove();
+    }
 }
 
-function cancel() {
-    vscode.postMessage({ command: 'cancel' });
+/**
+ * Obtiene todos los valores de una lista dinámica
+ */
+function getListValues(listName) {
+    const listContainer = document.getElementById(listName + 'List');
+    const inputs = listContainer.querySelectorAll('input');
+    return Array.from(inputs)
+        .map(input => input.value.trim())
+        .filter(v => v.length > 0);
 }
 
-// SOLUCIÓN DEFINITIVA: insertFileName que NUNCA falla
-let lastFocusedField = null;
-
-// Capturamos foco en cualquier input/textarea
-document.addEventListener('focusin', (e) => {
-    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) {
-        lastFocusedField = e.target;
-    }
-});
-
-// También capturamos clics (por si el usuario hace clic sin soltar el foco)
-document.addEventListener('click', (e) => {
-    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) {
-        lastFocusedField = e.target;
-    }
-});
-
-// La función mágica que funciona SIEMPRE
+/**
+ * Inserta el nombre de un archivo en el campo activo
+ */
 function insertFileName(filename) {
-    let target = lastFocusedField;
-
-    // Si por algún motivo no tenemos último foco, intentamos con activeElement
-    if (!target) {
-        target = document.activeElement;
-    }
-
-    // Si todavía no hay nada, buscamos cualquier campo visible (fallback final)
-    if (!target || (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA')) {
-        target = document.querySelector('input:focus, textarea:focus') ||
-                 document.querySelector('input, textarea');
-    }
-
-    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
-        const start = target.selectionStart || 0;
-        const end = target.selectionEnd || 0;
-        const textToInsert = filename + ' '; // agrego un espacio para que quede lindo
-
-        target.value = target.value.substring(0, start) + textToInsert + target.value.substring(end);
-        target.selectionStart = target.selectionEnd = start + textToInsert.length;
-        target.focus();
-
-        // Disparamos evento input para que cualquier listener lo detecte
-        target.dispatchEvent(new Event('input', { bubbles: true }));
-    } else {
-        // Solo como último recurso mostramos error (esto NUNCA debería pasar ahora)
-        const banner = document.getElementById('errorBanner');
-        banner.textContent = 'Haz clic en un campo antes de insertar';
-        banner.classList.add('visible');
-        setTimeout(() => banner.classList.remove('visible'), 3000);
+    const activeElement = document.activeElement;
+    if (activeElement && (activeElement.tagName === 'TEXTAREA' || activeElement.tagName === 'INPUT')) {
+        const start = activeElement.selectionStart;
+        const end = activeElement.selectionEnd;
+        const text = activeElement.value;
+        activeElement.value = text.substring(0, start) + filename + text.substring(end);
+        activeElement.focus();
+        activeElement.selectionStart = activeElement.selectionEnd = start + filename.length;
     }
 }
 
-// Evento de submit
+/**
+ * Cancela y cierra el formulario
+ */
+function cancel() {
+    if (confirm('¿Estás seguro de que quieres cancelar? Se perderán todos los cambios.')) {
+        vscode.postMessage({ command: 'cancel' });
+    }
+}
+
+/**
+ * Muestra los errores de validación
+ */
+function showValidationErrors(errors) {
+    const errorDiv = document.getElementById('errorMessage');
+    const errorList = document.getElementById('errorList');
+    
+    errorList.innerHTML = errors.map(err => `<li>${err}</li>`).join('');
+    errorDiv.style.display = 'block';
+    
+    // Scroll suave hacia los errores
+    errorDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/**
+ * Oculta los errores de validación
+ */
+function hideValidationErrors() {
+    const errorDiv = document.getElementById('errorMessage');
+    errorDiv.style.display = 'none';
+}
+
+/**
+ * Maneja el envío del formulario
+ */
 document.getElementById('intentForm').addEventListener('submit', (e) => {
     e.preventDefault();
-    document.querySelectorAll('.error-message').forEach(el => {
-        el.classList.remove('visible'); el.textContent = '';
-    });
-    document.getElementById('errorBanner').classList.remove('visible');
-
+    
+    hideValidationErrors();
+    
     const formData = {
         name: document.getElementById('name').value.trim(),
         problem: document.getElementById('problem').value.trim(),
@@ -116,21 +120,59 @@ document.getElementById('intentForm').addEventListener('submit', (e) => {
         tests: getListValues('tests'),
         expectedOutput: document.getElementById('expectedOutput').value.trim()
     };
-
-    vscode.postMessage({ command: 'submit', data: formData });
+    
+    vscode.postMessage({
+        command: 'submit',
+        data: formData
+    });
 });
 
-// Listener para mensajes de validación/error
+/**
+ * Maneja mensajes del host (VSCode)
+ */
 window.addEventListener('message', event => {
     const message = event.data;
-    if (message.command === 'validationErrors') {
-        const banner = document.getElementById('errorBanner');
-        banner.innerHTML = '<strong>Corrije los siguientes errores:</strong><ul>' +
-            message.errors.map(err => '<li>' + err + '</li>').join('') + '</ul>';
-        banner.classList.add('visible');
-        window.scrollTo(0, 0);
-    } else if (message.command === 'error') {
-        document.getElementById('errorBanner').textContent = message.message;
-        document.getElementById('errorBanner').classList.add('visible');
+    
+    switch (message.command) {
+        case 'validationErrors':
+            showValidationErrors(message.errors);
+            break;
+            
+        case 'error':
+            alert('Error: ' + message.message);
+            break;
+            
+        case 'success':
+            // Podrías agregar animación de éxito aquí
+            break;
+    }
+});
+
+/**
+ * Inicialización al cargar la página
+ */
+document.addEventListener('DOMContentLoaded', () => {
+    // Agregar items iniciales a las listas
+    addListItem('currentBehavior');
+    addListItem('desiredBehavior');
+    addListItem('scope');
+    
+    // Focus en el primer campo
+    document.getElementById('name').focus();
+});
+
+/**
+ * Atajos de teclado
+ */
+document.addEventListener('keydown', (e) => {
+    // Ctrl/Cmd + Enter para enviar
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        document.getElementById('intentForm').dispatchEvent(new Event('submit'));
+    }
+    
+    // Escape para cancelar
+    if (e.key === 'Escape') {
+        cancel();
     }
 });
