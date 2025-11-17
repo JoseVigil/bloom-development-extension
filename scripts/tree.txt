@@ -1,0 +1,47 @@
+bloom-development-extension/
+├── src/
+│   ├── commands/
+│   │   ├── changeIntentStatus.ts
+│   │   ├── copyContextToClipboard.ts
+│   │   ├── deleteIntent.ts
+│   │   ├── duplicateIntent.ts
+│   │   ├── editIntent.ts
+│   │   ├── generateIntent.ts
+│   │   ├── intent.ts
+│   │   ├── openIntent.ts
+│   │   ├── openMarkdownPreview.ts
+│   │   └── searchIntents.ts
+│   ├── core/
+│   │   ├── codebaseGenerator.ts
+│   │   ├── contextGatherer.ts
+│   │   ├── filePackager.ts
+│   │   ├── intentGenerator.ts
+│   │   ├── metadataManager.ts
+│   │   ├── tokenEstimator.ts
+│   │   └── validator.ts
+│   ├── extension.ts
+│   ├── models/
+│   │   ├── codebaseStrategy.ts
+│   │   ├── contextLayer.ts
+│   │   └── intent.ts
+│   ├── package.json
+│   ├── providers/
+│   │   └── intentTreeProvider.ts
+│   ├── strategies/
+│   │   ├── AndroidStrategy.ts
+│   │   ├── GenericStrategy.ts
+│   │   ├── IOSStrategy.ts
+│   │   ├── ProjectDetector.ts
+│   │   ├── ReactStrategy.ts
+│   │   └── WebStrategy.ts
+│   ├── ui/
+│   │   ├── intentForm.css
+│   │   ├── intentForm.html
+│   │   ├── intentForm.js
+│   │   ├── intentFormPanel.ts
+│   │   └── markdownPreviewPanel.ts
+│   └── utils/
+│       ├── logger.ts
+│       └── uriHelper.ts
+├── tsconfig.json
+└── package.json
