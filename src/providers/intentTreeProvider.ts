@@ -1,14 +1,11 @@
 import * as vscode from 'vscode';
-import * as path from 'path';
 import { Intent, IntentMetadata, IntentStatus } from '../models/intent';
 import { Logger } from '../utils/logger';
 import { MetadataManager } from '../core/metadataManager';
+import { joinPath } from '../utils/uriHelper';
 
-// Tipo union para los items del árbol
-export type TreeItem = IntentGroupItem | IntentTreeItem;
-
-export class IntentTreeProvider implements vscode.TreeDataProvider<TreeItem> {
-    private _onDidChangeTreeData = new vscode.EventEmitter<TreeItem | undefined>();
+export class IntentTreeProvider implements vscode.TreeDataProvider<IntentTreeItem | IntentGroupItem> {
+    private _onDidChangeTreeData = new vscode.EventEmitter<IntentTreeItem | IntentGroupItem | undefined>();
     readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
     
     constructor(
@@ -21,11 +18,11 @@ export class IntentTreeProvider implements vscode.TreeDataProvider<TreeItem> {
         this._onDidChangeTreeData.fire(undefined);
     }
     
-    getTreeItem(element: TreeItem): vscode.TreeItem {
+     getTreeItem(element: IntentTreeItem | IntentGroupItem): vscode.TreeItem {
         return element;
     }
     
-    async getChildren(element?: TreeItem): Promise<TreeItem[]> {
+    async getChildren(element?: IntentTreeItem | IntentGroupItem): Promise<Array<IntentTreeItem | IntentGroupItem>> {
         if (!element) {
             return [
                 new IntentGroupItem('in-progress', 'In Progress', this.workspaceFolder),
@@ -43,8 +40,10 @@ export class IntentTreeProvider implements vscode.TreeDataProvider<TreeItem> {
     }
     
     private async loadIntentsByStatus(status: IntentStatus): Promise<Intent[]> {
-        const intentsDir = vscode.Uri.file(
-            path.join(this.workspaceFolder.uri.fsPath, '.bloom', 'intents')
+        const intentsDir = joinPath(
+            this.workspaceFolder.uri,
+            '.bloom',
+            'intents'
         );
         
         try {
@@ -53,9 +52,7 @@ export class IntentTreeProvider implements vscode.TreeDataProvider<TreeItem> {
             
             for (const [name, type] of entries) {
                 if (type === vscode.FileType.Directory) {
-                    const intentFolder = vscode.Uri.file(
-                        path.join(intentsDir.fsPath, name)
-                    );
+                    const intentFolder = joinPath(intentsDir, name);
                     const metadata = await this.metadataManager.read(intentFolder);
                     
                     if (metadata && metadata.status === status) {
@@ -83,10 +80,7 @@ export class IntentGroupItem extends vscode.TreeItem {
     ) {
         super(label, vscode.TreeItemCollapsibleState.Expanded);
         this.contextValue = 'intentGroup';
-        this.iconPath = {
-            light: vscode.Uri.file(path.join(__filename, '..', '..', 'resources', 'light', 'folder.svg')),
-            dark: vscode.Uri.file(path.join(__filename, '..', '..', 'resources', 'dark', 'folder.svg'))
-        };
+        this.iconPath = vscode.ThemeIcon.Folder;
     }
 }
 
@@ -100,10 +94,7 @@ export class IntentTreeItem extends vscode.TreeItem {
         this.contextValue = 'intent';
         this.tooltip = this.buildTooltip();
         this.description = `(${intent.metadata.files.filesCount} archivos)`;
-        this.iconPath = {
-            light: vscode.Uri.file(path.join(__filename, '..', '..', 'resources', 'light', 'document.svg')),
-            dark: vscode.Uri.file(path.join(__filename, '..', '..', 'resources', 'dark', 'document.svg'))
-        };
+        this.iconPath = vscode.ThemeIcon.File;
         
         this.command = {
             command: 'bloom.openIntent',

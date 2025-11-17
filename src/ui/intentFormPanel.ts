@@ -7,19 +7,7 @@ import { IntentGenerator } from '../core/intentGenerator';
 import { FilePackager } from '../core/filePackager';
 import { MetadataManager } from '../core/metadataManager';
 import { ProjectDetector } from '../strategies/ProjectDetector';
-
-export interface IntentFormData {
-    name: string;
-    problem: string;
-    context: string;
-    currentBehavior: string[];
-    desiredBehavior: string[];
-    objective: string;
-    scope: string[];
-    considerations: string;
-    tests: string[];
-    expectedOutput: string;
-}
+import { IntentFormData } from '../models/intent';
 
 export class IntentFormPanel {
     private panel: vscode.WebviewPanel | undefined;
@@ -46,6 +34,12 @@ export class IntentFormPanel {
         this.panel.webview.html = this.getHtmlContent();
         this.setupMessageListener();
 
+        // ✅ NUEVO: Enviar lista de archivos al webview
+        this.panel.webview.postMessage({
+            command: 'setFiles',
+            files: this.relativePaths
+        });
+
         this.logger.info('Formulario de intent abierto');
     }
 
@@ -56,10 +50,17 @@ export class IntentFormPanel {
 
         this.panel.webview.onDidReceiveMessage(
             async (message) => {
-                if (message.command === 'submit') {
-                    await this.handleSubmit(message.data);
-                } else if (message.command === 'cancel') {
-                    this.panel?.dispose();
+                switch (message.command) {
+                    case 'submit':
+                        await this.handleSubmit(message.data);
+                        break;
+                    case 'cancel':
+                        this.panel?.dispose();
+                        break;
+                    // ✅ NUEVO: Manejo de preview de archivos
+                    case 'getFileContent':
+                        await this.handleGetFileContent(message.filename);
+                        break;
                 }
             },
             undefined,
@@ -67,12 +68,52 @@ export class IntentFormPanel {
         );
     }
 
+    // ✅ NUEVO: Handler para obtener contenido de archivos
+    private async handleGetFileContent(filename: string): Promise<void> {
+        try {
+            // Buscar el archivo por nombre
+            const fileUri = this.selectedFiles.find(uri => {
+                const relPath = this.relativePaths[this.selectedFiles.indexOf(uri)];
+                return path.basename(relPath) === filename || relPath === filename;
+            });
+
+            if (!fileUri) {
+                this.panel?.webview.postMessage({
+                    command: 'showFileContent',
+                    content: `Error: Archivo '${filename}' no encontrado`
+                });
+                return;
+            }
+
+            const fileContent = await vscode.workspace.fs.readFile(fileUri);
+            const text = new TextDecoder().decode(fileContent);
+
+            this.panel?.webview.postMessage({
+                command: 'showFileContent',
+                content: text
+            });
+        } catch (error) {
+            this.panel?.webview.postMessage({
+                command: 'showFileContent',
+                content: `Error al leer archivo: ${error}`
+            });
+        }
+    }
+
     private async handleSubmit(data: IntentFormData): Promise<void> {
         this.logger.info('Procesando formulario de intent');
 
-        // Validación
+        // ✅ ACTUALIZADO: Validación simplificada para V2
         const validator = new Validator();
-        const validationErrors = validator.validateIntentForm(data, this.workspaceFolder);
+        const validationErrors: string[] = [];
+
+        // Validar campos básicos
+        if (!data.name || data.name.trim().length === 0) {
+            validationErrors.push('El nombre del intent es requerido');
+        }
+        if (!data.problem || data.problem.trim().length < 20) {
+            validationErrors.push('El problema debe tener al menos 20 caracteres');
+        }
 
         if (validationErrors.length > 0) {
             this.panel?.webview.postMessage({
@@ -121,7 +162,7 @@ export class IntentFormPanel {
                 this.logger.info('Codebase.tar.gz generado');
             }
 
-            // Generar intent.bl
+            // ✅ ACTUALIZADO: Generar intent.bl con estructura V2
             const generator = new IntentGenerator(this.logger);
             const intentPath = vscode.Uri.file(path.join(intentFolderPath.fsPath, 'intent.bl'));
             await generator.generateIntent(data, this.relativePaths, intentPath);
@@ -203,6 +244,7 @@ export class IntentFormPanel {
         return content;
     }
 
+    // ✅ ACTUALIZADO: Método simplificado sin placeholders
     private getHtmlContent(): string {
         // Leer archivos separados
         const htmlPath = path.join(this.context.extensionPath, 'src', 'ui', 'intentForm.html');
@@ -213,17 +255,7 @@ export class IntentFormPanel {
         const cssContent = fs.readFileSync(cssPath, 'utf8');
         const jsContent = fs.readFileSync(jsPath, 'utf8');
 
-        // Generar botones de archivos
-        const fileButtonsHtml = this.relativePaths.length > 0
-            ? this.relativePaths.map(relPath => {
-                const filename = path.basename(relPath);
-                return `<button type="button" class="btn-file" onclick="insertFileName('${filename}')">${filename}</button>`;
-              }).join('')
-            : '<span style="color: var(--vscode-descriptionForeground); font-style: italic;">Ningún archivo seleccionado</span>';
-
-        // Reemplazar placeholders
-        htmlContent = htmlContent.replace('<!-- FILES_COUNT_PLACEHOLDER -->', `(${this.selectedFiles.length})`);
-        htmlContent = htmlContent.replace('<!-- FILE_BUTTONS_PLACEHOLDER -->', fileButtonsHtml);
+        // ✅ SIMPLIFICADO: Solo reemplazar CSS y JS
         htmlContent = htmlContent.replace('<!-- CSS_PLACEHOLDER -->', `<style>${cssContent}</style>`);
         htmlContent = htmlContent.replace('<!-- JS_PLACEHOLDER -->', `<script>${jsContent}</script>`);
 

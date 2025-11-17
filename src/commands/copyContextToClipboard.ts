@@ -1,9 +1,9 @@
 import * as vscode from 'vscode';
-import * as path from 'path';
 import { Logger } from '../utils/logger';
 import { ContextGatherer } from '../core/contextGatherer';
 import { TokenEstimator } from '../core/tokenEstimator';
 import { IntentTreeItem } from '../providers/intentTreeProvider';
+import { joinPath } from '../utils/uriHelper';
 
 export function registerCopyContextToClipboard(
     context: vscode.ExtensionContext,
@@ -19,11 +19,14 @@ export function registerCopyContextToClipboard(
                     treeItem.intent.folderUri.fsPath
                 );
                 
-                const intentPath = vscode.Uri.file(path.join(treeItem.intent.folderUri.fsPath, 'intent.bl'));
+                const intentPath = joinPath(treeItem.intent.folderUri, 'intent.bl');
                 const intentContent = await vscode.workspace.fs.readFile(intentPath);
                 const intentText = new TextDecoder().decode(intentContent);
                 
-                const codebasePath = vscode.Uri.file(path.join(treeItem.intent.folderUri.fsPath, 'codebase.md'));
+                const codebasePath = joinPath(
+                    treeItem.intent.folderUri,
+                    'codebase.md'
+                );
                 const codebaseContent = await vscode.workspace.fs.readFile(codebasePath);
                 const codebaseText = new TextDecoder().decode(codebaseContent);
                 

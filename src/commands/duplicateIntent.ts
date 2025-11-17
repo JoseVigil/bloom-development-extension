@@ -1,9 +1,9 @@
 import * as vscode from 'vscode';
-import * as path from 'path';
 import { Logger } from '../utils/logger';
 import { MetadataManager } from '../core/metadataManager';
 import { IntentTreeItem, IntentTreeProvider } from '../providers/intentTreeProvider';
 import { v4 as uuidv4 } from 'uuid';
+import { joinPath } from '../utils/uriHelper';
 
 export function registerDuplicateIntent(
     context: vscode.ExtensionContext,
@@ -32,7 +32,12 @@ export function registerDuplicateIntent(
             const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
             if (!workspaceFolder) return;
             
-            const newFolder = vscode.Uri.file(path.join(workspaceFolder.uri.fsPath, '.bloom,', 'intents,', 'newName'));
+            const newFolder = joinPath(
+                workspaceFolder.uri,
+                '.bloom',
+                'intents',
+                newName
+            );
             
             try {
                 await vscode.workspace.fs.copy(treeItem.intent.folderUri, newFolder, { overwrite: false });

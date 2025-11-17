@@ -1,8 +1,8 @@
 import * as vscode from 'vscode';
-import * as path from 'path';
 import { Logger } from '../utils/logger';
 import { MetadataManager } from '../core/metadataManager';
 import { IntentTreeItem } from '../providers/intentTreeProvider';
+import { joinPath } from '../utils/uriHelper';
 
 export function registerOpenIntent(
     context: vscode.ExtensionContext,
@@ -14,7 +14,10 @@ export function registerOpenIntent(
         async (treeItem: IntentTreeItem) => {
             logger.info(`Abriendo intent: ${treeItem.intent.metadata.name}`);
             
-            const intentPath = vscode.Uri.file(path.join(treeItem.intent.folderUri.fsPath, 'intent.bl'));
+            const intentPath = joinPath(
+                treeItem.intent.folderUri,
+                'intent.bl'
+            );
             
             const document = await vscode.workspace.openTextDocument(intentPath);
             await vscode.window.showTextDocument(document);

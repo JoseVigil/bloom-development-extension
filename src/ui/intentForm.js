@@ -1,178 +1,187 @@
 // VSCode API
 const vscode = acquireVsCodeApi();
+let lastFocusedField = null;
+let autoSaveTimer = null;
 
-// Contadores para IDs únicos de items en listas
-let listCounters = {
-    currentBehavior: 0,
-    desiredBehavior: 0,
-    scope: 0,
-    tests: 0
-};
-
-/**
- * Agrega un nuevo item a una lista dinámica
- */
-function addListItem(listName) {
-    const listContainer = document.getElementById(listName + 'List');
-    const itemId = listName + '_' + listCounters[listName]++;
-    
-    const itemDiv = document.createElement('div');
-    itemDiv.className = 'list-item';
-    itemDiv.id = itemId;
-    itemDiv.innerHTML = `
-        <input type="text" placeholder="Escribir aquí..." />
-        <button type="button" class="btn-remove" onclick="removeListItem('${itemId}')" title="Eliminar">×</button>
-    `;
-    
-    listContainer.appendChild(itemDiv);
-    
-    // Focus en el input recién creado
-    const newInput = itemDiv.querySelector('input');
-    if (newInput) {
-        newInput.focus();
+// Capturar último campo enfocado
+document.addEventListener('focusin', (e) => {
+    if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') {
+        lastFocusedField = e.target;
     }
-}
+});
 
-/**
- * Elimina un item de una lista dinámica
- */
-function removeListItem(itemId) {
-    const item = document.getElementById(itemId);
-    if (item) {
-        item.remove();
+// Formateo de texto
+function formatText(type) {
+    const textarea = lastFocusedField || document.getElementById('problem');
+    if (!textarea || textarea.tagName !== 'TEXTAREA') return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selected = textarea.value.substring(start, end);
+    let formatted = selected;
+
+    switch(type) {
+        case 'bold':
+            formatted = `**${selected}**`;
+            break;
+        case 'italic':
+            formatted = `*${selected}*`;
+            break;
+        case 'code':
+            formatted = `\`\`\`\n${selected}\n\`\`\``;
+            break;
+        case 'list':
+            formatted = selected.split('\n').map(line => line ? `- ${line}` : '').join('\n');
+            break;
     }
+
+    textarea.value = textarea.value.substring(0, start) + formatted + textarea.value.substring(end);
+    textarea.selectionStart = start;
+    textarea.selectionEnd = start + formatted.length;
+    textarea.focus();
+
+    saveDraft();
 }
 
-/**
- * Obtiene todos los valores de una lista dinámica
- */
-function getListValues(listName) {
-    const listContainer = document.getElementById(listName + 'List');
-    const inputs = listContainer.querySelectorAll('input');
-    return Array.from(inputs)
-        .map(input => input.value.trim())
-        .filter(v => v.length > 0);
-}
-
-/**
- * Inserta el nombre de un archivo en el campo activo
- */
+// Insertar nombre de archivo en cursor
 function insertFileName(filename) {
-    const activeElement = document.activeElement;
-    if (activeElement && (activeElement.tagName === 'TEXTAREA' || activeElement.tagName === 'INPUT')) {
-        const start = activeElement.selectionStart;
-        const end = activeElement.selectionEnd;
-        const text = activeElement.value;
-        activeElement.value = text.substring(0, start) + filename + text.substring(end);
-        activeElement.focus();
-        activeElement.selectionStart = activeElement.selectionEnd = start + filename.length;
+    const target = lastFocusedField || document.getElementById('problem');
+    if (!target || (target.tagName !== 'TEXTAREA' && target.tagName !== 'INPUT')) {
+        alert('Haz click en un campo de texto primero');
+        return;
+    }
+
+    const start = target.selectionStart || 0;
+    const end = target.selectionEnd || 0;
+    const text = filename + ' ';
+
+    target.value = target.value.substring(0, start) + text + target.value.substring(end);
+    target.selectionStart = target.selectionEnd = start + text.length;
+    target.focus();
+
+    saveDraft();
+}
+
+// Abrir preview de archivo
+function openFilePreview(filename) {
+    vscode.postMessage({
+        command: 'getFileContent',
+        filename: filename
+    });
+
+    document.getElementById('previewPanel').classList.add('visible');
+    document.getElementById('previewTitle').textContent = `📄 ${filename}`;
+}
+
+function closePreview() {
+    document.getElementById('previewPanel').classList.remove('visible');
+}
+
+// Auto-save draft
+function saveDraft() {
+    const formData = {
+        name: document.getElementById('name').value,
+        problem: document.getElementById('problem').value,
+        notes: document.getElementById('notes').value
+    };
+
+    const state = vscode.getState() || {};
+    state.draft = formData;
+    state.lastSaved = new Date().toISOString();
+    vscode.setState(state);
+
+    showAutoSaveIndicator();
+}
+
+function showAutoSaveIndicator() {
+    const indicator = document.getElementById('autoSaveIndicator');
+    indicator.textContent = '💾 Draft guardado ' + new Date().toLocaleTimeString();
+    indicator.style.opacity = '1';
+
+    setTimeout(() => {
+        indicator.style.opacity = '0.6';
+    }, 2000);
+}
+
+// Cargar draft al abrir
+function loadDraft() {
+    const state = vscode.getState();
+    if (state && state.draft) {
+        document.getElementById('name').value = state.draft.name || '';
+        document.getElementById('problem').value = state.draft.problem || '';
+        document.getElementById('notes').value = state.draft.notes || '';
+
+        document.getElementById('autoSaveIndicator').textContent = 
+            '📂 Draft cargado de ' + new Date(state.lastSaved).toLocaleString();
     }
 }
 
-/**
- * Cancela y cierra el formulario
- */
-function cancel() {
-    if (confirm('¿Estás seguro de que quieres cancelar? Se perderán todos los cambios.')) {
-        vscode.postMessage({ command: 'cancel' });
-    }
-}
+// Auto-save cada 30 segundos
+setInterval(saveDraft, 30000);
 
-/**
- * Muestra los errores de validación
- */
-function showValidationErrors(errors) {
-    const errorDiv = document.getElementById('errorMessage');
-    const errorList = document.getElementById('errorList');
+// Auto-save al escribir (debounced)
+document.getElementById('problem').addEventListener('input', () => {
+    clearTimeout(autoSaveTimer);
+    autoSaveTimer = setTimeout(saveDraft, 2000);
     
-    errorList.innerHTML = errors.map(err => `<li>${err}</li>`).join('');
-    errorDiv.style.display = 'block';
-    
-    // Scroll suave hacia los errores
-    errorDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
+    // Enable/disable generate button
+    const hasContent = document.getElementById('problem').value.length > 20;
+    document.getElementById('generateBtn').disabled = !hasContent;
+});
 
-/**
- * Oculta los errores de validación
- */
-function hideValidationErrors() {
-    const errorDiv = document.getElementById('errorMessage');
-    errorDiv.style.display = 'none';
-}
+document.getElementById('name').addEventListener('input', () => {
+    clearTimeout(autoSaveTimer);
+    autoSaveTimer = setTimeout(saveDraft, 2000);
+});
 
-/**
- * Maneja el envío del formulario
- */
+document.getElementById('notes').addEventListener('input', () => {
+    clearTimeout(autoSaveTimer);
+    autoSaveTimer = setTimeout(saveDraft, 2000);
+});
+
+// Submit form
 document.getElementById('intentForm').addEventListener('submit', (e) => {
     e.preventDefault();
-    
-    hideValidationErrors();
-    
+
     const formData = {
         name: document.getElementById('name').value.trim(),
         problem: document.getElementById('problem').value.trim(),
-        context: document.getElementById('context').value.trim(),
-        currentBehavior: getListValues('currentBehavior'),
-        desiredBehavior: getListValues('desiredBehavior'),
-        objective: document.getElementById('objective').value.trim(),
-        scope: getListValues('scope'),
-        considerations: document.getElementById('considerations').value.trim(),
-        tests: getListValues('tests'),
-        expectedOutput: document.getElementById('expectedOutput').value.trim()
+        notes: document.getElementById('notes').value.trim()
     };
-    
+
     vscode.postMessage({
         command: 'submit',
         data: formData
     });
+
+    // Limpiar draft después de generar
+    vscode.setState({});
 });
 
-/**
- * Maneja mensajes del host (VSCode)
- */
+function cancel() {
+    vscode.postMessage({ command: 'cancel' });
+}
+
+// Recibir contenido de archivo
 window.addEventListener('message', event => {
     const message = event.data;
     
-    switch (message.command) {
-        case 'validationErrors':
-            showValidationErrors(message.errors);
-            break;
-            
-        case 'error':
-            alert('Error: ' + message.message);
-            break;
-            
-        case 'success':
-            // Podrías agregar animación de éxito aquí
-            break;
+    if (message.command === 'showFileContent') {
+        document.getElementById('previewContent').textContent = message.content;
+    } else if (message.command === 'setFiles') {
+        const container = document.getElementById('filePills');
+        container.innerHTML = message.files.map(filename => `
+            <span class="file-pill">
+                <button type="button" onclick="insertFileName('${filename}')" style="background:none;border:none;color:inherit;cursor:pointer;">
+                    📄 ${filename}
+                </button>
+                <button type="button" class="file-link" onclick="openFilePreview('${filename}')" title="Ver archivo">
+                    🔗
+                </button>
+            </span>
+        `).join('');
     }
 });
 
-/**
- * Inicialización al cargar la página
- */
-document.addEventListener('DOMContentLoaded', () => {
-    // Agregar items iniciales a las listas
-    addListItem('currentBehavior');
-    addListItem('desiredBehavior');
-    addListItem('scope');
-    
-    // Focus en el primer campo
-    document.getElementById('name').focus();
-});
-
-/**
- * Atajos de teclado
- */
-document.addEventListener('keydown', (e) => {
-    // Ctrl/Cmd + Enter para enviar
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-        e.preventDefault();
-        document.getElementById('intentForm').dispatchEvent(new Event('submit'));
-    }
-    
-    // Escape para cancelar
-    if (e.key === 'Escape') {
-        cancel();
-    }
-});
+// Cargar draft al iniciar
+loadDraft();

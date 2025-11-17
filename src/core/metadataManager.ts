@@ -1,10 +1,10 @@
 // src/core/metadataManager.ts
 
 import * as vscode from 'vscode';
-import * as path from 'path';
 import { IntentMetadata, Intent } from '../models/intent';
 import { Logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
+import { joinPath } from '../utils/uriHelper';
 
 export class MetadataManager {
     constructor(private logger: Logger) {}
@@ -60,13 +60,13 @@ export class MetadataManager {
      */
     async read(intentFolder: vscode.Uri): Promise<IntentMetadata | null> {
         try {
-            const metadataPath = vscode.Uri.file(path.join(intentFolder.fsPath, '.bloom-meta.json'));
+            const metadataPath = joinPath(intentFolder, '.bloom-meta.json');
             const content = await vscode.workspace.fs.readFile(metadataPath);
             const metadata: IntentMetadata = JSON.parse(new TextDecoder().decode(content));
             
             return metadata;
         } catch (error) {
-            this.logger.warn(`Error al leer metadata de ${intentFolder.fsPath}` + ": " + (error as Error).message);
+            this.logger.warn(`Error al leer metadata de ${intentFolder.fsPath}: ${error}`);
             return null;
         }
     }
@@ -97,7 +97,7 @@ export class MetadataManager {
      * Guarda metadata en archivo
      */
     async save(intentFolder: vscode.Uri, metadata: IntentMetadata): Promise<void> {
-        const metadataPath = vscode.Uri.file(path.join(intentFolder.fsPath, '.bloom-meta.json'));
+        const metadataPath = joinPath(intentFolder, '.bloom-meta.json');
         const content = JSON.stringify(metadata, null, 2);
         await vscode.workspace.fs.writeFile(metadataPath, new TextEncoder().encode(content));
     }

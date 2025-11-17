@@ -1,8 +1,8 @@
 import * as vscode from 'vscode';
-import * as path from 'path';
 import { Logger } from '../utils/logger';
 import { MetadataManager } from '../core/metadataManager';
 import { IntentTreeItem, IntentTreeProvider } from '../providers/intentTreeProvider';
+import { joinPath } from '../utils/uriHelper';
 
 export function registerEditIntent(
     context: vscode.ExtensionContext,
@@ -13,7 +13,7 @@ export function registerEditIntent(
     const disposable = vscode.commands.registerCommand(
         'bloom.editIntent',
         async (treeItem: IntentTreeItem) => {
-            const intentPath = vscode.Uri.file(path.join(treeItem.intent.folderUri.fsPath, 'intent.bl'));
+            const intentPath = joinPath(treeItem.intent.folderUri, 'intent.bl');
             
             const document = await vscode.workspace.openTextDocument(intentPath);
             await vscode.window.showTextDocument(document);

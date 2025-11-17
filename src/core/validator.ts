@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { IntentFormData } from '../ui/intentFormPanel';
+import { IntentFormData } from '../models/intent';
 
 export class Validator {
     private readonly INVALID_CHARS = /[\/\\:*?"<>|]/;
@@ -47,14 +47,14 @@ export class Validator {
         // Validar comportamiento actual
         if (!data.currentBehavior || data.currentBehavior.length === 0) {
             errors.push('Debes agregar al menos un comportamiento actual');
-        } else if (data.currentBehavior.some(item => item.trim().length === 0)) {
+        } else if (data.currentBehavior.some((item: string) => item.trim().length === 0)) {
             errors.push('Todos los items de comportamiento actual deben tener contenido');
         }
 
         // Validar comportamiento deseado
         if (!data.desiredBehavior || data.desiredBehavior.length === 0) {
             errors.push('Debes agregar al menos un comportamiento deseado');
-        } else if (data.desiredBehavior.some(item => item.trim().length === 0)) {
+        } else if (data.desiredBehavior.some((item: string) => item.trim().length === 0)) {
             errors.push('Todos los items de comportamiento deseado deben tener contenido');
         }
 
@@ -74,13 +74,13 @@ export class Validator {
 
         // Validar listas opcionales (si tienen items, no deben estar vacíos)
         if (data.scope && data.scope.length > 0) {
-            if (data.scope.some(item => item.trim().length === 0)) {
+            if (data.scope.some((item: string) => item.trim().length === 0)) {
                 errors.push('Los items de alcance y restricciones no pueden estar vacíos');
             }
         }
 
         if (data.tests && data.tests.length > 0) {
-            if (data.tests.some(item => item.trim().length === 0)) {
+            if (data.tests.some((item: string) => item.trim().length === 0)) {
                 errors.push('Los items de tests/validación no pueden estar vacíos');
             }
         }

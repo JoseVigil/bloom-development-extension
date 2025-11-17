@@ -13,18 +13,11 @@ export interface FileDescriptor {
     priority: number;
     size: number;
     extension: string;
-    metadata?: FileMetadata; // AGREGADO para línea 101
-}
-
-/**
- * Metadata adicional de archivos
- */
-export interface FileMetadata {
-    createdAt?: Date;
-    modifiedAt?: Date;
-    author?: string;
-    lines?: number;
-    [key: string]: any; // Permite propiedades adicionales
+    metadata?: {
+        size: number;
+        type: string;
+        lastModified?: number;
+    };
 }
 
 /**
@@ -76,9 +69,9 @@ export interface CodebaseGeneratorOptions {
     workspaceFolder: vscode.WorkspaceFolder;
     includeTests?: boolean;
     maxFileSize?: number;
-    includeMetadata?: boolean;        // Línea 38, 101
-    addTableOfContents?: boolean;     // Línea 52
-    categorizeByType?: boolean;       // Línea 58
+    includeMetadata?: boolean;
+    addTableOfContents?: boolean;
+    categorizeByType?: boolean;
 }
 
 /**

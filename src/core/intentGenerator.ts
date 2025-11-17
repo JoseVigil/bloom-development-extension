@@ -1,7 +1,7 @@
-// Archivo creado autom�ticamente
+// Archivo creado automáticamente
 import * as vscode from 'vscode';
 import { Logger } from '../utils/logger';
-import { IntentFormData } from '../ui/intentFormPanel';
+import { IntentFormData } from '../models/intent';
 
 export class IntentGenerator {
     constructor(private logger: Logger) {}
@@ -37,14 +37,14 @@ export class IntentGenerator {
 
         // Comportamiento Actual
         content += `## Comportamiento Actual\n`;
-        data.currentBehavior.forEach((item, index) => {
+        data.currentBehavior.forEach((item: string, index: number) => {
             content += `${index + 1}. ${item}\n`;
         });
         content += '\n';
 
         // Comportamiento Deseado
         content += `## Comportamiento Deseado\n`;
-        data.desiredBehavior.forEach((item, index) => {
+        data.desiredBehavior.forEach((item: string, index: number) => {
             content += `${index + 1}. ${item}\n`;
         });
         content += '\n';
@@ -62,7 +62,7 @@ export class IntentGenerator {
         // Alcance y Restricciones
         if (data.scope && data.scope.length > 0) {
             content += `## Alcance y Restricciones\n`;
-            data.scope.forEach(item => {
+            data.scope.forEach((item: string) => {
                 content += `- ${item}\n`;
             });
             content += '\n';
@@ -80,7 +80,7 @@ export class IntentGenerator {
         // Tests / Validación
         if (data.tests && data.tests.length > 0) {
             content += `## Tests / Validación Necesaria\n`;
-            data.tests.forEach(item => {
+            data.tests.forEach((item: string) => {
                 content += `- [ ] ${item}\n`;
             });
             content += '\n';
