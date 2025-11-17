@@ -1,0 +1,7 @@
+python /c/repos/bloom-videos/bloom-development-extension/scripts/implement_codebase_result.py /c/repos/bloom-videos/bloom-development-extension/docs/v5/lifecycle_codebase.md /c/repos/bloom-videos/bloom-development-extension --backup-dir /c/repos/bloom-videos/backups
+
+
+python /c/repos/bloom-videos/bloom-development-extension/scripts/generate_codebase.py /c/repos/bloom-videos/bloom-development-extension/docs/v5/lifecycle_codebase.md /c/repos/bloom-videos/bloom-development-extension --backup-dir /c/repos/bloom-videos/bloom-development-extension/backups
+
+
+python /c/repos/bloom-videos/bloom-development-extension/scripts/implement_codebase_result.py /c/repos/bloom-videos/bloom-development-extension/docs/v5/reformatted_codebase.md /c/repos/bloom-videos/bloom-development-extension --backup-dir /c/repos/bloom-videos/bloom-development-extension/backups

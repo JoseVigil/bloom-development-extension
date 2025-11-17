@@ -1,0 +1,11 @@
+Implementa {TAREA} según documentos adjuntos.
+
+FORMATO OBLIGATORIO:
+- UN ÚNICO ARCHIVO MARKDOWN EN ARTIFACT
+- SIN TRIPLE BACKTICKS (```)
+- TODO CON INDENTACIÓN DE 4 ESPACIOS
+- Formato: ## Archivo N: ruta/archivo.ext (CREAR NUEVO|MODIFICAR)
+- Código indentado bajo cada sección
+- Sección final: ## Resumen de Cambios
+
+Si no hay tokens suficientes, no generes. Sin guías ni explicaciones.

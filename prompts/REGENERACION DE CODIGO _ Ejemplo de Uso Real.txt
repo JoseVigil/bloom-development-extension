@@ -1,0 +1,11 @@
+Implementa el ciclo de vida de intents con gestión dinámica de archivos según las especificaciones de bloom_intent_lifecycle.md y lifecycle_codebase.md.
+
+FORMATO DE ENTREGA OBLIGATORIO:
+[... copiar template completo ...]
+
+CONTEXTO DE LA TAREA:
+- Crear IntentSession como Façade + State Manager
+- Implementar auto-save con regeneración de codebase
+- 2 estados únicos: draft | generated
+- Panel de formulario sin preview interno
+- Integración opcional con scripts Python

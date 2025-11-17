@@ -1,178 +1,274 @@
 #!/usr/bin/env python3
 """
-Script para procesar e implementar los archivos del Bloom Intent Lifecycle
-Lee el archivo de implementación y actualiza/crea los archivos según las especificaciones.
+Script CORREGIDO para procesar codebase snapshots - VERSIÓN CON BACKUP ORGANIZADO
 """
 
 import os
 import re
 import sys
 import shutil
+import argparse
+from datetime import datetime
 
-def parse_implementation_file(file_path):
+def show_help():
+    """Muestra la ayuda del script"""
+    help_text = """
+🌸 PROCESADOR DE CODEBASE SNAPSHOT - AYUDA
+
+USO:
+  python implement_codebase_result.py <snapshot_file> <tree_root_directory> [--backup-dir BACKUP_DIR]
+
+PARÁMETROS:
+  snapshot_file        Archivo de snapshot (ej: lifecycle_codebase.md)
+  tree_root_directory  Directorio raíz del proyecto (ej: /ruta/al/proyecto)
+  
+OPCIONES:
+  --backup-dir DIR     Directorio donde guardar backups (opcional)
+  --help, -h          Muestra esta ayuda
+
+EJEMPLOS:
+  # Procesar sin backup
+  python implement_codebase_result.py lifecycle_codebase.md /ruta/al/proyecto
+  
+  # Procesar con backup en directorio específico
+  python implement_codebase_result.py lifecycle_codebase.md /ruta/al/proyecto --backup-dir /ruta/backups
+  
+  # Procesar con backup en directorio por defecto (./backups)
+  python implement_codebase_result.py lifecycle_codebase.md /ruta/al/proyecto --backup-dir
+
+DESCRIPCIÓN:
+  Este script procesa codebase snapshots y actualiza los archivos del proyecto.
+  Crea backups organizados manteniendo la estructura de directorios original.
+  Los backups se guardan con timestamp para evitar sobreescrituras.
+"""
+    print(help_text)
+
+def create_backup(source_file, project_root, backup_root):
     """
-    Parsea el archivo de implementación y extrae los archivos a crear/modificar
+    Crea un backup organizado manteniendo la estructura de directorios
+    """
+    if not backup_root:
+        return None
+    
+    # Calcular la ruta relativa desde el proyecto
+    relative_path = os.path.relpath(source_file, project_root)
+    
+    # Crear ruta de destino en backup
+    backup_file = os.path.join(backup_root, relative_path)
+    
+    # Asegurar que el directorio de backup existe
+    backup_dir = os.path.dirname(backup_file)
+    os.makedirs(backup_dir, exist_ok=True)
+    
+    # Copiar archivo
+    shutil.copy2(source_file, backup_file)
+    
+    return backup_file
+
+def parse_codebase_snapshot_safe(file_path):
+    """
+    Parsea un codebase snapshot de forma segura
     """
     with open(file_path, 'r', encoding='utf-8') as f:
         content = f.read()
     
-    # Patrón para encontrar cada archivo en el documento
-    pattern = r'## Archivo \d+: (.*?) \((CREAR NUEVO|MODIFICAR|ACTUALIZAR INTERFACES)\)\s*(.*?)(?=## Archivo \d+|$)'
-    matches = re.findall(pattern, content, re.DOTALL)
+    print(f"🔍 Analizando codebase snapshot...")
+    print(f"📏 Longitud del contenido: {len(content)} caracteres")
     
     files = []
-    for match in matches:
-        file_info = {
-            'path': match[0].strip(),
-            'action': match[1].strip(),
-            'content': match[2].strip()
-        }
-        files.append(file_info)
+    
+    # Buscar todas las secciones que comienzan con ### y contienen una ruta de archivo
+    pattern = r'## Archivo \d+: (src/[\w/.-]+\.\w+) \((CREAR NUEVO|MODIFICAR)\)\n\n(.*?)(?=## Archivo |\Z)'
+    matches = re.findall(pattern, content, re.DOTALL)
+    
+    for file_path_match, file_content in matches:
+        # Limpiar el contenido - remover líneas de metadatos
+        lines = file_content.split('\n')
+        clean_lines = []
+        
+        for line in lines:
+            # Saltar líneas de metadatos y líneas vacías al principio
+            if not line.strip() or 'Metadatos:' in line or 'Hash MD5:' in line:
+                continue
+            clean_lines.append(line)
+        
+        clean_content = '\n'.join(clean_lines).strip()
+        
+        if clean_content and len(clean_content) > 50:  # Contenido válido
+            files.append({
+                'path': file_path_match,
+                'action': 'MODIFICAR', 
+                'content': clean_content
+            })
+            print(f"   ✅ {file_path_match} - {len(clean_content)} caracteres")
+        else:
+            print(f"   ⚠️  {file_path_match} - contenido insuficiente")
     
     return files
 
-def get_existing_structure(tree_file_path):
-    """
-    Lee el tree.txt y devuelve la estructura existente
-    """
-    with open(tree_file_path, 'r', encoding='utf-8') as f:
-        return f.read()
-
 def ensure_directory_exists(file_path):
-    """
-    Asegura que el directorio para el archivo existe
-    """
+    """Asegura que el directorio existe"""
     directory = os.path.dirname(file_path)
     if directory and not os.path.exists(directory):
         os.makedirs(directory, exist_ok=True)
         print(f"📁 Directorio creado: {directory}")
 
-def process_files(implementation_files, tree_root_directory, base_directory="."):
+def setup_backup_directory(backup_dir_arg, project_root):
     """
-    Procesa cada archivo según su acción (CREAR NUEVO o MODIFICAR)
+    Configura el directorio de backup
     """
+    if backup_dir_arg is None:
+        return None  # No backup
+    
+    if backup_dir_arg == "":
+        # Backup por defecto en ./backups
+        backup_dir = os.path.join(os.path.dirname(project_root), "backups")
+    else:
+        backup_dir = backup_dir_arg
+    
+    # Crear directorio de backup con timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_dir = os.path.join(backup_dir, f"backup_{timestamp}")
+    
+    os.makedirs(backup_dir, exist_ok=True)
+    print(f"📂 Directorio de backup: {backup_dir}")
+    
+    return backup_dir
+
+def process_files_safe(files, tree_root_directory, backup_dir):
+    """Procesa archivos de forma segura con backup organizado"""
     results = []
+    processed_count = 0
+    backed_up_files = []
     
-    for file_info in implementation_files:
-        # Construir la ruta completa usando el directorio raíz del tree
-        file_path = os.path.join(tree_root_directory, file_info['path'])
-        action = file_info['action']
-        content = file_info['content']
+    for file_info in files:
+        file_relative_path = file_info['path']
         
-        # Limpiar el contenido (remover indentación excesiva)
-        lines = content.split('\n')
-        cleaned_lines = []
-        
-        for line in lines:
-            # Remover indentación común de 4 espacios (si existe)
-            if line.startswith('    '):
-                cleaned_lines.append(line[4:])
-            else:
-                cleaned_lines.append(line)
-        
-        cleaned_content = '\n'.join(cleaned_lines)
-        
-        ensure_directory_exists(file_path)
-        
-        if action == 'CREAR NUEVO':
-            if os.path.exists(file_path):
-                print(f"⚠️  ADVERTENCIA: {file_path} ya existe pero se marcó como CREAR NUEVO")
+        # VERIFICACIÓN DE SEGURIDAD: Asegurar que la ruta es válida
+        if not file_relative_path.startswith('src/'):
+            print(f"❌ RUTA INVÁLIDA: {file_relative_path} - debe empezar con 'src/'")
+            continue
             
-            with open(file_path, 'w', encoding='utf-8') as f:
-                f.write(cleaned_content)
-            
-            results.append(f"✅ CREADO: {file_path}")
-            print(f"✅ Archivo creado: {file_path}")
-            
-        elif action in ['MODIFICAR', 'ACTUALIZAR INTERFACES']:
-            if not os.path.exists(file_path):
-                print(f"⚠️  ADVERTENCIA: {file_path} no existe pero se marcó como MODIFICAR")
-                # Crearlo de todas formas
-                with open(file_path, 'w', encoding='utf-8') as f:
-                    f.write(cleaned_content)
-                results.append(f"✅ CREADO (no existía): {file_path}")
-                print(f"✅ Archivo creado (no existía): {file_path}")
-            else:
-                # Hacer backup del archivo original
-                backup_path = file_path + '.backup'
-                shutil.copy2(file_path, backup_path)
-                
-                with open(file_path, 'w', encoding='utf-8') as f:
-                    f.write(cleaned_content)
-                
-                results.append(f"✅ MODIFICADO: {file_path} (backup en {backup_path})")
-                print(f"✅ Archivo modificado: {file_path} (backup creado)")
+        if '${category}' in file_relative_path or '`' in file_relative_path:
+            print(f"❌ RUTA INVÁLIDA: {file_relative_path} - contiene caracteres inválidos")
+            continue
+        
+        # Construir ruta CORRECTA (sin duplicar 'src/')
+        file_full_path = os.path.join(tree_root_directory, file_relative_path)
+        
+        print(f"\n🔄 Procesando: {file_relative_path}")
+        print(f"   📍 Ruta destino: {file_full_path}")
+        
+        # Verificar si el archivo existe para hacer backup
+        file_exists = os.path.exists(file_full_path)
+        action_display = "MODIFICADO" if file_exists else "CREADO"
+        
+        # CREAR BACKUP si el archivo existe y se especificó backup
+        backup_path = None
+        if file_exists and backup_dir:
+            backup_path = create_backup(file_full_path, tree_root_directory, backup_dir)
+            if backup_path:
+                backed_up_files.append(backup_path)
+                print(f"   💾 Backup creado: {backup_path}")
+        
+        ensure_directory_exists(file_full_path)
+        
+        # Escribir archivo
+        with open(file_full_path, 'w', encoding='utf-8') as f:
+            f.write(file_info['content'])
+        
+        results.append(f"✅ {action_display}: {file_relative_path}")
+        if backup_path:
+            results[-1] += f" (backup: {os.path.relpath(backup_path, backup_dir)})"
+        
+        print(f"   ✅ Archivo {action_display.lower()}")
+        processed_count += 1
     
-    return results
+    return results, processed_count, backed_up_files
 
 def main():
-    if len(sys.argv) != 4:
-        print("Uso: python implement_bloom.py <archivo_implementacion> <tree_file> <tree_root_directory>")
-        print("Ejemplo: python implement_bloom.py bloom_lifecycle_implementation.md tree.txt /ruta/completa/al/proyecto")
-        print("\nParámetros:")
-        print("  <archivo_implementacion>: Archivo con el contenido de implementación")
-        print("  <tree_file>: Archivo tree.txt con la estructura")
-        print("  <tree_root_directory>: Directorio raíz donde está la estructura del tree")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description='Procesa codebase snapshots', add_help=False)
+    parser.add_argument('snapshot_file', nargs='?', help='Archivo de snapshot')
+    parser.add_argument('tree_root_directory', nargs='?', help='Directorio raíz del proyecto')
+    parser.add_argument('--backup-dir', nargs='?', const="", help='Directorio para backups (opcional)')
+    parser.add_argument('--help', '-h', action='store_true', help='Mostrar ayuda')
     
-    implementation_file = sys.argv[1]
-    tree_file = sys.argv[2]
-    tree_root_directory = sys.argv[3]
+    args = parser.parse_args()
     
-    if not os.path.exists(implementation_file):
-        print(f"❌ Error: El archivo de implementación '{implementation_file}' no existe")
-        sys.exit(1)
+    # Mostrar ayuda si se solicita
+    if args.help or not args.snapshot_file or not args.tree_root_directory:
+        show_help()
+        sys.exit(0)
     
-    if not os.path.exists(tree_file):
-        print(f"❌ Error: El archivo tree '{tree_file}' no existe")
+    snapshot_file = args.snapshot_file
+    tree_root_directory = args.tree_root_directory
+    backup_dir_arg = args.backup_dir
+    
+    # VERIFICACIONES DE SEGURIDAD
+    if not os.path.exists(snapshot_file):
+        print(f"❌ Error: Snapshot '{snapshot_file}' no existe")
         sys.exit(1)
     
     if not os.path.exists(tree_root_directory):
-        print(f"❌ Error: El directorio raíz '{tree_root_directory}' no existe")
+        print(f"❌ Error: Directorio '{tree_root_directory}' no existe")
         sys.exit(1)
     
-    print("🌸 Bloom Intent Lifecycle - Implementación Automática")
-    print("=" * 60)
-    print(f"📂 Directorio raíz del tree: {tree_root_directory}")
-    print(f"📋 Archivo de implementación: {implementation_file}")
-    print(f"🌳 Archivo tree: {tree_file}")
-    print("=" * 60)
+    # Configurar backup
+    backup_dir = setup_backup_directory(backup_dir_arg, tree_root_directory)
     
-    # Mostrar estructura existente
-    print("\n📁 Estructura existente:")
-    with open(tree_file, 'r', encoding='utf-8') as f:
-        print(f.read())
+    print("🌸 PROCESADOR DE SNAPSHOT - VERSIÓN CON BACKUP ORGANIZADO")
+    print("=" * 70)
+    print(f"📂 Directorio raíz del proyecto: {tree_root_directory}")
+    print(f"📋 Archivo snapshot: {snapshot_file}")
+    if backup_dir:
+        print(f"💾 Directorio de backup: {backup_dir}")
+    else:
+        print(f"⚠️  Modo SIN backup")
+    print("=" * 70)
     
-    # Parsear archivos de implementación
-    print(f"\n📋 Procesando archivo de implementación: {implementation_file}")
-    implementation_files = parse_implementation_file(implementation_file)
+    # Parsear snapshot de forma SEGURA
+    print(f"\n📋 Procesando snapshot...")
+    files = parse_codebase_snapshot_safe(snapshot_file)
     
-    print(f"📁 Encontrados {len(implementation_files)} archivos para procesar:")
-    for i, file_info in enumerate(implementation_files, 1):
-        full_path = os.path.join(tree_root_directory, file_info['path'])
-        print(f"  {i}. {file_info['path']} -> {full_path} ({file_info['action']})")
+    if not files:
+        print("❌ No se encontraron archivos válidos en el snapshot")
+        sys.exit(1)
     
-    # Confirmar con el usuario
-    print(f"\n⚠️  ATENCIÓN: Esta acción modificará/creará archivos en:")
+    print(f"\n📁 ARCHIVOS VÁLIDOS ENCONTRADOS ({len(files)}):")
+    for i, file_info in enumerate(files, 1):
+        print(f"  {i}. {file_info['path']}")
+    
+    # CONFIRMACIÓN FINAL
+    print(f"\n⚠️  🔴 ATENCIÓN CRÍTICA:")
+    print(f"   Se modificarán/crearán {len(files)} archivos en:")
     print(f"   {tree_root_directory}")
-    confirm = input("¿Continuar? (s/N): ").strip().lower()
+    if backup_dir:
+        print(f"   Los backups se guardarán en: {backup_dir}")
+    else:
+        print(f"   ⚠️  NO SE CREARÁN BACKUPS")
+    print(f"\n   ¿ESTÁS SEGURO DE QUE QUIERES CONTINUAR?")
     
-    if confirm not in ['s', 'si', 'y', 'yes']:
-        print("❌ Operación cancelada")
+    confirm = input("   Escribe 'SI' en mayúsculas para confirmar: ").strip()
+    
+    if confirm != 'SI':
+        print("❌ Operación cancelada por seguridad")
         sys.exit(0)
     
-    # Procesar archivos
+    # PROCESAR
     print("\n🚀 Procesando archivos...")
-    results = process_files(implementation_files, tree_root_directory)
+    results, processed_count, backed_up_files = process_files_safe(files, tree_root_directory, backup_dir)
     
-    # Mostrar resultados
-    print("\n📊 RESULTADOS:")
-    print("=" * 60)
+    # RESULTADOS
+    print("\n📊 RESULTADOS FINALES:")
+    print("=" * 70)
     for result in results:
         print(result)
     
-    print(f"\n✅ Implementación completada! {len(results)} archivos procesados.")
-    print(f"📂 Todos los archivos creados/modificados en: {tree_root_directory}")
+    print(f"\n✅ COMPLETADO: {processed_count} archivos procesados correctamente")
+    if backed_up_files:
+        print(f"💾 {len(backed_up_files)} backups creados en: {backup_dir}")
+    else:
+        print(f"⚠️  No se crearon backups")
 
 if __name__ == "__main__":
     main()

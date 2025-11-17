@@ -1,0 +1,38 @@
+Implementa {DESCRIPCIÓN_DE_LA_TAREA} según las especificaciones de los documentos adjuntos.
+
+FORMATO DE ENTREGA OBLIGATORIO:
+
+1. DEVUÉLVEME UN ÚNICO ARCHIVO MARKDOWN COMO CÓDIGO FUENTE EN UN ARTIFACT
+2. NO USES TRIPLE BACKTICKS (```) EN NINGUNA PARTE DEL DOCUMENTO
+3. NO USES BLOQUES DE CÓDIGO CERCADOS
+4. TODO EL CONTENIDO, INCLUYENDO CÓDIGO, DEBE ESTAR FORMATEADO EXCLUSIVAMENTE CON INDENTACIÓN DE 4 ESPACIOS
+5. SI USAS ``` EN CUALQUIER LUGAR, EL RESULTADO SE ROMPE
+6. ENTIENDE: SOLO QUIERO TEXTO PLANO MARKDOWN, SIN FENCES, SIN HTML, SIN FORMATO ESPECIAL
+7. TODO EL ARCHIVO DEBE SER 100% MARKDOWN PURO
+
+ESTRUCTURA DEL ARTIFACT:
+
+- Título: "# {NOMBRE_DEL_PROYECTO} - Implementación Completa"
+- Para cada archivo, usar este formato EXACTO:
+
+    ## Archivo N: ruta/del/archivo.ext (CREAR NUEVO | MODIFICAR)
+
+        [código indentado con 4 espacios]
+        [sin backticks, solo indentación]
+
+- Archivos nuevos: marcar con "(CREAR NUEVO)"
+- Archivos modificados: marcar con "(MODIFICAR)"
+- Al final: Sección "## Resumen de Cambios" listando:
+  * ARCHIVOS NUEVOS (cantidad)
+  * ARCHIVOS MODIFICADOS (cantidad)
+  * REGLAS CRÍTICAS APLICADAS
+
+RESTRICCIONES:
+
+- Si no disponés de tokens suficientes para completar la respuesta, no la generes
+- No incluyas guías de implementación ni explicaciones básicas
+- Respondé únicamente con la solución solicitada, sin adornos ni pasos innecesarios
+- El artifact debe ser procesable por scripts automatizados
+
+CONTEXTO DE LA TAREA:
+{DESCRIPCIÓN_DETALLADA_DEL_PROBLEMA}
