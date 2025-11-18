@@ -1,4 +1,4 @@
-bloom-development-extension/
+scripts/
 ├── src/
 │   ├── commands/
 │   │   ├── addToIntent.ts
