@@ -31,7 +31,7 @@
             },
             {
                 "command": "bloom.generateIntent",
-                "title": "Bloom: Generate New Intent"
+                "title": "Bloom: Generate Intent"
             },
             {
                 "command": "bloom.openIntent",
@@ -45,26 +45,6 @@
             {
                 "command": "bloom.deleteIntent",
                 "title": "Delete Intent"
-            },
-            {
-                "command": "bloom.addToIntent",
-                "title": "Bloom: Add to Intent"
-            },
-            {
-                "command": "bloom.deleteIntentFromForm",
-                "title": "Delete Current Intent"
-            },
-            {
-                "command": "bloom.openFileInVSCode",
-                "title": "Open File in VSCode"
-            },
-            {
-                "command": "bloom.revealInFinder",
-                "title": "Reveal in Finder/Explorer"
-            },
-            {
-                "command": "bloom.copyFilePath",
-                "title": "Copy File Path"
             }
         ],
         "menus": {
@@ -73,11 +53,6 @@
                     "command": "bloom.generateIntent",
                     "when": "explorerResourceIsFolder || resourceScheme == file",
                     "group": "bloom@1"
-                },
-                {
-                    "command": "bloom.addToIntent",
-                    "when": "explorerResourceIsFolder || resourceScheme == file",
-                    "group": "bloom@2"
                 }
             ],
             "view/item/context": [
@@ -106,16 +81,6 @@
                     "enum": ["free", "pro"],
                     "default": "free",
                     "description": "Versión del plugin"
-                },
-                "bloom.pythonPath": {
-                    "type": "string",
-                    "default": "python",
-                    "description": "Path al ejecutable de Python para regeneración de codebase"
-                },
-                "bloom.useCustomCodebaseGenerator": {
-                    "type": "boolean",
-                    "default": false,
-                    "description": "Usar script Python personalizado para generar codebase.md"
                 }
             }
         }

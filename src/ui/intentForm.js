@@ -1,22 +1,19 @@
-// VSCode API
 const vscode = acquireVsCodeApi();
 let lastFocusedField = null;
 let autoSaveTimer = null;
+let isEditMode = false;
 
-// Contadores para IDs únicos de items en listas
 let listCounters = {
     currentBehavior: 0,
     desiredBehavior: 0
 };
 
-// Capturar último campo enfocado
 document.addEventListener('focusin', (e) => {
     if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') {
         lastFocusedField = e.target;
     }
 });
 
-// ===== FORMATEO DE TEXTO =====
 function formatText(type) {
     const textarea = lastFocusedField || document.getElementById('problem');
     if (!textarea || textarea.tagName !== 'TEXTAREA') return;
@@ -46,10 +43,9 @@ function formatText(type) {
     textarea.selectionEnd = start + formatted.length;
     textarea.focus();
 
-    saveDraft();
+    triggerAutoSave();
 }
 
-// ===== MANEJO DE ARCHIVOS =====
 function insertFileName(filename) {
     const target = lastFocusedField || document.getElementById('problem');
     if (!target || (target.tagName !== 'TEXTAREA' && target.tagName !== 'INPUT')) {
@@ -65,24 +61,37 @@ function insertFileName(filename) {
     target.selectionStart = target.selectionEnd = start + text.length;
     target.focus();
 
-    saveDraft();
+    triggerAutoSave();
 }
 
-function openFilePreview(filename) {
+function openFileInVSCode(filePath) {
     vscode.postMessage({
-        command: 'getFileContent',
-        filename: filename
+        command: 'openFileInVSCode',
+        filePath: filePath
     });
-
-    document.getElementById('previewPanel').classList.add('visible');
-    document.getElementById('previewTitle').textContent = `📄 ${filename}`;
 }
 
-function closePreview() {
-    document.getElementById('previewPanel').classList.remove('visible');
+function copyFilePath(filePath) {
+    vscode.postMessage({
+        command: 'copyFilePath',
+        filePath: filePath
+    });
 }
 
-// ===== LISTAS DINÁMICAS =====
+function revealInFinder(filePath) {
+    vscode.postMessage({
+        command: 'revealInFinder',
+        filePath: filePath
+    });
+}
+
+function removeFile(filePath) {
+    vscode.postMessage({
+        command: 'removeFile',
+        filePath: filePath
+    });
+}
+
 function addListItem(listName) {
     const listContainer = document.getElementById(listName + 'List');
     const itemId = listName + '_' + listCounters[listName]++;
@@ -97,25 +106,20 @@ function addListItem(listName) {
     
     listContainer.appendChild(itemDiv);
     
-    // Focus en el input recién creado
     const newInput = itemDiv.querySelector('input');
     if (newInput) {
         newInput.focus();
-        // Auto-save al escribir en listas
-        newInput.addEventListener('input', () => {
-            clearTimeout(autoSaveTimer);
-            autoSaveTimer = setTimeout(saveDraft, 2000);
-        });
+        newInput.addEventListener('input', triggerAutoSave);
     }
 
-    saveDraft();
+    triggerAutoSave();
 }
 
 function removeListItem(itemId) {
     const item = document.getElementById(itemId);
     if (item) {
         item.remove();
-        saveDraft();
+        triggerAutoSave();
     }
 }
 
@@ -127,28 +131,29 @@ function getListValues(listName) {
         .filter(v => v.length > 0);
 }
 
-// ===== AUTO-SAVE DRAFT =====
-function saveDraft() {
-    const formData = {
-        name: document.getElementById('name').value,
-        problem: document.getElementById('problem').value,
-        expectedOutput: document.getElementById('expectedOutput').value,
-        currentBehavior: getListValues('currentBehavior'),
-        desiredBehavior: getListValues('desiredBehavior'),
-        considerations: document.getElementById('considerations').value
-    };
-
-    const state = vscode.getState() || {};
-    state.draft = formData;
-    state.lastSaved = new Date().toISOString();
-    vscode.setState(state);
-
-    showAutoSaveIndicator();
+function triggerAutoSave() {
+    clearTimeout(autoSaveTimer);
+    autoSaveTimer = setTimeout(() => {
+        const updates = {
+            problem: document.getElementById('problem').value,
+            expectedOutput: document.getElementById('expectedOutput').value,
+            currentBehavior: getListValues('currentBehavior'),
+            desiredBehavior: getListValues('desiredBehavior'),
+            considerations: document.getElementById('considerations').value
+        };
+        
+        vscode.postMessage({
+            command: 'autoSave',
+            updates: updates
+        });
+        
+        showAutoSaveIndicator();
+    }, 2000);
 }
 
 function showAutoSaveIndicator() {
     const indicator = document.getElementById('autoSaveIndicator');
-    indicator.textContent = '💾 Draft guardado ' + new Date().toLocaleTimeString();
+    indicator.textContent = '💾 Guardado ' + new Date().toLocaleTimeString();
     indicator.style.opacity = '1';
 
     setTimeout(() => {
@@ -156,49 +161,6 @@ function showAutoSaveIndicator() {
     }, 2000);
 }
 
-function loadDraft() {
-    const state = vscode.getState();
-    if (state && state.draft) {
-        const draft = state.draft;
-        
-        document.getElementById('name').value = draft.name || '';
-        document.getElementById('problem').value = draft.problem || '';
-        document.getElementById('expectedOutput').value = draft.expectedOutput || '';
-        document.getElementById('considerations').value = draft.considerations || '';
-
-        // Restaurar listas
-        if (draft.currentBehavior && Array.isArray(draft.currentBehavior)) {
-            draft.currentBehavior.forEach(value => {
-                addListItem('currentBehavior');
-                const items = document.getElementById('currentBehaviorList').querySelectorAll('.list-item');
-                const lastItem = items[items.length - 1];
-                if (lastItem) {
-                    lastItem.querySelector('input').value = value;
-                }
-            });
-        }
-
-        if (draft.desiredBehavior && Array.isArray(draft.desiredBehavior)) {
-            draft.desiredBehavior.forEach(value => {
-                addListItem('desiredBehavior');
-                const items = document.getElementById('desiredBehaviorList').querySelectorAll('.list-item');
-                const lastItem = items[items.length - 1];
-                if (lastItem) {
-                    lastItem.querySelector('input').value = value;
-                }
-            });
-        }
-
-        document.getElementById('autoSaveIndicator').textContent = 
-            '📂 Draft cargado de ' + new Date(state.lastSaved).toLocaleString();
-    } else {
-        // Agregar items iniciales si no hay draft
-        addListItem('currentBehavior');
-        addListItem('desiredBehavior');
-    }
-}
-
-// ===== VALIDACIÓN =====
 function showValidationErrors(errors) {
     const errorDiv = document.getElementById('errorMessage');
     const errorList = document.getElementById('errorList');
@@ -214,21 +176,34 @@ function hideValidationErrors() {
     errorDiv.style.display = 'none';
 }
 
-// ===== SUBMIT FORM =====
+function updateTokenDisplay(tokens) {
+    const tokenText = document.getElementById('tokenText');
+    const tokenFill = document.getElementById('tokenFill');
+    const tokenCounter = document.getElementById('tokenCounter');
+    
+    const percentage = tokens.percentage;
+    const estimated = tokens.estimated.toLocaleString();
+    const limit = tokens.limit.toLocaleString();
+    
+    tokenFill.style.width = Math.min(percentage, 100) + '%';
+    
+    if (percentage < 80) {
+        tokenCounter.className = 'token-counter token-safe';
+        tokenText.textContent = `📊 Token estimate: ${estimated} / ${limit} (${percentage.toFixed(1)}%)`;
+    } else if (percentage < 100) {
+        tokenCounter.className = 'token-counter token-warning';
+        tokenText.textContent = `⚠️ Warning: ${estimated} / ${limit} (${percentage.toFixed(1)}%) - Consider removing files`;
+    } else {
+        tokenCounter.className = 'token-counter token-error';
+        tokenText.textContent = `❌ Error: ${estimated} / ${limit} (${percentage.toFixed(1)}%) - Cannot generate, remove files`;
+        document.getElementById('generateBtn').disabled = true;
+    }
+}
+
 document.getElementById('intentForm').addEventListener('submit', (e) => {
     e.preventDefault();
     
     hideValidationErrors();
-
-    // Obtener archivos seleccionados
-    const selectedFiles = [];
-    const filePills = document.querySelectorAll('.file-pill button[onclick^="insertFileName"]');
-    filePills.forEach(btn => {
-        const match = btn.getAttribute('onclick').match(/insertFileName\('([^']+)'\)/);
-        if (match) {
-            selectedFiles.push(match[1]);
-        }
-    });
 
     const formData = {
         name: document.getElementById('name').value.trim(),
@@ -237,16 +212,13 @@ document.getElementById('intentForm').addEventListener('submit', (e) => {
         currentBehavior: getListValues('currentBehavior'),
         desiredBehavior: getListValues('desiredBehavior'),
         considerations: document.getElementById('considerations').value.trim(),
-        selectedFiles: selectedFiles
+        selectedFiles: []
     };
 
     vscode.postMessage({
         command: 'submit',
         data: formData
     });
-
-    // Limpiar draft después de generar
-    vscode.setState({});
 });
 
 function cancel() {
@@ -255,34 +227,9 @@ function cancel() {
     }
 }
 
-// ===== AUTO-SAVE INTERVALS =====
-setInterval(saveDraft, 30000);
-
-// Auto-save al escribir (debounced)
-document.getElementById('problem').addEventListener('input', () => {
-    clearTimeout(autoSaveTimer);
-    autoSaveTimer = setTimeout(saveDraft, 2000);
-    
-    // Enable/disable generate button
-    updateGenerateButton();
-});
-
-document.getElementById('name').addEventListener('input', () => {
-    clearTimeout(autoSaveTimer);
-    autoSaveTimer = setTimeout(saveDraft, 2000);
-    updateGenerateButton();
-});
-
-document.getElementById('expectedOutput').addEventListener('input', () => {
-    clearTimeout(autoSaveTimer);
-    autoSaveTimer = setTimeout(saveDraft, 2000);
-    updateGenerateButton();
-});
-
-document.getElementById('considerations').addEventListener('input', () => {
-    clearTimeout(autoSaveTimer);
-    autoSaveTimer = setTimeout(saveDraft, 2000);
-});
+function deleteIntent() {
+    vscode.postMessage({ command: 'deleteIntent' });
+}
 
 function updateGenerateButton() {
     const hasName = document.getElementById('name').value.length > 0;
@@ -292,27 +239,37 @@ function updateGenerateButton() {
     document.getElementById('generateBtn').disabled = !(hasName && hasProblem && hasOutput);
 }
 
-// ===== MENSAJES DEL HOST =====
+document.getElementById('problem').addEventListener('input', () => {
+    triggerAutoSave();
+    updateGenerateButton();
+});
+
+document.getElementById('name').addEventListener('input', () => {
+    triggerAutoSave();
+    updateGenerateButton();
+});
+
+document.getElementById('expectedOutput').addEventListener('input', () => {
+    triggerAutoSave();
+    updateGenerateButton();
+});
+
+document.getElementById('considerations').addEventListener('input', triggerAutoSave);
+
 window.addEventListener('message', event => {
     const message = event.data;
     
     switch (message.command) {
-        case 'showFileContent':
-            document.getElementById('previewContent').textContent = message.content;
+        case 'setFiles':
+            renderFilePills(message.files);
             break;
             
-        case 'setFiles':
-            const container = document.getElementById('filePills');
-            container.innerHTML = message.files.map(filename => `
-                <span class="file-pill">
-                    <button type="button" onclick="insertFileName('${filename}')" style="background:none;border:none;color:inherit;cursor:pointer;">
-                        📄 ${filename}
-                    </button>
-                    <button type="button" class="file-link" onclick="openFilePreview('${filename}')" title="Ver archivo">
-                        🔗
-                    </button>
-                </span>
-            `).join('');
+        case 'updateTokens':
+            updateTokenDisplay(message.tokens);
+            break;
+            
+        case 'loadExistingIntent':
+            loadExistingIntentData(message.data);
             break;
             
         case 'validationErrors':
@@ -325,20 +282,90 @@ window.addEventListener('message', event => {
     }
 });
 
-// ===== ATAJOS DE TECLADO =====
+function renderFilePills(files) {
+    const container = document.getElementById('filePills');
+    
+    if (!files || files.length === 0) {
+        container.innerHTML = '<p class="help-text">No hay archivos seleccionados</p>';
+        return;
+    }
+    
+    container.innerHTML = files.map(file => `
+        <div class="file-pill">
+            <button type="button" class="file-btn file-name" onclick="insertFileName('${file.filename}')" title="Insertar nombre">
+                📄 ${file.filename}
+            </button>
+            <button type="button" class="file-btn" onclick="openFileInVSCode('${file.relativePath}')" title="Abrir en VSCode">
+                🔗
+            </button>
+            <button type="button" class="file-btn" onclick="copyFilePath('${file.relativePath}')" title="Copiar path">
+                📋
+            </button>
+            <button type="button" class="file-btn" onclick="revealInFinder('${file.relativePath}')" title="Mostrar en Finder/Explorer">
+                📂
+            </button>
+            <button type="button" class="file-btn file-remove" onclick="removeFile('${file.relativePath}')" title="Remover">
+                ❌
+            </button>
+        </div>
+    `).join('');
+}
+
+function loadExistingIntentData(data) {
+    isEditMode = true;
+    
+    document.getElementById('name').value = data.name || '';
+    document.getElementById('name').disabled = true;
+    
+    document.getElementById('problem').value = data.content.problem || '';
+    document.getElementById('expectedOutput').value = data.content.expectedOutput || '';
+    document.getElementById('considerations').value = data.content.considerations || '';
+    
+    if (data.content.currentBehavior && Array.isArray(data.content.currentBehavior)) {
+        data.content.currentBehavior.forEach(value => {
+            addListItem('currentBehavior');
+            const items = document.getElementById('currentBehaviorList').querySelectorAll('.list-item');
+            const lastItem = items[items.length - 1];
+            if (lastItem) {
+                lastItem.querySelector('input').value = value;
+            }
+        });
+    }
+
+    if (data.content.desiredBehavior && Array.isArray(data.content.desiredBehavior)) {
+        data.content.desiredBehavior.forEach(value => {
+            addListItem('desiredBehavior');
+            const items = document.getElementById('desiredBehaviorList').querySelectorAll('.list-item');
+            const lastItem = items[items.length - 1];
+            if (lastItem) {
+                lastItem.querySelector('input').value = value;
+            }
+        });
+    }
+    
+    const generateBtn = document.getElementById('generateBtn');
+    if (data.status === 'completed') {
+        generateBtn.textContent = '🔄 Regenerar Intent';
+    }
+    
+    const deleteBtn = document.getElementById('deleteBtn');
+    deleteBtn.style.display = 'block';
+}
+
 document.addEventListener('keydown', (e) => {
-    // Ctrl/Cmd + Enter para enviar
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
         e.preventDefault();
         document.getElementById('intentForm').dispatchEvent(new Event('submit'));
     }
     
-    // Escape para cancelar
     if (e.key === 'Escape') {
         cancel();
     }
 });
 
-// ===== INICIALIZACIÓN =====
-loadDraft();
+addListItem('currentBehavior');
+addListItem('desiredBehavior');
 updateGenerateButton();
+
+const deleteBtn = document.getElementById('deleteBtn');
+deleteBtn.style.display = 'none';

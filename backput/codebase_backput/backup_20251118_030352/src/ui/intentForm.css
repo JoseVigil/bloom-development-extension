@@ -14,8 +14,25 @@ body {
 }
 
 .container {
-    max-width: 1200px;
-    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 70% 30%;
+    gap: 20px;
+    height: calc(100vh - 40px);
+}
+
+.form-left {
+    overflow-y: auto;
+}
+
+.form-right {
+    border-left: 1px solid var(--vscode-panel-border);
+    padding-left: 20px;
+    overflow-y: auto;
+    display: none;
+}
+
+.form-right.visible {
+    display: block;
 }
 
 h1 {
@@ -104,6 +121,7 @@ textarea {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
+    margin-top: 12px;
     padding: 12px;
     background-color: var(--vscode-input-background);
     border: 1px solid var(--vscode-input-border);
@@ -114,11 +132,14 @@ textarea {
 .file-pill {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    padding: 6px 8px;
+    gap: 6px;
+    padding: 6px 12px;
     background: var(--vscode-button-background);
     color: var(--vscode-button-foreground);
+    border: none;
     border-radius: 16px;
+    cursor: pointer;
+    font-size: 13px;
     transition: all 0.2s;
 }
 
@@ -127,80 +148,16 @@ textarea {
     transform: translateY(-1px);
 }
 
-.file-btn {
+.file-link {
     background: transparent;
     border: none;
     cursor: pointer;
-    padding: 2px 4px;
-    color: inherit;
-    font-size: 14px;
-    transition: opacity 0.2s;
+    padding: 2px;
+    color: var(--vscode-textLink-foreground);
 }
 
-.file-btn:hover {
-    opacity: 0.7;
-}
-
-.file-btn.file-name {
-    font-weight: 500;
-    font-size: 13px;
-}
-
-.file-btn.file-remove {
-    color: var(--vscode-errorForeground);
-    font-weight: bold;
-}
-
-.token-counter {
-    margin-top: 12px;
-    padding: 12px;
-    background: var(--vscode-editor-inactiveSelectionBackground);
-    border-radius: 4px;
-    border: 1px solid var(--vscode-input-border);
-}
-
-.token-bar {
-    width: 100%;
-    height: 8px;
-    background: var(--vscode-input-background);
-    border-radius: 4px;
-    overflow: hidden;
-    margin-bottom: 8px;
-}
-
-.token-fill {
-    height: 100%;
-    transition: width 0.3s ease, background-color 0.3s ease;
-    border-radius: 4px;
-}
-
-.token-counter.token-safe .token-fill {
-    background: #4ec9b0;
-}
-
-.token-counter.token-warning .token-fill {
-    background: #ce9178;
-}
-
-.token-counter.token-error .token-fill {
-    background: var(--vscode-errorForeground);
-}
-
-.token-text {
-    font-size: 13px;
-    font-weight: 500;
-}
-
-.token-counter.token-safe .token-text {
-    color: #4ec9b0;
-}
-
-.token-counter.token-warning .token-text {
-    color: #ce9178;
-}
-
-.token-counter.token-error .token-text {
-    color: var(--vscode-errorForeground);
+.file-link:hover {
+    color: var(--vscode-textLink-activeForeground);
 }
 
 .list-container {
@@ -279,15 +236,10 @@ textarea {
 
 .button-group {
     display: flex;
-    align-items: center;
     gap: 12px;
     margin-top: 32px;
     padding-top: 20px;
     border-top: 1px solid var(--vscode-panel-border);
-}
-
-.button-spacer {
-    flex: 1;
 }
 
 .btn-primary {
@@ -326,22 +278,6 @@ textarea {
     background-color: var(--vscode-list-hoverBackground);
 }
 
-.btn-danger {
-    padding: 10px 24px;
-    background-color: transparent;
-    color: var(--vscode-errorForeground);
-    border: 1px solid var(--vscode-errorForeground);
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 14px;
-    transition: all 0.2s ease;
-}
-
-.btn-danger:hover {
-    background-color: var(--vscode-errorForeground);
-    color: var(--vscode-editor-background);
-}
-
 .auto-save-indicator {
     font-size: 12px;
     color: var(--vscode-descriptionForeground);
@@ -377,6 +313,33 @@ textarea {
     margin-bottom: 4px;
 }
 
+.preview-content {
+    background: var(--vscode-textCodeBlock-background);
+    padding: 12px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 12px;
+    white-space: pre-wrap;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.close-preview {
+    float: right;
+    background: transparent;
+    border: none;
+    color: var(--vscode-foreground);
+    cursor: pointer;
+    font-size: 20px;
+    padding: 4px 8px;
+}
+
+.close-preview:hover {
+    background-color: var(--vscode-list-hoverBackground);
+    border-radius: 4px;
+}
+
+/* Animaciones */
 @keyframes fadeIn {
     from {
         opacity: 0;

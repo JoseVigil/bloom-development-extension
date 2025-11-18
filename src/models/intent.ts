@@ -181,3 +181,15 @@ export interface PayloadAnalysis {
     limits: Record<string, ModelLimit>;
     recommendations: Recommendation[];
 }
+
+// ============================================
+// CONTENT: Contenido del intent
+// ============================================
+
+export interface IntentContent {
+    problem: string;
+    expectedOutput: string;
+    currentBehavior: string[];
+    desiredBehavior: string[];
+    considerations: string;
+}
