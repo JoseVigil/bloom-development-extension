@@ -331,7 +331,8 @@ class TransactionalProcessor:
                 print("\n🔍 DRY-RUN: Acciones que se ejecutarían")
                 print("=" * 70)
                 for file_info in files:
-                    full_path = os.path.join(self.project_root, file_info['path'])
+                    normalized_path = os.path.normpath(file_info['path'])
+                    full_path = os.path.join(self.project_root, normalized_path)
                     action = "MODIFICAR" if os.path.exists(full_path) else "CREAR"
                     size = len(file_info['content'])
                     print(f"  [{action}] {file_info['path']} ({size} bytes)")
@@ -367,7 +368,8 @@ class TransactionalProcessor:
             return (False, f"❌ Contenido insuficiente ({len(content)} chars)")
         
         # Validar coherencia de acción
-        full_path = os.path.join(self.project_root, path)
+        normalized_path = os.path.normpath(path)
+        full_path = os.path.join(self.project_root, normalized_path)
         file_exists = os.path.exists(full_path)
         
         if action == "MODIFICAR" and not file_exists:
@@ -398,10 +400,16 @@ class TransactionalProcessor:
     
     def _write_to_temp(self, file_info: Dict) -> Optional[str]:
         """Escribe archivo en directorio temporal"""
-        temp_path = os.path.join(self.temp_dir, file_info['path'])
+        # ✅ NORMALIZAR PATH PARA EL OS ACTUAL
+        normalized_path = os.path.normpath(file_info['path'])
+        temp_path = os.path.join(self.temp_dir, normalized_path)
         
-        os.makedirs(os.path.dirname(temp_path), exist_ok=True)
+        # Crear directorio padre si no existe
+        temp_dir = os.path.dirname(temp_path)
+        if temp_dir:
+            os.makedirs(temp_dir, exist_ok=True)
         
+        # Escribir contenido
         with open(temp_path, 'w', encoding='utf-8') as f:
             f.write(file_info['content'])
         
@@ -409,8 +417,11 @@ class TransactionalProcessor:
     
     def _commit_file(self, file_info: Dict) -> Optional[str]:
         """Mueve archivo de temp a destino final (con backup)"""
-        temp_path = os.path.join(self.temp_dir, file_info['path'])
-        final_path = os.path.join(self.project_root, file_info['path'])
+        # ✅ NORMALIZAR PATH PARA EL OS ACTUAL
+        normalized_path = os.path.normpath(file_info['path'])
+        
+        temp_path = os.path.join(self.temp_dir, normalized_path)
+        final_path = os.path.join(self.project_root, normalized_path)
         
         print(f"\n📄 Procesando: {file_info['path']}")
         print(f"   📍 Destino: {final_path}")
@@ -425,7 +436,9 @@ class TransactionalProcessor:
                 print(f"   💾 Backup: {os.path.basename(backup_path)}")
         
         # Crear directorio destino
-        os.makedirs(os.path.dirname(final_path), exist_ok=True)
+        final_dir = os.path.dirname(final_path)
+        if final_dir:
+            os.makedirs(final_dir, exist_ok=True)
         
         # Mover de temp a final
         shutil.move(temp_path, final_path)
