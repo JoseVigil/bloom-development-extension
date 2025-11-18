@@ -1,7 +1,7 @@
 // src/strategies/helpers.ts
 // ✅ Helper para que las estrategias categoricen archivos correctamente
 
-import { FileCategory } from '../models/intent';
+import { FileCategory } from '../models/codebaseStrategy';
 import * as path from 'path';
 
 /**

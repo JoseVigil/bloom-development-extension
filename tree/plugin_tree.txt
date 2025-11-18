@@ -9,7 +9,6 @@ bloom-development-extension/
 │   │   ├── duplicateIntent.ts
 │   │   ├── editIntent.ts
 │   │   ├── generateIntent.ts
-│   │   ├── intent.ts
 │   │   ├── openFileInVSCode.ts
 │   │   ├── openIntent.ts
 │   │   ├── openMarkdownPreview.ts

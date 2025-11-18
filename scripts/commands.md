@@ -6,19 +6,11 @@ python /c/repos/bloom-videos/bloom-development-extension/scripts/tree\_custom.py
 
 
 
-
-
 implement\_codebase\_result.py
 
 
 
 python /c/repos/bloom-videos/bloom-development-extension/scripts/implement\_codebase\_result.py /c/repos/bloom-videos/bloom-development-extension/docs/v5/reformatted\_codebase.md /c/repos/bloom-videos/bloom-development-extension --backup-dir /c/repos/bloom-videos/bloom-development-extension/backups --tree-file /c/repos/bloom-videos/bloom-development-extension/scripts/tree.txt
-
-
-
-codebase\_generation.py
-
-python ... --output mi\_codebase.md --files ...
 
 
 
@@ -28,29 +20,9 @@ python /c/repos/bloom-videos/bloom-development-extension/scripts/codebase\_gener
 
 
 
-python snapshot\_processor\_v3.py codase\_snapshot.md ./bloom-development-extension \\
-
-&nbsp; --tree plugin\_tree.txt \\
-
-&nbsp; --backup-dir
+codebase\_snapshot\_integration.py
 
 
 
-
-
-python /c/repos/bloom-videos/bloom-development-extension/scripts/codebase\_snapshot\_integration.py \\
-
-&nbsp; /c/repos/bloom-videos/bloom-development-extension/codebase/codebase\_snapshot.md \\
-
-&nbsp; /c/repos/bloom-videos/bloom-development-extension \\
-
-&nbsp; --tree /c/repos/bloom-videos/bloom-development-extension/tree/plugin\_tree.txt \\
-
-&nbsp; --backup-dir /c/repos/bloom-videos/bloom-development-extension/backput/codebase\_backput
-
-
-
-
-
-
+python /c/repos/bloom-videos/bloom-development-extension/scripts/codebase\_snapshot\_integration.py /c/repos/bloom-videos/bloom-development-extension/codebase/codebase\_snapshot.md /c/repos/bloom-videos/bloom-development-extension --tree /c/repos/bloom-videos/bloom-development-extension/tree/plugin\_tree.txt --backup-dir /c/repos/bloom-videos/bloom-development-extension/backput/codebase\_backput
 

@@ -1,0 +1,75 @@
+$ python tree_custom.py --help
+Tree Generator - Genera diagramas de árbol de directorios
+
+Uso: python tree_custom.py <archivo_salida.txt> <ruta1> <ruta2> ...
+
+Parámetros:
+  archivo_salida.txt   - Archivo donde se guardará el árbol
+  ruta1, ruta2, ...    - Directorios/archivos a incluir en el árbol
+
+Ejemplos:
+  python tree_custom.py arbol.txt .
+  python tree_custom.py salida.txt src tests docs
+  python tree_custom.py proyecto.txt /ruta/al/proyecto
+
+
+$ python codebase_generation.py --help
+usage: codebase_generation.py [-h] [--dir ROOT_DIR] [--output OUTPUT_FILE] [--diff DIFF_DIR]
+                              [--files FILES [FILES ...]]
+
+Genera un snapshot de codebase en Markdown desde directorios y/o archivos específicos.
+
+options:
+  -h, --help            show this help message and exit
+  --dir ROOT_DIR        Directorio raíz a procesar (recursivo)
+  --output OUTPUT_FILE  Archivo de salida .md
+  --diff DIFF_DIR       Directorio para comparar (genera diff section)
+  --files FILES [FILES ...]
+                        Lista de archivos específicos a incluir
+
+Ejemplos de uso:
+  # Directorio completo
+  python codebase_generation.py --dir ./mi-proyecto
+
+  # Archivos específicos
+  python codebase_generation.py --files src/app.ts src/utils.ts config.json
+
+  # Combinar directorio + archivos adicionales
+  python codebase_generation.py --dir ./src --files README.md package.json
+
+  # Con output personalizado
+  python codebase_generation.py --dir ./src --output mi_proyecto.md
+
+  # Modo diff
+  python codebase_generation.py --dir ./version1 --diff ./version2
+
+
+$ python codebase_snapshot_integration.py --help
+usage: codebase_snapshot_integration.py [-h] [--tree TREE] [--backup-dir [BACKUP_DIR]]
+                                        [--dry-run] [--debug-tree]
+                                        snapshot_file project_root
+
+PROCESADOR DE CODEBASE SNAPSHOT v3.0 - VALIDACIÓN ROBUSTA
+Regenera una codebase completa a partir de un snapshot de Claude en formato Markdown.
+Valida contra árbol de directorios (tree.txt) y aplica cambios de forma transaccional.
+
+
+positional arguments:
+  snapshot_file         Archivo .md con el snapshot de la codebase (formato Claude estándar)
+  project_root          Directorio raíz donde se regenerarán los archivos
+
+options:
+  -h, --help            show this help message and exit
+  --tree TREE           Archivo tree.txt para validar estructura (ej: plugin_tree.txt)
+  --backup-dir [BACKUP_DIR]
+                        Directorio para backups. Sin valor: backups automáticos. Con ruta:
+                        usa directorio específico. Omítelo para no hacer backups.
+  --dry-run             Simula operación sin modificar archivos (solo muestra qué haría)
+  --debug-tree          Muestra todos los archivos detectados en el tree y sale
+
+Ejemplos de uso:
+  codebase_snapshot_integration.py snapshot.md ./mi_proyecto
+  codebase_snapshot_integration.py snapshot.md ./proyecto --tree plugin_tree.txt
+  codebase_snapshot_integration.py cambios.md ./src --backup-dir --tree tree.txt
+  codebase_snapshot_integration.py snapshot.md . --dry-run
+  codebase_snapshot_integration.py updates.md ./app --backup-dir ./backups --tree structure.tx

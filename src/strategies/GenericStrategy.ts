@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { ICodebaseStrategy, FileDescriptor, FileCategory } from '../models/codebaseStrategy';
-import { ProjectType } from '../models/intent';
+import { ProjectType } from '../models/intent.js';
 
 export class GenericStrategy implements ICodebaseStrategy {
     name = 'Generic';
