@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import { ICodebaseStrategy, FileDescriptor, FileCategory } from '../models/codebaseStrategy';
-import { ProjectType } from '../models/intent';
+import { ProjectType } from '../models/intent.js';
 
 async function fileExists(filePath: string): Promise<boolean> {
     try {

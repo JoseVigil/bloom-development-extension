@@ -1,12 +1,11 @@
 import * as vscode from 'vscode';
+import { FileCategory } from './codebaseStrategy';
 
 // ============================================
 // TIPOS BASE
 // ============================================
 
 export type IntentStatus = 'draft' | 'in-progress' | 'completed' | 'archived';
-
-export type FileCategory = 'code' | 'config' | 'docs' | 'test' | 'asset' | 'other';
 
 export type ProjectType = 'android' | 'ios' | 'web' | 'react' | 'node' | 'generic';
 

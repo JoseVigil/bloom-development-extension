@@ -1,8 +1,8 @@
 // src/strategies/AndroidStrategy.ts
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { ICodebaseStrategy, FileDescriptor } from '../models/codebaseStrategy';
-import { ProjectType, FileCategory } from '../models/intent';
+import { ICodebaseStrategy, FileDescriptor, FileCategory } from '../models/codebaseStrategy';
+import { ProjectType } from '../models/intent.js';
 
 export class AndroidStrategy implements ICodebaseStrategy {
     name = 'Android';
