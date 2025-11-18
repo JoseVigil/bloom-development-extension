@@ -10,7 +10,7 @@ Parámetros:
 Ejemplos:
   python tree_custom.py arbol.txt .
   python tree_custom.py salida.txt src tests docs
-  python tree_custom.py proyecto.txt /ruta/al/proyecto
+  python tree_custom.py proyecto.txt /ruta/al/proyecto 
 
 
 $ python codebase_generation.py --help

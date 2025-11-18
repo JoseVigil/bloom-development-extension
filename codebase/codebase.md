@@ -36,7 +36,7 @@ Lista de archivos incluidos en este snapshot:
 
 ## Contenidos de Archivos
 ### C:/repos/bloom-videos/bloom-development-extension/package.json
-Metadatos: Lenguaje: json, Hash MD5: 5ffbe41479071d56c0e1c92aea7045a5
+Metadatos: Lenguaje: json, Hash MD5: 0327a3a0e76a67db9157fbe82375b832
 
 ```json
 {
@@ -72,7 +72,7 @@ Metadatos: Lenguaje: json, Hash MD5: 5ffbe41479071d56c0e1c92aea7045a5
             },
             {
                 "command": "bloom.generateIntent",
-                "title": "Bloom: Generate Intent"
+                "title": "Bloom: Generate New Intent"
             },
             {
                 "command": "bloom.openIntent",
@@ -86,6 +86,26 @@ Metadatos: Lenguaje: json, Hash MD5: 5ffbe41479071d56c0e1c92aea7045a5
             {
                 "command": "bloom.deleteIntent",
                 "title": "Delete Intent"
+            },
+            {
+                "command": "bloom.addToIntent",
+                "title": "Bloom: Add to Intent"
+            },
+            {
+                "command": "bloom.deleteIntentFromForm",
+                "title": "Delete Current Intent"
+            },
+            {
+                "command": "bloom.openFileInVSCode",
+                "title": "Open File in VSCode"
+            },
+            {
+                "command": "bloom.revealInFinder",
+                "title": "Reveal in Finder/Explorer"
+            },
+            {
+                "command": "bloom.copyFilePath",
+                "title": "Copy File Path"
             }
         ],
         "menus": {
@@ -94,6 +114,11 @@ Metadatos: Lenguaje: json, Hash MD5: 5ffbe41479071d56c0e1c92aea7045a5
                     "command": "bloom.generateIntent",
                     "when": "explorerResourceIsFolder || resourceScheme == file",
                     "group": "bloom@1"
+                },
+                {
+                    "command": "bloom.addToIntent",
+                    "when": "explorerResourceIsFolder || resourceScheme == file",
+                    "group": "bloom@2"
                 }
             ],
             "view/item/context": [
@@ -122,6 +147,16 @@ Metadatos: Lenguaje: json, Hash MD5: 5ffbe41479071d56c0e1c92aea7045a5
                     "enum": ["free", "pro"],
                     "default": "free",
                     "description": "Versión del plugin"
+                },
+                "bloom.pythonPath": {
+                    "type": "string",
+                    "default": "python",
+                    "description": "Path al ejecutable de Python para regeneración de codebase"
+                },
+                "bloom.useCustomCodebaseGenerator": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Usar script Python personalizado para generar codebase.md"
                 }
             }
         }
@@ -466,205 +501,244 @@ export function registerRevealInFinder(
 ```
 
 ### C:/repos/bloom-videos/bloom-development-extension/src/core/codebaseGenerator.ts
-Metadatos: Lenguaje: typescript, Hash MD5: 76eac80a9b1936017d2fbc6f4372d383
+Metadatos: Lenguaje: typescript, Hash MD5: f981e517fb7fd3c2fa1fe42de4a361df
 
 ```typescript
 import * as vscode from 'vscode';
-    import { FileDescriptor, CodebaseGeneratorOptions } from '../models/codebaseStrategy';
-    import { promises as fs } from 'fs';
-    import * as path from 'path';
-    
-    export class CodebaseGenerator {
-        async generate(
-            files: FileDescriptor[],
-            outputPath: vscode.Uri,
-            options: CodebaseGeneratorOptions
-        ): Promise<void> {
-            if (options.format === 'markdown') {
-                await this.generateMarkdown(files, outputPath, options);
-            } else {
-                await this.generateTarball(files, outputPath, options);
-            }
-        }
+import { FileDescriptor, CodebaseGeneratorOptions } from '../models/codebaseStrategy';
+import { promises as fs } from 'fs';
+import * as path from 'path';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
+
+export class CodebaseGenerator {
+    async generate(
+        files: FileDescriptor[],
+        outputPath: vscode.Uri,
+        options: CodebaseGeneratorOptions
+    ): Promise<void> {
+        const config = vscode.workspace.getConfiguration('bloom');
+        const useCustomGenerator = config.get<boolean>('useCustomCodebaseGenerator', false);
         
-        private async generateMarkdown(
-            files: FileDescriptor[],
-            outputPath: vscode.Uri,
-            options: CodebaseGeneratorOptions
-        ): Promise<void> {
-            let content = this.generateHeader(files, options);
-            content += this.generateIndex(files, options);
-            content += await this.generateContent(files, options);
-            
-            await fs.writeFile(outputPath.fsPath, content, 'utf-8');
-        }
-        
-        private generateHeader(
-            files: FileDescriptor[],
-            options: CodebaseGeneratorOptions
-        ): string {
-            const timestamp = new Date().toISOString();
-            let header = `# Codebase Export\n\n`;
-            
-            if (options.includeMetadata) {
-                header += `**Generated:** ${timestamp}\n`;
-                header += `**Total Files:** ${files.length}\n`;
-                header += `**Format:** ${options.format}\n\n`;
+        if (useCustomGenerator && options.format === 'markdown') {
+            const success = await this.tryPythonGeneration(files, outputPath, options);
+            if (success) {
+                return;
             }
             
-            header += `---\n\n`;
-            return header;
+            vscode.window.showWarningMessage(
+                'Script Python no disponible, usando generador nativo'
+            );
         }
         
-        private generateIndex(
-            files: FileDescriptor[],
-            options: CodebaseGeneratorOptions
-        ): string {
-            if (!options.addTableOfContents) {
-                return '';
-            }
-            
-            let index = `## Table of Contents\n\n`;
-            
-            if (options.categorizeByType) {
-                const categorized = this.categorizeFiles(files);
-                
-                for (const [category, categoryFiles] of Object.entries(categorized)) {
-                    index += `### ${category}\n\n`;
-                    for (const file of categoryFiles) {
-                        const anchor = this.createAnchor(file.relativePath);
-                        index += `- [${file.relativePath}](#${anchor})\n`;
-                    }
-                    index += `\n`;
-                }
-            } else {
-                for (const file of files) {
-                    const anchor = this.createAnchor(file.relativePath);
-                    index += `- [${file.relativePath}](#${anchor})\n`;
-                }
-                index += `\n`;
-            }
-            
-            index += `---\n\n`;
-            return index;
-        }
-        
-        private async generateContent(
-            files: FileDescriptor[],
-            options: CodebaseGeneratorOptions
-        ): Promise<string> {
-            let content = `## Files\n\n`;
-            
-            for (const file of files) {
-                content += await this.generateFileSection(file, options);
-            }
-            
-            return content;
-        }
-        
-        private async generateFileSection(
-            file: FileDescriptor,
-            options: CodebaseGeneratorOptions
-        ): Promise<string> {
-            const anchor = this.createAnchor(file.relativePath);
-            let section = `### ${file.relativePath} {#${anchor}}\n\n`;
-            
-            if (options.includeMetadata && file.metadata) {
-                section += `**Size:** ${this.formatBytes(file.metadata.size)}\n`;
-                section += `**Type:** ${file.metadata.type}\n`;
-                if (file.metadata.lastModified) {
-                    section += `**Modified:** ${new Date(file.metadata.lastModified).toLocaleString()}\n`;
-                }
-                section += `\n`;
-            }
-            
-            try {
-                const fileContent = await fs.readFile(file.absolutePath, 'utf-8');
-                const language = this.getLanguageFromExtension(file.relativePath);
-                
-                section += `\`\`\`${language}\n`;
-                section += fileContent;
-                section += `\n\`\`\`\n\n`;
-            } catch (error) {
-                section += `*Error reading file: ${error}*\n\n`;
-            }
-            
-            section += `---\n\n`;
-            return section;
-        }
-        
-        private categorizeFiles(files: FileDescriptor[]): Record<string, FileDescriptor[]> {
-            const categories: Record<string, FileDescriptor[]> = {};
-            
-            for (const file of files) {
-                const ext = path.extname(file.relativePath).toLowerCase();
-                let category = 'Other';
-                
-                if (['.ts', '.tsx', '.js', '.jsx'].includes(ext)) {
-                    category = 'TypeScript/JavaScript';
-                } else if (['.json', '.jsonc'].includes(ext)) {
-                    category = 'Configuration';
-                } else if (['.md', '.txt'].includes(ext)) {
-                    category = 'Documentation';
-                } else if (['.css', '.scss', '.sass', '.less'].includes(ext)) {
-                    category = 'Styles';
-                } else if (['.html', '.htm'].includes(ext)) {
-                    category = 'HTML';
-                }
-                
-                if (!categories[category]) {
-                    categories[category] = [];
-                }
-                categories[category].push(file);
-            }
-            
-            return categories;
-        }
-        
-        private createAnchor(filePath: string): string {
-            return filePath
-                .toLowerCase()
-                .replace(/[^a-z0-9]+/g, '-')
-                .replace(/^-|-$/g, '');
-        }
-        
-        private getLanguageFromExtension(filePath: string): string {
-            const ext = path.extname(filePath).toLowerCase();
-            const languageMap: Record<string, string> = {
-                '.ts': 'typescript',
-                '.tsx': 'tsx',
-                '.js': 'javascript',
-                '.jsx': 'jsx',
-                '.json': 'json',
-                '.md': 'markdown',
-                '.css': 'css',
-                '.scss': 'scss',
-                '.html': 'html',
-                '.py': 'python',
-                '.java': 'java',
-            };
-            
-            return languageMap[ext] || 'text';
-        }
-        
-        private formatBytes(bytes: number): string {
-            if (bytes === 0) return '0 Bytes';
-            
-            const k = 1024;
-            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            
-            return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
-        }
-        
-        private async generateTarball(
-            files: FileDescriptor[],
-            outputPath: vscode.Uri,
-            options: CodebaseGeneratorOptions
-        ): Promise<void> {
-            throw new Error('Tarball generation not yet implemented');
+        if (options.format === 'markdown') {
+            await this.generateMarkdown(files, outputPath, options);
+        } else {
+            await this.generateTarball(files, outputPath, options);
         }
     }
+    
+    private async tryPythonGeneration(
+        files: FileDescriptor[],
+        outputPath: vscode.Uri,
+        options: CodebaseGeneratorOptions
+    ): Promise<boolean> {
+        try {
+            const workspacePath = options.workspaceFolder.uri.fsPath;
+            const scriptPath = path.join(workspacePath, '.bloom', 'scripts', 'generate_codebase.py');
+            
+            try {
+                await fs.access(scriptPath);
+            } catch {
+                return false;
+            }
+            
+            const config = vscode.workspace.getConfiguration('bloom');
+            const pythonPath = config.get<string>('pythonPath', 'python');
+            
+            const filesListPath = path.join(path.dirname(outputPath.fsPath), 'files_list.json');
+            await fs.writeFile(
+                filesListPath,
+                JSON.stringify({
+                    files: files.map(f => ({
+                        relativePath: f.relativePath,
+                        absolutePath: f.absolutePath
+                    })),
+                    workspacePath: workspacePath,
+                    outputPath: outputPath.fsPath
+                }),
+                'utf-8'
+            );
+            
+            const command = `"${pythonPath}" "${scriptPath}" "${filesListPath}"`;
+            const { stdout, stderr } = await execAsync(command, {
+                cwd: workspacePath,
+                timeout: 60000
+            });
+            
+            if (stderr) {
+                console.warn('Python script warnings:', stderr);
+            }
+            
+            console.log('Python script output:', stdout);
+            
+            try {
+                await fs.access(outputPath.fsPath);
+                vscode.window.showInformationMessage('✅ Codebase regenerado (Python)');
+                return true;
+            } catch {
+                return false;
+            }
+            
+        } catch (error) {
+            console.error('Error ejecutando script Python:', error);
+            return false;
+        }
+    }
+    
+    private async generateMarkdown(
+        files: FileDescriptor[],
+        outputPath: vscode.Uri,
+        options: CodebaseGeneratorOptions
+    ): Promise<void> {
+        let content = this.generateHeader(files, options);
+        content += this.generateIndex(files, options);
+        content += await this.generateContent(files, options);
+        
+        await fs.writeFile(outputPath.fsPath, content, 'utf-8');
+    }
+    
+    private generateHeader(
+        files: FileDescriptor[],
+        options: CodebaseGeneratorOptions
+    ): string {
+        const timestamp = new Date().toISOString();
+        let header = `# Snapshot de Codebase\n`;
+        header += `Este archivo consolida todo el código del proyecto para indexación rápida por IA. `;
+        header += `Primero el índice jerárquico, luego cada archivo con su path como título y código en bloque Markdown.\n\n`;
+        
+        if (options.includeMetadata) {
+            header += `**Generado:** ${timestamp}\n`;
+            header += `**Total de archivos:** ${files.length}\n\n`;
+        }
+        
+        return header;
+    }
+    
+    private generateIndex(
+        files: FileDescriptor[],
+        options: CodebaseGeneratorOptions
+    ): string {
+        if (!options.addTableOfContents) {
+            return '';
+        }
+        
+        let index = `## Índice de Archivos\n\n`;
+        index += `Lista de archivos incluidos en este snapshot:\n\n`;
+        
+        const filesByDir: Record<string, string[]> = {};
+        
+        for (const file of files) {
+            const dir = path.dirname(file.relativePath);
+            if (!filesByDir[dir]) {
+                filesByDir[dir] = [];
+            }
+            filesByDir[dir].push(file.relativePath);
+        }
+        
+        const sortedDirs = Object.keys(filesByDir).sort();
+        
+        for (const dir of sortedDirs) {
+            index += `- **${dir}/**\n`;
+            for (const filePath of filesByDir[dir].sort()) {
+                index += `  - ${filePath}\n`;
+            }
+        }
+        
+        index += `\n`;
+        return index;
+    }
+    
+    private async generateContent(
+        files: FileDescriptor[],
+        options: CodebaseGeneratorOptions
+    ): Promise<string> {
+        let content = `## Contenidos de Archivos\n`;
+        
+        for (const file of files) {
+            content += await this.generateFileSection(file, options);
+        }
+        
+        return content;
+    }
+    
+    private async generateFileSection(
+        file: FileDescriptor,
+        options: CodebaseGeneratorOptions
+    ): Promise<string> {
+        let section = `### ${file.relativePath}\n`;
+        
+        if (options.includeMetadata && file.metadata) {
+            section += `Metadatos: `;
+            section += `Lenguaje: ${file.metadata.type}, `;
+            section += `Tamaño: ${this.formatBytes(file.metadata.size)}\n\n`;
+        }
+        
+        try {
+            const fileContent = await fs.readFile(file.absolutePath, 'utf-8');
+            const language = this.getLanguageFromExtension(file.relativePath);
+            
+            section += `\`\`\`${language}\n`;
+            section += fileContent;
+            section += `\n\`\`\`\n\n`;
+        } catch (error) {
+            section += `*Error leyendo archivo: ${error}*\n\n`;
+        }
+        
+        return section;
+    }
+    
+    private getLanguageFromExtension(filePath: string): string {
+        const ext = path.extname(filePath).toLowerCase();
+        const languageMap: Record<string, string> = {
+            '.ts': 'typescript',
+            '.tsx': 'tsx',
+            '.js': 'javascript',
+            '.jsx': 'jsx',
+            '.json': 'json',
+            '.md': 'markdown',
+            '.css': 'css',
+            '.scss': 'scss',
+            '.html': 'html',
+            '.py': 'python',
+            '.java': 'java',
+            '.kt': 'kotlin',
+            '.swift': 'swift',
+        };
+        
+        return languageMap[ext] || 'text';
+    }
+    
+    private formatBytes(bytes: number): string {
+        if (bytes === 0) return '0 Bytes';
+        
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        
+        return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+    }
+    
+    private async generateTarball(
+        files: FileDescriptor[],
+        outputPath: vscode.Uri,
+        options: CodebaseGeneratorOptions
+    ): Promise<void> {
+        throw new Error('Tarball generation not yet implemented');
+    }
+}
 ```
 
 ### C:/repos/bloom-videos/bloom-development-extension/src/core/intentAutoSaver.ts
@@ -1376,66 +1450,83 @@ export class MetadataManager {
 ```
 
 ### C:/repos/bloom-videos/bloom-development-extension/src/extension.ts
-Metadatos: Lenguaje: typescript, Hash MD5: 7fe62bd1187acb20144f89c3af186f19
+Metadatos: Lenguaje: typescript, Hash MD5: c81080300117b6ce220e6c9862e068d1
 
 ```typescript
 import * as vscode from 'vscode';
-    import { registerOpenMarkdownPreview } from './commands/openMarkdownPreview';
-    import { registerGenerateIntent } from './commands/generateIntent';
-    import { registerOpenIntent } from './commands/openIntent';
-    import { registerCopyContextToClipboard } from './commands/copyContextToClipboard';
-    import { registerDeleteIntent } from './commands/deleteIntent';
-    import { Logger } from './utils/logger';
-    import { MetadataManager } from './core/metadataManager';
-    import { ContextGatherer } from './core/contextGatherer';
-    import { TokenEstimator } from './core/tokenEstimator';
-    import { IntentTreeProvider } from './providers/intentTreeProvider';
+import { registerOpenMarkdownPreview } from './commands/openMarkdownPreview';
+import { registerGenerateIntent } from './commands/generateIntent';
+import { registerOpenIntent } from './commands/openIntent';
+import { registerCopyContextToClipboard } from './commands/copyContextToClipboard';
+import { registerDeleteIntent } from './commands/deleteIntent';
+import { registerAddToIntent } from './commands/addToIntent';
+import { registerDeleteIntentFromForm } from './commands/deleteIntentFromForm';
+import { registerOpenFileInVSCode } from './commands/openFileInVSCode';
+import { registerRevealInFinder } from './commands/revealInFinder';
+import { Logger } from './utils/logger';
+import { MetadataManager } from './core/metadataManager';
+import { ContextGatherer } from './core/contextGatherer';
+import { TokenEstimator } from './core/tokenEstimator';
+import { IntentTreeProvider } from './providers/intentTreeProvider';
+
+export function activate(context: vscode.ExtensionContext) {
+    const logger = new Logger();
+    logger.info('Bloom plugin v2.0 activado');
     
-    export function activate(context: vscode.ExtensionContext) {
-        const logger = new Logger();
-        logger.info('Bloom plugin v2.0 activado');
+    const metadataManager = new MetadataManager(logger);
+    const contextGatherer = new ContextGatherer(logger);
+    const tokenEstimator = new TokenEstimator();
+    
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    if (workspaceFolder) {
+        const intentTreeProvider = new IntentTreeProvider(
+            workspaceFolder,
+            logger,
+            metadataManager
+        );
         
-        const metadataManager = new MetadataManager(logger);
-        const contextGatherer = new ContextGatherer(logger);
-        const tokenEstimator = new TokenEstimator();
+        vscode.window.registerTreeDataProvider('bloomIntents', intentTreeProvider);
         
-        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-        if (workspaceFolder) {
-            const intentTreeProvider = new IntentTreeProvider(
-                workspaceFolder,
-                logger,
-                metadataManager
-            );
-            
-            vscode.window.registerTreeDataProvider('bloomIntents', intentTreeProvider);
-            
-            registerOpenIntent(context, logger, metadataManager);
-            registerCopyContextToClipboard(context, logger, contextGatherer, tokenEstimator);
-            registerDeleteIntent(context, logger, intentTreeProvider);
-        }
+        registerOpenIntent(context, logger, metadataManager);
+        registerCopyContextToClipboard(context, logger, contextGatherer, tokenEstimator);
+        registerDeleteIntent(context, logger, intentTreeProvider);
+        registerAddToIntent(context, logger);
+        registerDeleteIntentFromForm(context, logger);
+        registerOpenFileInVSCode(context, logger);
+        registerRevealInFinder(context, logger);
         
-        registerOpenMarkdownPreview(context, logger);
-        registerGenerateIntent(context, logger);
-        
-        logger.info('Todos los comandos registrados exitosamente');
+        // Registrar comando para copiar path de archivo
+        const copyFilePathDisposable = vscode.commands.registerCommand(
+            'bloom.copyFilePath',
+            async (filePath: string) => {
+                await vscode.env.clipboard.writeText(filePath);
+                vscode.window.showInformationMessage(`Path copiado: ${filePath}`);
+            }
+        );
+        context.subscriptions.push(copyFilePathDisposable);
     }
     
-    export function deactivate() {}
+    registerOpenMarkdownPreview(context, logger);
+    registerGenerateIntent(context, logger);
+    
+    logger.info('Todos los comandos registrados exitosamente');
+}
+
+export function deactivate() {}
 ```
 
 ### C:/repos/bloom-videos/bloom-development-extension/src/models/intent.ts
-Metadatos: Lenguaje: typescript, Hash MD5: 04ddaf6c6eb6210f256a8d7e9c717fc0
+Metadatos: Lenguaje: typescript, Hash MD5: 48f99997b6743e9f386014b1391f4882
 
 ```typescript
 import * as vscode from 'vscode';
+import { FileCategory } from './codebaseStrategy';
 
 // ============================================
 // TIPOS BASE
 // ============================================
 
 export type IntentStatus = 'draft' | 'in-progress' | 'completed' | 'archived';
-
-export type FileCategory = 'code' | 'config' | 'docs' | 'test' | 'asset' | 'other';
 
 export type ProjectType = 'android' | 'ios' | 'web' | 'react' | 'node' | 'generic';
 
@@ -1610,6 +1701,18 @@ export interface PayloadAnalysis {
     limits: Record<string, ModelLimit>;
     recommendations: Recommendation[];
 }
+
+// ============================================
+// CONTENT: Contenido del intent
+// ============================================
+
+export interface IntentContent {
+    problem: string;
+    expectedOutput: string;
+    currentBehavior: string[];
+    desiredBehavior: string[];
+    considerations: string;
+}
 ```
 
 ### C:/repos/bloom-videos/bloom-development-extension/src/providers/intentTreeProvider.ts
@@ -1729,7 +1832,7 @@ export class IntentTreeItem extends vscode.TreeItem {
 ```
 
 ### C:/repos/bloom-videos/bloom-development-extension/src/ui/intentForm.css
-Metadatos: Lenguaje: css, Hash MD5: 99740a412f33426ceb73e275b05ddc93
+Metadatos: Lenguaje: css, Hash MD5: ff012a96dda3b528496db5ecdf746715
 
 ```css
 * {
@@ -1748,25 +1851,8 @@ body {
 }
 
 .container {
-    display: grid;
-    grid-template-columns: 70% 30%;
-    gap: 20px;
-    height: calc(100vh - 40px);
-}
-
-.form-left {
-    overflow-y: auto;
-}
-
-.form-right {
-    border-left: 1px solid var(--vscode-panel-border);
-    padding-left: 20px;
-    overflow-y: auto;
-    display: none;
-}
-
-.form-right.visible {
-    display: block;
+    max-width: 1200px;
+    margin: 0 auto;
 }
 
 h1 {
@@ -1855,7 +1941,6 @@ textarea {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
-    margin-top: 12px;
     padding: 12px;
     background-color: var(--vscode-input-background);
     border: 1px solid var(--vscode-input-border);
@@ -1866,14 +1951,11 @@ textarea {
 .file-pill {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 6px 12px;
+    gap: 4px;
+    padding: 6px 8px;
     background: var(--vscode-button-background);
     color: var(--vscode-button-foreground);
-    border: none;
     border-radius: 16px;
-    cursor: pointer;
-    font-size: 13px;
     transition: all 0.2s;
 }
 
@@ -1882,16 +1964,80 @@ textarea {
     transform: translateY(-1px);
 }
 
-.file-link {
+.file-btn {
     background: transparent;
     border: none;
     cursor: pointer;
-    padding: 2px;
-    color: var(--vscode-textLink-foreground);
+    padding: 2px 4px;
+    color: inherit;
+    font-size: 14px;
+    transition: opacity 0.2s;
 }
 
-.file-link:hover {
-    color: var(--vscode-textLink-activeForeground);
+.file-btn:hover {
+    opacity: 0.7;
+}
+
+.file-btn.file-name {
+    font-weight: 500;
+    font-size: 13px;
+}
+
+.file-btn.file-remove {
+    color: var(--vscode-errorForeground);
+    font-weight: bold;
+}
+
+.token-counter {
+    margin-top: 12px;
+    padding: 12px;
+    background: var(--vscode-editor-inactiveSelectionBackground);
+    border-radius: 4px;
+    border: 1px solid var(--vscode-input-border);
+}
+
+.token-bar {
+    width: 100%;
+    height: 8px;
+    background: var(--vscode-input-background);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+
+.token-fill {
+    height: 100%;
+    transition: width 0.3s ease, background-color 0.3s ease;
+    border-radius: 4px;
+}
+
+.token-counter.token-safe .token-fill {
+    background: #4ec9b0;
+}
+
+.token-counter.token-warning .token-fill {
+    background: #ce9178;
+}
+
+.token-counter.token-error .token-fill {
+    background: var(--vscode-errorForeground);
+}
+
+.token-text {
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.token-counter.token-safe .token-text {
+    color: #4ec9b0;
+}
+
+.token-counter.token-warning .token-text {
+    color: #ce9178;
+}
+
+.token-counter.token-error .token-text {
+    color: var(--vscode-errorForeground);
 }
 
 .list-container {
@@ -1970,10 +2116,15 @@ textarea {
 
 .button-group {
     display: flex;
+    align-items: center;
     gap: 12px;
     margin-top: 32px;
     padding-top: 20px;
     border-top: 1px solid var(--vscode-panel-border);
+}
+
+.button-spacer {
+    flex: 1;
 }
 
 .btn-primary {
@@ -2012,6 +2163,22 @@ textarea {
     background-color: var(--vscode-list-hoverBackground);
 }
 
+.btn-danger {
+    padding: 10px 24px;
+    background-color: transparent;
+    color: var(--vscode-errorForeground);
+    border: 1px solid var(--vscode-errorForeground);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+}
+
+.btn-danger:hover {
+    background-color: var(--vscode-errorForeground);
+    color: var(--vscode-editor-background);
+}
+
 .auto-save-indicator {
     font-size: 12px;
     color: var(--vscode-descriptionForeground);
@@ -2047,33 +2214,6 @@ textarea {
     margin-bottom: 4px;
 }
 
-.preview-content {
-    background: var(--vscode-textCodeBlock-background);
-    padding: 12px;
-    border-radius: 4px;
-    font-family: monospace;
-    font-size: 12px;
-    white-space: pre-wrap;
-    max-height: 400px;
-    overflow-y: auto;
-}
-
-.close-preview {
-    float: right;
-    background: transparent;
-    border: none;
-    color: var(--vscode-foreground);
-    cursor: pointer;
-    font-size: 20px;
-    padding: 4px 8px;
-}
-
-.close-preview:hover {
-    background-color: var(--vscode-list-hoverBackground);
-    border-radius: 4px;
-}
-
-/* Animaciones */
 @keyframes fadeIn {
     from {
         opacity: 0;
@@ -2087,7 +2227,7 @@ textarea {
 ```
 
 ### C:/repos/bloom-videos/bloom-development-extension/src/ui/intentForm.html
-Metadatos: Lenguaje: html, Hash MD5: b53be701f78801e45b4b6f853576b356
+Metadatos: Lenguaje: html, Hash MD5: 5438efcd788518e78d66ef6a534fb771
 
 ```html
 <!DOCTYPE html>
@@ -2100,83 +2240,85 @@ Metadatos: Lenguaje: html, Hash MD5: b53be701f78801e45b4b6f853576b356
 </head>
 <body>
     <div class="container">
-        <div class="form-left">
-            <h1>🌸 Crear Bloom Intent</h1>
+        <h1>🌸 Crear Bloom Intent</h1>
 
-            <div class="auto-save-indicator" id="autoSaveIndicator">
-                💾 Draft guardado automáticamente
-            </div>
-
-            <div id="errorMessage" class="error-message">
-                <strong>⚠️ Errores de validación:</strong>
-                <ul id="errorList"></ul>
-            </div>
-
-            <form id="intentForm">
-                <div class="form-section">
-                    <label for="name">Nombre del Intent <span class="required">*</span></label>
-                    <input type="text" id="name" name="name" placeholder="fix-login-crash" required>
-                    <p class="help-text">Solo letras minúsculas, números y guiones</p>
-                </div>
-
-                <div class="form-section">
-                    <label>📁 Archivos relevantes (click=insertar, 🔗=ver)</label>
-                    <div class="file-pills" id="filePills">
-                        <!-- Generado dinámicamente -->
-                    </div>
-                </div>
-
-                <div class="form-section">
-                    <label for="problem">¿Qué problema quieres resolver? <span class="required">*</span></label>
-                    
-                    <div class="editor-toolbar">
-                        <button type="button" class="toolbar-btn" onclick="formatText('bold')" title="Negrita">B</button>
-                        <button type="button" class="toolbar-btn" onclick="formatText('italic')" title="Cursiva">I</button>
-                        <button type="button" class="toolbar-btn" onclick="formatText('code')" title="Código">```</button>
-                        <button type="button" class="toolbar-btn" onclick="formatText('list')" title="Lista">• -</button>
-                    </div>
-                    
-                    <textarea id="problem" name="problem" placeholder="Describe el problema en detalle..." required></textarea>
-                </div>
-
-                <div class="form-section">
-                    <label for="expectedOutput">Output Esperado <span class="required">*</span></label>
-                    <textarea id="expectedOutput" name="expectedOutput" placeholder="Describe el resultado esperado..." required></textarea>
-                </div>
-
-                <div class="form-section">
-                    <label>Comportamiento Actual</label>
-                    <div class="list-container" id="currentBehaviorList"></div>
-                    <button type="button" class="btn-add" onclick="addListItem('currentBehavior')">
-                        + Agregar paso
-                    </button>
-                </div>
-
-                <div class="form-section">
-                    <label>Comportamiento Deseado</label>
-                    <div class="list-container" id="desiredBehaviorList"></div>
-                    <button type="button" class="btn-add" onclick="addListItem('desiredBehavior')">
-                        + Agregar paso
-                    </button>
-                </div>
-
-                <div class="form-section">
-                    <label for="considerations">💬 Consideraciones adicionales (opcional)</label>
-                    <textarea id="considerations" name="considerations" rows="3" placeholder="Ej: Usar Retrofit, mantener estilo actual"></textarea>
-                </div>
-
-                <div class="button-group">
-                    <button type="submit" class="btn-primary" id="generateBtn">✨ Generar Intent</button>
-                    <button type="button" class="btn-secondary" onclick="cancel()">Cancelar</button>
-                </div>
-            </form>
+        <div class="auto-save-indicator" id="autoSaveIndicator">
+            💾 Draft guardado automáticamente
         </div>
 
-        <div class="form-right" id="previewPanel">
-            <button class="close-preview" onclick="closePreview()">×</button>
-            <h3 id="previewTitle">Preview</h3>
-            <div class="preview-content" id="previewContent"></div>
+        <div id="errorMessage" class="error-message">
+            <strong>⚠️ Errores de validación:</strong>
+            <ul id="errorList"></ul>
         </div>
+
+        <form id="intentForm">
+            <div class="form-section">
+                <label for="name">Nombre del Intent <span class="required">*</span></label>
+                <input type="text" id="name" name="name" placeholder="fix-login-crash" required>
+                <p class="help-text">Solo letras minúsculas, números y guiones</p>
+            </div>
+
+            <div class="form-section">
+                <label>📁 Archivos relevantes</label>
+                <div class="file-pills" id="filePills">
+                    <!-- Generado dinámicamente -->
+                </div>
+                <div class="token-counter" id="tokenCounter">
+                    <div class="token-bar">
+                        <div class="token-fill" id="tokenFill"></div>
+                    </div>
+                    <div class="token-text" id="tokenText">
+                        📊 Token estimate: 0 / 100,000 (0%)
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-section">
+                <label for="problem">¿Qué problema quieres resolver? <span class="required">*</span></label>
+                
+                <div class="editor-toolbar">
+                    <button type="button" class="toolbar-btn" onclick="formatText('bold')" title="Negrita">B</button>
+                    <button type="button" class="toolbar-btn" onclick="formatText('italic')" title="Cursiva">I</button>
+                    <button type="button" class="toolbar-btn" onclick="formatText('code')" title="Código">```</button>
+                    <button type="button" class="toolbar-btn" onclick="formatText('list')" title="Lista">• -</button>
+                </div>
+                
+                <textarea id="problem" name="problem" placeholder="Describe el problema en detalle..." required></textarea>
+            </div>
+
+            <div class="form-section">
+                <label for="expectedOutput">Output Esperado <span class="required">*</span></label>
+                <textarea id="expectedOutput" name="expectedOutput" placeholder="Describe el resultado esperado..." required></textarea>
+            </div>
+
+            <div class="form-section">
+                <label>Comportamiento Actual</label>
+                <div class="list-container" id="currentBehaviorList"></div>
+                <button type="button" class="btn-add" onclick="addListItem('currentBehavior')">
+                    + Agregar paso
+                </button>
+            </div>
+
+            <div class="form-section">
+                <label>Comportamiento Deseado</label>
+                <div class="list-container" id="desiredBehaviorList"></div>
+                <button type="button" class="btn-add" onclick="addListItem('desiredBehavior')">
+                    + Agregar paso
+                </button>
+            </div>
+
+            <div class="form-section">
+                <label for="considerations">💬 Consideraciones adicionales (opcional)</label>
+                <textarea id="considerations" name="considerations" rows="3" placeholder="Ej: Usar Retrofit, mantener estilo actual"></textarea>
+            </div>
+
+            <div class="button-group">
+                <button type="submit" class="btn-primary" id="generateBtn">✨ Generar Intent</button>
+                <button type="button" class="btn-secondary" onclick="cancel()">Cancelar</button>
+                <div class="button-spacer"></div>
+                <button type="button" class="btn-danger" id="deleteBtn" onclick="deleteIntent()">🗑️ Delete Intent</button>
+            </div>
+        </form>
     </div>
     
     <!-- JS_PLACEHOLDER -->
@@ -2185,28 +2327,25 @@ Metadatos: Lenguaje: html, Hash MD5: b53be701f78801e45b4b6f853576b356
 ```
 
 ### C:/repos/bloom-videos/bloom-development-extension/src/ui/intentForm.js
-Metadatos: Lenguaje: javascript, Hash MD5: a7fa712b9868c97ac6e7fe0fb084ef85
+Metadatos: Lenguaje: javascript, Hash MD5: 0335754214d96bc50c860d2a97614f38
 
 ```javascript
-// VSCode API
 const vscode = acquireVsCodeApi();
 let lastFocusedField = null;
 let autoSaveTimer = null;
+let isEditMode = false;
 
-// Contadores para IDs únicos de items en listas
 let listCounters = {
     currentBehavior: 0,
     desiredBehavior: 0
 };
 
-// Capturar último campo enfocado
 document.addEventListener('focusin', (e) => {
     if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') {
         lastFocusedField = e.target;
     }
 });
 
-// ===== FORMATEO DE TEXTO =====
 function formatText(type) {
     const textarea = lastFocusedField || document.getElementById('problem');
     if (!textarea || textarea.tagName !== 'TEXTAREA') return;
@@ -2236,10 +2375,9 @@ function formatText(type) {
     textarea.selectionEnd = start + formatted.length;
     textarea.focus();
 
-    saveDraft();
+    triggerAutoSave();
 }
 
-// ===== MANEJO DE ARCHIVOS =====
 function insertFileName(filename) {
     const target = lastFocusedField || document.getElementById('problem');
     if (!target || (target.tagName !== 'TEXTAREA' && target.tagName !== 'INPUT')) {
@@ -2255,24 +2393,37 @@ function insertFileName(filename) {
     target.selectionStart = target.selectionEnd = start + text.length;
     target.focus();
 
-    saveDraft();
+    triggerAutoSave();
 }
 
-function openFilePreview(filename) {
+function openFileInVSCode(filePath) {
     vscode.postMessage({
-        command: 'getFileContent',
-        filename: filename
+        command: 'openFileInVSCode',
+        filePath: filePath
     });
-
-    document.getElementById('previewPanel').classList.add('visible');
-    document.getElementById('previewTitle').textContent = `📄 ${filename}`;
 }
 
-function closePreview() {
-    document.getElementById('previewPanel').classList.remove('visible');
+function copyFilePath(filePath) {
+    vscode.postMessage({
+        command: 'copyFilePath',
+        filePath: filePath
+    });
 }
 
-// ===== LISTAS DINÁMICAS =====
+function revealInFinder(filePath) {
+    vscode.postMessage({
+        command: 'revealInFinder',
+        filePath: filePath
+    });
+}
+
+function removeFile(filePath) {
+    vscode.postMessage({
+        command: 'removeFile',
+        filePath: filePath
+    });
+}
+
 function addListItem(listName) {
     const listContainer = document.getElementById(listName + 'List');
     const itemId = listName + '_' + listCounters[listName]++;
@@ -2287,25 +2438,20 @@ function addListItem(listName) {
     
     listContainer.appendChild(itemDiv);
     
-    // Focus en el input recién creado
     const newInput = itemDiv.querySelector('input');
     if (newInput) {
         newInput.focus();
-        // Auto-save al escribir en listas
-        newInput.addEventListener('input', () => {
-            clearTimeout(autoSaveTimer);
-            autoSaveTimer = setTimeout(saveDraft, 2000);
-        });
+        newInput.addEventListener('input', triggerAutoSave);
     }
 
-    saveDraft();
+    triggerAutoSave();
 }
 
 function removeListItem(itemId) {
     const item = document.getElementById(itemId);
     if (item) {
         item.remove();
-        saveDraft();
+        triggerAutoSave();
     }
 }
 
@@ -2317,28 +2463,29 @@ function getListValues(listName) {
         .filter(v => v.length > 0);
 }
 
-// ===== AUTO-SAVE DRAFT =====
-function saveDraft() {
-    const formData = {
-        name: document.getElementById('name').value,
-        problem: document.getElementById('problem').value,
-        expectedOutput: document.getElementById('expectedOutput').value,
-        currentBehavior: getListValues('currentBehavior'),
-        desiredBehavior: getListValues('desiredBehavior'),
-        considerations: document.getElementById('considerations').value
-    };
-
-    const state = vscode.getState() || {};
-    state.draft = formData;
-    state.lastSaved = new Date().toISOString();
-    vscode.setState(state);
-
-    showAutoSaveIndicator();
+function triggerAutoSave() {
+    clearTimeout(autoSaveTimer);
+    autoSaveTimer = setTimeout(() => {
+        const updates = {
+            problem: document.getElementById('problem').value,
+            expectedOutput: document.getElementById('expectedOutput').value,
+            currentBehavior: getListValues('currentBehavior'),
+            desiredBehavior: getListValues('desiredBehavior'),
+            considerations: document.getElementById('considerations').value
+        };
+        
+        vscode.postMessage({
+            command: 'autoSave',
+            updates: updates
+        });
+        
+        showAutoSaveIndicator();
+    }, 2000);
 }
 
 function showAutoSaveIndicator() {
     const indicator = document.getElementById('autoSaveIndicator');
-    indicator.textContent = '💾 Draft guardado ' + new Date().toLocaleTimeString();
+    indicator.textContent = '💾 Guardado ' + new Date().toLocaleTimeString();
     indicator.style.opacity = '1';
 
     setTimeout(() => {
@@ -2346,49 +2493,6 @@ function showAutoSaveIndicator() {
     }, 2000);
 }
 
-function loadDraft() {
-    const state = vscode.getState();
-    if (state && state.draft) {
-        const draft = state.draft;
-        
-        document.getElementById('name').value = draft.name || '';
-        document.getElementById('problem').value = draft.problem || '';
-        document.getElementById('expectedOutput').value = draft.expectedOutput || '';
-        document.getElementById('considerations').value = draft.considerations || '';
-
-        // Restaurar listas
-        if (draft.currentBehavior && Array.isArray(draft.currentBehavior)) {
-            draft.currentBehavior.forEach(value => {
-                addListItem('currentBehavior');
-                const items = document.getElementById('currentBehaviorList').querySelectorAll('.list-item');
-                const lastItem = items[items.length - 1];
-                if (lastItem) {
-                    lastItem.querySelector('input').value = value;
-                }
-            });
-        }
-
-        if (draft.desiredBehavior && Array.isArray(draft.desiredBehavior)) {
-            draft.desiredBehavior.forEach(value => {
-                addListItem('desiredBehavior');
-                const items = document.getElementById('desiredBehaviorList').querySelectorAll('.list-item');
-                const lastItem = items[items.length - 1];
-                if (lastItem) {
-                    lastItem.querySelector('input').value = value;
-                }
-            });
-        }
-
-        document.getElementById('autoSaveIndicator').textContent = 
-            '📂 Draft cargado de ' + new Date(state.lastSaved).toLocaleString();
-    } else {
-        // Agregar items iniciales si no hay draft
-        addListItem('currentBehavior');
-        addListItem('desiredBehavior');
-    }
-}
-
-// ===== VALIDACIÓN =====
 function showValidationErrors(errors) {
     const errorDiv = document.getElementById('errorMessage');
     const errorList = document.getElementById('errorList');
@@ -2404,21 +2508,34 @@ function hideValidationErrors() {
     errorDiv.style.display = 'none';
 }
 
-// ===== SUBMIT FORM =====
+function updateTokenDisplay(tokens) {
+    const tokenText = document.getElementById('tokenText');
+    const tokenFill = document.getElementById('tokenFill');
+    const tokenCounter = document.getElementById('tokenCounter');
+    
+    const percentage = tokens.percentage;
+    const estimated = tokens.estimated.toLocaleString();
+    const limit = tokens.limit.toLocaleString();
+    
+    tokenFill.style.width = Math.min(percentage, 100) + '%';
+    
+    if (percentage < 80) {
+        tokenCounter.className = 'token-counter token-safe';
+        tokenText.textContent = `📊 Token estimate: ${estimated} / ${limit} (${percentage.toFixed(1)}%)`;
+    } else if (percentage < 100) {
+        tokenCounter.className = 'token-counter token-warning';
+        tokenText.textContent = `⚠️ Warning: ${estimated} / ${limit} (${percentage.toFixed(1)}%) - Consider removing files`;
+    } else {
+        tokenCounter.className = 'token-counter token-error';
+        tokenText.textContent = `❌ Error: ${estimated} / ${limit} (${percentage.toFixed(1)}%) - Cannot generate, remove files`;
+        document.getElementById('generateBtn').disabled = true;
+    }
+}
+
 document.getElementById('intentForm').addEventListener('submit', (e) => {
     e.preventDefault();
     
     hideValidationErrors();
-
-    // Obtener archivos seleccionados
-    const selectedFiles = [];
-    const filePills = document.querySelectorAll('.file-pill button[onclick^="insertFileName"]');
-    filePills.forEach(btn => {
-        const match = btn.getAttribute('onclick').match(/insertFileName\('([^']+)'\)/);
-        if (match) {
-            selectedFiles.push(match[1]);
-        }
-    });
 
     const formData = {
         name: document.getElementById('name').value.trim(),
@@ -2427,16 +2544,13 @@ document.getElementById('intentForm').addEventListener('submit', (e) => {
         currentBehavior: getListValues('currentBehavior'),
         desiredBehavior: getListValues('desiredBehavior'),
         considerations: document.getElementById('considerations').value.trim(),
-        selectedFiles: selectedFiles
+        selectedFiles: []
     };
 
     vscode.postMessage({
         command: 'submit',
         data: formData
     });
-
-    // Limpiar draft después de generar
-    vscode.setState({});
 });
 
 function cancel() {
@@ -2445,34 +2559,9 @@ function cancel() {
     }
 }
 
-// ===== AUTO-SAVE INTERVALS =====
-setInterval(saveDraft, 30000);
-
-// Auto-save al escribir (debounced)
-document.getElementById('problem').addEventListener('input', () => {
-    clearTimeout(autoSaveTimer);
-    autoSaveTimer = setTimeout(saveDraft, 2000);
-    
-    // Enable/disable generate button
-    updateGenerateButton();
-});
-
-document.getElementById('name').addEventListener('input', () => {
-    clearTimeout(autoSaveTimer);
-    autoSaveTimer = setTimeout(saveDraft, 2000);
-    updateGenerateButton();
-});
-
-document.getElementById('expectedOutput').addEventListener('input', () => {
-    clearTimeout(autoSaveTimer);
-    autoSaveTimer = setTimeout(saveDraft, 2000);
-    updateGenerateButton();
-});
-
-document.getElementById('considerations').addEventListener('input', () => {
-    clearTimeout(autoSaveTimer);
-    autoSaveTimer = setTimeout(saveDraft, 2000);
-});
+function deleteIntent() {
+    vscode.postMessage({ command: 'deleteIntent' });
+}
 
 function updateGenerateButton() {
     const hasName = document.getElementById('name').value.length > 0;
@@ -2482,27 +2571,37 @@ function updateGenerateButton() {
     document.getElementById('generateBtn').disabled = !(hasName && hasProblem && hasOutput);
 }
 
-// ===== MENSAJES DEL HOST =====
+document.getElementById('problem').addEventListener('input', () => {
+    triggerAutoSave();
+    updateGenerateButton();
+});
+
+document.getElementById('name').addEventListener('input', () => {
+    triggerAutoSave();
+    updateGenerateButton();
+});
+
+document.getElementById('expectedOutput').addEventListener('input', () => {
+    triggerAutoSave();
+    updateGenerateButton();
+});
+
+document.getElementById('considerations').addEventListener('input', triggerAutoSave);
+
 window.addEventListener('message', event => {
     const message = event.data;
     
     switch (message.command) {
-        case 'showFileContent':
-            document.getElementById('previewContent').textContent = message.content;
+        case 'setFiles':
+            renderFilePills(message.files);
             break;
             
-        case 'setFiles':
-            const container = document.getElementById('filePills');
-            container.innerHTML = message.files.map(filename => `
-                <span class="file-pill">
-                    <button type="button" onclick="insertFileName('${filename}')" style="background:none;border:none;color:inherit;cursor:pointer;">
-                        📄 ${filename}
-                    </button>
-                    <button type="button" class="file-link" onclick="openFilePreview('${filename}')" title="Ver archivo">
-                        🔗
-                    </button>
-                </span>
-            `).join('');
+        case 'updateTokens':
+            updateTokenDisplay(message.tokens);
+            break;
+            
+        case 'loadExistingIntent':
+            loadExistingIntentData(message.data);
             break;
             
         case 'validationErrors':
@@ -2515,27 +2614,97 @@ window.addEventListener('message', event => {
     }
 });
 
-// ===== ATAJOS DE TECLADO =====
+function renderFilePills(files) {
+    const container = document.getElementById('filePills');
+    
+    if (!files || files.length === 0) {
+        container.innerHTML = '<p class="help-text">No hay archivos seleccionados</p>';
+        return;
+    }
+    
+    container.innerHTML = files.map(file => `
+        <div class="file-pill">
+            <button type="button" class="file-btn file-name" onclick="insertFileName('${file.filename}')" title="Insertar nombre">
+                📄 ${file.filename}
+            </button>
+            <button type="button" class="file-btn" onclick="openFileInVSCode('${file.relativePath}')" title="Abrir en VSCode">
+                🔗
+            </button>
+            <button type="button" class="file-btn" onclick="copyFilePath('${file.relativePath}')" title="Copiar path">
+                📋
+            </button>
+            <button type="button" class="file-btn" onclick="revealInFinder('${file.relativePath}')" title="Mostrar en Finder/Explorer">
+                📂
+            </button>
+            <button type="button" class="file-btn file-remove" onclick="removeFile('${file.relativePath}')" title="Remover">
+                ❌
+            </button>
+        </div>
+    `).join('');
+}
+
+function loadExistingIntentData(data) {
+    isEditMode = true;
+    
+    document.getElementById('name').value = data.name || '';
+    document.getElementById('name').disabled = true;
+    
+    document.getElementById('problem').value = data.content.problem || '';
+    document.getElementById('expectedOutput').value = data.content.expectedOutput || '';
+    document.getElementById('considerations').value = data.content.considerations || '';
+    
+    if (data.content.currentBehavior && Array.isArray(data.content.currentBehavior)) {
+        data.content.currentBehavior.forEach(value => {
+            addListItem('currentBehavior');
+            const items = document.getElementById('currentBehaviorList').querySelectorAll('.list-item');
+            const lastItem = items[items.length - 1];
+            if (lastItem) {
+                lastItem.querySelector('input').value = value;
+            }
+        });
+    }
+
+    if (data.content.desiredBehavior && Array.isArray(data.content.desiredBehavior)) {
+        data.content.desiredBehavior.forEach(value => {
+            addListItem('desiredBehavior');
+            const items = document.getElementById('desiredBehaviorList').querySelectorAll('.list-item');
+            const lastItem = items[items.length - 1];
+            if (lastItem) {
+                lastItem.querySelector('input').value = value;
+            }
+        });
+    }
+    
+    const generateBtn = document.getElementById('generateBtn');
+    if (data.status === 'completed') {
+        generateBtn.textContent = '🔄 Regenerar Intent';
+    }
+    
+    const deleteBtn = document.getElementById('deleteBtn');
+    deleteBtn.style.display = 'block';
+}
+
 document.addEventListener('keydown', (e) => {
-    // Ctrl/Cmd + Enter para enviar
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
         e.preventDefault();
         document.getElementById('intentForm').dispatchEvent(new Event('submit'));
     }
     
-    // Escape para cancelar
     if (e.key === 'Escape') {
         cancel();
     }
 });
 
-// ===== INICIALIZACIÓN =====
-loadDraft();
+addListItem('currentBehavior');
+addListItem('desiredBehavior');
 updateGenerateButton();
+
+const deleteBtn = document.getElementById('deleteBtn');
+deleteBtn.style.display = 'none';
 ```
 
 ### C:/repos/bloom-videos/bloom-development-extension/src/ui/intentFormPanel.ts
-Metadatos: Lenguaje: typescript, Hash MD5: 82fe40f2a508c14fa9e5a7098f123635
+Metadatos: Lenguaje: typescript, Hash MD5: a40a469b245014f00fa3b69ce6555a6c
 
 ```typescript
 import * as vscode from 'vscode';
@@ -2544,26 +2713,33 @@ import * as fs from 'fs';
 import { Logger } from '../utils/logger';
 import { Validator } from '../core/validator';
 import { IntentGenerator } from '../core/intentGenerator';
-import { FilePackager } from '../core/filePackager';
 import { MetadataManager } from '../core/metadataManager';
-import { ProjectDetector } from '../strategies/ProjectDetector';
-import { IntentFormData, formDataToContent } from '../models/intent';
+import { CodebaseGenerator } from '../core/codebaseGenerator';
+import { IntentSession } from '../core/intentSession';
+import { IntentFormData, TokenStats } from '../models/intent';
 
 export class IntentFormPanel {
     private panel: vscode.WebviewPanel | undefined;
+    private session: IntentSession | undefined;
+    private isEditMode: boolean = false;
+    private intentName: string | undefined;
 
     constructor(
         private context: vscode.ExtensionContext,
         private logger: Logger,
         private workspaceFolder: vscode.WorkspaceFolder,
         private selectedFiles: vscode.Uri[],
-        private relativePaths: string[]
-    ) {}
+        private relativePaths: string[],
+        existingIntentName?: string
+    ) {
+        this.intentName = existingIntentName;
+        this.isEditMode = !!existingIntentName;
+    }
 
-    show(): void {
+    async show(): Promise<void> {
         this.panel = vscode.window.createWebviewPanel(
             'bloomIntentForm',
-            'Bloom: Generate Intent',
+            this.isEditMode ? 'Bloom: Edit Intent' : 'Bloom: Generate Intent',
             vscode.ViewColumn.One,
             {
                 enableScripts: true,
@@ -2572,21 +2748,109 @@ export class IntentFormPanel {
         );
 
         this.panel.webview.html = this.getHtmlContent();
+        
+        // Inicializar sesión
+        if (this.isEditMode && this.intentName) {
+            await this.loadExistingIntent(this.intentName);
+        } else {
+            await this.createNewSession();
+        }
+
         this.setupMessageListener();
+        this.setupSessionListeners();
 
-        // ✅ NUEVO: Enviar lista de archivos al webview
-        this.panel.webview.postMessage({
-            command: 'setFiles',
-            files: this.relativePaths
-        });
-
+        // Enviar archivos iniciales
+        this.sendFilesToWebview();
+        
         this.logger.info('Formulario de intent abierto');
     }
 
+    private async createNewSession(): Promise<void> {
+        const metadataManager = new MetadataManager(this.logger);
+        const codebaseGenerator = new CodebaseGenerator();
+        const intentGenerator = new IntentGenerator(this.logger);
+
+        const intentFolder = vscode.Uri.file(
+            path.join(this.workspaceFolder.uri.fsPath, '.bloom', 'intents', 'temp_' + Date.now())
+        );
+
+        this.session = await IntentSession.create(
+            intentFolder,
+            this.workspaceFolder,
+            this.selectedFiles,
+            this.relativePaths,
+            metadataManager,
+            codebaseGenerator,
+            intentGenerator,
+            this.logger
+        );
+    }
+
+    private async loadExistingIntent(intentName: string): Promise<void> {
+        const metadataManager = new MetadataManager(this.logger);
+        const codebaseGenerator = new CodebaseGenerator();
+        const intentGenerator = new IntentGenerator(this.logger);
+
+        this.session = await IntentSession.forIntent(
+            intentName,
+            this.workspaceFolder,
+            metadataManager,
+            codebaseGenerator,
+            intentGenerator,
+            this.logger
+        );
+
+        const state = this.session.getState();
+        
+        // Cargar datos existentes en el formulario
+        this.panel?.webview.postMessage({
+            command: 'loadExistingIntent',
+            data: {
+                name: state.name,
+                content: state.content,
+                status: state.status
+            }
+        });
+    }
+
+    private setupSessionListeners(): void {
+        if (!this.session) return;
+
+        this.session.on('filesChanged', (files: string[]) => {
+            this.relativePaths = files;
+            this.sendFilesToWebview();
+            this.logger.info(`Archivos actualizados: ${files.length}`);
+        });
+
+        this.session.on('tokensChanged', (tokens: TokenStats) => {
+            this.panel?.webview.postMessage({
+                command: 'updateTokens',
+                tokens
+            });
+        });
+
+        this.session.on('stateChanged', (state: any) => {
+            this.logger.info(`Estado del intent actualizado: ${state.status}`);
+        });
+    }
+
+    private sendFilesToWebview(): void {
+        if (!this.panel) return;
+
+        const filesData = this.relativePaths.map(filePath => ({
+            filename: path.basename(filePath),
+            fullPath: filePath,
+            relativePath: filePath
+        }));
+
+        this.panel.webview.postMessage({
+            command: 'setFiles',
+            files: filesData
+        });
+    }
+
     private setupMessageListener(): void {
-        if (!this.panel) {
-            return;
-        }
+        if (!this.panel) return;
 
         this.panel.webview.onDidReceiveMessage(
             async (message) => {
@@ -2597,9 +2861,23 @@ export class IntentFormPanel {
                     case 'cancel':
                         this.panel?.dispose();
                         break;
-                    // ✅ NUEVO: Manejo de preview de archivos
-                    case 'getFileContent':
-                        await this.handleGetFileContent(message.filename);
+                    case 'openFileInVSCode':
+                        await this.handleOpenFileInVSCode(message.filePath);
+                        break;
+                    case 'copyFilePath':
+                        await vscode.commands.executeCommand('bloom.copyFilePath', message.filePath);
+                        break;
+                    case 'revealInFinder':
+                        await this.handleRevealInFinder(message.filePath);
+                        break;
+                    case 'removeFile':
+                        await this.handleRemoveFile(message.filePath);
+                        break;
+                    case 'autoSave':
+                        await this.handleAutoSave(message.updates);
+                        break;
+                    case 'deleteIntent':
+                        await this.handleDeleteIntent();
                         break;
                 }
             },
@@ -2608,42 +2886,68 @@ export class IntentFormPanel {
         );
     }
 
-    // ✅ NUEVO: Handler para obtener contenido de archivos
-    private async handleGetFileContent(filename: string): Promise<void> {
-        try {
-            // Buscar el archivo por nombre
-            const fileUri = this.selectedFiles.find(uri => {
-                const relPath = this.relativePaths[this.selectedFiles.indexOf(uri)];
-                return path.basename(relPath) === filename || relPath === filename;
-            });
+    private async handleOpenFileInVSCode(filePath: string): Promise<void> {
+        const fullPath = path.join(this.workspaceFolder.uri.fsPath, filePath);
+        const fileUri = vscode.Uri.file(fullPath);
+        
+        await vscode.commands.executeCommand('bloom.openFileInVSCode', fileUri);
+    }
 
-            if (!fileUri) {
-                this.panel?.webview.postMessage({
-                    command: 'showFileContent',
-                    content: `Error: Archivo '${filename}' no encontrado`
-                });
-                return;
-            }
+    private async handleRevealInFinder(filePath: string): Promise<void> {
+        const fullPath = path.join(this.workspaceFolder.uri.fsPath, filePath);
+        const fileUri = vscode.Uri.file(fullPath);
+        
+        await vscode.commands.executeCommand('bloom.revealInFinder', fileUri);
+    }
 
-            const fileContent = await vscode.workspace.fs.readFile(fileUri);
-            const text = new TextDecoder().decode(fileContent);
+    private async handleRemoveFile(filePath: string): Promise<void> {
+        if (!this.session) return;
 
-            this.panel?.webview.postMessage({
-                command: 'showFileContent',
-                content: text
-            });
-        } catch (error) {
-            this.panel?.webview.postMessage({
-                command: 'showFileContent',
-                content: `Error al leer archivo: ${error}`
-            });
+        const confirm = await vscode.window.showWarningMessage(
+            `¿Remover ${path.basename(filePath)}?`,
+            'Remover',
+            'Cancelar'
+        );
+
+        if (confirm === 'Remover') {
+            await this.session.removeFile(filePath);
+            vscode.window.showInformationMessage(`Archivo removido: ${path.basename(filePath)}`);
+        }
+    }
+
+    private async handleAutoSave(updates: any): Promise<void> {
+        if (!this.session) return;
+
+        this.session.queueAutoSave(updates);
+    }
+
+    private async handleDeleteIntent(): Promise<void> {
+        if (!this.session) return;
+
+        const state = this.session.getState();
+        
+        const confirm = await vscode.window.showWarningMessage(
+            `¿Eliminar intent '${state.name}'?`,
+            {
+                modal: true,
+                detail: `Esto borrará la carpeta .bloom/intents/${state.name}/ permanentemente.`
+            },
+            'Eliminar'
+        );
+
+        if (confirm === 'Eliminar') {
+            await this.session.deleteIntent();
+            this.panel?.dispose();
+            vscode.window.showInformationMessage(`Intent '${state.name}' eliminado`);
+            
+            // Refrescar tree view
+            vscode.commands.executeCommand('workbench.view.extension.bloomIntents');
         }
     }
 
     private async handleSubmit(data: IntentFormData): Promise<void> {
         this.logger.info('Procesando formulario de intent');
 
-        // ✅ ACTUALIZADO: Validación simplificada para V2
         const validator = new Validator();
         const validation = validator.validate(data);
 
@@ -2656,68 +2960,52 @@ export class IntentFormPanel {
             return;
         }
 
+        if (!this.session) {
+            vscode.window.showErrorMessage('Error: Sesión no inicializada');
+            return;
+        }
+
         try {
-            // Crear estructura de carpetas
-            const bloomPath = path.join(this.workspaceFolder.uri.fsPath, '.bloom');
-            const intentsPath = path.join(bloomPath, 'intents');
-            const intentFolderPath = vscode.Uri.file(path.join(intentsPath, data.name));
-
-            // Crear carpetas si no existen
-            await this.ensureDirectory(vscode.Uri.file(bloomPath));
-            await this.ensureDirectory(vscode.Uri.file(intentsPath));
-            await this.ensureDirectory(intentFolderPath);
-            
-            this.logger.info(`Carpeta creada: ${intentFolderPath.fsPath}`);
-
-            // Detectar tipo de proyecto
-            const detector = new ProjectDetector();
-            const strategy = await detector.detectStrategy(this.workspaceFolder.uri.fsPath);
-            const projectType = strategy?.projectType || 'generic';
-
-            // Determinar versión (free o pro)
-            const config = vscode.workspace.getConfiguration('bloom');
-            const version = config.get<string>('version', 'free');
-
-            // Generar codebase según versión
-            if (version === 'free') {
-                const codebaseContent = await this.generateCodebaseMarkdown();
-                const codebasePath = vscode.Uri.file(path.join(intentFolderPath.fsPath, 'codebase.md'));
-                await vscode.workspace.fs.writeFile(
-                    codebasePath,
-                    Buffer.from(codebaseContent, 'utf8')
+            // Crear carpeta definitiva si es nuevo intent
+            if (!this.isEditMode) {
+                const intentFolder = vscode.Uri.file(
+                    path.join(this.workspaceFolder.uri.fsPath, '.bloom', 'intents', data.name)
                 );
-                this.logger.info('Codebase.md generado');
-            } else {
-                const packager = new FilePackager(this.logger);
-                const tarballPath = vscode.Uri.file(path.join(intentFolderPath.fsPath, 'codebase.tar.gz'));
-                await packager.createTarball(this.selectedFiles, tarballPath, this.workspaceFolder);
-                this.logger.info('Codebase.tar.gz generado');
+                
+                await this.ensureDirectory(vscode.Uri.file(path.join(this.workspaceFolder.uri.fsPath, '.bloom')));
+                await this.ensureDirectory(vscode.Uri.file(path.join(this.workspaceFolder.uri.fsPath, '.bloom', 'intents')));
+                await this.ensureDirectory(intentFolder);
+                
+                // Actualizar sesión con carpeta definitiva
+                const metadataManager = new MetadataManager(this.logger);
+                const codebaseGenerator = new CodebaseGenerator();
+                const intentGenerator = new IntentGenerator(this.logger);
+                
+                this.session = await IntentSession.create(
+                    intentFolder,
+                    this.workspaceFolder,
+                    this.selectedFiles,
+                    this.relativePaths,
+                    metadataManager,
+                    codebaseGenerator,
+                    intentGenerator,
+                    this.logger
+                );
             }
 
-            // ✅ ACTUALIZADO: Generar intent.bl con estructura V2
-            const generator = new IntentGenerator(this.logger);
-            const intentPath = vscode.Uri.file(path.join(intentFolderPath.fsPath, 'intent.bl'));
-            await generator.generateIntent(data, this.relativePaths, intentPath);
-            this.logger.info('Intent.bl generado');
+            // Generar o regenerar intent
+            if (this.isEditMode) {
+                await this.session.regenerateIntent(data);
+                vscode.window.showInformationMessage(`✅ Intent '${data.name}' regenerado exitosamente`);
+            } else {
+                await this.session.generateIntent(data);
+                vscode.window.showInformationMessage(`✅ Intent '${data.name}' creado exitosamente`);
+            }
 
-            // ✅ CORREGIDO: Crear metadata con content
-            const metadataManager = new MetadataManager(this.logger);
-            await metadataManager.create(intentFolderPath, {
-                name: data.name,
-                projectType: projectType,
-                version: version as 'free' | 'pro',
-                files: this.selectedFiles,
-                filesCount: this.selectedFiles.length,
-                estimatedTokens: 0,
-                content: formDataToContent(data)  // ← AGREGADO
-            });
-            this.logger.info('Metadata creada');
-
-            // Cerrar panel y notificar éxito
             this.panel?.dispose();
-            vscode.window.showInformationMessage(
-                `✅ Intent '${data.name}' creado exitosamente en .bloom/intents/${data.name}/`
-            );
+            
+            // Refrescar tree view
+            vscode.commands.executeCommand('workbench.view.extension.bloomIntents');
 
             this.logger.info('Intent generado exitosamente');
 
@@ -2733,9 +3021,6 @@ export class IntentFormPanel {
         }
     }
 
-    /**
-     * Asegura que un directorio exista, creándolo si es necesario
-     */
     private async ensureDirectory(uri: vscode.Uri): Promise<void> {
         try {
             await vscode.workspace.fs.stat(uri);
@@ -2744,42 +3029,7 @@ export class IntentFormPanel {
         }
     }
 
-    private async generateCodebaseMarkdown(): Promise<string> {
-        let content = '# Bloom Codebase\n\n';
-        content += `> Generated on ${new Date().toISOString()}\n`;
-        content += `> Total Files: ${this.selectedFiles.length}\n\n`;
-        
-        content += '## 📋 File Index\n\n';
-        for (const relPath of this.relativePaths) {
-            content += `- ${relPath}\n`;
-        }
-        content += '\n---\n\n';
-
-        // Agregar contenido de cada archivo
-        for (let i = 0; i < this.selectedFiles.length; i++) {
-            const fileUri = this.selectedFiles[i];
-            const relPath = this.relativePaths[i];
-            
-            content += `## File: ${relPath}\n\n`;
-            
-            try {
-                const fileContent = await vscode.workspace.fs.readFile(fileUri);
-                const text = new TextDecoder().decode(fileContent);
-                
-                // Indentar con 4 espacios
-                const indented = text.split('\n').map(line => `    ${line}`).join('\n');
-                content += indented + '\n\n';
-            } catch (error) {
-                content += `    [Error reading file: ${error}]\n\n`;
-            }
-        }
-
-        return content;
-    }
-
-    // ✅ ACTUALIZADO: Método simplificado sin placeholders
     private getHtmlContent(): string {
-        // Leer archivos separados
         const htmlPath = path.join(this.context.extensionPath, 'src', 'ui', 'intentForm.html');
         const cssPath = path.join(this.context.extensionPath, 'src', 'ui', 'intentForm.css');
         const jsPath = path.join(this.context.extensionPath, 'src', 'ui', 'intentForm.js');
@@ -2788,7 +3038,6 @@ export class IntentFormPanel {
         const cssContent = fs.readFileSync(cssPath, 'utf8');
         const jsContent = fs.readFileSync(jsPath, 'utf8');
 
-        // ✅ SIMPLIFICADO: Solo reemplazar CSS y JS
         htmlContent = htmlContent.replace('<!-- CSS_PLACEHOLDER -->', `<style>${cssContent}</style>`);
         htmlContent = htmlContent.replace('<!-- JS_PLACEHOLDER -->', `<script>${jsContent}</script>`);
 
