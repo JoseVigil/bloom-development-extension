@@ -12,6 +12,13 @@
     "forceConsistentCasingInFileNames": true,
     "moduleResolution": "node",
     "resolveJsonModule": true,
-    "types": ["vscode", "node"],
-  }
+    "types": ["vscode", "node"]
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": [
+    "node_modules",
+    "out",
+    "backups/**",
+    ".vscode-test"
+  ]
 }

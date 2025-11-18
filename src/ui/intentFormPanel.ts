@@ -7,7 +7,7 @@ import { IntentGenerator } from '../core/intentGenerator';
 import { FilePackager } from '../core/filePackager';
 import { MetadataManager } from '../core/metadataManager';
 import { ProjectDetector } from '../strategies/ProjectDetector';
-import { IntentFormData } from '../models/intent';
+import { IntentFormData, formDataToContent } from '../models/intent';
 
 export class IntentFormPanel {
     private panel: vscode.WebviewPanel | undefined;
@@ -105,22 +105,14 @@ export class IntentFormPanel {
 
         // ✅ ACTUALIZADO: Validación simplificada para V2
         const validator = new Validator();
-        const validationErrors: string[] = [];
+        const validation = validator.validate(data);
 
-        // Validar campos básicos
-        if (!data.name || data.name.trim().length === 0) {
-            validationErrors.push('El nombre del intent es requerido');
-        }
-        if (!data.problem || data.problem.trim().length < 20) {
-            validationErrors.push('El problema debe tener al menos 20 caracteres');
-        }
-
-        if (validationErrors.length > 0) {
+        if (!validation.isValid) {
             this.panel?.webview.postMessage({
                 command: 'validationErrors',
-                errors: validationErrors
+                errors: validation.errors
             });
-            this.logger.warn(`Errores de validación: ${validationErrors.join(', ')}`);
+            this.logger.warn(`Errores de validación: ${validation.errors.join(', ')}`);
             return;
         }
 
@@ -168,7 +160,7 @@ export class IntentFormPanel {
             await generator.generateIntent(data, this.relativePaths, intentPath);
             this.logger.info('Intent.bl generado');
 
-            // Crear metadata usando el método correcto
+            // ✅ CORREGIDO: Crear metadata con content
             const metadataManager = new MetadataManager(this.logger);
             await metadataManager.create(intentFolderPath, {
                 name: data.name,
@@ -176,7 +168,8 @@ export class IntentFormPanel {
                 version: version as 'free' | 'pro',
                 files: this.selectedFiles,
                 filesCount: this.selectedFiles.length,
-                estimatedTokens: 0
+                estimatedTokens: 0,
+                content: formDataToContent(data)  // ← AGREGADO
             });
             this.logger.info('Metadata creada');
 

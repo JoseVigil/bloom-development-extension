@@ -49,8 +49,16 @@ def generate_tree(output_file, paths):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 3:
-        print("Uso: python tree_custom.py <archivo_salida.txt> <ruta1> <ruta2> ...")
+    if len(sys.argv) < 3 or sys.argv[1] in ['-h', '--help']:
+        print("Tree Generator - Genera diagramas de árbol de directorios")
+        print("\nUso: python tree_custom.py <archivo_salida.txt> <ruta1> <ruta2> ...")
+        print("\nParámetros:")
+        print("  archivo_salida.txt   - Archivo donde se guardará el árbol")
+        print("  ruta1, ruta2, ...    - Directorios/archivos a incluir en el árbol")
+        print("\nEjemplos:")
+        print("  python tree_custom.py arbol.txt .")
+        print("  python tree_custom.py salida.txt src tests docs")
+        print("  python tree_custom.py proyecto.txt /ruta/al/proyecto")
         sys.exit(1)
 
     output_file = sys.argv[1]

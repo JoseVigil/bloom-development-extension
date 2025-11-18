@@ -1,91 +1,66 @@
-// src/models/intent.ts
-
 import * as vscode from 'vscode';
 
-/**
- * Metadata completa de un intent
- * Almacenada en .bloom/intents/[nombre]/.bloom-meta.json
- */
-export interface IntentMetadata {
-    id: string;
-    name: string;
-    displayName?: string;
-    created: string;
-    updated: string;
-    status: IntentStatus;
-    tags?: string[];
-    description?: string;
-    projectType?: ProjectType;
-    version: 'free' | 'pro';
-    files: {
-        intentFile: string;
-        codebaseFile: string;
-        filesIncluded: string[];
-        filesCount: number;
-        totalSize: number;
-    };
-    stats: {
-        timesOpened: number;
-        lastOpened: string | null;
-        estimatedTokens: number;
-    };
-    bloomVersion: string;
-}
+// ============================================
+// TIPOS BASE
+// ============================================
 
-/**
- * Estados posibles de un intent
- */
 export type IntentStatus = 'draft' | 'in-progress' | 'completed' | 'archived';
 
-/**
- * Tipos de proyecto soportados
- */
-export type ProjectType = 'android' | 'ios' | 'web' | 'react' | 'react-native' | 'flutter' | 'nodejs' | 'python' | 'generic';
+export type FileCategory = 'code' | 'config' | 'docs' | 'test' | 'asset' | 'other';
 
-/**
- * Intent completo (metadata + ubicación)
- */
-export interface Intent {
-    metadata: IntentMetadata;
-    folderUri: vscode.Uri;
-}
+export type ProjectType = 'android' | 'ios' | 'web' | 'react' | 'node' | 'generic';
 
-/**
- * Datos del formulario de intent
- */
+// ============================================
+// INTERFACE PRINCIPAL: FORMULARIO
+// ============================================
+
 export interface IntentFormData {
     name: string;
     problem: string;
-    context: string;
+    expectedOutput: string;
     currentBehavior: string[];
     desiredBehavior: string[];
-    objective: string;
-    scope: string[];
     considerations: string;
-    tests: string[];
+    selectedFiles: string[];
+}
+
+// ============================================
+// CONTENT: Contenido del Intent
+// ============================================
+
+export interface IntentContent {
+    problem: string;
     expectedOutput: string;
+    currentBehavior: string[];
+    desiredBehavior: string[];
+    considerations: string;
 }
 
-/**
- * Opciones para crear un intent
- */
-export interface CreateIntentOptions {
-    workspaceFolder: vscode.WorkspaceFolder;
-    selectedFiles: vscode.Uri[];
-    relativePaths: string[];
-    projectType?: ProjectType;
-    strategy?: any; // ICodebaseStrategy (se define en otro archivo)
+// ============================================
+// METADATA: Información de archivos
+// ============================================
+
+export interface FilesMetadata {
+    intentFile: string;
+    codebaseFile: string;
+    filesIncluded: string[];
+    filesCount: number;
+    totalSize: number;
 }
 
-/**
- * Resultado de análisis de payload (para FREE MODE)
- */
-export interface PayloadAnalysis {
-    totalChars: number;
-    estimatedTokens: number;
-    limits: Record<string, ModelLimit>;
-    recommendations: Recommendation[];
+// ============================================
+// TOKENS: Estadísticas de tokens
+// ============================================
+
+export interface TokenStats {
+    estimated: number;
+    limit: number;
+    percentage: number;
 }
+
+// ============================================
+// TOKEN ESTIMATOR: Análisis de payload
+// ============================================
 
 export interface ModelLimit {
     modelName: string;
@@ -102,4 +77,119 @@ export interface Recommendation {
     severity: 'ok' | 'warning' | 'critical';
     model: string;
     message: string;
+}
+
+export interface PayloadAnalysis {
+    totalChars: number;
+    estimatedTokens: number;
+    limits: Record<string, ModelLimit>;
+    recommendations: Recommendation[];
+}
+
+// ============================================
+// METADATA COMPLETA: Persistencia
+// ============================================
+
+export interface IntentMetadata {
+    id: string;
+    name: string;
+    displayName: string;
+    created: string;
+    updated: string;
+    status: IntentStatus;
+    projectType?: ProjectType;
+    version: 'free' | 'pro';
+    
+    files: FilesMetadata;
+    content: IntentContent;
+    tokens: TokenStats;
+    tags?: string[];
+    
+    stats: {
+        timesOpened: number;
+        lastOpened: string | null;
+        estimatedTokens: number;
+    };
+    
+    bloomVersion: string;
+}
+
+// ============================================
+// INTENT: Entidad completa
+// ============================================
+
+export interface Intent {
+    folderUri: vscode.Uri;
+    metadata: IntentMetadata;
+}
+
+// ============================================
+// HELPERS: Conversión FormData → Content
+// ============================================
+
+export function formDataToContent(formData: IntentFormData): IntentContent {
+    return {
+        problem: formData.problem,
+        expectedOutput: formData.expectedOutput,
+        currentBehavior: formData.currentBehavior,
+        desiredBehavior: formData.desiredBehavior,
+        considerations: formData.considerations
+    };
+}
+
+// ============================================
+// HELPERS: Crear metadata inicial
+// ============================================
+
+export function createInitialMetadata(
+    formData: IntentFormData,
+    options: {
+        projectType?: ProjectType;
+        version: 'free' | 'pro';
+        filesCount: number;
+        totalSize: number;
+        estimatedTokens: number;
+    }
+): Omit<IntentMetadata, 'id' | 'created' | 'updated'> {
+    const now = new Date().toISOString();
+    
+    return {
+        name: formData.name,
+        displayName: generateDisplayName(formData.name),
+        status: 'draft',
+        projectType: options.projectType,
+        version: options.version,
+        
+        files: {
+            intentFile: 'intent.bl',
+            codebaseFile: options.version === 'free' ? 'codebase.md' : 'codebase.tar.gz',
+            filesIncluded: formData.selectedFiles,
+            filesCount: options.filesCount,
+            totalSize: options.totalSize
+        },
+        
+        content: formDataToContent(formData),
+        
+        tokens: {
+            estimated: options.estimatedTokens,
+            limit: 100000,
+            percentage: (options.estimatedTokens / 100000) * 100
+        },
+        
+        tags: [],
+        
+        stats: {
+            timesOpened: 0,
+            lastOpened: null,
+            estimatedTokens: options.estimatedTokens
+        },
+        
+        bloomVersion: '1.0.0'
+    };
+}
+
+function generateDisplayName(name: string): string {
+    return name
+        .replace(/-/g, ' ')
+        .replace(/\b\w/g, l => l.toUpperCase());
 }

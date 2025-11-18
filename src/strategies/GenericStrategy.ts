@@ -28,11 +28,11 @@ export class GenericStrategy implements ICodebaseStrategy {
     categorizeFile(relativePath: string): FileCategory {
         const extension = path.extname(relativePath).toLowerCase();
         
-        if (['.md', '.txt', '.doc'].includes(extension)) return FileCategory.DOCUMENTATION;
-        if (['.json', '.yaml', '.yml', '.toml'].includes(extension)) return FileCategory.CONFIGURATION;
-        if (['.test.', '.spec.'].some(t => relativePath.includes(t))) return FileCategory.TEST;
+        if (['.md', '.txt', '.doc'].includes(extension)) return 'docs';
+        if (['.json', '.yaml', '.yml', '.toml'].includes(extension)) return 'config';
+        if (['.test.', '.spec.'].some(t => relativePath.includes(t))) return 'test';
         
-        return FileCategory.SOURCE_CODE;
+        return 'code';
     }
     
     assignPriority(file: FileDescriptor): number {

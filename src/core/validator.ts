@@ -1,94 +1,93 @@
-import * as vscode from 'vscode';
-import * as path from 'path';
 import { IntentFormData } from '../models/intent';
 
-export class Validator {
-    private readonly INVALID_CHARS = /[\/\\:*?"<>|]/;
-    private readonly MAX_NAME_LENGTH = 100;
+export interface ValidationResult {
+    isValid: boolean;
+    errors: string[];
+    warnings: string[];
+}
+
+// ✅ Exportar la clase como "Validator" también para compatibilidad
+export class IntentValidator {
     private readonly MIN_TEXT_LENGTH = 10;
+    private readonly MAX_NAME_LENGTH = 50;
+    private readonly MAX_TEXT_LENGTH = 10000;
 
-    validateIntentForm(data: IntentFormData, workspaceFolder: vscode.WorkspaceFolder): string[] {
+    validate(data: IntentFormData): ValidationResult {
         const errors: string[] = [];
+        const warnings: string[] = [];
 
-        // Validar nombre
-        if (!data.name || data.name.trim().length === 0) {
-            errors.push('El nombre del intent es obligatorio');
-        } else if (this.INVALID_CHARS.test(data.name)) {
-            errors.push('El nombre del intent no puede contener caracteres especiales: / \\ : * ? " < > |');
-        } else if (data.name.length > this.MAX_NAME_LENGTH) {
-            errors.push(`El nombre del intent no puede exceder ${this.MAX_NAME_LENGTH} caracteres`);
-        } else {
-            // Verificar que no existe carpeta con ese nombre (nueva ruta)
-            const intentPath = path.join(workspaceFolder.uri.fsPath, '.bloom', 'intents', data.name);
-            try {
-                const fs = require('fs');
-                if (fs.existsSync(intentPath)) {
-                    errors.push(`Ya existe una carpeta con el nombre "${data.name}" en .bloom/intents/`);
-                }
-            } catch (error) {
-                // Si hay error al verificar, continuar
-            }
-        }
+        this.validateName(data, errors);
+        this.validateProblem(data, errors);
+        this.validateExpectedOutput(data, errors);
+        this.validateBehaviors(data, warnings);
+        this.validateConsiderations(data, warnings);
+        this.validateFiles(data, errors);
 
-        // Validar problema
-        if (!data.problem || data.problem.trim().length === 0) {
-            errors.push('El campo "Problema" es obligatorio');
-        } else if (data.problem.trim().length < this.MIN_TEXT_LENGTH) {
-            errors.push(`El campo "Problema" debe tener al menos ${this.MIN_TEXT_LENGTH} caracteres`);
-        }
-
-        // Validar contexto
-        if (!data.context || data.context.trim().length === 0) {
-            errors.push('El campo "Contexto" es obligatorio');
-        } else if (data.context.trim().length < this.MIN_TEXT_LENGTH) {
-            errors.push(`El campo "Contexto" debe tener al menos ${this.MIN_TEXT_LENGTH} caracteres`);
-        }
-
-        // Validar comportamiento actual
-        if (!data.currentBehavior || data.currentBehavior.length === 0) {
-            errors.push('Debes agregar al menos un comportamiento actual');
-        } else if (data.currentBehavior.some((item: string) => item.trim().length === 0)) {
-            errors.push('Todos los items de comportamiento actual deben tener contenido');
-        }
-
-        // Validar comportamiento deseado
-        if (!data.desiredBehavior || data.desiredBehavior.length === 0) {
-            errors.push('Debes agregar al menos un comportamiento deseado');
-        } else if (data.desiredBehavior.some((item: string) => item.trim().length === 0)) {
-            errors.push('Todos los items de comportamiento deseado deben tener contenido');
-        }
-
-        // Validar objetivo
-        if (!data.objective || data.objective.trim().length === 0) {
-            errors.push('El campo "Objetivo" es obligatorio');
-        } else if (data.objective.trim().length < this.MIN_TEXT_LENGTH) {
-            errors.push(`El campo "Objetivo" debe tener al menos ${this.MIN_TEXT_LENGTH} caracteres`);
-        }
-
-        // Validar salida esperada
-        if (!data.expectedOutput || data.expectedOutput.trim().length === 0) {
-            errors.push('El campo "Salida Esperada del Modelo" es obligatorio');
-        } else if (data.expectedOutput.trim().length < this.MIN_TEXT_LENGTH) {
-            errors.push(`El campo "Salida Esperada del Modelo" debe tener al menos ${this.MIN_TEXT_LENGTH} caracteres`);
-        }
-
-        // Validar listas opcionales (si tienen items, no deben estar vacíos)
-        if (data.scope && data.scope.length > 0) {
-            if (data.scope.some((item: string) => item.trim().length === 0)) {
-                errors.push('Los items de alcance y restricciones no pueden estar vacíos');
-            }
-        }
-
-        if (data.tests && data.tests.length > 0) {
-            if (data.tests.some((item: string) => item.trim().length === 0)) {
-                errors.push('Los items de tests/validación no pueden estar vacíos');
-            }
-        }
-
-        return errors;
+        return {
+            isValid: errors.length === 0,
+            errors,
+            warnings
+        };
     }
 
-    sanitizeFileName(name: string): string {
-        return name.replace(this.INVALID_CHARS, '-').toLowerCase();
+    private validateName(data: IntentFormData, errors: string[]): void {
+        if (!data.name || data.name.trim().length === 0) {
+            errors.push('El nombre es obligatorio');
+        } else if (data.name.length > this.MAX_NAME_LENGTH) {
+            errors.push(`El nombre no puede exceder ${this.MAX_NAME_LENGTH} caracteres`);
+        } else if (!/^[a-z0-9-]+$/.test(data.name)) {
+            errors.push('El nombre solo puede contener letras minúsculas, números y guiones');
+        }
+    }
+
+    private validateProblem(data: IntentFormData, errors: string[]): void {
+        if (!data.problem || data.problem.trim().length === 0) {
+            errors.push('La descripción del problema es obligatoria');
+        } else if (data.problem.trim().length < this.MIN_TEXT_LENGTH) {
+            errors.push(`El problema debe tener al menos ${this.MIN_TEXT_LENGTH} caracteres`);
+        } else if (data.problem.length > this.MAX_TEXT_LENGTH) {
+            errors.push(`El problema no puede exceder ${this.MAX_TEXT_LENGTH} caracteres`);
+        }
+    }
+
+    private validateExpectedOutput(data: IntentFormData, errors: string[]): void {
+        if (!data.expectedOutput || data.expectedOutput.trim().length === 0) {
+            errors.push('La salida esperada es obligatoria');
+        } else if (data.expectedOutput.trim().length < this.MIN_TEXT_LENGTH) {
+            errors.push(`La salida esperada debe tener al menos ${this.MIN_TEXT_LENGTH} caracteres`);
+        } else if (data.expectedOutput.length > this.MAX_TEXT_LENGTH) {
+            errors.push(`La salida esperada no puede exceder ${this.MAX_TEXT_LENGTH} caracteres`);
+        }
+    }
+
+    private validateBehaviors(data: IntentFormData, warnings: string[]): void {
+        if (data.currentBehavior && data.currentBehavior.length > 0) {
+            if (data.currentBehavior.some((item: string) => item.trim().length === 0)) {
+                warnings.push('Algunos comportamientos actuales están vacíos');
+            }
+        }
+
+        if (data.desiredBehavior && data.desiredBehavior.length > 0) {
+            if (data.desiredBehavior.some((item: string) => item.trim().length === 0)) {
+                warnings.push('Algunos comportamientos deseados están vacíos');
+            }
+        }
+    }
+
+    private validateConsiderations(data: IntentFormData, warnings: string[]): void {
+        if (data.considerations && data.considerations.trim().length > this.MAX_TEXT_LENGTH) {
+            warnings.push(`Las consideraciones son muy largas (máx: ${this.MAX_TEXT_LENGTH} caracteres)`);
+        }
+    }
+
+    private validateFiles(data: IntentFormData, errors: string[]): void {
+        if (!data.selectedFiles || data.selectedFiles.length === 0) {
+            errors.push('Debes seleccionar al menos un archivo');
+        } else if (data.selectedFiles.length > 1000) {
+            errors.push('Has seleccionado demasiados archivos (máximo: 1000)');
+        }
     }
 }
+
+// ✅ Export alias para compatibilidad con imports existentes
+export { IntentValidator as Validator };

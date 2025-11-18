@@ -79,24 +79,25 @@ export class ReactStrategy implements ICodebaseStrategy {
     categorizeFile(relativePath: string): FileCategory {
         const lowerPath = relativePath.toLowerCase();
         
-        if (relativePath === 'package.json' || relativePath === 'tsconfig.json') return FileCategory.CONFIGURATION;
-        if (lowerPath.includes('/components/')) return FileCategory.COMPONENT;
-        if (lowerPath.includes('/hooks/')) return FileCategory.SERVICE;
-        if (lowerPath.includes('/services/') || lowerPath.includes('/api/')) return FileCategory.SERVICE;
-        if (relativePath.match(/\.(css|scss)$/)) return FileCategory.STYLE;
-        if (relativePath.match(/\.(tsx|jsx|ts|js)$/)) return FileCategory.SOURCE_CODE;
+        if (relativePath === 'package.json' || relativePath === 'tsconfig.json') return 'config';
+        if (lowerPath.includes('/components/')) return 'code';
+        if (lowerPath.includes('/hooks/')) return 'code';
+        if (lowerPath.includes('/services/') || lowerPath.includes('/api/')) return 'code';
+        if (relativePath.match(/\.(css|scss)$/)) return 'asset';
+        if (relativePath.match(/\.(tsx|jsx|ts|js)$/)) return 'code';
         
-        return FileCategory.OTHER;
+        return 'other';
     }
     
     assignPriority(file: FileDescriptor): number {
         const priorityMap: Partial<Record<FileCategory, number>> = {
-            [FileCategory.CONFIGURATION]: 1,
-            [FileCategory.COMPONENT]: 3,
-            [FileCategory.SERVICE]: 3,
-            [FileCategory.SOURCE_CODE]: 3,
-            [FileCategory.STYLE]: 4
-        };
+                    'config': 1,
+                    'code': 2,
+                    'asset': 3,
+                    'test': 4,
+                    'docs': 5,
+                    'other': 6
+                };
         
         return priorityMap[file.category] || 9;
     }

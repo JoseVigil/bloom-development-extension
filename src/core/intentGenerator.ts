@@ -1,99 +1,100 @@
-// Archivo creado automáticamente
 import * as vscode from 'vscode';
-import { Logger } from '../utils/logger';
 import { IntentFormData } from '../models/intent';
+import { Logger } from '../utils/logger';
 
 export class IntentGenerator {
     constructor(private logger: Logger) {}
 
     async generateIntent(
         data: IntentFormData,
-        filePaths: string[],
+        files: string[],
         outputPath: vscode.Uri
     ): Promise<void> {
-        this.logger.info(`Generando intent.bl en ${outputPath.fsPath}`);
+        this.logger.info('Generando intent.bl');
 
-        try {
-            const content = this.buildIntentContent(data, filePaths);
-            const contentBytes = new TextEncoder().encode(content);
-            
-            await vscode.workspace.fs.writeFile(outputPath, contentBytes);
-            
-            this.logger.info('intent.bl generado exitosamente');
-        } catch (error) {
-            this.logger.error('Error al generar intent.bl', error as Error);
-            throw error;
-        }
+        let content = this.generateHeader(data);
+        content += this.generateProblem(data);
+        content += this.generateCurrentBehavior(data);
+        content += this.generateDesiredBehavior(data);
+        content += this.generateExpectedOutput(data);
+        content += this.generateConsiderations(data);
+        content += this.generateFilesList(files);
+        content += this.generateFooter();
+
+        await vscode.workspace.fs.writeFile(
+            outputPath,
+            new TextEncoder().encode(content)
+        );
+
+        this.logger.info('intent.bl generado exitosamente');
     }
 
-    private buildIntentContent(data: IntentFormData, filePaths: string[]): string {
-        let content = `# INTENT - ${data.name}\n\n`;
+    private generateHeader(data: IntentFormData): string {
+        return `# ${data.name}\n\n` +
+               `**Generado:** ${new Date().toLocaleString()}\n` +
+               `**Bloom Version:** 1.0.0\n\n` +
+               `---\n\n`;
+    }
 
-        // Problema
-        content += `## Problema\n${data.problem}\n\n`;
+    private generateProblem(data: IntentFormData): string {
+        return `## Problema\n${data.problem}\n\n`;
+    }
 
-        // Contexto
-        content += `## Contexto\n${data.context}\n\n`;
+    private generateCurrentBehavior(data: IntentFormData): string {
+        if (!data.currentBehavior || data.currentBehavior.length === 0) {
+            return '';
+        }
 
-        // Comportamiento Actual
-        content += `## Comportamiento Actual\n`;
+        let section = `## Comportamiento Actual\n\n`;
         data.currentBehavior.forEach((item: string, index: number) => {
-            content += `${index + 1}. ${item}\n`;
+            section += `${index + 1}. ${item}\n`;
         });
-        content += '\n';
+        section += `\n`;
 
-        // Comportamiento Deseado
-        content += `## Comportamiento Deseado\n`;
+        return section;
+    }
+
+    private generateDesiredBehavior(data: IntentFormData): string {
+        if (!data.desiredBehavior || data.desiredBehavior.length === 0) {
+            return '';
+        }
+
+        let section = `## Comportamiento Deseado\n\n`;
         data.desiredBehavior.forEach((item: string, index: number) => {
-            content += `${index + 1}. ${item}\n`;
+            section += `${index + 1}. ${item}\n`;
         });
-        content += '\n';
+        section += `\n`;
 
-        // Objetivo
-        content += `## Objetivo\n${data.objective}\n\n`;
+        return section;
+    }
 
-        // Archivos incluidos
-        content += `## Archivos incluidos en codebase.tar.gz\n`;
-        filePaths.forEach(filePath => {
-            content += `- ${filePath}\n`;
+    private generateExpectedOutput(data: IntentFormData): string {
+        return `## Salida Esperada del Modelo\n${data.expectedOutput}\n\n`;
+    }
+
+    private generateConsiderations(data: IntentFormData): string {
+        if (!data.considerations || data.considerations.trim().length === 0) {
+            return '';
+        }
+
+        return `## Consideraciones\n${data.considerations}\n\n`;
+    }
+
+    private generateFilesList(files: string[]): string {
+        let section = `## Archivos Incluidos\n\n`;
+        section += `Total: ${files.length} archivo(s)\n\n`;
+
+        files.forEach(file => {
+            section += `- \`${file}\`\n`;
         });
-        content += '\n';
 
-        // Alcance y Restricciones
-        if (data.scope && data.scope.length > 0) {
-            content += `## Alcance y Restricciones\n`;
-            data.scope.forEach((item: string) => {
-                content += `- ${item}\n`;
-            });
-            content += '\n';
-        } else {
-            content += `## Alcance y Restricciones\nNo especificado\n\n`;
-        }
+        section += `\n`;
+        return section;
+    }
 
-        // Hipótesis / Consideraciones
-        if (data.considerations && data.considerations.trim().length > 0) {
-            content += `## Hipótesis / Consideraciones\n${data.considerations}\n\n`;
-        } else {
-            content += `## Hipótesis / Consideraciones\nNo especificado\n\n`;
-        }
-
-        // Tests / Validación
-        if (data.tests && data.tests.length > 0) {
-            content += `## Tests / Validación Necesaria\n`;
-            data.tests.forEach((item: string) => {
-                content += `- [ ] ${item}\n`;
-            });
-            content += '\n';
-        } else {
-            content += `## Tests / Validación Necesaria\nNo especificado\n\n`;
-        }
-
-        // Salida Esperada
-        content += `## Salida Esperada del Modelo\n${data.expectedOutput}\n\n`;
-
-        // Footer
-        content += `---\nbloom/v1\nincludes_archive: "codebase.tar.gz"\n`;
-
-        return content;
+    private generateFooter(): string {
+        return `---\n\n` +
+               `**Nota:** Este archivo fue generado automáticamente por Bloom.\n` +
+               `Para más información, consulta la documentación en codebase.md\n`;
     }
 }

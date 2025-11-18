@@ -87,20 +87,23 @@ export class WebStrategy implements ICodebaseStrategy {
     categorizeFile(relativePath: string): FileCategory {
         const extension = path.extname(relativePath).toLowerCase();
         
-        if (extension === '.html') return FileCategory.LAYOUT;
-        if (['.css', '.scss', '.sass'].includes(extension)) return FileCategory.STYLE;
-        if (['.js', '.ts'].includes(extension)) return FileCategory.SOURCE_CODE;
+        if (extension === '.html') return 'asset';
+        if (['.css', '.scss', '.sass'].includes(extension)) return 'asset';
+        if (['.js', '.ts'].includes(extension)) return 'code';
         
-        return FileCategory.OTHER;
+        return 'other';
     }
     
     assignPriority(file: FileDescriptor): number {
         const priorityMap: Partial<Record<FileCategory, number>> = {
-            [FileCategory.LAYOUT]: 1,
-            [FileCategory.STYLE]: 2,
-            [FileCategory.SOURCE_CODE]: 3
-        };
-        
+                    'config': 1,
+                    'code': 2,
+                    'asset': 3,
+                    'test': 4,
+                    'docs': 5,
+                    'other': 6
+                };
+                
         return priorityMap[file.category] || 9;
     }
     

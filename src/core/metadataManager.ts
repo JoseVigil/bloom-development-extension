@@ -1,7 +1,7 @@
 // src/core/metadataManager.ts
 
 import * as vscode from 'vscode';
-import { IntentMetadata, Intent } from '../models/intent';
+import { IntentMetadata, Intent, IntentContent, TokenStats } from '../models/intent';
 import { Logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 import { joinPath } from '../utils/uriHelper';
@@ -21,9 +21,17 @@ export class MetadataManager {
             files: vscode.Uri[];
             filesCount: number;
             estimatedTokens?: number;
+            content: IntentContent;
         }
     ): Promise<IntentMetadata> {
         const now = new Date().toISOString();
+        const estimatedTokens = options.estimatedTokens || 0;
+        
+        const tokens: TokenStats = {
+            estimated: estimatedTokens,
+            limit: 100000,
+            percentage: (estimatedTokens / 100000) * 100
+        };
         
         const metadata: IntentMetadata = {
             id: uuidv4(),
@@ -41,10 +49,12 @@ export class MetadataManager {
                 filesCount: options.filesCount,
                 totalSize: await this.calculateTotalSize(options.files)
             },
+            content: options.content,
+            tokens: tokens,
             stats: {
                 timesOpened: 0,
                 lastOpened: null,
-                estimatedTokens: options.estimatedTokens || 0
+                estimatedTokens: estimatedTokens
             },
             bloomVersion: '1.0.0'
         };

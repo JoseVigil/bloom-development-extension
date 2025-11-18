@@ -1,21 +1,27 @@
 bloom-development-extension/
 ├── src/
 │   ├── commands/
+│   │   ├── addToIntent.ts
 │   │   ├── changeIntentStatus.ts
 │   │   ├── copyContextToClipboard.ts
 │   │   ├── deleteIntent.ts
+│   │   ├── deleteIntentFromForm.ts
 │   │   ├── duplicateIntent.ts
 │   │   ├── editIntent.ts
 │   │   ├── generateIntent.ts
 │   │   ├── intent.ts
+│   │   ├── openFileInVSCode.ts
 │   │   ├── openIntent.ts
 │   │   ├── openMarkdownPreview.ts
+│   │   ├── revealInFinder.ts
 │   │   └── searchIntents.ts
 │   ├── core/
 │   │   ├── codebaseGenerator.ts
 │   │   ├── contextGatherer.ts
 │   │   ├── filePackager.ts
+│   │   ├── intentAutoSaver.ts
 │   │   ├── intentGenerator.ts
+│   │   ├── intentSession.ts
 │   │   ├── metadataManager.ts
 │   │   ├── tokenEstimator.ts
 │   │   └── validator.ts
@@ -24,7 +30,6 @@ bloom-development-extension/
 │   │   ├── codebaseStrategy.ts
 │   │   ├── contextLayer.ts
 │   │   └── intent.ts
-│   ├── package.json
 │   ├── providers/
 │   │   └── intentTreeProvider.ts
 │   ├── strategies/
@@ -33,7 +38,8 @@ bloom-development-extension/
 │   │   ├── IOSStrategy.ts
 │   │   ├── ProjectDetector.ts
 │   │   ├── ReactStrategy.ts
-│   │   └── WebStrategy.ts
+│   │   ├── WebStrategy.ts
+│   │   └── helpers.ts
 │   ├── ui/
 │   │   ├── intentForm.css
 │   │   ├── intentForm.html
@@ -43,5 +49,5 @@ bloom-development-extension/
 │   └── utils/
 │       ├── logger.ts
 │       └── uriHelper.ts
-├── tsconfig.json
-└── package.json
+├── package.json
+└── tsconfig.json

@@ -15,24 +15,16 @@
                 💾 Draft guardado automáticamente
             </div>
 
+            <div id="errorMessage" class="error-message">
+                <strong>⚠️ Errores de validación:</strong>
+                <ul id="errorList"></ul>
+            </div>
+
             <form id="intentForm">
                 <div class="form-section">
                     <label for="name">Nombre del Intent <span class="required">*</span></label>
                     <input type="text" id="name" name="name" placeholder="fix-login-crash" required>
-                </div>
-
-                <div class="form-section">
-                    <label for="problem">¿Qué problema quieres resolver? <span class="required">*</span></label>
-                    
-                    <div class="editor-toolbar">
-                        <button type="button" class="toolbar-btn" onclick="formatText('bold')" title="Negrita">B</button>
-                        <button type="button" class="toolbar-btn" onclick="formatText('italic')" title="Cursiva">I</button>
-                        <button type="button" class="toolbar-btn" onclick="formatText('code')" title="Código">```</button>
-                        <button type="button" class="toolbar-btn" onclick="formatText('list')" title="Lista">• -</button>
-                        <button type="button" class="toolbar-btn" disabled title="Próximamente">🎙️</button>
-                    </div>
-                    
-                    <textarea id="problem" name="problem" placeholder="Describe el problema en detalle..." required></textarea>
+                    <p class="help-text">Solo letras minúsculas, números y guiones</p>
                 </div>
 
                 <div class="form-section">
@@ -43,12 +35,46 @@
                 </div>
 
                 <div class="form-section">
-                    <label for="notes">💬 Notas adicionales (opcional)</label>
-                    <textarea id="notes" name="notes" rows="3" placeholder="Ej: Usar Retrofit, mantener estilo actual"></textarea>
+                    <label for="problem">¿Qué problema quieres resolver? <span class="required">*</span></label>
+                    
+                    <div class="editor-toolbar">
+                        <button type="button" class="toolbar-btn" onclick="formatText('bold')" title="Negrita">B</button>
+                        <button type="button" class="toolbar-btn" onclick="formatText('italic')" title="Cursiva">I</button>
+                        <button type="button" class="toolbar-btn" onclick="formatText('code')" title="Código">```</button>
+                        <button type="button" class="toolbar-btn" onclick="formatText('list')" title="Lista">• -</button>
+                    </div>
+                    
+                    <textarea id="problem" name="problem" placeholder="Describe el problema en detalle..." required></textarea>
+                </div>
+
+                <div class="form-section">
+                    <label for="expectedOutput">Output Esperado <span class="required">*</span></label>
+                    <textarea id="expectedOutput" name="expectedOutput" placeholder="Describe el resultado esperado..." required></textarea>
+                </div>
+
+                <div class="form-section">
+                    <label>Comportamiento Actual</label>
+                    <div class="list-container" id="currentBehaviorList"></div>
+                    <button type="button" class="btn-add" onclick="addListItem('currentBehavior')">
+                        + Agregar paso
+                    </button>
+                </div>
+
+                <div class="form-section">
+                    <label>Comportamiento Deseado</label>
+                    <div class="list-container" id="desiredBehaviorList"></div>
+                    <button type="button" class="btn-add" onclick="addListItem('desiredBehavior')">
+                        + Agregar paso
+                    </button>
+                </div>
+
+                <div class="form-section">
+                    <label for="considerations">💬 Consideraciones adicionales (opcional)</label>
+                    <textarea id="considerations" name="considerations" rows="3" placeholder="Ej: Usar Retrofit, mantener estilo actual"></textarea>
                 </div>
 
                 <div class="button-group">
-                    <button type="submit" class="btn-primary" id="generateBtn" disabled>✨ Generar Intent</button>
+                    <button type="submit" class="btn-primary" id="generateBtn">✨ Generar Intent</button>
                     <button type="button" class="btn-secondary" onclick="cancel()">Cancelar</button>
                 </div>
             </form>

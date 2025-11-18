@@ -1,48 +1,44 @@
 // src/models/codebaseStrategy.ts
 
 import * as vscode from 'vscode';
-import { ProjectType } from './intent';
+import { ProjectType, FileCategory } from './intent';
 
-/**
- * Descriptor completo de un archivo
- */
+// ✅ Re-exportar FileCategory para que otros módulos puedan importarlo desde aquí
+export { FileCategory };
+
+export interface FileMetadata {
+    size: number;
+    type: string;
+    lastModified: number;
+}
+
 export interface FileDescriptor {
-    absolutePath: string;
     relativePath: string;
+    absolutePath: string;
     category: FileCategory;
     priority: number;
     size: number;
     extension: string;
-    metadata?: {
-        size: number;
-        type: string;
-        lastModified?: number;
-    };
+    metadata?: FileMetadata;
 }
 
 /**
- * Categorías de archivos
+ * Opciones para generar codebase
  */
-export enum FileCategory {
-    MANIFEST = 'Manifest',
-    BUILD_CONFIG = 'Build Configuration',
-    GRADLE = 'Gradle',
-    PACKAGE_JSON = 'Package Configuration',
-    SOURCE_CODE = 'Source Code',
-    COMPONENT = 'Component',
-    SERVICE = 'Service',
-    MODEL = 'Model',
-    CONTROLLER = 'Controller',
-    RESOURCE = 'Resource',
-    LAYOUT = 'Layout',
-    STYLE = 'Style',
-    NAVIGATION = 'Navigation',
-    DEPENDENCY = 'Dependency',
-    TEST = 'Test',
-    ASSET = 'Asset',
-    DOCUMENTATION = 'Documentation',
-    CONFIGURATION = 'Configuration',
-    OTHER = 'Other'
+export interface CodebaseGeneratorOptions {
+    workspaceFolder: vscode.WorkspaceFolder;
+    format: 'markdown' | 'tarball';
+    includeMetadata: boolean;
+    addTableOfContents: boolean;
+    categorizeByType: boolean;
+}
+
+export interface CodebaseStrategy {
+    name: string;
+    projectType: ProjectType;
+    detect(workspaceFolder: vscode.WorkspaceFolder): Promise<boolean>;
+    categorize(files: vscode.Uri[]): Promise<FileDescriptor[]>;
+    prioritize(files: FileDescriptor[]): FileDescriptor[];
 }
 
 /**
@@ -57,21 +53,6 @@ export interface ICodebaseStrategy {
     categorizeFile(relativePath: string): FileCategory;
     assignPriority(file: FileDescriptor): number;
     generateIndex(files: FileDescriptor[]): string;
-}
-
-/**
- * Opciones para generar codebase
- */
-export interface CodebaseGeneratorOptions {
-    format: 'markdown' | 'tarball';
-    projectType?: ProjectType;
-    strategy?: ICodebaseStrategy;
-    workspaceFolder: vscode.WorkspaceFolder;
-    includeTests?: boolean;
-    maxFileSize?: number;
-    includeMetadata?: boolean;
-    addTableOfContents?: boolean;
-    categorizeByType?: boolean;
 }
 
 /**

@@ -261,14 +261,40 @@ def show_summary(stats: Dict, backup_stats: Dict, processed_count: int):
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Procesador de codebase snapshots v2.0',
-        add_help=False
+        description='''
+PROCESADOR DE CODEBASE SNAPSHOT v2.0 - PARSER ROBUSTO
+Regenera una codebase completa a partir de un snapshot en formato Markdown
+        ''',
+        epilog='''
+Ejemplos de uso:
+  python codebase_regeneration.py snapshot.md ./mi_proyecto
+  python codebase_regeneration.py cambios.md ./src --backup-dir
+  python codebase_regeneration.py snapshot.md . --dry-run
+  python codebase_regeneration.py updates.md ./app --backup-dir ./backups
+        ''',
+        formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument('snapshot_file', nargs='?', help='Archivo snapshot')
-    parser.add_argument('tree_root_directory', nargs='?', help='Raíz del proyecto')
-    parser.add_argument('--backup-dir', nargs='?', const="", help='Dir de backups')
-    parser.add_argument('--help', '-h', action='store_true', help='Ayuda')
-    parser.add_argument('--dry-run', action='store_true', help='Simular sin escribir')
+    
+    parser.add_argument(
+        'snapshot_file', 
+        help='Archivo .md con el snapshot de la codebase (formato Claude estandar)'
+    )
+    parser.add_argument(
+        'tree_root_directory', 
+        help='Directorio raíz donde se regenerarán los archivos'
+    )
+    parser.add_argument(
+        '--backup-dir', 
+        nargs='?', 
+        const="",
+        help='''Directorio para backups. Sin valor: backups automáticos.
+        Con ruta: usa directorio específico. Omítelo para no hacer backups.'''
+    )
+    parser.add_argument(
+        '--dry-run', 
+        action='store_true',
+        help='Simula operación sin modificar archivos (solo muestra qué haría)'
+    )
     
     args = parser.parse_args()
     

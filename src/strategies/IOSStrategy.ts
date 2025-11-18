@@ -83,27 +83,27 @@ export class IOSStrategy implements ICodebaseStrategy {
         const fileName = path.basename(relativePath);
         const lowerPath = relativePath.toLowerCase();
         
-        if (fileName === 'Podfile' || fileName === 'Package.swift') return FileCategory.DEPENDENCY;
-        if (fileName === 'Info.plist') return FileCategory.MANIFEST;
-        if (fileName.endsWith('.storyboard')) return FileCategory.LAYOUT;
+        if (fileName === 'Podfile' || fileName === 'Package.swift') return 'config';
+        if (fileName === 'Info.plist') return 'config';
+        if (fileName.endsWith('.storyboard')) return 'asset';
         if (relativePath.match(/\.swift$/)) {
-            if (lowerPath.includes('viewmodel') || lowerPath.includes('model')) return FileCategory.MODEL;
-            if (lowerPath.includes('service')) return FileCategory.SERVICE;
-            return FileCategory.COMPONENT;
+            if (lowerPath.includes('viewmodel') || lowerPath.includes('model')) return 'code';
+            if (lowerPath.includes('service')) return 'code';
+            return 'code';
         }
         
-        return FileCategory.OTHER;
+        return 'other';
     }
     
     assignPriority(file: FileDescriptor): number {
         const priorityMap: Partial<Record<FileCategory, number>> = {
-            [FileCategory.DEPENDENCY]: 1,
-            [FileCategory.MANIFEST]: 1,
-            [FileCategory.COMPONENT]: 3,
-            [FileCategory.MODEL]: 3,
-            [FileCategory.SERVICE]: 3,
-            [FileCategory.LAYOUT]: 4
-        };
+                    'config': 1,
+                    'code': 2,
+                    'asset': 3,
+                    'test': 4,
+                    'docs': 5,
+                    'other': 6
+                };
         
         return priorityMap[file.category] || 9;
     }
