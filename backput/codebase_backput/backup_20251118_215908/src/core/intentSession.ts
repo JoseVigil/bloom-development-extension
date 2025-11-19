@@ -5,7 +5,7 @@ import { CodebaseGenerator } from './codebaseGenerator';
 import { IntentGenerator } from './intentGenerator';
 import { IntentAutoSaver } from './intentAutoSaver';
 import { Logger } from '../utils/logger';
-import { IntentFormData, IntentContent, TokenStats, formDataToContent, IntentWorkflow, IntentWorkflowStage } from '../models/intent';
+import { IntentFormData, IntentContent, TokenStats, formDataToContent } from '../models/intent';
 import { FileDescriptor, FileCategory } from '../models/codebaseStrategy';
 import { joinPath } from '../utils/uriHelper';
 import * as path from 'path';
@@ -17,14 +17,12 @@ export interface IntentState {
     files: string[];
     content: IntentContent;
     tokens: TokenStats;
-    workflow: IntentWorkflow;
-    projectType?: string;
 }
 
 export class IntentSession extends EventEmitter {
     private autoSaver: IntentAutoSaver;
     private state: IntentState;
-
+    
     private constructor(
         private intentFolder: vscode.Uri,
         private workspaceFolder: vscode.WorkspaceFolder,
@@ -71,11 +69,6 @@ export class IntentSession extends EventEmitter {
                 estimated: 0,
                 limit: 100000,
                 percentage: 0
-            },
-            workflow: {
-                stage: 'draft',
-                questions: [],
-                integrationStatus: 'pending'
             }
         };
 
@@ -90,7 +83,7 @@ export class IntentSession extends EventEmitter {
         );
 
         await session.calculateTokens();
-
+        
         return session;
     }
 
@@ -117,13 +110,7 @@ export class IntentSession extends EventEmitter {
             status: metadata.status,
             files: metadata.files.filesIncluded || [],
             content: metadata.content,
-            tokens: metadata.tokens,
-            workflow: metadata.workflow || {
-                stage: 'draft',
-                questions: [],
-                integrationStatus: 'pending'
-            },
-            projectType: metadata.projectType
+            tokens: metadata.tokens
         };
 
         return new IntentSession(
@@ -135,52 +122,6 @@ export class IntentSession extends EventEmitter {
             logger,
             state
         );
-    }
-
-    async updateWorkflow(updates: Partial<IntentWorkflow>): Promise<void> {
-        this.state.workflow = {
-            ...this.state.workflow,
-            ...updates
-        };
-
-        await this.metadataManager.update(this.intentFolder, {
-            workflow: this.state.workflow
-        });
-
-        this.emit('workflowChanged', this.state.workflow);
-    }
-
-    async readIntentFile(): Promise<string> {
-        const intentPath = joinPath(this.intentFolder, 'intent.bl');
-        const content = await vscode.workspace.fs.readFile(intentPath);
-        return new TextDecoder().decode(content);
-    }
-
-    async readCodebaseFile(): Promise<string> {
-        const codebasePath = joinPath(this.intentFolder, 'codebase.md');
-        const content = await vscode.workspace.fs.readFile(codebasePath);
-        return new TextDecoder().decode(content);
-    }
-
-    async readSnapshotFile(): Promise<string> {
-        if (!this.state.workflow.snapshotPath) {
-            throw new Error('No snapshot path available');
-        }
-        const snapshotPath = vscode.Uri.file(this.state.workflow.snapshotPath);
-        const content = await vscode.workspace.fs.readFile(snapshotPath);
-        return new TextDecoder().decode(content);
-    }
-
-    getWorkflowStage(): IntentWorkflowStage {
-        return this.state.workflow?.stage || 'draft';
-    }
-
-    getIntentFolder(): vscode.Uri {
-        return this.intentFolder;
-    }
-
-    getWorkspaceFolder(): vscode.WorkspaceFolder {
-        return this.workspaceFolder;
     }
 
     async addFiles(files: vscode.Uri[]): Promise<void> {
@@ -245,11 +186,6 @@ export class IntentSession extends EventEmitter {
         );
 
         await this.regenerateCodebase();
-
-        await this.updateWorkflow({
-            stage: 'intent-generated'
-        });
-
         await this.changeStatus('completed');
 
         this.logger.info('Intent generated successfully');
@@ -292,9 +228,9 @@ export class IntentSession extends EventEmitter {
 
     async deleteIntent(): Promise<void> {
         this.logger.info(`Deleting intent: ${this.state.name}`);
-
+        
         await vscode.workspace.fs.delete(this.intentFolder, { recursive: true });
-
+        
         this.dispose();
         this.logger.info('Intent deleted successfully');
     }
@@ -305,16 +241,6 @@ export class IntentSession extends EventEmitter {
 
     private async regenerateCodebase(): Promise<void> {
         this.logger.info('Regenerating codebase.md');
-
-        await vscode.workspace.fs.createDirectory(this.intentFolder);
-
-        try {
-            await vscode.workspace.fs.stat(this.intentFolder);
-        } catch {
-            // Crear carpeta si no existe
-            await vscode.workspace.fs.createDirectory(this.intentFolder);
-            this.logger.info(`Created intent folder: ${this.intentFolder.fsPath}`);
-        }
 
         const fileDescriptors: FileDescriptor[] = this.state.files.map(relativePath => {
             const absolutePath = path.join(this.workspaceFolder.uri.fsPath, relativePath);
@@ -352,7 +278,7 @@ export class IntentSession extends EventEmitter {
 
     private categorizeFile(filePath: string): FileCategory {
         const ext = path.extname(filePath).toLowerCase();
-
+        
         if (['.ts', '.tsx', '.js', '.jsx', '.py', '.java', '.kt', '.swift'].includes(ext)) {
             return 'code';
         }

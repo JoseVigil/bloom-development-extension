@@ -239,6 +239,11 @@ export class IntentFormPanel {
     private async handleSubmit(data: IntentFormData): Promise<void> {
         this.logger.info('Procesando formulario de intent');
 
+        if (!data.name || data.name.length < 3) {
+            vscode.window.showErrorMessage('El nombre del intent debe tener al menos 3 caracteres');
+            return;
+        }      
+
         const validator = new Validator();
         const validation = validator.validate(data);
 

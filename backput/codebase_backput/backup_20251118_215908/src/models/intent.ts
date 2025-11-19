@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { FileCategory } from './codebaseStrategy';
 
 // ============================================
 // TIPOS BASE
@@ -7,65 +8,6 @@ import * as vscode from 'vscode';
 export type IntentStatus = 'draft' | 'in-progress' | 'completed' | 'archived';
 
 export type ProjectType = 'android' | 'ios' | 'web' | 'react' | 'node' | 'generic';
-
-export type FileCategory = 'code' | 'config' | 'docs' | 'test' | 'asset' | 'other';
-
-
-// NUEVO: Workflow stages
-export type IntentWorkflowStage =
-    | 'draft'
-    | 'intent-generated'
-    | 'questions-ready'
-    | 'answers-submitted'
-    | 'snapshot-downloaded'
-    | 'integrated';
-
-// NUEVO: Question types
-export type QuestionCategory =
-    | 'architecture'
-    | 'design'
-    | 'implementation'
-    | 'testing'
-    | 'security';
-
-export type QuestionPriority = 'high' | 'medium' | 'low';
-
-export type AnswerType =
-    | 'multiple-choice'
-    | 'free-text'
-    | 'boolean'
-    | 'code-snippet';
-
-// ============================================
-// NUEVAS INTERFACES: WORKFLOW
-// ============================================
-
-export interface Question {
-    id: string;
-    category: QuestionCategory;
-    priority: QuestionPriority;
-    text: string;
-    answerType: AnswerType;
-    options?: string[];
-    userAnswer?: string;
-    metadata?: {
-        rationale?: string;
-        impact?: string;
-    };
-}
-
-export interface IntentWorkflow {
-    stage: IntentWorkflowStage;
-    questions: Question[];
-    questionsArtifactUrl?: string;
-    snapshotPath?: string;
-    integrationStatus?: 'pending' | 'in-progress' | 'success' | 'failed';
-    integrationReport?: {
-        filesCreated: string[];
-        filesModified: string[];
-        conflicts: string[];
-    };
-}
 
 // ============================================
 // INTERFACE PRINCIPAL: FORMULARIO
@@ -116,20 +58,18 @@ export interface IntentMetadata {
     status: IntentStatus;
     projectType?: ProjectType;
     version: 'free' | 'pro';
-
+    
     files: FilesMetadata;
     content: IntentContent;
     tokens: TokenStats;
     tags?: string[];
-
-    workflow: IntentWorkflow;
-
+    
     stats: {
         timesOpened: number;
         lastOpened: string | null;
         estimatedTokens: number;
     };
-
+    
     bloomVersion: string;
 }
 
@@ -171,14 +111,14 @@ export function createInitialMetadata(
     }
 ): Omit<IntentMetadata, 'id' | 'created' | 'updated'> {
     const now = new Date().toISOString();
-
+    
     return {
         name: formData.name,
         displayName: generateDisplayName(formData.name),
         status: 'draft',
         projectType: options.projectType,
         version: options.version,
-
+        
         files: {
             intentFile: 'intent.bl',
             codebaseFile: options.version === 'free' ? 'codebase.md' : 'codebase.tar.gz',
@@ -186,29 +126,23 @@ export function createInitialMetadata(
             filesCount: options.filesCount,
             totalSize: options.totalSize
         },
-
+        
         content: formDataToContent(formData),
-
+        
         tokens: {
             estimated: options.estimatedTokens,
             limit: 100000,
             percentage: (options.estimatedTokens / 100000) * 100
         },
-
+        
         tags: [],
-
-        workflow: {
-            stage: 'draft',
-            questions: [],
-            integrationStatus: 'pending'
-        },
-
+        
         stats: {
             timesOpened: 0,
             lastOpened: null,
             estimatedTokens: options.estimatedTokens
         },
-
+        
         bloomVersion: '1.0.0'
     };
 }

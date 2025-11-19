@@ -1,5 +1,7 @@
+// src/core/metadataManager.ts
+
 import * as vscode from 'vscode';
-import { IntentMetadata, Intent, IntentContent, TokenStats, IntentWorkflow } from '../models/intent';
+import { IntentMetadata, Intent, IntentContent, TokenStats } from '../models/intent';
 import { Logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 import { joinPath } from '../utils/uriHelper';
@@ -7,6 +9,9 @@ import { joinPath } from '../utils/uriHelper';
 export class MetadataManager {
     constructor(private logger: Logger) {}
 
+    /**
+     * Crea metadata para un nuevo intent
+     */
     async create(
         intentFolder: vscode.Uri,
         options: {
@@ -21,19 +26,13 @@ export class MetadataManager {
     ): Promise<IntentMetadata> {
         const now = new Date().toISOString();
         const estimatedTokens = options.estimatedTokens || 0;
-
+        
         const tokens: TokenStats = {
             estimated: estimatedTokens,
             limit: 100000,
             percentage: (estimatedTokens / 100000) * 100
         };
-
-        const workflow: IntentWorkflow = {
-            stage: 'draft',
-            questions: [],
-            integrationStatus: 'pending'
-        };
-
+        
         const metadata: IntentMetadata = {
             id: uuidv4(),
             name: options.name,
@@ -52,7 +51,6 @@ export class MetadataManager {
             },
             content: options.content,
             tokens: tokens,
-            workflow: workflow,
             stats: {
                 timesOpened: 0,
                 lastOpened: null,
@@ -63,16 +61,19 @@ export class MetadataManager {
 
         await this.save(intentFolder, metadata);
         this.logger.info(`Metadata creada para intent: ${options.name}`);
-
+        
         return metadata;
     }
 
+    /**
+     * Lee metadata de un intent
+     */
     async read(intentFolder: vscode.Uri): Promise<IntentMetadata | null> {
         try {
             const metadataPath = joinPath(intentFolder, '.bloom-meta.json');
             const content = await vscode.workspace.fs.readFile(metadataPath);
             const metadata: IntentMetadata = JSON.parse(new TextDecoder().decode(content));
-
+            
             return metadata;
         } catch (error) {
             this.logger.warn(`Error al leer metadata de ${intentFolder.fsPath}: ${error}`);
@@ -80,6 +81,9 @@ export class MetadataManager {
         }
     }
 
+    /**
+     * Actualiza metadata existente
+     */
     async update(
         intentFolder: vscode.Uri,
         updates: Partial<IntentMetadata>
@@ -95,16 +99,22 @@ export class MetadataManager {
 
         await this.save(intentFolder, updated);
         this.logger.info(`Metadata actualizada para intent: ${existing.name}`);
-
+        
         return updated;
     }
 
+    /**
+     * Guarda metadata en archivo
+     */
     async save(intentFolder: vscode.Uri, metadata: IntentMetadata): Promise<void> {
         const metadataPath = joinPath(intentFolder, '.bloom-meta.json');
         const content = JSON.stringify(metadata, null, 2);
         await vscode.workspace.fs.writeFile(metadataPath, new TextEncoder().encode(content));
     }
 
+    /**
+     * Incrementa contador de opens
+     */
     async incrementOpens(intentFolder: vscode.Uri): Promise<void> {
         const metadata = await this.read(intentFolder);
         if (!metadata) return;
@@ -115,6 +125,9 @@ export class MetadataManager {
         await this.save(intentFolder, metadata);
     }
 
+    /**
+     * Cambia el estado de un intent
+     */
     async changeStatus(
         intentFolder: vscode.Uri,
         newStatus: IntentMetadata['status']
@@ -122,10 +135,16 @@ export class MetadataManager {
         await this.update(intentFolder, { status: newStatus });
     }
 
+    /**
+     * Actualiza tags
+     */
     async updateTags(intentFolder: vscode.Uri, tags: string[]): Promise<void> {
         await this.update(intentFolder, { tags });
     }
 
+    /**
+     * Valida que la metadata sea válida
+     */
     isValid(metadata: any): metadata is IntentMetadata {
         return (
             typeof metadata.id === 'string' &&
@@ -135,6 +154,8 @@ export class MetadataManager {
             ['draft', 'in-progress', 'completed', 'archived'].includes(metadata.status)
         );
     }
+
+    // Helpers privados
 
     private generateDisplayName(name: string): string {
         return name

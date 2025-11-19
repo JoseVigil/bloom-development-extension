@@ -1,7 +1,7 @@
 // src/models/codebaseStrategy.ts
 
 import * as vscode from 'vscode';
-import { ProjectType, FileCategory } from './intent';
+import { FileCategory, ProjectType } from './intent';
 
 // ✅ Re-exportar FileCategory para que otros módulos puedan importarlo desde aquí
 export { FileCategory };
@@ -26,7 +26,7 @@ export interface FileDescriptor {
  * Opciones para generar codebase
  */
 export interface CodebaseGeneratorOptions {
-    workspaceFolder: vscode.WorkspaceFolder;
+    workspaceFolder: any;
     format: 'markdown' | 'tarball';
     includeMetadata: boolean;
     addTableOfContents: boolean;

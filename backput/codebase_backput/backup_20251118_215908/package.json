@@ -65,26 +65,6 @@
             {
                 "command": "bloom.copyFilePath",
                 "title": "Copy File Path"
-            },
-            {
-                "command": "bloom.createBTIPProject",
-                "title": "Bloom: Create BTIP Project"
-            },
-            {
-                "command": "bloom.generateQuestions",
-                "title": "Bloom: Generate Questions"
-            },
-            {
-                "command": "bloom.submitAnswers",
-                "title": "Submit Answers to Claude"
-            },
-            {
-                "command": "bloom.integrateSnapshot",
-                "title": "Integrate Snapshot"
-            },
-            {
-                "command": "bloom.reloadIntentForm",
-                "title": "Reload Intent Form"
             }
         ],
         "menus": {
@@ -98,11 +78,6 @@
                     "command": "bloom.addToIntent",
                     "when": "explorerResourceIsFolder || resourceScheme == file",
                     "group": "bloom@2"
-                },
-                {
-                    "command": "bloom.createBTIPProject",
-                    "when": "explorerResourceIsFolder",
-                    "group": "bloom@3"
                 }
             ],
             "view/item/context": [
@@ -135,28 +110,12 @@
                 "bloom.pythonPath": {
                     "type": "string",
                     "default": "python",
-                    "description": "Path al ejecutable de Python para scripts"
+                    "description": "Path al ejecutable de Python para regeneración de codebase"
                 },
                 "bloom.useCustomCodebaseGenerator": {
                     "type": "boolean",
                     "default": false,
                     "description": "Usar script Python personalizado para generar codebase.md"
-                },
-                "bloom.claudeApiKey": {
-                    "type": "string",
-                    "default": "",
-                    "description": "API Key de Claude (o usar variable de entorno ANTHROPIC_API_KEY)"
-                },
-                "bloom.claudeModel": {
-                    "type": "string",
-                    "enum": ["claude-3-opus-20240229", "claude-3-sonnet-20240229"],
-                    "default": "claude-3-sonnet-20240229",
-                    "description": "Modelo de Claude a utilizar"
-                },
-                "bloom.autoUpdateTree": {
-                    "type": "boolean",
-                    "default": true,
-                    "description": "Actualizar tree.txt automáticamente después de cambios"
                 }
             }
         }

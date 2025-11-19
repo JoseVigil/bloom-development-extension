@@ -292,7 +292,7 @@ class TreeValidator:
 
 
 class SnapshotParser:
-    """Parser robusto para codebase snapshots de Claude"""
+    """Parser robusto para codebase snapshots de Claude - VERSIÓN MEJORADA"""
     
     SECTION_PATTERN = r'^## Archivo \d+: (.+?) \((MODIFICAR|CREAR NUEVO)\)$'
     
@@ -301,15 +301,25 @@ class SnapshotParser:
         self.lines = content.split('\n')
         
     def parse(self) -> List[Dict]:
-        """Parse usando el formato estandarizado de Claude"""
+        """
+        Parse usando el formato estandarizado de Claude
+        MEJORADO: Maneja correctamente template strings de JS/TS
+        """
         files = []
         current_file = None
         current_content_lines = []
         in_code_block = False
         
+        # Estados para rastreo de template strings
+        in_template_string = False
+        template_string_char = None
+        escape_next = False
+        
         for i, line in enumerate(self.lines):
+            # Detectar inicio de nueva sección (solo si NO estamos en template string)
             match = re.match(self.SECTION_PATTERN, line)
-            if match:
+            if match and not in_template_string:
+                # Guardar archivo anterior
                 if current_file:
                     content = self._extract_indented_code(current_content_lines)
                     if content:
@@ -320,6 +330,7 @@ class SnapshotParser:
                             'line_number': current_file['line_number']
                         })
                 
+                # Iniciar nuevo archivo
                 current_file = {
                     'path': match.group(1),
                     'action': match.group(2),
@@ -327,9 +338,13 @@ class SnapshotParser:
                 }
                 current_content_lines = []
                 in_code_block = True
+                in_template_string = False
+                template_string_char = None
+                escape_next = False
                 continue
             
-            if line.startswith('## ') or line.startswith('# '):
+            # Detectar otros headers (solo si NO estamos en template string)
+            if (line.startswith('## ') or line.startswith('# ')) and not in_template_string:
                 if current_file and in_code_block:
                     content = self._extract_indented_code(current_content_lines)
                     if content:
@@ -344,9 +359,19 @@ class SnapshotParser:
                     in_code_block = False
                 continue
             
+            # Si estamos en un bloque de código, procesar y rastrear template strings
             if in_code_block and current_file:
+                in_template_string, template_string_char, escape_next = \
+                    self._track_template_string_state(
+                        line, 
+                        in_template_string, 
+                        template_string_char,
+                        escape_next
+                    )
+                
                 current_content_lines.append(line)
         
+        # Procesar último archivo
         if current_file and current_content_lines:
             content = self._extract_indented_code(current_content_lines)
             if content:
@@ -359,17 +384,98 @@ class SnapshotParser:
         
         return files
     
+    def _track_template_string_state(
+        self, 
+        line: str, 
+        in_template: bool, 
+        template_char: Optional[str],
+        escape_next: bool
+    ) -> Tuple[bool, Optional[str], bool]:
+        """
+        Rastrea si estamos dentro de un template string de JS/TS
+        
+        Retorna: (in_template, template_char, escape_next)
+        
+        Maneja:
+        - Template strings con backticks (`)
+        - Caracteres de escape (\\)
+        - Comentarios de línea (//)
+        - Strings anidados
+        """
+        stripped = line.strip()
+        
+        i = 0
+        while i < len(stripped):
+            char = stripped[i]
+            
+            # Si el carácter anterior era escape, ignorar este
+            if escape_next:
+                escape_next = False
+                i += 1
+                continue
+            
+            # Detectar escape character
+            if char == '\\':
+                escape_next = True
+                i += 1
+                continue
+            
+            # Si NO estamos en template, buscar inicio
+            if not in_template:
+                if char == '`':
+                    # Verificar que no sea dentro de un comentario
+                    if not self._is_in_comment(stripped[:i]):
+                        in_template = True
+                        template_char = '`'
+            
+            # Si YA estamos en template, buscar cierre
+            else:
+                if char == template_char:
+                    in_template = False
+                    template_char = None
+            
+            i += 1
+        
+        return in_template, template_char, escape_next
+    
+    def _is_in_comment(self, text: str) -> bool:
+        """
+        Verifica si el texto está dentro de un comentario de línea (//)
+        Ignora // dentro de strings
+        """
+        in_string = False
+        string_char = None
+        
+        for i, char in enumerate(text):
+            # Detectar inicio/fin de string
+            if char in ['"', "'"] and (i == 0 or text[i-1] != '\\'):
+                if not in_string:
+                    in_string = True
+                    string_char = char
+                elif char == string_char:
+                    in_string = False
+                    string_char = None
+            
+            # Detectar comentario (solo si no estamos en string)
+            if not in_string and i < len(text) - 1:
+                if text[i:i+2] == '//':
+                    return True
+        
+        return False
+    
     def _extract_indented_code(self, lines: List[str]) -> str:
-        """Extrae código removiendo indentación"""
+        """Extrae código removiendo indentación base"""
         if not lines:
             return ''
         
+        # Remover líneas vacías al inicio
         while lines and not lines[0].strip():
             lines.pop(0)
         
         if not lines:
             return ''
         
+        # Detectar indentación mínima (ignorando líneas vacías)
         indent_levels = []
         for line in lines:
             if line.strip():
@@ -381,6 +487,7 @@ class SnapshotParser:
         
         min_indent = min(indent_levels)
         
+        # Remover indentación base
         code_lines = []
         for line in lines:
             if line.strip():
@@ -391,6 +498,7 @@ class SnapshotParser:
             else:
                 code_lines.append('')
         
+        # Remover líneas vacías al final
         while code_lines and not code_lines[-1].strip():
             code_lines.pop()
         
