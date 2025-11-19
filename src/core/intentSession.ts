@@ -19,6 +19,7 @@ export interface IntentState {
     tokens: TokenStats;
     workflow: IntentWorkflow;
     projectType?: string;
+    intentFolder: vscode.Uri;
 }
 
 export class IntentSession extends EventEmitter {
@@ -76,7 +77,8 @@ export class IntentSession extends EventEmitter {
                 stage: 'draft',
                 questions: [],
                 integrationStatus: 'pending'
-            }
+            },
+            intentFolder: intentFolder
         };
 
         const session = new IntentSession(
@@ -123,7 +125,8 @@ export class IntentSession extends EventEmitter {
                 questions: [],
                 integrationStatus: 'pending'
             },
-            projectType: metadata.projectType
+            projectType: metadata.projectType,
+            intentFolder: intentFolder
         };
 
         return new IntentSession(

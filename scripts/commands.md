@@ -1,6 +1,6 @@
 tree\_custom.py
 
-python /c/repos/bloom-videos/bloom-development-extension/scripts/tree\_custom.py /c/repos/bloom-videos/bloom-development-extension/tree/plugin\_tree.txt /c/repos/bloom-videos/bloom-development-extension/src   /c/repos/bloom-videos/bloom-development-extension/package.json /c/repos/bloom-videos/bloom-development-extension/tsconfig.json
+python /c/repos/bloom-videos/bloom-development-extension/scripts/tree\_custom.py /c/repos/bloom-videos/bloom-development-extension/tree/plugin\_tree.txt /c/repos/bloom-videos/bloom-development-extension/src /c/repos/bloom-videos/bloom-development-extension/package.json /c/repos/bloom-videos/bloom-development-extension/tsconfig.json
 
 codebase\_generation.py
 

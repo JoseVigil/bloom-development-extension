@@ -71,6 +71,10 @@
                 "title": "Bloom: Create BTIP Project"
             },
             {
+                "command": "bloom.regenerateContext",
+                "title": "Bloom: Regenerate Project Context"
+            },
+            {
                 "command": "bloom.generateQuestions",
                 "title": "Bloom: Generate Questions"
             },
@@ -105,6 +109,12 @@
                     "group": "bloom@3"
                 }
             ],
+            "commandPalette": [
+                {
+                    "command": "bloom.regenerateContext",
+                    "when": "workspaceFolderCount > 0"
+                }
+            ],
             "view/item/context": [
                 {
                     "command": "bloom.openIntent",
@@ -134,7 +144,7 @@
                 },
                 "bloom.pythonPath": {
                     "type": "string",
-                    "default": "python",
+                    "default": "python3",
                     "description": "Path al ejecutable de Python para scripts"
                 },
                 "bloom.useCustomCodebaseGenerator": {

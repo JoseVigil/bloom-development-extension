@@ -1,15 +1,14 @@
 import * as vscode from 'vscode';
 import { Logger } from '../utils/logger';
 import { ContextGatherer } from '../core/contextGatherer';
-import { TokenEstimator } from '../core/tokenEstimator';
+import { TokenEstimator } from '../utils/tokenEstimator';
 import { IntentTreeItem } from '../providers/intentTreeProvider';
 import { joinPath } from '../utils/uriHelper';
 
 export function registerCopyContextToClipboard(
     context: vscode.ExtensionContext,
     logger: Logger,
-    contextGatherer: ContextGatherer,
-    tokenEstimator: TokenEstimator
+    contextGatherer: ContextGatherer    
 ): void {
     const disposable = vscode.commands.registerCommand(
         'bloom.copyContextToClipboard',
@@ -45,10 +44,12 @@ export function registerCopyContextToClipboard(
                 
                 await vscode.env.clipboard.writeText(fullContext);
                 
-                const analysis = tokenEstimator.analyzePayload(fullContext);
+                // ✅ Usar la nueva API estática
+                const totalTokens = TokenEstimator.estimateFromText(fullContext);
+                const totalChars = fullContext.length;
                 
                 const action = await vscode.window.showInformationMessage(
-                    `📋 Contexto copiado\n${analysis.totalChars.toLocaleString()} chars | ~${analysis.estimatedTokens.toLocaleString()} tokens`,
+                    `📋 Contexto copiado\n${totalChars.toLocaleString()} chars | ~${totalTokens.toLocaleString()} tokens`,
                     'Abrir Claude.ai'
                 );
                 
@@ -56,7 +57,7 @@ export function registerCopyContextToClipboard(
                     await vscode.env.openExternal(vscode.Uri.parse('https://claude.ai/new'));
                 }
                 
-                logger.info(`Contexto copiado: ${analysis.totalChars} chars, ${analysis.estimatedTokens} tokens`);
+                logger.info(`Contexto copiado: ${totalChars} chars, ${totalTokens} tokens`);
                 
             } catch (error) {
                 vscode.window.showErrorMessage(`Error: ${(error as Error).message}`);

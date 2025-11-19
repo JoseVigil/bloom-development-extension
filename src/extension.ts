@@ -16,8 +16,9 @@ import { registerReloadIntentForm } from './commands/reloadIntentForm';
 import { Logger } from './utils/logger';
 import { MetadataManager } from './core/metadataManager';
 import { ContextGatherer } from './core/contextGatherer';
-import { TokenEstimator } from './core/tokenEstimator';
+import { TokenEstimator } from './utils/tokenEstimator';
 import { IntentTreeProvider } from './providers/intentTreeProvider';
+import { registerRegenerateContext } from './commands/regenerateContext';
 
 export function activate(context: vscode.ExtensionContext) {
     const logger = new Logger();
@@ -38,7 +39,7 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.window.registerTreeDataProvider('bloomIntents', intentTreeProvider);
 
         registerOpenIntent(context, logger, metadataManager);
-        registerCopyContextToClipboard(context, logger, contextGatherer, tokenEstimator);
+        registerCopyContextToClipboard(context, logger, contextGatherer);
         registerDeleteIntent(context, logger, intentTreeProvider);
         registerAddToIntent(context, logger);
         registerDeleteIntentFromForm(context, logger);
@@ -46,6 +47,7 @@ export function activate(context: vscode.ExtensionContext) {
         registerRevealInFinder(context, logger);
 
         registerCreateBTIPProject(context, logger);
+        registerRegenerateContext(context, logger);
         registerGenerateQuestions(context, logger);
         registerSubmitAnswers(context, logger);
         registerIntegrateSnapshot(context, logger);

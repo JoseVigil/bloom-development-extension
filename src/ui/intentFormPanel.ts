@@ -1,3 +1,4 @@
+// src/ui/intentFormPanel.ts
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -7,13 +8,18 @@ import { IntentGenerator } from '../core/intentGenerator';
 import { MetadataManager } from '../core/metadataManager';
 import { CodebaseGenerator } from '../core/codebaseGenerator';
 import { IntentSession } from '../core/intentSession';
+import { TokenEstimator, TokenEstimation } from '../utils/tokenEstimator';
+import { PythonExecutor } from '../utils/pythonExecutor';
 import { IntentFormData, TokenStats } from '../models/intent';
+import { joinPath } from '../utils/uriHelper';
 
 export class IntentFormPanel {
     private panel: vscode.WebviewPanel | undefined;
     private session: IntentSession | undefined;
     private isEditMode: boolean = false;
     private intentName: string | undefined;
+    private pythonExecutor: PythonExecutor;
+    private tokenEstimation: TokenEstimation | undefined;
 
     constructor(
         private context: vscode.ExtensionContext,
@@ -25,6 +31,7 @@ export class IntentFormPanel {
     ) {
         this.intentName = existingIntentName;
         this.isEditMode = !!existingIntentName;
+        this.pythonExecutor = new PythonExecutor(logger);
     }
 
     async show(): Promise<void> {
@@ -34,7 +41,10 @@ export class IntentFormPanel {
             vscode.ViewColumn.One,
             {
                 enableScripts: true,
-                retainContextWhenHidden: true
+                retainContextWhenHidden: true,
+                localResourceRoots: [
+                    joinPath(this.context.extensionUri, 'src', 'ui')
+                ]
             }
         );
 
@@ -53,6 +63,11 @@ export class IntentFormPanel {
         // Enviar archivos iniciales
         this.sendFilesToWebview();
         
+        // Calcular tokens iniciales
+        if (this.relativePaths.length > 0) {
+            await this.calculateAndSendTokens();
+        }
+
         this.logger.info('Formulario de intent abierto');
     }
 
@@ -110,6 +125,7 @@ export class IntentFormPanel {
         this.session.on('filesChanged', (files: string[]) => {
             this.relativePaths = files;
             this.sendFilesToWebview();
+            this.calculateAndSendTokens();
             this.logger.info(`Archivos actualizados: ${files.length}`);
         });
 
@@ -140,6 +156,42 @@ export class IntentFormPanel {
         });
     }
 
+    private async calculateAndSendTokens(): Promise<void> {
+        if (!this.session) return;
+
+        try {
+            const intentFolder = this.session.getState().intentFolder;
+            
+            this.tokenEstimation = await TokenEstimator.estimateIntent(
+                intentFolder,
+                this.relativePaths
+            );
+
+            // Enviar al webview
+            this.panel?.webview.postMessage({
+                command: 'updateTokens',
+                tokens: {
+                    estimated: this.tokenEstimation.totalTokens,
+                    limit: 100000,
+                    percentage: this.tokenEstimation.percentage * 100
+                }
+            });
+
+            // Mostrar alerta si es necesario
+            const alertMessage = TokenEstimator.getAlertMessage(this.tokenEstimation);
+            if (alertMessage) {
+                if (this.tokenEstimation.error) {
+                    vscode.window.showErrorMessage(alertMessage);
+                } else if (this.tokenEstimation.warning) {
+                    vscode.window.showWarningMessage(alertMessage);
+                }
+            }
+
+        } catch (error: any) {
+            this.logger.error(`Error calculando tokens: ${error.message}`);
+        }
+    }
+
     private setupMessageListener(): void {
         if (!this.panel) return;
 
@@ -156,7 +208,7 @@ export class IntentFormPanel {
                         await this.handleOpenFileInVSCode(message.filePath);
                         break;
                     case 'copyFilePath':
-                        await vscode.commands.executeCommand('bloom.copyFilePath', message.filePath);
+                        await this.handleCopyFilePath(message.filePath);
                         break;
                     case 'revealInFinder':
                         await this.handleRevealInFinder(message.filePath);
@@ -181,14 +233,27 @@ export class IntentFormPanel {
         const fullPath = path.join(this.workspaceFolder.uri.fsPath, filePath);
         const fileUri = vscode.Uri.file(fullPath);
         
-        await vscode.commands.executeCommand('bloom.openFileInVSCode', fileUri);
+        try {
+            await vscode.window.showTextDocument(fileUri, {
+                viewColumn: vscode.ViewColumn.Beside
+            });
+        } catch (error: any) {
+            this.logger.error(`Error abriendo archivo: ${error.message}`);
+            vscode.window.showErrorMessage(`No se pudo abrir: ${filePath}`);
+        }
+    }
+
+    private async handleCopyFilePath(filePath: string): Promise<void> {
+        const fullPath = path.join(this.workspaceFolder.uri.fsPath, filePath);
+        await vscode.env.clipboard.writeText(fullPath);
+        vscode.window.showInformationMessage('Path copiado al clipboard');
     }
 
     private async handleRevealInFinder(filePath: string): Promise<void> {
         const fullPath = path.join(this.workspaceFolder.uri.fsPath, filePath);
         const fileUri = vscode.Uri.file(fullPath);
         
-        await vscode.commands.executeCommand('bloom.revealInFinder', fileUri);
+        await vscode.commands.executeCommand('revealFileInOS', fileUri);
     }
 
     private async handleRemoveFile(filePath: string): Promise<void> {
@@ -203,6 +268,9 @@ export class IntentFormPanel {
         if (confirm === 'Remover') {
             await this.session.removeFile(filePath);
             vscode.window.showInformationMessage(`Archivo removido: ${path.basename(filePath)}`);
+            
+            // Recalcular tokens
+            await this.calculateAndSendTokens();
         }
     }
 
@@ -239,10 +307,18 @@ export class IntentFormPanel {
     private async handleSubmit(data: IntentFormData): Promise<void> {
         this.logger.info('Procesando formulario de intent');
 
+        // Validar que no exceda tokens
+        if (this.tokenEstimation?.error) {
+            vscode.window.showErrorMessage(
+                '❌ No se puede generar: excede el límite de tokens. Remueve archivos primero.'
+            );
+            return;
+        }
+
         if (!data.name || data.name.length < 3) {
             vscode.window.showErrorMessage('El nombre del intent debe tener al menos 3 caracteres');
             return;
-        }      
+        }
 
         const validator = new Validator();
         const validation = validator.validate(data);
@@ -262,41 +338,59 @@ export class IntentFormPanel {
         }
 
         try {
-            // Crear carpeta definitiva si es nuevo intent
-            if (!this.isEditMode) {
-                const intentFolder = vscode.Uri.file(
-                    path.join(this.workspaceFolder.uri.fsPath, '.bloom', 'intents', data.name)
-                );
-                
-                await this.ensureDirectory(vscode.Uri.file(path.join(this.workspaceFolder.uri.fsPath, '.bloom')));
-                await this.ensureDirectory(vscode.Uri.file(path.join(this.workspaceFolder.uri.fsPath, '.bloom', 'intents')));
-                await this.ensureDirectory(intentFolder);
-                
-                // Actualizar sesión con carpeta definitiva
-                const metadataManager = new MetadataManager(this.logger);
-                const codebaseGenerator = new CodebaseGenerator();
-                const intentGenerator = new IntentGenerator(this.logger);
-                
-                this.session = await IntentSession.create(
-                    intentFolder,
-                    this.workspaceFolder,
-                    this.selectedFiles,
-                    this.relativePaths,
-                    metadataManager,
-                    codebaseGenerator,
-                    intentGenerator,
-                    this.logger
-                );
-            }
+            await vscode.window.withProgress(
+                {
+                    location: vscode.ProgressLocation.Notification,
+                    title: this.isEditMode ? 'Regenerando intent' : 'Generando intent',
+                    cancellable: false
+                },
+                async (progress) => {
+                    // Crear carpeta definitiva si es nuevo intent
+                    if (!this.isEditMode) {
+                        progress.report({ message: 'Creando estructura...' });
+                        
+                        const intentFolder = vscode.Uri.file(
+                            path.join(this.workspaceFolder.uri.fsPath, '.bloom', 'intents', data.name)
+                        );
+                        
+                        await this.ensureDirectory(vscode.Uri.file(path.join(this.workspaceFolder.uri.fsPath, '.bloom')));
+                        await this.ensureDirectory(vscode.Uri.file(path.join(this.workspaceFolder.uri.fsPath, '.bloom', 'intents')));
+                        await this.ensureDirectory(intentFolder);
+                        
+                        // Actualizar sesión con carpeta definitiva
+                        const metadataManager = new MetadataManager(this.logger);
+                        const codebaseGenerator = new CodebaseGenerator();
+                        const intentGenerator = new IntentGenerator(this.logger);
+                        
+                        this.session = await IntentSession.create(
+                            intentFolder,
+                            this.workspaceFolder,
+                            this.selectedFiles,
+                            this.relativePaths,
+                            metadataManager,
+                            codebaseGenerator,
+                            intentGenerator,
+                            this.logger
+                        );
+                    }
 
-            // Generar o regenerar intent
-            if (this.isEditMode) {
-                await this.session.regenerateIntent(data);
-                vscode.window.showInformationMessage(`✅ Intent '${data.name}' regenerado exitosamente`);
-            } else {
-                await this.session.generateIntent(data);
-                vscode.window.showInformationMessage(`✅ Intent '${data.name}' creado exitosamente`);
-            }
+                    progress.report({ message: 'Generando codebase.bl...' });
+
+                    // Generar codebase.bl (con opción de script Python)
+                    await this.generateCodebase();
+
+                    progress.report({ message: 'Guardando intent...' });
+
+                    // Generar o regenerar intent
+                    if (this.isEditMode) {
+                        await this.session!.regenerateIntent(data);
+                        vscode.window.showInformationMessage(`✅ Intent '${data.name}' regenerado exitosamente`);
+                    } else {
+                        await this.session!.generateIntent(data);
+                        vscode.window.showInformationMessage(`✅ Intent '${data.name}' creado exitosamente`);
+                    }
+                }
+            );
 
             this.panel?.dispose();
             
@@ -315,6 +409,58 @@ export class IntentFormPanel {
                 message: errorMessage
             });
         }
+    }
+
+    private async generateCodebase(): Promise<void> {
+        const useCustom = vscode.workspace.getConfiguration('bloom')
+            .get('useCustomCodebaseGenerator', false);
+
+        if (useCustom) {
+            // Intentar usar script Python personalizado
+            const intentPath = this.session!.getState().intentFolder.fsPath;
+            const result = await this.pythonExecutor.generateCodebase(
+                intentPath,
+                this.relativePaths
+            );
+
+            if (!result.success) {
+                this.logger.warn('Script Python falló, usando generador nativo');
+                await this.generateCodebaseNative();
+            }
+        } else {
+            // Usar generador nativo TypeScript
+            await this.generateCodebaseNative();
+        }
+    }
+
+    private async generateCodebaseNative(): Promise<void> {
+        let codebaseContent = '# CODEBASE\n\n';
+
+        for (const filePath of this.relativePaths) {
+            try {
+                const fullPath = joinPath(this.workspaceFolder.uri, filePath);
+                const fileContent = await vscode.workspace.fs.readFile(fullPath);
+                const text = Buffer.from(fileContent).toString('utf-8');
+
+                codebaseContent += `## Archivo: ${filePath}\n\n`;
+                codebaseContent += '```\n';
+                codebaseContent += text;
+                codebaseContent += '\n```\n\n';
+
+            } catch (error) {
+                this.logger.warn(`No se pudo leer: ${filePath}`);
+            }
+        }
+
+        const intentFolder = this.session!.getState().intentFolder;
+        const codebasePath = joinPath(intentFolder, 'codebase.bl');
+
+        await vscode.workspace.fs.writeFile(
+            codebasePath,
+            Buffer.from(codebaseContent, 'utf-8')
+        );
+
+        this.logger.info('codebase.bl generado con método nativo');
     }
 
     private async ensureDirectory(uri: vscode.Uri): Promise<void> {
