@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-PROCESADOR DE CODEBASE SNAPSHOT v3.0 - VALIDACIÓN ROBUSTA
-Compatible con formato Claude + validación contra tree
+PROCESADOR DE CODEBASE SNAPSHOT v4.0 - CON NORMALIZADOR INTEGRADO
+Compatible con formato Claude + validación contra tree + normalización automática
 """
 
 import os
@@ -14,6 +14,180 @@ from typing import List, Dict, Optional, Tuple, Set
 from pathlib import Path
 import tempfile
 import json
+import subprocess
+
+# ============================================
+# NORMALIZADOR EMBEBIDO
+# ============================================
+
+HEADER_RE = re.compile(r'^##\s*Archivo\s+(\d+)\s*:\s*(.+?)\s*\((MODIFICAR|CREAR NUEVO)\)\s*$', re.IGNORECASE)
+HEADER_LOOSE_RE = re.compile(r'^##\s*(Archivo\s*\d*\s*:\s*.+)$', re.IGNORECASE)
+BACKTICK_FENCE_RE = re.compile(r'^```.*$')
+TAB_RE = re.compile(r'\t')
+SEPARATOR_RE = re.compile(r'^---+\s*$')
+
+class NormalizerSection:
+    def __init__(self, raw_header: str = "", index: Optional[int] = None, path: str = "", action: str = ""):
+        self.raw_header = raw_header
+        self.index = index
+        self.path = path
+        self.action = action
+        self.raw_lines: List[str] = []
+        self.normalized_lines: List[str] = []
+        self.problems: List[str] = []
+
+    def add_line(self, line: str):
+        self.raw_lines.append(line.rstrip("\n"))
+
+    def detect_problems_and_normalize(self):
+        lines = [TAB_RE.sub(" " * 4, l) for l in self.raw_lines]
+
+        inside_fence = False
+        stripped_lines: List[str] = []
+        fences_found = 0
+
+        for l in lines:
+            # Detectar y remover backticks
+            if BACKTICK_FENCE_RE.match(l.strip()):
+                fences_found += 1
+                inside_fence = not inside_fence
+                continue
+            
+            # Detectar y remover separadores ---
+            if SEPARATOR_RE.match(l.strip()):
+                continue
+            
+            stripped_lines.append(l)
+
+        if fences_found:
+            self.problems.append(f"Se eliminaron {fences_found} fences de triple backticks")
+
+        # Detectar indentación mínima
+        min_indent = None
+        for l in stripped_lines:
+            if l.strip() == "":
+                continue
+            lead = len(l) - len(l.lstrip(" "))
+            if min_indent is None or lead < min_indent:
+                min_indent = lead
+
+        if min_indent is None:
+            self.problems.append("Sección vacía detectada")
+            min_indent = 0
+        elif min_indent > 4:
+            self.problems.append(f"Indentación excesiva detectada (min={min_indent}, se corregirá a 4)")
+
+        # Normalizar indentación a 4 espacios
+        normalized = []
+        for l in stripped_lines:
+            if l.strip() == "":
+                normalized.append("")
+                continue
+
+            lead = len(l) - len(l.lstrip(" "))
+            to_remove = min(lead, min_indent) if min_indent else 0
+            new_line = l[to_remove:]
+            new_line = TAB_RE.sub(" " * 4, new_line)
+            
+            # Solo agregar 4 espacios si la línea no está vacía
+            if new_line.strip():
+                normalized.append(" " * 4 + new_line.rstrip())
+            else:
+                normalized.append("")
+
+        self.normalized_lines = normalized
+
+    def assemble_section_text(self) -> List[str]:
+        out = []
+        header = self.raw_header.strip()
+
+        if not HEADER_RE.match(header):
+            loose = HEADER_LOOSE_RE.match(header)
+            if loose:
+                repaired = f"## Archivo: {loose.group(1).strip()} (MODIFICAR)"
+                self.problems.append("Header reparado")
+                header = repaired
+            else:
+                self.problems.append("Header inválido")
+
+        out.append(header)
+        out.append("")
+
+        if self.normalized_lines:
+            out.extend(self.normalized_lines)
+        else:
+            out.append("    # SECCION VACIA - revisar")
+            self.problems.append("Sección vacía insertada")
+
+        out.append("")
+        return out
+
+
+def parse_sections_for_normalization(lines: List[str]) -> List[NormalizerSection]:
+    sections: List[NormalizerSection] = []
+    current: Optional[NormalizerSection] = None
+    
+    for raw in lines:
+        l = raw.rstrip("\n")
+        stripped = l.strip()
+
+        if stripped.startswith("##"):
+            if current is not None:
+                sections.append(current)
+
+            m = HEADER_RE.match(stripped)
+            if m:
+                idx = int(m.group(1))
+                path = m.group(2).strip()
+                action = m.group(3).upper()
+                header_text = f"## Archivo {idx}: {path} ({action})"
+                current = NormalizerSection(raw_header=header_text, index=idx, path=path, action=action)
+            else:
+                current = NormalizerSection(raw_header=stripped)
+                current.problems.append("Header mal formado detectado")
+
+            continue
+
+        if current is None:
+            current = NormalizerSection(raw_header="## Archivo 0: prefacio (MODIFICAR)", index=0, path="prefacio", action="MODIFICAR")
+            current.problems.append("Contenido antes del primer header")
+
+        current.add_line(l)
+
+    if current is not None:
+        sections.append(current)
+
+    return sections
+
+
+def normalize_snapshot_content(content: str) -> Tuple[str, Dict]:
+    """Normaliza el contenido del snapshot"""
+    lines = content.split('\n')
+    sections = parse_sections_for_normalization(lines)
+    
+    stats = {
+        "total_sections": len(sections),
+        "sections_with_problems": 0,
+        "total_problems": 0
+    }
+    
+    output: List[str] = []
+    
+    for sec in sections:
+        sec.detect_problems_and_normalize()
+        
+        if sec.problems:
+            stats["sections_with_problems"] += 1
+            stats["total_problems"] += len(sec.problems)
+        
+        output.extend(sec.assemble_section_text())
+    
+    return '\n'.join(output), stats
+
+
+# ============================================
+# CÓDIGO ORIGINAL DE INTEGRACIÓN
+# ============================================
 
 class TreeValidator:
     """Valida snapshots contra árbol de directorios real"""
@@ -32,7 +206,6 @@ class TreeValidator:
         with open(self.tree_file, 'r', encoding='utf-8') as f:
             lines = f.readlines()
         
-        # Stack de directorios por nivel de indentación
         dir_stack = {}
         root_dir = None
         
@@ -40,13 +213,10 @@ class TreeValidator:
             if not line.strip():
                 continue
             
-            # Detectar directorio raíz (primera línea sin símbolos tree)
             if not root_dir and line.strip().endswith('/') and not any(c in line for c in ['├', '│', '└', '─']):
                 root_dir = line.strip().rstrip('/')
                 continue
             
-            # Calcular nivel de indentación
-            # Contar caracteres antes del nombre real
             original_line = line
             indent = 0
             i = 0
@@ -65,26 +235,20 @@ class TreeValidator:
                 else:
                     break
             
-            # Extraer nombre limpio
             name = line[i:].strip()
             if not name:
                 continue
             
-            # Calcular nivel real (cada nivel tree son ~4 chars)
             level = indent // 4
             
-            # Actualizar stack de directorios
-            # Limpiar niveles superiores
             keys_to_remove = [k for k in dir_stack if k >= level]
             for k in keys_to_remove:
                 del dir_stack[k]
             
-            # Es directorio
             if name.endswith('/'):
                 dir_name = name.rstrip('/')
                 dir_stack[level] = dir_name
             else:
-                # Es archivo - construir ruta completa
                 path_parts = []
                 for l in sorted(dir_stack.keys()):
                     path_parts.append(dir_stack[l])
@@ -93,12 +257,10 @@ class TreeValidator:
                 file_path = '/'.join(path_parts)
                 self.valid_paths.add(file_path)
                 
-                # Si el primer componente es el root_dir, también agregar sin él
                 if path_parts and path_parts[0] == root_dir:
                     file_path_clean = '/'.join(path_parts[1:])
                     self.valid_paths.add(file_path_clean)
                 
-                # Guardar en estructura
                 dir_path = '/'.join(path_parts[:-1])
                 if dir_path not in self.tree_structure:
                     self.tree_structure[dir_path] = []
@@ -107,7 +269,6 @@ class TreeValidator:
     def validate_path(self, path: str) -> Tuple[bool, str]:
         """Valida si un path existe en el tree"""
         if not self.tree_file:
-            # Si no hay tree, validar contra filesystem
             full_path = os.path.join(self.project_root, path)
             exists = os.path.exists(full_path)
             return (True, "⚠️  No tree file - validating against filesystem")
@@ -115,7 +276,6 @@ class TreeValidator:
         if path in self.valid_paths:
             return (True, "✅ Path exists in tree")
         
-        # Verificar si es un directorio en el tree
         for valid_path in self.valid_paths:
             if valid_path.startswith(path + '/'):
                 return (True, "✅ Path is a directory in tree")
@@ -134,7 +294,6 @@ class TreeValidator:
 class SnapshotParser:
     """Parser robusto para codebase snapshots de Claude"""
     
-    # Acepta ambos formatos: "MODIFICAR" y "CREAR NUEVO"
     SECTION_PATTERN = r'^## Archivo \d+: (.+?) \((MODIFICAR|CREAR NUEVO)\)$'
     
     def __init__(self, content: str):
@@ -149,10 +308,8 @@ class SnapshotParser:
         in_code_block = False
         
         for i, line in enumerate(self.lines):
-            # Detectar inicio de sección de archivo
             match = re.match(self.SECTION_PATTERN, line)
             if match:
-                # Guardar archivo anterior
                 if current_file:
                     content = self._extract_indented_code(current_content_lines)
                     if content:
@@ -163,7 +320,6 @@ class SnapshotParser:
                             'line_number': current_file['line_number']
                         })
                 
-                # Iniciar nuevo archivo
                 current_file = {
                     'path': match.group(1),
                     'action': match.group(2),
@@ -173,7 +329,6 @@ class SnapshotParser:
                 in_code_block = True
                 continue
             
-            # Detectar fin de sección (nueva sección ## o #)
             if line.startswith('## ') or line.startswith('# '):
                 if current_file and in_code_block:
                     content = self._extract_indented_code(current_content_lines)
@@ -189,11 +344,9 @@ class SnapshotParser:
                     in_code_block = False
                 continue
             
-            # Acumular líneas de código
             if in_code_block and current_file:
                 current_content_lines.append(line)
         
-        # Guardar último archivo
         if current_file and current_content_lines:
             content = self._extract_indented_code(current_content_lines)
             if content:
@@ -207,20 +360,37 @@ class SnapshotParser:
         return files
     
     def _extract_indented_code(self, lines: List[str]) -> str:
-        """Extrae código removiendo indentación de 4 espacios"""
-        code_lines = []
+        """Extrae código removiendo indentación"""
+        if not lines:
+            return ''
         
+        while lines and not lines[0].strip():
+            lines.pop(0)
+        
+        if not lines:
+            return ''
+        
+        indent_levels = []
         for line in lines:
-            # Remover exactamente 4 espacios de indentación
-            if line.startswith('    '):
-                code_lines.append(line[4:])
-            elif line.strip() == '':
-                code_lines.append('')
-            # Si no tiene indentación y no está vacía, ignorar (es texto descriptivo)
+            if line.strip():
+                spaces = len(line) - len(line.lstrip(' '))
+                indent_levels.append(spaces)
         
-        # Remover líneas vacías al inicio y final
-        while code_lines and not code_lines[0].strip():
-            code_lines.pop(0)
+        if not indent_levels:
+            return ''
+        
+        min_indent = min(indent_levels)
+        
+        code_lines = []
+        for line in lines:
+            if line.strip():
+                if len(line) >= min_indent:
+                    code_lines.append(line[min_indent:])
+                else:
+                    code_lines.append(line)
+            else:
+                code_lines.append('')
+        
         while code_lines and not code_lines[-1].strip():
             code_lines.pop()
         
@@ -287,7 +457,6 @@ class TransactionalProcessor:
         validation_errors = []
         
         try:
-            # FASE 1: Validación completa
             print("\n🔍 FASE 1: VALIDACIÓN")
             print("=" * 70)
             
@@ -307,9 +476,8 @@ class TransactionalProcessor:
             
             print("\n✅ Validación exitosa")
             
-            # FASE 2: Escritura temporal (si no es dry-run)
             if not dry_run:
-                print("\n📝 FASE 2: ESCRITURA TEMPORAL")
+                print("\n🔍 FASE 2: ESCRITURA TEMPORAL")
                 print("=" * 70)
                 
                 for file_info in files:
@@ -317,7 +485,6 @@ class TransactionalProcessor:
                     if temp_path:
                         print(f"  ✅ Temp: {os.path.basename(temp_path)}")
                 
-                # FASE 3: Commit (mover de temp a destino final)
                 print("\n💾 FASE 3: COMMIT")
                 print("=" * 70)
                 
@@ -327,7 +494,6 @@ class TransactionalProcessor:
                         self.results.append(result)
                         processed_count += 1
             else:
-                # Dry-run: solo mostrar qué se haría
                 print("\n🔍 DRY-RUN: Acciones que se ejecutarían")
                 print("=" * 70)
                 for file_info in files:
@@ -342,57 +508,45 @@ class TransactionalProcessor:
             return (self.results, processed_count, self.warnings)
             
         except Exception as e:
-            # Rollback automático (no hay nada que limpiar si falló en validación)
             print(f"\n❌ ERROR: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return ([], 0, [f"Error crítico: {str(e)}"])
         
         finally:
-            # Limpiar directorio temporal
             if self.temp_dir and os.path.exists(self.temp_dir):
                 shutil.rmtree(self.temp_dir, ignore_errors=True)
     
     def _validate_file(self, file_info: Dict) -> Tuple[bool, str]:
         """Valida un archivo antes de procesarlo"""
         path = file_info['path']
-        action = file_info['action']
         content = file_info['content']
         
-        # Validar path contra tree
-        path_valid, tree_msg = self.tree_validator.validate_path(path)
-        
-        if not path_valid:
-            return (False, tree_msg)
-        
-        # Validar contenido mínimo
         if not content or len(content.strip()) < 10:
             return (False, f"❌ Contenido insuficiente ({len(content)} chars)")
         
-        # Validar coherencia de acción
+        if not self._is_safe_path(path):
+            return (False, f"❌ Path inseguro (contiene ..)")
+        
         normalized_path = os.path.normpath(path)
         full_path = os.path.join(self.project_root, normalized_path)
         file_exists = os.path.exists(full_path)
         
-        if action == "MODIFICAR" and not file_exists:
-            self.warnings.append(f"⚠️  '{path}' marcado como MODIFICAR pero no existe (se creará)")
-            return (True, "⚠️  MODIFICAR->CREAR")
+        if self.tree_validator.tree_file and file_exists:
+            path_valid, tree_msg = self.tree_validator.validate_path(path)
+            if not path_valid:
+                return (False, tree_msg)
+            actual_action = "MODIFICAR"
+            return (True, f"✅ {actual_action}")
         
-        if action == "CREAR NUEVO" and file_exists:
-            self.warnings.append(f"⚠️  '{path}' marcado como CREAR NUEVO pero ya existe (se sobrescribirá)")
-            return (True, "⚠️  CREAR->MODIFICAR")
-        
-        # Validar seguridad del path
-        if not self._is_safe_path(path):
-            return (False, f"❌ Path inseguro (contiene ..)")
-        
-        return (True, tree_msg)
+        actual_action = "CREAR" if not file_exists else "MODIFICAR"
+        return (True, f"✅ {actual_action}")
     
     def _is_safe_path(self, path: str) -> bool:
         """Valida que el path sea seguro"""
-        # No debe contener navegación hacia arriba
         if '..' in path:
             return False
         
-        # No debe contener caracteres peligrosos
         if any(c in path for c in ['${', '`', '<', '>', '|', ';']):
             return False
         
@@ -400,16 +554,13 @@ class TransactionalProcessor:
     
     def _write_to_temp(self, file_info: Dict) -> Optional[str]:
         """Escribe archivo en directorio temporal"""
-        # ✅ NORMALIZAR PATH PARA EL OS ACTUAL
         normalized_path = os.path.normpath(file_info['path'])
         temp_path = os.path.join(self.temp_dir, normalized_path)
         
-        # Crear directorio padre si no existe
         temp_dir = os.path.dirname(temp_path)
         if temp_dir:
             os.makedirs(temp_dir, exist_ok=True)
         
-        # Escribir contenido
         with open(temp_path, 'w', encoding='utf-8') as f:
             f.write(file_info['content'])
         
@@ -417,7 +568,6 @@ class TransactionalProcessor:
     
     def _commit_file(self, file_info: Dict) -> Optional[str]:
         """Mueve archivo de temp a destino final (con backup)"""
-        # ✅ NORMALIZAR PATH PARA EL OS ACTUAL
         normalized_path = os.path.normpath(file_info['path'])
         
         temp_path = os.path.join(self.temp_dir, normalized_path)
@@ -426,7 +576,6 @@ class TransactionalProcessor:
         print(f"\n📄 Procesando: {file_info['path']}")
         print(f"   📍 Destino: {final_path}")
         
-        # Backup si existe
         file_exists = os.path.exists(final_path)
         backup_path = None
         
@@ -435,12 +584,10 @@ class TransactionalProcessor:
             if backup_path:
                 print(f"   💾 Backup: {os.path.basename(backup_path)}")
         
-        # Crear directorio destino
         final_dir = os.path.dirname(final_path)
         if final_dir:
             os.makedirs(final_dir, exist_ok=True)
         
-        # Mover de temp a final
         shutil.move(temp_path, final_path)
         
         action_display = "MODIFICADO" if file_exists else "CREADO"
@@ -471,11 +618,19 @@ def setup_backup_directory(backup_arg: Optional[str], project_root: str) -> Opti
     return backup_dir
 
 
-def show_summary(tree_stats: Dict, backup_stats: Dict, processed_count: int, warnings: List[str]):
+def show_summary(tree_stats: Dict, backup_stats: Dict, processed_count: int, warnings: List[str], norm_stats: Optional[Dict]):
     """Muestra resumen final"""
     print("\n" + "=" * 70)
     print("📊 RESUMEN DE OPERACIÓN")
     print("=" * 70)
+    
+    if norm_stats:
+        print(f"🔧 Normalización aplicada:")
+        print(f"   - Secciones procesadas: {norm_stats['total_sections']}")
+        print(f"   - Secciones con problemas: {norm_stats['sections_with_problems']}")
+        print(f"   - Problemas corregidos: {norm_stats['total_problems']}")
+        print("")
+    
     print(f"✅ Archivos procesados: {processed_count}")
     
     if tree_stats['has_tree']:
@@ -492,7 +647,7 @@ def show_summary(tree_stats: Dict, backup_stats: Dict, processed_count: int, war
     
     if warnings:
         print(f"\n⚠️  ADVERTENCIAS ({len(warnings)}):")
-        for warning in warnings[:5]:  # Mostrar máximo 5
+        for warning in warnings[:5]:
             print(f"  {warning}")
         if len(warnings) > 5:
             print(f"  ... y {len(warnings) - 5} más")
@@ -502,53 +657,26 @@ def show_summary(tree_stats: Dict, backup_stats: Dict, processed_count: int, war
 
 def main():
     parser = argparse.ArgumentParser(
-        description='''
-PROCESADOR DE CODEBASE SNAPSHOT v3.0 - VALIDACIÓN ROBUSTA
-Regenera una codebase completa a partir de un snapshot de Claude en formato Markdown.
-Valida contra árbol de directorios (tree.txt) y aplica cambios de forma transaccional.
-        ''',
-        epilog='''
-Ejemplos de uso:
-  %(prog)s snapshot.md ./mi_proyecto
-  %(prog)s snapshot.md ./proyecto --tree plugin_tree.txt
-  %(prog)s cambios.md ./src --backup-dir --tree tree.txt
-  %(prog)s snapshot.md . --dry-run
-  %(prog)s updates.md ./app --backup-dir ./backups --tree structure.txt
-        ''',
+        description='PROCESADOR DE CODEBASE SNAPSHOT v4.0 - CON NORMALIZADOR INTEGRADO',
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
     
-    parser.add_argument(
-        'snapshot_file', 
-        help='Archivo .md con el snapshot de la codebase (formato Claude estándar)'
-    )
-    parser.add_argument(
-        'project_root', 
-        help='Directorio raíz donde se regenerarán los archivos'
-    )
-    parser.add_argument(
-        '--tree',
-        type=str,
-        help='Archivo tree.txt para validar estructura (ej: plugin_tree.txt)'
-    )
-    parser.add_argument(
-        '--backup-dir', 
-        nargs='?', 
-        const="",
-        help='Directorio para backups. Sin valor: backups automáticos. Con ruta: usa directorio específico. Omítelo para no hacer backups.'
-    )
-    parser.add_argument(
-        '--dry-run', 
-        action='store_true',
-        help='Simula operación sin modificar archivos (solo muestra qué haría)'
-    )
-    parser.add_argument(
-        '--debug-tree',
-        action='store_true',
-        help='Muestra todos los archivos detectados en el tree y sale'
-    )
+    parser.add_argument('snapshot_file', help='Archivo .md con el snapshot de la codebase')
+    parser.add_argument('project_root', help='Directorio raíz donde se regenerarán los archivos')
+    parser.add_argument('--tree', type=str, help='Archivo tree.txt para validar estructura')
+    parser.add_argument('--backup-dir', nargs='?', const="", help='Directorio para backups')
+    parser.add_argument('--dry-run', action='store_true', help='Simula operación sin modificar archivos')
+    parser.add_argument('--skip-normalization', action='store_true', help='Omitir normalización automática')
     
     args = parser.parse_args()
+    
+    # Normalizar paths
+    args.snapshot_file = os.path.abspath(args.snapshot_file)
+    args.project_root = os.path.abspath(args.project_root)
+    if args.tree:
+        args.tree = os.path.abspath(args.tree)
+    if args.backup_dir and args.backup_dir != "":
+        args.backup_dir = os.path.abspath(args.backup_dir)
     
     # Validaciones
     if not os.path.exists(args.snapshot_file):
@@ -566,7 +694,7 @@ Ejemplos de uso:
     # Setup
     backup_dir = setup_backup_directory(args.backup_dir, args.project_root)
     
-    print("🌸 PROCESADOR DE SNAPSHOT v3.0")
+    print("🌸 PROCESADOR DE SNAPSHOT v4.0 - CON NORMALIZADOR")
     print("=" * 70)
     print(f"📂 Proyecto: {args.project_root}")
     print(f"📋 Snapshot: {args.snapshot_file}")
@@ -578,10 +706,22 @@ Ejemplos de uso:
         print(f"🔍 MODO DRY-RUN (no se escribirá)")
     print("=" * 70)
     
-    # Parse
+    # Leer contenido
     with open(args.snapshot_file, 'r', encoding='utf-8') as f:
         content = f.read()
     
+    # NORMALIZACIÓN AUTOMÁTICA
+    norm_stats = None
+    if not args.skip_normalization:
+        print("\n🔧 NORMALIZANDO SNAPSHOT...")
+        print("=" * 70)
+        content, norm_stats = normalize_snapshot_content(content)
+        print(f"✅ Normalización completada:")
+        print(f"   - Secciones: {norm_stats['total_sections']}")
+        print(f"   - Problemas corregidos: {norm_stats['total_problems']}")
+        print("=" * 70)
+    
+    # Parse
     snapshot_parser = SnapshotParser(content)
     files = snapshot_parser.parse()
     
@@ -589,9 +729,9 @@ Ejemplos de uso:
         print("❌ No se encontraron archivos válidos en el snapshot")
         sys.exit(1)
     
-    print(f"\n📁 ARCHIVOS DETECTADOS ({len(files)}):")
+    print(f"\n📋 ARCHIVOS DETECTADOS ({len(files)}):")
     for i, f in enumerate(files, 1):
-        print(f"  {i}. [{f['action']}] {f['path']}")
+        print(f"  {i}. [{f['action']}] {f['path']} ({len(f['content'])} chars)")
     
     # Inicializar validadores
     tree_validator = TreeValidator(args.tree, args.project_root)
@@ -599,23 +739,6 @@ Ejemplos de uso:
     
     if args.tree:
         print(f"\n🌳 Tree cargado: {tree_stats['total_files']} archivos")
-        
-        if args.debug_tree:
-            print("\n🔍 DEBUG: Archivos detectados en tree:")
-            print("=" * 70)
-            for path in sorted(tree_validator.valid_paths):
-                print(f"  {path}")
-            print("=" * 70)
-            print(f"\nTotal: {len(tree_validator.valid_paths)} archivos")
-            
-            print("\n🔍 DEBUG: Comparación snapshot vs tree:")
-            print("=" * 70)
-            for f in files:
-                exists = f['path'] in tree_validator.valid_paths
-                status = "✅" if exists else "❌"
-                print(f"  {status} {f['path']}")
-            print("=" * 70)
-            sys.exit(0)
     
     # Confirmación
     if not args.dry_run:
@@ -643,7 +766,7 @@ Ejemplos de uso:
         print(result)
     
     backup_stats = backup_manager.get_stats()
-    show_summary(tree_stats, backup_stats, processed_count, warnings)
+    show_summary(tree_stats, backup_stats, processed_count, warnings, norm_stats)
     
     print("\n✨ Operación completada exitosamente")
 
