@@ -56,5 +56,18 @@ bloom-development-extension/
 │   └── utils/
 │       ├── logger.ts
 │       └── uriHelper.ts
+├── scripts/
+│   ├── add_files_to_codebase.py
+│   ├── codebase_generation.py
+│   ├── codebase_snapshot_integration.py
+│   ├── commands.md
+│   ├── generate_android_context.py
+│   ├── scrpts.md
+│   ├── snapshot_normalizer.py
+│   ├── sync_codebase.py
+│   └── tree_custom.py
+├── tree/
+│   ├── plugin_tree.txt
+│   └── src_tree.txt
 ├── package.json
 └── tsconfig.json
