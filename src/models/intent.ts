@@ -10,7 +10,6 @@ export type ProjectType = 'android' | 'ios' | 'web' | 'react' | 'node' | 'generi
 
 export type FileCategory = 'code' | 'config' | 'docs' | 'test' | 'asset' | 'other';
 
-
 // NUEVO: Workflow stages
 export type IntentWorkflowStage =
     | 'draft'
@@ -104,6 +103,18 @@ export interface TokenStats {
 }
 
 // ============================================
+// CONTENT: Contenido del intent
+// ============================================
+
+export interface IntentContent {
+    problem: string;
+    expectedOutput: string;
+    currentBehavior: string[];
+    desiredBehavior: string[];
+    considerations: string;
+}
+
+// ============================================
 // METADATA COMPLETA: Persistencia
 // ============================================
 
@@ -133,6 +144,28 @@ export interface IntentMetadata {
     bloomVersion: string;
 }
 
+// ============================================================================
+// CLAUDE BRIDGE AUTOMATION: Gestión de perfiles y automatización de Claude.ai
+// ============================================================================
+
+/**
+ * Configuración de profile de Chrome para un intent
+ */
+export interface IntentProfileConfig {
+    profileName: string;              // Nombre del profile de Chrome ("Default", "Profile 1", etc.)
+    provider: 'claude' | 'chatgpt' | 'grok';  // Provider principal
+    account?: string;                  // Email de la cuenta (opcional)
+}
+
+/**
+ * Información de conversación activa
+ */
+export interface ActiveConversation {
+    conversationId: string;
+    url: string;
+    lastAccessed: Date;
+}
+
 // ============================================
 // INTENT: Entidad completa
 // ============================================
@@ -140,6 +173,16 @@ export interface IntentMetadata {
 export interface Intent {
     folderUri: vscode.Uri;
     metadata: IntentMetadata;
+    
+    // Configuración de profile
+    profileConfig?: IntentProfileConfig;
+    
+    // Conversaciones activas por provider
+    activeConversations?: {
+        claude?: ActiveConversation;
+        chatgpt?: ActiveConversation;
+        grok?: ActiveConversation;
+    };
 }
 
 // ============================================
@@ -170,8 +213,6 @@ export function createInitialMetadata(
         estimatedTokens: number;
     }
 ): Omit<IntentMetadata, 'id' | 'created' | 'updated'> {
-    const now = new Date().toISOString();
-
     return {
         name: formData.name,
         displayName: generateDisplayName(formData.name),
@@ -245,16 +286,4 @@ export interface PayloadAnalysis {
     estimatedTokens: number;
     limits: Record<string, ModelLimit>;
     recommendations: Recommendation[];
-}
-
-// ============================================
-// CONTENT: Contenido del intent
-// ============================================
-
-export interface IntentContent {
-    problem: string;
-    expectedOutput: string;
-    currentBehavior: string[];
-    desiredBehavior: string[];
-    considerations: string;
 }

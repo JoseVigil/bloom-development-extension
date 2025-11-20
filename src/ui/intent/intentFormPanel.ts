@@ -2,16 +2,17 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import { Logger } from '../utils/logger';
-import { Validator } from '../core/validator';
-import { IntentGenerator } from '../core/intentGenerator';
-import { MetadataManager } from '../core/metadataManager';
-import { CodebaseGenerator } from '../core/codebaseGenerator';
-import { IntentSession } from '../core/intentSession';
-import { TokenEstimator, TokenEstimation } from '../utils/tokenEstimator';
-import { PythonExecutor } from '../utils/pythonExecutor';
-import { IntentFormData, TokenStats } from '../models/intent';
-import { joinPath } from '../utils/uriHelper';
+import { Logger } from '../../utils/logger';
+import { Validator } from '../../core/validator';
+import { IntentGenerator } from '../../core/intentGenerator';
+import { MetadataManager } from '../../core/metadataManager';
+import { CodebaseGenerator } from '../../core/codebaseGenerator';
+import { IntentSession } from '../../core/intentSession';
+import { TokenEstimator, TokenEstimation } from '../../utils/tokenEstimator';
+import { PythonExecutor } from '../../utils/pythonExecutor';
+import { IntentFormData, TokenStats } from '../../models/intent';
+import { joinPath } from '../../utils/uriHelper';
+
 
 export class IntentFormPanel {
     private panel: vscode.WebviewPanel | undefined;

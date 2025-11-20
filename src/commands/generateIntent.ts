@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-    import { IntentFormPanel } from '../ui/intentFormPanel';
+    import { IntentFormPanel } from '../ui/intent/intentFormPanel';
     import { Logger } from '../utils/logger';
     import * as path from 'path';
     

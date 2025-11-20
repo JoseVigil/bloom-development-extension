@@ -1,5 +1,7 @@
 bloom-development-extension/
 ├── src/
+│   ├── bridge/
+│   │   └── BridgeExecutor.ts
 │   ├── commands/
 │   │   ├── addToIntent.ts
 │   │   ├── changeIntentStatus.ts
@@ -15,10 +17,13 @@ bloom-development-extension/
 │   │   ├── openFileInVSCode.ts
 │   │   ├── openIntent.ts
 │   │   ├── openMarkdownPreview.ts
+│   │   ├── regenerateContext.ts
 │   │   ├── reloadIntentForm.ts
 │   │   ├── revealInFinder.ts
 │   │   ├── searchIntents.ts
 │   │   └── submitAnswers.ts
+│   ├── context/
+│   │   └── ContextCollector.ts
 │   ├── core/
 │   │   ├── claudeApiClient.ts
 │   │   ├── codebaseGenerator.ts
@@ -29,7 +34,6 @@ bloom-development-extension/
 │   │   ├── intentSession.ts
 │   │   ├── metadataManager.ts
 │   │   ├── pythonScriptRunner.ts
-│   │   ├── tokenEstimator.ts
 │   │   └── validator.ts
 │   ├── extension.ts
 │   ├── models/
@@ -37,6 +41,8 @@ bloom-development-extension/
 │   │   ├── codebaseStrategy.ts
 │   │   ├── contextLayer.ts
 │   │   └── intent.ts
+│   ├── processor/
+│   │   └── ArtifactProcessor.ts
 │   ├── providers/
 │   │   └── intentTreeProvider.ts
 │   ├── strategies/
@@ -48,6 +54,7 @@ bloom-development-extension/
 │   │   ├── WebStrategy.ts
 │   │   └── helpers.ts
 │   ├── ui/
+│   │   ├── ClaudeBridgePanel.ts
 │   │   ├── intentForm.css
 │   │   ├── intentForm.html
 │   │   ├── intentForm.js
@@ -55,6 +62,8 @@ bloom-development-extension/
 │   │   └── markdownPreviewPanel.ts
 │   └── utils/
 │       ├── logger.ts
+│       ├── pythonExecutor.ts
+│       ├── tokenEstimator.ts
 │       └── uriHelper.ts
 ├── package.json
 └── tsconfig.json

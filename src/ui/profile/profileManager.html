@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profile Manager</title>
+</head>
+<body>
+    <div id="root">
+        <div class="container">
+            <header class="header">
+                <h1>🌸 Bloom AI Bridge - Profile Manager</h1>
+                <p class="subtitle">Gestiona perfiles de Chrome y cuentas de AI para tus intents</p>
+            </header>
+
+            <section class="section">
+                <div class="section-header">
+                    <h2>👤 Chrome Profiles</h2>
+                    <button id="scanButton" class="btn btn-primary">
+                        <span class="icon">🔄</span>
+                        Scan Profiles
+                    </button>
+                </div>
+
+                <div id="profilesContainer" class="profiles-container">
+                    <div class="empty-state">
+                        <span class="empty-icon">👤</span>
+                        <p>No profiles detectados</p>
+                        <p class="empty-hint">Haz click en "Scan Profiles" para detectar automáticamente</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="section">
+                <div class="section-header">
+                    <h2>⚙️ Intent → Profile Mappings</h2>
+                    <button id="addMappingButton" class="btn btn-secondary">
+                        <span class="icon">➕</span>
+                        Add Mapping
+                    </button>
+                </div>
+
+                <div id="mappingsContainer" class="mappings-container">
+                    <div class="empty-state">
+                        <span class="empty-icon">⚙️</span>
+                        <p>No hay configuraciones de intent</p>
+                        <p class="empty-hint">Crea un intent primero, luego asígnale un profile aquí</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="section info-section">
+                <h3>ℹ️ Cómo funciona</h3>
+                <ol class="info-list">
+                    <li>
+                        <strong>Scan Profiles:</strong> Detecta automáticamente todos los perfiles de Chrome instalados
+                    </li>
+                    <li>
+                        <strong>Verificación de cuentas:</strong> Identifica qué cuentas de AI están logueadas en cada profile
+                    </li>
+                    <li>
+                        <strong>Asignación:</strong> Configura qué profile y cuenta usar para cada intent
+                    </li>
+                    <li>
+                        <strong>Ejecución automática:</strong> Al ejecutar un intent, se usa el profile configurado automáticamente
+                    </li>
+                </ol>
+            </section>
+        </div>
+
+        <div id="addMappingModal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Add Intent → Profile Mapping</h3>
+                    <button id="closeModalButton" class="btn-close">✕</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="intentSelect">Intent</label>
+                        <select id="intentSelect" class="form-control">
+                            <option value="">Select an intent...</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="profileSelect">Chrome Profile</label>
+                        <select id="profileSelect" class="form-control">
+                            <option value="">Select a profile...</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="claudeAccountSelect">Claude Account</label>
+                        <select id="claudeAccountSelect" class="form-control">
+                            <option value="">No account detected</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="chatgptAccountSelect">ChatGPT Account (opcional)</label>
+                        <select id="chatgptAccountSelect" class="form-control">
+                            <option value="">No account detected</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="grokAccountSelect">Grok Account (opcional)</label>
+                        <select id="grokAccountSelect" class="form-control">
+                            <option value="">No account detected</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button id="cancelMappingButton" class="btn btn-secondary">Cancel</button>
+                    <button id="saveMappingButton" class="btn btn-primary">Save Mapping</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

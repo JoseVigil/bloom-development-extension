@@ -3,6 +3,7 @@ import { Logger } from '../utils/logger';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as path from 'path';
+import * as fs from 'fs';
 
 const execAsync = promisify(exec);
 
@@ -159,4 +160,79 @@ export class PythonScriptRunner {
 
         return files;
     }
-}
+
+    async detectChromeProfiles(): Promise<ScriptResult & {
+        profiles?: Array<{
+            name: string;
+            path: string;
+            accounts: Array<{provider: string, email: string}>;
+        }>;
+    }> {
+
+        const config = vscode.workspace.getConfiguration('bloom');
+        const pythonPath = config.get<string>('pythonPath', 'python');
+
+        const scriptPath = path.join(this.scriptsPath, 'chrome_profile_detector.py');
+        const command = `"${pythonPath}" "${scriptPath}" --json`;
+        
+        const { stdout } = await execAsync(command);
+        const profiles = JSON.parse(stdout);
+        
+        return { success: true, stdout, stderr: '', profiles };
+    }
+
+    async sendClaudeMessage(
+    prompt: string,
+    profile: string,
+    account: string,
+    contextFiles: string[]
+): Promise<ScriptResult & { conversationId?: string }> {
+    this.logger.info('Enviando mensaje a Claude via claude_bridge.py');
+
+    const config = vscode.workspace.getConfiguration('bloom');
+    const pythonPath = config.get<string>('pythonPath', 'python3');  // ← FALTABA ESTO
+
+    const scriptPath = path.join(this.scriptsPath, 'claude_bridge.py');
+    
+    // Crear archivo temporal con el prompt
+    const tempPromptFile = path.join(this.scriptsPath, '.temp_prompt.txt');
+    await fs.promises.writeFile(tempPromptFile, prompt, 'utf-8');
+    
+    // Crear archivo temporal con contexto
+    const tempContextFile = path.join(this.scriptsPath, '.temp_context.json');
+    await fs.promises.writeFile(
+        tempContextFile, 
+        JSON.stringify({ files: contextFiles }), 
+        'utf-8'
+    );
+
+    const command = `"${pythonPath}" "${scriptPath}" send --profile "${profile}" --account "${account}" --prompt "${tempPromptFile}" --context "${tempContextFile}"`;
+
+            try {
+                const { stdout, stderr } = await execAsync(command, {
+                    timeout: 120000
+                });
+
+                this.logger.info('claude_bridge.py completado');
+
+                // Extraer conversation ID del output
+                const match = stdout.match(/Conversation ID: ([a-f0-9-]+)/);
+                const conversationId = match ? match[1] : undefined;
+
+                return {
+                    success: true,
+                    stdout,
+                    stderr,
+                    conversationId
+                };
+            } catch (error: any) {
+                this.logger.error('Error ejecutando claude_bridge.py', error);
+                return {
+                    success: false,
+                    stdout: error.stdout || '',
+                    stderr: error.stderr || error.message,
+                    conversationId: undefined  // ← FALTABA ESTO
+                };
+            }
+        }
+    }

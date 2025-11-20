@@ -26,6 +26,24 @@
                 <p class="help-text">Solo letras minúsculas, números y guiones</p>
             </div>
 
+            <!-- profileManager.html -->
+            <div class="profile-container">
+                <h2>Chrome Profiles Detected</h2>
+                <div id="profilesList"></div>
+                
+                <h2>Intent → Profile Mapping</h2>
+                <table id="intentMappings">
+                    <tr>
+                        <th>Intent</th>
+                        <th>Chrome Profile</th>
+                        <th>Claude Account</th>
+                        <th>Actions</th>
+                    </tr>
+                </table>
+                
+                <button onclick="scanProfiles()">🔄 Scan Profiles</button>
+            </div>
+
             <div class="form-section">
                 <label>📁 Archivos relevantes</label>
                 <div class="file-pills" id="filePills">
