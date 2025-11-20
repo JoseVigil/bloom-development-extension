@@ -24,6 +24,9 @@ import { registerRegenerateContext } from './commands/regenerateContext';
 import { ProfileManagerPanel } from './ui/profile/profileManagerPanel';
 import { ChromeProfileManager } from './core/chromeProfileManager';
 import { Intent } from './models/intent';
+// ✅ FIX 1: Corregir ruta - debe ser 'providers' (plural) no 'provider'
+import { ProfileTreeProvider } from './providers/profileTreeProvider';
+
 import { 
     openIntentInBrowser, 
     openProviderInBrowser,
@@ -79,7 +82,7 @@ export function activate(context: vscode.ExtensionContext) {
         );
         context.subscriptions.push(copyFilePathDisposable);
 
-        // NUEVO: Registrar comandos de Chrome Profile Manager
+        // Registrar comandos de Chrome Profile Manager
         registerProfileCommands(context, logger, workspaceFolder);
     }
 
@@ -92,13 +95,32 @@ export function activate(context: vscode.ExtensionContext) {
 export function deactivate() {}
 
 /**
- * Registrar comandos relacionados con Chrome Profile Manager
+ * ✅ FIX 2: COMPLETAR la función registerProfileCommands
  */
 function registerProfileCommands(
     context: vscode.ExtensionContext,
     logger: Logger,
     workspaceFolder: vscode.WorkspaceFolder
 ) {
+    // ========================================================================
+    // TREE VIEW PROVIDER
+    // ========================================================================
+    
+    const chromeManager = new ChromeProfileManager(context, logger);
+
+    const profileTreeProvider = new ProfileTreeProvider(
+        context,
+        logger,
+        chromeManager
+    );
+
+    const profilesTreeView = vscode.window.createTreeView('bloomProfiles', {
+        treeDataProvider: profileTreeProvider,
+        showCollapseAll: true
+    });
+
+    context.subscriptions.push(profilesTreeView);
+
     // ========================================================================
     // PROFILE MANAGER PANEL
     // ========================================================================
@@ -117,18 +139,13 @@ function registerProfileCommands(
     const refreshProfilesCommand = vscode.commands.registerCommand(
         'bloom.refreshProfiles',
         async () => {
-            const chromeManager = new ChromeProfileManager(context, logger);
-            
             await vscode.window.withProgress({
                 location: vscode.ProgressLocation.Notification,
                 title: "Refreshing Chrome profiles...",
                 cancellable: false
             }, async () => {
-                const profiles = await chromeManager.detectProfiles();
-                
-                vscode.window.showInformationMessage(
-                    `✅ Found ${profiles.length} Chrome profile${profiles.length !== 1 ? 's' : ''}`
-                );
+                await profileTreeProvider.loadProfiles();
+                vscode.window.showInformationMessage('✅ Profiles refreshed');
             });
         }
     );
@@ -181,7 +198,6 @@ function registerProfileCommands(
         'bloom.openIntentInBrowser',
         async (intent?: Intent) => {
             if (!intent) {
-                // Si no se pasa intent, pedir al usuario que seleccione
                 const intents = await getAvailableIntents(workspaceFolder);
                 
                 if (intents.length === 0) {

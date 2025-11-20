@@ -16,10 +16,30 @@
     ],
     "main": "./out/extension.js",
     "contributes": {
+        "viewsContainers": {
+            "activitybar": [
+                {
+                    "id": "bloomAiBridge",
+                    "title": "Bloom AI Bridge",
+                    "icon": "$(flame)"
+                }
+            ]
+        },
         "views": {
-            "explorer": [
+            "bloomAiBridge": [
+                {
+                    "id": "bloomProfiles",
+                    "name": "Chrome Profiles",
+                    "contextualTitle": "AI Profiles"
+                },
                 {
                     "id": "bloomIntents",
+                    "name": "Intents"
+                }
+            ],
+            "explorer": [
+                {
+                    "id": "bloomIntentsExplorer",
                     "name": "Bloom Intents"
                 }
             ]
@@ -89,9 +109,61 @@
             {
                 "command": "bloom.reloadIntentForm",
                 "title": "Reload Intent Form"
+            },
+            {
+                "command": "bloom.manageProfiles",
+                "title": "Bloom: Manage AI Profiles",
+                "icon": "$(account)"
+            },
+            {
+                "command": "bloom.refreshProfiles",
+                "title": "Refresh Profiles",
+                "icon": "$(refresh)"
+            },
+            {
+                "command": "bloom.configureIntentProfile",
+                "title": "Configure Profile for Intent",
+                "icon": "$(gear)"
+            },
+            {
+                "command": "bloom.changeIntentProfile",
+                "title": "Change Intent Profile"
+            },
+            {
+                "command": "bloom.removeIntentProfile",
+                "title": "Remove Intent Profile"
+            },
+            {
+                "command": "bloom.openIntentInBrowser",
+                "title": "Bloom: Open Intent in Browser",
+                "icon": "$(browser)"
+            },
+            {
+                "command": "bloom.openClaudeInBrowser",
+                "title": "Bloom: Open Claude in Browser"
+            },
+            {
+                "command": "bloom.openChatGPTInBrowser",
+                "title": "Bloom: Open ChatGPT in Browser"
+            },
+            {
+                "command": "bloom.openGrokInBrowser",
+                "title": "Bloom: Open Grok in Browser"
             }
         ],
         "menus": {
+            "view/title": [
+                {
+                    "command": "bloom.refreshProfiles",
+                    "when": "view == bloomProfiles",
+                    "group": "navigation"
+                },
+                {
+                    "command": "bloom.manageProfiles",
+                    "when": "view == bloomProfiles",
+                    "group": "navigation"
+                }
+            ],
             "explorer/context": [
                 {
                     "command": "bloom.generateIntent",
@@ -127,12 +199,35 @@
                     "group": "1_main@2"
                 },
                 {
+                    "command": "bloom.configureIntentProfile",
+                    "when": "view == bloomIntents && viewItem == intent",
+                    "group": "2_profile@1"
+                },
+                {
+                    "command": "bloom.openIntentInBrowser",
+                    "when": "view == bloomIntents && viewItem == intent",
+                    "group": "2_profile@2"
+                },
+                {
                     "command": "bloom.deleteIntent",
                     "when": "view == bloomIntents && viewItem == intent",
                     "group": "3_danger@1"
                 }
             ]
         },
+        "keybindings": [
+            {
+                "command": "bloom.openIntentInBrowser",
+                "key": "ctrl+shift+b",
+                "mac": "cmd+shift+b",
+                "when": "editorFocus"
+            },
+            {
+                "command": "bloom.manageProfiles",
+                "key": "ctrl+alt+m",
+                "mac": "cmd+alt+m"
+            }
+        ],
         "configuration": {
             "title": "Bloom",
             "properties": {
@@ -182,12 +277,11 @@
     "devDependencies": {
         "@types/node": "^18.19.130",
         "@types/uuid": "^10.0.0",
-        "@types/vscode": "^1.80.0",
+        "@types/vscode": "^1.85.0",
         "@typescript-eslint/eslint-plugin": "^5.59.0",
         "@typescript-eslint/parser": "^5.59.0",
         "eslint": "^8.41.0",
-        "typescript": "^5.0.4",
-        "vscode": "^1.1.37"
+        "typescript": "^5.0.4"
     },
     "dependencies": {
         "@vscode/codicons": "^0.0.33",
