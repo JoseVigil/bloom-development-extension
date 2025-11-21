@@ -40,6 +40,7 @@ export class NucleusTreeProvider implements vscode.TreeDataProvider<NucleusTreeI
         if (fs.existsSync(configPath)) {
             this.nucleusPath = this.workspaceRoot;
             this.config = loadNucleusConfig(bloomPath);
+            this.logger.info(`✅ Nucleus detected at: ${this.nucleusPath}`);
             return;
         }
         
@@ -57,11 +58,12 @@ export class NucleusTreeProvider implements vscode.TreeDataProvider<NucleusTreeI
                         this.nucleusPath = linkedNucleusPath;
                         const linkedBloomPath = path.join(linkedNucleusPath, '.bloom');
                         this.config = loadNucleusConfig(linkedBloomPath);
+                        this.logger.info(`✅ Linked Nucleus detected at: ${this.nucleusPath}`);
                         return;
                     }
                 }
             } catch (error) {
-                console.error('Error reading nucleus link:', error);
+                this.logger.error('Error reading nucleus link', error as Error);
             }
         }
         
@@ -83,12 +85,15 @@ export class NucleusTreeProvider implements vscode.TreeDataProvider<NucleusTreeI
                 if (fs.existsSync(itemConfigPath)) {
                     this.nucleusPath = itemPath;
                     this.config = loadNucleusConfig(itemBloomPath);
+                    this.logger.info(`✅ Parent Nucleus detected at: ${this.nucleusPath}`);
                     return;
                 }
             }
         } catch (error) {
-            // Ignore
+            this.logger.warn('Could not scan parent directory for Nucleus');
         }
+        
+        this.logger.info('ℹ️ No Nucleus detected');
     }
     
     getTreeItem(element: NucleusTreeItem): vscode.TreeItem {
@@ -96,33 +101,44 @@ export class NucleusTreeProvider implements vscode.TreeDataProvider<NucleusTreeI
     }
     
     async getChildren(element?: NucleusTreeItem): Promise<NucleusTreeItem[]> {
-        if (!this.config || !this.nucleusPath) {
-            return Promise.resolve([
-                new NucleusTreeItem(
-                    'No Nucleus Project Detected',
-                    vscode.TreeItemCollapsibleState.None,
-                    'info',
-                    undefined,
-                    'Click "Create Nucleus Project" to start'
-                )
-            ]);
-        }
-        
+        // ========================================================================
+        // ROOT LEVEL: MOSTRAR ESTADO
+        // ========================================================================
         if (!element) {
-            // Root level - show Nucleus info
-            return Promise.resolve([
+            // ✅ CASO 1: No hay Nucleus detectado
+            if (!this.config || !this.nucleusPath) {
+                return [
+                    new NucleusTreeItem(
+                        '🏢 No Nucleus Detected',
+                        vscode.TreeItemCollapsibleState.None,
+                        'no-nucleus',
+                        undefined,
+                        'Click the + button above to create a Nucleus project',
+                        {
+                            command: 'bloom.createNucleusProject',
+                            title: 'Create Nucleus Project',
+                            arguments: []
+                        }
+                    )
+                ];
+            }
+            
+            // ✅ CASO 2: Nucleus detectado - Mostrar header
+            return [
                 new NucleusTreeItem(
-                    this.config.organization.displayName || this.config.organization.name,
+                    `🏢 ${this.config.organization.displayName || this.config.organization.name}`,
                     vscode.TreeItemCollapsibleState.Expanded,
                     'nucleus',
                     this.config.organization,
-                    this.config.nucleus.name
+                    `${this.config.nucleus.name}\n${this.config.projects.length} projects`
                 )
-            ]);
+            ];
         }
         
+        // ========================================================================
+        // NUCLEUS LEVEL: MOSTRAR CATEGORÍAS
+        // ========================================================================
         if (element.type === 'nucleus') {
-            // Categories: Mobile, Backend, Web, Other
             const categories = {
                 mobile: [],
                 backend: [],
@@ -130,7 +146,7 @@ export class NucleusTreeProvider implements vscode.TreeDataProvider<NucleusTreeI
                 other: []
             } as Record<string, LinkedProject[]>;
             
-            this.config.projects.forEach(project => {
+            this.config!.projects.forEach(project => {
                 if (project.strategy === 'android' || project.strategy === 'ios') {
                     categories.mobile.push(project);
                 } else if (project.strategy === 'node' || project.strategy === 'python-flask' || project.strategy === 'php-laravel') {
@@ -147,7 +163,7 @@ export class NucleusTreeProvider implements vscode.TreeDataProvider<NucleusTreeI
             if (categories.mobile.length > 0) {
                 categoryItems.push(
                     new NucleusTreeItem(
-                        '📱 Mobile',
+                        `📱 Mobile (${categories.mobile.length})`,
                         vscode.TreeItemCollapsibleState.Collapsed,
                         'category',
                         categories.mobile
@@ -158,7 +174,7 @@ export class NucleusTreeProvider implements vscode.TreeDataProvider<NucleusTreeI
             if (categories.backend.length > 0) {
                 categoryItems.push(
                     new NucleusTreeItem(
-                        '⚙️ Backend',
+                        `⚙️ Backend (${categories.backend.length})`,
                         vscode.TreeItemCollapsibleState.Collapsed,
                         'category',
                         categories.backend
@@ -169,7 +185,7 @@ export class NucleusTreeProvider implements vscode.TreeDataProvider<NucleusTreeI
             if (categories.web.length > 0) {
                 categoryItems.push(
                     new NucleusTreeItem(
-                        '🌐 Web',
+                        `🌐 Web (${categories.web.length})`,
                         vscode.TreeItemCollapsibleState.Collapsed,
                         'category',
                         categories.web
@@ -180,7 +196,7 @@ export class NucleusTreeProvider implements vscode.TreeDataProvider<NucleusTreeI
             if (categories.other.length > 0) {
                 categoryItems.push(
                     new NucleusTreeItem(
-                        '🔧 Other',
+                        `🔧 Other (${categories.other.length})`,
                         vscode.TreeItemCollapsibleState.Collapsed,
                         'category',
                         categories.other
@@ -188,30 +204,59 @@ export class NucleusTreeProvider implements vscode.TreeDataProvider<NucleusTreeI
                 );
             }
             
-            return Promise.resolve(categoryItems);
+            // ✅ Si no hay proyectos, mostrar mensaje
+            if (categoryItems.length === 0) {
+                return [
+                    new NucleusTreeItem(
+                        'No projects linked yet',
+                        vscode.TreeItemCollapsibleState.None,
+                        'info',
+                        undefined,
+                        'Right-click on a BTIP project folder and select "Link to Nucleus"'
+                    )
+                ];
+            }
+            
+            return categoryItems;
         }
         
+        // ========================================================================
+        // CATEGORY LEVEL: MOSTRAR PROYECTOS
+        // ========================================================================
         if (element.type === 'category') {
             const projects = element.data as LinkedProject[];
-            return Promise.resolve(
-                projects.map(project => 
-                    new NucleusTreeItem(
-                        project.displayName || project.name,
-                        vscode.TreeItemCollapsibleState.Collapsed,
-                        'nucleusProject',
-                        project
-                    )
+            return projects.map(project => 
+                new NucleusTreeItem(
+                    project.displayName || project.name,
+                    vscode.TreeItemCollapsibleState.Collapsed,
+                    'nucleusProject',
+                    project,
+                    `${project.description || 'No description'}\nStrategy: ${project.strategy}\nStatus: ${project.status}`
                 )
             );
         }
         
-        // Nuevo: Para nesting Intents bajo Project
+        // ========================================================================
+        // PROJECT LEVEL: MOSTRAR INTENTS (NESTED)
+        // ========================================================================
         if (element.type === 'nucleusProject') {
             const project = element.data as LinkedProject;
             const projectPath = path.resolve(this.nucleusPath!, project.localPath);
             
-            if (fs.existsSync(projectPath)) {
-                // Crea instancia de IntentTreeProvider para este project
+            if (!fs.existsSync(projectPath)) {
+                return [
+                    new NucleusTreeItem(
+                        '⚠️ Project Path Not Found',
+                        vscode.TreeItemCollapsibleState.None,
+                        'error',
+                        undefined,
+                        `Expected path: ${projectPath}`
+                    )
+                ];
+            }
+            
+            // ✅ Crear IntentTreeProvider para este proyecto
+            try {
                 const intentProvider = new IntentTreeProvider(
                     { uri: vscode.Uri.file(projectPath) } as vscode.WorkspaceFolder,
                     this.logger,
@@ -221,30 +266,55 @@ export class NucleusTreeProvider implements vscode.TreeDataProvider<NucleusTreeI
                 const intents = await intentProvider.getIntents();
                 
                 if (intents.length === 0) {
-                    return [new NucleusTreeItem('No Intents Found', vscode.TreeItemCollapsibleState.None, 'info')];
+                    return [
+                        new NucleusTreeItem(
+                            'No Intents',
+                            vscode.TreeItemCollapsibleState.None,
+                            'info',
+                            undefined,
+                            'Open this project and create intents'
+                        )
+                    ];
                 }
                 
+                // ✅ Convertir IntentTreeItems a NucleusTreeItems
                 return intents.map(intentItem => {
+                    // Fix: Convertir tooltip a string si es MarkdownString
+                    const tooltipText = typeof intentItem.tooltip === 'string' 
+                        ? intentItem.tooltip 
+                        : intentItem.tooltip instanceof vscode.MarkdownString
+                        ? intentItem.tooltip.value
+                        : undefined;
+                    
                     const treeItem = new NucleusTreeItem(
                         intentItem.label as string,
                         vscode.TreeItemCollapsibleState.None,
                         'intent',
-                        intentItem.intent
+                        intentItem.intent,
+                        tooltipText
                     );
-                    treeItem.command = {
-                        command: 'bloom.openIntent',
-                        title: 'Open Intent',
-                        arguments: [intentItem.intent]
-                    };
+                    
+                    // ✅ Preservar comando de Intent
+                    treeItem.command = intentItem.command;
                     treeItem.iconPath = new vscode.ThemeIcon('file');
+                    treeItem.description = intentItem.description;
+                    
                     return treeItem;
                 });
-            } else {
-                return [new NucleusTreeItem('Project Path Not Found', vscode.TreeItemCollapsibleState.None, 'error')];
+                
+            } catch (error) {
+                this.logger.error('Error loading intents for project', error as Error);
+                return [
+                    new NucleusTreeItem(
+                        '⚠️ Error Loading Intents',
+                        vscode.TreeItemCollapsibleState.None,
+                        'error'
+                    )
+                ];
             }
         }
         
-        return Promise.resolve([]);
+        return [];
     }
 }
 
@@ -256,12 +326,17 @@ export class NucleusTreeItem extends vscode.TreeItem {
         collapsibleState: vscode.TreeItemCollapsibleState,
         type: string,
         public readonly data?: any,
-        tooltip?: string
+        tooltip?: string,
+        command?: vscode.Command
     ) {
         super(label, collapsibleState);
         this.tooltip = tooltip || label;
         this.contextValue = type;
         this.type = type;
+        
+        if (command) {
+            this.command = command;
+        }
         
         // Set icons based on type
         switch (type) {
@@ -281,6 +356,9 @@ export class NucleusTreeItem extends vscode.TreeItem {
                 break;
             case 'intent':
                 this.iconPath = new vscode.ThemeIcon('file');
+                break;
+            case 'no-nucleus':
+                this.iconPath = new vscode.ThemeIcon('info');
                 break;
             case 'info':
                 this.iconPath = new vscode.ThemeIcon('info');
@@ -331,7 +409,9 @@ export class NucleusTreeItem extends vscode.TreeItem {
     }
 }
 
-// Command to open nucleus project
+// ============================================================================
+// COMMAND: Open Nucleus Project
+// ============================================================================
 export async function openNucleusProject(project: LinkedProject): Promise<void> {
     try {
         const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;

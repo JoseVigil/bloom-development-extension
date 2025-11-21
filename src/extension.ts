@@ -28,6 +28,9 @@ import { ProfileTreeProvider } from './providers/profileTreeProvider';
 import { registerCreateNucleusProject, registerAppendProject } from './commands/createNucleusProject';
 import { openIntentInBrowser, openProviderInBrowser } from './commands/openIntentInBrowser';
 
+// ✅ NUEVO: Import Nucleus Provider
+import { NucleusTreeProvider, openNucleusProject } from './providers/nucleusTreeProvider';
+
 import {
     configureIntentProfile,
     changeIntentProfile,
@@ -46,6 +49,9 @@ export function activate(context: vscode.ExtensionContext) {
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     if (workspaceFolder) {
 
+        // ========================================================================
+        // INTENT TREE PROVIDER
+        // ========================================================================
         const intentTreeProvider = new IntentTreeProvider(
             workspaceFolder,
             logger,
@@ -54,6 +60,53 @@ export function activate(context: vscode.ExtensionContext) {
 
         vscode.window.registerTreeDataProvider('bloomIntents', intentTreeProvider);
 
+        // ========================================================================
+        // NUCLEUS TREE PROVIDER (FIXED)
+        // ========================================================================
+        const nucleusTreeProvider = new NucleusTreeProvider(
+            workspaceFolder.uri.fsPath
+        );
+
+        // ✅ Registrar el tree view correctamente
+        const nucleusTreeView = vscode.window.createTreeView('bloomNucleus', {
+            treeDataProvider: nucleusTreeProvider,
+            showCollapseAll: true
+        });
+
+        context.subscriptions.push(nucleusTreeView);
+
+        // ✅ Registrar comando de sync que faltaba
+        const syncNucleusCommand = vscode.commands.registerCommand(
+            'bloom.syncNucleusProjects',
+            async () => {
+                await vscode.window.withProgress({
+                    location: vscode.ProgressLocation.Notification,
+                    title: "Syncing Nucleus projects...",
+                    cancellable: false
+                }, async () => {
+                    nucleusTreeProvider.refresh();
+                    vscode.window.showInformationMessage('✅ Nucleus projects synced');
+                });
+            }
+        );
+
+        // ✅ Registrar comando de open project
+        const openNucleusProjectCommand = vscode.commands.registerCommand(
+            'bloom.openNucleusProject',
+            async (project: any) => {
+                if (!project) {
+                    vscode.window.showWarningMessage('No project selected');
+                    return;
+                }
+                await openNucleusProject(project);
+            }
+        );
+
+        context.subscriptions.push(syncNucleusCommand, openNucleusProjectCommand);
+
+        // ========================================================================
+        // INTENT COMMANDS
+        // ========================================================================
         registerOpenIntent(context, logger, metadataManager);
         registerCopyContextToClipboard(context, logger, contextGatherer);
         registerDeleteIntent(context, logger, intentTreeProvider);
@@ -69,6 +122,9 @@ export function activate(context: vscode.ExtensionContext) {
         registerIntegrateSnapshot(context, logger);
         registerReloadIntentForm(context, logger);
 
+        // ========================================================================
+        // NUCLEUS COMMANDS
+        // ========================================================================
         registerCreateNucleusProject(context, logger);
         registerAppendProject(context, logger);
 
@@ -94,7 +150,7 @@ export function activate(context: vscode.ExtensionContext) {
 export function deactivate() {}
 
 /**
- * ✅ FIX 2: COMPLETAR la función registerProfileCommands
+ * Registrar comandos de Chrome Profile Manager
  */
 function registerProfileCommands(
     context: vscode.ExtensionContext,
@@ -269,7 +325,6 @@ function registerProfileCommands(
 
 /**
  * Helper: Obtener intents disponibles del workspace (SAFE VERSION)
- * Filtra intents inválidos y maneja errores gracefully
  */
 async function getAvailableIntents(workspaceFolder: vscode.WorkspaceFolder): Promise<Intent[]> {
     try {
@@ -283,10 +338,8 @@ async function getAvailableIntents(workspaceFolder: vscode.WorkspaceFolder): Pro
             return [];
         }
 
-        // Solo archivos .json
         const intentFiles = fs.readdirSync(intentsPath)
             .filter((f: string) => {
-                // Validar que sea archivo .json
                 const fullPath = path.join(intentsPath, f);
                 const stat = fs.statSync(fullPath);
                 return stat.isFile() && f.endsWith('.json');
@@ -299,36 +352,17 @@ async function getAvailableIntents(workspaceFolder: vscode.WorkspaceFolder): Pro
                 const filePath = path.join(intentsPath, file);
                 const content = fs.readFileSync(filePath, 'utf-8');
                 
-                // Parsear JSON
                 const intent = JSON.parse(content) as Intent;
                 
-                // Validación estricta
-                if (!intent) {
-                    console.warn(`[Bloom] Intent is null/undefined: ${file}`);
+                if (!intent || !intent.metadata || !intent.metadata.name || !intent.metadata.id) {
+                    console.warn(`[Bloom] Invalid intent: ${file}`);
                     continue;
                 }
 
-                if (!intent.metadata) {
-                    console.warn(`[Bloom] Intent missing metadata: ${file}`, intent);
-                    continue;
-                }
-
-                if (!intent.metadata.name || typeof intent.metadata.name !== 'string') {
-                    console.warn(`[Bloom] Intent missing valid name: ${file}`, intent.metadata);
-                    continue;
-                }
-
-                if (!intent.metadata.id) {
-                    console.warn(`[Bloom] Intent missing id: ${file}`, intent);
-                    continue;
-                }
-
-                // Intent válido
                 intents.push(intent);
 
             } catch (parseError: any) {
                 console.error(`[Bloom] Error parsing intent file ${file}:`, parseError.message);
-                // Continuar con el siguiente archivo
             }
         }
 

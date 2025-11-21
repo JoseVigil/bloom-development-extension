@@ -33,16 +33,17 @@
                     "id": "bloomProfiles",
                     "name": "Chrome Profiles",
                     "contextualTitle": "AI Profiles"
-                },
-                {
-                    "id": "bloomIntents",
-                    "name": "Intents"
-                },
+                },                
                 {
                     "id": "bloomNucleus",
                     "name": "Nucleus",
                     "contextualTitle": "Organization Projects"
+                },
+                {
+                    "id": "bloomIntents",
+                    "name": "Intents"
                 }
+
             ],
             "explorer": [
                 {
