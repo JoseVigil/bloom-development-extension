@@ -24,7 +24,6 @@ import { registerRegenerateContext } from './commands/regenerateContext';
 import { ProfileManagerPanel } from './ui/profile/profileManagerPanel';
 import { ChromeProfileManager } from './core/chromeProfileManager';
 import { Intent } from './models/intent';
-// ✅ FIX 1: Corregir ruta - debe ser 'providers' (plural) no 'provider'
 import { ProfileTreeProvider } from './providers/profileTreeProvider';
 
 import { 
@@ -269,7 +268,8 @@ function registerProfileCommands(
 }
 
 /**
- * Helper: Obtener intents disponibles del workspace
+ * Helper: Obtener intents disponibles del workspace (SAFE VERSION)
+ * Filtra intents inválidos y maneja errores gracefully
  */
 async function getAvailableIntents(workspaceFolder: vscode.WorkspaceFolder): Promise<Intent[]> {
     try {
@@ -283,24 +283,60 @@ async function getAvailableIntents(workspaceFolder: vscode.WorkspaceFolder): Pro
             return [];
         }
 
+        // Solo archivos .json
         const intentFiles = fs.readdirSync(intentsPath)
-            .filter((f: string) => f.endsWith('.json'));
+            .filter((f: string) => {
+                // Validar que sea archivo .json
+                const fullPath = path.join(intentsPath, f);
+                const stat = fs.statSync(fullPath);
+                return stat.isFile() && f.endsWith('.json');
+            });
 
         const intents: Intent[] = [];
 
         for (const file of intentFiles) {
-            const content = fs.readFileSync(
-                path.join(intentsPath, file),
-                'utf-8'
-            );
-            const intent = JSON.parse(content) as Intent;
-            intents.push(intent);
+            try {
+                const filePath = path.join(intentsPath, file);
+                const content = fs.readFileSync(filePath, 'utf-8');
+                
+                // Parsear JSON
+                const intent = JSON.parse(content) as Intent;
+                
+                // Validación estricta
+                if (!intent) {
+                    console.warn(`[Bloom] Intent is null/undefined: ${file}`);
+                    continue;
+                }
+
+                if (!intent.metadata) {
+                    console.warn(`[Bloom] Intent missing metadata: ${file}`, intent);
+                    continue;
+                }
+
+                if (!intent.metadata.name || typeof intent.metadata.name !== 'string') {
+                    console.warn(`[Bloom] Intent missing valid name: ${file}`, intent.metadata);
+                    continue;
+                }
+
+                if (!intent.metadata.id) {
+                    console.warn(`[Bloom] Intent missing id: ${file}`, intent);
+                    continue;
+                }
+
+                // Intent válido
+                intents.push(intent);
+
+            } catch (parseError: any) {
+                console.error(`[Bloom] Error parsing intent file ${file}:`, parseError.message);
+                // Continuar con el siguiente archivo
+            }
         }
 
+        console.log(`[Bloom] Loaded ${intents.length} valid intents`);
         return intents;
 
-    } catch (error) {
-        console.error('Error loading intents:', error);
+    } catch (error: any) {
+        console.error('[Bloom] Error loading intents:', error);
         return [];
     }
 }
