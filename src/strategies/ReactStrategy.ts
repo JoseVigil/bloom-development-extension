@@ -1,8 +1,9 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import { ICodebaseStrategy, FileDescriptor, FileCategory } from '../models/codebaseStrategy';
+import { FileDescriptor, FileCategory } from '../models/codebaseStrategy';
 import { ProjectType } from '../models/intent.js';
+import { CodebaseStrategy } from '../models/codebaseStrategy';
 
 async function fileExists(filePath: string): Promise<boolean> {
     try {
@@ -13,25 +14,154 @@ async function fileExists(filePath: string): Promise<boolean> {
     }
 }
 
-export class ReactStrategy implements ICodebaseStrategy {
+export class ReactStrategy implements CodebaseStrategy {
     name = 'React';
-    projectType: ProjectType = 'react';
+    projectType: ProjectType = 'react-web';
     
-    async detect(workspaceRoot: string): Promise<boolean> {
-        const packageJsonPath = path.join(workspaceRoot, 'package.json');
+    /**
+     * Detects if the workspace is a React project
+     */
+    async detect(workspaceFolder: vscode.WorkspaceFolder): Promise<boolean> {
+        const projectRoot = workspaceFolder.uri.fsPath;
+        const packageJsonPath = path.join(projectRoot, 'package.json');
         
-        if (await fileExists(packageJsonPath)) {
-            const content = await fs.promises.readFile(packageJsonPath, 'utf8');
+        if (!fs.existsSync(packageJsonPath)) {
+            return false;
+        }
+        
+        try {
+            const content = fs.readFileSync(packageJsonPath, 'utf-8');
             const packageJson = JSON.parse(content);
             
-            return !!(
-                packageJson.dependencies?.react ||
-                packageJson.dependencies?.['react-dom'] ||
-                packageJson.devDependencies?.react
-            );
+            const deps = {
+                ...packageJson.dependencies,
+                ...packageJson.devDependencies
+            };
+            
+            // Check for React
+            if (deps['react'] || deps['react-dom']) {
+                return true;
+            }
+        } catch (error) {
+            return false;
         }
         
         return false;
+    }
+    
+    /**
+     * Categorizes files for React projects
+     */
+    async categorize(files: vscode.Uri[]): Promise<FileDescriptor[]> {
+        const descriptors: FileDescriptor[] = [];
+        
+        for (const fileUri of files) {
+            const absolutePath = fileUri.fsPath;
+            const workspaceFolder = vscode.workspace.getWorkspaceFolder(fileUri);
+            
+            if (!workspaceFolder) {
+                continue;
+            }
+            
+            const relativePath = path.relative(workspaceFolder.uri.fsPath, absolutePath);
+            const extension = path.extname(absolutePath);
+            const lowerPath = relativePath.toLowerCase();
+            
+            let category: FileCategory = 'code';
+            let priority = 5;
+            
+            // React-specific categorization
+            if (extension === '.jsx' || extension === '.tsx') {
+                category = 'code';
+                priority = 10;
+                
+                // Boost priority for key React files
+                if (lowerPath.includes('/components/')) {
+                    priority = 12;
+                } else if (lowerPath.includes('app.tsx') || lowerPath.includes('app.jsx')) {
+                    priority = 13;
+                }
+            } else if (extension === '.js' || extension === '.ts') {
+                category = 'code';
+                priority = 9;
+                
+                // Boost priority for hooks and services
+                if (lowerPath.includes('/hooks/')) {
+                    priority = 11;
+                } else if (lowerPath.includes('/services/') || lowerPath.includes('/api/')) {
+                    priority = 10;
+                } else if (lowerPath.includes('/utils/') || lowerPath.includes('/helpers/')) {
+                    priority = 8;
+                }
+            } else if (extension === '.css' || extension === '.scss' || extension === '.sass') {
+                category = 'asset';
+                priority = 6;
+            } else if (extension === '.module.css' || extension === '.module.scss') {
+                category = 'asset';
+                priority = 7;
+            } else if (relativePath === 'package.json') {
+                category = 'config';
+                priority = 12;
+            } else if (relativePath === 'tsconfig.json' || relativePath === 'jsconfig.json') {
+                category = 'config';
+                priority = 11;
+            } else if (extension === '.json' || extension === '.yaml' || extension === '.yml') {
+                category = 'config';
+                priority = 8;
+            } else if (lowerPath.includes('.test.') || lowerPath.includes('.spec.') || 
+                       lowerPath.includes('/tests/') || lowerPath.includes('/__tests__/')) {
+                category = 'test';
+                priority = 6;
+            } else if (extension === '.md' || extension === '.txt') {
+                category = 'docs';
+                priority = 3;
+            } else if (extension === '.png' || extension === '.jpg' || extension === '.svg' || 
+                       extension === '.gif' || extension === '.ico') {
+                category = 'asset';
+                priority = 2;
+            }
+            
+            const stats = fs.statSync(absolutePath);
+            
+            descriptors.push({
+                relativePath,
+                absolutePath,
+                category,
+                priority,
+                size: stats.size,
+                extension,
+                metadata: {
+                    size: stats.size,
+                    type: extension,
+                    lastModified: stats.mtimeMs
+                }
+            });
+        }
+        
+        return descriptors;
+    }
+    
+    /**
+     * Prioritizes files for React projects
+     */
+    prioritize(files: FileDescriptor[]): FileDescriptor[] {
+        return files.sort((a, b) => {
+            // Sort by priority (higher first)
+            if (b.priority !== a.priority) {
+                return b.priority - a.priority;
+            }
+            
+            // Then by path depth (shallower first)
+            const depthA = a.relativePath.split(path.sep).length;
+            const depthB = b.relativePath.split(path.sep).length;
+            
+            if (depthA !== depthB) {
+                return depthA - depthB;
+            }
+            
+            // Finally alphabetically
+            return a.relativePath.localeCompare(b.relativePath);
+        });
     }
     
     async getRelevantFiles(workspaceRoot: string, selectedFiles?: vscode.Uri[]): Promise<FileDescriptor[]> {
@@ -91,13 +221,13 @@ export class ReactStrategy implements ICodebaseStrategy {
     
     assignPriority(file: FileDescriptor): number {
         const priorityMap: Partial<Record<FileCategory, number>> = {
-                    'config': 1,
-                    'code': 2,
-                    'asset': 3,
-                    'test': 4,
-                    'docs': 5,
-                    'other': 6
-                };
+            'config': 1,
+            'code': 2,
+            'asset': 3,
+            'test': 4,
+            'docs': 5,
+            'other': 6
+        };
         
         return priorityMap[file.category] || 9;
     }

@@ -2,7 +2,7 @@
     "name": "bloom-btip-plugin",
     "displayName": "Bloom BTIP",
     "description": "Plugin para preview de Markdown y generación de Technical Intent Packages",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "publisher": "bloom",
     "engines": {
         "vscode": "^1.80.0"
@@ -12,7 +12,9 @@
     ],
     "activationEvents": [
         "onCommand:bloom.openMarkdownPreview",
-        "onCommand:bloom.generateIntent"
+        "onCommand:bloom.generateIntent",
+        "onCommand:bloom.createNucleusProject",
+        "onCommand:bloom.linkToNucleus"
     ],
     "main": "./out/extension.js",
     "contributes": {
@@ -35,6 +37,11 @@
                 {
                     "id": "bloomIntents",
                     "name": "Intents"
+                },
+                {
+                    "id": "bloomNucleus",
+                    "name": "Nucleus",
+                    "contextualTitle": "Organization Projects"
                 }
             ],
             "explorer": [
@@ -89,6 +96,30 @@
             {
                 "command": "bloom.createBTIPProject",
                 "title": "Bloom: Create BTIP Project"
+            },
+            {
+                "command": "bloom.createNucleusProject",
+                "title": "Bloom: Create Nucleus Project",
+                "icon": "$(organization)"
+            },
+            {
+                "command": "bloom.linkToNucleus",
+                "title": "Bloom: Link to Nucleus",
+                "icon": "$(link)"
+            },
+            {
+                "command": "bloom.unlinkFromNucleus",
+                "title": "Bloom: Unlink from Nucleus"
+            },
+            {
+                "command": "bloom.openNucleusProject",
+                "title": "Bloom: Open Nucleus Project",
+                "icon": "$(folder-opened)"
+            },
+            {
+                "command": "bloom.syncNucleusProjects",
+                "title": "Bloom: Sync Nucleus Projects",
+                "icon": "$(sync)"
             },
             {
                 "command": "bloom.regenerateContext",
@@ -162,6 +193,11 @@
                     "command": "bloom.manageProfiles",
                     "when": "view == bloomProfiles",
                     "group": "navigation"
+                },
+                {
+                    "command": "bloom.syncNucleusProjects",
+                    "when": "view == bloomNucleus",
+                    "group": "navigation"
                 }
             ],
             "explorer/context": [
@@ -179,11 +215,29 @@
                     "command": "bloom.createBTIPProject",
                     "when": "explorerResourceIsFolder",
                     "group": "bloom@3"
+                },
+                {
+                    "command": "bloom.createNucleusProject",
+                    "when": "explorerResourceIsFolder",
+                    "group": "bloom@4"
+                },
+                {
+                    "command": "bloom.linkToNucleus",
+                    "when": "explorerResourceIsFolder",
+                    "group": "bloom@5"
                 }
             ],
             "commandPalette": [
                 {
                     "command": "bloom.regenerateContext",
+                    "when": "workspaceFolderCount > 0"
+                },
+                {
+                    "command": "bloom.createNucleusProject",
+                    "when": "workspaceFolderCount > 0"
+                },
+                {
+                    "command": "bloom.linkToNucleus",
                     "when": "workspaceFolderCount > 0"
                 }
             ],
@@ -212,6 +266,11 @@
                     "command": "bloom.deleteIntent",
                     "when": "view == bloomIntents && viewItem == intent",
                     "group": "3_danger@1"
+                },
+                {
+                    "command": "bloom.openNucleusProject",
+                    "when": "view == bloomNucleus && viewItem == nucleusProject",
+                    "group": "1_main@1"
                 }
             ]
         },
@@ -226,6 +285,11 @@
                 "command": "bloom.manageProfiles",
                 "key": "ctrl+alt+m",
                 "mac": "cmd+alt+m"
+            },
+            {
+                "command": "bloom.createNucleusProject",
+                "key": "ctrl+alt+n",
+                "mac": "cmd+alt+n"
             }
         ],
         "configuration": {
@@ -262,6 +326,11 @@
                     "type": "boolean",
                     "default": true,
                     "description": "Actualizar tree.txt automáticamente después de cambios"
+                },
+                "bloom.nucleusAutoDetect": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Detectar y mostrar proyectos Nucleus automáticamente"
                 }
             }
         }

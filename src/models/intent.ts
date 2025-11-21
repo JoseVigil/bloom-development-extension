@@ -6,11 +6,21 @@ import * as vscode from 'vscode';
 
 export type IntentStatus = 'draft' | 'in-progress' | 'completed' | 'archived';
 
-export type ProjectType = 'android' | 'ios' | 'web' | 'react' | 'node' | 'generic';
-
 export type FileCategory = 'code' | 'config' | 'docs' | 'test' | 'asset' | 'other';
 
-// NUEVO: Workflow stages
+// Strategies
+export type ProjectType = 
+    | 'android' 
+    | 'ios' 
+    | 'react-web' 
+    | 'web'
+    | 'node'
+    | 'python-flask'
+    | 'php-laravel'
+    | 'nucleus'        
+    | 'generic';
+
+// Workflow stages
 export type IntentWorkflowStage =
     | 'draft'
     | 'intent-generated'
@@ -19,7 +29,7 @@ export type IntentWorkflowStage =
     | 'snapshot-downloaded'
     | 'integrated';
 
-// NUEVO: Question types
+// Question types
 export type QuestionCategory =
     | 'architecture'
     | 'design'

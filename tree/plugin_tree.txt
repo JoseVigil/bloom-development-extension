@@ -5,6 +5,7 @@ bloom-development-extension/
 │   ├── commands/
 │   │   ├── addToIntent.ts
 │   │   ├── changeIntentStatus.ts
+│   │   ├── configureIntentProfile.ts
 │   │   ├── copyContextToClipboard.ts
 │   │   ├── createBTIPProject.ts
 │   │   ├── deleteIntent.ts
@@ -16,6 +17,7 @@ bloom-development-extension/
 │   │   ├── integrateSnapshot.ts
 │   │   ├── openFileInVSCode.ts
 │   │   ├── openIntent.ts
+│   │   ├── openIntentInBrowser.ts
 │   │   ├── openMarkdownPreview.ts
 │   │   ├── regenerateContext.ts
 │   │   ├── reloadIntentForm.ts
@@ -25,6 +27,7 @@ bloom-development-extension/
 │   ├── context/
 │   │   └── ContextCollector.ts
 │   ├── core/
+│   │   ├── chromeProfileManager.ts
 │   │   ├── claudeApiClient.ts
 │   │   ├── codebaseGenerator.ts
 │   │   ├── contextGatherer.ts
@@ -44,7 +47,8 @@ bloom-development-extension/
 │   ├── processor/
 │   │   └── ArtifactProcessor.ts
 │   ├── providers/
-│   │   └── intentTreeProvider.ts
+│   │   ├── intentTreeProvider.ts
+│   │   └── profileTreeProvider.ts
 │   ├── strategies/
 │   │   ├── AndroidStrategy.ts
 │   │   ├── GenericStrategy.ts
@@ -55,11 +59,17 @@ bloom-development-extension/
 │   │   └── helpers.ts
 │   ├── ui/
 │   │   ├── ClaudeBridgePanel.ts
-│   │   ├── intentForm.css
-│   │   ├── intentForm.html
-│   │   ├── intentForm.js
-│   │   ├── intentFormPanel.ts
-│   │   └── markdownPreviewPanel.ts
+│   │   ├── intent/
+│   │   │   ├── intentForm.css
+│   │   │   ├── intentForm.html
+│   │   │   ├── intentForm.js
+│   │   │   └── intentFormPanel.ts
+│   │   ├── markdownPreviewPanel.ts
+│   │   └── profile/
+│   │       ├── profileManager.css
+│   │       ├── profileManager.html
+│   │       ├── profileManager.js
+│   │       └── profileManagerPanel.ts
 │   └── utils/
 │       ├── logger.ts
 │       ├── pythonExecutor.ts
