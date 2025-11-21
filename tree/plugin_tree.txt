@@ -8,6 +8,7 @@ bloom-development-extension/
 │   │   ├── configureIntentProfile.ts
 │   │   ├── copyContextToClipboard.ts
 │   │   ├── createBTIPProject.ts
+│   │   ├── createNucleusProject.ts
 │   │   ├── deleteIntent.ts
 │   │   ├── deleteIntentFromForm.ts
 │   │   ├── duplicateIntent.ts
@@ -15,6 +16,7 @@ bloom-development-extension/
 │   │   ├── generateIntent.ts
 │   │   ├── generateQuestions.ts
 │   │   ├── integrateSnapshot.ts
+│   │   ├── linkToNucleus.ts
 │   │   ├── openFileInVSCode.ts
 │   │   ├── openIntent.ts
 │   │   ├── openIntentInBrowser.ts
@@ -48,11 +50,13 @@ bloom-development-extension/
 │   │   └── ArtifactProcessor.ts
 │   ├── providers/
 │   │   ├── intentTreeProvider.ts
+│   │   ├── nucleusTreeProvider.ts
 │   │   └── profileTreeProvider.ts
 │   ├── strategies/
 │   │   ├── AndroidStrategy.ts
 │   │   ├── GenericStrategy.ts
 │   │   ├── IOSStrategy.ts
+│   │   ├── NucleusStrategy.ts
 │   │   ├── ProjectDetector.ts
 │   │   ├── ReactStrategy.ts
 │   │   ├── WebStrategy.ts

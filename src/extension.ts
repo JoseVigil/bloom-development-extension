@@ -25,13 +25,9 @@ import { ProfileManagerPanel } from './ui/profile/profileManagerPanel';
 import { ChromeProfileManager } from './core/chromeProfileManager';
 import { Intent } from './models/intent';
 import { ProfileTreeProvider } from './providers/profileTreeProvider';
+import { registerCreateNucleusProject, registerAppendProject } from './commands/createNucleusProject';
+import { openIntentInBrowser, openProviderInBrowser } from './commands/openIntentInBrowser';
 
-import { 
-    openIntentInBrowser, 
-    openProviderInBrowser,
-    registerActiveConversation,
-    cleanupOldConversations
-} from './commands/openIntentInBrowser';
 import {
     configureIntentProfile,
     changeIntentProfile,
@@ -49,6 +45,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     if (workspaceFolder) {
+
         const intentTreeProvider = new IntentTreeProvider(
             workspaceFolder,
             logger,
@@ -71,6 +68,9 @@ export function activate(context: vscode.ExtensionContext) {
         registerSubmitAnswers(context, logger);
         registerIntegrateSnapshot(context, logger);
         registerReloadIntentForm(context, logger);
+
+        registerCreateNucleusProject(context, logger);
+        registerAppendProject(context, logger);
 
         const copyFilePathDisposable = vscode.commands.registerCommand(
             'bloom.copyFilePath',

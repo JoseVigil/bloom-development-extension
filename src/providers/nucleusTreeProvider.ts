@@ -1,11 +1,10 @@
-// src/providers/nucleusTreeProvider.ts
-// Tree view provider for Nucleus organizational structure
-
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import { NucleusConfig, LinkedProject, loadNucleusConfig } from '../models/bloomConfig';
-import { ProjectDetector } from '../strategies/ProjectDetector';
+import { IntentTreeProvider } from './intentTreeProvider';
+import { MetadataManager } from '../core/metadataManager';
+import { Logger } from '../utils/logger';
 
 export class NucleusTreeProvider implements vscode.TreeDataProvider<NucleusTreeItem> {
     
@@ -16,6 +15,9 @@ export class NucleusTreeProvider implements vscode.TreeDataProvider<NucleusTreeI
     
     private nucleusPath: string | null = null;
     private config: NucleusConfig | null = null;
+    
+    private logger: Logger = new Logger();
+    private metadataManager: MetadataManager = new MetadataManager(this.logger);
     
     constructor(private workspaceRoot: string | undefined) {
         this.detectNucleus();
@@ -93,7 +95,7 @@ export class NucleusTreeProvider implements vscode.TreeDataProvider<NucleusTreeI
         return element;
     }
     
-    getChildren(element?: NucleusTreeItem): Thenable<NucleusTreeItem[]> {
+    async getChildren(element?: NucleusTreeItem): Promise<NucleusTreeItem[]> {
         if (!this.config || !this.nucleusPath) {
             return Promise.resolve([
                 new NucleusTreeItem(
@@ -110,127 +112,164 @@ export class NucleusTreeProvider implements vscode.TreeDataProvider<NucleusTreeI
             // Root level - show Nucleus info
             return Promise.resolve([
                 new NucleusTreeItem(
-                    this.config.organization.displayName,
+                    this.config.organization.displayName || this.config.organization.name,
                     vscode.TreeItemCollapsibleState.Expanded,
                     'nucleus',
-                    this.nucleusPath,
+                    this.config.organization,
                     this.config.nucleus.name
                 )
             ]);
         }
         
         if (element.type === 'nucleus') {
-            // Show categories
-            return Promise.resolve([
-                new NucleusTreeItem(
-                    `📱 Mobile (${this.countByCategory('mobile')})`,
-                    vscode.TreeItemCollapsibleState.Collapsed,
-                    'category',
-                    'mobile'
-                ),
-                new NucleusTreeItem(
-                    `⚙️ Backend (${this.countByCategory('backend')})`,
-                    vscode.TreeItemCollapsibleState.Collapsed,
-                    'category',
-                    'backend'
-                ),
-                new NucleusTreeItem(
-                    `🌐 Web (${this.countByCategory('web')})`,
-                    vscode.TreeItemCollapsibleState.Collapsed,
-                    'category',
-                    'web'
-                ),
-                new NucleusTreeItem(
-                    `🔧 Other (${this.countByCategory('other')})`,
-                    vscode.TreeItemCollapsibleState.Collapsed,
-                    'category',
-                    'other'
-                )
-            ]);
+            // Categories: Mobile, Backend, Web, Other
+            const categories = {
+                mobile: [],
+                backend: [],
+                web: [],
+                other: []
+            } as Record<string, LinkedProject[]>;
+            
+            this.config.projects.forEach(project => {
+                if (project.strategy === 'android' || project.strategy === 'ios') {
+                    categories.mobile.push(project);
+                } else if (project.strategy === 'node' || project.strategy === 'python-flask' || project.strategy === 'php-laravel') {
+                    categories.backend.push(project);
+                } else if (project.strategy === 'react-web') {
+                    categories.web.push(project);
+                } else {
+                    categories.other.push(project);
+                }
+            });
+            
+            const categoryItems: NucleusTreeItem[] = [];
+            
+            if (categories.mobile.length > 0) {
+                categoryItems.push(
+                    new NucleusTreeItem(
+                        '📱 Mobile',
+                        vscode.TreeItemCollapsibleState.Collapsed,
+                        'category',
+                        categories.mobile
+                    )
+                );
+            }
+            
+            if (categories.backend.length > 0) {
+                categoryItems.push(
+                    new NucleusTreeItem(
+                        '⚙️ Backend',
+                        vscode.TreeItemCollapsibleState.Collapsed,
+                        'category',
+                        categories.backend
+                    )
+                );
+            }
+            
+            if (categories.web.length > 0) {
+                categoryItems.push(
+                    new NucleusTreeItem(
+                        '🌐 Web',
+                        vscode.TreeItemCollapsibleState.Collapsed,
+                        'category',
+                        categories.web
+                    )
+                );
+            }
+            
+            if (categories.other.length > 0) {
+                categoryItems.push(
+                    new NucleusTreeItem(
+                        '🔧 Other',
+                        vscode.TreeItemCollapsibleState.Collapsed,
+                        'category',
+                        categories.other
+                    )
+                );
+            }
+            
+            return Promise.resolve(categoryItems);
         }
         
         if (element.type === 'category') {
-            // Show projects in category
-            const projects = this.getProjectsByCategory(element.data as string);
-            
+            const projects = element.data as LinkedProject[];
             return Promise.resolve(
                 projects.map(project => 
                     new NucleusTreeItem(
-                        project.displayName,
-                        vscode.TreeItemCollapsibleState.None,
+                        project.displayName || project.name,
+                        vscode.TreeItemCollapsibleState.Collapsed,
                         'nucleusProject',
-                        project,
-                        `${project.name} - ${project.status}`
+                        project
                     )
                 )
             );
         }
         
-        return Promise.resolve([]);
-    }
-    
-    private countByCategory(category: string): number {
-        if (!this.config) {
-            return 0;
-        }
-        
-        return this.getProjectsByCategory(category).length;
-    }
-    
-    private getProjectsByCategory(category: string): LinkedProject[] {
-        if (!this.config) {
-            return [];
-        }
-        
-        return this.config.projects.filter(project => {
-            switch (category) {
-                case 'mobile':
-                    return project.strategy === 'android' || project.strategy === 'ios';
-                case 'backend':
-                    return project.strategy === 'node' || 
-                           project.strategy === 'python-flask' || 
-                           project.strategy === 'php-laravel';
-                case 'web':
-                    return project.strategy === 'react-web';
-                case 'other':
-                    return project.strategy !== 'android' && 
-                           project.strategy !== 'ios' &&
-                           project.strategy !== 'node' &&
-                           project.strategy !== 'python-flask' &&
-                           project.strategy !== 'php-laravel' &&
-                           project.strategy !== 'react-web';
-                default:
-                    return false;
+        // Nuevo: Para nesting Intents bajo Project
+        if (element.type === 'nucleusProject') {
+            const project = element.data as LinkedProject;
+            const projectPath = path.resolve(this.nucleusPath!, project.localPath);
+            
+            if (fs.existsSync(projectPath)) {
+                // Crea instancia de IntentTreeProvider para este project
+                const intentProvider = new IntentTreeProvider(
+                    { uri: vscode.Uri.file(projectPath) } as vscode.WorkspaceFolder,
+                    this.logger,
+                    this.metadataManager
+                );
+                
+                const intents = await intentProvider.getIntents();
+                
+                if (intents.length === 0) {
+                    return [new NucleusTreeItem('No Intents Found', vscode.TreeItemCollapsibleState.None, 'info')];
+                }
+                
+                return intents.map(intentItem => {
+                    const treeItem = new NucleusTreeItem(
+                        intentItem.label as string,
+                        vscode.TreeItemCollapsibleState.None,
+                        'intent',
+                        intentItem.intent
+                    );
+                    treeItem.command = {
+                        command: 'bloom.openIntent',
+                        title: 'Open Intent',
+                        arguments: [intentItem.intent]
+                    };
+                    treeItem.iconPath = new vscode.ThemeIcon('file');
+                    return treeItem;
+                });
+            } else {
+                return [new NucleusTreeItem('Project Path Not Found', vscode.TreeItemCollapsibleState.None, 'error')];
             }
-        });
-    }
-    
-    getNucleusPath(): string | null {
-        return this.nucleusPath;
-    }
-    
-    getConfig(): NucleusConfig | null {
-        return this.config;
+        }
+        
+        return Promise.resolve([]);
     }
 }
 
 export class NucleusTreeItem extends vscode.TreeItem {
+    public type: string;
     
     constructor(
         public readonly label: string,
-        public readonly collapsibleState: vscode.TreeItemCollapsibleState,
-        public readonly type: 'nucleus' | 'category' | 'nucleusProject' | 'info',
+        collapsibleState: vscode.TreeItemCollapsibleState,
+        type: string,
         public readonly data?: any,
-        public readonly tooltip?: string
+        tooltip?: string
     ) {
         super(label, collapsibleState);
-        
+        this.tooltip = tooltip || label;
         this.contextValue = type;
+        this.type = type;
         
         // Set icons based on type
         switch (type) {
             case 'nucleus':
                 this.iconPath = new vscode.ThemeIcon('organization');
+                break;
+            case 'category':
+                this.iconPath = new vscode.ThemeIcon('folder');
                 break;
             case 'nucleusProject':
                 this.iconPath = this.getProjectIcon(data);
@@ -240,8 +279,14 @@ export class NucleusTreeItem extends vscode.TreeItem {
                     arguments: [data]
                 };
                 break;
+            case 'intent':
+                this.iconPath = new vscode.ThemeIcon('file');
+                break;
             case 'info':
                 this.iconPath = new vscode.ThemeIcon('info');
+                break;
+            case 'error':
+                this.iconPath = new vscode.ThemeIcon('error');
                 break;
         }
         

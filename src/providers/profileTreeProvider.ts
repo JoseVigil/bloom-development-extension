@@ -76,17 +76,12 @@ class ProfileTreeItem extends vscode.TreeItem {
         if (profile) {
             this.tooltip = `${profile.name}\nPath: ${profile.path}`;
             this.contextValue = 'profile';
-            // ✅ FIX: Usar path a archivo de icono o ThemeIcon con objeto literal
-            this.iconPath = {
-                id: 'account',
-                color: undefined
-            } as vscode.ThemeIcon;
+            // Fix: Usa constructor correcto de ThemeIcon sin cast
+            this.iconPath = new vscode.ThemeIcon('account');
         } else {
             this.contextValue = 'account';
-            this.iconPath = {
-                id: status === '✓' ? 'check' : 'question',
-                color: undefined
-            } as vscode.ThemeIcon;
+            // Fix: Usa constructor correcto para status
+            this.iconPath = new vscode.ThemeIcon(status === '✓' ? 'check' : 'question');
         }
     }
 }

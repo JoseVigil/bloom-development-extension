@@ -157,6 +157,7 @@ export class ChromeProfileManager {
             this.logger.warn(`Could not detect accounts for profile: ${profilePath}, ${error}`);
         }
 
+        console.log(`Accounts for profile ${profilePath}:`, accounts);
         return accounts;
     }
 

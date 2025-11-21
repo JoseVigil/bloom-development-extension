@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as fs from 'fs'; // Agregado para fs.existsSync
 import { Intent, IntentMetadata, IntentStatus } from '../models/intent';
 import { Logger } from '../utils/logger';
 import { MetadataManager } from '../core/metadataManager';
@@ -46,6 +47,13 @@ export class IntentTreeProvider implements vscode.TreeDataProvider<IntentTreeIte
             'intents'
         );
         
+        // Nuevo: Check si el directorio existe para evitar ENOENT
+        const intentsPath = intentsDir.fsPath;
+        if (!fs.existsSync(intentsPath)) {
+            this.logger.info(`Intents directory not found: ${intentsPath} - Returning empty list.`);
+            return [];
+        }
+        
         try {
             const entries = await vscode.workspace.fs.readDirectory(intentsDir);
             const intents: Intent[] = [];
@@ -61,14 +69,24 @@ export class IntentTreeProvider implements vscode.TreeDataProvider<IntentTreeIte
                 }
             }
             
-            return intents.sort((a, b) => 
-                new Date(b.metadata.updated).getTime() - 
-                new Date(a.metadata.updated).getTime()
+            return intents.sort(
+                (a, b) => new Date(b.metadata.updated).getTime() - new Date(a.metadata.updated).getTime()
             );
         } catch (error) {
             this.logger.error('Error al cargar intents', error as Error);
             return [];
         }
+    }
+
+    // Nuevo método para nesting en Nucleus
+    public async getIntents(): Promise<IntentTreeItem[]> {
+        const allIntents: Intent[] = [];
+        const statuses: IntentStatus[] = ['in-progress', 'completed', 'archived'];
+        for (const status of statuses) {
+            const intents = await this.loadIntentsByStatus(status);
+            allIntents.push(...intents);
+        }
+        return allIntents.map(intent => new IntentTreeItem(intent));
     }
 }
 
