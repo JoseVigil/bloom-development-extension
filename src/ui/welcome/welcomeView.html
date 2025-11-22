@@ -4,49 +4,81 @@
     <meta charset="UTF-8">
     <style>
         body { font-family: var(--vscode-font-family); background: var(--vscode-editor-background); color: var(--vscode-foreground); padding: 40px; text-align: center; }
-        .logo { width: 120px; height: 120px; margin: 0 auto 30px; background: #ff6b6b; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 60px; }
+        .logo { width: 100px; height: 100px; background: #ff6b6b; border-radius: 50%; margin: 0 auto 30px; font-size: 50px; display: flex; align-items: center; justify-content: center; }
         h1 { font-size: 28px; margin: 20px 0 10px; }
-        p { font-size: 15px; opacity: 0.9; line-height: 1.6; max-width: 500px; margin: 0 auto 30px; }
-        input, button { padding: 12px 20px; margin: 8px; border-radius: 8px; font-size: 14px; }
-        input { background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border); color: var(--vscode-input-foreground); width: 300px; }
-        button { background: #ff6b6b; color: white; border: none; cursor: pointer; width: 340px; font-weight: 600; }
-        button:hover { background: #ff8787; }
-        .terms { font-size: 12px; opacity: 0.7; margin-top: 20px; }
-        a { color: #ff6b6b; text-decoration: none; }
+        p { max-width: 500px; margin: 0 auto 40px; opacity: 0.9; line-height: 1.6; }
+        button { padding: 16px 32px; font-size: 18px; border-radius: 12px; border: none; cursor: pointer; font-weight: 600; }
+        .btn-github { background: #333; color: white; }
+        .btn-github:hover { background: #444; }
+        .btn-create { background: #ff6b6b; color: white; display: none; }
+        .btn-create:hover { background: #ff8787; }
+        .form { display: none; margin: 40px auto; max-width: 400px; text-align: left; }
+        input, select { width: 100%; padding: 12px; margin: 10px 0; border-radius: 8px; border: 1px solid var(--vscode-input-border); background: var(--vscode-input-background); color: var(--vscode-input-foreground); }
+        .status { margin: 20px; font-size: 14px; }
+        .success { color: #0f0; }
+        .error { color: #f66; }
     </style>
 </head>
 <body>
-    <div class="logo">Fire</div>
-    <h1>Bloom Nucleus</h1>
-    <p>El centro de conocimiento organizacional que conecta todos tus proyectos técnicos con inteligencia artificial.</p>
-    
-    <input type="text" id="name" placeholder="Tu nombre completo" /><br/>
-    <input type="email" id="email" placeholder="tu@email.com" /><br/>
-    
-    <button id="register">Crear mi cuenta gratuita</button>
-    
-    <div class="terms">
-        Al continuar aceptás nuestros <a href="#" onclick="openTerms()">Términos de Servicio</a> y 
-        <a href="#" onclick="openPrivacy()">Política de Privacidad</a>
+    <div class="logo">Bloom</div>
+    <h1>Bienvenido a Bloom</h1>
+    <p>Conectá tu cuenta de GitHub para crear tu Nucleus centralizado y comenzar a usar todas las funciones.</p>
+
+    <button class="btn-github" id="authBtn">Conectar con GitHub</button>
+
+    <div id="form" class="form">
+        <input type="text" id="name" placeholder="Nombre" readonly />
+        <input type="email" id="email" placeholder="Email" readonly />
+        <input type="text" id="username" placeholder="Usuario GitHub" readonly />
+        <select id="org">
+            <option value="">Crear en mi cuenta personal</option>
+        </select>
+        <button class="btn-create" id="createBtn">Crear mi Nucleus</button>
     </div>
+
+    <div class="status" id="status"></div>
 
     <script>
         const vscode = acquireVsCodeApi();
-        
-        document.getElementById('register').onclick = () => {
-            const name = document.getElementById('name').value.trim();
-            const email = document.getElementById('email').value.trim();
-            
-            if (!name || !email || !email.includes('@')) {
-                vscode.postMessage({ command: 'error', text: 'Completa todos los campos correctamente' });
-                return;
-            }
-            
-            vscode.postMessage({ command: 'register', name, email });
+
+        document.getElementById('authBtn').onclick = () => {
+            vscode.postMessage({ command: 'authenticate' });
         };
 
-        function openTerms() { vscode.postMessage({ command: 'open', url: 'https://bloom.ai/terms' }); }
-        function openPrivacy() { vscode.postMessage({ command: 'open', url: 'https://bloom.ai/privacy' }); }
+        document.getElementById('createBtn').onclick = () => {
+            const org = document.getElementById('org').value || null;
+            vscode.postMessage({ command: 'createNucleus', githubOrg: org });
+        };
+
+        window.addEventListener('message', e => {
+            const msg = e.data;
+            if (msg.command === 'userAuthenticated') {
+                document.getElementById('name').value = msg.name;
+                document.getElementById('email').value = msg.email;
+                document.getElementById('username').value = msg.username;
+
+                const select = document.getElementById('org');
+                select.innerHTML = '<option value="">Crear en mi cuenta personal</option>';
+                msg.orgs.forEach(o => {
+                    const opt = document.createElement('option');
+                    opt.value = o.login;
+                    opt.textContent = o.login;
+                    select.appendChild(opt);
+                });
+
+                document.getElementById('form').style.display = 'block';
+                document.getElementById('authBtn').style.display = 'none';
+                document.getElementById('createBtn').style.display = 'block';
+            }
+            if (msg.command === 'error') {
+                document.getElementById('status').textContent = msg.text;
+                document.getElementById('status').className = 'error';
+            }
+            if (msg.command === 'nucleusCreated') {
+                document.getElementById('status').textContent = '¡Nucleus creado con éxito!';
+                document.getElementById('status').className = 'success';
+            }
+        });
     </script>
 </body>
 </html>

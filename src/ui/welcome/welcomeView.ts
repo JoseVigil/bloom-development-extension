@@ -2,6 +2,8 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { UserManager } from '../../managers/userManager';
+import { getUserOrgs, createNucleusRepo } from '../../utils/githubApi';
+import { getCurrentGitHubUser } from '../../utils/githubOAuth';
 
 export class WelcomeView {
     private panel: vscode.WebviewPanel | undefined;
@@ -16,30 +18,77 @@ export class WelcomeView {
 
         this.panel = vscode.window.createWebviewPanel(
             'bloomWelcome',
-            'Bienvenido a Bloom Nucleus',
+            'Bienvenido a Bloom',
             vscode.ViewColumn.One,
-            { enableScripts: true, retainContextWhenHidden: true }
+            {
+                enableScripts: true,
+                retainContextWhenHidden: true,
+                localResourceRoots: [vscode.Uri.file(path.join(this.context.extensionPath, 'src', 'ui', 'welcome'))]
+            }
         );
 
         this.panel.webview.html = this.getHtml();
-        this.panel.webview.onDidReceiveMessage(async msg => {
+        this.panel.onDidDispose(() => { this.panel = undefined; });
+
+        this.panel.webview.onDidReceiveMessage(async (msg) => {
             switch (msg.command) {
-                case 'register':
-                    await UserManager.init(this.context).register(msg.email, msg.name);
-                    vscode.window.showInformationMessage(`¡Bienvenido ${msg.name.split(' ')[0]}! Tu Nucleus está listo.`);
-                    this.panel?.dispose();
-                    vscode.commands.executeCommand('bloom.focusRealNucleusView');
+                case 'authenticate':
+                    await this.authenticateAndFillForm();
                     break;
-                case 'error':
-                    vscode.window.showErrorMessage(msg.text);
-                    break;
-                case 'open':
-                    vscode.env.openExternal(vscode.Uri.parse(msg.url));
+                case 'createNucleus':
+                    await this.createNucleus(msg.githubOrg);
                     break;
             }
         });
+    }
 
-        this.panel.onDidDispose(() => { this.panel = undefined; });
+    private async authenticateAndFillForm() {
+        try {
+            vscode.window.showInformationMessage('Conectando con GitHub...');
+
+            const user = await getCurrentGitHubUser();
+            const orgs = await getUserOrgs();
+
+            this.panel?.webview.postMessage({
+                command: 'userAuthenticated',
+                name: user.name || user.login,
+                email: user.email || 'email@privado.com',
+                username: user.login,
+                orgs: orgs
+            });
+
+        } catch (err: any) {
+            this.panel?.webview.postMessage({
+                command: 'error',
+                text: err.message || 'No se pudo conectar con GitHub'
+            });
+        }
+    }
+
+    private async createNucleus(githubOrg?: string) {
+        try {
+            vscode.window.showInformationMessage('Creando tu Nucleus...');
+            const repoUrl = await createNucleusRepo(githubOrg || undefined);
+            const user = await getCurrentGitHubUser();
+
+            await UserManager.init(this.context).saveUser({
+                githubUsername: user.login,
+                githubOrg: githubOrg || user.login
+            });
+
+            this.panel?.webview.postMessage({ command: 'nucleusCreated', repoUrl });
+
+            setTimeout(() => {
+                this.panel?.dispose();
+                vscode.commands.executeCommand('bloom.focusRealNucleusView');
+            }, 2000);
+
+        } catch (err: any) {
+            this.panel?.webview.postMessage({
+                command: 'error',
+                text: err.message
+            });
+        }
     }
 
     private getHtml(): string {
