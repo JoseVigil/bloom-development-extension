@@ -38,9 +38,12 @@ bloom-development-extension/
 │   │   ├── intentGenerator.ts
 │   │   ├── intentSession.ts
 │   │   ├── metadataManager.ts
+│   │   ├── nucleusManager.ts
 │   │   ├── pythonScriptRunner.ts
 │   │   └── validator.ts
 │   ├── extension.ts
+│   ├── managers/
+│   │   └── userManager.ts
 │   ├── models/
 │   │   ├── bloomConfig.ts
 │   │   ├── codebaseStrategy.ts
@@ -51,6 +54,7 @@ bloom-development-extension/
 │   ├── providers/
 │   │   ├── intentTreeProvider.ts
 │   │   ├── nucleusTreeProvider.ts
+│   │   ├── nucleusWelcomeProvider.ts
 │   │   └── profileTreeProvider.ts
 │   ├── strategies/
 │   │   ├── AndroidStrategy.ts
@@ -69,12 +73,21 @@ bloom-development-extension/
 │   │   │   ├── intentForm.js
 │   │   │   └── intentFormPanel.ts
 │   │   ├── markdownPreviewPanel.ts
-│   │   └── profile/
-│   │       ├── profileManager.css
-│   │       ├── profileManager.html
-│   │       ├── profileManager.js
-│   │       └── profileManagerPanel.ts
+│   │   ├── nucleus/
+│   │   │   └── NucleusSetupPanel.ts
+│   │   ├── profile/
+│   │   │   ├── profileManager.css
+│   │   │   ├── profileManager.html
+│   │   │   ├── profileManager.js
+│   │   │   └── profileManagerPanel.ts
+│   │   └── welcome/
+│   │       ├── userManager.ts
+│   │       ├── welcomeView.html
+│   │       └── welcomeView.ts
 │   └── utils/
+│       ├── github.ts
+│       ├── githubApi.ts
+│       ├── githubOAuth.ts
 │       ├── logger.ts
 │       ├── pythonExecutor.ts
 │       ├── tokenEstimator.ts
