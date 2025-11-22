@@ -2,7 +2,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { UserManager } from '../../managers/userManager';
-import { getUserOrgs, createNucleusRepo } from '../../utils/githubApi';
+import { getUserOrgs } from '../../utils/githubApi';
 import { getCurrentGitHubUser } from '../../utils/githubOAuth';
 
 export class WelcomeView {
@@ -68,15 +68,21 @@ export class WelcomeView {
     private async createNucleus(githubOrg?: string) {
         try {
             vscode.window.showInformationMessage('Creando tu Nucleus...');
-            const repoUrl = await createNucleusRepo(githubOrg || undefined);
-            const user = await getCurrentGitHubUser();
 
+            const user = await getCurrentGitHubUser();
+            const orgs = await getUserOrgs();
+
+            // GUARDAR TODAS LAS ORGS
             await UserManager.init(this.context).saveUser({
                 githubUsername: user.login,
-                githubOrg: githubOrg || user.login
+                githubOrg: githubOrg || user.login,
+                allOrgs: [user.login, ...orgs.map(o => o.login)]
             });
 
-            this.panel?.webview.postMessage({ command: 'nucleusCreated', repoUrl });
+            this.panel?.webview.postMessage({ 
+                command: 'nucleusCreated', 
+                message: '¡Listo! Ya podés usar Bloom.' 
+            });
 
             setTimeout(() => {
                 this.panel?.dispose();
@@ -86,7 +92,7 @@ export class WelcomeView {
         } catch (err: any) {
             this.panel?.webview.postMessage({
                 command: 'error',
-                text: err.message
+                text: err.message || 'Error creando Nucleus'
             });
         }
     }

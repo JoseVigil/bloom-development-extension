@@ -3,7 +3,8 @@ import * as vscode from 'vscode';
 
 export interface BloomUser {
     githubUsername: string;
-    githubOrg: string;
+    githubOrg: string;          
+    allOrgs: string[];         
     registeredAt: number;
 }
 
@@ -23,32 +24,33 @@ export class UserManager {
     }
 
     getUser(): BloomUser | null {
-        // ←←← ESTA ES LA LÍNEA CORREGIDA
-        const user = this.context.globalState.get<BloomUser>('bloom.user.v2');
+        const user = this.context.globalState.get<BloomUser>('bloom.user.v3');
         return user ?? null;
     }
 
-    async saveUser(user: {
+    async saveUser(data: {
         githubUsername: string;
         githubOrg?: string;
+        allOrgs?: string[];
     }): Promise<void> {
         const finalUser: BloomUser = {
-            githubUsername: user.githubUsername.trim().replace('@', ''),
-            githubOrg: (user.githubOrg?.trim() || user.githubUsername.trim().replace('@', '')),
+            githubUsername: data.githubUsername.trim().replace('@', ''),
+            githubOrg: (data.githubOrg?.trim() || data.githubUsername.trim().replace('@', '')),
+            allOrgs: data.allOrgs || [data.githubUsername.trim().replace('@', '')],
             registeredAt: Date.now()
         };
 
-        await this.context.globalState.update('bloom.user.v2', finalUser);
+        await this.context.globalState.update('bloom.user.v3', finalUser);
         await vscode.commands.executeCommand('setContext', 'bloom.isRegistered', true);
     }
 
     isRegistered(): boolean {
         const user = this.getUser();
-        return !!user?.githubUsername && !!user?.githubOrg;
+        return !!user?.githubUsername && !!user?.allOrgs?.length;
     }
 
     async clear(): Promise<void> {
-        await this.context.globalState.update('bloom.user.v2', undefined);
+        await this.context.globalState.update('bloom.user.v3', undefined);
         await vscode.commands.executeCommand('setContext', 'bloom.isRegistered', false);
     }
 }

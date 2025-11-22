@@ -29,11 +29,14 @@ import { Intent } from './models/intent';
 import { ProfileTreeProvider } from './providers/profileTreeProvider';
 import { registerCreateNucleusProject } from './commands/createNucleusProject';
 import { openIntentInBrowser, openProviderInBrowser } from './commands/openIntentInBrowser';
-
-import { NucleusTreeProvider, openNucleusProject } from './providers/nucleusTreeProvider';
+import { NucleusTreeProvider } from './providers/nucleusTreeProvider';
 import { NucleusWelcomeProvider } from './providers/nucleusWelcomeProvider';
 import { WelcomeView } from './ui/welcome/welcomeView';
 import { UserManager } from './managers/userManager';
+import { NucleusSetupPanel } from './ui/nucleus/NucleusSetupPanel';
+import { openNucleusProject } from './providers/nucleusTreeProvider';
+
+
 
 import {
     configureIntentProfile,
@@ -61,7 +64,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.window.registerTreeDataProvider('bloomIntents', intentTreeProvider);
 
     // Nucleus Real + Welcome
-    const nucleusTreeProvider = new NucleusTreeProvider(workspaceFolder.uri.fsPath);
+    const nucleusTreeProvider = new NucleusTreeProvider(workspaceFolder.uri.fsPath, context);
     const nucleusWelcomeProvider = new NucleusWelcomeProvider(context);
 
     vscode.window.registerTreeDataProvider('bloomNucleus', nucleusTreeProvider);
@@ -131,7 +134,8 @@ export function activate(context: vscode.ExtensionContext) {
             vscode.commands.executeCommand('workbench.view.extension.bloomNucleus')
         ),
         vscode.commands.registerCommand('bloom.syncNucleusProjects', () => nucleusTreeProvider.refresh()),
-        vscode.commands.registerCommand('bloom.openNucleusProject', (project: any) => project && openNucleusProject(project))
+        vscode.commands.registerCommand('bloom.openNucleusProject', (project: any) => project && openNucleusProject(project)),
+        vscode.commands.registerCommand('bloom.createNewNucleus', () => new NucleusSetupPanel(context).show())
     );
 
     // Registro premium
