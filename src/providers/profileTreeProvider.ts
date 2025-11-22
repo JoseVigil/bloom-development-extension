@@ -1,9 +1,11 @@
+// src/providers/profileTreeProvider.ts
 import * as vscode from 'vscode';
 import { Logger } from '../utils/logger';
 import { ChromeProfileManager, ChromeProfile } from '../core/chromeProfileManager';
 
-export class ProfileTreeProvider implements vscode.TreeDataProvider<ProfileTreeItem> {    
-    // ✅ FIX 1: Especificar el tipo correcto sin 'void'
+export class ProfileTreeProvider implements vscode.TreeDataProvider<ProfileTreeItem> {
+    private static instance: ProfileTreeProvider | undefined;
+
     private _onDidChangeTreeData = new vscode.EventEmitter<ProfileTreeItem | undefined | null>();
     readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
@@ -15,8 +17,21 @@ export class ProfileTreeProvider implements vscode.TreeDataProvider<ProfileTreeI
         private chromeManager: ChromeProfileManager
     ) {}
 
+    public static getInstance(): ProfileTreeProvider {
+        if (!ProfileTreeProvider.instance) {
+            throw new Error('ProfileTreeProvider no fue inicializado. Llamá a initialize() primero.');
+        }
+        return ProfileTreeProvider.instance;
+    }
+
+    public static initialize(context: vscode.ExtensionContext, logger: Logger, chromeManager: ChromeProfileManager) {
+        ProfileTreeProvider.instance = new ProfileTreeProvider(context, logger, chromeManager);
+        // Registrar el tree provider
+        const provider = ProfileTreeProvider.instance;
+        vscode.window.registerTreeDataProvider('bloomProfiles', provider);
+    }
+
     refresh(): void {
-        // ✅ FIX 2: Pasar undefined explícitamente en lugar de void
         this._onDidChangeTreeData.fire(undefined);
     }
 
@@ -36,12 +51,11 @@ export class ProfileTreeProvider implements vscode.TreeDataProvider<ProfileTreeI
 
     async getChildren(element?: ProfileTreeItem): Promise<ProfileTreeItem[]> {
         if (!element) {
-            // Root level: show profiles
             if (this.profiles.length === 0) {
                 await this.loadProfiles();
             }
 
-            return this.profiles.map(profile => 
+            return this.profiles.map(profile =>
                 new ProfileTreeItem(
                     profile.displayName || profile.name,
                     profile,
@@ -49,13 +63,12 @@ export class ProfileTreeProvider implements vscode.TreeDataProvider<ProfileTreeI
                 )
             );
         } else if (element.profile) {
-            // Child level: show accounts
             return element.profile.accounts.map(account =>
                 new ProfileTreeItem(
                     `${account.provider}: ${account.email || 'Unknown'}`,
                     undefined,
                     vscode.TreeItemCollapsibleState.None,
-                    account.verified ? '✓' : '?'
+                    account.verified ? 'check' : 'question'
                 )
             );
         }
@@ -76,12 +89,10 @@ class ProfileTreeItem extends vscode.TreeItem {
         if (profile) {
             this.tooltip = `${profile.name}\nPath: ${profile.path}`;
             this.contextValue = 'profile';
-            // Fix: Usa constructor correcto de ThemeIcon sin cast
             this.iconPath = new vscode.ThemeIcon('account');
         } else {
             this.contextValue = 'account';
-            // Fix: Usa constructor correcto para status
-            this.iconPath = new vscode.ThemeIcon(status === '✓' ? 'check' : 'question');
+            this.iconPath = new vscode.ThemeIcon(status === 'check' ? 'check' : 'question');
         }
     }
 }

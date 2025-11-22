@@ -133,13 +133,11 @@ export async function configureIntentProfile(
         intent.profileConfig = config;
 
         // Guardar en ChromeProfileManager (mapping centralizado)
-        await chromeManager.saveIntentMapping(
-            intent.metadata.id,
-            config.profileName,
-            {
-                [config.provider]: config.account
-            }
-        );
+        await chromeManager.saveIntentMapping({
+            intentId: intent.metadata.id,
+            profileName: config.profileName,
+            aiAccounts: config.account ? { [config.provider]: config.account } : undefined
+        });
 
         // Guardar intent
         await vscode.commands.executeCommand('bloom.saveIntent', intent);

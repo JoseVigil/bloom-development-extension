@@ -109,14 +109,14 @@ export class NucleusTreeProvider implements vscode.TreeDataProvider<NucleusTreeI
             if (!this.config || !this.nucleusPath) {
                 return [
                     new NucleusTreeItem(
-                        '🏢 No Nucleus Detected',
+                        'Crear un nuevo Nucleus Project',
                         vscode.TreeItemCollapsibleState.None,
-                        'no-nucleus',
+                        'create-nucleus',  // ← nuevo tipo para darle icono bonito
                         undefined,
-                        'Click the + button above to create a Nucleus project',
+                        'Haz clic aquí para convertir este workspace en un Nucleus',
                         {
                             command: 'bloom.createNucleusProject',
-                            title: 'Create Nucleus Project',
+                            title: 'Crear Nucleus Project',
                             arguments: []
                         }
                     )
@@ -340,6 +340,11 @@ export class NucleusTreeItem extends vscode.TreeItem {
         
         // Set icons based on type
         switch (type) {
+            case 'create-nucleus':
+                this.iconPath = new vscode.ThemeIcon('add', new vscode.ThemeColor('charts.green'));
+                this.description = 'Click para crear';
+                this.contextValue = 'create-nucleus';
+                break;
             case 'nucleus':
                 this.iconPath = new vscode.ThemeIcon('organization');
                 break;

@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: var(--vscode-font-family); background: var(--vscode-editor-background); color: var(--vscode-foreground); padding: 40px; text-align: center; }
+        .logo { width: 120px; height: 120px; margin: 0 auto 30px; background: #ff6b6b; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 60px; }
+        h1 { font-size: 28px; margin: 20px 0 10px; }
+        p { font-size: 15px; opacity: 0.9; line-height: 1.6; max-width: 500px; margin: 0 auto 30px; }
+        input, button { padding: 12px 20px; margin: 8px; border-radius: 8px; font-size: 14px; }
+        input { background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border); color: var(--vscode-input-foreground); width: 300px; }
+        button { background: #ff6b6b; color: white; border: none; cursor: pointer; width: 340px; font-weight: 600; }
+        button:hover { background: #ff8787; }
+        .terms { font-size: 12px; opacity: 0.7; margin-top: 20px; }
+        a { color: #ff6b6b; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class="logo">Fire</div>
+    <h1>Bloom Nucleus</h1>
+    <p>El centro de conocimiento organizacional que conecta todos tus proyectos técnicos con inteligencia artificial.</p>
+    
+    <input type="text" id="name" placeholder="Tu nombre completo" /><br/>
+    <input type="email" id="email" placeholder="tu@email.com" /><br/>
+    
+    <button id="register">Crear mi cuenta gratuita</button>
+    
+    <div class="terms">
+        Al continuar aceptás nuestros <a href="#" onclick="openTerms()">Términos de Servicio</a> y 
+        <a href="#" onclick="openPrivacy()">Política de Privacidad</a>
+    </div>
+
+    <script>
+        const vscode = acquireVsCodeApi();
+        
+        document.getElementById('register').onclick = () => {
+            const name = document.getElementById('name').value.trim();
+            const email = document.getElementById('email').value.trim();
+            
+            if (!name || !email || !email.includes('@')) {
+                vscode.postMessage({ command: 'error', text: 'Completa todos los campos correctamente' });
+                return;
+            }
+            
+            vscode.postMessage({ command: 'register', name, email });
+        };
+
+        function openTerms() { vscode.postMessage({ command: 'open', url: 'https://bloom.ai/terms' }); }
+        function openPrivacy() { vscode.postMessage({ command: 'open', url: 'https://bloom.ai/privacy' }); }
+    </script>
+</body>
+</html>

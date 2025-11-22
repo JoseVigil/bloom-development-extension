@@ -221,41 +221,36 @@ export class ChromeProfileManager {
     /**
      * Guarda mapping de intent → profile config
      */
-    async saveIntentMapping(
-        intentId: string,
-        profileName: string,
-        aiAccounts: { claude?: string; chatgpt?: string; grok?: string }
-    ): Promise<void> {
+    public async saveIntentMapping(data: {
+        intentId: string;
+        profileName: string;
+        aiAccounts?: { claude?: string; chatgpt?: string; grok?: string };
+    }) {
         try {
-            // Determinar provider principal (el que tenga cuenta)
-            let provider: 'claude' | 'chatgpt' | 'grok' = 'claude';
-            let account: string | undefined;
-
-            if (aiAccounts.claude) {
-                provider = 'claude';
-                account = aiAccounts.claude;
-            } else if (aiAccounts.chatgpt) {
-                provider = 'chatgpt';
-                account = aiAccounts.chatgpt;
-            } else if (aiAccounts.grok) {
-                provider = 'grok';
-                account = aiAccounts.grok;
+            const mappingsPath = path.join(this.context.globalStorageUri.fsPath, 'profile-mappings.json');
+            
+            let mappings: any[] = [];
+            if (fs.existsSync(mappingsPath)) {
+                const content = await readFile(mappingsPath, 'utf-8');
+                mappings = JSON.parse(content);
             }
 
-            const config: IntentProfileConfig = {
-                profileName,
-                provider,
-                account
-            };
+            // Eliminar si ya existe
+            mappings = mappings.filter(m => m.intentId !== data.intentId);
 
-            this.mappings.set(intentId, config);
-            await this.saveMappings();
+            // Agregar nueva
+            mappings.push({
+                intentId: data.intentId,
+                profileName: data.profileName,
+                aiAccounts: data.aiAccounts || {},
+                updatedAt: new Date().toISOString()
+            });
 
-            this.logger.info(`Saved profile mapping for intent: ${intentId}`);
-
-        } catch (error: any) {
-            this.logger.error('Error saving intent mapping', error);
-            throw new Error(`Failed to save mapping: ${error.message}`);
+            await writeFile(mappingsPath, JSON.stringify(mappings, null, 2));
+            this.logger.info(`Mapping guardado para intent ${data.intentId}`);
+        } catch (err: any) {
+            this.logger.error('Error guardando mapping', err);
+            throw err;
         }
     }
 
@@ -507,5 +502,34 @@ export class ChromeProfileManager {
             provider: 'claude',
             account: undefined
         };
+    }
+
+    public async getAllIntents(): Promise<any[]> {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) return [];
+
+        const intentsPath = path.join(workspaceFolder.uri.fsPath, '.bloom', 'intents');
+        if (!fs.existsSync(intentsPath)) return [];
+
+        const files = fs.readdirSync(intentsPath).filter(f => f.endsWith('.json'));
+        const intents = [];
+
+        for (const file of files) {
+            try {
+                const data = JSON.parse(fs.readFileSync(path.join(intentsPath, file), 'utf-8'));
+                if (data.metadata?.name) {
+                    intents.push({
+                        id: data.metadata.id,
+                        name: data.metadata.name
+                    });
+                }
+            } catch {}
+        }
+        return intents;
+    }
+
+    public async getAllMappings(): Promise<any[]> {
+        // Implementación básica - podés mejorarla después
+        return [];
     }
 }
