@@ -200,6 +200,16 @@
       {
         "command": "bloom.resetRegistration",
         "title": "Bloom: Reset Registration (Debug)"
+      },
+      {
+        "command": "bloom.addProjectToNucleus",
+        "title": "Bloom: Agregar Proyecto",
+        "icon": "$(add)"
+      },
+      {
+        "command": "bloom.reviewPendingCommits",
+        "title": "Bloom: Revisar Commits Pendientes",
+        "icon": "$(git-commit)"
       }
     ],
     "menus": {

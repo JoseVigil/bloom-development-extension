@@ -35,6 +35,8 @@ import { UserManager } from './managers/userManager';
 import { NucleusSetupPanel } from './ui/nucleus/NucleusSetupPanel';
 import { openNucleusProject } from './providers/nucleusTreeProvider';
 import { linkToNucleus } from './commands/linkToNucleus';
+import { manageProject } from './commands/manageProject';
+import { GitManager } from './utils/gitManager';
 
 import {
     configureIntentProfile,
@@ -47,6 +49,9 @@ export function activate(context: vscode.ExtensionContext) {
     logger.info('Bloom BTIP + Nucleus Premium activado');
 
     UserManager.init(context);
+
+    // Inicializar GitManager
+    GitManager.initialize(context);
 
     const metadataManager = new MetadataManager(logger);
     const contextGatherer = new ContextGatherer(logger);
@@ -76,6 +81,37 @@ export function activate(context: vscode.ExtensionContext) {
     // Chrome Profile Manager
     const chromeProfileManager = new ChromeProfileManager(context, logger);
     ProfileTreeProvider.initialize(context, logger, chromeProfileManager);
+
+    // ========================================
+    // COMANDO: Add Project to Nucleus
+    // ========================================
+    context.subscriptions.push(
+        vscode.commands.registerCommand('bloom.addProjectToNucleus', async (treeItem: any) => {
+            if (!treeItem || !treeItem.data) {
+                vscode.window.showErrorMessage('Error: No se pudo obtener información del Nucleus');
+                return;
+            }
+
+            const orgName = treeItem.data.orgName;
+            const nucleusPath = treeItem.data.nucleusPath;
+
+            if (!nucleusPath) {
+                vscode.window.showErrorMessage(`No se encontró el Nucleus para ${orgName}`);
+                return;
+            }
+
+            await manageProject(nucleusPath, orgName);
+        })
+    );
+
+    // ========================================
+    // COMANDO: Review Pending Commits
+    // ========================================
+    context.subscriptions.push(
+        vscode.commands.registerCommand('bloom.reviewPendingCommits', async () => {
+            await GitManager.reviewAndCommit();
+        })
+    );
 
     // ========================================
     // COMANDOS BÁSICOS

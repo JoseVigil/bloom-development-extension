@@ -93,11 +93,14 @@ export class NucleusTreeProvider implements vscode.TreeDataProvider<NucleusTreeI
 
             // Mostrar organizaciones con Nucleus
             for (const [org, config] of this.configs.entries()) {
+                // Encontrar el path del Nucleus
+                const nucleusPath = this.findNucleusPath(org);
+                
                 items.push(new NucleusTreeItem(
                     `${org} (${config.projects.length} proyectos)`,
                     vscode.TreeItemCollapsibleState.Expanded,
                     'org',
-                    org
+                    { orgName: org, nucleusPath: nucleusPath }
                 ));
             }
 
@@ -114,7 +117,8 @@ export class NucleusTreeProvider implements vscode.TreeDataProvider<NucleusTreeI
         }
 
         if (element.type === 'org') {
-            const config = this.configs.get(element.data as string);
+            const org = element.data.orgName;
+            const config = this.configs.get(org);
             if (!config?.projects) return [];
             
             return config.projects.map(p =>
@@ -135,6 +139,25 @@ export class NucleusTreeProvider implements vscode.TreeDataProvider<NucleusTreeI
         return [];
     }
 
+    private findNucleusPath(org: string): string | undefined {
+        if (!this.workspaceRoot) return undefined;
+
+        // Intentar workspace actual
+        const localBloom = path.join(this.workspaceRoot, '.bloom', 'core', 'nucleus-config.json');
+        if (fs.existsSync(localBloom)) {
+            return this.workspaceRoot;
+        }
+
+        // Intentar parent directory
+        const parentDir = path.dirname(this.workspaceRoot);
+        const nucleusPath = path.join(parentDir, `nucleus-${org}`);
+        if (fs.existsSync(nucleusPath)) {
+            return nucleusPath;
+        }
+
+        return undefined;
+    }
+
     private getProjectIcon(strategy: string): string {
         const icons: Record<string, string> = {
             'android': '📱',
@@ -147,6 +170,11 @@ export class NucleusTreeProvider implements vscode.TreeDataProvider<NucleusTreeI
             'generic': '📦'
         };
         return icons[strategy] || '📦';
+    }
+
+    // NUEVO: Método público para obtener nucleusPath
+    public getNucleusPath(org: string): string | undefined {
+        return this.findNucleusPath(org);
     }
 }
 
