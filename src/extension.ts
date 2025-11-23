@@ -27,7 +27,6 @@ import { ProfileManagerPanel } from './ui/profile/profileManagerPanel';
 import { ChromeProfileManager } from './core/chromeProfileManager';
 import { Intent } from './models/intent';
 import { ProfileTreeProvider } from './providers/profileTreeProvider';
-import { registerCreateNucleusProject } from './commands/createNucleusProject';
 import { openIntentInBrowser, openProviderInBrowser } from './commands/openIntentInBrowser';
 import { NucleusTreeProvider } from './providers/nucleusTreeProvider';
 import { NucleusWelcomeProvider } from './providers/nucleusWelcomeProvider';
@@ -35,8 +34,7 @@ import { WelcomeView } from './ui/welcome/welcomeView';
 import { UserManager } from './managers/userManager';
 import { NucleusSetupPanel } from './ui/nucleus/NucleusSetupPanel';
 import { openNucleusProject } from './providers/nucleusTreeProvider';
-
-
+import { linkToNucleus } from './commands/linkToNucleus';
 
 import {
     configureIntentProfile,
@@ -79,7 +77,9 @@ export function activate(context: vscode.ExtensionContext) {
     const chromeProfileManager = new ChromeProfileManager(context, logger);
     ProfileTreeProvider.initialize(context, logger, chromeProfileManager);
 
-    // === CORREGIDO: todos los registerCommand con los parámetros correctos ===
+    // ========================================
+    // COMANDOS BÁSICOS
+    // ========================================
     registerOpenMarkdownPreview(context, logger);
     registerGenerateIntent(context, logger);
     registerOpenIntent(context, logger, metadataManager);
@@ -95,9 +95,71 @@ export function activate(context: vscode.ExtensionContext) {
     registerIntegrateSnapshot(context, logger);
     registerReloadIntentForm(context, logger);
     registerRegenerateContext(context, logger);
-    registerCreateNucleusProject(context, logger);
 
-    // Profile & Browser commands
+    // ========================================
+    // COMANDO: Reset Registration (DEBUG)
+    // ========================================
+    context.subscriptions.push(
+        vscode.commands.registerCommand('bloom.resetRegistration', async () => {
+            const confirm = await vscode.window.showWarningMessage(
+                '⚠️ ¿Estás seguro de que querés resetear el registro?\n\nEsto borrará:\n- Datos de GitHub guardados\n- Configuración de organizaciones\n- Estado de registro',
+                { modal: true },
+                'Sí, Resetear',
+                'Cancelar'
+            );
+
+            if (confirm === 'Sí, Resetear') {
+                try {
+                    await UserManager.init(context).clear();
+                    
+                    vscode.window.showInformationMessage(
+                        '✅ Registro reseteado exitosamente. La ventana se recargará...'
+                    );
+                    
+                    // Recargar ventana después de 1 segundo
+                    setTimeout(async () => {
+                        await vscode.commands.executeCommand('workbench.action.reloadWindow');
+                    }, 1000);
+                    
+                } catch (error: any) {
+                    vscode.window.showErrorMessage(`Error reseteando registro: ${error.message}`);
+                    logger.error('Error en resetRegistration', error);
+                }
+            }
+        })
+    );
+
+    // ========================================
+    // COMANDO: Show Welcome
+    // ========================================
+    context.subscriptions.push(
+        vscode.commands.registerCommand('bloom.showWelcome', () => {
+            welcomeWebview.show();
+        })
+    );
+
+    // ========================================
+    // COMANDO: Create Nucleus Project (ahora abre Welcome)
+    // ========================================
+    context.subscriptions.push(
+        vscode.commands.registerCommand('bloom.createNucleusProject', async () => {
+            // Siempre abrir Welcome, que maneja el flujo completo
+            welcomeWebview.show();
+        })
+    );
+
+    // ========================================
+    // COMANDO: Link to Nucleus
+    // ========================================
+    context.subscriptions.push(
+        vscode.commands.registerCommand('bloom.linkToNucleus', async (uri?: vscode.Uri) => {
+            await linkToNucleus(uri);
+        })
+    );
+
+    // ========================================
+    // COMANDOS: Profile & Browser
+    // ========================================
     context.subscriptions.push(
         vscode.commands.registerCommand('bloom.manageProfiles', () =>
             ProfileManagerPanel.createOrShow(context.extensionUri, logger, context)
@@ -128,22 +190,46 @@ export function activate(context: vscode.ExtensionContext) {
         }),
         vscode.commands.registerCommand('bloom.openClaudeInBrowser', () => openProviderInBrowser('claude', context, logger)),
         vscode.commands.registerCommand('bloom.openChatGPTInBrowser', () => openProviderInBrowser('chatgpt', context, logger)),
-        vscode.commands.registerCommand('bloom.openGrokInBrowser', () => openProviderInBrowser('grok', context, logger)),
-        vscode.commands.registerCommand('bloom.showWelcome', () => welcomeWebview.show()),
-        vscode.commands.registerCommand('bloom.focusRealNucleusView', () =>
-            vscode.commands.executeCommand('workbench.view.extension.bloomNucleus')
-        ),
-        vscode.commands.registerCommand('bloom.syncNucleusProjects', () => nucleusTreeProvider.refresh()),
-        vscode.commands.registerCommand('bloom.openNucleusProject', (project: any) => project && openNucleusProject(project)),
-        vscode.commands.registerCommand('bloom.createNewNucleus', () => new NucleusSetupPanel(context).show())
+        vscode.commands.registerCommand('bloom.openGrokInBrowser', () => openProviderInBrowser('grok', context, logger))
     );
 
-    // Registro premium
-    if (!UserManager.init(context).isRegistered()) {
-        setTimeout(() => welcomeWebview.show(), 1000);
+    // ========================================
+    // COMANDOS: Nucleus Management
+    // ========================================
+    context.subscriptions.push(
+        vscode.commands.registerCommand('bloom.focusRealNucleusView', () =>
+            vscode.commands.executeCommand('workbench.view.extension.bloomAiBridge')
+        ),
+        vscode.commands.registerCommand('bloom.syncNucleusProjects', () => {
+            nucleusTreeProvider.refresh();
+            vscode.window.showInformationMessage('🔄 Nucleus tree actualizado');
+        }),
+        vscode.commands.registerCommand('bloom.openNucleusProject', (project: any) => {
+            if (project) {
+                openNucleusProject(project);
+            }
+        }),
+        vscode.commands.registerCommand('bloom.createNewNucleus', () => {
+            new NucleusSetupPanel(context).show();
+        })
+    );
+
+    // ========================================
+    // VERIFICACIÓN: Mostrar Welcome en primera instalación
+    // ========================================
+    const isRegistered = UserManager.init(context).isRegistered();
+    
+    logger.info(`Estado de registro: ${isRegistered ? 'REGISTRADO' : 'NO REGISTRADO'}`);
+    
+    if (!isRegistered) {
+        logger.info('Primera instalación detectada - Mostrando Welcome');
+        setTimeout(() => {
+            welcomeWebview.show();
+        }, 1000);
     }
 
-    vscode.commands.executeCommand('setContext', 'bloom.isRegistered', UserManager.init(context).isRegistered());
+    // Actualizar contexto de VSCode
+    vscode.commands.executeCommand('setContext', 'bloom.isRegistered', isRegistered);
 }
 
 async function getAvailableIntents(workspaceFolder: vscode.WorkspaceFolder): Promise<Intent[]> {

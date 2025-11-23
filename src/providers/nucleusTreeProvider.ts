@@ -22,7 +22,7 @@ export class NucleusTreeProvider implements vscode.TreeDataProvider<NucleusTreeI
 
     refresh(): void {
         this.detectAllNucleus();
-        this._onDidChangeTreeData.fire(undefined);  // ← CORREGIDO
+        this._onDidChangeTreeData.fire(undefined);
     }
 
     private detectAllNucleus(): void {
@@ -43,6 +43,7 @@ export class NucleusTreeProvider implements vscode.TreeDataProvider<NucleusTreeI
     private detectNucleusForOrg(org: string): NucleusConfig | null {
         if (!this.workspaceRoot) return null;
 
+        // Caso 1: Workspace actual ES un Nucleus
         const bloomPath = path.join(this.workspaceRoot, '.bloom');
         const configPath = path.join(bloomPath, 'core', 'nucleus-config.json');
 
@@ -53,17 +54,30 @@ export class NucleusTreeProvider implements vscode.TreeDataProvider<NucleusTreeI
             }
         }
 
+        // Caso 2: Workspace tiene link a Nucleus
         const linkPath = path.join(bloomPath, 'nucleus.json');
         if (fs.existsSync(linkPath)) {
             try {
                 const link = JSON.parse(fs.readFileSync(linkPath, 'utf-8'));
-                if (link.organization === org && link.nucleusPath) {
+                if (link.organizationName === org && link.nucleusPath) {
                     const fullPath = path.resolve(this.workspaceRoot, link.nucleusPath);
                     if (fs.existsSync(fullPath)) {
                         return loadNucleusConfig(path.join(fullPath, '.bloom'));
                     }
                 }
             } catch {}
+        }
+
+        // Caso 3: Buscar en parent directory
+        const parentDir = path.dirname(this.workspaceRoot);
+        const nucleusName = `nucleus-${org}`;
+        const nucleusPath = path.join(parentDir, nucleusName);
+        
+        if (fs.existsSync(nucleusPath)) {
+            const nucleusBloomPath = path.join(nucleusPath, '.bloom');
+            if (fs.existsSync(nucleusBloomPath)) {
+                return loadNucleusConfig(nucleusBloomPath);
+            }
         }
 
         return null;
@@ -77,26 +91,22 @@ export class NucleusTreeProvider implements vscode.TreeDataProvider<NucleusTreeI
         if (!element) {
             const items: NucleusTreeItem[] = [];
 
-            for (const org of this.configs.keys()) {
+            // Mostrar organizaciones con Nucleus
+            for (const [org, config] of this.configs.entries()) {
                 items.push(new NucleusTreeItem(
-                    `${org}`,
+                    `${org} (${config.projects.length} proyectos)`,
                     vscode.TreeItemCollapsibleState.Expanded,
                     'org',
                     org
                 ));
             }
 
-            items.push(new NucleusTreeItem(
-                'Agregar otro Nucleus',
-                vscode.TreeItemCollapsibleState.None,
-                'add'
-            ));
-
-            if (items.length === 1) {
-                items.unshift(new NucleusTreeItem(
-                    'No hay Nucleus configurado',
+            // Solo mostrar si no hay Nucleus detectados
+            if (items.length === 0) {
+                items.push(new NucleusTreeItem(
+                    'No hay Nucleus en este workspace',
                     vscode.TreeItemCollapsibleState.None,
-                    'empty'
+                    'info'
                 ));
             }
 
@@ -106,9 +116,10 @@ export class NucleusTreeProvider implements vscode.TreeDataProvider<NucleusTreeI
         if (element.type === 'org') {
             const config = this.configs.get(element.data as string);
             if (!config?.projects) return [];
+            
             return config.projects.map(p =>
                 new NucleusTreeItem(
-                    `${p.displayName || p.name}`,
+                    `${this.getProjectIcon(p.strategy)} ${p.displayName || p.name}`,
                     vscode.TreeItemCollapsibleState.None,
                     'project',
                     p,
@@ -121,12 +132,21 @@ export class NucleusTreeProvider implements vscode.TreeDataProvider<NucleusTreeI
             );
         }
 
-        if (element.type === 'add') {
-            vscode.commands.executeCommand('bloom.createNewNucleus');
-            return [];
-        }
-
         return [];
+    }
+
+    private getProjectIcon(strategy: string): string {
+        const icons: Record<string, string> = {
+            'android': '📱',
+            'ios': '🍎',
+            'react-web': '🌐',
+            'web': '🌐',
+            'node': '⚙️',
+            'python-flask': '🐍',
+            'php-laravel': '🐘',
+            'generic': '📦'
+        };
+        return icons[strategy] || '📦';
     }
 }
 
@@ -134,7 +154,7 @@ class NucleusTreeItem extends vscode.TreeItem {
     constructor(
         label: string,
         collapsibleState: vscode.TreeItemCollapsibleState,
-        public readonly type: 'org' | 'project' | 'add' | 'empty',
+        public readonly type: 'org' | 'project' | 'info',
         public readonly data?: any,
         command?: vscode.Command
     ) {
@@ -144,21 +164,20 @@ class NucleusTreeItem extends vscode.TreeItem {
         switch (type) {
             case 'org':
                 this.iconPath = new vscode.ThemeIcon('organization');
+                this.contextValue = 'nucleusOrg';
                 break;
             case 'project':
                 this.iconPath = new vscode.ThemeIcon('folder');
+                this.contextValue = 'nucleusProject';
+                this.tooltip = `${data.name} - ${data.strategy}`;
                 break;
-            case 'add':
-                this.iconPath = new vscode.ThemeIcon('add');
-                break;
-            case 'empty':
+            case 'info':
                 this.iconPath = new vscode.ThemeIcon('info');
                 break;
         }
     }
 }
 
-// ←←← LA FUNCIÓN QUE FALTABA EXPORTAR
 export async function openNucleusProject(project: LinkedProject): Promise<void> {
     try {
         const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -167,11 +186,15 @@ export async function openNucleusProject(project: LinkedProject): Promise<void> 
             return;
         }
 
+        // Intentar encontrar el proyecto
         let projectPath: string | null = null;
+        
+        // 1. Relativo al workspace actual
         const relativePath = path.join(workspaceRoot, project.localPath);
         if (fs.existsSync(relativePath)) {
             projectPath = relativePath;
         } else {
+            // 2. Relativo al parent directory
             const parentDir = path.dirname(workspaceRoot);
             const parentRelativePath = path.join(parentDir, project.localPath);
             if (fs.existsSync(parentRelativePath)) {
@@ -181,17 +204,18 @@ export async function openNucleusProject(project: LinkedProject): Promise<void> 
 
         if (!projectPath) {
             const browse = await vscode.window.showWarningMessage(
-                `Project path not found: ${project.localPath}`,
-                'Browse for Project', 'Cancel'
+                `No se encontró el proyecto en: ${project.localPath}`,
+                'Buscar Manualmente',
+                'Cancelar'
             );
 
-            if (browse === 'Browse for Project') {
+            if (browse === 'Buscar Manualmente') {
                 const selected = await vscode.window.showOpenDialog({
                     canSelectFiles: false,
                     canSelectFolders: true,
                     canSelectMany: false,
-                    openLabel: `Select ${project.name} folder`,
-                    title: `Locate ${project.displayName}`
+                    openLabel: `Seleccionar carpeta de ${project.name}`,
+                    title: `Localizar ${project.displayName}`
                 });
 
                 if (selected && selected.length > 0) {
@@ -202,12 +226,13 @@ export async function openNucleusProject(project: LinkedProject): Promise<void> 
             if (!projectPath) return;
         }
 
+        // Abrir en nueva ventana
         await vscode.commands.executeCommand(
             'vscode.openFolder',
             vscode.Uri.file(projectPath),
-            true
+            true // Nueva ventana
         );
     } catch (error: any) {
-        vscode.window.showErrorMessage(`Error opening project: ${error.message}`);
+        vscode.window.showErrorMessage(`Error abriendo proyecto: ${error.message}`);
     }
 }

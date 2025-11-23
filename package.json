@@ -57,23 +57,17 @@
           "id": "bloomIntents",
           "name": "Intents"
         }
-      ],
-      "explorer": [
-        {
-          "id": "bloomIntentsExplorer",
-          "name": "Bloom Intents"
-        }
       ]
     },
     "viewsWelcome": [
       {
         "view": "bloomNucleus",
-        "contents": "No hay ningún Nucleus detectado en este workspace.\n[Crear Nucleus Project](command:bloom.createNucleusProject)",
+        "contents": "No hay ningún Nucleus detectado en este workspace.\n[Crear Nucleus](command:bloom.showWelcome)",
         "when": "bloom.isRegistered && workspaceFolderCount > 0"
       },
       {
         "view": "bloomNucleusWelcome",
-        "contents": "Bienvenido a Bloom Nucleus\n\nPara comenzar, completá tu registro gratuito.",
+        "contents": "Bienvenido a Bloom Nucleus\n\nPara comenzar, completá tu registro gratuito.\n[Conectar con GitHub](command:bloom.showWelcome)",
         "when": "!bloom.isRegistered"
       }
     ],
@@ -125,7 +119,7 @@
       },
       {
         "command": "bloom.createNucleusProject",
-        "title": "Crear Nucleus Project",
+        "title": "Bloom: Crear Nucleus",
         "icon": "$(add)"
       },
       {
@@ -144,7 +138,7 @@
       },
       {
         "command": "bloom.syncNucleusProjects",
-        "title": "Sync Nucleus Projects",
+        "title": "Bloom: Sync Nucleus Projects",
         "icon": "$(sync)"
       },
       {
@@ -201,7 +195,11 @@
       },
       {
         "command": "bloom.showWelcome",
-        "title": "Mostrar Bienvenida Bloom"
+        "title": "Bloom: Mostrar Bienvenida"
+      },
+      {
+        "command": "bloom.resetRegistration",
+        "title": "Bloom: Reset Registration (Debug)"
       }
     ],
     "menus": {
@@ -244,11 +242,6 @@
           "group": "bloom@3"
         },
         {
-          "command": "bloom.createNucleusProject",
-          "when": "explorerResourceIsFolder",
-          "group": "bloom@4"
-        },
-        {
           "command": "bloom.linkToNucleus",
           "when": "explorerResourceIsFolder",
           "group": "bloom@5"
@@ -261,11 +254,19 @@
         },
         {
           "command": "bloom.createNucleusProject",
-          "when": "workspaceFolderCount > 0"
+          "when": "bloom.isRegistered"
         },
         {
           "command": "bloom.linkToNucleus",
           "when": "workspaceFolderCount > 0"
+        },
+        {
+          "command": "bloom.showWelcome",
+          "when": "true"
+        },
+        {
+          "command": "bloom.resetRegistration",
+          "when": "true"
         }
       ],
       "view/item/context": [
