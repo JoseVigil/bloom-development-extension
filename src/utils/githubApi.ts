@@ -84,20 +84,38 @@ export async function createNucleusRepo(orgLogin?: string): Promise<string> {
 // ============================================================================
 
 /**
- * Obtiene los repositorios de una organización
+ * Obtiene los repositorios de una organización O usuario personal
+ * Detecta automáticamente si es org o user
  */
-export async function getOrgRepos(org: string): Promise<GitHubRepo[]> {
+export async function getOrgRepos(orgOrUser: string): Promise<GitHubRepo[]> {
     const headers = await getGitHubHeaders();
     
-    // Obtener repositorios con paginación (máximo 100 por página)
-    const resp = await fetch(
-        `https://api.github.com/orgs/${org}/repos?per_page=100&sort=updated`,
+    // Primero intentar como organización
+    let resp = await fetch(
+        `https://api.github.com/orgs/${orgOrUser}/repos?per_page=100&sort=updated`,
         { headers }
     );
     
+    // Si falla (404), intentar como usuario personal
+    if (!resp.ok && resp.status === 404) {
+        // Verificar si es el usuario actual
+        const userResp = await fetch('https://api.github.com/user', { headers });
+        if (userResp.ok) {
+            const currentUser = await userResp.json() as any;
+            
+            // Si el nombre coincide con el usuario actual, obtener sus repos
+            if (currentUser.login.toLowerCase() === orgOrUser.toLowerCase()) {
+                resp = await fetch(
+                    'https://api.github.com/user/repos?per_page=100&sort=updated&affiliation=owner',
+                    { headers }
+                );
+            }
+        }
+    }
+    
     if (!resp.ok) {
         const err = await resp.text();
-        throw new Error(`Error obteniendo repositorios de ${org}: ${err}`);
+        throw new Error(`Error obteniendo repositorios de ${orgOrUser}: ${err}`);
     }
     
     return (await resp.json()) as GitHubRepo[];

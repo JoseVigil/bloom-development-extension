@@ -1,8 +1,10 @@
 // src/utils/gitManager.ts
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as fs from 'fs';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { Logger } from '../utils/logger';
 
 const execAsync = promisify(exec);
 
@@ -22,6 +24,7 @@ export interface PendingCommit {
 export class GitManager {
     private static pendingCommits: PendingCommit[] = [];
     private static statusBarItem: vscode.StatusBarItem;
+    private static logger: Logger;
 
     static initialize(context: vscode.ExtensionContext) {
         this.statusBarItem = vscode.window.createStatusBarItem(
@@ -521,4 +524,179 @@ export class GitManager {
         this.pendingCommits = [];
         this.updateStatusBar();
     }
+
+    /**
+     * MÉTODO UNIVERSAL: Prepara archivos y abre SCM panel para commit confirmable
+     * 
+     * @param repoPath - Path absoluto al repositorio
+     * @param files - Array de paths relativos a stagear (undefined = todo)
+     * @param commitMessage - Mensaje sugerido (pre-llena el input del SCM)
+     * 
+     * CASOS DE USO:
+     * - Proyectos nuevos: stageAndOpenSCM(projectPath, undefined, "Initial commit")
+     * - Intents: stageAndOpenSCM(workspacePath, ['.bloom/intents/...'], "Generated intent")
+     * - Nucleus: stageAndOpenSCM(nucleusPath, undefined, "Initial Nucleus")
+     */
+    static async stageAndOpenSCM(
+        repoPath: string,
+        files?: string[],
+        commitMessage?: string
+    ): Promise<void> {
+        try {
+            const repoName = path.basename(repoPath);
+            
+            console.log(`[GitManager] stageAndOpenSCM called:`, {
+                repoPath,
+                filesCount: files?.length || 'all',
+                hasMessage: !!commitMessage
+            });
+
+            // 1. Verificar que es un repo git válido
+            const gitDir = path.join(repoPath, '.git');
+            if (!fs.existsSync(gitDir)) {
+                throw new Error(`Not a git repository: ${repoPath}`);
+            }
+
+            // 2. Stage archivos
+            if (files && files.length > 0) {
+                // Stage archivos específicos
+                console.log(`[GitManager] Staging ${files.length} specific files`);
+                for (const file of files) {
+                    try {
+                        await execAsync(`git add "${file}"`, { cwd: repoPath });
+                    } catch (error: any) {
+                        console.warn(`[GitManager] Could not stage ${file}:`, error.message);
+                        // Continuar con otros archivos
+                    }
+                }
+            } else {
+                // Stage todo
+                console.log(`[GitManager] Staging all changes`);
+                await execAsync('git add .', { cwd: repoPath });
+            }
+
+            // 3. Verificar que hay cambios staged
+            const { stdout: stagedFiles } = await execAsync(
+                'git diff --cached --name-only',
+                { cwd: repoPath }
+            );
+
+            if (!stagedFiles.trim()) {
+                vscode.window.showInformationMessage(
+                    `✓ No hay cambios nuevos en ${repoName}`
+                );
+                console.log(`[GitManager] No staged changes in ${repoName}`);
+                return;
+            }
+
+            const changedFilesList = stagedFiles.trim().split('\n').filter(f => f);
+            console.log(`[GitManager] ${changedFilesList.length} files staged`);
+
+            // 4. Intentar pre-llenar mensaje de commit usando Git Extension API
+            if (commitMessage) {
+                await this.trySetCommitMessage(repoPath, commitMessage);
+            }
+
+            // 5. Enfocar en SCM panel
+            await vscode.commands.executeCommand('workbench.view.scm');
+            
+            // 6. Intentar enfocar en el repo específico (importante en multi-root)
+            try {
+                await vscode.commands.executeCommand('workbench.scm.focus');
+            } catch (error) {
+                // No crítico
+                console.warn('[GitManager] Could not focus SCM:', error);
+            }
+
+            // 7. Mostrar notificación NO BLOQUEANTE
+            const filePreview = changedFilesList.slice(0, 5).join('\n');
+            const moreFiles = changedFilesList.length > 5 
+                ? `\n... y ${changedFilesList.length - 5} más` 
+                : '';
+
+            const action = await vscode.window.showInformationMessage(
+                `📝 ${changedFilesList.length} archivo(s) preparado(s) en ${repoName}`,
+                {
+                    modal: false, // NO BLOQUEANTE
+                    detail: `Revisá los cambios en el panel SCM.\n\nArchivos:\n${filePreview}${moreFiles}`
+                },
+                'Ver SCM'
+            );
+
+            if (action === 'Ver SCM') {
+                await vscode.commands.executeCommand('workbench.view.scm');
+            }
+
+            console.log(`[GitManager] Successfully staged and opened SCM for ${repoName}`);
+
+        } catch (error: any) {
+            console.error('[GitManager] Error in stageAndOpenSCM:', error);
+            vscode.window.showErrorMessage(
+                `Error preparando cambios: ${error.message}`
+            );
+            throw error; // Re-throw para que el caller sepa que falló
+        }
+    }
+
+    /**
+     * HELPER: Intenta pre-llenar el mensaje de commit en el SCM panel
+     * NOTA: Esto puede fallar silenciosamente (no es crítico)
+     */
+    private static async trySetCommitMessage(
+        repoPath: string,
+        message: string
+    ): Promise<void> {
+        try {
+            const gitExtension = vscode.extensions.getExtension('vscode.git');
+            if (!gitExtension) {
+                console.warn('[GitManager] Git extension not found');
+                return;
+            }
+
+            const gitApi = gitExtension.exports.getAPI(1);
+            
+            // Buscar el repositorio que coincide con el path
+            const repo = gitApi.repositories.find(
+                (r: any) => r.rootUri.fsPath === repoPath
+            );
+
+            if (repo && repo.inputBox) {
+                repo.inputBox.value = message;
+                console.log('[GitManager] Commit message pre-filled successfully');
+            } else {
+                console.warn('[GitManager] Repository not found in Git API');
+            }
+        } catch (error: any) {
+            // Fallo silencioso - no es crítico
+            console.warn('[GitManager] Could not set commit message:', error.message);
+        }
+    }
+
+
+    /**
+     * Configura mensaje de commit sugerido en el repo
+     */
+    private static async setCommitMessage(
+        repoPath: string,
+        message: string
+    ): Promise<void> {
+        try {
+            // Usar la API de Git de VSCode si está disponible
+            const gitExtension = vscode.extensions.getExtension('vscode.git');
+            if (!gitExtension) return;
+
+            const gitApi = gitExtension.exports.getAPI(1);
+            const repo = gitApi.repositories.find(
+                (r: any) => r.rootUri.fsPath === repoPath
+            );
+
+            if (repo) {
+                repo.inputBox.value = message;
+            }
+        } catch (error) {
+            // Silently fail - no es crítico
+            console.warn('Could not set commit message:', error);
+        }
+    }
+
 }

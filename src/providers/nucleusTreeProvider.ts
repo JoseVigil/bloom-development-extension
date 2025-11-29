@@ -88,24 +88,40 @@ export class NucleusTreeProvider implements vscode.TreeDataProvider<NucleusTreeI
     }
 
     async getChildren(element?: NucleusTreeItem): Promise<NucleusTreeItem[]> {
+        console.log('[NucleusTree] getChildren called, element:', element?.type);
+        
         if (!element) {
             const items: NucleusTreeItem[] = [];
 
+            console.log('[NucleusTree] Configs detected:', this.configs.size);
+
             // Mostrar organizaciones con Nucleus
             for (const [org, config] of this.configs.entries()) {
+                console.log('[NucleusTree] Processing org:', org, 'projects:', config.projects.length);
+                
                 // Encontrar el path del Nucleus
                 const nucleusPath = this.findNucleusPath(org);
                 
-                items.push(new NucleusTreeItem(
-                    `${org} (${config.projects.length} proyectos)`,
+                console.log('[NucleusTree] Nucleus path for', org, ':', nucleusPath);
+                
+                const orgItem = new NucleusTreeItem(
+                    `${org} (${config.projects.length} proyecto${config.projects.length !== 1 ? 's' : ''})`,
                     vscode.TreeItemCollapsibleState.Expanded,
                     'org',
-                    { orgName: org, nucleusPath: nucleusPath }
-                ));
+                    { orgName: org, nucleusPath: nucleusPath, config: config }
+                );
+                
+                // IMPORTANTE: Agregar tooltip para que el usuario sepa que puede agregar
+                orgItem.tooltip = `Click derecho o en el ícono + para agregar proyectos`;
+                
+                console.log('[NucleusTree] orgItem contextValue:', orgItem.contextValue);
+                
+                items.push(orgItem);
             }
 
             // Solo mostrar si no hay Nucleus detectados
             if (items.length === 0) {
+                console.log('[NucleusTree] No configs found, showing info message');
                 items.push(new NucleusTreeItem(
                     'No hay Nucleus en este workspace',
                     vscode.TreeItemCollapsibleState.None,
@@ -113,6 +129,7 @@ export class NucleusTreeProvider implements vscode.TreeDataProvider<NucleusTreeI
                 ));
             }
 
+            console.log('[NucleusTree] Returning', items.length, 'items');
             return items;
         }
 
@@ -254,12 +271,10 @@ export async function openNucleusProject(project: LinkedProject): Promise<void> 
             if (!projectPath) return;
         }
 
-        // Abrir en nueva ventana
-        await vscode.commands.executeCommand(
-            'vscode.openFolder',
-            vscode.Uri.file(projectPath),
-            true // Nueva ventana
-        );
+        // ✅ NUEVO: Agregar al workspace en lugar de abrir nueva ventana
+        const { WorkspaceManager } = await import('../managers/workspaceManager');
+        await WorkspaceManager.addProjectToWorkspace(projectPath, project.displayName);
+
     } catch (error: any) {
         vscode.window.showErrorMessage(`Error abriendo proyecto: ${error.message}`);
     }

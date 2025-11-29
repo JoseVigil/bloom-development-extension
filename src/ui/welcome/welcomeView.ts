@@ -4,7 +4,10 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { UserManager } from '../../managers/userManager';
 import { getUserOrgs } from '../../utils/githubApi';
-import { getCurrentGitHubUser } from '../../utils/githubOAuth';
+import { getCurrentGitHubUser, getGitHubTokenFromSession } from '../../utils/githubOAuth';
+import { GitOrchestrator, NucleusResult } from '../../core/gitOrchestrator';
+import { Logger } from '../../utils/logger';
+import { PythonScriptRunner } from '../../core/pythonScriptRunner';
 
 export class WelcomeView {
     private panel: vscode.WebviewPanel | undefined;
@@ -78,317 +81,106 @@ export class WelcomeView {
                 allOrgs: [user.login, ...orgs.map(o => o.login)]
             });
 
-            // 2. ELEGIR CARPETA DONDE CREAR NUCLEUS
-            const selectedFolder = await vscode.window.showOpenDialog({
-                canSelectFiles: false,
-                canSelectFolders: true,
-                canSelectMany: false,
-                openLabel: 'Seleccionar carpeta donde crear Nucleus',
-                title: `Crear nucleus-${githubOrg || user.login}`
-            });
-
-            if (!selectedFolder || selectedFolder.length === 0) {
-                vscode.window.showWarningMessage('Creación cancelada');
-                return;
+            // 2. OBTENER TOKEN FRESCO DESDE SESIÓN DE VSCODE
+            const token = await getGitHubTokenFromSession();
+            if (!token) {
+                throw new Error('No GitHub token available. Please authenticate again.');
             }
 
-            const parentFolder = selectedFolder[0].fsPath;
-            const nucleusName = `nucleus-${githubOrg || user.login}`;
-            const nucleusPath = path.join(parentFolder, nucleusName);
+            // 3. CREAR ORCHESTRATOR
+            const logger = new Logger();
+            const orchestrator = new GitOrchestrator(
+                token,
+                logger,
+                new PythonScriptRunner(this.context, logger)
+            );
 
-            // 3. CREAR ESTRUCTURA FÍSICA DE NUCLEUS
-            await vscode.window.withProgress({
-                location: vscode.ProgressLocation.Notification,
-                title: 'Creando Nucleus...',
-                cancellable: false
-            }, async (progress) => {
-                progress.report({ message: 'Creando estructura...' });
+            // 4. DETECTAR ESTADO
+            const status = await orchestrator.detectNucleusStatus(githubOrg || user.login);
 
-                // Crear carpeta principal
-                if (!fs.existsSync(nucleusPath)) {
-                    fs.mkdirSync(nucleusPath, { recursive: true });
+            // 5. ELEGIR ACCIÓN SEGÚN ESTADO
+            let result: NucleusResult;
+
+            if (status.location === 'none') {
+                // Crear nuevo
+                const folder = await vscode.window.showOpenDialog({
+                    canSelectFolders: true,
+                    canSelectFiles: false,
+                    canSelectMany: false,
+                    title: 'Seleccionar carpeta parent para Nucleus',
+                    openLabel: 'Seleccionar'
+                });
+                
+                if (!folder || folder.length === 0) {
+                    vscode.window.showWarningMessage('Creación cancelada');
+                    return;
                 }
+                
+                result = await orchestrator.createNucleus(
+                    githubOrg || user.login,
+                    folder[0].fsPath
+                );
 
-                // Crear estructura .bloom/
-                await this.createNucleusStructure(nucleusPath, githubOrg || user.login, user);
-
-                progress.report({ message: 'Finalizando...' });
-            });
-
-            // 4. MOSTRAR ÉXITO Y CERRAR
-            this.panel?.webview.postMessage({ 
-                command: 'nucleusCreated', 
-                message: `¡Nucleus creado en ${nucleusPath}!` 
-            });
-
-            vscode.window.showInformationMessage(
-                `✅ Nucleus creado exitosamente en: ${nucleusPath}`,
-                'Abrir Carpeta'
-            ).then(selection => {
-                if (selection === 'Abrir Carpeta') {
-                    vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(nucleusPath), false);
+            } else if (status.location === 'remote') {
+                // Clonar
+                const folder = await vscode.window.showOpenDialog({
+                    canSelectFolders: true,
+                    canSelectFiles: false,
+                    canSelectMany: false,
+                    title: 'Seleccionar carpeta donde clonar',
+                    openLabel: 'Seleccionar'
+                });
+                
+                if (!folder || folder.length === 0) {
+                    vscode.window.showWarningMessage('Clonación cancelada');
+                    return;
                 }
-            });
+                
+                result = await orchestrator.cloneNucleus(
+                    githubOrg || user.login,
+                    folder[0].fsPath
+                );
 
-            // Cerrar panel después de 2 segundos
-            setTimeout(() => {
-                this.panel?.dispose();
-                vscode.commands.executeCommand('bloom.syncNucleusProjects');
-            }, 2000);
+            } else if (status.location === 'both' || status.location === 'local') {
+                // Vincular existente
+                if (!status.localPath) {
+                    throw new Error('Local path not found in status');
+                }
+                
+                result = await orchestrator.linkNucleus(
+                    status.localPath,
+                    githubOrg || user.login
+                );
+            } else {
+                throw new Error('Unknown nucleus status');
+            }
+
+            // 6. MOSTRAR RESULTADO
+            if (result.success) {
+                this.panel?.webview.postMessage({
+                    command: 'nucleusCreated',
+                    message: result.message
+                });
+                
+                setTimeout(() => {
+                    this.panel?.dispose();
+                    vscode.commands.executeCommand('bloom.syncNucleusProjects');
+                }, 2000);
+            } else {
+                throw new Error(result.error || 'Error desconocido');
+            }
 
         } catch (err: any) {
             this.panel?.webview.postMessage({
                 command: 'error',
-                text: err.message || 'Error creando Nucleus'
+                text: err.message
             });
             
             vscode.window.showErrorMessage(`Error creando Nucleus: ${err.message}`);
         }
     }
 
-    /**
-     * Crea la estructura completa de Nucleus sin depender de Python
-     */
-    private async createNucleusStructure(
-        nucleusPath: string, 
-        orgName: string, 
-        user: any
-    ): Promise<void> {
-        const bloomPath = path.join(nucleusPath, '.bloom');
-
-        // Crear directorios
-        const dirs = [
-            path.join(bloomPath, 'core'),
-            path.join(bloomPath, 'organization'),
-            path.join(bloomPath, 'projects')
-        ];
-
-        for (const dir of dirs) {
-            if (!fs.existsSync(dir)) {
-                fs.mkdirSync(dir, { recursive: true });
-            }
-        }
-
-        // 1. Crear nucleus-config.json
-        const nucleusConfig = {
-            type: 'nucleus',
-            version: '1.0.0',
-            id: this.generateUUID(),
-            organization: {
-                name: orgName,
-                displayName: orgName,
-                url: `https://github.com/${orgName}`,
-                description: ''
-            },
-            nucleus: {
-                name: `nucleus-${orgName}`,
-                repoUrl: `https://github.com/${orgName}/nucleus-${orgName}.git`,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString()
-            },
-            projects: [],
-            settings: {
-                autoIndexProjects: true,
-                generateWebDocs: false
-            }
-        };
-
-        fs.writeFileSync(
-            path.join(bloomPath, 'core', 'nucleus-config.json'),
-            JSON.stringify(nucleusConfig, null, 2),
-            'utf-8'
-        );
-
-        // 2. Crear .rules.bl
-        const rulesContent = `# Reglas del Nucleus - ${orgName}
-
-## Convenciones de Código
-- Usar nombres descriptivos
-- Documentar funciones públicas
-- Mantener consistencia con proyectos existentes
-
-## Proceso de Review
-- Todo código debe pasar por PR
-- Al menos 1 aprobación requerida
-
-## Testing
-- Cobertura mínima: 70%
-- Tests unitarios obligatorios para lógica crítica
-
----
-bloom/v1
-document_type: "nucleus_rules"
-`;
-
-        fs.writeFileSync(
-            path.join(bloomPath, 'core', '.rules.bl'),
-            rulesContent,
-            'utf-8'
-        );
-
-        // 3. Crear .prompt.bl
-        const promptContent = `# Prompt del Nucleus - ${orgName}
-
-Eres un asistente de IA que ayuda a desarrolladores del equipo ${orgName}.
-
-## Contexto de la Organización
-[Completar con información sobre la organización]
-
-## Proyectos Vinculados
-[Se actualizará automáticamente con los proyectos linkeados]
-
-## Tone & Style
-- Profesional pero amigable
-- Respuestas concisas y accionables
-- Priorizar buenas prácticas
-
----
-bloom/v1
-document_type: "nucleus_prompt"
-`;
-
-        fs.writeFileSync(
-            path.join(bloomPath, 'core', '.prompt.bl'),
-            promptContent,
-            'utf-8'
-        );
-
-        // 4. Crear .organization.bl
-        const organizationContent = `# ${orgName}
-
-## 📋 Información General
-
-**Nombre:** ${orgName}
-**GitHub:** https://github.com/${orgName}
-**Creado:** ${new Date().toLocaleDateString()}
-
-## 🎯 Misión
-
-[Completar con la misión de la organización]
-
-## 👥 Equipo
-
-[Listar miembros del equipo]
-
-## 📊 Métricas
-
-- Proyectos activos: 0
-- Desarrolladores: 1+
-- Stack principal: [Definir]
-
----
-bloom/v1
-document_type: "organization_overview"
-`;
-
-        fs.writeFileSync(
-            path.join(bloomPath, 'organization', '.organization.bl'),
-            organizationContent,
-            'utf-8'
-        );
-
-        // 5. Crear archivos de organización vacíos
-        const orgFiles = ['about.bl', 'business-model.bl', 'policies.bl', 'protocols.bl'];
-        for (const file of orgFiles) {
-            const title = file.replace('.bl', '').replace('-', ' ').toUpperCase();
-            const content = `# ${title}\n\n[Completar]\n\n---\nbloom/v1\ndocument_type: "organization_${file.replace('.bl', '')}"\n`;
-            fs.writeFileSync(
-                path.join(bloomPath, 'organization', file),
-                content,
-                'utf-8'
-            );
-        }
-
-        // 6. Crear _index.bl
-        const indexContent = `# Índice de Proyectos - ${orgName}
-
-## Árbol de Proyectos
-
-\`\`\`
-${orgName}/
-└── 🏢 nucleus-${orgName}  [Este proyecto - Centro de conocimiento]
-\`\`\`
-
-## Proyectos Vinculados
-
-*No hay proyectos vinculados aún. Usa "Link to Nucleus" para agregar proyectos.*
-
----
-bloom/v1
-document_type: "projects_index"
-auto_generated: true
-updated_at: "${new Date().toISOString()}"
-`;
-
-        fs.writeFileSync(
-            path.join(bloomPath, 'projects', '_index.bl'),
-            indexContent,
-            'utf-8'
-        );
-
-        // 7. Crear README.md
-        const readmeContent = `# nucleus-${orgName}
-
-Centro de conocimiento y documentación organizacional para ${orgName}.
-
-## 🌸 Bloom Nucleus
-
-Este repositorio usa Bloom BTIP para gestionar la documentación técnica y organizacional.
-
-### Estructura
-
-- \`.bloom/core/\` - Configuración del Nucleus
-- \`.bloom/organization/\` - Documentación de la organización
-- \`.bloom/projects/\` - Overviews de proyectos vinculados
-
-### Uso
-
-1. Abre este proyecto en VSCode con el plugin Bloom instalado
-2. Usa "Link to Nucleus" en proyectos técnicos para vincularlos
-3. Edita los archivos .bl para mantener la documentación actualizada
-
----
-
-Generado por Bloom BTIP v1.0.0
-`;
-
-        fs.writeFileSync(
-            path.join(nucleusPath, 'README.md'),
-            readmeContent,
-            'utf-8'
-        );
-
-        // 8. Crear .gitignore
-        const gitignoreContent = `# Bloom
-.bloom/cache/
-.bloom/temp/
-
-# IDE
-.vscode/
-.idea/
-
-# OS
-.DS_Store
-Thumbs.db
-`;
-
-        fs.writeFileSync(
-            path.join(nucleusPath, '.gitignore'),
-            gitignoreContent,
-            'utf-8'
-        );
-    }
-
-    private generateUUID(): string {
-        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-            const r = Math.random() * 16 | 0;
-            const v = c === 'x' ? r : (r & 0x3 | 0x8);
-            return v.toString(16);
-        });
-    }
-
     private getHtml(): string {
-        // HTML existente - no cambiar
         return `
 <!DOCTYPE html>
 <html>

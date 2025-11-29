@@ -53,4 +53,10 @@ export class UserManager {
         await this.context.globalState.update('bloom.user.v3', undefined);
         await vscode.commands.executeCommand('setContext', 'bloom.isRegistered', false);
     }
+
+    static async getUserData(): Promise<any> {
+        const context = this.instance?.context;
+        if (!context) return null;
+        return context.globalState.get('bloom.user', null);
+    }
 }

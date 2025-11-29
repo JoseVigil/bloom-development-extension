@@ -17,6 +17,7 @@ bloom-development-extension/
 │   │   ├── generateQuestions.ts
 │   │   ├── integrateSnapshot.ts
 │   │   ├── linkToNucleus.ts
+│   │   ├── manageProject.ts
 │   │   ├── openFileInVSCode.ts
 │   │   ├── openIntent.ts
 │   │   ├── openIntentInBrowser.ts
@@ -34,6 +35,7 @@ bloom-development-extension/
 │   │   ├── codebaseGenerator.ts
 │   │   ├── contextGatherer.ts
 │   │   ├── filePackager.ts
+│   │   ├── gitOrchestrator.ts
 │   │   ├── intentAutoSaver.ts
 │   │   ├── intentGenerator.ts
 │   │   ├── intentSession.ts
@@ -43,7 +45,8 @@ bloom-development-extension/
 │   │   └── validator.ts
 │   ├── extension.ts
 │   ├── managers/
-│   │   └── userManager.ts
+│   │   ├── userManager.ts
+│   │   └── workspaceManager.ts
 │   ├── models/
 │   │   ├── bloomConfig.ts
 │   │   ├── codebaseStrategy.ts
@@ -85,6 +88,7 @@ bloom-development-extension/
 │   │       ├── welcomeView.html
 │   │       └── welcomeView.ts
 │   └── utils/
+│       ├── gitManager.ts
 │       ├── github.ts
 │       ├── githubApi.ts
 │       ├── githubOAuth.ts

@@ -281,6 +281,11 @@
       ],
       "view/item/context": [
         {
+          "command": "bloom.addProjectToNucleus",
+          "when": "view == bloomNucleus && viewItem == nucleusOrg",
+          "group": "inline"
+        },
+        {
           "command": "bloom.openIntent",
           "when": "view == bloomIntents && viewItem == intent",
           "group": "1_main@1"
@@ -335,7 +340,10 @@
       "properties": {
         "bloom.version": {
           "type": "string",
-          "enum": ["free", "pro"],
+          "enum": [
+            "free",
+            "pro"
+          ],
           "default": "free",
           "description": "Versión del plugin"
         },
@@ -356,7 +364,10 @@
         },
         "bloom.claudeModel": {
           "type": "string",
-          "enum": ["claude-3-opus-20240229", "claude-3-sonnet-20240229"],
+          "enum": [
+            "claude-3-opus-20240229",
+            "claude-3-sonnet-20240229"
+          ],
           "default": "claude-3-sonnet-20240229",
           "description": "Modelo de Claude a utilizar"
         },
@@ -391,6 +402,7 @@
     "typescript": "^5.0.4"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "@vscode/codicons": "^0.0.33",
     "punycode": "^2.3.0",
     "uuid": "^13.0.0"

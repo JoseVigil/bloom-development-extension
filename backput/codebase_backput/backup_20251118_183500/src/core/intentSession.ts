@@ -143,7 +143,15 @@ export class IntentSession extends EventEmitter {
             }
         });
 
-        await this.regenerateCodebase();
+        await this.regenerateCodebase();        
+        await GitManager.stageAndOpenSCM(
+            this.workspaceFolder.uri.fsPath,
+            [
+                `.bloom/intents/${this.state.name}/intent.json`,
+                `.bloom/intents/${this.state.name}/codebase.md`
+            ],
+            `📁 Added ${files.length} file(s) to intent: ${this.state.name}`
+        );
         await this.calculateTokens();
 
         this.emit('filesChanged', this.state.files);
@@ -186,7 +194,25 @@ export class IntentSession extends EventEmitter {
         );
 
         await this.regenerateCodebase();
+
+        await this.updateWorkflow({2
+            stage: 'intent-generated'
+        });
+
         await this.changeStatus('completed');
+
+        // Preparar commit confirmable
+        await GitManager.stageAndOpenSCM(
+            this.workspaceFolder.uri.fsPath,
+            [
+                `.bloom/intents/${this.state.name}/intent.json`,
+                `.bloom/intents/${this.state.name}/intent.bl`,
+                `.bloom/intents/${this.state.name}/codebase.md`
+            ],
+            `✨ Generated intent: ${this.state.name}\n\n` +
+            `Files included: ${this.state.files.length}\n` +
+            `Problem: ${this.state.content.problem.substring(0, 100)}...`
+        );
 
         this.logger.info('Intent generated successfully');
     }

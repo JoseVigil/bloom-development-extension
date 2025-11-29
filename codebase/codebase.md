@@ -1,8 +1,8 @@
 # Snapshot de Codebase
 Este archivo consolida todo el código del proyecto para indexación rápida por IA. Primero el índice jerárquico, luego cada archivo con su path como título y código en bloque Markdown.
 
-**Origen:** Archivos específicos: 29
-**Total de archivos:** 29
+**Origen:** Archivos específicos: 45
+**Total de archivos:** 26
 
 ## Índice de Archivos
 
@@ -18,41 +18,35 @@ Lista de archivos incluidos en este snapshot:
   - C:/repos/bloom-videos/bloom-development-extension/src/commands\deleteIntentFromForm.ts
   - C:/repos/bloom-videos/bloom-development-extension/src/commands\generateIntent.ts
   - C:/repos/bloom-videos/bloom-development-extension/src/commands\linkToNucleus.ts
+  - C:/repos/bloom-videos/bloom-development-extension/src/commands\manageProject.ts
   - C:/repos/bloom-videos/bloom-development-extension/src/commands\openFileInVSCode.ts
   - C:/repos/bloom-videos/bloom-development-extension/src/commands\openIntent.ts
   - C:/repos/bloom-videos/bloom-development-extension/src/commands\revealInFinder.ts
 - **C:/repos/bloom-videos/bloom-development-extension/src/core/**
   - C:/repos/bloom-videos/bloom-development-extension/src/core\codebaseGenerator.ts
+  - C:/repos/bloom-videos/bloom-development-extension/src/core\gitOrchestrator.ts
   - C:/repos/bloom-videos/bloom-development-extension/src/core\intentAutoSaver.ts
   - C:/repos/bloom-videos/bloom-development-extension/src/core\intentSession.ts
   - C:/repos/bloom-videos/bloom-development-extension/src/core\metadataManager.ts
   - C:/repos/bloom-videos/bloom-development-extension/src/core\nucleusManager.ts
 - **C:/repos/bloom-videos/bloom-development-extension/src/managers/**
   - C:/repos/bloom-videos/bloom-development-extension/src/managers\userManager.ts
+  - C:/repos/bloom-videos/bloom-development-extension/src/managers\workspaceManager.ts
 - **C:/repos/bloom-videos/bloom-development-extension/src/models/**
-  - C:/repos/bloom-videos/bloom-development-extension/src/models\bloomConfig.ts
   - C:/repos/bloom-videos/bloom-development-extension/src/models\intent.ts
 - **C:/repos/bloom-videos/bloom-development-extension/src/providers/**
   - C:/repos/bloom-videos/bloom-development-extension/src/providers\intentTreeProvider.ts
   - C:/repos/bloom-videos/bloom-development-extension/src/providers\nucleusTreeProvider.ts
-- **C:/repos/bloom-videos/bloom-development-extension/src/strategies/**
-  - C:/repos/bloom-videos/bloom-development-extension/src/strategies\NucleusStrategy.ts
-  - C:/repos/bloom-videos/bloom-development-extension/src/strategies\ProjectDetector.ts
-- **C:/repos/bloom-videos/bloom-development-extension/src/ui/intent/**
-  - C:/repos/bloom-videos/bloom-development-extension/src/ui/intent\intentForm.css
-  - C:/repos/bloom-videos/bloom-development-extension/src/ui/intent\intentForm.html
-  - C:/repos/bloom-videos/bloom-development-extension/src/ui/intent\intentForm.js
-  - C:/repos/bloom-videos/bloom-development-extension/src/ui/intent\intentFormPanel.ts
-- **C:/repos/bloom-videos/bloom-development-extension/src/ui/nucleus/**
-  - C:/repos/bloom-videos/bloom-development-extension/src/ui/nucleus\NucleusSetupPanel.ts
 - **C:/repos/bloom-videos/bloom-development-extension/src/ui/welcome/**
   - C:/repos/bloom-videos/bloom-development-extension/src/ui/welcome\welcomeView.ts
 - **C:/repos/bloom-videos/bloom-development-extension/src/utils/**
+  - C:/repos/bloom-videos/bloom-development-extension/src/utils\gitManager.ts
+  - C:/repos/bloom-videos/bloom-development-extension/src/utils\githubApi.ts
   - C:/repos/bloom-videos/bloom-development-extension/src/utils\githubOAuth.ts
 
 ## Contenidos de Archivos
 ### C:/repos/bloom-videos/bloom-development-extension/package.json
-Metadatos: Lenguaje: json, Hash MD5: afe6ce89bb8c412601536420b233afa2
+Metadatos: Lenguaje: json, Hash MD5: 8f5dedc915542b4772537f8ae237c112
 
 ```json
 {
@@ -114,23 +108,17 @@ Metadatos: Lenguaje: json, Hash MD5: afe6ce89bb8c412601536420b233afa2
           "id": "bloomIntents",
           "name": "Intents"
         }
-      ],
-      "explorer": [
-        {
-          "id": "bloomIntentsExplorer",
-          "name": "Bloom Intents"
-        }
       ]
     },
     "viewsWelcome": [
       {
         "view": "bloomNucleus",
-        "contents": "No hay ningún Nucleus detectado en este workspace.\n[Crear Nucleus Project](command:bloom.createNucleusProject)",
+        "contents": "No hay ningún Nucleus detectado en este workspace.\n[Crear Nucleus](command:bloom.showWelcome)",
         "when": "bloom.isRegistered && workspaceFolderCount > 0"
       },
       {
         "view": "bloomNucleusWelcome",
-        "contents": "Bienvenido a Bloom Nucleus\n\nPara comenzar, completá tu registro gratuito.",
+        "contents": "Bienvenido a Bloom Nucleus\n\nPara comenzar, completá tu registro gratuito.\n[Conectar con GitHub](command:bloom.showWelcome)",
         "when": "!bloom.isRegistered"
       }
     ],
@@ -182,7 +170,7 @@ Metadatos: Lenguaje: json, Hash MD5: afe6ce89bb8c412601536420b233afa2
       },
       {
         "command": "bloom.createNucleusProject",
-        "title": "Crear Nucleus Project",
+        "title": "Bloom: Crear Nucleus",
         "icon": "$(add)"
       },
       {
@@ -201,7 +189,7 @@ Metadatos: Lenguaje: json, Hash MD5: afe6ce89bb8c412601536420b233afa2
       },
       {
         "command": "bloom.syncNucleusProjects",
-        "title": "Sync Nucleus Projects",
+        "title": "Bloom: Sync Nucleus Projects",
         "icon": "$(sync)"
       },
       {
@@ -258,7 +246,21 @@ Metadatos: Lenguaje: json, Hash MD5: afe6ce89bb8c412601536420b233afa2
       },
       {
         "command": "bloom.showWelcome",
-        "title": "Mostrar Bienvenida Bloom"
+        "title": "Bloom: Mostrar Bienvenida"
+      },
+      {
+        "command": "bloom.resetRegistration",
+        "title": "Bloom: Reset Registration (Debug)"
+      },
+      {
+        "command": "bloom.addProjectToNucleus",
+        "title": "Bloom: Agregar Proyecto",
+        "icon": "$(add)"
+      },
+      {
+        "command": "bloom.reviewPendingCommits",
+        "title": "Bloom: Revisar Commits Pendientes",
+        "icon": "$(git-commit)"
       }
     ],
     "menus": {
@@ -301,11 +303,6 @@ Metadatos: Lenguaje: json, Hash MD5: afe6ce89bb8c412601536420b233afa2
           "group": "bloom@3"
         },
         {
-          "command": "bloom.createNucleusProject",
-          "when": "explorerResourceIsFolder",
-          "group": "bloom@4"
-        },
-        {
           "command": "bloom.linkToNucleus",
           "when": "explorerResourceIsFolder",
           "group": "bloom@5"
@@ -318,14 +315,27 @@ Metadatos: Lenguaje: json, Hash MD5: afe6ce89bb8c412601536420b233afa2
         },
         {
           "command": "bloom.createNucleusProject",
-          "when": "workspaceFolderCount > 0"
+          "when": "bloom.isRegistered"
         },
         {
           "command": "bloom.linkToNucleus",
           "when": "workspaceFolderCount > 0"
+        },
+        {
+          "command": "bloom.showWelcome",
+          "when": "true"
+        },
+        {
+          "command": "bloom.resetRegistration",
+          "when": "true"
         }
       ],
       "view/item/context": [
+        {
+          "command": "bloom.addProjectToNucleus",
+          "when": "view == bloomNucleus && viewItem == nucleusOrg",
+          "group": "inline"
+        },
         {
           "command": "bloom.openIntent",
           "when": "view == bloomIntents && viewItem == intent",
@@ -381,7 +391,10 @@ Metadatos: Lenguaje: json, Hash MD5: afe6ce89bb8c412601536420b233afa2
       "properties": {
         "bloom.version": {
           "type": "string",
-          "enum": ["free", "pro"],
+          "enum": [
+            "free",
+            "pro"
+          ],
           "default": "free",
           "description": "Versión del plugin"
         },
@@ -402,7 +415,10 @@ Metadatos: Lenguaje: json, Hash MD5: afe6ce89bb8c412601536420b233afa2
         },
         "bloom.claudeModel": {
           "type": "string",
-          "enum": ["claude-3-opus-20240229", "claude-3-sonnet-20240229"],
+          "enum": [
+            "claude-3-opus-20240229",
+            "claude-3-sonnet-20240229"
+          ],
           "default": "claude-3-sonnet-20240229",
           "description": "Modelo de Claude a utilizar"
         },
@@ -437,11 +453,13 @@ Metadatos: Lenguaje: json, Hash MD5: afe6ce89bb8c412601536420b233afa2
     "typescript": "^5.0.4"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "@vscode/codicons": "^0.0.33",
     "punycode": "^2.3.0",
     "uuid": "^13.0.0"
   }
 }
+
 ```
 
 ### C:/repos/bloom-videos/bloom-development-extension/src/commands/addToIntent.ts
@@ -1660,6 +1678,838 @@ function getStatusIcon(status: string): string {
 }
 ```
 
+### C:/repos/bloom-videos/bloom-development-extension/src/commands/manageProject.ts
+Metadatos: Lenguaje: typescript, Hash MD5: c02d97f25549519849508797a963ee22
+
+```typescript
+// src/commands/manageProject.ts
+import * as vscode from 'vscode';
+import * as path from 'path';
+import * as fs from 'fs';
+import { Logger } from '../utils/logger';
+import { ProjectDetector } from '../strategies/ProjectDetector';
+import { loadNucleusConfig, saveNucleusConfig, createLinkedProject } from '../models/bloomConfig';
+import { GitManager } from '../utils/gitManager';
+import { getUserOrgs, getOrgRepos } from '../utils/githubApi';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import { WorkspaceManager } from '../managers/workspaceManager';
+
+const execAsync = promisify(exec);
+
+export async function manageProject(nucleusPath: string, orgName: string): Promise<void> {
+    const action = await vscode.window.showQuickPick([
+        {
+            label: '$(folder) Vincular Proyecto Local Existente',
+            description: 'Conectar un proyecto que ya existe en tu computadora',
+            value: 'link-local'
+        },
+        {
+            label: '$(cloud-download) Clonar desde GitHub',
+            description: 'Clonar un repositorio de la organización',
+            value: 'clone-github'
+        },
+        {
+            label: '$(file-directory-create) Crear Proyecto Nuevo',
+            description: 'Iniciar un proyecto desde cero con template',
+            value: 'create-new'
+        }
+    ], {
+        placeHolder: 'Selecciona cómo agregar el proyecto'
+    });
+
+    if (!action) return;
+
+    switch (action.value) {
+        case 'link-local':
+            await linkLocalProject(nucleusPath, orgName);
+            break;
+        case 'clone-github':
+            await cloneFromGitHub(nucleusPath, orgName);
+            break;
+        case 'create-new':
+            await createNewProject(nucleusPath, orgName);
+            break;
+    }
+}
+
+/**
+ * Vincular proyecto local existente
+ */
+async function linkLocalProject(nucleusPath: string, orgName: string): Promise<void> {
+    const logger = new Logger();
+    
+    // Parent folder: donde DEBEN estar todos los proyectos
+    const parentDir = path.dirname(nucleusPath);
+    
+    // Auto-discovery en el parent folder (ÚNICO lugar válido)
+    const detectedProjects = await detectProjectsInFolder(parentDir, nucleusPath);
+
+    if (detectedProjects.length > 0) {
+        // Mostrar lista de proyectos detectados en el parent folder
+        const selected = await vscode.window.showQuickPick(
+            detectedProjects.map(p => ({
+                label: `${getStrategyIcon(p.strategy)} ${p.name}`,
+                description: `${p.strategy}`,
+                detail: `${p.path}`,
+                project: p
+            })),
+            {
+                placeHolder: `Selecciona un proyecto del directorio ${path.basename(parentDir)}/`
+            }
+        );
+
+        if (selected) {
+            await linkProjectToNucleus(
+                nucleusPath,
+                orgName,
+                selected.project.path,
+                selected.project.name,
+                selected.project.strategy
+            );
+            
+            // Agregar al workspace
+            await WorkspaceManager.addProjectToWorkspace(
+                selected.project.path, 
+                selected.project.name
+            );
+        }
+    } else {
+        vscode.window.showInformationMessage(
+            `No se detectaron proyectos en ${parentDir}.\n\nSugerencia: Clona o crea proyectos nuevos.`
+        );
+    }
+}
+
+/**
+ * Clonar desde GitHub
+ */
+async function cloneFromGitHub(nucleusPath: string, orgName: string): Promise<void> {
+    try {
+        // Parent folder: donde se clonará el proyecto
+        const parentDir = path.dirname(nucleusPath);
+        
+        // 1. Obtener repos de la organización
+        await vscode.window.withProgress({
+            location: vscode.ProgressLocation.Notification,
+            title: 'Obteniendo repositorios...',
+            cancellable: false
+        }, async () => {
+            await new Promise(resolve => setTimeout(resolve, 500));
+        });
+
+        const repos = await getOrgRepos(orgName);
+        
+        // 2. Filtrar repos ya vinculados
+        const nucleusConfig = loadNucleusConfig(path.join(nucleusPath, '.bloom'));
+        const linkedRepos = nucleusConfig?.projects.map(p => p.name) || [];
+        const availableRepos = repos.filter((r: any) => !linkedRepos.includes(r.name));
+
+        if (availableRepos.length === 0) {
+            vscode.window.showInformationMessage('Todos los repositorios ya están vinculados');
+            return;
+        }
+
+        // 3. Seleccionar repo
+        interface RepoQuickPickItem extends vscode.QuickPickItem {
+            repo: any;
+        }
+
+        const selected = await vscode.window.showQuickPick<RepoQuickPickItem>(
+            availableRepos.map((r: any) => ({
+                label: r.name,
+                description: r.description || 'Sin descripción',
+                detail: `⭐ ${r.stargazers_count} - Se clonará en: ${parentDir}/${r.name}`,
+                repo: r
+            })),
+            {
+                placeHolder: `Selecciona repositorio (se clonará en ${path.basename(parentDir)}/)`
+            }
+        );
+
+        if (!selected) return;
+
+        // 4. Clonar directamente en parent folder (SIN preguntar ubicación)
+        const clonePath = path.join(parentDir, selected.repo.name);
+
+        // Verificar si ya existe
+        if (fs.existsSync(clonePath)) {
+            const overwrite = await vscode.window.showWarningMessage(
+                `La carpeta ${selected.repo.name} ya existe en ${parentDir}.\n¿Deseas vincularla de todas formas?`,
+                'Vincular Existente',
+                'Cancelar'
+            );
+
+            if (overwrite !== 'Vincular Existente') return;
+
+            // Vincular proyecto existente
+            const strategy = await ProjectDetector.getStrategyName(clonePath);
+            
+            // Asegurar estructura .bloom
+            await ensureBloomStructure(clonePath, strategy);
+            
+            await linkProjectToNucleus(nucleusPath, orgName, clonePath, selected.repo.name, strategy);
+            
+            // Agregar al workspace
+            await WorkspaceManager.addProjectToWorkspace(clonePath, selected.repo.name);
+            
+            vscode.window.showInformationMessage(`✅ ${selected.repo.name} vinculado al Nucleus`);
+            return;
+        }
+
+        // 5. Clonar con progress
+        await vscode.window.withProgress({
+            location: vscode.ProgressLocation.Notification,
+            title: `Clonando ${selected.repo.name} en ${path.basename(parentDir)}/...`,
+            cancellable: false
+        }, async (progress) => {
+            progress.report({ message: 'Clonando repositorio...' });
+            
+            try {
+                // Usar la API de Git de VSCode
+                const git = vscode.extensions.getExtension('vscode.git')?.exports;
+                if (!git) {
+                    throw new Error('Git extension no disponible');
+                }
+                
+                const gitApi = git.getAPI(1);
+                
+                // Clonar usando la API de VSCode (en parent folder)
+                await gitApi.clone(selected.repo.clone_url, parentDir);
+                
+                progress.report({ message: 'Detectando tipo de proyecto...' });
+                
+                // Detectar estrategia
+                const strategy = await ProjectDetector.getStrategyName(clonePath);
+                
+                progress.report({ message: 'Creando estructura Bloom...' });
+                
+                // Asegurar estructura .bloom
+                await ensureBloomStructure(clonePath, strategy);
+                
+                progress.report({ message: 'Vinculando al Nucleus...' });
+                
+                await linkProjectToNucleus(
+                    nucleusPath,
+                    orgName,
+                    clonePath,
+                    selected.repo.name,
+                    strategy
+                );
+            } catch (error: any) {
+                // Fallback a exec si la API falla
+                if (error.message.includes('Git extension')) {
+                    try {
+                        await execAsync(`git clone "${selected.repo.clone_url}" "${clonePath}"`);
+                        
+                        progress.report({ message: 'Detectando tipo de proyecto...' });
+                        const strategy = await ProjectDetector.getStrategyName(clonePath);
+                        
+                        progress.report({ message: 'Creando estructura Bloom...' });
+                        await ensureBloomStructure(clonePath, strategy);
+                        
+                        progress.report({ message: 'Vinculando al Nucleus...' });
+                        await linkProjectToNucleus(nucleusPath, orgName, clonePath, selected.repo.name, strategy);
+                    } catch (execError: any) {
+                        throw new Error(`No se pudo clonar: ${execError.message}. Asegúrate de tener Git instalado.`);
+                    }
+                } else {
+                    throw error;
+                }
+            }
+        });        
+
+        // 6. Agregar al workspace automáticamente
+        await WorkspaceManager.addProjectToWorkspace(clonePath, selected.repo.name);
+
+        vscode.window.showInformationMessage(
+            `✅ ${selected.repo.name} clonado y agregado al workspace`
+        );
+
+    } catch (error: any) {
+        vscode.window.showErrorMessage(`Error clonando repositorio: ${error.message}`);
+    }
+}
+
+/**
+ * Crear proyecto nuevo
+ */
+async function createNewProject(nucleusPath: string, orgName: string): Promise<void> {
+    // Parent folder: donde se creará el proyecto
+    const parentDir = path.dirname(nucleusPath);
+    
+    // 1. Nombre del proyecto
+    const projectName = await vscode.window.showInputBox({
+        prompt: 'Nombre del proyecto',
+        placeHolder: 'mi-proyecto',
+        validateInput: (value) => {
+            if (!value || value.length < 3) return 'Mínimo 3 caracteres';
+            if (!/^[a-z0-9-]+$/.test(value)) return 'Solo minúsculas, números y guiones';
+            
+            // Verificar si ya existe en parent folder
+            const wouldExist = path.join(parentDir, value);
+            if (fs.existsSync(wouldExist)) {
+                return `Ya existe una carpeta llamada "${value}" en ${path.basename(parentDir)}/`;
+            }
+            
+            return null;
+        }
+    });
+
+    if (!projectName) return;
+
+    // 2. Tipo de proyecto
+    const projectType = await vscode.window.showQuickPick([
+        { label: '📱 Android', value: 'android' },
+        { label: '🍎 iOS', value: 'ios' },
+        { label: '🌐 React Web', value: 'react-web' },
+        { label: '⚙️ Node Backend', value: 'node' },
+        { label: '🐍 Python Flask', value: 'python-flask' },
+        { label: '📦 Genérico', value: 'generic' }
+    ], {
+        placeHolder: 'Selecciona el tipo de proyecto'
+    });
+
+    if (!projectType) return;
+
+    // 3. Crear directamente en parent folder (SIN preguntar ubicación)
+    const projectPath = path.join(parentDir, projectName);
+
+    // 4. Mostrar confirmación de ubicación
+    const confirm = await vscode.window.showInformationMessage(
+        `Se creará: ${parentDir}/${projectName}/`,
+        'Crear',
+        'Cancelar'
+    );
+
+    if (confirm !== 'Crear') return;
+
+    // 5. Crear con template
+    await vscode.window.withProgress({
+        location: vscode.ProgressLocation.Notification,
+        title: `Creando ${projectName} en ${path.basename(parentDir)}/...`,
+        cancellable: false
+    }, async (progress) => {
+        // Crear carpeta
+        if (!fs.existsSync(projectPath)) {
+            fs.mkdirSync(projectPath, { recursive: true });
+        }
+
+        progress.report({ message: 'Creando estructura básica...' });
+
+        // Crear template básico según tipo
+        await createProjectTemplate(projectPath, projectType.value);
+
+        progress.report({ message: 'Creando estructura Bloom...' });
+        
+        // Asegurar estructura .bloom
+        await ensureBloomStructure(projectPath, projectType.value);
+
+        progress.report({ message: 'Vinculando al Nucleus...' });
+
+        await linkProjectToNucleus(
+            nucleusPath,
+            orgName,
+            projectPath,
+            projectName,
+            projectType.value
+        );
+
+        progress.report({ message: 'Inicializando Git...' });
+
+        // Inicializar git
+        try {
+            await execAsync('git init', { cwd: projectPath });
+            await execAsync('git add .', { cwd: projectPath });
+            
+            // Queue commit (no push automático)
+            await GitManager.stageAndOpenSCM(
+                projectPath,
+                undefined, // Stage todos los archivos
+                `🌸 Initial commit - Created with Bloom\n\nProyecto: ${projectName}\nEstrategia: ${projectType.value}`
+            );
+
+        } catch (gitError) {
+            // Si git falla, continuar de todas formas
+            console.warn('Git init failed:', gitError);
+        }
+
+        await WorkspaceManager.addProjectToWorkspace(projectPath, projectName);
+    });
+
+    // Agregar al workspace automáticamente
+    await WorkspaceManager.addProjectToWorkspace(projectPath, projectName);
+
+    vscode.window.showInformationMessage(
+        `✅ ${projectName} creado y agregado al workspace`
+    );
+}
+
+/**
+ * Detecta proyectos en una carpeta
+ */
+async function detectProjectsInFolder(
+    folderPath: string,
+    excludePath: string
+): Promise<Array<{name: string; path: string; strategy: string; description: string}>> {
+    const projects: Array<any> = [];
+
+    try {
+        const items = fs.readdirSync(folderPath, { withFileTypes: true });
+
+        for (const item of items) {
+            if (!item.isDirectory()) continue;
+
+            const itemPath = path.join(folderPath, item.name);
+
+            // Excluir el propio Nucleus
+            if (itemPath === excludePath) continue;
+
+            // Detectar estrategia
+            const strategy = await ProjectDetector.getStrategyName(itemPath);
+
+            // Solo incluir si tiene .bloom/ o es un tipo reconocido
+            const hasBloom = fs.existsSync(path.join(itemPath, '.bloom'));
+            if (hasBloom || strategy !== 'generic') {
+                projects.push({
+                    name: item.name,
+                    path: itemPath,
+                    strategy,
+                    description: hasBloom ? 'Proyecto Bloom detectado' : `Proyecto ${strategy} detectado`
+                });
+            }
+        }
+    } catch (error) {
+        console.error('Error detecting projects:', error);
+    }
+
+    return projects;
+}
+
+/**
+ * Asegura que existe estructura .bloom completa
+ * SI YA EXISTE: No hace nada
+ * SI NO EXISTE: Crea estructura completa según estrategia
+ */
+async function ensureBloomStructure(projectPath: string, strategy: string): Promise<void> {
+    const bloomPath = path.join(projectPath, '.bloom');
+    
+    // CRÍTICO: Verificar si ya existe estructura completa
+    const coreExists = fs.existsSync(path.join(bloomPath, 'core'));
+    const projectExists = fs.existsSync(path.join(bloomPath, 'project'));
+    
+    if (coreExists && projectExists) {
+        console.log('✅ Estructura .bloom ya existe - No se sobrescribe');
+        return;
+    }
+    
+    console.log(`📁 Creando estructura .bloom para proyecto ${strategy}...`);
+    
+    // Crear directorios
+    const dirs = [
+        path.join(bloomPath, 'core'),
+        path.join(bloomPath, 'project'),
+        path.join(bloomPath, 'intents')
+    ];
+    
+    for (const dir of dirs) {
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
+    }
+    
+    // Crear archivos core básicos (SOLO si no existen)
+    const rulesPath = path.join(bloomPath, 'core', '.rules.bl');
+    if (!fs.existsSync(rulesPath)) {
+        const rulesContent = `# Reglas del Proyecto
+
+## Convenciones de Código
+- Seguir guía de estilo del lenguaje
+- Documentar funciones públicas
+- Mantener consistencia con el equipo
+
+## Testing
+- Tests unitarios para lógica crítica
+- Coverage mínimo recomendado: 70%
+
+## Git
+- Commits descriptivos
+- Pull requests para features nuevos
+
+---
+bloom/v1
+document_type: "project_rules"
+strategy: "${strategy}"
+created_at: "${new Date().toISOString()}"
+`;
+        
+        fs.writeFileSync(rulesPath, rulesContent, 'utf-8');
+    }
+    
+    const promptPath = path.join(bloomPath, 'core', '.prompt.bl');
+    if (!fs.existsSync(promptPath)) {
+        const promptContent = `# Prompt del Proyecto
+
+Eres un asistente de IA especializado en proyectos ${strategy}.
+
+## Contexto del Proyecto
+Este es un proyecto ${strategy}. Ayuda al desarrollador con:
+- Debugging de código
+- Sugerencias de arquitectura
+- Optimización de performance
+- Buenas prácticas específicas de ${strategy}
+
+## Tone
+- Directo y técnico
+- Ejemplos concretos
+- Referencias a documentación oficial
+
+---
+bloom/v1
+document_type: "project_prompt"
+strategy: "${strategy}"
+`;
+        
+        fs.writeFileSync(promptPath, promptContent, 'utf-8');
+    }
+    
+    // Crear .context.bl (SOLO si no existe)
+    const contextPath = path.join(bloomPath, 'project', '.context.bl');
+    if (!fs.existsSync(contextPath)) {
+        const contextContent = `# Contexto del Proyecto
+
+## Estrategia Detectada
+${strategy}
+
+## Descripción
+[Completar con descripción del proyecto]
+
+## Stack Tecnológico
+${getStackDescription(strategy)}
+
+## Arquitectura
+[Describir arquitectura del proyecto]
+
+## Dependencias Clave
+[Listar dependencias principales]
+
+---
+bloom/v1
+document_type: "project_context"
+strategy: "${strategy}"
+created_at: "${new Date().toISOString()}"
+`;
+        
+        fs.writeFileSync(contextPath, contextContent, 'utf-8');
+    }
+    
+    console.log('✅ Estructura .bloom creada exitosamente');
+}
+
+/**
+ * Retorna descripción de stack según estrategia
+ */
+function getStackDescription(strategy: string): string {
+    const stacks: Record<string, string> = {
+        'android': '- Lenguaje: Kotlin/Java\n- Build: Gradle\n- UI: XML/Jetpack Compose',
+        'ios': '- Lenguaje: Swift\n- Build: Xcode\n- UI: SwiftUI/UIKit',
+        'react-web': '- Lenguaje: JavaScript/TypeScript\n- Framework: React\n- Build: Webpack/Vite',
+        'node': '- Lenguaje: JavaScript/TypeScript\n- Runtime: Node.js\n- Framework: Express/Fastify',
+        'python-flask': '- Lenguaje: Python\n- Framework: Flask\n- Database: SQLAlchemy',
+        'generic': '- [Definir stack tecnológico]'
+    };
+    
+    return stacks[strategy] || stacks['generic'];
+}
+
+/**
+ * Vincula un proyecto al Nucleus
+ */
+async function linkProjectToNucleus(
+    nucleusPath: string,
+    orgName: string,
+    projectPath: string,
+    projectName: string,
+    strategy: string
+): Promise<void> {
+    const logger = new Logger();
+    const bloomPath = path.join(nucleusPath, '.bloom');
+
+    // 1. Cargar nucleus-config.json
+    const nucleusConfig = loadNucleusConfig(bloomPath);
+    if (!nucleusConfig) {
+        throw new Error('Nucleus config not found');
+    }
+
+    // 2. Crear LinkedProject
+    const relativePath = path.relative(nucleusPath, projectPath);
+    const repoUrl = await detectGitRemote(projectPath);
+
+    const linkedProject = createLinkedProject(
+        projectName,
+        projectName.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+        strategy as any,
+        repoUrl || `https://github.com/${orgName}/${projectName}.git`,
+        relativePath
+    );
+
+    // 3. Actualizar nucleus-config.json
+    nucleusConfig.projects.push(linkedProject);
+    nucleusConfig.nucleus.updatedAt = new Date().toISOString();
+    saveNucleusConfig(bloomPath, nucleusConfig);
+
+    // 4. Crear nucleus.json en el proyecto hijo
+    const projectBloomDir = path.join(projectPath, '.bloom');
+    if (!fs.existsSync(projectBloomDir)) {
+        fs.mkdirSync(projectBloomDir, { recursive: true });
+    }
+
+    const nucleusLink = {
+        linkedToNucleus: true,
+        nucleusId: nucleusConfig.id,
+        nucleusName: nucleusConfig.nucleus.name,
+        nucleusPath: path.relative(projectPath, nucleusPath),
+        nucleusUrl: nucleusConfig.nucleus.repoUrl,
+        organizationName: nucleusConfig.organization.name,
+        projectId: linkedProject.id,
+        linkedAt: linkedProject.linkedAt
+    };
+
+    fs.writeFileSync(
+        path.join(projectBloomDir, 'nucleus.json'),
+        JSON.stringify(nucleusLink, null, 2),
+        'utf-8'
+    );
+
+    // 5. Crear overview.bl en Nucleus
+    const overviewDir = path.join(bloomPath, 'projects', projectName);
+    if (!fs.existsSync(overviewDir)) {
+        fs.mkdirSync(overviewDir, { recursive: true });
+    }
+
+    const overviewContent = generateProjectOverview(linkedProject);
+    fs.writeFileSync(
+        path.join(overviewDir, 'overview.bl'),
+        overviewContent,
+        'utf-8'
+    );
+
+    // 6. Regenerar _index.bl
+    regenerateProjectsIndex(nucleusPath, nucleusConfig);
+
+    // 7. Queue Git commit en Nucleus
+    await GitManager.queueCommit(
+        nucleusPath,
+        `📦 Added project: ${projectName} (${strategy})`,
+        [
+            '.bloom/core/nucleus-config.json',
+            `.bloom/projects/${projectName}/overview.bl`,
+            '.bloom/projects/_index.bl'
+        ]
+    );
+
+    logger.info(`Proyecto ${projectName} vinculado exitosamente`);
+
+    // Refrescar tree
+    vscode.commands.executeCommand('bloom.syncNucleusProjects');
+}
+
+// Helper functions...
+function getStrategyIcon(strategy: string): string {
+    const icons: Record<string, string> = {
+        'android': '📱', 
+        'ios': '🍎', 
+        'react-web': '🌐',
+        'node': '⚙️', 
+        'python-flask': '🐍', 
+        'generic': '📦'
+    };
+    return icons[strategy] || '📦';
+}
+
+async function detectGitRemote(projectPath: string): Promise<string | null> {
+    try {
+        const { stdout } = await execAsync('git remote get-url origin', {
+            cwd: projectPath
+        });
+        return stdout.trim();
+    } catch {
+        return null;
+    }
+}
+
+function generateProjectOverview(project: any): string {
+    return `# ${project.displayName} - Overview
+
+## Información General
+**Nombre:** ${project.name}
+**Estrategia:** ${project.strategy}
+**Repositorio:** ${project.repoUrl}
+**Path Local:** ${project.localPath}
+**Estado:** ${project.status}
+
+## 🎯 Propósito
+[Completar: ¿Por qué existe este proyecto? ¿Qué problema resuelve?]
+
+## 👥 Usuarios
+[Completar: ¿Quién usa este proyecto? ¿Qué roles interactúan con él?]
+
+## 💼 Lógica de Negocio
+[Completar: ¿Cómo contribuye al modelo de negocio de la organización?]
+
+## 🔗 Dependencias
+### Depende de:
+- [Completar]
+
+### Es usado por:
+- [Completar]
+
+---
+bloom/v1
+project_id: "${project.id}"
+linked_at: "${project.linkedAt}"
+`;
+}
+
+function regenerateProjectsIndex(nucleusPath: string, config: any): void {
+    const indexPath = path.join(nucleusPath, '.bloom', 'projects', '_index.bl');
+    
+    let tree = `${config.organization.name}/\n`;
+    tree += `├── 🏢 ${config.nucleus.name} [Nucleus]\n`;
+    
+    config.projects.forEach((p: any, i: number) => {
+        const isLast = i === config.projects.length - 1;
+        const prefix = isLast ? '└──' : '├──';
+        const icon = getStrategyIcon(p.strategy);
+        tree += `${prefix} ${icon} ${p.name} [${p.strategy}]\n`;
+    });
+    
+    const content = `# Índice de Proyectos - ${config.organization.name}
+
+## Árbol de Proyectos
+
+\`\`\`
+${tree}\`\`\`
+
+## Proyectos Vinculados (${config.projects.length})
+
+| Proyecto | Estrategia | Estado | Path |
+|----------|------------|--------|------|
+${config.projects.map((p: any) => `| ${p.name} | ${p.strategy} | ${p.status} | ${p.localPath} |`).join('\n')}
+
+---
+bloom/v1
+auto_generated: true
+updated_at: "${new Date().toISOString()}"
+`;
+    
+    fs.writeFileSync(indexPath, content, 'utf-8');
+}
+
+async function createProjectTemplate(projectPath: string, type: string): Promise<void> {
+    // Crear README.md
+    const readme = `# ${path.basename(projectPath)}
+
+Proyecto ${type} creado con Bloom BTIP.
+
+## Setup
+
+[Completar instrucciones de instalación]
+
+## Development
+
+[Completar comandos de desarrollo]
+
+## Testing
+
+[Completar comandos de testing]
+
+---
+Creado con 🌸 Bloom BTIP
+`;
+    
+    fs.writeFileSync(path.join(projectPath, 'README.md'), readme, 'utf-8');
+
+    // Crear .gitignore básico
+    const gitignore = `# Dependencies
+node_modules/
+venv/
+vendor/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment
+.env
+.env.local
+`;
+    fs.writeFileSync(path.join(projectPath, '.gitignore'), gitignore, 'utf-8');
+
+    // Templates específicos según tipo
+    switch (type) {
+        case 'node':
+            fs.writeFileSync(
+                path.join(projectPath, 'package.json'),
+                JSON.stringify({
+                    name: path.basename(projectPath),
+                    version: '1.0.0',
+                    description: '',
+                    main: 'index.js',
+                    scripts: {
+                        start: 'node index.js',
+                        test: 'echo "No tests yet"'
+                    },
+                    keywords: [],
+                    author: '',
+                    license: 'ISC'
+                }, null, 2),
+                'utf-8'
+            );
+            
+            // Crear index.js básico
+            const indexJs = `// ${path.basename(projectPath)}
+console.log('Hello from Bloom! 🌸');
+
+// TODO: Implement your application logic here
+`;
+            fs.writeFileSync(path.join(projectPath, 'index.js'), indexJs, 'utf-8');
+            break;
+            
+        // Agregar más templates según necesidad
+        case 'python-flask':
+            const requirementsTxt = `flask==3.0.0
+python-dotenv==1.0.0
+`;
+            fs.writeFileSync(path.join(projectPath, 'requirements.txt'), requirementsTxt, 'utf-8');
+            
+            const appPy = `# ${path.basename(projectPath)}
+from flask import Flask
+
+app = Flask(__name__)
+
+@app.route('/')
+def hello():
+    return 'Hello from Bloom! 🌸'
+
+if __name__ == '__main__':
+    app.run(debug=True)
+`;
+            fs.writeFileSync(path.join(projectPath, 'app.py'), appPy, 'utf-8');
+            break;
+    }
+}
+```
+
 ### C:/repos/bloom-videos/bloom-development-extension/src/commands/openFileInVSCode.ts
 Metadatos: Lenguaje: typescript, Hash MD5: 464c261ba1bcdbb36dc98c0ab3f3de17
 
@@ -1999,6 +2849,389 @@ export class CodebaseGenerator {
     ): Promise<void> {
         throw new Error('Tarball generation not yet implemented');
     }
+}
+```
+
+### C:/repos/bloom-videos/bloom-development-extension/src/core/gitOrchestrator.ts
+Metadatos: Lenguaje: typescript, Hash MD5: e3431a0295b097460fb2262915628006
+
+```typescript
+// src/core/gitOrchestrator.ts
+import * as vscode from 'vscode';
+import * as path from 'path';
+import * as fs from 'fs';
+import simpleGit, { SimpleGit } from 'simple-git';
+import { Octokit } from '@octokit/rest';
+import { Logger } from '../utils/logger';
+import { PythonScriptRunner } from './pythonScriptRunner';
+import { WorkspaceManager } from '../managers/workspaceManager';
+import { GitManager } from '../utils/gitManager';
+
+export interface NucleusStatus {
+  exists: boolean;
+  location: 'local' | 'remote' | 'both' | 'none';
+  localPath?: string;
+  remoteUrl?: string;
+  hasValidStructure?: boolean;
+  conflictDetected?: boolean;
+}
+
+export interface NucleusResult {
+  success: boolean;
+  nucleusPath: string;
+  action: 'created' | 'cloned' | 'linked';
+  message: string;
+  error?: string;
+}
+
+export class GitOrchestrator {
+  private octokit: Octokit;
+  private git: SimpleGit;
+  private logger: Logger;
+  private pythonRunner: PythonScriptRunner;
+
+  constructor(
+    githubToken: string,
+    logger: Logger,
+    pythonRunner: PythonScriptRunner
+  ) {
+    this.octokit = new Octokit({ auth: githubToken });
+    this.git = simpleGit();
+    this.logger = logger;
+    this.pythonRunner = pythonRunner;
+  }
+
+  /**
+   * FLUJO 1: Detectar estado de Nucleus
+   */
+  async detectNucleusStatus(org: string): Promise<NucleusStatus> {
+    const nucleusName = `nucleus-${org}`;
+    const status: NucleusStatus = {
+      exists: false,
+      location: 'none'
+    };
+
+    // 1. Verificar remoto en GitHub
+    const remoteExists = await this.checkRemoteRepo(org, nucleusName);
+    
+    // 2. Verificar local (en parent folder del workspace)
+    const localPath = this.findLocalNucleus(org);
+
+    if (remoteExists && localPath) {
+      status.exists = true;
+      status.location = 'both';
+      status.localPath = localPath;
+      status.remoteUrl = `https://github.com/${org}/${nucleusName}.git`;
+      
+      // Validar consistencia
+      const isConsistent = await this.validateConsistency(localPath, status.remoteUrl);
+      status.conflictDetected = !isConsistent;
+      status.hasValidStructure = this.hasValidBloomStructure(localPath);
+      
+    } else if (remoteExists) {
+      status.exists = true;
+      status.location = 'remote';
+      status.remoteUrl = `https://github.com/${org}/${nucleusName}.git`;
+      
+    } else if (localPath) {
+      status.exists = true;
+      status.location = 'local';
+      status.localPath = localPath;
+      status.hasValidStructure = this.hasValidBloomStructure(localPath);
+    }
+
+    this.logger.info(`Nucleus status for ${org}: ${JSON.stringify(status)}`);
+    return status;
+  }
+
+  
+  /**
+   * FLUJO 2: Crear Nucleus (local + remoto nuevo)
+   */
+  async createNucleus(org: string, parentPath: string): Promise<NucleusResult> {
+      const nucleusName = `nucleus-${org}`;
+      const nucleusPath = path.join(parentPath, nucleusName);
+
+      try {
+          // 1. Crear repo remoto en GitHub
+          this.logger.info(`Creating remote repo: ${nucleusName}`);
+          await this.octokit.repos.createForAuthenticatedUser({
+              name: nucleusName,
+              description: `Nucleus organizacional para ${org}`,
+              private: false,
+              auto_init: false
+          });
+
+          // 2. Crear carpeta local
+          if (!fs.existsSync(nucleusPath)) {
+              fs.mkdirSync(nucleusPath, { recursive: true });
+          }
+
+          // 3. Inicializar Git
+          const git = simpleGit(nucleusPath);
+          await git.init();
+          await git.addRemote('origin', `https://github.com/${org}/${nucleusName}.git`);
+
+          // 4. Ejecutar Python para generar estructura
+          this.logger.info('Generating Nucleus structure with Python...');
+          await this.pythonRunner.generateNucleus(nucleusPath, org);
+
+          // 5. Crear workspace
+          await WorkspaceManager.initializeWorkspace(nucleusPath);
+
+          // ✅ FIX: Usar GitManager directamente (elimina duplicación)
+          await GitManager.stageAndOpenSCM(
+              nucleusPath,
+              undefined, // Stage todos los archivos
+              `🌸 Initial Nucleus commit - ${nucleusName}\n\nGenerated with Bloom BTIP\nOrganization: ${org}`
+          );
+
+          return {
+              success: true,
+              nucleusPath,
+              action: 'created',
+              message: `Nucleus creado en ${nucleusPath}. Revisá los cambios en el panel SCM para hacer commit.`
+          };
+
+      } catch (error: any) {
+          this.logger.error('Error creating nucleus', error);
+          return {
+              success: false,
+              nucleusPath,
+              action: 'created',
+              message: 'Error al crear Nucleus',
+              error: error.message
+          };
+      }
+  }
+
+  /**
+   * FLUJO 3: Clonar Nucleus (remoto existe)
+   */
+  async cloneNucleus(org: string, parentPath: string): Promise<NucleusResult> {
+      const nucleusName = `nucleus-${org}`;
+      const nucleusPath = path.join(parentPath, nucleusName);
+      const repoUrl = `https://github.com/${org}/${nucleusName}.git`;
+
+      try {
+          this.logger.info(`Cloning nucleus from ${repoUrl}`);
+
+          // 1. Clonar repositorio
+          await simpleGit().clone(repoUrl, nucleusPath);
+
+          // 2. Verificar estructura .bloom/
+          const needsCompletion = !this.hasValidBloomStructure(nucleusPath);
+
+          if (needsCompletion) {
+              this.logger.info('Completing missing .bloom/ structure...');
+              await this.pythonRunner.generateNucleus(nucleusPath, org, { skipExisting: true });
+              
+              // ✅ FIX: Usar GitManager directamente
+              await GitManager.stageAndOpenSCM(
+                  nucleusPath,
+                  undefined,
+                  `🔧 Complete missing .bloom/ structure\n\nAdded by Bloom BTIP`
+              );
+          }
+
+          // 3. Crear workspace
+          await WorkspaceManager.initializeWorkspace(nucleusPath);
+
+          return {
+              success: true,
+              nucleusPath,
+              action: 'cloned',
+              message: needsCompletion 
+                  ? 'Nucleus clonado. Se agregaron archivos faltantes - revisar SCM.'
+                  : 'Nucleus clonado exitosamente.'
+          };
+
+      } catch (error: any) {
+          this.logger.error('Error cloning nucleus', error);
+          return {
+              success: false,
+              nucleusPath,
+              action: 'cloned',
+              message: 'Error al clonar Nucleus',
+              error: error.message
+          };
+      }
+  }
+
+  /**
+   * FLUJO 4: Vincular Nucleus (local + remoto existen)
+   */
+  async linkNucleus(localPath: string, org: string): Promise<NucleusResult> {
+      try {
+          const nucleusName = `nucleus-${org}`;
+          const expectedRemote = `https://github.com/${org}/${nucleusName}.git`;
+
+          // 1. Validar que el directorio existe
+          if (!fs.existsSync(localPath)) {
+              throw new Error(`Path no existe: ${localPath}`);
+          }
+
+          // 2. Verificar .git
+          const git = simpleGit(localPath);
+          const isRepo = await git.checkIsRepo();
+          
+          if (!isRepo) {
+              throw new Error('No es un repositorio Git válido');
+          }
+
+          // 3. Verificar remote origin
+          const remotes = await git.getRemotes(true);
+          const origin = remotes.find(r => r.name === 'origin');
+          
+          if (!origin) {
+              // Agregar origin si no existe
+              await git.addRemote('origin', expectedRemote);
+          } else if (origin.refs.fetch !== expectedRemote) {
+              throw new Error(`Remote origin no coincide. Esperado: ${expectedRemote}, Actual: ${origin.refs.fetch}`);
+          }
+
+          // 4. Validar estructura .bloom/
+          const needsCompletion = !this.hasValidBloomStructure(localPath);
+          
+          if (needsCompletion) {
+              this.logger.info('Completing .bloom/ structure...');
+              await this.pythonRunner.generateNucleus(localPath, org, { skipExisting: true });
+              
+              // ✅ FIX: Usar GitManager directamente
+              await GitManager.stageAndOpenSCM(
+                  localPath,
+                  undefined,
+                  `🔗 Link to Nucleus - Complete structure\n\nAdded by Bloom BTIP`
+              );
+          }
+
+          // 5. Crear workspace si no existe
+          await WorkspaceManager.initializeWorkspace(localPath);
+
+          return {
+              success: true,
+              nucleusPath: localPath,
+              action: 'linked',
+              message: needsCompletion
+                  ? 'Nucleus vinculado. Se agregaron archivos faltantes - revisar SCM.'
+                  : 'Nucleus vinculado exitosamente.'
+          };
+
+      } catch (error: any) {
+          this.logger.error('Error linking nucleus', error);
+          return {
+              success: false,
+              nucleusPath: localPath,
+              action: 'linked',
+              message: 'Error al vincular Nucleus',
+              error: error.message
+          };
+      }
+  }
+
+  /**
+   * UTILIDADES PRIVADAS
+   */
+
+  private async checkRemoteRepo(org: string, repoName: string): Promise<boolean> {
+    try {
+      await this.octokit.repos.get({
+        owner: org,
+        repo: repoName
+      });
+      return true;
+    } catch (error: any) {
+      if (error.status === 404) {
+        return false;
+      }
+      throw error;
+    }
+  }
+
+  private findLocalNucleus(org: string): string | null {
+    const nucleusName = `nucleus-${org}`;
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    
+    if (!workspaceRoot) return null;
+
+    // Buscar en parent directory
+    const parentDir = path.dirname(workspaceRoot);
+    const possiblePath = path.join(parentDir, nucleusName);
+
+    if (fs.existsSync(possiblePath)) {
+      return possiblePath;
+    }
+
+    // Buscar en workspace actual
+    if (path.basename(workspaceRoot) === nucleusName) {
+      return workspaceRoot;
+    }
+
+    return null;
+  }
+
+  private async validateConsistency(localPath: string, remoteUrl: string): Promise<boolean> {
+    try {
+      const git = simpleGit(localPath);
+      const remotes = await git.getRemotes(true);
+      const origin = remotes.find(r => r.name === 'origin');
+      
+      if (!origin) return false;
+      
+      // Normalizar URLs para comparación
+      const normalizedLocal = this.normalizeGitUrl(origin.refs.fetch);
+      const normalizedRemote = this.normalizeGitUrl(remoteUrl);
+      
+      return normalizedLocal === normalizedRemote;
+    } catch {
+      return false;
+    }
+  }
+
+  private normalizeGitUrl(url: string): string {
+    return url
+      .replace(/\.git$/, '')
+      .replace(/^https:\/\//, '')
+      .replace(/^git@github\.com:/, 'github.com/')
+      .toLowerCase();
+  }
+
+  private hasValidBloomStructure(nucleusPath: string): boolean {
+    const requiredPaths = [
+      '.bloom',
+      '.bloom/core',
+      '.bloom/core/nucleus-config.json',
+      '.bloom/organization',
+      '.bloom/projects'
+    ];
+
+    return requiredPaths.every(p => 
+      fs.existsSync(path.join(nucleusPath, p))
+    );
+  }
+
+  private async openSCMPanel(repoPath: string): Promise<void> {
+    // Enfocar en el repo específico
+    const uri = vscode.Uri.file(repoPath);
+    await vscode.commands.executeCommand('workbench.view.scm');
+
+    await GitManager.stageAndOpenSCM(
+        repoPath,
+        undefined,
+        `🌸 Initial Nucleus commit\n\nGenerated with Bloom BTIP`
+    );
+    
+    // Opcional: Mostrar mensaje
+    vscode.window.showInformationMessage(
+      '📝 Archivos agregados al stage. Revisa el panel SCM para hacer commit.',
+      'Abrir SCM'
+    ).then(selection => {
+      if (selection === 'Abrir SCM') {
+        vscode.commands.executeCommand('workbench.view.scm');
+      }
+    });
+    
+  }
 }
 ```
 
@@ -2861,7 +4094,7 @@ export class NucleusManager {
 ```
 
 ### C:/repos/bloom-videos/bloom-development-extension/src/extension.ts
-Metadatos: Lenguaje: typescript, Hash MD5: 1bacfabd70bd0f41c824b224e8686e35
+Metadatos: Lenguaje: typescript, Hash MD5: 0d774f6c3359dc0cf0cb890ef101c69a
 
 ```typescript
 // src/extension.ts
@@ -2893,7 +4126,6 @@ import { ProfileManagerPanel } from './ui/profile/profileManagerPanel';
 import { ChromeProfileManager } from './core/chromeProfileManager';
 import { Intent } from './models/intent';
 import { ProfileTreeProvider } from './providers/profileTreeProvider';
-import { registerCreateNucleusProject } from './commands/createNucleusProject';
 import { openIntentInBrowser, openProviderInBrowser } from './commands/openIntentInBrowser';
 import { NucleusTreeProvider } from './providers/nucleusTreeProvider';
 import { NucleusWelcomeProvider } from './providers/nucleusWelcomeProvider';
@@ -2901,8 +4133,9 @@ import { WelcomeView } from './ui/welcome/welcomeView';
 import { UserManager } from './managers/userManager';
 import { NucleusSetupPanel } from './ui/nucleus/NucleusSetupPanel';
 import { openNucleusProject } from './providers/nucleusTreeProvider';
-
-
+import { linkToNucleus } from './commands/linkToNucleus';
+import { manageProject } from './commands/manageProject';
+import { GitManager } from './utils/gitManager';
 
 import {
     configureIntentProfile,
@@ -2914,7 +4147,11 @@ export function activate(context: vscode.ExtensionContext) {
     const logger = new Logger();
     logger.info('Bloom BTIP + Nucleus Premium activado');
 
+    // Inicializar UserManager
     UserManager.init(context);
+
+    // Inicializar GitManager
+    GitManager.initialize(context);
 
     const metadataManager = new MetadataManager(logger);
     const contextGatherer = new ContextGatherer(logger);
@@ -2923,8 +4160,22 @@ export function activate(context: vscode.ExtensionContext) {
     const welcomeWebview = new WelcomeView(context);
 
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-    if (!workspaceFolder) return;
+    if (!workspaceFolder) {
+        logger.warn('No workspace folder detected - Limited functionality');
+        // Aún así registrar comandos críticos
+        registerCriticalCommands(context, logger, welcomeWebview);
+        return;
+    }
 
+    const gitExtension = vscode.extensions.getExtension('vscode.git');
+    if (!gitExtension) {
+        logger.error('VSCode Git extension not available');
+    }
+
+    // ========================================
+    // TREE PROVIDERS
+    // ========================================
+    
     // Intent Tree
     const intentTreeProvider = new IntentTreeProvider(workspaceFolder, logger, metadataManager);
     vscode.window.registerTreeDataProvider('bloomIntents', intentTreeProvider);
@@ -2943,9 +4194,17 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Chrome Profile Manager
     const chromeProfileManager = new ChromeProfileManager(context, logger);
-    ProfileTreeProvider.initialize(context, logger, chromeProfileManager);
+    
+    try {
+        ProfileTreeProvider.initialize(context, logger, chromeProfileManager);
+        logger.info('ProfileTreeProvider initialized successfully');
+    } catch (error: any) {
+        logger.error('Error initializing ProfileTreeProvider', error);
+    }
 
-    // === CORREGIDO: todos los registerCommand con los parámetros correctos ===
+    // ========================================
+    // COMANDOS BÁSICOS DE INTENTS
+    // ========================================
     registerOpenMarkdownPreview(context, logger);
     registerGenerateIntent(context, logger);
     registerOpenIntent(context, logger, metadataManager);
@@ -2961,70 +4220,416 @@ export function activate(context: vscode.ExtensionContext) {
     registerIntegrateSnapshot(context, logger);
     registerReloadIntentForm(context, logger);
     registerRegenerateContext(context, logger);
-    registerCreateNucleusProject(context, logger);
 
-    // Profile & Browser commands
+    // ========================================
+    // COMANDOS: Chrome Profiles & Browser
+    // ========================================
     context.subscriptions.push(
-        vscode.commands.registerCommand('bloom.manageProfiles', () =>
-            ProfileManagerPanel.createOrShow(context.extensionUri, logger, context)
-        ),
-        vscode.commands.registerCommand('bloom.refreshProfiles', () =>
-            ProfileTreeProvider.getInstance().refresh()
-        ),
-        vscode.commands.registerCommand('bloom.configureIntentProfile', (intent: Intent) =>
-            intent && configureIntentProfile(intent, context, logger)
-        ),
-        vscode.commands.registerCommand('bloom.changeIntentProfile', (intent: Intent) =>
-            intent && changeIntentProfile(intent, context, logger)
-        ),
-        vscode.commands.registerCommand('bloom.removeIntentProfile', (intent: Intent) =>
-            intent && removeIntentProfile(intent, context, logger)
-        ),
-        vscode.commands.registerCommand('bloom.openIntentInBrowser', async (intent?: Intent) => {
-            if (!intent) {
-                const intents = await getAvailableIntents(workspaceFolder);
-                if (intents.length === 0) return vscode.window.showInformationMessage('No intents found');
-                const selected = await vscode.window.showQuickPick(
-                    intents.map(i => ({ label: i.metadata.name, intent: i })),
-                    { placeHolder: 'Select intent' }
-                );
-                intent = selected?.intent;
+        vscode.commands.registerCommand('bloom.manageProfiles', () => {
+            try {
+                ProfileManagerPanel.createOrShow(context.extensionUri, logger, context);
+            } catch (error: any) {
+                logger.error('Error opening profile manager', error);
+                vscode.window.showErrorMessage(`Error abriendo gestor de perfiles: ${error.message}`);
             }
-            if (intent) await openIntentInBrowser(intent, context, logger);
-        }),
-        vscode.commands.registerCommand('bloom.openClaudeInBrowser', () => openProviderInBrowser('claude', context, logger)),
-        vscode.commands.registerCommand('bloom.openChatGPTInBrowser', () => openProviderInBrowser('chatgpt', context, logger)),
-        vscode.commands.registerCommand('bloom.openGrokInBrowser', () => openProviderInBrowser('grok', context, logger)),
-        vscode.commands.registerCommand('bloom.showWelcome', () => welcomeWebview.show()),
-        vscode.commands.registerCommand('bloom.focusRealNucleusView', () =>
-            vscode.commands.executeCommand('workbench.view.extension.bloomNucleus')
-        ),
-        vscode.commands.registerCommand('bloom.syncNucleusProjects', () => nucleusTreeProvider.refresh()),
-        vscode.commands.registerCommand('bloom.openNucleusProject', (project: any) => project && openNucleusProject(project)),
-        vscode.commands.registerCommand('bloom.createNewNucleus', () => new NucleusSetupPanel(context).show())
+        })
     );
 
-    // Registro premium
-    if (!UserManager.init(context).isRegistered()) {
-        setTimeout(() => welcomeWebview.show(), 1000);
+    
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('bloom.refreshProfiles', () => {
+            try {
+                const provider = ProfileTreeProvider.getInstance();
+                if (provider) {
+                    provider.refresh();
+                    vscode.window.showInformationMessage('✅ Perfiles actualizados');
+                    logger.info('Chrome profiles refreshed');
+                } else {
+                    throw new Error('ProfileTreeProvider not initialized');
+                }
+            } catch (error: any) {
+                logger.error('Error refreshing profiles', error);
+                vscode.window.showErrorMessage(`Error refrescando perfiles: ${error.message}`);
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('bloom.configureIntentProfile', (intent: Intent) => {
+            if (intent) {
+                configureIntentProfile(intent, context, logger);
+            } else {
+                vscode.window.showWarningMessage('No intent selected');
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('bloom.changeIntentProfile', (intent: Intent) => {
+            if (intent) {
+                changeIntentProfile(intent, context, logger);
+            } else {
+                vscode.window.showWarningMessage('No intent selected');
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('bloom.removeIntentProfile', (intent: Intent) => {
+            if (intent) {
+                removeIntentProfile(intent, context, logger);
+            } else {
+                vscode.window.showWarningMessage('No intent selected');
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('bloom.openIntentInBrowser', async (intent?: Intent) => {
+            try {
+                if (!intent) {
+                    const intents = await getAvailableIntents(workspaceFolder);
+                    if (intents.length === 0) {
+                        vscode.window.showInformationMessage('No hay intents disponibles');
+                        return;
+                    }
+                    const selected = await vscode.window.showQuickPick(
+                        intents.map(i => ({ label: i.metadata.name, intent: i })),
+                        { placeHolder: 'Selecciona un intent' }
+                    );
+                    intent = selected?.intent;
+                }
+                if (intent) {
+                    await openIntentInBrowser(intent, context, logger);
+                }
+            } catch (error: any) {
+                logger.error('Error opening intent in browser', error);
+                vscode.window.showErrorMessage(`Error: ${error.message}`);
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('bloom.openClaudeInBrowser', () => {
+            openProviderInBrowser('claude', context, logger);
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('bloom.openChatGPTInBrowser', () => {
+            openProviderInBrowser('chatgpt', context, logger);
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('bloom.openGrokInBrowser', () => {
+            openProviderInBrowser('grok', context, logger);
+        })
+    );
+
+    // ========================================
+    // COMANDOS: Nucleus Management
+    // ========================================
+    context.subscriptions.push(
+        vscode.commands.registerCommand('bloom.showWelcome', () => {
+            try {
+                welcomeWebview.show();
+                logger.info('Welcome view shown');
+            } catch (error: any) {
+                logger.error('Error showing welcome', error);
+                vscode.window.showErrorMessage(`Error mostrando bienvenida: ${error.message}`);
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('bloom.createNucleusProject', async () => {
+            try {
+                welcomeWebview.show();
+                logger.info('Create Nucleus flow initiated');
+            } catch (error: any) {
+                logger.error('Error creating nucleus', error);
+                vscode.window.showErrorMessage(`Error creando Nucleus: ${error.message}`);
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('bloom.addProjectToNucleus', async (treeItem: any) => {
+            try {
+                if (!treeItem || !treeItem.data) {
+                    vscode.window.showErrorMessage('Error: No se pudo obtener información del Nucleus');
+                    return;
+                }
+
+                const orgName = treeItem.data.orgName;
+                const nucleusPath = treeItem.data.nucleusPath;
+
+                if (!nucleusPath) {
+                    vscode.window.showErrorMessage(`No se encontró el Nucleus para ${orgName}`);
+                    return;
+                }
+
+                await manageProject(nucleusPath, orgName);
+            } catch (error: any) {
+                logger.error('Error adding project to nucleus', error);
+                vscode.window.showErrorMessage(`Error: ${error.message}`);
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('bloom.linkToNucleus', async (uri?: vscode.Uri) => {
+            try {
+                await linkToNucleus(uri);
+            } catch (error: any) {
+                logger.error('Error linking to nucleus', error);
+                vscode.window.showErrorMessage(`Error vinculando a Nucleus: ${error.message}`);
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('bloom.syncNucleusProjects', () => {
+            try {
+                nucleusTreeProvider.refresh();
+                vscode.window.showInformationMessage('🔄 Nucleus tree actualizado');
+                logger.info('Nucleus tree refreshed');
+            } catch (error: any) {
+                logger.error('Error syncing nucleus projects', error);
+                vscode.window.showErrorMessage(`Error sincronizando: ${error.message}`);
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('bloom.openNucleusProject', (project: any) => {
+            try {
+                if (project) {
+                    openNucleusProject(project);
+                } else {
+                    vscode.window.showWarningMessage('No project selected');
+                }
+            } catch (error: any) {
+                logger.error('Error opening nucleus project', error);
+                vscode.window.showErrorMessage(`Error abriendo proyecto: ${error.message}`);
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('bloom.createNewNucleus', () => {
+            try {
+                new NucleusSetupPanel(context).show();
+                logger.info('Nucleus setup panel opened');
+            } catch (error: any) {
+                logger.error('Error opening nucleus setup', error);
+                vscode.window.showErrorMessage(`Error: ${error.message}`);
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('bloom.focusRealNucleusView', () => {
+            vscode.commands.executeCommand('workbench.view.extension.bloomAiBridge');
+        })
+    );
+
+    // ========================================
+    // COMANDOS: Git Management
+    // ========================================
+    context.subscriptions.push(
+        vscode.commands.registerCommand('bloom.reviewPendingCommits', async () => {
+            try {
+                await GitManager.reviewAndCommit();
+            } catch (error: any) {
+                logger.error('Error reviewing commits', error);
+                vscode.window.showErrorMessage(`Error: ${error.message}`);
+            }
+        })
+    );
+
+    // ========================================
+    // COMANDO: Reset Registration (DEBUG)
+    // ========================================
+    context.subscriptions.push(
+        vscode.commands.registerCommand('bloom.resetRegistration', async () => {
+            const confirm = await vscode.window.showWarningMessage(
+                '⚠️ ¿Estás seguro de que querés resetear el registro?\n\nEsto borrará:\n- Datos de GitHub guardados\n- Configuración de organizaciones\n- Estado de registro',
+                { modal: true },
+                'Sí, Resetear',
+                'Cancelar'
+            );
+
+            if (confirm === 'Sí, Resetear') {
+                try {
+                    await UserManager.init(context).clear();
+                    
+                    vscode.window.showInformationMessage(
+                        '✅ Registro reseteado exitosamente. La ventana se recargará...'
+                    );
+                    
+                    logger.info('Registration reset - Reloading window');
+                    
+                    // Recargar ventana después de 1 segundo
+                    setTimeout(async () => {
+                        await vscode.commands.executeCommand('workbench.action.reloadWindow');
+                    }, 1000);
+                    
+                } catch (error: any) {
+                    vscode.window.showErrorMessage(`Error reseteando registro: ${error.message}`);
+                    logger.error('Error en resetRegistration', error);
+                }
+            }
+        })
+    );
+
+    // ========================================
+    // ⛓️‍💥 DESVINCULAR NUCLEUS (Botón oficial) – VERSIÓN 100% CORREGIDA
+    // ========================================
+    context.subscriptions.push(
+        vscode.commands.registerCommand('bloom.unlinkNucleus', async () => {
+            const userData = await UserManager.getUserData() as {
+                githubOrg: string | null;
+                allOrgs: string[];
+            } | null;
+
+            if (!userData?.githubOrg) {
+                vscode.window.showWarningMessage('Ningún Nucleus vinculado actualmente');
+                return;
+            }
+
+            const org: string = userData.githubOrg;
+
+            const choice = await vscode.window.showWarningMessage(
+                `⛓️‍💥 Desvincular Nucleus de ${org}`,
+                { 
+                    modal: true, 
+                    detail: "El repositorio local y remoto NO se borrarán.\nSolo se quitará del plugin. Podrás volver a levantarlo cuando quieras." 
+                },
+                'Sí, desvincular',
+                'Cancelar'
+            );
+
+            if (choice !== 'Sí, desvincular') return;
+
+            // Remover de la lista de organizaciones
+            userData.allOrgs = userData.allOrgs.filter((o: string) => o !== org);
+
+            // Si era el activo, pasar al siguiente (o null)
+            if (userData.githubOrg === org) {
+                userData.githubOrg = userData.allOrgs[0] || null;
+            }
+
+            // Guardar cambios
+            await context.globalState.update('bloom.user', userData);
+
+            // Actualizar contexto global de VSCode
+            await vscode.commands.executeCommand('setContext', 'bloom.isRegistered', userData.githubOrg !== null);
+
+            // Cerrar solo las carpetas relacionadas con este nucleus (corregido 100%)
+            const foldersToRemove = vscode.workspace.workspaceFolders?.filter(folder =>
+                folder.name.includes(`nucleus-${org}`) || 
+                folder.uri.fsPath.includes(`nucleus-${org}`)
+            ) ?? [];
+
+            if (foldersToRemove.length > 0) {
+                const indices = foldersToRemove.map(f => vscode.workspace.workspaceFolders!.indexOf(f));
+                // Borrar de atrás hacia adelante para no romper índices
+                for (let i = indices.length - 1; i >= 0; i--) {
+                    await vscode.workspace.updateWorkspaceFolders(indices[i], 1);
+                }
+            }
+
+            // Refresh del árbol
+            nucleusTreeProvider.refresh();
+
+            vscode.window.showInformationMessage(`✅ Nucleus ${org} desvinculado correctamente`);
+        })
+    );
+
+    // ========================================
+    // VERIFICACIÓN: Mostrar Welcome en primera instalación
+    // ========================================
+    const isRegistered = UserManager.init(context).isRegistered();
+    
+    logger.info(`Estado de registro: ${isRegistered ? 'REGISTRADO' : 'NO REGISTRADO'}`);
+    
+    if (!isRegistered) {
+        logger.info('Primera instalación detectada - Mostrando Welcome en 1 segundo');
+        setTimeout(() => {
+            try {
+                welcomeWebview.show();
+            } catch (error: any) {
+                logger.error('Error showing welcome on first run', error);
+            }
+        }, 1000);
     }
 
-    vscode.commands.executeCommand('setContext', 'bloom.isRegistered', UserManager.init(context).isRegistered());
+    // Actualizar contexto de VSCode
+    vscode.commands.executeCommand('setContext', 'bloom.isRegistered', isRegistered);
+
+    logger.info('✅ Bloom BTIP activation complete - All commands registered');
 }
 
+/**
+ * Registra comandos críticos incluso sin workspace
+ */
+function registerCriticalCommands(
+    context: vscode.ExtensionContext,
+    logger: Logger,
+    welcomeWebview: WelcomeView
+): void {
+    context.subscriptions.push(
+        vscode.commands.registerCommand('bloom.showWelcome', () => {
+            welcomeWebview.show();
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('bloom.createNucleusProject', () => {
+            welcomeWebview.show();
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('bloom.resetRegistration', async () => {
+            await UserManager.init(context).clear();
+            vscode.window.showInformationMessage('Registro reseteado');
+        })
+    );
+
+    logger.info('Critical commands registered (no workspace mode)');
+}
+
+/**
+ * Obtiene intents disponibles en el workspace
+ */
 async function getAvailableIntents(workspaceFolder: vscode.WorkspaceFolder): Promise<Intent[]> {
     const intentsPath = path.join(workspaceFolder.uri.fsPath, '.bloom', 'intents');
-    if (!fs.existsSync(intentsPath)) return [];
+    
+    if (!fs.existsSync(intentsPath)) {
+        return [];
+    }
 
     const files = fs.readdirSync(intentsPath).filter(f => f.endsWith('.json'));
     const intents: Intent[] = [];
 
     for (const file of files) {
         try {
-            const data = JSON.parse(fs.readFileSync(path.join(intentsPath, file), 'utf-8')) as Intent;
-            if (data?.metadata?.name) intents.push(data);
-        } catch { }
+            const filePath = path.join(intentsPath, file);
+            const data = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as Intent;
+            
+            if (data?.metadata?.name) {
+                intents.push(data);
+            }
+        } catch (error) {
+            // Skip invalid intent files
+            console.warn(`Skipping invalid intent file: ${file}`);
+        }
     }
+    
     return intents;
 }
 
@@ -3034,7 +4639,7 @@ export function deactivate() {
 ```
 
 ### C:/repos/bloom-videos/bloom-development-extension/src/managers/userManager.ts
-Metadatos: Lenguaje: typescript, Hash MD5: a35f271eb96a232edf4795f84a5212a2
+Metadatos: Lenguaje: typescript, Hash MD5: e1825d546d9d902fb76685147c8c91eb
 
 ```typescript
 // src/managers/userManager.ts
@@ -3092,421 +4697,320 @@ export class UserManager {
         await this.context.globalState.update('bloom.user.v3', undefined);
         await vscode.commands.executeCommand('setContext', 'bloom.isRegistered', false);
     }
+
+    static async getUserData(): Promise<any> {
+        const context = this.instance?.context;
+        if (!context) return null;
+        return context.globalState.get('bloom.user', null);
+    }
 }
 ```
 
-### C:/repos/bloom-videos/bloom-development-extension/src/models/bloomConfig.ts
-Metadatos: Lenguaje: typescript, Hash MD5: 350870ef26928fef261f00e68a8af060
+### C:/repos/bloom-videos/bloom-development-extension/src/managers/workspaceManager.ts
+Metadatos: Lenguaje: typescript, Hash MD5: 779530b637f4d06b8632aff79fad71c3
 
 ```typescript
+// src/managers/workspaceManager.ts
 import * as vscode from 'vscode';
-import { v4 as uuidv4 } from 'uuid';
+import * as path from 'path';
+import * as fs from 'fs';
 
-// ============================================================================
-// ORIGINAL BLOOM CONFIG (actualizado)
-// ============================================================================
-
-export type ProjectStrategy =
-    | 'android'
-    | 'ios'
-    | 'react-web'
-    | 'web'          
-    | 'node'
-    | 'python-flask'
-    | 'php-laravel'
-    | 'nucleus'
-    | 'generic';
-
-export interface AndroidStrategyConfig {
-    minSdk: number;
-    targetSdk: number;
-    kotlinVersion: string;
-    useCompose: boolean;
+interface WorkspaceFolder {
+    name: string;
+    path: string;
 }
 
-export interface IosStrategyConfig {
-    minVersion: string;
-    swiftVersion: string;
-    useSwiftUI: boolean;
-}
-
-export interface ReactStrategyConfig {
-    reactVersion: string;
-    useTypeScript: boolean;
-    cssFramework?: 'tailwind' | 'styled-components' | 'css-modules';
-}
-
-// NEW: Web strategy config (similar to react-web but more generic)
-export interface WebStrategyConfig {
-    useTypeScript: boolean;
-    cssFramework?: 'tailwind' | 'styled-components' | 'css-modules' | 'vanilla-css';
-    framework?: 'vanilla' | 'vue' | 'angular' | 'svelte';
-}
-
-export interface NodeStrategyConfig {
-    nodeVersion: string;
-    packageManager: 'npm' | 'yarn' | 'pnpm';
-    framework?: 'express' | 'fastify' | 'nest';
-}
-
-export interface PythonFlaskStrategyConfig {
-    pythonVersion: string;
-    flaskVersion: string;
-    databaseType: 'sqlite' | 'postgresql' | 'mysql';
-    useAlembic: boolean;
-}
-
-export interface PhpLaravelStrategyConfig {
-    phpVersion: string;
-    laravelVersion: string;
-    databaseDriver: 'mysql' | 'pgsql' | 'sqlite';
-    usePest: boolean;
-}
-
-export interface GenericStrategyConfig {
-    customSettings: Record<string, any>;
-}
-
-export type StrategyConfig =
-    | AndroidStrategyConfig
-    | IosStrategyConfig
-    | ReactStrategyConfig
-    | WebStrategyConfig
-    | NodeStrategyConfig
-    | PythonFlaskStrategyConfig
-    | PhpLaravelStrategyConfig
-    | NucleusConfig
-    | GenericStrategyConfig;
-
-export interface BloomConfig {
-    version: string;
-    projectName: string;
-    strategy: ProjectStrategy;
-    strategyConfig: StrategyConfig;
-    createdAt: string;
-    lastModified: string;
-    paths: {
-        core: string;
-        intents: string;
-        project: string;
-        utils: string;
+interface WorkspaceConfig {
+    folders: WorkspaceFolder[];
+    settings: {
+        'bloom.activeNucleus'?: string;
+        [key: string]: any;
+    };
+    extensions?: {
+        recommendations: string[];
     };
 }
 
-export function createDefaultConfig(
-    projectName: string,
-    strategy: ProjectStrategy,
-    workspaceFolder: vscode.WorkspaceFolder
-): BloomConfig {
-    return {
-        version: '1.0.0',
-        projectName,
-        strategy,
-        strategyConfig: getDefaultStrategyConfig(strategy),
-        createdAt: new Date().toISOString(),
-        lastModified: new Date().toISOString(),
-        paths: {
-            core: '.bloom/core',
-            intents: '.bloom/intents',
-            project: '.bloom/project',
-            utils: '.bloom/utils'
+export class WorkspaceManager {
+    /**
+     * Inicializa workspace al crear Nucleus por primera vez
+     * Crea archivo .code-workspace en el parent folder
+     */
+    static async initializeWorkspace(nucleusPath: string): Promise<void> {
+        const nucleusName = path.basename(nucleusPath);
+        const parentFolder = path.dirname(nucleusPath);
+        const orgName = nucleusName.replace('nucleus-', '');
+        const workspaceFilePath = path.join(parentFolder, `${orgName}-workspace.code-workspace`);
+
+        // Verificar si ya existe workspace
+        if (fs.existsSync(workspaceFilePath)) {
+            console.log(`Workspace file already exists: ${workspaceFilePath}`);
+            return;
         }
-    };
-}
 
-function getDefaultStrategyConfig(strategy: ProjectStrategy): StrategyConfig {
-    switch (strategy) {
-        case 'android':
-            return {
-                minSdk: 24,
-                targetSdk: 34,
-                kotlinVersion: '1.9.0',
-                useCompose: true
-            } as AndroidStrategyConfig;
+        // Crear configuración inicial del workspace
+        const workspaceConfig: WorkspaceConfig = {
+            folders: [
+                {
+                    name: `🏢 ${nucleusName}`,
+                    path: `./${nucleusName}`
+                }
+            ],
+            settings: {                
+                'bloom.activeNucleus': nucleusName,
+                'window.title': `${orgName} Workspace`,
+                'files.exclude': {
+                    '**/.git': true,
+                    '**/.DS_Store': true,
+                    '**/node_modules': true
+                }
+            },
+            extensions: {
+                recommendations: ['bloom.bloom-btip-plugin']
+            }
+        };
 
-        case 'ios':
-            return {
-                minVersion: '15.0',
-                swiftVersion: '5.9',
-                useSwiftUI: true
-            } as IosStrategyConfig;
+        // Guardar archivo .code-workspace
+        fs.writeFileSync(
+            workspaceFilePath,
+            JSON.stringify(workspaceConfig, null, 2),
+            'utf-8'
+        );
 
-        case 'react-web':
-            return {
-                reactVersion: '18.2.0',
-                useTypeScript: true,
-                cssFramework: 'tailwind'
-            } as ReactStrategyConfig;
+        console.log(`✅ Workspace file created: ${workspaceFilePath}`);
 
-        case 'web':
-            return {
-                useTypeScript: true,
-                cssFramework: 'tailwind',
-                framework: 'vanilla'
-            } as WebStrategyConfig;
+        // Ofrecer abrir el workspace
+        const openWorkspace = await vscode.window.showInformationMessage(
+            `Workspace creado: ${path.basename(workspaceFilePath)}`,
+            'Abrir Workspace',
+            'Más Tarde'
+        );
 
-        case 'node':
-            return {
-                nodeVersion: '18.0.0',
-                packageManager: 'npm',
-                framework: 'express'
-            } as NodeStrategyConfig;
-
-        case 'python-flask':
-            return {
-                pythonVersion: '3.11',
-                flaskVersion: '3.0.0',
-                databaseType: 'sqlite',
-                useAlembic: true
-            } as PythonFlaskStrategyConfig;
-
-        case 'php-laravel':
-            return {
-                phpVersion: '8.2',
-                laravelVersion: '10.0',
-                databaseDriver: 'mysql',
-                usePest: true
-            } as PhpLaravelStrategyConfig;
-
-        case 'nucleus':
-            return createNucleusConfig('default-org', 'https://github.com/default', 'https://github.com/default/nucleus');
-
-        default:
-            return {
-                customSettings: {}
-            } as GenericStrategyConfig;
-    }
-}
-
-// ============================================================================
-// NUCLEUS EXTENSION
-// ============================================================================
-
-export type ProjectStatus = 'active' | 'development' | 'archived' | 'planned';
-export type ProjectType = 'nucleus' | 'btip';
-
-export interface NucleusOrganization {
-    name: string;
-    displayName: string;
-    url: string;
-    description?: string;
-}
-
-export interface NucleusInfo {
-    name: string;
-    repoUrl: string;
-    createdAt: string;
-    updatedAt: string;
-}
-
-export interface LinkedProject {
-    id: string;
-    name: string;
-    displayName: string;
-    description?: string;
-    strategy: ProjectStrategy;
-    repoUrl: string;
-    localPath: string;
-    status: ProjectStatus;
-    linkedAt: string;
-}
-
-export interface NucleusSettings {
-    autoIndexProjects: boolean;
-    generateWebDocs: boolean;
-}
-
-export interface NucleusConfig {
-    type: 'nucleus';
-    version: string;
-    id: string;
-    organization: NucleusOrganization;
-    nucleus: NucleusInfo;
-    projects: LinkedProject[];
-    settings: NucleusSettings;
-}
-
-export interface NucleusLink {
-    linkedToNucleus: boolean;
-    nucleusId: string;
-    nucleusName: string;
-    nucleusPath: string;
-    nucleusUrl: string;
-    organizationName: string;
-    projectId: string;
-    linkedAt: string;
-}
-
-export function createNucleusConfig(
-    organizationName: string,
-    organizationUrl: string,
-    nucleusRepoUrl: string
-): NucleusConfig {
-    const now = new Date().toISOString();
-    const nucleusName = `nucleus-${organizationName.toLowerCase().replace(/\s+/g, '-')}`;
-    
-    return {
-        type: 'nucleus',
-        version: '1.0.0',
-        id: uuidv4(),
-        organization: {
-            name: organizationName,
-            displayName: organizationName,
-            url: organizationUrl,
-            description: ''
-        },
-        nucleus: {
-            name: nucleusName,
-            repoUrl: nucleusRepoUrl,
-            createdAt: now,
-            updatedAt: now
-        },
-        projects: [],
-        settings: {
-            autoIndexProjects: true,
-            generateWebDocs: false
+        if (openWorkspace === 'Abrir Workspace') {
+            await vscode.commands.executeCommand(
+                'vscode.openFolder',
+                vscode.Uri.file(workspaceFilePath),
+                false // No nueva ventana - reemplaza actual
+            );
         }
-    };
-}
-
-export function createLinkedProject(
-    name: string,
-    displayName: string,
-    strategy: ProjectStrategy,
-    repoUrl: string,
-    localPath: string
-): LinkedProject {
-    return {
-        id: uuidv4(),
-        name,
-        displayName,
-        description: '',
-        strategy,
-        repoUrl,
-        localPath,
-        status: 'active',
-        linkedAt: new Date().toISOString()
-    };
-}
-
-export function createNucleusLink(
-    nucleusConfig: NucleusConfig,
-    projectId: string,
-    nucleusPath: string
-): NucleusLink {
-    return {
-        linkedToNucleus: true,
-        nucleusId: nucleusConfig.id,
-        nucleusName: nucleusConfig.nucleus.name,
-        nucleusPath,
-        nucleusUrl: nucleusConfig.nucleus.repoUrl,
-        organizationName: nucleusConfig.organization.name,
-        projectId,
-        linkedAt: new Date().toISOString()
-    };
-}
-
-export function detectProjectType(bloomPath: string): ProjectType | null {
-    const fs = require('fs');
-    const path = require('path');
-    
-    // Check for nucleus-config.json
-    const nucleusConfigPath = path.join(bloomPath, 'core', 'nucleus-config.json');
-    if (fs.existsSync(nucleusConfigPath)) {
-        return 'nucleus';
     }
-    
-    // Check for project/ directory (BTIP indicator)
-    const projectDir = path.join(bloomPath, 'project');
-    if (fs.existsSync(projectDir)) {
-        return 'btip';
+
+    /**
+     * Agrega un proyecto al workspace actual
+     * Si no hay workspace, crea uno nuevo
+     */
+    static async addProjectToWorkspace(projectPath: string, projectName?: string): Promise<void> {
+        const workspaceFolders = vscode.workspace.workspaceFolders || [];
+        const projectUri = vscode.Uri.file(projectPath);
+
+        // Verificar si ya está en el workspace
+        const alreadyInWorkspace = workspaceFolders.some(
+            folder => folder.uri.fsPath === projectPath
+        );
+
+        if (alreadyInWorkspace) {
+            console.log(`Project already in workspace: ${projectPath}`);
+            
+            // Enfocar en el explorador
+            await vscode.commands.executeCommand(
+                'revealInExplorer',
+                projectUri
+            );
+            return;
+        }
+
+        // Detectar estrategia para icono
+        const icon = await this.getProjectIcon(projectPath);
+        const displayName = projectName || path.basename(projectPath);
+
+        // Agregar al workspace usando API nativa
+        const workspaceEdit = vscode.workspace.updateWorkspaceFolders(
+            workspaceFolders.length, // Insertar al final
+            0, // No eliminar ninguno
+            {
+                uri: projectUri,
+                name: `${icon} ${displayName}`
+            }
+        );
+
+        if (workspaceEdit) {
+            console.log(`✅ Project added to workspace: ${projectPath}`);
+            
+            // Actualizar archivo .code-workspace si existe
+            await this.syncWorkspaceFile();
+            
+            // Enfocar en el nuevo proyecto
+            setTimeout(async () => {
+                await vscode.commands.executeCommand(
+                    'revealInExplorer',
+                    projectUri
+                );
+            }, 500);
+        } else {
+            console.error(`❌ Failed to add project to workspace: ${projectPath}`);
+            
+            // Fallback: ofrecer abrir manualmente
+            const openManually = await vscode.window.showWarningMessage(
+                `No se pudo agregar "${displayName}" al workspace actual.`,
+                'Abrir en Nueva Ventana',
+                'Cancelar'
+            );
+
+            if (openManually === 'Abrir en Nueva Ventana') {
+                await vscode.commands.executeCommand(
+                    'vscode.openFolder',
+                    projectUri,
+                    true
+                );
+            }
+        }
     }
-    
-    // Check for nucleus.json (linked BTIP)
-    const nucleusLinkPath = path.join(bloomPath, 'nucleus.json');
-    if (fs.existsSync(nucleusLinkPath)) {
-        return 'btip';
+
+    /**
+     * Remueve un proyecto del workspace
+     */
+    static async removeProjectFromWorkspace(projectPath: string): Promise<void> {
+        const workspaceFolders = vscode.workspace.workspaceFolders || [];
+        
+        const folderIndex = workspaceFolders.findIndex(
+            folder => folder.uri.fsPath === projectPath
+        );
+
+        if (folderIndex === -1) {
+            console.log(`Project not in workspace: ${projectPath}`);
+            return;
+        }
+
+        const workspaceEdit = vscode.workspace.updateWorkspaceFolders(
+            folderIndex, // Índice a remover
+            1 // Cantidad a remover
+        );
+
+        if (workspaceEdit) {
+            console.log(`✅ Project removed from workspace: ${projectPath}`);
+            await this.syncWorkspaceFile();
+        }
     }
-    
-    return null;
-}
 
-export function isNucleusProject(bloomPath: string): boolean {
-    return detectProjectType(bloomPath) === 'nucleus';
-}
-
-export function isBTIPProject(bloomPath: string): boolean {
-    return detectProjectType(bloomPath) === 'btip';
-}
-
-export function hasNucleusLink(bloomPath: string): boolean {
-    const fs = require('fs');
-    const path = require('path');
-    const nucleusLinkPath = path.join(bloomPath, 'nucleus.json');
-    return fs.existsSync(nucleusLinkPath);
-}
-
-export function loadNucleusConfig(bloomPath: string): NucleusConfig | null {
-    const fs = require('fs');
-    const path = require('path');
-    
-    try {
-        const configPath = path.join(bloomPath, 'core', 'nucleus-config.json');
-        if (!fs.existsSync(configPath)) {
+    /**
+     * Lee la configuración del workspace actual
+     */
+    static getWorkspaceConfig(): WorkspaceConfig | null {
+        const workspaceFile = vscode.workspace.workspaceFile;
+        
+        if (!workspaceFile) {
             return null;
         }
-        
-        const content = fs.readFileSync(configPath, 'utf-8');
-        return JSON.parse(content) as NucleusConfig;
-    } catch (error) {
-        console.error('Error loading nucleus config:', error);
-        return null;
-    }
-}
 
-export function loadNucleusLink(bloomPath: string): NucleusLink | null {
-    const fs = require('fs');
-    const path = require('path');
-    
-    try {
-        const linkPath = path.join(bloomPath, 'nucleus.json');
-        if (!fs.existsSync(linkPath)) {
+        try {
+            const content = fs.readFileSync(workspaceFile.fsPath, 'utf-8');
+            return JSON.parse(content) as WorkspaceConfig;
+        } catch (error) {
+            console.error('Error reading workspace config:', error);
             return null;
         }
+    }
+
+    /**
+     * Sincroniza el archivo .code-workspace con el estado actual
+     */
+    private static async syncWorkspaceFile(): Promise<void> {
+        const workspaceFile = vscode.workspace.workspaceFile;
         
-        const content = fs.readFileSync(linkPath, 'utf-8');
-        return JSON.parse(content) as NucleusLink;
-    } catch (error) {
-        console.error('Error loading nucleus link:', error);
+        if (!workspaceFile) {
+            return;
+        }
+
+        const workspaceFolders = vscode.workspace.workspaceFolders || [];
+        const workspaceRoot = path.dirname(workspaceFile.fsPath);
+
+        try {
+            // Leer config existente
+            let config: WorkspaceConfig;
+            
+            if (fs.existsSync(workspaceFile.fsPath)) {
+                const content = fs.readFileSync(workspaceFile.fsPath, 'utf-8');
+                config = JSON.parse(content);
+            } else {
+                config = { folders: [], settings: {} };
+            }
+
+            // Actualizar folders con estado actual
+            config.folders = workspaceFolders.map(folder => {
+                const relativePath = path.relative(workspaceRoot, folder.uri.fsPath);
+                return {
+                    name: folder.name,
+                    path: relativePath.startsWith('.') ? relativePath : `./${relativePath}`
+                };
+            });
+
+            // Guardar
+            fs.writeFileSync(
+                workspaceFile.fsPath,
+                JSON.stringify(config, null, 2),
+                'utf-8'
+            );
+
+            console.log(`✅ Workspace file synchronized`);
+        } catch (error) {
+            console.error('Error syncing workspace file:', error);
+        }
+    }
+
+    /**
+     * Detecta el icono apropiado según el tipo de proyecto
+     */
+    private static async getProjectIcon(projectPath: string): Promise<string> {
+        // Importar ProjectDetector dinámicamente para evitar dependencias circulares
+        try {
+            const { ProjectDetector } = await import('../strategies/ProjectDetector');
+            const strategy = await ProjectDetector.getStrategyName(projectPath);
+            
+            const icons: Record<string, string> = {
+                'android': '📱',
+                'ios': '🍎',
+                'react-web': '🌐',
+                'web': '🌐',
+                'node': '⚙️',
+                'python-flask': '🐍',
+                'php-laravel': '🐘',
+                'nucleus': '🏢',
+                'generic': '📦'
+            };
+            
+            return icons[strategy] || '📦';
+        } catch {
+            return '📦';
+        }
+    }
+
+    /**
+     * Verifica si estamos en un multi-root workspace
+     */
+    static isMultiRootWorkspace(): boolean {
+        return (vscode.workspace.workspaceFolders?.length || 0) > 1;
+    }
+
+    /**
+     * Obtiene el path del Nucleus actual en el workspace
+     */
+    static getCurrentNucleusPath(): string | null {
+        const folders = vscode.workspace.workspaceFolders || [];
+        
+        for (const folder of folders) {
+            const nucleusConfigPath = path.join(
+                folder.uri.fsPath,
+                '.bloom',
+                'core',
+                'nucleus-config.json'
+            );
+            
+            if (fs.existsSync(nucleusConfigPath)) {
+                return folder.uri.fsPath;
+            }
+        }
+        
         return null;
-    }
-}
-
-export function saveNucleusConfig(bloomPath: string, config: NucleusConfig): boolean {
-    const fs = require('fs');
-    const path = require('path');
-    
-    try {
-        const configPath = path.join(bloomPath, 'core', 'nucleus-config.json');
-        fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
-        return true;
-    } catch (error) {
-        console.error('Error saving nucleus config:', error);
-        return false;
-    }
-}
-
-export function saveNucleusLink(bloomPath: string, link: NucleusLink): boolean {
-    const fs = require('fs');
-    const path = require('path');
-    
-    try {
-        const linkPath = path.join(bloomPath, 'nucleus.json');
-        fs.writeFileSync(linkPath, JSON.stringify(link, null, 2), 'utf-8');
-        return true;
-    } catch (error) {
-        console.error('Error saving nucleus link:', error);
-        return false;
     }
 }
 ```
@@ -3951,7 +5455,7 @@ export class IntentTreeItem extends vscode.TreeItem {
 ```
 
 ### C:/repos/bloom-videos/bloom-development-extension/src/providers/nucleusTreeProvider.ts
-Metadatos: Lenguaje: typescript, Hash MD5: 851d77bc5ede898e2da7412353c89e3a
+Metadatos: Lenguaje: typescript, Hash MD5: 8ca0cce5e2433796f67da96dede04957
 
 ```typescript
 // src/providers/nucleusTreeProvider.ts
@@ -3978,7 +5482,7 @@ export class NucleusTreeProvider implements vscode.TreeDataProvider<NucleusTreeI
 
     refresh(): void {
         this.detectAllNucleus();
-        this._onDidChangeTreeData.fire(undefined);  // ← CORREGIDO
+        this._onDidChangeTreeData.fire(undefined);
     }
 
     private detectAllNucleus(): void {
@@ -3999,6 +5503,7 @@ export class NucleusTreeProvider implements vscode.TreeDataProvider<NucleusTreeI
     private detectNucleusForOrg(org: string): NucleusConfig | null {
         if (!this.workspaceRoot) return null;
 
+        // Caso 1: Workspace actual ES un Nucleus
         const bloomPath = path.join(this.workspaceRoot, '.bloom');
         const configPath = path.join(bloomPath, 'core', 'nucleus-config.json');
 
@@ -4009,17 +5514,30 @@ export class NucleusTreeProvider implements vscode.TreeDataProvider<NucleusTreeI
             }
         }
 
+        // Caso 2: Workspace tiene link a Nucleus
         const linkPath = path.join(bloomPath, 'nucleus.json');
         if (fs.existsSync(linkPath)) {
             try {
                 const link = JSON.parse(fs.readFileSync(linkPath, 'utf-8'));
-                if (link.organization === org && link.nucleusPath) {
+                if (link.organizationName === org && link.nucleusPath) {
                     const fullPath = path.resolve(this.workspaceRoot, link.nucleusPath);
                     if (fs.existsSync(fullPath)) {
                         return loadNucleusConfig(path.join(fullPath, '.bloom'));
                     }
                 }
             } catch {}
+        }
+
+        // Caso 3: Buscar en parent directory
+        const parentDir = path.dirname(this.workspaceRoot);
+        const nucleusName = `nucleus-${org}`;
+        const nucleusPath = path.join(parentDir, nucleusName);
+        
+        if (fs.existsSync(nucleusPath)) {
+            const nucleusBloomPath = path.join(nucleusPath, '.bloom');
+            if (fs.existsSync(nucleusBloomPath)) {
+                return loadNucleusConfig(nucleusBloomPath);
+            }
         }
 
         return null;
@@ -4030,41 +5548,59 @@ export class NucleusTreeProvider implements vscode.TreeDataProvider<NucleusTreeI
     }
 
     async getChildren(element?: NucleusTreeItem): Promise<NucleusTreeItem[]> {
+        console.log('[NucleusTree] getChildren called, element:', element?.type);
+        
         if (!element) {
             const items: NucleusTreeItem[] = [];
 
-            for (const org of this.configs.keys()) {
-                items.push(new NucleusTreeItem(
-                    `${org}`,
+            console.log('[NucleusTree] Configs detected:', this.configs.size);
+
+            // Mostrar organizaciones con Nucleus
+            for (const [org, config] of this.configs.entries()) {
+                console.log('[NucleusTree] Processing org:', org, 'projects:', config.projects.length);
+                
+                // Encontrar el path del Nucleus
+                const nucleusPath = this.findNucleusPath(org);
+                
+                console.log('[NucleusTree] Nucleus path for', org, ':', nucleusPath);
+                
+                const orgItem = new NucleusTreeItem(
+                    `${org} (${config.projects.length} proyecto${config.projects.length !== 1 ? 's' : ''})`,
                     vscode.TreeItemCollapsibleState.Expanded,
                     'org',
-                    org
-                ));
+                    { orgName: org, nucleusPath: nucleusPath, config: config }
+                );
+                
+                // IMPORTANTE: Agregar tooltip para que el usuario sepa que puede agregar
+                orgItem.tooltip = `Click derecho o en el ícono + para agregar proyectos`;
+                
+                console.log('[NucleusTree] orgItem contextValue:', orgItem.contextValue);
+                
+                items.push(orgItem);
             }
 
-            items.push(new NucleusTreeItem(
-                'Agregar otro Nucleus',
-                vscode.TreeItemCollapsibleState.None,
-                'add'
-            ));
-
-            if (items.length === 1) {
-                items.unshift(new NucleusTreeItem(
-                    'No hay Nucleus configurado',
+            // Solo mostrar si no hay Nucleus detectados
+            if (items.length === 0) {
+                console.log('[NucleusTree] No configs found, showing info message');
+                items.push(new NucleusTreeItem(
+                    'No hay Nucleus en este workspace',
                     vscode.TreeItemCollapsibleState.None,
-                    'empty'
+                    'info'
                 ));
             }
 
+            console.log('[NucleusTree] Returning', items.length, 'items');
             return items;
         }
 
         if (element.type === 'org') {
-            const config = this.configs.get(element.data as string);
+            const org = element.data.orgName;
+            const config = this.configs.get(org);
             if (!config?.projects) return [];
+            
             return config.projects.map(p =>
                 new NucleusTreeItem(
-                    `${p.displayName || p.name}`,
+                    `${this.getProjectIcon(p.strategy)} ${p.displayName || p.name}`,
                     vscode.TreeItemCollapsibleState.None,
                     'project',
                     p,
@@ -4077,12 +5613,45 @@ export class NucleusTreeProvider implements vscode.TreeDataProvider<NucleusTreeI
             );
         }
 
-        if (element.type === 'add') {
-            vscode.commands.executeCommand('bloom.createNewNucleus');
-            return [];
+        return [];
+    }
+
+    private findNucleusPath(org: string): string | undefined {
+        if (!this.workspaceRoot) return undefined;
+
+        // Intentar workspace actual
+        const localBloom = path.join(this.workspaceRoot, '.bloom', 'core', 'nucleus-config.json');
+        if (fs.existsSync(localBloom)) {
+            return this.workspaceRoot;
         }
 
-        return [];
+        // Intentar parent directory
+        const parentDir = path.dirname(this.workspaceRoot);
+        const nucleusPath = path.join(parentDir, `nucleus-${org}`);
+        if (fs.existsSync(nucleusPath)) {
+            return nucleusPath;
+        }
+
+        return undefined;
+    }
+
+    private getProjectIcon(strategy: string): string {
+        const icons: Record<string, string> = {
+            'android': '📱',
+            'ios': '🍎',
+            'react-web': '🌐',
+            'web': '🌐',
+            'node': '⚙️',
+            'python-flask': '🐍',
+            'php-laravel': '🐘',
+            'generic': '📦'
+        };
+        return icons[strategy] || '📦';
+    }
+
+    // NUEVO: Método público para obtener nucleusPath
+    public getNucleusPath(org: string): string | undefined {
+        return this.findNucleusPath(org);
     }
 }
 
@@ -4090,7 +5659,7 @@ class NucleusTreeItem extends vscode.TreeItem {
     constructor(
         label: string,
         collapsibleState: vscode.TreeItemCollapsibleState,
-        public readonly type: 'org' | 'project' | 'add' | 'empty',
+        public readonly type: 'org' | 'project' | 'info',
         public readonly data?: any,
         command?: vscode.Command
     ) {
@@ -4100,21 +5669,20 @@ class NucleusTreeItem extends vscode.TreeItem {
         switch (type) {
             case 'org':
                 this.iconPath = new vscode.ThemeIcon('organization');
+                this.contextValue = 'nucleusOrg';
                 break;
             case 'project':
                 this.iconPath = new vscode.ThemeIcon('folder');
+                this.contextValue = 'nucleusProject';
+                this.tooltip = `${data.name} - ${data.strategy}`;
                 break;
-            case 'add':
-                this.iconPath = new vscode.ThemeIcon('add');
-                break;
-            case 'empty':
+            case 'info':
                 this.iconPath = new vscode.ThemeIcon('info');
                 break;
         }
     }
 }
 
-// ←←← LA FUNCIÓN QUE FALTABA EXPORTAR
 export async function openNucleusProject(project: LinkedProject): Promise<void> {
     try {
         const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -4123,11 +5691,15 @@ export async function openNucleusProject(project: LinkedProject): Promise<void> 
             return;
         }
 
+        // Intentar encontrar el proyecto
         let projectPath: string | null = null;
+        
+        // 1. Relativo al workspace actual
         const relativePath = path.join(workspaceRoot, project.localPath);
         if (fs.existsSync(relativePath)) {
             projectPath = relativePath;
         } else {
+            // 2. Relativo al parent directory
             const parentDir = path.dirname(workspaceRoot);
             const parentRelativePath = path.join(parentDir, project.localPath);
             if (fs.existsSync(parentRelativePath)) {
@@ -4137,17 +5709,18 @@ export async function openNucleusProject(project: LinkedProject): Promise<void> 
 
         if (!projectPath) {
             const browse = await vscode.window.showWarningMessage(
-                `Project path not found: ${project.localPath}`,
-                'Browse for Project', 'Cancel'
+                `No se encontró el proyecto en: ${project.localPath}`,
+                'Buscar Manualmente',
+                'Cancelar'
             );
 
-            if (browse === 'Browse for Project') {
+            if (browse === 'Buscar Manualmente') {
                 const selected = await vscode.window.showOpenDialog({
                     canSelectFiles: false,
                     canSelectFolders: true,
                     canSelectMany: false,
-                    openLabel: `Select ${project.name} folder`,
-                    title: `Locate ${project.displayName}`
+                    openLabel: `Seleccionar carpeta de ${project.name}`,
+                    title: `Localizar ${project.displayName}`
                 });
 
                 if (selected && selected.length > 0) {
@@ -4158,2358 +5731,30 @@ export async function openNucleusProject(project: LinkedProject): Promise<void> 
             if (!projectPath) return;
         }
 
-        await vscode.commands.executeCommand(
-            'vscode.openFolder',
-            vscode.Uri.file(projectPath),
-            true
-        );
+        // ✅ NUEVO: Agregar al workspace en lugar de abrir nueva ventana
+        const { WorkspaceManager } = await import('../managers/workspaceManager');
+        await WorkspaceManager.addProjectToWorkspace(projectPath, project.displayName);
+
     } catch (error: any) {
-        vscode.window.showErrorMessage(`Error opening project: ${error.message}`);
-    }
-}
-```
-
-### C:/repos/bloom-videos/bloom-development-extension/src/strategies/NucleusStrategy.ts
-Metadatos: Lenguaje: typescript, Hash MD5: 476ba538135d31f3b0079d8db53cd28d
-
-```typescript
-// src/strategies/NucleusStrategy.ts
-// Strategy for handling Nucleus (organizational) projects
-
-import * as vscode from 'vscode';
-import * as path from 'path';
-import * as fs from 'fs';
-import { CodebaseStrategy, FileDescriptor, FileCategory } from '../models/codebaseStrategy';
-import { ProjectType } from '../models/intent';
-
-export class NucleusStrategy implements CodebaseStrategy {
-    name = 'nucleus';
-    projectType: ProjectType = 'nucleus';
-    
-    /**
-     * Detects if the workspace is a Nucleus project
-     */
-    async detect(workspaceFolder: vscode.WorkspaceFolder): Promise<boolean> {
-        const bloomPath = path.join(workspaceFolder.uri.fsPath, '.bloom');
-        
-        if (!fs.existsSync(bloomPath)) {
-            return false;
-        }
-        
-        // Check for nucleus-config.json
-        const nucleusConfigPath = path.join(bloomPath, 'core', 'nucleus-config.json');
-        if (!fs.existsSync(nucleusConfigPath)) {
-            return false;
-        }
-        
-        // Validate it's actually a nucleus config
-        try {
-            const content = fs.readFileSync(nucleusConfigPath, 'utf-8');
-            const config = JSON.parse(content);
-            return config.type === 'nucleus';
-        } catch (error) {
-            return false;
-        }
-    }
-    
-    /**
-     * Categorizes files for Nucleus projects
-     * Nucleus projects focus on .bl (Bloom) documentation files
-     */
-    async categorize(files: vscode.Uri[]): Promise<FileDescriptor[]> {
-        const descriptors: FileDescriptor[] = [];
-        
-        for (const fileUri of files) {
-            const absolutePath = fileUri.fsPath;
-            const workspaceFolder = vscode.workspace.getWorkspaceFolder(fileUri);
-            
-            if (!workspaceFolder) {
-                continue;
-            }
-            
-            const relativePath = path.relative(workspaceFolder.uri.fsPath, absolutePath);
-            const extension = path.extname(absolutePath);
-            
-            let category: FileCategory = 'docs';
-            let priority = 5;
-            
-            // Categorize by location and type
-            if (relativePath.includes('.bloom/core/')) {
-                category = 'config';
-                priority = 10;
-            } else if (relativePath.includes('.bloom/organization/')) {
-                category = 'docs';
-                priority = 9;
-            } else if (relativePath.includes('.bloom/projects/')) {
-                category = 'docs';
-                priority = 8;
-            } else if (extension === '.json') {
-                category = 'config';
-                priority = 7;
-            } else if (extension === '.md') {
-                category = 'docs';
-                priority = 6;
-            }
-            
-            const stats = fs.statSync(absolutePath);
-            
-            descriptors.push({
-                relativePath,
-                absolutePath,
-                category,
-                priority,
-                size: stats.size,
-                extension,
-                metadata: {
-                    size: stats.size,
-                    type: extension,
-                    lastModified: stats.mtimeMs
-                }
-            });
-        }
-        
-        return descriptors;
-    }
-    
-    /**
-     * Prioritizes files for Nucleus projects
-     * Core files > Organization files > Project overviews
-     */
-    prioritize(files: FileDescriptor[]): FileDescriptor[] {
-        return files.sort((a, b) => {
-            // Sort by priority (higher first)
-            if (b.priority !== a.priority) {
-                return b.priority - a.priority;
-            }
-            
-            // Then by path depth (shallower first)
-            const depthA = a.relativePath.split(path.sep).length;
-            const depthB = b.relativePath.split(path.sep).length;
-            
-            if (depthA !== depthB) {
-                return depthA - depthB;
-            }
-            
-            // Finally alphabetically
-            return a.relativePath.localeCompare(b.relativePath);
-        });
-    }
-    
-    /**
-     * Legacy method for backward compatibility
-     */
-    async generateCodebase(projectRoot: string, outputPath: string): Promise<string> {
-        const codebasePath = path.join(outputPath, 'codebase.md');
-        
-        // For Nucleus projects, we generate a different kind of codebase
-        // focused on organizational documentation rather than code
-        
-        const content = await this.generateNucleusCodebase(projectRoot);
-        
-        fs.writeFileSync(codebasePath, content, 'utf-8');
-        
-        return codebasePath;
-    }
-    
-    private async generateNucleusCodebase(projectRoot: string): Promise<string> {
-        const sections: string[] = [];
-        
-        sections.push('# BLOOM NUCLEUS - ORGANIZATIONAL DOCUMENTATION\n');
-        sections.push('This is a Nucleus project - an organizational knowledge center.\n');
-        sections.push('---\n\n');
-        
-        // 1. Read nucleus-config.json
-        const config = this.readNucleusConfig(projectRoot);
-        if (config) {
-            sections.push('## ORGANIZATION INFO\n');
-            sections.push(`**Name:** ${config.organization.name}\n`);
-            sections.push(`**Display Name:** ${config.organization.displayName}\n`);
-            sections.push(`**URL:** ${config.organization.url}\n`);
-            if (config.organization.description) {
-                sections.push(`**Description:** ${config.organization.description}\n`);
-            }
-            sections.push('\n');
-            
-            sections.push('## NUCLEUS INFO\n');
-            sections.push(`**Nucleus Name:** ${config.nucleus.name}\n`);
-            sections.push(`**Repository:** ${config.nucleus.repoUrl}\n`);
-            sections.push(`**Created:** ${config.nucleus.createdAt}\n`);
-            sections.push(`**Updated:** ${config.nucleus.updatedAt}\n`);
-            sections.push('\n');
-            
-            if (config.projects && config.projects.length > 0) {
-                sections.push('## LINKED PROJECTS\n');
-                for (const project of config.projects) {
-                    sections.push(`### ${project.displayName}\n`);
-                    sections.push(`- **Name:** ${project.name}\n`);
-                    sections.push(`- **Strategy:** ${project.strategy}\n`);
-                    sections.push(`- **Status:** ${project.status}\n`);
-                    sections.push(`- **Repository:** ${project.repoUrl}\n`);
-                    sections.push(`- **Local Path:** ${project.localPath}\n`);
-                    if (project.description) {
-                        sections.push(`- **Description:** ${project.description}\n`);
-                    }
-                    sections.push('\n');
-                }
-            }
-        }
-        
-        // 2. Read organization files
-        const organizationPath = path.join(projectRoot, '.bloom', 'organization');
-        if (fs.existsSync(organizationPath)) {
-            sections.push('## ORGANIZATION DOCUMENTATION\n\n');
-            
-            const orgFiles = [
-                '.organization.bl',
-                'about.bl',
-                'business-model.bl',
-                'policies.bl',
-                'protocols.bl'
-            ];
-            
-            for (const file of orgFiles) {
-                const filePath = path.join(organizationPath, file);
-                if (fs.existsSync(filePath)) {
-                    const content = fs.readFileSync(filePath, 'utf-8');
-                    sections.push(`### 📄 ${file}\n\n`);
-                    sections.push('```markdown\n');
-                    sections.push(content);
-                    sections.push('\n```\n\n');
-                }
-            }
-        }
-        
-        // 3. Read projects index
-        const projectsIndexPath = path.join(projectRoot, '.bloom', 'projects', '_index.bl');
-        if (fs.existsSync(projectsIndexPath)) {
-            sections.push('## PROJECTS INDEX\n\n');
-            const content = fs.readFileSync(projectsIndexPath, 'utf-8');
-            sections.push('```markdown\n');
-            sections.push(content);
-            sections.push('\n```\n\n');
-        }
-        
-        // 4. Read project overviews
-        const projectsPath = path.join(projectRoot, '.bloom', 'projects');
-        if (fs.existsSync(projectsPath)) {
-            const projectDirs = fs.readdirSync(projectsPath, { withFileTypes: true })
-                .filter(dirent => dirent.isDirectory())
-                .map(dirent => dirent.name);
-            
-            if (projectDirs.length > 0) {
-                sections.push('## PROJECT OVERVIEWS\n\n');
-                
-                for (const projectDir of projectDirs) {
-                    const overviewPath = path.join(projectsPath, projectDir, 'overview.bl');
-                    if (fs.existsSync(overviewPath)) {
-                        const content = fs.readFileSync(overviewPath, 'utf-8');
-                        sections.push(`### 📦 ${projectDir}\n\n`);
-                        sections.push('```markdown\n');
-                        sections.push(content);
-                        sections.push('\n```\n\n');
-                    }
-                }
-            }
-        }
-        
-        // 5. Read core rules and prompt
-        const coreRulesPath = path.join(projectRoot, '.bloom', 'core', '.rules.bl');
-        if (fs.existsSync(coreRulesPath)) {
-            sections.push('## NUCLEUS RULES\n\n');
-            const content = fs.readFileSync(coreRulesPath, 'utf-8');
-            sections.push('```markdown\n');
-            sections.push(content);
-            sections.push('\n```\n\n');
-        }
-        
-        const corePromptPath = path.join(projectRoot, '.bloom', 'core', '.prompt.bl');
-        if (fs.existsSync(corePromptPath)) {
-            sections.push('## NUCLEUS PROMPT\n\n');
-            const content = fs.readFileSync(corePromptPath, 'utf-8');
-            sections.push('```markdown\n');
-            sections.push(content);
-            sections.push('\n```\n\n');
-        }
-        
-        sections.push('---\n');
-        sections.push('Generated by Bloom BTIP Plugin\n');
-        sections.push(`Timestamp: ${new Date().toISOString()}\n`);
-        
-        return sections.join('');
-    }
-    
-    private readNucleusConfig(projectRoot: string): any {
-        try {
-            const configPath = path.join(projectRoot, '.bloom', 'core', 'nucleus-config.json');
-            if (!fs.existsSync(configPath)) {
-                return null;
-            }
-            
-            const content = fs.readFileSync(configPath, 'utf-8');
-            return JSON.parse(content);
-        } catch (error) {
-            console.error('Error reading nucleus config:', error);
-            return null;
-        }
-    }
-    
-    async getProjectStructure(projectRoot: string): Promise<string> {
-        // For Nucleus, return organizational structure
-        const lines: string[] = [];
-        
-        lines.push('Nucleus Project Structure:');
-        lines.push('');
-        lines.push('.bloom/');
-        lines.push('├── core/');
-        lines.push('│   ├── nucleus-config.json  🔑 (Nucleus identifier)');
-        lines.push('│   ├── .rules.bl');
-        lines.push('│   └── .prompt.bl');
-        lines.push('├── organization/');
-        lines.push('│   ├── .organization.bl');
-        lines.push('│   ├── about.bl');
-        lines.push('│   ├── business-model.bl');
-        lines.push('│   ├── policies.bl');
-        lines.push('│   └── protocols.bl');
-        lines.push('└── projects/');
-        lines.push('    ├── _index.bl');
-        lines.push('    └── {project-name}/');
-        lines.push('        └── overview.bl');
-        
-        return lines.join('\n');
-    }
-    
-    async validateProject(projectRoot: string): Promise<{ valid: boolean; errors: string[] }> {
-        const errors: string[] = [];
-        
-        // Check for nucleus-config.json
-        const configPath = path.join(projectRoot, '.bloom', 'core', 'nucleus-config.json');
-        if (!fs.existsSync(configPath)) {
-            errors.push('Missing nucleus-config.json in .bloom/core/');
-        } else {
-            try {
-                const content = fs.readFileSync(configPath, 'utf-8');
-                const config = JSON.parse(content);
-                
-                if (config.type !== 'nucleus') {
-                    errors.push('nucleus-config.json must have type="nucleus"');
-                }
-                
-                if (!config.organization || !config.organization.name) {
-                    errors.push('nucleus-config.json missing organization.name');
-                }
-                
-                if (!config.nucleus || !config.nucleus.name) {
-                    errors.push('nucleus-config.json missing nucleus.name');
-                }
-            } catch (error) {
-                errors.push('Invalid JSON in nucleus-config.json');
-            }
-        }
-        
-        // Check for organization directory
-        const orgPath = path.join(projectRoot, '.bloom', 'organization');
-        if (!fs.existsSync(orgPath)) {
-            errors.push('Missing .bloom/organization/ directory');
-        }
-        
-        // Check for projects directory
-        const projectsPath = path.join(projectRoot, '.bloom', 'projects');
-        if (!fs.existsSync(projectsPath)) {
-            errors.push('Missing .bloom/projects/ directory');
-        }
-        
-        return {
-            valid: errors.length === 0,
-            errors
-        };
-    }
-    
-    getRequiredFiles(): string[] {
-        return [
-            '.bloom/core/nucleus-config.json',
-            '.bloom/core/.rules.bl',
-            '.bloom/core/.prompt.bl',
-            '.bloom/organization/.organization.bl',
-            '.bloom/projects/_index.bl'
-        ];
-    }
-    
-    getFileExtensions(): string[] {
-        return ['.bl', '.json', '.md'];
-    }
-    
-    async estimateTokenCount(projectRoot: string): Promise<number> {
-        // Nucleus projects are documentation-heavy
-        // Estimate based on .bl files
-        
-        let totalChars = 0;
-        const bloomPath = path.join(projectRoot, '.bloom');
-        
-        const countFiles = (dir: string) => {
-            if (!fs.existsSync(dir)) {
-                return;
-            }
-            
-            const items = fs.readdirSync(dir, { withFileTypes: true });
-            
-            for (const item of items) {
-                const fullPath = path.join(dir, item.name);
-                
-                if (item.isDirectory()) {
-                    countFiles(fullPath);
-                } else if (item.isFile() && (item.name.endsWith('.bl') || item.name.endsWith('.json'))) {
-                    try {
-                        const content = fs.readFileSync(fullPath, 'utf-8');
-                        totalChars += content.length;
-                    } catch (error) {
-                        // Skip files we can't read
-                    }
-                }
-            }
-        };
-        
-        countFiles(bloomPath);
-        
-        // Rough estimate: 4 chars per token
-        return Math.ceil(totalChars / 4);
-    }
-}
-```
-
-### C:/repos/bloom-videos/bloom-development-extension/src/strategies/ProjectDetector.ts
-Metadatos: Lenguaje: typescript, Hash MD5: 90d1bb620a99fa928094c41670d9555a
-
-```typescript
-// src/strategies/ProjectDetector.ts
-// Updated to detect Nucleus projects with registered strategies pattern
-
-import * as vscode from 'vscode';
-import * as path from 'path';
-import * as fs from 'fs';
-import { CodebaseStrategy } from '../models/codebaseStrategy';
-import { AndroidStrategy } from './AndroidStrategy';
-import { IOSStrategy } from './IOSStrategy';
-import { ReactStrategy } from './ReactStrategy';
-import { WebStrategy } from './WebStrategy';
-import { NucleusStrategy } from './NucleusStrategy';
-import { GenericStrategy } from './GenericStrategy';
-
-export class ProjectDetector {
-    private strategies: CodebaseStrategy[] = [];
-    
-    constructor() {
-        this.registerStrategies();
-    }
-    
-    private registerStrategies(): void {
-        this.strategies = [
-            new NucleusStrategy(),
-            new AndroidStrategy(),
-            new IOSStrategy(),
-            new ReactStrategy(),
-            new WebStrategy(),
-            new GenericStrategy() 
-        ];
-    }
-    
-    /**
-     * Detects the project type and returns the appropriate strategy
-     * Maintains both the registered strategies pattern and priority detection
-     */
-    async detectStrategy(workspaceRoot: string): Promise<CodebaseStrategy> {
-        // Convert string path to WorkspaceFolder
-        const workspaceFolder = this.getWorkspaceFolderFromPath(workspaceRoot);
-        
-        // PRIORITY 1: Check for explicit .bloom/core/strategy indicator
-        const explicitStrategy = this.readExplicitStrategy(workspaceRoot);
-        if (explicitStrategy) {
-            console.log(`✅ Detected explicit strategy: ${explicitStrategy}`);
-            return this.getStrategyByName(explicitStrategy);
-        }
-        
-        // PRIORITY 2: Use registered strategies with detection logic
-        for (const strategy of this.strategies) {
-            // Skip GenericStrategy until we've checked all others
-            if (strategy instanceof GenericStrategy) {
-                continue;
-            }
-            
-            const detected = await strategy.detect(workspaceFolder);
-            if (detected) {
-                console.log(`✅ Detected ${strategy.name} project`);
-                return strategy;
-            }
-        }
-        
-        // DEFAULT: Generic strategy
-        console.log('⚠️  Using Generic strategy (no specific type detected)');
-        return new GenericStrategy();
-    }
-    
-    /**
-     * Helper method to convert string path to WorkspaceFolder
-     */
-    private getWorkspaceFolderFromPath(workspaceRoot: string): vscode.WorkspaceFolder {
-        // Try to find the actual workspace folder
-        const uri = vscode.Uri.file(workspaceRoot);
-        const existingFolder = vscode.workspace.getWorkspaceFolder(uri);
-        
-        if (existingFolder) {
-            return existingFolder;
-        }
-        
-        // Create a minimal WorkspaceFolder object if not found
-        return {
-            uri: uri,
-            name: path.basename(workspaceRoot),
-            index: 0
-        };
-    }
-    
-    /**
-     * Static method for direct detection (maintains compatibility)
-     */
-    static async detectStrategy(projectRoot: string): Promise<CodebaseStrategy> {
-        const detector = new ProjectDetector();
-        return await detector.detectStrategy(projectRoot);
-    }
-    
-    /**
-     * Detects if project is a Nucleus (organizational) project
-     */
-    private isNucleusProject(projectRoot: string): boolean {
-        const bloomPath = path.join(projectRoot, '.bloom');
-        
-        if (!fs.existsSync(bloomPath)) {
-            return false;
-        }
-        
-        // Check for nucleus-config.json
-        const nucleusConfigPath = path.join(bloomPath, 'core', 'nucleus-config.json');
-        if (!fs.existsSync(nucleusConfigPath)) {
-            return false;
-        }
-        
-        // Validate it's actually a nucleus config
-        try {
-            const content = fs.readFileSync(nucleusConfigPath, 'utf-8');
-            const config = JSON.parse(content);
-            return config.type === 'nucleus';
-        } catch (error) {
-            return false;
-        }
-    }
-    
-    /**
-     * Reads explicit strategy from .bloom/core/.strategy if exists
-     */
-    private readExplicitStrategy(projectRoot: string): string | null {
-        const strategyPath = path.join(projectRoot, '.bloom', 'core', '.strategy');
-        
-        if (!fs.existsSync(strategyPath)) {
-            return null;
-        }
-        
-        try {
-            const content = fs.readFileSync(strategyPath, 'utf-8').trim();
-            return content;
-        } catch (error) {
-            return null;
-        }
-    }
-    
-    /**
-     * Returns strategy instance by name
-     */
-    private getStrategyByName(name: string): CodebaseStrategy {
-        switch (name.toLowerCase()) {
-            case 'android':
-                return new AndroidStrategy();
-            case 'ios':
-                return new IOSStrategy();
-            case 'react-web':
-            case 'react':
-                return new ReactStrategy();
-            case 'web':
-                return new WebStrategy();
-            case 'nucleus':
-                return new NucleusStrategy();
-            default:
-                return new GenericStrategy();
-        }
-    }
-    
-    /**
-     * Detects Android projects
-     */
-    private isAndroidProject(projectRoot: string): boolean {
-        // Check for build.gradle in app/
-        const appBuildGradle = path.join(projectRoot, 'app', 'build.gradle');
-        const appBuildGradleKts = path.join(projectRoot, 'app', 'build.gradle.kts');
-        
-        if (fs.existsSync(appBuildGradle) || fs.existsSync(appBuildGradleKts)) {
-            return true;
-        }
-        
-        // Check for AndroidManifest.xml
-        const manifest = path.join(projectRoot, 'app', 'src', 'main', 'AndroidManifest.xml');
-        if (fs.existsSync(manifest)) {
-            return true;
-        }
-        
-        return false;
-    }
-    
-    /**
-     * Detects iOS projects
-     */
-    private isIOSProject(projectRoot: string): boolean {
-        // Check for .xcodeproj or .xcworkspace
-        const items = fs.readdirSync(projectRoot);
-        
-        for (const item of items) {
-            if (item.endsWith('.xcodeproj') || item.endsWith('.xcworkspace')) {
-                return true;
-            }
-        }
-        
-        // Check for Podfile
-        const podfile = path.join(projectRoot, 'Podfile');
-        if (fs.existsSync(podfile)) {
-            return true;
-        }
-        
-        return false;
-    }
-    
-    /**
-     * Detects React Web projects
-     */
-    private isReactProject(projectRoot: string): boolean {
-        const packageJsonPath = path.join(projectRoot, 'package.json');
-        
-        if (!fs.existsSync(packageJsonPath)) {
-            return false;
-        }
-        
-        try {
-            const content = fs.readFileSync(packageJsonPath, 'utf-8');
-            const packageJson = JSON.parse(content);
-            
-            const deps = {
-                ...packageJson.dependencies,
-                ...packageJson.devDependencies
-            };
-            
-            // Check for React
-            if (deps['react'] || deps['react-dom']) {
-                return true;
-            }
-            
-        } catch (error) {
-            return false;
-        }
-        
-        return false;
-    }
-    
-    /**
-     * Detects generic web projects
-     */
-    private isWebProject(projectRoot: string): boolean {
-        // Check for package.json
-        const packageJsonPath = path.join(projectRoot, 'package.json');
-        if (fs.existsSync(packageJsonPath)) {
-            return true;
-        }
-        
-        // Check for index.html
-        const indexHtml = path.join(projectRoot, 'index.html');
-        if (fs.existsSync(indexHtml)) {
-            return true;
-        }
-        
-        return false;
-    }
-    
-    /**
-     * Gets a human-readable name for the detected strategy
-     */
-    static async getStrategyName(projectRoot: string): Promise<string> {
-        const strategy = await this.detectStrategy(projectRoot);
-        return strategy.name;
-    }
-    
-    /**
-     * Checks if a project has Nucleus link
-     */
-    static hasNucleusLink(projectRoot: string): boolean {
-        const nucleusLinkPath = path.join(projectRoot, '.bloom', 'nucleus.json');
-        return fs.existsSync(nucleusLinkPath);
-    }
-    
-    /**
-     * Reads Nucleus link configuration
-     */
-    static readNucleusLink(projectRoot: string): any {
-        try {
-            const linkPath = path.join(projectRoot, '.bloom', 'nucleus.json');
-            if (!fs.existsSync(linkPath)) {
-                return null;
-            }
-            
-            const content = fs.readFileSync(linkPath, 'utf-8');
-            return JSON.parse(content);
-        } catch (error) {
-            console.error('Error reading nucleus link:', error);
-            return null;
-        }
-    }
-    
-    /**
-     * Finds parent Nucleus project if linked
-     */
-    static findParentNucleus(projectRoot: string): string | null {
-        const nucleusLink = this.readNucleusLink(projectRoot);
-        
-        if (!nucleusLink || !nucleusLink.nucleusPath) {
-            return null;
-        }
-        
-        // Resolve relative path
-        const nucleusPath = path.resolve(projectRoot, nucleusLink.nucleusPath);
-        
-        // Verify it exists and is a Nucleus project
-        if (fs.existsSync(nucleusPath) && this.isNucleusProject(nucleusPath)) {
-            return nucleusPath;
-        }
-        
-        return null;
-    }
-    
-    /**
-     * Static version for Nucleus project detection
-     */
-    private static isNucleusProject(projectRoot: string): boolean {
-        const detector = new ProjectDetector();
-        return detector.isNucleusProject(projectRoot);
-    }
-    
-    /**
-     * Gets all projects info including Nucleus relationships
-     */
-    static async getProjectInfo(projectRoot: string): Promise<{
-        projectType: 'nucleus' | 'btip' | 'unknown';
-        strategy: string;
-        hasNucleusLink: boolean;
-        nucleusPath?: string;
-        organizationName?: string;
-    }> {
-        const bloomPath = path.join(projectRoot, '.bloom');
-        
-        if (!fs.existsSync(bloomPath)) {
-            return {
-                projectType: 'unknown',
-                strategy: 'none',
-                hasNucleusLink: false
-            };
-        }
-        
-        const isNucleus = this.isNucleusProject(projectRoot);
-        const hasLink = this.hasNucleusLink(projectRoot);
-        const strategy = await this.getStrategyName(projectRoot);
-        
-        const info: any = {
-            projectType: isNucleus ? 'nucleus' : 'btip',
-            strategy,
-            hasNucleusLink: hasLink
-        };
-        
-        if (hasLink) {
-            const link = this.readNucleusLink(projectRoot);
-            if (link) {
-                info.nucleusPath = link.nucleusPath;
-                info.organizationName = link.organizationName;
-            }
-        }
-        
-        if (isNucleus) {
-            // Read nucleus config for organization name
-            try {
-                const configPath = path.join(bloomPath, 'core', 'nucleus-config.json');
-                const content = fs.readFileSync(configPath, 'utf-8');
-                const config = JSON.parse(content);
-                info.organizationName = config.organization.name;
-            } catch (error) {
-                // Ignore
-            }
-        }
-        
-        return info;
-    }
-}
-```
-
-### C:/repos/bloom-videos/bloom-development-extension/src/ui/intent/intentForm.css
-Metadatos: Lenguaje: css, Hash MD5: ff012a96dda3b528496db5ecdf746715
-
-```css
-* {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-}
-
-body {
-    font-family: var(--vscode-font-family);
-    font-size: var(--vscode-font-size);
-    color: var(--vscode-foreground);
-    background-color: var(--vscode-editor-background);
-    padding: 20px;
-    line-height: 1.6;
-}
-
-.container {
-    max-width: 1200px;
-    margin: 0 auto;
-}
-
-h1 {
-    margin-bottom: 24px;
-    font-size: 24px;
-    color: var(--vscode-textLink-foreground);
-}
-
-.form-section {
-    margin-bottom: 24px;
-}
-
-label {
-    display: block;
-    margin-bottom: 8px;
-    font-weight: 600;
-    font-size: 14px;
-}
-
-.required {
-    color: var(--vscode-errorForeground);
-}
-
-.help-text {
-    font-size: 12px;
-    color: var(--vscode-descriptionForeground);
-    margin-top: 4px;
-    font-style: italic;
-}
-
-input[type="text"],
-textarea {
-    width: 100%;
-    padding: 10px;
-    background-color: var(--vscode-input-background);
-    color: var(--vscode-input-foreground);
-    border: 1px solid var(--vscode-input-border);
-    border-radius: 4px;
-    font-family: var(--vscode-font-family);
-    font-size: var(--vscode-font-size);
-    transition: border-color 0.2s ease;
-}
-
-input[type="text"]:focus,
-textarea:focus {
-    outline: 1px solid var(--vscode-focusBorder);
-    border-color: var(--vscode-focusBorder);
-}
-
-textarea {
-    min-height: 120px;
-    resize: vertical;
-}
-
-.editor-toolbar {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 8px;
-    padding: 4px;
-    background: var(--vscode-editor-inactiveSelectionBackground);
-    border-radius: 4px;
-}
-
-.toolbar-btn {
-    padding: 4px 8px;
-    background: var(--vscode-button-secondaryBackground);
-    color: var(--vscode-button-secondaryForeground);
-    border: none;
-    border-radius: 2px;
-    cursor: pointer;
-    font-weight: 600;
-    font-size: 13px;
-    transition: background-color 0.2s ease;
-}
-
-.toolbar-btn:hover {
-    background: var(--vscode-button-secondaryHoverBackground);
-}
-
-.toolbar-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-.file-pills {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    padding: 12px;
-    background-color: var(--vscode-input-background);
-    border: 1px solid var(--vscode-input-border);
-    border-radius: 4px;
-    min-height: 52px;
-}
-
-.file-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 6px 8px;
-    background: var(--vscode-button-background);
-    color: var(--vscode-button-foreground);
-    border-radius: 16px;
-    transition: all 0.2s;
-}
-
-.file-pill:hover {
-    background: var(--vscode-button-hoverBackground);
-    transform: translateY(-1px);
-}
-
-.file-btn {
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    padding: 2px 4px;
-    color: inherit;
-    font-size: 14px;
-    transition: opacity 0.2s;
-}
-
-.file-btn:hover {
-    opacity: 0.7;
-}
-
-.file-btn.file-name {
-    font-weight: 500;
-    font-size: 13px;
-}
-
-.file-btn.file-remove {
-    color: var(--vscode-errorForeground);
-    font-weight: bold;
-}
-
-.token-counter {
-    margin-top: 12px;
-    padding: 12px;
-    background: var(--vscode-editor-inactiveSelectionBackground);
-    border-radius: 4px;
-    border: 1px solid var(--vscode-input-border);
-}
-
-.token-bar {
-    width: 100%;
-    height: 8px;
-    background: var(--vscode-input-background);
-    border-radius: 4px;
-    overflow: hidden;
-    margin-bottom: 8px;
-}
-
-.token-fill {
-    height: 100%;
-    transition: width 0.3s ease, background-color 0.3s ease;
-    border-radius: 4px;
-}
-
-.token-counter.token-safe .token-fill {
-    background: #4ec9b0;
-}
-
-.token-counter.token-warning .token-fill {
-    background: #ce9178;
-}
-
-.token-counter.token-error .token-fill {
-    background: var(--vscode-errorForeground);
-}
-
-.token-text {
-    font-size: 13px;
-    font-weight: 500;
-}
-
-.token-counter.token-safe .token-text {
-    color: #4ec9b0;
-}
-
-.token-counter.token-warning .token-text {
-    color: #ce9178;
-}
-
-.token-counter.token-error .token-text {
-    color: var(--vscode-errorForeground);
-}
-
-.list-container {
-    background-color: var(--vscode-input-background);
-    border: 1px solid var(--vscode-input-border);
-    border-radius: 4px;
-    padding: 10px;
-    min-height: 60px;
-}
-
-.list-item {
-    display: flex;
-    align-items: center;
-    margin-bottom: 8px;
-    padding: 8px;
-    background-color: var(--vscode-editor-background);
-    border-radius: 3px;
-}
-
-.list-item:last-child {
-    margin-bottom: 0;
-}
-
-.list-item input {
-    flex: 1;
-    margin-right: 10px;
-    background-color: transparent;
-    border: none;
-    color: var(--vscode-foreground);
-    padding: 6px;
-    font-family: var(--vscode-font-family);
-    font-size: var(--vscode-font-size);
-}
-
-.list-item input:focus {
-    outline: 1px solid var(--vscode-focusBorder);
-    border-radius: 2px;
-}
-
-.btn-remove {
-    background: none;
-    border: none;
-    color: var(--vscode-errorForeground);
-    cursor: pointer;
-    padding: 0;
-    font-size: 20px;
-    line-height: 1;
-    width: 24px;
-    height: 24px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 3px;
-    transition: background-color 0.2s ease;
-}
-
-.btn-remove:hover {
-    background-color: rgba(244, 135, 113, 0.2);
-}
-
-.btn-add {
-    background-color: var(--vscode-button-secondaryBackground);
-    color: var(--vscode-button-secondaryForeground);
-    border: none;
-    padding: 8px 16px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 14px;
-    margin-top: 8px;
-    transition: background-color 0.2s ease;
-}
-
-.btn-add:hover {
-    background-color: var(--vscode-button-secondaryHoverBackground);
-}
-
-.button-group {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-top: 32px;
-    padding-top: 20px;
-    border-top: 1px solid var(--vscode-panel-border);
-}
-
-.button-spacer {
-    flex: 1;
-}
-
-.btn-primary {
-    padding: 10px 24px;
-    background-color: var(--vscode-button-background);
-    color: var(--vscode-button-foreground);
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-weight: 600;
-    font-size: 14px;
-    transition: background-color 0.2s ease;
-}
-
-.btn-primary:hover {
-    background-color: var(--vscode-button-hoverBackground);
-}
-
-.btn-primary:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-.btn-secondary {
-    padding: 10px 24px;
-    background-color: transparent;
-    color: var(--vscode-foreground);
-    border: 1px solid var(--vscode-panel-border);
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 14px;
-    transition: background-color 0.2s ease;
-}
-
-.btn-secondary:hover {
-    background-color: var(--vscode-list-hoverBackground);
-}
-
-.btn-danger {
-    padding: 10px 24px;
-    background-color: transparent;
-    color: var(--vscode-errorForeground);
-    border: 1px solid var(--vscode-errorForeground);
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 14px;
-    transition: all 0.2s ease;
-}
-
-.btn-danger:hover {
-    background-color: var(--vscode-errorForeground);
-    color: var(--vscode-editor-background);
-}
-
-.auto-save-indicator {
-    font-size: 12px;
-    color: var(--vscode-descriptionForeground);
-    margin-bottom: 16px;
-    padding: 8px;
-    background: var(--vscode-editor-inactiveSelectionBackground);
-    border-radius: 4px;
-    transition: opacity 0.3s ease;
-}
-
-.error-message {
-    background-color: rgba(244, 135, 113, 0.2);
-    border-left: 3px solid var(--vscode-errorForeground);
-    padding: 12px;
-    margin-bottom: 20px;
-    border-radius: 4px;
-    display: none;
-    animation: fadeIn 0.3s ease;
-}
-
-.error-message strong {
-    display: block;
-    margin-bottom: 8px;
-    color: var(--vscode-errorForeground);
-}
-
-.error-message ul {
-    margin: 0;
-    padding-left: 20px;
-}
-
-.error-message li {
-    margin-bottom: 4px;
-}
-
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(-10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-```
-
-### C:/repos/bloom-videos/bloom-development-extension/src/ui/intent/intentForm.html
-Metadatos: Lenguaje: html, Hash MD5: 233a448be936bc92ba1f99fe3a36f3de
-
-```html
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Generate Intent</title>
-    <!-- CSS_PLACEHOLDER -->
-</head>
-<body>
-    <div class="container">
-        <h1>🌸 Crear Bloom Intent</h1>
-
-        <div class="auto-save-indicator" id="autoSaveIndicator">
-            💾 Draft guardado automáticamente
-        </div>
-
-        <div id="errorMessage" class="error-message">
-            <strong>⚠️ Errores de validación:</strong>
-            <ul id="errorList"></ul>
-        </div>
-
-        <form id="intentForm">
-            <div class="form-section">
-                <label for="name">Nombre del Intent <span class="required">*</span></label>
-                <input type="text" id="name" name="name" placeholder="fix-login-crash" required>
-                <p class="help-text">Solo letras minúsculas, números y guiones</p>
-            </div>
-
-            <!-- profileManager.html -->
-            <div class="profile-container">
-                <h2>Chrome Profiles Detected</h2>
-                <div id="profilesList"></div>
-                
-                <h2>Intent → Profile Mapping</h2>
-                <table id="intentMappings">
-                    <tr>
-                        <th>Intent</th>
-                        <th>Chrome Profile</th>
-                        <th>Claude Account</th>
-                        <th>Actions</th>
-                    </tr>
-                </table>
-                
-                <button onclick="scanProfiles()">🔄 Scan Profiles</button>
-            </div>
-
-            <div class="form-section">
-                <label>📁 Archivos relevantes</label>
-                <div class="file-pills" id="filePills">
-                    <!-- Generado dinámicamente -->
-                </div>
-                <div class="token-counter" id="tokenCounter">
-                    <div class="token-bar">
-                        <div class="token-fill" id="tokenFill"></div>
-                    </div>
-                    <div class="token-text" id="tokenText">
-                        📊 Token estimate: 0 / 100,000 (0%)
-                    </div>
-                </div>
-            </div>
-
-            <div class="form-section">
-                <label for="problem">¿Qué problema quieres resolver? <span class="required">*</span></label>
-                
-                <div class="editor-toolbar">
-                    <button type="button" class="toolbar-btn" onclick="formatText('bold')" title="Negrita">B</button>
-                    <button type="button" class="toolbar-btn" onclick="formatText('italic')" title="Cursiva">I</button>
-                    <button type="button" class="toolbar-btn" onclick="formatText('code')" title="Código">```</button>
-                    <button type="button" class="toolbar-btn" onclick="formatText('list')" title="Lista">• -</button>
-                </div>
-                
-                <textarea id="problem" name="problem" placeholder="Describe el problema en detalle..." required></textarea>
-            </div>
-
-            <div class="form-section">
-                <label for="expectedOutput">Output Esperado <span class="required">*</span></label>
-                <textarea id="expectedOutput" name="expectedOutput" placeholder="Describe el resultado esperado..." required></textarea>
-            </div>
-
-            <div class="form-section">
-                <label>Comportamiento Actual</label>
-                <div class="list-container" id="currentBehaviorList"></div>
-                <button type="button" class="btn-add" onclick="addListItem('currentBehavior')">
-                    + Agregar paso
-                </button>
-            </div>
-
-            <div class="form-section">
-                <label>Comportamiento Deseado</label>
-                <div class="list-container" id="desiredBehaviorList"></div>
-                <button type="button" class="btn-add" onclick="addListItem('desiredBehavior')">
-                    + Agregar paso
-                </button>
-            </div>
-
-            <div class="form-section">
-                <label for="considerations">💬 Consideraciones adicionales (opcional)</label>
-                <textarea id="considerations" name="considerations" rows="3" placeholder="Ej: Usar Retrofit, mantener estilo actual"></textarea>
-            </div>
-
-            <div class="button-group">
-                <button type="submit" class="btn-primary" id="generateBtn">✨ Generar Intent</button>
-                <button type="button" class="btn-secondary" onclick="cancel()">Cancelar</button>
-                <div class="button-spacer"></div>
-                <button type="button" class="btn-danger" id="deleteBtn" onclick="deleteIntent()">🗑️ Delete Intent</button>
-            </div>
-        </form>
-    </div>
-    
-    <!-- JS_PLACEHOLDER -->
-</body>
-</html>
-```
-
-### C:/repos/bloom-videos/bloom-development-extension/src/ui/intent/intentForm.js
-Metadatos: Lenguaje: javascript, Hash MD5: 0335754214d96bc50c860d2a97614f38
-
-```javascript
-const vscode = acquireVsCodeApi();
-let lastFocusedField = null;
-let autoSaveTimer = null;
-let isEditMode = false;
-
-let listCounters = {
-    currentBehavior: 0,
-    desiredBehavior: 0
-};
-
-document.addEventListener('focusin', (e) => {
-    if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') {
-        lastFocusedField = e.target;
-    }
-});
-
-function formatText(type) {
-    const textarea = lastFocusedField || document.getElementById('problem');
-    if (!textarea || textarea.tagName !== 'TEXTAREA') return;
-
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const selected = textarea.value.substring(start, end);
-    let formatted = selected;
-
-    switch(type) {
-        case 'bold':
-            formatted = `**${selected}**`;
-            break;
-        case 'italic':
-            formatted = `*${selected}*`;
-            break;
-        case 'code':
-            formatted = `\`\`\`\n${selected}\n\`\`\``;
-            break;
-        case 'list':
-            formatted = selected.split('\n').map(line => line ? `- ${line}` : '').join('\n');
-            break;
-    }
-
-    textarea.value = textarea.value.substring(0, start) + formatted + textarea.value.substring(end);
-    textarea.selectionStart = start;
-    textarea.selectionEnd = start + formatted.length;
-    textarea.focus();
-
-    triggerAutoSave();
-}
-
-function insertFileName(filename) {
-    const target = lastFocusedField || document.getElementById('problem');
-    if (!target || (target.tagName !== 'TEXTAREA' && target.tagName !== 'INPUT')) {
-        alert('Haz click en un campo de texto primero');
-        return;
-    }
-
-    const start = target.selectionStart || 0;
-    const end = target.selectionEnd || 0;
-    const text = filename + ' ';
-
-    target.value = target.value.substring(0, start) + text + target.value.substring(end);
-    target.selectionStart = target.selectionEnd = start + text.length;
-    target.focus();
-
-    triggerAutoSave();
-}
-
-function openFileInVSCode(filePath) {
-    vscode.postMessage({
-        command: 'openFileInVSCode',
-        filePath: filePath
-    });
-}
-
-function copyFilePath(filePath) {
-    vscode.postMessage({
-        command: 'copyFilePath',
-        filePath: filePath
-    });
-}
-
-function revealInFinder(filePath) {
-    vscode.postMessage({
-        command: 'revealInFinder',
-        filePath: filePath
-    });
-}
-
-function removeFile(filePath) {
-    vscode.postMessage({
-        command: 'removeFile',
-        filePath: filePath
-    });
-}
-
-function addListItem(listName) {
-    const listContainer = document.getElementById(listName + 'List');
-    const itemId = listName + '_' + listCounters[listName]++;
-    
-    const itemDiv = document.createElement('div');
-    itemDiv.className = 'list-item';
-    itemDiv.id = itemId;
-    itemDiv.innerHTML = `
-        <input type="text" placeholder="Escribir aquí..." />
-        <button type="button" class="btn-remove" onclick="removeListItem('${itemId}')" title="Eliminar">×</button>
-    `;
-    
-    listContainer.appendChild(itemDiv);
-    
-    const newInput = itemDiv.querySelector('input');
-    if (newInput) {
-        newInput.focus();
-        newInput.addEventListener('input', triggerAutoSave);
-    }
-
-    triggerAutoSave();
-}
-
-function removeListItem(itemId) {
-    const item = document.getElementById(itemId);
-    if (item) {
-        item.remove();
-        triggerAutoSave();
-    }
-}
-
-function getListValues(listName) {
-    const listContainer = document.getElementById(listName + 'List');
-    const inputs = listContainer.querySelectorAll('input');
-    return Array.from(inputs)
-        .map(input => input.value.trim())
-        .filter(v => v.length > 0);
-}
-
-function triggerAutoSave() {
-    clearTimeout(autoSaveTimer);
-    autoSaveTimer = setTimeout(() => {
-        const updates = {
-            problem: document.getElementById('problem').value,
-            expectedOutput: document.getElementById('expectedOutput').value,
-            currentBehavior: getListValues('currentBehavior'),
-            desiredBehavior: getListValues('desiredBehavior'),
-            considerations: document.getElementById('considerations').value
-        };
-        
-        vscode.postMessage({
-            command: 'autoSave',
-            updates: updates
-        });
-        
-        showAutoSaveIndicator();
-    }, 2000);
-}
-
-function showAutoSaveIndicator() {
-    const indicator = document.getElementById('autoSaveIndicator');
-    indicator.textContent = '💾 Guardado ' + new Date().toLocaleTimeString();
-    indicator.style.opacity = '1';
-
-    setTimeout(() => {
-        indicator.style.opacity = '0.6';
-    }, 2000);
-}
-
-function showValidationErrors(errors) {
-    const errorDiv = document.getElementById('errorMessage');
-    const errorList = document.getElementById('errorList');
-    
-    errorList.innerHTML = errors.map(err => `<li>${err}</li>`).join('');
-    errorDiv.style.display = 'block';
-    
-    errorDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-
-function hideValidationErrors() {
-    const errorDiv = document.getElementById('errorMessage');
-    errorDiv.style.display = 'none';
-}
-
-function updateTokenDisplay(tokens) {
-    const tokenText = document.getElementById('tokenText');
-    const tokenFill = document.getElementById('tokenFill');
-    const tokenCounter = document.getElementById('tokenCounter');
-    
-    const percentage = tokens.percentage;
-    const estimated = tokens.estimated.toLocaleString();
-    const limit = tokens.limit.toLocaleString();
-    
-    tokenFill.style.width = Math.min(percentage, 100) + '%';
-    
-    if (percentage < 80) {
-        tokenCounter.className = 'token-counter token-safe';
-        tokenText.textContent = `📊 Token estimate: ${estimated} / ${limit} (${percentage.toFixed(1)}%)`;
-    } else if (percentage < 100) {
-        tokenCounter.className = 'token-counter token-warning';
-        tokenText.textContent = `⚠️ Warning: ${estimated} / ${limit} (${percentage.toFixed(1)}%) - Consider removing files`;
-    } else {
-        tokenCounter.className = 'token-counter token-error';
-        tokenText.textContent = `❌ Error: ${estimated} / ${limit} (${percentage.toFixed(1)}%) - Cannot generate, remove files`;
-        document.getElementById('generateBtn').disabled = true;
-    }
-}
-
-document.getElementById('intentForm').addEventListener('submit', (e) => {
-    e.preventDefault();
-    
-    hideValidationErrors();
-
-    const formData = {
-        name: document.getElementById('name').value.trim(),
-        problem: document.getElementById('problem').value.trim(),
-        expectedOutput: document.getElementById('expectedOutput').value.trim(),
-        currentBehavior: getListValues('currentBehavior'),
-        desiredBehavior: getListValues('desiredBehavior'),
-        considerations: document.getElementById('considerations').value.trim(),
-        selectedFiles: []
-    };
-
-    vscode.postMessage({
-        command: 'submit',
-        data: formData
-    });
-});
-
-function cancel() {
-    if (confirm('¿Estás seguro de que quieres cancelar? Se perderán todos los cambios.')) {
-        vscode.postMessage({ command: 'cancel' });
-    }
-}
-
-function deleteIntent() {
-    vscode.postMessage({ command: 'deleteIntent' });
-}
-
-function updateGenerateButton() {
-    const hasName = document.getElementById('name').value.length > 0;
-    const hasProblem = document.getElementById('problem').value.length > 20;
-    const hasOutput = document.getElementById('expectedOutput').value.length > 10;
-    
-    document.getElementById('generateBtn').disabled = !(hasName && hasProblem && hasOutput);
-}
-
-document.getElementById('problem').addEventListener('input', () => {
-    triggerAutoSave();
-    updateGenerateButton();
-});
-
-document.getElementById('name').addEventListener('input', () => {
-    triggerAutoSave();
-    updateGenerateButton();
-});
-
-document.getElementById('expectedOutput').addEventListener('input', () => {
-    triggerAutoSave();
-    updateGenerateButton();
-});
-
-document.getElementById('considerations').addEventListener('input', triggerAutoSave);
-
-window.addEventListener('message', event => {
-    const message = event.data;
-    
-    switch (message.command) {
-        case 'setFiles':
-            renderFilePills(message.files);
-            break;
-            
-        case 'updateTokens':
-            updateTokenDisplay(message.tokens);
-            break;
-            
-        case 'loadExistingIntent':
-            loadExistingIntentData(message.data);
-            break;
-            
-        case 'validationErrors':
-            showValidationErrors(message.errors);
-            break;
-            
-        case 'error':
-            alert('Error: ' + message.message);
-            break;
-    }
-});
-
-function renderFilePills(files) {
-    const container = document.getElementById('filePills');
-    
-    if (!files || files.length === 0) {
-        container.innerHTML = '<p class="help-text">No hay archivos seleccionados</p>';
-        return;
-    }
-    
-    container.innerHTML = files.map(file => `
-        <div class="file-pill">
-            <button type="button" class="file-btn file-name" onclick="insertFileName('${file.filename}')" title="Insertar nombre">
-                📄 ${file.filename}
-            </button>
-            <button type="button" class="file-btn" onclick="openFileInVSCode('${file.relativePath}')" title="Abrir en VSCode">
-                🔗
-            </button>
-            <button type="button" class="file-btn" onclick="copyFilePath('${file.relativePath}')" title="Copiar path">
-                📋
-            </button>
-            <button type="button" class="file-btn" onclick="revealInFinder('${file.relativePath}')" title="Mostrar en Finder/Explorer">
-                📂
-            </button>
-            <button type="button" class="file-btn file-remove" onclick="removeFile('${file.relativePath}')" title="Remover">
-                ❌
-            </button>
-        </div>
-    `).join('');
-}
-
-function loadExistingIntentData(data) {
-    isEditMode = true;
-    
-    document.getElementById('name').value = data.name || '';
-    document.getElementById('name').disabled = true;
-    
-    document.getElementById('problem').value = data.content.problem || '';
-    document.getElementById('expectedOutput').value = data.content.expectedOutput || '';
-    document.getElementById('considerations').value = data.content.considerations || '';
-    
-    if (data.content.currentBehavior && Array.isArray(data.content.currentBehavior)) {
-        data.content.currentBehavior.forEach(value => {
-            addListItem('currentBehavior');
-            const items = document.getElementById('currentBehaviorList').querySelectorAll('.list-item');
-            const lastItem = items[items.length - 1];
-            if (lastItem) {
-                lastItem.querySelector('input').value = value;
-            }
-        });
-    }
-
-    if (data.content.desiredBehavior && Array.isArray(data.content.desiredBehavior)) {
-        data.content.desiredBehavior.forEach(value => {
-            addListItem('desiredBehavior');
-            const items = document.getElementById('desiredBehaviorList').querySelectorAll('.list-item');
-            const lastItem = items[items.length - 1];
-            if (lastItem) {
-                lastItem.querySelector('input').value = value;
-            }
-        });
-    }
-    
-    const generateBtn = document.getElementById('generateBtn');
-    if (data.status === 'completed') {
-        generateBtn.textContent = '🔄 Regenerar Intent';
-    }
-    
-    const deleteBtn = document.getElementById('deleteBtn');
-    deleteBtn.style.display = 'block';
-}
-
-document.addEventListener('keydown', (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-        e.preventDefault();
-        document.getElementById('intentForm').dispatchEvent(new Event('submit'));
-    }
-    
-    if (e.key === 'Escape') {
-        cancel();
-    }
-});
-
-addListItem('currentBehavior');
-addListItem('desiredBehavior');
-updateGenerateButton();
-
-const deleteBtn = document.getElementById('deleteBtn');
-deleteBtn.style.display = 'none';
-```
-
-### C:/repos/bloom-videos/bloom-development-extension/src/ui/intent/intentFormPanel.ts
-Metadatos: Lenguaje: typescript, Hash MD5: 1efcfa2f54ebd76a205cd90d6306c1ad
-
-```typescript
-// src/ui/intentFormPanel.ts
-import * as vscode from 'vscode';
-import * as path from 'path';
-import * as fs from 'fs';
-import { Logger } from '../../utils/logger';
-import { Validator } from '../../core/validator';
-import { IntentGenerator } from '../../core/intentGenerator';
-import { MetadataManager } from '../../core/metadataManager';
-import { CodebaseGenerator } from '../../core/codebaseGenerator';
-import { IntentSession } from '../../core/intentSession';
-import { TokenEstimator, TokenEstimation } from '../../utils/tokenEstimator';
-import { PythonExecutor } from '../../utils/pythonExecutor';
-import { IntentFormData, TokenStats } from '../../models/intent';
-import { joinPath } from '../../utils/uriHelper';
-
-
-export class IntentFormPanel {
-    private panel: vscode.WebviewPanel | undefined;
-    private session: IntentSession | undefined;
-    private isEditMode: boolean = false;
-    private intentName: string | undefined;
-    private pythonExecutor: PythonExecutor;
-    private tokenEstimation: TokenEstimation | undefined;
-
-    constructor(
-        private context: vscode.ExtensionContext,
-        private logger: Logger,
-        private workspaceFolder: vscode.WorkspaceFolder,
-        private selectedFiles: vscode.Uri[],
-        private relativePaths: string[],
-        existingIntentName?: string
-    ) {
-        this.intentName = existingIntentName;
-        this.isEditMode = !!existingIntentName;
-        this.pythonExecutor = new PythonExecutor(logger);
-    }
-
-    async show(): Promise<void> {
-        this.panel = vscode.window.createWebviewPanel(
-            'bloomIntentForm',
-            this.isEditMode ? 'Bloom: Edit Intent' : 'Bloom: Generate Intent',
-            vscode.ViewColumn.One,
-            {
-                enableScripts: true,
-                retainContextWhenHidden: true,
-                localResourceRoots: [
-                    joinPath(this.context.extensionUri, 'src', 'ui')
-                ]
-            }
-        );
-
-        this.panel.webview.html = this.getHtmlContent();
-        
-        // Inicializar sesión
-        if (this.isEditMode && this.intentName) {
-            await this.loadExistingIntent(this.intentName);
-        } else {
-            await this.createNewSession();
-        }
-
-        this.setupMessageListener();
-        this.setupSessionListeners();
-
-        // Enviar archivos iniciales
-        this.sendFilesToWebview();
-        
-        // Calcular tokens iniciales
-        if (this.relativePaths.length > 0) {
-            await this.calculateAndSendTokens();
-        }
-
-        this.logger.info('Formulario de intent abierto');
-    }
-
-    private async createNewSession(): Promise<void> {
-        const metadataManager = new MetadataManager(this.logger);
-        const codebaseGenerator = new CodebaseGenerator();
-        const intentGenerator = new IntentGenerator(this.logger);
-
-        const intentFolder = vscode.Uri.file(
-            path.join(this.workspaceFolder.uri.fsPath, '.bloom', 'intents', 'temp_' + Date.now())
-        );
-
-        this.session = await IntentSession.create(
-            intentFolder,
-            this.workspaceFolder,
-            this.selectedFiles,
-            this.relativePaths,
-            metadataManager,
-            codebaseGenerator,
-            intentGenerator,
-            this.logger
-        );
-    }
-
-    private async loadExistingIntent(intentName: string): Promise<void> {
-        const metadataManager = new MetadataManager(this.logger);
-        const codebaseGenerator = new CodebaseGenerator();
-        const intentGenerator = new IntentGenerator(this.logger);
-
-        this.session = await IntentSession.forIntent(
-            intentName,
-            this.workspaceFolder,
-            metadataManager,
-            codebaseGenerator,
-            intentGenerator,
-            this.logger
-        );
-
-        const state = this.session.getState();
-        
-        // Cargar datos existentes en el formulario
-        this.panel?.webview.postMessage({
-            command: 'loadExistingIntent',
-            data: {
-                name: state.name,
-                content: state.content,
-                status: state.status
-            }
-        });
-    }
-
-    private setupSessionListeners(): void {
-        if (!this.session) return;
-
-        this.session.on('filesChanged', (files: string[]) => {
-            this.relativePaths = files;
-            this.sendFilesToWebview();
-            this.calculateAndSendTokens();
-            this.logger.info(`Archivos actualizados: ${files.length}`);
-        });
-
-        this.session.on('tokensChanged', (tokens: TokenStats) => {
-            this.panel?.webview.postMessage({
-                command: 'updateTokens',
-                tokens
-            });
-        });
-
-        this.session.on('stateChanged', (state: any) => {
-            this.logger.info(`Estado del intent actualizado: ${state.status}`);
-        });
-    }
-
-    private sendFilesToWebview(): void {
-        if (!this.panel) return;
-
-        const filesData = this.relativePaths.map(filePath => ({
-            filename: path.basename(filePath),
-            fullPath: filePath,
-            relativePath: filePath
-        }));
-
-        this.panel.webview.postMessage({
-            command: 'setFiles',
-            files: filesData
-        });
-    }
-
-    private async calculateAndSendTokens(): Promise<void> {
-        if (!this.session) return;
-
-        try {
-            const intentFolder = this.session.getState().intentFolder;
-            
-            this.tokenEstimation = await TokenEstimator.estimateIntent(
-                intentFolder,
-                this.relativePaths
-            );
-
-            // Enviar al webview
-            this.panel?.webview.postMessage({
-                command: 'updateTokens',
-                tokens: {
-                    estimated: this.tokenEstimation.totalTokens,
-                    limit: 100000,
-                    percentage: this.tokenEstimation.percentage * 100
-                }
-            });
-
-            // Mostrar alerta si es necesario
-            const alertMessage = TokenEstimator.getAlertMessage(this.tokenEstimation);
-            if (alertMessage) {
-                if (this.tokenEstimation.error) {
-                    vscode.window.showErrorMessage(alertMessage);
-                } else if (this.tokenEstimation.warning) {
-                    vscode.window.showWarningMessage(alertMessage);
-                }
-            }
-
-        } catch (error: any) {
-            this.logger.error(`Error calculando tokens: ${error.message}`);
-        }
-    }
-
-    private setupMessageListener(): void {
-        if (!this.panel) return;
-
-        this.panel.webview.onDidReceiveMessage(
-            async (message) => {
-                switch (message.command) {
-                    case 'submit':
-                        await this.handleSubmit(message.data);
-                        break;
-                    case 'cancel':
-                        this.panel?.dispose();
-                        break;
-                    case 'openFileInVSCode':
-                        await this.handleOpenFileInVSCode(message.filePath);
-                        break;
-                    case 'copyFilePath':
-                        await this.handleCopyFilePath(message.filePath);
-                        break;
-                    case 'revealInFinder':
-                        await this.handleRevealInFinder(message.filePath);
-                        break;
-                    case 'removeFile':
-                        await this.handleRemoveFile(message.filePath);
-                        break;
-                    case 'autoSave':
-                        await this.handleAutoSave(message.updates);
-                        break;
-                    case 'deleteIntent':
-                        await this.handleDeleteIntent();
-                        break;
-                }
-            },
-            undefined,
-            this.context.subscriptions
-        );
-    }
-
-    private async handleOpenFileInVSCode(filePath: string): Promise<void> {
-        const fullPath = path.join(this.workspaceFolder.uri.fsPath, filePath);
-        const fileUri = vscode.Uri.file(fullPath);
-        
-        try {
-            await vscode.window.showTextDocument(fileUri, {
-                viewColumn: vscode.ViewColumn.Beside
-            });
-        } catch (error: any) {
-            this.logger.error(`Error abriendo archivo: ${error.message}`);
-            vscode.window.showErrorMessage(`No se pudo abrir: ${filePath}`);
-        }
-    }
-
-    private async handleCopyFilePath(filePath: string): Promise<void> {
-        const fullPath = path.join(this.workspaceFolder.uri.fsPath, filePath);
-        await vscode.env.clipboard.writeText(fullPath);
-        vscode.window.showInformationMessage('Path copiado al clipboard');
-    }
-
-    private async handleRevealInFinder(filePath: string): Promise<void> {
-        const fullPath = path.join(this.workspaceFolder.uri.fsPath, filePath);
-        const fileUri = vscode.Uri.file(fullPath);
-        
-        await vscode.commands.executeCommand('revealFileInOS', fileUri);
-    }
-
-    private async handleRemoveFile(filePath: string): Promise<void> {
-        if (!this.session) return;
-
-        const confirm = await vscode.window.showWarningMessage(
-            `¿Remover ${path.basename(filePath)}?`,
-            'Remover',
-            'Cancelar'
-        );
-
-        if (confirm === 'Remover') {
-            await this.session.removeFile(filePath);
-            vscode.window.showInformationMessage(`Archivo removido: ${path.basename(filePath)}`);
-            
-            // Recalcular tokens
-            await this.calculateAndSendTokens();
-        }
-    }
-
-    private async handleAutoSave(updates: any): Promise<void> {
-        if (!this.session) return;
-
-        this.session.queueAutoSave(updates);
-    }
-
-    private async handleDeleteIntent(): Promise<void> {
-        if (!this.session) return;
-
-        const state = this.session.getState();
-        
-        const confirm = await vscode.window.showWarningMessage(
-            `¿Eliminar intent '${state.name}'?`,
-            {
-                modal: true,
-                detail: `Esto borrará la carpeta .bloom/intents/${state.name}/ permanentemente.`
-            },
-            'Eliminar'
-        );
-
-        if (confirm === 'Eliminar') {
-            await this.session.deleteIntent();
-            this.panel?.dispose();
-            vscode.window.showInformationMessage(`Intent '${state.name}' eliminado`);
-            
-            // Refrescar tree view
-            vscode.commands.executeCommand('workbench.view.extension.bloomIntents');
-        }
-    }
-
-    private async handleSubmit(data: IntentFormData): Promise<void> {
-        this.logger.info('Procesando formulario de intent');
-
-        // Validar que no exceda tokens
-        if (this.tokenEstimation?.error) {
-            vscode.window.showErrorMessage(
-                '❌ No se puede generar: excede el límite de tokens. Remueve archivos primero.'
-            );
-            return;
-        }
-
-        if (!data.name || data.name.length < 3) {
-            vscode.window.showErrorMessage('El nombre del intent debe tener al menos 3 caracteres');
-            return;
-        }
-
-        const validator = new Validator();
-        const validation = validator.validate(data);
-
-        if (!validation.isValid) {
-            this.panel?.webview.postMessage({
-                command: 'validationErrors',
-                errors: validation.errors
-            });
-            this.logger.warn(`Errores de validación: ${validation.errors.join(', ')}`);
-            return;
-        }
-
-        if (!this.session) {
-            vscode.window.showErrorMessage('Error: Sesión no inicializada');
-            return;
-        }
-
-        try {
-            await vscode.window.withProgress(
-                {
-                    location: vscode.ProgressLocation.Notification,
-                    title: this.isEditMode ? 'Regenerando intent' : 'Generando intent',
-                    cancellable: false
-                },
-                async (progress) => {
-                    // Crear carpeta definitiva si es nuevo intent
-                    if (!this.isEditMode) {
-                        progress.report({ message: 'Creando estructura...' });
-                        
-                        const intentFolder = vscode.Uri.file(
-                            path.join(this.workspaceFolder.uri.fsPath, '.bloom', 'intents', data.name)
-                        );
-                        
-                        await this.ensureDirectory(vscode.Uri.file(path.join(this.workspaceFolder.uri.fsPath, '.bloom')));
-                        await this.ensureDirectory(vscode.Uri.file(path.join(this.workspaceFolder.uri.fsPath, '.bloom', 'intents')));
-                        await this.ensureDirectory(intentFolder);
-                        
-                        // Actualizar sesión con carpeta definitiva
-                        const metadataManager = new MetadataManager(this.logger);
-                        const codebaseGenerator = new CodebaseGenerator();
-                        const intentGenerator = new IntentGenerator(this.logger);
-                        
-                        this.session = await IntentSession.create(
-                            intentFolder,
-                            this.workspaceFolder,
-                            this.selectedFiles,
-                            this.relativePaths,
-                            metadataManager,
-                            codebaseGenerator,
-                            intentGenerator,
-                            this.logger
-                        );
-                    }
-
-                    progress.report({ message: 'Generando codebase.bl...' });
-
-                    // Generar codebase.bl (con opción de script Python)
-                    await this.generateCodebase();
-
-                    progress.report({ message: 'Guardando intent...' });
-
-                    // Generar o regenerar intent
-                    if (this.isEditMode) {
-                        await this.session!.regenerateIntent(data);
-                        vscode.window.showInformationMessage(`✅ Intent '${data.name}' regenerado exitosamente`);
-                    } else {
-                        await this.session!.generateIntent(data);
-                        vscode.window.showInformationMessage(`✅ Intent '${data.name}' creado exitosamente`);
-                    }
-                }
-            );
-
-            this.panel?.dispose();
-            
-            // Refrescar tree view
-            vscode.commands.executeCommand('workbench.view.extension.bloomIntents');
-
-            this.logger.info('Intent generado exitosamente');
-
-        } catch (error: unknown) {
-            const errorMessage = error instanceof Error ? error.message : String(error);
-            vscode.window.showErrorMessage(`Error al generar intent: ${errorMessage}`);
-            this.logger.error('Error al generar intent', error as Error);
-
-            this.panel?.webview.postMessage({
-                command: 'error',
-                message: errorMessage
-            });
-        }
-    }
-
-    private async generateCodebase(): Promise<void> {
-        const useCustom = vscode.workspace.getConfiguration('bloom')
-            .get('useCustomCodebaseGenerator', false);
-
-        if (useCustom) {
-            // Intentar usar script Python personalizado
-            const intentPath = this.session!.getState().intentFolder.fsPath;
-            const result = await this.pythonExecutor.generateCodebase(
-                intentPath,
-                this.relativePaths
-            );
-
-            if (!result.success) {
-                this.logger.warn('Script Python falló, usando generador nativo');
-                await this.generateCodebaseNative();
-            }
-        } else {
-            // Usar generador nativo TypeScript
-            await this.generateCodebaseNative();
-        }
-    }
-
-    private async generateCodebaseNative(): Promise<void> {
-        let codebaseContent = '# CODEBASE\n\n';
-
-        for (const filePath of this.relativePaths) {
-            try {
-                const fullPath = joinPath(this.workspaceFolder.uri, filePath);
-                const fileContent = await vscode.workspace.fs.readFile(fullPath);
-                const text = Buffer.from(fileContent).toString('utf-8');
-
-                codebaseContent += `## Archivo: ${filePath}\n\n`;
-                codebaseContent += '```\n';
-                codebaseContent += text;
-                codebaseContent += '\n```\n\n';
-
-            } catch (error) {
-                this.logger.warn(`No se pudo leer: ${filePath}`);
-            }
-        }
-
-        const intentFolder = this.session!.getState().intentFolder;
-        const codebasePath = joinPath(intentFolder, 'codebase.bl');
-
-        await vscode.workspace.fs.writeFile(
-            codebasePath,
-            Buffer.from(codebaseContent, 'utf-8')
-        );
-
-        this.logger.info('codebase.bl generado con método nativo');
-    }
-
-    private async ensureDirectory(uri: vscode.Uri): Promise<void> {
-        try {
-            await vscode.workspace.fs.stat(uri);
-        } catch {
-            await vscode.workspace.fs.createDirectory(uri);
-        }
-    }
-
-    private getHtmlContent(): string {
-        const htmlPath = path.join(this.context.extensionPath, 'src', 'ui', 'intentForm.html');
-        const cssPath = path.join(this.context.extensionPath, 'src', 'ui', 'intentForm.css');
-        const jsPath = path.join(this.context.extensionPath, 'src', 'ui', 'intentForm.js');
-
-        let htmlContent = fs.readFileSync(htmlPath, 'utf8');
-        const cssContent = fs.readFileSync(cssPath, 'utf8');
-        const jsContent = fs.readFileSync(jsPath, 'utf8');
-
-        htmlContent = htmlContent.replace('<!-- CSS_PLACEHOLDER -->', `<style>${cssContent}</style>`);
-        htmlContent = htmlContent.replace('<!-- JS_PLACEHOLDER -->', `<script>${jsContent}</script>`);
-
-        return htmlContent;
-    }
-}
-```
-
-### C:/repos/bloom-videos/bloom-development-extension/src/ui/nucleus/NucleusSetupPanel.ts
-Metadatos: Lenguaje: typescript, Hash MD5: 6bc86aaeff1de6c434100199280f259d
-
-```typescript
-// src/ui/nucleus/NucleusSetupPanel.ts
-import * as vscode from 'vscode';
-import * as path from 'path';
-import { NucleusManager } from '../../core/nucleusManager';
-import { getCurrentGitHubUser } from '../../utils/githubOAuth';
-import { getUserOrgs } from '../../utils/githubApi';
-import { UserManager } from '../../managers/userManager';
-
-export class NucleusSetupPanel {
-    private panel: vscode.WebviewPanel | undefined;
-    private nucleusManager: NucleusManager;
-
-    constructor(private context: vscode.ExtensionContext) {
-        this.nucleusManager = new NucleusManager(context);
-    }
-
-    show() {
-        if (this.panel) {
-            this.panel.reveal();
-            return;
-        }
-
-        this.panel = vscode.window.createWebviewPanel(
-            'bloomNucleusSetup',
-            'Crear Nucleus',
-            vscode.ViewColumn.One,
-            { enableScripts: true, retainContextWhenHidden: true }
-        );
-
-        this.panel.webview.html = this.getHtml();
-        this.panel.webview.onDidReceiveMessage(async (msg) => {
-            switch (msg.command) {
-                case 'loadData':
-                    await this.loadData();
-                    break;
-                case 'createNucleus':
-                    await this.createNucleus(msg.org, msg.localPath, msg.isNew);
-                    break;
-            }
-        });
-
-        this.panel.onDidDispose(() => { this.panel = undefined; });
-    }
-
-    private async loadData() {
-        try {
-            const user = await getCurrentGitHubUser();
-            const orgs = await getUserOrgs();
-
-            this.panel?.webview.postMessage({
-                command: 'dataLoaded',
-                orgs
-            });
-        } catch (err: any) {
-            this.panel?.webview.postMessage({ command: 'error', text: err.message });
-        }
-    }
-
-    private async createNucleus(org: string, localPath: string, isNew: boolean) {
-        try {
-            const nucleusPath = await this.nucleusManager.createOrLinkNucleus(org, localPath, isNew);
-
-            await UserManager.init(this.context).saveUser({
-                githubUsername: (await getCurrentGitHubUser()).login,
-                githubOrg: org
-            });
-
-            this.panel?.webview.postMessage({ command: 'success', path: nucleusPath });
-        } catch (err: any) {
-            this.panel?.webview.postMessage({ command: 'error', text: err.message });
-        }
-    }
-
-    private getHtml(): string {
-        return `
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="UTF-8">
-                <style>
-                    body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); background: var(--vscode-editor-background); padding: 20px; }
-                    h1 { font-size: 24px; margin-bottom: 20px; }
-                    p { margin-bottom: 20px; }
-                    select, input { width: 100%; padding: 10px; margin-bottom: 10px; border-radius: 4px; border: 1px solid var(--vscode-input-border); }
-                    button { padding: 10px; border-radius: 4px; background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; cursor: pointer; margin: 5px 0; }
-                    button:hover { background: var(--vscode-button-hoverBackground); }
-                </style>
-            </head>
-            <body>
-                <h1>Crear un Nuevo Nucleus</h1>
-                <p>Selecciona la organización y la ubicación local para tu Nucleus.</p>
-                <button id="loadBtn">Cargar Organizaciones</button>
-
-                <select id="org" style="display:none;">
-                    <option value="">Selecciona Organización</option>
-                </select>
-
-                <button id="newBtn" style="display:none;">Crear Carpeta Nueva</button>
-                <button id="existingBtn" style="display:none;">Usar Carpeta Existente</button>
-
-                <input type="text" id="localPath" placeholder="Ruta local" readonly style="display:none;"/>
-
-                <button id="createBtn" disabled style="display:none;">Crear Nucleus</button>
-
-                <div id="status"></div>
-
-                <script>
-                    const vscode = acquireVsCodeApi();
-
-                    document.getElementById('loadBtn').onclick = () => {
-                        vscode.postMessage({ command: 'loadData' });
-                    };
-
-                    document.getElementById('newBtn').onclick = async () => {
-                        const folder = await vscode.window.showOpenDialog({ canSelectFolders: true });
-                        if (folder) document.getElementById('localPath').value = folder[0].fsPath;
-                    };
-
-                    document.getElementById('existingBtn').onclick = async () => {
-                        const folder = await vscode.window.showOpenDialog({ canSelectFolders: true });
-                        if (folder) document.getElementById('localPath').value = folder[0].fsPath;
-                    };
-
-                    document.getElementById('createBtn').onclick = () => {
-                        const org = document.getElementById('org').value;
-                        const localPath = document.getElementById('localPath').value;
-                        const isNew = document.getElementById('newBtn').clicked; // Simplificado
-                        vscode.postMessage({ command: 'createNucleus', org, localPath, isNew });
-                    };
-
-                    window.addEventListener('message', e => {
-                        const msg = e.data;
-                        if (msg.command === 'dataLoaded') {
-                            const select = document.getElementById('org');
-                            msg.orgs.forEach(o => {
-                                const opt = document.createElement('option');
-                                opt.value = o.login;
-                                opt.textContent = o.login;
-                                select.appendChild(opt);
-                            });
-                            select.style.display = 'block';
-                            document.getElementById('newBtn').style.display = 'block';
-                            document.getElementById('existingBtn').style.display = 'block';
-                            document.getElementById('createBtn').style.display = 'block';
-                            document.getElementById('createBtn').disabled = false;
-                        }
-                        if (msg.command === 'success') {
-                            document.getElementById('status').textContent = 'Nucleus creado!';
-                        }
-                        if (msg.command === 'error') {
-                            document.getElementById('status').textContent = msg.text;
-                        }
-                    });
-                </script>
-            </body>
-            </html>
-        `;
+        vscode.window.showErrorMessage(`Error abriendo proyecto: ${error.message}`);
     }
 }
 ```
 
 ### C:/repos/bloom-videos/bloom-development-extension/src/ui/welcome/welcomeView.ts
-Metadatos: Lenguaje: typescript, Hash MD5: d46d07883be22b5c3a9fd5782beace9b
+Metadatos: Lenguaje: typescript, Hash MD5: fd7c838c62d490d9b5318a302ca6e092
 
 ```typescript
 // src/ui/welcome/welcomeView.ts
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as fs from 'fs';
 import { UserManager } from '../../managers/userManager';
 import { getUserOrgs } from '../../utils/githubApi';
-import { getCurrentGitHubUser } from '../../utils/githubOAuth';
+import { getCurrentGitHubUser, getGitHubTokenFromSession } from '../../utils/githubOAuth';
+import { GitOrchestrator, NucleusResult } from '../../core/gitOrchestrator';
+import { Logger } from '../../utils/logger';
+import { PythonScriptRunner } from '../../core/pythonScriptRunner';
 
 export class WelcomeView {
     private panel: vscode.WebviewPanel | undefined;
@@ -6573,45 +5818,1224 @@ export class WelcomeView {
 
     private async createNucleus(githubOrg?: string) {
         try {
-            vscode.window.showInformationMessage('Creando tu Nucleus...');
-
+            // 1. GUARDAR USUARIO EN GLOBALSTATE
             const user = await getCurrentGitHubUser();
             const orgs = await getUserOrgs();
 
-            // GUARDAR TODAS LAS ORGS
             await UserManager.init(this.context).saveUser({
                 githubUsername: user.login,
                 githubOrg: githubOrg || user.login,
                 allOrgs: [user.login, ...orgs.map(o => o.login)]
             });
 
-            this.panel?.webview.postMessage({ 
-                command: 'nucleusCreated', 
-                message: '¡Listo! Ya podés usar Bloom.' 
-            });
+            // 2. OBTENER TOKEN FRESCO DESDE SESIÓN DE VSCODE
+            const token = await getGitHubTokenFromSession();
+            if (!token) {
+                throw new Error('No GitHub token available. Please authenticate again.');
+            }
 
-            setTimeout(() => {
-                this.panel?.dispose();
-                vscode.commands.executeCommand('bloom.focusRealNucleusView');
-            }, 2000);
+            // 3. CREAR ORCHESTRATOR
+            const logger = new Logger();
+            const orchestrator = new GitOrchestrator(
+                token,
+                logger,
+                new PythonScriptRunner(this.context, logger)
+            );
+
+            // 4. DETECTAR ESTADO
+            const status = await orchestrator.detectNucleusStatus(githubOrg || user.login);
+
+            // 5. ELEGIR ACCIÓN SEGÚN ESTADO
+            let result: NucleusResult;
+
+            if (status.location === 'none') {
+                // Crear nuevo
+                const folder = await vscode.window.showOpenDialog({
+                    canSelectFolders: true,
+                    canSelectFiles: false,
+                    canSelectMany: false,
+                    title: 'Seleccionar carpeta parent para Nucleus',
+                    openLabel: 'Seleccionar'
+                });
+                
+                if (!folder || folder.length === 0) {
+                    vscode.window.showWarningMessage('Creación cancelada');
+                    return;
+                }
+                
+                result = await orchestrator.createNucleus(
+                    githubOrg || user.login,
+                    folder[0].fsPath
+                );
+
+            } else if (status.location === 'remote') {
+                // Clonar
+                const folder = await vscode.window.showOpenDialog({
+                    canSelectFolders: true,
+                    canSelectFiles: false,
+                    canSelectMany: false,
+                    title: 'Seleccionar carpeta donde clonar',
+                    openLabel: 'Seleccionar'
+                });
+                
+                if (!folder || folder.length === 0) {
+                    vscode.window.showWarningMessage('Clonación cancelada');
+                    return;
+                }
+                
+                result = await orchestrator.cloneNucleus(
+                    githubOrg || user.login,
+                    folder[0].fsPath
+                );
+
+            } else if (status.location === 'both' || status.location === 'local') {
+                // Vincular existente
+                if (!status.localPath) {
+                    throw new Error('Local path not found in status');
+                }
+                
+                result = await orchestrator.linkNucleus(
+                    status.localPath,
+                    githubOrg || user.login
+                );
+            } else {
+                throw new Error('Unknown nucleus status');
+            }
+
+            // 6. MOSTRAR RESULTADO
+            if (result.success) {
+                this.panel?.webview.postMessage({
+                    command: 'nucleusCreated',
+                    message: result.message
+                });
+                
+                setTimeout(() => {
+                    this.panel?.dispose();
+                    vscode.commands.executeCommand('bloom.syncNucleusProjects');
+                }, 2000);
+            } else {
+                throw new Error(result.error || 'Error desconocido');
+            }
 
         } catch (err: any) {
             this.panel?.webview.postMessage({
                 command: 'error',
-                text: err.message || 'Error creando Nucleus'
+                text: err.message
             });
+            
+            vscode.window.showErrorMessage(`Error creando Nucleus: ${err.message}`);
         }
     }
 
     private getHtml(): string {
-        const htmlPath = path.join(this.context.extensionPath, 'src', 'ui', 'welcome', 'welcomeView.html');
-        return require('fs').readFileSync(htmlPath, 'utf-8');
+        return `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { 
+            font-family: var(--vscode-font-family); 
+            color: var(--vscode-foreground); 
+            background: var(--vscode-editor-background); 
+            padding: 40px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        h1 { 
+            font-size: 32px; 
+            margin-bottom: 10px;
+            color: var(--vscode-textLink-foreground);
+        }
+        p { 
+            margin-bottom: 20px;
+            line-height: 1.6;
+        }
+        select, input { 
+            width: 100%; 
+            padding: 12px; 
+            margin-bottom: 15px; 
+            border-radius: 4px; 
+            border: 1px solid var(--vscode-input-border);
+            background: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+        }
+        button { 
+            padding: 12px 24px; 
+            border-radius: 4px; 
+            background: var(--vscode-button-background); 
+            color: var(--vscode-button-foreground); 
+            border: none; 
+            cursor: pointer; 
+            font-weight: 600;
+            width: 100%;
+            margin: 8px 0;
+        }
+        button:hover { 
+            background: var(--vscode-button-hoverBackground); 
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+        #status {
+            padding: 12px;
+            border-radius: 4px;
+            margin-top: 20px;
+            display: none;
+        }
+        #status.success {
+            background: rgba(76, 201, 176, 0.2);
+            border-left: 3px solid #4ec9b0;
+            display: block;
+        }
+        #status.error {
+            background: rgba(244, 135, 113, 0.2);
+            border-left: 3px solid #f48771;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <h1>🌸 Bienvenido a Bloom</h1>
+    <p>Conectá con GitHub para comenzar a usar Bloom BTIP y gestionar tus proyectos.</p>
+
+    <button id="authBtn">Conectar con GitHub</button>
+
+    <div id="formContainer" style="display:none;">
+        <div class="form-group">
+            <label>Nombre</label>
+            <input type="text" id="name" readonly />
+        </div>
+
+        <div class="form-group">
+            <label>Email</label>
+            <input type="text" id="email" readonly />
+        </div>
+
+        <div class="form-group">
+            <label>Usuario de GitHub</label>
+            <input type="text" id="username" readonly />
+        </div>
+
+        <div class="form-group">
+            <label>Selecciona Organización</label>
+            <select id="org">
+                <option value="">Selecciona una organización</option>
+            </select>
+        </div>
+
+        <button id="createBtn" disabled>Crear Nucleus</button>
+    </div>
+
+    <div id="status"></div>
+
+    <script>
+        const vscode = acquireVsCodeApi();
+
+        document.getElementById('authBtn').onclick = () => {
+            vscode.postMessage({ command: 'authenticate' });
+        };
+
+        document.getElementById('org').onchange = () => {
+            const org = document.getElementById('org').value;
+            document.getElementById('createBtn').disabled = !org;
+        };
+
+        document.getElementById('createBtn').onclick = () => {
+            const org = document.getElementById('org').value;
+            vscode.postMessage({ command: 'createNucleus', githubOrg: org });
+        };
+
+        window.addEventListener('message', e => {
+            const msg = e.data;
+            
+            if (msg.command === 'userAuthenticated') {
+                document.getElementById('name').value = msg.name;
+                document.getElementById('email').value = msg.email;
+                document.getElementById('username').value = msg.username;
+                
+                const select = document.getElementById('org');
+                select.innerHTML = '<option value="">Selecciona una organización</option>';
+                
+                // Agregar usuario personal
+                const personalOpt = document.createElement('option');
+                personalOpt.value = msg.username;
+                personalOpt.textContent = msg.username + ' (Personal)';
+                select.appendChild(personalOpt);
+                
+                // Agregar organizaciones
+                msg.orgs.forEach(o => {
+                    const opt = document.createElement('option');
+                    opt.value = o.login;
+                    opt.textContent = o.login;
+                    select.appendChild(opt);
+                });
+                
+                document.getElementById('formContainer').style.display = 'block';
+                document.getElementById('authBtn').style.display = 'none';
+            }
+            
+            if (msg.command === 'nucleusCreated') {
+                const status = document.getElementById('status');
+                status.textContent = msg.message;
+                status.className = 'success';
+            }
+            
+            if (msg.command === 'error') {
+                const status = document.getElementById('status');
+                status.textContent = msg.text;
+                status.className = 'error';
+            }
+        });
+    </script>
+</body>
+</html>
+        `;
+    }
+}
+```
+
+### C:/repos/bloom-videos/bloom-development-extension/src/utils/gitManager.ts
+Metadatos: Lenguaje: typescript, Hash MD5: 862e9ca23f4c222adc322625a141f59e
+
+```typescript
+// src/utils/gitManager.ts
+import * as vscode from 'vscode';
+import * as path from 'path';
+import * as fs from 'fs';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import { Logger } from '../utils/logger';
+
+const execAsync = promisify(exec);
+
+export interface GitChange {
+    file: string;
+    status: 'added' | 'modified' | 'deleted';
+}
+
+export interface PendingCommit {
+    repoPath: string;
+    repoName: string;
+    message: string;
+    changes: GitChange[];
+    timestamp: number;
+}
+
+export class GitManager {
+    private static pendingCommits: PendingCommit[] = [];
+    private static statusBarItem: vscode.StatusBarItem;
+    private static logger: Logger;
+
+    static initialize(context: vscode.ExtensionContext) {
+        this.statusBarItem = vscode.window.createStatusBarItem(
+            vscode.StatusBarAlignment.Left,
+            100
+        );
+        this.statusBarItem.command = 'bloom.reviewPendingCommits';
+        context.subscriptions.push(this.statusBarItem);
+        this.updateStatusBar();
+    }
+
+    /**
+     * Registra un commit pendiente SIN ejecutarlo
+     */
+    static async queueCommit(
+        repoPath: string,
+        message: string,
+        files?: string[]
+    ): Promise<void> {
+        const repoName = path.basename(repoPath);
+        
+        // Detectar cambios
+        const changes = await this.getChanges(repoPath, files);
+        
+        if (changes.length === 0) {
+            return; // No hay nada que commitear
+        }
+
+        // Agregar a la cola
+        this.pendingCommits.push({
+            repoPath,
+            repoName,
+            message,
+            changes,
+            timestamp: Date.now()
+        });
+
+        this.updateStatusBar();
+        this.showNotification(repoName, changes.length);
+    }
+
+    /**
+     * Obtiene cambios en el repositorio
+     */
+    private static async getChanges(
+        repoPath: string,
+        files?: string[]
+    ): Promise<GitChange[]> {
+        try {
+            const { stdout } = await execAsync('git status --porcelain', {
+                cwd: repoPath
+            });
+
+            if (!stdout.trim()) {
+                return [];
+            }
+
+            const lines = stdout.trim().split('\n');
+            const changes: GitChange[] = [];
+
+            for (const line of lines) {
+                const status = line.substring(0, 2).trim();
+                const file = line.substring(3);
+
+                // Si se especificaron archivos, filtrar
+                if (files && files.length > 0) {
+                    if (!files.some(f => file.includes(f))) {
+                        continue;
+                    }
+                }
+
+                let changeStatus: 'added' | 'modified' | 'deleted';
+                if (status.includes('A')) changeStatus = 'added';
+                else if (status.includes('D')) changeStatus = 'deleted';
+                else changeStatus = 'modified';
+
+                changes.push({ file, status: changeStatus });
+            }
+
+            return changes;
+        } catch (error) {
+            console.error('Error getting git changes:', error);
+            return [];
+        }
+    }
+
+    /**
+     * Muestra notificación de cambios pendientes
+     */
+    private static showNotification(repoName: string, changeCount: number) {
+        const message = `💾 ${changeCount} cambio(s) guardado(s) en ${repoName}`;
+        
+        vscode.window.showInformationMessage(
+            message,
+            'Ver Cambios',
+            'Más Tarde'
+        ).then(selection => {
+            if (selection === 'Ver Cambios') {
+                vscode.commands.executeCommand('bloom.reviewPendingCommits');
+            }
+        });
+    }
+
+    /**
+     * Actualiza status bar con contador
+     */
+    private static updateStatusBar() {
+        if (this.pendingCommits.length === 0) {
+            this.statusBarItem.hide();
+            return;
+        }
+
+        const total = this.pendingCommits.reduce((sum, c) => sum + c.changes.length, 0);
+        const repos = [...new Set(this.pendingCommits.map(c => c.repoName))].length;
+
+        this.statusBarItem.text = `$(git-commit) ${total} cambios en ${repos} repo(s)`;
+        this.statusBarItem.tooltip = 'Click para revisar y commitear';
+        this.statusBarItem.show();
+    }
+
+    /**
+     * Muestra panel de revisión de commits
+     */
+    static async reviewAndCommit(): Promise<void> {
+        if (this.pendingCommits.length === 0) {
+            vscode.window.showInformationMessage('No hay cambios pendientes');
+            return;
+        }
+
+        // Crear panel webview
+        const panel = vscode.window.createWebviewPanel(
+            'bloomGitReview',
+            'Revisar Commits Pendientes',
+            vscode.ViewColumn.One,
+            { enableScripts: true }
+        );
+
+        panel.webview.html = this.getReviewHtml();
+
+        // Enviar datos
+        panel.webview.postMessage({
+            command: 'loadCommits',
+            commits: this.pendingCommits
+        });
+
+        // Escuchar acciones
+        panel.webview.onDidReceiveMessage(async (message) => {
+            switch (message.command) {
+                case 'editMessage':
+                    await this.editCommitMessage(message.index, message.newMessage);
+                    panel.webview.postMessage({
+                        command: 'loadCommits',
+                        commits: this.pendingCommits
+                    });
+                    break;
+
+                case 'commitAndPush':
+                    await this.executeCommit(message.index, true);
+                    this.pendingCommits.splice(message.index, 1);
+                    
+                    if (this.pendingCommits.length === 0) {
+                        panel.dispose();
+                    } else {
+                        panel.webview.postMessage({
+                            command: 'loadCommits',
+                            commits: this.pendingCommits
+                        });
+                    }
+                    this.updateStatusBar();
+                    break;
+
+                case 'commitOnly':
+                    await this.executeCommit(message.index, false);
+                    this.pendingCommits.splice(message.index, 1);
+                    
+                    if (this.pendingCommits.length === 0) {
+                        panel.dispose();
+                    } else {
+                        panel.webview.postMessage({
+                            command: 'loadCommits',
+                            commits: this.pendingCommits
+                        });
+                    }
+                    this.updateStatusBar();
+                    break;
+
+                case 'discard':
+                    this.pendingCommits.splice(message.index, 1);
+                    
+                    if (this.pendingCommits.length === 0) {
+                        panel.dispose();
+                    } else {
+                        panel.webview.postMessage({
+                            command: 'loadCommits',
+                            commits: this.pendingCommits
+                        });
+                    }
+                    this.updateStatusBar();
+                    break;
+
+                case 'commitAll':
+                    await this.commitAll(message.withPush);
+                    panel.dispose();
+                    break;
+            }
+        });
+    }
+
+    /**
+     * Edita mensaje de commit
+     */
+    private static async editCommitMessage(index: number, newMessage: string) {
+        if (this.pendingCommits[index]) {
+            this.pendingCommits[index].message = newMessage;
+        }
+    }
+
+    /**
+     * Ejecuta un commit específico
+     */
+    private static async executeCommit(index: number, withPush: boolean): Promise<void> {
+        const commit = this.pendingCommits[index];
+        
+        try {
+            // Stage cambios
+            await execAsync('git add .', { cwd: commit.repoPath });
+
+            // Commit
+            const escapedMessage = commit.message.replace(/"/g, '\\"');
+            await execAsync(`git commit -m "${escapedMessage}"`, {
+                cwd: commit.repoPath
+            });
+
+            // Push si se solicita
+            if (withPush) {
+                await execAsync('git push', { cwd: commit.repoPath });
+                vscode.window.showInformationMessage(
+                    `✅ Commit + Push exitoso en ${commit.repoName}`
+                );
+            } else {
+                vscode.window.showInformationMessage(
+                    `✅ Commit exitoso en ${commit.repoName} (sin push)`
+                );
+            }
+        } catch (error: any) {
+            vscode.window.showErrorMessage(
+                `Error en ${commit.repoName}: ${error.message}`
+            );
+        }
+    }
+
+    /**
+     * Commitea todos los cambios pendientes
+     */
+    private static async commitAll(withPush: boolean): Promise<void> {
+        let successful = 0;
+        let failed = 0;
+
+        for (const commit of this.pendingCommits) {
+            try {
+                await execAsync('git add .', { cwd: commit.repoPath });
+                const escapedMessage = commit.message.replace(/"/g, '\\"');
+                await execAsync(`git commit -m "${escapedMessage}"`, {
+                    cwd: commit.repoPath
+                });
+
+                if (withPush) {
+                    await execAsync('git push', { cwd: commit.repoPath });
+                }
+                
+                successful++;
+            } catch (error) {
+                failed++;
+            }
+        }
+
+        this.pendingCommits = [];
+        this.updateStatusBar();
+
+        const action = withPush ? 'Commit + Push' : 'Commit';
+        vscode.window.showInformationMessage(
+            `${action}: ${successful} exitosos, ${failed} fallidos`
+        );
+    }
+
+    /**
+     * HTML del panel de revisión
+     */
+    private static getReviewHtml(): string {
+        return `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            font-family: var(--vscode-font-family);
+            color: var(--vscode-foreground);
+            background: var(--vscode-editor-background);
+            padding: 20px;
+        }
+        h1 { margin-bottom: 20px; }
+        .commit-card {
+            background: var(--vscode-input-background);
+            border: 1px solid var(--vscode-input-border);
+            border-radius: 4px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+        .commit-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .repo-name {
+            font-weight: 600;
+            font-size: 16px;
+        }
+        .timestamp {
+            font-size: 12px;
+            color: var(--vscode-descriptionForeground);
+        }
+        .commit-message {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 12px;
+            background: var(--vscode-editor-background);
+            border: 1px solid var(--vscode-input-border);
+            color: var(--vscode-input-foreground);
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        .changes-list {
+            margin-bottom: 12px;
+            padding: 8px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 4px;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        .change-item {
+            font-family: monospace;
+            font-size: 12px;
+            padding: 2px 0;
+        }
+        .added { color: #4ec9b0; }
+        .modified { color: #ce9178; }
+        .deleted { color: #f48771; }
+        .actions {
+            display: flex;
+            gap: 8px;
+        }
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .btn-primary {
+            background: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+        }
+        .btn-secondary {
+            background: var(--vscode-button-secondaryBackground);
+            color: var(--vscode-button-secondaryForeground);
+        }
+        .btn-danger {
+            background: transparent;
+            color: var(--vscode-errorForeground);
+            border: 1px solid var(--vscode-errorForeground);
+        }
+        .bulk-actions {
+            position: sticky;
+            top: 0;
+            background: var(--vscode-editor-background);
+            padding: 16px 0;
+            border-bottom: 1px solid var(--vscode-panel-border);
+            margin-bottom: 20px;
+            display: flex;
+            gap: 8px;
+        }
+    </style>
+</head>
+<body>
+    <h1>📋 Revisar Commits Pendientes</h1>
+    
+    <div class="bulk-actions">
+        <button class="btn-primary" onclick="commitAll(true)">✅ Commit + Push Todos</button>
+        <button class="btn-secondary" onclick="commitAll(false)">💾 Commit Todos (sin push)</button>
+    </div>
+
+    <div id="commits"></div>
+
+    <script>
+        const vscode = acquireVsCodeApi();
+
+        window.addEventListener('message', e => {
+            if (e.data.command === 'loadCommits') {
+                renderCommits(e.data.commits);
+            }
+        });
+
+        function renderCommits(commits) {
+            const container = document.getElementById('commits');
+            container.innerHTML = commits.map((commit, i) => \`
+                <div class="commit-card">
+                    <div class="commit-header">
+                        <span class="repo-name">📦 \${commit.repoName}</span>
+                        <span class="timestamp">\${new Date(commit.timestamp).toLocaleString()}</span>
+                    </div>
+                    
+                    <textarea class="commit-message" id="msg-\${i}">\${commit.message}</textarea>
+                    
+                    <div class="changes-list">
+                        \${commit.changes.map(c => \`
+                            <div class="change-item \${c.status}">
+                                \${c.status === 'added' ? '+' : c.status === 'deleted' ? '-' : 'M'} \${c.file}
+                            </div>
+                        \`).join('')}
+                    </div>
+                    
+                    <div class="actions">
+                        <button class="btn-primary" onclick="commitAndPush(\${i})">
+                            ✅ Commit + Push
+                        </button>
+                        <button class="btn-secondary" onclick="commitOnly(\${i})">
+                            💾 Solo Commit
+                        </button>
+                        <button class="btn-secondary" onclick="editMessage(\${i})">
+                            ✏️ Editar
+                        </button>
+                        <button class="btn-danger" onclick="discard(\${i})">
+                            🗑️ Descartar
+                        </button>
+                    </div>
+                </div>
+            \`).join('');
+        }
+
+        function editMessage(index) {
+            const newMessage = document.getElementById('msg-' + index).value;
+            vscode.postMessage({
+                command: 'editMessage',
+                index: index,
+                newMessage: newMessage
+            });
+        }
+
+        function commitAndPush(index) {
+            vscode.postMessage({
+                command: 'commitAndPush',
+                index: index
+            });
+        }
+
+        function commitOnly(index) {
+            vscode.postMessage({
+                command: 'commitOnly',
+                index: index
+            });
+        }
+
+        function discard(index) {
+            if (confirm('¿Descartar estos cambios?')) {
+                vscode.postMessage({
+                    command: 'discard',
+                    index: index
+                });
+            }
+        }
+
+        function commitAll(withPush) {
+            vscode.postMessage({
+                command: 'commitAll',
+                withPush: withPush
+            });
+        }
+    </script>
+</body>
+</html>
+        `;
+    }
+
+    /**
+     * Obtiene conteo de commits pendientes
+     */
+    static getPendingCount(): number {
+        return this.pendingCommits.length;
+    }
+
+    /**
+     * Limpia commits pendientes
+     */
+    static clearPending(): void {
+        this.pendingCommits = [];
+        this.updateStatusBar();
+    }
+
+    /**
+     * MÉTODO UNIVERSAL: Prepara archivos y abre SCM panel para commit confirmable
+     * 
+     * @param repoPath - Path absoluto al repositorio
+     * @param files - Array de paths relativos a stagear (undefined = todo)
+     * @param commitMessage - Mensaje sugerido (pre-llena el input del SCM)
+     * 
+     * CASOS DE USO:
+     * - Proyectos nuevos: stageAndOpenSCM(projectPath, undefined, "Initial commit")
+     * - Intents: stageAndOpenSCM(workspacePath, ['.bloom/intents/...'], "Generated intent")
+     * - Nucleus: stageAndOpenSCM(nucleusPath, undefined, "Initial Nucleus")
+     */
+    static async stageAndOpenSCM(
+        repoPath: string,
+        files?: string[],
+        commitMessage?: string
+    ): Promise<void> {
+        try {
+            const repoName = path.basename(repoPath);
+            
+            console.log(`[GitManager] stageAndOpenSCM called:`, {
+                repoPath,
+                filesCount: files?.length || 'all',
+                hasMessage: !!commitMessage
+            });
+
+            // 1. Verificar que es un repo git válido
+            const gitDir = path.join(repoPath, '.git');
+            if (!fs.existsSync(gitDir)) {
+                throw new Error(`Not a git repository: ${repoPath}`);
+            }
+
+            // 2. Stage archivos
+            if (files && files.length > 0) {
+                // Stage archivos específicos
+                console.log(`[GitManager] Staging ${files.length} specific files`);
+                for (const file of files) {
+                    try {
+                        await execAsync(`git add "${file}"`, { cwd: repoPath });
+                    } catch (error: any) {
+                        console.warn(`[GitManager] Could not stage ${file}:`, error.message);
+                        // Continuar con otros archivos
+                    }
+                }
+            } else {
+                // Stage todo
+                console.log(`[GitManager] Staging all changes`);
+                await execAsync('git add .', { cwd: repoPath });
+            }
+
+            // 3. Verificar que hay cambios staged
+            const { stdout: stagedFiles } = await execAsync(
+                'git diff --cached --name-only',
+                { cwd: repoPath }
+            );
+
+            if (!stagedFiles.trim()) {
+                vscode.window.showInformationMessage(
+                    `✓ No hay cambios nuevos en ${repoName}`
+                );
+                console.log(`[GitManager] No staged changes in ${repoName}`);
+                return;
+            }
+
+            const changedFilesList = stagedFiles.trim().split('\n').filter(f => f);
+            console.log(`[GitManager] ${changedFilesList.length} files staged`);
+
+            // 4. Intentar pre-llenar mensaje de commit usando Git Extension API
+            if (commitMessage) {
+                await this.trySetCommitMessage(repoPath, commitMessage);
+            }
+
+            // 5. Enfocar en SCM panel
+            await vscode.commands.executeCommand('workbench.view.scm');
+            
+            // 6. Intentar enfocar en el repo específico (importante en multi-root)
+            try {
+                await vscode.commands.executeCommand('workbench.scm.focus');
+            } catch (error) {
+                // No crítico
+                console.warn('[GitManager] Could not focus SCM:', error);
+            }
+
+            // 7. Mostrar notificación NO BLOQUEANTE
+            const filePreview = changedFilesList.slice(0, 5).join('\n');
+            const moreFiles = changedFilesList.length > 5 
+                ? `\n... y ${changedFilesList.length - 5} más` 
+                : '';
+
+            const action = await vscode.window.showInformationMessage(
+                `📝 ${changedFilesList.length} archivo(s) preparado(s) en ${repoName}`,
+                {
+                    modal: false, // NO BLOQUEANTE
+                    detail: `Revisá los cambios en el panel SCM.\n\nArchivos:\n${filePreview}${moreFiles}`
+                },
+                'Ver SCM'
+            );
+
+            if (action === 'Ver SCM') {
+                await vscode.commands.executeCommand('workbench.view.scm');
+            }
+
+            console.log(`[GitManager] Successfully staged and opened SCM for ${repoName}`);
+
+        } catch (error: any) {
+            console.error('[GitManager] Error in stageAndOpenSCM:', error);
+            vscode.window.showErrorMessage(
+                `Error preparando cambios: ${error.message}`
+            );
+            throw error; // Re-throw para que el caller sepa que falló
+        }
+    }
+
+    /**
+     * HELPER: Intenta pre-llenar el mensaje de commit en el SCM panel
+     * NOTA: Esto puede fallar silenciosamente (no es crítico)
+     */
+    private static async trySetCommitMessage(
+        repoPath: string,
+        message: string
+    ): Promise<void> {
+        try {
+            const gitExtension = vscode.extensions.getExtension('vscode.git');
+            if (!gitExtension) {
+                console.warn('[GitManager] Git extension not found');
+                return;
+            }
+
+            const gitApi = gitExtension.exports.getAPI(1);
+            
+            // Buscar el repositorio que coincide con el path
+            const repo = gitApi.repositories.find(
+                (r: any) => r.rootUri.fsPath === repoPath
+            );
+
+            if (repo && repo.inputBox) {
+                repo.inputBox.value = message;
+                console.log('[GitManager] Commit message pre-filled successfully');
+            } else {
+                console.warn('[GitManager] Repository not found in Git API');
+            }
+        } catch (error: any) {
+            // Fallo silencioso - no es crítico
+            console.warn('[GitManager] Could not set commit message:', error.message);
+        }
+    }
+
+
+    /**
+     * Configura mensaje de commit sugerido en el repo
+     */
+    private static async setCommitMessage(
+        repoPath: string,
+        message: string
+    ): Promise<void> {
+        try {
+            // Usar la API de Git de VSCode si está disponible
+            const gitExtension = vscode.extensions.getExtension('vscode.git');
+            if (!gitExtension) return;
+
+            const gitApi = gitExtension.exports.getAPI(1);
+            const repo = gitApi.repositories.find(
+                (r: any) => r.rootUri.fsPath === repoPath
+            );
+
+            if (repo) {
+                repo.inputBox.value = message;
+            }
+        } catch (error) {
+            // Silently fail - no es crítico
+            console.warn('Could not set commit message:', error);
+        }
+    }
+
+}
+```
+
+### C:/repos/bloom-videos/bloom-development-extension/src/utils/githubApi.ts
+Metadatos: Lenguaje: typescript, Hash MD5: f95dbdf7a98e486da4f00dde81bbc3e5
+
+```typescript
+// src/utils/githubApi.ts
+import { getGitHubHeaders } from './githubOAuth';
+
+// ============================================================================
+// INTERFACES
+// ============================================================================
+
+export interface GitHubOrg {
+    login: string;
+    id: number;
+    avatar_url: string;
+    description?: string | null;
+}
+
+export interface GitHubRepo {
+    id: number;
+    name: string;
+    full_name: string;
+    description: string | null;
+    clone_url: string;
+    html_url: string;
+    stargazers_count: number;
+    updated_at: string;
+    language: string | null;
+    private: boolean;
+}
+
+// ============================================================================
+// FUNCIONES EXISTENTES (de tu código original)
+// ============================================================================
+
+/**
+ * Obtiene las organizaciones del usuario actual
+ */
+export async function getUserOrgs(): Promise<GitHubOrg[]> {
+    const headers = await getGitHubHeaders();
+    const resp = await fetch('https://api.github.com/user/orgs', { headers });
+    
+    if (!resp.ok) {
+        const err = await resp.text();
+        throw new Error(`Error obteniendo organizaciones: ${err}`);
+    }
+    
+    return (await resp.json()) as GitHubOrg[];
+}
+
+/**
+ * Crea un repositorio Nucleus en GitHub
+ * (Función original de tu código)
+ */
+export async function createNucleusRepo(orgLogin?: string): Promise<string> {
+    const headers = await getGitHubHeaders();
+    const repoName = `bloom-nucleus-${new Date().getFullYear()}`;
+
+    const body = {
+        name: repoName,
+        description: 'Nucleus Project - Bloom BTIP Premium',
+        private: false,
+        auto_init: true,
+        gitignore_template: 'Node'
+    };
+
+    const url = orgLogin
+        ? `https://api.github.com/orgs/${orgLogin}/repos`
+        : 'https://api.github.com/user/repos';
+
+    const resp = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body)
+    });
+
+    if (!resp.ok) {
+        const err = await resp.text();
+        throw new Error(`No se pudo crear el repositorio: ${err}`);
+    }
+
+    const data = await resp.json() as any;
+    return data.html_url;
+}
+
+// ============================================================================
+// NUEVAS FUNCIONES (para manageProject.ts)
+// ============================================================================
+
+/**
+ * Obtiene los repositorios de una organización O usuario personal
+ * Detecta automáticamente si es org o user
+ */
+export async function getOrgRepos(orgOrUser: string): Promise<GitHubRepo[]> {
+    const headers = await getGitHubHeaders();
+    
+    // Primero intentar como organización
+    let resp = await fetch(
+        `https://api.github.com/orgs/${orgOrUser}/repos?per_page=100&sort=updated`,
+        { headers }
+    );
+    
+    // Si falla (404), intentar como usuario personal
+    if (!resp.ok && resp.status === 404) {
+        // Verificar si es el usuario actual
+        const userResp = await fetch('https://api.github.com/user', { headers });
+        if (userResp.ok) {
+            const currentUser = await userResp.json() as any;
+            
+            // Si el nombre coincide con el usuario actual, obtener sus repos
+            if (currentUser.login.toLowerCase() === orgOrUser.toLowerCase()) {
+                resp = await fetch(
+                    'https://api.github.com/user/repos?per_page=100&sort=updated&affiliation=owner',
+                    { headers }
+                );
+            }
+        }
+    }
+    
+    if (!resp.ok) {
+        const err = await resp.text();
+        throw new Error(`Error obteniendo repositorios de ${orgOrUser}: ${err}`);
+    }
+    
+    return (await resp.json()) as GitHubRepo[];
+}
+
+/**
+ * Obtiene los repositorios del usuario personal (no organizaciones)
+ */
+export async function getUserRepos(): Promise<GitHubRepo[]> {
+    const headers = await getGitHubHeaders();
+    
+    const resp = await fetch(
+        'https://api.github.com/user/repos?per_page=100&sort=updated',
+        { headers }
+    );
+    
+    if (!resp.ok) {
+        const err = await resp.text();
+        throw new Error(`Error obteniendo repositorios personales: ${err}`);
+    }
+    
+    return (await resp.json()) as GitHubRepo[];
+}
+
+/**
+ * Obtiene un repositorio específico
+ */
+export async function getRepo(owner: string, repo: string): Promise<GitHubRepo> {
+    const headers = await getGitHubHeaders();
+    
+    const resp = await fetch(
+        `https://api.github.com/repos/${owner}/${repo}`,
+        { headers }
+    );
+    
+    if (!resp.ok) {
+        const err = await resp.text();
+        throw new Error(`Error obteniendo repositorio ${owner}/${repo}: ${err}`);
+    }
+    
+    return (await resp.json()) as GitHubRepo;
+}
+
+/**
+ * Crea un nuevo repositorio en una organización
+ */
+export async function createOrgRepo(
+    org: string,
+    name: string,
+    description?: string,
+    isPrivate: boolean = false
+): Promise<GitHubRepo> {
+    const headers = await getGitHubHeaders();
+    
+    const resp = await fetch(
+        `https://api.github.com/orgs/${org}/repos`,
+        {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+                name,
+                description,
+                private: isPrivate,
+                auto_init: true
+            })
+        }
+    );
+    
+    if (!resp.ok) {
+        const err = await resp.text();
+        let errorMessage = `Error creando repositorio ${name} en ${org}`;
+        
+        try {
+            const errorData = JSON.parse(err);
+            if (errorData.message) {
+                errorMessage = errorData.message;
+            }
+        } catch {
+            errorMessage += `: ${err}`;
+        }
+        
+        throw new Error(errorMessage);
+    }
+    
+    return (await resp.json()) as GitHubRepo;
+}
+
+/**
+ * Verifica si un repositorio existe
+ */
+export async function repoExists(owner: string, repo: string): Promise<boolean> {
+    try {
+        await getRepo(owner, repo);
+        return true;
+    } catch {
+        return false;
     }
 }
 ```
 
 ### C:/repos/bloom-videos/bloom-development-extension/src/utils/githubOAuth.ts
-Metadatos: Lenguaje: typescript, Hash MD5: 4021a1a307d87b1a9bd3c5cacc0a1d55
+Metadatos: Lenguaje: typescript, Hash MD5: ffa29ea8963cd13394f5d6350d06d3fd
 
 ```typescript
 // src/utils/githubOAuth.ts
@@ -6620,6 +7044,69 @@ import * as vscode from 'vscode';
 const GITHUB_AUTH_PROVIDER_ID = 'github';
 const SCOPES = ['repo', 'read:org', 'user:email'];
 
+// Cache para el token (en memoria)
+let cachedToken: string | null = null;
+
+/**
+ * Guarda el token en cache para uso posterior
+ */
+export function setGitHubToken(token: string): void {
+    cachedToken = token;
+}
+
+/**
+ * Obtiene el token guardado en cache (desde memoria)
+ * Para obtener un token fresco desde VSCode, usar getGitHubTokenFromSession()
+ */
+export function getCachedGitHubToken(): string | null {
+    return cachedToken;
+}
+
+/**
+ * Obtiene la sesión de GitHub desde VSCode
+ */
+export async function getGitHubSession(): Promise<vscode.AuthenticationSession> {
+    const session = await vscode.authentication.getSession(GITHUB_AUTH_PROVIDER_ID, SCOPES, {
+        createIfNone: true
+    });
+
+    if (!session) {
+        throw new Error('No se pudo autenticar con GitHub');
+    }
+
+    return session;
+}
+
+/**
+ * Obtiene el token de acceso desde la sesión de VSCode y lo guarda en cache
+ */
+export async function getGitHubTokenFromSession(): Promise<string> {
+    const session = await getGitHubSession();
+    const token = session.accessToken;
+    
+    // Guardar en cache automáticamente
+    setGitHubToken(token);
+    
+    return token;
+}
+
+/**
+ * Obtiene headers para peticiones a la API de GitHub
+ */
+export async function getGitHubHeaders(): Promise<Record<string, string>> {
+    const token = await getGitHubTokenFromSession();
+    return {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        'User-Agent': 'Bloom-VSCode-Extension'
+    };
+}
+
+/**
+ * Obtiene el usuario actual de GitHub
+ * Ahora guarda el token automáticamente en cache
+ */
 export async function getCurrentGitHubUser(): Promise<{
     login: string;
     name?: string;
@@ -6646,33 +7133,48 @@ export async function getCurrentGitHubUser(): Promise<{
     };
 }
 
-export async function getGitHubSession(): Promise<vscode.AuthenticationSession> {
-    const session = await vscode.authentication.getSession(GITHUB_AUTH_PROVIDER_ID, SCOPES, {
-        createIfNone: true
-    });
-
-    if (!session) {
-        throw new Error('No se pudo autenticar con GitHub');
-    }
-
-    return session;
-}
-
-export async function getGitHubToken(): Promise<string> {
+/**
+ * Versión alternativa que retorna tanto el usuario como el token explícitamente
+ */
+export async function getCurrentGitHubUserWithToken(): Promise<{
+    user: {
+        login: string;
+        name?: string;
+        email?: string | null;
+    };
+    token: string;
+}> {
     const session = await getGitHubSession();
-    return session.accessToken;
-}
-
-export async function getGitHubHeaders(): Promise<Record<string, string>> {
-    const token = await getGitHubToken();
-    return {
+    const token = session.accessToken;
+    setGitHubToken(token);
+    
+    const headers = {
         'Authorization': `Bearer ${token}`,
         'Accept': 'application/vnd.github+json',
         'X-GitHub-Api-Version': '2022-11-28',
         'User-Agent': 'Bloom-VSCode-Extension'
     };
+    
+    const resp = await fetch('https://api.github.com/user', { headers });
+    if (!resp.ok) throw new Error('Error obteniendo datos del usuario');
+    const data = await resp.json() as any;
+
+    if (!data.email) {
+        const emailsResp = await fetch('https://api.github.com/user/emails', { headers });
+        if (emailsResp.ok) {
+            const emails = await emailsResp.json() as any[];
+            const primary = emails.find((e: any) => e.primary && e.verified);
+            if (primary) data.email = primary.email;
+        }
+    }
+
+    const user = {
+        login: data.login,
+        name: data.name || data.login,
+        email: data.email || null
+    };
+
+    return { user, token };
 }
-
-
 ```
 
