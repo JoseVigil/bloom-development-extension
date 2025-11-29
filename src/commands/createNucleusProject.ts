@@ -5,6 +5,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { Logger } from '../utils/logger';
 import { PythonScriptRunner } from '../core/pythonScriptRunner';
+import { GitOrchestrator } from '../core/gitOrchestrator';
 import { promisify } from 'util';
 import { exec } from 'child_process';
 
@@ -242,7 +243,7 @@ export function registerAppendProject(
 }
 
 /**
- * Vincula un proyecto hijo al Nucleus actual
+ * Vincula un proyecto hijo al Nucleus actual usando GitOrchestrator
  */
 async function appendProjectToNucleus(
     context: vscode.ExtensionContext,
@@ -277,6 +278,106 @@ async function appendProjectToNucleus(
         return;
     }
     
+    // Preguntar si quiere clonar desde GitHub o vincular local
+    const action = await vscode.window.showQuickPick(
+        [
+            {
+                label: '📦 Clonar proyecto desde GitHub',
+                description: 'Clona un repositorio y lo vincula al Nucleus',
+                action: 'clone'
+            },
+            {
+                label: '🔗 Vincular proyecto local existente',
+                description: 'Vincula un proyecto que ya existe localmente',
+                action: 'link'
+            }
+        ],
+        {
+            placeHolder: 'Seleccione cómo desea agregar el proyecto'
+        }
+    );
+    
+    if (!action) {
+        return;
+    }
+    
+    if (action.action === 'clone') {
+        await cloneAndLinkProject(context, logger, nucleusRoot, nucleusConfig);
+    } else {
+        await linkExistingProject(context, logger, nucleusRoot, nucleusConfig);
+    }
+}
+
+/**
+ * Clona un proyecto desde GitHub usando GitOrchestrator
+ */
+async function cloneAndLinkProject(
+    context: vscode.ExtensionContext,
+    logger: Logger,
+    nucleusRoot: string,
+    nucleusConfig: any
+): Promise<void> {
+    // Solicitar URL del repositorio
+    const repoUrl = await vscode.window.showInputBox({
+        prompt: 'URL del repositorio de GitHub',
+        placeHolder: 'https://github.com/usuario/proyecto.git',
+        validateInput: (value) => {
+            if (!value || !value.includes('github.com')) {
+                return 'Debe ser una URL válida de GitHub';
+            }
+            return null;
+        }
+    });
+    
+    if (!repoUrl) {
+        return;
+    }
+    
+    // Usar GitOrchestrator para clonar
+    await vscode.window.withProgress({
+        location: vscode.ProgressLocation.Notification,
+        title: "Clonando proyecto...",
+        cancellable: false
+    }, async (progress) => {
+        try {
+            progress.report({ message: "Preparando..." });
+            
+            const orchestrator = new GitOrchestrator(context, undefined, logger, new PythonScriptRunner(context, logger));
+            const parentPath = path.dirname(nucleusRoot);
+            
+            progress.report({ message: "Clonando repositorio..." });
+            
+            const result = await orchestrator.cloneProject(repoUrl, parentPath, nucleusRoot);
+            
+            if (!result.success) {
+                throw new Error(result.error || 'Error desconocido al clonar');
+            }
+            
+            vscode.window.showInformationMessage(
+                `✅ Proyecto clonado y vinculado exitosamente en ${result.projectPath}`
+            );
+            
+            // Refrescar tree views
+            vscode.commands.executeCommand('bloom.refreshNucleusTree');
+            
+        } catch (error: any) {
+            logger.error('Error clonando proyecto', error);
+            vscode.window.showErrorMessage(
+                `Error clonando proyecto: ${error.message}`
+            );
+        }
+    });
+}
+
+/**
+ * Vincula un proyecto local existente (lógica original)
+ */
+async function linkExistingProject(
+    context: vscode.ExtensionContext,
+    logger: Logger,
+    nucleusRoot: string,
+    nucleusConfig: any
+): Promise<void> {
     // Buscar proyectos hermanos
     const parentDir = path.dirname(nucleusRoot);
     let siblingDirs: string[] = [];
@@ -399,6 +500,7 @@ async function appendProjectToNucleus(
     
     // Actualizar nucleus-config.json
     nucleusConfig.nucleus.updatedAt = now;
+    const nucleusConfigPath = path.join(nucleusRoot, '.bloom', 'core', 'nucleus-config.json');
     fs.writeFileSync(
         nucleusConfigPath,
         JSON.stringify(nucleusConfig, null, 2),

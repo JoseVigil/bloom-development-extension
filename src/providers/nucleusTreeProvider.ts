@@ -5,6 +5,7 @@ import * as fs from 'fs';
 import { NucleusConfig, LinkedProject, loadNucleusConfig } from '../models/bloomConfig';
 import { Logger } from '../utils/logger';
 import { UserManager } from '../managers/userManager';
+import { WorkspaceManager } from '../managers/workspaceManager';
 
 export class NucleusTreeProvider implements vscode.TreeDataProvider<NucleusTreeItem> {
     private _onDidChangeTreeData = new vscode.EventEmitter<NucleusTreeItem | undefined>();
@@ -17,6 +18,18 @@ export class NucleusTreeProvider implements vscode.TreeDataProvider<NucleusTreeI
         private workspaceRoot: string | undefined,
         private context: vscode.ExtensionContext
     ) {
+        // Registrar comandos
+        vscode.commands.registerCommand('bloom.unlinkNucleus', async (item: NucleusTreeItem) => {
+            if (item && item.type === 'org' && item.data?.orgName) {
+                await this.unlinkNucleus(item.data.orgName);
+            }
+        });
+        
+        vscode.commands.registerCommand('bloom.refreshNucleus', () => this.refresh());
+        
+        // Refresh automático cuando cambia la configuración
+        vscode.workspace.onDidChangeConfiguration(() => this.refresh());
+        
         this.refresh();
     }
 
@@ -81,6 +94,51 @@ export class NucleusTreeProvider implements vscode.TreeDataProvider<NucleusTreeI
         }
 
         return null;
+    }
+
+    // Nueva función para unlink Nucleus
+    async unlinkNucleus(org: string): Promise<void> {
+        const confirm = await vscode.window.showWarningMessage(
+            `⛓️‍💥 Desvincular Nucleus de ${org}\n\nEl repositorio local y remoto NO se borrarán.\nSolo se quitará del plugin.`,
+            { modal: true },
+            'Desvincular'
+        );
+        
+        if (confirm !== 'Desvincular') return;
+
+        const userManager = UserManager.init(this.context);
+        const userData = userManager.getUser();
+        if (!userData) return;
+
+        // Remover org de allOrgs
+        userData.allOrgs = (userData.allOrgs || []).filter(o => o !== org);
+        userData.githubOrg = userData.allOrgs[0] || userData.githubUsername;
+
+        await userManager.saveUser(userData);
+        await vscode.commands.executeCommand('setContext', 'bloom.isRegistered', !!userData.githubOrg);
+
+        // Cerrar folders relacionadas con este Nucleus
+        const wsFolders = vscode.workspace.workspaceFolders || [];
+        const nucleusPath = this.findNucleusPath(org);
+        
+        if (nucleusPath) {
+            // Encontrar índices de folders a remover
+            const indicesToRemove: number[] = [];
+            wsFolders.forEach((folder, idx) => {
+                if (folder.uri.fsPath.includes(`nucleus-${org}`) || 
+                    folder.uri.fsPath.startsWith(nucleusPath)) {
+                    indicesToRemove.push(idx);
+                }
+            });
+
+            // Remover folders en orden inverso para mantener índices válidos
+            for (let i = indicesToRemove.length - 1; i >= 0; i--) {
+                vscode.workspace.updateWorkspaceFolders(indicesToRemove[i], 1);
+            }
+        }
+
+        this.refresh();
+        vscode.window.showInformationMessage(`✅ Nucleus ${org} desvinculado correctamente`);
     }
 
     getTreeItem(element: NucleusTreeItem): vscode.TreeItem {
@@ -189,7 +247,7 @@ export class NucleusTreeProvider implements vscode.TreeDataProvider<NucleusTreeI
         return icons[strategy] || '📦';
     }
 
-    // NUEVO: Método público para obtener nucleusPath
+    // Método público para obtener nucleusPath
     public getNucleusPath(org: string): string | undefined {
         return this.findNucleusPath(org);
     }
@@ -271,8 +329,7 @@ export async function openNucleusProject(project: LinkedProject): Promise<void> 
             if (!projectPath) return;
         }
 
-        // ✅ NUEVO: Agregar al workspace en lugar de abrir nueva ventana
-        const { WorkspaceManager } = await import('../managers/workspaceManager');
+        // Agregar al workspace en lugar de abrir nueva ventana
         await WorkspaceManager.addProjectToWorkspace(projectPath, project.displayName);
 
     } catch (error: any) {

@@ -548,6 +548,7 @@ private async createNucleus(githubOrg?: string) {
 
     // NUEVO: Usar GitOrchestrator
     const orchestrator = new GitOrchestrator(
+      this.context,
       user.token, // Obtener del OAuth
       new Logger(),
       new PythonScriptRunner()
@@ -628,6 +629,7 @@ async function cloneFromGitHub(nucleusPath: string, orgName: string): Promise<vo
 
   // NUEVO: Usar GitOrchestrator para clonar
   const orchestrator = new GitOrchestrator(
+    this.context,
     await getGithubToken(),
     new Logger(),
     new PythonScriptRunner()
@@ -699,7 +701,12 @@ import { GitOrchestrator } from '../src/core/gitOrchestrator';
 
 describe('GitOrchestrator', () => {
   test('detectNucleusStatus - none', async () => {
-    const orchestrator = new GitOrchestrator(token, logger, runner);
+    const orchestrator = new GitOrchestrator(
+      this.context,
+      token, 
+      logger, 
+      runner
+    );
     const status = await orchestrator.detectNucleusStatus('test-org');
     expect(status.location).toBe('none');
   });

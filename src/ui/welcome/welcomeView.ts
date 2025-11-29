@@ -90,6 +90,7 @@ export class WelcomeView {
             // 3. CREAR ORCHESTRATOR
             const logger = new Logger();
             const orchestrator = new GitOrchestrator(
+                this.context,
                 token,
                 logger,
                 new PythonScriptRunner(this.context, logger)

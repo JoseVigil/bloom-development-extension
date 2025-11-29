@@ -210,16 +210,6 @@
         "command": "bloom.reviewPendingCommits",
         "title": "Bloom: Revisar Commits Pendientes",
         "icon": "$(git-commit)"
-      },
-      {
-        "command": "bloom.unlinkNucleus",
-        "title": "Bloom: Unlink Nucleus",
-        "icon": "$(chain-broken)"
-      },
-      {
-        "command": "bloom.refreshNucleus",
-        "title": "Refresh Nucleus",
-        "icon": "$(sync)"
       }
     ],
     "menus": {
@@ -232,16 +222,6 @@
         {
           "command": "bloom.manageProfiles",
           "when": "view == bloomProfiles",
-          "group": "navigation"
-        },
-        {
-          "command": "bloom.unlinkNucleus",
-          "when": "view == bloomNucleus",
-          "group": "navigation@0"
-        },
-        {
-          "command": "bloom.refreshNucleus",
-          "when": "view == bloomNucleus",
           "group": "navigation"
         },
         {
@@ -405,10 +385,8 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run build",
+    "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
-    "copy-assets": "node -e \"require('fs').cpSync('src/ui', 'out/ui', {recursive: true})\"",
-    "build": "npm run compile && npm run copy-assets",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src --ext ts",

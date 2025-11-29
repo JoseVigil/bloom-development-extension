@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import simpleGit, { SimpleGit } from 'simple-git';
 import { Octokit } from '@octokit/rest';
+import { getGitHubTokenFromSession } from '../utils/githubOAuth';
 import { Logger } from '../utils/logger';
 import { PythonScriptRunner } from './pythonScriptRunner';
 import { WorkspaceManager } from '../managers/workspaceManager';
@@ -26,21 +27,45 @@ export interface NucleusResult {
   error?: string;
 }
 
+export interface ProjectResult {
+  success: boolean;
+  projectPath: string;
+  action?: 'cloned' | 'linked' | 'created';
+  message?: string;
+  error?: string;
+}
+
 export class GitOrchestrator {
-  private octokit: Octokit;
+  private octokit!: Octokit;
   private git: SimpleGit;
   private logger: Logger;
   private pythonRunner: PythonScriptRunner;
 
   constructor(
-    githubToken: string,
-    logger: Logger,
-    pythonRunner: PythonScriptRunner
+      private context: vscode.ExtensionContext,  // ← AGREGAR este parámetro
+      githubToken?: string,
+      logger?: Logger,
+      pythonRunner?: PythonScriptRunner
   ) {
-    this.octokit = new Octokit({ auth: githubToken });
-    this.git = simpleGit();
-    this.logger = logger;
-    this.pythonRunner = pythonRunner;
+      this.logger = logger || new Logger();
+      this.pythonRunner = pythonRunner || new PythonScriptRunner(context, this.logger);  // ← Ahora sí funciona
+      this.git = simpleGit();
+      
+      if (githubToken) {
+          this.octokit = new Octokit({ auth: githubToken });
+      } else {
+          this.initOctokit();
+      }
+  }
+
+  private async initOctokit() {
+      try {
+          const token = await getGitHubTokenFromSession();
+          this.octokit = new Octokit({ auth: token });
+      } catch (error: any) {  // ← Agregar tipo explícito
+          this.logger.error('Failed to initialize Octokit', error as Error);
+          throw error;
+      }
   }
 
   /**
@@ -86,189 +111,315 @@ export class GitOrchestrator {
     return status;
   }
 
-  
   /**
    * FLUJO 2: Crear Nucleus (local + remoto nuevo)
    */
   async createNucleus(org: string, parentPath: string): Promise<NucleusResult> {
-      const nucleusName = `nucleus-${org}`;
-      const nucleusPath = path.join(parentPath, nucleusName);
+    const nucleusName = `nucleus-${org}`;
+    const nucleusPath = path.join(parentPath, nucleusName);
 
-      try {
-          // 1. Crear repo remoto en GitHub
-          this.logger.info(`Creating remote repo: ${nucleusName}`);
-          await this.octokit.repos.createForAuthenticatedUser({
-              name: nucleusName,
-              description: `Nucleus organizacional para ${org}`,
-              private: false,
-              auto_init: false
-          });
+    try {
+      // 1. Crear repo remoto en GitHub
+      this.logger.info(`Creating remote repo: ${nucleusName}`);
+      await this.octokit.repos.createForAuthenticatedUser({
+        name: nucleusName,
+        description: `Nucleus organizacional para ${org}`,
+        private: false,
+        auto_init: false
+      });
 
-          // 2. Crear carpeta local
-          if (!fs.existsSync(nucleusPath)) {
-              fs.mkdirSync(nucleusPath, { recursive: true });
-          }
-
-          // 3. Inicializar Git
-          const git = simpleGit(nucleusPath);
-          await git.init();
-          await git.addRemote('origin', `https://github.com/${org}/${nucleusName}.git`);
-
-          // 4. Ejecutar Python para generar estructura
-          this.logger.info('Generating Nucleus structure with Python...');
-          await this.pythonRunner.generateNucleus(nucleusPath, org);
-
-          // 5. Crear workspace
-          await WorkspaceManager.initializeWorkspace(nucleusPath);
-
-          // ✅ FIX: Usar GitManager directamente (elimina duplicación)
-          await GitManager.stageAndOpenSCM(
-              nucleusPath,
-              undefined, // Stage todos los archivos
-              `🌸 Initial Nucleus commit - ${nucleusName}\n\nGenerated with Bloom BTIP\nOrganization: ${org}`
-          );
-
-          return {
-              success: true,
-              nucleusPath,
-              action: 'created',
-              message: `Nucleus creado en ${nucleusPath}. Revisá los cambios en el panel SCM para hacer commit.`
-          };
-
-      } catch (error: any) {
-          this.logger.error('Error creating nucleus', error);
-          return {
-              success: false,
-              nucleusPath,
-              action: 'created',
-              message: 'Error al crear Nucleus',
-              error: error.message
-          };
+      // 2. Crear carpeta local
+      if (!fs.existsSync(nucleusPath)) {
+        fs.mkdirSync(nucleusPath, { recursive: true });
       }
+
+      // 3. Inicializar Git
+      const git = simpleGit(nucleusPath);
+      await git.init();
+      await git.addRemote('origin', `https://github.com/${org}/${nucleusName}.git`);
+
+      // 4. Ejecutar Python para generar estructura
+      this.logger.info('Generating Nucleus structure with Python...');
+      await this.pythonRunner.generateNucleus(nucleusPath, org);
+
+      // 5. Crear workspace
+      await WorkspaceManager.initializeWorkspace(nucleusPath);
+
+      // 6. Usar GitManager para stage y abrir SCM
+      await GitManager.stageAndOpenSCM(
+        nucleusPath,
+        undefined, // Stage todos los archivos
+        `🌸 Initial Nucleus commit - ${nucleusName}\n\nGenerated with Bloom BTIP\nOrganization: ${org}`
+      );
+
+      return {
+        success: true,
+        nucleusPath,
+        action: 'created',
+        message: `Nucleus creado en ${nucleusPath}. Revisá los cambios en el panel SCM para hacer commit.`
+      };
+
+    } catch (error: any) {
+      this.logger.error('Error creating nucleus', error);
+      return {
+        success: false,
+        nucleusPath,
+        action: 'created',
+        message: 'Error al crear Nucleus',
+        error: error.message
+      };
+    }
   }
 
   /**
    * FLUJO 3: Clonar Nucleus (remoto existe)
    */
   async cloneNucleus(org: string, parentPath: string): Promise<NucleusResult> {
-      const nucleusName = `nucleus-${org}`;
-      const nucleusPath = path.join(parentPath, nucleusName);
-      const repoUrl = `https://github.com/${org}/${nucleusName}.git`;
+    const nucleusName = `nucleus-${org}`;
+    const nucleusPath = path.join(parentPath, nucleusName);
+    const repoUrl = `https://github.com/${org}/${nucleusName}.git`;
 
-      try {
-          this.logger.info(`Cloning nucleus from ${repoUrl}`);
+    try {
+      this.logger.info(`Cloning nucleus from ${repoUrl}`);
 
-          // 1. Clonar repositorio
-          await simpleGit().clone(repoUrl, nucleusPath);
+      // 1. Clonar repositorio
+      await simpleGit().clone(repoUrl, nucleusPath);
 
-          // 2. Verificar estructura .bloom/
-          const needsCompletion = !this.hasValidBloomStructure(nucleusPath);
+      // 2. Verificar estructura .bloom/
+      const needsCompletion = !this.hasValidBloomStructure(nucleusPath);
 
-          if (needsCompletion) {
-              this.logger.info('Completing missing .bloom/ structure...');
-              await this.pythonRunner.generateNucleus(nucleusPath, org, { skipExisting: true });
-              
-              // ✅ FIX: Usar GitManager directamente
-              await GitManager.stageAndOpenSCM(
-                  nucleusPath,
-                  undefined,
-                  `🔧 Complete missing .bloom/ structure\n\nAdded by Bloom BTIP`
-              );
-          }
-
-          // 3. Crear workspace
-          await WorkspaceManager.initializeWorkspace(nucleusPath);
-
-          return {
-              success: true,
-              nucleusPath,
-              action: 'cloned',
-              message: needsCompletion 
-                  ? 'Nucleus clonado. Se agregaron archivos faltantes - revisar SCM.'
-                  : 'Nucleus clonado exitosamente.'
-          };
-
-      } catch (error: any) {
-          this.logger.error('Error cloning nucleus', error);
-          return {
-              success: false,
-              nucleusPath,
-              action: 'cloned',
-              message: 'Error al clonar Nucleus',
-              error: error.message
-          };
+      if (needsCompletion) {
+        this.logger.info('Completing missing .bloom/ structure...');
+        await this.pythonRunner.generateNucleus(nucleusPath, org, { skipExisting: true });
+        
+        // Usar GitManager para stage y abrir SCM
+        await GitManager.stageAndOpenSCM(
+          nucleusPath,
+          undefined,
+          `🔧 Complete missing .bloom/ structure\n\nAdded by Bloom BTIP`
+        );
       }
+
+      // 3. Crear workspace
+      await WorkspaceManager.initializeWorkspace(nucleusPath);
+
+      return {
+        success: true,
+        nucleusPath,
+        action: 'cloned',
+        message: needsCompletion 
+          ? 'Nucleus clonado. Se agregaron archivos faltantes - revisar SCM.'
+          : 'Nucleus clonado exitosamente.'
+      };
+
+    } catch (error: any) {
+      this.logger.error('Error cloning nucleus', error);
+      return {
+        success: false,
+        nucleusPath,
+        action: 'cloned',
+        message: 'Error al clonar Nucleus',
+        error: error.message
+      };
+    }
   }
 
   /**
    * FLUJO 4: Vincular Nucleus (local + remoto existen)
    */
   async linkNucleus(localPath: string, org: string): Promise<NucleusResult> {
-      try {
-          const nucleusName = `nucleus-${org}`;
-          const expectedRemote = `https://github.com/${org}/${nucleusName}.git`;
+    try {
+      const nucleusName = `nucleus-${org}`;
+      const expectedRemote = `https://github.com/${org}/${nucleusName}.git`;
 
-          // 1. Validar que el directorio existe
-          if (!fs.existsSync(localPath)) {
-              throw new Error(`Path no existe: ${localPath}`);
-          }
-
-          // 2. Verificar .git
-          const git = simpleGit(localPath);
-          const isRepo = await git.checkIsRepo();
-          
-          if (!isRepo) {
-              throw new Error('No es un repositorio Git válido');
-          }
-
-          // 3. Verificar remote origin
-          const remotes = await git.getRemotes(true);
-          const origin = remotes.find(r => r.name === 'origin');
-          
-          if (!origin) {
-              // Agregar origin si no existe
-              await git.addRemote('origin', expectedRemote);
-          } else if (origin.refs.fetch !== expectedRemote) {
-              throw new Error(`Remote origin no coincide. Esperado: ${expectedRemote}, Actual: ${origin.refs.fetch}`);
-          }
-
-          // 4. Validar estructura .bloom/
-          const needsCompletion = !this.hasValidBloomStructure(localPath);
-          
-          if (needsCompletion) {
-              this.logger.info('Completing .bloom/ structure...');
-              await this.pythonRunner.generateNucleus(localPath, org, { skipExisting: true });
-              
-              // ✅ FIX: Usar GitManager directamente
-              await GitManager.stageAndOpenSCM(
-                  localPath,
-                  undefined,
-                  `🔗 Link to Nucleus - Complete structure\n\nAdded by Bloom BTIP`
-              );
-          }
-
-          // 5. Crear workspace si no existe
-          await WorkspaceManager.initializeWorkspace(localPath);
-
-          return {
-              success: true,
-              nucleusPath: localPath,
-              action: 'linked',
-              message: needsCompletion
-                  ? 'Nucleus vinculado. Se agregaron archivos faltantes - revisar SCM.'
-                  : 'Nucleus vinculado exitosamente.'
-          };
-
-      } catch (error: any) {
-          this.logger.error('Error linking nucleus', error);
-          return {
-              success: false,
-              nucleusPath: localPath,
-              action: 'linked',
-              message: 'Error al vincular Nucleus',
-              error: error.message
-          };
+      // 1. Validar que el directorio existe
+      if (!fs.existsSync(localPath)) {
+        throw new Error(`Path no existe: ${localPath}`);
       }
+
+      // 2. Verificar .git
+      const git = simpleGit(localPath);
+      const isRepo = await git.checkIsRepo();
+      
+      if (!isRepo) {
+        throw new Error('No es un repositorio Git válido');
+      }
+
+      // 3. Verificar remote origin
+      const remotes = await git.getRemotes(true);
+      const origin = remotes.find((r: any) => r.name === 'origin');
+      
+      if (!origin) {
+        // Agregar origin si no existe
+        await git.addRemote('origin', expectedRemote);
+      } else if (origin.refs.fetch !== expectedRemote) {
+        throw new Error(`Remote origin no coincide. Esperado: ${expectedRemote}, Actual: ${origin.refs.fetch}`);
+      }
+
+      // 4. Validar estructura .bloom/
+      const needsCompletion = !this.hasValidBloomStructure(localPath);
+      
+      if (needsCompletion) {
+        this.logger.info('Completing .bloom/ structure...');
+        await this.pythonRunner.generateNucleus(localPath, org, { skipExisting: true });
+        
+        // Usar GitManager para stage y abrir SCM
+        await GitManager.stageAndOpenSCM(
+          localPath,
+          undefined,
+          `🔗 Link to Nucleus - Complete structure\n\nAdded by Bloom BTIP`
+        );
+      }
+
+      // 5. Crear workspace si no existe
+      await WorkspaceManager.initializeWorkspace(localPath);
+
+      return {
+        success: true,
+        nucleusPath: localPath,
+        action: 'linked',
+        message: needsCompletion
+          ? 'Nucleus vinculado. Se agregaron archivos faltantes - revisar SCM.'
+          : 'Nucleus vinculado exitosamente.'
+      };
+
+    } catch (error: any) {
+      this.logger.error('Error linking nucleus', error);
+      return {
+        success: false,
+        nucleusPath: localPath,
+        action: 'linked',
+        message: 'Error al vincular Nucleus',
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * FLUJO 5: Clonar Proyecto
+   */
+  async cloneProject(
+    repoUrl: string, 
+    parentPath: string, 
+    nucleusPath: string
+  ): Promise<ProjectResult> {
+    const repoName = repoUrl.split('/').pop()?.replace('.git', '') || '';
+    const projectPath = path.join(parentPath, repoName);
+
+    try {
+      this.logger.info(`Cloning project from ${repoUrl}`);
+
+      // 1. Clonar repositorio
+      const git = simpleGit(parentPath);
+      await git.clone(repoUrl, repoName);
+
+      // 2. Detectar estrategia del proyecto
+      const strategy = this.detectProjectStrategy(projectPath);
+      this.logger.info(`Detected strategy: ${strategy}`);
+
+      // 3. Generar estructura .bloom/ para el proyecto
+      await this.pythonRunner.generateContext(projectPath, strategy);
+
+      // 4. Linkear proyecto al nucleus
+      await this.linkProjectToNucleus(projectPath, nucleusPath);
+
+      // 5. Stage cambios
+      const projectGit = simpleGit(projectPath);
+      await projectGit.add('./*');
+      
+      // 6. Abrir SCM panel
+      await this.openSCMPanel(projectPath);
+
+      // 7. Agregar al workspace
+      await WorkspaceManager.addProjectToWorkspace(projectPath, repoName);
+
+      return {
+        success: true,
+        projectPath,
+        action: 'cloned',
+        message: `Proyecto ${repoName} clonado y linkeado al Nucleus`
+      };
+
+    } catch (error: any) {
+      this.logger.error('Error cloning project', error);
+      return {
+        success: false,
+        projectPath: '',
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Detectar estrategia del proyecto
+   */
+  private detectProjectStrategy(projectPath: string): string {
+    // Detectar Android
+    if (fs.existsSync(path.join(projectPath, 'build.gradle')) ||
+        fs.existsSync(path.join(projectPath, 'app', 'build.gradle'))) {
+      return 'android';
+    }
+
+    // Detectar iOS
+    if (fs.existsSync(path.join(projectPath, 'Podfile')) ||
+        fs.readdirSync(projectPath).some(f => f.endsWith('.xcodeproj'))) {
+      return 'ios';
+    }
+
+    // Detectar React Web
+    if (fs.existsSync(path.join(projectPath, 'package.json'))) {
+      const packageJson = JSON.parse(
+        fs.readFileSync(path.join(projectPath, 'package.json'), 'utf-8')
+      );
+      if (packageJson.dependencies?.react) {
+        return 'react-web';
+      }
+      return 'web';
+    }
+
+    // Detectar Python Flask
+    if (fs.existsSync(path.join(projectPath, 'requirements.txt')) ||
+        fs.existsSync(path.join(projectPath, 'app.py'))) {
+      return 'python-flask';
+    }
+
+    // Detectar PHP Laravel
+    if (fs.existsSync(path.join(projectPath, 'composer.json')) &&
+        fs.existsSync(path.join(projectPath, 'artisan'))) {
+      return 'php-laravel';
+    }
+
+    // Detectar Node.js
+    if (fs.existsSync(path.join(projectPath, 'package.json'))) {
+      return 'node';
+    }
+
+    // Default
+    return 'generic';
+  }
+
+  /**
+   * Linkear proyecto al Nucleus
+   */
+  private async linkProjectToNucleus(
+    projectPath: string, 
+    nucleusPath: string
+  ): Promise<void> {
+    const linkFilePath = path.join(projectPath, '.bloom', 'nucleus-link.json');
+    const linkData = {
+      nucleusPath: path.relative(projectPath, nucleusPath),
+      linkedAt: new Date().toISOString()
+    };
+
+    // Crear directorio .bloom si no existe
+    const bloomDir = path.join(projectPath, '.bloom');
+    if (!fs.existsSync(bloomDir)) {
+      fs.mkdirSync(bloomDir, { recursive: true });
+    }
+
+    // Escribir archivo de link
+    fs.writeFileSync(linkFilePath, JSON.stringify(linkData, null, 2));
+    this.logger.info(`Project linked to Nucleus at ${nucleusPath}`);
   }
 
   /**
@@ -358,20 +509,19 @@ export class GitOrchestrator {
     await vscode.commands.executeCommand('workbench.view.scm');
 
     await GitManager.stageAndOpenSCM(
-        repoPath,
-        undefined,
-        `🌸 Initial Nucleus commit\n\nGenerated with Bloom BTIP`
+      repoPath,
+      undefined,
+      `🌸 Initial commit\n\nGenerated with Bloom BTIP`
     );
     
-    // Opcional: Mostrar mensaje
+    // Mostrar mensaje informativo
     vscode.window.showInformationMessage(
-      '📝 Archivos agregados al stage. Revisa el panel SCM para hacer commit.',
+      '📋 Archivos agregados al stage. Revisa el panel SCM para hacer commit.',
       'Abrir SCM'
     ).then(selection => {
       if (selection === 'Abrir SCM') {
         vscode.commands.executeCommand('workbench.view.scm');
       }
     });
-    
   }
 }

@@ -1,4 +1,4 @@
-// src/ui/intentFormPanel.ts
+// src/ui/intent/intentFormPanel.ts
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -44,7 +44,7 @@ export class IntentFormPanel {
                 enableScripts: true,
                 retainContextWhenHidden: true,
                 localResourceRoots: [
-                    joinPath(this.context.extensionUri, 'src', 'ui')
+                    vscode.Uri.joinPath(this.context.extensionUri, 'out', 'ui')
                 ]
             }
         );
@@ -473,9 +473,21 @@ export class IntentFormPanel {
     }
 
     private getHtmlContent(): string {
-        const htmlPath = path.join(this.context.extensionPath, 'src', 'ui', 'intentForm.html');
-        const cssPath = path.join(this.context.extensionPath, 'src', 'ui', 'intentForm.css');
-        const jsPath = path.join(this.context.extensionPath, 'src', 'ui', 'intentForm.js');
+        // ✅ FIX: Usar paths correctos desde out/ui/
+        const htmlPath = vscode.Uri.joinPath(
+            this.context.extensionUri, 
+            'out', 'ui', 'intent', 'intentForm.html'
+        ).fsPath;
+        
+        const cssPath = vscode.Uri.joinPath(
+            this.context.extensionUri,
+            'out', 'ui', 'intent', 'intentForm.css'
+        ).fsPath;
+        
+        const jsPath = vscode.Uri.joinPath(
+            this.context.extensionUri,
+            'out', 'ui', 'intent', 'intentForm.js'
+        ).fsPath;
 
         let htmlContent = fs.readFileSync(htmlPath, 'utf8');
         const cssContent = fs.readFileSync(cssPath, 'utf8');
