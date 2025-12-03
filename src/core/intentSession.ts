@@ -160,7 +160,7 @@ export class IntentSession extends EventEmitter {
     }
 
     async readCodebaseFile(): Promise<string> {
-        const codebasePath = joinPath(this.intentFolder, 'codebase.md');
+        const codebasePath = joinPath(this.intentFolder, 'codebase.bl');
         const content = await vscode.workspace.fs.readFile(codebasePath);
         return new TextDecoder().decode(content);
     }
@@ -198,7 +198,7 @@ export class IntentSession extends EventEmitter {
         await this.metadataManager.update(this.intentFolder, {
             files: {
                 intentFile: 'intent.bl',
-                codebaseFile: 'codebase.md',
+                codebaseFile: 'codebase.bl',
                 filesIncluded: this.state.files,
                 filesCount: this.state.files.length,
                 totalSize: await this.calculateTotalSize()
@@ -220,7 +220,7 @@ export class IntentSession extends EventEmitter {
         await this.metadataManager.update(this.intentFolder, {
             files: {
                 intentFile: 'intent.bl',
-                codebaseFile: 'codebase.md',
+                codebaseFile: 'codebase.bl',
                 filesIncluded: this.state.files,
                 filesCount: this.state.files.length,
                 totalSize: await this.calculateTotalSize()
@@ -307,7 +307,7 @@ export class IntentSession extends EventEmitter {
     }
 
     private async regenerateCodebase(): Promise<void> {
-        this.logger.info('Regenerating codebase.md');
+        this.logger.info('Regenerating codebase.bl');
 
         await vscode.workspace.fs.createDirectory(this.intentFolder);
 
@@ -336,7 +336,7 @@ export class IntentSession extends EventEmitter {
             };
         });
 
-        const codebasePath = joinPath(this.intentFolder, 'codebase.md');
+        const codebasePath = joinPath(this.intentFolder, 'codebase.bl');
 
         await this.codebaseGenerator.generate(
             fileDescriptors,

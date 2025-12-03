@@ -86,8 +86,11 @@ async function linkLocalProject(nucleusPath: string, orgName: string): Promise<v
             
             // Agregar al workspace
             await WorkspaceManager.addProjectToWorkspace(
-                selected.project.path, 
-                selected.project.name
+                nucleusPath,                
+                orgName,                    
+                selected.project.path,
+                selected.project.name,
+                selected.project.strategy
             );
         }
     } else {
@@ -159,7 +162,7 @@ async function cloneFromGitHub(nucleusPath: string, orgName: string): Promise<vo
             if (overwrite !== 'Vincular Existente') return;
 
             // Vincular proyecto existente
-            const strategy = await ProjectDetector.getStrategyName(clonePath);
+            const strategy = await ProjectDetector.getStrategyName(clonePath);            
             
             // Asegurar estructura .bloom
             await ensureBloomStructure(clonePath, strategy);
@@ -167,7 +170,13 @@ async function cloneFromGitHub(nucleusPath: string, orgName: string): Promise<vo
             await linkProjectToNucleus(nucleusPath, orgName, clonePath, selected.repo.name, strategy);
             
             // Agregar al workspace
-            await WorkspaceManager.addProjectToWorkspace(clonePath, selected.repo.name);
+            await WorkspaceManager.addProjectToWorkspace(
+                nucleusPath,
+                orgName,
+                clonePath,
+                selected.repo.name,
+                strategy
+            );
             
             vscode.window.showInformationMessage(`✅ ${selected.repo.name} vinculado al Nucleus`);
             return;
@@ -212,6 +221,7 @@ async function cloneFromGitHub(nucleusPath: string, orgName: string): Promise<vo
                     selected.repo.name,
                     strategy
                 );
+                
             } catch (error: any) {
                 // Fallback a exec si la API falla
                 if (error.message.includes('Git extension')) {
@@ -236,7 +246,14 @@ async function cloneFromGitHub(nucleusPath: string, orgName: string): Promise<vo
         });        
 
         // 6. Agregar al workspace automáticamente
-        await WorkspaceManager.addProjectToWorkspace(clonePath, selected.repo.name);
+        const strategy = await ProjectDetector.getStrategyName(clonePath);
+        await WorkspaceManager.addProjectToWorkspace(
+            nucleusPath,
+            orgName,
+            clonePath,
+            selected.repo.name,
+            strategy
+        );
 
         vscode.window.showInformationMessage(
             `✅ ${selected.repo.name} clonado y agregado al workspace`
@@ -350,11 +367,23 @@ async function createNewProject(nucleusPath: string, orgName: string): Promise<v
             console.warn('Git init failed:', gitError);
         }
 
-        await WorkspaceManager.addProjectToWorkspace(projectPath, projectName);
+        await WorkspaceManager.addProjectToWorkspace(
+            nucleusPath,
+            orgName,
+            projectPath,
+            projectName,
+            projectType.value  
+        );        
     });
 
     // Agregar al workspace automáticamente
-    await WorkspaceManager.addProjectToWorkspace(projectPath, projectName);
+    await WorkspaceManager.addProjectToWorkspace(
+            nucleusPath,
+            orgName,
+            projectPath,
+            projectName,
+            projectType.value  
+        );  
 
     vscode.window.showInformationMessage(
         `✅ ${projectName} creado y agregado al workspace`

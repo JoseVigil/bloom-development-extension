@@ -105,7 +105,7 @@ Esto incluye:
 Scripts que ya existen en tu spec:
 
 * `generate_nucleus.py`
-* `generate_context.py`
+* `generate_project_context.py`
 * `generate_codebase.py`
 
 Python no decide nada sobre Git, solo produce archivos.

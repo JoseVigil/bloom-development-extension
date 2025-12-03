@@ -101,7 +101,7 @@ export class IntentAutoSaver {
             };
         });
 
-        const codebasePath = joinPath(this.intentFolder, 'codebase.md');
+        const codebasePath = joinPath(this.intentFolder, 'codebase.bl');
 
         await this.codebaseGenerator.generate(
             fileDescriptors,

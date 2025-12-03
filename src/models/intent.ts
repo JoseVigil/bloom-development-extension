@@ -232,7 +232,7 @@ export function createInitialMetadata(
 
         files: {
             intentFile: 'intent.bl',
-            codebaseFile: options.version === 'free' ? 'codebase.md' : 'codebase.tar.gz',
+            codebaseFile: options.version === 'free' ? 'codebase.bl' : 'codebase.tar.gz',
             filesIncluded: formData.selectedFiles,
             filesCount: options.filesCount,
             totalSize: options.totalSize

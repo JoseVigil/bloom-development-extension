@@ -651,7 +651,7 @@ async function createNucleusProject(
         try {
             progress.report({ message: "Preparando..." });
             
-            const pythonRunner = new PythonScriptRunner(context, logger);
+            const pythonRunner = new PythonScriptRunner();
             
             // Obtener configuración de Python
             const config = vscode.workspace.getConfiguration('bloom');

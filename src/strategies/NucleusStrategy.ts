@@ -124,7 +124,7 @@ export class NucleusStrategy implements CodebaseStrategy {
      * Legacy method for backward compatibility
      */
     async generateCodebase(projectRoot: string, outputPath: string): Promise<string> {
-        const codebasePath = path.join(outputPath, 'codebase.md');
+        const codebasePath = path.join(outputPath, 'codebase.bl');
         
         // For Nucleus projects, we generate a different kind of codebase
         // focused on organizational documentation rather than code

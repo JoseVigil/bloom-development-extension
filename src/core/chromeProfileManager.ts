@@ -5,6 +5,7 @@ import { promisify } from 'util';
 import { exec as execCallback } from 'child_process';
 import { Logger } from '../utils/logger';
 import { IntentProfileConfig } from '../models/intent';
+import { ChromeProfileHelper, resolveProfileName } from '../helpers/chromeProfileHelper';
 
 const exec = promisify(execCallback);
 const readFile = promisify(fs.readFile);
@@ -45,7 +46,7 @@ interface ProfileMapping {
 export class ChromeProfileManager {
     private readonly configFile: string;
     private mappings: Map<string, IntentProfileConfig> = new Map();
-
+    private profileHelper: ChromeProfileHelper; // ← NUEVO
     constructor(
         private context: vscode.ExtensionContext,
         private logger: Logger
@@ -57,66 +58,36 @@ export class ChromeProfileManager {
         }
         this.configFile = path.join(storagePath, 'profile-mappings.json');
         this.loadMappings();
+       
+        // Inicializar helper
+        this.profileHelper = new ChromeProfileHelper(logger);
     }
 
     // ========================================================================
-    // DISCOVERY
+    // DISCOVERY - MEJORADO
     // ========================================================================
-
     /**
      * Detecta todos los profiles de Chrome instalados
+     * MEJORADO: Usa ChromeProfileHelper para obtener nombres reales
      */
     async detectProfiles(): Promise<ChromeProfile[]> {
         try {
-            const userDataDir = this.getChromeUserDataDir();
-            
-            if (!fs.existsSync(userDataDir)) {
-                this.logger.warn(`Chrome User Data directory not found: ${userDataDir}`);
-                return [];
-            }
-
+            // Usar el helper para obtener toda la info
+            const profileInfos = await this.profileHelper.getAllProfiles();
             const profiles: ChromeProfile[] = [];
-
-            // Leer Local State para obtener info de profiles
-            const localStatePath = path.join(userDataDir, 'Local State');
-            let profilesInfo: any = {};
-
-            if (fs.existsSync(localStatePath)) {
-                const localStateContent = await readFile(localStatePath, 'utf-8');
-                const localState = JSON.parse(localStateContent);
-                profilesInfo = localState.profile?.info_cache || {};
+            for (const info of profileInfos) {
+                const profile: ChromeProfile = {
+                    name: info.directoryName, // "Profile 9"
+                    path: info.path,
+                    displayName: info.displayName, // "UiTool" ← EL NOMBRE REAL
+                    accounts: []
+                };
+                // Detección rápida de cuentas
+                profile.accounts = await this.quickDetectAccounts(info.path);
+                profiles.push(profile);
             }
-
-            // Escanear directorios de profiles
-            const entries = await readdir(userDataDir);
-
-            for (const entry of entries) {
-                // Profiles tienen formato "Default", "Profile 1", "Profile 2", etc.
-                if (entry === 'Default' || entry.startsWith('Profile ')) {
-                    const profilePath = path.join(userDataDir, entry);
-                    const profileStat = await stat(profilePath);
-
-                    if (profileStat.isDirectory()) {
-                        const info = profilesInfo[entry] || {};
-                        
-                        const profile: ChromeProfile = {
-                            name: entry,
-                            path: profilePath,
-                            displayName: info.name || entry,
-                            accounts: []
-                        };
-
-                        // Detección rápida de cuentas (parseo de cookies)
-                        profile.accounts = await this.quickDetectAccounts(profilePath);
-
-                        profiles.push(profile);
-                    }
-                }
-            }
-
             this.logger.info(`Detected ${profiles.length} Chrome profiles`);
             return profiles;
-
         } catch (error: any) {
             this.logger.error('Error detecting Chrome profiles', error);
             throw new Error(`Failed to detect Chrome profiles: ${error.message}`);
@@ -174,10 +145,12 @@ export class ChromeProfileManager {
         provider: 'claude' | 'chatgpt' | 'grok'
     ): Promise<DetectedAccount> {
         try {
+
             // Llamar al script Python para verificar con Playwright
             const scriptPath = path.join(
                 this.context.extensionPath,
                 'scripts',
+                'web-bridge',
                 'verify_account.py'
             );
 
@@ -320,47 +293,82 @@ export class ChromeProfileManager {
     }
 
     // ========================================================================
-    // BROWSER LAUNCH (Core Feature)
+    // PROFILE RESOLUTION - NUEVO
     // ========================================================================
-
     /**
-     * Abre Chrome con el profile especificado y navega al AI provider
+     * Resuelve un nombre de perfil (puede ser display name o directory name)
+     * Ejemplo: "UiTool" → { directory: "Profile 9", display: "UiTool" }
+     */
+    async resolveProfileName(profileName: string): Promise<{
+        directory: string;
+        display: string;
+        path: string;
+    }> {
+        try {
+            const resolved = await resolveProfileName(profileName, this.logger);
+            const info = await this.profileHelper.getProfileInfo(resolved.directory);
+            if (!info) {
+                throw new Error(`Could not get profile info for: ${profileName}`);
+            }
+            return {
+                directory: resolved.directory,
+                display: resolved.display,
+                path: info.path
+            };
+        } catch (error: any) {
+            this.logger.error(`Error resolving profile name: ${profileName}`, error);
+            throw error;
+        }
+    }
+    /**
+     * Obtiene el perfil completo por display name o directory name
+     */
+    async getProfileByName(name: string): Promise<ChromeProfile | null> {
+        try {
+            const resolved = await this.resolveProfileName(name);
+            const profiles = await this.detectProfiles();
+           
+            return profiles.find(p => p.name === resolved.directory) || null;
+        } catch (error) {
+            return null;
+        }
+    }
+
+    // ========================================================================
+    // BROWSER LAUNCH - MEJORADO
+    // ========================================================================
+    /**
+     * Abre Chrome con el profile especificado
+     * MEJORADO: Acepta tanto display name ("UiTool") como directory name ("Profile 9")
      */
     async openInBrowser(
-        profileName: string,
+        profileName: string, // Puede ser "UiTool" o "Profile 9"
         provider: 'claude' | 'chatgpt' | 'grok',
         conversationId?: string
     ): Promise<void> {
         try {
-            const chromePath = this.getChromeExecutablePath();
+            // Resolver el nombre a directory name
+            const resolved = await this.resolveProfileName(profileName);
+           
+            const chromePath = this.profileHelper.getChromeExecutablePath();
             const urls = this.getProviderUrls(provider, conversationId);
-
             let command: string;
-
             if (process.platform === 'darwin') {
-                // macOS
-                command = `open -a "Google Chrome" --args --profile-directory="${profileName}" "${urls.target}"`;
+                command = `open -a "Google Chrome" --args --profile-directory="${resolved.directory}" "${urls.target}"`;
             } else if (process.platform === 'win32') {
-                // Windows
-                command = `"${chromePath}" --profile-directory="${profileName}" "${urls.target}"`;
+                command = `"${chromePath}" --profile-directory="${resolved.directory}" "${urls.target}"`;
             } else {
                 throw new Error(`Unsupported platform: ${process.platform}`);
             }
-
-            this.logger.info(`Opening browser: ${provider} with profile ${profileName}`);
-
+            this.logger.info(`Opening browser: ${provider} with profile ${resolved.display} (${resolved.directory})`);
             await exec(command);
-
-            // Mostrar notificación
             const message = conversationId
-                ? `✅ Opened ${provider} conversation in ${profileName}`
-                : `✅ Opened ${provider} in ${profileName}`;
-
+                ? `✅ Opened ${provider} conversation in ${resolved.display}`
+                : `✅ Opened ${provider} in ${resolved.display}`;
             vscode.window.showInformationMessage(message, 'OK');
-
         } catch (error: any) {
             this.logger.error('Error opening browser', error);
-            
+           
             vscode.window.showErrorMessage(
                 `Failed to open Chrome: ${error.message}`,
                 'Retry'
@@ -397,47 +405,20 @@ export class ChromeProfileManager {
     }
 
     // ========================================================================
-    // HELPERS
+    // HELPERS - ACTUALIZADO
     // ========================================================================
-
     /**
-     * Obtiene la ruta al ejecutable de Chrome según el OS
+     * DEPRECADO: Usar profileHelper.getChromeExecutablePath() directamente
      */
     private getChromeExecutablePath(): string {
-        const platform = process.platform;
-
-        if (platform === 'win32') {
-            // Windows - buscar en ubicaciones comunes
-            const possiblePaths = [
-                path.join(process.env.LOCALAPPDATA || '', 'Google', 'Chrome', 'Application', 'chrome.exe'),
-                path.join(process.env.PROGRAMFILES || '', 'Google', 'Chrome', 'Application', 'chrome.exe'),
-                path.join(process.env['PROGRAMFILES(X86)'] || '', 'Google', 'Chrome', 'Application', 'chrome.exe')
-            ];
-
-            for (const chromePath of possiblePaths) {
-                if (fs.existsSync(chromePath)) {
-                    return chromePath;
-                }
-            }
-
-            throw new Error('Chrome executable not found on Windows');
-
-        } else if (platform === 'darwin') {
-            // macOS - usar con 'open -a'
-            return '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-
-        } else {
-            throw new Error(`Unsupported platform: ${platform}`);
-        }
+        return this.profileHelper.getChromeExecutablePath();
     }
-
     /**
-     * Obtiene el directorio User Data de Chrome según el OS
+     * DEPRECADO: Usar profileHelper.getChromeUserDataDir() directamente
      */
     private getChromeUserDataDir(): string {
         const platform = process.platform;
         const home = process.env.HOME || process.env.USERPROFILE || '';
-
         if (platform === 'win32') {
             return path.join(process.env.LOCALAPPDATA || '', 'Google', 'Chrome', 'User Data');
         } else if (platform === 'darwin') {
@@ -501,6 +482,47 @@ export class ChromeProfileManager {
             profileName: defaultProfile.name,
             provider: 'claude',
             account: undefined
+        };
+    }
+
+    // ========================================================================
+    // UTILITY METHODS - NUEVO
+    // ========================================================================
+    /**
+     * Lista todos los perfiles con información legible
+     */
+    async listAllProfiles(): Promise<void> {
+        const summary = await this.profileHelper.listProfilesSummary();
+       
+        vscode.window.showQuickPick(summary, {
+            placeHolder: 'Chrome Profiles Found',
+            canPickMany: false
+        });
+    }
+    /**
+     * Busca un perfil de manera flexible
+     */
+    async searchProfile(query: string): Promise<ChromeProfile | null> {
+        // Intentar por display name
+        let profile = await this.profileHelper.findProfileByDisplayName(query);
+       
+        if (!profile) {
+            // Intentar por directory name
+            profile = await this.profileHelper.getProfileInfo(query);
+        }
+        if (!profile) {
+            // Intentar por email/username
+            profile = await this.profileHelper.findProfileByUserName(query);
+        }
+        if (!profile) {
+            return null;
+        }
+        // Convertir a ChromeProfile
+        return {
+            name: profile.directoryName,
+            path: profile.path,
+            displayName: profile.displayName,
+            accounts: await this.quickDetectAccounts(profile.path)
         };
     }
 

@@ -5,6 +5,7 @@ import { initializeContext } from './initialization/contextInitializer';
 import { initializeProviders } from './initialization/providersInitializer';
 import { initializeManagers } from './initialization/managersInitializer';
 import { registerAllCommands } from './initialization/commandRegistry';
+import { registerCriticalCommands } from './initialization/criticalCommandsInitializer';
 
 export function activate(context: vscode.ExtensionContext) {
     const logger = new Logger();
@@ -52,36 +53,6 @@ export function activate(context: vscode.ExtensionContext) {
             `Bloom BTIP falló al activarse: ${error.message}`
         );
     }
-}
-
-/**
- * Registra solo comandos críticos cuando no hay workspace
- */
-function registerCriticalCommands(
-    context: vscode.ExtensionContext,
-    logger: Logger,
-    welcomeView: any
-): void {
-    const criticalCommands = {
-        'bloom.showWelcome': () => welcomeView.show(),
-        'bloom.createNucleusProject': () => welcomeView.show(),
-        'bloom.resetRegistration': async () => {
-            const { UserManager } = await import('./managers/userManager');
-            await UserManager.init(context).clear();
-            vscode.window.showInformationMessage('✅ Registro reseteado');
-            setTimeout(() => {
-                vscode.commands.executeCommand('workbench.action.reloadWindow');
-            }, 1000);
-        }
-    };
-
-    for (const [commandId, handler] of Object.entries(criticalCommands)) {
-        context.subscriptions.push(
-            vscode.commands.registerCommand(commandId, handler)
-        );
-    }
-
-    logger.info('⚡ Critical commands registered (no workspace mode)');
 }
 
 export function deactivate() {

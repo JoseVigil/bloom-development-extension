@@ -45,7 +45,7 @@ export function registerCreateBTIPProject(
 
             if (!pythonAvailable) {
                 const configure = await vscode.window.showErrorMessage(
-                    'Python no está disponible. El script generate_context.py requiere Python 3.',
+                    'Python no está disponible. El script generate_project_context.py requiere Python 3.',
                     'Configurar Python Path',
                     'Cancelar'
                 );
@@ -72,7 +72,7 @@ export function registerCreateBTIPProject(
                     cancellable: false
                 },
                 async (progress) => {
-                    progress.report({ message: 'Ejecutando generate_context.py...' });
+                    progress.report({ message: 'Ejecutando generate_project_context.py...' });
 
                     // Ejecutar script Python
                     const result = await pythonExecutor.generateContext(

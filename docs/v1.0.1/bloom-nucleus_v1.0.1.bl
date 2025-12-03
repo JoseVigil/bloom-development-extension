@@ -1,0 +1,1058 @@
+<DOCUMENT filename="bloom-unified-specs.md">
+# Bloom Plugin - Especificación Técnica Unificada
+
+**Versión:** 1.1.1  
+**Fecha:** 30 de Noviembre de 2025  
+**Tipo de Proyecto:** VSCode Extension + Multi-Organization System
+
+---
+
+## Índice General
+
+1. Resumen Ejecutivo
+2. Arquitectura General
+3. Sistema Nucleus (Multi-Organización)
+4. Sistema de Intents (BTIP)
+5. Git Orchestration
+6. Gestión de Archivos y Auto-Save
+7. Estrategias de Proyecto
+8. Chrome Profile Manager
+9. Workflow de Usuario
+10. Estructura de Archivos
+11. Implementación Técnica
+12. Comandos y Configuración
+13. Testing y Validación
+14. Troubleshooting
+15. Roadmap y Mejoras Futuras
+16. Referencias
+17. Conclusión
+18. Flujos Detallados (Apéndice)
+
+---
+
+## 1. Resumen Ejecutivo
+
+Bloom es un plugin de VSCode que integra tres sistemas complementarios:
+
+**Sistema A: Nucleus (Organizacional)**
+
+- Gestión multi-organización con autenticación GitHub OAuth
+- Repositorios centralizados por organización con convención nucleus-<org>
+- Documentación organizacional en archivos .bl
+- Índice de proyectos técnicos vinculados
+- Workspace unificado multi-root para navegación sin ventanas múltiples
+
+**Sistema B: BTIP (Technical Intent Packages)**
+
+- Gestión de intents de desarrollo con ciclo de vida completo
+- Auto-save inteligente con debounce de 2 segundos
+- Generación dinámica de codebase.bl
+- Integración con Claude AI via Chrome profiles
+
+**Sistema C: Git Orchestration**
+
+- Detección automática de estado local/remoto
+- Gestión unificada de commits con confirmación explícita
+- Push confirmable vía SCM panel nativo
+- Coordinación entre TypeScript y Python para generación de estructura
+
+**Características Clave:**
+
+- Zero-config: experiencia tipo GitHub Copilot
+- Multi-workspace: un usuario puede tener múltiples Nucleus
+- Auto-detección: estrategias de proyecto detectadas automáticamente
+- Persistencia: auto-save de drafts + gestión de estado
+- Git inteligente: commits staged con confirmación manual
+
+Para código fuente detallado, consulta el snapshot consolidado en 'codebase_key_files.bl', optimizado para indexación por IA.
+
+---
+
+## 2. Arquitectura General
+
+### 2.1 Componentes Principales
+
+    Bloom Plugin
+    ├── Nucleus System
+    │   ├── OAuth GitHub
+    │   ├── Multi-org Registry
+    │   ├── Repository Management
+    │   ├── Organization Documentation
+    │   └── Workspace Unificado
+    │
+    ├── BTIP System
+    │   ├── Intent Lifecycle
+    │   ├── Auto-Save Engine
+    │   ├── Codebase Generator
+    │   └── Workflow Manager
+    │
+    ├── Git Orchestration
+    │   ├── GitOrchestrator (Core)
+    │   ├── State Detection
+    │   ├── SCM Integration
+    │   └── Python Script Runner
+    │
+    ├── Chrome Integration
+    │   ├── Profile Manager
+    │   ├── Claude AI Bridge
+    │   └── Conversation Tracking
+    │
+    └── Strategy Detection
+        ├── Android Strategy
+        ├── iOS Strategy
+        ├── React/Web Strategy
+        ├── Node Strategy
+        ├── Nucleus Strategy
+        └── Generic Strategy
+
+### 2.2 Flujo de Datos
+
+    Usuario → GitHub OAuth → UserManager (allOrgs[])
+                                    ↓
+                            NucleusTreeProvider
+                                    ↓
+                    [Org 1]  [Org 2]  [Org 3]
+                       ↓        ↓        ↓
+                   nucleus-1 nucleus-2 nucleus-3
+                       ↓
+                   Projects (Linked)
+                       ↓
+                   Git Orchestration
+                       ↓
+                   Intent System (BTIP)
+                       ↓
+                   Claude Bridge
+
+---
+
+## 3. Sistema Nucleus (Multi-Organización)
+
+### 3.1 Concepto Fundamental
+
+Un **Nucleus** es un repositorio organizacional que:
+
+- Documenta la estructura de proyectos
+- Define políticas y protocolos
+- Indexa proyectos técnicos (hijos)
+- Sirve como centro de conocimiento
+
+**Diferencia con BTIP:**
+
+    | Aspecto         | BTIP (Hijo)           | Nucleus (Padre)      |
+    |-----------------|----------------------|---------------------|
+    | Propósito       | Código técnico       | Documentación org   |
+    | Estrategia      | android, node, etc.  | nucleus             |
+    | Contenido       | Código + intents     | Docs + overviews    |
+    | Identificador   | .bloom/project/      | nucleus-config.json |
+    | Audiencia       | AI (coding)          | Humanos + AI        |
+
+### 3.2 Registro y Autenticación
+
+**Flujo de Registro (Primera Vez):**
+
+    1. Usuario abre plugin → Vista "Welcome"
+    2. Click "Conectar con GitHub" → OAuth
+    3. Plugin obtiene:
+       - user.login (username)
+       - user.orgs[] (todas las organizaciones)
+    4. UserManager guarda en globalState:
+       {
+         githubUsername: "josevigil",
+         githubOrg: "josevigil",
+         allOrgs: ["josevigil", "bloom", "acme-corp"]
+       }
+    5. Vista cambia de Welcome → Nucleus Tree
+
+**Implementación:**
+
+Ver `src/managers/userManager.ts` para lógica de persistencia.
+Ver `src/ui/welcome/welcomeView.ts` para flujo de autenticación.
+
+### 3.3 Gestión Multi-Nucleus y Workspace Unificado
+
+**Activity Bar → Vista "Nucleus":**
+
+    [Organization 1]
+      ├─ project-mobile
+      ├─ project-backend
+      └─ project-web
+    
+    [Organization 2]
+      ├─ another-project
+      └─ another-backend
+    
+    [+ Agregar otro Nucleus]
+
+**Arquitectura Multi-Root Workspace:**
+
+Bloom utiliza VSCode Multi-Root Workspace para unificar todos los proyectos:
+
+    Parent Folder/
+    ├── nucleus-josevigil/              ← Nucleus (Centro)
+    ├── bloom-mobile/                   ← Proyecto hijo
+    ├── bloom-backend/                  ← Proyecto hijo
+    └── josevigil-workspace.code-workspace  ← Config multi-root
+
+**Beneficios:**
+
+- Un solo VSCode para todos los proyectos
+- Navegación sin abrir ventanas nuevas
+- Compilación por proyecto individual
+- Persistencia del workspace entre sesiones
+
+**Detección Automática:**
+
+El plugin detecta Nucleus en:
+
+1. Workspace actual (si contiene nucleus-config.json)
+2. Proyectos hermanos (via nucleus.json link)
+3. Parent directory (búsqueda recursiva limitada)
+
+Ver `src/providers/nucleusTreeProvider.ts` para implementación.
+Ver `src/managers/workspaceManager.ts` para gestión de workspace.
+
+### 3.4 Convención de Nombres
+
+**Repositorio Nucleus:**
+
+    nucleus-<organization>
+
+Ejemplos:
+
+- nucleus-josevigil
+- nucleus-bloom
+- nucleus-acme-corp
+
+**Beneficios:**
+
+- Prefijo distintivo para filtrado
+- Clara identificación de propósito
+- Compatibilidad con GitHub naming
+
+### 3.5 Creación de Nucleus con Git Orchestration
+
+**3 Casos de Uso Detectados Automáticamente:**
+
+**Caso 1: Repo no existe (Crear Nuevo)**
+
+    1. GitOrchestrator detecta location: 'none'
+    2. Crea repo en GitHub via API
+    3. Crear carpeta local nucleus-<org> antes de ejecutar git init
+    4. Inicializa Git localmente
+    5. Ejecuta generate_nucleus.py
+    6. Stage archivos con GitManager.stageAndOpenSCM
+
+**Caso 2: Repo existe en remoto (Clonar)**
+
+    1. GitOrchestrator detecta location: 'remote'
+    2. Clona repo desde GitHub
+    3. Si falta estructura: Ejecutar generate_nucleus.py --skipExisting
+    4. Stage archivos con GitManager.stageAndOpenSCM
+
+**Caso 3: Repo existe local y remoto (Vincular)**
+
+    1. GitOrchestrator detecta location: 'both'
+    2. Valida o corrige origin (agregar si faltara)
+    3. Si falta estructura: Ejecutar generate_nucleus.py --skipExisting
+    4. Stage archivos con GitManager.stageAndOpenSCM
+
+Código completo en `src/core/gitOrchestrator.ts`.
+
+### 3.6 Estructura del Nucleus
+
+**Estructura Principal:**
+
+    nucleus-<org>/
+    ├── .bloom/
+    │   ├── core/
+    │   │   └── nucleus-config.json
+    │   ├── organization/
+    │   │   ├── _index.bl
+    │   │   ├── overview.bl
+    │   │   ├── policies.bl
+    │   │   └── repos/  ← Repos específicos por estrategia
+    │   └── projects/
+    │       └── _index.bl
+    └── nucleus-config.json
+
+Ver `src/strategies/NucleusStrategy.ts` para generación.
+
+### 3.7 Vinculación de Proyectos Hijo a Nucleus
+
+**Flujo Principal (Manual):**
+
+1. Detectar si el proyecto ya estaba vinculado mediante nucleus.json preexistente
+2. Crear entrada en nucleus-config.json del Nucleus padre
+3. Crear nucleus.json en el proyecto hijo
+4. Generar overview.bl
+5. Actualizar _index.bl en Nucleus
+6. Ejecutar ensureBloomStructure():
+   - Generación de templates por estrategia (Android, Node, iOS, Web)
+   - Creación de app-context.bl condicional por estrategia
+7. Stage + Abrir SCM para commit manual
+
+**Flujo Alternativo (Al Clonar Proyecto Hijo):**
+
+1. Ejecutar ensureBloomStructure() automáticamente
+2. Generar nucleus.json automáticamente si existe relación previa
+3. Actualizar _index.bl
+
+Ver `src/commands/linkToNucleus.ts` para implementación completa.
+
+### 3.8 Desvincular Nucleus
+
+**Flujo Completo:**
+
+1. Usuario hace click en ⛓️‍💥 Desvincular
+2. Aparece modal de confirmación
+3. Al confirmar:
+   - Remover `org` de `allOrgs`
+   - Actualizar `githubOrg`
+   - Actualizar `bloom.isRegistered`
+   - Cerrar carpetas del workspace asociadas al nucleus
+   - Refrescar NucleusTreeProvider
+   - Mostrar toast de éxito
+4. UI vuelve a Nucleus Welcome
+5. Repos locales/remotos permanecen intactos
+
+Ver `src/commands/nucleus/nucleusCommands.ts` para implementación (comando: bloom.unlinkNucleus).
+
+---
+
+## 4. Sistema de Intents (BTIP)
+
+### 4.1 Intent Lifecycle
+
+**Estados:**
+
+- draft
+- generated
+- questions-ready
+- answers-submitted
+- snapshot-downloaded
+- integrated
+
+Ver `src/core/intentSession.ts` para gestión.
+
+### 4.2 Auto-Save
+
+**Flujo:**
+
+1. Edición en formulario
+2. Debounce 2s
+3. Guardar en intent.json
+4. Actualizar timestamps
+
+Ver `src/core/intentAutoSaver.ts`.
+
+### 4.3 Codebase Regeneration
+
+**Flujo:**
+
+1. Trigger por comando o evento
+2. Generar via nativo o Python
+3. Fallback si falla
+4. Notificación
+
+Ver `src/core/codebaseGenerator.ts`.
+
+---
+
+## 5. Git Orchestration
+
+Ver sección 3.5 para casos de Nucleus. Implementación en `src/core/gitOrchestrator.ts` y `src/utils/gitManager.ts`.
+
+---
+
+## 6. Gestión de Archivos y Auto-Save
+
+Ver 4.2 para details.
+
+---
+
+## 7. Estrategias de Proyecto
+
+Ver `src/strategies/` para classes como AndroidStrategy.ts, etc.
+
+---
+
+## 8. Chrome Profile Manager
+
+### 8.1 Gestión de Perfiles
+
+Ver `src/core/chromeProfileManager.ts`.
+
+### 8.2 Integración con AI (Planificado)
+
+Cada perfil en profileTreeProvider.ts corresponde a cuentas de ChatGPT, Claude y Grok. Cada intent permite seleccionar perfil y cuenta para creación. Comandos planificados:
+
+- bloom.openClaudeInBrowser: Abre Claude en perfil seleccionado.
+- bloom.openChatGPTInBrowser: Abre ChatGPT en perfil.
+- bloom.openGrokInBrowser: Abre Grok en perfil.
+
+Ver `src/commands/profile/profileCommands.ts` para stubs.
+
+---
+
+## 9. Workflow de Usuario
+
+Ver sección 18 para flujos detallados.
+
+---
+
+## 10. Estructura de Archivos
+
+### 10.1 Plugin Tree
+
+La estructura completa del plugin, incluyendo hashes MD5 por archivo y directorio, está disponible en archivos anexados para mayor detalle y parseabilidad:
+
+- **hash_tree.txt**: Versión legible para humanos (árbol formateado con hashes truncados y estadísticas como total de archivos/directorios).
+- **hash_tree.json**: Versión estructurada para IA (JSON con project_hash, timestamp, files, directories y statistics; ideal para parsing automatizado, e.g., extraer hash por path con code_execution).
+
+Ejemplo de uso para IA: Parsea "hash_tree.json" para verificar integridad (e.g., compara local vs. snapshot usando hashlib en Python).
+
+### 10.2 Snapshot de Código Clave (codebase_key_files.bl)
+
+Para facilitar la indexación y análisis por IA, el archivo "codebase_key_files.bl" consolida el código fuente de los archivos clave del plugin. Este snapshot incluye:
+- **Índice Jerárquico**: Lista de paths para navegación rápida.
+- **Contenidos**: Código completo en bloques Markdown, con metadatos como lenguaje y hash MD5.
+- **Uso para IA**: Parsear directamente para extraer código por path.
+
+**Archivos Clave Incluidos**:
+| Categoría       | Archivos Principales                          | Descripción Breve |
+|-----------------|-----------------------------------------------|-------------------|
+| Raíz            | package.json                                 | Configuración del plugin, comandos y menús. |
+| Punto de Entrada| extension.ts                                 | Inicialización principal (refactorizada con initialization/). |
+| Comandos        | manageProject.ts, linkToNucleus.ts           | Gestión de proyectos (vinculación, clonación). |
+| Core            | gitOrchestrator.ts, intentSession.ts, nucleusManager.ts | Orquestación Git, sesiones de intents, gestión Nucleus. |
+| Initialization  | commandRegistry.ts, managersInitializer.ts, providersInitializer.ts | Registro modular de comandos, managers y providers. |
+| Managers        | userManager.ts, workspaceManager.ts          | Persistencia de usuario y workspaces multi-root. |
+| Providers       | intentTreeProvider.ts, nucleusTreeProvider.ts| Vistas de árbol para intents y Nucleus. |
+| Utils           | gitManager.ts                                | Gestión universal de Git con staging y commits. |
+
+**Referencia para IA**: Todos los archivos clave del codebase están contenidos en "codebase_key_files.bl". Busca por path en el snapshot.
+
+---
+
+## 11. Implementación Técnica
+
+### 11.1 Clases Principales
+
+Ver codebase_key_files.bl para código.
+
+### 11.4 Comandos Registrados
+
+Ver `src/initialization/commandRegistry.ts` para registro completo.
+
+Lista sincronizada (de package.json):
+- bloom.openMarkdownPreview
+- bloom.generateIntent
+- bloom.openIntent
+- bloom.copyContextToClipboard
+- bloom.deleteIntent
+- bloom.addToIntent
+- bloom.deleteIntentFromForm
+- bloom.openFileInVSCode
+- bloom.revealInFinder
+- bloom.copyFilePath
+- bloom.createBTIPProject
+- bloom.createNucleusProject
+- bloom.linkToNucleus
+- bloom.unlinkNucleus
+- bloom.openNucleusProject
+- bloom.syncNucleusProjects
+- bloom.regenerateContext
+- bloom.generateQuestions
+- bloom.submitAnswers
+- bloom.integrateSnapshot
+- bloom.reloadIntentForm
+- bloom.manageProfiles
+- bloom.refreshProfiles
+- bloom.configureIntentProfile
+- bloom.openIntentInBrowser
+- bloom.openClaudeInBrowser
+- bloom.openChatGPTInBrowser
+- bloom.openGrokInBrowser
+- bloom.showWelcome
+- bloom.resetRegistration
+- bloom.addProjectToNucleus
+- bloom.reviewPendingCommits
+- bloom.refreshNucleus
+
+---
+
+## 12. Comandos y Configuración
+
+### 12.1 package.json Extracto
+
+Ver codebase_key_files.bl para completo.
+
+activationEvents: ["onCommand:bloom.generateIntent", "onView:bloomNucleus", ...]
+
+commands: [lista como en 11.4, sin bloom.unlinkFromNucleus]
+
+### 12.2 Configuraciones
+
+bloom.pythonPath, bloom.gitPath, bloom.claudeApiKey, bloom.claudeModel, bloom.nucleusAutoDetect.
+
+---
+
+## 13. Testing y Validación
+
+### 13.1 Estado Actual
+
+El plugin no cuenta con framework de testing implementado. No existen carpetas `/test`, scripts en `package.json` ni dependencias como Jest o Mocha. La validación se realiza manualmente mediante pruebas funcionales.
+
+### 13.2 Criterios de Éxito
+
+✅ Sistema Nucleus multi-org funcional
+✅ OAuth GitHub con detección de múltiples organizaciones
+✅ Creación de Nucleus con 3 casos: nuevo, clonar, vincular
+✅ Git Orchestration con GitExecutor multi-plataforma
+✅ Workspace multi-root con archivo `.code-workspace` generado automáticamente
+✅ Comando desvincular Nucleus sin borrar repositorios
+✅ Detección automática de estrategias de proyecto (android, ios, node, etc.)
+✅ Auto-save de intents con debounce de 2 segundos
+✅ Regeneración de `codebase.bl` sin pérdida de datos
+✅ Stage de cambios + apertura de SCM panel nativo
+✅ IntentSession con lifecycle de 6 estados
+✅ ChromeProfileManager con soporte para Claude, ChatGPT, Grok
+
+### 13.3 Validación de Integridad
+
+Todos los archivos del snapshot tienen hashes MD5 verificables en archivos anexados. Usa `scripts/fileToMD5.py` para generar/verificar hashes locales:
+- **hash_tree.txt**: Versión legible para humanos (árbol con hashes y totals).
+- **hash_tree.json**: Versión IA para parsing (incluye project_hash para integridad global).
+
+La comparación automatizada detecta modificaciones no autorizadas.
+
+### 13.4 Edge Cases Conocidos
+
+- Git no instalado: GitPathResolver detecta y muestra error con instrucciones
+- Python no configurado: Fallback a generación TypeScript nativa
+- OAuth expirado: Re-prompt automático de autenticación
+- Workspace file corrupto: Regeneración desde template
+- Hashes desactualizados: Warning en logs, no bloquea funcionalidad
+
+---
+
+## 14. Troubleshooting
+
+### 14.1 Problema Crítico: Plugin No Activa sin Workspace
+
+**Síntoma:** Al instalar Bloom por primera vez sin workspace abierto, la vista Welcome nunca aparece.
+
+**Causa:** `extension.ts` ejecuta return temprano si no detecta `workspaceFolder`, deteniendo la activación completa.
+
+**Solución Temporal:** Abrir cualquier carpeta (Cmd/Ctrl+K Cmd/Ctrl+O) y recargar VSCode (Cmd/Ctrl+R).
+
+**Fix Permanente Propuesto:** Modificar `extension.ts` para forzar apertura de Welcome incluso sin workspace, ejecutando `bloom.showWelcome` tras 500ms.
+
+### 14.2 Problemas Comunes
+
+**Git Remote URL Inválida**
+- Síntoma: Error "not found" al clonar
+- Causa: Repo no existe en GitHub o permisos insuficientes
+- Solución: Verificar URL en navegador, validar OAuth scope `repo`
+
+**Python Script Falla en Windows**
+- Síntoma: "'python3' is not recognized"
+- Causa: Windows usa `python` en lugar de `python3`
+- Solución: Cambiar `bloom.pythonPath` en settings a `python` o `py`
+
+**Hashes MD5 No Coinciden**
+- Síntoma: Hash local difiere de valores en anexos
+- Causa: Archivo modificado manualmente
+- Solución: Compara contra hash_tree.json (parsea files[path] para hash específico) o hash_tree.txt; restaura desde `codebase_key_files.bl` o regenera con `fileToMD5.py`
+
+**Workspace File Corrupto**
+- Síntoma: Error "Invalid JSON" al abrir workspace
+- Causa: Formato JSON inválido en `.code-workspace`
+- Solución: Eliminar archivo y ejecutar `bloom.createNucleusProject` para regenerar
+
+**Intent Form Vacío**
+- Síntoma: Metadata no carga al abrir intent
+- Causa: `intent.json` faltante o corrupto
+- Solución: Ejecutar `Bloom: Regenerate Context` desde Command Palette
+
+**Git Staging en Multi-Root**
+- Síntoma: SCM panel no enfoca repo correcto
+- Causa: Git Extension API no determina repo activo
+- Solución: Seleccionar repo manualmente en SCM panel tras notificación
+
+### 14.3 Logs y Diagnóstico
+
+Abrir Output panel (View → Output) y seleccionar "Bloom BTIP". Buscar patrones:
+- `[ERROR]` para errores críticos
+- `[GitOrchestrator]` para operaciones git
+- `[UserManager]` para autenticación
+- `[WorkspaceManager]` para cambios en workspace
+
+### 14.4 Comandos de Debug
+
+- `Bloom: Reset Registration (Debug)` - Limpia globalState y fuerza re-autenticación
+- `Bloom: Refresh Nucleus` - Re-detecta todos los nucleus en workspace
+- `Bloom: Revisar Commits Pendientes` - Panel de commits staged sin push
+
+---
+
+## 15. Roadmap y Mejoras Futuras
+
+### 15.1 Features Completados (v1.1.1)
+
+✅ Desvincular Nucleus (comando `bloom.unlinkNucleus`)
+✅ Git Orchestration con 3 casos de detección
+✅ GitExecutor multi-plataforma para Windows/Mac/Linux
+✅ Workspace multi-root con generación automática
+✅ Auto-save de intents con debounce
+
+### 15.2 Fase 1: Estabilización (Q1 2026)
+
+🔲 Implementar framework de testing (Jest + @vscode/test-electron)
+🔲 Cobertura de código >70% en componentes críticos
+🔲 Fix activación sin workspace (problema crítico #1)
+🔲 Validación automática de hashes MD5 en build-time
+
+### 15.3 Fase 2: Integración AI (Q2 2026)
+
+🔲 Selección de perfil AI en intent form (Claude/ChatGPT/Grok)
+🔲 Implementar comandos `openClaudeInBrowser`, `openChatGPTInBrowser`, `openGrokInBrowser`
+🔲 Bridge bidireccional con Claude API para questions/answers
+🔲 Tracking de conversaciones AI por intent
+
+### 15.4 Fase 3: Performance (Q3 2026)
+
+🔲 Integrar `fileToMD5.py` en pipeline de build para hashes automáticos
+🔲 Optimización de regeneración de `codebase.bl` (caching inteligente)
+🔲 Lazy loading de proyectos en NucleusTreeProvider
+🔲 Compresión de snapshots grandes (>5MB)
+
+### 15.5 Mejoras de UX
+
+- Onboarding interactivo post-instalación
+- Templates de proyecto predefinidos (Android, iOS, React)
+- Export/import de configuración Nucleus entre equipos
+- Sincronización de perfiles AI entre dispositivos
+
+---
+
+## 16. Referencias
+
+### 16.1 Documentos Fuente
+
+1. **bloom_unified_spec.md** - Especificación original v2.0
+2. **Desvincular Nucleus (Unlink Nucleus).md** - Feature v1.0
+3. **git-orchestration-impl.md** - Implementación Git
+4. **BLOOM – Git Orchestration Plan.md** - Plan arquitectónico
+5. **bloom-nucleus-flows.md** - Flujos detallados
+6. **codebase_key_files.bl** - Snapshot consolidado de código clave para análisis por IA.
+7. **hash_tree.txt** - Estructura de plugin legible con hashes MD5 (versión humana).
+8. **hash_tree.json** - Estructura de plugin parseable con hashes MD5 (versión IA).
+9. **SNAPSHOT_HASHES.md** - Hashes MD5 consolidados.
+
+### 16.2 Código Fuente
+
+Ubicación completa en "codebase_key_files.bl" (snapshot consolidado para indexación por IA). Reemplaza referencias anteriores; usa como fuente primaria.
+
+Archivos clave (resumidos; ver estructura completa en archivos anexados):
+- src/extension.ts - Punto de entrada (refactorizado). Código en snapshot.
+- src/initialization/commandRegistry.ts - Registro de comandos. Código en snapshot.
+- src/initialization/providersInitializer.ts - Inicialización de providers. Código en snapshot.
+- src/initialization/managersInitializer.ts - Inicialización de managers. Código en snapshot.
+- src/core/gitOrchestrator.ts - Git Orchestration. Código en snapshot.
+- src/core/nucleusManager.ts - Gestión de Nucleus. Código en snapshot.
+- src/core/intentSession.ts - Gestión de intents. Código en snapshot.
+- src/managers/userManager.ts - Persistencia de usuario. Código en snapshot.
+- src/managers/workspaceManager.ts - Multi-root workspace. Código en snapshot.
+- src/utils/gitManager.ts - Git staging universal. Código en snapshot.
+- src/providers/nucleusTreeProvider.ts - UI de Nucleus. Código en snapshot.
+- src/providers/intentTreeProvider.ts - UI de intents. Código en snapshot.
+- src/commands/manageProject.ts - CRUD de proyectos. Código en snapshot.
+- src/commands/linkToNucleus.ts - Vinculación de proyectos. Código en snapshot.
+
+**Hashes MD5 para Verificación**: Para hashes completos por archivo y directorio (incluyendo project_hash y estadísticas), consulta los archivos anexados:
+- **hash_tree.txt**: Versión legible para humanos (árbol con hashes y totals).
+- **hash_tree.json**: Versión estructurada para IA (JSON parseable; e.g., usa code_execution para comparar hashes locales vs. snapshot).
+
+Ejemplo de uso: En Python, carga hash_tree.json y verifica md5sum de un archivo específico.
+
+**Guía para IA**: Para acceder al código de cualquier archivo listado, referencia "codebase_key_files.bl" y busca la sección con el path correspondiente. Usa tools como code_execution para ejecutar o analizar snippets directamente del snapshot, o para validar hashes de hash_tree.json.
+
+### 16.3 Enlaces Externos
+
+**VSCode:**
+
+- Multi-Root Workspaces: https://code.visualstudio.com/docs/editor/multi-root-workspaces (accedido 30 Nov 2025)
+- Extension API: https://code.visualstudio.com/api (accedido 30 Nov 2025)
+- Command Palette API: https://code.visualstudio.com/api/references/commands (accedido 30 Nov 2025)
+
+**GitHub:**
+
+- OAuth Apps: https://docs.github.com/en/developers/apps/building-oauth-apps (accedido 30 Nov 2025)
+- Repos API: https://docs.github.com/en/rest/repos (accedido 30 Nov 2025)
+
+**Anthropic:**
+
+- Claude API: https://docs.anthropic.com (accedido 30 Nov 2025)
+- Prompt Engineering: https://docs.anthropic.com/claude/docs/prompt-engineering (accedido 30 Nov 2025)
+
+**Otros:**
+
+- Python MD5 (hashlib): https://docs.python.org/3/library/hashlib.html (accedido 30 Nov 2025) – Para fileToMD5.py y verificación de integridad.
+
+---
+
+## 17. Conclusión
+
+Bloom v1.1.1 integra cuatro sistemas poderosos:
+
+1. **Nucleus** - Gestión organizacional con GitHub OAuth
+2. **BTIP** - Gestión de intents técnicos con auto-save
+3. **Git Orchestration** - Commits staged con confirmación explícita
+4. **Workspace Unificado** - Navegación fluida sin ventanas múltiples
+
+El código fuente clave está consolidado en 'codebase_key_files.bl' para facilitar el razonamiento y depuración por IA. Con hashes MD5 integrados para integridad (ver SNAPSHOT_HASHES.md), el sistema asegura robustez contra modificaciones. Próximas mejoras incluyen fileToMD5.py para automatización de hashes y automatización de perfiles AI, preparando para integraciones avanzadas con Claude/ChatGPT/Grok.
+
+### Características Destacadas
+
+**Git Orchestration:**
+
+El sistema de Git Orchestration representa un avance crítico:
+
+- Detecta automáticamente estado local/remoto
+- Maneja 3 casos: crear, clonar, vincular
+- TypeScript para Git, Python para generación
+- Commits staged con confirmación manual
+- NUNCA hace push silencioso
+
+**Workspace Unificado:**
+
+- Usa APIs nativas de VSCode
+- Persistencia automática entre sesiones
+- No interfiere con compilación por proyecto
+- Sincronización bidireccional con archivo
+
+**Desvincular Nucleus:**
+
+- UX profesional y segura
+- Permite cambiar rápidamente de organización
+- Prepara para "Levantar Nucleus existente"
+- Desarrollador puede probar flujos infinitas veces
+
+**Hashes MD5 para Integridad:** Verificación automática vía fileToMD5.py asegura que snapshots permanezcan inalterados.
+
+**Versión:** 1.1.1  
+**Última Actualización:** 30 de Noviembre de 2025  
+**Mantenedor:** Bloom Development Team
+
+---
+
+## 18. Flujos Detallados (Apéndice)
+
+### Flujo 1: Crear Nucleus desde Cero (`location: 'none'`)
+
+**Condición de Entrada:** Usuario ejecuta `bloom.createNucleusProject`, repo remoto no existe.
+
+**Pasos:**
+1. Crear repo remoto en GitHub (`nucleus-<org>`)
+2. Crear carpeta local nucleus-<org> antes de ejecutar git init
+3. Inicializar Git (`git init`)
+4. Agregar remote origin
+5. Ejecutar `generate_nucleus.py`
+6. Generar estructura `.bloom/`
+7. `git add ./*`
+8. Inicializar workspace
+9. Abrir panel SCM para commit/push
+10. Usuario hace commit y push
+11. Workspace queda levantado con su `.code-workspace`
+
+**Resultado Observable:** Nucleus creado y registrado visualmente en VSCode.
+
+**Referencia:** Ver `gitOrchestrator.ts` método `createNucleus`, hash `3ab7e7924ad90647f50e66088f5c7bf4`.
+
+### Flujo 2: Clonar Nucleus Existente (`location: 'remote'`)
+
+**Condición de Entrada:** Repo existe en GitHub, local no.
+
+**Pasos:**
+1. Detectar `nucleus-<org>` remoto
+2. `git clone` a `parentPath/nucleus-<org>`
+3. Verificar estructura `.bloom/`
+4. Si faltan archivos: Ejecutar `generate_nucleus.py --skipExisting`
+5. `git add` si hubo cambios
+6. Abrir SCM para commit
+7. Crear workspace y registrar el Nucleus
+
+**Resultado Observable:** Nucleus clonado con estructura completa.
+
+**Referencia:** Ver `gitOrchestrator.ts` método `cloneNucleus`, hash `3ab7e7924ad90647f50e66088f5c7bf4`.
+
+### Flujo 3: Vincular Nucleus Existente (`location: 'both'`)
+
+**Condición de Entrada:** Carpeta local y repo remoto existen.
+
+**Pasos:**
+1. Validar existencia de carpeta
+2. Validar `.git`
+3. Validar o corregir `origin` (agregar si faltara)
+4. Verificar estructura `.bloom/`
+5. Si falta algo: Ejecutar Python con `--skipExisting`
+6. `git add` si hubo cambios
+7. Abrir SCM para commit manual
+8. Registrar en Bloom Registry
+9. Crear workspace si falta
+
+**Resultado Observable:** Nucleus vinculado sin clonar nada.
+
+**Referencia:** Ver `gitOrchestrator.ts` método `linkNucleus`, hash `3ab7e7924ad90647f50e66088f5c7bf4`.
+
+### Flujo 4: Clonar Proyecto sin Configuración Nucleus
+
+**Pasos:**
+1. `git clone`
+2. Detectar ausencia de `.bloom/`
+3. Generar estructura `.bloom/` para proyecto hijo
+4. Actualizar `nucleus.json`
+5. Generar `overview.bl`
+6. `git add`
+7. SCM abierto para commit/push
+8. WorkspaceManager agrega el proyecto
+
+**Referencia:** Ver `manageProject.ts` método `cloneProject`, hash `822a6cc6bb9d7622eb69fbda43d819a5`.
+
+### Flujo 5: Clonar Proyecto con Config Nucleus
+
+**Pasos:**
+1. `git clone`
+2. Detectar `.bloom/` y `nucleus.json`
+3. Validar consistencia (org, path, ids)
+4. No generar nada
+5. Registrar proyecto en workspace
+
+**Referencia:** Ver `manageProject.ts` método `cloneProject`, hash `822a6cc6bb9d7622eb69fbda43d819a5`.
+
+### Flujo 6: Crear Proyecto Nuevo
+
+**Pasos:**
+1. Crear carpeta
+2. `git init`
+3. Crear repo remoto en GitHub
+4. Agregar `origin`
+5. Ejecutar generador Python
+6. Generar `.bloom/` + `overview.bl`
+7. `git add`
+8. SCM para commit/push
+9. Proyecto registrado en workspace
+
+**Referencia:** Ver `manageProject.ts` método `createProject`, hash `822a6cc6bb9d7622eb69fbda43d819a5`.
+
+### Flujo 7: Crear Workspace Unificado
+
+**Pasos:**
+1. Crear archivo `{org}-workspace.code-workspace`
+2. Agregar raíz `nucleus-<org>`
+3. Aplicar settings: `bloom.activeNucleus`, configuraciones del workspace, `files.exclude`
+4. Agregar extensiones recomendadas
+5. Activar workspace multi-root
+6. Abrir workspace
+
+**Referencia:** Ver `workspaceManager.ts` método `createWorkspaceFile`, hash `53deedbbdbf2eb2271881fcb73461aa5`.
+
+### Flujo 8: Agregar Proyecto al Workspace
+
+**Pasos:**
+1. Detectar nuevo proyecto
+2. Insertarlo en `.code-workspace`
+3. Actualizar settings/iconos
+4. Refrescar TreeProvider
+5. Mantener persistencia entre sesiones
+
+**Referencia:** Ver `workspaceManager.ts` método `addProjectToWorkspace`, hash `53deedbbdbf2eb2271881fcb73461aa5`.
+
+### Flujo 9: Desvincular Nucleus (UNLINK NUCLEUS)
+
+**Pasos:**
+1. Usuario hace click en ⛓️‍💥 Desvincular
+2. Aparece modal de confirmación
+3. Al confirmar:
+   - Remover `org` de `allOrgs`
+   - Actualizar `githubOrg`
+   - Actualizar `bloom.isRegistered`
+   - Cerrar carpetas del workspace asociadas al nucleus
+   - Refrescar NucleusTreeProvider
+   - Mostrar toast de éxito
+4. UI vuelve a Nucleus Welcome
+5. Repos locales/remotos permanecen intactos
+
+**Referencia:** Ver `nucleusCommands.ts` método `unlinkNucleus`, hash `724164dec7ca24ef838f2581fe257055`.
+
+### Flujo 10: Ciclo de Vida Completo del Intent
+
+**Estados y Transiciones:**
+- `draft`
+- `generated`
+- `questions-ready`
+- `answers-submitted`
+- `snapshot-downloaded`
+- `integrated`
+
+Cada transición tiene acciones específicas.
+
+**Referencia:** Ver `intentSession.ts` método `updateWorkflow`, hash `a3c92aef66ac46e0493836c8ab792b78`.
+
+### Flujo 11: Auto-save Inteligente
+
+**Pasos:**
+1. Usuario edita formulario
+2. Debounce 2s
+3. Guardar en `intent.json`
+4. Actualizar timestamps
+5. No genera `intent.bl`
+6. No regenera codebase
+
+**Referencia:** Ver `intentAutoSaver.ts`, hash `dd970079bbf3536687be62ecfba266fc`.
+
+### Flujo 12: Codebase Regeneration
+
+**Pasos:**
+1. Trigger por Add/Remove file o submit
+2. Generación nativa o Python
+3. Si falla → fallback
+4. Notificación visual
+
+**Referencia:** Ver `codebaseGenerator.ts`, hash `df0cbfeadf1020ead587b1bf4a9dfe3e`.
+
+### Flujo 13: Crear Nucleus con Git Orchestration
+
+**Caso A - Nuevo (`location: 'none'`):**
+1. Crear repo remoto
+2. Crear carpeta local
+3. Inicializar git
+4. Ejecutar Python generator
+5. Stage cambios
+6. Verificar workspace file
+7. Ofrecer abrir workspace
+
+**Caso B - Ambos (`location: 'both'`):**
+1. Validar que carpeta local tiene `.git`
+2. Verificar remote origin, agregarlo si falta
+3. Validar estructura `.bloom/`, completar con `--skipExisting` si necesario
+4. Stage cambios pendientes
+5. Verificar workspace file
+6. Ofrecer abrir workspace
+
+**Resultado Observable:** Nucleus completamente funcional con estructura validada, workspace file disponible, cambios staged si hubo completado de estructura.
+
+**Referencia:** Ver `gitOrchestrator.ts` métodos `cloneNucleus` y `linkNucleus`, hash `3ab7e7924ad90647f50e66088f5c7bf4`.
+
+### Flujo 14: Agregar Proyecto al Workspace
+
+**Condición de Entrada:** Nucleus configurado, usuario quiere agregar proyecto (vincular local, clonar remoto o crear nuevo).
+
+**Sub-flujo A - Vincular Local:**
+1. Detectar proyectos en parent directory con `detectProjectsInFolder`
+2. Excluir Nucleus de la lista
+3. Mostrar QuickPick con proyectos detectados y estrategia
+4. Usuario selecciona proyecto
+5. Ejecutar `ensureBloomStructure` si falta `.bloom/`
+6. Actualizar `nucleus-config.json` con LinkedProject
+7. Crear `nucleus.json` en proyecto hijo
+8. Generar `overview.bl` en Nucleus
+9. Regenerar `_index.bl`
+10. Agregar al workspace con `WorkspaceManager.addProjectToWorkspace`
+11. Stage cambios en Nucleus
+
+**Sub-flujo B - Clonar Remoto:**
+1. Obtener repos de org con `getOrgRepos`
+2. Filtrar repos ya vinculados
+3. Usuario selecciona repo
+4. Clonar directamente en parent directory
+5. Detectar estrategia con `ProjectDetector.getStrategyName`
+6. Ejecutar `ensureBloomStructure`
+7. Completar pasos 6-11 de sub-flujo A
+
+**Sub-flujo C - Crear Nuevo:**
+1. Usuario ingresa nombre del proyecto
+2. Selecciona tipo (android, ios, react-web, node, etc.)
+3. Crear carpeta en parent directory
+4. Generar template básico con `createProjectTemplate`
+5. Ejecutar `ensureBloomStructure`
+6. Inicializar git con `git init`
+7. Completar pasos 6-11 de sub-flujo A
+
+**Resultado Observable:** Proyecto agregado al workspace multi-root, visible en NucleusTreeProvider, estructura `.bloom/` completa, cambios staged en Nucleus.
+
+**Referencia:** Ver `manageProject.ts` y `linkToNucleus.ts`, hashes `822a6cc6bb9d7622eb69fbda43d819a5` y `db6fa6dfdbaf47eee75143a1e9b37b08`.
+
+### Flujo 15: Desvincular Nucleus
+
+**Condición de Entrada:** Usuario hace clic en comando "Unlink Nucleus" desde NucleusTreeProvider.
+
+**Pasos:**
+1. Mostrar modal de confirmación advirtiendo que repos no se borran
+2. Usuario confirma acción
+3. UserManager remueve org de `allOrgs` en globalState
+4. Actualizar `githubOrg` al primer org restante o username
+5. Actualizar contexto VSCode `bloom.isRegistered`
+6. Cerrar folders del workspace relacionadas con ese Nucleus
+7. Refrescar NucleusTreeProvider
+8. Mostrar toast de éxito
+
+**Resultado Observable:** Nucleus desaparece de la vista, folders cerrados en VSCode, repositorios locales y remotos intactos.
+
+**Referencia:** Ver `nucleusCommands.ts` método `unlinkNucleus`, hash `724164dec7ca24ef838f2581fe257055`.
+
+### Flujo 16: Intent Lifecycle Completo
+
+**Condición de Entrada:** Usuario crea nuevo intent desde Command Palette o TreeView.
+
+**Estados y Transiciones:**
+1. **draft:** Intent creado, formulario abierto, auto-save activo
+2. **generated:** Usuario completa formulario y genera `intent.bl` + `codebase.bl`
+3. **questions-ready:** Sistema genera preguntas clarificadoras (opcional)
+4. **answers-submitted:** Usuario responde preguntas y envía a Claude (futuro)
+5. **snapshot-downloaded:** Claude retorna snapshot de cambios (futuro)
+6. **integrated:** Usuario integra snapshot al proyecto
+
+**Acciones por Estado:**
+- **draft:** Auto-save cada 2s con debounce, no genera `.bl`
+- **generated:** Regenerar `codebase.bl` si se agregan/remueven archivos
+- **questions-ready:** Mostrar panel con preguntas generadas
+- **answers-submitted:** Enviar a Claude API (requiere profile configurado)
+- **snapshot-downloaded:** Validar y preparar archivos para integración
+- **integrated:** Aplicar cambios con control de conflictos
+
+**Resultado Observable:** Intent transiciona entre estados, metadata persiste en `intent.json`, archivos `.bl` generados, UI actualizada en TreeView.
+
+**Referencia:** Ver `intentSession.ts` método `updateWorkflow`, hash `a3c92aef66ac46e0493836c8ab792b78`.
+
+### Flujo 17: Auto-save + Regeneración Codebase
+
+**Condición de Entrada:** Usuario edita campos en intent form (problem, expectedOutput, considerations).
+
+**Flujo Auto-save:**
+1. Usuario escribe en campo de texto
+2. IntentAutoSaver actualiza lista de archivos en state
+3. Iniciar temporizador de 2 segundos
+4. Si hay más cambios antes de expirar: resetear temporizador
+5. Al expirar: guardar en `intent.json`
+6. Actualizar timestamps (updatedAt)
+7. NO regenerar `intent.bl` ni `codebase.bl` (solo en submit)
+
+**Flujo Regeneración Codebase:**
+1. Usuario agrega o remueve archivo desde TreeView
+2. IntentSession actualiza lista de archivos en state
+3. Ejecutar `CodebaseGenerator.generate` con nueva lista
+4. Escribir `codebase.bl` actualizado
+5. Recalcular tokens con TokenEstimator
+6. Actualizar metadata en `intent.json`
+7. Emitir evento `filesChanged` para actualizar UI
+
+**Resultado Observable:** Formulario guarda cambios automáticamente sin pérdida de datos, `codebase.bl` refleja lista actualizada de archivos, contador de tokens actualizado.
+
+**Referencia:** Ver `intentAutoSaver.ts` y `codebaseGenerator.ts`, hashes `dd970079bbf3536687be62ecfba266fc` y `df0cbfeadf1020ead587b1bf4a9dfe3e`.
+
+---
+
+*Para más información técnica detallada, consultar codebase_key_files.bl con el código fuente completo.*
+</DOCUMENT>

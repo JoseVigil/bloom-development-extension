@@ -41,7 +41,13 @@ export class CodebaseGenerator {
     ): Promise<boolean> {
         try {
             const workspacePath = options.workspaceFolder.uri.fsPath;
-            const scriptPath = path.join(workspacePath, '.bloom', 'scripts', 'generate_codebase.py');
+            const scriptPath = path.join(
+                workspacePath, 
+                '.bloom', 
+                'scripts', 
+                'codebase',
+                'generate_codebase.py'
+            );
             
             try {
                 await fs.access(scriptPath);

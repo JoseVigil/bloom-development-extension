@@ -48,7 +48,7 @@
 
 **Integración Python:**
 - ❌ Ejecución post-git de `generate_nucleus.py`
-- ❌ Ejecución post-git de `generate_context.py`
+- ❌ Ejecución post-git de `generate_project_context.py`
 - ❌ Coordinación entre TS y Python
 
 ---

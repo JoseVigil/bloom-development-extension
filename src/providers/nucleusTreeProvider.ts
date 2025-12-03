@@ -17,16 +17,7 @@ export class NucleusTreeProvider implements vscode.TreeDataProvider<NucleusTreeI
     constructor(
         private workspaceRoot: string | undefined,
         private context: vscode.ExtensionContext
-    ) {
-        // Registrar comandos
-        vscode.commands.registerCommand('bloom.unlinkNucleus', async (item: NucleusTreeItem) => {
-            if (item && item.type === 'org' && item.data?.orgName) {
-                await this.unlinkNucleus(item.data.orgName);
-            }
-        });
-        
-        vscode.commands.registerCommand('bloom.refreshNucleus', () => this.refresh());
-        
+    ) {    
         // Refresh automático cuando cambia la configuración
         vscode.workspace.onDidChangeConfiguration(() => this.refresh());
         
@@ -329,8 +320,63 @@ export async function openNucleusProject(project: LinkedProject): Promise<void> 
             if (!projectPath) return;
         }
 
-        // Agregar al workspace en lugar de abrir nueva ventana
-        await WorkspaceManager.addProjectToWorkspace(projectPath, project.displayName);
+        // Encontrar el Nucleus path y org desde nucleus.json del proyecto
+        let nucleusPath: string | undefined;
+        let orgName: string | undefined;
+        
+        const nucleusLinkPath = path.join(projectPath, '.bloom', 'nucleus.json');
+        if (fs.existsSync(nucleusLinkPath)) {
+            try {
+                const linkData = JSON.parse(fs.readFileSync(nucleusLinkPath, 'utf-8'));
+                orgName = linkData.organizationName;
+                
+                // Resolver path del Nucleus
+                if (linkData.nucleusPath) {
+                    nucleusPath = path.resolve(projectPath, linkData.nucleusPath);
+                }
+            } catch (error) {
+                console.error('Error reading nucleus.json:', error);
+            }
+        }
+
+        // Si no se pudo obtener del nucleus.json, buscar en parent
+        if (!nucleusPath || !orgName) {
+            const parentDir = path.dirname(projectPath);
+            const nucleusDirs = fs.readdirSync(parentDir).filter(d => d.startsWith('nucleus-'));
+            
+            if (nucleusDirs.length > 0) {
+                nucleusPath = path.join(parentDir, nucleusDirs[0]);
+                orgName = nucleusDirs[0].replace('nucleus-', '');
+            }
+        }
+
+        // Si aún no tenemos nucleus info, usar valores por defecto
+        if (!nucleusPath || !orgName) {
+            vscode.window.showWarningMessage('No se pudo determinar el Nucleus asociado. Agregando solo al workspace.');
+            
+            // Agregar solo la carpeta al workspace
+            const workspaceFolders = vscode.workspace.workspaceFolders || [];
+            const folderExists = workspaceFolders.some(f => f.uri.fsPath === projectPath);
+            
+            if (!folderExists) {
+                await vscode.workspace.updateWorkspaceFolders(
+                    workspaceFolders.length,
+                    0,
+                    { uri: vscode.Uri.file(projectPath), name: project.displayName }
+                );
+            }
+            
+            return;
+        }
+
+        // Agregar al workspace usando WorkspaceManager
+        await WorkspaceManager.addProjectToWorkspace(
+            nucleusPath,
+            orgName,
+            projectPath,
+            project.displayName,
+            project.strategy
+        );
 
     } catch (error: any) {
         vscode.window.showErrorMessage(`Error abriendo proyecto: ${error.message}`);

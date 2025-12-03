@@ -135,10 +135,10 @@ export function activate(context: vscode.ExtensionContext) {
 }
 ```
 
-#### `generate_context.py` (EXTEND)
+#### `generate_project_context.py` (EXTEND)
 Add Nucleus support to Python script:
 
-The spec document includes a `NucleusAnalyzer` class that should be added to `generate_context.py`. Key features:
+The spec document includes a `NucleusAnalyzer` class that should be added to `generate_project_context.py`. Key features:
 - Detects organization from `.git/config`
 - Scans parent directory for sibling projects
 - Generates nucleus-specific context
@@ -241,7 +241,7 @@ nucleus-josevigil/
 - [ ] **Step 6**: Create `nucleusTreeProvider.ts`
 - [ ] **Step 7**: Update `package.json` with new commands/views
 - [ ] **Step 8**: Update `extension.ts` to register providers
-- [ ] **Step 9**: Extend `generate_context.py` with `NucleusAnalyzer`
+- [ ] **Step 9**: Extend `generate_project_context.py` with `NucleusAnalyzer`
 - [ ] **Step 10**: Test complete workflow
 
 ---
@@ -344,7 +344,7 @@ Consider adding status bar item showing:
 
 - **Specification**: `bloom-nucleus-spec.md` (complete technical spec)
 - **Original Plugin**: Current BTIP implementation
-- **Python Script**: `generate_context.py` for context generation
+- **Python Script**: `generate_project_context.py` for context generation
 
 ---
 

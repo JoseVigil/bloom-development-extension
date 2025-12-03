@@ -24,7 +24,7 @@ export function registerCopyContextToClipboard(
                 
                 const codebasePath = joinPath(
                     treeItem.intent.folderUri,
-                    'codebase.md'
+                    'codebase.bl'
                 );
                 const codebaseContent = await vscode.workspace.fs.readFile(codebasePath);
                 const codebaseText = new TextDecoder().decode(codebaseContent);

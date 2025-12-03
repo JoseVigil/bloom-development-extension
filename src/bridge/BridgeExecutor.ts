@@ -209,7 +209,12 @@ export class BridgeExecutor {
         // Buscar en directorio de la extensión
         const extensionPath = vscode.extensions.getExtension('your-publisher-name.claude-vscode-bridge')?.extensionPath;
         if (extensionPath) {
-            return path.join(extensionPath, 'scripts', 'claude_bridge.py');
+            return path.join(
+                extensionPath, 
+                'scripts', 
+                'web-bridge',
+                'claude_bridge.py'
+            );
         }
 
         throw new Error('Bridge script path not configured');

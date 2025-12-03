@@ -2,6 +2,10 @@ import * as vscode from 'vscode';
 import { spawn } from 'child_process';
 import * as path from 'path';
 
+/**
+ * @deprecated Desde la versión 1.1.1 - Será eliminada.
+ * @see  Para la nueva implementación 
+ */
 export class ArtifactProcessor {
     private outputChannel: vscode.OutputChannel;
 

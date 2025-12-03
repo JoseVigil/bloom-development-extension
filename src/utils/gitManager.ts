@@ -2,11 +2,8 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import { Logger } from '../utils/logger';
-
-const execAsync = promisify(exec);
+import { GitExecutor } from './gitExecutor';
+import { Logger } from './logger';
 
 export interface GitChange {
     file: string;
@@ -68,14 +65,15 @@ export class GitManager {
 
     /**
      * Obtiene cambios en el repositorio
+     * AHORA USA GitExecutor para compatibilidad multi-plataforma
      */
     private static async getChanges(
         repoPath: string,
         files?: string[]
     ): Promise<GitChange[]> {
         try {
-            const { stdout } = await execAsync('git status --porcelain', {
-                cwd: repoPath
+            const { stdout } = await GitExecutor.exec('status --porcelain', { 
+                cwd: repoPath 
             });
 
             if (!stdout.trim()) {
@@ -106,7 +104,7 @@ export class GitManager {
 
             return changes;
         } catch (error) {
-            console.error('Error getting git changes:', error);
+            console.error('[GitManager] Error getting git changes:', error);
             return [];
         }
     }
@@ -244,23 +242,24 @@ export class GitManager {
 
     /**
      * Ejecuta un commit específico
+     * AHORA USA GitExecutor
      */
     private static async executeCommit(index: number, withPush: boolean): Promise<void> {
         const commit = this.pendingCommits[index];
         
         try {
             // Stage cambios
-            await execAsync('git add .', { cwd: commit.repoPath });
+            await GitExecutor.exec('add .', { cwd: commit.repoPath });
 
             // Commit
             const escapedMessage = commit.message.replace(/"/g, '\\"');
-            await execAsync(`git commit -m "${escapedMessage}"`, {
+            await GitExecutor.exec(`commit -m "${escapedMessage}"`, {
                 cwd: commit.repoPath
             });
 
             // Push si se solicita
             if (withPush) {
-                await execAsync('git push', { cwd: commit.repoPath });
+                await GitExecutor.exec('push', { cwd: commit.repoPath });
                 vscode.window.showInformationMessage(
                     `✅ Commit + Push exitoso en ${commit.repoName}`
                 );
@@ -278,6 +277,7 @@ export class GitManager {
 
     /**
      * Commitea todos los cambios pendientes
+     * AHORA USA GitExecutor
      */
     private static async commitAll(withPush: boolean): Promise<void> {
         let successful = 0;
@@ -285,14 +285,14 @@ export class GitManager {
 
         for (const commit of this.pendingCommits) {
             try {
-                await execAsync('git add .', { cwd: commit.repoPath });
+                await GitExecutor.exec('add .', { cwd: commit.repoPath });
                 const escapedMessage = commit.message.replace(/"/g, '\\"');
-                await execAsync(`git commit -m "${escapedMessage}"`, {
+                await GitExecutor.exec(`commit -m "${escapedMessage}"`, {
                     cwd: commit.repoPath
                 });
 
                 if (withPush) {
-                    await execAsync('git push', { cwd: commit.repoPath });
+                    await GitExecutor.exec('push', { cwd: commit.repoPath });
                 }
                 
                 successful++;
@@ -511,31 +511,12 @@ export class GitManager {
     }
 
     /**
-     * Obtiene conteo de commits pendientes
-     */
-    static getPendingCount(): number {
-        return this.pendingCommits.length;
-    }
-
-    /**
-     * Limpia commits pendientes
-     */
-    static clearPending(): void {
-        this.pendingCommits = [];
-        this.updateStatusBar();
-    }
-
-    /**
      * MÉTODO UNIVERSAL: Prepara archivos y abre SCM panel para commit confirmable
+     * AHORA USA GitExecutor para compatibilidad multi-plataforma
      * 
      * @param repoPath - Path absoluto al repositorio
      * @param files - Array de paths relativos a stagear (undefined = todo)
      * @param commitMessage - Mensaje sugerido (pre-llena el input del SCM)
-     * 
-     * CASOS DE USO:
-     * - Proyectos nuevos: stageAndOpenSCM(projectPath, undefined, "Initial commit")
-     * - Intents: stageAndOpenSCM(workspacePath, ['.bloom/intents/...'], "Generated intent")
-     * - Nucleus: stageAndOpenSCM(nucleusPath, undefined, "Initial Nucleus")
      */
     static async stageAndOpenSCM(
         repoPath: string,
@@ -552,18 +533,18 @@ export class GitManager {
             });
 
             // 1. Verificar que es un repo git válido
-            const gitDir = path.join(repoPath, '.git');
-            if (!fs.existsSync(gitDir)) {
+            const isRepo = await GitExecutor.isGitRepository(repoPath);
+            if (!isRepo) {
                 throw new Error(`Not a git repository: ${repoPath}`);
             }
 
-            // 2. Stage archivos
+            // 2. Stage archivos usando GitExecutor
             if (files && files.length > 0) {
                 // Stage archivos específicos
                 console.log(`[GitManager] Staging ${files.length} specific files`);
                 for (const file of files) {
                     try {
-                        await execAsync(`git add "${file}"`, { cwd: repoPath });
+                        await GitExecutor.exec(`add "${file}"`, { cwd: repoPath });
                     } catch (error: any) {
                         console.warn(`[GitManager] Could not stage ${file}:`, error.message);
                         // Continuar con otros archivos
@@ -572,18 +553,18 @@ export class GitManager {
             } else {
                 // Stage todo
                 console.log(`[GitManager] Staging all changes`);
-                await execAsync('git add .', { cwd: repoPath });
+                await GitExecutor.exec('add .', { cwd: repoPath });
             }
 
             // 3. Verificar que hay cambios staged
-            const { stdout: stagedFiles } = await execAsync(
-                'git diff --cached --name-only',
+            const { stdout: stagedFiles } = await GitExecutor.exec(
+                'diff --cached --name-only',
                 { cwd: repoPath }
             );
 
             if (!stagedFiles.trim()) {
                 vscode.window.showInformationMessage(
-                    `✓ No hay cambios nuevos en ${repoName}`
+                    `✔ No hay cambios nuevos en ${repoName}`
                 );
                 console.log(`[GitManager] No staged changes in ${repoName}`);
                 return;
@@ -672,31 +653,18 @@ export class GitManager {
         }
     }
 
-
     /**
-     * Configura mensaje de commit sugerido en el repo
+     * Obtiene conteo de commits pendientes
      */
-    private static async setCommitMessage(
-        repoPath: string,
-        message: string
-    ): Promise<void> {
-        try {
-            // Usar la API de Git de VSCode si está disponible
-            const gitExtension = vscode.extensions.getExtension('vscode.git');
-            if (!gitExtension) return;
-
-            const gitApi = gitExtension.exports.getAPI(1);
-            const repo = gitApi.repositories.find(
-                (r: any) => r.rootUri.fsPath === repoPath
-            );
-
-            if (repo) {
-                repo.inputBox.value = message;
-            }
-        } catch (error) {
-            // Silently fail - no es crítico
-            console.warn('Could not set commit message:', error);
-        }
+    static getPendingCount(): number {
+        return this.pendingCommits.length;
     }
 
+    /**
+     * Limpia commits pendientes
+     */
+    static clearPending(): void {
+        this.pendingCommits = [];
+        this.updateStatusBar();
+    }
 }

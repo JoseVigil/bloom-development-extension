@@ -95,6 +95,6 @@ export class IntentGenerator {
     private generateFooter(): string {
         return `---\n\n` +
                `**Nota:** Este archivo fue generado automáticamente por Bloom.\n` +
-               `Para más información, consulta la documentación en codebase.md\n`;
+               `Para más información, consulta la documentación en codebase.bl\n`;
     }
 }

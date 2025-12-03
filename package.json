@@ -2,8 +2,8 @@
   "name": "bloom-btip-plugin",
   "displayName": "Bloom BTIP",
   "description": "Plugin para preview de Markdown y generación de Technical Intent Packages",
-  "version": "1.1.0",
-  "publisher": "bloom",
+  "version": "1.1.1",
+  "publisher": "Jose Vigil",
   "engines": {
     "vscode": "^1.80.0"
   },
@@ -367,6 +367,11 @@
           "default": "free",
           "description": "Versión del plugin"
         },
+        "bloom.gitPath": {
+          "type": "string",
+          "default": "",
+          "description": "Ruta absoluta al ejecutable de Git (opcional, se detecta automáticamente)"
+        },
         "bloom.pythonPath": {
           "type": "string",
           "default": "python3",
@@ -375,7 +380,7 @@
         "bloom.useCustomCodebaseGenerator": {
           "type": "boolean",
           "default": false,
-          "description": "Usar script Python personalizado para generar codebase.md"
+          "description": "Usar script Python personalizado para generar codebase.bl"
         },
         "bloom.claudeApiKey": {
           "type": "string",
@@ -404,6 +409,7 @@
       }
     }
   },
+  "extensions.autoCheckUpdates": false,
   "scripts": {
     "vscode:prepublish": "npm run build",
     "compile": "tsc -p ./",
@@ -425,8 +431,10 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
+    "@octokit/rest": "^22.0.1",
     "@vscode/codicons": "^0.0.33",
     "punycode": "^2.3.0",
+    "simple-git": "^3.30.0",
     "uuid": "^13.0.0"
   }
 }

@@ -1,0 +1,147 @@
+
+PROJECT_HASH: 32179682989e5ad52d0ca2f734f28ce5
+Generated: 2025-11-30 10:40:13
+Total files: 93
+Total directories: 22
+======================================================================
+
+codebase/
+├── src/ [DIR]
+│   ├── bridge/ [DIR]
+│   │   └── BridgeExecutor.ts ..................... 99d343607b43ed35
+│   ├── commands/ [DIR]
+│   │   ├── addToIntent.ts ........................ cd1f6b52ed6b37e3
+│   │   ├── changeIntentStatus.ts ................. 7cce34af361e8a33
+│   │   ├── configureIntentProfile.ts ............. af42c4d5a8070025
+│   │   ├── copyContextToClipboard.ts ............. 47d1a963593bb191
+│   │   ├── createBTIPProject.ts .................. f4556410dcb200e5
+│   │   ├── createNucleusProject.ts ............... 13d80ea4d67185da
+│   │   ├── debug/ [DIR]
+│   │   │   └── debugCommands.ts .................. f914dc47de2b2200
+│   │   ├── deleteIntent.ts ....................... b1e301d330ee5fed
+│   │   ├── deleteIntentFromForm.ts ............... 0f814adfba4ee61e
+│   │   ├── duplicateIntent.ts .................... 58372ef822783f3c
+│   │   ├── editIntent.ts ......................... b758e086daab0117
+│   │   ├── generateIntent.ts ..................... 68189a5e633452dd
+│   │   ├── generateQuestions.ts .................. d8a86710d07b404f
+│   │   ├── git/ [DIR]
+│   │   │   └── gitCommands.ts .................... 410d3661ad55181b
+│   │   ├── integrateSnapshot.ts .................. c2104ba270c15f14
+│   │   ├── linkToNucleus.ts ...................... db6fa6dfdbaf47ee
+│   │   ├── manageProject.ts ...................... 822a6cc6bb9d7622
+│   │   ├── nucleus/ [DIR]
+│   │   │   └── nucleusCommands.ts ................ 724164dec7ca24ef
+│   │   ├── openFileInVSCode.ts ................... b486a52974d12ffc
+│   │   ├── openIntent.ts ......................... e08e807775ce58f1
+│   │   ├── openIntentInBrowser.ts ................ aee7517901ddfa84
+│   │   ├── openMarkdownPreview.ts ................ 6d05f58da3e2f265
+│   │   ├── profile/ [DIR]
+│   │   │   └── profileCommands.ts ................ 361b054ceeb44e1e
+│   │   ├── regenerateContext.ts .................. d967a6a2caf2a5e8
+│   │   ├── reloadIntentForm.ts ................... da64c0c83ab5af17
+│   │   ├── revealInFinder.ts ..................... 2aec5eca697abf6e
+│   │   ├── searchIntents.ts ...................... 7cce34af361e8a33
+│   │   └── submitAnswers.ts ...................... 2c2689eeeb6095d6
+│   ├── context/ [DIR]
+│   │   └── ContextCollector.ts ................... 716670d87d5d7759
+│   ├── core/ [DIR]
+│   │   ├── chromeProfileManager.ts ............... d66dbc538fb83c51
+│   │   ├── claudeApiClient.ts .................... 829159952ffde7e3
+│   │   ├── codebaseGenerator.ts .................. df0cbfeadf1020ea
+│   │   ├── contextGatherer.ts .................... b3aa249a3c67c47f
+│   │   ├── filePackager.ts ....................... 79eccce7d3f58862
+│   │   ├── gitOrchestrator.ts .................... 3ab7e7924ad90647
+│   │   ├── intentAutoSaver.ts .................... dd970079bbf35366
+│   │   ├── intentGenerator.ts .................... 856059e03433c8e9
+│   │   ├── intentSession.ts ...................... a3c92aef66ac46e0
+│   │   ├── metadataManager.ts .................... 963d1b81e8f794fb
+│   │   ├── nucleusManager.ts ..................... 401bdf28159c1ab6
+│   │   ├── pythonScriptRunner.ts ................. 263596cf72a4dd5e
+│   │   └── validator.ts .......................... 56768bae11e319a3
+│   ├── extension.ts .............................. d5b8f305f7dd8b0a
+│   ├── initialization/ [DIR]
+│   │   ├── commandRegistry.ts .................... 203086739300b587
+│   │   ├── contextInitializer.ts ................. 431f6741657eca75
+│   │   ├── criticalCommandsInitializer.ts ........ ff3f32b90337b35f
+│   │   ├── managersInitializer.ts ................ 2599f1ec6d0347b7
+│   │   └── providersInitializer.ts ............... bd21c3f0f41a116e
+│   ├── managers/ [DIR]
+│   │   ├── userManager.ts ........................ 5534afd922c3ccd0
+│   │   └── workspaceManager.ts ................... 53deedbbdbf2eb22
+│   ├── models/ [DIR]
+│   │   ├── bloomConfig.ts ........................ cc0cd20615c0d4bc
+│   │   ├── codebaseStrategy.ts ................... 50d47dc460425904
+│   │   ├── contextLayer.ts ....................... 864ce5688fc8fcc5
+│   │   └── intent.ts ............................. 287f79bab1fb89ce
+│   ├── processor/ [DIR]
+│   │   └── ArtifactProcessor.ts .................. 51d0fecbc518b0c3
+│   ├── providers/ [DIR]
+│   │   ├── intentTreeProvider.ts ................. 33b61fad1cbd6542
+│   │   ├── nucleusTreeProvider.ts ................ 63b479598500ab2f
+│   │   ├── nucleusWelcomeProvider.ts ............. bed898ade011bb02
+│   │   └── profileTreeProvider.ts ................ b4e1dcd8af0b74ca
+│   ├── strategies/ [DIR]
+│   │   ├── AndroidStrategy.ts .................... 6cd3f3eba403f273
+│   │   ├── GenericStrategy.ts .................... 38ee2b86caeffa69
+│   │   ├── IOSStrategy.ts ........................ bdfa113b3bba1e84
+│   │   ├── NucleusStrategy.ts .................... d7c8d87d5bce83aa
+│   │   ├── ProjectDetector.ts .................... 90d1bb620a99fa92
+│   │   ├── ReactStrategy.ts ...................... 811971cf4c5a0117
+│   │   ├── WebStrategy.ts ........................ ab70e8b0ab6727d5
+│   │   └── helpers.ts ............................ 7961ee952321a908
+│   ├── ui/ [DIR]
+│   │   ├── ClaudeBridgePanel.ts .................. dd255afcafce3833
+│   │   ├── intent/ [DIR]
+│   │   │   ├── intentForm.css .................... 191a11c2d74b9242
+│   │   │   ├── intentForm.html ................... 249857c7ad5e56b1
+│   │   │   ├── intentForm.js ..................... 56eae4f9a225d345
+│   │   │   └── intentFormPanel.ts ................ fa6d56f7e0fc85df
+│   │   ├── markdownPreviewPanel.ts ............... 2d05bbf9386ec958
+│   │   ├── nucleus/ [DIR]
+│   │   │   └── NucleusSetupPanel.ts .............. e0d5bbeb21606850
+│   │   ├── profile/ [DIR]
+│   │   │   ├── profileManager.css ................ 577d40f911ca4e69
+│   │   │   ├── profileManager.html ............... 6732eb9b54c59ca7
+│   │   │   ├── profileManager.js ................. 26439f8be4b5f8a1
+│   │   │   └── profileManagerPanel.ts ............ 503076c5f58a47f4
+│   │   └── welcome/ [DIR]
+│   │       ├── welcomeView.html .................. ecbeca335498631c
+│   │       └── welcomeView.ts .................... 9927f7221c39e68a
+│   └── utils/ [DIR]
+│       ├── gitExecutor.ts ........................ 84a0f867009bdf2e
+│       ├── gitManager.ts ......................... 28995ee7da9b1238
+│       ├── gitPathResolver.ts .................... 33411f45b231caad
+│       ├── github.ts ............................. f05477392e38cf16
+│       ├── githubApi.ts .......................... b9acdbe3d55a6870
+│       ├── githubOAuth.ts ........................ ec24d1ad2cec19b9
+│       ├── logger.ts ............................. 08dabcf97abe931c
+│       ├── pythonExecutor.ts ..................... 7b019abf3f49fd22
+│       ├── tokenEstimator.ts ..................... 9f9da182b056be75
+│       └── uriHelper.ts .......................... 47a9aacd8d4bf418
+├── package.json .................................. 20439c2ceeaf2fe9
+└── tsconfig.json ................................. decbe0f5479815a9
+
+======================================================================
+DIRECTORY HASHES:
+  ../ → e5f4fd79e36c5df580f5a4a48de9fff7
+  ..\src/ → 427e92a94a52d1a1760d1e5e43de4c47
+  ..\src\bridge/ → 4b454b550ee2ff5796c0de446c1f0566
+  ..\src\commands/ → 651985568903f525f7f433c96c21aff8
+  ..\src\commands\debug/ → 9894fd14a0ae1da5b0820752eb818f75
+  ..\src\commands\git/ → 8512f17d53e40d010d2cf04f9559abc8
+  ..\src\commands\nucleus/ → abb7ae260fe3a060b3e1a9c5c4720811
+  ..\src\commands\profile/ → 3b74c3aeadaee82831c02f27b32d60c9
+  ..\src\context/ → 7a9bdc77a1f82cfdb8da076b2ff7557a
+  ..\src\core/ → 8c9bc8c0836612c9b30c4be71a833504
+  ..\src\initialization/ → d79716acfcffbe16cb870f50c541d4d7
+  ..\src\managers/ → dc913fdcbc4ee64ecffefaae05373b5e
+  ..\src\models/ → d9bdfa6ce8b4dd6291cd69dd80ae30bc
+  ..\src\processor/ → 5a05a563d4fbd7b4c71e6eeb4d5bee5a
+  ..\src\providers/ → aea6feccaebd6febf359001d47dbea73
+  ..\src\strategies/ → dbf60dd282d2fe919f775f95c75c0da9
+  ..\src\ui/ → b7e97a0cf00e8b5f2e96c01d29b66696
+  ..\src\ui\intent/ → 714267ae5c51487bb36a564c0d6a5b0a
+  ..\src\ui\nucleus/ → f13052f4106684ace04a7894d863be48
+  ..\src\ui\profile/ → 5fc15a47782c49dcef406fcfabdb5d6d
+  ..\src\ui\welcome/ → 55081862807653abb7301660b761a1ea
+  ..\src\utils/ → 3c535f1890dfcb1cff1a56594ff630a4

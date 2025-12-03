@@ -1356,7 +1356,7 @@ Este documento contiene la implementación completa del sistema de gestión de c
                     async (progress) => {
                         try {
                             const workspaceFolder = session.getWorkspaceFolder();
-                            const pythonRunner = new PythonScriptRunner(context, logger);
+                            const pythonRunner = new PythonScriptRunner();
 
                             const snapshotPath = state.workflow.snapshotPath;
                             const projectRoot = workspaceFolder.uri.fsPath;

@@ -1311,13 +1311,13 @@ No utilizado actualmente. Todo en archivos locales.
 
 ## 11. Scripts Python
 
-### 11.1 generate_context.py
+### 11.1 generate_project_context.py
 
 **Propósito:** Generar contexto de proyecto para diferentes estrategias.
 
 **Uso:**
 
-    python generate_context.py --strategy=android --output=.bloom/project/
+    python generate_project_context.py --strategy=android --output=.bloom/project/
 
 **Estrategias Soportadas:**
 

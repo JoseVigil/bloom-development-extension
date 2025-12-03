@@ -812,12 +812,12 @@ export function hasNucleusLink(bloomPath: string): boolean {
 
 ---
 
-## 🐍 Script Python: `generate_context.py` Modificado
+## 🐍 Script Python: `generate_project_context.py` Modificado
 
 ### Nuevos Imports y Clase NucleusAnalyzer
 
 ```python
-# Agregar al inicio de generate_context.py
+# Agregar al inicio de generate_project_context.py
 
 # =============================================================================
 # NUCLEUS ANALYZER

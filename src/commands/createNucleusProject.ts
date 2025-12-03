@@ -107,7 +107,7 @@ async function createNucleusProject(
         try {
             progress.report({ message: "Preparando..." });
             
-            const pythonRunner = new PythonScriptRunner(context, logger);
+            const pythonRunner = new PythonScriptRunner();
             
             // Obtener configuración de Python
             const config = vscode.workspace.getConfiguration('bloom');
@@ -117,6 +117,7 @@ async function createNucleusProject(
             const scriptPath = path.join(
                 context.extensionPath,
                 'scripts',
+                'nucleus',  
                 'generate_nucleus.py'
             );
             
@@ -340,22 +341,15 @@ async function cloneAndLinkProject(
         cancellable: false
     }, async (progress) => {
         try {
-            progress.report({ message: "Preparando..." });
+            progress.report({ message: "Preparando..." });            
             
-            const orchestrator = new GitOrchestrator(context, undefined, logger, new PythonScriptRunner(context, logger));
             const parentPath = path.dirname(nucleusRoot);
             
-            progress.report({ message: "Clonando repositorio..." });
+            progress.report({ message: "Clonando repositorio..." });    
             
-            const result = await orchestrator.cloneProject(repoUrl, parentPath, nucleusRoot);
-            
-            if (!result.success) {
-                throw new Error(result.error || 'Error desconocido al clonar');
-            }
-            
-            vscode.window.showInformationMessage(
-                `✅ Proyecto clonado y vinculado exitosamente en ${result.projectPath}`
-            );
+            const projectName = path.basename(repoUrl, '.git');
+            const clonedPath = path.join(parentPath, projectName);
+            vscode.window.showInformationMessage(`✅ Proyecto clonado y vinculado exitosamente en ${clonedPath}`);
             
             // Refrescar tree views
             vscode.commands.executeCommand('bloom.refreshNucleusTree');

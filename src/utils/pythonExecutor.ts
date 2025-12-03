@@ -62,7 +62,7 @@ export class PythonExecutor {
     }
 
     /**
-     * Ejecuta generate_context.py
+     * Ejecuta generate_project_context.py
      */
     async generateContext(
         projectRoot: string,
@@ -74,7 +74,7 @@ export class PythonExecutor {
             'scripts'
         );
         
-        const scriptPath = path.join(scriptsPath, 'generate_context.py');
+        const scriptPath = path.join(scriptsPath, 'generate_project_context.py');
         
         const args = [
             `--strategy=${strategy}`,

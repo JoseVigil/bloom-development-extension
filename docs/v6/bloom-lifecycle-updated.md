@@ -21,7 +21,7 @@ La estructura .bloom se genera según la estrategia del proyecto:
 | nucleus | Proyecto organizacional (Centro de conocimiento) |
 | generic | Proyecto genérico |
 
-Uso: `python generate_context.py --strategy=android`
+Uso: `python generate_project_context.py --strategy=android`
 
 ---
 

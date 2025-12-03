@@ -45,7 +45,7 @@ export class MetadataManager {
             version: options.version,
             files: {
                 intentFile: 'intent.bl',
-                codebaseFile: options.version === 'free' ? 'codebase.md' : 'codebase.tar.gz',
+                codebaseFile: options.version === 'free' ? 'codebase.bl' : 'codebase.tar.gz',
                 filesIncluded: options.files.map(f => f.fsPath),
                 filesCount: options.filesCount,
                 totalSize: await this.calculateTotalSize(options.files)
