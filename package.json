@@ -414,11 +414,15 @@
     "vscode:prepublish": "npm run build",
     "compile": "tsc -p ./",
     "copy-assets": "node -e \"require('fs').cpSync('src/ui', 'out/ui', {recursive: true})\"",
+    "build:bridge": "cd src/bridge/c++ && chmod +x build.sh && ./build.sh",
+    "prebuild": "npm run build:bridge",
     "build": "npm run compile && npm run copy-assets",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src --ext ts",
-    "test": "node ./out/test/runTest.js"
+    "test": "node ./out/test/runTest.js",
+    "clean": "rm -rf out && rm -rf src/bridge/bin",
+    "rebuild": "npm run clean && npm run build"
   },
   "devDependencies": {
     "@types/node": "^18.19.130",
