@@ -1,232 +1,221 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { spawn } from 'child_process';
-
-export interface BridgeResult {
-    success: boolean;
-    conversationId?: string;
-    outputPath?: string;
-    questions?: string[];
-    error?: string;
-}
+import * as fs from 'fs';
+import { spawn, ChildProcess } from 'child_process';
 
 export class BridgeExecutor {
-    private config = vscode.workspace.getConfiguration('claudeBridge');
-    private outputChannel: vscode.OutputChannel;
+    private process: ChildProcess | null = null;
+    private extensionPath: string;
 
-    constructor() {
-        this.outputChannel = vscode.window.createOutputChannel('Claude Bridge');
+    constructor(context: vscode.ExtensionContext) {
+        this.extensionPath = context.extensionPath;
     }
 
-    async sendMessage(prompt: string, contextFiles: string[]): Promise<BridgeResult> {
-        this.outputChannel.show();
-        this.outputChannel.appendLine('🚀 Enviando mensaje a Claude...');
-
-        const scriptPath = this.getScriptPath();
-        const pythonPath = this.config.get<string>('pythonPath', 'python3');
-
-        // Crear archivo temporal con prompt
-        const tempDir = this.getTempDir();
-        const promptFile = path.join(tempDir, 'prompt.txt');
-        const contextFile = path.join(tempDir, 'context.json');
-
-        await vscode.workspace.fs.writeFile(
-            vscode.Uri.file(promptFile),
-            Buffer.from(prompt, 'utf-8')
+    /**
+     * Obtiene la ruta del binario según la plataforma
+     */
+    private getBinaryPath(): string {
+        const platform = process.platform;
+        
+        // Mapeo de plataformas
+        const platformMap: { [key: string]: string } = {
+            'win32': 'win32',
+            'darwin': 'darwin',
+            'linux': 'linux'
+        };
+        
+        const platformDir = platformMap[platform];
+        if (!platformDir) {
+            throw new Error(`Plataforma no soportada: ${platform}`);
+        }
+        
+        // Ruta al binario en el instalador
+        const binDir = path.join(
+            this.extensionPath, 
+            'installer', 
+            'native', 
+            'bin', 
+            platformDir
         );
+        
+        const binaryName = platform === 'win32' ? 'native_bridge.exe' : 'native_bridge';
+        const binaryPath = path.join(binDir, binaryName);
 
-        await vscode.workspace.fs.writeFile(
-            vscode.Uri.file(contextFile),
-            Buffer.from(JSON.stringify({ files: contextFiles }), 'utf-8')
-        );
-
-        // Ejecutar script
-        const args = [
-            scriptPath,
-            'send',
-            '--prompt', promptFile,
-            '--context', contextFile
-        ];
-
-        if (this.config.get<boolean>('headlessMode')) {
-            args.push('--headless');
+        // Verificar que existe
+        if (!fs.existsSync(binaryPath)) {
+            throw new Error(
+                `Binario no encontrado: ${binaryPath}\n` +
+                `Ejecuta: npm run build:bridge para compilar los binarios`
+            );
         }
 
-        return new Promise((resolve) => {
-            const process = spawn(pythonPath, args);
+        // En Unix, verificar permisos de ejecución
+        if (platform !== 'win32') {
+            try {
+                fs.accessSync(binaryPath, fs.constants.X_OK);
+            } catch {
+                // Intentar dar permisos
+                fs.chmodSync(binaryPath, 0o755);
+            }
+        }
 
-            let stdout = '';
-            let stderr = '';
+        return binaryPath;
+    }
 
-            process.stdout.on('data', (data) => {
-                const text = data.toString();
-                stdout += text;
-                this.outputChannel.append(text);
-            });
+    /**
+     * Inicia el bridge nativo
+     */
+    public async start(): Promise<void> {
+        if (this.process) {
+            throw new Error('Bridge ya está en ejecución');
+        }
 
-            process.stderr.on('data', (data) => {
-                stderr += data.toString();
-            });
+        const binaryPath = this.getBinaryPath();
 
-            process.on('close', (code) => {
-                if (code === 0) {
-                    // Extraer conversation ID del stdout
-                    const match = stdout.match(/Conversation ID: ([a-f0-9-]+)/);
-                    const conversationId = match ? match[1] : undefined;
+        return new Promise((resolve, reject) => {
+            try {
+                this.process = spawn(binaryPath, [], {
+                    stdio: ['pipe', 'pipe', 'pipe'],
+                    windowsHide: true // Ocultar ventana en Windows
+                });
 
-                    resolve({
-                        success: true,
-                        conversationId
-                    });
-                } else {
-                    resolve({
-                        success: false,
-                        error: stderr
-                    });
-                }
-            });
+                // Manejar stderr
+                this.process.stderr?.on('data', (data) => {
+                    console.error(`[Bridge Error]: ${data.toString()}`);
+                });
+
+                // Manejar cierre inesperado
+                this.process.on('exit', (code, signal) => {
+                    console.log(`[Bridge] Proceso terminado. Código: ${code}, Señal: ${signal}`);
+                    this.process = null;
+                });
+
+                this.process.on('error', (error) => {
+                    console.error(`[Bridge] Error al iniciar: ${error.message}`);
+                    reject(error);
+                });
+
+                // Dar tiempo para que se inicie el servidor TCP
+                setTimeout(() => {
+                    if (this.process && !this.process.killed) {
+                        console.log('[Bridge] Iniciado correctamente');
+                        resolve();
+                    } else {
+                        reject(new Error('El bridge falló al iniciar'));
+                    }
+                }, 1000);
+
+            } catch (error) {
+                reject(error);
+            }
         });
     }
 
-    async fetchArtifact(conversationId: string): Promise<BridgeResult> {
-        this.outputChannel.show();
-        this.outputChannel.appendLine(`📥 Descargando artifact: ${conversationId}`);
-
-        const scriptPath = this.getScriptPath();
-        const pythonPath = this.config.get<string>('pythonPath', 'python3');
-
-        const tempDir = this.getTempDir();
-        const outputPath = path.join(tempDir, `artifact_${conversationId}.md`);
-
-        const args = [
-            scriptPath,
-            'fetch',
-            conversationId,
-            '--output', outputPath
-        ];
-
-        if (this.config.get<boolean>('headlessMode')) {
-            args.push('--headless');
+    /**
+     * Detiene el bridge nativo
+     */
+    public stop(): void {
+        if (this.process && !this.process.killed) {
+            this.process.kill();
+            this.process = null;
+            console.log('[Bridge] Detenido');
         }
-
-        return new Promise((resolve) => {
-            const process = spawn(pythonPath, args);
-
-            let stdout = '';
-
-            process.stdout.on('data', (data) => {
-                const text = data.toString();
-                stdout += text;
-                this.outputChannel.append(text);
-            });
-
-            process.on('close', (code) => {
-                if (code === 0) {
-                    resolve({
-                        success: true,
-                        outputPath
-                    });
-                } else {
-                    resolve({
-                        success: false,
-                        error: 'Failed to fetch artifact'
-                    });
-                }
-            });
-        });
     }
 
-    async parseQuestions(conversationId: string): Promise<BridgeResult> {
-        this.outputChannel.show();
-        this.outputChannel.appendLine(`❓ Parseando preguntas: ${conversationId}`);
-
-        const scriptPath = this.getScriptPath();
-        const pythonPath = this.config.get<string>('pythonPath', 'python3');
-
-        const args = [
-            scriptPath,
-            'parse-questions',
-            conversationId
-        ];
-
-        if (this.config.get<boolean>('headlessMode')) {
-            args.push('--headless');
+    /**
+     * Envía un mensaje al bridge a través de stdin
+     */
+    public sendMessage(message: any): boolean {
+        if (!this.process || this.process.killed) {
+            console.error('[Bridge] No está en ejecución');
+            return false;
         }
 
-        return new Promise((resolve) => {
-            const process = spawn(pythonPath, args);
+        try {
+            const json = JSON.stringify(message);
+            const buffer = Buffer.alloc(4 + json.length);
+            
+            // Escribir longitud (4 bytes, little-endian)
+            buffer.writeUInt32LE(json.length, 0);
+            // Escribir mensaje
+            buffer.write(json, 4);
 
-            let stdout = '';
+            return this.process.stdin?.write(buffer) ?? false;
+        } catch (error) {
+            console.error(`[Bridge] Error al enviar mensaje: ${error}`);
+            return false;
+        }
+    }
 
-            process.stdout.on('data', (data) => {
-                const text = data.toString();
-                stdout += text;
-                this.outputChannel.append(text);
-            });
+    /**
+     * Lee mensajes del bridge desde stdout
+     */
+    public onMessage(callback: (message: any) => void): void {
+        if (!this.process) {
+            throw new Error('Bridge no está en ejecución');
+        }
 
-            process.on('close', async (code) => {
-                if (code === 0) {
-                    // Leer archivo JSON generado
-                    const tempDir = this.getTempDir();
-                    const jsonPath = path.join(
-                        tempDir, 
-                        'claude_bridge_data',
-                        `questions_${conversationId}.json`
-                    );
+        let buffer = Buffer.alloc(0);
+
+        this.process.stdout?.on('data', (chunk: Buffer) => {
+            buffer = Buffer.concat([buffer, chunk]);
+
+            while (buffer.length >= 4) {
+                // Leer longitud del mensaje
+                const messageLength = buffer.readUInt32LE(0);
+
+                if (buffer.length >= 4 + messageLength) {
+                    // Extraer mensaje completo
+                    const messageBuffer = buffer.slice(4, 4 + messageLength);
+                    buffer = buffer.slice(4 + messageLength);
 
                     try {
-                        const content = await vscode.workspace.fs.readFile(
-                            vscode.Uri.file(jsonPath)
-                        );
-                        const data = JSON.parse(content.toString());
-
-                        resolve({
-                            success: true,
-                            questions: data.questions
-                        });
+                        const message = JSON.parse(messageBuffer.toString());
+                        callback(message);
                     } catch (error) {
-                        resolve({
-                            success: false,
-                            error: 'Failed to read questions file'
-                        });
+                        console.error('[Bridge] Error al parsear mensaje:', error);
                     }
                 } else {
-                    resolve({
-                        success: false,
-                        error: 'Failed to parse questions'
-                    });
+                    // Mensaje incompleto, esperar más datos
+                    break;
                 }
-            });
+            }
         });
     }
 
-    private getScriptPath(): string {
-        const configured = this.config.get<string>('bridgeScriptPath', '');
-        if (configured) {
-            return configured;
-        }
-
-        // Buscar en directorio de la extensión
-        const extensionPath = vscode.extensions.getExtension('your-publisher-name.claude-vscode-bridge')?.extensionPath;
-        if (extensionPath) {
-            return path.join(
-                extensionPath, 
-                'scripts', 
-                'web-bridge',
-                'claude_bridge.py'
-            );
-        }
-
-        throw new Error('Bridge script path not configured');
-    }
-
-    private getTempDir(): string {
-        if (vscode.workspace.workspaceFolders) {
-            return path.join(
-                vscode.workspace.workspaceFolders[0].uri.fsPath,
-                '.claude-bridge'
-            );
-        }
-        return path.join(require('os').tmpdir(), 'claude-bridge');
+    /**
+     * Verifica si el bridge está en ejecución
+     */
+    public isRunning(): boolean {
+        return this.process !== null && !this.process.killed;
     }
 }
+
+// Ejemplo de uso en extension.ts:
+/*
+import { BridgeExecutor } from './bridge/BridgeExecutor';
+
+export async function activate(context: vscode.ExtensionContext) {
+    const bridge = new BridgeExecutor(context);
+    
+    try {
+        await bridge.start();
+        
+        // Escuchar mensajes
+        bridge.onMessage((message) => {
+            console.log('Mensaje recibido:', message);
+        });
+        
+        // Enviar mensaje
+        bridge.sendMessage({ action: 'test', data: 'hello' });
+        
+    } catch (error) {
+        vscode.window.showErrorMessage(`Error al iniciar bridge: ${error}`);
+    }
+    
+    // Limpiar al desactivar
+    context.subscriptions.push({
+        dispose: () => bridge.stop()
+    });
+}
+*/

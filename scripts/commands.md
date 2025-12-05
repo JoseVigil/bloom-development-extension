@@ -1,13 +1,19 @@
 projects generate_project_context.py 
 
-
 python /c/repos/bloom-videos/bloom-development-extension/scripts/projects/generate_project_context.py --strategy=android --root=/c/TEMP/tmp/dummy
 
 --hash /c/repos/bloom-videos/bloom-development-extension/tree/hash\_tree.txt /c/repos/bloom-videos/bloom-development-extension/src /c/repos/bloom-videos/bloom-development-extension/package.json /c/repos/bloom-videos/bloom-development-extension/tsconfig.json
 
 tree\_hash.py
 
-python /c/repos/bloom-videos/bloom-development-extension/scripts/tree/generate\_tree\_hash.py --hash /c/repos/bloom-videos/bloom-development-extension/tree/hash\_tree.txt /c/repos/bloom-videos/bloom-development-extension/src /c/repos/bloom-videos/bloom-development-extension/package.json /c/repos/bloom-videos/bloom-development-extension/tsconfig.json
+python generate_tree.py --hash hash_tree.txt src package.json tsconfig.json
+
+python generate_tree.py --hash --json snapshot.txt src package.json tsconfig.json
+
+python generate_tree.py simple_tree.txt src package.json
+
+python generate_tree.py bridge_tree.txt src installer package.json
+
 
 tree gzip json
 

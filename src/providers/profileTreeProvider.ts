@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { Logger } from '../utils/logger';
 import { ChromeProfileManager, ChromeProfile } from '../core/chromeProfileManager';
 
+
 export class ProfileTreeProvider implements vscode.TreeDataProvider<ProfileTreeItem> {
     private static instance: ProfileTreeProvider | undefined;
 

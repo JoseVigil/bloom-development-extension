@@ -3,3 +3,9 @@ dist
 node_modules
 .vscode-test/
 *.vsix
+
+# BTIP Explorer Webview
+webview/btip-explorer/build/
+webview/btip-explorer/node_modules/
+webview/btip-explorer/.svelte-kit/
+webview/btip-explorer/package-lock.json

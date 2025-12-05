@@ -411,18 +411,24 @@
   },
   "extensions.autoCheckUpdates": false,
   "scripts": {
+    "postinstall": "node scripts/bridge/postinstall.js",
     "vscode:prepublish": "npm run build",
     "compile": "tsc -p ./",
     "copy-assets": "node -e \"require('fs').cpSync('src/ui', 'out/ui', {recursive: true})\"",
     "build:bridge": "cd src/bridge/c++ && chmod +x build.sh && ./build.sh",
-    "prebuild": "npm run build:bridge",
+    "build:bridge:all": "npm run build:bridge",
+    "build:webview": "cd webview/btip-explorer && npm install && npm run build",
+    "prebuild": "npm run build:bridge && npm run build:webview",
     "build": "npm run compile && npm run copy-assets",
     "watch": "tsc -watch -p ./",
+    "watch:webview": "cd webview/btip-explorer && npm run dev",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src --ext ts",
     "test": "node ./out/test/runTest.js",
-    "clean": "rm -rf out && rm -rf src/bridge/bin",
-    "rebuild": "npm run clean && npm run build"
+    "clean": "rimraf out installer/native/bin/* src/bridge/bin webview/btip-explorer/build",
+    "clean:bridge": "rimraf installer/native/bin/* src/bridge/c++/nlohmann",
+    "rebuild": "npm run clean && npm run build",
+    "package:installer": "npm run build:bridge:all && node installer/scripts/build.js"
   },
   "devDependencies": {
     "@types/node": "^18.19.130",

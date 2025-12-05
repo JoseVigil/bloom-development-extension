@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bloom Nucleus Installer</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #333;
+      overflow: hidden;
+    }
+
+    .container {
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .screen {
+      display: none;
+      flex: 1;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 40px;
+      animation: fadeIn 0.3s ease-in;
+    }
+
+    .screen.active {
+      display: flex;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .card {
+      background: white;
+      border-radius: 20px;
+      padding: 50px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      max-width: 600px;
+      width: 100%;
+      text-align: center;
+    }
+
+    .logo {
+      width: 100px;
+      height: 100px;
+      margin: 0 auto 30px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 48px;
+      color: white;
+      font-weight: bold;
+    }
+
+    h1 {
+      font-size: 32px;
+      margin-bottom: 15px;
+      color: #2d3748;
+    }
+
+    p {
+      color: #718096;
+      line-height: 1.6;
+      margin-bottom: 30px;
+    }
+
+    .button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 15px 40px;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+    }
+
+    .button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .checkbox-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 20px 0;
+      text-align: left;
+    }
+
+    .checkbox-container input[type="checkbox"] {
+      width: 20px;
+      height: 20px;
+      margin-right: 10px;
+      cursor: pointer;
+    }
+
+    .checkbox-container label {
+      cursor: pointer;
+      color: #4a5568;
+    }
+
+    .dev-mode {
+      margin-top: 20px;
+    }
+
+    .progress-container {
+      width: 100%;
+      margin: 30px 0;
+    }
+
+    .progress-bar {
+      width: 100%;
+      height: 8px;
+      background: #e2e8f0;
+      border-radius: 10px;
+      overflow: hidden;
+      margin-bottom: 15px;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+      transition: width 0.3s ease;
+      width: 0%;
+    }
+
+    .progress-text {
+      color: #4a5568;
+      font-size: 14px;
+    }
+
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid #e2e8f0;
+      border-top-color: #667eea;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 20px auto;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .system-info {
+      background: #f7fafc;
+      border-radius: 10px;
+      padding: 20px;
+      margin: 20px 0;
+      text-align: left;
+    }
+
+    .system-info-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .system-info-item:last-child {
+      border-bottom: none;
+    }
+
+    .system-info-label {
+      font-weight: 600;
+      color: #4a5568;
+    }
+
+    .system-info-value {
+      color: #718096;
+    }
+
+    .success-icon {
+      width: 80px;
+      height: 80px;
+      margin: 0 auto 30px;
+      background: #48bb78;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 48px;
+      color: white;
+    }
+
+    .error-icon {
+      width: 80px;
+      height: 80px;
+      margin: 0 auto 30px;
+      background: #f56565;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 48px;
+      color: white;
+    }
+
+    .next-steps {
+      text-align: left;
+      margin: 20px 0;
+    }
+
+    .next-steps ol {
+      padding-left: 20px;
+    }
+
+    .next-steps li {
+      margin: 10px 0;
+      color: #4a5568;
+    }
+
+    .button-group {
+      display: flex;
+      gap: 15px;
+      justify-content: center;
+      margin-top: 20px;
+    }
+
+    .button-secondary {
+      background: #e2e8f0;
+      color: #4a5568;
+    }
+
+    .button-secondary:hover {
+      background: #cbd5e0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Welcome Screen -->
+    <div class="screen active" id="welcome-screen">
+      <div class="card">
+        <div class="logo">B</div>
+        <h1>Welcome to Bloom Nucleus</h1>
+        <p>
+          This installer will set up the complete Bloom Nucleus System on your machine,
+          including the VSCode plugin, Native Host bridge, and Chrome extension support.
+        </p>
+        <div class="system-info" id="system-info">
+          <div class="system-info-item">
+            <span class="system-info-label">Platform:</span>
+            <span class="system-info-value" id="platform-value">Loading...</span>
+          </div>
+          <div class="system-info-item">
+            <span class="system-info-label">VSCode:</span>
+            <span class="system-info-value" id="vscode-value">Checking...</span>
+          </div>
+        </div>
+        <div class="checkbox-container">
+          <input type="checkbox" id="terms-checkbox">
+          <label for="terms-checkbox">I accept the terms of use and privacy policy</label>
+        </div>
+        <div class="checkbox-container dev-mode">
+          <input type="checkbox" id="dev-mode-checkbox">
+          <label for="dev-mode-checkbox">Development mode (symlink plugin source)</label>
+        </div>
+        <button class="button" id="start-button" disabled>Begin Installation</button>
+      </div>
+    </div>
+
+    <!-- Installation Screen -->
+    <div class="screen" id="installation-screen">
+      <div class="card">
+        <div class="logo">B</div>
+        <h1>Installing Bloom Nucleus</h1>
+        <p>Please wait while we set up your environment...</p>
+        <div class="progress-container">
+          <div class="progress-bar">
+            <div class="progress-fill" id="progress-fill"></div>
+          </div>
+          <div class="progress-text" id="progress-text">Preparing installation...</div>
+        </div>
+        <div class="spinner"></div>
+      </div>
+    </div>
+
+    <!-- Success Screen -->
+    <div class="screen" id="success-screen">
+      <div class="card">
+        <div class="success-icon">✓</div>
+        <h1>Installation Complete!</h1>
+        <p>Bloom Nucleus has been successfully installed on your system.</p>
+        <div class="next-steps">
+          <h3>Next Steps:</h3>
+          <ol>
+            <li>Open VSCode to activate the Bloom Nucleus plugin</li>
+            <li>Open Chrome and navigate to <code>chrome://extensions/</code></li>
+            <li>Enable "Developer mode" and click "Load unpacked"</li>
+            <li>Select the extension folder at: <span id="extension-path"></span></li>
+          </ol>
+        </div>
+        <div class="button-group">
+          <button class="button button-secondary" id="open-chrome-button">Open Chrome Extensions</button>
+          <button class="button" id="open-vscode-button">Open VSCode</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Error Screen -->
+    <div class="screen" id="error-screen">
+      <div class="card">
+        <div class="error-icon">✕</div>
+        <h1>Installation Failed</h1>
+        <p id="error-message">An error occurred during installation.</p>
+        <button class="button" id="retry-button">Retry Installation</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let systemInfo = null;
+
+    // Initialize
+    async function init() {
+      systemInfo = await window.bloomAPI.getSystemInfo();
+      
+      document.getElementById('platform-value').textContent = 
+        systemInfo.platform === 'win32' ? 'Windows' :
+        systemInfo.platform === 'darwin' ? 'macOS' :
+        'Linux';
+      
+      document.getElementById('vscode-value').textContent = 
+        systemInfo.vsCodeInstalled ? 'Installed ✓' : 'Not Found ✗';
+
+      if (systemInfo.isDevMode) {
+        document.getElementById('dev-mode-checkbox').checked = true;
+      }
+    }
+
+    // Terms checkbox handling
+    document.getElementById('terms-checkbox').addEventListener('change', (e) => {
+      document.getElementById('start-button').disabled = !e.target.checked;
+    });
+
+    // Start installation
+    document.getElementById('start-button').addEventListener('click', async () => {
+      const devMode = document.getElementById('dev-mode-checkbox').checked;
+      showScreen('installation-screen');
+      
+      window.bloomAPI.onInstallationProgress((data) => {
+        const percentage = (data.step / data.total) * 100;
+        document.getElementById('progress-fill').style.width = percentage + '%';
+        document.getElementById('progress-text').textContent = 
+          `Step ${data.step}/${data.total}: ${data.message}`;
+      });
+
+      const result = await window.bloomAPI.startInstallation({ devMode });
+      
+      if (result.success) {
+        document.getElementById('extension-path').textContent = systemInfo.paths.chromeExtDir;
+        showScreen('success-screen');
+      } else {
+        document.getElementById('error-message').textContent = 
+          `Error: ${result.error}`;
+        showScreen('error-screen');
+      }
+    });
+
+    // Success screen buttons
+    document.getElementById('open-chrome-button').addEventListener('click', () => {
+      window.bloomAPI.openChromeExtensions();
+    });
+
+    document.getElementById('open-vscode-button').addEventListener('click', () => {
+      window.bloomAPI.openVSCode();
+    });
+
+    // Retry button
+    document.getElementById('retry-button').addEventListener('click', () => {
+      showScreen('welcome-screen');
+    });
+
+    // Screen management
+    function showScreen(screenId) {
+      document.querySelectorAll('.screen').forEach(screen => {
+        screen.classList.remove('active');
+      });
+      document.getElementById(screenId).classList.add('active');
+    }
+
+    // Start initialization
+    init();
+  </script>
+</body>
+</html>
