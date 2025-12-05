@@ -52,16 +52,16 @@ compile_windows() {
     
     if command -v x86_64-w64-mingw32-g++ &> /dev/null; then
         x86_64-w64-mingw32-g++ -std=c++20 -I. "$SRC_FILE" \
-            -o "$INSTALLER_NATIVE/win32/bloom-host.exe" \
+            -o "$INSTALLER_NATIVE/win32/native_bridge.exe" \
             -lws2_32 -static-libgcc -static-libstdc++ \
             -Wl,--subsystem,console
         
-        if [ -f "$INSTALLER_NATIVE/win32/bloom-host.exe" ]; then
-            SIZE=$(ls -lh "$INSTALLER_NATIVE/win32/bloom-host.exe" | awk '{print $5}')
-            echo -e "${GREEN}✓ Windows: bloom-host.exe creado (${SIZE})${NC}"
-            echo -e "  � $INSTALLER_NATIVE/win32/bloom-host.exe"
+        if [ -f "$INSTALLER_NATIVE/win32/native_bridge.exe" ]; then
+            SIZE=$(ls -lh "$INSTALLER_NATIVE/win32/native_bridge.exe" | awk '{print $5}')
+            echo -e "${GREEN}✓ Windows: native_bridge.exe creado (${SIZE})${NC}"
+            echo -e "  � $INSTALLER_NATIVE/win32/native_bridge.exe"
         else
-            echo -e "${RED}❌ Error al crear bloom-host.exe${NC}"
+            echo -e "${RED}❌ Error al crear native_bridge.exe${NC}"
             return 1
         fi
     else
@@ -79,9 +79,9 @@ compile_macos() {
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     
     # Archivos temporales
-    TEMP_ARM="$INSTALLER_NATIVE/darwin/bloom-host_arm"
-    TEMP_X86="$INSTALLER_NATIVE/darwin/bloom-host_x86"
-    FINAL_BIN="$INSTALLER_NATIVE/darwin/bloom-host"
+    TEMP_ARM="$INSTALLER_NATIVE/darwin/native_bridge_arm"
+    TEMP_X86="$INSTALLER_NATIVE/darwin/native_bridge_x86"
+    FINAL_BIN="$INSTALLER_NATIVE/darwin/native_bridge"
     
     # Compilar arm64
     echo "  → Compilando arm64..."
@@ -99,8 +99,8 @@ compile_macos() {
     # Verificar
     if [ -f "$FINAL_BIN" ]; then
         SIZE=$(ls -lh "$FINAL_BIN" | awk '{print $5}')
-        echo -e "${GREEN}✓ macOS: bloom-host creado (${SIZE})${NC}"
-        echo -e "  � $INSTALLER_NATIVE/darwin/bloom-host"
+        echo -e "${GREEN}✓ macOS: native_bridge creado (${SIZE})${NC}"
+        echo -e "  � $INSTALLER_NATIVE/darwin/native_bridge"
         echo -e "  �️  $(lipo -info "$FINAL_BIN" | cut -d: -f3)"
         
         # Limpiar temporales
@@ -120,15 +120,15 @@ compile_linux() {
     
     if command -v g++ &> /dev/null; then
         g++ -std=c++20 -I. "$SRC_FILE" \
-            -o "$INSTALLER_NATIVE/linux/bloom-host" \
+            -o "$INSTALLER_NATIVE/linux/native_bridge" \
             -lpthread -static-libgcc -static-libstdc++
         
-        chmod +x "$INSTALLER_NATIVE/linux/bloom-host"
+        chmod +x "$INSTALLER_NATIVE/linux/native_bridge"
         
-        if [ -f "$INSTALLER_NATIVE/linux/bloom-host" ]; then
-            SIZE=$(ls -lh "$INSTALLER_NATIVE/linux/bloom-host" | awk '{print $5}')
-            echo -e "${GREEN}✓ Linux: bloom-host creado (${SIZE})${NC}"
-            echo -e "  � $INSTALLER_NATIVE/linux/bloom-host"
+        if [ -f "$INSTALLER_NATIVE/linux/native_bridge" ]; then
+            SIZE=$(ls -lh "$INSTALLER_NATIVE/linux/native_bridge" | awk '{print $5}')
+            echo -e "${GREEN}✓ Linux: native_bridge creado (${SIZE})${NC}"
+            echo -e "  � $INSTALLER_NATIVE/linux/native_bridge"
         else
             echo -e "${RED}❌ Error al crear binario Linux${NC}"
             return 1
@@ -164,14 +164,14 @@ echo "  $INSTALLER_NATIVE/"
 echo ""
 
 # Listar todos los binarios creados
-if [ -f "$INSTALLER_NATIVE/win32/bloom-host.exe" ]; then
-    echo -e "  ${GREEN}✓${NC} win32/bloom-host.exe"
+if [ -f "$INSTALLER_NATIVE/win32/native_bridge.exe" ]; then
+    echo -e "  ${GREEN}✓${NC} win32/native_bridge.exe"
 fi
-if [ -f "$INSTALLER_NATIVE/darwin/bloom-host" ]; then
-    echo -e "  ${GREEN}✓${NC} darwin/bloom-host"
+if [ -f "$INSTALLER_NATIVE/darwin/native_bridge" ]; then
+    echo -e "  ${GREEN}✓${NC} darwin/native_bridge"
 fi
-if [ -f "$INSTALLER_NATIVE/linux/bloom-host" ]; then
-    echo -e "  ${GREEN}✓${NC} linux/bloom-host"
+if [ -f "$INSTALLER_NATIVE/linux/native_bridge" ]; then
+    echo -e "  ${GREEN}✓${NC} linux/native_bridge"
 fi
 
 echo ""
