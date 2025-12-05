@@ -8,17 +8,17 @@ const platform = process.platform;
 const home = process.env.HOME || process.env.USERPROFILE;
 
 const paths = {
-  bloomDir: platform === 'win32'
-    ? path.join(process.env.APPDATA, 'Bloom')
+  hostInstallDir: platform === 'win32' 
+    ? 'C:\\Program Files\\BloomNucleus\\native'
     : platform === 'darwin'
-    ? path.join(home, 'Library', 'Application Support', 'Bloom')
-    : path.join(home, '.config', 'Bloom'),
+    ? path.join('/usr', 'local', 'bin', 'bloom-nucleus')
+    : path.join('/usr', 'local', 'bin', 'bloom-nucleus'),
   
-  nativeHost: platform === 'win32'
-    ? path.join(process.env.APPDATA, 'Bloom', 'native-host')
+  configDir: platform === 'win32'
+    ? path.join(process.env.LOCALAPPDATA, 'BloomNucleus')
     : platform === 'darwin'
-    ? path.join(home, 'Library', 'Application Support', 'Bloom', 'native-host')
-    : path.join(home, '.config', 'Bloom', 'native-host'),
+    ? path.join(home, '.config', 'BloomNucleus')
+    : path.join(home, '.config', 'BloomNucleus'),
   
   chromeExt: platform === 'win32'
     ? path.join(process.env.APPDATA, 'Bloom', 'chrome-extension')
@@ -39,11 +39,11 @@ console.log('\n🔍 Validando instalación de Bloom Nucleus...\n');
 
 let allGood = true;
 
-// 1. Directorio principal
-allGood &= check('Directorio Bloom', fs.existsSync(paths.bloomDir), paths.bloomDir);
+// 1. Directorio de configuración
+allGood &= check('Directorio de configuración', fs.existsSync(paths.configDir), paths.configDir);
 
 // 2. Config
-const configPath = path.join(paths.bloomDir, 'config.json');
+const configPath = path.join(paths.configDir, 'config.json');
 allGood &= check('Archivo de configuración', fs.existsSync(configPath), configPath);
 
 if (fs.existsSync(configPath)) {
@@ -53,28 +53,28 @@ if (fs.existsSync(configPath)) {
   console.log('   🔧 Modo Dev:', config.devMode ? 'Sí' : 'No');
 }
 
-// 3. Native Host
-allGood &= check('Directorio Native Host', fs.existsSync(paths.nativeHost), paths.nativeHost);
+// 3. Native Host Directory
+allGood &= check('Directorio Native Host', fs.existsSync(paths.hostInstallDir), paths.hostInstallDir);
 
 const binary = platform === 'win32' ? 'bloom-host.exe' : 'bloom-host';
-const binaryPath = path.join(paths.nativeHost, binary);
+const binaryPath = path.join(paths.hostInstallDir, binary);
 allGood &= check('Binario Native Host', fs.existsSync(binaryPath), binaryPath);
 
-const manifestPath = path.join(paths.nativeHost, 'manifest.json');
+const manifestPath = path.join(paths.hostInstallDir, 'com.bloom.nucleus.bridge.json');
 allGood &= check('Manifest Native Host', fs.existsSync(manifestPath), manifestPath);
 
 // 4. Registro/Manifest del sistema
 if (platform === 'win32') {
   try {
-    execSync('reg query "HKCU\\Software\\Google\\Chrome\\NativeMessagingHosts\\com.bloom.nucleus.host"', { stdio: 'ignore' });
+    execSync('reg query "HKCU\\Software\\Google\\Chrome\\NativeMessagingHosts\\com.bloom.nucleus.bridge"', { stdio: 'ignore' });
     allGood &= check('Registro Windows', true);
   } catch {
     allGood &= check('Registro Windows', false);
   }
 } else {
   const systemManifestPath = platform === 'darwin'
-    ? path.join(home, 'Library', 'Application Support', 'Google', 'Chrome', 'NativeMessagingHosts', 'com.bloom.nucleus.host.json')
-    : path.join(home, '.config', 'google-chrome', 'NativeMessagingHosts', 'com.bloom.nucleus.host.json');
+    ? path.join(home, 'Library', 'Application Support', 'Google', 'Chrome', 'NativeMessagingHosts', 'com.bloom.nucleus.bridge.json')
+    : path.join(home, '.config', 'google-chrome', 'NativeMessagingHosts', 'com.bloom.nucleus.bridge.json');
   
   allGood &= check('Manifest del sistema', fs.existsSync(systemManifestPath), systemManifestPath);
 }

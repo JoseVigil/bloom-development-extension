@@ -266,5 +266,16 @@ async function downloadClaudeArtifact(payload) {
   return result[0]?.result;
 }
 
+nativePort.onMessage.addListener((message) => {
+  // Echo test
+  if (message.test) {
+    sendToHost({ echo: message.test, received: true });
+    console.log('Echo test:', message);
+    return;
+  }
+  
+  handleHostMessage(message);
+});
+
 // Initialize connection on startup
 connectToNativeHost();
