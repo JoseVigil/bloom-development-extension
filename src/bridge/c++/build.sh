@@ -9,7 +9,7 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-echo -e "${YELLOW}🔧 Building Native Bridge for All Platforms${NC}"
+echo -e "${YELLOW}� Building Native Bridge for All Platforms${NC}"
 echo "========================================================="
 
 # Detectar directorio del script
@@ -29,7 +29,7 @@ mkdir -p "$INSTALLER_NATIVE/linux"
 
 # Descargar json.hpp si no existe
 echo ""
-echo -e "${YELLOW}📦 Verificando dependencias...${NC}"
+echo -e "${YELLOW}� Verificando dependencias...${NC}"
 if [ ! -d "$HEADER_DIR" ]; then
     mkdir -p "$HEADER_DIR"
 fi
@@ -47,7 +47,7 @@ fi
 compile_windows() {
     echo ""
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${YELLOW}🪟  Compilando para Windows x86_64...${NC}"
+    echo -e "${YELLOW}�  Compilando para Windows x86_64...${NC}"
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     
     if command -v x86_64-w64-mingw32-g++ &> /dev/null; then
@@ -59,7 +59,7 @@ compile_windows() {
         if [ -f "$INSTALLER_NATIVE/win32/native_bridge.exe" ]; then
             SIZE=$(ls -lh "$INSTALLER_NATIVE/win32/native_bridge.exe" | awk '{print $5}')
             echo -e "${GREEN}✓ Windows: native_bridge.exe creado (${SIZE})${NC}"
-            echo -e "  📂 $INSTALLER_NATIVE/win32/native_bridge.exe"
+            echo -e "  � $INSTALLER_NATIVE/win32/native_bridge.exe"
         else
             echo -e "${RED}❌ Error al crear native_bridge.exe${NC}"
             return 1
@@ -75,7 +75,7 @@ compile_windows() {
 compile_macos() {
     echo ""
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${YELLOW}🍎 Compilando para macOS (Universal Binary)...${NC}"
+    echo -e "${YELLOW}� Compilando para macOS (Universal Binary)...${NC}"
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     
     # Archivos temporales
@@ -100,8 +100,8 @@ compile_macos() {
     if [ -f "$FINAL_BIN" ]; then
         SIZE=$(ls -lh "$FINAL_BIN" | awk '{print $5}')
         echo -e "${GREEN}✓ macOS: native_bridge creado (${SIZE})${NC}"
-        echo -e "  📂 $INSTALLER_NATIVE/darwin/native_bridge"
-        echo -e "  🏗️  $(lipo -info "$FINAL_BIN" | cut -d: -f3)"
+        echo -e "  � $INSTALLER_NATIVE/darwin/native_bridge"
+        echo -e "  �️  $(lipo -info "$FINAL_BIN" | cut -d: -f3)"
         
         # Limpiar temporales
         rm -f "$TEMP_ARM" "$TEMP_X86"
@@ -115,7 +115,7 @@ compile_macos() {
 compile_linux() {
     echo ""
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${YELLOW}🐧 Compilando para Linux x86_64...${NC}"
+    echo -e "${YELLOW}� Compilando para Linux x86_64...${NC}"
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     
     if command -v g++ &> /dev/null; then
@@ -128,7 +128,7 @@ compile_linux() {
         if [ -f "$INSTALLER_NATIVE/linux/native_bridge" ]; then
             SIZE=$(ls -lh "$INSTALLER_NATIVE/linux/native_bridge" | awk '{print $5}')
             echo -e "${GREEN}✓ Linux: native_bridge creado (${SIZE})${NC}"
-            echo -e "  📂 $INSTALLER_NATIVE/linux/native_bridge"
+            echo -e "  � $INSTALLER_NATIVE/linux/native_bridge"
         else
             echo -e "${RED}❌ Error al crear binario Linux${NC}"
             return 1
@@ -159,7 +159,7 @@ else
 fi
 
 echo ""
-echo -e "${BLUE}📦 Binarios generados en:${NC}"
+echo -e "${BLUE}� Binarios generados en:${NC}"
 echo "  $INSTALLER_NATIVE/"
 echo ""
 
@@ -175,7 +175,7 @@ if [ -f "$INSTALLER_NATIVE/linux/native_bridge" ]; then
 fi
 
 echo ""
-echo -e "${BLUE}🚀 Listo para empaquetar con el instalador${NC}"
+echo -e "${BLUE}� Listo para empaquetar con el instalador${NC}"
 echo "========================================================="
 
 exit 0
