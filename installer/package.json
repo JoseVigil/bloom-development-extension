@@ -6,6 +6,7 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
+    "dev:admin": "powershell -ExecutionPolicy Bypass -File ./scripts/run-elevated.ps1",
     "build": "electron-builder",
     "build:win": "electron-builder --win",
     "build:mac": "electron-builder --mac",
@@ -25,7 +26,18 @@
     ],
     "win": {
       "target": "nsis",
-      "icon": "electron-app/assets/icon.ico"
+      "icon": "electron-app/assets/icon.ico",
+      "requestedExecutionLevel": "requireAdministrator"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowElevation": true,
+      "runAfterFinish": true,
+      "installerIcon": "electron-app/assets/icon.ico",
+      "uninstallerIcon": "electron-app/assets/icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
     },
     "mac": {
       "target": "dmg",

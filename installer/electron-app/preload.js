@@ -1,7 +1,5 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-// Expose protected methods that allow the renderer process to use
-// the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld('bloomAPI', {
   getSystemInfo: () => ipcRenderer.invoke('get-system-info'),
   
@@ -11,7 +9,13 @@ contextBridge.exposeInMainWorld('bloomAPI', {
     ipcRenderer.on('installation-progress', (event, data) => callback(data));
   },
   
+  detectChromeProfiles: () => ipcRenderer.invoke('detect-chrome-profiles'),
+  
+  validateExtensionId: (extensionId) => ipcRenderer.invoke('validate-extension-id', extensionId),
+  
+  finalizeSetup: (data) => ipcRenderer.invoke('finalize-setup', data),
+  
   openChromeExtensions: () => ipcRenderer.invoke('open-chrome-extensions'),
   
-  openVSCode: () => ipcRenderer.invoke('open-vscode')
+  openFolder: (folderPath) => ipcRenderer.invoke('open-folder', folderPath)
 });
