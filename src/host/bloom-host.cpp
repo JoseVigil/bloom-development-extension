@@ -17,6 +17,8 @@
 #include <ws2tcpip.h>
 #include <shlobj.h>
 #include <direct.h>
+#include <io.h>
+#include <fcntl.h>
 #pragma comment(lib, "ws2_32.lib")
 typedef SOCKET socket_t;
 #define INVALID_SOCK INVALID_SOCKET
@@ -36,17 +38,21 @@ typedef int socket_t;
 
 using json = nlohmann::json;
 
-// Version info
 const std::string VERSION = "1.0.0";
 const int BUILD = 1;
 const int PROTOCOL = 1;
-
-// Port range for fallback
 const int BASE_PORT = 5678;
 const int MAX_PORT_ATTEMPTS = 20;
 
 // ============================================================================
-// FILE SYSTEM UTILS
+// GLOBALS
+// ============================================================================
+std::atomic<socket_t> vscode_socket{INVALID_SOCK};
+std::mutex stdout_mutex;
+std::atomic<bool> shutdown_requested{false};
+
+// ============================================================================
+// FILE SYSTEM
 // ============================================================================
 std::string get_app_data_path() {
 #ifdef _WIN32
@@ -65,7 +71,7 @@ void ensure_directory(const std::string& path) {
 }
 
 // ============================================================================
-// LOGGER WITH ROTATION
+// LOGGER
 // ============================================================================
 class Logger {
 private:
@@ -73,8 +79,7 @@ private:
     std::ofstream log_file;
     std::mutex log_mutex;
     bool enabled;
-    size_t max_size = 5 * 1024 * 1024; // 5MB
-    int max_files = 10;
+    size_t max_size = 5 * 1024 * 1024;
 
     std::string get_timestamp() {
         auto now = std::chrono::system_clock::now();
@@ -88,13 +93,12 @@ private:
         auto now = std::chrono::system_clock::now();
         auto time = std::chrono::system_clock::to_time_t(now);
         std::stringstream ss;
-        ss << std::put_time(std::localtime(&time), "server-%Y%m%d-%H%M.log");
+        ss << std::put_time(std::localtime(&time), "host-%Y%m%d-%H%M.log");
         return ss.str();
     }
 
     void rotate_if_needed() {
         if (!log_file.is_open()) return;
-        
         auto pos = log_file.tellp();
         if (pos > static_cast<std::streamoff>(max_size)) {
             log_file.close();
@@ -103,17 +107,13 @@ private:
         }
     }
 
-    void create_log_dir() {
-        std::string base = get_app_data_path();
-        ensure_directory(base);
-        log_dir = base + "/logs";
-        ensure_directory(log_dir);
-    }
-
 public:
     Logger(bool enable = true) : enabled(enable) {
         if (enabled) {
-            create_log_dir();
+            std::string base = get_app_data_path();
+            ensure_directory(base);
+            log_dir = base + "/logs";
+            ensure_directory(log_dir);
             std::string filename = log_dir + "/" + get_log_filename();
             log_file.open(filename, std::ios::app);
         }
@@ -140,8 +140,10 @@ public:
     void warn(const std::string& msg) { log("WARN", msg); }
 };
 
+Logger g_logger(true);
+
 // ============================================================================
-// STATE FILE MANAGER
+// STATE MANAGER
 // ============================================================================
 class StateManager {
 private:
@@ -172,23 +174,16 @@ public:
         out.close();
     }
 
-    json read_state() {
-        std::lock_guard<std::mutex> lock(state_mutex);
-        std::ifstream in(state_file);
-        if (!in) return json::object();
-        json state;
-        in >> state;
-        return state;
-    }
-
     void clear_state() {
         std::lock_guard<std::mutex> lock(state_mutex);
         std::remove(state_file.c_str());
     }
 };
 
+StateManager g_state;
+
 // ============================================================================
-// PROTOCOL HELPERS
+// PROTOCOL
 // ============================================================================
 uint32_t read_size(std::istream& in) {
     uint32_t size = 0;
@@ -197,13 +192,14 @@ uint32_t read_size(std::istream& in) {
 }
 
 std::string read_payload(std::istream& in, uint32_t size) {
+    if (size == 0 || size > 10 * 1024 * 1024) return "";
     std::string msg(size, '\0');
-    if (size > 0) in.read(&msg[0], size);
+    in.read(&msg[0], size);
     return msg;
 }
 
-void write_message(std::ostream& out, const std::string& s, std::mutex& mut) {
-    std::lock_guard<std::mutex> lock(mut);
+void write_message(std::ostream& out, const std::string& s) {
+    std::lock_guard<std::mutex> lock(stdout_mutex);
     uint32_t len = static_cast<uint32_t>(s.size());
     out.write(reinterpret_cast<const char*>(&len), 4);
     out.write(s.c_str(), len);
@@ -217,6 +213,7 @@ uint32_t read_size_socket(socket_t sock) {
 }
 
 std::string read_payload_socket(socket_t sock, uint32_t size) {
+    if (size == 0 || size > 10 * 1024 * 1024) return "";
     std::string msg(size, '\0');
     int ret = recv(sock, &msg[0], size, 0);
     return (ret == static_cast<int>(size)) ? msg : "";
@@ -229,94 +226,43 @@ void write_socket(socket_t sock, const std::string& s) {
 }
 
 // ============================================================================
-// MESSAGE ROUTER
+// MESSAGE PROCESSING
 // ============================================================================
-class MessageRouter {
-private:
-    std::atomic<socket_t> vscode_socket{INVALID_SOCK};
-    std::mutex output_mutex;
-    Logger& logger;
-    std::atomic<bool> shutdown_requested{false};
-
-public:
-    MessageRouter(Logger& log) : logger(log) {}
-
-    void set_vscode_socket(socket_t sock) {
-        vscode_socket.store(sock);
-        logger.info("VSCode connected");
+json process_message(const json& msg) {
+    if (!msg.contains("command")) {
+        return {{"ok", false}, {"error", {{"type", "INVALID_COMMAND"}, {"message", "Missing command"}}}};
     }
 
-    void clear_vscode_socket() {
-        vscode_socket.store(INVALID_SOCK);
-        logger.info("VSCode disconnected");
+    std::string cmd = msg["command"];
+
+    // Control commands
+    if (cmd == "shutdown") {
+        shutdown_requested.store(true);
+        g_logger.info("Shutdown requested");
+        return {{"ok", true}, {"message", "Shutting down"}};
     }
 
-    bool should_shutdown() { return shutdown_requested.load(); }
-
-    json process_message(const json& msg) {
-        logger.debug("Processing message: " + msg.dump().substr(0, 100));
-
-        if (!msg.contains("command")) {
-            return {{"ok", false}, {"error", {{"type", "INVALID_COMMAND"}, {"message", "Missing command"}}}};
-        }
-
-        std::string cmd = msg["command"];
-
-        // Handle control commands
-        if (cmd == "shutdown") {
-            shutdown_requested.store(true);
-            logger.info("Shutdown requested");
-            return {{"ok", true}, {"message", "Shutting down"}};
-        }
-
-        if (cmd == "ping") {
-            return {
-                {"ok", true}, 
-                {"version", VERSION}, 
-                {"build", BUILD}, 
-                {"protocol", PROTOCOL}
-            };
-        }
-
-        // Handle local commands
-        if (cmd == "save_artifact") {
-            return handle_save(msg);
-        } else if (cmd == "read_file") {
-            return handle_read(msg);
-        }
-
-        // Forward to VSCode
-        socket_t sock = vscode_socket.load();
-        if (sock != INVALID_SOCK) {
-            write_socket(sock, msg.dump());
-            return {{"ok", true}, {"forwarded", true}};
-        } else {
-            return {{"ok", false}, {"error", {{"type", "NO_VSCODE"}, {"message", "VSCode not connected"}}}};
-        }
+    if (cmd == "ping") {
+        return {{"ok", true}, {"version", VERSION}, {"build", BUILD}, {"protocol", PROTOCOL}};
     }
 
-    void forward_to_chrome(const json& msg) {
-        write_message(std::cout, msg.dump(), output_mutex);
-        logger.debug("Forwarded to Chrome: " + msg.dump().substr(0, 100));
-    }
-
-private:
-    json handle_save(const json& msg) {
+    // Local file operations
+    if (cmd == "save_artifact") {
         try {
             std::string filename = msg.value("filename", "artifact.html");
             std::string content = msg.value("content", "");
             std::ofstream out(filename, std::ios::binary);
             out << content;
             out.close();
-            logger.info("Saved file: " + filename);
+            g_logger.info("Saved: " + filename);
             return {{"ok", true}, {"path", filename}};
         } catch (const std::exception& e) {
-            logger.error("Save failed: " + std::string(e.what()));
+            g_logger.error("Save failed: " + std::string(e.what()));
             return {{"ok", false}, {"error", {{"type", "SAVE_ERROR"}, {"message", e.what()}}}};
         }
     }
 
-    json handle_read(const json& msg) {
+    if (cmd == "read_file") {
         try {
             std::string filename = msg.value("filename", "");
             std::ifstream in(filename, std::ios::binary | std::ios::ate);
@@ -327,21 +273,105 @@ private:
             in.seekg(0);
             std::string content(static_cast<size_t>(fsize), '\0');
             in.read(&content[0], fsize);
-            logger.info("Read file: " + filename);
+            g_logger.info("Read: " + filename);
             return {{"ok", true}, {"content", content}};
         } catch (const std::exception& e) {
-            logger.error("Read failed: " + std::string(e.what()));
+            g_logger.error("Read failed: " + std::string(e.what()));
             return {{"ok", false}, {"error", {{"type", "READ_ERROR"}, {"message", e.what()}}}};
         }
     }
-};
+
+    // Forward to VSCode if connected
+    socket_t sock = vscode_socket.load();
+    if (sock != INVALID_SOCK) {
+        write_socket(sock, msg.dump());
+        g_logger.debug("Forwarded to VSCode");
+        return {{"ok", true}, {"forwarded", true}};
+    }
+
+    return {{"ok", false}, {"error", {{"type", "NO_HANDLER"}, {"message", "Command not handled"}}}};
+}
 
 // ============================================================================
-// PORT MANAGER
+// CHROME LOOP (stdin/stdout)
 // ============================================================================
-int find_available_port(Logger& logger, int preferred_port = BASE_PORT) {
+void chrome_loop() {
+    g_logger.info("Chrome loop started (stdin/stdout)");
+    
+#ifdef _WIN32
+    _setmode(_fileno(stdin), _O_BINARY);
+    _setmode(_fileno(stdout), _O_BINARY);
+#endif
+
+    while (!shutdown_requested.load()) {
+        uint32_t size = read_size(std::cin);
+        if (size == 0) {
+            if (std::cin.eof()) break;
+            continue;
+        }
+
+        std::string msg = read_payload(std::cin, size);
+        if (msg.empty()) continue;
+
+        try {
+            auto j = json::parse(msg);
+            g_logger.debug("Chrome msg: " + j.dump().substr(0, 100));
+
+            json response = process_message(j);
+            write_message(std::cout, response.dump());
+
+        } catch (const std::exception& e) {
+            g_logger.error("Chrome parse error: " + std::string(e.what()));
+            json err = {{"ok", false}, {"error", {{"type", "PARSE_ERROR"}, {"message", e.what()}}}};
+            write_message(std::cout, err.dump());
+        }
+    }
+
+    g_logger.info("Chrome loop ended");
+}
+
+// ============================================================================
+// VSCODE CLIENT HANDLER
+// ============================================================================
+void handle_vscode_client(socket_t client) {
+    vscode_socket.store(client);
+    g_logger.info("VSCode connected");
+
+    while (!shutdown_requested.load()) {
+        uint32_t size = read_size_socket(client);
+        if (size == 0) break;
+
+        std::string msg = read_payload_socket(client, size);
+        if (msg.empty()) break;
+
+        try {
+            auto j = json::parse(msg);
+            g_logger.debug("VSCode msg: " + j.dump().substr(0, 100));
+
+            json response = process_message(j);
+            write_socket(client, response.dump());
+
+            // También enviar a Chrome si está activo
+            write_message(std::cout, j.dump());
+
+        } catch (const std::exception& e) {
+            g_logger.error("VSCode parse error: " + std::string(e.what()));
+            json err = {{"ok", false}, {"error", {{"type", "PARSE_ERROR"}, {"message", e.what()}}}};
+            write_socket(client, err.dump());
+        }
+    }
+
+    vscode_socket.store(INVALID_SOCK);
+    close_socket(client);
+    g_logger.info("VSCode disconnected");
+}
+
+// ============================================================================
+// TCP SERVER (VSCode)
+// ============================================================================
+int find_available_port(int preferred) {
     for (int attempt = 0; attempt < MAX_PORT_ATTEMPTS; attempt++) {
-        int port = preferred_port + attempt;
+        int port = preferred + attempt;
         
         socket_t test_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
         if (test_sock == INVALID_SOCK) continue;
@@ -356,136 +386,31 @@ int find_available_port(Logger& logger, int preferred_port = BASE_PORT) {
 
         if (bind(test_sock, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) == 0) {
             close_socket(test_sock);
-            logger.info("Found available port: " + std::to_string(port));
+            g_logger.info("Found available port: " + std::to_string(port));
             return port;
         }
 
         close_socket(test_sock);
-        logger.warn("Port " + std::to_string(port) + " in use, trying next");
+        g_logger.warn("Port " + std::to_string(port) + " in use");
     }
 
-    logger.error("No available ports in range " + std::to_string(preferred_port) + 
-                 "-" + std::to_string(preferred_port + MAX_PORT_ATTEMPTS - 1));
+    g_logger.error("No available ports");
     return -1;
 }
 
-// ============================================================================
-// MODE: NATIVE (Chrome, ephemeral)
-// ============================================================================
-void native_mode(Logger& logger, StateManager& state_mgr) {
-    logger.info("Starting NATIVE mode (Chrome stdin/stdout)");
+void tcp_server_loop(int preferred_port) {
+    g_logger.info("Starting TCP server");
 
-    uint32_t size = read_size(std::cin);
-    if (size == 0 || size > 10 * 1024 * 1024) {
-        logger.error("Invalid message size: " + std::to_string(size));
-        return;
-    }
-
-    std::string msg = read_payload(std::cin, size);
-    if (msg.empty()) {
-        logger.error("Empty message");
-        return;
-    }
-
-    try {
-        auto j = json::parse(msg);
-        logger.debug("Received: " + j.dump().substr(0, 100));
-
-        // Read state to find server port
-        auto state = state_mgr.read_state();
-        int server_port = state.value("port", BASE_PORT);
-
-        // Try connecting to server
-        socket_t sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-        if (sock != INVALID_SOCK) {
-            sockaddr_in addr{};
-            addr.sin_family = AF_INET;
-            addr.sin_port = htons(server_port);
-            addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-
-            if (connect(sock, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) == 0) {
-                write_socket(sock, j.dump());
-                logger.info("Forwarded to server on port " + std::to_string(server_port));
-
-                uint32_t resp_size = read_size_socket(sock);
-                if (resp_size > 0 && resp_size < 10 * 1024 * 1024) {
-                    std::string resp = read_payload_socket(sock, resp_size);
-                    std::cout.write(reinterpret_cast<const char*>(&resp_size), 4);
-                    std::cout.write(resp.c_str(), resp_size);
-                    std::cout.flush();
-                }
-                close_socket(sock);
-                return;
-            }
-            close_socket(sock);
-        }
-
-        // Server not available - handle locally
-        logger.info("Server not available, handling locally");
-        MessageRouter router(logger);
-        json response = router.process_message(j);
-        std::string resp_str = response.dump();
-        uint32_t resp_size = static_cast<uint32_t>(resp_str.size());
-        std::cout.write(reinterpret_cast<const char*>(&resp_size), 4);
-        std::cout.write(resp_str.c_str(), resp_size);
-        std::cout.flush();
-
-    } catch (const std::exception& e) {
-        logger.error("Parse error: " + std::string(e.what()));
-        json err = {{"ok", false}, {"error", {{"type", "PARSE_ERROR"}, {"message", e.what()}}}};
-        std::string err_str = err.dump();
-        uint32_t err_size = static_cast<uint32_t>(err_str.size());
-        std::cout.write(reinterpret_cast<const char*>(&err_size), 4);
-        std::cout.write(err_str.c_str(), err_size);
-        std::cout.flush();
-    }
-}
-
-// ============================================================================
-// MODE: SERVER (VSCode, persistent)
-// ============================================================================
-void handle_client(socket_t client, MessageRouter& router, Logger& logger) {
-    router.set_vscode_socket(client);
-
-    while (!router.should_shutdown()) {
-        uint32_t size = read_size_socket(client);
-        if (size == 0 || size > 10 * 1024 * 1024) break;
-
-        std::string msg = read_payload_socket(client, size);
-        if (msg.empty()) break;
-
-        try {
-            auto j = json::parse(msg);
-            logger.debug("VSCode message: " + j.dump().substr(0, 100));
-
-            json response = router.process_message(j);
-            write_socket(client, response.dump());
-
-        } catch (const std::exception& e) {
-            logger.error("VSCode parse error: " + std::string(e.what()));
-            json err = {{"ok", false}, {"error", {{"type", "PARSE_ERROR"}, {"message", e.what()}}}};
-            write_socket(client, err.dump());
-        }
-    }
-
-    router.clear_vscode_socket();
-    close_socket(client);
-}
-
-void server_mode(Logger& logger, StateManager& state_mgr, int preferred_port) {
-    logger.info("Starting SERVER mode");
-
-    int port = find_available_port(logger, preferred_port);
+    int port = find_available_port(preferred_port);
     if (port == -1) {
-        logger.error("Cannot find available port");
-        state_mgr.write_state(0, "error_no_port");
+        g_state.write_state(0, "error_no_port");
         return;
     }
 
     socket_t listen_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (listen_sock == INVALID_SOCK) {
-        logger.error("Cannot create socket");
-        state_mgr.write_state(0, "error_socket");
+        g_logger.error("Cannot create socket");
+        g_state.write_state(0, "error_socket");
         return;
     }
 
@@ -498,40 +423,37 @@ void server_mode(Logger& logger, StateManager& state_mgr, int preferred_port) {
     addr.sin_addr.s_addr = inet_addr("127.0.0.1");
 
     if (bind(listen_sock, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0) {
-        logger.error("Bind failed on port " + std::to_string(port));
+        g_logger.error("Bind failed");
         close_socket(listen_sock);
-        state_mgr.write_state(0, "error_bind");
+        g_state.write_state(0, "error_bind");
         return;
     }
 
     if (listen(listen_sock, SOMAXCONN) != 0) {
-        logger.error("Listen failed");
+        g_logger.error("Listen failed");
         close_socket(listen_sock);
-        state_mgr.write_state(0, "error_listen");
+        g_state.write_state(0, "error_listen");
         return;
     }
 
-    logger.info("Server listening on 127.0.0.1:" + std::to_string(port));
-    state_mgr.write_state(port, "running");
+    g_logger.info("Listening on 127.0.0.1:" + std::to_string(port));
+    g_state.write_state(port, "running");
 
-    MessageRouter router(logger);
-
-    while (!router.should_shutdown()) {
+    while (!shutdown_requested.load()) {
         socket_t client = accept(listen_sock, nullptr, nullptr);
         if (client == INVALID_SOCK) {
-            if (router.should_shutdown()) break;
-            logger.error("Accept failed");
+            if (shutdown_requested.load()) break;
             continue;
         }
-        logger.info("Client connected");
-        std::thread([client, &router, &logger]() {
-            handle_client(client, router, logger);
+
+        std::thread([client]() {
+            handle_vscode_client(client);
         }).detach();
     }
 
     close_socket(listen_sock);
-    state_mgr.clear_state();
-    logger.info("Server shutdown complete");
+    g_state.clear_state();
+    g_logger.info("TCP server stopped");
 }
 
 // ============================================================================
@@ -543,26 +465,30 @@ int main(int argc, char* argv[]) {
     if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) return 1;
 #endif
 
-    bool server = false;
     int port = BASE_PORT;
-
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
-        if (arg == "--server") {
-            server = true;
-        } else if (arg.find("--port=") == 0) {
+        if (arg.find("--port=") == 0) {
             port = std::stoi(arg.substr(7));
         }
     }
 
-    StateManager state_mgr;
-    Logger logger(server);
+    g_logger.info("=== Bloom Host Started ===");
+    g_logger.info("Version: " + VERSION);
 
-    if (server) {
-        server_mode(logger, state_mgr, port);
-    } else {
-        native_mode(logger, state_mgr);
-    }
+    // Start TCP server in background thread
+    std::thread server_thread([port]() {
+        tcp_server_loop(port);
+    });
+
+    // Main thread handles Chrome stdin/stdout
+    chrome_loop();
+
+    // Wait for server thread to finish
+    shutdown_requested.store(true);
+    server_thread.join();
+
+    g_logger.info("=== Bloom Host Stopped ===");
 
 #ifdef _WIN32
     WSACleanup();

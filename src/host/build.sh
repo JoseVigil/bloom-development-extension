@@ -6,7 +6,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-echo -e "${YELLOW}� Building Bloom Host${NC}"
+echo -e "${YELLOW}⚙ Building Bloom Host${NC}"
 
 # Detectar directorio del script (src/host/)
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
@@ -20,7 +20,11 @@ HEADER_DIR="nlohmann"
 PROJECT_ROOT="$SCRIPT_DIR/../.."
 OUT_DIR="$PROJECT_ROOT/installer/native/bin"
 
-mkdir -p "$OUT_DIR/win32" "$OUT_DIR/darwin" "$OUT_DIR/linux"
+# � CORREGIDO: carpetas separadas por arquitectura
+mkdir -p "$OUT_DIR/win32" \
+         "$OUT_DIR/linux" \
+         "$OUT_DIR/darwin/arm64" \
+         "$OUT_DIR/darwin/x64"
 
 # Descargar json.hpp
 if [ ! -f "$HEADER_DIR/json.hpp" ]; then
@@ -41,16 +45,19 @@ if command -v x86_64-w64-mingw32-g++ &> /dev/null; then
     echo -e "${GREEN}✓ bloom-host.exe created${NC}"
 fi
 
-# macOS Universal
+# macOS (SEPARADO POR ARQUITECTURA)
 if [[ "$OSTYPE" == "darwin"* ]]; then
-    echo -e "${YELLOW}� Compiling for macOS...${NC}"
-    clang++ -arch arm64 -std=c++20 -O2 -I. "$SRC_FILE" -o "$OUT_DIR/darwin/bloom-host_arm"
-    clang++ -arch x86_64 -std=c++20 -O2 -I. "$SRC_FILE" -o "$OUT_DIR/darwin/bloom-host_x86"
-    lipo -create -output "$OUT_DIR/darwin/bloom-host" \
-        "$OUT_DIR/darwin/bloom-host_arm" "$OUT_DIR/darwin/bloom-host_x86"
-    chmod +x "$OUT_DIR/darwin/bloom-host"
-    rm -f "$OUT_DIR/darwin/bloom-host_arm" "$OUT_DIR/darwin/bloom-host_x86"
-    echo -e "${GREEN}✓ bloom-host created (Universal)${NC}"
+    echo -e "${YELLOW}� Compiling for macOS (ARM64)...${NC}"
+    clang++ -arch arm64 -std=c++20 -O2 -I. "$SRC_FILE" \
+        -o "$OUT_DIR/darwin/arm64/bloom-host"
+    chmod +x "$OUT_DIR/darwin/arm64/bloom-host"
+
+    echo -e "${YELLOW}� Compiling for macOS (x64)...${NC}"
+    clang++ -arch x86_64 -std=c++20 -O2 -I. "$SRC_FILE" \
+        -o "$OUT_DIR/darwin/x64/bloom-host"
+    chmod +x "$OUT_DIR/darwin/x64/bloom-host"
+
+    echo -e "${GREEN}✓ bloom-host created for both macOS architectures${NC}"
 fi
 
 # Linux
@@ -68,4 +75,3 @@ echo -e "${GREEN}✅ Build complete!${NC}"
 echo "Binaries in: $OUT_DIR/"
 echo ""
 echo -e "${YELLOW}� Ready for Electron installer${NC}"
-ls -lh "$OUT_DIR/win32/" "$OUT_DIR/darwin/" 2>/dev/null | grep bloom-host
