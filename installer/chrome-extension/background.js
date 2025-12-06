@@ -9,13 +9,19 @@ function connectToNativeHost() {
     nativePort = chrome.runtime.connectNative(HOST_NAME);
     
     nativePort.onMessage.addListener((message) => {
+      // Echo test
+      if (message.test) {
+        sendToHost({ echo: message.test, received: true });
+        console.log('Echo test:', message);
+        return;
+      }
+      
       handleHostMessage(message);
     });
     
     nativePort.onDisconnect.addListener(() => {
       console.error("Native host disconnected:", chrome.runtime.lastError);
       nativePort = null;
-      // Attempt reconnection after 2 seconds
       setTimeout(connectToNativeHost, 2000);
     });
     
@@ -70,7 +76,7 @@ async function handleHostMessage(message) {
       case "observe_changes":
         result = await observeChanges(payload);
         break;
-    case "claude.download_artifact":
+      case "claude.download_artifact":
         result = await downloadClaudeArtifact(payload);
         break;
       default:
@@ -171,6 +177,58 @@ async function observeChanges(payload) {
   return response;
 }
 
+async function downloadClaudeArtifact(payload) {
+  const { tabId } = payload;
+  
+  const result = await chrome.scripting.executeScript({
+    target: { tabId },
+    func: () => {
+      const artifact = document.querySelector('[data-testid="artifact-root"]');
+      if (!artifact) {
+        return { error: "No artifact found" };
+      }
+
+      const codeBlock = artifact.querySelector('pre code');
+      const reactRoot = artifact.querySelector('[data-testid="react-artifact"]');
+      const htmlFrame = artifact.querySelector('iframe');
+      
+      let content = '';
+      let type = '';
+      let language = '';
+      
+      if (codeBlock) {
+        content = codeBlock.textContent;
+        type = 'code';
+        const langClass = codeBlock.className.match(/language-(\w+)/);
+        language = langClass ? langClass[1] : 'text';
+      } else if (reactRoot) {
+        const scriptTag = document.querySelector('script[type="application/json"]');
+        if (scriptTag) {
+          content = scriptTag.textContent;
+          type = 'react';
+        }
+      } else if (htmlFrame) {
+        content = htmlFrame.srcdoc || '';
+        type = 'html';
+      }
+      
+      const titleEl = document.querySelector('[data-testid="artifact-title"]') || 
+                      artifact.closest('.artifact-container')?.querySelector('.font-semibold');
+      const title = titleEl?.textContent || 'artifact';
+      
+      return {
+        content,
+        type,
+        language,
+        title,
+        timestamp: Date.now()
+      };
+    }
+  });
+  
+  return result[0]?.result;
+}
+
 // Listen for tab events
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (controlledTabs.has(tabId) && changeInfo.status === "complete") {
@@ -206,75 +264,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
   }
   return true;
-});
-
-async function downloadClaudeArtifact(payload) {
-  const { tabId } = payload;
-  
-  const result = await chrome.scripting.executeScript({
-    target: { tabId },
-    func: () => {
-      // Find artifact container
-      const artifact = document.querySelector('[data-testid="artifact-root"]');
-      if (!artifact) {
-        return { error: "No artifact found" };
-      }
-
-      // Get artifact type and content
-      const codeBlock = artifact.querySelector('pre code');
-      const reactRoot = artifact.querySelector('[data-testid="react-artifact"]');
-      const htmlFrame = artifact.querySelector('iframe');
-      
-      let content = '';
-      let type = '';
-      let language = '';
-      
-      if (codeBlock) {
-        // Code artifact
-        content = codeBlock.textContent;
-        type = 'code';
-        const langClass = codeBlock.className.match(/language-(\w+)/);
-        language = langClass ? langClass[1] : 'text';
-      } else if (reactRoot) {
-        // React artifact - get from script tag
-        const scriptTag = document.querySelector('script[type="application/json"]');
-        if (scriptTag) {
-          content = scriptTag.textContent;
-          type = 'react';
-        }
-      } else if (htmlFrame) {
-        // HTML artifact
-        content = htmlFrame.srcdoc || '';
-        type = 'html';
-      }
-      
-      // Get title
-      const titleEl = document.querySelector('[data-testid="artifact-title"]') || 
-                      artifact.closest('.artifact-container')?.querySelector('.font-semibold');
-      const title = titleEl?.textContent || 'artifact';
-      
-      return {
-        content,
-        type,
-        language,
-        title,
-        timestamp: Date.now()
-      };
-    }
-  });
-  
-  return result[0]?.result;
-}
-
-nativePort.onMessage.addListener((message) => {
-  // Echo test
-  if (message.test) {
-    sendToHost({ echo: message.test, received: true });
-    console.log('Echo test:', message);
-    return;
-  }
-  
-  handleHostMessage(message);
 });
 
 // Initialize connection on startup
