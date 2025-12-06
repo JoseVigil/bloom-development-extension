@@ -129,6 +129,20 @@
       word-break: break-all;
     }
 
+    .success-box {
+      background: #f0fff4;
+      border-left: 4px solid #48bb78;
+      padding: 15px;
+      margin: 15px 0;
+      border-radius: 5px;
+    }
+
+    .success-box strong {
+      color: #22543d;
+      display: block;
+      margin-bottom: 5px;
+    }
+
     .steps {
       background: #f7fafc;
       border-radius: 10px;
@@ -360,6 +374,64 @@
     .clickable-path:hover {
       color: #764ba2;
     }
+
+    .status-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 15px;
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: 600;
+      margin: 10px 0;
+    }
+
+    .status-indicator.running {
+      background: #f0fff4;
+      color: #22543d;
+    }
+
+    .status-indicator.stopped {
+      background: #fff5f5;
+      color: #742a2a;
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+
+    .status-dot.green {
+      background: #48bb78;
+    }
+
+    .status-dot.red {
+      background: #f56565;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .error-state {
+      text-align: center;
+      padding: 40px 20px;
+    }
+
+    .error-state h2 {
+      color: #f56565;
+      margin-bottom: 20px;
+    }
+
+    .error-state code {
+      background: #e2e8f0;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 13px;
+    }
   </style>
 </head>
 <body>
@@ -371,7 +443,8 @@
         <div class="logo">B</div>
         <h1>Bloom Nucleus Installer</h1>
         <p class="text-center">
-          Este instalador configurará el sistema completo de Bloom Nucleus en tu máquina.
+          Este instalador configurará el sistema completo de Bloom Nucleus en tu máquina,
+          incluyendo el servicio de background y la integración con Chrome.
         </p>
         
         <div class="info-box">
@@ -382,6 +455,10 @@
         <div class="info-box">
           <strong>El host se instalará en:</strong>
           <code id="install-path">Cargando...</code>
+        </div>
+
+        <div class="warning-box">
+          ⚠️ Este instalador requiere privilegios de administrador para instalar el servicio de sistema.
         </div>
 
         <div class="button-group">
@@ -406,16 +483,59 @@
       </div>
     </div>
 
-    <!-- 3. EXTENSION SETUP SCREEN -->
+    <!-- 3. SERVICE CONFIGURATION SCREEN -->
+    <div class="screen" id="service-screen">
+      <div class="card">
+        <div class="logo">B</div>
+        <h1>Configurando Servicio</h1>
+        <p class="text-center">Instalando y configurando el servicio de background de Bloom Nucleus...</p>
+
+        <div class="info-box">
+          <strong>¿Qué es el servicio?</strong>
+          El servicio corre permanentemente en segundo plano, permitiendo que VSCode se conecte en cualquier momento para ejecutar comandos y análisis de código.
+        </div>
+
+        <div id="service-status-container" style="text-align: center;">
+          <div class="spinner"></div>
+          <p id="service-status-text" style="margin-top: 20px; color: #4a5568;">Instalando servicio...</p>
+        </div>
+
+        <div id="service-result" style="display: none;">
+          <div class="success-box">
+            <strong>✓ Servicio instalado correctamente</strong>
+            Puerto detectado: <code id="detected-port">5678</code>
+          </div>
+
+          <div class="button-group">
+            <button class="button button-secondary" id="view-logs-btn">Ver Logs</button>
+            <button class="button" id="continue-from-service-btn">Continuar</button>
+          </div>
+        </div>
+
+        <div id="service-error" style="display: none;">
+          <div class="warning-box">
+            <strong>⚠️ Error al instalar el servicio</strong>
+            <p id="service-error-text"></p>
+          </div>
+
+          <div class="button-group">
+            <button class="button button-secondary" id="retry-service-btn">Reintentar</button>
+            <button class="button" id="skip-service-btn">Continuar sin servicio</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. EXTENSION SETUP SCREEN -->
     <div class="screen" id="extension-setup-screen">
       <div class="card">
         <div class="logo">B</div>
         <h1>Instalación de la Extensión</h1>
-        <p>El host nativo ha sido instalado correctamente. Ahora necesitas instalar la extensión de Chrome manualmente.</p>
+        <p>El host nativo y servicio han sido configurados. Ahora necesitas instalar la extensión de Chrome manualmente.</p>
 
         <div class="info-box">
           <strong>La extensión está ubicada en:</strong>
-          <code class="clickable-path" id="extension-path" onclick="window.bloomAPI.openFolder(this.textContent)">Cargando...</code>
+          <code class="clickable-path" id="extension-path" onclick="window.api.openFolder(this.textContent)">Cargando...</code>
         </div>
 
         <h2>Pasos para instalar la extensión:</h2>
@@ -440,7 +560,7 @@
       </div>
     </div>
 
-    <!-- 4. EXTENSION ID SCREEN -->
+    <!-- 5. EXTENSION ID SCREEN -->
     <div class="screen" id="extension-id-screen">
       <div class="card">
         <div class="logo">B</div>
@@ -471,7 +591,7 @@
       </div>
     </div>
 
-    <!-- 5. CHROME PROFILES SCREEN -->
+    <!-- 6. CHROME PROFILES SCREEN -->
     <div class="screen" id="profiles-screen">
       <div class="card">
         <div class="logo">B</div>
@@ -494,12 +614,20 @@
       </div>
     </div>
 
-    <!-- 6. SUCCESS SCREEN -->
+    <!-- 7. SUCCESS SCREEN -->
     <div class="screen" id="success-screen">
       <div class="card">
         <div class="success-icon">✓</div>
         <h1>¡Instalación Completa!</h1>
         <p class="text-center">Bloom Nucleus ha sido configurado correctamente en tu sistema.</p>
+
+        <div class="success-box">
+          <strong>Estado del Servicio:</strong>
+          <div class="status-indicator running">
+            <div class="status-dot green"></div>
+            <span>Servicio corriendo en puerto <code id="final-port">5678</code></span>
+          </div>
+        </div>
 
         <div class="info-box">
           <strong>Configuración guardada en:</strong>
@@ -509,7 +637,9 @@
         <h2>Resumen:</h2>
         <div class="steps">
           <ul style="list-style: none; padding: 0;">
-            <li>✅ Host nativo instalado y registrado</li>
+            <li>✅ Host nativo instalado</li>
+            <li>✅ Servicio Windows configurado y corriendo</li>
+            <li>✅ Native Messaging registrado</li>
             <li>✅ Extensión vinculada (ID: <code id="final-ext-id">...</code>)</li>
             <li>✅ Perfiles configurados: <span id="final-profiles">...</span></li>
           </ul>
@@ -520,12 +650,13 @@
         </div>
 
         <div class="button-group">
+          <button class="button button-secondary" id="final-view-logs-btn">Ver Logs</button>
           <button class="button" id="close-installer-btn">Cerrar Instalador</button>
         </div>
       </div>
     </div>
 
-    <!-- 7. ERROR SCREEN -->
+    <!-- 8. ERROR SCREEN -->
     <div class="screen" id="error-screen">
       <div class="card">
         <div class="error-icon">✕</div>
@@ -545,17 +676,36 @@
     let detectedProfiles = [];
     let selectedProfiles = [];
     let extensionId = null;
+    let servicePort = 5678;
 
     // ========================================================================
     // INITIALIZATION
     // ========================================================================
 
     async function init() {
-      systemInfo = await window.bloomAPI.getSystemInfo();
+      // Verificar que window.api está disponible
+      if (!window.api) {
+        document.querySelector('.screen.active .card').innerHTML = `
+          <div class="error-state">
+            <div style="font-size: 48px; margin-bottom: 20px;">⚠️</div>
+            <h2>Error de inicialización</h2>
+            <p>No se pudo cargar la API del instalador.</p>
+            <p style="margin-top: 20px;">
+              <strong>Posibles soluciones:</strong><br>
+              1. Verifica que el archivo <code>preload.js</code> esté en la carpeta del instalador<br>
+              2. Ejecuta el instalador como administrador<br>
+              3. Reinstala la aplicación
+            </p>
+          </div>
+        `;
+        return;
+      }
+
+      systemInfo = await window.api.getSystemInfo();
       
       document.getElementById('install-path').textContent = systemInfo.paths.hostInstallDir;
       document.getElementById('extension-path').textContent = systemInfo.paths.extensionSource;
-      document.getElementById('config-path').textContent = systemInfo.paths.configDir + '\\config.json';
+      document.getElementById('config-path').textContent = systemInfo.paths.configDir + '\\config\\config.json';
     }
 
     // ========================================================================
@@ -576,17 +726,19 @@
     document.getElementById('start-button').addEventListener('click', async () => {
       showScreen('installation-screen');
       
-      window.bloomAPI.onInstallationProgress((data) => {
+      window.api.onInstallationProgress((data) => {
         const percentage = (data.step / data.total) * 100;
         document.getElementById('progress-fill').style.width = percentage + '%';
         document.getElementById('progress-text').textContent = 
           `Paso ${data.step}/${data.total}: ${data.message}`;
       });
 
-      const result = await window.bloomAPI.startInstallation({ devMode: true });
+      const result = await window.api.startInstallation({ devMode: true });
       
       if (result.success) {
-        showScreen('extension-setup-screen');
+        // Proceed to service installation
+        showScreen('service-screen');
+        await installService();
       } else {
         document.getElementById('error-message').textContent = `Error: ${result.error}`;
         showScreen('error-screen');
@@ -594,11 +746,70 @@
     });
 
     // ========================================================================
+    // SERVICE SCREEN
+    // ========================================================================
+
+    async function installService() {
+      document.getElementById('service-status-container').style.display = 'block';
+      document.getElementById('service-result').style.display = 'none';
+      document.getElementById('service-error').style.display = 'none';
+      
+      // Verificar VC++ Redistributables primero (solo Windows)
+      if (systemInfo.platform === 'win32') {
+        const preflight = await window.api.preflightChecks();
+        
+        if (!preflight.vcRedistInstalled) {
+          document.getElementById('service-status-text').textContent = 'Instalando Visual C++ Redistributables...';
+          
+          const vcResult = await window.api.installVCRedist();
+          
+          if (!vcResult.success) {
+            document.getElementById('service-error-text').innerHTML = 
+              'Falta Visual C++ Redistributables.<br><a href="https://aka.ms/vs/17/release/vc_redist.x64.exe" target="_blank">Descargar e instalar manualmente</a>, luego reinicia el instalador.';
+            document.getElementById('service-status-container').style.display = 'none';
+            document.getElementById('service-error').style.display = 'block';
+            return;
+          }
+        }
+      }
+      
+      document.getElementById('service-status-text').textContent = 'Instalando servicio...';
+      const result = await window.api.installService();
+      
+      if (result.success) {
+        servicePort = result.port;
+        document.getElementById('detected-port').textContent = result.port;
+        document.getElementById('service-status-container').style.display = 'none';
+        document.getElementById('service-result').style.display = 'block';
+      } else {
+        document.getElementById('service-error-text').textContent = result.error;
+        document.getElementById('service-status-container').style.display = 'none';
+        document.getElementById('service-error').style.display = 'block';
+      }
+    }
+
+    document.getElementById('view-logs-btn').addEventListener('click', () => {
+      window.api.openLogsFolder();
+    });
+
+    document.getElementById('continue-from-service-btn').addEventListener('click', () => {
+      showScreen('extension-setup-screen');
+    });
+
+    document.getElementById('retry-service-btn').addEventListener('click', async () => {
+      await installService();
+    });
+
+    document.getElementById('skip-service-btn').addEventListener('click', () => {
+      showScreen('extension-setup-screen');
+    });
+
+    // ========================================================================
     // EXTENSION SETUP SCREEN
     // ========================================================================
 
     document.getElementById('open-chrome-btn').addEventListener('click', () => {
-      window.bloomAPI.openChromeExtensions();
+      window.api.openChromeExtensions();
     });
 
     document.getElementById('extension-installed-btn').addEventListener('click', () => {
@@ -618,7 +829,7 @@
       e.target.value = value;
       
       if (value.length === 32) {
-        const result = await window.bloomAPI.validateExtensionId(value);
+        const result = await window.api.validateExtensionId(value);
         
         if (result.valid) {
           extensionIdInput.classList.remove('invalid');
@@ -655,7 +866,7 @@
       const profileList = document.getElementById('profile-list');
       profileList.innerHTML = '<p class="text-center" style="padding: 20px; color: #a0aec0;">Detectando perfiles...</p>';
       
-      const result = await window.bloomAPI.detectChromeProfiles();
+      const result = await window.api.detectChromeProfiles();
       
       if (result.success && result.profiles.length > 0) {
         detectedProfiles = result.profiles;
@@ -709,12 +920,13 @@
       document.getElementById('progress-text').textContent = 'Finalizando configuración...';
       document.getElementById('progress-fill').style.width = '100%';
       
-      const result = await window.bloomAPI.finalizeSetup({
+      const result = await window.api.finalizeSetup({
         extensionId: extensionId,
         profiles: selectedProfiles
       });
       
       if (result.success) {
+        document.getElementById('final-port').textContent = servicePort;
         document.getElementById('final-ext-id').textContent = extensionId;
         document.getElementById('final-profiles').textContent = selectedProfiles.join(', ');
         showScreen('success-screen');
@@ -727,6 +939,10 @@
     // ========================================================================
     // SUCCESS SCREEN
     // ========================================================================
+
+    document.getElementById('final-view-logs-btn').addEventListener('click', () => {
+      window.api.openLogsFolder();
+    });
 
     document.getElementById('close-installer-btn').addEventListener('click', () => {
       window.close();
