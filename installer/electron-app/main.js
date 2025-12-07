@@ -454,6 +454,20 @@ async function installHost() {
 
   await fs.copy(sourcePath, destPath, { overwrite: true });
   
+  // Windows: También copiar libwinpthread-1.dll si existe
+  if (platform === 'win32') {
+    const dllName = 'libwinpthread-1.dll';
+    const dllSourcePath = path.join(__dirname, '..', 'native', 'bin', 'win32', dllName);
+    
+    if (await fs.pathExists(dllSourcePath)) {
+      const dllDestPath = path.join(paths.hostInstallDir, dllName);
+      await fs.copy(dllSourcePath, dllDestPath, { overwrite: true });
+      console.log('✓ libwinpthread-1.dll copied');
+    } else {
+      console.log('⚠ libwinpthread-1.dll not found - binary should be fully static');
+    }
+  }
+  
   if (platform !== 'win32') {
     await fs.chmod(destPath, '755');
   }
