@@ -15,5 +15,6 @@ contextBridge.exposeInMainWorld('api', {
   openLogsFolder: () => ipcRenderer.invoke('open-logs-folder'),
   onInstallationProgress: (callback) => {
     ipcRenderer.on('installation-progress', (event, data) => callback(data));
-  }
+  },
+  openBTIPConfig: () => ipcRenderer.invoke('open-btip-config')
 });
