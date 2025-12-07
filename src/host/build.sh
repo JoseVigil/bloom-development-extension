@@ -35,48 +35,81 @@ if [ ! -f "$HEADER_DIR/json.hpp" ]; then
     echo -e "${GREEN}✓ json.hpp downloaded${NC}"
 fi
 
-# Windows - FIXED: Static pthread linking
+# Windows
 if command -v x86_64-w64-mingw32-g++ &> /dev/null; then
     echo -e "${YELLOW}� Compiling for Windows...${NC}"
     
-    x86_64-w64-mingw32-g++ \
-        -std=c++20 \
-        -O2 \
-        -I. \
-        "$SRC_FILE" \
+    x86_64-w64-mingw32-g++ -std=c++20 -O2 -I. "$SRC_FILE" \
         -o "$OUT_DIR/win32/bloom-host.exe" \
-        -m64 \
-        -static \
-        -static-libgcc \
-        -static-libstdc++ \
-        -Wl,-Bstatic -lpthread -Wl,-Bdynamic \
-        -lws2_32 \
-        -lshell32 \
+        -lws2_32 -lshell32 -static-libgcc -static-libstdc++ \
         -Wl,--subsystem,console
     
     echo -e "${GREEN}✓ bloom-host.exe created${NC}"
     
-    # Verificar que NO tenga libwinpthread-1.dll
-    echo -e "${YELLOW}� Verifying static linking...${NC}"
-    if x86_64-w64-mingw32-objdump -p "$OUT_DIR/win32/bloom-host.exe" | grep -q "libwinpthread"; then
-        echo -e "${RED}⚠️  WARNING: libwinpthread-1.dll still required!${NC}"
-        echo -e "${YELLOW}� Copying libwinpthread-1.dll as fallback...${NC}"
+    # Detectar y copiar DLLs requeridas desde MinGW
+    echo -e "${YELLOW}� Detecting required DLLs...${NC}"
+    
+    # Buscar DLLs en el sistema MinGW
+    MINGW_BIN=""
+    
+    # Lista de ubicaciones posibles (en orden de prioridad)
+    POSSIBLE_PATHS=(
+        "/usr/local/opt/mingw-w64/toolchain-x86_64/x86_64-w64-mingw32/bin"
+        "/opt/homebrew/opt/mingw-w64/toolchain-x86_64/x86_64-w64-mingw32/bin"
+        "/usr/local/Cellar/mingw-w64/*/toolchain-x86_64/x86_64-w64-mingw32/bin"
+    )
+    
+    # Intentar cada ubicación
+    for path in "${POSSIBLE_PATHS[@]}"; do
+        # Expandir wildcards si existen
+        expanded_paths=($path)
+        for expanded in "${expanded_paths[@]}"; do
+            if [ -d "$expanded" ] && [ -f "$expanded/libwinpthread-1.dll" ]; then
+                MINGW_BIN="$expanded"
+                break 2
+            fi
+        done
+    done
+    
+    # Si no se encontró, buscar con find
+    if [ -z "$MINGW_BIN" ]; then
+        echo -e "${YELLOW}  Searching for libwinpthread-1.dll...${NC}"
+        FOUND_DLL=$(find /usr/local /opt/homebrew -name "libwinpthread-1.dll" 2>/dev/null | head -1)
+        if [ -n "$FOUND_DLL" ]; then
+            MINGW_BIN=$(dirname "$FOUND_DLL")
+        fi
+    fi
+    
+    if [ -n "$MINGW_BIN" ] && [ -d "$MINGW_BIN" ]; then
+        echo -e "${GREEN}✓ Found MinGW bin: $MINGW_BIN${NC}"
         
-        # Intentar copiar la DLL como fallback
-        if command -v brew &> /dev/null; then
-            MINGW_PATH=$(brew --prefix mingw-w64 2>/dev/null || echo "")
-            if [ -n "$MINGW_PATH" ]; then
-                DLL_PATH="$MINGW_PATH/toolchain-x86_64/x86_64-w64-mingw32/bin/libwinpthread-1.dll"
+        # Detectar qué DLLs necesita el ejecutable
+        REQUIRED_DLLS=$(x86_64-w64-mingw32-objdump -p "$OUT_DIR/win32/bloom-host.exe" | \
+            grep "DLL Name:" | \
+            grep -v "KERNEL32\|api-ms-win\|SHELL32\|WS2_32" | \
+            awk '{print $3}')
+        
+        if [ -n "$REQUIRED_DLLS" ]; then
+            echo -e "${YELLOW}Required DLLs:${NC}"
+            echo "$REQUIRED_DLLS"
+            
+            # Copiar cada DLL requerida
+            for DLL in $REQUIRED_DLLS; do
+                DLL_PATH="$MINGW_BIN/$DLL"
                 if [ -f "$DLL_PATH" ]; then
                     cp "$DLL_PATH" "$OUT_DIR/win32/"
-                    echo -e "${GREEN}✓ libwinpthread-1.dll copied${NC}"
+                    echo -e "${GREEN}  ✓ Copied: $DLL${NC}"
                 else
-                    echo -e "${RED}✗ Could not find libwinpthread-1.dll${NC}"
+                    echo -e "${RED}  ✗ Not found: $DLL${NC}"
                 fi
-            fi
+            done
+        else
+            echo -e "${GREEN}✓ No external DLLs required (fully static)${NC}"
         fi
     else
-        echo -e "${GREEN}✓ Fully static binary (no pthread dependency)${NC}"
+        echo -e "${YELLOW}⚠ Could not find MinGW bin directory${NC}"
+        echo -e "${YELLOW}  If the executable fails, manually copy DLLs to:${NC}"
+        echo -e "${YELLOW}  $OUT_DIR/win32/${NC}"
     fi
 fi
 
@@ -109,10 +142,7 @@ echo ""
 echo -e "${GREEN}✅ Build complete!${NC}"
 echo "Binaries in: $OUT_DIR/"
 echo ""
-echo -e "${YELLOW}� Dependency check:${NC}"
-if command -v x86_64-w64-mingw32-objdump &> /dev/null; then
-    echo "Windows DLLs required:"
-    x86_64-w64-mingw32-objdump -p "$OUT_DIR/win32/bloom-host.exe" | grep "DLL Name" | grep -v "api-ms-win" | grep -v "KERNEL32" | grep -v "SHELL32" | grep -v "WS2_32"
-fi
+echo -e "${YELLOW}� Windows build contents:${NC}"
+ls -lh "$OUT_DIR/win32/" 2>/dev/null || echo "No Windows build"
 echo ""
 echo -e "${YELLOW}� Ready for Electron installer${NC}"
