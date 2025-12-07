@@ -41,6 +41,7 @@ if command -v x86_64-w64-mingw32-g++ &> /dev/null; then
     x86_64-w64-mingw32-g++ -std=c++20 -O2 -I. "$SRC_FILE" \
         -o "$OUT_DIR/win32/bloom-host.exe" \
         -lws2_32 -lshlwapi -static-libgcc -static-libstdc++ \
+        -Wl,-Bstatic -lpthread -Wl,-Bdynamic \
         -Wl,--subsystem,console
     echo -e "${GREEN}✓ bloom-host.exe created${NC}"
 fi
