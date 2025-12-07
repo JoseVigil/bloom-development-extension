@@ -337,6 +337,10 @@ ipcMain.handle('open-logs-folder', async () => {
   await shell.openPath(logsDir);
 });
 
+ipcMain.handle('open-btip-config', async () => {
+  await shell.openExternal('http://localhost:8777/home');
+});
+
 async function checkAdminPrivileges() {
   if (platform === 'win32') {
     try {
