@@ -3,14 +3,12 @@ import * as vscode from 'vscode';
 import { Logger } from '../utils/logger';
 import { IntentTreeProvider } from '../providers/intentTreeProvider';
 import { NucleusTreeProvider } from '../providers/nucleusTreeProvider';
-import { NucleusWelcomeProvider } from '../providers/nucleusWelcomeProvider';
 import { ProfileTreeProvider } from '../providers/profileTreeProvider';
 import { Managers } from './managersInitializer';
 
 export interface Providers {
     intentTreeProvider: IntentTreeProvider;
     nucleusTreeProvider: NucleusTreeProvider;
-    nucleusWelcomeProvider: NucleusWelcomeProvider;
 }
 
 /**
@@ -43,10 +41,6 @@ export function initializeProviders(
         showCollapseAll: true
     });
     
-    // Nucleus Welcome Provider (Para primera vez)
-    const nucleusWelcomeProvider = new NucleusWelcomeProvider(context);
-    vscode.window.registerTreeDataProvider('bloomNucleusWelcome', nucleusWelcomeProvider);
-    
     // Profile Tree Provider (Singleton)
     try {
         ProfileTreeProvider.initialize(context, logger, managers.chromeProfileManager);
@@ -59,7 +53,6 @@ export function initializeProviders(
     
     return {
         intentTreeProvider,
-        nucleusTreeProvider,
-        nucleusWelcomeProvider
+        nucleusTreeProvider
     };
 }

@@ -14,7 +14,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     try {
         // 1. Inicializar contexto global
-        const isRegistered = initializeContext(context, logger);
+        initializeContext(context, logger);
         
         // 2. Inicializar managers
         const managers = initializeManagers(context, logger);
@@ -24,7 +24,7 @@ export function activate(context: vscode.ExtensionContext) {
         
         if (!workspaceFolder) {
             logger.warn('⚠️ No workspace folder - Limited functionality');
-            registerCriticalCommands(context, logger, managers.welcomeView);
+            registerCriticalCommands(context, logger);
             return;
         }
         
@@ -47,18 +47,6 @@ export function activate(context: vscode.ExtensionContext) {
         
         // 6. Registrar comandos principales
         registerAllCommands(context, logger, managers, providers);
-        
-        // 7. Welcome en primera instalación
-        if (!isRegistered) {
-            logger.info('📋 Primera instalación - Mostrando Welcome');
-            setTimeout(() => {
-                try {
-                    managers.welcomeView.show();
-                } catch (error: any) {
-                    logger.error('Error showing welcome', error);
-                }
-            }, 1000);
-        }
         
         logger.info('✅ Bloom BTIP activation complete');
         
