@@ -1,438 +1,295 @@
-import * as http from 'http';
-import * as crypto from 'crypto';
-import * as path from 'path';
-import * as fs from 'fs';
-import * as vscode from 'vscode';
-import { Logger } from '../utils/logger';
+import WebSocket, { WebSocketServer } from 'ws';
+import type { IncomingMessage } from 'http';
+import type { HostExecutor } from '../host/HostExecutor';
 
-interface WebSocketFrame {
-    fin: boolean;
-    opcode: number;
-    masked: boolean;
-    payload: Buffer;
+// Extensión limpia de WebSocket para agregar isAlive
+interface ExtendedWebSocket extends WebSocket {
+  isAlive: boolean;
 }
 
-interface BTIPMessage {
-    event: string;
-    [key: string]: any;
+interface WebSocketMessage {
+  event: string;
+  data?: any;
 }
 
+interface WebSocketError {
+  event: 'error';
+  data: {
+    message: string;
+  };
+}
+
+interface StatusResponse {
+  plugin: string;
+  host: any;
+  gemini: any;
+  connectedClients: number;
+}
+
+/**
+ * WebSocketManager - Transport layer para eventos bidireccionales
+ */
 export class WebSocketManager {
-    private connections: Set<any> = new Set();
-    private server: http.Server;
-    private workspacePath: string;
-    private bloomPath: string;
-    private fileWatcher: vscode.FileSystemWatcher | null = null;
+  private static instance: WebSocketManager;
 
-    constructor(server: http.Server, workspacePath: string) {
-        this.server = server;
-        this.workspacePath = workspacePath;
-        this.bloomPath = path.join(workspacePath, '.bloom');
-        this.setupWebSocketServer();
-        this.setupFileWatcher();
+  private wss: WebSocketServer | null = null;
+  private clients: Set<ExtendedWebSocket> = new Set();
+  private intentSubscribers: Set<ExtendedWebSocket> = new Set();
+  private heartbeatInterval: NodeJS.Timeout | null = null;
+  private attachedHost: HostExecutor | null = null;
+
+  private readonly PORT = 4124;
+  private readonly HEARTBEAT_INTERVAL = 20000; // 20 segundos
+
+  private constructor() {}
+
+  static getInstance(): WebSocketManager {
+    if (!WebSocketManager.instance) {
+      WebSocketManager.instance = new WebSocketManager();
+    }
+    return WebSocketManager.instance;
+  }
+
+  async start(): Promise<void> {
+    if (this.wss) {
+      console.log('[WebSocketManager] Ya está iniciado');
+      return;
     }
 
-    private setupWebSocketServer(): void {
-        this.server.on('upgrade', (req, socket, head) => {
-            if (req.url !== '/ws') {
-                socket.destroy();
-                return;
-            }
-
-            this.handleUpgrade(req, socket, head);
+    return new Promise((resolve, reject) => {
+      try {
+        this.wss = new WebSocketServer({
+          port: this.PORT,
+          verifyClient: (info: { origin: string; req: IncomingMessage; secure: boolean }) => {
+            const origin = info.origin || (info.req.headers.origin as string | undefined);
+            if (origin?.startsWith('vscode-webview://')) return true;
+            if (origin?.includes('localhost') || origin?.includes('127.0.0.1')) return true;
+            console.warn('[WebSocketManager] Conexión rechazada desde origen:', origin);
+            return false;
+          },
         });
+
+        this.wss.on('connection', (ws: WebSocket) => {
+          this.handleConnection(ws as ExtendedWebSocket);
+        });
+
+        this.wss.on('error', (error: Error) => {
+          console.error('[WebSocketManager] Error del servidor WebSocket:', error);
+        });
+
+        this.startHeartbeat();
+
+        console.log(`[WebSocketManager] Servidor WebSocket iniciado en ws://localhost:${this.PORT}`);
+        resolve();
+      } catch (err) {
+        console.error('[WebSocketManager] Fallo al iniciar servidor:', err);
+        reject(err);
+      }
+    });
+  }
+
+  async stop(): Promise<void> {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
     }
 
-    private handleUpgrade(req: http.IncomingMessage, socket: any, head: Buffer): void {
-        const key = req.headers['sec-websocket-key'];
-        if (!key) {
-            socket.destroy();
-            return;
+    this.clients.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.close(1000, 'Server shutting down');
+      }
+    });
+
+    this.clients.clear();
+    this.intentSubscribers.clear();
+
+    if (this.wss) {
+      await new Promise<void>(resolve => {
+        this.wss!.close(() => {
+          console.log('[WebSocketManager] Servidor WebSocket detenido');
+          this.wss = null;
+          resolve();
+        });
+      });
+    }
+  }
+
+  private handleConnection(ws: ExtendedWebSocket): void {
+    console.log('[WebSocketManager] Nueva conexión entrante');
+    this.clients.add(ws);
+    ws.isAlive = true;
+
+    ws.on('pong', () => {
+      ws.isAlive = true;
+    });
+
+    ws.on('message', (data: WebSocket.RawData) => {
+      this.handleMessage(ws, data.toString());
+    });
+
+    ws.on('close', () => {
+      console.log('[WebSocketManager] Cliente desconectado');
+      this.clients.delete(ws);
+      this.intentSubscribers.delete(ws);
+    });
+
+    ws.on('error', (error: Error) => {
+      console.error('[WebSocketManager] Error en cliente:', error);
+      this.clients.delete(ws);
+      this.intentSubscribers.delete(ws);
+    });
+
+    this.sendToClient(ws, 'connected', {
+      timestamp: Date.now(),
+      clients: this.clients.size,
+    });
+  }
+
+  private async handleMessage(ws: ExtendedWebSocket, rawMessage: string): Promise<void> {
+    let message: WebSocketMessage;
+    try {
+      message = JSON.parse(rawMessage);
+    } catch (err) {
+      this.sendError(ws, 'Mensaje JSON inválido');
+      return;
+    }
+
+    console.log(`[WebSocketManager] Evento recibido: ${message.event}`);
+
+    try {
+      switch (message.event) {
+        case 'request_status':
+          await this.handleRequestStatus(ws);
+          break;
+
+        case 'subscribe_intents':
+          this.handleSubscribeIntents(ws);
+          break;
+
+        case 'run_gemini_dev_to_doc':
+          await this.handleRunGeminiDevToDoc(ws, message.data);
+          break;
+
+        case 'open_intent':
+          await this.handleOpenIntent(ws, message.data);
+          break;
+
+        default:
+          this.sendError(ws, `Evento desconocido: ${message.event}`);
+      }
+    } catch (err: any) {
+      console.error('[WebSocketManager] Error procesando mensaje:', err);
+      this.sendError(ws, err.message || 'Error interno');
+    }
+  }
+
+  private async handleRequestStatus(ws: ExtendedWebSocket): Promise<void> {
+    const status: StatusResponse = {
+      plugin: 'bloom-vscode-plugin',
+      host: this.attachedHost && typeof (this.attachedHost as any).hostStatus === 'function'
+        ? (this.attachedHost as any).hostStatus()
+        : { connected: false },
+      gemini: this.getGeminiStatus(),
+      connectedClients: this.clients.size,
+    };
+
+    this.sendToClient(ws, 'status', status);
+  }
+
+  private handleSubscribeIntents(ws: ExtendedWebSocket): void {
+    this.intentSubscribers.add(ws);
+    console.log(`[WebSocketManager] Cliente suscrito a intents (${this.intentSubscribers.size} total)`);
+    this.sendToClient(ws, 'subscribed', { type: 'intents', timestamp: Date.now() });
+  }
+
+  private async handleRunGeminiDevToDoc(ws: ExtendedWebSocket, data: any): Promise<void> {
+    console.log('[WebSocketManager] Ejecutando pipeline gemini_dev_to_doc...', data);
+    this.sendToClient(ws, 'gemini_pipeline_started', { timestamp: Date.now(), data });
+    // TODO: Delegar a PluginApiServer cuando esté listo
+  }
+
+  private async handleOpenIntent(ws: ExtendedWebSocket, data: any): Promise<void> {
+    const { id } = data || {};
+    if (!id) {
+      this.sendError(ws, 'Falta ID del intent');
+      return;
+    }
+
+    console.log(`[WebSocketManager] Abriendo intent: ${id}`);
+    // TODO: await IntentController.openIntent(id);
+    this.sendToClient(ws, 'intent_opened', { id, timestamp: Date.now() });
+  }
+
+  broadcast(event: string, payload?: any): void {
+    const message = JSON.stringify({ event, data: payload });
+    let sent = 0;
+    this.clients.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(message);
+        sent++;
+      }
+    });
+    console.log(`[WebSocketManager] Broadcast '${event}' → ${sent} clientes`);
+  }
+
+  sendToClient(ws: ExtendedWebSocket, event: string, payload?: any): void {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ event, data: payload }));
+    }
+  }
+
+  private sendError(ws: ExtendedWebSocket, message: string): void {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ event: 'error', data: { message } }));
+    }
+  }
+
+  currentStatus(): { clients: number } {
+    return { clients: this.clients.size };
+  }
+
+  attachHost(host: HostExecutor): void {
+    this.attachedHost = host;
+    console.log('[WebSocketManager] HostExecutor adjuntado');
+    // Aquí conectarás los eventos del host cuando los tenga
+  }
+
+  private startHeartbeat(): void {
+    this.heartbeatInterval = setInterval(() => {
+      this.broadcast('heartbeat', { timestamp: Date.now() });
+
+      this.clients.forEach(ws => {
+        if (!ws.isAlive) {
+          console.log('[WebSocketManager] Cliente muerto detectado, cerrando...');
+          ws.terminate();
+          this.clients.delete(ws);
+          this.intentSubscribers.delete(ws);
+          return;
         }
 
-        const acceptKey = this.generateAcceptKey(key as string);
-        
-        socket.write(
-            'HTTP/1.1 101 Switching Protocols\r\n' +
-            'Upgrade: websocket\r\n' +
-            'Connection: Upgrade\r\n' +
-            `Sec-WebSocket-Accept: ${acceptKey}\r\n` +
-            '\r\n'
-        );
+        ws.isAlive = false;
+        ws.ping();
+      });
+    }, this.HEARTBEAT_INTERVAL);
+  }
 
-        const connection = {
-            socket,
-            id: crypto.randomUUID()
-        };
+  private getGeminiStatus(): any {
+    return { configured: false, apiKey: false };
+  }
 
-        this.connections.add(connection);
-        Logger.info(`WebSocket client connected: ${connection.id}`);
+  notifyIntentsUpdated(data: any): void {
+    const message = JSON.stringify({ event: 'intents_updated', data });
+    let sent = 0;
+    this.intentSubscribers.forEach(ws => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(message);
+        sent++;
+      }
+    });
+    console.log(`[WebSocketManager] intents_updated → ${sent} suscriptores`);
+  }
 
-        socket.on('data', (data: Buffer) => {
-            this.handleData(connection, data);
-        });
-
-        socket.on('close', () => {
-            this.connections.delete(connection);
-            Logger.info(`WebSocket client disconnected: ${connection.id}`);
-        });
-
-        socket.on('error', (err: Error) => {
-            Logger.error('WebSocket error:', err);
-            this.connections.delete(connection);
-        });
-
-        // Send initial tree snapshot
-        this.sendTreeSnapshot(connection);
-    }
-
-    private handleData(connection: any, data: Buffer): void {
-        try {
-            const frame = this.parseFrame(data);
-            if (!frame) return;
-
-            if (frame.opcode === 0x8) { // Close frame
-                connection.socket.end();
-                return;
-            }
-
-            if (frame.opcode === 0x9) { // Ping
-                this.sendPong(connection);
-                return;
-            }
-
-            if (frame.opcode === 0x1) { // Text frame
-                const message: BTIPMessage = JSON.parse(frame.payload.toString('utf8'));
-                this.handleMessage(connection, message);
-            }
-        } catch (err) {
-            Logger.error('Error handling WebSocket data:', err);
-        }
-    }
-
-    private handleMessage(connection: any, message: BTIPMessage): void {
-        Logger.info(`WebSocket message: ${message.event}`);
-
-        switch (message.event) {
-            case 'navigate':
-                this.handleNavigate(connection, message.path);
-                break;
-            case 'open_file':
-                this.handleOpenFile(connection, message.path);
-                break;
-            case 'expand_node':
-                this.handleExpandNode(connection, message.path);
-                break;
-            case 'list_directory':
-                this.handleListDirectory(connection, message.path);
-                break;
-            case 'ping':
-                this.sendMessage(connection, { event: 'pong' });
-                break;
-            default:
-                Logger.warn(`Unknown WebSocket event: ${message.event}`);
-        }
-    }
-
-    private handleNavigate(connection: any, targetPath: string): void {
-        const fullPath = path.join(this.bloomPath, targetPath);
-        
-        if (!this.isValidPath(fullPath)) {
-            this.sendMessage(connection, {
-                event: 'error',
-                message: 'Invalid path'
-            });
-            return;
-        }
-
-        this.sendMessage(connection, {
-            event: 'navigate_success',
-            path: targetPath
-        });
-    }
-
-    private handleOpenFile(connection: any, filePath: string): void {
-        const fullPath = path.join(this.bloomPath, filePath);
-
-        if (!this.isValidPath(fullPath)) {
-            this.sendMessage(connection, {
-                event: 'error',
-                message: 'Invalid path'
-            });
-            return;
-        }
-
-        fs.readFile(fullPath, 'utf8', (err, data) => {
-            if (err) {
-                this.sendMessage(connection, {
-                    event: 'error',
-                    message: `Cannot read file: ${err.message}`
-                });
-                return;
-            }
-
-            this.sendMessage(connection, {
-                event: 'file_content',
-                path: filePath,
-                content: data,
-                size: data.length,
-                ext: path.extname(filePath)
-            });
-        });
-    }
-
-    private handleExpandNode(connection: any, nodePath: string): void {
-        const fullPath = path.join(this.bloomPath, nodePath);
-
-        if (!this.isValidPath(fullPath)) {
-            this.sendMessage(connection, {
-                event: 'error',
-                message: 'Invalid path'
-            });
-            return;
-        }
-
-        this.readDirectory(fullPath, (err, structure) => {
-            if (err) {
-                this.sendMessage(connection, {
-                    event: 'error',
-                    message: `Cannot read directory: ${err.message}`
-                });
-                return;
-            }
-
-            this.sendMessage(connection, {
-                event: 'node_expanded',
-                path: nodePath,
-                children: structure
-            });
-        });
-    }
-
-    private handleListDirectory(connection: any, dirPath: string): void {
-        const fullPath = path.join(this.bloomPath, dirPath || '');
-
-        if (!this.isValidPath(fullPath)) {
-            this.sendMessage(connection, {
-                event: 'error',
-                message: 'Invalid path'
-            });
-            return;
-        }
-
-        this.readDirectory(fullPath, (err, structure) => {
-            if (err) {
-                this.sendMessage(connection, {
-                    event: 'error',
-                    message: `Cannot read directory: ${err.message}`
-                });
-                return;
-            }
-
-            this.sendMessage(connection, {
-                event: 'directory_list',
-                path: dirPath,
-                items: structure
-            });
-        });
-    }
-
-    private sendTreeSnapshot(connection: any): void {
-        this.readBTIPStructure((err, structure) => {
-            if (err) {
-                Logger.error('Error reading BTIP structure:', err);
-                return;
-            }
-
-            this.sendMessage(connection, {
-                event: 'tree_snapshot',
-                structure
-            });
-        });
-    }
-
-    private readBTIPStructure(callback: (err: Error | null, structure?: any) => void): void {
-        if (!fs.existsSync(this.bloomPath)) {
-            callback(new Error('.bloom directory not found'));
-            return;
-        }
-
-        this.readDirectory(this.bloomPath, callback);
-    }
-
-    private readDirectory(dirPath: string, callback: (err: Error | null, structure?: any) => void): void {
-        fs.readdir(dirPath, { withFileTypes: true }, (err, entries) => {
-            if (err) {
-                callback(err);
-                return;
-            }
-
-            const structure: any[] = [];
-
-            let pending = entries.length;
-            if (pending === 0) {
-                callback(null, structure);
-                return;
-            }
-
-            entries.forEach((entry) => {
-                const fullPath = path.join(dirPath, entry.name);
-                const relativePath = path.relative(this.bloomPath, fullPath);
-
-                if (entry.isDirectory()) {
-                    structure.push({
-                        name: entry.name,
-                        path: relativePath,
-                        type: 'directory'
-                    });
-                    if (--pending === 0) callback(null, structure);
-                } else {
-                    fs.stat(fullPath, (statErr, stats) => {
-                        if (!statErr) {
-                            structure.push({
-                                name: entry.name,
-                                path: relativePath,
-                                type: 'file',
-                                size: stats.size,
-                                ext: path.extname(entry.name)
-                            });
-                        }
-                        if (--pending === 0) callback(null, structure);
-                    });
-                }
-            });
-        });
-    }
-
-    private setupFileWatcher(): void {
-        const pattern = new vscode.RelativePattern(this.workspacePath, '.bloom/**/*');
-        this.fileWatcher = vscode.workspace.createFileSystemWatcher(pattern);
-
-        this.fileWatcher.onDidCreate((uri) => {
-            this.broadcast({
-                event: 'btip_update',
-                change: 'created',
-                path: path.relative(this.bloomPath, uri.fsPath)
-            });
-        });
-
-        this.fileWatcher.onDidChange((uri) => {
-            this.broadcast({
-                event: 'btip_update',
-                change: 'modified',
-                path: path.relative(this.bloomPath, uri.fsPath)
-            });
-        });
-
-        this.fileWatcher.onDidDelete((uri) => {
-            this.broadcast({
-                event: 'btip_update',
-                change: 'deleted',
-                path: path.relative(this.bloomPath, uri.fsPath)
-            });
-        });
-    }
-
-    broadcast(message: BTIPMessage): void {
-        this.connections.forEach((connection) => {
-            this.sendMessage(connection, message);
-        });
-    }
-
-    private sendMessage(connection: any, message: BTIPMessage): void {
-        const data = JSON.stringify(message);
-        const frame = this.createFrame(data);
-        connection.socket.write(frame);
-    }
-
-    private sendPong(connection: any): void {
-        const frame = Buffer.alloc(2);
-        frame[0] = 0x8A; // FIN + Pong
-        frame[1] = 0x00; // No payload
-        connection.socket.write(frame);
-    }
-
-    private createFrame(data: string): Buffer {
-        const payload = Buffer.from(data, 'utf8');
-        const payloadLength = payload.length;
-
-        let frame: Buffer;
-        let offset = 2;
-
-        if (payloadLength < 126) {
-            frame = Buffer.alloc(2 + payloadLength);
-            frame[1] = payloadLength;
-        } else if (payloadLength < 65536) {
-            frame = Buffer.alloc(4 + payloadLength);
-            frame[1] = 126;
-            frame.writeUInt16BE(payloadLength, 2);
-            offset = 4;
-        } else {
-            frame = Buffer.alloc(10 + payloadLength);
-            frame[1] = 127;
-            frame.writeBigUInt64BE(BigInt(payloadLength), 2);
-            offset = 10;
-        }
-
-        frame[0] = 0x81; // FIN + Text
-        payload.copy(frame, offset);
-
-        return frame;
-    }
-
-    private parseFrame(data: Buffer): WebSocketFrame | null {
-        if (data.length < 2) return null;
-
-        const fin = (data[0] & 0x80) !== 0;
-        const opcode = data[0] & 0x0F;
-        const masked = (data[1] & 0x80) !== 0;
-        let payloadLength = data[1] & 0x7F;
-        let offset = 2;
-
-        if (payloadLength === 126) {
-            if (data.length < 4) return null;
-            payloadLength = data.readUInt16BE(2);
-            offset = 4;
-        } else if (payloadLength === 127) {
-            if (data.length < 10) return null;
-            payloadLength = Number(data.readBigUInt64BE(2));
-            offset = 10;
-        }
-
-        if (!masked) return null;
-
-        const maskKey = data.slice(offset, offset + 4);
-        offset += 4;
-
-        const payload = Buffer.alloc(payloadLength);
-        for (let i = 0; i < payloadLength; i++) {
-            payload[i] = data[offset + i] ^ maskKey[i % 4];
-        }
-
-        return { fin, opcode, masked, payload };
-    }
-
-    private generateAcceptKey(key: string): string {
-        const magic = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
-        const hash = crypto.createHash('sha1');
-        hash.update(key + magic);
-        return hash.digest('base64');
-    }
-
-    private isValidPath(targetPath: string): boolean {
-        const normalized = path.normalize(targetPath);
-        return normalized.startsWith(this.bloomPath);
-    }
-
-    dispose(): void {
-        if (this.fileWatcher) {
-            this.fileWatcher.dispose();
-            this.fileWatcher = null;
-        }
-
-        this.connections.forEach((connection) => {
-            connection.socket.end();
-        });
-        this.connections.clear();
-    }
+  notifyHostEvent(eventType: string, data: any): void {
+    this.broadcast('host_event', { type: eventType, ...data, timestamp: Date.now() });
+  }
 }

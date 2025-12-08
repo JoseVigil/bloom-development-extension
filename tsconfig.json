@@ -14,7 +14,7 @@
     "resolveJsonModule": true,
     "types": ["vscode", "node"]
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "src/bridge/HostExecutor.tss"],
   "exclude": [
     "node_modules",
     "out",

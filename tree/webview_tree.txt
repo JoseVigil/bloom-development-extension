@@ -1,0 +1,27 @@
+bloom-development-extension/
+└── webview/
+    └── btip-explorer/
+        ├── package.json
+        ├── src/
+        │   ├── app.html
+        │   ├── lib/
+        │   │   ├── components/
+        │   │   │   ├── FileTree.svelte
+        │   │   │   ├── FileViewer.svelte
+        │   │   │   ├── TreeNode.svelte
+        │   │   │   └── viewers/
+        │   │   │       ├── BLViewer.svelte
+        │   │   │       ├── JSONViewer.svelte
+        │   │   │       └── TextViewer.svelte
+        │   │   ├── index.ts
+        │   │   ├── stores/
+        │   │   │   ├── navigation.ts
+        │   │   │   └── websocket.ts
+        │   │   └── styles/
+        │   │       └── global.css
+        │   └── routes/
+        │       ├── +layout.svelte
+        │       └── +page.svelte
+        ├── svelte.config.js
+        ├── tsconfig.json
+        └── vite.config.ts

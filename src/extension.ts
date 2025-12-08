@@ -6,6 +6,7 @@ import { initializeProviders } from './initialization/providersInitializer';
 import { initializeManagers } from './initialization/managersInitializer';
 import { registerAllCommands } from './initialization/commandRegistry';
 import { registerCriticalCommands } from './initialization/criticalCommandsInitializer';
+import { initializeServer } from './server'; // ← Cambio: importar desde server/index.ts
 
 export function activate(context: vscode.ExtensionContext) {
     const logger = new Logger();
@@ -29,11 +30,25 @@ export function activate(context: vscode.ExtensionContext) {
         
         // 4. Inicializar providers
         const providers = initializeProviders(context, workspaceFolder, logger, managers);
+
+        // 5. Inicializar servidor (API, WebSocket, Host) ← Cambio: usar initializeServer
+        initializeServer(context)
+            .then(({ api, ws, host }) => {
+                logger.info('✅ Server components initialized');
+                logger.info(`📡 API Server: http://localhost:${api.getPort()}`);
+                logger.info(`🔌 WebSocket: ws://localhost:4124`);
+            })
+            .catch(err => {
+                logger.error('❌ Error initializing server', err);
+                vscode.window.showErrorMessage(
+                    `Bloom: Error al iniciar el servidor - ${err.message}`
+                );
+            });
         
-        // 5. Registrar TODOS los comandos
+        // 6. Registrar comandos principales
         registerAllCommands(context, logger, managers, providers);
         
-        // 6. Mostrar welcome si es primera vez
+        // 7. Welcome en primera instalación
         if (!isRegistered) {
             logger.info('📋 Primera instalación - Mostrando Welcome');
             setTimeout(() => {
@@ -56,5 +71,6 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 export function deactivate() {
-    // VSCode limpia automáticamente
+    // VSCode limpia automáticamente los subscriptions
+    console.log('🌸 Bloom BTIP deactivated');
 }
