@@ -5,7 +5,6 @@ import { MetadataManager } from '../core/metadataManager';
 import { ContextGatherer } from '../core/contextGatherer';
 import { TokenEstimator } from '../utils/tokenEstimator';
 import { ChromeProfileManager } from '../core/chromeProfileManager';
-import { WelcomeView } from '../ui/welcome/welcomeView';
 import { GitManager } from '../utils/gitManager';
 
 export interface Managers {
@@ -14,7 +13,6 @@ export interface Managers {
     contextGatherer: ContextGatherer;
     tokenEstimator: TokenEstimator;
     chromeProfileManager: ChromeProfileManager;
-    welcomeView: WelcomeView;
 }
 
 /**
@@ -32,7 +30,6 @@ export function initializeManagers(
     const contextGatherer = new ContextGatherer(logger);
     const tokenEstimator = new TokenEstimator();
     const chromeProfileManager = new ChromeProfileManager(context, logger);
-    const welcomeView = new WelcomeView(context);
     
     logger.info('✅ Managers initialized');
     
@@ -41,7 +38,6 @@ export function initializeManagers(
         metadataManager,
         contextGatherer,
         tokenEstimator,
-        chromeProfileManager,
-        welcomeView
+        chromeProfileManager
     };
 }

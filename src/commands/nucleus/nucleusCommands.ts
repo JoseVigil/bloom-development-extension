@@ -4,7 +4,6 @@ import { Logger } from '../../utils/logger';
 import { Managers } from '../../initialization/managersInitializer';
 import { Providers } from '../../initialization/providersInitializer';
 import { UserManager } from '../../managers/userManager';
-import { NucleusSetupPanel } from '../../ui/nucleus/NucleusSetupPanel';
 import { openNucleusProject } from '../../providers/nucleusTreeProvider';
 import { linkToNucleus } from '../linkToNucleus';
 import { manageProject } from '../manageProject';
@@ -18,51 +17,6 @@ export function registerNucleusCommands(
     managers: Managers,
     providers: Providers
 ): void {
-    // ========================================
-    // COMANDO: Show Welcome
-    // ========================================
-    context.subscriptions.push(
-        vscode.commands.registerCommand('bloom.showWelcome', () => {
-            try {
-                managers.welcomeView.show();
-                logger.info('Welcome view shown');
-            } catch (error: any) {
-                logger.error('Error showing welcome', error);
-                vscode.window.showErrorMessage(`Error: ${error.message}`);
-            }
-        })
-    );
-
-    // ========================================
-    // COMANDO: Create Nucleus Project
-    // ========================================
-    context.subscriptions.push(
-        vscode.commands.registerCommand('bloom.createNucleusProject', async () => {
-            try {
-                managers.welcomeView.show();
-                logger.info('Create Nucleus flow initiated');
-            } catch (error: any) {
-                logger.error('Error creating nucleus', error);
-                vscode.window.showErrorMessage(`Error: ${error.message}`);
-            }
-        })
-    );
-
-    // ========================================
-    // COMANDO: Create New Nucleus
-    // ========================================
-    context.subscriptions.push(
-        vscode.commands.registerCommand('bloom.createNewNucleus', () => {
-            try {
-                new NucleusSetupPanel(context).show();
-                logger.info('Nucleus setup panel opened');
-            } catch (error: any) {
-                logger.error('Error opening nucleus setup', error);
-                vscode.window.showErrorMessage(`Error: ${error.message}`);
-            }
-        })
-    );
-
     // ========================================
     // COMANDO: Add Project to Nucleus
     // ========================================
@@ -163,7 +117,7 @@ export function registerNucleusCommands(
     );
 
     // ========================================
-    // COMANDO: Unlink Nucleus (SIN DUPLICAR)
+    // COMANDO: Unlink Nucleus
     // ========================================
     context.subscriptions.push(
         vscode.commands.registerCommand('bloom.unlinkNucleus', async () => {
@@ -179,7 +133,7 @@ export function registerNucleusCommands(
                 const org = user.githubOrg;
 
                 const choice = await vscode.window.showWarningMessage(
-                    `⛓️‍💥 Desvincular Nucleus de ${org}`,
+                    `⛔️💥 Desvincular Nucleus de ${org}`,
                     { 
                         modal: true, 
                         detail: 'El repositorio local y remoto NO se borrarán.\nSolo se quitará del plugin.'
