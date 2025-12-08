@@ -18,19 +18,18 @@ const stat = promisify(fs.stat);
 // ============================================================================
 
 export interface ChromeProfile {
-    name: string;           // "Profile 1", "Default", "Work"
-    path: string;           // Ruta absoluta al profile
-    displayName?: string;   // Nombre customizado del usuario
+    name: string;
+    path: string;
+    displayName?: string;
     accounts: DetectedAccount[];
 }
 
 export interface DetectedAccount {
     provider: 'claude' | 'chatgpt' | 'grok';
-    email?: string;         // Detectado o null
-    verified: boolean;      // Si se verificó con Playwright
+    email?: string;
+    verified: boolean;
     lastCheck?: Date;
 }
-
 
 interface ProfileMapping {
     intentId: string;
@@ -39,53 +38,349 @@ interface ProfileMapping {
     updatedAt: Date;
 }
 
+interface ActiveProfileState {
+    profileName: string;
+    displayName?: string;
+    lastUsed: string;
+}
+
 // ============================================================================
 // CHROME PROFILE MANAGER
 // ============================================================================
 
 export class ChromeProfileManager {
     private readonly configFile: string;
+    private readonly activeProfileFile: string;
     private mappings: Map<string, IntentProfileConfig> = new Map();
-    private profileHelper: ChromeProfileHelper; // ← NUEVO
+    private profileHelper: ChromeProfileHelper;
+    private activeProfile: ActiveProfileState | null = null;
+
     constructor(
         private context: vscode.ExtensionContext,
         private logger: Logger
     ) {
-        // Archivo de configuración en workspace storage
         const storagePath = context.globalStorageUri.fsPath;
         if (!fs.existsSync(storagePath)) {
             fs.mkdirSync(storagePath, { recursive: true });
         }
         this.configFile = path.join(storagePath, 'profile-mappings.json');
+        this.activeProfileFile = path.join(storagePath, 'active-profile.json');
         this.loadMappings();
-       
-        // Inicializar helper
+        this.loadActiveProfile();
         this.profileHelper = new ChromeProfileHelper(logger);
     }
 
     // ========================================================================
-    // DISCOVERY - MEJORADO
+    // MÉTODOS CRÍTICOS - NUEVOS
     // ========================================================================
+
     /**
-     * Detecta todos los profiles de Chrome instalados
-     * MEJORADO: Usa ChromeProfileHelper para obtener nombres reales
+     * Permite al usuario seleccionar un perfil de Chrome de forma interactiva
      */
+    async selectProfileInteractive(): Promise<void> {
+        try {
+            const profiles = await this.detectProfiles();
+
+            if (profiles.length === 0) {
+                vscode.window.showWarningMessage('No Chrome profiles found');
+                return;
+            }
+
+            const items = profiles.map(profile => ({
+                label: profile.displayName || profile.name,
+                description: profile.name !== profile.displayName ? profile.name : undefined,
+                detail: `Path: ${profile.path}`,
+                profile: profile
+            }));
+
+            const selected = await vscode.window.showQuickPick(items, {
+                placeHolder: 'Select a Chrome profile',
+                matchOnDescription: true,
+                matchOnDetail: true
+            });
+
+            if (!selected) {
+                return;
+            }
+
+            await this.setActiveProfile(
+                selected.profile.name,
+                selected.profile.displayName
+            );
+
+            vscode.window.showInformationMessage(
+                `✅ Active profile set to: ${selected.label}`
+            );
+
+            this.logger.info(`Active profile changed to: ${selected.label} (${selected.profile.name})`);
+
+        } catch (error: any) {
+            this.logger.error('Error selecting profile interactively', error);
+            vscode.window.showErrorMessage(
+                `Failed to select profile: ${error.message}`
+            );
+        }
+    }
+
+    /**
+     * Abre Chrome con el perfil actualmente seleccionado
+     */
+    async launchChromeWithActiveProfile(): Promise<void> {
+        try {
+            if (!this.activeProfile) {
+                const shouldSelect = await vscode.window.showInformationMessage(
+                    'No active Chrome profile selected',
+                    'Select Profile',
+                    'Cancel'
+                );
+
+                if (shouldSelect === 'Select Profile') {
+                    await this.selectProfileInteractive();
+                    if (!this.activeProfile) {
+                        return;
+                    }
+                } else {
+                    return;
+                }
+            }
+
+            await this.openInBrowser(
+                this.activeProfile.profileName,
+                'claude'
+            );
+
+            this.logger.info(`Launched Chrome with active profile: ${this.activeProfile.displayName || this.activeProfile.profileName}`);
+
+        } catch (error: any) {
+            this.logger.error('Error launching Chrome with active profile', error);
+            vscode.window.showErrorMessage(
+                `Failed to launch Chrome: ${error.message}`
+            );
+        }
+    }
+
+    /**
+     * Establece el perfil activo
+     */
+    private async setActiveProfile(profileName: string, displayName?: string): Promise<void> {
+        this.activeProfile = {
+            profileName,
+            displayName,
+            lastUsed: new Date().toISOString()
+        };
+
+        await this.saveActiveProfile();
+    }
+
+    /**
+     * Obtiene el perfil activo actual
+     */
+    getActiveProfile(): ActiveProfileState | null {
+        return this.activeProfile;
+    }
+
+    /**
+     * Guarda el perfil activo a disco
+     */
+    private async saveActiveProfile(): Promise<void> {
+        try {
+            await writeFile(
+                this.activeProfileFile,
+                JSON.stringify(this.activeProfile, null, 2),
+                'utf-8'
+            );
+        } catch (error: any) {
+            this.logger.error('Error saving active profile', error);
+        }
+    }
+
+    /**
+     * Carga el perfil activo desde disco
+     */
+    private loadActiveProfile(): void {
+        try {
+            if (fs.existsSync(this.activeProfileFile)) {
+                const content = fs.readFileSync(this.activeProfileFile, 'utf-8');
+                this.activeProfile = JSON.parse(content);
+                this.logger.info(`Loaded active profile: ${this.activeProfile?.displayName || this.activeProfile?.profileName}`);
+            }
+        } catch (error: any) {
+            this.logger.warn(`Could not load active profile: ${error}`);
+            this.activeProfile = null;
+        }
+    }
+
+    /**
+     * Abre Chrome con el perfil activo en un provider específico
+     */
+    async launchChromeWithProvider(
+        provider: 'claude' | 'chatgpt' | 'grok',
+        conversationId?: string
+    ): Promise<void> {
+        try {
+            if (!this.activeProfile) {
+                await this.selectProfileInteractive();
+                if (!this.activeProfile) {
+                    return;
+                }
+            }
+
+            await this.openInBrowser(
+                this.activeProfile.profileName,
+                provider,
+                conversationId
+            );
+
+        } catch (error: any) {
+            this.logger.error('Error launching Chrome with provider', error);
+            vscode.window.showErrorMessage(
+                `Failed to launch ${provider}: ${error.message}`
+            );
+        }
+    }
+
+    // ========================================================================
+    // MÉTODOS SECUNDARIOS - DELEGADOS A CHROME
+    // ========================================================================
+
+    /**
+     * Delega la creación de perfil a Chrome
+     */
+    async createNewProfile(): Promise<void> {
+        const action = await vscode.window.showInformationMessage(
+            'To create a new Chrome profile, please use Chrome directly',
+            'Open Chrome Settings',
+            'Cancel'
+        );
+
+        if (action === 'Open Chrome Settings') {
+            try {
+                const chromePath = this.profileHelper.getChromeExecutablePath();
+                let command: string;
+
+                if (process.platform === 'darwin') {
+                    command = `open -a "Google Chrome" --args --new-window "chrome://settings/manageProfile"`;
+                } else if (process.platform === 'win32') {
+                    command = `"${chromePath}" --new-window "chrome://settings/manageProfile"`;
+                } else {
+                    command = `google-chrome --new-window "chrome://settings/manageProfile"`;
+                }
+
+                await exec(command);
+                this.logger.info('Opened Chrome profile settings');
+
+            } catch (error: any) {
+                this.logger.error('Error opening Chrome settings', error);
+                vscode.window.showErrorMessage('Failed to open Chrome settings');
+            }
+        }
+    }
+
+    /**
+     * Delega la edición de perfil a Chrome
+     */
+    async editProfile(item?: any): Promise<void> {
+        let profileName: string | undefined;
+
+        if (item?.profile) {
+            profileName = item.profile.name;
+        } else if (this.activeProfile) {
+            profileName = this.activeProfile.profileName;
+        }
+
+        const action = await vscode.window.showInformationMessage(
+            'To edit Chrome profile settings, please use Chrome directly',
+            'Open Chrome Settings',
+            'Cancel'
+        );
+
+        if (action === 'Open Chrome Settings') {
+            try {
+                const chromePath = this.profileHelper.getChromeExecutablePath();
+                let command: string;
+
+                if (profileName) {
+                    const resolved = await this.resolveProfileName(profileName);
+                    if (process.platform === 'darwin') {
+                        command = `open -a "Google Chrome" --args --profile-directory="${resolved.directory}" --new-window "chrome://settings/manageProfile"`;
+                    } else if (process.platform === 'win32') {
+                        command = `"${chromePath}" --profile-directory="${resolved.directory}" --new-window "chrome://settings/manageProfile"`;
+                    } else {
+                        command = `google-chrome --profile-directory="${resolved.directory}" --new-window "chrome://settings/manageProfile"`;
+                    }
+                } else {
+                    if (process.platform === 'darwin') {
+                        command = `open -a "Google Chrome" --args --new-window "chrome://settings/manageProfile"`;
+                    } else if (process.platform === 'win32') {
+                        command = `"${chromePath}" --new-window "chrome://settings/manageProfile"`;
+                    } else {
+                        command = `google-chrome --new-window "chrome://settings/manageProfile"`;
+                    }
+                }
+
+                await exec(command);
+                this.logger.info('Opened Chrome profile settings for editing');
+
+            } catch (error: any) {
+                this.logger.error('Error opening Chrome settings', error);
+                vscode.window.showErrorMessage('Failed to open Chrome settings');
+            }
+        }
+    }
+
+    /**
+     * Delega la eliminación de perfil a Chrome
+     */
+    async deleteProfile(item?: any): Promise<void> {
+        const warning = await vscode.window.showWarningMessage(
+            'To delete a Chrome profile, please use Chrome directly to avoid data loss',
+            'Open Chrome Settings',
+            'Cancel'
+        );
+
+        if (warning === 'Open Chrome Settings') {
+            try {
+                const chromePath = this.profileHelper.getChromeExecutablePath();
+                let command: string;
+
+                if (process.platform === 'darwin') {
+                    command = `open -a "Google Chrome" --args --new-window "chrome://settings/manageProfile"`;
+                } else if (process.platform === 'win32') {
+                    command = `"${chromePath}" --new-window "chrome://settings/manageProfile"`;
+                } else {
+                    command = `google-chrome --new-window "chrome://settings/manageProfile"`;
+                }
+
+                await exec(command);
+                this.logger.info('Opened Chrome profile settings for deletion');
+
+            } catch (error: any) {
+                this.logger.error('Error opening Chrome settings', error);
+                vscode.window.showErrorMessage('Failed to open Chrome settings');
+            }
+        }
+    }
+
+    // ========================================================================
+    // DISCOVERY
+    // ========================================================================
+
     async detectProfiles(): Promise<ChromeProfile[]> {
         try {
-            // Usar el helper para obtener toda la info
             const profileInfos = await this.profileHelper.getAllProfiles();
             const profiles: ChromeProfile[] = [];
+
             for (const info of profileInfos) {
                 const profile: ChromeProfile = {
-                    name: info.directoryName, // "Profile 9"
+                    name: info.directoryName,
                     path: info.path,
-                    displayName: info.displayName, // "UiTool" ← EL NOMBRE REAL
+                    displayName: info.displayName,
                     accounts: []
                 };
-                // Detección rápida de cuentas
                 profile.accounts = await this.quickDetectAccounts(info.path);
                 profiles.push(profile);
             }
+
             this.logger.info(`Detected ${profiles.length} Chrome profiles`);
             return profiles;
         } catch (error: any) {
@@ -94,25 +389,14 @@ export class ChromeProfileManager {
         }
     }
 
-    /**
-     * Detección rápida de cuentas mediante parseo de cookies/storage
-     * (Simplified - solo detecta presencia, no email específico)
-     */
     private async quickDetectAccounts(profilePath: string): Promise<DetectedAccount[]> {
         const accounts: DetectedAccount[] = [];
 
         try {
-            // Verificar cookies de Claude
             const cookiesPath = path.join(profilePath, 'Cookies');
             if (fs.existsSync(cookiesPath)) {
-                // SQLite database - complejo parsear sin library
-                // Por ahora, solo verificamos existencia del archivo
-                // TODO: Usar sqlite3 library para parsear cookies reales
-                
-                // Heurística simple: si el archivo existe y tiene tamaño > 0
                 const cookiesStat = await stat(cookiesPath);
                 if (cookiesStat.size > 0) {
-                    // Asumimos que podría tener sesión de Claude
                     accounts.push({
                         provider: 'claude',
                         verified: false,
@@ -120,33 +404,22 @@ export class ChromeProfileManager {
                     });
                 }
             }
-
-            // Similar para otros providers
-            // Por ahora retornamos solo la detección básica
-
         } catch (error: any) {
             this.logger.warn(`Could not detect accounts for profile: ${profilePath}, ${error}`);
         }
 
-        console.log(`Accounts for profile ${profilePath}:`, accounts);
         return accounts;
     }
 
     // ========================================================================
-    // VALIDATION (Playwright integration)
+    // VALIDATION
     // ========================================================================
 
-    /**
-     * Verifica que una cuenta esté logueada usando Playwright
-     * (Requiere claude_bridge.py con Playwright)
-     */
     async verifyAccount(
         profileName: string,
         provider: 'claude' | 'chatgpt' | 'grok'
     ): Promise<DetectedAccount> {
         try {
-
-            // Llamar al script Python para verificar con Playwright
             const scriptPath = path.join(
                 this.context.extensionPath,
                 'scripts',
@@ -155,7 +428,6 @@ export class ChromeProfileManager {
             );
 
             const profilePath = this.getProfilePath(profileName);
-
             const command = `python "${scriptPath}" --profile "${profilePath}" --provider ${provider}`;
 
             const { stdout } = await exec(command, { 
@@ -191,9 +463,6 @@ export class ChromeProfileManager {
     // PERSISTENCE
     // ========================================================================
 
-    /**
-     * Guarda mapping de intent → profile config
-     */
     public async saveIntentMapping(data: {
         intentId: string;
         profileName: string;
@@ -208,10 +477,8 @@ export class ChromeProfileManager {
                 mappings = JSON.parse(content);
             }
 
-            // Eliminar si ya existe
             mappings = mappings.filter(m => m.intentId !== data.intentId);
 
-            // Agregar nueva
             mappings.push({
                 intentId: data.intentId,
                 profileName: data.profileName,
@@ -227,25 +494,16 @@ export class ChromeProfileManager {
         }
     }
 
-    /**
-     * Carga mapping para un intent
-     */
     async loadIntentMapping(intentId: string): Promise<IntentProfileConfig | null> {
         return this.mappings.get(intentId) || null;
     }
 
-    /**
-     * Elimina mapping de un intent
-     */
     async deleteIntentMapping(intentId: string): Promise<void> {
         this.mappings.delete(intentId);
         await this.saveMappings();
         this.logger.info(`Deleted profile mapping for intent: ${intentId}`);
     }
 
-    /**
-     * Lista todos los mappings
-     */
     async listMappings(): Promise<Array<{ intentId: string; config: IntentProfileConfig }>> {
         return Array.from(this.mappings.entries()).map(([intentId, config]) => ({
             intentId,
@@ -253,9 +511,6 @@ export class ChromeProfileManager {
         }));
     }
 
-    /**
-     * Guarda mappings a disco
-     */
     private async saveMappings(): Promise<void> {
         try {
             const data = Array.from(this.mappings.entries()).map(([intentId, config]) => ({
@@ -271,9 +526,6 @@ export class ChromeProfileManager {
         }
     }
 
-    /**
-     * Carga mappings desde disco
-     */
     private loadMappings(): void {
         try {
             if (fs.existsSync(this.configFile)) {
@@ -293,12 +545,9 @@ export class ChromeProfileManager {
     }
 
     // ========================================================================
-    // PROFILE RESOLUTION - NUEVO
+    // PROFILE RESOLUTION
     // ========================================================================
-    /**
-     * Resuelve un nombre de perfil (puede ser display name o directory name)
-     * Ejemplo: "UiTool" → { directory: "Profile 9", display: "UiTool" }
-     */
+
     async resolveProfileName(profileName: string): Promise<{
         directory: string;
         display: string;
@@ -320,9 +569,7 @@ export class ChromeProfileManager {
             throw error;
         }
     }
-    /**
-     * Obtiene el perfil completo por display name o directory name
-     */
+
     async getProfileByName(name: string): Promise<ChromeProfile | null> {
         try {
             const resolved = await this.resolveProfileName(name);
@@ -335,24 +582,20 @@ export class ChromeProfileManager {
     }
 
     // ========================================================================
-    // BROWSER LAUNCH - MEJORADO
+    // BROWSER LAUNCH
     // ========================================================================
-    /**
-     * Abre Chrome con el profile especificado
-     * MEJORADO: Acepta tanto display name ("UiTool") como directory name ("Profile 9")
-     */
+
     async openInBrowser(
-        profileName: string, // Puede ser "UiTool" o "Profile 9"
+        profileName: string,
         provider: 'claude' | 'chatgpt' | 'grok',
         conversationId?: string
     ): Promise<void> {
         try {
-            // Resolver el nombre a directory name
             const resolved = await this.resolveProfileName(profileName);
-           
             const chromePath = this.profileHelper.getChromeExecutablePath();
             const urls = this.getProviderUrls(provider, conversationId);
             let command: string;
+
             if (process.platform === 'darwin') {
                 command = `open -a "Google Chrome" --args --profile-directory="${resolved.directory}" "${urls.target}"`;
             } else if (process.platform === 'win32') {
@@ -360,12 +603,16 @@ export class ChromeProfileManager {
             } else {
                 throw new Error(`Unsupported platform: ${process.platform}`);
             }
+
             this.logger.info(`Opening browser: ${provider} with profile ${resolved.display} (${resolved.directory})`);
             await exec(command);
+
             const message = conversationId
                 ? `✅ Opened ${provider} conversation in ${resolved.display}`
                 : `✅ Opened ${provider} in ${resolved.display}`;
+
             vscode.window.showInformationMessage(message, 'OK');
+
         } catch (error: any) {
             this.logger.error('Error opening browser', error);
            
@@ -380,15 +627,11 @@ export class ChromeProfileManager {
         }
     }
 
-    /**
-     * Test de conexión - verifica que el profile y cuenta funcionen
-     */
     async testConnection(
         profileName: string,
         account: string
     ): Promise<{ success: boolean; message?: string }> {
         try {
-            // Intentar abrir Claude brevemente para verificar
             await this.openInBrowser(profileName, 'claude');
             
             return {
@@ -405,20 +648,17 @@ export class ChromeProfileManager {
     }
 
     // ========================================================================
-    // HELPERS - ACTUALIZADO
+    // HELPERS
     // ========================================================================
-    /**
-     * DEPRECADO: Usar profileHelper.getChromeExecutablePath() directamente
-     */
+
     private getChromeExecutablePath(): string {
         return this.profileHelper.getChromeExecutablePath();
     }
-    /**
-     * DEPRECADO: Usar profileHelper.getChromeUserDataDir() directamente
-     */
+
     private getChromeUserDataDir(): string {
         const platform = process.platform;
         const home = process.env.HOME || process.env.USERPROFILE || '';
+
         if (platform === 'win32') {
             return path.join(process.env.LOCALAPPDATA || '', 'Google', 'Chrome', 'User Data');
         } else if (platform === 'darwin') {
@@ -428,17 +668,11 @@ export class ChromeProfileManager {
         }
     }
 
-    /**
-     * Obtiene la ruta completa a un profile específico
-     */
     private getProfilePath(profileName: string): string {
         const userDataDir = this.getChromeUserDataDir();
         return path.join(userDataDir, profileName);
     }
 
-    /**
-     * Genera URLs para cada provider
-     */
     private getProviderUrls(
         provider: 'claude' | 'chatgpt' | 'grok',
         conversationId?: string
@@ -465,13 +699,9 @@ export class ChromeProfileManager {
         return urls[provider];
     }
 
-    /**
-     * Obtiene configuración default si no hay ninguna configurada
-     */
     async getDefaultConfig(): Promise<IntentProfileConfig> {
         const profiles = await this.detectProfiles();
         
-        // Usar el primer profile disponible o Default
         const defaultProfile = profiles.find(p => p.name === 'Default') || profiles[0];
 
         if (!defaultProfile) {
@@ -486,11 +716,9 @@ export class ChromeProfileManager {
     }
 
     // ========================================================================
-    // UTILITY METHODS - NUEVO
+    // UTILITY METHODS
     // ========================================================================
-    /**
-     * Lista todos los perfiles con información legible
-     */
+
     async listAllProfiles(): Promise<void> {
         const summary = await this.profileHelper.listProfilesSummary();
        
@@ -499,25 +727,22 @@ export class ChromeProfileManager {
             canPickMany: false
         });
     }
-    /**
-     * Busca un perfil de manera flexible
-     */
+
     async searchProfile(query: string): Promise<ChromeProfile | null> {
-        // Intentar por display name
         let profile = await this.profileHelper.findProfileByDisplayName(query);
        
         if (!profile) {
-            // Intentar por directory name
             profile = await this.profileHelper.getProfileInfo(query);
         }
+
         if (!profile) {
-            // Intentar por email/username
             profile = await this.profileHelper.findProfileByUserName(query);
         }
+
         if (!profile) {
             return null;
         }
-        // Convertir a ChromeProfile
+
         return {
             name: profile.directoryName,
             path: profile.path,
@@ -551,7 +776,6 @@ export class ChromeProfileManager {
     }
 
     public async getAllMappings(): Promise<any[]> {
-        // Implementación básica - podés mejorarla después
         return [];
     }
 }

@@ -9,11 +9,11 @@ import { registerCriticalCommands } from './initialization/criticalCommandsIniti
 import { initializeServer } from './server';
 import { registerStartGithubOAuthCommand, stopGithubOAuthServer } from './commands/auth/startGithubOAuth';
 import { AiAccountChecker } from './ai/AiAccountChecker';
-
+import { initializeProfileAccounts } from './initialization/initializeProfileAccounts'; // ← NUEVA IMPORTACIÓN
 
 export function activate(context: vscode.ExtensionContext) {
     const logger = new Logger();
-    logger.info('🌸 Bloom BTIP + Nucleus Premium activando...');
+    logger.info('Bloom BTIP + Nucleus Premium activando...');
 
     try {
         // 1. Inicializar contexto global
@@ -26,26 +26,29 @@ export function activate(context: vscode.ExtensionContext) {
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
         
         if (!workspaceFolder) {
-            logger.warn('⚠️ No workspace folder - Limited functionality');
+            logger.warn('No workspace folder - Limited functionality');
             registerCriticalCommands(context, logger);
             return;
         }
         
-        // 4. Inicializar providers
+        // 4. Inicializar providers (antiguos)
         const providers = initializeProviders(context, workspaceFolder, logger, managers);
 
-        // 5. Account Checkers
-        const checker = AiAccountChecker.init(context);
-        checker.start();
+        // 5. NUEVO: Inicializar perfiles Chrome, cuentas AI y árbol de perfiles
+        const profileModules = initializeProfileAccounts(context, logger);
 
-        // 6. Inicializar servidor (API, WebSocket, Host)
+        // 6. (Opcional) Account Checker duplicado? → Ya está dentro de initializeProfileAccounts
+        // Se mantiene solo por compatibilidad vieja, pero ya no es necesario duplicar
+        // const checker = AiAccountChecker.init(context);
+        // checker.start();
+
+        // 7. Inicializar servidor (API, WebSocket, Host)
         initializeServer(context)
             .then(({ api, ws, host }) => {
-                logger.info('✅ Server components initialized');
-                logger.info(`📡 API Server: http://localhost:${api.getPort()}`);
-                logger.info(`🔌 WebSocket: ws://localhost:4124`);
+                logger.info('Server components initialized');
+                logger.info(`API Server: http://localhost:${api.getPort()}`);
+                logger.info(`WebSocket: ws://localhost:4124`);
 
-                // 6. Registrar comando GitHub OAuth con referencias al servidor
                 const outputChannel = vscode.window.createOutputChannel('Bloom GitHub OAuth');
                 context.subscriptions.push(outputChannel);
 
@@ -57,22 +60,23 @@ export function activate(context: vscode.ExtensionContext) {
                     api.getPort()
                 );
 
-                logger.info('✅ GitHub OAuth command registered');
+                logger.info('GitHub OAuth command registered');
             })
             .catch(err => {
-                logger.error('❌ Error initializing server', err);
+                logger.error('Error initializing server', err);
                 vscode.window.showErrorMessage(
                     `Bloom: Error al iniciar el servidor - ${err.message}`
                 );
             });
         
-        // 7. Registrar comandos principales
+        // 8. Registrar comandos principales (los tuyos clásicos)
         registerAllCommands(context, logger, managers, providers);
         
-        logger.info('✅ Bloom BTIP activation complete');
+        logger.info('Bloom BTIP + Nucleus Premium activation complete');
+        logger.info('Perfil Chrome, cuentas AI y WebSocket listos');
         
     } catch (error: any) {
-        logger.error('❌ Critical error during activation', error);
+        logger.error('Critical error during activation', error);
         vscode.window.showErrorMessage(
             `Bloom BTIP falló al activarse: ${error.message}`
         );
@@ -80,9 +84,6 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 export function deactivate() {
-    // Cleanup OAuth server
     stopGithubOAuthServer();
-    
-    // VSCode limpia automáticamente los subscriptions
-    console.log('🌸 Bloom BTIP deactivated');
+    console.log('Bloom BTIP deactivated');
 }

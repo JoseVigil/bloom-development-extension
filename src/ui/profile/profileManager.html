@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Profile Manager</title>
+    <link rel="stylesheet" href="profileManager.css">
 </head>
 <body>
     <div id="root">
@@ -68,6 +69,7 @@
             </section>
         </div>
 
+        <!-- Modal: Add Mapping -->
         <div id="addMappingModal" class="modal" style="display: none;">
             <div class="modal-content">
                 <div class="modal-header">
@@ -116,6 +118,35 @@
                 </div>
             </div>
         </div>
+
+        <!-- Modal: AI Accounts -->
+        <div id="aiAccountsModal" class="modal" style="display: none;">
+            <div class="modal-content modal-large">
+                <div class="modal-header">
+                    <h3>🤖 AI Accounts - <span id="aiAccountsProfileName"></span></h3>
+                    <button id="closeAiAccountsModalButton" class="btn-close">✕</button>
+                </div>
+                <div class="modal-body">
+                    <div class="ai-accounts-toolbar">
+                        <button id="addAiAccountButton" class="btn btn-primary btn-sm">
+                            ➕ Add Account
+                        </button>
+                        <button id="refreshAiAccountsButton" class="btn btn-secondary btn-sm">
+                            🔄 Refresh Status
+                        </button>
+                    </div>
+                    
+                    <div id="aiAccountsListContainer" class="ai-accounts-list">
+                        <div class="empty-state">
+                            <span class="empty-icon">🤖</span>
+                            <p>No AI accounts configured</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
+
+    <script src="profileManager.js"></script>
 </body>
 </html>

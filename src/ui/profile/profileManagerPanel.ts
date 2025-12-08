@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { Logger } from '../../utils/logger';
 import { ChromeProfileManager } from '../../core/chromeProfileManager';
+import { AiAccountChecker } from '../../ai/AiAccountChecker';
 import { joinPath } from '../../utils/uriHelper';
 
 export class ProfileManagerPanel {
@@ -12,6 +13,7 @@ export class ProfileManagerPanel {
     private readonly _extensionUri: vscode.Uri;
     private _disposables: vscode.Disposable[] = [];
     private chromeProfileManager: ChromeProfileManager;
+    private accountChecker: AiAccountChecker;
     private logger: Logger;
     private context: vscode.ExtensionContext;
 
@@ -21,13 +23,15 @@ export class ProfileManagerPanel {
         panel: vscode.WebviewPanel,
         extensionUri: vscode.Uri,
         logger: Logger,
-        context: vscode.ExtensionContext
+        context: vscode.ExtensionContext,
+        accountChecker: AiAccountChecker
     ) {
         this._panel = panel;
         this._extensionUri = extensionUri;
         this.logger = logger;
         this.context = context;
         this.chromeProfileManager = new ChromeProfileManager(context, logger);
+        this.accountChecker = accountChecker;
 
         this._update();
 
@@ -60,6 +64,18 @@ export class ProfileManagerPanel {
                     case 'openProfile':
                         await this.handleOpenProfile(message.profileName, message.provider);
                         break;
+                    case 'addAiAccount':
+                        await this.handleAddAiAccount(message.profileName);
+                        break;
+                    case 'checkAiAccounts':
+                        await this.handleCheckAiAccounts(message.profileName);
+                        break;
+                    case 'loadAiAccounts':
+                        await this.handleLoadAiAccounts(message.profileName);
+                        break;
+                    case 'removeAiAccount':
+                        await this.handleRemoveAiAccount(message.profileName, message.provider, message.accountId);
+                        break;
                 }
             },
             null,
@@ -67,8 +83,12 @@ export class ProfileManagerPanel {
         );
     }
 
-    // MÉTODO QUE USÁS EN extension.ts
-    public static createOrShow(extensionUri: vscode.Uri, logger: Logger, context: vscode.ExtensionContext) {
+    public static createOrShow(
+        extensionUri: vscode.Uri,
+        logger: Logger,
+        context: vscode.ExtensionContext,
+        accountChecker: AiAccountChecker
+    ) {
         const column = vscode.window.activeTextEditor?.viewColumn || vscode.ViewColumn.One;
 
         if (ProfileManagerPanel.currentPanel) {
@@ -91,7 +111,13 @@ export class ProfileManagerPanel {
             }
         );
 
-        ProfileManagerPanel.currentPanel = new ProfileManagerPanel(panel, extensionUri, logger, context);
+        ProfileManagerPanel.currentPanel = new ProfileManagerPanel(
+            panel,
+            extensionUri,
+            logger,
+            context,
+            accountChecker
+        );
     }
 
     public dispose() {
@@ -133,7 +159,7 @@ export class ProfileManagerPanel {
         return text;
     }
 
-    // ==================== HANDLERS (todos los que usás en JS) ====================
+    // ==================== HANDLERS ====================
 
     private async handleScanProfiles() {
         try {
@@ -166,7 +192,6 @@ export class ProfileManagerPanel {
     }
 
     private async handleTestConnection(profile: string, account: string) {
-        // Implementación básica (puede mejorarse)
         this._panel.webview.postMessage({
             command: 'connectionTested',
             success: true,
@@ -199,12 +224,88 @@ export class ProfileManagerPanel {
     }
 
     private async handleVerifyAccount(profileName: string, provider: string) {
-        // Placeholder — se puede implementar con puppeteer o login check
         this.logger.info(`Verify account requested: ${provider} in ${profileName}`);
     }
 
     private async handleOpenProfile(profileName: string, provider: string) {
-        // Placeholder — abrir Chrome con el perfil
         this.logger.info(`Open profile requested: ${profileName} - ${provider}`);
+    }
+
+    // ==================== AI ACCOUNTS HANDLERS ====================
+
+    private async handleAddAiAccount(profileName: string) {
+        try {
+            // Delegar al comando existente
+            await vscode.commands.executeCommand('bloom.addAiAccount', profileName);
+            
+            // Recargar cuentas después de agregar
+            await this.handleLoadAiAccounts(profileName);
+        } catch (err: any) {
+            vscode.window.showErrorMessage(`Error adding AI account: ${err.message}`);
+        }
+    }
+
+    private async handleCheckAiAccounts(profileName: string) {
+        try {
+            const statuses = await this.accountChecker.checkAllForProfile(profileName);
+            
+            this._panel.webview.postMessage({
+                command: 'aiAccountsChecked',
+                profileName,
+                statuses
+            });
+
+            this.logger.info(`Checked ${statuses.length} AI accounts for ${profileName}`);
+        } catch (err: any) {
+            vscode.window.showErrorMessage(`Error checking accounts: ${err.message}`);
+        }
+    }
+
+    private async handleLoadAiAccounts(profileName: string) {
+        try {
+            const accounts = this.context.globalState.get<any[]>('bloom.ai.accounts', []);
+            const profileAccounts = accounts.filter(acc => acc.profileName === profileName);
+
+            // Obtener estados actuales
+            const statuses = await this.accountChecker.checkAllForProfile(profileName);
+
+            this._panel.webview.postMessage({
+                command: 'aiAccountsLoaded',
+                profileName,
+                accounts: profileAccounts,
+                statuses
+            });
+        } catch (err: any) {
+            this.logger.error('Error loading AI accounts', err);
+        }
+    }
+
+    private async handleRemoveAiAccount(profileName: string, provider: string, accountId: string) {
+        try {
+            // Remover de globalState
+            const key = 'bloom.ai.accounts';
+            const existing = this.context.globalState.get<any[]>(key, []);
+            const filtered = existing.filter(
+                acc => !(acc.profileName === profileName && 
+                        acc.provider === provider && 
+                        acc.accountId === accountId)
+            );
+            await this.context.globalState.update(key, filtered);
+
+            // Remover API key de secrets
+            const secretKey = `bloom.ai.${profileName}.${provider}.${accountId}`;
+            await this.context.secrets.delete(secretKey);
+
+            this._panel.webview.postMessage({
+                command: 'aiAccountRemoved',
+                profileName,
+                provider,
+                accountId
+            });
+
+            this.logger.info(`Removed AI account: ${provider}/${accountId} from ${profileName}`);
+        } catch (err: any) {
+            vscode.window.showErrorMessage(`Error removing account: ${err.message}`);
+        }
     }
 }

@@ -41,7 +41,8 @@
         {
           "id": "bloomProfiles",
           "name": "Chrome Profiles",
-          "contextualTitle": "AI Profiles"
+          "icon": "$(account)",
+          "contextualTitle": "Bloom Profiles"
         },
         {
           "id": "bloomNucleusWelcome",
@@ -164,23 +165,45 @@
       },
       {
         "command": "bloom.manageProfiles",
-        "title": "Bloom: Manage AI Profiles",
+        "title": "Bloom: Manage Chrome Profiles",
         "icon": "$(account)"
       },
       {
         "command": "bloom.refreshProfiles",
-        "title": "Refresh Profiles",
+        "title": "Bloom: Refresh Profiles",
         "icon": "$(refresh)"
       },
       {
+        "command": "bloom.addAiAccount",
+        "title": "Bloom: Add AI Account",
+        "icon": "$(add)"
+      },
+      {
+        "command": "bloom.checkAiAccounts",
+        "title": "Bloom: Check AI Accounts",
+        "icon": "$(check-all)"
+      },
+      {
+        "command": "bloom.checkSpecificAiAccount",
+        "title": "Bloom: Check Specific AI Account"
+      },
+      {
         "command": "bloom.configureIntentProfile",
-        "title": "Configure Profile for Intent",
-        "icon": "$(gear)"
+        "title": "Bloom: Configure Intent Profile",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "bloom.changeIntentProfile",
+        "title": "Bloom: Change Intent Profile"
+      },
+      {
+        "command": "bloom.removeIntentProfile",
+        "title": "Bloom: Remove Intent Profile"
       },
       {
         "command": "bloom.openIntentInBrowser",
         "title": "Bloom: Open Intent in Browser",
-        "icon": "$(browser)"
+        "icon": "$(globe)"
       },
       {
         "command": "bloom.openClaudeInBrowser",
@@ -308,6 +331,22 @@
         {
           "command": "bloom.startGitHubOAuth",
           "when": "true"
+        },
+        {
+          "command": "bloom.manageProfiles",
+          "when": "bloom.isRegistered"
+        },
+        {
+          "command": "bloom.addAiAccount",
+          "when": "bloom.isRegistered"
+        },
+        {
+          "command": "bloom.checkAiAccounts",
+          "when": "bloom.isRegistered"
+        },
+        {
+          "command": "bloom.checkSpecificAiAccount",
+          "when": "false"
         }
       ],
       "view/item/context": [
@@ -345,6 +384,19 @@
           "command": "bloom.openNucleusProject",
           "when": "view == bloomNucleus && viewItem == nucleusProject",
           "group": "1_main@1"
+        },
+        {
+          "command": "bloom.addAiAccount",
+          "when": "view == bloomProfiles && viewItem == profile",
+          "group": "inline"
+        },
+        {
+          "command": "bloom.checkAiAccounts",
+          "when": "view == bloomProfiles && viewItem == profile"
+        },
+        {
+          "command": "bloom.checkSpecificAiAccount",
+          "when": "view == bloomProfiles && viewItem == ai-account"
         }
       ]
     },

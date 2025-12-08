@@ -6,6 +6,7 @@ import { Logger } from '../../utils/logger';
 import { Managers } from '../../initialization/managersInitializer';
 import { ProfileManagerPanel } from '../../ui/profile/profileManagerPanel';
 import { ProfileTreeProvider } from '../../providers/profileTreeProvider';
+import { AiAccountChecker } from '../../ai/AiAccountChecker';
 import { Intent } from '../../models/intent';
 import { openIntentInBrowser, openProviderInBrowser } from '../openIntentInBrowser';
 import {
@@ -13,6 +14,8 @@ import {
     changeIntentProfile,
     removeIntentProfile
 } from '../configureIntentProfile';
+import { addAiAccount } from './addAiAccount';
+import { checkAiAccounts, checkSpecificAccount } from './checkAiAccounts';
 
 /**
  * Registra todos los comandos relacionados con Chrome Profiles
@@ -22,13 +25,21 @@ export function registerProfileCommands(
     logger: Logger,
     managers: Managers
 ): void {
+    // Obtener instancia del AiAccountChecker
+    const accountChecker = AiAccountChecker.getInstance();
+
     // ========================================
     // COMANDO: Manage Profiles
     // ========================================
     context.subscriptions.push(
         vscode.commands.registerCommand('bloom.manageProfiles', () => {
             try {
-                ProfileManagerPanel.createOrShow(context.extensionUri, logger, context);
+                ProfileManagerPanel.createOrShow(
+                    context.extensionUri,
+                    logger,
+                    context,
+                    accountChecker
+                );
                 logger.info('Profile manager opened');
             } catch (error: any) {
                 logger.error('Error opening profile manager', error);
@@ -185,6 +196,52 @@ export function registerProfileCommands(
                 openProviderInBrowser('grok', context, logger);
             } catch (error: any) {
                 logger.error('Error opening Grok', error);
+                vscode.window.showErrorMessage(`Error: ${error.message}`);
+            }
+        })
+    );
+
+    // ========================================
+    // NUEVO COMANDO: Add AI Account
+    // ========================================
+    context.subscriptions.push(
+        vscode.commands.registerCommand('bloom.addAiAccount', async (profileName?: string) => {
+            try {
+                await addAiAccount(context, logger, profileName);
+            } catch (error: any) {
+                logger.error('Error adding AI account', error);
+                vscode.window.showErrorMessage(`Error: ${error.message}`);
+            }
+        })
+    );
+
+    // ========================================
+    // NUEVO COMANDO: Check AI Accounts
+    // ========================================
+    context.subscriptions.push(
+        vscode.commands.registerCommand('bloom.checkAiAccounts', async (profileName?: string) => {
+            try {
+                await checkAiAccounts(context, logger, accountChecker, profileName);
+            } catch (error: any) {
+                logger.error('Error checking AI accounts', error);
+                vscode.window.showErrorMessage(`Error: ${error.message}`);
+            }
+        })
+    );
+
+    // ========================================
+    // NUEVO COMANDO: Check Specific AI Account
+    // ========================================
+    context.subscriptions.push(
+        vscode.commands.registerCommand('bloom.checkSpecificAiAccount', async (
+            profileName: string,
+            provider: string,
+            accountId: string
+        ) => {
+            try {
+                await checkSpecificAccount(profileName, provider, accountId, accountChecker, logger);
+            } catch (error: any) {
+                logger.error('Error checking specific account', error);
                 vscode.window.showErrorMessage(`Error: ${error.message}`);
             }
         })
