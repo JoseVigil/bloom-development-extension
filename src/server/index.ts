@@ -63,6 +63,45 @@ class StubHostClient {
     }
 }
 
+class StubUserManager {
+    public globalState: vscode.Memento;
+
+    constructor(context: vscode.ExtensionContext) {
+        this.globalState = context.globalState;
+    }
+
+    async getGithubUsername(): Promise<string | undefined> {
+        return this.globalState.get('github.username');
+    }
+
+    async getGithubOrgs(): Promise<string[]> {
+        return this.globalState.get('github.orgs', []);
+    }
+
+    async setGithubUser(username: string, orgs: string[]): Promise<void> {
+        await this.globalState.update('github.username', username);
+        await this.globalState.update('github.orgs', orgs);
+        await this.globalState.update('github.authenticated', true);
+    }
+
+    async isGithubAuthenticated(): Promise<boolean> {
+        return this.globalState.get('github.authenticated', false);
+    }
+
+    async getGeminiApiKey(): Promise<string | undefined> {
+        return this.globalState.get('gemini.apiKey');
+    }
+
+    async setGeminiApiKey(apiKey: string): Promise<void> {
+        await this.globalState.update('gemini.apiKey', apiKey);
+        await this.globalState.update('gemini.configured', true);
+    }
+
+    async isGeminiConfigured(): Promise<boolean> {
+        return this.globalState.get('gemini.configured', false);
+    }
+}
+
 // ============================================================================
 // INITIALIZATION
 // ============================================================================
@@ -84,6 +123,7 @@ export async function initializeServer(context: vscode.ExtensionContext) {
     const intentManager = new StubIntentManager();
     const geminiClient = new StubGeminiClient();
     const hostClient = new StubHostClient();
+    const userManager = new StubUserManager(context);
 
     // 4. Inicializar WebSocket Manager (singleton)
     const ws = WebSocketManager.getInstance();
@@ -102,6 +142,7 @@ export async function initializeServer(context: vscode.ExtensionContext) {
         intentManager,
         geminiClient,
         hostClient,
+        userManager,
         outputChannel,
         pluginVersion
     });

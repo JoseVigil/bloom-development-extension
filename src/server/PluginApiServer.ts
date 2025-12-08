@@ -33,6 +33,17 @@ interface HostClient {
   getStatus(): Promise<any>;
 }
 
+interface UserManager {
+  globalState: vscode.Memento;
+  getGithubUsername(): Promise<string | undefined>;
+  getGithubOrgs(): Promise<string[]>;
+  setGithubUser(username: string, orgs: string[]): Promise<void>;
+  isGithubAuthenticated(): Promise<boolean>;
+  getGeminiApiKey(): Promise<string | undefined>;
+  setGeminiApiKey(apiKey: string): Promise<void>;
+  isGeminiConfigured(): Promise<boolean>;
+}
+
 interface BTIPNode {
   name: string;
   path: string;
@@ -48,13 +59,14 @@ interface PluginApiServerConfig {
   intentManager: IntentManager;
   geminiClient: GeminiClient;
   hostClient: HostClient;
+  userManager: UserManager;
   outputChannel: vscode.OutputChannel;
   pluginVersion: string;
 }
 
 export class PluginApiServer {
   private server: http.Server | null = null;
-  private port: number = 48215; // Using the port from the current class; adjust if needed
+  private port: number = 48215;
   private running: boolean = false;
 
   private context: vscode.ExtensionContext;
@@ -64,6 +76,7 @@ export class PluginApiServer {
   private intentManager: IntentManager;
   private geminiClient: GeminiClient;
   private hostClient: HostClient;
+  private userManager: UserManager;
   private outputChannel: vscode.OutputChannel;
   private pluginVersion: string;
 
@@ -75,6 +88,7 @@ export class PluginApiServer {
     this.intentManager = config.intentManager;
     this.geminiClient = config.geminiClient;
     this.hostClient = config.hostClient;
+    this.userManager = config.userManager;
     this.outputChannel = config.outputChannel;
     this.pluginVersion = config.pluginVersion;
   }
@@ -128,12 +142,10 @@ export class PluginApiServer {
   }
 
   private async handleRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
-    // CORS headers (merged: using '*' from current, but can adjust to 'https://b.tips' if specific)
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-    // Handle preflight
     if (req.method === 'OPTIONS') {
       res.writeHead(204);
       res.end();
@@ -147,7 +159,6 @@ export class PluginApiServer {
     this.log(`${method} ${pathname}`);
 
     try {
-      // Merged route handling: includes all from both versions
       if (method === 'GET' && pathname === '/health') {
         this.sendJson(res, 200, { status: 'ok' });
       } else if (method === 'GET' && pathname === '/home') {
@@ -178,11 +189,22 @@ export class PluginApiServer {
         await this.handleDocRefine(req, res);
       } else if (method === 'POST' && pathname === '/doc/summarize') {
         await this.handleDocSummarize(req, res);
+      } else if (method === 'GET' && pathname === '/btip/auth/status') {
+        await this.handleAuthStatus(req, res);
+      } else if (method === 'GET' && pathname === '/btip/auth/github/start') {
+        await this.handleGithubAuthStart(req, res);
+      } else if (method === 'POST' && pathname === '/btip/auth/github/complete') {
+        await this.handleGithubAuthComplete(req, res);
+      } else if (method === 'POST' && pathname === '/btip/auth/gemini') {
+        await this.handleGeminiAuth(req, res);
       } else if (method === 'GET' && pathname === '/btip/explorer/tree') {
+        if (!(await this.checkAuth(res))) return;
         await this.handleGetTree(new URL(req.url || '/', `http://localhost:${this.port}`), res);
       } else if (method === 'GET' && pathname === '/btip/explorer/file') {
+        if (!(await this.checkAuth(res))) return;
         await this.handleGetFile(new URL(req.url || '/', `http://localhost:${this.port}`), res);
       } else if (method === 'POST' && pathname === '/btip/explorer/refresh') {
+        if (!(await this.checkAuth(res))) return;
         await this.handleRefresh(res);
       } else {
         this.sendJson(res, 404, { error: 'Endpoint not found' });
@@ -193,12 +215,104 @@ export class PluginApiServer {
     }
   }
 
-  // System endpoints from latest
+  private async checkAuth(res: http.ServerResponse): Promise<boolean> {
+    const githubAuth = await this.userManager.isGithubAuthenticated();
+    const geminiAuth = await this.userManager.isGeminiConfigured();
+    
+    if (!githubAuth || !geminiAuth) {
+      this.sendJson(res, 403, { 
+        error: 'Authentication required',
+        githubAuthenticated: githubAuth,
+        geminiConfigured: geminiAuth
+      });
+      return false;
+    }
+    return true;
+  }
+
+  private async handleAuthStatus(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    const githubAuthenticated = await this.userManager.isGithubAuthenticated();
+    const geminiConfigured = await this.userManager.isGeminiConfigured();
+    const githubUsername = await this.userManager.getGithubUsername();
+    const allOrgs = await this.userManager.getGithubOrgs();
+
+    this.sendJson(res, 200, {
+      githubAuthenticated,
+      geminiConfigured,
+      githubUsername: githubUsername || null,
+      allOrgs: allOrgs || []
+    });
+  }
+
+  private async handleGithubAuthStart(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    try {
+      await vscode.commands.executeCommand('bloom.openWelcomeGithub');
+      this.sendJson(res, 200, { ok: true });
+    } catch (error: any) {
+      this.sendJson(res, 500, { error: error.message });
+    }
+  }
+
+  private async handleGithubAuthComplete(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    const body = await this.parseBody(req);
+    const { code, state, username, orgs } = body;
+
+    if (!code || !state) {
+      this.sendJson(res, 400, { error: 'Missing code or state' });
+      return;
+    }
+
+    if (!username) {
+      this.sendJson(res, 400, { error: 'Missing username' });
+      return;
+    }
+
+    try {
+      await this.userManager.setGithubUser(username, orgs || []);
+      
+      this.wsManager.broadcast('auth:updated', {
+        githubAuthenticated: true,
+        username,
+        allOrgs: orgs || []
+      });
+
+      this.sendJson(res, 200, {
+        ok: true,
+        username,
+        allOrgs: orgs || []
+      });
+    } catch (error: any) {
+      this.sendJson(res, 500, { error: error.message });
+    }
+  }
+
+  private async handleGeminiAuth(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    const body = await this.parseBody(req);
+    const { apiKey } = body;
+
+    if (!apiKey || typeof apiKey !== 'string' || apiKey.trim().length === 0) {
+      this.sendJson(res, 400, { error: 'Invalid API key' });
+      return;
+    }
+
+    try {
+      await this.userManager.setGeminiApiKey(apiKey);
+      
+      this.wsManager.broadcast('auth:updated', {
+        geminiConfigured: true
+      });
+
+      this.sendJson(res, 200, { ok: true });
+    } catch (error: any) {
+      this.sendJson(res, 500, { error: error.message });
+    }
+  }
+
   private async handleHome(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
     this.sendJson(res, 200, { 
       message: 'Bloom Plugin API',
       version: this.pluginVersion,
-      endpoints: ['/health', '/home', '/handshake', '/host/status', '/nucleus/*', '/project/*', '/intents/*', '/doc/*', '/btip/explorer/*']
+      endpoints: ['/health', '/home', '/handshake', '/host/status', '/nucleus/*', '/project/*', '/intents/*', '/doc/*', '/btip/auth/*', '/btip/explorer/*']
     });
   }
 
@@ -218,7 +332,6 @@ export class PluginApiServer {
     this.sendJson(res, 200, status);
   }
 
-  // Nucleus endpoints from latest
   private async handleNucleusCreate(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
     const body = await this.parseBody(req);
     const result = await this.nucleusManager.create(body);
@@ -236,7 +349,6 @@ export class PluginApiServer {
     this.sendJson(res, 200, { nuclei: list });
   }
 
-  // Project endpoints from latest
   private async handleProjectCreate(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
     const body = await this.parseBody(req);
     const result = await this.projectManager.create(body);
@@ -248,7 +360,6 @@ export class PluginApiServer {
     this.sendJson(res, 200, { projects: list });
   }
 
-  // Intent Navigator endpoints from latest
   private async handleIntentsList(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
     const list = await this.intentManager.list();
     this.sendJson(res, 200, { intents: list });
@@ -270,7 +381,6 @@ export class PluginApiServer {
     this.sendJson(res, 200, result);
   }
 
-  // Documentation endpoints (Gemini) from latest
   private async handleDocGenerate(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
     const body = await this.parseBody(req);
     const result = await this.geminiClient.generate(body);
@@ -289,7 +399,6 @@ export class PluginApiServer {
     this.sendJson(res, 200, result);
   }
 
-  // BTIP endpoints from current
   private async handleGetTree(url: URL, res: http.ServerResponse): Promise<void> {
     const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (!workspacePath) {
@@ -365,7 +474,6 @@ export class PluginApiServer {
     res.end(JSON.stringify({ success: true }));
   }
 
-  // Utility methods (merged from both, prioritizing latest's parseBody and log)
   private sendJson(res: http.ServerResponse, status: number, payload: any): void {
     res.writeHead(status, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(payload));
