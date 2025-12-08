@@ -1,75 +1,99 @@
 // src/ai/adapters/GrokAdapter.ts
-import type { AiAdapter, AiAccountStatus } from '../index';
+import type { AiAdapter, AiAccountStatus, AiProvider } from '../index';
 
 /**
- * GrokAdapter - Verificación de cuenta Grok (X.AI)
+ * GrokAdapter - Verificación de cuenta Grok (xAI)
  * 
- * NOTA: Grok no tiene API pública oficial.
- * Esta es una implementación MOCK que simula el comportamiento.
+ * IMPORTANTE: Grok no tiene API pública oficial (a diciembre 2025).
+ * Esta implementación es un MOCK realista que simula el comportamiento real.
  * 
- * En producción, esto se haría mediante:
- * - Playwright verificando sesión en x.com/i/grok
- * - O usando token de X/Twitter API si está disponible
+ * En una versión futura podría usar:
+ * - Playwright para verificar sesión en x.com/grok
+ * - O autenticación vía X/Twitter Premium si xAI lo expone
  */
 export class GrokAdapter implements AiAdapter {
     private token: string;
-    
+    private readonly provider: AiProvider = 'grok';
+
     constructor(config: { token: string }) {
-        this.token = config.token;
+        this.token = config.token.trim();
     }
-    
+
     /**
-     * Obtiene uso actual
-     * MOCK: Simula respuesta
+     * Obtiene uso actual - MOCK realista
      */
     async getUsage(): Promise<{ used: number; unit: string }> {
-        // Simular delay de red
         await this.delay(300);
-        
+
         if (!this.token) {
             throw new Error('Grok token not configured');
         }
-        
-        // Mock data - en producción vendría de API
+
+        // Simulación realista: entre 5 y 90 consultas usadas
+        const used = Math.floor(Math.random() * 85) + 5;
+
         return {
-            used: 42,
+            used,
             unit: 'queries'
         };
     }
-    
+
     /**
-     * Obtiene quota/límite
-     * MOCK: Simula respuesta
+     * Obtiene quota/límite - MOCK según tiers conocidos
      */
     async getQuota(): Promise<{ used: number; total: number }> {
         await this.delay(300);
-        
+
         if (!this.token) {
             throw new Error('Grok token not configured');
         }
-        
-        // Mock: 100 queries por día para free tier
-        return {
-            used: 42,
-            total: 100
-        };
+
+        // Simulamos diferentes tiers según longitud/formato del token (mock)
+        const isPremiumPlus = this.token.length > 50; // ejemplo arbitrario
+
+        if (isPremiumPlus) {
+            // X Premium+ o SuperGrok: límite mucho más alto o ilimitado
+            return {
+                used: Math.floor(Math.random() * 500) + 100,
+                total: 10_000 // prácticamente ilimitado
+            };
+        } else {
+            // Grok gratuito o Premium básico: ~100-200 consultas/día
+            return {
+                used: Math.floor(Math.random() * 90) + 10,
+                total: 150
+            };
+        }
     }
-    
+
     /**
-     * Obtiene estado completo
-     * MOCK: Simula verificación
+     * Obtiene estado completo - ahora incluye provider y accountId
      */
-    async getStatus(): Promise<AiAccountStatus> {
+    async getStatus(accountId?: string): Promise<AiAccountStatus> {
         try {
+            const isValid = await this.validateToken();
+
+            if (!isValid) {
+                return {
+                    provider: this.provider,
+                    accountId,
+                    ok: false,
+                    error: 'Invalid or missing Grok access token',
+                    lastChecked: new Date()
+                };
+            }
+
             const [usage, quota] = await Promise.all([
                 this.getUsage(),
                 this.getQuota()
             ]);
-            
-            const percentage = (quota.used / quota.total) * 100;
+
+            const percentage = quota.total > 0 ? (quota.used / quota.total) * 100 : 0;
             const remaining = quota.total - quota.used;
-            
+
             return {
+                provider: this.provider,
+                accountId,
                 ok: true,
                 usageRemaining: remaining,
                 quota: {
@@ -79,34 +103,35 @@ export class GrokAdapter implements AiAdapter {
                 },
                 lastChecked: new Date()
             };
-            
+
         } catch (error: any) {
             return {
+                provider: this.provider,
+                accountId,
                 ok: false,
-                error: error.message || 'Failed to check Grok status',
+                error: error.message || 'Failed to check Grok account status',
                 lastChecked: new Date()
             };
         }
     }
-    
+
+    /**
+     * Valida el token - MOCK mejorado
+     */
+    private async validateToken(): Promise<boolean> {
+        if (!this.token) {
+            return false;
+        }
+
+        // En producción: verificar sesión en x.com o con API interna de xAI
+        // Por ahora: validación heurística básica
+        return this.token.length > 10 && /[A-Za-z0-9_-]+/.test(this.token);
+    }
+
     /**
      * Helper: simula delay de red
      */
     private delay(ms: number): Promise<void> {
         return new Promise(resolve => setTimeout(resolve, ms));
-    }
-    
-    /**
-     * Método adicional: verificar si el token es válido
-     * MOCK: Verifica formato básico
-     */
-    async validateToken(): Promise<boolean> {
-        if (!this.token) {
-            return false;
-        }
-        
-        // En producción, haría una llamada real a la API
-        // Por ahora, solo verificamos que no esté vacío
-        return this.token.length > 10;
     }
 }

@@ -6,6 +6,8 @@ export { ChatGPTAdapter } from './adapters/ChatGPTAdapter';
 export { GeminiAdapter } from './adapters/GeminiAdapter';
 
 export interface AiAccountStatus {
+    provider: AiProvider;  
+    accountId?: string;    
     ok: boolean;
     usageRemaining?: number;
     quota?: {

@@ -13,13 +13,6 @@ interface CacheEntry {
     timestamp: number;
 }
 
-interface ProfileAiAccounts {
-    [accountId: string]: {
-        provider: AiProvider;
-        status: AiAccountStatus;
-    };
-}
-
 /**
  * AiAccountChecker - Motor de verificación de cuentas AI
  * - Scheduler interno (5 min default)
@@ -97,6 +90,85 @@ export class AiAccountChecker {
         this.running = false;
         console.log('[AiAccountChecker] Stopped');
     }
+
+    // ========================================================================
+    // MÉTODOS PÚBLICOS NUEVOS
+    // ========================================================================
+
+    /**
+     * Fuerza verificación inmediata de todas las cuentas AI en todos los perfiles
+     * Limpia el cache antes de verificar para obtener estado fresco
+     */
+    async checkAllAccountsNow(): Promise<void> {
+        console.log('[AiAccountChecker] Starting manual check of all accounts...');
+        
+        try {
+            // Limpiar cache para forzar verificación fresca
+            this.clearCache();
+            
+            // Obtener todos los perfiles (en implementación real vendría de ChromeProfileManager)
+            const profileIds = await this.getAllProfileIds();
+            
+            if (profileIds.length === 0) {
+                console.log('[AiAccountChecker] No profiles found to check');
+                vscode.window.showInformationMessage('No Chrome profiles found');
+                return;
+            }
+
+            // Mostrar progreso
+            await vscode.window.withProgress({
+                location: vscode.ProgressLocation.Notification,
+                title: 'Checking AI accounts',
+                cancellable: false
+            }, async (progress) => {
+                const increment = 100 / profileIds.length;
+                
+                for (let i = 0; i < profileIds.length; i++) {
+                    const profileId = profileIds[i];
+                    progress.report({ 
+                        increment,
+                        message: `Profile ${i + 1}/${profileIds.length}: ${profileId}` 
+                    });
+                    
+                    await this.checkAllForProfile(profileId);
+                }
+            });
+
+            console.log('[AiAccountChecker] Manual check completed');
+            vscode.window.showInformationMessage(
+                `✅ Checked AI accounts for ${profileIds.length} profile(s)`
+            );
+
+        } catch (error: any) {
+            console.error('[AiAccountChecker] Error in manual check:', error);
+            vscode.window.showErrorMessage(
+                `Failed to check AI accounts: ${error.message}`
+            );
+        }
+    }
+
+    /**
+     * Limpia todo el cache de sesiones AI
+     * Útil cuando hay problemas de login loops o estados inconsistentes
+     */
+    async clearAllSessionCache(): Promise<void> {
+        console.log('[AiAccountChecker] Clearing all session cache...');
+        
+        const cacheSize = this.cache.size;
+        this.clearCache();
+        
+        console.log(`[AiAccountChecker] Cleared ${cacheSize} cached entries`);
+        
+        // Broadcast para notificar a clientes que el cache fue limpiado
+        this.wsManager.broadcast('cache:cleared', {
+            timestamp: Date.now(),
+            entriesCleared: cacheSize
+        });
+    }
+    
+    // ========================================================================
+    // MÉTODOS PÚBLICOS EXISTENTES
+    // ========================================================================
     
     /**
      * Verifica una cuenta específica
@@ -126,15 +198,19 @@ export class AiAccountChecker {
                 timestamp: Date.now()
             });
             
-            // Broadcast update
-            this.broadcastProfileUpdate(profileId, {
-                [accountId]: { provider, status }
-            });
+            // Broadcast update (ahora como array de uno)
+            this.broadcastProfileUpdate(profileId, [{
+                ...status,
+                provider,
+                accountId
+            }]);
             
             return status;
             
         } catch (error: any) {
             const errorStatus: AiAccountStatus = {
+                provider,       
+                accountId,       
                 ok: false,
                 error: error.message || 'Unknown error',
                 lastChecked: new Date()
@@ -146,20 +222,28 @@ export class AiAccountChecker {
                 timestamp: Date.now()
             });
             
+            // Broadcast error como array de uno
+            this.broadcastProfileUpdate(profileId, [{
+                ...errorStatus,
+                provider,
+                accountId
+            }]);
+            
             return errorStatus;
         }
     }
     
     /**
      * Verifica todas las cuentas de un perfil
+     * RETORNO CAMBIADO: Ahora retorna AiAccountStatus[] directamente (con provider y accountId incluidos)
      */
-    async checkAllForProfile(profileId: string): Promise<ProfileAiAccounts> {
+    async checkAllForProfile(profileId: string): Promise<AiAccountStatus[]> {
         // En una implementación real, obtendríamos las cuentas configuradas
         // desde ChromeProfileManager o similar
         // Por ahora, verificamos las 4 providers con cuentas mock
         
         const providers: AiProvider[] = ['grok', 'claude', 'chatgpt', 'gemini'];
-        const results: ProfileAiAccounts = {};
+        const results: { [accountId: string]: { provider: AiProvider; status: AiAccountStatus; } } = {};
         
         for (const provider of providers) {
             const accountId = `${provider}-account`;
@@ -168,21 +252,31 @@ export class AiAccountChecker {
                 results[accountId] = { provider, status };
             } catch (error: any) {
                 console.error(`[AiAccountChecker] Error checking ${provider}:`, error);
+                const errorStatus: AiAccountStatus = {
+                    provider,        
+                    accountId,       
+                    ok: false,
+                    error: error.message,
+                    lastChecked: new Date()
+                };
                 results[accountId] = {
                     provider,
-                    status: {
-                        ok: false,
-                        error: error.message,
-                        lastChecked: new Date()
-                    }
+                    status: errorStatus
                 };
             }
         }
         
-        // Broadcast consolidado
-        this.broadcastProfileUpdate(profileId, results);
+        // Convertir a array plano con provider y accountId en cada status
+        const accountsArray: AiAccountStatus[] = Object.entries(results).map(([accountId, { provider, status }]) => ({
+            ...status,
+            provider,
+            accountId
+        }));
         
-        return results;
+        // Broadcast consolidado (ahora como array y evento 'account:status')
+        this.broadcastProfileUpdate(profileId, accountsArray);
+        
+        return accountsArray;
     }
     
     /**
@@ -280,13 +374,25 @@ export class AiAccountChecker {
     }
     
     /**
-     * Broadcast vía WebSocket
+     * Broadcast vía WebSocket (CAMBIADO: Ahora acepta AiAccountStatus[] y envía 'account:status')
      */
-    private broadcastProfileUpdate(profileId: string, aiAccounts: ProfileAiAccounts): void {
-        this.wsManager.broadcast('profile:update', {
+    private broadcastProfileUpdate(profileId: string, accounts: AiAccountStatus[]): void {
+        this.wsManager.broadcast('account:status', {
             profileId,
-            aiAccounts,
+            accounts,
             timestamp: Date.now()
         });
+    }
+
+    /**
+     * Obtiene lista de todos los profile IDs
+     * En implementación real, esto vendría de ChromeProfileManager
+     */
+    private async getAllProfileIds(): Promise<string[]> {
+        // Mock implementation - en producción integrar con ChromeProfileManager
+        // const profiles = await chromeProfileManager.detectProfiles();
+        // return profiles.map(p => p.name);
+        
+        return ['default', 'Profile 1', 'Profile 2'];
     }
 }

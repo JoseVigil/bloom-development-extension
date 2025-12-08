@@ -1,3 +1,17 @@
+/* profileManager.css */
+
+:root {
+    --bg-primary: var(--vscode-editor-background);
+    --bg-secondary: var(--vscode-sideBar-background);
+    --fg-primary: var(--vscode-editor-foreground);
+    --fg-secondary: var(--vscode-descriptionForeground);
+    --border-color: var(--vscode-panel-border);
+    --accent-color: var(--vscode-focusBorder);
+    --success-color: #4caf50;
+    --error-color: #f44336;
+    --warning-color: #ff9800;
+}
+
 * {
     box-sizing: border-box;
     margin: 0;
@@ -6,10 +20,10 @@
 
 body {
     font-family: var(--vscode-font-family);
-    color: var(--vscode-foreground);
-    background: var(--vscode-editor-background);
-    padding: 0;
-    overflow-x: hidden;
+    font-size: var(--vscode-font-size);
+    background: var(--bg-primary);
+    color: var(--fg-primary);
+    line-height: 1.6;
 }
 
 .container {
@@ -18,30 +32,28 @@ body {
     padding: 20px;
 }
 
+/* Header */
 .header {
-    margin-bottom: 30px;
+    text-align: center;
+    margin-bottom: 40px;
     padding-bottom: 20px;
-    border-bottom: 1px solid var(--vscode-panel-border);
+    border-bottom: 1px solid var(--border-color);
 }
 
 .header h1 {
     font-size: 28px;
     font-weight: 600;
-    color: var(--vscode-titleBar-activeForeground);
-    margin-bottom: 8px;
+    margin-bottom: 10px;
 }
 
 .subtitle {
-    color: var(--vscode-descriptionForeground);
+    color: var(--fg-secondary);
     font-size: 14px;
 }
 
+/* Section */
 .section {
-    background: var(--vscode-sideBar-background);
-    border: 1px solid var(--vscode-panel-border);
-    border-radius: 6px;
-    padding: 20px;
-    margin-bottom: 20px;
+    margin-bottom: 40px;
 }
 
 .section-header {
@@ -52,153 +64,146 @@ body {
 }
 
 .section-header h2 {
-    font-size: 18px;
+    font-size: 20px;
     font-weight: 600;
-    color: var(--vscode-textLink-foreground);
 }
 
+/* Buttons */
 .btn {
     padding: 8px 16px;
     border: none;
     border-radius: 4px;
     cursor: pointer;
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 500;
+    transition: opacity 0.2s;
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    transition: all 0.2s;
+}
+
+.btn:hover {
+    opacity: 0.85;
 }
 
 .btn-primary {
-    background: var(--vscode-button-background);
-    color: var(--vscode-button-foreground);
-}
-
-.btn-primary:hover {
-    background: var(--vscode-button-hoverBackground);
-}
-
-.btn-secondary {
-    background: var(--vscode-button-secondaryBackground);
-    color: var(--vscode-button-secondaryForeground);
-}
-
-.btn-secondary:hover {
-    background: var(--vscode-button-secondaryHoverBackground);
-}
-
-.btn-danger {
-    background: var(--vscode-errorForeground);
+    background: var(--accent-color);
     color: white;
 }
 
-.btn-danger:hover {
-    opacity: 0.8;
+.btn-secondary {
+    background: var(--bg-secondary);
+    color: var(--fg-primary);
+    border: 1px solid var(--border-color);
+}
+
+.btn-danger {
+    background: var(--error-color);
+    color: white;
 }
 
 .btn-sm {
-    padding: 4px 10px;
-    font-size: 12px;
+    padding: 6px 12px;
+    font-size: 13px;
 }
 
-.icon {
-    font-size: 16px;
+.btn-close {
+    background: transparent;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    color: var(--fg-secondary);
+    padding: 4px 8px;
 }
 
-.profiles-container,
-.mappings-container {
-    min-height: 200px;
+.btn-close:hover {
+    color: var(--fg-primary);
 }
 
-.empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 60px 20px;
-    text-align: center;
-}
-
-.empty-icon {
-    font-size: 48px;
-    margin-bottom: 16px;
-    opacity: 0.5;
-}
-
-.empty-state p {
-    margin: 4px 0;
-    color: var(--vscode-descriptionForeground);
-}
-
-.empty-hint {
-    font-size: 12px;
-    opacity: 0.7;
+/* Profile Cards */
+.profiles-container {
+    display: grid;
+    gap: 16px;
 }
 
 .profile-card {
-    background: var(--vscode-editor-background);
-    border: 1px solid var(--vscode-panel-border);
-    border-radius: 6px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
     padding: 16px;
-    margin-bottom: 12px;
-    transition: all 0.2s;
-}
-
-.profile-card:hover {
-    border-color: var(--vscode-focusBorder);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .profile-header {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
     margin-bottom: 12px;
 }
 
 .profile-name {
     font-size: 16px;
     font-weight: 600;
-    color: var(--vscode-foreground);
+    margin-bottom: 4px;
 }
 
 .profile-path {
-    font-size: 11px;
-    color: var(--vscode-descriptionForeground);
-    font-family: monospace;
-    margin-top: 4px;
+    font-size: 12px;
+    color: var(--fg-secondary);
+    font-family: 'Courier New', monospace;
 }
 
 .profile-accounts {
-    margin-top: 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
 }
 
+/* Account Badges */
 .account-badge {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
     padding: 4px 10px;
-    background: var(--vscode-badge-background);
-    color: var(--vscode-badge-foreground);
     border-radius: 12px;
     font-size: 12px;
-    margin-right: 8px;
-    margin-bottom: 6px;
+    font-weight: 500;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
 }
 
-.account-badge.claude { background: #CC9B7A; color: white; }
-.account-badge.chatgpt { background: #10A37F; color: white; }
-.account-badge.grok { background: #1DA1F2; color: white; }
+.account-badge.claude {
+    background: rgba(139, 69, 255, 0.1);
+    border-color: rgba(139, 69, 255, 0.3);
+}
+
+.account-badge.chatgpt {
+    background: rgba(16, 163, 127, 0.1);
+    border-color: rgba(16, 163, 127, 0.3);
+}
+
+.account-badge.grok {
+    background: rgba(255, 100, 100, 0.1);
+    border-color: rgba(255, 100, 100, 0.3);
+}
+
+.account-badge.gemini {
+    background: rgba(66, 133, 244, 0.1);
+    border-color: rgba(66, 133, 244, 0.3);
+}
+
+/* Mapping Cards */
+.mappings-container {
+    display: grid;
+    gap: 16px;
+}
 
 .mapping-card {
-    background: var(--vscode-editor-background);
-    border: 1px solid var(--vscode-panel-border);
-    border-radius: 6px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
     padding: 16px;
-    margin-bottom: 12px;
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr auto;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 16px;
     align-items: center;
 }
@@ -210,80 +215,93 @@ body {
 }
 
 .mapping-label {
-    font-size: 11px;
-    text-transform: uppercase;
-    color: var(--vscode-descriptionForeground);
-    font-weight: 600;
+    font-size: 12px;
+    color: var(--fg-secondary);
+    font-weight: 500;
 }
 
 .mapping-value {
     font-size: 14px;
-    color: var(--vscode-foreground);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
 }
 
 .mapping-actions {
     display: flex;
-    gap: 6px;
+    justify-content: flex-end;
+    gap: 8px;
 }
 
+/* Empty State */
+.empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--fg-secondary);
+}
+
+.empty-icon {
+    font-size: 48px;
+    display: block;
+    margin-bottom: 12px;
+    opacity: 0.5;
+}
+
+.empty-hint {
+    font-size: 13px;
+    margin-top: 8px;
+}
+
+/* Info Section */
 .info-section {
-    background: var(--vscode-textBlockQuote-background);
-    border-left: 3px solid var(--vscode-textLink-foreground);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 20px;
 }
 
 .info-section h3 {
     font-size: 16px;
-    margin-bottom: 12px;
-    color: var(--vscode-textLink-foreground);
+    margin-bottom: 16px;
 }
 
 .info-list {
-    list-style: none;
-    padding-left: 0;
+    padding-left: 20px;
 }
 
 .info-list li {
-    padding: 8px 0;
-    padding-left: 24px;
-    position: relative;
-    line-height: 1.5;
+    margin-bottom: 12px;
+    line-height: 1.6;
 }
 
-.info-list li::before {
-    content: "→";
-    position: absolute;
-    left: 0;
-    color: var(--vscode-textLink-foreground);
-    font-weight: bold;
-}
-
-.info-list strong {
-    color: var(--vscode-textLink-foreground);
-}
-
+/* Modal */
 .modal {
+    display: none;
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
     background: rgba(0, 0, 0, 0.6);
-    display: flex;
+    z-index: 1000;
     align-items: center;
     justify-content: center;
-    z-index: 1000;
+    padding: 20px;
 }
 
 .modal-content {
-    background: var(--vscode-editor-background);
-    border: 1px solid var(--vscode-panel-border);
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
     border-radius: 8px;
-    width: 90%;
     max-width: 600px;
-    max-height: 80vh;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.modal-large {
+    max-width: 800px;
 }
 
 .modal-header {
@@ -291,7 +309,7 @@ body {
     justify-content: space-between;
     align-items: center;
     padding: 20px;
-    border-bottom: 1px solid var(--vscode-panel-border);
+    border-bottom: 1px solid var(--border-color);
 }
 
 .modal-header h3 {
@@ -299,86 +317,150 @@ body {
     font-weight: 600;
 }
 
-.btn-close {
-    background: none;
-    border: none;
-    font-size: 24px;
-    color: var(--vscode-foreground);
-    cursor: pointer;
-    padding: 0;
-    width: 32px;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 4px;
-}
-
-.btn-close:hover {
-    background: var(--vscode-toolbar-hoverBackground);
-}
-
 .modal-body {
     padding: 20px;
-    overflow-y: auto;
 }
 
 .modal-footer {
     display: flex;
     justify-content: flex-end;
-    gap: 10px;
+    gap: 12px;
     padding: 20px;
-    border-top: 1px solid var(--vscode-panel-border);
+    border-top: 1px solid var(--border-color);
 }
 
+/* Form */
 .form-group {
-    margin-bottom: 20px;
+    margin-bottom: 16px;
 }
 
 .form-group label {
     display: block;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
     font-size: 13px;
     font-weight: 500;
-    color: var(--vscode-foreground);
 }
 
 .form-control {
     width: 100%;
     padding: 8px 12px;
-    background: var(--vscode-input-background);
-    color: var(--vscode-input-foreground);
-    border: 1px solid var(--vscode-input-border);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
     border-radius: 4px;
-    font-size: 13px;
-    font-family: var(--vscode-font-family);
+    color: var(--fg-primary);
+    font-size: 14px;
 }
 
 .form-control:focus {
     outline: none;
-    border-color: var(--vscode-focusBorder);
+    border-color: var(--accent-color);
 }
 
-.status-indicator {
-    display: inline-flex;
+/* AI Accounts */
+.ai-accounts-toolbar {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.ai-accounts-list {
+    display: grid;
+    gap: 12px;
+}
+
+.ai-account-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 16px;
+}
+
+.ai-account-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.ai-account-provider {
+    font-size: 15px;
+    font-weight: 600;
+    display: flex;
     align-items: center;
     gap: 6px;
+}
+
+.ai-account-status {
+    padding: 4px 10px;
+    border-radius: 12px;
     font-size: 12px;
-    padding: 4px 8px;
-    border-radius: 4px;
+    font-weight: 500;
 }
 
-.status-indicator.success {
-    background: var(--vscode-testing-iconPassed);
-    color: white;
+.ai-account-status.ok {
+    background: rgba(76, 175, 80, 0.15);
+    color: var(--success-color);
 }
 
-.status-indicator.warning {
-    background: var(--vscode-testing-iconQueued);
-    color: white;
+.ai-account-status.no-key {
+    background: rgba(255, 152, 0, 0.15);
+    color: var(--warning-color);
 }
 
-.status-indicator.error {
-    background: var(--vscode-testing-iconFailed);
-    color: white;
+.ai-account-status.error {
+    background: rgba(244, 67, 54, 0.15);
+    color: var(--error-color);
+}
+
+.ai-account-status.checking {
+    background: rgba(33, 150, 243, 0.15);
+    color: #2196f3;
+}
+
+.ai-account-details {
+    display: grid;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.ai-account-field {
+    display: flex;
+    gap: 8px;
+    font-size: 13px;
+}
+
+.ai-account-field .label {
+    color: var(--fg-secondary);
+    min-width: 80px;
+}
+
+.ai-account-field .value {
+    color: var(--fg-primary);
+    font-weight: 500;
+}
+
+.ai-account-field.error .value {
+    color: var(--error-color);
+}
+
+.ai-account-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+/* Notifications */
+.notification {
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
 }

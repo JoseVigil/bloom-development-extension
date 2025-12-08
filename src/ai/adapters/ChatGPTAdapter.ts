@@ -1,5 +1,5 @@
 // src/ai/adapters/ChatGPTAdapter.ts
-import type { AiAdapter, AiAccountStatus } from '../index';
+import type { AiAdapter, AiAccountStatus, AiProvider } from '../index';
 
 /**
  * ChatGPTAdapter - Verificación de cuenta ChatGPT (OpenAI)
@@ -14,95 +14,87 @@ import type { AiAdapter, AiAccountStatus } from '../index';
 export class ChatGPTAdapter implements AiAdapter {
     private token: string;
     private baseUrl = 'https://api.openai.com/v1';
-    
+    private provider: AiProvider = 'chatgpt';
+
     constructor(config: { token: string }) {
-        this.token = config.token;
+        this.token = config.token.trim();
     }
-    
+
     /**
      * Obtiene uso actual
      */
     async getUsage(): Promise<{ used: number; unit: string }> {
         await this.delay(300);
-        
+
         if (!this.token) {
             throw new Error('ChatGPT token not configured');
         }
-        
-        // Verificar si es API key (formato: sk-...)
+
         const isApiKey = this.token.startsWith('sk-');
-        
+
         if (isApiKey) {
-            // Intentar obtener uso real de OpenAI API
             try {
                 return await this.getApiUsage();
-            } catch (error) {
-                // Fallback a mock si falla
+            } catch {
                 return this.getMockUsage();
             }
         } else {
-            // Session token - mock
             return this.getMockUsage();
         }
     }
-    
+
     /**
      * Obtiene quota/límite
      */
     async getQuota(): Promise<{ used: number; total: number }> {
         await this.delay(300);
-        
+
         if (!this.token) {
             throw new Error('ChatGPT token not configured');
         }
-        
+
         const isApiKey = this.token.startsWith('sk-');
-        
+
         if (isApiKey) {
-            // API tier - intentar obtener quota real
             try {
                 return await this.getApiQuota();
-            } catch (error) {
-                // Fallback a mock
-                return {
-                    used: 5000,
-                    total: 1000000 // 1M tokens
-                };
+            } catch {
+                return { used: 5000, total: 1_000_000 };
             }
         } else {
-            // Free tier - ChatGPT Plus/Free
-            return {
-                used: 12,
-                total: 40 // ~40 messages cada 3 horas
-            };
+            // Free / Plus tier aproximado: ~40 mensajes cada 3 horas
+            return { used: 12, total: 40 };
         }
     }
-    
+
     /**
-     * Obtiene estado completo
+     * Obtiene estado completo - ahora incluye provider obligatoriamente
      */
-    async getStatus(): Promise<AiAccountStatus> {
+    async getStatus(accountId?: string): Promise<AiAccountStatus> {
         try {
-            // Verificar validez del token
             const isValid = await this.validateToken();
-            
+
             if (!isValid) {
                 return {
+                    provider: this.provider,
+                    accountId,
                     ok: false,
                     error: 'Invalid or expired token',
                     lastChecked: new Date()
                 };
             }
-            
+
             const [usage, quota] = await Promise.all([
                 this.getUsage(),
                 this.getQuota()
             ]);
-            
-            const percentage = (quota.used / quota.total) * 100;
+
+            const percentage = quota.total > 0 ? (quota.used / quota.total) * 100 : 0;
             const remaining = quota.total - quota.used;
-            
+
             return {
+                provider: this.provider,
+                accountId,
                 ok: true,
                 usageRemaining: remaining,
                 quota: {
@@ -112,25 +104,24 @@ export class ChatGPTAdapter implements AiAdapter {
                 },
                 lastChecked: new Date()
             };
-            
+
         } catch (error: any) {
             return {
+                provider: this.provider,
+                accountId,
                 ok: false,
-                error: error.message || 'Failed to check ChatGPT status',
+                error: error.message || 'Failed to check ChatGPT account status',
                 lastChecked: new Date()
             };
         }
     }
-    
+
     /**
-     * Valida el token
+     * Valida el token (API key o session token)
      */
-    async validateToken(): Promise<boolean> {
-        if (!this.token) {
-            return false;
-        }
-        
-        // Si es API key, verificar con OpenAI API
+    private async validateToken(): Promise<boolean> {
+        if (!this.token) return false;
+
         if (this.token.startsWith('sk-')) {
             try {
                 const response = await fetch(`${this.baseUrl}/models`, {
@@ -139,89 +130,43 @@ export class ChatGPTAdapter implements AiAdapter {
                         'Authorization': `Bearer ${this.token}`
                     }
                 });
-                
                 return response.status === 200;
-                
-            } catch (error) {
+            } catch {
                 return false;
             }
-        } else {
-            // Session token - validar formato básico
-            return this.token.length > 20;
         }
+
+        // Session token: validación básica de longitud/formato
+        return this.token.length > 50 && /[A-Za-z0-9_-]+/.test(this.token);
     }
-    
+
     // ========================================================================
     // OPENAI API METHODS
     // ========================================================================
-    
-    /**
-     * Obtiene uso real desde OpenAI API
-     */
+
     private async getApiUsage(): Promise<{ used: number; unit: string }> {
-        try {
-            // OpenAI no tiene endpoint público de usage sin billing permisos
-            // Usar endpoint de dashboard si está disponible
-            const response = await fetch(`${this.baseUrl}/usage`, {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${this.token}`
-                }
-            });
-            
-            if (!response.ok) {
-                throw new Error('Usage endpoint not available');
-            }
-            
-            const data = await response.json() as any;
-            
-            return {
-                used: data.total_tokens || 0,
-                unit: 'tokens'
-            };
-            
-        } catch (error) {
-            // Fallback a mock
-            return this.getMockUsage();
-        }
+        // Nota: OpenAI no expone uso público sin permisos de billing
+        // Este endpoint no existe públicamente → fallback
+        throw new Error('Usage endpoint not available without billing access');
     }
-    
-    /**
-     * Obtiene quota real desde OpenAI API
-     */
+
     private async getApiQuota(): Promise<{ used: number; total: number }> {
-        try {
-            // Similar - endpoint no público sin billing access
-            // Retornar mock por ahora
-            return {
-                used: 5000,
-                total: 1000000
-            };
-        } catch (error) {
-            return {
-                used: 5000,
-                total: 1000000
-            };
-        }
+        // Sin acceso a billing, no hay forma real de obtener límites exactos
+        // Devolvemos valores aproximados según tier típico
+        return { used: 8_000, total: 1_000_000 };
     }
-    
+
     // ========================================================================
     // PRIVATE HELPERS
     // ========================================================================
-    
-    /**
-     * Obtiene uso mock para free/plus tier
-     */
+
     private getMockUsage(): { used: number; unit: string } {
         return {
-            used: 12,
+            used: Math.floor(Math.random() * 15) + 5, // 5-20 mensajes usados
             unit: 'messages'
         };
     }
-    
-    /**
-     * Simula delay de red
-     */
+
     private delay(ms: number): Promise<void> {
         return new Promise(resolve => setTimeout(resolve, ms));
     }

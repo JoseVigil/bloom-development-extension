@@ -1,104 +1,100 @@
 // src/ai/adapters/ClaudeAdapter.ts
-import type { AiAdapter, AiAccountStatus } from '../index';
+import type { AiAdapter, AiAccountStatus, AiProvider } from '../index';
 
 /**
  * ClaudeAdapter - Verificación de cuenta Claude (Anthropic)
  * 
- * NOTA: Claude API tiene endpoints oficiales pero no exponen usage/quota
- * de manera directa en el free tier.
+ * Soporta:
+ * - API keys oficiales (sk-ant-...)
+ * - Session tokens de claude.ai (free tier)
  * 
- * Esta implementación usa:
- * - Mock para free tier (claude.ai)
- * - API real para tier de pago (si token es API key válida)
+ * NOTA: Anthropic no expone usage/quota públicamente → usamos mocks realistas
  */
 export class ClaudeAdapter implements AiAdapter {
     private token: string;
     private baseUrl = 'https://api.anthropic.com/v1';
-    
+    private readonly provider: AiProvider = 'claude';
+
     constructor(config: { token: string }) {
-        this.token = config.token;
+        this.token = config.token.trim();
     }
-    
+
     /**
      * Obtiene uso actual
      */
     async getUsage(): Promise<{ used: number; unit: string }> {
         await this.delay(300);
-        
+
         if (!this.token) {
             throw new Error('Claude token not configured');
         }
-        
-        // Verificar si es API key (formato: sk-ant-...)
+
         const isApiKey = this.token.startsWith('sk-ant-');
-        
+
         if (isApiKey) {
-            // Intentar obtener uso real de la API
-            try {
-                // Anthropic no tiene endpoint de usage público
-                // Usamos mock incluso para API keys
-                return this.getMockUsage();
-            } catch (error) {
-                return this.getMockUsage();
-            }
+            // Anthropic no expone uso público → mock realista
+            return this.getMockApiUsage();
         } else {
-            // Free tier - mock
-            return this.getMockUsage();
+            // Free tier en claude.ai
+            return this.getMockFreeUsage();
         }
     }
-    
+
     /**
      * Obtiene quota/límite
      */
     async getQuota(): Promise<{ used: number; total: number }> {
         await this.delay(300);
-        
+
         if (!this.token) {
             throw new Error('Claude token not configured');
         }
-        
+
         const isApiKey = this.token.startsWith('sk-ant-');
-        
+
         if (isApiKey) {
-            // API tier - quota alta (mock)
+            // Tier pago: límites altos (estimado)
             return {
-                used: 2500,
-                total: 1000000 // 1M tokens
+                used: Math.floor(Math.random() * 3000) + 1000,
+                total: 1_000_000
             };
         } else {
-            // Free tier - claude.ai
+            // Free tier: ~50 mensajes/día (aproximado)
             return {
-                used: 15,
-                total: 50 // 50 messages por día
+                used: Math.floor(Math.random() * 30) + 5,
+                total: 50
             };
         }
     }
-    
+
     /**
-     * Obtiene estado completo
+     * Obtiene estado completo - ahora incluye provider y accountId
      */
-    async getStatus(): Promise<AiAccountStatus> {
+    async getStatus(accountId?: string): Promise<AiAccountStatus> {
         try {
-            // Verificar validez del token primero
             const isValid = await this.validateToken();
-            
+
             if (!isValid) {
                 return {
+                    provider: this.provider,
+                    accountId,
                     ok: false,
                     error: 'Invalid or expired token',
                     lastChecked: new Date()
                 };
             }
-            
+
             const [usage, quota] = await Promise.all([
                 this.getUsage(),
                 this.getQuota()
             ]);
-            
-            const percentage = (quota.used / quota.total) * 100;
+
+            const percentage = quota.total > 0 ? (quota.used / quota.total) * 100 : 0;
             const remaining = quota.total - quota.used;
-            
+
             return {
+                provider: this.provider,
+                accountId,
                 ok: true,
                 usageRemaining: remaining,
                 quota: {
@@ -108,28 +104,26 @@ export class ClaudeAdapter implements AiAdapter {
                 },
                 lastChecked: new Date()
             };
-            
+
         } catch (error: any) {
             return {
+                provider: this.provider,
+                accountId,
                 ok: false,
-                error: error.message || 'Failed to check Claude status',
+                error: error.message || 'Failed to check Claude account status',
                 lastChecked: new Date()
             };
         }
     }
-    
+
     /**
-     * Valida el token haciendo una llamada ligera a la API
+     * Valida el token (API key o session)
      */
-    async validateToken(): Promise<boolean> {
-        if (!this.token) {
-            return false;
-        }
-        
-        // Si es API key, verificar con la API
+    private async validateToken(): Promise<boolean> {
+        if (!this.token) return false;
+
         if (this.token.startsWith('sk-ant-')) {
             try {
-                // Hacer una llamada mínima a /messages para verificar
                 const response = await fetch(`${this.baseUrl}/messages`, {
                     method: 'POST',
                     headers: {
@@ -140,42 +134,39 @@ export class ClaudeAdapter implements AiAdapter {
                     body: JSON.stringify({
                         model: 'claude-3-haiku-20240307',
                         max_tokens: 1,
-                        messages: [
-                            { role: 'user', content: 'test' }
-                        ]
+                        messages: [{ role: 'user', content: 'ping' }]
                     })
                 });
-                
-                // Si no es 401/403, el token es válido
+
                 return response.status !== 401 && response.status !== 403;
-                
-            } catch (error) {
-                // Error de red o similar - asumimos válido
+            } catch {
+                // Si hay error de red, asumimos que podría ser válido
                 return true;
             }
         } else {
-            // Session token de claude.ai - validar formato básico
-            return this.token.length > 20;
+            // Session token de claude.ai → validación heurística
+            return this.token.length > 50 && /[A-Za-z0-9._-]+/.test(this.token);
         }
     }
-    
+
     // ========================================================================
     // PRIVATE HELPERS
     // ========================================================================
-    
-    /**
-     * Obtiene uso mock para free tier
-     */
-    private getMockUsage(): { used: number; unit: string } {
+
+    private getMockApiUsage(): { used: number; unit: string } {
         return {
-            used: 15,
+            used: Math.floor(Math.random() * 5000) + 1000,
+            unit: 'tokens'
+        };
+    }
+
+    private getMockFreeUsage(): { used: number; unit: string } {
+        return {
+            used: Math.floor(Math.random() * 25) + 5,
             unit: 'messages'
         };
     }
-    
-    /**
-     * Simula delay de red
-     */
+
     private delay(ms: number): Promise<void> {
         return new Promise(resolve => setTimeout(resolve, ms));
     }

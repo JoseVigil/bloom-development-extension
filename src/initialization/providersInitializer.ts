@@ -5,6 +5,8 @@ import { IntentTreeProvider } from '../providers/intentTreeProvider';
 import { NucleusTreeProvider } from '../providers/nucleusTreeProvider';
 import { ProfileTreeProvider } from '../providers/profileTreeProvider';
 import { Managers } from './managersInitializer';
+import { WebSocketManager } from '../server/WebSocketManager';
+import { AiAccountChecker } from '../ai/AiAccountChecker';
 
 export interface Providers {
     intentTreeProvider: IntentTreeProvider;
@@ -43,7 +45,19 @@ export function initializeProviders(
     
     // Profile Tree Provider (Singleton)
     try {
-        ProfileTreeProvider.initialize(context, logger, managers.chromeProfileManager);
+        // Obtener o inicializar los managers faltantes (singletons)
+        const wsManager = WebSocketManager.getInstance();
+        wsManager.start(); // Asegurar que esté iniciado
+        const accountChecker = AiAccountChecker.init(context);
+        accountChecker.start(); // Asegurar que el scheduler esté activo
+
+        ProfileTreeProvider.initialize(
+            context,
+            logger,
+            managers.chromeProfileManager,
+            wsManager,
+            accountChecker
+        );
         logger.info('✅ ProfileTreeProvider initialized');
     } catch (error: any) {
         logger.error('❌ Error initializing ProfileTreeProvider', error);
