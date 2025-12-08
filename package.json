@@ -22,7 +22,8 @@
     "onView:bloomProfiles",
     "onCommand:bloom.showWelcome",
     "onCommand:bloom.manageProfiles",
-    "onCommand:bloom.openIntentInBrowser"
+    "onCommand:bloom.openIntentInBrowser",
+    "onCommand:bloom.startGitHubOAuth"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -220,6 +221,12 @@
         "command": "bloom.refreshNucleus",
         "title": "Refresh Nucleus",
         "icon": "$(sync)"
+      },
+      {
+        "command": "bloom.startGitHubOAuth",
+        "title": "Bloom: Authenticate with GitHub",
+        "category": "Bloom",
+        "icon": "$(github)"
       }
     ],
     "menus": {
@@ -297,6 +304,10 @@
         {
           "command": "bloom.resetRegistration",
           "when": "true"
+        },
+        {
+          "command": "bloom.startGitHubOAuth",
+          "when": "true"
         }
       ],
       "view/item/context": [
@@ -353,6 +364,11 @@
         "command": "bloom.createNucleusProject",
         "key": "ctrl+alt+n",
         "mac": "cmd+alt+n"
+      },
+      {
+        "command": "bloom.startGitHubOAuth",
+        "key": "ctrl+alt+g",
+        "mac": "cmd+alt+g"
       }
     ],
     "configuration": {
@@ -405,6 +421,18 @@
           "type": "boolean",
           "default": true,
           "description": "Detectar y mostrar proyectos Nucleus automáticamente"
+        },
+        "bloom.github.clientId": {
+          "type": "string",
+          "default": "",
+          "description": "GitHub OAuth Client ID for authentication",
+          "order": 100
+        },
+        "bloom.github.clientSecret": {
+          "type": "string",
+          "default": "",
+          "description": "GitHub OAuth Client Secret (stored securely in settings)",
+          "order": 101
         }
       }
     }

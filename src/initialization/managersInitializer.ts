@@ -7,12 +7,17 @@ import { TokenEstimator } from '../utils/tokenEstimator';
 import { ChromeProfileManager } from '../core/chromeProfileManager';
 import { GitManager } from '../utils/gitManager';
 
+// ← Añadimos la importación del UserManager
+import { UserManager } from '../managers/userManager';
+
 export interface Managers {
     logger: Logger;
     metadataManager: MetadataManager;
     contextGatherer: ContextGatherer;
     tokenEstimator: TokenEstimator;
     chromeProfileManager: ChromeProfileManager;
+    // ← Añadimos la propiedad al interfaz
+    userManager: UserManager;
 }
 
 /**
@@ -31,6 +36,9 @@ export function initializeManagers(
     const tokenEstimator = new TokenEstimator();
     const chromeProfileManager = new ChromeProfileManager(context, logger);
     
+    // ← Inicializamos el UserManager con el contexto
+    const userManager = UserManager.init(context);
+    
     logger.info('✅ Managers initialized');
     
     return {
@@ -38,6 +46,7 @@ export function initializeManagers(
         metadataManager,
         contextGatherer,
         tokenEstimator,
-        chromeProfileManager
+        chromeProfileManager,
+        userManager          // ← Lo incluimos en el objeto devuelto
     };
 }
