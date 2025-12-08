@@ -1,5 +1,6 @@
 // src/utils/githubApi.ts
-import { getGitHubHeaders } from './githubOAuth';
+import * as vscode from 'vscode';
+import { UserManager } from '../managers/userManager';
 
 // ============================================================================
 // INTERFACES
@@ -23,6 +24,81 @@ export interface GitHubRepo {
     updated_at: string;
     language: string | null;
     private: boolean;
+}
+
+export interface GitHubUser {
+    login: string;
+    id: number;
+    avatar_url: string;
+    email?: string | null;
+}
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+/**
+ * Obtiene headers de autenticación para GitHub API
+ */
+async function getGitHubHeaders(): Promise<Record<string, string>> {
+    const context = (global as any).__bloomContext as vscode.ExtensionContext;
+    if (!context) {
+        throw new Error('Bloom context not initialized');
+    }
+
+    const userManager = UserManager.init(context);
+    const token = await userManager.getGithubToken();
+
+    if (!token) {
+        throw new Error('GitHub not authenticated');
+    }
+
+    return {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/vnd.github.v3+json'
+    };
+}
+
+/**
+ * Obtiene el usuario y organizaciones usando un token
+ * Used by OAuth flow
+ */
+export async function fetchUserAndOrgs(token: string): Promise<{ username: string; orgs: string[] }> {
+    // Fetch user
+    const userResponse = await fetch('https://api.github.com/user', {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Accept': 'application/vnd.github.v3+json'
+        }
+    });
+
+    if (!userResponse.ok) {
+        const error = await userResponse.text();
+        throw new Error(`Failed to fetch user: ${error}`);
+    }
+
+    const user = await userResponse.json() as GitHubUser;
+
+    // Fetch organizations
+    const orgsResponse = await fetch('https://api.github.com/user/orgs', {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Accept': 'application/vnd.github.v3+json'
+        }
+    });
+
+    let orgs: string[] = [user.login];
+
+    if (orgsResponse.ok) {
+        const orgsData = await orgsResponse.json() as GitHubOrg[];
+        const orgLogins = orgsData.map(org => org.login);
+        orgs = [user.login, ...orgLogins];
+    }
+
+    return {
+        username: user.login,
+        orgs: orgs
+    };
 }
 
 // ============================================================================

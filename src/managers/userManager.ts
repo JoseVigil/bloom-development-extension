@@ -16,6 +16,10 @@ export class UserManager {
     private static instance: UserManager;
     private context: vscode.ExtensionContext;
 
+    // Secret storage keys
+    private readonly GITHUB_TOKEN_KEY = 'bloom.github.token';
+    private readonly GEMINI_API_KEY = 'bloom.gemini.apiKey';
+
     private constructor(context: vscode.ExtensionContext) {
         this.context = context;
     }
@@ -70,12 +74,13 @@ export class UserManager {
      */
     async clear(): Promise<void> {
         await this.context.globalState.update('bloom.user.v3', undefined);
+        await this.context.secrets.delete(this.GITHUB_TOKEN_KEY);
+        await this.context.secrets.delete(this.GEMINI_API_KEY);
         await vscode.commands.executeCommand('setContext', 'bloom.isRegistered', false);
     }
 
     /**
      * Método estático para obtener datos (usado por comandos)
-     * FIX: Cambiar null por undefined
      */
     static async getUserData(): Promise<BloomUser | null> {
         const context = this.instance?.context;
@@ -83,6 +88,86 @@ export class UserManager {
         
         const user = context.globalState.get<BloomUser>('bloom.user.v3');
         return user ?? null;
+    }
+
+    // ========================================
+    // GITHUB OAUTH METHODS
+    // ========================================
+
+    /**
+     * Almacena el token de GitHub en SecretStorage
+     */
+    async setGithubToken(token: string): Promise<void> {
+        await this.context.secrets.store(this.GITHUB_TOKEN_KEY, token);
+    }
+
+    /**
+     * Obtiene el token de GitHub desde SecretStorage
+     */
+    async getGithubToken(): Promise<string | undefined> {
+        return await this.context.secrets.get(this.GITHUB_TOKEN_KEY);
+    }
+
+    /**
+     * Establece el usuario y organizaciones de GitHub
+     */
+    async setGithubUser(username: string, orgs: string[]): Promise<void> {
+        await this.saveUser({
+            githubUsername: username,
+            githubOrg: orgs[0] || username,
+            allOrgs: orgs
+        });
+    }
+
+    /**
+     * Obtiene el username de GitHub
+     */
+    async getGithubUsername(): Promise<string | undefined> {
+        const user = this.getUser();
+        return user?.githubUsername;
+    }
+
+    /**
+     * Obtiene las organizaciones de GitHub
+     */
+    async getGithubOrgs(): Promise<string[]> {
+        const user = this.getUser();
+        return user?.allOrgs || [];
+    }
+
+    /**
+     * Verifica si el usuario está autenticado en GitHub
+     */
+    async isGithubAuthenticated(): Promise<boolean> {
+        const token = await this.getGithubToken();
+        const user = this.getUser();
+        return !!token && !!user?.githubUsername;
+    }
+
+    // ========================================
+    // GEMINI API METHODS
+    // ========================================
+
+    /**
+     * Almacena la API Key de Gemini
+     */
+    async setGeminiApiKey(apiKey: string): Promise<void> {
+        await this.context.secrets.store(this.GEMINI_API_KEY, apiKey);
+    }
+
+    /**
+     * Obtiene la API Key de Gemini
+     */
+    async getGeminiApiKey(): Promise<string | undefined> {
+        return await this.context.secrets.get(this.GEMINI_API_KEY);
+    }
+
+    /**
+     * Verifica si Gemini está configurado
+     */
+    async isGeminiConfigured(): Promise<boolean> {
+        const apiKey = await this.getGeminiApiKey();
+        return !!apiKey;
     }
 
     // ========================================
@@ -101,8 +186,6 @@ export class UserManager {
 
         // Intentar leer datos v1
         const email = this.context.globalState.get<string>('bloom.user.email');
-        const name = this.context.globalState.get<string>('bloom.user.name');
-        const registeredAt = this.context.globalState.get<string>('bloom.user.registeredAt');
 
         if (!email) {
             return false; // No hay nada que migrar
@@ -138,5 +221,16 @@ export class UserManager {
             registeredAt: this.context.globalState.get<string>('bloom.user.registeredAt'),
             acceptedTerms: this.context.globalState.get<boolean>('bloom.user.acceptedTerms')
         };
+    }
+
+    // ========================================
+    // GLOBAL STATE ACCESS
+    // ========================================
+
+    /**
+     * Proporciona acceso al globalState para compatibilidad
+     */
+    get globalState(): vscode.Memento {
+        return this.context.globalState;
     }
 }
