@@ -4,8 +4,8 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import { WebSocketManager } from './WebSocketManager';
+import { spawn } from 'child_process';
 
-// Interfaces for service dependencies
 interface NucleusManager {
   create(data: any): Promise<any>;
   clone(data: any): Promise<any>;
@@ -62,6 +62,14 @@ interface PluginApiServerConfig {
   userManager: UserManager;
   outputChannel: vscode.OutputChannel;
   pluginVersion: string;
+}
+
+interface ScriptResult {
+  code: number;
+  stdout: string;
+  stderr: string;
+  summary?: string;
+  filesCreated?: string[];
 }
 
 export class PluginApiServer {
@@ -206,6 +214,12 @@ export class PluginApiServer {
       } else if (method === 'POST' && pathname === '/btip/explorer/refresh') {
         if (!(await this.checkAuth(res))) return;
         await this.handleRefresh(res);
+      } else if (method === 'POST' && pathname === '/btip/nucleus/create') {
+        if (!(await this.checkAuth(res))) return;
+        await this.handleBtipNucleusCreate(req, res);
+      } else if (method === 'POST' && pathname === '/btip/projects/create') {
+        if (!(await this.checkAuth(res))) return;
+        await this.handleBtipProjectsCreate(req, res);
       } else {
         this.sendJson(res, 404, { error: 'Endpoint not found' });
       }
@@ -312,7 +326,7 @@ export class PluginApiServer {
     this.sendJson(res, 200, { 
       message: 'Bloom Plugin API',
       version: this.pluginVersion,
-      endpoints: ['/health', '/home', '/handshake', '/host/status', '/nucleus/*', '/project/*', '/intents/*', '/doc/*', '/btip/auth/*', '/btip/explorer/*']
+      endpoints: ['/health', '/home', '/handshake', '/host/status', '/nucleus/*', '/project/*', '/intents/*', '/doc/*', '/btip/auth/*', '/btip/explorer/*', '/btip/nucleus/*', '/btip/projects/*']
     });
   }
 
@@ -397,6 +411,231 @@ export class PluginApiServer {
     const body = await this.parseBody(req);
     const result = await this.geminiClient.summarize(body);
     this.sendJson(res, 200, result);
+  }
+
+  private async handleBtipNucleusCreate(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    const body = await this.parseBody(req);
+    const { name, org, repoUrl } = body;
+
+    if (!name) {
+      this.sendJson(res, 400, { error: 'Missing required field: name' });
+      return;
+    }
+
+    const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!workspacePath) {
+      this.sendJson(res, 400, { error: 'No workspace folder open' });
+      return;
+    }
+
+    const sanitizedPath = this.sanitizePath(workspacePath);
+    if (!sanitizedPath) {
+      this.sendJson(res, 400, { error: 'Invalid workspace path' });
+      return;
+    }
+
+    try {
+      const args = [
+        '--name', name,
+        '--root', sanitizedPath,
+        '--output', '.bloom'
+      ];
+
+      if (org) {
+        args.push('--org', org);
+      }
+
+      if (repoUrl) {
+        args.push('--url', repoUrl);
+      }
+
+      const result = await this.runPythonScript('generate_nucleus.py', args);
+
+      if (result.code === 0) {
+        this.wsManager.broadcast('nucleus:created', {
+          name,
+          org,
+          path: path.join(sanitizedPath, '.bloom')
+        });
+
+        this.sendJson(res, 201, {
+          ok: true,
+          summary: result.summary || 'Nucleus created successfully',
+          filesCreated: result.filesCreated || [],
+          stdout: result.stdout,
+          stderr: result.stderr
+        });
+      } else {
+        this.sendJson(res, 500, {
+          ok: false,
+          error: 'Script execution failed',
+          stdout: result.stdout,
+          stderr: result.stderr
+        });
+      }
+    } catch (error: any) {
+      this.log(`Error in handleBtipNucleusCreate: ${error.message}`);
+      this.sendJson(res, 500, { error: error.message });
+    }
+  }
+
+  private async handleBtipProjectsCreate(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    const body = await this.parseBody(req);
+    const { strategy, rootPath, output } = body;
+
+    if (!strategy || !rootPath) {
+      this.sendJson(res, 400, { error: 'Missing required fields: strategy, rootPath' });
+      return;
+    }
+
+    const sanitizedRootPath = this.sanitizePath(rootPath);
+    if (!sanitizedRootPath) {
+      this.sendJson(res, 400, { error: 'Invalid root path' });
+      return;
+    }
+
+    const sanitizedOutput = output ? this.sanitizePath(output) : '.bloom/project';
+
+    try {
+      const args = [
+        '--strategy', strategy,
+        '--root', sanitizedRootPath,
+        '--output', sanitizedOutput
+      ];
+
+      const result = await this.runPythonScript('generate_project_context.py', args);
+
+      if (result.code === 0) {
+        this.wsManager.broadcast('project:created', {
+          strategy,
+          rootPath: sanitizedRootPath,
+          output: sanitizedOutput
+        });
+
+        this.sendJson(res, 201, {
+          ok: true,
+          summary: result.summary || 'Project context created successfully',
+          filesCreated: result.filesCreated || [],
+          stdout: result.stdout,
+          stderr: result.stderr
+        });
+      } else {
+        this.sendJson(res, 500, {
+          ok: false,
+          error: 'Script execution failed',
+          stdout: result.stdout,
+          stderr: result.stderr
+        });
+      }
+    } catch (error: any) {
+      this.log(`Error in handleBtipProjectsCreate: ${error.message}`);
+      this.sendJson(res, 500, { error: error.message });
+    }
+  }
+
+  private async runPythonScript(scriptName: string, args: string[]): Promise<ScriptResult> {
+    const extensionPath = this.context.extensionPath;
+    const scriptsPath = path.join(extensionPath, 'scripts');
+    const scriptPath = path.join(scriptsPath, scriptName);
+
+    return new Promise((resolve, reject) => {
+      const timeout = 300000; // 5 minutes
+      const pythonCommand = process.platform === 'win32' ? 'python' : 'python3';
+
+      this.log(`Executing: ${pythonCommand} ${scriptPath} ${args.join(' ')}`);
+
+      const child = spawn(pythonCommand, [scriptPath, ...args], {
+        cwd: scriptsPath,
+        timeout: timeout
+      });
+
+      let stdout = '';
+      let stderr = '';
+
+      child.stdout.on('data', (data) => {
+        const output = data.toString();
+        stdout += output;
+        this.log(`[STDOUT] ${output}`);
+      });
+
+      child.stderr.on('data', (data) => {
+        const output = data.toString();
+        stderr += output;
+        this.log(`[STDERR] ${output}`);
+      });
+
+      child.on('error', (error) => {
+        this.log(`Process error: ${error.message}`);
+        reject(error);
+      });
+
+      child.on('close', (code) => {
+        this.log(`Process exited with code: ${code}`);
+
+        const filesCreated = this.extractFilesFromOutput(stdout, 'CREATED:');
+        const summary = this.extractSummaryFromOutput(stdout);
+
+        resolve({
+          code: code || 0,
+          stdout,
+          stderr,
+          summary,
+          filesCreated
+        });
+      });
+
+      setTimeout(() => {
+        if (!child.killed) {
+          child.kill();
+          reject(new Error('Script execution timeout'));
+        }
+      }, timeout);
+    });
+  }
+
+  private sanitizePath(inputPath: string): string | null {
+    try {
+      const normalized = path.normalize(inputPath);
+      
+      if (normalized.includes('..')) {
+        return null;
+      }
+
+      const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (workspacePath && !normalized.startsWith(workspacePath)) {
+        return null;
+      }
+
+      return normalized;
+    } catch {
+      return null;
+    }
+  }
+
+  private extractFilesFromOutput(output: string, marker: string): string[] {
+    const lines = output.split('\n');
+    const files: string[] = [];
+
+    for (const line of lines) {
+      if (line.includes(marker)) {
+        const filePath = line.split(marker)[1]?.trim();
+        if (filePath) {
+          files.push(filePath);
+        }
+      }
+    }
+
+    return files;
+  }
+
+  private extractSummaryFromOutput(output: string): string | undefined {
+    const lines = output.split('\n');
+    for (const line of lines) {
+      if (line.includes('SUMMARY:')) {
+        return line.split('SUMMARY:')[1]?.trim();
+      }
+    }
+    return undefined;
   }
 
   private async handleGetTree(url: URL, res: http.ServerResponse): Promise<void> {
