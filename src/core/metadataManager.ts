@@ -38,8 +38,8 @@ export class MetadataManager {
             id: uuidv4(),
             name: options.name,
             displayName: this.generateDisplayName(options.name),
-            created: now,
-            updated: now,
+            createdAt: now,
+            updatedAt: now,
             status: 'in-progress',
             projectType: options.projectType as any,
             version: options.version,
@@ -90,7 +90,7 @@ export class MetadataManager {
         const updated: IntentMetadata = {
             ...existing,
             ...updates,
-            updated: new Date().toISOString()
+            updatedAt: new Date().toISOString()
         };
 
         await this.save(intentFolder, updated);

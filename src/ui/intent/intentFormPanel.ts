@@ -12,6 +12,7 @@ import { TokenEstimator, TokenEstimation } from '../../utils/tokenEstimator';
 import { PythonExecutor } from '../../utils/pythonExecutor';
 import { IntentFormData, TokenStats } from '../../models/intent';
 import { joinPath } from '../../utils/uriHelper';
+import { v4 as uuid4 } from 'uuid';
 
 
 export class IntentFormPanel {
@@ -222,6 +223,9 @@ export class IntentFormPanel {
                         break;
                     case 'deleteIntent':
                         await this.handleDeleteIntent();
+                        break;
+                    case 'intentDevCreate':
+                        await this.handleIntentDevCreate(message.data);
                         break;
                 }
             },
@@ -497,5 +501,78 @@ export class IntentFormPanel {
         htmlContent = htmlContent.replace('<!-- JS_PLACEHOLDER -->', `<script>${jsContent}</script>`);
 
         return htmlContent;
+    }
+
+    private async handleIntentDevCreate(data: any): Promise<void> {
+        const { name, uid, profileId, aiProvider, aiAccountId, files, problem, expectedOutput } = data;
+        if (!name || !uid || !profileId || !aiProvider || !aiAccountId || !files) {
+            this.panel?.webview.postMessage({
+                command: 'error',
+                message: 'Missing required fields'
+            });
+            return;
+        }
+        const workspacePath = this.workspaceFolder.uri.fsPath;
+        if (!workspacePath) {
+            this.panel?.webview.postMessage({
+                command: 'error',
+                message: 'No workspace folder open'
+            });
+            return;
+        }
+        try {
+            const args = [
+                '--name', name,
+                '--uid', uid,
+                '--profile', profileId,
+                '--provider', aiProvider,
+                '--account', aiAccountId,
+                '--files', JSON.stringify(files),
+                '--workspace', workspacePath
+            ];
+            if (problem) args.push('--problem', problem);
+            if (expectedOutput) args.push('--expected-output', expectedOutput);
+            const result = await this.pythonExecutor.createIntentDev(args);
+            if (result.success) {
+                const createdData = {
+                    id: uuid4(), // Extract from Python output if needed
+                    name,
+                    uid,
+                    profileId,
+                    aiProvider,
+                    url: `/intents/${name}-${uid}`
+                };
+                this.panel?.webview.postMessage({
+                    command: 'intents:created',
+                    data: createdData
+                });
+                this.panel?.webview.postMessage({
+                    command: 'intentDevCreateResponse',
+                    data: {
+                        ok: true,
+                        name,
+                        uid,
+                        path: path.join(workspacePath, '.bloom', 'intents', 'dev', `${name}-${uid}`),
+                        url: `/intents/${name}-${uid}`,
+                        summary: result.stdout || 'Intent DEV created'  // Cambiado de result.summary a result.stdout
+                    }
+                });
+            } else {
+                this.panel?.webview.postMessage({
+                    command: 'intentDevCreateResponse',
+                    data: {
+                        ok: false,
+                        error: 'Script failed',
+                        stderr: result.stderr
+                    }
+                });
+            }
+        } catch (error: any) {
+            this.logger.error(`Error in handleIntentDevCreate: ${error.message}`);
+            this.panel?.webview.postMessage({
+                command: 'error',
+                message: error.message
+            });
+        }
     }
 }

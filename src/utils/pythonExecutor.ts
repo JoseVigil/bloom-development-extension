@@ -29,7 +29,7 @@ export class PythonExecutor {
         scriptPath: string,
         args: string[] = [],
         cwd?: string
-    ): Promise<PythonExecutionResult> {  // ← Agregar <PythonExecutionResult>
+    ): Promise<PythonExecutionResult> {
         try {
             const command = `"${this.pythonPath}" "${scriptPath}" ${args.join(' ')}`;
             
@@ -68,7 +68,7 @@ export class PythonExecutor {
         projectRoot: string,
         strategy: string,
         outputPath?: string
-    ): Promise<PythonExecutionResult> {  // ← Agregar <PythonExecutionResult>
+    ): Promise<PythonExecutionResult> {
         const scriptsPath = path.join(
             vscode.extensions.getExtension('bloom.bloom-btip-plugin')?.extensionPath || '',
             'scripts'
@@ -94,7 +94,7 @@ export class PythonExecutor {
     async generateTree(
         outputFile: string,
         paths: string[]
-    ): Promise<PythonExecutionResult> {  // ← Agregar <PythonExecutionResult>
+    ): Promise<PythonExecutionResult> {
         const scriptsPath = path.join(
             vscode.extensions.getExtension('bloom.bloom-btip-plugin')?.extensionPath || '',
             'scripts'
@@ -112,7 +112,7 @@ export class PythonExecutor {
     async generateCodebase(
         intentPath: string,
         files: string[]
-    ): Promise<PythonExecutionResult> {  // ← Agregar <PythonExecutionResult>
+    ): Promise<PythonExecutionResult> {
         const useCustom = vscode.workspace.getConfiguration('bloom')
             .get('useCustomCodebaseGenerator', false);
 
@@ -138,7 +138,7 @@ export class PythonExecutor {
     /**
      * Verifica si Python está disponible
      */
-    async checkPythonAvailable(): Promise<boolean> {  // ← Agregar <boolean>
+    async checkPythonAvailable(): Promise<boolean> {
         try {
             const result = await this.executeScript(
                 '-c',
@@ -148,5 +148,21 @@ export class PythonExecutor {
         } catch {
             return false;
         }
+    }
+
+    /**
+     * Ejecuta create_intent.py para intents de desarrollo (dev)
+     */
+    async createIntentDev(
+        args: string[]
+    ): Promise<PythonExecutionResult> {
+        const scriptsPath = path.join(
+            vscode.extensions.getExtension('bloom.bloom-btip-plugin')?.extensionPath || '',
+            'scripts'
+        );
+        
+        const scriptPath = path.join(scriptsPath, 'create_intent.py');
+
+        return this.executeScript(scriptPath, args);
     }
 }

@@ -1,27 +1,65 @@
 bloom-development-extension/
 └── webview/
-    └── btip-explorer/
+    └── app/
+        ├── .svelte-kit/
+        │   ├── ambient.d.ts
+        │   ├── generated/
+        │   │   ├── client/
+        │   │   │   ├── app.js
+        │   │   │   ├── matchers.js
+        │   │   │   └── nodes/
+        │   │   │       ├── 0.js
+        │   │   │       ├── 1.js
+        │   │   │       ├── 2.js
+        │   │   │       ├── 3.js
+        │   │   │       ├── 4.js
+        │   │   │       └── 5.js
+        │   │   ├── root.js
+        │   │   ├── root.svelte
+        │   │   └── server/
+        │   │       └── internal.js
+        │   ├── non-ambient.d.ts
+        │   ├── tsconfig.json
+        │   └── types/
+        │       ├── route_meta_data.json
+        │       └── src/
+        │           └── routes/
+        │               ├── $types.d.ts
+        │               ├── home/
+        │               │   └── $types.d.ts
+        │               ├── intents/
+        │               │   └── $types.d.ts
+        │               └── welcome/
+        │                   └── $types.d.ts
+        ├── node_modules/ [... dependencies]
+        ├── package-lock.json
         ├── package.json
         ├── src/
         │   ├── app.html
         │   ├── lib/
+        │   │   ├── api.ts
         │   │   ├── components/
         │   │   │   ├── FileTree.svelte
-        │   │   │   ├── FileViewer.svelte
-        │   │   │   ├── TreeNode.svelte
-        │   │   │   └── viewers/
-        │   │   │       ├── BLViewer.svelte
-        │   │   │       ├── JSONViewer.svelte
-        │   │   │       └── TextViewer.svelte
-        │   │   ├── index.ts
+        │   │   │   ├── GeminiTokenForm.svelte
+        │   │   │   ├── GithubAuthButton.svelte
+        │   │   │   ├── IntentsLink.svelte
+        │   │   │   ├── NucleusPanel.svelte
+        │   │   │   ├── ProjectsPanel.svelte
+        │   │   │   └── SystemStatus.svelte
         │   │   ├── stores/
+        │   │   │   ├── auth.ts
         │   │   │   ├── navigation.ts
+        │   │   │   ├── system.ts
         │   │   │   └── websocket.ts
-        │   │   └── styles/
-        │   │       └── global.css
+        │   │   └── types.ts
         │   └── routes/
         │       ├── +layout.svelte
-        │       └── +page.svelte
+        │       ├── +page.svelte
+        │       ├── home/
+        │       │   └── +page.svelte
+        │       ├── intents/
+        │       │   └── +page.svelte
+        │       └── welcome/
+        │           └── +page.svelte
         ├── svelte.config.js
-        ├── tsconfig.json
         └── vite.config.ts

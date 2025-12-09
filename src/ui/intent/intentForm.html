@@ -3,47 +3,39 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Generate Intent</title>
+    <title>Generate Intent DEV</title>
     <!-- CSS_PLACEHOLDER -->
 </head>
 <body>
     <div class="container">
-        <h1>🌸 Crear Bloom Intent</h1>
+        <h1>🌸 Create Intent DEV (Draft)</h1>
 
         <div class="auto-save-indicator" id="autoSaveIndicator">
-            💾 Draft guardado automáticamente
+            💾 Draft auto-saved
         </div>
 
         <div id="errorMessage" class="error-message">
-            <strong>⚠️ Errores de validación:</strong>
+            <strong>⚠️ Validation errors:</strong>
             <ul id="errorList"></ul>
         </div>
 
         <form id="intentForm">
+            <!-- OBLIGATORIOS -->
             <div class="form-section">
-                <label for="name">Nombre del Intent <span class="required">*</span></label>
+                <label for="name">Intent Name <span class="required">*</span></label>
                 <input type="text" id="name" name="name" placeholder="fix-login-crash" required>
-                <p class="help-text">Solo letras minúsculas, números y guiones</p>
+                <p class="help-text">Lowercase letters, numbers, hyphens only</p>
+            </div>
+
+            <div class="form-section">
+                <label for="profileId">Chrome Profile <span class="required">*</span></label>
+                <select id="profileId" name="profileId" required>
+                    <option value="">-- Select Profile --</option>
+                </select>
+                <p class="help-text">Profile with active AI session</p>
             </div>
 
             <!-- profileManager.html -->
-            <div class="profile-container">
-                <h2>Chrome Profiles Detected</h2>
-                <div id="profilesList"></div>
-                
-                <h2>Intent → Profile Mapping</h2>
-                <table id="intentMappings">
-                    <tr>
-                        <th>Intent</th>
-                        <th>Chrome Profile</th>
-                        <th>Claude Account</th>
-                        <th>Actions</th>
-                    </tr>
-                </table>
-                
-                <button onclick="scanProfiles()">🔄 Scan Profiles</button>
-            </div>
-
             <div class="form-section">
                 <label>📁 Archivos relevantes</label>
                 <div class="file-pills" id="filePills">
@@ -60,49 +52,59 @@
             </div>
 
             <div class="form-section">
-                <label for="problem">¿Qué problema quieres resolver? <span class="required">*</span></label>
-                
-                <div class="editor-toolbar">
-                    <button type="button" class="toolbar-btn" onclick="formatText('bold')" title="Negrita">B</button>
-                    <button type="button" class="toolbar-btn" onclick="formatText('italic')" title="Cursiva">I</button>
-                    <button type="button" class="toolbar-btn" onclick="formatText('code')" title="Código">```</button>
-                    <button type="button" class="toolbar-btn" onclick="formatText('list')" title="Lista">• -</button>
+                <label for="aiProvider">AI Provider <span class="required">*</span></label>
+                <select id="aiProvider" name="aiProvider" required>
+                    <option value="">-- Select Provider --</option>
+                    <option value="claude">Claude (Anthropic)</option>
+                    <option value="grok">Grok (xAI)</option>
+                    <option value="chatgpt">ChatGPT (OpenAI)</option>
+                    <option value="gemini">Gemini (Google)</option>
+                </select>
+            </div>
+
+            <div class="form-section">
+                <label for="aiAccountId">AI Account <span class="required">*</span></label>
+                <select id="aiAccountId" name="aiAccountId" required disabled>
+                    <option value="">-- Select provider first --</option>
+                </select>
+                <p class="help-text" id="accountStatus"></p>
+            </div>
+
+            <div class="form-section">
+                <label>📂 Selected Files <span class="required">*</span></label>
+                <div class="file-pills" id="filePills">
+                    <!-- Populated by JS -->
                 </div>
-                
-                <textarea id="problem" name="problem" placeholder="Describe el problema en detalle..." required></textarea>
+                <div class="token-counter" id="tokenCounter">
+                    <div class="token-bar">
+                        <div class="token-fill" id="tokenFill"></div>
+                    </div>
+                    <div class="token-text" id="tokenText">
+                        📊 Token estimate: 0 / 100,000 (0%)
+                    </div>
+                </div>
+            </div>
+
+            <!-- OPCIONALES (sin required) -->
+            <div class="form-section">
+                <label for="problem">Problem Description (optional)</label>
+                <div class="editor-toolbar">
+                    <button type="button" class="toolbar-btn" onclick="formatText('bold')">B</button>
+                    <button type="button" class="toolbar-btn" onclick="formatText('italic')">I</button>
+                    <button type="button" class="toolbar-btn" onclick="formatText('code')">```</button>
+                </div>
+                <textarea id="problem" name="problem" placeholder="Will be enriched in web UI..."></textarea>
+                <p class="help-text">Optional: Add initial context here</p>
             </div>
 
             <div class="form-section">
-                <label for="expectedOutput">Output Esperado <span class="required">*</span></label>
-                <textarea id="expectedOutput" name="expectedOutput" placeholder="Describe el resultado esperado..." required></textarea>
-            </div>
-
-            <div class="form-section">
-                <label>Comportamiento Actual</label>
-                <div class="list-container" id="currentBehaviorList"></div>
-                <button type="button" class="btn-add" onclick="addListItem('currentBehavior')">
-                    + Agregar paso
-                </button>
-            </div>
-
-            <div class="form-section">
-                <label>Comportamiento Deseado</label>
-                <div class="list-container" id="desiredBehaviorList"></div>
-                <button type="button" class="btn-add" onclick="addListItem('desiredBehavior')">
-                    + Agregar paso
-                </button>
-            </div>
-
-            <div class="form-section">
-                <label for="considerations">💬 Consideraciones adicionales (opcional)</label>
-                <textarea id="considerations" name="considerations" rows="3" placeholder="Ej: Usar Retrofit, mantener estilo actual"></textarea>
+                <label for="expectedOutput">Expected Output (optional)</label>
+                <textarea id="expectedOutput" name="expectedOutput" placeholder="Will be enriched in web UI..."></textarea>
             </div>
 
             <div class="button-group">
-                <button type="submit" class="btn-primary" id="generateBtn">✨ Generar Intent</button>
-                <button type="button" class="btn-secondary" onclick="cancel()">Cancelar</button>
-                <div class="button-spacer"></div>
-                <button type="button" class="btn-danger" id="deleteBtn" onclick="deleteIntent()">🗑️ Delete Intent</button>
+                <button type="submit" class="btn-primary" id="generateBtn">✨ Create Intent DEV</button>
+                <button type="button" class="btn-secondary" onclick="cancel()">Cancel</button>
             </div>
         </form>
     </div>

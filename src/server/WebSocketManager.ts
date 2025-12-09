@@ -223,6 +223,22 @@ export class WebSocketManager extends EventEmitter {  // AJUSTE: Extender EventE
     this.sendToClient(ws, 'intent_opened', { id, timestamp: Date.now() });
   }
 
+  /**
+   * Nuevo evento: intents:created
+   * Payload: { id, name, uid, profileId, aiProvider, projectId, url }
+   * 
+   * Uso:
+   * this.wsManager.broadcast('intents:created', {
+   *   id: 'uuid',
+   *   name: 'fix-crash',
+   *   uid: 'a3x',
+   *   profileId: 'Profile 1',
+   *   aiProvider: 'claude',
+   *   projectId: null,
+   *   url: '/intents/fix-crash-a3x'
+   * });
+   */
+
   broadcast(event: string, payload?: any): void {
     const message = JSON.stringify({ event, data: payload });
     let sent = 0;
@@ -233,7 +249,7 @@ export class WebSocketManager extends EventEmitter {  // AJUSTE: Extender EventE
       }
     });
     console.log(`[WebSocketManager] Broadcast '${event}' → ${sent} clientes`);
-  }
+  }    
 
   sendToClient(ws: ExtendedWebSocket, event: string, payload?: any): void {
     if (ws.readyState === WebSocket.OPEN) {

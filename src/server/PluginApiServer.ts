@@ -7,6 +7,7 @@ import { WebSocketManager } from './WebSocketManager';
 import { spawn } from 'child_process';
 import { ChromeProfileManager } from '../core/chromeProfileManager';
 import { AiAccountChecker } from '../ai/AiAccountChecker';
+import { v4 as uuid4 } from 'uuid';
 
 interface NucleusManager {
   create(data: any): Promise<any>;
@@ -317,6 +318,10 @@ export class PluginApiServer {
         await this.handleRefreshAccounts(req, res, pathname);
         return;
       }
+      if (method === 'POST' && pathname === '/api/v1/intents/dev/create') {
+          await this.handleIntentDevCreate(req, res);
+          return;
+      }
 
       // 404
       this.sendJson(res, 404, { error: 'Endpoint not found' });
@@ -440,6 +445,65 @@ export class PluginApiServer {
       this.sendJson(res, 200, { ok: true });
     } catch (error: any) {
       this.log(`Error refreshing accounts: ${error.message}`);
+      this.sendJson(res, 500, { error: error.message });
+    }
+  }
+
+  private async handleIntentDevCreate(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    const body = await this.parseBody(req);
+    const { name, uid, profileId, aiProvider, aiAccountId, files, problem, expectedOutput } = body;
+
+    if (!name || !uid || !profileId || !aiProvider || !aiAccountId || !files) {
+      this.sendJson(res, 400, { error: 'Missing required fields' });
+      return;
+    } const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!workspacePath) {
+      this.sendJson(res, 400, { error: 'No workspace folder open' });
+      return;
+    }
+    try {
+      const args = [
+        '--name', name,
+        '--uid', uid,
+        '--profile', profileId,
+        '--provider', aiProvider,
+        '--account', aiAccountId,
+        '--files', JSON.stringify(files),
+        '--workspace', workspacePath
+      ];
+
+      if (problem) args.push('--problem', problem);
+      if (expectedOutput) args.push('--expected-output', expectedOutput);
+
+      const result = await this.runPythonScript('create_intent.py', args);
+
+      if (result.code === 0) {
+        this.wsManager.broadcast('intents:created', {
+          id: uuid4(), 
+          name,
+          uid,
+          profileId,
+          aiProvider,
+          url: `/intents/${name}-${uid}`
+        });
+
+        this.sendJson(res, 201, {
+          ok: true,
+          name,
+          uid,
+          path: path.join(workspacePath, '.bloom', 'intents', 'dev', `${name}-${uid}`),
+          url: `/intents/${name}-${uid}`,
+          summary: result.summary || 'Intent DEV created'
+        });
+      } else {
+        this.sendJson(res, 500, {
+          ok: false,
+          error: 'Script failed',
+          stderr: result.stderr
+        });
+      }
+    } catch (error: any) {
+      this.log(`Error in handleIntentDevCreate: ${error.message}`);
       this.sendJson(res, 500, { error: error.message });
     }
   }
