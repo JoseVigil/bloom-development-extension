@@ -46,8 +46,8 @@ export function registerDuplicateIntent(
                 if (newMetadata) {
                     newMetadata.id = uuidv4();
                     newMetadata.name = newName;
-                    newMetadata.created = new Date().toISOString();
-                    newMetadata.updated = new Date().toISOString();
+                    newMetadata.createdAt = new Date().toISOString();
+                    newMetadata.updatedAt = new Date().toISOString();
                     await metadataManager.save(newFolder, newMetadata);
                 }
                 

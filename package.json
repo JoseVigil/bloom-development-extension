@@ -23,7 +23,8 @@
     "onCommand:bloom.showWelcome",
     "onCommand:bloom.manageProfiles",
     "onCommand:bloom.openIntentInBrowser",
-    "onCommand:bloom.startGitHubOAuth"
+    "onCommand:bloom.startGitHubOAuth",
+    "onCommand:bloom.createIntentDev"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -250,6 +251,11 @@
         "title": "Bloom: Authenticate with GitHub",
         "category": "Bloom",
         "icon": "$(github)"
+      },
+      {
+        "command": "bloom.createIntentDev",
+        "title": "Bloom: Create Intent DEV (Draft)",
+        "category": "Bloom"
       }
     ],
     "menus": {
@@ -290,6 +296,11 @@
           "command": "bloom.generateIntent",
           "when": "explorerResourceIsFolder || resourceScheme == file",
           "group": "bloom@1"
+        },
+        {
+          "command": "bloom.createIntentDev",
+          "group": "bloom@1",
+          "when": "explorerResourceIsFolder || resourceScheme == file"
         },
         {
           "command": "bloom.addToIntent",
@@ -511,13 +522,16 @@
     "package:installer": "npm run build:bridge:all && node installer/scripts/build.js"
   },
   "devDependencies": {
+    "@types/mocha": "^10.0.10",
     "@types/node": "^18.19.130",
+    "@types/sinon": "^21.0.0",
     "@types/uuid": "^10.0.0",
     "@types/vscode": "^1.85.0",
     "@types/ws": "^8.18.1",
     "@typescript-eslint/eslint-plugin": "^5.59.0",
     "@typescript-eslint/parser": "^5.59.0",
     "eslint": "^8.41.0",
+    "sinon": "^21.0.0",
     "typescript": "^5.0.4"
   },
   "dependencies": {
@@ -526,7 +540,7 @@
     "@vscode/codicons": "^0.0.33",
     "punycode": "^2.3.0",
     "simple-git": "^3.30.0",
-    "uuid": "^13.0.0",
+    "uuid": "^9.0.0",
     "ws": "^8.18.3"
   }
 }

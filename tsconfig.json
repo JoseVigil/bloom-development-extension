@@ -12,7 +12,7 @@
     "forceConsistentCasingInFileNames": true,
     "moduleResolution": "node",
     "resolveJsonModule": true,
-    "types": ["vscode", "node"]
+    "types": ["vscode", "mocha", "node"]
   },
   "include": ["src/**/*.ts", "src/bridge/HostExecutor.tss"],
   "exclude": [

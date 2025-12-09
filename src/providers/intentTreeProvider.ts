@@ -70,7 +70,7 @@ export class IntentTreeProvider implements vscode.TreeDataProvider<IntentTreeIte
             }
             
             return intents.sort(
-                (a, b) => new Date(b.metadata.updated).getTime() - new Date(a.metadata.updated).getTime()
+                (a, b) => new Date(b.metadata.updatedAt).getTime() - new Date(a.metadata.updatedAt).getTime()
             );
         } catch (error) {
             this.logger.error('Error al cargar intents', error as Error);
@@ -123,6 +123,6 @@ export class IntentTreeItem extends vscode.TreeItem {
     
     private buildTooltip(): string {
         const meta = this.intent.metadata;
-        return `${meta.displayName || meta.name}\nArchivos: ${meta.files.filesCount}\nCreado: ${new Date(meta.created).toLocaleDateString()}\nTags: ${meta.tags?.join(', ') || 'ninguno'}`;
+        return `${meta.displayName || meta.name}\nArchivos: ${meta.files.filesCount}\nCreado: ${new Date(meta.createdAt).toLocaleDateString()}\nTags: ${meta.tags?.join(', ') || 'ninguno'}`;
     }
 }

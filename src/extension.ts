@@ -9,7 +9,7 @@ import { registerCriticalCommands } from './initialization/criticalCommandsIniti
 import { initializeServer } from './server';
 import { registerStartGithubOAuthCommand, stopGithubOAuthServer } from './commands/auth/startGithubOAuth';
 import { AiAccountChecker } from './ai/AiAccountChecker';
-import { initializeProfileAccounts } from './initialization/initializeProfileAccounts'; // ← NUEVA IMPORTACIÓN
+import { initializeProfileAccounts } from './initialization/initializeProfileAccounts'; 
 
 export function activate(context: vscode.ExtensionContext) {
     const logger = new Logger();

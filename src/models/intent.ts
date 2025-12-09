@@ -82,6 +82,9 @@ export interface IntentWorkflow {
 
 export interface IntentFormData {
     name: string;
+    profileId: string; 
+    aiProvider: string; 
+    aiAccountId: string;
     problem: string;
     expectedOutput: string;
     currentBehavior: string[];
@@ -130,10 +133,17 @@ export interface IntentContent {
 
 export interface IntentMetadata {
     id: string;
+    uid?: string;  // Made optional
     name: string;
     displayName: string;
-    created: string;
-    updated: string;
+    profileId?: string;  // Made optional
+    aiProvider?: 'claude' | 'grok' | 'chatgpt' | 'gemini';  // Made optional
+    aiAccountId?: string;  // Made optional
+    
+    // Unificar campos de fecha
+    createdAt: string;
+    updatedAt: string;
+    
     status: IntentStatus;
     projectType?: ProjectType;
     version: 'free' | 'pro';
@@ -152,6 +162,16 @@ export interface IntentMetadata {
     };
 
     bloomVersion: string;
+    
+    // Campos adicionales
+    nucleusId?: string;
+    projectId?: string;
+    derivedFrom?: string;
+    problem?: string;
+    expectedOutput?: string;
+    currentBehavior?: string[];
+    desiredBehavior?: string[];
+    considerations?: string;
 }
 
 // ============================================================================
@@ -222,10 +242,13 @@ export function createInitialMetadata(
         totalSize: number;
         estimatedTokens: number;
     }
-): Omit<IntentMetadata, 'id' | 'created' | 'updated'> {
+): Omit<IntentMetadata, 'id' | 'createdAt' | 'updatedAt'> {
     return {
         name: formData.name,
         displayName: generateDisplayName(formData.name),
+        profileId: formData.profileId,
+        aiProvider: formData.aiProvider as 'claude' | 'grok' | 'chatgpt' | 'gemini',  // Type assertion for safety
+        aiAccountId: formData.aiAccountId,
         status: 'draft',
         projectType: options.projectType,
         version: options.version,

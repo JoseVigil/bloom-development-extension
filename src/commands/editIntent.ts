@@ -19,7 +19,7 @@ export function registerEditIntent(
             await vscode.window.showTextDocument(document);
             
             await metadataManager.update(treeItem.intent.folderUri, {
-                updated: new Date().toISOString()
+                updatedAt: new Date().toISOString()
             });
             
             treeProvider.refresh();

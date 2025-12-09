@@ -26,6 +26,7 @@ import { registerNucleusCommands } from '../commands/nucleus/nucleusCommands';
 import { registerProfileCommands } from '../commands/profile/profileCommands';
 import { registerGitCommands } from '../commands/git/gitCommands';
 import { registerDebugCommands } from '../commands/debug/debugCommands';
+import { createIntentDevCommand } from '../commands/intent/createIntentDev';
 
 /**
  * Registra TODOS los comandos del plugin
@@ -35,7 +36,7 @@ export function registerAllCommands(
     context: vscode.ExtensionContext,
     logger: Logger,
     managers: Managers,
-    providers: Providers
+    providers: any
 ): void {
     logger.info('📝 Registrando comandos...');
     
@@ -83,6 +84,12 @@ export function registerAllCommands(
     // ========================================
     registerDebugCommands(context, logger);
     logger.info('✅ Debug commands registered');
+
+    const createIntentDevDisposable = vscode.commands.registerCommand(
+        'bloom.createIntentDev',
+        () => createIntentDevCommand(context, logger)
+    );
+    context.subscriptions.push(createIntentDevDisposable);
     
     logger.info('✅ All commands registered successfully');
 }
