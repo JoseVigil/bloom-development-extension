@@ -306,7 +306,11 @@ void chrome_loop() {
     while (!shutdown_requested.load()) {
         uint32_t size = read_size(std::cin);
         if (size == 0) {
-            if (std::cin.eof()) break;
+            if (std::cin.eof()) {
+                g_logger.info("stdin closed (EOF) - initiating shutdown");
+                shutdown_requested.store(true);
+                break;
+            }
             continue;
         }
 
