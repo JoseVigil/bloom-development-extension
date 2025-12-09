@@ -7,6 +7,8 @@ import { HostExecutor } from '../host/HostExecutor';
 import { BTIPExplorerController } from '../server/BTIPExplorerController';
 import { Managers } from './managersInitializer';
 import { Providers } from './providersInitializer';
+import { ChromeProfileManager } from '../core/chromeProfileManager';  // AJUSTE: Importar para instanciar
+import { AiAccountChecker } from '../ai/AiAccountChecker';  // AJUSTE: Importar para instanciar
 
 // ============================================================================
 // STUB IMPLEMENTATIONS - Reemplazar cuando existan las clases reales
@@ -147,6 +149,10 @@ export async function initializeServerAndUI(
     const hostClient = new StubHostClient();
     const userManager = new StubUserManager(context);
 
+    // AJUSTE: Instanciar las dependencias faltantes para PluginApiServerConfig
+    const chromeProfileManager = new ChromeProfileManager(context, logger);  // AJUSTE: Pasar context y logger requeridos
+    const aiAccountChecker = AiAccountChecker.init(context);  // AJUSTE: Usar método estático init() en lugar de new (constructor privado)
+
     // 4. Obtener instancia singleton de WebSocket Manager
     const wsManager = WebSocketManager.getInstance();
     await wsManager.start();
@@ -165,7 +171,9 @@ export async function initializeServerAndUI(
         hostClient,
         userManager,
         outputChannel,
-        pluginVersion
+        pluginVersion,
+        chromeProfileManager,  // AJUSTE: Agregar la propiedad faltante
+        aiAccountChecker       // AJUSTE: Agregar la propiedad faltante
     });
     await apiServer.start();
     logger.info(`PluginApiServer corriendo en puerto ${apiServer.getPort()}`);
