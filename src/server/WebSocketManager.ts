@@ -1,7 +1,7 @@
 import WebSocket, { WebSocketServer } from 'ws';
 import type { IncomingMessage } from 'http';
 import type { HostExecutor } from '../host/HostExecutor';
-import { EventEmitter } from 'events';
+import { EventEmitter } from 'events';  // AJUSTE: Importar EventEmitter para soportar eventos personalizados
 
 // Extensión limpia de WebSocket para agregar isAlive
 interface ExtendedWebSocket extends WebSocket {
@@ -29,9 +29,8 @@ interface StatusResponse {
 
 /**
  * WebSocketManager - Transport layer para eventos bidireccionales
- * Ahora incluye EventEmitter para notificar a componentes internos
  */
-export class WebSocketManager extends EventEmitter {
+export class WebSocketManager extends EventEmitter {  // AJUSTE: Extender EventEmitter para agregar soporte a 'on' y 'emit'
   private static instance: WebSocketManager;
 
   private wss: WebSocketServer | null = null;
@@ -44,7 +43,7 @@ export class WebSocketManager extends EventEmitter {
   private readonly HEARTBEAT_INTERVAL = 20000; // 20 segundos
 
   private constructor() {
-    super();
+    super();  // AJUSTE: Llamar al super de EventEmitter
   }
 
   static getInstance(): WebSocketManager {
@@ -116,9 +115,6 @@ export class WebSocketManager extends EventEmitter {
         });
       });
     }
-
-    // Limpiar listeners
-    this.removeAllListeners();
   }
 
   private handleConnection(ws: ExtendedWebSocket): void {
@@ -163,9 +159,6 @@ export class WebSocketManager extends EventEmitter {
 
     console.log(`[WebSocketManager] Evento recibido: ${message.event}`);
 
-    // Emitir evento interno para que otros componentes puedan escuchar
-    this.emit('message', { event: message.event, data: message.data, ws });
-
     try {
       switch (message.event) {
         case 'request_status':
@@ -182,16 +175,6 @@ export class WebSocketManager extends EventEmitter {
 
         case 'open_intent':
           await this.handleOpenIntent(ws, message.data);
-          break;
-
-        case 'profile:update':
-          // Emitir evento específico para actualizaciones de perfil
-          this.emit('profile:update', message.data);
-          break;
-
-        case 'account:status':
-          // Emitir evento específico para estado de cuentas
-          this.emit('account:status', message.data);
           break;
 
         default:
@@ -250,9 +233,6 @@ export class WebSocketManager extends EventEmitter {
       }
     });
     console.log(`[WebSocketManager] Broadcast '${event}' → ${sent} clientes`);
-
-    // También emitir internamente para componentes que escuchan
-    this.emit('broadcast', { event, payload });
   }
 
   sendToClient(ws: ExtendedWebSocket, event: string, payload?: any): void {
@@ -305,20 +285,14 @@ export class WebSocketManager extends EventEmitter {
     let sent = 0;
     this.intentSubscribers.forEach(ws => {
       if (ws.readyState === WebSocket.OPEN) {
-        ws.send(message);
+        ws.send(message); 
         sent++;
       }
     });
     console.log(`[WebSocketManager] intents_updated → ${sent} suscriptores`);
-    
-    // Emitir también internamente
-    this.emit('intents_updated', data);
   }
 
   notifyHostEvent(eventType: string, data: any): void {
     this.broadcast('host_event', { type: eventType, ...data, timestamp: Date.now() });
-    
-    // Emitir también internamente
-    this.emit('host_event', { type: eventType, ...data });
   }
 }

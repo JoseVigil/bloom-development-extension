@@ -4,6 +4,9 @@ import { PluginApiServer } from './PluginApiServer';
 import { WebSocketManager } from './WebSocketManager';
 import { HostExecutor } from '../host/HostExecutor';
 import { BTIPExplorerController } from './BTIPExplorerController';
+import { ChromeProfileManager } from '../core/chromeProfileManager';  // AJUSTE: Importar para instanciar
+import { AiAccountChecker } from '../ai/AiAccountChecker';  // AJUSTE: Importar para instanciar
+import { Logger } from '../utils/logger';  // AJUSTE: Importar Logger para instanciar
 
 // ============================================================================
 // STUB IMPLEMENTATIONS - Reemplazar cuando existan las clases reales
@@ -109,6 +112,9 @@ class StubUserManager {
 export async function initializeServer(context: vscode.ExtensionContext) {
     console.log('[Server] Initializing components...');
 
+    // AJUSTE: Crear instancia de Logger (asumiendo que Logger se puede instanciar sin args; ajusta si requiere params)
+    const logger = new Logger();  // AJUSTE: Instanciar Logger para pasarlo a ChromeProfileManager
+
     // 1. Crear OutputChannel para logs del servidor
     const outputChannel = vscode.window.createOutputChannel('Bloom Server');
     context.subscriptions.push(outputChannel);
@@ -124,6 +130,10 @@ export async function initializeServer(context: vscode.ExtensionContext) {
     const geminiClient = new StubGeminiClient();
     const hostClient = new StubHostClient();
     const userManager = new StubUserManager(context);
+
+    // AJUSTE: Instanciar las dependencias faltantes para PluginApiServerConfig
+    const chromeProfileManager = new ChromeProfileManager(context, logger);  // AJUSTE: Pasar context y logger requeridos
+    const aiAccountChecker = AiAccountChecker.init(context);  // AJUSTE: Usar método estático init() en lugar de new (constructor privado)
 
     // 4. Inicializar WebSocket Manager (singleton)
     const ws = WebSocketManager.getInstance();
@@ -144,7 +154,9 @@ export async function initializeServer(context: vscode.ExtensionContext) {
         hostClient,
         userManager,
         outputChannel,
-        pluginVersion
+        pluginVersion,
+        chromeProfileManager,  // AJUSTE: Agregar la propiedad faltante
+        aiAccountChecker       // AJUSTE: Agregar la propiedad faltante
     });
     await api.start();
     console.log(`[Server] PluginApiServer started on port ${api.getPort()}`);
