@@ -1,12 +1,15 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { theme } from '$lib/stores/theme';
+  import { onboardingStore } from '$lib/stores/onboarding';
   import SystemStatus from '$lib/components/SystemStatus.svelte';
   import { Menu, X, Home, FileText, Zap, GitBranch, User, Settings } from 'lucide-svelte';
   
   let sidebarCollapsed = false;
   let rightPaneCollapsed = false;
   let isWebview = false;
+  
+  $: showSidebar = $onboardingStore.step !== 'welcome' && $onboardingStore.completed;
   
   onMount(() => {
     isWebview = typeof window !== 'undefined' && !!(window as any).vscode;
@@ -23,73 +26,79 @@
 </script>
 
 <div class="btip-layout">
-  <header class="header">
-    <div class="header-left">
-      <button on:click={toggleSidebar} class="icon-btn" aria-label="Toggle sidebar">
-        {#if sidebarCollapsed}<Menu size={20} />{:else}<X size={20} />{/if}
-      </button>
-      <h1 class="title">BTIP Studio</h1>
-    </div>
-    <div class="header-center">
-      <SystemStatus mode="badge" />
-    </div>
-    <div class="header-right">
-      <button class="action-btn" aria-label="Create Nucleus">
-        <Zap size={16} />
-        <span>Crear Nucleus</span>
-      </button>
-      <button class="action-btn" aria-label="Open Explorer">
-        <FileText size={16} />
-        <span>Explorer</span>
-      </button>
-    </div>
-  </header>
+  {#if showSidebar}
+    <header class="header">
+      <div class="header-left">
+        <button on:click={toggleSidebar} class="icon-btn" aria-label="Toggle sidebar">
+          {#if sidebarCollapsed}<Menu size={20} />{:else}<X size={20} />{/if}
+        </button>
+        <h1 class="title">BTIP Studio</h1>
+      </div>
+      <div class="header-center">
+        <SystemStatus mode="badge" />
+      </div>
+      <div class="header-right">
+        <button class="action-btn" aria-label="Create Nucleus">
+          <Zap size={16} />
+          <span>Crear Nucleus</span>
+        </button>
+        <button class="action-btn" aria-label="Open Explorer">
+          <FileText size={16} />
+          <span>Explorer</span>
+        </button>
+      </div>
+    </header>
 
-  <div class="main-container">
-    <aside class="sidebar" class:collapsed={sidebarCollapsed} role="navigation" aria-label="Main navigation">
-      <nav class="nav">
-        <a href="/" class="nav-item" aria-label="Home">
-          <Home size={18} aria-hidden="true" />
-          {#if !sidebarCollapsed}<span>Home</span>{/if}
-        </a>
-        <a href="/intents" class="nav-item" aria-label="Intents">
-          <FileText size={18} aria-hidden="true" />
-          {#if !sidebarCollapsed}<span>Intents</span>{/if}
-        </a>
-        <a href="/nucleus" class="nav-item" aria-label="Nucleus">
-          <Zap size={18} aria-hidden="true" />
-          {#if !sidebarCollapsed}<span>Nucleus</span>{/if}
-        </a>
-        <a href="/projects" class="nav-item" aria-label="Projects">
-          <GitBranch size={18} aria-hidden="true" />
-          {#if !sidebarCollapsed}<span>Projects</span>{/if}
-        </a>
-        <a href="/profiles" class="nav-item" aria-label="Profiles">
-          <User size={18} aria-hidden="true" />
-          {#if !sidebarCollapsed}<span>Profiles</span>{/if}
-        </a>
-        <a href="/account" class="nav-item" aria-label="Account">
-          <Settings size={18} aria-hidden="true" />
-          {#if !sidebarCollapsed}<span>Account</span>{/if}
-        </a>
-      </nav>
-    </aside>
+    <div class="main-container">
+      <aside class="sidebar" class:collapsed={sidebarCollapsed} role="navigation" aria-label="Main navigation">
+        <nav class="nav">
+          <a href="/" class="nav-item" aria-label="Home">
+            <Home size={18} aria-hidden="true" />
+            {#if !sidebarCollapsed}<span>Home</span>{/if}
+          </a>
+          <a href="/intents" class="nav-item" aria-label="Intents">
+            <FileText size={18} aria-hidden="true" />
+            {#if !sidebarCollapsed}<span>Intents</span>{/if}
+          </a>
+          <a href="/nucleus" class="nav-item" aria-label="Nucleus">
+            <Zap size={18} aria-hidden="true" />
+            {#if !sidebarCollapsed}<span>Nucleus</span>{/if}
+          </a>
+          <a href="/projects" class="nav-item" aria-label="Projects">
+            <GitBranch size={18} aria-hidden="true" />
+            {#if !sidebarCollapsed}<span>Projects</span>{/if}
+          </a>
+          <a href="/profiles" class="nav-item" aria-label="Profiles">
+            <User size={18} aria-hidden="true" />
+            {#if !sidebarCollapsed}<span>Profiles</span>{/if}
+          </a>
+          <a href="/account" class="nav-item" aria-label="Account">
+            <Settings size={18} aria-hidden="true" />
+            {#if !sidebarCollapsed}<span>Account</span>{/if}
+          </a>
+        </nav>
+      </aside>
 
-    <main class="content" role="main">
+      <main class="content" role="main">
+        <slot />
+      </main>
+
+      <aside class="right-pane" class:collapsed={rightPaneCollapsed} role="region" aria-label="Side panel">
+        <button on:click={toggleRightPane} class="collapse-btn" aria-label="Toggle side panel">
+          {rightPaneCollapsed ? '◀' : '▶'}
+        </button>
+        {#if !rightPaneCollapsed}
+          <div class="right-content">
+            <slot name="right-pane" />
+          </div>
+        {/if}
+      </aside>
+    </div>
+  {:else}
+    <main class="content-full" role="main">
       <slot />
     </main>
-
-    <aside class="right-pane" class:collapsed={rightPaneCollapsed} role="region" aria-label="Side panel">
-      <button on:click={toggleRightPane} class="collapse-btn" aria-label="Toggle side panel">
-        {rightPaneCollapsed ? '◀' : '▶'}
-      </button>
-      {#if !rightPaneCollapsed}
-        <div class="right-content">
-          <slot name="right-pane" />
-        </div>
-      {/if}
-    </aside>
-  </div>
+  {/if}
 </div>
 
 <style>
@@ -121,6 +130,11 @@
     flex-direction: column;
     height: 100vh;
     overflow: hidden;
+  }
+
+  .content-full {
+    flex: 1;
+    overflow: auto;
   }
 
   .header {
