@@ -20,6 +20,7 @@ EXCLUDED_DIRS = {
     '.next': '[... build cache]',
     'dist': '[... build output]',
     'build': '[... build output]',
+    'out': '[... output files]',
     '.venv': '[... virtual env]',
     'venv': '[... virtual env]',
 }
@@ -366,6 +367,7 @@ EXCLUSIONES AUTOMÁTICAS:
   .next/         → [... build cache]
   dist/          → [... build output]
   build/         → [... build output]
+  out/           → [... output files]
   .venv/         → [... virtual env]
   venv/          → [... virtual env]
         """,
