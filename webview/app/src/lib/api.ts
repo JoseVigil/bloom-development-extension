@@ -43,6 +43,11 @@ export async function getSystemStatus() {
   return response.json();
 }
 
+export async function getAuthStatus() {
+  const response = await fetchWithFallback('/btip/auth/status');
+  return response.json();
+}
+
 export async function getIntents() {
   const response = await fetchWithFallback('/intents/list');
   const data = await response.json();
@@ -82,14 +87,71 @@ export async function runExecution(intentId: string, data: any) {
 }
 
 export async function getProfiles() {
-  const response = await fetchWithFallback('/profiles');
+  const response = await fetchWithFallback('/api/v1/profiles');
   const data = await response.json();
   return data.profiles || [];
 }
 
+export async function createProfile(data: any) {
+  const response = await fetchWithFallback('/api/v1/profiles/create', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  });
+  return response.json();
+}
+
 export async function refreshAccounts(profileId: string) {
-  const response = await fetchWithFallback(`/profiles/${profileId}/refresh-accounts`, {
+  const response = await fetchWithFallback(`/api/v1/profiles/${profileId}/refresh-accounts`, {
     method: 'POST'
+  });
+  return response.json();
+}
+
+export async function testGemini(apiKey: string) {
+  const response = await fetchWithFallback('/btip/auth/gemini', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ apiKey })
+  });
+  return response.json();
+}
+
+export async function getNucleusList() {
+  const response = await fetchWithFallback('/nucleus/list');
+  const data = await response.json();
+  return data.nuclei || [];
+}
+
+export async function createNucleus(name: string, org?: string, url?: string) {
+  const response = await fetchWithFallback('/btip/nucleus/create', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, org, repoUrl: url })
+  });
+  return response.json();
+}
+
+export async function getProjects() {
+  const response = await fetchWithFallback('/project/list');
+  const data = await response.json();
+  return data.projects || [];
+}
+
+export async function createProject(nucleusId: string, name: string) {
+  const response = await fetchWithFallback('/project/create', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nucleusId, name })
+  });
+  return response.json();
+}
+
+export async function saveGeminiToken(token: string) {
+  const response = await fetchWithFallback('/btip/auth/gemini', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ apiKey: token })
   });
   return response.json();
 }
