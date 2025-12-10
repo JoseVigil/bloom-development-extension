@@ -5,5 +5,17 @@ export default defineConfig({
   plugins: [sveltekit()],
   server: {
     port: 5173
+  },
+  build: {
+    target: 'esnext',
+    minify: 'esbuild',
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'svelte': ['svelte'],
+          'lucide': ['lucide-svelte']
+        }
+      }
+    }
   }
 });

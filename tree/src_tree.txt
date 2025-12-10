@@ -1,7 +1,19 @@
 bloom-development-extension/
 ├── src/
+│   ├── ai/
+│   │   ├── AiAccountChecker.ts
+│   │   ├── adapters/
+│   │   │   ├── ChatGPTAdapter.ts
+│   │   │   ├── ClaudeAdapter.ts
+│   │   │   ├── GeminiAdapter.ts
+│   │   │   └── GrokAdapter.ts
+│   │   └── index.ts
+│   ├── auth/
+│   │   └── GitHubOAuthServer.ts
 │   ├── commands/
 │   │   ├── addToIntent.ts
+│   │   ├── auth/
+│   │   │   └── startGithubOAuth.ts
 │   │   ├── changeIntentStatus.ts
 │   │   ├── configureIntentProfile.ts
 │   │   ├── copyContextToClipboard.ts
@@ -18,6 +30,10 @@ bloom-development-extension/
 │   │   ├── git/
 │   │   │   └── gitCommands.ts
 │   │   ├── integrateSnapshot.ts
+│   │   ├── intent/
+│   │   │   ├── __tests__/
+│   │   │   │   └── createIntentDev.test.ts
+│   │   │   └── createIntentDev.ts
 │   │   ├── linkToNucleus.ts
 │   │   ├── manageProject.ts
 │   │   ├── nucleus/
@@ -27,6 +43,8 @@ bloom-development-extension/
 │   │   ├── openIntentInBrowser.ts
 │   │   ├── openMarkdownPreview.ts
 │   │   ├── profile/
+│   │   │   ├── addAiAccount.ts
+│   │   │   ├── checkAiAccounts.ts
 │   │   │   └── profileCommands.ts
 │   │   ├── regenerateContext.ts
 │   │   ├── reloadIntentForm.ts
@@ -62,8 +80,10 @@ bloom-development-extension/
 │   │   ├── commandRegistry.ts
 │   │   ├── contextInitializer.ts
 │   │   ├── criticalCommandsInitializer.ts
+│   │   ├── initializeProfileAccounts.ts
 │   │   ├── managersInitializer.ts
 │   │   ├── providersInitializer.ts
+│   │   ├── registerProfileCommands.ts
 │   │   └── serverAndUiInitializer.ts
 │   ├── managers/
 │   │   ├── userManager.ts
@@ -78,7 +98,6 @@ bloom-development-extension/
 │   ├── providers/
 │   │   ├── intentTreeProvider.ts
 │   │   ├── nucleusTreeProvider.ts
-│   │   ├── nucleusWelcomeProvider.ts
 │   │   └── profileTreeProvider.ts
 │   ├── server/
 │   │   ├── BTIPExplorerController.ts
@@ -105,14 +124,11 @@ bloom-development-extension/
 │   │   ├── markdownPreviewPanel.ts
 │   │   ├── nucleus/
 │   │   │   └── NucleusSetupPanel.ts
-│   │   ├── profile/
-│   │   │   ├── profileManager.css
-│   │   │   ├── profileManager.html
-│   │   │   ├── profileManager.js
-│   │   │   └── profileManagerPanel.ts
-│   │   └── welcome/
-│   │       ├── welcomeView.html
-│   │       └── welcomeView.ts
+│   │   └── profile/
+│   │       ├── profileManager.css
+│   │       ├── profileManager.html
+│   │       ├── profileManager.js
+│   │       └── profileManagerPanel.ts
 │   └── utils/
 │       ├── gitExecutor.ts
 │       ├── gitManager.ts

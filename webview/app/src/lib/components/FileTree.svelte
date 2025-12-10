@@ -1,85 +1,112 @@
 <script lang="ts">
-  import type { BTIPNode } from '../api';
-  import { getFile } from '../api';
-  import { navigationStore } from '../stores/navigation';
-
-  export let tree: BTIPNode[];
+  import type { BTIPNode } from '$lib/api';
+  import { getFile } from '$lib/api';
+  import { Folder, File, ChevronRight, ChevronDown } from 'lucide-svelte';
+  
+  export let tree: BTIPNode[] = [];
   export let level: number = 0;
-
+  export let mode: 'nucleus' | 'explorer' | 'files-chooser' = 'explorer';
+  
+  let expanded = new Set<string>();
   let selectedFile: { path: string; content: string; extension: string } | null = null;
   let loading = false;
-
-  async function handleFileClick(node: BTIPNode) {
+  
+  async function handleClick(node: BTIPNode) {
     if (node.type === 'directory') {
-      navigationStore.toggleExpanded(node.path);
+      if (expanded.has(node.path)) {
+        expanded.delete(node.path);
+      } else {
+        expanded.add(node.path);
+      }
+      expanded = expanded;
     } else {
       loading = true;
       try {
         const file = await getFile(node.path);
         selectedFile = file;
-        navigationStore.setSelectedPath(node.path);
+        
+        if (typeof window !== 'undefined' && (window as any).vscode) {
+          (window as any).vscode.postMessage({
+            command: 'openFile',
+            path: node.path
+          });
+        }
       } catch (error) {
         console.error('Failed to load file:', error);
+        if (typeof window !== 'undefined' && !(window as any).vscode) {
+          alert('Open in VSCode required');
+        }
       } finally {
         loading = false;
       }
     }
   }
-
-  function getIcon(node: BTIPNode): string {
-    if (node.type === 'directory') {
-      return '📁';
-    }
-    const ext = node.name.split('.').pop()?.toLowerCase();
-    switch (ext) {
-      case 'bl':
-        return '📄';
-      case 'json':
-        return '📋';
-      case 'txt':
-        return '📝';
-      default:
-        return '📄';
-    }
+  
+  function handleDragOver(event: DragEvent) {
+    event.preventDefault();
+  }
+  
+  function handleDrop(event: DragEvent) {
+    event.preventDefault();
+    console.log('File dropped:', event.dataTransfer?.files);
   }
 </script>
 
-<div class="file-tree">
-  {#each tree as node}
-    <div class="node" style="padding-left: {level * 1.5}rem">
-      <button
-        class="node-button"
-        class:selected={$navigationStore.selectedPath === node.path}
-        on:click={() => handleFileClick(node)}
-      >
-        <span class="icon">{getIcon(node)}</span>
-        <span class="name">{node.name}</span>
-      </button>
-
-      {#if node.type === 'directory' && node.children && $navigationStore.expandedPaths.has(node.path)}
-        <svelte:self tree={node.children} level={level + 1} />
-      {/if}
-    </div>
-  {/each}
-
-  {#if selectedFile}
-    <div class="file-viewer">
-      <div class="file-header">
-        <h3>{selectedFile.path.split('/').pop()}</h3>
-        <button on:click={() => selectedFile = null}>Close</button>
+<div class="file-tree" on:dragover={handleDragOver} on:drop={handleDrop}>
+  {#if tree.length === 0}
+    <div class="empty">No files</div>
+  {:else}
+    {#each tree as node (node.path)}
+      <div class="node" style="padding-left: {level * 1rem}px">
+        <button
+          class="node-button"
+          on:click={() => handleClick(node)}
+          aria-label={node.name}
+        >
+          {#if node.type === 'directory'}
+            {#if expanded.has(node.path)}
+              <ChevronDown size={16} />
+            {:else}
+              <ChevronRight size={16} />
+            {/if}
+            <Folder size={16} />
+          {:else}
+            <File size={16} />
+          {/if}
+          <span class="name">{node.name}</span>
+        </button>
+        
+        {#if node.type === 'directory' && expanded.has(node.path) && node.children}
+          <svelte:self tree={node.children} level={level + 1} {mode} />
+        {/if}
       </div>
-      <pre class="file-content">{selectedFile.content}</pre>
-    </div>
-  {/if}
-
-  {#if loading}
-    <div class="loading-overlay">Loading file...</div>
+    {/each}
   {/if}
 </div>
 
+{#if selectedFile}
+  <div class="file-viewer">
+    <div class="viewer-header">
+      <h3>{selectedFile.path.split('/').pop()}</h3>
+      <button on:click={() => selectedFile = null}>Close</button>
+    </div>
+    <pre class="viewer-content">{selectedFile.content}</pre>
+  </div>
+{/if}
+
+{#if loading}
+  <div class="loading-overlay">Loading...</div>
+{/if}
+
 <style>
   .file-tree {
-    position: relative;
+    font-size: 0.875rem;
+  }
+
+  .empty {
+    padding: 1rem;
+    text-align: center;
+    color: var(--text-secondary);
   }
 
   .node {
@@ -91,26 +118,23 @@
     align-items: center;
     gap: 0.5rem;
     width: 100%;
-    padding: 0.5rem;
+    padding: 0.375rem 0.5rem;
     background: transparent;
     border: none;
-    color: #d4d4d4;
+    color: var(--text-primary);
     cursor: pointer;
     text-align: left;
-    font-size: 0.875rem;
     border-radius: 4px;
+    transition: background 0.2s;
   }
 
   .node-button:hover {
-    background: #2a2d2e;
+    background: var(--bg-tertiary);
   }
 
-  .node-button.selected {
-    background: #094771;
-  }
-
-  .icon {
-    flex-shrink: 0;
+  .node-button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
   }
 
   .name {
@@ -126,40 +150,39 @@
     left: 50%;
     transform: translate(-50%, -50%);
     width: 80%;
-    max-width: 800px;
+    max-width: 900px;
     max-height: 80vh;
-    background: #252526;
-    border: 1px solid #333;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
     border-radius: 8px;
     display: flex;
     flex-direction: column;
     z-index: 1000;
   }
 
-  .file-header {
+  .viewer-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     padding: 1rem;
-    border-bottom: 1px solid #333;
+    border-bottom: 1px solid var(--border-color);
   }
 
-  .file-header h3 {
+  .viewer-header h3 {
     margin: 0;
     font-size: 1rem;
   }
 
-  .file-header button {
+  .viewer-header button {
     padding: 0.25rem 0.75rem;
-    background: #007acc;
+    background: var(--accent);
     color: white;
     border: none;
     border-radius: 4px;
     cursor: pointer;
-    font-size: 0.875rem;
   }
 
-  .file-content {
+  .viewer-content {
     flex: 1;
     overflow: auto;
     padding: 1rem;
@@ -168,7 +191,6 @@
     font-size: 0.875rem;
     line-height: 1.5;
     white-space: pre-wrap;
-    word-wrap: break-word;
   }
 
   .loading-overlay {
@@ -182,7 +204,6 @@
     align-items: center;
     justify-content: center;
     color: white;
-    font-size: 1.25rem;
     z-index: 999;
   }
 </style>

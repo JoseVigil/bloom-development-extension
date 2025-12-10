@@ -39,26 +39,35 @@ bloom-development-extension/
         │   ├── lib/
         │   │   ├── api.ts
         │   │   ├── components/
+        │   │   │   ├── BriefingEditor.svelte
+        │   │   │   ├── ChatBTIP.svelte
         │   │   │   ├── FileTree.svelte
         │   │   │   ├── GeminiTokenForm.svelte
         │   │   │   ├── GithubAuthButton.svelte
         │   │   │   ├── IntentsLink.svelte
         │   │   │   ├── NucleusPanel.svelte
         │   │   │   ├── ProjectsPanel.svelte
-        │   │   │   └── SystemStatus.svelte
+        │   │   │   ├── SystemStatus.svelte
+        │   │   │   └── TokenEstimator.svelte
         │   │   ├── stores/
         │   │   │   ├── auth.ts
+        │   │   │   ├── intents.ts
         │   │   │   ├── navigation.ts
         │   │   │   ├── system.ts
+        │   │   │   ├── theme.ts
         │   │   │   └── websocket.ts
-        │   │   └── types.ts
+        │   │   ├── types.ts
+        │   │   └── ws.ts
         │   └── routes/
         │       ├── +layout.svelte
         │       ├── +page.svelte
         │       ├── home/
         │       │   └── +page.svelte
         │       ├── intents/
-        │       │   └── +page.svelte
+        │       │   ├── +page.svelte
+        │       │   └── [id]/
+        │       │       ├── +page.svelte
+        │       │       └── response
         │       └── welcome/
         │           └── +page.svelte
         ├── svelte.config.js

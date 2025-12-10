@@ -1,50 +1,24 @@
-const BASE_URL = 'http://localhost:5888/btip';
+let baseUrl = 'http://localhost:4123/api/v1';
+const fallbackPorts = ['http://localhost:5888', 'http://localhost:48215'];
 
-export async function getSystemStatus() {
-  const response = await fetch(`${BASE_URL}/system/status`);
-  return response.json();
+export function setBaseUrl(url: string) {
+  baseUrl = url;
 }
 
-export async function saveGeminiToken(token: string) {
-  const response = await fetch(`${BASE_URL}/system/set-gemini-token`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token })
-  });
-  return response.json();
-}
-
-export async function getNucleusList() {
-  const response = await fetch(`${BASE_URL}/nucleus/list`);
-  return response.json();
-}
-
-export async function createNucleus(name: string) {
-  const response = await fetch(`${BASE_URL}/nucleus/create`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name })
-  });
-  return response.json();
-}
-
-export async function getProjects(nucleusId: string) {
-  const response = await fetch(`${BASE_URL}/projects/list?nucleusId=${nucleusId}`);
-  return response.json();
-}
-
-export async function createProject(nucleusId: string, name: string) {
-  const response = await fetch(`${BASE_URL}/projects/create`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ nucleusId, name })
-  });
-  return response.json();
-}
-
-export async function isGithubAuthenticated() {
-  const response = await fetch(`${BASE_URL}/auth/github/status`);
-  return response.json();
+async function fetchWithFallback(endpoint: string, options: RequestInit = {}) {
+  try {
+    const response = await fetch(`${baseUrl}${endpoint}`, options);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response;
+  } catch (error) {
+    for (const fallback of fallbackPorts) {
+      try {
+        const response = await fetch(`${fallback}${endpoint}`, options);
+        if (response.ok) return response;
+      } catch {}
+    }
+    throw error;
+  }
 }
 
 export interface BTIPNode {
@@ -53,40 +27,69 @@ export interface BTIPNode {
   type: 'file' | 'directory';
   children?: BTIPNode[];
 }
-export interface BTIPFile {
-  path: string;
-  content: string;
-  extension: string;
-}
-let baseUrl = 'http://localhost:48215';
-export function setBaseUrl(url: string): void {
-  baseUrl = url;
-}
+
 export async function getTree(path: string = ''): Promise<BTIPNode[]> {
-  const url = `${baseUrl}/btip/explorer/tree${path ? `?path=${encodeURIComponent(path)}` : ''}`;
-  const response = await fetch(url);
- 
-  if (!response.ok) {
-    throw new Error(`Failed to fetch tree: ${response.statusText}`);
-  }
- 
+  const response = await fetchWithFallback(`/btip/explorer/tree?path=${encodeURIComponent(path)}`);
   return response.json();
 }
-export async function getFile(path: string): Promise<BTIPFile> {
-  const url = `${baseUrl}/btip/explorer/file?path=${encodeURIComponent(path)}`;
-  const response = await fetch(url);
- 
-  if (!response.ok) {
-    throw new Error(`Failed to fetch file: ${response.statusText}`);
-  }
- 
+
+export async function getFile(path: string): Promise<{ path: string; content: string; extension: string }> {
+  const response = await fetchWithFallback(`/btip/explorer/file?path=${encodeURIComponent(path)}`);
   return response.json();
 }
-export async function refresh(): Promise<void> {
-  const url = `${baseUrl}/btip/explorer/refresh`;
-  const response = await fetch(url, { method: 'POST' });
- 
-  if (!response.ok) {
-    throw new Error(`Failed to refresh: ${response.statusText}`);
-  }
+
+export async function getSystemStatus() {
+  const response = await fetchWithFallback('/health');
+  return response.json();
+}
+
+export async function getIntents() {
+  const response = await fetchWithFallback('/intents/list');
+  const data = await response.json();
+  return data.intents || [];
+}
+
+export async function getIntent(id: string) {
+  const response = await fetchWithFallback(`/intents/get?id=${encodeURIComponent(id)}`);
+  return response.json();
+}
+
+export async function createIntentDoc(data: any) {
+  const response = await fetchWithFallback('/intents/doc/create', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  });
+  return response.json();
+}
+
+export async function estimateTokens(content: string) {
+  const response = await fetchWithFallback('/doc/generate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content })
+  });
+  return response.json();
+}
+
+export async function runExecution(intentId: string, data: any) {
+  const response = await fetchWithFallback(`/intents/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ intentId, ...data })
+  });
+  return response.json();
+}
+
+export async function getProfiles() {
+  const response = await fetchWithFallback('/profiles');
+  const data = await response.json();
+  return data.profiles || [];
+}
+
+export async function refreshAccounts(profileId: string) {
+  const response = await fetchWithFallback(`/profiles/${profileId}/refresh-accounts`, {
+    method: 'POST'
+  });
+  return response.json();
 }
