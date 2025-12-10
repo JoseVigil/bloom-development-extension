@@ -1,7 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { getSystemStatus } from '../api';
-  import { systemStatus } from '../stores/system';
+  import { getSystemStatus } from '$lib/api';
+  import { systemStatus } from '$lib/stores/system';
+  
+  export let mode: 'badge' | 'full' = 'full';
   
   let loading = true;
   
@@ -9,7 +11,11 @@
     loading = true;
     try {
       const status = await getSystemStatus();
-      systemStatus.set(status);
+      systemStatus.set({
+        plugin: status.status === 'ok',
+        host: false,
+        extension: true
+      });
     } catch (error) {
       console.error('Error loading system status:', error);
     } finally {
@@ -20,56 +26,92 @@
   onMount(loadStatus);
 </script>
 
-<div class="status">
-  <h3>Estado del Sistema</h3>
-  
-  {#if loading}
-    <p>Verificando...</p>
-  {:else}
-    <div class="items">
-      <div class="item">
-        <span>Plugin:</span>
-        <span class="indicator" class:active={$systemStatus.plugin}></span>
+{#if mode === 'badge'}
+  <div class="badge">
+    <span class="dot" class:active={$systemStatus.plugin}></span>
+    <span class="text">System</span>
+  </div>
+{:else}
+  <div class="status">
+    <h3>System Status</h3>
+    
+    {#if loading}
+      <p>Checking...</p>
+    {:else}
+      <div class="items">
+        <div class="item">
+          <span>Plugin:</span>
+          <span class="indicator" class:active={$systemStatus.plugin}></span>
+        </div>
+        <div class="item">
+          <span>Host:</span>
+          <span class="indicator" class:active={$systemStatus.host}></span>
+        </div>
+        <div class="item">
+          <span>Extension:</span>
+          <span class="indicator" class:active={$systemStatus.extension}></span>
+        </div>
       </div>
-      <div class="item">
-        <span>Host:</span>
-        <span class="indicator" class:active={$systemStatus.host}></span>
-      </div>
-      <div class="item">
-        <span>Extension:</span>
-        <span class="indicator" class:active={$systemStatus.extension}></span>
-      </div>
-    </div>
-  {/if}
-</div>
+    {/if}
+  </div>
+{/if}
 
 <style>
+  .badge {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.375rem 0.75rem;
+    background: var(--bg-tertiary);
+    border-radius: 12px;
+    font-size: 0.75rem;
+  }
+
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #dc3545;
+  }
+
+  .dot.active {
+    background: #28a745;
+  }
+  
+  .text {
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+  
   .status {
-    padding: 20px;
-    border: 1px solid #ddd;
+    padding: 1rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
     border-radius: 8px;
   }
   
   h3 {
-    margin: 0 0 16px 0;
-    font-size: 18px;
+    margin: 0 0 1rem 0;
+    font-size: 1rem;
+    font-weight: 600;
   }
   
   .items {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 0.75rem;
   }
   
   .item {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    font-size: 0.875rem;
   }
   
   .indicator {
-    width: 12px;
-    height: 12px;
+    width: 10px;
+    height: 10px;
     border-radius: 50%;
     background: #dc3545;
   }

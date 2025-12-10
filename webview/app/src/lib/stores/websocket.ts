@@ -8,6 +8,7 @@ interface WebSocketState {
 let ws: WebSocket | null = null;
 let reconnectTimeout: number | null = null;
 let onUpdateCallback: (() => void) | null = null;
+let eventCallbacks: Map<string, ((data: any) => void)[]> = new Map();
 
 const initialState: WebSocketState = {
   connected: false,
@@ -17,10 +18,8 @@ const initialState: WebSocketState = {
 function createWebSocketStore() {
   const { subscribe, set, update } = writable<WebSocketState>(initialState);
 
-  function connect(url: string = 'ws://localhost:48216') {
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      return;
-    }
+  function connect(url: string = 'ws://localhost:4124') {
+    if (ws && ws.readyState === WebSocket.OPEN) return;
 
     update(state => ({ ...state, reconnecting: true }));
 
@@ -28,7 +27,7 @@ function createWebSocketStore() {
       ws = new WebSocket(url);
 
       ws.onopen = () => {
-        console.log('WebSocket connected');
+        console.log('[WS] Connected');
         set({ connected: true, reconnecting: false });
         if (reconnectTimeout) {
           clearTimeout(reconnectTimeout);
@@ -41,31 +40,29 @@ function createWebSocketStore() {
           const message = JSON.parse(event.data);
           handleMessage(message);
         } catch (error) {
-          console.error('WebSocket message parse error:', error);
+          console.error('[WS] Parse error:', error);
         }
       };
 
       ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
+        console.error('[WS] Error:', error);
       };
 
       ws.onclose = () => {
-        console.log('WebSocket disconnected');
+        console.log('[WS] Disconnected');
         set({ connected: false, reconnecting: false });
         ws = null;
         scheduleReconnect(url);
       };
     } catch (error) {
-      console.error('WebSocket connection error:', error);
+      console.error('[WS] Connection error:', error);
       set({ connected: false, reconnecting: false });
       scheduleReconnect(url);
     }
   }
 
   function scheduleReconnect(url: string) {
-    if (reconnectTimeout) {
-      return;
-    }
+    if (reconnectTimeout) return;
     reconnectTimeout = window.setTimeout(() => {
       reconnectTimeout = null;
       connect(url);
@@ -73,12 +70,20 @@ function createWebSocketStore() {
   }
 
   function handleMessage(message: any) {
-    console.log('WebSocket message:', message);
+    const { event, data } = message;
+    
+    if (event === 'btip:updated' || event === 'intents:updated') {
+      if (onUpdateCallback) onUpdateCallback();
+    }
 
-    if (message.event === 'btip:updated') {
-      if (onUpdateCallback) {
-        onUpdateCallback();
-      }
+    if (event === 'profile:update') {
+      const callbacks = eventCallbacks.get('profile:update');
+      if (callbacks) callbacks.forEach(cb => cb(data));
+    }
+
+    if (event === 'host_event') {
+      const callbacks = eventCallbacks.get('host_event');
+      if (callbacks) callbacks.forEach(cb => cb(data));
     }
   }
 
@@ -98,18 +103,24 @@ function createWebSocketStore() {
     onUpdateCallback = callback;
   }
 
+  function on(event: string, callback: (data: any) => void) {
+    if (!eventCallbacks.has(event)) {
+      eventCallbacks.set(event, []);
+    }
+    eventCallbacks.get(event)!.push(callback);
+  }
+
   return {
     subscribe,
     connect,
     disconnect,
-    onUpdate
+    onUpdate,
+    on
   };
 }
 
 export const websocketStore = createWebSocketStore();
 
 export function refreshTree() {
-  if (onUpdateCallback) {
-    onUpdateCallback();
-  }
+  if (onUpdateCallback) onUpdateCallback();
 }
