@@ -247,11 +247,26 @@ def generate_tree(output_file, paths, use_hash=False, json_output=False):
         print(f"\n📊 Project Hash: {project_hash}")
 
 
+def normalize_path(path):
+    """
+    Normaliza una ruta usando el separador correcto del sistema operativo.
+    
+    Args:
+        path: Ruta a normalizar
+        
+    Returns:
+        Ruta normalizada
+    """
+    # Reemplazar barras por el separador del sistema
+    path = path.replace('/', os.sep).replace('\\', os.sep)
+    # Normalizar y eliminar barras finales
+    return os.path.normpath(path).rstrip(os.sep)
+
+
 def resolve_paths(paths, script_dir):
     """
     Resuelve rutas relativas al directorio raíz del proyecto.
-    Si el script está en /scripts/tree, la raíz es dos niveles arriba.
-    Si el script está en /scripts, la raíz es un nivel arriba.
+    Soporta subcarpetas específicas como 'src/webview'.
     
     Args:
         paths: Lista de rutas a resolver
@@ -275,6 +290,9 @@ def resolve_paths(paths, script_dir):
     
     resolved = []
     for path in paths:
+        # Normalizar la ruta
+        path = normalize_path(path)
+        
         # Si es ruta absoluta, usarla tal cual
         if os.path.isabs(path):
             resolved.append(path)
@@ -365,20 +383,32 @@ EXCLUSIONES AUTOMÁTICAS:
     │   └── tree/
     │       └── generate_tree.py  ← Script aquí
     ├── src/
+    │   ├── components/
+    │   └── webview/
     ├── tree/          (salida automática aquí)
     └── package.json
 
   Desde /scripts/tree:
-    python generate_tree.py hash_tree.txt src package.json tsconfig.json
-    python generate_tree.py --hash hash_tree.txt src package.json
-    python generate_tree.py --hash --json snapshot.txt src tests docs
+    # Árbol completo de src/
+    python generate_tree.py tree.txt src
+    
+    # Solo subcarpeta específica src/webview/
+    python generate_tree.py tree.txt src/webview
+    
+    # Múltiples subcarpetas específicas
+    python generate_tree.py tree.txt src/components src/webview
+    
+    # Con hashes
+    python generate_tree.py --hash tree.txt src/webview
+    python generate_tree.py --hash --json snapshot.txt src/components tests/unit
 
   Desde raíz del proyecto:
-    python scripts/tree/generate_tree.py hash_tree.txt src package.json
-    python scripts/tree/generate_tree.py --hash hash_tree.txt src package.json
+    python scripts/tree/generate_tree.py tree.txt src/webview
+    python scripts/tree/generate_tree.py --hash tree.txt src/components
 
-  ✓ Las rutas src/ y package.json se resuelven desde la raíz del proyecto
-  ✓ El archivo de salida se guarda automáticamente en /tree/ (raíz del proyecto)
+  ✓ Las rutas como src/webview se resuelven desde la raíz del proyecto
+  ✓ Soporta cualquier nivel de subcarpetas: src/a/b/c/d
+  ✓ El archivo de salida se guarda automáticamente en /tree/
   ✓ Si /tree/ no existe, se crea automáticamente
 
 
@@ -386,34 +416,35 @@ EXCLUSIONES AUTOMÁTICAS:
 ───────────────────────────────────────────────────────────────────────────
   python generate_tree.py arbol.txt .
   python generate_tree.py salida.txt src tests docs
-  python generate_tree.py estructura.txt src package.json README.md
+  python generate_tree.py estructura.txt src/webview src/components
+  python generate_tree.py output.txt config/prod config/dev
 
 
 📂 MODO HASH (Con checksums MD5):
 ───────────────────────────────────────────────────────────────────────────
   python generate_tree.py --hash arbol.txt .
-  python generate_tree.py --hash salida.txt src package.json
-  python generate_tree.py --hash proyecto.txt src tests docs config
+  python generate_tree.py --hash salida.txt src/webview
+  python generate_tree.py --hash proyecto.txt src/components tests/unit docs
 
 
 📊 MODO HASH + JSON (Para procesamiento automático):
 ───────────────────────────────────────────────────────────────────────────
   python generate_tree.py --hash --json salida.txt .
-  python generate_tree.py --hash --json snapshot.txt src tests
+  python generate_tree.py --hash --json snapshot.txt src/webview tests
   
 
-🌐 RUTAS ABSOLUTAS (Compatible con tu comando anterior):
+🌐 RUTAS ABSOLUTAS (Compatible):
 ───────────────────────────────────────────────────────────────────────────
   # Git Bash / Unix / macOS
   python /c/repos/proyecto/scripts/tree/generate_tree.py --hash \\
     /c/repos/proyecto/tree/hash_tree.txt \\
-    /c/repos/proyecto/src \\
+    /c/repos/proyecto/src/webview \\
     /c/repos/proyecto/package.json
 
   # Windows CMD
   python C:\\repos\\proyecto\\scripts\\tree\\generate_tree.py --hash ^
     C:\\repos\\proyecto\\tree\\hash_tree.txt ^
-    C:\\repos\\proyecto\\src ^
+    C:\\repos\\proyecto\\src\\webview ^
     C:\\repos\\proyecto\\package.json
 
 
@@ -482,7 +513,7 @@ Para reportar bugs o sugerencias, usa el sistema de issues del repositorio.
     parser.add_argument(
         'paths',
         nargs='+',
-        help='Directorios o archivos a incluir en el árbol'
+        help='Directorios, subcarpetas o archivos a incluir (ej: src, src/webview, config/prod)'
     )
     
     args = parser.parse_args()
@@ -494,7 +525,7 @@ Para reportar bugs o sugerencias, usa el sistema de issues del repositorio.
     # Obtener el directorio del script
     script_dir = os.path.dirname(os.path.abspath(__file__))
     
-    # Resolver rutas de entrada
+    # Resolver rutas de entrada (ahora soporta subcarpetas)
     resolved_paths = resolve_paths(args.paths, script_dir)
     
     # Verificar que las rutas existen
