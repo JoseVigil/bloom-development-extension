@@ -10,7 +10,14 @@ const net = require('net');
 let mainWindow;
 
 const platform = process.platform;
-const isDevMode = process.argv.includes('--dev');
+const isDevMode = process.argv.includes('--dev') || !app.isPackaged;
+
+const getResourcePath = (relativePath) => {
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, relativePath);
+  }
+  return path.join(__dirname, '..', relativePath);
+};
 
 const paths = {
   home: app.getPath('home'),
@@ -31,7 +38,7 @@ const paths = {
     : platform === 'darwin'
     ? path.join(app.getPath('home'), 'Library', 'Application Support', 'Google', 'Chrome')
     : path.join(app.getPath('home'), '.config', 'google-chrome'),
-  extensionSource: path.join(__dirname, '..', 'chrome-extension')
+  extensionSource: getResourcePath('chrome-extension')
 };
 
 const SERVICE_NAME = 'BloomNucleusHost';
@@ -80,6 +87,7 @@ ipcMain.handle('get-system-info', async () => {
   return {
     platform,
     isDevMode,
+    isPackaged: app.isPackaged,
     paths: {
       hostInstallDir: paths.hostInstallDir,
       extensionSource: paths.extensionSource,
@@ -423,7 +431,7 @@ async function backupPreviousInstallation() {
 
 async function installHost() {
   const hostBinary = platform === 'win32' ? 'bloom-host.exe' : 'bloom-host';
-  const sourcePath = path.join(__dirname, '..', 'native', 'bin', platform, hostBinary);
+  const sourcePath = getResourcePath(path.join('native', 'bin', platform, hostBinary));
   const destPath = path.join(paths.hostInstallDir, hostBinary);
 
   if (!await fs.pathExists(sourcePath)) {
@@ -446,7 +454,7 @@ async function copyDependencies() {
     'libwinpthread-1.dll'
   ];
 
-  const sourceDllDir = path.join(__dirname, '..', 'native', 'bin', platform);
+  const sourceDllDir = getResourcePath(path.join('native', 'bin', platform));
   
   for (const dll of requiredDlls) {
     const sourcePath = path.join(sourceDllDir, dll);
@@ -469,8 +477,6 @@ async function createInitialConfig() {
   
   await fs.writeJson(serverConfigPath, serverConfig, { spaces: 2 });
 }
-
-// CONTINUAR main.js - Agregar al final de la Parte 1
 
 async function installWindowsService(port) {
   const hostBinary = 'bloom-host.exe';
