@@ -10,14 +10,11 @@ if %errorLevel% == 0 (
     echo Ejecutando con privilegios de administrador...
     echo.
     cd /d "%~dp0"
-    npm run dev
+    electron . --dev
 ) else (
-    echo Este instalador requiere privilegios de administrador.
-    echo Solicitando permisos...
+    echo Solicitando permisos de administrador...
     echo.
-    
-    :: Relanzar con privilegios elevados
-    powershell -Command "Start-Process cmd -ArgumentList '/c cd /d %~dp0 && npm run dev && pause' -Verb RunAs"
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process cmd -ArgumentList '/c cd /d \"%~dp0\" && electron . --dev && pause' -Verb RunAs"
 )
 
 pause

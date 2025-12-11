@@ -1,0 +1,597 @@
+.bloom/
+│
+├── .core/
+│   ├── .doc.instructions.bl
+│   │     Instrucciones detalladas de cómo leer, interpretar y actualizar la documentación del proyecto.
+│   │     Define el orden recomendado de lectura, los archivos intervinientes,
+│   │     las secuencias de lectura y escritura, y las buenas prácticas de redacción.
+│   │     Establece cómo la IA y los humanos deben aplicar cambios sobre los archivos DOC.
+│   │     
+│   │     PRIORIDAD DE CARGA: Media-Baja (fuzzy rules, al final del contexto)
+│   │     USADO EN: Intent DOC - Context, Curation
+│   │
+│   ├── .dev.instructions.bl
+│   │     Instrucciones de cómo leer el codebase, la documentación técnica y escribir código.
+│   │     Define el formato esperado de escritura, la política de archivos completos
+│   │     vs modificaciones parciales, y las pautas para navegar el contexto técnico
+│   │     de los Intents orientados a desarrollo.
+│   │     
+│   │     PRIORIDAD DE CARGA: Media-Baja (fuzzy rules, al final del contexto)
+│   │     USADO EN: Intent DEV - Briefing, Execution, Refinement
+│   │
+│   ├── .dev.rules.bl
+│   │     Reglas fundamentales del ecosistema de desarrollo.
+│   │     Define principios, restricciones y comportamientos obligatorios
+│   │     para cualquier Intent orientado a código.
+│   │     Incluye templates y modelos de respuestas para la integración automática,
+│   │     así como criterios de calidad y consistencia del código generado.
+│   │     
+│   │     PRIORIDAD DE CARGA: Media-Baja (fuzzy rules, al final del contexto)
+│   │     USADO EN: Intent DEV - Briefing, Execution, Refinement
+│   │
+│   └── .doc.rules.bl
+│         Reglas globales para la documentación técnica del proyecto.
+│         Define la ubicación lógica de los contenidos (arquitectura, workflow,
+│         implementación, etc.) y las estructuras recomendadas.
+│         Incluye modelos de respuestas para autogestionar actualizaciones de archivos
+│         de arquitectura, workflow e implementación a través de respuestas de la IA,
+│         asegurando coherencia entre secciones y documentos relacionados.
+│         
+│         PRIORIDAD DE CARGA: Media-Baja (fuzzy rules, al final del contexto)
+│         USADO EN: Intent DOC - Context, Curation
+│
+├── .intents/
+│   │
+│   ├── .dev/
+│   │   └── .{intent-name-uuid3}/
+│   │       │
+│   │       ├── .dev_state.json
+│   │       │     Estado global del Intent DEV: fase actual (briefing/execution/refinement),
+│   │       │     turn actual, metadata del intent, timestamps, y status general.
+│   │       │     
+│   │       │     PRIORIDAD DE CARGA: Alta (primeros 2K tokens)
+│   │       │     USADO EN: Todas las fases DEV
+│   │       │     CONTIENE:
+│   │       │     {
+│   │       │       "intent_id": "uuid3",
+│   │       │       "name": "nombre-descriptivo",
+│   │       │       "current_phase": "briefing | execution | refinement",
+│   │       │       "current_turn": 0,
+│   │       │       "status": "pending | in_progress | completed",
+│   │       │       "created_at": "timestamp",
+│   │       │       "updated_at": "timestamp",
+│   │       │       "objective": "descripción breve del objetivo",
+│   │       │       "scope": ["módulo1", "módulo2"]
+│   │       │     }
+│   │       │
+│   │       ├── .briefing/
+│   │       │   │
+│   │       │   ├── .intent.json
+│   │       │   │     Pedido original del usuario en formato estructurado.
+│   │       │   │     
+│   │       │   │     PRIORIDAD DE CARGA: Crítica (primeros 500 tokens del .payload.json)
+│   │       │   │     USADO EN: Fase Briefing
+│   │       │   │     CONTIENE:
+│   │       │   │     {
+│   │       │   │       "user_request": "texto original del usuario",
+│   │       │   │       "objective": "objetivo extraído",
+│   │       │   │       "scope": ["módulos implicados"],
+│   │       │   │       "constraints": ["restricciones mencionadas"],
+│   │       │   │       "files_attached": ["referencias a archivos adjuntos"]
+│   │       │   │     }
+│   │       │   │
+│   │       │   └── .files/
+│   │       │       ├── .codebase.bl
+│   │       │       │     Codebase inicial detectado/inferido para el Intent.
+│   │       │       │     Incluye archivos enviados por el usuario, archivos relevantes
+│   │       │       │     del proyecto, y placeholders para archivos a generar.
+│   │       │       │     
+│   │       │       │     PRIORIDAD DE CARGA: Crítica (tokens 500-3000 del .payload.json)
+│   │       │       │     USADO EN: Fase Briefing
+│   │       │       │     CONTIENE:
+│   │       │       │     - Archivos completos enviados por usuario
+│   │       │       │     - Archivos detectados del proyecto
+│   │       │       │     - Placeholders marcados como ### MISSING
+│   │       │       │     - Relaciones entre archivos
+│   │       │       │
+│   │       │       └── [optional files]
+│   │       │             Archivos adicionales referenciados por el usuario
+│   │       │             o necesarios para el contexto del Intent.
+│   │       │             
+│   │       │             PRIORIDAD DE CARGA: Media (tokens 3000-6000)
+│   │       │
+│   │       ├── .execution/
+│   │       │   │
+│   │       │   ├── .answers.json
+│   │       │   │     Respuestas del usuario a las 5 preguntas críticas generadas
+│   │       │   │     durante la fase de Briefing.
+│   │       │   │     
+│   │       │   │     PRIORIDAD DE CARGA: Crítica (primeros 500 tokens del .payload.json)
+│   │       │   │     USADO EN: Fase Execution
+│   │       │   │     CONTIENE:
+│   │       │   │     {
+│   │       │   │       "questions": [
+│   │       │   │         {
+│   │       │   │           "question": "texto de pregunta",
+│   │       │   │           "answer": "respuesta del usuario"
+│   │       │   │         }
+│   │       │   │       ]
+│   │       │   │     }
+│   │       │   │
+│   │       │   └── .files/
+│   │       │       ├── .codebase.bl
+│   │       │       │     Codebase COMPLETO post-execution.
+│   │       │       │     Todos los placeholders resueltos, código funcional generado,
+│   │       │       │     sin artefactos erróneos.
+│   │       │       │     
+│   │       │       │     PRIORIDAD DE CARGA: Crítica (tokens 500-4000 del .payload.json)
+│   │       │       │     USADO EN: Fase Execution
+│   │       │       │     CONTIENE:
+│   │       │       │     - Archivos generados en esta fase
+│   │       │       │     - Archivos modificados
+│   │       │       │     - Codebase sin ### MISSING
+│   │       │       │     - Relaciones finales entre archivos
+│   │       │       │
+│   │       │       └── [optional files]
+│   │       │             Archivos de contexto adicionales necesarios para execution.
+│   │       │             
+│   │       │             PRIORIDAD DE CARGA: Media (tokens 4000-7000)
+│   │       │
+│   │       ├── .refinement/
+│   │       │   └── .turn_X/
+│   │       │       │
+│   │       │       ├── .turn.json
+│   │       │       │     Pedido específico de refinamiento del usuario para este turn.
+│   │       │       │     
+│   │       │       │     PRIORIDAD DE CARGA: Crítica (primeros 500 tokens del .payload.json)
+│   │       │       │     USADO EN: Fase Refinement, Turn X
+│   │       │       │     CONTIENE:
+│   │       │       │     {
+│   │       │       │       "turn": X,
+│   │       │       │       "user_request": "pedido de cambio del usuario",
+│   │       │       │       "target_files": ["archivos a modificar"],
+│   │       │       │       "constraints": ["restricciones adicionales"]
+│   │       │       │     }
+│   │       │       │
+│   │       │       └── .files/
+│   │       │           ├── .codebase.bl
+│   │       │           │     Superficie autorizada para modificar en este turn.
+│   │       │           │     Codebase actualizado post-turn_X.
+│   │       │           │     
+│   │       │           │     PRIORIDAD DE CARGA: Crítica (tokens 500-3500 del .payload.json)
+│   │       │           │     USADO EN: Fase Refinement, Turn X
+│   │       │           │     CONTIENE:
+│   │       │           │     - Archivos modificados en turn_X
+│   │       │           │     - Cambios incrementales aplicados
+│   │       │           │     - Estado consistente post-modificación
+│   │       │           │
+│   │       │           └── [optional files]
+│   │       │                 Archivos de contexto para el refinamiento.
+│   │       │                 
+│   │       │                 PRIORIDAD DE CARGA: Media (tokens 3500-6000)
+│   │       │
+│   │       └── .pipeline/
+│   │           │   Pipeline de carga optimizada para la IA.
+│   │           │   Cada fase tiene su .payload.json e .index.json para maximizar
+│   │           │   la atención de la IA en los tokens críticos.
+│   │           │
+│   │           ├── .briefing/
+│   │           │   │
+│   │           │   ├── .payload.json
+│   │           │   │     Payload optimizado para fase Briefing.
+│   │           │   │     
+│   │           │   │     PRIORIDAD DE CARGA: Máxima (primeros 2K tokens)
+│   │           │   │     ESTRUCTURA OPTIMIZADA:
+│   │           │   │     {
+│   │           │   │       "priority_1_critical": {
+│   │           │   │         "intent": { /* contenido de .intent.json */ },
+│   │           │   │         "codebase_summary": "resumen del codebase inicial",
+│   │           │   │         "key_files": ["archivo1", "archivo2"]
+│   │           │   │       },
+│   │           │   │       "priority_2_high": {
+│   │           │   │         "codebase": { /* contenido de .codebase.bl */ },
+│   │           │   │         "tree": { /* resumen visual del .tree.bl */ }
+│   │           │   │       },
+│   │           │   │       "priority_3_medium": {
+│   │           │   │         "optional_files": { /* archivos adicionales */ },
+│   │           │   │         "dev_context": { /* .dev.strategy.context.bl */ }
+│   │           │   │       },
+│   │           │   │       "priority_4_low": {
+│   │           │   │         "dev_rules": { /* .dev.rules.bl */ },
+│   │           │   │         "dev_instructions": { /* .dev.instructions.bl */ }
+│   │           │   │       }
+│   │           │   │     }
+│   │           │   │
+│   │           │   └── .index.json
+│   │           │         Índice de archivos incluidos en el payload.
+│   │           │         
+│   │           │         CONTIENE:
+│   │           │         {
+│   │           │           "phase": "briefing",
+│   │           │           "files": [
+│   │           │             {
+│   │           │               "path": ".briefing/.intent.json",
+│   │           │               "priority": "critical",
+│   │           │               "token_range": "0-500",
+│   │           │               "included_in_payload": true
+│   │           │             },
+│   │           │             {
+│   │           │               "path": ".briefing/.files/.codebase.bl",
+│   │           │               "priority": "critical",
+│   │           │               "token_range": "500-3000",
+│   │           │               "included_in_payload": true
+│   │           │             },
+│   │           │             {
+│   │           │               "path": ".project/.tree.bl",
+│   │           │               "priority": "high",
+│   │           │               "token_range": "3000-4000",
+│   │           │               "included_in_payload": true
+│   │           │             },
+│   │           │             {
+│   │           │               "path": ".core/.dev.rules.bl",
+│   │           │               "priority": "low",
+│   │           │               "token_range": "8000-10000",
+│   │           │               "included_in_payload": true
+│   │           │             }
+│   │           │           ],
+│   │           │           "total_tokens": 10000,
+│   │           │           "created_at": "timestamp"
+│   │           │         }
+│   │           │
+│   │           ├── .execution/
+│   │           │   │
+│   │           │   ├── .payload.json
+│   │           │   │     Payload optimizado para fase Execution.
+│   │           │   │     
+│   │           │   │     PRIORIDAD DE CARGA: Máxima (primeros 2K tokens)
+│   │           │   │     ESTRUCTURA OPTIMIZADA:
+│   │           │   │     {
+│   │           │   │       "priority_1_critical": {
+│   │           │   │         "answers": { /* contenido de .answers.json */ },
+│   │           │   │         "briefing_codebase": "resumen del codebase briefing",
+│   │           │   │         "target_files": ["archivo1", "archivo2"]
+│   │           │   │       },
+│   │           │   │       "priority_2_high": {
+│   │           │   │         "codebase": { /* contenido de .codebase.bl de briefing */ },
+│   │           │   │         "tree": { /* .tree.bl */ }
+│   │           │   │       },
+│   │           │   │       "priority_3_medium": {
+│   │           │   │         "optional_files": { /* archivos adicionales */ },
+│   │           │   │         "dev_context": { /* .dev.strategy.context.bl */ }
+│   │           │   │       },
+│   │           │   │       "priority_4_low": {
+│   │           │   │         "dev_rules": { /* .dev.rules.bl */ },
+│   │           │   │         "dev_instructions": { /* .dev.instructions.bl */ }
+│   │           │   │       }
+│   │           │   │     }
+│   │           │   │
+│   │           │   └── .index.json
+│   │           │         Índice de archivos para execution.
+│   │           │
+│   │           └── .refinement/
+│   │               └── .turn_X/
+│   │                   │
+│   │                   ├── .payload.json
+│   │                   │     Payload optimizado para Refinement Turn X.
+│   │                   │     
+│   │                   │     PRIORIDAD DE CARGA: Máxima (primeros 2K tokens)
+│   │                   │     ESTRUCTURA OPTIMIZADA:
+│   │                   │     {
+│   │                   │       "priority_1_critical": {
+│   │                   │         "turn_request": { /* contenido de .turn.json */ },
+│   │                   │         "execution_codebase": "resumen del codebase execution",
+│   │                   │         "target_files": ["archivo1", "archivo2"],
+│   │                   │         "previous_turn_summary": "resumen turn anterior (si existe)"
+│   │                   │       },
+│   │                   │       "priority_2_high": {
+│   │                   │         "codebase": { /* codebase del turn anterior o execution */ },
+│   │                   │         "tree": { /* .tree.bl */ }
+│   │                   │       },
+│   │                   │       "priority_3_medium": {
+│   │                   │         "optional_files": { /* archivos adicionales */ },
+│   │                   │         "dev_context": { /* .dev.strategy.context.bl */ }
+│   │                   │       },
+│   │                   │       "priority_4_low": {
+│   │                   │         "dev_rules": { /* .dev.rules.bl */ },
+│   │                   │         "dev_instructions": { /* .dev.instructions.bl */ }
+│   │                   │       }
+│   │                   │     }
+│   │                   │
+│   │                   └── .index.json
+│   │                         Índice de archivos para refinement turn X.
+│   │
+│   └── .doc/
+│       └── .{intent-name-uuid3}/
+│           │
+│           ├── .doc_state.json
+│           │     Estado global del Intent DOC: fase actual (context/curation),
+│           │     turn actual, metadata del intent, timestamps, y status general.
+│           │     
+│           │     PRIORIDAD DE CARGA: Alta (primeros 2K tokens)
+│           │     USADO EN: Todas las fases DOC
+│           │     CONTIENE:
+│           │     {
+│           │       "intent_id": "uuid3",
+│           │       "name": "nombre-descriptivo",
+│           │       "current_phase": "context | curation",
+│           │       "current_turn": 0,
+│           │       "status": "pending | in_progress | completed",
+│           │       "created_at": "timestamp",
+│           │       "updated_at": "timestamp",
+│           │       "objective": "descripción breve del objetivo",
+│           │       "target_docs": ["archivo1.bl", "archivo2.bl"]
+│           │     }
+│           │
+│           ├── .context/
+│           │   │
+│           │   ├── .doc.json
+│           │   │     Pedido de documentación del usuario en formato estructurado.
+│           │   │     
+│           │   │     PRIORIDAD DE CARGA: Crítica (primeros 500 tokens del .payload.json)
+│           │   │     USADO EN: Fase Context
+│           │   │     CONTIENE:
+│           │   │     {
+│           │   │       "user_request": "texto original del usuario",
+│           │   │       "objective": "qué documentación generar",
+│           │   │       "scope": "qué módulos/componentes documentar",
+│           │   │       "target_files": ["dónde escribir"],
+│           │   │       "constraints": ["restricciones específicas"],
+│           │   │       "type": "architecture | workflow | implementation | mixed"
+│           │   │     }
+│           │   │
+│           │   └── .files/
+│           │       ├── .docbase.json
+│           │       │     Base documental inicial para el Intent DOC.
+│           │       │     Incluye documentación existente relevante, contexto del proyecto,
+│           │       │     y estructura de archivos a documentar.
+│           │       │     
+│           │       │     PRIORIDAD DE CARGA: Crítica (tokens 500-3000 del .payload.json)
+│           │       │     USADO EN: Fase Context
+│           │       │     CONTIENE:
+│           │       │     {
+│           │       │       "existing_docs": {
+│           │       │         "architecture": { /* secciones relevantes */ },
+│           │       │         "workflow": { /* secciones relevantes */ },
+│           │       │         "implementation": { /* secciones relevantes */ }
+│           │       │       },
+│           │       │       "project_context": {
+│           │       │         "tree": { /* .tree.bl resumido */ },
+│           │       │         "modules": ["módulo1", "módulo2"]
+│           │       │       },
+│           │       │       "discovery_files": [ /* archivos para descubrimiento */ ]
+│           │       │     }
+│           │       │
+│           │       └── [optional files]
+│           │             Archivos adicionales para contexto documental:
+│           │             - Código fuente a documentar
+│           │             - Documentación relacionada
+│           │             - Diagramas existentes
+│           │             
+│           │             PRIORIDAD DE CARGA: Media-Alta (tokens 3000-6000)
+│           │
+│           ├── .curation/
+│           │   └── .turn_X/
+│           │       │
+│           │       ├── .doc.json
+│           │       │     Pedido específico de refinamiento de documentación para este turn.
+│           │       │     
+│           │       │     PRIORIDAD DE CARGA: Crítica (primeros 500 tokens del .payload.json)
+│           │       │     USADO EN: Fase Curation, Turn X
+│           │       │     CONTIENE:
+│           │       │     {
+│           │       │       "turn": X,
+│           │       │       "user_request": "cambios solicitados en docs",
+│           │       │       "target_sections": ["sección1", "sección2"],
+│           │       │       "action": "update | add | refactor",
+│           │       │       "constraints": ["restricciones adicionales"]
+│           │       │     }
+│           │       │
+│           │       └── .files/
+│           │           ├── .docbase.bl
+│           │           │     Documentación actualizada post-turn_X.
+│           │           │     
+│           │           │     PRIORIDAD DE CARGA: Crítica (tokens 500-3500 del .payload.json)
+│           │           │     USADO EN: Fase Curation, Turn X
+│           │           │     CONTIENE:
+│           │           │     - Documentación modificada en turn_X
+│           │           │     - Cambios incrementales aplicados
+│           │           │     - Estado consistente de docs post-modificación
+│           │           │
+│           │           └── [optional files]
+│           │                 Archivos de contexto para la curation.
+│           │                 
+│           │                 PRIORIDAD DE CARGA: Media (tokens 3500-6000)
+│           │
+│           └── .pipeline/
+│               │   Pipeline de carga optimizada para la IA en Intent DOC.
+│               │
+│               ├── .context/
+│               │   │
+│               │   ├── .payload.json
+│               │   │     Payload optimizado para fase Context (generación inicial de docs).
+│               │   │     
+│               │   │     PRIORIDAD DE CARGA: Máxima (primeros 2K tokens)
+│               │   │     ESTRUCTURA OPTIMIZADA:
+│               │   │     {
+│               │   │       "priority_1_critical": {
+│               │   │         "doc_request": { /* contenido de .doc.json */ },
+│               │   │         "tree_visual": "resumen visual del .tree.bl",
+│               │   │         "target_modules": ["módulo1", "módulo2"]
+│               │   │       },
+│               │   │       "priority_2_high": {
+│               │   │         "docbase": { /* contenido de .docbase.json */ },
+│               │   │         "existing_architecture": { /* .doc.app.architecture.bl relevante */ },
+│               │   │         "existing_workflow": { /* .doc.app.workflow.bl relevante */ },
+│               │   │         "existing_implementation": { /* .doc.app.implementation.bl relevante */ }
+│               │   │       },
+│               │   │       "priority_3_medium": {
+│               │   │         "optional_files": { /* archivos adicionales */ },
+│               │   │         "tree_complete": { /* .tree.bl completo */ }
+│               │   │       },
+│               │   │       "priority_4_low": {
+│               │   │         "doc_rules": { /* .doc.rules.bl */ },
+│               │   │         "doc_instructions": { /* .doc.instructions.bl */ }
+│               │   │       }
+│               │   │     }
+│               │   │     
+│               │   │     NOTA: Los archivos .doc.standards.bl, .doc.prompt.bl y .doc.app.context.bl
+│               │   │     se fusionan en el payload según relevancia, priorizando contenido
+│               │   │     específico del intent sobre reglas generales.
+│               │   │
+│               │   └── .index.json
+│               │         Índice de archivos incluidos en el payload de context.
+│               │         
+│               │         CONTIENE:
+│               │         {
+│               │         "phase": "context",
+│               │           "files": [
+│               │             {
+│               │               "path": ".context/.doc.json",
+│               │               "priority": "critical",
+│               │               "token_range": "0-500",
+│               │               "included_in_payload": true
+│               │             },
+│               │             {
+│               │               "path": ".project/.tree.bl",
+│               │               "priority": "critical",
+│               │               "token_range": "500-1500",
+│               │               "section": "visual_summary",
+│               │               "included_in_payload": true
+│               │             },
+│               │             {
+│               │               "path": ".context/.files/.docbase.json",
+│               │               "priority": "high",
+│               │               "token_range": "1500-4000",
+│               │               "included_in_payload": true
+│               │             },
+│               │             {
+│               │               "path": ".project/.doc.app.architecture.bl",
+│               │               "priority": "high",
+│               │               "token_range": "4000-5500",
+│               │               "section": "relevant_sections_only",
+│               │               "included_in_payload": true
+│               │             },
+│               │             {
+│               │               "path": ".core/.doc.rules.bl",
+│               │               "priority": "low",
+│               │               "token_range": "9000-10000",
+│               │               "included_in_payload": true
+│               │             }
+│               │           ],
+│               │           "total_tokens": 10000,
+│               │           "created_at": "timestamp"
+│               │         }
+│               │
+│               └── .curation/
+│                   └── .turn_X/
+│                       │
+│                       ├── .payload.json
+│                       │     Payload optimizado para Curation Turn X (refinamiento de docs).
+│                       │     
+│                       │     PRIORIDAD DE CARGA: Máxima (primeros 2K tokens)
+│                       │     ESTRUCTURA OPTIMIZADA:
+│                       │     {
+│                       │       "priority_1_critical": {
+│                       │         "curation_request": { /* contenido de .doc.json */ },
+│                       │         "context_docbase": "resumen de docs generadas en context",
+│                       │         "target_sections": ["sección1", "sección2"],
+│                       │         "previous_turn_summary": "resumen turn anterior (si existe)"
+│                       │       },
+│                       │       "priority_2_high": {
+│                       │         "docbase": { /* docbase del turn anterior o context */ },
+│                       │         "tree": { /* .tree.bl */ },
+│                       │         "related_docs": { /* docs relacionadas relevantes */ }
+│                       │       },
+│                       │       "priority_3_medium": {
+│                       │         "optional_files": { /* archivos adicionales */ },
+│                       │         "project_docs": { /* otros docs del proyecto */ }
+│                       │       },
+│                       │       "priority_4_low": {
+│                       │         "doc_rules": { /* .doc.rules.bl */ },
+│                       │         "doc_instructions": { /* .doc.instructions.bl */ }
+│                       │       }
+│                       │     }
+│                       │
+│                       └── .index.json
+│                             Índice de archivos para curation turn X.
+│
+└── .project/
+    │   Documentación base estática del proyecto.
+    │   Estos archivos son el "ground truth" del sistema y se usan como contexto
+    │   en ambos tipos de Intents (DEV y DOC).
+    │
+    ├── .dev.strategy.standards.bl
+    │       Estándares técnicos, patrones arquitectónicos, convenciones
+    │       de estilo y lineamientos que rigen la generación, refactorización
+    │       y manipulación de código fuente a nivel de proyecto.
+    │       Aplica como base para todos los Intents DEV.
+    │       
+    │       PRIORIDAD DE CARGA: Media-Baja (fuzzy rules, tokens 6000-8000)
+    │       USADO EN: Intent DEV - Todas las fases
+    │
+    ├── .dev.strategy.context.bl
+    │       Contexto técnico del proyecto: estructura del código,
+    │       arquitectura global, dependencias, convenciones internas, módulos
+    │       principales y cualquier información necesaria para ejecutar Intents DEV.
+    │       Proporciona una vista de alto nivel para que la IA entienda
+    │       el entorno donde operan los cambios de código.
+    │       
+    │       PRIORIDAD DE CARGA: Media (tokens 5000-7000)
+    │       USADO EN: Intent DEV - Todas las fases
+    │
+    ├── .doc.app.architecture.bl
+    │       Arquitectura conceptual del sistema: visión general del producto,
+    │       componentes principales, relaciones entre subsistemas,
+    │       modelo de dominio, reglas de negocio de alto nivel
+    │       y estructura fundamental de la solución.
+    │       Define “qué es” el sistema y cómo está organizado en términos estructurales.
+    │
+    │       PRIORIDAD DE CARGA: Media-Alta
+    │       USADO EN: Intent DOC - Context, Curation
+    │       FUNCIÓN EN EL PIPELINE:
+    │       - Actúa como fuente primaria para generar documentación técnica.
+    │       - Permite mantener coherencia entre arquitectura y workflow/implementation.
+    │       - Se incluye parcialmente en payloads para contexto arquitectónico.
+    │
+    ├── .doc.app.workflow.bl
+    │       Flujos de uso del sistema: roles participantes, casos de uso,
+    │       procesos operativos paso a paso, validaciones funcionales
+    │       y escenarios típicos de interacción.
+    │       Explica “cómo se utiliza” el sistema desde la perspectiva del negocio
+    │       y de los usuarios finales.
+    │
+    │       PRIORIDAD DE CARGA: Media-Alta
+    │       USADO EN: Intent DOC - Context, Curation
+    │       FUNCIÓN EN EL PIPELINE:
+    │       - Fuente de verdad para describir procesos del sistema.
+    │       - Permite a la IA reconstruir flujos de extremo a extremo.
+    │       - Sirve para validar coherencia con arquitectura e implementación.
+    │
+    ├── .doc.app.implementation.bl
+    │       Detalle técnico de implementación: servicios, modelos de datos,
+    │       integraciones externas, APIs, dependencias y restricciones técnicas.
+    │       Explica “cómo se ejecuta y materializa” el sistema en términos
+    │       de código, infraestructura y componentes tecnológicos.
+    │
+    │       PRIORIDAD DE CARGA: Alta
+    │       USADO EN: Intent DOC - Context, Curation
+    │       FUNCIÓN EN EL PIPELINE:
+    │       - Conecta arquitectura conceptual con el código real.
+    │       - Permite generar documentación técnica precisa orientada a desarrollo.
+    │       - Se utiliza para inferir dependencias, servicios y módulos.
+    │
+    └── .tree.bl
+            Mapa estructural completo del proyecto (filesystem en formato árbol).
+            Permite navegación abstracta, referencia cruzada y análisis
+            sin necesidad de abrir archivos individuales.
+            Es utilizado como base tanto para Intents DEV como DOC
+            para comprender la topología del repositorio.
+            
+            PRIORIDAD DE CARGA: Crítica
+            USADO EN: Intent DEV (todas las fases) y Intent DOC (todas las fases)
+            FUNCIÓN EN EL PIPELINE:
+            - Es el eje central que determina qué archivos existen.
+            - Permite a la IA ubicar módulos, descubrir relaciones y validar rutas.
+            - Se incluye parcialmente en payloads (`tree_visual`).
+            - Actúa como mapa global para navegar el repositorio sin costo cognitivo.
+	

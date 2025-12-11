@@ -23,9 +23,15 @@ tree\_custom.py
 
 python /c/repos/bloom-videos/bloom-development-extension/scripts/tree\_hash.py --hash /c/repos/bloom-videos/bloom-development-extension/tree/hash\_tree.txt /c/repos/bloom-videos/bloom-development-extension/src /c/repos/bloom-videos/bloom-development-extension/package.json /c/repos/bloom-videos/bloom-development-extension/tsconfig.json
 
+
 codebase\_generation.py
 
-codebase_key_files.ml
+
+python codebase_generator.py --output /c/repos/bloom-videos/bloom-development-extension/codebase/codebase_key_files.bl --files /c/repos/bloom-videos/bloom-development-extension/package.json /c/repos/bloom-videos/bloom-development-extension/src/extension.ts /c/repos/bloom-videos/bloom-development-extension/src/initialization/commandRegistry.ts /c/repos/bloom-videos/bloom-development-extension/src/initialization/providersInitializer.ts /c/repos/bloom-videos/bloom-development-extension/src/initialization/managersInitializer.ts /c/repos/bloom-videos/bloom-development-extension/src/core/gitOrchestrator.ts /c/repos/bloom-videos/bloom-development-extension/src/core/nucleusManager.ts /c/repos/bloom-videos/bloom-development-extension/src/core/intentSession.ts /c/repos/bloom-videos/bloom-development-extension/src/managers/userManager.ts /c/repos/bloom-videos/bloom-development-extension/src/managers/workspaceManager.ts /c/repos/bloom-videos/bloom-development-extension/src/utils/gitManager.ts /c/repos/bloom-videos/bloom-development-extension/src/providers/nucleusTreeProvider.ts /c/repos/bloom-videos/bloom-development-extension/src/providers/intentTreeProvider.ts /c/repos/bloom-videos/bloom-development-extension/src/commands/manageProject.ts
+
+
+codebase\_generation.py / OLD
+
 
 python /c/repos/bloom-videos/bloom-development-extension/scripts/codebase_generation.py --output /c/repos/bloom-videos/bloom-development-extension/codebase/codebase_key_files.bl --files /c/repos/bloom-videos/bloom-development-extension/package.json /c/repos/bloom-videos/bloom-development-extension/src/extension.ts /c/repos/bloom-videos/bloom-development-extension/src/initialization/commandRegistry.ts /c/repos/bloom-videos/bloom-development-extension/src/initialization/providersInitializer.ts /c/repos/bloom-videos/bloom-development-extension/src/initialization/managersInitializer.ts /c/repos/bloom-videos/bloom-development-extension/src/core/gitOrchestrator.ts /c/repos/bloom-videos/bloom-development-extension/src/core/nucleusManager.ts /c/repos/bloom-videos/bloom-development-extension/src/core/intentSession.ts /c/repos/bloom-videos/bloom-development-extension/src/managers/userManager.ts /c/repos/bloom-videos/bloom-development-extension/src/managers/workspaceManager.ts /c/repos/bloom-videos/bloom-development-extension/src/utils/gitManager.ts /c/repos/bloom-videos/bloom-development-extension/src/providers/nucleusTreeProvider.ts /c/repos/bloom-videos/bloom-development-extension/src/providers/intentTreeProvider.ts /c/repos/bloom-videos/bloom-development-extension/src/commands/manageProject.ts
 
@@ -50,3 +56,17 @@ python /c/repos/bloom-videos/bloom-development-extension/scripts/codebase_snapsh
 snapshot_normalizer.py
 
 python /c/repos/bloom-videos/bloom-development-extension/scripts/snapshot_normalizer.py /c/repos/bloom-videos/bloom-development-extension/codebase/bloom-btip-workflow.md /c/repos/bloom-videos/bloom-development-extension/codebase/snapshot.normalized.md
+
+
+
+pack_intent_dev_briefing.py
+
+python pack_intent_dev_briefing.py .example-dev /c/TEMP/TMP
+
+pack_intent_dev_execution.py
+
+python pack_intent_dev_execution.py .example-dev /c/TEMP/TMP
+
+pack_intent_dev_refinement.py
+
+python pack_intent_dev_refinement.py .example-dev 1 /c/TEMP/TMP

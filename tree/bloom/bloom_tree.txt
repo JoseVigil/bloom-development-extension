@@ -1,0 +1,69 @@
+.bloom/
+│
+├── .core/
+│   ├── .doc.instructions.bl
+│   ├── .dev.instructions.bl
+│   ├── .dev.rules.bl
+│   └── .doc.rules.bl
+│
+├── .intents/
+│   ├── .dev/
+│   │   └── .{intent-name-uuid3}/
+│   │       ├── .dev_state.json
+│   │       ├── .briefing/
+│   │       │   ├── .intent.json
+│   │       │   └── .files/
+│   │       │       ├── .codebase.bl
+│   │       │       └── [optional files]
+│   │       ├── .execution/
+│   │       │   ├── .answers.json
+│   │       │   └── .files/
+│   │       │       ├── .codebase.bl
+│   │       │       └── [optional files]
+│   │       ├── .refinement/
+│   │       │   └── .turn_X/
+│   │       │       ├── .turn.json
+│   │       │       └── .files/
+│   │       │           ├── .codebase.bl
+│   │       │           └── [optional files]
+│   │       └── .pipeline/
+│   │           ├── .briefing/
+│   │           │   ├── .payload.json
+│   │           │   └── .index.json
+│   │           ├── .execution/
+│   │           │   ├── .payload.json
+│   │           │   └── .index.json
+│   │           └── .refinement/
+│   │               └── .turn_X/
+│   │                   ├── .payload.json
+│   │                   └── .index.json
+│   └── .doc/
+│       └── .{intent-name-uuid3}/
+│           ├── .doc_state.json
+│           ├── .context/
+│           │   ├── .doc.json
+│           │   └── .files/
+│           │       ├── .docbase.json
+│           │       └── [optional files]
+│           ├── .curation/
+│           │   └── .turn_X/
+│           │       ├── .doc.json
+│           │       └── .files/
+│           │           ├── .docbase.bl
+│           │           └── [optional files]
+│           └── .pipeline/
+│               ├── .context/
+│               │   ├── .payload.json
+│               │   └── .index.json
+│               └── .curation/
+│                   └── .turn_X/
+│                       ├── .payload.json
+│                       └── .index.json
+│
+└── .project/
+    ├── .dev.strategy.standards.bl
+    ├── .dev.strategy.context.bl
+    ├── .doc.app.architecture.bl
+    ├── .doc.app.workflow.bl
+    ├── .doc.app.implementation.bl
+    └── .tree.bl
