@@ -107,7 +107,7 @@ class FilesCompressor:
             if input_path.is_dir():
                 files_data = self._collect_files(input_path, exclude_patterns)
                 # Prefijar relative_path con el nombre del directorio raíz para evitar conflictos
-                root_name = input_path.name
+                root_name = input_str.lstrip('../').lstrip('./').rstrip('/\\')
                 for file_data in files_data:
                     file_data['relative_path'] = Path(root_name) / file_data['relative_path']
                 all_files_data.extend(files_data)

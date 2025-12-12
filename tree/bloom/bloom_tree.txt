@@ -4,61 +4,98 @@
 │   ├── .doc.instructions.bl
 │   ├── .dev.instructions.bl
 │   ├── .dev.rules.bl
-│   └── .doc.rules.bl
+│   ├── .doc.rules.bl
+│   └── .core.meta.json
 │
 ├── .intents/
 │   ├── .dev/
-│   │   └── .{intent-name-uuid3}/
+│   │   └── .{intent-name-uuid3}/	
 │   │       ├── .dev_state.json
 │   │       ├── .briefing/
-│   │       │   ├── .intent.json
+│   │       │   ├── .briefing.json
+│   │       │   ├── .context_plan.json
 │   │       │   └── .files/
-│   │       │       ├── .codebase.bl
+│   │       │       ├── .codebase.json
+│   │       │       ├── .codebase_index.json
+│   │       │       ├── .docbase.json
+│   │       │       ├── .docbase_index.json
 │   │       │       └── [optional files]
 │   │       ├── .execution/
 │   │       │   ├── .answers.json
+│   │       │   ├── .context_plan.json
 │   │       │   └── .files/
-│   │       │       ├── .codebase.bl
+│   │       │       ├── .codebase.json
+│   │       │       ├── .codebase_index.json
+│   │       │       ├── .docbase.json
+│   │       │       ├── .docbase_index.json
 │   │       │       └── [optional files]
 │   │       ├── .refinement/
 │   │       │   └── .turn_X/
 │   │       │       ├── .turn.json
+│   │       │       ├── .context_plan.json
 │   │       │       └── .files/
-│   │       │           ├── .codebase.bl
+│   │       │           ├── .codebase.json
+│   │       │           ├── .codebase_index.json
+│   │       │           ├── .docbase.json
+│   │       │           ├── .docbase_index.json
 │   │       │           └── [optional files]
 │   │       └── .pipeline/
 │   │           ├── .briefing/
 │   │           │   ├── .payload.json
-│   │           │   └── .index.json
+│   │           │   ├── .index.json
+│   │           │   └── .response/ 
+│   │           │       ├── .raw_output.txt
+│   │           │       ├── .report.json
+│   │           │       └── .staging/
 │   │           ├── .execution/
 │   │           │   ├── .payload.json
-│   │           │   └── .index.json
+│   │           │   ├── .index.json
+│   │           │   └── .response/ 
+│   │           │       ├── .raw_output.txt
+│   │           │       ├── .report.json
+│   │           │       └── .staging/
 │   │           └── .refinement/
 │   │               └── .turn_X/
 │   │                   ├── .payload.json
 │   │                   └── .index.json
+│   │                      └── .response/ 
+│   │                          ├── .raw_output.txt
+│   │                          ├── .report.json
+│   │                          └── .staging/
 │   └── .doc/
 │       └── .{intent-name-uuid3}/
 │           ├── .doc_state.json
 │           ├── .context/
 │           │   ├── .doc.json
+│           │   ├── .context_plan.json
 │           │   └── .files/
 │           │       ├── .docbase.json
+│           │       ├── .docbase_index.json
 │           │       └── [optional files]
 │           ├── .curation/
 │           │   └── .turn_X/
 │           │       ├── .doc.json
+│           │       ├── .context_plan.json
 │           │       └── .files/
-│           │           ├── .docbase.bl
+│           │           ├── .docbase.json
+│           │           ├── .docbase_index.json
 │           │           └── [optional files]
 │           └── .pipeline/
 │               ├── .context/
 │               │   ├── .payload.json
 │               │   └── .index.json
+│               │       .response/ 
+│               │       ├── .raw_output.txt
+│	            │       ├── .report.json
+│	            │       └── .staging/
 │               └── .curation/
 │                   └── .turn_X/
 │                       ├── .payload.json
 │                       └── .index.json
+│                           .response/ 
+│                           ├── .raw_output.txt
+│                           ├── .report.json
+│                           └── .staging/
 │
 └── .project/
     ├── .dev.strategy.standards.bl
@@ -66,4 +103,5 @@
     ├── .doc.app.architecture.bl
     ├── .doc.app.workflow.bl
     ├── .doc.app.implementation.bl
-    └── .tree.bl
+    ├── .tree.bl
+    └── .project.meta.json

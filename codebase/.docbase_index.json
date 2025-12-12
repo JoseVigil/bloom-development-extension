@@ -1,0 +1,94 @@
+{
+  "_index_version": "2.1",
+  "mode": "docbase",
+  "summary": {
+    "total_files": 4,
+    "total_size_bytes": 97350,
+    "total_compressed_bytes": 38944,
+    "average_compression_ratio": 50.02,
+    "languages": {
+      "markdown": 4
+    }
+  },
+  "by_directory": {
+    "docs\\v9": {
+      "file_count": 4,
+      "files": [
+        {
+          "p": "docs/v9/BLOOM – Git Orchestration Plan.md",
+          "l": "markdown",
+          "h": "e7551283bbc6c362f6137e3d45ef117e",
+          "s": 8757,
+          "cs": 4596,
+          "loc": 235,
+          "ratio": 47.52
+        },
+        {
+          "p": "docs/v9/Desvincular Nucleus (Unlink Nucleus).md",
+          "l": "markdown",
+          "h": "eded565038cae002a6ec10fa181966ea",
+          "s": 2960,
+          "cs": 2136,
+          "loc": 46,
+          "ratio": 27.84
+        },
+        {
+          "p": "docs/v9/bloom_unified_spec.md",
+          "l": "markdown",
+          "h": "bea03aaab708de934fbef441b83dd2ec",
+          "s": 64298,
+          "cs": 24176,
+          "loc": 1719,
+          "ratio": 62.4
+        },
+        {
+          "p": "docs/v9/git-orchestration-impl.md",
+          "l": "markdown",
+          "h": "dee7a79a719e858a4f26e337b4b2d88e",
+          "s": 21335,
+          "cs": 8036,
+          "loc": 635,
+          "ratio": 62.33
+        }
+      ]
+    }
+  },
+  "all_files": [
+    {
+      "p": "docs/v9/BLOOM – Git Orchestration Plan.md",
+      "l": "markdown",
+      "h": "e7551283bbc6c362f6137e3d45ef117e",
+      "s": 8757,
+      "cs": 4596,
+      "loc": 235,
+      "ratio": 47.52
+    },
+    {
+      "p": "docs/v9/Desvincular Nucleus (Unlink Nucleus).md",
+      "l": "markdown",
+      "h": "eded565038cae002a6ec10fa181966ea",
+      "s": 2960,
+      "cs": 2136,
+      "loc": 46,
+      "ratio": 27.84
+    },
+    {
+      "p": "docs/v9/bloom_unified_spec.md",
+      "l": "markdown",
+      "h": "bea03aaab708de934fbef441b83dd2ec",
+      "s": 64298,
+      "cs": 24176,
+      "loc": 1719,
+      "ratio": 62.4
+    },
+    {
+      "p": "docs/v9/git-orchestration-impl.md",
+      "l": "markdown",
+      "h": "dee7a79a719e858a4f26e337b4b2d88e",
+      "s": 21335,
+      "cs": 8036,
+      "loc": 635,
+      "ratio": 62.33
+    }
+  ]
+}
