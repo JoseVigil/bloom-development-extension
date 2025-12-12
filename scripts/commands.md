@@ -23,41 +23,18 @@ tree\_custom.py
 
 python /c/repos/bloom-videos/bloom-development-extension/scripts/tree\_hash.py --hash /c/repos/bloom-videos/bloom-development-extension/tree/hash\_tree.txt /c/repos/bloom-videos/bloom-development-extension/src /c/repos/bloom-videos/bloom-development-extension/package.json /c/repos/bloom-videos/bloom-development-extension/tsconfig.json
 
+CODEBASE 
 
-codebase\_generation.py
+python files_compressor.py --mode codebase --input ../../src ../../webview --output ../../codebase/
 
+python files_compressor.py --mode docbase --input ../../docs/v9 --output ../../codebase/
 
-python codebase_generator.py --output /c/repos/bloom-videos/bloom-development-extension/codebase/codebase_key_files.bl --files /c/repos/bloom-videos/bloom-development-extension/package.json /c/repos/bloom-videos/bloom-development-extension/src/extension.ts /c/repos/bloom-videos/bloom-development-extension/src/initialization/commandRegistry.ts /c/repos/bloom-videos/bloom-development-extension/src/initialization/providersInitializer.ts /c/repos/bloom-videos/bloom-development-extension/src/initialization/managersInitializer.ts /c/repos/bloom-videos/bloom-development-extension/src/core/gitOrchestrator.ts /c/repos/bloom-videos/bloom-development-extension/src/core/nucleusManager.ts /c/repos/bloom-videos/bloom-development-extension/src/core/intentSession.ts /c/repos/bloom-videos/bloom-development-extension/src/managers/userManager.ts /c/repos/bloom-videos/bloom-development-extension/src/managers/workspaceManager.ts /c/repos/bloom-videos/bloom-development-extension/src/utils/gitManager.ts /c/repos/bloom-videos/bloom-development-extension/src/providers/nucleusTreeProvider.ts /c/repos/bloom-videos/bloom-development-extension/src/providers/intentTreeProvider.ts /c/repos/bloom-videos/bloom-development-extension/src/commands/manageProject.ts
+python file_extractor.py --input ../../codebase/.codebase.json --output ../../extracted_code/
 
-
-codebase\_generation.py / OLD
-
-
-python /c/repos/bloom-videos/bloom-development-extension/scripts/codebase_generation.py --output /c/repos/bloom-videos/bloom-development-extension/codebase/codebase_key_files.bl --files /c/repos/bloom-videos/bloom-development-extension/package.json /c/repos/bloom-videos/bloom-development-extension/src/extension.ts /c/repos/bloom-videos/bloom-development-extension/src/initialization/commandRegistry.ts /c/repos/bloom-videos/bloom-development-extension/src/initialization/providersInitializer.ts /c/repos/bloom-videos/bloom-development-extension/src/initialization/managersInitializer.ts /c/repos/bloom-videos/bloom-development-extension/src/core/gitOrchestrator.ts /c/repos/bloom-videos/bloom-development-extension/src/core/nucleusManager.ts /c/repos/bloom-videos/bloom-development-extension/src/core/intentSession.ts /c/repos/bloom-videos/bloom-development-extension/src/managers/userManager.ts /c/repos/bloom-videos/bloom-development-extension/src/managers/workspaceManager.ts /c/repos/bloom-videos/bloom-development-extension/src/utils/gitManager.ts /c/repos/bloom-videos/bloom-development-extension/src/providers/nucleusTreeProvider.ts /c/repos/bloom-videos/bloom-development-extension/src/providers/intentTreeProvider.ts /c/repos/bloom-videos/bloom-development-extension/src/commands/manageProject.ts
-
-Sample  codebase.ml
-
-python /c/repos/bloom-videos/bloom-development-extension/scripts/codebase\_generation.py --output /c/repos/bloom-videos/bloom-development-extension/codebase/codebase.ml --files /c/repos/bloom-videos/bloom-development-extension/package.json /c/repos/bloom-videos/bloom-development-extension/src/extension.ts /c/repos/bloom-videos/bloom-development-extension/src/core/intentSession.ts /c/repos/bloom-videos/bloom-development-extension/src/core/intentAutoSaver.ts /c/repos/bloom-videos/bloom-development-extension/src/core/metadataManager.ts /c/repos/bloom-videos/bloom-development-extension/src/core/codebaseGenerator.ts /c/repos/bloom-videos/bloom-development-extension/src/commands/addToIntent.ts /c/repos/bloom-videos/bloom-development-extension/src/commands/deleteIntentFromForm.ts /c/repos/bloom-videos/bloom-development-extension/src/commands/openFileInVSCode.ts /c/repos/bloom-videos/bloom-development-extension/src/commands/revealInFinder.ts /c/repos/bloom-videos/bloom-development-extension/src/commands/generateIntent.ts /c/repos/bloom-videos/bloom-development-extension/src/commands/openIntent.ts /c/repos/bloom-videos/bloom-development-extension/src/providers/intentTreeProvider.ts /c/repos/bloom-videos/bloom-development-extension/src/models/intent.ts /c/repos/bloom-videos/bloom-development-extension/src/ui/intentFormPanel.ts /c/repos/bloom-videos/bloom-development-extension/src/ui/intentForm.html /c/repos/bloom-videos/bloom-development-extension/src/ui/intentForm.css /c/repos/bloom-videos/bloom-development-extension/src/ui/intentForm.js
-
-codebase gzip
-
-python /c/repos/bloom-videos/bloom-development-extension/scripts/gzip_compressor.py /c/repos/bloom-videos/bloom-development-extension/codebase/codebase_key_files.bl /c/repos/bloom-videos/bloom-development-extension/codebase/codebase_key_files_gzip.json
-
-codebase
-
-python /c/repos/bloom-videos/bloom-development-extension/scripts/gzip_compressor.py --no-gzip /c/repos/bloom-videos/bloom-development-extension/codebase/codebase_key_files.bl /c/repos/bloom-videos/bloom-development-extension/codebase/codebase_key_files.json
+python file_extractor.py --input ../../codebase/.codebase.json --output /c/TEMP/TMP
 
 
-
-codebase\_snapshot\_integration.py
-
-python /c/repos/bloom-videos/bloom-development-extension/scripts/codebase_snapshot_integration.py /c/repos/bloom-videos/bloom-development-extension/codebase/bloom-btip-workflow.md /c/repos/bloom-videos/bloom-development-extension --backup-dir /c/repos/bloom-videos/bloom-development-extension/backput/codebase_backput
-
-snapshot_normalizer.py
-
-python /c/repos/bloom-videos/bloom-development-extension/scripts/snapshot_normalizer.py /c/repos/bloom-videos/bloom-development-extension/codebase/bloom-btip-workflow.md /c/repos/bloom-videos/bloom-development-extension/codebase/snapshot.normalized.md
-
-
+PACK
 
 pack_intent_dev_briefing.py
 
