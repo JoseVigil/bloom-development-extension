@@ -10,7 +10,7 @@ python generate_tree.py --hash hash_tree.txt src package.json tsconfig.json
 
 python generate_tree.py --hash --json snapshot.txt src package.json tsconfig.json
 
-python generate_tree.py src_tree.txt src package.json
+python generate_tree.py src_tree.txt src package.json tsconfig.json
 
 python generate_tree.py bridge_tree.txt src installer package.json
 

@@ -2,15 +2,407 @@
   "_index_version": "2.1",
   "mode": "docbase",
   "summary": {
-    "total_files": 4,
-    "total_size_bytes": 97350,
-    "total_compressed_bytes": 38944,
-    "average_compression_ratio": 50.02,
+    "total_files": 42,
+    "total_size_bytes": 829446,
+    "total_compressed_bytes": 336020,
+    "average_compression_ratio": 47.47,
     "languages": {
-      "markdown": 4
+      "markdown": 42
     }
   },
   "by_directory": {
+    "docs\\v1": {
+      "file_count": 16,
+      "files": [
+        {
+          "p": "docs/v1/Arquitectura BTIP — Descripción General.md",
+          "l": "markdown",
+          "h": "f90143a525af11fdd5a36ceb5e612993",
+          "s": 4983,
+          "cs": 3044,
+          "loc": 120,
+          "ratio": 38.91
+        },
+        {
+          "p": "docs/v1/BLOOM_BTIP.md",
+          "l": "markdown",
+          "h": "2c699cd4d850fd76bd65d75bc7f66f12",
+          "s": 7509,
+          "cs": 4272,
+          "loc": 168,
+          "ratio": 43.11
+        },
+        {
+          "p": "docs/v1/BLOOM_BTIP_CLI_SPEC.md",
+          "l": "markdown",
+          "h": "5da0f47724fddec64f2b12a89875f946",
+          "s": 4193,
+          "cs": 2692,
+          "loc": 97,
+          "ratio": 35.8
+        },
+        {
+          "p": "docs/v1/BLOOM_BTIP_CLOUDE_GUIDE.md",
+          "l": "markdown",
+          "h": "d41d8cd98f00b204e9800998ecf8427e",
+          "s": 0,
+          "cs": 0,
+          "loc": 0,
+          "ratio": 0.0
+        },
+        {
+          "p": "docs/v1/BLOOM_BTIP_CLOUDE_GUIDE_SUMMARY.md",
+          "l": "markdown",
+          "h": "ba9c803690acff5352649177427f1dc9",
+          "s": 10990,
+          "cs": 6436,
+          "loc": 306,
+          "ratio": 41.44
+        },
+        {
+          "p": "docs/v1/BLOOM_BTIP_CREATECODEBASE_IMPLEMENTATION.md",
+          "l": "markdown",
+          "h": "ec538f1312745c29ff796a780c39e886",
+          "s": 5125,
+          "cs": 2784,
+          "loc": 113,
+          "ratio": 45.68
+        },
+        {
+          "p": "docs/v1/BLOOM_BTIP_INTERFACE_PROMPT.md",
+          "l": "markdown",
+          "h": "d54eba8f3623a7f1cc9792c988352863",
+          "s": 2694,
+          "cs": 1716,
+          "loc": 23,
+          "ratio": 36.3
+        },
+        {
+          "p": "docs/v1/BLOOM_BTIP_PLUGIN_PROMPT_GENERAL.md",
+          "l": "markdown",
+          "h": "7896458a409ffcb31cd1f87c7caf7666",
+          "s": 5560,
+          "cs": 3212,
+          "loc": 94,
+          "ratio": 42.23
+        },
+        {
+          "p": "docs/v1/BLOOM_BTIP_PLUGIN_SPEC.md",
+          "l": "markdown",
+          "h": "ad0744bd4e72088cce8f488a7427c2b6",
+          "s": 4525,
+          "cs": 2940,
+          "loc": 82,
+          "ratio": 35.03
+        },
+        {
+          "p": "docs/v1/BLOOM_BTIP_PLUGIN_SPEC_REVISED.md",
+          "l": "markdown",
+          "h": "3bb0298cf22f3dacc869f576b8419716",
+          "s": 5744,
+          "cs": 3324,
+          "loc": 139,
+          "ratio": 42.13
+        },
+        {
+          "p": "docs/v1/BLOOM_BTIP_SPEC_BASE.md",
+          "l": "markdown",
+          "h": "4ada5a09a6977797800c90bf99a117d8",
+          "s": 8208,
+          "cs": 4756,
+          "loc": 166,
+          "ratio": 42.06
+        },
+        {
+          "p": "docs/v1/BLOOM_BTIP_UNIVERSAL_CODEBASE_TEMPLATE.md",
+          "l": "markdown",
+          "h": "bfac2bb5995a2ea4786e41da750590fb",
+          "s": 36438,
+          "cs": 13716,
+          "loc": 936,
+          "ratio": 62.36
+        },
+        {
+          "p": "docs/v1/BLOOM_CODE_BASE_CONCEPTO.md",
+          "l": "markdown",
+          "h": "6d1c22710878f6160931a9a32a6c9e71",
+          "s": 4071,
+          "cs": 2524,
+          "loc": 72,
+          "ratio": 38.0
+        },
+        {
+          "p": "docs/v1/BLOOM_CODE_CLI_SPEC.md",
+          "l": "markdown",
+          "h": "a6e324902b737865472d3a80aefacef5",
+          "s": 2900,
+          "cs": 1872,
+          "loc": 56,
+          "ratio": 35.45
+        },
+        {
+          "p": "docs/v1/BLOOM_CODE_PLUGIN_SPEC.md",
+          "l": "markdown",
+          "h": "4cdac2bd3f237b3ffba77d2286d12c7f",
+          "s": 2647,
+          "cs": 1792,
+          "loc": 65,
+          "ratio": 32.3
+        },
+        {
+          "p": "docs/v1/BLOOM_PLUGIN_ARCHITECTURE.md",
+          "l": "markdown",
+          "h": "20f6dde422bb0e559b1bf8df091f388f",
+          "s": 12759,
+          "cs": 6004,
+          "loc": 327,
+          "ratio": 52.94
+        }
+      ]
+    },
+    "docs\\v1.0.1": {
+      "file_count": 2,
+      "files": [
+        {
+          "p": "docs/v1.0.1/Prompt Superador para Implementar Intent DEV.md",
+          "l": "markdown",
+          "h": "0429c878e90e38b582e7311f0fe400f9",
+          "s": 8741,
+          "cs": 5056,
+          "loc": 102,
+          "ratio": 42.16
+        },
+        {
+          "p": "docs/v1.0.1/bloom-nucleus_v1.0.1.bl",
+          "l": "markdown",
+          "h": "978ce3de42207d285780d790386cfd02",
+          "s": 37388,
+          "cs": 15740,
+          "loc": 770,
+          "ratio": 57.9
+        }
+      ]
+    },
+    "docs\\v10": {
+      "file_count": 2,
+      "files": [
+        {
+          "p": "docs/v10/bloom-nucleus-1.0.1.md",
+          "l": "markdown",
+          "h": "aed9da68b70f8875855fa042a7474584",
+          "s": 20939,
+          "cs": 8628,
+          "loc": 516,
+          "ratio": 58.79
+        },
+        {
+          "p": "docs/v10/bloom-unified-specs_backup.md",
+          "l": "markdown",
+          "h": "673a4512ba424d9d3eda7f983c7d9f4f",
+          "s": 56523,
+          "cs": 21628,
+          "loc": 1489,
+          "ratio": 61.74
+        }
+      ]
+    },
+    "docs\\v2": {
+      "file_count": 3,
+      "files": [
+        {
+          "p": "docs/v2/BLOOM_BTIP_INTERFACE_PROMPT.md",
+          "l": "markdown",
+          "h": "d54eba8f3623a7f1cc9792c988352863",
+          "s": 2694,
+          "cs": 1716,
+          "loc": 23,
+          "ratio": 36.3
+        },
+        {
+          "p": "docs/v2/BLOOM_BTIP_PLUGIN_PROMPT_GENERAL.md",
+          "l": "markdown",
+          "h": "7896458a409ffcb31cd1f87c7caf7666",
+          "s": 5560,
+          "cs": 3212,
+          "loc": 94,
+          "ratio": 42.23
+        },
+        {
+          "p": "docs/v2/BLOOM_BTIP_PLUGIN_SPEC.md",
+          "l": "markdown",
+          "h": "3bb0298cf22f3dacc869f576b8419716",
+          "s": 5744,
+          "cs": 3324,
+          "loc": 139,
+          "ratio": 42.13
+        }
+      ]
+    },
+    "docs\\v3": {
+      "file_count": 5,
+      "files": [
+        {
+          "p": "docs/v3/BLOOM_BTIP_INTERFACE_PROMPT.md",
+          "l": "markdown",
+          "h": "c18f3763cfbb472948b440cafed26925",
+          "s": 3309,
+          "cs": 1956,
+          "loc": 36,
+          "ratio": 40.89
+        },
+        {
+          "p": "docs/v3/BLOOM_BTIP_PLUGIN_PROMPT_GENERAL.md",
+          "l": "markdown",
+          "h": "e2857c519a1444725e1679971ba26ecb",
+          "s": 11512,
+          "cs": 5140,
+          "loc": 229,
+          "ratio": 55.35
+        },
+        {
+          "p": "docs/v3/BLOOM_BTIP_PLUGIN_SPEC_REVISED.md",
+          "l": "markdown",
+          "h": "95944fc268aa89ef0d0738bc39a6b371",
+          "s": 15440,
+          "cs": 7108,
+          "loc": 336,
+          "ratio": 53.96
+        },
+        {
+          "p": "docs/v3/BLOOM_Codebase_Generator.md",
+          "l": "markdown",
+          "h": "646f1adaff6d64f1a629c446b0f53c05",
+          "s": 20197,
+          "cs": 8260,
+          "loc": 542,
+          "ratio": 59.1
+        },
+        {
+          "p": "docs/v3/SETUP_GUIDE.md",
+          "l": "markdown",
+          "h": "73000809ea840b4ce9ed9816b5c30d8b",
+          "s": 8367,
+          "cs": 4564,
+          "loc": 237,
+          "ratio": 45.45
+        }
+      ]
+    },
+    "docs\\v4": {
+      "file_count": 2,
+      "files": [
+        {
+          "p": "docs/v4/BLOOM_BTIP_CODEBASE_GENERATOR.md",
+          "l": "markdown",
+          "h": "0239fadb3b23bcaeb8bfda7209f75263",
+          "s": 79998,
+          "cs": 23348,
+          "loc": 1920,
+          "ratio": 70.81
+        },
+        {
+          "p": "docs/v4/BLOOM_BTIP_INTENT_MANAGER.md",
+          "l": "markdown",
+          "h": "f41c87d4236cf7b6b7c2837345131fd8",
+          "s": 151432,
+          "cs": 47608,
+          "loc": 3553,
+          "ratio": 68.56
+        }
+      ]
+    },
+    "docs\\v5": {
+      "file_count": 1,
+      "files": [
+        {
+          "p": "docs/v5/bloom_intent_lifecycle.md",
+          "l": "markdown",
+          "h": "97c2129d4e98c471b3417d3c66f07a14",
+          "s": 19947,
+          "cs": 8752,
+          "loc": 495,
+          "ratio": 56.12
+        }
+      ]
+    },
+    "docs\\v6": {
+      "file_count": 3,
+      "files": [
+        {
+          "p": "docs/v6/bloom-lifecycle-updated.md",
+          "l": "markdown",
+          "h": "4204ceeed9daaafed632baf8f53c1ef8",
+          "s": 22227,
+          "cs": 9888,
+          "loc": 578,
+          "ratio": 55.51
+        },
+        {
+          "p": "docs/v6/bloom-nucleus-spec.md",
+          "l": "markdown",
+          "h": "6c5450abaa30856b38362ee5315fe6a9",
+          "s": 26159,
+          "cs": 10564,
+          "loc": 732,
+          "ratio": 59.62
+        },
+        {
+          "p": "docs/v6/nucleus_implementation_guide.md",
+          "l": "markdown",
+          "h": "b391b7dce251919dc4ddc28c23ef7fb2",
+          "s": 11889,
+          "cs": 5452,
+          "loc": 289,
+          "ratio": 54.14
+        }
+      ]
+    },
+    "docs\\v7": {
+      "file_count": 2,
+      "files": [
+        {
+          "p": "docs/v7/bloom_unified_spec.md",
+          "l": "markdown",
+          "h": "f2bbd6ee37c8d6ffee2b89b2db12bc74",
+          "s": 45969,
+          "cs": 18168,
+          "loc": 1298,
+          "ratio": 60.48
+        },
+        {
+          "p": "docs/v7/nucleus_creation_management.md",
+          "l": "markdown",
+          "h": "ec165008ff7365f577116d3fecd6bd1f",
+          "s": 5853,
+          "cs": 3208,
+          "loc": 59,
+          "ratio": 45.19
+        }
+      ]
+    },
+    "docs\\v8": {
+      "file_count": 2,
+      "files": [
+        {
+          "p": "docs/v8/bloom-btip-resumen.md",
+          "l": "markdown",
+          "h": "3e24729d94dc6627ac3bba89e2041d95",
+          "s": 7893,
+          "cs": 4504,
+          "loc": 98,
+          "ratio": 42.94
+        },
+        {
+          "p": "docs/v8/bloom_unified_spec.md",
+          "l": "markdown",
+          "h": "f2bbd6ee37c8d6ffee2b89b2db12bc74",
+          "s": 45969,
+          "cs": 18168,
+          "loc": 1298,
+          "ratio": 60.48
+        }
+      ]
+    },
     "docs\\v9": {
       "file_count": 4,
       "files": [
@@ -54,6 +446,348 @@
     }
   },
   "all_files": [
+    {
+      "p": "docs/v1.0.1/Prompt Superador para Implementar Intent DEV.md",
+      "l": "markdown",
+      "h": "0429c878e90e38b582e7311f0fe400f9",
+      "s": 8741,
+      "cs": 5056,
+      "loc": 102,
+      "ratio": 42.16
+    },
+    {
+      "p": "docs/v1.0.1/bloom-nucleus_v1.0.1.bl",
+      "l": "markdown",
+      "h": "978ce3de42207d285780d790386cfd02",
+      "s": 37388,
+      "cs": 15740,
+      "loc": 770,
+      "ratio": 57.9
+    },
+    {
+      "p": "docs/v1/Arquitectura BTIP — Descripción General.md",
+      "l": "markdown",
+      "h": "f90143a525af11fdd5a36ceb5e612993",
+      "s": 4983,
+      "cs": 3044,
+      "loc": 120,
+      "ratio": 38.91
+    },
+    {
+      "p": "docs/v1/BLOOM_BTIP.md",
+      "l": "markdown",
+      "h": "2c699cd4d850fd76bd65d75bc7f66f12",
+      "s": 7509,
+      "cs": 4272,
+      "loc": 168,
+      "ratio": 43.11
+    },
+    {
+      "p": "docs/v1/BLOOM_BTIP_CLI_SPEC.md",
+      "l": "markdown",
+      "h": "5da0f47724fddec64f2b12a89875f946",
+      "s": 4193,
+      "cs": 2692,
+      "loc": 97,
+      "ratio": 35.8
+    },
+    {
+      "p": "docs/v1/BLOOM_BTIP_CLOUDE_GUIDE.md",
+      "l": "markdown",
+      "h": "d41d8cd98f00b204e9800998ecf8427e",
+      "s": 0,
+      "cs": 0,
+      "loc": 0,
+      "ratio": 0.0
+    },
+    {
+      "p": "docs/v1/BLOOM_BTIP_CLOUDE_GUIDE_SUMMARY.md",
+      "l": "markdown",
+      "h": "ba9c803690acff5352649177427f1dc9",
+      "s": 10990,
+      "cs": 6436,
+      "loc": 306,
+      "ratio": 41.44
+    },
+    {
+      "p": "docs/v1/BLOOM_BTIP_CREATECODEBASE_IMPLEMENTATION.md",
+      "l": "markdown",
+      "h": "ec538f1312745c29ff796a780c39e886",
+      "s": 5125,
+      "cs": 2784,
+      "loc": 113,
+      "ratio": 45.68
+    },
+    {
+      "p": "docs/v1/BLOOM_BTIP_INTERFACE_PROMPT.md",
+      "l": "markdown",
+      "h": "d54eba8f3623a7f1cc9792c988352863",
+      "s": 2694,
+      "cs": 1716,
+      "loc": 23,
+      "ratio": 36.3
+    },
+    {
+      "p": "docs/v1/BLOOM_BTIP_PLUGIN_PROMPT_GENERAL.md",
+      "l": "markdown",
+      "h": "7896458a409ffcb31cd1f87c7caf7666",
+      "s": 5560,
+      "cs": 3212,
+      "loc": 94,
+      "ratio": 42.23
+    },
+    {
+      "p": "docs/v1/BLOOM_BTIP_PLUGIN_SPEC.md",
+      "l": "markdown",
+      "h": "ad0744bd4e72088cce8f488a7427c2b6",
+      "s": 4525,
+      "cs": 2940,
+      "loc": 82,
+      "ratio": 35.03
+    },
+    {
+      "p": "docs/v1/BLOOM_BTIP_PLUGIN_SPEC_REVISED.md",
+      "l": "markdown",
+      "h": "3bb0298cf22f3dacc869f576b8419716",
+      "s": 5744,
+      "cs": 3324,
+      "loc": 139,
+      "ratio": 42.13
+    },
+    {
+      "p": "docs/v1/BLOOM_BTIP_SPEC_BASE.md",
+      "l": "markdown",
+      "h": "4ada5a09a6977797800c90bf99a117d8",
+      "s": 8208,
+      "cs": 4756,
+      "loc": 166,
+      "ratio": 42.06
+    },
+    {
+      "p": "docs/v1/BLOOM_BTIP_UNIVERSAL_CODEBASE_TEMPLATE.md",
+      "l": "markdown",
+      "h": "bfac2bb5995a2ea4786e41da750590fb",
+      "s": 36438,
+      "cs": 13716,
+      "loc": 936,
+      "ratio": 62.36
+    },
+    {
+      "p": "docs/v1/BLOOM_CODE_BASE_CONCEPTO.md",
+      "l": "markdown",
+      "h": "6d1c22710878f6160931a9a32a6c9e71",
+      "s": 4071,
+      "cs": 2524,
+      "loc": 72,
+      "ratio": 38.0
+    },
+    {
+      "p": "docs/v1/BLOOM_CODE_CLI_SPEC.md",
+      "l": "markdown",
+      "h": "a6e324902b737865472d3a80aefacef5",
+      "s": 2900,
+      "cs": 1872,
+      "loc": 56,
+      "ratio": 35.45
+    },
+    {
+      "p": "docs/v1/BLOOM_CODE_PLUGIN_SPEC.md",
+      "l": "markdown",
+      "h": "4cdac2bd3f237b3ffba77d2286d12c7f",
+      "s": 2647,
+      "cs": 1792,
+      "loc": 65,
+      "ratio": 32.3
+    },
+    {
+      "p": "docs/v1/BLOOM_PLUGIN_ARCHITECTURE.md",
+      "l": "markdown",
+      "h": "20f6dde422bb0e559b1bf8df091f388f",
+      "s": 12759,
+      "cs": 6004,
+      "loc": 327,
+      "ratio": 52.94
+    },
+    {
+      "p": "docs/v10/bloom-nucleus-1.0.1.md",
+      "l": "markdown",
+      "h": "aed9da68b70f8875855fa042a7474584",
+      "s": 20939,
+      "cs": 8628,
+      "loc": 516,
+      "ratio": 58.79
+    },
+    {
+      "p": "docs/v10/bloom-unified-specs_backup.md",
+      "l": "markdown",
+      "h": "673a4512ba424d9d3eda7f983c7d9f4f",
+      "s": 56523,
+      "cs": 21628,
+      "loc": 1489,
+      "ratio": 61.74
+    },
+    {
+      "p": "docs/v2/BLOOM_BTIP_INTERFACE_PROMPT.md",
+      "l": "markdown",
+      "h": "d54eba8f3623a7f1cc9792c988352863",
+      "s": 2694,
+      "cs": 1716,
+      "loc": 23,
+      "ratio": 36.3
+    },
+    {
+      "p": "docs/v2/BLOOM_BTIP_PLUGIN_PROMPT_GENERAL.md",
+      "l": "markdown",
+      "h": "7896458a409ffcb31cd1f87c7caf7666",
+      "s": 5560,
+      "cs": 3212,
+      "loc": 94,
+      "ratio": 42.23
+    },
+    {
+      "p": "docs/v2/BLOOM_BTIP_PLUGIN_SPEC.md",
+      "l": "markdown",
+      "h": "3bb0298cf22f3dacc869f576b8419716",
+      "s": 5744,
+      "cs": 3324,
+      "loc": 139,
+      "ratio": 42.13
+    },
+    {
+      "p": "docs/v3/BLOOM_BTIP_INTERFACE_PROMPT.md",
+      "l": "markdown",
+      "h": "c18f3763cfbb472948b440cafed26925",
+      "s": 3309,
+      "cs": 1956,
+      "loc": 36,
+      "ratio": 40.89
+    },
+    {
+      "p": "docs/v3/BLOOM_BTIP_PLUGIN_PROMPT_GENERAL.md",
+      "l": "markdown",
+      "h": "e2857c519a1444725e1679971ba26ecb",
+      "s": 11512,
+      "cs": 5140,
+      "loc": 229,
+      "ratio": 55.35
+    },
+    {
+      "p": "docs/v3/BLOOM_BTIP_PLUGIN_SPEC_REVISED.md",
+      "l": "markdown",
+      "h": "95944fc268aa89ef0d0738bc39a6b371",
+      "s": 15440,
+      "cs": 7108,
+      "loc": 336,
+      "ratio": 53.96
+    },
+    {
+      "p": "docs/v3/BLOOM_Codebase_Generator.md",
+      "l": "markdown",
+      "h": "646f1adaff6d64f1a629c446b0f53c05",
+      "s": 20197,
+      "cs": 8260,
+      "loc": 542,
+      "ratio": 59.1
+    },
+    {
+      "p": "docs/v3/SETUP_GUIDE.md",
+      "l": "markdown",
+      "h": "73000809ea840b4ce9ed9816b5c30d8b",
+      "s": 8367,
+      "cs": 4564,
+      "loc": 237,
+      "ratio": 45.45
+    },
+    {
+      "p": "docs/v4/BLOOM_BTIP_CODEBASE_GENERATOR.md",
+      "l": "markdown",
+      "h": "0239fadb3b23bcaeb8bfda7209f75263",
+      "s": 79998,
+      "cs": 23348,
+      "loc": 1920,
+      "ratio": 70.81
+    },
+    {
+      "p": "docs/v4/BLOOM_BTIP_INTENT_MANAGER.md",
+      "l": "markdown",
+      "h": "f41c87d4236cf7b6b7c2837345131fd8",
+      "s": 151432,
+      "cs": 47608,
+      "loc": 3553,
+      "ratio": 68.56
+    },
+    {
+      "p": "docs/v5/bloom_intent_lifecycle.md",
+      "l": "markdown",
+      "h": "97c2129d4e98c471b3417d3c66f07a14",
+      "s": 19947,
+      "cs": 8752,
+      "loc": 495,
+      "ratio": 56.12
+    },
+    {
+      "p": "docs/v6/bloom-lifecycle-updated.md",
+      "l": "markdown",
+      "h": "4204ceeed9daaafed632baf8f53c1ef8",
+      "s": 22227,
+      "cs": 9888,
+      "loc": 578,
+      "ratio": 55.51
+    },
+    {
+      "p": "docs/v6/bloom-nucleus-spec.md",
+      "l": "markdown",
+      "h": "6c5450abaa30856b38362ee5315fe6a9",
+      "s": 26159,
+      "cs": 10564,
+      "loc": 732,
+      "ratio": 59.62
+    },
+    {
+      "p": "docs/v6/nucleus_implementation_guide.md",
+      "l": "markdown",
+      "h": "b391b7dce251919dc4ddc28c23ef7fb2",
+      "s": 11889,
+      "cs": 5452,
+      "loc": 289,
+      "ratio": 54.14
+    },
+    {
+      "p": "docs/v7/bloom_unified_spec.md",
+      "l": "markdown",
+      "h": "f2bbd6ee37c8d6ffee2b89b2db12bc74",
+      "s": 45969,
+      "cs": 18168,
+      "loc": 1298,
+      "ratio": 60.48
+    },
+    {
+      "p": "docs/v7/nucleus_creation_management.md",
+      "l": "markdown",
+      "h": "ec165008ff7365f577116d3fecd6bd1f",
+      "s": 5853,
+      "cs": 3208,
+      "loc": 59,
+      "ratio": 45.19
+    },
+    {
+      "p": "docs/v8/bloom-btip-resumen.md",
+      "l": "markdown",
+      "h": "3e24729d94dc6627ac3bba89e2041d95",
+      "s": 7893,
+      "cs": 4504,
+      "loc": 98,
+      "ratio": 42.94
+    },
+    {
+      "p": "docs/v8/bloom_unified_spec.md",
+      "l": "markdown",
+      "h": "f2bbd6ee37c8d6ffee2b89b2db12bc74",
+      "s": 45969,
+      "cs": 18168,
+      "loc": 1298,
+      "ratio": 60.48
+    },
     {
       "p": "docs/v9/BLOOM – Git Orchestration Plan.md",
       "l": "markdown",
