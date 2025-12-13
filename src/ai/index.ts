@@ -4,6 +4,7 @@ export { GrokAdapter } from './adapters/GrokAdapter';
 export { ClaudeAdapter } from './adapters/ClaudeAdapter';
 export { ChatGPTAdapter } from './adapters/ChatGPTAdapter';
 export { GeminiAdapter } from './adapters/GeminiAdapter';
+export { CopilotNativeAdapter } from './adapters/CopilotNativeAdapter'; // <--- NUEVO
 
 export interface AiAccountStatus {
     provider: AiProvider;  
@@ -25,4 +26,4 @@ export interface AiAdapter {
     getStatus(): Promise<AiAccountStatus>;
 }
 
-export type AiProvider = 'grok' | 'claude' | 'chatgpt' | 'gemini';
+export type AiProvider = 'grok' | 'claude' | 'chatgpt' | 'gemini' | 'copilot'; // <--- Agregado 'copilot'
