@@ -1,45 +1,4 @@
 bloom-development-extension/
-├── scripts/
-│   ├── base/
-│   │   ├── __pycache__/ [... cache]
-│   │   ├── code_compressor.py
-│   │   ├── file_extractor.py
-│   │   ├── files_compressor.py
-│   │   └── protocol_doc.md
-│   ├── bridge/
-│   │   └── postinstall.js
-│   ├── commands.md
-│   ├── intent/
-│   │   ├── __pycache__/ [... cache]
-│   │   ├── compression_metrics.py
-│   │   ├── create_intent.py
-│   │   ├── pack_intent_dev_briefing.py
-│   │   ├── pack_intent_dev_execution.py
-│   │   └── pack_intent_dev_refinement.py
-│   ├── md5/
-│   │   └── fileToMD5.py
-│   ├── nucleus/
-│   │   └── generate_nucleus.py
-│   ├── projects/
-│   │   └── generate_project_context.py
-│   ├── strategies/
-│   │   ├── generate_android_context_strategy.py
-│   │   └── generate_typescript_node_context_strategy.py
-│   ├── tests/
-│   │   └── test_create_intent.py
-│   ├── tree/
-│   └── web-bridge/
-│       ├── chrome_profile_resolver.py
-│       ├── claude_bridge.py
-│       ├── claude_download_artifacts.py
-│       ├── download_artifacts.py
-│       ├── quick_download.py
-│       └── verify_account.py
-├── tree/
-│   ├── bloom/
-│   │   ├── bloom_desc_tree.txt
-│   │   └── bloom_tree.txt
-│   └── plugin_tree.txt
 ├── src/
 │   ├── ai/
 │   │   ├── AiAccountChecker.ts
@@ -239,10 +198,16 @@ bloom-development-extension/
 │   ├── filesystem/
 │   │   ├── __init__.py
 │   │   ├── __pycache__/ [... cache]
-│   │   ├── compression.py
+│   │   ├── code_compressor.py
+│   │   ├── files_compressor.py
+│   │   ├── files_extractor.py
 │   │   ├── payload_manager.py
 │   │   ├── staging.py
 │   │   └── tree_manager.py
+│   ├── generators/
+│   │   ├── __init__.py
+│   │   ├── __pycache__/ [... cache]
+│   │   └── nucleus_generator.py
 │   ├── intelligence/
 │   │   ├── __init__.py
 │   │   ├── llm_client.py

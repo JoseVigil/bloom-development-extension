@@ -7,6 +7,9 @@ const execPromise = util.promisify(exec);
 const os = require('os');
 const net = require('net');
 
+// Importamos los helpers de integración
+const installHelpers = require('./installHelpers');
+
 let mainWindow;
 
 const platform = process.platform;
@@ -15,6 +18,10 @@ const isDevMode = process.argv.includes('--dev') || !app.isPackaged;
 const getResourcePath = (relativePath) => {
   if (app.isPackaged) {
     return path.join(process.resourcesPath, relativePath);
+  }
+  // En dev, native está en ../native y core en ../../core
+  if (relativePath.startsWith('core')) {
+    return path.join(__dirname, '..', '..', relativePath);
   }
   return path.join(__dirname, '..', relativePath);
 };
@@ -28,6 +35,12 @@ const paths = {
     : platform === 'darwin'
     ? '/Library/Application Support/BloomNucleus/native'
     : '/opt/bloom-nucleus/native',
+  // Nueva ruta para el núcleo Python
+  coreInstallDir: platform === 'win32'
+    ? 'C:\\Program Files\\BloomNucleus\\core'
+    : platform === 'darwin'
+    ? '/Library/Application Support/BloomNucleus/core'
+    : '/opt/bloom-nucleus/core',
   configDir: platform === 'win32'
     ? path.join(process.env.LOCALAPPDATA, 'BloomNucleus')
     : platform === 'darwin'
@@ -90,6 +103,7 @@ ipcMain.handle('get-system-info', async () => {
     isPackaged: app.isPackaged,
     paths: {
       hostInstallDir: paths.hostInstallDir,
+      coreInstallDir: paths.coreInstallDir,
       extensionSource: paths.extensionSource,
       configDir: paths.configDir
     },
@@ -118,6 +132,7 @@ ipcMain.handle('start-installation', async (event, config) => {
       { name: 'Creando directorios', fn: createDirectories },
       { name: 'Respaldando instalación previa', fn: backupPreviousInstallation },
       { name: 'Instalando Native Host', fn: installHost },
+      { name: 'Instalando Bloom Core (Python)', fn: installCore },
       { name: 'Copiando DLLs dependientes', fn: copyDependencies },
       { name: 'Creando configuración inicial', fn: createInitialConfig }
     ];
@@ -346,7 +361,40 @@ ipcMain.handle('open-logs-folder', async () => {
 });
 
 ipcMain.handle('open-btip-config', async () => {
-  await shell.openExternal('http://localhost:8777/home');
+  try {
+    const state = await installHelpers.getOnboardingState(paths.configDir);
+    
+    // Notificar UI que estamos verificando
+    mainWindow.webContents.send('server-status', { 
+      status: 'checking', 
+      message: 'Verificando servicios (UI en pto 4123)...' 
+    });
+    
+    // Esperar a que el servidor SvelteKit esté listo (timeout 10s)
+    const serversReady = await installHelpers.waitForServersReady(10000);
+    
+    let url;
+    if (serversReady.ready) {
+       url = installHelpers.getOnboardingURL(state, serversReady.uiPort);
+    } else {
+       // Fallback si el servidor UI no responde (ej. usuario lo inicia manualmente luego)
+       console.warn('UI Server not responsive, opening default fallback');
+       url = `http://localhost:${installHelpers.UI_SERVER_PORT}`;
+    }
+    
+    console.log('Opening configuration URL:', url);
+    await shell.openExternal(url);
+    
+    return { success: true, url };
+  } catch (error) {
+    console.error('Error opening BTIP config:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('check-onboarding-status', async () => {
+  const state = await installHelpers.getOnboardingState(paths.configDir);
+  return { success: true, state };
 });
 
 async function checkAdminPrivileges() {
@@ -406,6 +454,7 @@ async function findAvailablePort(startPort, endPort) {
 async function createDirectories() {
   try {
     await fs.ensureDir(paths.hostInstallDir);
+    await fs.ensureDir(paths.coreInstallDir);
     await fs.ensureDir(path.join(paths.configDir, 'config'));
     await fs.ensureDir(path.join(paths.configDir, 'state'));
     await fs.ensureDir(path.join(paths.configDir, 'logs'));
@@ -443,6 +492,27 @@ async function installHost() {
   if (platform !== 'win32') {
     await fs.chmod(destPath, '755');
   }
+}
+
+async function installCore() {
+  // Copia la carpeta 'core' completa incluyendo 'libs'
+  const sourcePath = getResourcePath('core');
+  const destPath = paths.coreInstallDir;
+
+  console.log(`Copying core from ${sourcePath} to ${destPath}`);
+
+  if (!await fs.pathExists(sourcePath)) {
+    throw new Error(`Core modules not found at: ${sourcePath}. Did you run 'npm run package'?`);
+  }
+
+  // Asegurar directorio destino
+  await fs.ensureDir(destPath);
+  
+  // Copiar recursivamente
+  await fs.copy(sourcePath, destPath, { 
+    overwrite: true,
+    filter: (src) => !src.includes('__pycache__') // Evitar copiar cache compilado
+  });
 }
 
 async function copyDependencies() {
