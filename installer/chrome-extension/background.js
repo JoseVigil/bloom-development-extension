@@ -1,48 +1,116 @@
-// Native Messaging Connection
-let nativePort = null;
-const HOST_NAME = "com.bloom.nucleus.bridge";
-const controlledTabs = new Map();
+// ============================================================================
+// CONFIGURACIÓN Y ESTADO
+// ============================================================================
+const HOST_NAME = "com.bloom.nucleus.host";
+const HEARTBEAT_INTERVAL = 20000; // 20 segundos
+const RECONNECT_DELAY = 5000;     // 5 segundos
 
-// Connect to native host
+let nativePort = null;
+let heartbeatTimer = null;
+let isConnected = false;
+const controlledTabs = new Map(); // Mantiene estado de pestañas controladas
+
+// ============================================================================
+// LÓGICA DE CONEXIÓN (CORE)
+// ============================================================================
+
 function connectToNativeHost() {
+  if (nativePort) return;
+
+  console.log(`🔌 Iniciando conexión con ${HOST_NAME}...`);
+  
   try {
     nativePort = chrome.runtime.connectNative(HOST_NAME);
     
-    nativePort.onMessage.addListener((message) => {
-      // Echo test
-      if (message.test) {
-        sendToHost({ echo: message.test, received: true });
-        console.log('Echo test:', message);
-        return;
-      }
-      
-      handleHostMessage(message);
-    });
+    // Listeners del Puerto
+    nativePort.onMessage.addListener(handleHostMessage);
     
     nativePort.onDisconnect.addListener(() => {
-      console.error("Native host disconnected:", chrome.runtime.lastError);
-      nativePort = null;
-      setTimeout(connectToNativeHost, 2000);
+      const err = chrome.runtime.lastError;
+      console.warn("⚠️ Desconectado del Host Nativo.", err ? err.message : "");
+      handleDisconnect();
     });
+
+    // Iniciar ciclo de vida
+    isConnected = true;
+    startHeartbeat();
     
-    console.log("Connected to native host");
+    // Handshake inicial
+    sendToHost({ command: "ping", source: "handshake" });
+
   } catch (error) {
-    console.error("Failed to connect to native host:", error);
-    setTimeout(connectToNativeHost, 2000);
+    console.error("❌ Error fatal al conectar:", error);
+    handleDisconnect();
   }
 }
 
-// Send message to native host
+function handleDisconnect() {
+  isConnected = false;
+  nativePort = null;
+  stopHeartbeat();
+  
+  // Notificar a componentes UI si es necesario
+  chrome.storage.local.set({ hostStatus: "disconnected" });
+
+  console.log(`🔄 Reintentando conexión en ${RECONNECT_DELAY/1000}s...`);
+  setTimeout(connectToNativeHost, RECONNECT_DELAY);
+}
+
+// ============================================================================
+// SISTEMA KEEP-ALIVE (HEARTBEAT)
+// ============================================================================
+
+function startHeartbeat() {
+  stopHeartbeat();
+  // console.log("💓 Heartbeat iniciado");
+  
+  heartbeatTimer = setInterval(() => {
+    if (isConnected && nativePort) {
+      // Enviamos ping silencioso para mantener vivo el canal
+      sendToHost({ command: "ping", source: "heartbeat" });
+    }
+  }, HEARTBEAT_INTERVAL);
+}
+
+function stopHeartbeat() {
+  if (heartbeatTimer) clearInterval(heartbeatTimer);
+  heartbeatTimer = null;
+}
+
 function sendToHost(message) {
   if (nativePort) {
-    nativePort.postMessage(message);
+    try {
+      nativePort.postMessage(message);
+    } catch (e) {
+      console.error("Error enviando mensaje:", e);
+      handleDisconnect();
+    }
   } else {
-    console.error("No native port available");
+    // Si intentamos enviar y no hay puerto, intentar reconectar
+    connectToNativeHost();
   }
 }
 
-// Handle messages from native host
+// ============================================================================
+// MANEJO DE MENSAJES (ROUTER)
+// ============================================================================
+
 async function handleHostMessage(message) {
+  // 1. Interceptar PING/PONG (Sistema)
+  if (message.command === "ping" || (message.ok && message.version)) {
+    chrome.storage.local.set({ 
+      hostStatus: "connected",
+      hostVersion: message.version || "1.0.0",
+      lastHeartbeat: Date.now()
+    });
+    
+    if (message.source === "handshake") {
+      console.log(`✅ Host Conectado: v${message.version}`);
+    }
+    return; // No procesar más
+  }
+
+  // 2. Procesar Comandos de Negocio
   const { id, command, payload } = message;
   
   try {
@@ -80,24 +148,28 @@ async function handleHostMessage(message) {
         result = await downloadClaudeArtifact(payload);
         break;
       default:
-        throw new Error(`Unknown command: ${command}`);
+        // Si es un mensaje de eco o respuesta genérica
+        if (message.test || message.received) return;
+        throw new Error(`Comando desconocido: ${command}`);
     }
     
-    sendToHost({
-      id,
-      status: "ok",
-      result
-    });
+    // Responder éxito
+    if (id) {
+      sendToHost({ id, status: "ok", result });
+    }
+    
   } catch (error) {
-    sendToHost({
-      id,
-      status: "error",
-      result: { message: error.message }
-    });
+    console.error(`Error ejecutando ${command}:`, error);
+    if (id) {
+      sendToHost({ id, status: "error", result: { message: error.message } });
+    }
   }
 }
 
-// Command implementations
+// ============================================================================
+// IMPLEMENTACIÓN DE COMANDOS
+// ============================================================================
+
 async function openTab(payload) {
   const { url } = payload;
   const tab = await chrome.tabs.create({ url, active: false });
@@ -131,50 +203,28 @@ async function getHtml(payload) {
 
 async function click(payload) {
   const { tabId, selector } = payload;
-  const response = await chrome.tabs.sendMessage(tabId, {
-    action: "click",
-    selector
-  });
-  return response;
+  // Requiere content script escuchando
+  return await chrome.tabs.sendMessage(tabId, { action: "click", selector });
 }
 
 async function type(payload) {
   const { tabId, selector, text } = payload;
-  const response = await chrome.tabs.sendMessage(tabId, {
-    action: "type",
-    selector,
-    text
-  });
-  return response;
+  return await chrome.tabs.sendMessage(tabId, { action: "type", selector, text });
 }
 
 async function uploadFile(payload) {
   const { tabId, selector, filePath } = payload;
-  const response = await chrome.tabs.sendMessage(tabId, {
-    action: "upload_file",
-    selector,
-    filePath
-  });
-  return response;
+  return await chrome.tabs.sendMessage(tabId, { action: "upload_file", selector, filePath });
 }
 
 async function readDom(payload) {
   const { tabId, selector } = payload;
-  const response = await chrome.tabs.sendMessage(tabId, {
-    action: "read_dom",
-    selector
-  });
-  return response;
+  return await chrome.tabs.sendMessage(tabId, { action: "read_dom", selector });
 }
 
 async function observeChanges(payload) {
   const { tabId, selector, enabled } = payload;
-  const response = await chrome.tabs.sendMessage(tabId, {
-    action: "observe_changes",
-    selector,
-    enabled
-  });
-  return response;
+  return await chrome.tabs.sendMessage(tabId, { action: "observe_changes", selector, enabled });
 }
 
 async function downloadClaudeArtifact(payload) {
@@ -183,10 +233,9 @@ async function downloadClaudeArtifact(payload) {
   const result = await chrome.scripting.executeScript({
     target: { tabId },
     func: () => {
+      // Lógica de extracción de Artifacts (Claude)
       const artifact = document.querySelector('[data-testid="artifact-root"]');
-      if (!artifact) {
-        return { error: "No artifact found" };
-      }
+      if (!artifact) return { error: "No artifact found" };
 
       const codeBlock = artifact.querySelector('pre code');
       const reactRoot = artifact.querySelector('[data-testid="react-artifact"]');
@@ -216,20 +265,17 @@ async function downloadClaudeArtifact(payload) {
                       artifact.closest('.artifact-container')?.querySelector('.font-semibold');
       const title = titleEl?.textContent || 'artifact';
       
-      return {
-        content,
-        type,
-        language,
-        title,
-        timestamp: Date.now()
-      };
+      return { content, type, language, title, timestamp: Date.now() };
     }
   });
   
   return result[0]?.result;
 }
 
-// Listen for tab events
+// ============================================================================
+// EVENTOS DEL NAVEGADOR
+// ============================================================================
+
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (controlledTabs.has(tabId) && changeInfo.status === "complete") {
     sendToHost({
@@ -251,7 +297,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   }
 });
 
-// Listen for messages from content scripts
+// Mensajes desde Content Scripts
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.event === "dom_change") {
     sendToHost({
@@ -263,8 +309,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
     });
   }
-  return true;
+  return true; // Async response support
 });
 
-// Initialize connection on startup
+// ============================================================================
+// INICIO
+// ============================================================================
 connectToNativeHost();
+chrome.runtime.onStartup.addListener(connectToNativeHost);

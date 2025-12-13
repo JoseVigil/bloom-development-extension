@@ -5,6 +5,7 @@ bloom-development-extension/
 │   │   ├── adapters/
 │   │   │   ├── ChatGPTAdapter.ts
 │   │   │   ├── ClaudeAdapter.ts
+│   │   │   ├── CopilotNativeAdapter.ts
 │   │   │   ├── GeminiAdapter.ts
 │   │   │   └── GrokAdapter.ts
 │   │   └── index.ts
@@ -207,7 +208,26 @@ bloom-development-extension/
 │   ├── generators/
 │   │   ├── __init__.py
 │   │   ├── __pycache__/ [... cache]
-│   │   └── nucleus_generator.py
+│   │   ├── nucleus_generator.py
+│   │   └── strategies/
+│   │       ├── __init__.py
+│   │       ├── android.py
+│   │       ├── cicd.py
+│   │       ├── context_strategy.py
+│   │       ├── cpp.py
+│   │       ├── dotnet.py
+│   │       ├── flutter.py
+│   │       ├── go.py
+│   │       ├── iac.py
+│   │       ├── ios.py
+│   │       ├── jvm.py
+│   │       ├── macos.py
+│   │       ├── multistack_detector.py
+│   │       ├── php.py
+│   │       ├── python.py
+│   │       ├── ruby.py
+│   │       ├── rust.py
+│   │       └── typescript.py
 │   ├── intelligence/
 │   │   ├── __init__.py
 │   │   ├── llm_client.py
@@ -223,6 +243,7 @@ bloom-development-extension/
 │   │   ├── engine.py
 │   │   ├── state_machine.py
 │   │   └── task_dispatcher.py
+│   ├── requirements.txt
 │   └── utils/
 │       ├── __init__.py
 │       ├── logging_utils.py
