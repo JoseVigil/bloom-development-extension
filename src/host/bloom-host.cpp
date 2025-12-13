@@ -51,6 +51,9 @@ std::atomic<socket_t> vscode_socket{INVALID_SOCK};
 std::mutex stdout_mutex;
 std::atomic<bool> shutdown_requested{false};
 
+// Variable para rastrear la última vez que Chrome envió datos (Heartbeat o mensajes)
+std::atomic<time_t> last_chrome_activity{0};
+
 // ============================================================================
 // FILE SYSTEM
 // ============================================================================
@@ -246,6 +249,25 @@ json process_message(const json& msg) {
         return {{"ok", true}, {"version", VERSION}, {"build", BUILD}, {"protocol", PROTOCOL}};
     }
 
+    // Comando para que el Instalador verifique la conexión
+    if (cmd == "get_status") {
+        time_t now = std::time(nullptr);
+        time_t last = last_chrome_activity.load();
+        
+        // Consideramos conectado si hubo actividad en los últimos 30 segundos
+        bool chrome_connected = (last > 0) && ((now - last) < 30); 
+
+        return {
+            {"ok", true},
+            {"status", {
+                {"version", VERSION},
+                {"chrome_connected", chrome_connected},
+                {"last_activity_seconds_ago", (last > 0 ? (now - last) : -1)},
+                {"vscode_connected", (vscode_socket.load() != INVALID_SOCK)}
+            }}
+        };
+    }
+
     // Local file operations
     if (cmd == "save_artifact") {
         try {
@@ -313,6 +335,9 @@ void chrome_loop() {
             }
             continue;
         }
+
+        // Actualizar timestamp cada vez que Chrome envía algo (Heartbeat o mensaje)
+        last_chrome_activity.store(std::time(nullptr));
 
         std::string msg = read_payload(std::cin, size);
         if (msg.empty()) continue;
