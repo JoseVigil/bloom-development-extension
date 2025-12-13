@@ -4,10 +4,10 @@ const fs = require('fs-extra');
 const { exec, spawn } = require('child_process');
 const util = require('util');
 const execPromise = util.promisify(exec);
-const os = require('os');
 const net = require('net');
+const os = require('os');
 
-// Importamos los helpers de integración
+// Importamos los helpers de integración (Asegúrate de que installHelpers.js exista en la misma carpeta)
 const installHelpers = require('./installHelpers');
 
 let mainWindow;
@@ -19,7 +19,7 @@ const getResourcePath = (relativePath) => {
   if (app.isPackaged) {
     return path.join(process.resourcesPath, relativePath);
   }
-  // En dev, native está en ../native y core en ../../core
+  // En dev, 'native' está en ../native y 'core' en ../../core
   if (relativePath.startsWith('core')) {
     return path.join(__dirname, '..', '..', relativePath);
   }
@@ -35,7 +35,6 @@ const paths = {
     : platform === 'darwin'
     ? '/Library/Application Support/BloomNucleus/native'
     : '/opt/bloom-nucleus/native',
-  // Nueva ruta para el núcleo Python
   coreInstallDir: platform === 'win32'
     ? 'C:\\Program Files\\BloomNucleus\\core'
     : platform === 'darwin'
@@ -43,8 +42,6 @@ const paths = {
     : '/opt/bloom-nucleus/core',
   configDir: platform === 'win32'
     ? path.join(process.env.LOCALAPPDATA, 'BloomNucleus')
-    : platform === 'darwin'
-    ? path.join(app.getPath('home'), '.config', 'BloomNucleus')
     : path.join(app.getPath('home'), '.config', 'BloomNucleus'),
   chromeUserData: platform === 'win32'
     ? path.join(process.env.LOCALAPPDATA, 'Google', 'Chrome', 'User Data')
@@ -96,6 +93,10 @@ app.on('activate', () => {
   }
 });
 
+// ============================================================================
+// IPC HANDLERS
+// ============================================================================
+
 ipcMain.handle('get-system-info', async () => {
   return {
     platform,
@@ -103,7 +104,6 @@ ipcMain.handle('get-system-info', async () => {
     isPackaged: app.isPackaged,
     paths: {
       hostInstallDir: paths.hostInstallDir,
-      coreInstallDir: paths.coreInstallDir,
       extensionSource: paths.extensionSource,
       configDir: paths.configDir
     },
@@ -129,6 +129,7 @@ ipcMain.handle('preflight-checks', async () => {
 ipcMain.handle('start-installation', async (event, config) => {
   try {
     const steps = [
+      { name: 'Deteniendo servicios previos', fn: stopRunningServices },
       { name: 'Creando directorios', fn: createDirectories },
       { name: 'Respaldando instalación previa', fn: backupPreviousInstallation },
       { name: 'Instalando Native Host', fn: installHost },
@@ -266,49 +267,6 @@ ipcMain.handle('install-vc-redist', async () => {
   }
 });
 
-async function checkVCRedistInstalled() {
-  if (platform !== 'win32') return true;
-  
-  try {
-    const systemRoot = process.env.SystemRoot || 'C:\\Windows';
-    const system32 = path.join(systemRoot, 'System32');
-    const sysWow64 = path.join(systemRoot, 'SysWOW64');
-    
-    const requiredDlls = [
-      'vcruntime140.dll',
-      'vcruntime140_1.dll',
-      'msvcp140.dll',
-      'msvcp140_1.dll',
-      'msvcp140_2.dll'
-    ];
-    
-    const missingDlls = [];
-    
-    for (const dll of requiredDlls) {
-      const dll64 = path.join(system32, dll);
-      const dll32 = path.join(sysWow64, dll);
-      
-      const exists64 = await fs.pathExists(dll64);
-      const exists32 = await fs.pathExists(dll32);
-      
-      if (!exists64 && !exists32) {
-        missingDlls.push(dll);
-      }
-    }
-    
-    if (missingDlls.length > 0) {
-      console.log('Missing DLLs:', missingDlls.join(', '));
-      return false;
-    }
-    
-    console.log('All VC++ DLLs found');
-    return true;
-  } catch (error) {
-    console.error('Error checking VC++:', error);
-    return false;
-  }
-}
-
 ipcMain.handle('check-service-status', async () => {
   try {
     const state = await readServerState();
@@ -360,24 +318,23 @@ ipcMain.handle('open-logs-folder', async () => {
   await shell.openPath(logsDir);
 });
 
+// INTEGRACIÓN ONBOARDING
 ipcMain.handle('open-btip-config', async () => {
   try {
     const state = await installHelpers.getOnboardingState(paths.configDir);
     
-    // Notificar UI que estamos verificando
     mainWindow.webContents.send('server-status', { 
       status: 'checking', 
       message: 'Verificando servicios (UI en pto 4123)...' 
     });
     
-    // Esperar a que el servidor SvelteKit esté listo (timeout 10s)
+    // Timeout 10s
     const serversReady = await installHelpers.waitForServersReady(10000);
     
     let url;
     if (serversReady.ready) {
        url = installHelpers.getOnboardingURL(state, serversReady.uiPort);
     } else {
-       // Fallback si el servidor UI no responde (ej. usuario lo inicia manualmente luego)
        console.warn('UI Server not responsive, opening default fallback');
        url = `http://localhost:${installHelpers.UI_SERVER_PORT}`;
     }
@@ -397,58 +354,138 @@ ipcMain.handle('check-onboarding-status', async () => {
   return { success: true, state };
 });
 
-async function checkAdminPrivileges() {
-  if (platform === 'win32') {
-    try {
-      await execPromise('net session');
-      return true;
-    } catch {
-      return false;
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+/**
+ * Detiene servicios anteriores agresivamente para liberar archivos
+ */
+async function stopRunningServices() {
+  console.log('Stopping existing services aggressively...');
+  try {
+    if (platform === 'win32') {
+      // 1. Deshabilitar auto-inicio
+      await execPromise(`sc config BloomNucleusHost start= disabled`).catch(() => {});
+      // 2. Detener servicio
+      await execPromise(`sc stop BloomNucleusHost`).catch(() => {});
+      
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // 3. Forzar muerte de proceso
+      await execPromise(`taskkill /F /IM bloom-host.exe`).catch(() => {});
+      
+      // 4. Esperar liberación de handle
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    } else {
+      await execPromise(`pkill -9 bloom-host`).catch(() => {});
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+  } catch (error) {
+    console.log('Service stop warning (ignoring):', error.message);
+  }
+}
+
+/**
+ * Copia archivos forzando desbloqueo (unlink/rename)
+ */
+async function forceCopyFile(source, dest) {
+  if (!await fs.pathExists(source)) {
+    throw new Error(`Source not found: ${source}`);
+  }
+
+  // Si el destino existe, intentamos quitarlo
+  if (await fs.pathExists(dest)) {
+    let deleted = false;
+    let attempts = 0;
+    
+    while (!deleted && attempts < 5) {
+      try {
+        await fs.unlink(dest);
+        deleted = true;
+      } catch (err) {
+        if (err.code === 'EPERM' || err.code === 'EBUSY') {
+          console.log(`File locked (${path.basename(dest)}), retrying... (${attempts + 1}/5)`);
+          await new Promise(r => setTimeout(r, 1000));
+          if (platform === 'win32') {
+             await execPromise(`taskkill /F /IM bloom-host.exe`).catch(() => {});
+          }
+          attempts++;
+        } else {
+          throw err; 
+        }
+      }
+    }
+
+    // Plan B: Renombrar
+    if (!deleted) {
+      console.log(`Could not delete locked file ${path.basename(dest)}, renaming to .old`);
+      const trashPath = dest + '.old.' + Date.now();
+      try {
+        if (await fs.pathExists(trashPath)) await fs.unlink(trashPath);
+        await fs.rename(dest, trashPath);
+      } catch (renameError) {
+        console.error('Rename failed:', renameError.message);
+      }
     }
   }
-  return process.getuid && process.getuid() === 0;
+
+  // Copia final
+  await fs.copy(source, dest, { overwrite: true });
 }
 
-async function checkPreviousInstallation() {
+async function installHost() {
   const hostBinary = platform === 'win32' ? 'bloom-host.exe' : 'bloom-host';
-  const binaryPath = path.join(paths.hostInstallDir, hostBinary);
-  return await fs.pathExists(binaryPath);
+  const sourcePath = getResourcePath(path.join('native', 'bin', platform, hostBinary));
+  const destPath = path.join(paths.hostInstallDir, hostBinary);
+
+  console.log(`Installing Host Binary: ${hostBinary}`);
+  await forceCopyFile(sourcePath, destPath);
+  
+  if (platform !== 'win32') {
+    await fs.chmod(destPath, '755');
+  }
 }
 
-async function checkPortAvailable(port) {
-  return new Promise((resolve) => {
-    const server = net.createServer();
-    
-    server.once('error', (err) => {
-      resolve(err.code !== 'EADDRINUSE');
-    });
-    
-    server.once('listening', () => {
-      server.close();
-      resolve(true);
-    });
-    
-    server.listen(port, '127.0.0.1');
+async function installCore() {
+  const sourcePath = getResourcePath('core');
+  const destPath = paths.coreInstallDir;
+
+  console.log(`Copying core from ${sourcePath} to ${destPath}`);
+
+  if (!await fs.pathExists(sourcePath)) {
+    throw new Error(`Core modules not found at: ${sourcePath}. Did you run 'npm run package'?`);
+  }
+
+  await fs.ensureDir(destPath);
+  
+  // Usamos fs.copy normal para directorios, filtrando __pycache__
+  await fs.copy(sourcePath, destPath, { 
+    overwrite: true,
+    filter: (src) => !src.includes('__pycache__')
   });
 }
 
-async function checkDiskSpace() {
-  try {
-    await fs.ensureDir(paths.hostInstallDir);
-    return true;
-  } catch {
-    return false;
-  }
-}
+async function copyDependencies() {
+  if (platform !== 'win32') return;
 
-async function findAvailablePort(startPort, endPort) {
-  for (let port = startPort; port <= endPort; port++) {
-    const available = await checkPortAvailable(port);
-    if (available) {
-      return port;
+  const requiredDlls = [
+    'libgcc_s_seh-1.dll',
+    'libstdc++-6.dll',
+    'libwinpthread-1.dll'
+  ];
+
+  const sourceDllDir = getResourcePath(path.join('native', 'bin', platform));
+  console.log('Copying dependencies (DLLs)...');
+  
+  for (const dll of requiredDlls) {
+    const sourcePath = path.join(sourceDllDir, dll);
+    const destPath = path.join(paths.hostInstallDir, dll);
+    
+    if (await fs.pathExists(sourcePath)) {
+      await forceCopyFile(sourcePath, destPath);
     }
   }
-  throw new Error(`No ports available ${startPort}-${endPort}`);
 }
 
 async function createDirectories() {
@@ -474,78 +511,91 @@ async function backupPreviousInstallation() {
   if (await fs.pathExists(sourcePath)) {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const backupPath = path.join(paths.configDir, 'backups', `${hostBinary}_${timestamp}.bak`);
-    await fs.copy(sourcePath, backupPath, { overwrite: true });
-  }
-}
-
-async function installHost() {
-  const hostBinary = platform === 'win32' ? 'bloom-host.exe' : 'bloom-host';
-  const sourcePath = getResourcePath(path.join('native', 'bin', platform, hostBinary));
-  const destPath = path.join(paths.hostInstallDir, hostBinary);
-
-  if (!await fs.pathExists(sourcePath)) {
-    throw new Error(`Binary not found: ${sourcePath}`);
-  }
-
-  await fs.copy(sourcePath, destPath, { overwrite: true });
-  
-  if (platform !== 'win32') {
-    await fs.chmod(destPath, '755');
-  }
-}
-
-async function installCore() {
-  // Copia la carpeta 'core' completa incluyendo 'libs'
-  const sourcePath = getResourcePath('core');
-  const destPath = paths.coreInstallDir;
-
-  console.log(`Copying core from ${sourcePath} to ${destPath}`);
-
-  if (!await fs.pathExists(sourcePath)) {
-    throw new Error(`Core modules not found at: ${sourcePath}. Did you run 'npm run package'?`);
-  }
-
-  // Asegurar directorio destino
-  await fs.ensureDir(destPath);
-  
-  // Copiar recursivamente
-  await fs.copy(sourcePath, destPath, { 
-    overwrite: true,
-    filter: (src) => !src.includes('__pycache__') // Evitar copiar cache compilado
-  });
-}
-
-async function copyDependencies() {
-  if (platform !== 'win32') return;
-
-  const requiredDlls = [
-    'libgcc_s_seh-1.dll',
-    'libstdc++-6.dll',
-    'libwinpthread-1.dll'
-  ];
-
-  const sourceDllDir = getResourcePath(path.join('native', 'bin', platform));
-  
-  for (const dll of requiredDlls) {
-    const sourcePath = path.join(sourceDllDir, dll);
-    const destPath = path.join(paths.hostInstallDir, dll);
-    
-    if (await fs.pathExists(sourcePath)) {
-      await fs.copy(sourcePath, destPath, { overwrite: true });
+    // Try copy instead of rename to avoid locking issues with backup
+    try {
+      await fs.copy(sourcePath, backupPath);
+    } catch(e) {
+      console.warn('Backup failed, skipping:', e.message);
     }
   }
 }
 
 async function createInitialConfig() {
   const serverConfigPath = path.join(paths.configDir, 'config', 'server.json');
-  
   const serverConfig = {
     preferredPort: DEFAULT_PORT,
     autoStart: true,
     logLevel: 'info'
   };
-  
   await fs.writeJson(serverConfigPath, serverConfig, { spaces: 2 });
+}
+
+// ... Resto de funciones (Windows Service, Checks, etc.) se mantienen ...
+// Aseguramos que checkAdminPrivileges etc estén presentes
+
+async function checkAdminPrivileges() {
+  if (platform === 'win32') {
+    try {
+      await execPromise('net session');
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  return process.getuid && process.getuid() === 0;
+}
+
+async function checkPreviousInstallation() {
+  const hostBinary = platform === 'win32' ? 'bloom-host.exe' : 'bloom-host';
+  const binaryPath = path.join(paths.hostInstallDir, hostBinary);
+  return await fs.pathExists(binaryPath);
+}
+
+async function checkPortAvailable(port) {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.once('error', (err) => resolve(err.code !== 'EADDRINUSE'));
+    server.once('listening', () => {
+      server.close();
+      resolve(true);
+    });
+    server.listen(port, '127.0.0.1');
+  });
+}
+
+async function checkDiskSpace() {
+  try {
+    await fs.ensureDir(paths.hostInstallDir);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function findAvailablePort(startPort, endPort) {
+  for (let port = startPort; port <= endPort; port++) {
+    if (await checkPortAvailable(port)) return port;
+  }
+  throw new Error(`No ports available ${startPort}-${endPort}`);
+}
+
+async function checkVCRedistInstalled() {
+  if (platform !== 'win32') return true;
+  try {
+    const systemRoot = process.env.SystemRoot || 'C:\\Windows';
+    const system32 = path.join(systemRoot, 'System32');
+    const sysWow64 = path.join(systemRoot, 'SysWOW64');
+    const requiredDlls = ['vcruntime140.dll', 'msvcp140.dll'];
+    
+    for (const dll of requiredDlls) {
+      const exists64 = await fs.pathExists(path.join(system32, dll));
+      const exists32 = await fs.pathExists(path.join(sysWow64, dll));
+      if (!exists64 && !exists32) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function installWindowsService(port) {
@@ -554,29 +604,22 @@ async function installWindowsService(port) {
   
   console.log('=== Windows Service Installation ===');
   
-  try {
-    await fs.access(binaryPath);
-  } catch (error) {
+  if (!await fs.pathExists(binaryPath)) {
     throw new Error(`Binary not found: ${binaryPath}`);
-  }
-  
-  const vcInstalled = await checkVCRedistInstalled();
-  if (!vcInstalled) {
-    throw new Error('VC++ Redistributables required');
   }
   
   try {
     await execPromise(`sc query ${SERVICE_NAME}`);
+    // Asegurar que está stopped antes de reconfigurar
     await execPromise(`sc stop ${SERVICE_NAME}`).catch(() => {});
-    await new Promise(resolve => setTimeout(resolve, 2000));
     await execPromise(`sc delete ${SERVICE_NAME}`);
     await new Promise(resolve => setTimeout(resolve, 2000));
   } catch {
     console.log('No existing service');
   }
   
+  // Resetear config a auto-start
   const serviceBinPath = `\\"${binaryPath}\\" --server --port=${port}`;
-  
   const createCmd = `sc create ${SERVICE_NAME} binPath= "${serviceBinPath}" DisplayName= "Bloom Nucleus Host" start= auto`;
   await execPromise(createCmd);
   
@@ -588,14 +631,12 @@ cd /d "${paths.hostInstallDir}"
 set PATH=${paths.hostInstallDir};%PATH%
 "${binaryPath}" --server --port=${port}
 `;
-
   const batchPath = path.join(paths.configDir, 'start-server.bat');
   await fs.writeFile(batchPath, batchScript);
 
   const vbsScript = `Set WshShell = CreateObject("WScript.Shell")
 WshShell.Run """${batchPath}""", 0, False
 Set WshShell = Nothing`;
-
   const vbsPath = path.join(paths.configDir, 'start-server.vbs');
   await fs.writeFile(vbsPath, vbsScript);
 
@@ -609,7 +650,6 @@ Set WshShell = Nothing`;
       windowsHide: true
     });
   }
-
   await new Promise(resolve => setTimeout(resolve, 5000));
 }
 
@@ -643,12 +683,9 @@ async function installMacOSService(port) {
 
   await execPromise(`sudo launchctl stop com.bloom.nucleus.host`).catch(() => {});
   await execPromise(`sudo launchctl unload ${plistPath}`).catch(() => {});
-  
   await fs.writeFile(plistPath, plistContent, { mode: 0o644 });
-  
   await execPromise(`sudo launchctl load ${plistPath}`);
   await execPromise(`sudo launchctl start com.bloom.nucleus.host`);
-  
   await new Promise(resolve => setTimeout(resolve, 5000));
 }
 
@@ -660,42 +697,29 @@ async function installLinuxService(port) {
   const serviceContent = `[Unit]
 Description=Bloom Nucleus Host Server
 After=network.target
-
 [Service]
 Type=simple
 ExecStart=${binaryPath} --server --port=${port}
 Restart=always
 RestartSec=10
-
 [Install]
 WantedBy=multi-user.target
 `;
 
   await execPromise(`sudo systemctl stop bloom-nucleus-host`).catch(() => {});
-  
   await fs.writeFile(servicePath, serviceContent, { mode: 0o644 });
-  
   await execPromise('sudo systemctl daemon-reload');
   await execPromise('sudo systemctl enable bloom-nucleus-host');
   await execPromise('sudo systemctl start bloom-nucleus-host');
-  
   await new Promise(resolve => setTimeout(resolve, 5000));
 }
 
 async function healthCheckService(port, timeout = 30000) {
   const startTime = Date.now();
-  const interval = 500;
-  
   while (Date.now() - startTime < timeout) {
-    const available = await checkPortAvailable(port);
-    
-    if (!available) {
-      return true;
-    }
-    
-    await new Promise(resolve => setTimeout(resolve, interval));
+    if (!(await checkPortAvailable(port))) return true;
+    await new Promise(resolve => setTimeout(resolve, 500));
   }
-  
   return false;
 }
 
@@ -709,19 +733,15 @@ async function generateNativeManifest(extensionId) {
     description: 'Bloom Bridge Host',
     path: hostPath.replace(/\\/g, '\\\\'),
     type: 'stdio',
-    allowed_origins: extensionId 
-      ? [`chrome-extension://${extensionId}/`]
-      : []
+    allowed_origins: extensionId ? [`chrome-extension://${extensionId}/`] : []
   };
 
   await fs.writeJson(manifestPath, manifest, { spaces: 2 });
-  
   return manifestPath;
 }
 
 async function registerNativeHost() {
   const manifestPath = path.join(paths.hostInstallDir, 'com.bloom.nucleus.bridge.json');
-  
   if (platform === 'win32') {
     await registerWindowsNativeHost(manifestPath);
   } else if (platform === 'darwin') {
@@ -734,7 +754,6 @@ async function registerNativeHost() {
 async function registerWindowsNativeHost(manifestPath) {
   const regKey = 'HKCU\\SOFTWARE\\Google\\Chrome\\NativeMessagingHosts\\com.bloom.nucleus.bridge';
   const escapedPath = manifestPath.replace(/\\/g, '\\\\');
-  
   try {
     const psCommand = `New-Item -Path "Registry::${regKey}" -Force | New-ItemProperty -Name "(Default)" -Value "${escapedPath}" -Force`;
     await execPromise(`powershell -Command "${psCommand}"`, { shell: 'powershell.exe' });
@@ -745,28 +764,14 @@ async function registerWindowsNativeHost(manifestPath) {
 }
 
 async function registerMacNativeHost(manifestPath) {
-  const nativeMessagingDir = path.join(
-    paths.home,
-    'Library',
-    'Application Support',
-    'Google',
-    'Chrome',
-    'NativeMessagingHosts'
-  );
-  
+  const nativeMessagingDir = path.join(paths.home, 'Library', 'Application Support', 'Google', 'Chrome', 'NativeMessagingHosts');
   await fs.ensureDir(nativeMessagingDir);
   const destPath = path.join(nativeMessagingDir, 'com.bloom.nucleus.bridge.json');
   await fs.copy(manifestPath, destPath);
 }
 
 async function registerLinuxNativeHost(manifestPath) {
-  const nativeMessagingDir = path.join(
-    paths.home,
-    '.config',
-    'google-chrome',
-    'NativeMessagingHosts'
-  );
-  
+  const nativeMessagingDir = path.join(paths.home, '.config', 'google-chrome', 'NativeMessagingHosts');
   await fs.ensureDir(nativeMessagingDir);
   const destPath = path.join(nativeMessagingDir, 'com.bloom.nucleus.bridge.json');
   await fs.copy(manifestPath, destPath);
@@ -774,38 +779,22 @@ async function registerLinuxNativeHost(manifestPath) {
 
 async function detectChromeProfiles() {
   const profiles = [];
-  
   try {
-    if (!await fs.pathExists(paths.chromeUserData)) {
-      return profiles;
-    }
-    
+    if (!await fs.pathExists(paths.chromeUserData)) return profiles;
     const items = await fs.readdir(paths.chromeUserData);
-    
     for (const item of items) {
       const itemPath = path.join(paths.chromeUserData, item);
       const stat = await fs.stat(itemPath);
-      
       if (stat.isDirectory()) {
         if (item === 'Default' || item.startsWith('Profile ')) {
           const prefsPath = path.join(itemPath, 'Preferences');
           if (await fs.pathExists(prefsPath)) {
             let profileName = item;
-            
             try {
               const prefs = await fs.readJson(prefsPath);
-              if (prefs.profile && prefs.profile.name) {
-                profileName = `${item} (${prefs.profile.name})`;
-              }
-            } catch (e) {
-              // Ignore
-            }
-            
-            profiles.push({
-              id: item,
-              name: profileName,
-              path: itemPath
-            });
+              if (prefs.profile && prefs.profile.name) profileName = `${item} (${prefs.profile.name})`;
+            } catch (e) {}
+            profiles.push({ id: item, name: profileName, path: itemPath });
           }
         }
       }
@@ -813,7 +802,6 @@ async function detectChromeProfiles() {
   } catch (error) {
     console.error('Error detecting profiles:', error);
   }
-  
   return profiles;
 }
 
@@ -824,27 +812,22 @@ async function saveServerState(state) {
 
 async function readServerState() {
   const statePath = path.join(paths.configDir, 'state', 'server.json');
-  try {
-    return await fs.readJson(statePath);
-  } catch {
-    return null;
-  }
+  try { return await fs.readJson(statePath); } catch { return null; }
 }
 
 async function saveConfig(config) {
   const configPath = path.join(paths.configDir, 'config', 'config.json');
-  
   const fullConfig = {
     version: '1.0.0',
     installedAt: new Date().toISOString(),
     platform,
     devMode: true,
     hostPath: path.join(paths.hostInstallDir, platform === 'win32' ? 'bloom-host.exe' : 'bloom-host'),
+    corePath: paths.coreInstallDir,
     extensionId: config.extensionId || null,
     profiles: config.profiles || [],
     extensionSource: paths.extensionSource
   };
-
   await fs.writeJson(configPath, fullConfig, { spaces: 2 });
 }
 

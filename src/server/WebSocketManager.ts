@@ -1,7 +1,9 @@
 import WebSocket, { WebSocketServer } from 'ws';
 import type { IncomingMessage } from 'http';
 import type { HostExecutor } from '../host/HostExecutor';
-import { EventEmitter } from 'events';  // AJUSTE: Importar EventEmitter para soportar eventos personalizados
+import { EventEmitter } from 'events';
+import * as vscode from 'vscode'; // Necesario para acceder al workspace
+import { CopilotNativeAdapter } from '../ai/adapters/CopilotNativeAdapter'; // <--- IMPORTAR
 
 // Extensión limpia de WebSocket para agregar isAlive
 interface ExtendedWebSocket extends WebSocket {
@@ -30,7 +32,7 @@ interface StatusResponse {
 /**
  * WebSocketManager - Transport layer para eventos bidireccionales
  */
-export class WebSocketManager extends EventEmitter {  // AJUSTE: Extender EventEmitter para agregar soporte a 'on' y 'emit'
+export class WebSocketManager extends EventEmitter {
   private static instance: WebSocketManager;
 
   private wss: WebSocketServer | null = null;
@@ -38,12 +40,14 @@ export class WebSocketManager extends EventEmitter {  // AJUSTE: Extender EventE
   private intentSubscribers: Set<ExtendedWebSocket> = new Set();
   private heartbeatInterval: NodeJS.Timeout | null = null;
   private attachedHost: HostExecutor | null = null;
+  private copilotAdapter: CopilotNativeAdapter; // <--- Instancia del Adapter
 
   private readonly PORT = 4124;
   private readonly HEARTBEAT_INTERVAL = 20000; // 20 segundos
 
   private constructor() {
-    super();  // AJUSTE: Llamar al super de EventEmitter
+    super();
+    this.copilotAdapter = new CopilotNativeAdapter(); // <--- Inicializar
   }
 
   static getInstance(): WebSocketManager {
@@ -176,6 +180,12 @@ export class WebSocketManager extends EventEmitter {  // AJUSTE: Extender EventE
         case 'open_intent':
           await this.handleOpenIntent(ws, message.data);
           break;
+        
+        // --- Chat con Copilot ---
+        case 'btip_chat_prompt':
+          await this.handleCopilotChat(ws, message.data);
+          break;
+        // --------------------------------------
 
         default:
           this.sendError(ws, `Evento desconocido: ${message.event}`);
@@ -185,6 +195,39 @@ export class WebSocketManager extends EventEmitter {  // AJUSTE: Extender EventE
       this.sendError(ws, err.message || 'Error interno');
     }
   }
+
+  // --- Lógica del Chat ---
+  private async handleCopilotChat(ws: ExtendedWebSocket, payload: any) {
+    const { intentId, text } = payload;
+    
+    // Obtener ruta del proyecto (asumiendo single root workspace por simplicidad)
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    if (!workspaceFolders || workspaceFolders.length === 0) {
+        this.sendError(ws, 'No hay un proyecto abierto en VS Code');
+        return;
+    }
+    const projectRoot = workspaceFolders[0].uri.fsPath;
+
+    // 1. Notificar inicio de stream
+    this.sendToClient(ws, 'chat_stream_start', { intentId, timestamp: Date.now() });
+
+    // 2. Ejecutar Copilot con Callback para Streaming
+    await this.copilotAdapter.streamResponse(
+        text,
+        intentId,
+        projectRoot,
+        (chunk) => {
+            this.sendToClient(ws, 'chat_stream_chunk', {
+                intentId,
+                chunk
+            });
+        }
+    );
+
+    // 3. Notificar fin
+    this.sendToClient(ws, 'chat_stream_end', { intentId, timestamp: Date.now() });
+  }
+  // -----------------------
 
   private async handleRequestStatus(ws: ExtendedWebSocket): Promise<void> {
     const status: StatusResponse = {
@@ -223,22 +266,6 @@ export class WebSocketManager extends EventEmitter {  // AJUSTE: Extender EventE
     this.sendToClient(ws, 'intent_opened', { id, timestamp: Date.now() });
   }
 
-  /**
-   * Nuevo evento: intents:created
-   * Payload: { id, name, uid, profileId, aiProvider, projectId, url }
-   * 
-   * Uso:
-   * this.wsManager.broadcast('intents:created', {
-   *   id: 'uuid',
-   *   name: 'fix-crash',
-   *   uid: 'a3x',
-   *   profileId: 'Profile 1',
-   *   aiProvider: 'claude',
-   *   projectId: null,
-   *   url: '/intents/fix-crash-a3x'
-   * });
-   */
-
   broadcast(event: string, payload?: any): void {
     const message = JSON.stringify({ event, data: payload });
     let sent = 0;
@@ -270,7 +297,6 @@ export class WebSocketManager extends EventEmitter {  // AJUSTE: Extender EventE
   attachHost(host: HostExecutor): void {
     this.attachedHost = host;
     console.log('[WebSocketManager] HostExecutor adjuntado');
-    // Aquí conectarás los eventos del host cuando los tenga
   }
 
   private startHeartbeat(): void {
