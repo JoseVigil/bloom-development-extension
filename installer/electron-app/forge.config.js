@@ -9,7 +9,8 @@ module.exports = {
     icon: path.join(__dirname, 'assets', 'electron'),
     extraResource: [
       path.join(__dirname, 'assets'),
-      path.join(__dirname, '..', 'native')
+      path.join(__dirname, '..', 'native'),
+      path.join(__dirname, '..', '..', 'core')
     ],
     ignore: (filePath) => {
       if (!filePath) return false;
@@ -26,7 +27,10 @@ module.exports = {
         /^\/\.gitignore/,
         /^\/\.env/,
         /^\/package-lock\.json/,
-        /^\/npm-debug\.log/
+        /^\/npm-debug\.log/,
+        /^\/__pycache__/,
+        /\.pyc$/,
+        /\.spec$/
       ];
       
       return ignorePatterns.some(pattern => pattern.test(filePath));
@@ -146,11 +150,8 @@ module.exports = {
       const chromeExtPath = path.join(__dirname, '..', 'chrome-extension');
       if (fs.existsSync(chromeExtPath)) {
         const destExtPath = path.join(resourcesPath, 'chrome-extension');
-        if (!fs.existsSync(destExtPath)) {
-          fs.mkdirSync(destExtPath, { recursive: true });
-          copyRecursive(chromeExtPath, destExtPath);
-          console.log('✓ Chrome extension copied');
-        }
+        fs.cpSync(chromeExtPath, destExtPath, { recursive: true });
+        console.log('✓ Chrome extension copied');
       }
       
       const configPath = path.join(__dirname, 'installer-config.json');

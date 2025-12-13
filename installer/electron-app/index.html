@@ -706,6 +706,16 @@
       document.getElementById('install-path').textContent = systemInfo.paths.hostInstallDir;
       document.getElementById('extension-path').textContent = systemInfo.paths.extensionSource;
       document.getElementById('config-path').textContent = systemInfo.paths.configDir + '\\config\\config.json';
+      
+      // Listener para feedback de apertura de BTIP Config
+      window.api.onServerStatus((data) => {
+        // Puedes usar esto para mostrar un toast o actualizar el texto de un botón
+        console.log('Server Status:', data);
+        if(data.status === 'checking') {
+          const btn = document.getElementById('open-onboarding-btn');
+          if(btn) btn.textContent = 'Verificando...';
+        }
+      });
     }
 
     // ========================================================================
