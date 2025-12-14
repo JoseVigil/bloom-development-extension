@@ -2,23 +2,41 @@ import sys
 import os
 from pathlib import Path
 from typing import List, Optional
-import typer
 
-# --- BOOTSTRAP: VENDORING DE LIBS ---
+# --- BLOOM NUCLEUS BOOTSTRAP -------------------------------------------------
+# Garantizar que las librerías vendored (./libs) tengan prioridad absoluta.
+# Esto permite la ejecución offline sin que el usuario haga 'pip install'.
 current_dir = os.path.dirname(os.path.abspath(__file__))
 libs_dir = os.path.join(current_dir, 'libs')
-if libs_dir not in sys.path:
-    sys.path.insert(0, libs_dir)
-# ------------------------------------
 
+if os.path.exists(libs_dir) and libs_dir not in sys.path:
+    # Insertar en índice 0 para forzar el uso de nuestras versiones probadas
+    sys.path.insert(0, libs_dir)
+# -----------------------------------------------------------------------------
+
+# IMPORTS
+import typer
+import asyncio
+
+# Módulos internos
 from core.filesystem.tree_manager import TreeManager
 from core.filesystem.files_compressor import FilesCompressor
 from core.filesystem.files_extractor import FilesExtractor
 from core.generators.nucleus_generator import NucleusGenerator
+from core.generators.context_strategy import ContextStrategyManager
 
-app = typer.Typer(name="bloom-cli", help="Bloom Cognitive Core CLI")
+# Inicialización de la aplicación CLI
+app = typer.Typer(
+    name="bloom-cli",
+    help="Bloom Cognitive Core CLI - Sistema de análisis y gestión de proyectos",
+    no_args_is_help=True
+)
 
-# --- COMANDO: TREE ---
+
+# =============================================================================
+# COMANDOS DE DIAGNÓSTICO Y VISUALIZACIÓN
+# =============================================================================
+
 @app.command()
 def tree(
     output: Path = typer.Option(..., "--out", "-o", help="Archivo de destino"),
@@ -28,10 +46,17 @@ def tree(
     json: bool = typer.Option(False, "--json", help="Exportar JSON metadata")
 ):
     """
-    Genera el mapa del proyecto.
+    Genera el mapa visual y técnico del proyecto.
+    
+    Ejemplo:
+        bloom tree --out project-tree.txt --hash
+        bloom tree --out tree.txt --root ./src --json
     """
     if output.is_dir():
-        typer.secho(f"❌ Error: El destino '{output}' es un directorio. Indica un archivo.", fg=typer.colors.RED)
+        typer.secho(
+            f"❌ Error: El destino '{output}' es un directorio. Indica un archivo.",
+            fg=typer.colors.RED
+        )
         raise typer.Exit(code=1)
 
     manager = TreeManager(root_path=root)
@@ -46,12 +71,15 @@ def tree(
             use_json=json
         )
         typer.secho(f"✅ Árbol generado en: {output}", fg=typer.colors.GREEN)
-
     except Exception as e:
         typer.secho(f"❌ Error crítico: {e}", fg=typer.colors.RED)
         raise typer.Exit(code=1)
 
-# --- COMANDO: COMPRESS ---
+
+# =============================================================================
+# COMANDOS DE I/O (COMPRESIÓN / EXTRACCIÓN)
+# =============================================================================
+
 @app.command()
 def compress(
     mode: str = typer.Option(..., "--mode", "-m", help="codebase | docbase"),
@@ -61,18 +89,16 @@ def compress(
     no_comments: bool = typer.Option(False, "--no-comments", help="Remover comentarios")
 ):
     """
-    Comprime archivos usando el FilesCompressor v2.1.
+    Empaqueta código/docs usando Protocolo v2.1 (Gzip+Base64).
+    
+    Ejemplo:
+        bloom compress --mode codebase --input ./src --output ./dist
+        bloom compress --mode docbase --input ./docs --no-comments
     """
     try:
-        # Parsear exclusiones
         exclude_patterns = [p.strip() for p in exclude.split(',')] if exclude else None
+        compressor = FilesCompressor(mode=mode, preserve_comments=not no_comments)
         
-        compressor = FilesCompressor(
-            mode=mode,
-            preserve_comments=not no_comments
-        )
-        
-        # Convertir Path a str si existe, para compatibilidad con el script legacy
         output_str = str(output) if output else None
 
         json_path, index_path = compressor.compress_paths(
@@ -88,7 +114,7 @@ def compress(
         typer.secho(f"❌ Error: {e}", fg=typer.colors.RED)
         raise typer.Exit(1)
 
-# --- COMANDO: EXTRACT ---
+
 @app.command()
 def extract(
     input: Path = typer.Option(..., "--input", "-i", help="Archivo JSON (.codebase.json)"),
@@ -97,7 +123,11 @@ def extract(
     no_verify: bool = typer.Option(False, "--no-verify", help="Saltar verificación de hash")
 ):
     """
-    Descomprime archivos usando FilesExtractor.
+    Descomprime archivos usando el FilesExtractor.
+    
+    Ejemplo:
+        bloom extract --input project.codebase.json --output ./restored
+        bloom extract --input backup.json --file "src/main.py"
     """
     try:
         extractor = FilesExtractor(verify_hashes=not no_verify)
@@ -113,42 +143,125 @@ def extract(
         typer.secho(f"❌ Error: {e}", fg=typer.colors.RED)
         raise typer.Exit(1)
 
-# --- STUBS ORQUESTADOR ---
-@app.command()
-def run(intent_id: str, phase: str):
-    """Stub para ejecución de intent."""
-    typer.echo(f"🚀 Running {intent_id} in {phase}")
 
-@app.command()
-def hydrate(intent_id: str):
-    """Stub para hidratación."""
-    typer.echo(f"💧 Hydrating {intent_id}")
-
-if __name__ == "__main__":
-    app()
-
+# =============================================================================
+# COMANDOS DE GENERACIÓN Y ANÁLISIS
+# =============================================================================
 
 @app.command()
 def init_nucleus(
     org: str = typer.Option(..., help="Nombre de la organización"),
-    url: str = typer.Option("", help="URL de la organización (GitHub/Web)"),
-    root: Path = typer.Option(Path("."), "--root", "-r", help="Raíz del proyecto Nucleus"),
+    url: str = typer.Option("", help="URL de la organización"),
+    root: Path = typer.Option(Path("."), "--root", "-r", help="Raíz del proyecto"),
     output: Path = typer.Option(Path(".bloom"), "--output", "-o", help="Carpeta de salida")
 ):
     """
-    Inicializa la estructura .bloom para un proyecto Nucleus (Organizacional).
+    Inicializa la estructura .bloom para un proyecto Nucleus.
+    
+    Ejemplo:
+        bloom init-nucleus --org "Mi Empresa" --url "https://empresa.com"
+        bloom init-nucleus --org "StartupXYZ" --root ./monorepo
     """
     generator = NucleusGenerator(root)
-    
-    typer.secho(f"🚀 Inicializando Nucleus: {org}", fg=typer.colors.BLUE)
+    typer.secho(f"🚀 Inicializando Nucleus: {org}", fg=typer.colors.BLUE, bold=True)
     
     try:
         project_count = generator.generate(org, url, output)
-        
         typer.secho(f"✅ Nucleus generado en: {output}", fg=typer.colors.GREEN)
-        typer.echo(f"   🏢 Organización: {org}")
         typer.echo(f"   🔗 Proyectos vinculados: {project_count}")
-        
     except Exception as e:
         typer.secho(f"❌ Error: {e}", fg=typer.colors.RED)
         raise typer.Exit(1)
+
+
+@app.command()
+def analyze(
+    root: Path = typer.Option(Path("."), "--root", "-r", help="Raíz del proyecto"),
+    output: Path = typer.Option(
+        Path(".project/.doc.app.architecture.bl"),
+        "--output", "-o",
+        help="Archivo de destino"
+    )
+):
+    """
+    [GENESIS PHASE 2] Discovery: Ejecuta el análisis técnico automático (Multi-Stack).
+    Genera la 'Verdad Técnica' basada en los archivos del repositorio.
+    """
+    manager = ContextStrategyManager(root)
+    
+    typer.secho(
+        f"🔍 [Genesis: Discovery] Iniciando análisis en: {root.resolve()}",
+        fg=typer.colors.BLUE
+    )
+    
+    try:
+        success = manager.execute_analysis(output)
+        
+        if success:
+            typer.secho(
+                f"✅ Análisis completado. Arquitectura generada en: {output}",
+                fg=typer.colors.GREEN
+            )
+        else:
+            typer.secho(
+                "⚠️  No se detectaron stacks tecnológicos conocidos.",
+                fg=typer.colors.YELLOW
+            )
+            
+    except Exception as e:
+        typer.secho(f"❌ Error durante el análisis: {e}", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
+
+# =============================================================================
+# COMANDOS DEL ORQUESTADOR (STUBS - En Desarrollo)
+# =============================================================================
+
+@app.command()
+def run(
+    intent_id: str = typer.Option(..., help="UUID del Intent"),
+    phase: str = typer.Option(..., help="Fase: briefing | execution | refinement"),
+    root: Path = typer.Option(Path("."), "--root", "-r", help="Raíz del proyecto")
+):
+    """
+    Ejecuta un ciclo cognitivo completo (En Desarrollo).
+    
+    NOTA: Este comando está en fase de implementación.
+    
+    Ejemplo:
+        bloom run --intent-id abc-123 --phase briefing
+    """
+    typer.secho(
+        f"🚀 [EN DESARROLLO] Ejecutando Engine para Intent: {intent_id}",
+        fg=typer.colors.YELLOW
+    )
+    typer.echo(f"   Fase: {phase}")
+    typer.echo(f"   Root: {root}")
+    typer.echo("\n⚠️  Esta funcionalidad estará disponible próximamente.")
+
+
+@app.command()
+def hydrate(
+    intent_id: str = typer.Option(..., help="UUID del Intent a hidratar")
+):
+    """
+    Genera payload de contexto sin llamar a AI (En Desarrollo).
+    
+    NOTA: Este comando está en fase de implementación.
+    
+    Ejemplo:
+        bloom hydrate --intent-id abc-123
+    """
+    typer.secho(
+        f"💧 [EN DESARROLLO] Hydrating Intent: {intent_id}",
+        fg=typer.colors.YELLOW
+    )
+    typer.echo("\n⚠️  Esta funcionalidad estará disponible próximamente.")
+
+
+# =============================================================================
+# PUNTO DE ENTRADA
+# =============================================================================
+
+if __name__ == "__main__":
+    app()
