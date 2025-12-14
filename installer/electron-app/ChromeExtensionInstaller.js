@@ -140,119 +140,53 @@ class ChromeExtensionInstaller {
 
   // Modificar este método
   async applyWindowsPolicy(id, crxPath) {
-    console.log(`[Registry] Registrando ID: ${id}`);
-    
-    // NO convertir a file:// para External Extensions
-    const normalPath = crxPath; // Dejar como C:\Program Files\...
-    const fileUrl = 'file:///' + crxPath.split(path.sep).join('/'); // Solo para Forcelist
-    
-    const tempScriptPath = path.join(require('os').tmpdir(), `bloom-registry-${Date.now()}.ps1`);
-    
-    const psScript = `
-    # Bloom Nucleus - Extension Installer (HKCU Strategy)
-    $ErrorActionPreference = 'Stop'
-
-    $ExtId = "${id}"
-    $CrxPath = "${normalPath}"
-    $CrxUrl = "${fileUrl}"
-
-    Write-Host "=== BLOOM REGISTRY INSTALLER ==="
-    Write-Host "Extension ID: $ExtId"
-    Write-Host "CRX Path: $CrxPath"
-    Write-Host "CRX URL: $CrxUrl"
-    Write-Host ""
-
-    # ========================================================================
-    # ESCRIBIR EN HKCU (Current User - Chrome puede leer sin admin)
-    # ========================================================================
-
-    $PolicyPath = "HKCU:\\Software\\Policies\\Google\\Chrome"
-    $ForcelistKey = "$PolicyPath\\ExtensionInstallForcelist"
-
-    Write-Host "[1/4] Configurando Forcelist (HKCU)..."
-    if (!(Test-Path $ForcelistKey)) { 
-        New-Item -Path $ForcelistKey -Force | Out-Null 
-    }
-    New-ItemProperty -Path $ForcelistKey -Name "1" -Value "$ExtId;$CrxUrl" -PropertyType String -Force | Out-Null
-    Write-Host "  OK - Forcelist creado (usa file:// URL)"
-
-    Write-Host "[2/4] Configurando ExtensionSettings (HKCU)..."
-    $SettingsKey = "$PolicyPath\\ExtensionSettings"
-    if (!(Test-Path $SettingsKey)) { 
-        New-Item -Path $SettingsKey -Force | Out-Null 
-    }
-
-    $ExtSettingsKey = "$SettingsKey\\$ExtId"
-    if (!(Test-Path $ExtSettingsKey)) { 
-        New-Item -Path $ExtSettingsKey -Force | Out-Null 
-    }
-
-    New-ItemProperty -Path $ExtSettingsKey -Name "installation_mode" -Value "force_installed" -PropertyType String -Force | Out-Null
-    New-ItemProperty -Path $ExtSettingsKey -Name "update_url" -Value "$CrxUrl" -PropertyType String -Force | Out-Null
-    Write-Host "  OK - ExtensionSettings creado"
-
-    Write-Host "[3/4] Configurando External Extensions (HKCU)..."
-    $ExtPath = "HKCU:\\Software\\Google\\Chrome\\Extensions\\$ExtId"
-    if (!(Test-Path $ExtPath)) { 
-        New-Item -Path $ExtPath -Force | Out-Null 
-    }
-
-    # CRITICO: Usar "path" en lugar de "external_crx" para External Extensions
-    New-ItemProperty -Path $ExtPath -Name "path" -Value "$CrxPath" -PropertyType String -Force | Out-Null
-    New-ItemProperty -Path $ExtPath -Name "version" -Value "1.0.0" -PropertyType String -Force | Out-Null
-    Write-Host "  OK - External Extensions creado (usa path nativo)"
-
-    Write-Host "[4/4] Configurando Allowlist (HKCU)..."
-    $AllowlistKey = "$PolicyPath\\ExtensionInstallAllowlist"
-    if (!(Test-Path $AllowlistKey)) { 
-        New-Item -Path $AllowlistKey -Force | Out-Null 
-    }
-    New-ItemProperty -Path $AllowlistKey -Name "1" -Value "$ExtId" -PropertyType String -Force | Out-Null
-    Write-Host "  OK - Allowlist creado"
-
-    Write-Host ""
-    Write-Host "========================================="
-    Write-Host "REGISTRO COMPLETADO EN HKCU"
-    Write-Host "Forcelist: file:// URL"
-    Write-Host "External: path nativo Windows"
-    Write-Host "========================================="
-    `;
-
-        try {
-            await require('fs-extra').writeFile(tempScriptPath, psScript, 'utf8');
-            console.log(`[Registry] Script: ${tempScriptPath}`);
-            
-            const { stdout, stderr } = await execPromise(
-                `powershell -ExecutionPolicy Bypass -File "${tempScriptPath}"`,
-                { timeout: 15000 }
-            );
-            
-            console.log("[Registry] === SALIDA ===");
-            console.log(stdout);
-            
-            if (stderr) {
-                console.warn("[Registry] Warnings:", stderr);
-            }
-            
-            await require('fs-extra').unlink(tempScriptPath).catch(() => {});
-            
-            const verifyCmd = `powershell -Command "Test-Path 'HKCU:\\Software\\Policies\\Google\\Chrome\\ExtensionInstallForcelist'"`;
-            const { stdout: result } = await execPromise(verifyCmd);
-            
-            if (result.trim() !== 'True') {
-                throw new Error('No se pudo crear Forcelist en HKCU');
-            }
-            
-            console.log("[Registry] ✅ Claves creadas en HKCU");
-            
-        } catch (e) {
-            console.error("[Registry] ❌ Error:", e);
-            try { 
-                await require('fs-extra').unlink(tempScriptPath); 
-            } catch {}
-            throw new Error(`Falló registro: ${e.message}`);
-        }
-    }
+      console.log(`[Registry] Registrando ID: ${id}`);
+      console.log(`[Registry] CRX Path: ${crxPath}`);
+      
+      // Path del script externo
+      const scriptPath = path.join(__dirname, 'registry-scripts', 'hkcu.ps1');
+      
+      // Verificar que el script existe
+      if (!await fs.pathExists(scriptPath)) {
+          throw new Error(`Script no encontrado: ${scriptPath}`);
+      }
+      
+      // Verificar que el CRX existe
+      if (!await fs.pathExists(crxPath)) {
+          throw new Error(`CRX no encontrado: ${crxPath}`);
+      }
+      
+      try {
+          console.log(`[Registry] Ejecutando: ${scriptPath}`);
+          
+          // Ejecutar script externo con parámetros
+          const { stdout, stderr } = await execPromise(
+              `powershell -ExecutionPolicy Bypass -File "${scriptPath}" -ExtId "${id}" -CrxPath "${crxPath}"`,
+              { timeout: 20000 }
+          );
+          
+          console.log("[Registry] === SALIDA ===");
+          console.log(stdout);
+          
+          if (stderr) {
+              console.warn("[Registry] Warnings:", stderr);
+          }
+          
+          // Verificar que se creó la clave principal
+          const verifyCmd = `powershell -Command "Test-Path 'HKCU:\\Software\\Policies\\Google\\Chrome\\ExtensionInstallForcelist'"`;
+          const { stdout: result } = await execPromise(verifyCmd);
+          
+          if (result.trim() !== 'True') {
+              throw new Error('Forcelist no se creó en HKCU');
+          }
+          
+          console.log("[Registry] ✅ Verificación exitosa");
+          
+      } catch (e) {
+          console.error("[Registry] ❌ Error:", e);
+          throw new Error(`Falló registro: ${e.message}`);
+      }
+  }
   
   async applyMacPolicy(id, crxPath) {
     const destDir = path.join(os.homedir(), "Library/Application Support/Google/Chrome/External Extensions");
