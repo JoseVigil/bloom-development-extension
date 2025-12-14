@@ -3,436 +3,97 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- CSP Corregido para evitar warning y permitir scripts locales -->
   <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' http://localhost:* ws://localhost:*;">
   <title>Bloom Nucleus Installer</title>
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
+    /* ESTILOS BASE */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      height: 100%;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      width: 100%; height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: #333;
-      overflow: hidden;
+      color: #333; overflow: hidden;
     }
-
-    .container {
-      width: 100vw;
-      height: 100vh;
-      display: flex;
-      flex-direction: column;
-    }
-
+    .container { width: 100vw; height: 100vh; display: flex; flex-direction: column; }
+    
+    /* PANTALLAS */
     .screen {
-      display: none;
-      flex: 1;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      padding: 40px;
+      display: none; flex: 1; flex-direction: column;
+      justify-content: center; align-items: center; padding: 40px;
       animation: fadeIn 0.3s ease-in;
     }
+    .screen.active { display: flex; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 
-    .screen.active {
-      display: flex;
-    }
-
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(20px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
+    /* TARJETAS */
     .card {
-      background: white;
-      border-radius: 20px;
-      padding: 40px;
+      background: white; border-radius: 20px; padding: 40px;
       box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-      max-width: 700px;
-      width: 100%;
-      max-height: 85vh;
-      overflow-y: auto;
+      max-width: 700px; width: 100%; max-height: 85vh; overflow-y: auto;
     }
-
-    .card::-webkit-scrollbar {
-      width: 8px;
-    }
-
-    .card::-webkit-scrollbar-track {
-      background: #f1f1f1;
-      border-radius: 10px;
-    }
-
-    .card::-webkit-scrollbar-thumb {
-      background: #667eea;
-      border-radius: 10px;
-    }
-
+    
+    /* COMPONENTES UI */
     .logo {
-      width: 80px;
-      height: 80px;
-      margin: 0 auto 20px;
+      width: 80px; height: 80px; margin: 0 auto 20px;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      border-radius: 20px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 40px;
-      color: white;
-      font-weight: bold;
+      border-radius: 20px; display: flex; align-items: center; justify-content: center;
+      font-size: 40px; color: white; font-weight: bold;
     }
-
-    h1 {
-      font-size: 28px;
-      margin-bottom: 15px;
-      color: #2d3748;
-      text-align: center;
-    }
-
-    h2 {
-      font-size: 20px;
-      margin: 25px 0 15px 0;
-      color: #4a5568;
-    }
-
-    p {
-      color: #718096;
-      line-height: 1.6;
-      margin-bottom: 20px;
-    }
-
-    .info-box {
-      background: #f7fafc;
-      border-left: 4px solid #667eea;
-      padding: 15px;
-      margin: 15px 0;
-      border-radius: 5px;
-    }
-
-    .info-box strong {
-      color: #4a5568;
-      display: block;
-      margin-bottom: 5px;
-    }
-
-    .info-box code {
-      background: #e2e8f0;
-      padding: 2px 6px;
-      border-radius: 3px;
-      font-size: 13px;
-      color: #2d3748;
-      word-break: break-all;
-    }
-
-    .success-box {
-      background: #f0fff4;
-      border-left: 4px solid #48bb78;
-      padding: 15px;
-      margin: 15px 0;
-      border-radius: 5px;
-    }
-
-    .success-box strong {
-      color: #22543d;
-      display: block;
-      margin-bottom: 5px;
-    }
-
-    .steps {
-      background: #f7fafc;
-      border-radius: 10px;
-      padding: 20px;
-      margin: 20px 0;
-    }
-
-    .steps ol {
-      padding-left: 25px;
-      margin: 0;
-    }
-
-    .steps li {
-      margin: 12px 0;
-      color: #4a5568;
-      line-height: 1.6;
-    }
-
-    .steps li code {
-      background: #e2e8f0;
-      padding: 2px 6px;
-      border-radius: 3px;
-      font-size: 13px;
-    }
-
+    h1 { font-size: 28px; margin-bottom: 15px; color: #2d3748; text-align: center; }
+    p { color: #718096; line-height: 1.6; margin-bottom: 20px; }
+    
+    .info-box { background: #f7fafc; border-left: 4px solid #667eea; padding: 15px; margin: 15px 0; border-radius: 5px; }
+    .warning-box { background: #fffaf0; border-left: 4px solid #ed8936; padding: 15px; margin: 15px 0; border-radius: 5px; color: #744210; }
+    .success-box { background: #f0fff4; border-left: 4px solid #48bb78; padding: 15px; margin: 15px 0; border-radius: 5px; }
+    
+    code { background: #e2e8f0; padding: 2px 6px; border-radius: 3px; font-size: 13px; color: #2d3748; word-break: break-all; }
+    
+    /* BOTONES */
     .button {
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      border: none;
-      padding: 14px 35px;
-      border-radius: 10px;
-      font-size: 15px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: transform 0.2s, box-shadow 0.2s;
-      margin: 10px 5px;
+      color: white; border: none; padding: 14px 35px; border-radius: 10px;
+      font-size: 15px; font-weight: 600; cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s; margin: 10px 5px;
     }
+    .button:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4); }
+    .button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; background: #cbd5e0; }
+    .button-secondary { background: #e2e8f0; color: #4a5568; }
+    .button-group { display: flex; gap: 10px; justify-content: center; margin-top: 25px; flex-wrap: wrap; }
 
-    .button:hover:not(:disabled) {
-      transform: translateY(-2px);
-      box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
-    }
-
-    .button:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-      transform: none;
-    }
-
-    .button-secondary {
-      background: #e2e8f0;
-      color: #4a5568;
-    }
-
-    .button-secondary:hover:not(:disabled) {
-      background: #cbd5e0;
-      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-    }
-
-    .button-group {
-      display: flex;
-      gap: 10px;
-      justify-content: center;
-      margin-top: 25px;
-      flex-wrap: wrap;
-    }
-
-    .input-group {
-      margin: 25px 0;
-    }
-
-    .input-group label {
-      display: block;
-      margin-bottom: 8px;
-      color: #4a5568;
-      font-weight: 600;
-    }
-
-    .input-group input[type="text"] {
-      width: 100%;
-      padding: 12px;
-      border: 2px solid #e2e8f0;
-      border-radius: 8px;
-      font-size: 14px;
-      font-family: monospace;
-      transition: border-color 0.2s;
-    }
-
-    .input-group input[type="text"]:focus {
-      outline: none;
-      border-color: #667eea;
-    }
-
-    .input-group input[type="text"].invalid {
-      border-color: #f56565;
-    }
-
-    .input-group .hint {
-      font-size: 12px;
-      color: #a0aec0;
-      margin-top: 5px;
-    }
-
-    .input-group .error {
-      font-size: 12px;
-      color: #f56565;
-      margin-top: 5px;
-    }
-
-    .progress-container {
-      width: 100%;
-      margin: 30px 0;
-    }
-
-    .progress-bar {
-      width: 100%;
-      height: 8px;
-      background: #e2e8f0;
-      border-radius: 10px;
-      overflow: hidden;
-      margin-bottom: 15px;
-    }
-
-    .progress-fill {
-      height: 100%;
-      background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-      transition: width 0.3s ease;
-      width: 0%;
-    }
-
-    .progress-text {
-      color: #4a5568;
-      font-size: 14px;
-      text-align: center;
-    }
-
+    /* PROGRESO Y SPINNERS */
+    .progress-container { width: 100%; margin: 30px 0; }
+    .progress-bar { width: 100%; height: 8px; background: #e2e8f0; border-radius: 10px; overflow: hidden; margin-bottom: 15px; }
+    .progress-fill { height: 100%; background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); transition: width 0.3s ease; width: 0%; }
+    .progress-text { color: #4a5568; font-size: 14px; text-align: center; }
+    
     .spinner {
-      width: 40px;
-      height: 40px;
-      border: 4px solid #e2e8f0;
-      border-top-color: #667eea;
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-      margin: 20px auto;
+      width: 40px; height: 40px; border: 4px solid #e2e8f0;
+      border-top-color: #667eea; border-radius: 50%;
+      animation: spin 0.8s linear infinite; margin: 20px auto;
     }
+    @keyframes spin { to { transform: rotate(360deg); } }
 
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-
+    /* STATUS ICONS */
     .success-icon, .error-icon {
-      width: 70px;
-      height: 70px;
-      margin: 0 auto 25px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 40px;
-      color: white;
+      width: 70px; height: 70px; margin: 0 auto 25px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 40px; color: white;
     }
+    .success-icon { background: #48bb78; }
+    .error-icon { background: #f56565; }
 
-    .success-icon {
-      background: #48bb78;
-    }
+    /* PROFILE LIST */
+    .profile-list { margin: 20px 0; max-height: 200px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; }
+    .profile-item { padding: 12px 15px; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; }
+    .profile-item:hover { background: #f7fafc; }
+    .profile-item input[type="checkbox"] { width: 18px; height: 18px; margin-right: 12px; cursor: pointer; }
 
-    .error-icon {
-      background: #f56565;
-    }
-
-    .profile-list {
-      margin: 20px 0;
-      max-height: 200px;
-      overflow-y: auto;
-      border: 1px solid #e2e8f0;
-      border-radius: 8px;
-    }
-
-    .profile-item {
-      padding: 12px 15px;
-      border-bottom: 1px solid #e2e8f0;
-      display: flex;
-      align-items: center;
-      transition: background 0.2s;
-    }
-
-    .profile-item:last-child {
-      border-bottom: none;
-    }
-
-    .profile-item:hover {
-      background: #f7fafc;
-    }
-
-    .profile-item input[type="checkbox"] {
-      width: 18px;
-      height: 18px;
-      margin-right: 12px;
-      cursor: pointer;
-    }
-
-    .profile-item label {
-      cursor: pointer;
-      color: #4a5568;
-      flex: 1;
-    }
-
-    .text-center {
-      text-align: center;
-    }
-
-    .warning-box {
-      background: #fffaf0;
-      border-left: 4px solid #ed8936;
-      padding: 15px;
-      margin: 15px 0;
-      border-radius: 5px;
-      color: #744210;
-    }
-
-    .clickable-path {
-      cursor: pointer;
-      color: #667eea;
-      text-decoration: underline;
-      font-family: monospace;
-      font-size: 13px;
-    }
-
-    .clickable-path:hover {
-      color: #764ba2;
-    }
-
-    .status-indicator {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 8px 15px;
-      border-radius: 20px;
-      font-size: 14px;
-      font-weight: 600;
-      margin: 10px 0;
-    }
-
-    .status-indicator.running {
-      background: #f0fff4;
-      color: #22543d;
-    }
-
-    .status-indicator.stopped {
-      background: #fff5f5;
-      color: #742a2a;
-    }
-
-    .status-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      animation: pulse 2s infinite;
-    }
-
-    .status-dot.green {
-      background: #48bb78;
-    }
-
-    .status-dot.red {
-      background: #f56565;
-    }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
-    }
-
-    .error-state {
-      text-align: center;
-      padding: 40px 20px;
-    }
-
-    .error-state h2 {
-      color: #f56565;
-      margin-bottom: 20px;
-    }
-
-    .error-state code {
-      background: #e2e8f0;
-      padding: 2px 6px;
-      border-radius: 3px;
-      font-size: 13px;
-    }
+    /* ANIMACIONES HANDSHAKE */
+    .status-dot { width: 20px; height: 20px; border-radius: 50%; margin: 0 auto; transition: background 0.3s; }
+    .status-dot.red { background: #f56565; box-shadow: 0 0 10px #f56565; }
+    .status-dot.green { background: #48bb78; box-shadow: 0 0 10px #48bb78; }
+    .text-center { text-align: center; }
   </style>
 </head>
 <body>
@@ -444,26 +105,22 @@
         <div class="logo">B</div>
         <h1>Bloom Nucleus Installer</h1>
         <p class="text-center">
-          Este instalador configurará el sistema completo de Bloom Nucleus en tu máquina,
-          incluyendo el servicio de background y la integración con Chrome.
+          Este instalador configurará el sistema completo de Bloom Nucleus en tu máquina:
+          Servicio de Background, Motor Python y Extensión de Chrome.
         </p>
         
         <div class="info-box">
-          <strong>Modo de desarrollo</strong>
-          En este modo, la extensión de Chrome se instalará manualmente desde el repositorio local.
-        </div>
-
-        <div class="info-box">
-          <strong>El host se instalará en:</strong>
+          <strong>Ubicación de instalación:</strong>
           <code id="install-path">Cargando...</code>
         </div>
 
         <div class="warning-box">
-          ⚠️ Este instalador requiere privilegios de administrador para instalar el servicio de sistema.
+          ⚠️ Requiere permisos de administrador.
         </div>
 
         <div class="button-group">
-          <button class="button" id="start-button">Comenzar Instalación</button>
+          <!-- Disabled by default until init() completes -->
+          <button class="button" id="start-button" disabled>Cargando sistema...</button>
         </div>
       </div>
     </div>
@@ -478,7 +135,7 @@
           <div class="progress-bar">
             <div class="progress-fill" id="progress-fill"></div>
           </div>
-          <div class="progress-text" id="progress-text">Preparando instalación...</div>
+          <div class="progress-text" id="progress-text">Iniciando...</div>
         </div>
         <div class="spinner"></div>
       </div>
@@ -489,13 +146,7 @@
       <div class="card">
         <div class="logo">B</div>
         <h1>Configurando Servicio</h1>
-        <p class="text-center">Instalando y configurando el servicio de background de Bloom Nucleus...</p>
-
-        <div class="info-box">
-          <strong>¿Qué es el servicio?</strong>
-          El servicio corre permanentemente en segundo plano, permitiendo que VSCode se conecte en cualquier momento para ejecutar comandos y análisis de código.
-        </div>
-
+        
         <div id="service-status-container" style="text-align: center;">
           <div class="spinner"></div>
           <p id="service-status-text" style="margin-top: 20px; color: #4a5568;">Instalando servicio...</p>
@@ -504,11 +155,9 @@
         <div id="service-result" style="display: none;">
           <div class="success-box">
             <strong>✓ Servicio instalado correctamente</strong>
-            Puerto detectado: <code id="detected-port">5678</code>
+            Puerto: <code id="detected-port">5678</code>
           </div>
-
           <div class="button-group">
-            <button class="button button-secondary" id="view-logs-btn">Ver Logs</button>
             <button class="button" id="continue-from-service-btn">Continuar</button>
           </div>
         </div>
@@ -518,7 +167,6 @@
             <strong>⚠️ Error al instalar el servicio</strong>
             <p id="service-error-text"></p>
           </div>
-
           <div class="button-group">
             <button class="button button-secondary" id="retry-service-btn">Reintentar</button>
             <button class="button" id="skip-service-btn">Continuar sin servicio</button>
@@ -527,143 +175,102 @@
       </div>
     </div>
 
-    <!-- 4. EXTENSION SETUP SCREEN -->
-    <div class="screen" id="extension-setup-screen">
-      <div class="card">
-        <div class="logo">B</div>
-        <h1>Instalación de la Extensión</h1>
-        <p>El host nativo y servicio han sido configurados. Ahora necesitas instalar la extensión de Chrome manualmente.</p>
-
-        <div class="info-box">
-          <strong>La extensión está ubicada en:</strong>
-          <code class="clickable-path" id="extension-path" onclick="window.api.openFolder(this.textContent)">Cargando...</code>
-        </div>
-
-        <h2>Pasos para instalar la extensión:</h2>
-        <div class="steps">
-          <ol>
-            <li>Abrí Chrome</li>
-            <li>Navegá a <code>chrome://extensions</code></li>
-            <li>Activá <strong>"Modo desarrollador"</strong> arriba a la derecha</li>
-            <li>Hacé clic en <strong>"Cargar desempaquetada"</strong></li>
-            <li>Seleccioná la carpeta de la extensión mostrada arriba</li>
-          </ol>
-        </div>
-
-        <div class="warning-box">
-          ⚠️ No cierres este instalador hasta completar todos los pasos
-        </div>
-
-        <div class="button-group">
-          <button class="button button-secondary" id="open-chrome-btn">Abrir chrome://extensions</button>
-          <button class="button" id="extension-installed-btn">Ya instalé la extensión</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- 5. EXTENSION ID SCREEN -->
-    <div class="screen" id="extension-id-screen">
-      <div class="card">
-        <div class="logo">B</div>
-        <h1>Vinculación de la Extensión</h1>
-        <p>Para que el host nativo pueda comunicarse con la extensión, necesitamos su Extension ID.</p>
-
-        <div class="info-box">
-          <strong>¿Dónde encontrar el Extension ID?</strong>
-          En <code>chrome://extensions</code>, el ID aparece debajo del nombre de la extensión cuando el "Modo desarrollador" está activado.
-        </div>
-
-        <div class="input-group">
-          <label for="extension-id-input">Extension ID:</label>
-          <input 
-            type="text" 
-            id="extension-id-input" 
-            placeholder="kalbnicbomhpdljbnkfhmjnibfjeninc"
-            maxlength="32"
-          >
-          <div class="hint">32 caracteres en minúsculas (ejemplo: kalbnicbomhpdljbnkfhmjnibfjeninc)</div>
-          <div class="error" id="extension-id-error" style="display: none;"></div>
-        </div>
-
-        <div class="button-group">
-          <button class="button button-secondary" id="back-to-extension-btn">Volver</button>
-          <button class="button" id="validate-id-btn" disabled>Continuar</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- 6. CHROME PROFILES SCREEN -->
+    <!-- 4. PROFILE SELECTION SCREEN -->
     <div class="screen" id="profiles-screen">
       <div class="card">
         <div class="logo">B</div>
-        <h1>Perfiles de Chrome</h1>
-        <p>Seleccioná los perfiles de Chrome donde usarás la extensión.</p>
+        <h1>Integración con Chrome</h1>
+        <p>Selecciona los perfiles donde habilitar Bloom Nucleus.</p>
 
-        <div class="info-box">
-          <strong>Nota:</strong> En modo desarrollo, deberás cargar la extensión manualmente en cada perfil que selecciones.
+        <div id="chrome-running-warning" class="warning-box" style="display:none;">
+          <strong>⚠️ Chrome está abierto</strong>
+          <p style="margin: 5px 0 0 0; font-size: 13px;">Deberás reiniciar Chrome para aplicar los cambios.</p>
         </div>
 
-        <h2>Perfiles detectados:</h2>
-        <div class="profile-list" id="profile-list">
-          <p class="text-center" style="padding: 20px; color: #a0aec0;">Detectando perfiles...</p>
+        <div class="profile-list-container">
+            <div class="input-group" style="margin-bottom: 10px;">
+                 <label><input type="checkbox" id="select-all-profiles" checked> Seleccionar todos</label>
+            </div>
+            <div class="profile-list" id="profile-list">
+              <div class="spinner"></div>
+            </div>
         </div>
 
         <div class="button-group">
-          <button class="button button-secondary" id="skip-profiles-btn">Omitir (usar Default)</button>
-          <button class="button" id="continue-profiles-btn">Continuar</button>
+          <button class="button" id="install-extension-btn">Instalar y Conectar</button>
         </div>
       </div>
     </div>
 
-    <!-- 7. SUCCESS SCREEN -->
+    <!-- 5. HANDSHAKE SCREEN -->
+    <div class="screen" id="handshake-screen">
+      <div class="card">
+        <div class="logo">B</div>
+        <h1 id="handshake-title">Configurando...</h1>
+        
+        <div id="handshake-steps">
+            <!-- Paso 1: Instalando (ID: step-installing) -->
+            <div id="step-installing" style="text-align: center;">
+                <div class="spinner"></div>
+                <p>Aplicando configuración Enterprise...</p>
+            </div>
+
+            <!-- Paso 2: Esperando a Chrome (ID: step-waiting-chrome) -->
+            <div id="step-waiting-chrome" style="display: none; text-align: center;">
+                <div class="info-box" style="background: #ebf8ff; border-left-color: #4299e1;">
+                    <strong>Sincronizando...</strong>
+                    <div id="step2-message">Validando conexión con Chrome...</div>
+                </div>
+                
+                <div style="margin: 30px 0;">
+                    <div class="status-dot red" id="heartbeat-dot"></div>
+                    <p style="margin-top: 10px; font-size: 14px; color: #718096;">Esperando señal del sistema...</p>
+                </div>
+            </div>
+            
+            <!-- Paso 3: Éxito (ID: step-success) -->
+            <div id="step-success" style="display: none; text-align: center;">
+                <div class="success-icon" style="transform: scale(1.5); margin: 40px auto;">✓</div>
+                <h2 style="color: #48bb78; margin-bottom: 20px;">¡Conectado!</h2>
+                <p>Sistema sincronizado correctamente.</p>
+                
+                <div class="button-group">
+                  <button class="button" id="finish-handshake-btn">Finalizar</button>
+                </div>
+            </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 6. SUCCESS SCREEN -->
     <div class="screen" id="success-screen">
       <div class="card">
         <div class="success-icon">✓</div>
         <h1>¡Instalación Completa!</h1>
-        <p class="text-center">Bloom Nucleus ha sido configurado correctamente en tu sistema.</p>
+        <p class="text-center">Bloom Nucleus ha sido configurado correctamente.</p>
 
         <div class="success-box">
-          <strong>Estado del Servicio:</strong>
-          <div class="status-indicator running">
-            <div class="status-dot green"></div>
-            <span>Servicio corriendo en puerto <code id="final-port">5678</code></span>
-          </div>
-        </div>
-
-        <div class="info-box">
-          <strong>Configuración guardada en:</strong>
-          <code id="config-path">Cargando...</code>
-        </div>
-
-        <h2>Resumen:</h2>
-        <div class="steps">
-          <ul style="list-style: none; padding: 0;">
-            <li>✅ Host nativo instalado</li>
-            <li>✅ Servicio Windows configurado y corriendo</li>
-            <li>✅ Native Messaging registrado</li>
-            <li>✅ Extensión vinculada (ID: <code id="final-ext-id">...</code>)</li>
-            <li>✅ Perfiles configurados: <span id="final-profiles">...</span></li>
+          <strong>Estado del Sistema:</strong>
+          <ul style="margin-left: 20px; margin-top: 10px;">
+            <li>Servicio Host: <strong>Activo</strong> (Puerto <span id="final-port">...</span>)</li>
+            <li>Extensión Chrome: <strong>Instalada</strong></li>
+            <li>Motor IA: <strong>Listo</strong></li>
           </ul>
         </div>
 
-        <div class="warning-box">
-          Recordá cargar la extensión en cada perfil de Chrome que hayas seleccionado.
-        </div>
-
-        <div class="button-group">
+        <div class="button-group" id="final-actions">
           <button class="button button-secondary" id="final-view-logs-btn">Ver Logs</button>
-          <button class="button" id="close-installer-btn">Cerrar Instalador</button>
+          <button class="button" id="open-onboarding-btn">🚀 Configurar Bloom</button>
         </div>
       </div>
     </div>
 
-    <!-- 8. ERROR SCREEN -->
+    <!-- 7. ERROR SCREEN -->
     <div class="screen" id="error-screen">
       <div class="card">
         <div class="error-icon">✕</div>
         <h1>Error en la Instalación</h1>
-        <p class="text-center" id="error-message">Ha ocurrido un error durante la instalación.</p>
-        
+        <p class="text-center" id="error-message">Ha ocurrido un error.</p>
         <div class="button-group">
           <button class="button" id="retry-button">Reintentar</button>
         </div>
@@ -673,70 +280,43 @@
   </div>
 
   <script>
+
     let systemInfo = null;
-    let detectedProfiles = [];
-    let selectedProfiles = [];
-    let extensionId = null;
     let servicePort = 5678;
+    let handshakeInterval = null;
+    let installedExtensionPath = null;
+    let isInstallationInProgress = false; 
+    let selectedProfileId = null;
 
     // ========================================================================
     // INITIALIZATION
     // ========================================================================
 
     async function init() {
-      // Verificar que window.api está disponible
-      if (!window.api) {
-        document.querySelector('.screen.active .card').innerHTML = `
-          <div class="error-state">
-            <div style="font-size: 48px; margin-bottom: 20px;">⚠️</div>
-            <h2>Error de inicialización</h2>
-            <p>No se pudo cargar la API del instalador.</p>
-            <p style="margin-top: 20px;">
-              <strong>Posibles soluciones:</strong><br>
-              1. Verifica que el archivo <code>preload.js</code> esté en la carpeta del instalador<br>
-              2. Ejecuta el instalador como administrador<br>
-              3. Reinstala la aplicación
-            </p>
-          </div>
-        `;
-        return;
+      try {
+        if (!window.api) throw new Error("API not loaded");
+        
+        systemInfo = await window.api.getSystemInfo();
+        
+        // Update UI
+        document.getElementById('install-path').textContent = systemInfo.paths.hostInstallDir;
+        
+        // Enable start button only after info is loaded
+        const startBtn = document.getElementById('start-button');
+        startBtn.textContent = "Comenzar Instalación";
+        startBtn.disabled = false;
+
+        // Setup Listeners
+        setupGlobalListeners();
+        
+      } catch (e) {
+        console.error("Init failed:", e);
+        document.getElementById('start-button').textContent = "Error de carga";
       }
-
-      systemInfo = await window.api.getSystemInfo();
-      
-      document.getElementById('install-path').textContent = systemInfo.paths.hostInstallDir;
-      document.getElementById('extension-path').textContent = systemInfo.paths.extensionSource;
-      document.getElementById('config-path').textContent = systemInfo.paths.configDir + '\\config\\config.json';
-      
-      // Listener para feedback de apertura de BTIP Config
-      window.api.onServerStatus((data) => {
-        // Puedes usar esto para mostrar un toast o actualizar el texto de un botón
-        console.log('Server Status:', data);
-        if(data.status === 'checking') {
-          const btn = document.getElementById('open-onboarding-btn');
-          if(btn) btn.textContent = 'Verificando...';
-        }
-      });
     }
 
-    // ========================================================================
-    // SCREEN MANAGEMENT
-    // ========================================================================
-
-    function showScreen(screenId) {
-      document.querySelectorAll('.screen').forEach(screen => {
-        screen.classList.remove('active');
-      });
-      document.getElementById(screenId).classList.add('active');
-    }
-
-    // ========================================================================
-    // WELCOME SCREEN
-    // ========================================================================
-
-    document.getElementById('start-button').addEventListener('click', async () => {
-      showScreen('installation-screen');
-      
+    function setupGlobalListeners() {
+      // Listener para progreso
       window.api.onInstallationProgress((data) => {
         const percentage = (data.step / data.total) * 100;
         document.getElementById('progress-fill').style.width = percentage + '%';
@@ -744,49 +324,57 @@
           `Paso ${data.step}/${data.total}: ${data.message}`;
       });
 
+      // Listener para estado de servidor (Configurar Bloom)
+      window.api.onServerStatus((data) => {
+        const btn = document.getElementById('open-onboarding-btn');
+        if(btn && data.status === 'checking') {
+          btn.textContent = 'Verificando...';
+        }
+      });
+    }
+
+    // ========================================================================
+    // NAVIGATION
+    // ========================================================================
+
+    function showScreen(screenId) {
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      document.getElementById(screenId).classList.add('active');
+    }
+
+    // ========================================================================
+    // LOGIC
+    // ========================================================================
+
+    // 1. WELCOME -> INSTALL
+    document.getElementById('start-button').addEventListener('click', async () => {
+      showScreen('installation-screen');
       const result = await window.api.startInstallation({ devMode: true });
       
       if (result.success) {
-        // Proceed to service installation
         showScreen('service-screen');
         await installService();
       } else {
-        document.getElementById('error-message').textContent = `Error: ${result.error}`;
-        showScreen('error-screen');
+        showError(result.error);
       }
     });
 
-    // ========================================================================
-    // SERVICE SCREEN
-    // ========================================================================
-
+    // 2. INSTALL SERVICE
     async function installService() {
-      document.getElementById('service-status-container').style.display = 'block';
-      document.getElementById('service-result').style.display = 'none';
-      document.getElementById('service-error').style.display = 'none';
-      
-      // Verificar VC++ Redistributables primero (solo Windows)
+      if (!systemInfo) return; // Guard clause
+
+      // Check VC++ (Windows Only)
       if (systemInfo.platform === 'win32') {
         const preflight = await window.api.preflightChecks();
-        
         if (!preflight.vcRedistInstalled) {
-          document.getElementById('service-status-text').textContent = 'Instalando Visual C++ Redistributables...';
-          
-          const vcResult = await window.api.installVCRedist();
-          
-          if (!vcResult.success) {
-            document.getElementById('service-error-text').innerHTML = 
-              'Falta Visual C++ Redistributables.<br><a href="https://aka.ms/vs/17/release/vc_redist.x64.exe" target="_blank">Descargar e instalar manualmente</a>, luego reinicia el instalador.';
-            document.getElementById('service-status-container').style.display = 'none';
-            document.getElementById('service-error').style.display = 'block';
-            return;
-          }
+            document.getElementById('service-status-text').textContent = 'Instalando dependencias VC++...';
+            await window.api.installVCRedist();
         }
       }
-      
-      document.getElementById('service-status-text').textContent = 'Instalando servicio...';
+
+      document.getElementById('service-status-text').textContent = 'Iniciando servicio...';
       const result = await window.api.installService();
-      
+
       if (result.success) {
         servicePort = result.port;
         document.getElementById('detected-port').textContent = result.port;
@@ -799,179 +387,216 @@
       }
     }
 
-    document.getElementById('view-logs-btn').addEventListener('click', () => {
-      window.api.openLogsFolder();
-    });
-
+    // Handlers Service Screen
     document.getElementById('continue-from-service-btn').addEventListener('click', () => {
-      showScreen('extension-setup-screen');
-    });
-
-    document.getElementById('retry-service-btn').addEventListener('click', async () => {
-      await installService();
-    });
-
-    document.getElementById('skip-service-btn').addEventListener('click', () => {
-      showScreen('extension-setup-screen');
-    });
-
-    // ========================================================================
-    // EXTENSION SETUP SCREEN
-    // ========================================================================
-
-    document.getElementById('open-chrome-btn').addEventListener('click', () => {
-      window.api.openChromeExtensions();
-    });
-
-    document.getElementById('extension-installed-btn').addEventListener('click', () => {
-      showScreen('extension-id-screen');
-    });
-
-    // ========================================================================
-    // EXTENSION ID SCREEN
-    // ========================================================================
-
-    const extensionIdInput = document.getElementById('extension-id-input');
-    const extensionIdError = document.getElementById('extension-id-error');
-    const validateIdBtn = document.getElementById('validate-id-btn');
-
-    extensionIdInput.addEventListener('input', async (e) => {
-      const value = e.target.value.toLowerCase();
-      e.target.value = value;
-      
-      if (value.length === 32) {
-        const result = await window.api.validateExtensionId(value);
-        
-        if (result.valid) {
-          extensionIdInput.classList.remove('invalid');
-          extensionIdError.style.display = 'none';
-          validateIdBtn.disabled = false;
-          extensionId = value;
-        } else {
-          extensionIdInput.classList.add('invalid');
-          extensionIdError.textContent = 'Formato inválido. Debe ser 32 caracteres en minúsculas (a-z).';
-          extensionIdError.style.display = 'block';
-          validateIdBtn.disabled = true;
-        }
-      } else {
-        validateIdBtn.disabled = true;
-        extensionIdInput.classList.remove('invalid');
-        extensionIdError.style.display = 'none';
-      }
-    });
-
-    document.getElementById('back-to-extension-btn').addEventListener('click', () => {
-      showScreen('extension-setup-screen');
-    });
-
-    document.getElementById('validate-id-btn').addEventListener('click', async () => {
       showScreen('profiles-screen');
-      await loadChromeProfiles();
+      loadChromeProfiles();
+    });
+    
+    document.getElementById('retry-service-btn').addEventListener('click', installService);
+    document.getElementById('skip-service-btn').addEventListener('click', () => {
+      showScreen('profiles-screen');
+      loadChromeProfiles();
     });
 
-    // ========================================================================
-    // CHROME PROFILES SCREEN
-    // ========================================================================
-
+    // 3. PROFILES SCREEN
     async function loadChromeProfiles() {
-      const profileList = document.getElementById('profile-list');
-      profileList.innerHTML = '<p class="text-center" style="padding: 20px; color: #a0aec0;">Detectando perfiles...</p>';
+      const list = document.getElementById('profile-list');
+      list.innerHTML = '<div class="spinner"></div>';
       
-      const result = await window.api.detectChromeProfiles();
-      
-      if (result.success && result.profiles.length > 0) {
-        detectedProfiles = result.profiles;
-        
-        profileList.innerHTML = '';
-        result.profiles.forEach(profile => {
-          const item = document.createElement('div');
-          item.className = 'profile-item';
-          
-          const checkbox = document.createElement('input');
-          checkbox.type = 'checkbox';
-          checkbox.id = `profile-${profile.id}`;
-          checkbox.value = profile.id;
-          checkbox.checked = profile.id === 'Default';
-          
-          const label = document.createElement('label');
-          label.setAttribute('for', `profile-${profile.id}`);
-          label.textContent = profile.name;
-          
-          item.appendChild(checkbox);
-          item.appendChild(label);
-          profileList.appendChild(item);
-        });
-      } else {
-        profileList.innerHTML = '<p class="text-center" style="padding: 20px; color: #a0aec0;">No se detectaron perfiles. Se usará el perfil Default.</p>';
-      }
-    }
+      // Ocultar checkbox de "Seleccionar todos" si existe, ya no aplica
+      const selectAllContainer = document.querySelector('.input-group');
+      if (selectAllContainer) selectAllContainer.style.display = 'none';
 
-    document.getElementById('skip-profiles-btn').addEventListener('click', () => {
-      selectedProfiles = ['Default'];
-      finalizeSetup();
-    });
-
-    document.getElementById('continue-profiles-btn').addEventListener('click', () => {
-      const checkboxes = document.querySelectorAll('.profile-item input[type="checkbox"]:checked');
-      selectedProfiles = Array.from(checkboxes).map(cb => cb.value);
-      
-      if (selectedProfiles.length === 0) {
-        selectedProfiles = ['Default'];
-      }
-      
-      finalizeSetup();
-    });
-
-    // ========================================================================
-    // FINALIZATION
-    // ========================================================================
-
-    async function finalizeSetup() {
-      showScreen('installation-screen');
-      document.getElementById('progress-text').textContent = 'Finalizando configuración...';
-      document.getElementById('progress-fill').style.width = '100%';
-      
-      const result = await window.api.finalizeSetup({
-        extensionId: extensionId,
-        profiles: selectedProfiles
-      });
+      const result = await window.api.getChromeProfiles();
       
       if (result.success) {
-        document.getElementById('final-port').textContent = servicePort;
-        document.getElementById('final-ext-id').textContent = extensionId;
-        document.getElementById('final-profiles').textContent = selectedProfiles.join(', ');
-        showScreen('success-screen');
-      } else {
-        document.getElementById('error-message').textContent = `Error al finalizar: ${result.error}`;
-        showScreen('error-screen');
+        document.getElementById('chrome-running-warning').style.display = 
+          result.isChromeRunning ? 'block' : 'none';
+        
+        list.innerHTML = '';
+        if (result.profiles.length === 0) {
+           list.innerHTML = '<p class="text-center">Perfil Predeterminado</p>';
+        }
+
+        result.profiles.forEach((p, index) => {
+          const div = document.createElement('div');
+          div.className = 'profile-item';
+          // USAMOS RADIO BUTTON PARA SELECCIÓN ÚNICA
+          // Seleccionamos el primero automáticamente
+          const checked = index === 0 ? 'checked' : '';
+          
+          div.innerHTML = `
+            <input type="radio" name="chrome-profile" id="p-${p.id}" value="${p.id}" ${checked}>
+            <label for="p-${p.id}" style="width: 100%; cursor: pointer;">
+              <div style="font-weight:600">${p.name}</div>
+              <div style="font-size:12px;color:#a0aec0">${p.id}</div>
+            </label>
+          `;
+          list.appendChild(div);
+        });
       }
     }
 
+    
     // ========================================================================
-    // SUCCESS SCREEN
+    // 4. INSTALL EXTENSION & HANDSHAKE (Lógica Enterprise Corregida)
     // ========================================================================
+    const installBtn = document.getElementById('install-extension-btn');
 
+    installBtn.onclick = async () => {
+      const selectedRadio = document.querySelector('input[name="chrome-profile"]:checked');
+      
+      if (!selectedRadio) {
+          alert("Por favor selecciona un perfil de la lista.");
+          return;
+      }
+      
+      const targetProfileId = selectedRadio.value;
+      console.log("🎯 PERFIL SELECCIONADO:", targetProfileId);
+
+      if (installBtn.disabled) return;
+      installBtn.disabled = true;
+      installBtn.textContent = "Procesando...";
+      
+      showScreen('handshake-screen');
+      
+      document.getElementById('step-installing').style.display = 'block';
+      document.getElementById('step-waiting-chrome').style.display = 'none';
+      document.getElementById('step-success').style.display = 'none';
+
+      try {
+          // PASO 1: Registrar en Windows
+          const res = await window.api.installExtensionSelected({ profiles: [targetProfileId] });
+          
+          if (!res.success) {
+              throw new Error(res.error);
+          }
+
+          const installedPath = res.extensionId.path;
+          console.log("✅ Registro completado. Path:", installedPath);
+
+          // PASO 2: UI Update
+          document.getElementById('step-installing').style.display = 'none';
+          document.getElementById('step-waiting-chrome').style.display = 'block';
+          
+          document.getElementById('step2-message').innerHTML = 
+              `<p>Abriendo Chrome en perfil: <strong>${targetProfileId}</strong></p>
+                <p style="font-size: 12px; color: #718096; margin-top: 10px;">
+                Este proceso puede tardar 10-15 segundos mientras Chrome lee el registro...
+                </p>`;
+
+          // PASO 3: Lanzar Chrome
+          console.log(`🚀 Lanzando Chrome. Perfil: ${targetProfileId}`);
+          await window.api.launchChromeProfile({ 
+              profileId: targetProfileId, 
+              extensionPath: installedPath 
+          });
+
+          // ⏱️ CRÍTICO: Esperar MÁS tiempo antes de empezar polling
+          console.log('⏳ Esperando 8 segundos a que Chrome procese el registro...');
+          await new Promise(r => setTimeout(r, 8000));
+
+          // PASO 4: Iniciar polling MÁS LENTO
+          startHandshakePolling();
+
+      } catch (error) {
+          console.error("❌ Error en flujo:", error);
+          if (error.message && error.message.includes("curso")) return;
+
+          showError(error.message || "Error desconocido durante la instalación");
+          installBtn.disabled = false;
+          installBtn.textContent = "Reintentar";
+      }
+    };
+
+    function startHandshakePolling() {
+        const dot = document.getElementById('heartbeat-dot');
+        let attempts = 0;
+        const MAX_ATTEMPTS = 30; // 30 intentos x 3 segundos = 90 segundos total
+        
+        handshakeInterval = setInterval(async () => {
+          attempts++;
+          
+          // Animación visual
+          dot.style.opacity = dot.style.opacity === '0.5' ? '1' : '0.5';
+          
+          // Update contador
+          const messageEl = document.getElementById('step2-message');
+          if (messageEl) {
+              messageEl.innerHTML = `
+                  <p>Validando conexión con Chrome...</p>
+                  <p style="font-size: 12px; color: #a0aec0; margin-top: 5px;">
+                  Intento ${attempts}/${MAX_ATTEMPTS}
+                  </p>
+              `;
+          }
+          
+          const status = await window.api.checkExtensionHeartbeat();
+          
+          if (status.chromeConnected) {
+            clearInterval(handshakeInterval);
+            dot.classList.remove('red');
+            dot.classList.add('green');
+            document.getElementById('step-waiting-chrome').style.display = 'none';
+            document.getElementById('step-success').style.display = 'block';
+            document.getElementById('handshake-title').textContent = "Sincronizado";
+            return;
+          }
+          
+          // Timeout después de MAX_ATTEMPTS
+          if (attempts >= MAX_ATTEMPTS) {
+              clearInterval(handshakeInterval);
+              showError(`Timeout: Chrome no respondió después de ${MAX_ATTEMPTS * 3} segundos. 
+                        Verifica:\n
+                        1. Chrome se cerró completamente antes de reabrir\n
+                        2. El registro se aplicó correctamente (ejecuta regedit como Admin)\n
+                        3. No hay políticas de dominio bloqueando extensiones`);
+          }
+        }, 3000); // Polling cada 3 segundos (más lento = más confiable)
+      }
+
+    document.getElementById('finish-handshake-btn').addEventListener('click', finalizeSetup);
+
+    // 5. FINALIZE & SUCCESS
+    async function finalizeSetup() {
+       // Perform any final cleanup or config saving here
+       const result = await window.api.finalizeSetup({ 
+           extensionId: "kalbnicbomhpdljbnkfhmjnibfjeninc", // Or retrieve from memory
+           profiles: [] 
+       });
+
+       if (result.success) {
+         document.getElementById('final-port').textContent = servicePort;
+         showScreen('success-screen');
+       } else {
+         showError(result.error);
+       }
+    }
+
+    // Botones Finales (Listeners agregados aquí porque los elementos son estáticos)
     document.getElementById('final-view-logs-btn').addEventListener('click', () => {
       window.api.openLogsFolder();
     });
 
-    document.getElementById('close-installer-btn').addEventListener('click', () => {
-      window.close();
+    document.getElementById('open-onboarding-btn').addEventListener('click', async () => {
+      await window.api.openBTIPConfig();
+      setTimeout(() => window.close(), 3000);
     });
 
-    // ========================================================================
-    // ERROR SCREEN
-    // ========================================================================
+    // 6. ERROR HANDLING
+    function showError(msg) {
+      document.getElementById('error-message').textContent = msg;
+      showScreen('error-screen');
+    }
 
     document.getElementById('retry-button').addEventListener('click', () => {
       location.reload();
-    });
+    });    
 
-    // ========================================================================
     // START
-    // ========================================================================
-
     init();
+
   </script>
 </body>
 </html>
