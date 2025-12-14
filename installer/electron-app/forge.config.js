@@ -10,7 +10,8 @@ module.exports = {
     extraResource: [
       path.join(__dirname, 'assets'),
       path.join(__dirname, '..', 'native'),
-      path.join(__dirname, '..', '..', 'core')
+      path.join(__dirname, '..', '..', 'core'),
+      path.join(__dirname, '..', 'chrome-extension', 'crx') 
     ],
     ignore: (filePath) => {
       if (!filePath) return false;

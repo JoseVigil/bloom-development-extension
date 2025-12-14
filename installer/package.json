@@ -61,10 +61,9 @@
   "author": "Bloom Team",
   "license": "MIT",
   "devDependencies": {
+    "crx": "^5.0.1",
     "electron": "^28.0.0",
-    "electron-builder": "^24.9.1"
-  },
-  "dependencies": {
-    "fs-extra": "^11.2.0"
+    "electron-builder": "^24.9.1",
+    "fs-extra": "^11.3.2"
   }
 }

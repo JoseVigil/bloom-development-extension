@@ -1,23 +1,24 @@
 // ============================================================================
 // CONFIGURACIÓN Y ESTADO
 // ============================================================================
-const HOST_NAME = "com.bloom.nucleus.host";
+const HOST_NAME = "com.bloom.nucleus.bridge"; // Asegúrate que coincida con tu manifest.json
 const HEARTBEAT_INTERVAL = 20000; // 20 segundos
-const RECONNECT_DELAY = 5000;     // 5 segundos
+const BASE_RECONNECT_DELAY = 1000; // Iniciar rápido (1s)
 
 let nativePort = null;
 let heartbeatTimer = null;
 let isConnected = false;
-const controlledTabs = new Map(); // Mantiene estado de pestañas controladas
+let retryCount = 0;
+const controlledTabs = new Map(); 
 
 // ============================================================================
-// LÓGICA DE CONEXIÓN (CORE)
+// LÓGICA DE CONEXIÓN (CORE ENTERPRISE)
 // ============================================================================
 
 function connectToNativeHost() {
   if (nativePort) return;
 
-  console.log(`🔌 Iniciando conexión con ${HOST_NAME}...`);
+  console.log(`🔌 [Bloom] Iniciando conexión con ${HOST_NAME}...`);
   
   try {
     nativePort = chrome.runtime.connectNative(HOST_NAME);
@@ -27,21 +28,46 @@ function connectToNativeHost() {
     
     nativePort.onDisconnect.addListener(() => {
       const err = chrome.runtime.lastError;
-      console.warn("⚠️ Desconectado del Host Nativo.", err ? err.message : "");
+      console.warn("⚠️ [Bloom] Desconectado del Host.", err ? err.message : "Desconexión limpia");
       handleDisconnect();
     });
 
-    // Iniciar ciclo de vida
+    // --- CRÍTICO PARA EL INSTALADOR ---
+    // Enviar señal de vida inmediata. El Host reenviará esto a Electron.
+    sendHandshake();
+
+    // Iniciar ciclo de vida normal
     isConnected = true;
+    retryCount = 0; // Resetear contador de reintentos
     startHeartbeat();
-    
-    // Handshake inicial
-    sendToHost({ command: "ping", source: "handshake" });
 
   } catch (error) {
-    console.error("❌ Error fatal al conectar:", error);
+    console.error("❌ [Bloom] Error fatal al conectar:", error);
     handleDisconnect();
   }
+}
+
+/**
+ * Envía el paquete especial que el Installer busca para confirmar éxito.
+ */
+function sendHandshake() {
+  if (!nativePort) return;
+
+  const manifest = chrome.runtime.getManifest();
+  
+  const handshakeMsg = {
+    type: "SYSTEM_HELLO",         // Identificador para el Installer
+    status: "installed",
+    id: chrome.runtime.id,
+    version: manifest.version,
+    timestamp: Date.now()
+  };
+
+  console.log("🚀 [Bloom] Enviando Handshake de Instalación:", handshakeMsg);
+  nativePort.postMessage(handshakeMsg);
+  
+  // También enviamos el ping estándar para compatibilidad con versiones previas
+  nativePort.postMessage({ command: "ping", source: "handshake" });
 }
 
 function handleDisconnect() {
@@ -49,11 +75,14 @@ function handleDisconnect() {
   nativePort = null;
   stopHeartbeat();
   
-  // Notificar a componentes UI si es necesario
   chrome.storage.local.set({ hostStatus: "disconnected" });
 
-  console.log(`🔄 Reintentando conexión en ${RECONNECT_DELAY/1000}s...`);
-  setTimeout(connectToNativeHost, RECONNECT_DELAY);
+  // Reintento exponencial limitado (1s, 2s, 4s, 5s...)
+  const delay = Math.min(BASE_RECONNECT_DELAY * Math.pow(2, retryCount), 5000);
+  retryCount++;
+
+  console.log(`🔄 [Bloom] Reintentando conexión en ${delay}ms (Intento ${retryCount})...`);
+  setTimeout(connectToNativeHost, delay);
 }
 
 // ============================================================================
@@ -62,12 +91,15 @@ function handleDisconnect() {
 
 function startHeartbeat() {
   stopHeartbeat();
-  // console.log("💓 Heartbeat iniciado");
   
   heartbeatTimer = setInterval(() => {
     if (isConnected && nativePort) {
-      // Enviamos ping silencioso para mantener vivo el canal
-      sendToHost({ command: "ping", source: "heartbeat" });
+      // Ping silencioso para mantener el canal stdio abierto
+      try {
+        nativePort.postMessage({ command: "ping", source: "heartbeat" });
+      } catch(e) {
+        handleDisconnect();
+      }
     }
   }, HEARTBEAT_INTERVAL);
 }
@@ -86,13 +118,13 @@ function sendToHost(message) {
       handleDisconnect();
     }
   } else {
-    // Si intentamos enviar y no hay puerto, intentar reconectar
+    // Intentar recuperar conexión si se intenta enviar algo
     connectToNativeHost();
   }
 }
 
 // ============================================================================
-// MANEJO DE MENSAJES (ROUTER)
+// MANEJO DE MENSAJES (ROUTER DE AUTOMATIZACIÓN)
 // ============================================================================
 
 async function handleHostMessage(message) {
@@ -103,11 +135,7 @@ async function handleHostMessage(message) {
       hostVersion: message.version || "1.0.0",
       lastHeartbeat: Date.now()
     });
-    
-    if (message.source === "handshake") {
-      console.log(`✅ Host Conectado: v${message.version}`);
-    }
-    return; // No procesar más
+    return;
   }
 
   // 2. Procesar Comandos de Negocio
@@ -148,9 +176,10 @@ async function handleHostMessage(message) {
         result = await downloadClaudeArtifact(payload);
         break;
       default:
-        // Si es un mensaje de eco o respuesta genérica
         if (message.test || message.received) return;
-        throw new Error(`Comando desconocido: ${command}`);
+        // No lanzamos error para evitar ruido en logs si el host envía metadatos extra
+        console.warn(`[Bloom] Comando desconocido recibido: ${command}`);
+        return; 
     }
     
     // Responder éxito
@@ -159,7 +188,7 @@ async function handleHostMessage(message) {
     }
     
   } catch (error) {
-    console.error(`Error ejecutando ${command}:`, error);
+    console.error(`[Bloom] Error ejecutando ${command}:`, error);
     if (id) {
       sendToHost({ id, status: "error", result: { message: error.message } });
     }
@@ -167,12 +196,12 @@ async function handleHostMessage(message) {
 }
 
 // ============================================================================
-// IMPLEMENTACIÓN DE COMANDOS
+// IMPLEMENTACIÓN DE COMANDOS (Mantenidos igual)
 // ============================================================================
 
 async function openTab(payload) {
   const { url } = payload;
-  const tab = await chrome.tabs.create({ url, active: false });
+  const tab = await chrome.tabs.create({ url, active: false }); // Background open
   controlledTabs.set(tab.id, { url, created: Date.now() });
   return { tabId: tab.id };
 }
@@ -203,7 +232,6 @@ async function getHtml(payload) {
 
 async function click(payload) {
   const { tabId, selector } = payload;
-  // Requiere content script escuchando
   return await chrome.tabs.sendMessage(tabId, { action: "click", selector });
 }
 
@@ -233,7 +261,6 @@ async function downloadClaudeArtifact(payload) {
   const result = await chrome.scripting.executeScript({
     target: { tabId },
     func: () => {
-      // Lógica de extracción de Artifacts (Claude)
       const artifact = document.querySelector('[data-testid="artifact-root"]');
       if (!artifact) return { error: "No artifact found" };
 
@@ -273,8 +300,22 @@ async function downloadClaudeArtifact(payload) {
 }
 
 // ============================================================================
-// EVENTOS DEL NAVEGADOR
+// EVENTOS DEL NAVEGADOR Y CICLO DE VIDA
 // ============================================================================
+
+// 1. Evento de Primera Instalación (CRÍTICO PARA INSTALLER)
+// Este evento se dispara cuando Chrome aplica la política de registro y carga la extensión
+chrome.runtime.onInstalled.addListener((details) => {
+    console.log(`🎉 [Bloom] Extensión instalada/actualizada. Razón: ${details.reason}`);
+    // Forzar conexión inmediata
+    connectToNativeHost();
+});
+
+// 2. Evento de Inicio de Navegador
+chrome.runtime.onStartup.addListener(() => {
+    console.log("🚀 [Bloom] Navegador iniciado.");
+    connectToNativeHost();
+});
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (controlledTabs.has(tabId) && changeInfo.status === "complete") {
@@ -309,11 +350,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
     });
   }
-  return true; // Async response support
+  return true;
 });
 
 // ============================================================================
-// INICIO
+// INICIO INMEDIATO
 // ============================================================================
+// Intentar conectar apenas se carga el script (Backup por si los eventos fallan)
 connectToNativeHost();
-chrome.runtime.onStartup.addListener(connectToNativeHost);

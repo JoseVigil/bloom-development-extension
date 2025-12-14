@@ -6,11 +6,13 @@ const util = require('util');
 const execPromise = util.promisify(exec);
 const net = require('net');
 const os = require('os');
+const ChromeExtensionInstaller = require('./ChromeExtensionInstaller');
 
 // Importamos los helpers de integración (Asegúrate de que installHelpers.js exista en la misma carpeta)
 const installHelpers = require('./installHelpers');
 
 let mainWindow;
+let isExtensionInstalling = false;
 
 const platform = process.platform;
 const isDevMode = process.argv.includes('--dev') || !app.isPackaged;
@@ -48,8 +50,16 @@ const paths = {
     : platform === 'darwin'
     ? path.join(app.getPath('home'), 'Library', 'Application Support', 'Google', 'Chrome')
     : path.join(app.getPath('home'), '.config', 'google-chrome'),
-  extensionSource: getResourcePath('chrome-extension')
+    
+  // --- CAMBIO AQUÍ: Definimos la carpeta contenedora del CRX ---
+  crxDir: app.isPackaged
+    ? path.join(process.resourcesPath, 'crx')                 // Producción
+    : path.join(__dirname, '..', 'chrome-extension', 'crx')   // Desarrollo
 };
+
+// --- AGREGAR ESTO JUSTO DEBAJO DE }; ---
+paths.extensionCrx = path.join(paths.crxDir, 'extension.crx');
+paths.extensionId = path.join(paths.crxDir, 'id.json');
 
 const SERVICE_NAME = 'BloomNucleusHost';
 const DEFAULT_PORT = 5678;
@@ -353,6 +363,144 @@ ipcMain.handle('check-onboarding-status', async () => {
   const state = await installHelpers.getOnboardingState(paths.configDir);
   return { success: true, state };
 });
+
+ipcMain.handle('get-chrome-profiles', async () => {
+  const installer = new ChromeExtensionInstaller(paths);
+  try {
+    // Aquí es donde se llamaba al método que faltaba
+    const profiles = await installer.getProfiles();
+    const isRunning = await installer.isChromeRunning();
+    
+    console.log(`Perfiles detectados: ${profiles.length}`);
+    return { success: true, profiles, isChromeRunning: isRunning };
+  } catch (error) {
+    console.error("Error al obtener perfiles:", error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('install-extension-selected', async (event, { profiles }) => {
+  // 1. CHEQUEO DE SEGURIDAD
+  if (isExtensionInstalling) {
+      console.warn("Intento de instalación concurrente bloqueado.");
+      return { success: false, error: "Instalación en curso, por favor espera." };
+  }
+  
+  isExtensionInstalling = true; // BLOQUEAR
+
+  try {
+    const installer = new ChromeExtensionInstaller(paths);
+    
+    // A. Instalar extensión (Copia CRX y Registra en Windows)
+    // Esto retorna un objeto: { id: "el_id_leido_del_json", path: "..." }
+    const result = await installer.install(profiles); 
+
+    console.log("Extension instalada con ID:", result.id);
+
+    // B. CRITICO: Actualizar el Native Host con este ID
+    // Si no hacemos esto, el host rechazará la conexión de la extensión
+    await generateNativeManifest(result.id);
+    await registerNativeHost();
+
+    // C. Guardar en config para referencia futura
+    await saveConfig({ extensionId: result.id, profiles });
+
+    return { success: true, extensionId: result };
+
+  } catch (error) {
+    console.error('Extension install failed:', error);
+    return { success: false, error: error.message };
+  } finally {
+    isExtensionInstalling = false; // DESBLOQUEAR SIEMPRE
+  }
+});
+
+ipcMain.handle('check-extension-heartbeat', async () => {
+  const state = await readServerState();
+  const port = state?.port || DEFAULT_PORT;
+  return await checkHostStatus(port);
+});
+
+// ============================================================================
+// CHROME LAUNCHER (CORREGIDO PARA INSTALACIÓN ENTERPRISE)
+// ============================================================================
+
+ipcMain.handle('launch-chrome-profile', async (event, { profileId, extensionPath }) => {
+  try {
+    const chromePath = await findChromeExecutable();
+    if (!chromePath) throw new Error("No se encontró el ejecutable de Chrome");
+
+    const targetProfile = profileId || "Default";
+    
+    console.log(`[Launcher] 🔄 Cerrando SOLO perfil: ${targetProfile}`);
+
+    // PASO 1: CIERRE QUIRÚRGICO (Solo Windows)
+    if (process.platform === 'win32') {
+        // Crear script en archivo temporal
+        const tempKillScript = path.join(os.tmpdir(), `bloom-kill-${Date.now()}.ps1`);
+        
+        const killScript = `
+$targetProfile = "${targetProfile}"
+$found = $false
+
+Get-WmiObject Win32_Process -Filter "name = 'chrome.exe'" | Where-Object { 
+  $_.CommandLine -like "*--profile-directory=*$targetProfile*"
+} | ForEach-Object { 
+  Write-Host "Cerrando PID: $($_.ProcessId)"
+  Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+  $found = $true
+}
+
+if (-not $found) {
+  Write-Host "No habia procesos del perfil $targetProfile abiertos"
+}
+`;
+        
+        try {
+            await fs.writeFile(tempKillScript, killScript, 'utf8');
+            const { stdout } = await execPromise(
+                `powershell -ExecutionPolicy Bypass -File "${tempKillScript}"`,
+                { timeout: 5000 }
+            );
+            console.log('[Launcher]', stdout.trim());
+            await fs.unlink(tempKillScript).catch(() => {});
+        } catch(e) {
+            console.log('[Launcher] Error cerrando:', e.message);
+        }
+        
+        // Espera para liberar recursos
+        await new Promise(r => setTimeout(r, 2000));
+    }
+    
+    // PASO 2: LANZAMIENTO CON LOGS ACTIVADOS
+    const args = [
+      `--profile-directory=${targetProfile}`,
+      '--enable-logging',
+      '--v=1',
+      `--log-file=${path.join(paths.configDir, 'logs', 'chrome-debug.log')}`
+    ];
+
+    console.log(`[Launcher] 🚀 Abriendo Chrome (Perfil: ${targetProfile})`);
+
+    const child = spawn(chromePath, args, { 
+      detached: true, 
+      stdio: 'ignore',
+      env: { 
+        ...process.env,
+        CHROME_DEVELOPER_MODE: undefined 
+      }
+    });
+    child.unref();
+
+    await new Promise(r => setTimeout(r, 2000));
+    return { success: true };
+    
+  } catch (error) {
+    console.error('[Launcher] ❌ Error:', error);
+    return { success: false, error: error.message };
+  }
+});
+
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -838,4 +986,57 @@ async function checkVSCodeInstalled() {
   } catch {
     return false;
   }
+}
+
+function checkHostStatus(port) {
+  return new Promise((resolve) => {
+    const client = new net.Socket();
+    const timeout = setTimeout(() => {
+      client.destroy();
+      resolve({ hostRunning: false, chromeConnected: false, error: 'timeout' });
+    }, 1000);
+    
+    client.connect(port, '127.0.0.1', () => {
+      const request = JSON.stringify({ jsonrpc: "2.0", method: "get_status", id: 1 }) + '\n';
+      client.write(request);
+    });
+    
+    client.on('data', (data) => {
+      clearTimeout(timeout);
+      try {
+        const response = JSON.parse(data.toString());
+        const isChromeConnected = response.result && response.result.chrome_connected === true;
+        client.destroy();
+        resolve({ hostRunning: true, chromeConnected: isChromeConnected });
+      } catch (e) {
+        client.destroy();
+        resolve({ hostRunning: true, chromeConnected: false });
+      }
+    });
+    
+    client.on('error', (err) => {
+      clearTimeout(timeout);
+      client.destroy();
+      resolve({ hostRunning: false, chromeConnected: false, error: err.message });
+    });
+  });
+}
+
+// Función auxiliar para encontrar Chrome
+async function findChromeExecutable() {
+  if (process.platform === 'win32') {
+    const commonPaths = [
+      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+      path.join(process.env.LOCALAPPDATA, 'Google\\Chrome\\Application\\chrome.exe')
+    ];
+    for (const p of commonPaths) {
+      if (await fs.pathExists(p)) return p;
+    }
+  } else if (process.platform === 'darwin') {
+    return '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+  } else {
+    return 'google-chrome';
+  }
+  return null;
 }
