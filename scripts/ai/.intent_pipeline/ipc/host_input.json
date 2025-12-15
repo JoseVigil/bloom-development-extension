@@ -1,0 +1,13 @@
+{
+  "id": "9a568f26-b244-4e41-8f72-cd49da274b3a",
+  "command": "claude.submit",
+  "payload": {
+    "provider": "claude",
+    "text": "Hola Claude, esta es una prueba de automatizaci\u00f3n BTIP Fase 1. Si lees esto, el sistema funciona.",
+    "context_files": [],
+    "parameters": {
+      "temperature": 0.7
+    }
+  },
+  "timestamp": 1765836923.693038
+}

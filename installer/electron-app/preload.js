@@ -34,7 +34,7 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('server-status', (event, data) => callback(data));
   },
    getChromeProfiles: () => ipcRenderer.invoke('get-chrome-profiles'),
-  installExtensionSelected: (data) => ipcRenderer.invoke('install-extension-selected', data),
+  installExtension: () => ipcRenderer.invoke('install-extension'),
   checkExtensionHeartbeat: () => ipcRenderer.invoke('check-extension-heartbeat'),
   launchChromeProfile: (data) => ipcRenderer.invoke('launch-chrome-profile', data),
 });
