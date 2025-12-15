@@ -195,8 +195,6 @@ bloom-development-extension/
 │   │   └── legacy_bridge.py
 │   ├── commnds.md
 │   ├── config.py
-│   ├── core/
-│   │   └── libs/ [... python vendored dependencies]
 │   ├── filesystem/
 │   │   ├── __init__.py
 │   │   ├── __pycache__/ [... cache]
@@ -209,12 +207,13 @@ bloom-development-extension/
 │   ├── generators/
 │   │   ├── __init__.py
 │   │   ├── __pycache__/ [... cache]
+│   │   ├── context_strategy.py
 │   │   ├── nucleus_generator.py
 │   │   └── strategies/
 │   │       ├── __init__.py
+│   │       ├── __pycache__/ [... cache]
 │   │       ├── android.py
 │   │       ├── cicd.py
-│   │       ├── context_strategy.py
 │   │       ├── cpp.py
 │   │       ├── dotnet.py
 │   │       ├── flutter.py
@@ -239,9 +238,11 @@ bloom-development-extension/
 │   │   ├── index_loader.py
 │   │   ├── meta_manager.py
 │   │   └── semantic_router.py
+│   ├── migrate_to_v2_complete.py
 │   ├── orchestrator/
 │   │   ├── __init__.py
 │   │   ├── engine.py
+│   │   ├── genesis_planner.py
 │   │   ├── state_machine.py
 │   │   └── task_dispatcher.py
 │   ├── requirements.txt
@@ -266,17 +267,21 @@ bloom-development-extension/
 │   ├── create_installer.py
 │   ├── electron-app/
 │   │   ├── .gitignore
-│   │   ├── ChromeExtensionInstaller.js
 │   │   ├── app.manifest
 │   │   ├── assets/
 │   │   │   ├── bloom.ico
 │   │   │   └── installer.gif
 │   │   ├── config-loader.js
 │   │   ├── entitlements.plist
+│   │   ├── extension-id.txt
 │   │   ├── forge.config.js
 │   │   ├── index.html
 │   │   ├── installHelpers.js
 │   │   ├── installer-config.json
+│   │   ├── installers/
+│   │   │   ├── ChromeEnterpriseExtensionInstaller.js
+│   │   │   ├── ChromeManualExtensionInstaller.js
+│   │   │   └── config.js
 │   │   ├── main.js
 │   │   ├── node_modules/ [... dependencies]
 │   │   ├── out/ [... output files]

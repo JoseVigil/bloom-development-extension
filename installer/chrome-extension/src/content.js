@@ -1,3 +1,8 @@
+// ============================================================================
+// BLOOM NUCLEUS BRIDGE - CONTENT SCRIPT
+// El brazo ejecutor dentro del DOM real.
+// ============================================================================
+
 // MutationObserver for DOM changes
 let observer = null;
 let observedElements = new Map();
@@ -5,90 +10,170 @@ let observedElements = new Map();
 // Listen for messages from background
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const { action } = message;
-  
-  try {
-    let result;
-    
-    switch (action) {
-      case "click":
-        result = handleClick(message.selector);
-        break;
-      case "type":
-        result = handleType(message.selector, message.text);
-        break;
-      case "upload_file":
-        result = handleUploadFile(message.selector, message.filePath);
-        break;
-      case "read_dom":
-        result = handleReadDom(message.selector);
-        break;
-      case "observe_changes":
-        result = handleObserveChanges(message.selector, message.enabled);
-        break;
-      default:
-        throw new Error(`Unknown action: ${action}`);
+
+  // Procesamiento ASÍNCRONO para permitir esperas en la UI (Submit)
+  (async () => {
+    try {
+      let result;
+
+      switch (action) {
+        case "click":
+          result = handleClick(message.selector);
+          break;
+        case "type":
+          result = handleType(message.selector, message.text);
+          break;
+        case "upload_file":
+          result = handleUploadFile(message.selector, message.filePath);
+          break;
+        case "read_dom":
+          result = handleReadDom(message.selector);
+          break;
+        case "observe_changes":
+          result = handleObserveChanges(message.selector, message.enabled);
+          break;
+        
+        // --- NUEVO COMANDO CRÍTICO (BRIDGE NATIVO) ---
+        case "ai.submit":
+          result = await handleAiSubmit(message.payload);
+          break;
+          
+        default:
+          throw new Error(`Unknown action: ${action}`);
+      }
+
+      sendResponse({ success: true, result });
+    } catch (error) {
+      console.error("[Bloom Content] Error:", error);
+      sendResponse({ success: false, error: error.message });
     }
-    
-    sendResponse({ success: true, result });
-  } catch (error) {
-    sendResponse({ success: false, error: error.message });
-  }
-  
-  return true;
+  })();
+
+  return true; // Indica a Chrome que la respuesta será asíncrona
 });
 
-// Click on element
+// ============================================================================
+// AI SUBMIT DRIVER (CLAUDE / GENERIC) - ROBUST VERSION
+// ============================================================================
+
+async function handleAiSubmit(payload) {
+  const text = payload.text || payload;
+  console.log("[Bloom Driver] Buscando chat box...", text.length);
+
+  // --- ESTRATEGIA DE SELECTORES (Resiliencia) ---
+  const editorSelectors = [
+    'div[contenteditable="true"]',           // Estándar ProseMirror/RichText
+    'div[role="textbox"]',                   // Estándar Accesibilidad
+    'fieldset [contenteditable="true"]',     // Variación Claude reciente
+    '.ProseMirror',                          // Clase interna de la librería
+    '[data-testid="chat-input"]'             // Selector de testing (si existe)
+  ];
+
+  let editor = null;
+  for (const selector of editorSelectors) {
+    editor = document.querySelector(selector);
+    if (editor) {
+      console.log(`[Bloom Driver] Editor encontrado usando: ${selector}`);
+      break;
+    }
+  }
+
+  if (!editor) {
+    // Debug: Imprimir el body para ver qué está pasando si falla todo
+    console.error("DOM Dump:", document.body.innerHTML.substring(0, 500));
+    throw new Error("INPUT_NOT_FOUND: No se pudo localizar el área de texto con ningún selector conocido.");
+  }
+
+  // 2. Enfocar
+  editor.focus();
+  await new Promise(r => setTimeout(r, 100)); // Espera un poco más
+
+  // 3. Inyección de Texto (Simulación de Paste)
+  try {
+    const data = new DataTransfer();
+    data.setData('text/plain', text);
+    
+    const pasteEvent = new ClipboardEvent('paste', {
+      bubbles: true,
+      cancelable: true,
+      clipboardData: data
+    });
+    
+    editor.dispatchEvent(pasteEvent);
+    console.log("[Bloom Driver] Paste event disparado.");
+  } catch (e) {
+    console.warn("[Bloom Driver] Falló paste event, usando fallback.", e);
+    // Fallback sucio pero efectivo
+    document.execCommand('insertText', false, text);
+  }
+
+  // Esperar a que la UI procese el texto
+  await new Promise(r => setTimeout(r, 800));
+
+  // 4. Click en Submit
+  // Buscamos el botón de enviar con más inteligencia
+  const buttonSelectors = [
+    'button[aria-label="Send Message"]',
+    'button[aria-label="Send message"]', // A veces cambia mayúsculas
+    'button[type="submit"]',
+    'div[aria-label="Send Message"]'     // A veces es un div clickeable
+  ];
+
+  let sendButton = null;
+  for (const selector of buttonSelectors) {
+    sendButton = document.querySelector(selector);
+    if (sendButton) break;
+  }
+
+  if (!sendButton) {
+    // Intento desesperado: buscar icono de flecha
+    const svgs = Array.from(document.querySelectorAll('svg'));
+    // El icono de enviar suele estar al final o tener ciertas clases
+    // Esto es arriesgado, mejor lanzar error si no se encuentra el aria-label
+    throw new Error("SUBMIT_BTN_NOT_FOUND: No encuentro botón de envío.");
+  }
+
+  if (sendButton.disabled) {
+    throw new Error("SUBMIT_BTN_DISABLED: El botón sigue deshabilitado tras pegar.");
+  }
+
+  sendButton.click();
+  console.log("[Bloom Driver] Click en enviar ejecutado.");
+
+  return { 
+    status: "submitted", 
+    timestamp: Date.now(),
+    ui_feedback: "click_executed"
+  };
+}
+
+// ============================================================================
+// FUNCIONES ESTÁNDAR (Legacy / Helper)
+// ============================================================================
+
 function handleClick(selector) {
   const element = document.querySelector(selector);
-  if (!element) {
-    throw new Error(`Element not found: ${selector}`);
-  }
-  
+  if (!element) throw new Error(`Element not found: ${selector}`);
   element.click();
   return { clicked: true };
 }
 
-// Type text into element
 function handleType(selector, text) {
   const element = document.querySelector(selector);
-  if (!element) {
-    throw new Error(`Element not found: ${selector}`);
-  }
-  
-  // Set value
+  if (!element) throw new Error(`Element not found: ${selector}`);
   element.value = text;
-  
-  // Trigger input events
   element.dispatchEvent(new Event('input', { bubbles: true }));
   element.dispatchEvent(new Event('change', { bubbles: true }));
-  
   return { typed: true, length: text.length };
 }
 
-// Set file for file input
 function handleUploadFile(selector, filePath) {
-  const element = document.querySelector(selector);
-  if (!element || element.tagName !== 'INPUT' || element.type !== 'file') {
-    throw new Error(`File input not found: ${selector}`);
-  }
-  
-  // Note: Due to security restrictions, we can't directly set files
-  // The native host will need to handle this through other means
-  // This function serves as a placeholder for the architecture
-  
-  return { 
-    ready: true, 
-    note: "File upload requires native host coordination" 
-  };
+  return { ready: true, note: "Native host coordination required" };
 }
 
-// Read DOM element data
 function handleReadDom(selector) {
   const element = document.querySelector(selector);
-  if (!element) {
-    throw new Error(`Element not found: ${selector}`);
-  }
-  
+  if (!element) throw new Error(`Element not found: ${selector}`);
   return {
     tagName: element.tagName,
     id: element.id,
@@ -103,68 +188,40 @@ function handleReadDom(selector) {
   };
 }
 
-// Observe DOM changes
 function handleObserveChanges(selector, enabled) {
   if (enabled) {
     const element = selector ? document.querySelector(selector) : document.body;
-    if (!element) {
-      throw new Error(`Element not found: ${selector}`);
-    }
+    if (!element) throw new Error(`Element not found: ${selector}`);
     
-    // Create observer if not exists
     if (!observer) {
       observer = new MutationObserver((mutations) => {
-        const changes = mutations.map(mutation => ({
-          type: mutation.type,
-          target: {
-            tagName: mutation.target.tagName,
-            id: mutation.target.id,
-            className: mutation.target.className
-          },
-          addedNodes: mutation.addedNodes.length,
-          removedNodes: mutation.removedNodes.length,
-          attributeName: mutation.attributeName,
-          oldValue: mutation.oldValue
+        const changes = mutations.map(m => ({
+          type: m.type,
+          target: { tagName: m.target.tagName, id: m.target.id },
+          addedNodes: m.addedNodes.length
         }));
-        
-        // Send to background
-        chrome.runtime.sendMessage({
-          event: "dom_change",
-          changes
-        });
+        chrome.runtime.sendMessage({ event: "dom_change", changes });
       });
     }
-    
-    // Start observing
-    observer.observe(element, {
-      childList: true,
-      attributes: true,
-      subtree: true,
-      characterData: true,
-      attributeOldValue: true,
-      characterDataOldValue: true
-    });
-    
+    observer.observe(element, { childList: true, attributes: true, subtree: true });
     observedElements.set(selector || "body", element);
-    
-    return { observing: true, selector: selector || "body" };
+    return { observing: true };
   } else {
-    // Stop observing
     if (observer) {
       observer.disconnect();
       observer = null;
     }
     observedElements.clear();
-    
     return { observing: false };
   }
 }
 
-// Notify background when page loads
+// ============================================================================
+// CICLO DE VIDA
+// ============================================================================
+
 if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", () => {
-    notifyPageReady();
-  });
+  document.addEventListener("DOMContentLoaded", notifyPageReady);
 } else {
   notifyPageReady();
 }

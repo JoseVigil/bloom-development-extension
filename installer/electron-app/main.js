@@ -6,7 +6,10 @@ const util = require('util');
 const execPromise = util.promisify(exec);
 const net = require('net');
 const os = require('os');
-const ChromeExtensionInstaller = require('./ChromeExtensionInstaller');
+const { CURRENT_STRATEGY, INSTALL_STRATEGY } = require('./installers/config');
+const ChromeManualInstaller = require('./installers/ChromeManualExtensionInstaller');
+const ChromeEnterpriseInstaller = require('./installers/ChromeEnterpriseExtensionInstaller');
+
 
 // Importamos los helpers de integración (Asegúrate de que installHelpers.js exista en la misma carpeta)
 const installHelpers = require('./installHelpers');
@@ -331,30 +334,33 @@ ipcMain.handle('open-logs-folder', async () => {
 // INTEGRACIÓN ONBOARDING
 ipcMain.handle('open-btip-config', async () => {
   try {
-    const state = await installHelpers.getOnboardingState(paths.configDir);
-    
     mainWindow.webContents.send('server-status', { 
       status: 'checking', 
-      message: 'Verificando servicios (UI en pto 4123)...' 
+      message: 'Verificando servidor VSCode (puerto 4123)...' 
     });
     
-    // Timeout 10s
-    const serversReady = await installHelpers.waitForServersReady(10000);
+    console.log('🔍 Esperando webview server...');
+    const webviewStatus = await installHelpers.waitForWebviewServer(30000);
     
-    let url;
-    if (serversReady.ready) {
-       url = installHelpers.getOnboardingURL(state, serversReady.uiPort);
+    if (!webviewStatus.ready) {
+      console.warn('⚠️ Webview server no respondió');
+      mainWindow.webContents.send('server-status', { 
+        status: 'warning', 
+        message: 'Servidor VSCode no detectado. Asegúrate de tener la extensión corriendo (F5 en VSCode).' 
+      });
     } else {
-       console.warn('UI Server not responsive, opening default fallback');
-       url = `http://localhost:${installHelpers.UI_SERVER_PORT}`;
+      console.log('✅ Webview server detectado');
     }
     
-    console.log('Opening configuration URL:', url);
+    const url = `http://localhost:${installHelpers.WEBVIEW_SERVER_PORT}`;
+    console.log('🌐 Abriendo configuración:', url);
+    
     await shell.openExternal(url);
     
-    return { success: true, url };
+    return { success: true, url, webviewReady: webviewStatus.ready };
+    
   } catch (error) {
-    console.error('Error opening BTIP config:', error);
+    console.error('❌ Error abriendo BTIP config:', error);
     return { success: false, error: error.message };
   }
 });
@@ -379,47 +385,28 @@ ipcMain.handle('get-chrome-profiles', async () => {
   }
 });
 
-ipcMain.handle('install-extension-selected', async (event, { profiles }) => {
-  // 1. CHEQUEO DE SEGURIDAD
-  if (isExtensionInstalling) {
-      console.warn("Intento de instalación concurrente bloqueado.");
-      return { success: false, error: "Instalación en curso, por favor espera." };
-  }
-  
-  isExtensionInstalling = true; // BLOQUEAR
-
+ipcMain.handle('install-extension', async () => {
   try {
-    const installer = new ChromeExtensionInstaller(paths);
+    const installer = getExtensionInstaller();
+    const result = await installer.install();
     
-    // A. Instalar extensión (Copia CRX y Registra en Windows)
-    // Esto retorna un objeto: { id: "el_id_leido_del_json", path: "..." }
-    const result = await installer.install(profiles); 
-
-    console.log("Extension instalada con ID:", result.id);
-
-    // B. CRITICO: Actualizar el Native Host con este ID
-    // Si no hacemos esto, el host rechazará la conexión de la extensión
-    await generateNativeManifest(result.id);
-    await registerNativeHost();
-
-    // C. Guardar en config para referencia futura
-    await saveConfig({ extensionId: result.id, profiles });
-
-    return { success: true, extensionId: result };
-
+    console.log(`✅ Extensión preparada (${result.method})`);
+    
+    return result;
+    
   } catch (error) {
-    console.error('Extension install failed:', error);
+    console.error('❌ Error en instalación de extensión:', error);
     return { success: false, error: error.message };
-  } finally {
-    isExtensionInstalling = false; // DESBLOQUEAR SIEMPRE
   }
-});
+});  
 
 ipcMain.handle('check-extension-heartbeat', async () => {
   const state = await readServerState();
   const port = state?.port || DEFAULT_PORT;
   return await checkHostStatus(port);
 });
+
+
 
 // ============================================================================
 // CHROME LAUNCHER (CORREGIDO PARA INSTALACIÓN ENTERPRISE)
@@ -1022,6 +1009,14 @@ function checkHostStatus(port) {
   });
 }
 
+function getExtensionInstaller() {
+  if (CURRENT_STRATEGY === INSTALL_STRATEGY.MANUAL) {
+    return new ChromeManualInstaller(paths);
+  } else {
+    return new ChromeEnterpriseInstaller(paths);
+  }
+}
+
 // Función auxiliar para encontrar Chrome
 async function findChromeExecutable() {
   if (process.platform === 'win32') {
@@ -1040,3 +1035,4 @@ async function findChromeExecutable() {
   }
   return null;
 }
+

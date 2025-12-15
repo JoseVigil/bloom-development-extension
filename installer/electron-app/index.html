@@ -172,32 +172,46 @@
             <button class="button" id="skip-service-btn">Continuar sin servicio</button>
           </div>
         </div>
-      </div>
+      </div>  
     </div>
 
-    <!-- 4. PROFILE SELECTION SCREEN -->
-    <div class="screen" id="profiles-screen">
+    <!-- MANUAL INSTALLATION SCREEN -->
+    <div class="screen" id="manual-install-screen">
       <div class="card">
         <div class="logo">B</div>
-        <h1>Integración con Chrome</h1>
-        <p>Selecciona los perfiles donde habilitar Bloom Nucleus.</p>
-
-        <div id="chrome-running-warning" class="warning-box" style="display:none;">
-          <strong>⚠️ Chrome está abierto</strong>
-          <p style="margin: 5px 0 0 0; font-size: 13px;">Deberás reiniciar Chrome para aplicar los cambios.</p>
-        </div>
-
-        <div class="profile-list-container">
-            <div class="input-group" style="margin-bottom: 10px;">
-                 <label><input type="checkbox" id="select-all-profiles" checked> Seleccionar todos</label>
-            </div>
-            <div class="profile-list" id="profile-list">
-              <div class="spinner"></div>
-            </div>
+        <h1>Instalación de Extensión</h1>
+        
+        <div class="info-box" style="text-align: left; background: #ebf8ff; border-left-color: #4299e1;">
+          <strong>📋 Instrucciones:</strong>
+          <ol style="margin: 15px 0 0 20px; line-height: 2.2; font-size: 15px;">
+            <li>Abre <strong>Chrome</strong> (cualquier perfil)</li>
+            <li>Ve a <code style="background: white; padding: 4px 8px;">chrome://extensions/</code></li>
+            <li>Activa <strong>"Modo de desarrollador"</strong> (toggle arriba a la derecha)</li>
+            <li>Arrastra el archivo <code style="background: white; padding: 4px 8px;">extension.crx</code> a la ventana</li>
+            <li>Haz clic en <strong>"Agregar extensión"</strong></li>
+          </ol>
         </div>
 
         <div class="button-group">
-          <button class="button" id="install-extension-btn">Instalar y Conectar</button>
+          <button class="button" id="open-crx-folder-btn">
+            📁 Abrir Carpeta con CRX
+          </button>
+          <button class="button button-secondary" id="open-chrome-ext-btn">
+            🌐 Abrir chrome://extensions/
+          </button>
+        </div>
+
+        <div style="margin-top: 40px; padding: 25px; background: #f0fff4; border-radius: 10px; border-left: 4px solid #48bb78;">
+          <p style="font-size: 14px; color: #2f855a; margin-bottom: 15px; font-weight: 600;">
+            ⏱️ Esperando instalación...
+          </p>
+          <p style="font-size: 13px; color: #4a5568; margin-bottom: 20px;">
+            El instalador detectará automáticamente cuando instales la extensión.
+          </p>
+          <div class="spinner" style="margin: 20px auto;"></div>
+          <p id="heartbeat-status" style="font-size: 12px; color: #718096; text-align: center;">
+            Verificando conexión...
+          </p>
         </div>
       </div>
     </div>
@@ -242,7 +256,7 @@
       </div>
     </div>
 
-    <!-- 6. SUCCESS SCREEN -->
+    <!-- 6. SUCCESS SCREEN -->    
     <div class="screen" id="success-screen">
       <div class="card">
         <div class="success-icon">✓</div>
@@ -256,6 +270,20 @@
             <li>Extensión Chrome: <strong>Instalada</strong></li>
             <li>Motor IA: <strong>Listo</strong></li>
           </ul>
+        </div>
+
+        <!-- Instrucción de desarrollo -->
+        <div class="info-box" style="background: #fffaf0; border-left-color: #ed8936; text-align: left;">
+          <strong>🛠️ Modo Desarrollo - Siguiente Paso:</strong>
+          <ol style="margin-left: 20px; margin-top: 10px; line-height: 1.8;">
+            <li>Abre VSCode en la carpeta <code>vscode-extension</code></li>
+            <li>Presiona <strong>F5</strong> para iniciar debug</li>
+            <li>Espera a que cargue (aparecerá nueva ventana VSCode)</li>
+            <li>Vuelve aquí y haz clic en <strong>"Configurar Bloom"</strong></li>
+          </ol>
+          <p style="margin-top: 10px; font-size: 13px; color: #744210;">
+            💡 El instalador verificará automáticamente que el servidor esté corriendo.
+          </p>
         </div>
 
         <div class="button-group" id="final-actions">
@@ -387,11 +415,77 @@
       }
     }
 
-    // Handlers Service Screen
-    document.getElementById('continue-from-service-btn').addEventListener('click', () => {
-      showScreen('profiles-screen');
-      loadChromeProfiles();
+    // Después de instalar servicio exitosamente
+    document.getElementById('continue-from-service-btn').addEventListener('click', async () => {
+      showScreen('manual-install-screen');
+      
+      // Instalar extensión (solo provisiona archivos)
+      const result = await window.api.installExtension();
+      
+      if (!result.success) {
+        showError(result.error);
+        return;
+      }
+      
+      console.log('✅ Extensión provisionada:', result);
+      
+      // Iniciar polling automático
+      startHeartbeatPolling();
     });
+
+    // Botones de ayuda
+    document.getElementById('open-crx-folder-btn').addEventListener('click', async () => {
+      await window.api.openFolder(systemInfo.paths.hostInstallDir);
+    });
+
+    document.getElementById('open-chrome-ext-btn').addEventListener('click', async () => {
+      await window.api.openChromeExtensions();
+    });
+
+    // Polling de conexión
+    let heartbeatInterval = null;
+    let heartbeatAttempts = 0;
+    const MAX_ATTEMPTS = 45; // 90 segundos (45 x 2s)
+
+    function startHeartbeatPolling() {
+      console.log('🔄 Iniciando polling de heartbeat...');
+      
+      heartbeatInterval = setInterval(async () => {
+        heartbeatAttempts++;
+        
+        // Update UI
+        document.getElementById('heartbeat-status').textContent = 
+          `Intento ${heartbeatAttempts}/${MAX_ATTEMPTS} - Esperando señal de Chrome...`;
+        
+        // Check connection
+        const status = await window.api.checkExtensionHeartbeat();
+        
+        if (status.chromeConnected) {
+          console.log('✅ ¡Conexión detectada!');
+          clearInterval(heartbeatInterval);
+          onExtensionConnected();
+          return;
+        }
+        
+        // Timeout
+        if (heartbeatAttempts >= MAX_ATTEMPTS) {
+          clearInterval(heartbeatInterval);
+          showError('Timeout: La extensión no se conectó en 90 segundos.\n\n' +
+                    'Verifica que:\n' +
+                    '1. Instalaste la extensión en Chrome\n' +
+                    '2. La extensión está habilitada\n' +
+                    '3. El servicio está corriendo');
+        }
+      }, 2000);
+    }
+
+    function onExtensionConnected() {
+      // Mostrar éxito
+      document.getElementById('final-port').textContent = servicePort;
+      showScreen('success-screen');
+      
+      console.log('🎉 Instalación completada exitosamente');
+    }
     
     document.getElementById('retry-service-btn').addEventListener('click', installService);
     document.getElementById('skip-service-btn').addEventListener('click', () => {

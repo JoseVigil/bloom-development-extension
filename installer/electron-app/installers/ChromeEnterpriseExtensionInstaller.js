@@ -5,7 +5,7 @@ const { exec } = require('child_process');
 const util = require('util');
 const execPromise = util.promisify(exec);
 
-class ChromeExtensionInstaller {
+class ChromeEnterpriseExtensionInstaller {
   constructor(systemPaths) {
     this.paths = systemPaths;
     this.platform = process.platform;

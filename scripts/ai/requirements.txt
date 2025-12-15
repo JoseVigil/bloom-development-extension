@@ -1,0 +1,15 @@
+
+# BTIP Core - Python Dependencies
+# Production-grade automation for Claude.ai interaction
+
+# Browser automation
+playwright==1.41.0
+
+# Clipboard management
+pyperclip==1.8.2
+
+# Development dependencies (optional)
+# pytest==7.4.3
+# pytest-asyncio==0.21.1
+# black==23.12.1
+# mypy==1.7.1{\rtf1}

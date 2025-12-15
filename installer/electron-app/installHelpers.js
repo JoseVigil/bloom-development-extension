@@ -277,10 +277,44 @@ async function migrateLegacyConfig(configDir) {
   return false;
 }
 
+const WEBVIEW_SERVER_PORT = 4123;
+
+async function waitForWebviewServer(timeout = 30000) {
+  const startTime = Date.now();
+  
+  while (Date.now() - startTime < timeout) {
+    try {
+      const http = require('http');
+      
+      await new Promise((resolve, reject) => {
+        const req = http.get(`http://localhost:${WEBVIEW_SERVER_PORT}`, (res) => {
+          resolve();
+        });
+        
+        req.on('error', reject);
+        req.setTimeout(2000, () => {
+          req.destroy();
+          reject(new Error('timeout'));
+        });
+      });
+      
+      return { ready: true, port: WEBVIEW_SERVER_PORT };
+      
+    } catch (error) {
+      // Server no está listo, seguir esperando
+    }
+    
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  
+  return { ready: false, port: WEBVIEW_SERVER_PORT };
+}
+
 module.exports = {
   UI_SERVER_PORT,
   WS_SERVER_PORT,
   UI_FALLBACK_PORT,
+  WEBVIEW_SERVER_PORT,
   checkServerRunning,
   findAvailablePort,
   isPortAvailable,
@@ -291,5 +325,5 @@ module.exports = {
   waitForServersReady,
   getOnboardingURL,
   verifySystemHealth,
-  migrateLegacyConfig
+  migrateLegacyConfig  
 };

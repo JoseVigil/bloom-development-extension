@@ -502,7 +502,9 @@
   },
   "extensions.autoCheckUpdates": false,
   "scripts": {
-    "postinstall": "node scripts/bridge/postinstall.js",
+    "install:bridge": "node scripts/bridge/postinstall.js",
+    "install:python": "node scripts/python/install_python_deps.js",
+    "postinstall": "npm run install:bridge && npm run install:python",
     "vscode:prepublish": "npm run build",
     "compile": "tsc -p ./",
     "copy-assets": "node -e \"require('fs').cpSync('src/ui', 'out/ui', {recursive: true})\"",
@@ -525,7 +527,9 @@
     "start": "electron-forge start -- --dev",
     "make": "npm run install-py-deps && electron-forge make",
     "package": "npm run install-py-deps && electron-forge package",
-    "install-py-deps": "echo 'Instalando dependencias Python en core/libs...' && pip install --target ../../core/libs -r ../../core/requirements.txt --upgrade --no-user"
+    "package:vscode": "vsce package --out ../installer/vscode/bloom-extension.vsix",   
+    "package:all": "npm run package:vscode && npm run package", 
+    "test:python-install": "python -m core verify"
   },
   "keywords": [
     "bloom",
