@@ -123,3 +123,66 @@ python -m core --help
 python -m core compress --help
 ```
 
+ core/
+ ├── __init__.py
+ ├── __main__.py
+ ├── __pycache__/ [... cache]
+ ├── adapters/
+ │   ├── __init__.py
+ │   └── legacy_bridge.py
+ ├── commnds.md
+ ├── config.py
+ ├── core/
+ │   └── libs/ [... python vendored dependencies]
+ ├── filesystem/
+ │   ├── __init__.py
+ │   ├── __pycache__/ [... cache]
+ │   ├── code_compressor.py
+ │   ├── files_compressor.py
+ │   ├── files_extractor.py
+ │   ├── payload_manager.py
+ │   ├── staging.py
+ │   └── tree_manager.py
+ ├── generators/
+ │   ├── __init__.py
+ │   ├── __pycache__/ [... cache]
+ │   ├── nucleus_generator.py
+ │   └── strategies/
+ │       ├── __init__.py
+ │       ├── android.py
+ │       ├── cicd.py
+ │       ├── context_strategy.py
+ │       ├── cpp.py
+ │       ├── dotnet.py
+ │       ├── flutter.py
+ │       ├── go.py
+ │       ├── iac.py
+ │       ├── ios.py
+ │       ├── jvm.py
+ │       ├── macos.py
+ │       ├── multistack_detector.py
+ │       ├── php.py
+ │       ├── python.py
+ │       ├── ruby.py
+ │       ├── rust.py
+ │       └── typescript.py
+ ├── intelligence/
+ │   ├── __init__.py
+ │   ├── llm_client.py
+ │   └── response_parser.py
+ ├── libs/ [... python vendored dependencies]
+ ├── memory/
+ │   ├── __init__.py
+ │   ├── index_loader.py
+ │   ├── meta_manager.py
+ │   └── semantic_router.py
+ ├── orchestrator/
+ │   ├── __init__.py
+ │   ├── engine.py
+ │   ├── state_machine.py
+ │   └── task_dispatcher.py
+ ├── requirements.txt
+ └── utils/
+     ├── __init__.py
+     ├── logging_utils.py
+     └── path_resolver.py

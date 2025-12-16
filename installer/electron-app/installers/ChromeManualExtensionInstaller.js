@@ -92,11 +92,16 @@ class ChromeManualExtensionInstaller {
   }
 
   async registerWindowsNativeHost(manifestPath) {
-    const { execPromise } = require('util').promisify(require('child_process').exec);
+    // CORRECCIÓN: Definir correctamente las dependencias
+    const util = require('util');
+    const exec = require('child_process').exec;
+    const execPromise = util.promisify(exec);
+
     const regKey = 'HKCU\\SOFTWARE\\Google\\Chrome\\NativeMessagingHosts\\com.bloom.nucleus.bridge';
     const escapedPath = manifestPath.replace(/\\/g, '\\\\');
-    
+      
     try {
+      // El resto sigue igual...
       const psCommand = `New-Item -Path "Registry::${regKey}" -Force | New-ItemProperty -Name "(Default)" -Value "${escapedPath}" -Force`;
       await execPromise(`powershell -Command "${psCommand}"`, { shell: 'powershell.exe' });
       console.log('✅ Native Host registrado (Windows)');

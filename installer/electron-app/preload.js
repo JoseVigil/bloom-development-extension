@@ -36,5 +36,8 @@ contextBridge.exposeInMainWorld('api', {
    getChromeProfiles: () => ipcRenderer.invoke('get-chrome-profiles'),
   installExtension: () => ipcRenderer.invoke('install-extension'),
   checkExtensionHeartbeat: () => ipcRenderer.invoke('check-extension-heartbeat'),
-  launchChromeProfile: (data) => ipcRenderer.invoke('launch-chrome-profile', data),
+  launchChromeProfile: (args) => ipcRenderer.invoke('launch-chrome-profile', args),
+  
+  startDrag: (filePath) => ipcRenderer.send('ondragstart', filePath),
+  updateExtensionId: (newId) => ipcRenderer.invoke('update-extension-id', newId),
 });
