@@ -203,4 +203,4 @@ class ChromeEnterpriseExtensionInstaller {
   }
 }
 
-module.exports = ChromeExtensionInstaller;
+module.exports = ChromeEnterpriseExtensionInstaller;

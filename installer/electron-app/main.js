@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, nativeImage } = require('electron'); 
 const path = require('path');
 const fs = require('fs-extra');
 const { exec, spawn } = require('child_process');
@@ -81,7 +81,7 @@ function createWindow() {
     icon: path.join(__dirname, 'assets', 'icon.png')
   });
 
-  mainWindow.loadFile(path.join(__dirname, 'index.html'));
+  mainWindow.loadFile(path.join(__dirname, '/src/index.html'));
   
   if (isDevMode) {
     mainWindow.webContents.openDevTools();
@@ -412,82 +412,111 @@ ipcMain.handle('check-extension-heartbeat', async () => {
 // CHROME LAUNCHER (CORREGIDO PARA INSTALACIÓN ENTERPRISE)
 // ============================================================================
 
+// Agrega esto en main.js
 ipcMain.handle('launch-chrome-profile', async (event, { profileId, extensionPath }) => {
   try {
+    // 1. Encontrar ejecutable
     const chromePath = await findChromeExecutable();
     if (!chromePath) throw new Error("No se encontró el ejecutable de Chrome");
 
     const targetProfile = profileId || "Default";
-    
-    console.log(`[Launcher] 🔄 Cerrando SOLO perfil: ${targetProfile}`);
+    console.log(`[Launcher] 🔄 Reiniciando Chrome. Perfil: ${targetProfile}`);
 
-    // PASO 1: CIERRE QUIRÚRGICO (Solo Windows)
+    // 2. Cerrar instancias previas de ese perfil (Solo Windows)
     if (process.platform === 'win32') {
-        // Crear script en archivo temporal
-        const tempKillScript = path.join(os.tmpdir(), `bloom-kill-${Date.now()}.ps1`);
-        
-        const killScript = `
-$targetProfile = "${targetProfile}"
-$found = $false
-
-Get-WmiObject Win32_Process -Filter "name = 'chrome.exe'" | Where-Object { 
-  $_.CommandLine -like "*--profile-directory=*$targetProfile*"
-} | ForEach-Object { 
-  Write-Host "Cerrando PID: $($_.ProcessId)"
-  Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
-  $found = $true
-}
-
-if (-not $found) {
-  Write-Host "No habia procesos del perfil $targetProfile abiertos"
-}
-`;
+        const scriptContent = `
+            $p = "${targetProfile}"
+            Get-WmiObject Win32_Process -Filter "name = 'chrome.exe'" | Where-Object { 
+                $_.CommandLine -like "*--profile-directory=*$p*" 
+            } | Stop-Process -Force -ErrorAction SilentlyContinue
+        `;
+        const tempScript = path.join(os.tmpdir(), `kill_chrome_${Date.now()}.ps1`);
         
         try {
-            await fs.writeFile(tempKillScript, killScript, 'utf8');
-            const { stdout } = await execPromise(
-                `powershell -ExecutionPolicy Bypass -File "${tempKillScript}"`,
-                { timeout: 5000 }
-            );
-            console.log('[Launcher]', stdout.trim());
-            await fs.unlink(tempKillScript).catch(() => {});
-        } catch(e) {
-            console.log('[Launcher] Error cerrando:', e.message);
+            await fs.writeFile(tempScript, scriptContent);
+            await execPromise(`powershell -ExecutionPolicy Bypass -File "${tempScript}"`, { timeout: 5000 });
+            await fs.unlink(tempScript).catch(()=>/./);
+        } catch (e) {
+            console.log("No se pudo cerrar Chrome limpiamente:", e.message);
         }
-        
-        // Espera para liberar recursos
-        await new Promise(r => setTimeout(r, 2000));
+        await new Promise(r => setTimeout(r, 1500)); // Esperar cierre
     }
-    
-    // PASO 2: LANZAMIENTO CON LOGS ACTIVADOS
+
+    // 3. Preparar argumentos
     const args = [
       `--profile-directory=${targetProfile}`,
-      '--enable-logging',
-      '--v=1',
-      `--log-file=${path.join(paths.configDir, 'logs', 'chrome-debug.log')}`
+      // Importante: En Enterprise/Registry a veces ayuda forzar la relectura
+      '--restore-last-session' 
     ];
 
-    console.log(`[Launcher] 🚀 Abriendo Chrome (Perfil: ${targetProfile})`);
-
+    // 4. Lanzar
     const child = spawn(chromePath, args, { 
       detached: true, 
-      stdio: 'ignore',
-      env: { 
-        ...process.env,
-        CHROME_DEVELOPER_MODE: undefined 
-      }
+      stdio: 'ignore' 
     });
     child.unref();
 
-    await new Promise(r => setTimeout(r, 2000));
     return { success: true };
-    
+
   } catch (error) {
-    console.error('[Launcher] ❌ Error:', error);
+    console.error('Error lanzando Chrome:', error);
     return { success: false, error: error.message };
   }
 });
 
+// --- EN main.js ---
+
+// 1. Agrega esto junto a los otros handlers
+ipcMain.handle('update-extension-id', async (event, newId) => {
+  try {
+    // Validación básica de seguridad (solo letras minúsculas, 32 caracteres)
+    if (!/^[a-z]{32}$/.test(newId)) {
+      throw new Error("El ID debe tener 32 letras minúsculas (a-z).");
+    }
+
+    console.log(`[Manifest] Actualizando Allowed Origin con ID: ${newId}`);
+    
+    // Usamos el instalador manual para regenerar el manifiesto con el nuevo ID
+    const installer = new ChromeManualInstaller(paths);
+    await installer.generateNativeManifest(newId);
+    
+    // (Opcional) Re-registrar el host si fuera necesario, pero usualmente solo cambiar el JSON basta.
+    // await installer.registerNativeHost(); 
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error actualizando ID:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// 2. Manejador para el Drag & Drop nativo
+// --- EN main.js ---
+
+// --- CORRECCIÓN EN main.js ---
+
+// --- EN main.js (Reemplaza el bloque anterior de ondragstart) ---
+
+ipcMain.on('ondragstart', (event, filePath) => {
+  // 1. Validar que llegue algo
+  if (!filePath || typeof filePath !== 'string') return;
+  
+  // 2. Resolver ruta absoluta
+  const absolutePath = path.resolve(filePath);
+  
+  // 3. Log para saber que entramos
+  console.log('[Drag] Iniciando arrastre SIN ICONO para:', absolutePath);
+
+  // 4. Ejecutar arrastre con icono vacío (esto no falla nunca)
+  try {
+      event.sender.startDrag({
+        file: absolutePath,
+        icon: nativeImage.createEmpty() // <--- Usamos imagen vacía para probar
+      });
+  } catch (err) {
+      console.error("[Drag] Error fatal:", err);
+  }
+});
 
 // ============================================================================
 // HELPER FUNCTIONS
