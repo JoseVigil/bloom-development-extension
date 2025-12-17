@@ -3,6 +3,7 @@
   "name": "Bloom Nucleus Bridge",
   "version": "1.0.0",
   "description": "Native messaging bridge for browser automation",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArR9LQUunP5gkFNDrMzwd9iolQipvntlkmidrZ2H9t5+0rn4vshqtQH2JS+92ExmnuNazsDF353LbMAuASKNWMmFdHIsGATN6trgSoGYpRiAyDvCCxqr55gb4wZk/l8g00/l8sCOVdBzpEObUkeQPBtYQwM7bT33vJ0Z/p9yMwO0N3POHVlGODaL8T/QUTosVi58qBGx6+KOfaih6MUrr5ImVaCqIdhVMzE08jGNi6TDryuGNB0Ev0fJ1ww7jACUrIXKdzxpOCbL6WZbAqvPDkYtfSE+q6PyMiZ9YdE8fbG6dtY/Fh3KEMyqNqy3ynxBOWHKNHxdpvCylhpLUYMkQhQIDAQAB",
   "permissions": [
     "tabs",
     "scripting",

@@ -1,0 +1,18 @@
+{
+   "background": {
+      "service_worker": "background.js"
+   },
+   "content_scripts": [ {
+      "all_frames": true,
+      "js": [ "content.js" ],
+      "matches": [ "\u003Call_urls>" ],
+      "run_at": "document_start"
+   } ],
+   "description": "Native messaging bridge for browser automation",
+   "host_permissions": [ "\u003Call_urls>" ],
+   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA74JyMJqIAuwWYPnBg/tM0b3PDyeuxjMP5m9ev2soMUQZLBKZHdO2IzwR1GoWVhyh9A/kzfFBMKKRI2jMHf74IDIhFJzE8fxEtRCPL7XKaVGq57+WTXH5d7gQG4yZ0vibM2kPLfdPqVHY9GJoGy44GIlMLF4McAJX8hPc7Hof0M95d1dmFXmsqpXUfRThWjdUrcrvHetHaA9k+n1Nnwl+OWEr6xC8CNSp2bTXkmp9o6hAy4hjtmuhxQN7FWqr/46Hg3BkkyC2LwAgMV/Y5GM9FR4jppDnTNYieiSuBems7BUwVT9W9AWLwt9yTP40uRqmQicvCOR60sPjAUV/rkk3MwIDAQAB",
+   "manifest_version": 3,
+   "name": "Bloom Nucleus Bridge",
+   "permissions": [ "tabs", "scripting", "activeTab", "nativeMessaging", "storage" ],
+   "version": "1.0.0"
+}

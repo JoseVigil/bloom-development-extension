@@ -1,5 +1,8 @@
 const path = require('path');
 const fs = require('fs-extra');
+const { exec } = require('child_process');
+const util = require('util');
+const execPromise = util.promisify(exec);
 
 class ChromeManualExtensionInstaller {
   constructor(systemPaths) {
@@ -43,15 +46,37 @@ class ChromeManualExtensionInstaller {
   }
 
   async getExtensionId() {
-    const idJsonPath = this.paths.extensionId;
+    // CORREGIDO: Lee desde chrome-extension/crx/id.json
+    const idJsonPath = path.join(
+      __dirname, 
+      '..', 
+      '..', 
+      'chrome-extension', 
+      'crx', 
+      'id.json'
+    );
+    
     if (!await fs.pathExists(idJsonPath)) {
       throw new Error(`ID metadata no encontrado: ${idJsonPath}`);
     }
-    return await fs.readJson(idJsonPath);
+    
+    const metadata = await fs.readJson(idJsonPath);
+    console.log(`📄 ID leído desde: ${idJsonPath}`);
+    console.log(`   ID: ${metadata.id}`);
+    
+    return metadata;
   }
 
   async provisionCrxFile(destPath) {
-    const sourceCrx = this.paths.extensionCrx;
+    // CORREGIDO: Lee desde chrome-extension/crx/extension.crx
+    const sourceCrx = path.join(
+      __dirname,
+      '..',
+      '..',
+      'chrome-extension',
+      'crx',
+      'extension.crx'
+    );
     
     if (!await fs.pathExists(sourceCrx)) {
       throw new Error(`CRX no encontrado: ${sourceCrx}`);
@@ -59,6 +84,7 @@ class ChromeManualExtensionInstaller {
     
     await fs.ensureDir(path.dirname(destPath));
     await fs.copy(sourceCrx, destPath, { overwrite: true });
+    console.log(`📦 CRX copiado desde: ${sourceCrx}`);
   }
 
   async generateNativeManifest(extensionId) {
@@ -92,23 +118,18 @@ class ChromeManualExtensionInstaller {
   }
 
   async registerWindowsNativeHost(manifestPath) {
-    // CORRECCIÓN: Definir correctamente las dependencias
-    const util = require('util');
-    const exec = require('child_process').exec;
-    const execPromise = util.promisify(exec);
-
     const regKey = 'HKCU\\SOFTWARE\\Google\\Chrome\\NativeMessagingHosts\\com.bloom.nucleus.bridge';
     const escapedPath = manifestPath.replace(/\\/g, '\\\\');
       
     try {
-      // El resto sigue igual...
       const psCommand = `New-Item -Path "Registry::${regKey}" -Force | New-ItemProperty -Name "(Default)" -Value "${escapedPath}" -Force`;
       await execPromise(`powershell -Command "${psCommand}"`, { shell: 'powershell.exe' });
-      console.log('✅ Native Host registrado (Windows)');
+      console.log('✅ Native Host registrado (Windows - HKCU)');
     } catch (error) {
+      // Fallback a reg add
       const command = `reg add "${regKey}" /ve /d "${escapedPath}" /f`;
       await execPromise(command);
-      console.log('✅ Native Host registrado (Windows fallback)');
+      console.log('✅ Native Host registrado (Windows fallback - HKCU)');
     }
   }
 
@@ -132,6 +153,28 @@ class ChromeManualExtensionInstaller {
     const destPath = path.join(nativeMessagingDir, 'com.bloom.nucleus.bridge.json');
     await fs.copy(manifestPath, destPath);
     console.log('✅ Native Host registrado (Linux)');
+  }
+
+  /**
+   * Desinstala la extensión (limpia native host registry)
+   */
+  async uninstall() {
+    console.log('🗑️  Desinstalando Native Host...');
+    
+    if (this.platform === 'win32') {
+      const regKey = 'HKCU\\SOFTWARE\\Google\\Chrome\\NativeMessagingHosts\\com.bloom.nucleus.bridge';
+      try {
+        await execPromise(`reg delete "${regKey}" /f`);
+        console.log('✅ Native Host registry eliminado');
+      } catch (e) {
+        console.log('ℹ️  Native Host no estaba registrado');
+      }
+    }
+    
+    console.log('✅ Desinstalación manual completada');
+    console.log('⚠️  El usuario debe remover la extensión manualmente desde chrome://extensions');
+    
+    return { success: true };
   }
 }
 

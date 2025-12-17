@@ -275,7 +275,7 @@ class HeartbeatManager {
 }
 
 // ========================================================================
-// 4. EXTENSION INSTALLER
+// 4. EXTENSION INSTALLER (Versión Corregida en renderer.js)
 // ========================================================================
 class ExtensionInstaller {
   constructor(api, uiManager) {
@@ -289,7 +289,8 @@ class ExtensionInstaller {
     
     if (result.success) {
       this.currentCrxPath = result.crxPath;
-      console.log('📦 Archivo listo para arrastrar:', this.currentCrxPath);
+      // LOG IMPORTANTE: Verificamos que tenemos la ruta
+      console.log('📦 Archivo listo en:', this.currentCrxPath);
       return { success: true, path: result.crxPath };
     } else {
       this.ui.showError("No se pudo preparar el archivo CRX: " + result.error);
@@ -297,21 +298,36 @@ class ExtensionInstaller {
     }
   }
 
+  // ESTA ES LA FUNCIÓN QUE CAMBIA
   setupDragAndDrop(elementId) {
-    const draggableEl = document.getElementById(elementId);
+    const cardEl = document.getElementById(elementId);
     
-    if (!draggableEl) {
-      console.warn(`⚠️ Elemento '${elementId}' no encontrado para drag & drop`);
+    // Verificación de seguridad
+    if (!cardEl) {
+      console.error(`❌ ERROR CRÍTICO: No encontré el elemento con ID '${elementId}'`);
       return;
     }
 
-    draggableEl.addEventListener('dragstart', (e) => {
-      e.preventDefault();
+    console.log('✅ Elemento encontrado, configurando click para:', elementId);
+
+    // 1. Estilo visual
+    cardEl.style.cursor = 'pointer';
+    cardEl.removeAttribute('draggable'); // Quitamos el drag viejo
+
+    // 2. Limpiamos listeners viejos clonando el nodo
+    const newElement = cardEl.cloneNode(true);
+    cardEl.parentNode.replaceChild(newElement, cardEl);
+
+    // 3. Agregamos el evento CLICK
+    newElement.addEventListener('click', () => {
+      console.log('🖱️ CLICK DETECTADO. Ruta actual:', this.currentCrxPath);
       
       if (this.currentCrxPath && this.currentCrxPath.length > 0) {
-        this.api.startDrag(this.currentCrxPath);
+        // Llamada a la API
+        this.api.showItemInFolder(this.currentCrxPath);
       } else {
-        alert("Error: El archivo de la extensión no está listo aún. Espera unos segundos.");
+        alert("⚠️ El archivo aún no está listo. Espera unos segundos.");
+        console.warn("Click fallido: currentCrxPath está vacío");
       }
     });
   }
