@@ -53,50 +53,51 @@ export class HeartbeatManager {
    * Inicia el polling de handshake (versión enterprise)
    */
   startHandshakePolling(onSuccess) {
-    console.log('🔄 Iniciando polling de handshake (enterprise)...');
-    this.attempts = 0;
-    const MAX_ATTEMPTS = 30;
-    const POLL_INTERVAL = 3000;
-    
-    this.interval = setInterval(async () => {
-      this.attempts++;
+      console.log('🔄 Iniciando validación estricta de conexión...');
+      this.attempts = 0;
+      const MAX_ATTEMPTS = 60; // 60 intentos
+      const POLL_INTERVAL = 1000; // 1 segundo (más rápido)
       
-      // Animación visual
-      this.ui.animateHeartbeat('heartbeat-dot');
-      
-      // Actualizar contador
+      // Actualizamos la UI inicial del handshake
       this.ui.updateHTML('step2-message', `
-        <p>Validando conexión con Chrome...</p>
-        <p style="font-size: 12px; color: #a0aec0; margin-top: 5px;">
-          Intento ${this.attempts}/${MAX_ATTEMPTS}
-        </p>
+          <strong>Esperando a Chrome...</strong>
+          <ul style="text-align:left; margin-top:10px; font-size:13px; color:#4a5568;">
+              <li>1. Ve a <code>chrome://extensions</code></li>
+              <li>2. Busca "Bloom Nucleus"</li>
+              <li>3. <b>Haz clic en el icono de Recargar (⟳)</b></li>
+          </ul>
       `);
-      
-      // Verificar estado
-      const status = await this.api.checkExtensionHeartbeat();
-      
-      if (status.chromeConnected) {
-        this.stop();
-        this.ui.setHeartbeatState('heartbeat-dot', true);
-        this.ui.toggleElement('step-waiting-chrome', false);
-        this.ui.toggleElement('step-success', true);
-        this.ui.updateText('handshake-title', 'Sincronizado');
+
+      this.interval = setInterval(async () => {
+        this.attempts++;
+        this.ui.animateHeartbeat('heartbeat-dot');
         
-        if (onSuccess) onSuccess();
-        return;
-      }
-      
-      // Timeout
-      if (this.attempts >= MAX_ATTEMPTS) {
-        this.stop();
-        const error = `Timeout: Chrome no respondió después de ${MAX_ATTEMPTS * 3} segundos.\n` +
-                      'Verifica:\n' +
-                      '1. Chrome se cerró completamente antes de reabrir\n' +
-                      '2. El registro se aplicó correctamente (ejecuta regedit como Admin)\n' +
-                      '3. No hay políticas de dominio bloqueando extensiones';
-        this.ui.showError(error);
-      }
-    }, POLL_INTERVAL);
+        // Chequeo real
+        const status = await this.api.checkExtensionHeartbeat();
+        
+        if (status.chromeConnected) {
+          this.stop();
+          // Feedback visual inmediato
+          this.ui.setHeartbeatState('heartbeat-dot', true);
+          this.ui.updateText('handshake-title', '¡Conexión Exitosa!');
+          
+          // Pequeño delay para que el usuario vea el check verde antes de cambiar
+          setTimeout(() => {
+              if (onSuccess) onSuccess();
+          }, 1000);
+          return;
+        }
+        
+        // Manejo del Timeout (Error bloqueante)
+        if (this.attempts >= MAX_ATTEMPTS) {
+          this.stop();
+          this.ui.showError(
+              "No se detectó la conexión con Chrome.\n\n" +
+              "El instalador no puede continuar sin verificar que la extensión funcione.\n" +
+              "Asegúrate de haber recargado la extensión y que el ID sea correcto."
+          );
+        }
+      }, POLL_INTERVAL);
   }
 
   /**

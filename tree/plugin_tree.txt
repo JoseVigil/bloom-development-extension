@@ -193,6 +193,7 @@ bloom-development-extension/
 │   ├── adapters/
 │   │   ├── __init__.py
 │   │   └── legacy_bridge.py
+│   ├── commands.txt
 │   ├── commnds.md
 │   ├── config.py
 │   ├── filesystem/
@@ -254,9 +255,8 @@ bloom-development-extension/
 │   ├── README.md
 │   ├── chrome-extension/
 │   │   ├── crx/
-│   │   │   ├── extension.crx
-│   │   │   └── id.json
-│   │   ├── key.pem
+│   │   │   ├── id.json
+│   │   │   └── key.pem
 │   │   └── src/
 │   │       ├── 128x128.png
 │   │       ├── background.js
@@ -273,9 +273,7 @@ bloom-development-extension/
 │   │   │   └── installer.gif
 │   │   ├── config-loader.js
 │   │   ├── entitlements.plist
-│   │   ├── extension-id.txt
 │   │   ├── forge.config.js
-│   │   ├── index.html
 │   │   ├── installHelpers.js
 │   │   ├── installer-config.json
 │   │   ├── installers/
@@ -293,6 +291,15 @@ bloom-development-extension/
 │   │   │   └── hkcu.ps1
 │   │   ├── run-admin.bat
 │   │   ├── run-make-admin.bat
+│   │   ├── src/
+│   │   │   ├── event_listeners.js
+│   │   │   ├── extension_installer.js
+│   │   │   ├── heartbeat_manager.js
+│   │   │   ├── index.html
+│   │   │   ├── installation_manager.js
+│   │   │   ├── renderer.js
+│   │   │   ├── styles.css
+│   │   │   └── ui_manager.js
 │   │   └── test-installation.js
 │   ├── native/
 │   │   └── bin/
@@ -307,12 +314,18 @@ bloom-development-extension/
 │   ├── node_modules/ [... dependencies]
 │   ├── package-lock.json
 │   ├── package.json
-│   └── scripts/
-│       ├── build.js
-│       ├── generate-extension-id.js
-│       ├── pack-extension.js
-│       ├── run-elevated.ps1
-│       ├── uninstall.js
-│       └── validate.js
+│   ├── scripts/
+│   │   ├── build-extension.js
+│   │   ├── check-health.js
+│   │   ├── clean-crx-registry.js
+│   │   ├── generate-fixed-key.js
+│   │   ├── get-id.js
+│   │   ├── god-mode.js
+│   │   ├── register-host.js
+│   │   ├── run-elevated.ps1
+│   │   ├── setup-dev-host.js
+│   │   └── validate.js
+│   └── temp_profiles/
+│       └── Worker_Prototipo_01/
 ├── package.json
 └── tsconfig.json

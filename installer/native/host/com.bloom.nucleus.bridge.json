@@ -1,0 +1,9 @@
+{
+  "name": "com.bloom.nucleus.bridge",
+  "description": "Bloom Nucleus Host (Dev)",
+  "path": "C:\\repos\\bloom-videos\\bloom-development-extension\\installer\\native\\bin\\win32\\bloom-host.exe",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://iofbckileookkfiokffblaomlhfenkea/"
+  ]
+}

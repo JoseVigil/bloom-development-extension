@@ -5,29 +5,6 @@ const path = require('path');
 const { execSync } = require('child_process');
 
 const platform = process.platform;
-const home = process.env.HOME || process.env.USERPROFILE;
-
-const paths = {
-  hostInstallDir: platform === 'win32' 
-    ? 'C:\\Program Files\\BloomNucleus\\native'
-    : platform === 'darwin'
-    ? path.join('/usr', 'local', 'bin', 'bloom-nucleus')
-    : path.join('/usr', 'local', 'bin', 'bloom-nucleus'),
-  
-  configDir: platform === 'win32'
-    ? path.join(process.env.LOCALAPPDATA, 'BloomNucleus')
-    : platform === 'darwin'
-    ? path.join(home, '.config', 'BloomNucleus')
-    : path.join(home, '.config', 'BloomNucleus'),
-  
-  chromeExt: platform === 'win32'
-    ? path.join(process.env.APPDATA, 'Bloom', 'chrome-extension')
-    : platform === 'darwin'
-    ? path.join(home, 'Library', 'Application Support', 'Bloom', 'chrome-extension')
-    : path.join(home, '.config', 'Bloom', 'chrome-extension'),
-  
-  vsCodeExt: path.join(home, '.vscode', 'extensions')
-};
 
 function check(name, condition, path = '') {
   const status = condition ? '✅' : '❌';
@@ -35,70 +12,67 @@ function check(name, condition, path = '') {
   return condition;
 }
 
-console.log('\n🔍 Validando instalación de Bloom Nucleus...\n');
+console.log('\n🔍 Validating Bloom Nucleus Installation...\n');
 
 let allGood = true;
 
-// 1. Directorio de configuración
-allGood &= check('Directorio de configuración', fs.existsSync(paths.configDir), paths.configDir);
+// 1. Extension Build
+const extensionCrx = path.join(__dirname, '..', 'chrome-extension', 'crx', 'extension.crx');
+const extensionId = path.join(__dirname, '..', 'chrome-extension', 'crx', 'id.json');
+const extensionKey = path.join(__dirname, '..', 'chrome-extension', 'crx', 'key.pem');
 
-// 2. Config
-const configPath = path.join(paths.configDir, 'config.json');
-allGood &= check('Archivo de configuración', fs.existsSync(configPath), configPath);
+allGood &= check('Extension CRX', fs.existsSync(extensionCrx), extensionCrx);
+allGood &= check('Extension ID', fs.existsSync(extensionId), extensionId);
+allGood &= check('Extension Key', fs.existsSync(extensionKey), extensionKey);
 
-if (fs.existsSync(configPath)) {
-  const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-  console.log('   📄 Version:', config.version);
-  console.log('   📅 Instalado:', new Date(config.installedAt).toLocaleString());
-  console.log('   🔧 Modo Dev:', config.devMode ? 'Sí' : 'No');
+if (fs.existsSync(extensionId)) {
+  const idData = JSON.parse(fs.readFileSync(extensionId, 'utf8'));
+  console.log(`   📄 ID: ${idData.id}`);
+  console.log(`   🔗 Update URL: ${idData.updateUrl || 'N/A'}`);
 }
 
-// 3. Native Host Directory
-allGood &= check('Directorio Native Host', fs.existsSync(paths.hostInstallDir), paths.hostInstallDir);
+// 2. Native Host Binary
+const nativeBinary = platform === 'win32' 
+  ? path.join(__dirname, '..', 'native', 'bin', 'win32', 'bloom-host.exe')
+  : platform === 'darwin'
+  ? path.join(__dirname, '..', 'native', 'bin', 'darwin', 'x64', 'bloom-host')
+  : null;
 
-const binary = platform === 'win32' ? 'bloom-host.exe' : 'bloom-host';
-const binaryPath = path.join(paths.hostInstallDir, binary);
-allGood &= check('Binario Native Host', fs.existsSync(binaryPath), binaryPath);
+if (nativeBinary) {
+  allGood &= check('Native Host Binary', fs.existsSync(nativeBinary), nativeBinary);
+}
 
-const manifestPath = path.join(paths.hostInstallDir, 'com.bloom.nucleus.bridge.json');
-allGood &= check('Manifest Native Host', fs.existsSync(manifestPath), manifestPath);
-
-// 4. Registro/Manifest del sistema
+// 3. Registry Check (Windows only)
 if (platform === 'win32') {
   try {
-    execSync('reg query "HKCU\\Software\\Google\\Chrome\\NativeMessagingHosts\\com.bloom.nucleus.bridge"', { stdio: 'ignore' });
-    allGood &= check('Registro Windows', true);
+    execSync('reg query "HKLM\\SOFTWARE\\Policies\\Google\\Chrome\\ExtensionInstallForcelist"', { stdio: 'ignore' });
+    allGood &= check('Chrome Enterprise Policy', true);
+    
+    // Read the policy value
+    const result = execSync('reg query "HKLM\\SOFTWARE\\Policies\\Google\\Chrome\\ExtensionInstallForcelist" /v 1', { encoding: 'utf8' });
+    if (result.includes(';')) {
+      console.log('   ✅ Policy format correct (ID;URL)');
+    } else {
+      console.log('   ⚠️  Policy may be missing update URL');
+    }
   } catch {
-    allGood &= check('Registro Windows', false);
+    allGood &= check('Chrome Enterprise Policy', false);
   }
-} else {
-  const systemManifestPath = platform === 'darwin'
-    ? path.join(home, 'Library', 'Application Support', 'Google', 'Chrome', 'NativeMessagingHosts', 'com.bloom.nucleus.bridge.json')
-    : path.join(home, '.config', 'google-chrome', 'NativeMessagingHosts', 'com.bloom.nucleus.bridge.json');
-  
-  allGood &= check('Manifest del sistema', fs.existsSync(systemManifestPath), systemManifestPath);
 }
 
-// 5. Chrome Extension
-allGood &= check('Directorio Chrome Extension', fs.existsSync(paths.chromeExt), paths.chromeExt);
-allGood &= check('Manifest Chrome Extension', fs.existsSync(path.join(paths.chromeExt, 'manifest.json')));
-
-// 6. VSCode Extension
-try {
-  // Buscar en directorio (más confiable para dev mode)
-  const extDirs = fs.readdirSync(paths.vsCodeExt).filter(d => d.includes('bloom'));
-  const hasBloom = extDirs.length > 0;
-  allGood &= check('VSCode Extension instalada', hasBloom);
-  
-  if (extDirs.length > 0) {
-    console.log('   📦 Encontradas:', extDirs.join(', '));
-  }
-} catch (error) {
-  allGood &= check('VSCode Extension', false, 'Error al verificar');
-}
+// 4. Electron App
+const electronMain = path.join(__dirname, '..', 'electron-app', 'main.js');
+allGood &= check('Electron Installer', fs.existsSync(electronMain), electronMain);
 
 console.log('\n' + '='.repeat(50));
-console.log(allGood ? '\n✅ Instalación completa y válida!\n' : '\n❌ Instalación incompleta o con errores\n');
+console.log(allGood ? '\n✅ All checks passed!\n' : '\n❌ Some checks failed\n');
 console.log('='.repeat(50) + '\n');
+
+if (!allGood) {
+  console.log('💡 To fix:');
+  console.log('   1. Run: node scripts/build-extension.js');
+  console.log('   2. Build Electron installer: cd electron-app && npm run make');
+  console.log('   3. Run installer as admin\n');
+}
 
 process.exit(allGood ? 0 : 1);

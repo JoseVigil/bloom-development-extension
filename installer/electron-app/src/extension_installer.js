@@ -24,29 +24,35 @@ export class ExtensionInstaller {
     }
   }
 
-  /**
-   * Configura el drag & drop del archivo CRX
+   /**
+   * MODIFICADO: Configura Click para abrir carpeta (Bypass de seguridad de Windows)
    */
   setupDragAndDrop(elementId) {
-    const draggableEl = document.getElementById(elementId);
+    const cardEl = document.getElementById(elementId);
     
-    if (!draggableEl) {
-      console.warn(`⚠️ Elemento '${elementId}' no encontrado para drag & drop`);
+    if (!cardEl) {
+      console.warn(`⚠️ Elemento '${elementId}' no encontrado`);
       return;
     }
 
-    draggableEl.addEventListener('dragstart', (e) => {
-      e.preventDefault();
-      
+    // Aseguramos que parezca clickeable
+    cardEl.style.cursor = 'pointer';
+
+    // Limpiamos eventos anteriores para evitar duplicados
+    const newCardEl = cardEl.cloneNode(true);
+    cardEl.parentNode.replaceChild(newCardEl, cardEl);
+
+    newCardEl.addEventListener('click', () => {
+      console.log('🖱️ Click detectado. Path actual:', this.currentCrxPath);
+
       if (this.currentCrxPath && this.currentCrxPath.length > 0) {
-        this.api.startDrag(this.currentCrxPath);
+        this.api.showItemInFolder(this.currentCrxPath);
       } else {
-        alert("Error: El archivo de la extensión no está listo aún. Espera unos segundos.");
-        console.error("currentCrxPath está vacío");
+        alert("El archivo no está listo aún. Espera unos segundos e intenta de nuevo.");
       }
     });
 
-    console.log('✅ Drag & drop configurado para:', elementId);
+    console.log('✅ Botón de abrir carpeta configurado');
   }
 
   /**

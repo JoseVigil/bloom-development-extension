@@ -325,6 +325,17 @@ ipcMain.handle('open-folder', async (event, folderPath) => {
   await shell.openPath(folderPath);
 });
 
+ipcMain.handle('show-item-in-folder', async (event, filePath) => {
+  if (filePath && typeof filePath === 'string') {
+    console.log('📂 Main Process: Abriendo explorador en:', filePath);
+    // IMPORTANTE: shell debe estar importado arriba: const { shell } = require('electron');
+    shell.showItemInFolder(filePath); 
+  }
+  return { success: true };
+});
+
+
+
 ipcMain.handle('open-logs-folder', async () => {
   const logsDir = path.join(paths.configDir, 'logs');
   await fs.ensureDir(logsDir);

@@ -47,40 +47,62 @@ export class InstallationManager {
   }
 
   /**
-   * Instala y configura el servicio
+   * Instala y arranca el servicio, dejándolo listo para cuando se instale la extensión.
    */
   async installService() {
-    if (!this.systemInfo) {
-      return { success: false, error: 'System info not loaded' };
-    }
+      if (!this.systemInfo) {
+        return { success: false, error: 'System info not loaded' };
+      }
 
-    // Verificar dependencias VC++ en Windows
-    if (this.systemInfo.platform === 'win32') {
-      this.ui.updateText('service-status-text', 'Verificando dependencias...');
-      
-      const preflight = await this.api.preflightChecks();
-      if (!preflight.vcRedistInstalled) {
-        this.ui.updateText('service-status-text', 'Instalando dependencias VC++...');
-        await this.api.installVCRedist();
+      try {
+        // 1. Verificar dependencias (VC++ en Windows)
+        if (this.systemInfo.platform === 'win32') {
+          this.ui.updateText('service-status-text', 'Verificando dependencias...');
+          const preflight = await this.api.preflightChecks();
+          
+          if (!preflight.vcRedistInstalled) {
+            this.ui.updateText('service-status-text', 'Instalando dependencias VC++...');
+            await this.api.installVCRedist();
+          }
+        }
+
+        // 2. Instalar y Arrancar el Servicio
+        this.ui.updateText('service-status-text', 'Instalando e iniciando servicio...');
+        
+        // Asumimos que tu api.installService() hace la copia Y el arranque del proceso
+        const result = await this.api.installService();
+
+        if (result.success) {
+          // Guardamos el puerto que nos devuelve el backend
+          this.servicePort = result.port || 5678;
+          
+          // 3. ACTUALIZACIÓN UI: Éxito
+          this.ui.updateText('service-status-text', 'Servicio activo y escuchando.');
+          this.ui.updateText('detected-port', this.servicePort);
+          
+          // Ocultamos el spinner y mostramos el panel de resultado positivo
+          this.ui.hideSpinner('service-status-container', 'service-result');
+          
+          console.log(`✅ Servicio instalado y corriendo en puerto ${this.servicePort}`);
+          
+          // Retornamos true para que el Instalador avance a la pantalla de la Extensión
+          return { success: true, port: this.servicePort };
+
+        } else {
+          // Fallo en la instalación o arranque
+          throw new Error(result.error || "No se pudo iniciar el servicio.");
+        }
+
+      } catch (error) {
+        console.error("❌ Error en installService:", error);
+        
+        this.ui.updateText('service-error-text', error.message || error);
+        this.ui.toggleElement('service-status-container', false);
+        this.ui.toggleElement('service-error', true);
+        
+        return { success: false, error: error.message };
       }
     }
-
-    // Iniciar servicio
-    this.ui.updateText('service-status-text', 'Iniciando servicio...');
-    const result = await this.api.installService();
-
-    if (result.success) {
-      this.servicePort = result.port;
-      this.ui.updateText('detected-port', result.port);
-      this.ui.hideSpinner('service-status-container', 'service-result');
-      return { success: true, port: result.port };
-    } else {
-      this.ui.updateText('service-error-text', result.error);
-      this.ui.toggleElement('service-status-container', false);
-      this.ui.toggleElement('service-error', true);
-      return { success: false, error: result.error };
-    }
-  }
 
   /**
    * Prepara extensión para instalación manual

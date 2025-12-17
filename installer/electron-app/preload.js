@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('api', {
   // Métodos de configuración y archivos
   openBTIPConfig: () => ipcRenderer.invoke('open-btip-config'),
   openFolder: (folderPath) => ipcRenderer.invoke('open-folder', folderPath),
+  showItemInFolder: (filePath) => ipcRenderer.invoke('show-item-in-folder', filePath),
   openLogsFolder: () => ipcRenderer.invoke('open-logs-folder'),
   
   // Métodos de estado
