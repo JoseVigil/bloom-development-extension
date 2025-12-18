@@ -54,7 +54,8 @@ class TreeManager:
                     "total_files": int,
                     "total_directories": int
                 },
-                "output_written": bool
+                "output_written": bool,
+                "warnings": List[str]  # NEW: Warnings about missing paths
             }
         """
         
@@ -62,12 +63,23 @@ class TreeManager:
         file_hashes = {} if use_hash else None
         dir_hashes = {} if use_hash else None
         final_output = ""
+        warnings = []  # NEW: Track warnings
 
         root_name = os.path.basename(self.root)
         final_output += f"{root_name}/\n"
 
         # Build tree structure
         for i, p in enumerate(resolved_paths):
+            # NEW: Validate path exists before processing
+            if not os.path.exists(p):
+                warning_msg = f"⚠️  Path not found: {os.path.relpath(p, self.root)}"
+                warnings.append(warning_msg)
+                # Still show it in the tree with a warning marker
+                is_last = (i == len(resolved_paths) - 1)
+                connector = "└── " if is_last else "├── "
+                final_output += connector + os.path.basename(p) + " [NOT FOUND]\n"
+                continue
+            
             is_last = (i == len(resolved_paths) - 1)
             final_output += self._build_tree(
                 p, prefix="", is_last=is_last, 
@@ -122,7 +134,8 @@ class TreeManager:
                 "statistics": {
                     "total_files": len(file_hashes),
                     "total_directories": len(dir_hashes)
-                }
+                },
+                "warnings": warnings  # NEW: Include warnings in JSON
             }
             
             with open(json_file, "w", encoding="utf-8") as f:
@@ -136,7 +149,8 @@ class TreeManager:
                 "total_files": len(file_hashes) if file_hashes else 0,
                 "total_directories": len(dir_hashes) if dir_hashes else 0
             },
-            "output_written": True
+            "output_written": True,
+            "warnings": warnings  # NEW: Return warnings
         }
 
     # --- INTERNAL METHODS ---
@@ -194,6 +208,12 @@ class TreeManager:
         Recursively build tree structure string.
         Returns the tree representation as a string.
         """
+        # NEW: Early validation
+        if not os.path.exists(path):
+            name = os.path.basename(path.rstrip(os.sep))
+            connector = "└── " if is_last else "├── "
+            return prefix + connector + name + " [NOT FOUND]\n"
+        
         name = os.path.basename(path.rstrip(os.sep))
         connector = "└── " if is_last else "├── "
         
@@ -240,7 +260,9 @@ class TreeManager:
         # List directory contents
         try:
             entries = sorted(os.listdir(path))
-        except Exception:
+        except Exception as e:
+            # NEW: Show error if directory can't be listed
+            tree_str += prefix + ("    " if is_last else "│   ") + f"[Error listing directory: {e}]\n"
             return tree_str
 
         new_prefix = prefix + ("    " if is_last else "│   ")

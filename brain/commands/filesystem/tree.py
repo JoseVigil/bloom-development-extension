@@ -62,10 +62,10 @@ class TreeCommand(BaseCommand):
                 if gc.verbose:
                     typer.echo(f"🔍 Generating tree from: {Path.cwd()}", err=True)
                     if targets:
-                        typer.echo(f"🔍 Targets: {targets}", err=True)
-                    typer.echo(f"🔍 Output: {output}", err=True)
-                    typer.echo(f"🔍 Hash mode: {hash}", err=True)
-                    typer.echo(f"🔍 Export JSON: {export_json}", err=True)
+                        typer.echo(f"🎯 Targets: {targets}", err=True)
+                    typer.echo(f"📝 Output: {output}", err=True)
+                    typer.echo(f"🔐 Hash mode: {hash}", err=True)
+                    typer.echo(f"📦 Export JSON: {export_json}", err=True)
                 
                 # LÓGICA PURA
                 manager = TreeManager(Path.cwd())
@@ -88,7 +88,8 @@ class TreeCommand(BaseCommand):
                         "timestamp": result.get("timestamp"),
                         "targets_processed": targets or ["root"],
                         "hash_enabled": hash,
-                        "json_exported": hash and export_json
+                        "json_exported": hash and export_json,
+                        "warnings": result.get("warnings", [])  # NEW: Include warnings
                     }
                 }
                 
@@ -123,6 +124,14 @@ class TreeCommand(BaseCommand):
         typer.echo("🌳 Tree Generation Complete")
         typer.echo("=" * 70)
         
+        # NEW: Show warnings first if any
+        warnings = result.get('warnings', [])
+        if warnings:
+            typer.echo("\n⚠️  WARNINGS:")
+            for warning in warnings:
+                typer.echo(f"   {warning}")
+            typer.echo()
+        
         # Información principal
         typer.echo(f"\n📄 Output file: {result['output_file']}")
         
@@ -148,4 +157,7 @@ class TreeCommand(BaseCommand):
         if targets != ['root']:
             typer.echo(f"\n🎯 Targets: {', '.join(targets)}")
         
-        typer.echo("\n✅ Tree structure saved successfully!")
+        if warnings:
+            typer.echo("\n⚠️  Some paths were not found. Check the output file for details.")
+        else:
+            typer.echo("\n✅ Tree structure saved successfully!")

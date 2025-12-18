@@ -273,14 +273,45 @@ bloom-development-extension/
 │   ├── commands/
 │   │   ├── __init__.py
 │   │   ├── __pycache__/ [... cache]
+│   │   ├── context/
+│   │   │   ├── __pycache__/ [... cache]
+│   │   │   └── generate.py
 │   │   ├── filesystem/
 │   │   │   ├── __init__.py
 │   │   │   ├── __pycache__/ [... cache]
 │   │   │   └── tree.py
-│   │   └── init.py
+│   │   ├── init.py
+│   │   └── project/
+│   │       ├── __pycache__/ [... cache]
+│   │       ├── load.py
+│   │       └── nucleus.py
 │   ├── commands.md
 │   ├── core/
 │   │   ├── __pycache__/ [... cache]
+│   │   ├── context/
+│   │   │   ├── detector.py
+│   │   │   ├── generate.py
+│   │   │   ├── manager.py
+│   │   │   ├── strategies/
+│   │   │   │   ├── android.py
+│   │   │   │   ├── cicd.py
+│   │   │   │   ├── cpp.py
+│   │   │   │   ├── dotnet.py
+│   │   │   │   ├── flutter.py
+│   │   │   │   ├── go.py
+│   │   │   │   ├── iac.py
+│   │   │   │   ├── ios.py
+│   │   │   │   ├── jvm.py
+│   │   │   │   ├── macos.py
+│   │   │   │   ├── multistack_detector.py
+│   │   │   │   ├── php.py
+│   │   │   │   ├── python.py
+│   │   │   │   ├── ruby.py
+│   │   │   │   ├── rust.py
+│   │   │   │   └── typescript.py
+│   │   │   └── strategy_loader.py
+│   │   ├── nucleus_manager.py
+│   │   ├── project_manager.py
 │   │   └── tree_manager.py
 │   ├── pyproject.toml
 │   └── shared/

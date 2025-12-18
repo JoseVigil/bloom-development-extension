@@ -1,8 +1,8 @@
 
-PROJECT_HASH: 0eab6f0b203b5ffb737d6d9c13769e99
-Generated: 2025-12-18 00:56:00
-Total files: 218
-Total directories: 59
+PROJECT_HASH: 37f8605c712a92a29d7cd1f1518fe88b
+Generated: 2025-12-18 02:41:01
+Total files: 272
+Total directories: 70
 ======================================================================
 
 bloom-development-extension/
@@ -213,15 +213,17 @@ bloom-development-extension/
 │   ├── node_modules/ [... dependencies]
 │   ├── package-lock.json ......................... bccf4658b4b6c613
 │   ├── package.json .............................. a8e1aa79ab5c831e
-│   └── scripts/ [DIR]
-│       ├── build-extension.js .................... bd872a4eab28dae8
-│       ├── check-health.js ....................... 10941fae4212fac6
-│       ├── generate-fixed-key.js ................. 19924a115c527081
-│       ├── get-id.js ............................. 5f5173613e891bf2
-│       ├── god-mode.js ........................... 51f35a585616ef99
-│       ├── run-elevated.ps1 ...................... fa8bb5f5b9e14124
-│       ├── setup-dev.js .......................... 0c6d57b8c3b49613
-│       └── validate.js ........................... 017b96d959520759
+│   ├── scripts/ [DIR]
+│   │   ├── build-extension.js .................... bd872a4eab28dae8
+│   │   ├── check-health.js ....................... 10941fae4212fac6
+│   │   ├── generate-fixed-key.js ................. 19924a115c527081
+│   │   ├── get-id.js ............................. 5f5173613e891bf2
+│   │   ├── god-mode.js ........................... 51f35a585616ef99
+│   │   ├── run-elevated.ps1 ...................... fa8bb5f5b9e14124
+│   │   ├── setup-dev.js .......................... 0c6d57b8c3b49613
+│   │   └── validate.js ........................... 017b96d959520759
+│   └── tree/ [DIR]
+│       └── plugin_tree_hashed.txt ................ c0d85d10b8c55ce5
 ├── webview/ [DIR]
 │   └── app/ [DIR]
 │       ├── .svelte-kit/ [... svelte build]
@@ -267,6 +269,71 @@ bloom-development-extension/
 │       │           └── +page.svelte .............. 55faf244ada812e2
 │       ├── svelte.config.js ...................... e2efd1c53bfd9829
 │       └── vite.config.ts ........................ 781a5a2d63599a69
+├── core/ [DIR]
+│   ├── __init__.py ............................... 3e7081f7929fca1b
+│   ├── __main__.py ............................... aa3980a408e59ca3
+│   ├── __pycache__/ [... cache]
+│   ├── adapters/ [DIR]
+│   │   ├── __init__.py ........................... facf73e416bff54c
+│   │   └── legacy_bridge.py ...................... d43b66df4c56c4d0
+│   ├── commands.txt .............................. f6d13c11704cf7cb
+│   ├── commnds.md ................................ 547b890c8390512f
+│   ├── config.py ................................. 20f1e4a1bfb057f5
+│   ├── filesystem/ [DIR]
+│   │   ├── __init__.py ........................... b80d74f3a953cbaa
+│   │   ├── __pycache__/ [... cache]
+│   │   ├── code_compressor.py .................... ca72d9c593e05a66
+│   │   ├── files_compressor.py ................... bb506059a76854a6
+│   │   ├── files_extractor.py .................... 2b8255c6f6e49eb6
+│   │   ├── payload_manager.py .................... 6255a9a547eab7b6
+│   │   ├── staging.py ............................ 09a6e10928d71b3d
+│   │   └── tree_manager.py ....................... f85fe4f7ab32dda9
+│   ├── generators/ [DIR]
+│   │   ├── __init__.py ........................... d41d8cd98f00b204
+│   │   ├── __pycache__/ [... cache]
+│   │   ├── context_strategy.py ................... d5e707d9427c9e2c
+│   │   ├── nucleus_generator.py .................. 04299241aef01443
+│   │   └── strategies/ [DIR]
+│   │       ├── __init__.py ....................... d41d8cd98f00b204
+│   │       ├── __pycache__/ [... cache]
+│   │       ├── android.py ........................ 5b70af69d85f883b
+│   │       ├── cicd.py ........................... a0129785b2ce24fe
+│   │       ├── cpp.py ............................ d002074e56a0acb2
+│   │       ├── dotnet.py ......................... f4959606a57f10bf
+│   │       ├── flutter.py ........................ d4236739faa455e6
+│   │       ├── go.py ............................. 8addea158eb3b6bb
+│   │       ├── iac.py ............................ 372a828e8e88a1cd
+│   │       ├── ios.py ............................ 29987b9ed63cd288
+│   │       ├── jvm.py ............................ ad2cb3faed4b4e71
+│   │       ├── macos.py .......................... 2370e45587a40299
+│   │       ├── multistack_detector.py ............ e0487152ee69ec17
+│   │       ├── php.py ............................ 556810b8362880f7
+│   │       ├── python.py ......................... 5a669a98b33747f7
+│   │       ├── ruby.py ........................... d36827451c1a2ce0
+│   │       ├── rust.py ........................... efaf1bf0e12c4074
+│   │       └── typescript.py ..................... 02568a3ddbdf13e9
+│   ├── intelligence/ [DIR]
+│   │   ├── __init__.py ........................... 214be77eaf78e641
+│   │   ├── llm_client.py ......................... 9df7466e18437047
+│   │   └── response_parser.py .................... 94a0a2593bd3f7b4
+│   ├── libs/ [... python vendored dependencies]
+│   ├── memory/ [DIR]
+│   │   ├── __init__.py ........................... 8f82f6c436236c3d
+│   │   ├── index_loader.py ....................... dad21da0dd71fbfc
+│   │   ├── meta_manager.py ....................... e76611bf3a9de9fa
+│   │   └── semantic_router.py .................... ade534b73e1cc8b2
+│   ├── migrate_to_v2_complete.py ................. 4eccddba71106be1
+│   ├── orchestrator/ [DIR]
+│   │   ├── __init__.py ........................... f323fae3e766a9e2
+│   │   ├── engine.py ............................. 6a474b09afbf24ad
+│   │   ├── genesis_planner.py .................... 3d2742a4d9bd38d0
+│   │   ├── state_machine.py ...................... 101ba4cbb4d94ef3
+│   │   └── task_dispatcher.py .................... c0bf323050e74af3
+│   ├── requirements.txt .......................... 0559de20b166c901
+│   └── utils/ [DIR]
+│       ├── __init__.py ........................... 99ba159c1319de6d
+│       ├── logging_utils.py ...................... 243565122d160927
+│       └── path_resolver.py ...................... ed34adc0130c63d1
 ├── brain/ [DIR]
 │   ├── __init__.py ............................... d41d8cd98f00b204
 │   ├── __main__.py ............................... 80c4df71dd11c78b
@@ -283,12 +350,16 @@ bloom-development-extension/
 │   │   ├── filesystem/ [DIR]
 │   │   │   ├── __init__.py ....................... d41d8cd98f00b204
 │   │   │   ├── __pycache__/ [... cache]
-│   │   │   └── tree.py ........................... 4667bce32f9a8819
-│   │   └── init.py ............................... ea07a916e0b3c8ec
-│   ├── commands.md ............................... 6992a1c60e382593
+│   │   │   └── tree.py ........................... 9c439a048eb26f2b
+│   │   ├── init.py ............................... ea07a916e0b3c8ec
+│   │   └── project/ [DIR]
+│   │       ├── __pycache__/ [... cache]
+│   │       └── nucleus.py ........................ cd1a9098c81079cb
+│   ├── commands.md ............................... 653ee46e793ae240
 │   ├── core/ [DIR]
 │   │   ├── __pycache__/ [... cache]
-│   │   └── tree_manager.py ....................... 0c87a2a24b1b1e93
+│   │   ├── nucleus_manager.py .................... e5ecc4b4db451f67
+│   │   └── tree_manager.py ....................... e1a8bfb0982eb68a
 │   ├── pyproject.toml ............................ 0c161aaad17345c4
 │   └── shared/ [DIR]
 │       ├── __init__.py ........................... d41d8cd98f00b204
@@ -301,13 +372,23 @@ bloom-development-extension/
 
 ======================================================================
 DIRECTORY HASHES:
-  brain/ → e6278320c081b275af8e4ae19ec0f223
+  brain/ → ae29b827e650571058a89543501bf07e
   brain\cli/ → cd8918dd9c3e285f2fb07f655c85538d
   brain\commands/ → 7f3cf195cc045cacef997a756a2d8c77
-  brain\commands\filesystem/ → 18e5b90e89f6662d20e36fbe7535782b
-  brain\core/ → 7ea1f17c555a6a78885c837a572537e8
+  brain\commands\filesystem/ → aee5bb96dbecc1d649524d8e09ac2c16
+  brain\commands\project/ → 0e58e8db27e3bede4c3edea9a36d36d5
+  brain\core/ → e98cdc5e26705a9b2f8bd7fbccec8df8
   brain\shared/ → 6d2eb227e4c1e12f4ab68bba5717842c
   brain\shared\shared/ → 0ffb6dcb8e0d7dacfa36da655311c9f4
+  core/ → dec7aa43113b55d6fb4169ef506b441d
+  core\adapters/ → 0919028f538b62196630896b27089805
+  core\filesystem/ → 8b2abfaf9a6092dab20f1b9f89d808c7
+  core\generators/ → 95af3b329463b77ba672b65db30bfa2e
+  core\generators\strategies/ → b5ea2a8a4a3e147478dad706fb0d6e75
+  core\intelligence/ → 17fc7da1bfaf9c5d6fd1154457d8e117
+  core\memory/ → 07c1c3434e47d14fdd4ab39500748e55
+  core\orchestrator/ → 4475df556a9bf3fb0d77ade1b14a7775
+  core\utils/ → 8fad868f7b605f444f2392d9dd520f20
   installer/ → ace8d3f7d0aa788d286503da91be0be9
   installer\chrome-extension\crx/ → 9dc49c608bc02236862c0397f6d4a02a
   installer\chrome-extension\src/ → 390c3d48c90df814efb2a8d47b32a6e0
@@ -321,6 +402,7 @@ DIRECTORY HASHES:
   installer\native\bin\win32/ → 8db983e04039509c71ad516f020e87c9
   installer\native\host/ → 11bce76c52536134b2040c23d5503f9e
   installer\scripts/ → cfdcb343586bf5da684a3b44bf10b660
+  installer\tree/ → 44a680cba175619c8781615b06f50376
   src/ → 7c54570430058ab32350b5153ffcb2b7
   src\ai/ → 1c2f35343ed500e2488e92d7dfc1bfef
   src\ai\adapters/ → 95ea1683b6408ea0d648901afe78401c
