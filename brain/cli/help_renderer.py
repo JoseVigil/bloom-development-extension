@@ -336,7 +336,7 @@ def _render_categories(console: Console, categories: List[CommandCategory]):
 
 def render_help(registry: CommandRegistry):
     """Main help rendering function with prioritized category order."""
-    console = Console()
+    console = Console(width=85)
     
     console.print("\n[bold yellow]Brain CLI[/bold yellow] - Modular system for Bloom\n")
     
