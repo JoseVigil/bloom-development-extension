@@ -2,7 +2,7 @@
 Base classes for Brain CLI commands with auto-discovery support.
 """
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, List
 import typer
 from brain.cli.categories import CommandCategory
@@ -14,12 +14,10 @@ class CommandMetadata:
     name: str
     category: CommandCategory
     description: str
+    version: str = "1.0.0"
     is_root: bool = False
-    aliases: List[str] = None
-    
-    def __post_init__(self):
-        if self.aliases is None:
-            self.aliases = []
+    aliases: List[str] = field(default_factory=list)
+    examples: List[str] = field(default_factory=list)
 
 
 class BaseCommand(ABC):
