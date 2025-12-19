@@ -1,60 +1,66 @@
 """
-Brain CLI - Entry point principal
+Brain CLI - Auto-discovery entry point.
+NO MAINTENANCE REQUIRED when adding new commands.
 """
 import typer
 import sys
 from brain.commands import discover_commands
 from brain.shared.context import GlobalContext
+from brain.cli.help_renderer import render_help
 
-# Inicializamos la app Typer
 app = typer.Typer(
     no_args_is_help=True,
-    help="Brain - Sistema CLI modular para Bloom"
+    help="Brain - Modular CLI system for Bloom",
+    add_completion=False  # Disable default help to use custom
 )
 
-@app.callback()
+
+@app.callback(invoke_without_command=True)
 def main_config(
     ctx: typer.Context,
-    json_mode: bool = typer.Option(
-        False, 
-        "--json", 
-        help="Activa output JSON para VS Code"
-    ),
-    verbose: bool = typer.Option(
-        False, 
-        "--verbose", 
-        help="Muestra logs detallados de depuración"
-    )
+    json_mode: bool = typer.Option(False, "--json", help="Enable JSON output"),
+    verbose: bool = typer.Option(False, "--verbose", help="Enable detailed logging")
 ):
-    """
-    Configuración global que se ejecuta antes de cualquier comando.
-    Inicializa el contexto compartido.
-    """
-    # Inicializamos el contexto global y lo guardamos en Typer
-    ctx.obj = GlobalContext(
-        json_mode=json_mode,
-        verbose=verbose,
-        root_path="."
-    )
+    """Brain CLI - The brain of the Bloom extension."""
     
-    # Debug temprano si verbose está activo
-    if verbose:
-        print(f"🔧 [DEBUG] Contexto inicializado: JSON={json_mode}, Verbose={verbose}", file=sys.stderr)
+    # Intercept --help before Typer processes it
+    if ctx.invoked_subcommand is None and "--help" in sys.argv:
+        registry = discover_commands()
+        render_help(registry)
+        raise typer.Exit()
+    
+    ctx.obj = GlobalContext(json_mode=json_mode, verbose=verbose, root_path=".")
 
 
 def main():
-    """Bootstrap del sistema"""
+    """Main entry point with auto-discovery."""
     try:
-        # Descubrimiento automático de comandos
         registry = discover_commands()
-        for command in registry.get_all_commands():
-            command.register(app)
+        sub_apps = {}
         
-        # Ejecución
+        # Auto-register all commands
+        for command in registry.get_all_commands():
+            meta = command.metadata()
+            
+            # Root commands register directly
+            if meta.is_root:
+                command.register(app)
+                continue
+            
+            # Grouped commands
+            if meta.category not in sub_apps:
+                sub_apps[meta.category] = typer.Typer(
+                    help=meta.category.description,
+                    no_args_is_help=True
+                )
+                app.add_typer(sub_apps[meta.category], name=meta.category.value)
+            
+            command.register(sub_apps[meta.category])
+        
         app()
+        
     except Exception as e:
-        # Catch-all final para evitar crashes feos
-        print(f"❌ Error fatal en Brain: {e}", file=sys.stderr)
+        print(f"❌ Brain System Error: {e}", file=sys.stderr)
         sys.exit(1)
 
 
