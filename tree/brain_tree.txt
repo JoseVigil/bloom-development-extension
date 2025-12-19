@@ -1,0 +1,90 @@
+bloom-development-extension/
+└── brain/
+    ├── __init__.py
+    ├── __main__.py
+    ├── __pycache__/ [... cache]
+    ├── cli/
+    │   ├── __init__.py
+    │   ├── __pycache__/ [... cache]
+    │   ├── base.py
+    │   ├── categories.py
+    │   ├── help_renderer.py
+    │   └── registry.py
+    ├── commands/
+    │   ├── __init__.py
+    │   ├── __pycache__/ [... cache]
+    │   ├── context/
+    │   │   ├── __pycache__/ [... cache]
+    │   │   └── generate.py
+    │   ├── filesystem/
+    │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
+    │   │   └── tree.py
+    │   ├── github/
+    │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
+    │   │   ├── auth.py
+    │   │   ├── auth_login.py
+    │   │   ├── auth_logout.py
+    │   │   ├── auth_status.py
+    │   │   ├── clone.py
+    │   │   ├── orgs.py
+    │   │   ├── orgs_list.py
+    │   │   ├── repos.py
+    │   │   └── repos_list.py
+    │   ├── init.py
+    │   ├── nucleus/
+    │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
+    │   │   ├── create.py
+    │   │   ├── link.py
+    │   │   └── status.py
+    │   └── project/
+    │       ├── __pycache__/ [... cache]
+    │       ├── load.py
+    │       └── nucleus.py
+    ├── commands.md
+    ├── core/
+    │   ├── __pycache__/ [... cache]
+    │   ├── context/
+    │   │   ├── detector.py
+    │   │   ├── generate.py
+    │   │   ├── manager.py
+    │   │   ├── strategies/
+    │   │   │   ├── android.py
+    │   │   │   ├── cicd.py
+    │   │   │   ├── cpp.py
+    │   │   │   ├── dotnet.py
+    │   │   │   ├── flutter.py
+    │   │   │   ├── go.py
+    │   │   │   ├── iac.py
+    │   │   │   ├── ios.py
+    │   │   │   ├── jvm.py
+    │   │   │   ├── macos.py
+    │   │   │   ├── multistack_detector.py
+    │   │   │   ├── php.py
+    │   │   │   ├── python.py
+    │   │   │   ├── ruby.py
+    │   │   │   ├── rust.py
+    │   │   │   └── typescript.py
+    │   │   └── strategy_loader.py
+    │   ├── git/
+    │   │   ├── __init__.py
+    │   │   ├── executor.py
+    │   │   └── repository.py
+    │   ├── github/
+    │   │   ├── __init__.py
+    │   │   ├── api_client.py
+    │   │   ├── credentials.py
+    │   │   └── models.py
+    │   ├── nucleus_manager.py
+    │   ├── project_manager.py
+    │   └── tree_manager.py
+    ├── pyproject.toml
+    └── shared/
+        ├── __init__.py
+        ├── __pycache__/ [... cache]
+        ├── context.py
+        ├── github_types.py
+        └── shared/
+            └── context.py

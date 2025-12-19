@@ -9,10 +9,11 @@ class CommandCategory(Enum):
     Command categories for organizing CLI.
     Each category includes its description for help generation.
     """
-    FILESYSTEM = ("filesystem", "File operations and directory analysis")
-    PROJECT = ("project", "Project lifecycle and scaffolding")
-    CONTEXT = ("context", "AI context generation and management")
+    NUCLEUS = ("nucleus", "Nucleus project management and lifecycle")
     GITHUB = ("github", "GitHub integration and repository management")
+    CONTEXT = ("context", "AI context generation and management")
+    PROJECT = ("project", "Project lifecycle and scaffolding")
+    FILESYSTEM = ("filesystem", "File operations and directory analysis")
     INTENT = ("intent", "Intent execution system")
     AI = ("ai", "AI-powered features")
     
