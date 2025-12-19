@@ -61,7 +61,7 @@ def _render_categories(console: Console, categories: List[CommandCategory]):
 
 
 def _extract_params(callback) -> List[str]:
-    """Extract parameters from a command callback."""
+    """Extract parameters from a command callback with SHORT FLAGS."""
     if not callback:
         return []
     
@@ -75,8 +75,11 @@ def _extract_params(callback) -> List[str]:
         default = param.default
         if isinstance(default, OptionInfo):
             if hasattr(default, "param_decls") and default.param_decls:
-                flags = [f for f in default.param_decls if f.startswith('--')]
-                flag = flags[0] if flags else default.param_decls[0]
+                # Prefer short flag (-o) over long (--output)
+                short_flags = [f for f in default.param_decls if f.startswith('-') and not f.startswith('--')]
+                long_flags = [f for f in default.param_decls if f.startswith('--')]
+                flag = short_flags[0] if short_flags else (long_flags[0] if long_flags else default.param_decls[0])
+                
                 if default.default == ...:
                     params.append(f"[yellow]{flag} <VALUE>[/yellow]")
                 else:
@@ -112,12 +115,12 @@ def _render_commands(console: Console, commands_by_category: Dict[CommandCategor
                 params = _extract_params(registered.callback)
                 params_str = " ".join(params) if params else ""
                 
-                full_cmd = f"  {meta.name}"
-                cmd_line = Text(full_cmd, style="green")
+                # Full executable command
+                full_cmd = f"python -m brain {category.value} {meta.name}"
                 if params_str:
-                    cmd_line.append(" ")
-                    cmd_line.append(Text.from_markup(params_str))
+                    full_cmd += f" {params_str}"
                 
+                cmd_line = Text.from_markup(f"  [green]{full_cmd}[/green]")
                 lines.append(cmd_line)
                 
                 if meta.description:
@@ -143,11 +146,12 @@ def _render_root_commands(console: Console, root_commands: List[BaseCommand]):
             params = _extract_params(registered.callback)
             params_str = " ".join(params) if params else ""
             
-            cmd_line = Text(meta.name, style="green")
+            # Full executable command
+            full_cmd = f"python -m brain {meta.name}"
             if params_str:
-                cmd_line.append(" ")
-                cmd_line.append(Text.from_markup(params_str))
+                full_cmd += f" {params_str}"
             
+            cmd_line = Text.from_markup(f"[green]{full_cmd}[/green]")
             lines.append(cmd_line)
             
             if meta.description:
