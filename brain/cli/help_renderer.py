@@ -5,11 +5,13 @@ NO MAINTENANCE REQUIRED - reads from command metadata.
 from dataclasses import dataclass
 from collections import defaultdict
 from typing import Dict, List
+import inspect
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 import typer
+from typer.models import OptionInfo, ArgumentInfo
 from brain.cli.base import BaseCommand, CommandMetadata
 from brain.cli.categories import CommandCategory
 from brain.cli.registry import CommandRegistry
@@ -70,28 +72,8 @@ def _render_categories(console: Console, categories: List[CommandCategory]):
     console.print(Panel(table, title="[bold]Categories[/bold]", border_style="green"))
 
 
-def _get_command_signature(cmd: BaseCommand, category: CommandCategory = None) -> str:
-    """Extract command signature with parameters."""
-    import inspect
-    from typer.models import OptionInfo, ArgumentInfo
-    
-    meta = cmd.metadata()
-    
-    # Build base command path
-    if meta.is_root:
-        base = f"brain {meta.name}"
-    else:
-        base = f"brain {category.value} {meta.name}"
-    
-    # Try to extract subcommands if it's a group
-    # This requires introspection of the registered Typer app
-    # For now, return base signature
-    return base
-
-
 def _extract_subcommands(cmd: BaseCommand) -> List[tuple]:
     """Extract subcommands from a command group."""
-    import inspect
     
     # Create temporary Typer app to introspect
     temp_app = typer.Typer()
@@ -111,12 +93,23 @@ def _extract_subcommands(cmd: BaseCommand) -> List[tuple]:
                 if isinstance(default, OptionInfo):
                     # Extract flag name
                     if hasattr(default, "param_decls") and default.param_decls:
-                        flag = default.param_decls[0]
-                        params.append(f"[cyan]{flag}[/cyan]")
+                        # Use the longest flag (usually the --long-form)
+                        flags = [f for f in default.param_decls if f.startswith('--')]
+                        flag = flags[0] if flags else default.param_decls[0]
+                        
+                        # Check if required
+                        if default.default == ...:
+                            params.append(f"[yellow]{flag} <VALUE>[/yellow]")
+                        else:
+                            params.append(f"[cyan]{flag}[/cyan]")
                     else:
-                        params.append(f"[cyan]--{name.replace('_', '-')}[/cyan]")
-                elif not isinstance(default, ArgumentInfo) or default == inspect.Parameter.empty:
-                    # It's an argument
+                        flag_name = f"--{name.replace('_', '-')}"
+                        if default.default == ...:
+                            params.append(f"[yellow]{flag_name} <VALUE>[/yellow]")
+                        else:
+                            params.append(f"[cyan]{flag_name}[/cyan]")
+                elif param.default == inspect.Parameter.empty or isinstance(default, ArgumentInfo):
+                    # It's a required argument
                     params.append(f"[yellow]<{name.upper()}>[/yellow]")
         
         # Get help text
@@ -146,8 +139,9 @@ def _render_commands(console: Console, commands_by_category: Dict[CommandCategor
             subcommands = _extract_subcommands(cmd)
             
             if subcommands:
+                # Multi-command group (like auth with login/logout/status)
                 for subcmd_name, params, help_text in subcommands:
-                    # Build full command
+                    # Build full command: brain github auth login --token <VALUE>
                     full_cmd = f"  {meta.name} {subcmd_name}"
                     params_str = " ".join(params) if params else ""
                     
@@ -159,14 +153,14 @@ def _render_commands(console: Console, commands_by_category: Dict[CommandCategor
                     lines.append(cmd_line)
                     
                     if help_text:
-                        lines.append(Text(f"    {help_text}", style="dim"))
+                        lines.append(Text(f"      {help_text}", style="dim"))
             else:
                 # Single command without subcommands
                 cmd_line = Text(f"  {meta.name}", style="green")
                 lines.append(cmd_line)
                 
                 if meta.description:
-                    lines.append(Text(f"    {meta.description}", style="dim"))
+                    lines.append(Text(f"      {meta.description}", style="dim"))
     
     # Join all lines
     content = Text("\n").join(lines)
@@ -185,8 +179,9 @@ def _render_root_commands(console: Console, root_commands: List[BaseCommand]):
         subcommands = _extract_subcommands(cmd)
         
         if subcommands:
+            # Root command with subcommands (like nucleus)
             for subcmd_name, params, help_text in subcommands:
-                full_cmd = f"brain {meta.name} {subcmd_name}"
+                full_cmd = f"{meta.name} {subcmd_name}"
                 params_str = " ".join(params) if params else ""
                 
                 cmd_line = Text(full_cmd, style="green")
@@ -197,16 +192,49 @@ def _render_root_commands(console: Console, root_commands: List[BaseCommand]):
                 lines.append(cmd_line)
                 
                 if help_text:
-                    lines.append(Text(f"  {help_text}", style="dim"))
+                    lines.append(Text(f"    {help_text}", style="dim"))
         else:
-            cmd_line = Text(f"brain {meta.name}", style="green")
-            lines.append(cmd_line)
+            # Simple root command (like tree, context, load)
+            # Extract its parameters
+            temp_app = typer.Typer()
+            cmd.register(temp_app)
             
-            if meta.description:
-                lines.append(Text(f"  {meta.description}", style="dim"))
+            if temp_app.registered_commands:
+                registered = temp_app.registered_commands[0]
+                params = []
+                
+                if registered.callback:
+                    sig = inspect.signature(registered.callback)
+                    for name, param in sig.parameters.items():
+                        if name == "ctx":
+                            continue
+                        
+                        default = param.default
+                        if isinstance(default, OptionInfo):
+                            if hasattr(default, "param_decls") and default.param_decls:
+                                flags = [f for f in default.param_decls if f.startswith('--')]
+                                flag = flags[0] if flags else default.param_decls[0]
+                                
+                                if default.default == ...:
+                                    params.append(f"[yellow]{flag} <VALUE>[/yellow]")
+                                else:
+                                    params.append(f"[cyan]{flag}[/cyan]")
+                        elif param.default == inspect.Parameter.empty or isinstance(default, ArgumentInfo):
+                            params.append(f"[yellow]<{name.upper()}>[/yellow]")
+                
+                cmd_line = Text(meta.name, style="green")
+                if params:
+                    cmd_line.append(" ")
+                    cmd_line.append(Text.from_markup(" ".join(params)))
+                
+                lines.append(cmd_line)
+                
+                if meta.description:
+                    lines.append(Text(f"    {meta.description}", style="dim"))
     
-    content = Text("\n").join(lines)
-    console.print(Panel(content, title="[bold]Quick Access[/bold]", border_style="magenta"))
+    if lines:
+        content = Text("\n").join(lines)
+        console.print(Panel(content, title="[bold]Quick Access[/bold]", border_style="magenta"))
 
 
 def render_help(registry: CommandRegistry):

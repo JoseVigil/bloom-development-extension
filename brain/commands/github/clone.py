@@ -15,7 +15,7 @@ class GithubCloneCommand(BaseCommand):
     def metadata(self) -> CommandMetadata:
         return CommandMetadata(
             name="clone",
-            category=CommandCategory.PROJECT,
+            category=CommandCategory.GITHUB,
             version="1.0.0",
             description="Clone GitHub repository",
             examples=[

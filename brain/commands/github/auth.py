@@ -14,7 +14,7 @@ class GithubAuthCommand(BaseCommand):
     def metadata(self) -> CommandMetadata:
         return CommandMetadata(
             name="auth",
-            category=CommandCategory.PROJECT,
+            category=CommandCategory.GITHUB,
             version="1.0.0",
             description="Manage GitHub authentication",
             examples=[

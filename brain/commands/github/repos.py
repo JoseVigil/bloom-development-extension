@@ -14,7 +14,7 @@ class GithubReposCommand(BaseCommand):
     def metadata(self) -> CommandMetadata:
         return CommandMetadata(
             name="repos",
-            category=CommandCategory.PROJECT,
+            category=CommandCategory.GITHUB,
             version="1.0.0",
             description="Manage GitHub repositories",
             examples=[

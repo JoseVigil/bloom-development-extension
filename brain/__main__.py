@@ -6,34 +6,34 @@ import typer
 import sys
 from brain.commands import discover_commands
 from brain.shared.context import GlobalContext
-from brain.cli.help_renderer import render_help
 
 app = typer.Typer(
     no_args_is_help=True,
     help="Brain - Modular CLI system for Bloom",
-    add_completion=False  # Disable default help to use custom
+    add_completion=False
 )
 
 
-@app.callback(invoke_without_command=True)
+@app.callback()
 def main_config(
     ctx: typer.Context,
     json_mode: bool = typer.Option(False, "--json", help="Enable JSON output"),
     verbose: bool = typer.Option(False, "--verbose", help="Enable detailed logging")
 ):
     """Brain CLI - The brain of the Bloom extension."""
-    
-    # Intercept --help before Typer processes it
-    if ctx.invoked_subcommand is None and "--help" in sys.argv:
-        registry = discover_commands()
-        render_help(registry)
-        raise typer.Exit()
-    
     ctx.obj = GlobalContext(json_mode=json_mode, verbose=verbose, root_path=".")
 
 
 def main():
     """Main entry point with auto-discovery."""
+    
+    # Intercept --help BEFORE Typer processes anything
+    if "--help" in sys.argv and len(sys.argv) == 2:
+        from brain.cli.help_renderer import render_help
+        registry = discover_commands()
+        render_help(registry)
+        sys.exit(0)
+    
     try:
         registry = discover_commands()
         sub_apps = {}

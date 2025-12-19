@@ -13,7 +13,7 @@ class GithubOrgsCommand(BaseCommand):
     def metadata(self) -> CommandMetadata:
         return CommandMetadata(
             name="orgs",
-            category=CommandCategory.PROJECT,
+            category=CommandCategory.GITHUB,
             version="1.0.0",
             description="List GitHub organizations",
             examples=[
