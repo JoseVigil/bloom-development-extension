@@ -60,12 +60,13 @@ def _render_categories(console: Console, categories: List[CommandCategory]):
     console.print(Panel(table, title="[bold]Categories[/bold]", border_style="green"))
 
 
-def _extract_params(callback) -> List[str]:
-    """Extract parameters from a command callback with SHORT FLAGS."""
+def _extract_params_with_help(callback) -> tuple[List[str], List[tuple]]:
+    """Extract parameters and their help text."""
     if not callback:
-        return []
+        return [], []
     
     params = []
+    param_details = []
     sig = inspect.signature(callback)
     
     for name, param in sig.parameters.items():
@@ -75,25 +76,36 @@ def _extract_params(callback) -> List[str]:
         default = param.default
         if isinstance(default, OptionInfo):
             if hasattr(default, "param_decls") and default.param_decls:
-                # Prefer short flag (-o) over long (--output)
                 short_flags = [f for f in default.param_decls if f.startswith('-') and not f.startswith('--')]
                 long_flags = [f for f in default.param_decls if f.startswith('--')]
                 flag = short_flags[0] if short_flags else (long_flags[0] if long_flags else default.param_decls[0])
                 
+                # Get help text
+                help_text = default.help or ""
+                
                 if default.default == ...:
                     params.append(f"[yellow]{flag} <VALUE>[/yellow]")
+                    param_details.append((flag, "required", help_text))
                 else:
                     params.append(f"[cyan]{flag}[/cyan]")
+                    param_details.append((flag, "optional", help_text))
             else:
                 flag = f"--{name.replace('_', '-')}"
+                help_text = default.help if hasattr(default, 'help') else ""
+                
                 if default.default == ...:
                     params.append(f"[yellow]{flag} <VALUE>[/yellow]")
+                    param_details.append((flag, "required", help_text))
                 else:
                     params.append(f"[cyan]{flag}[/cyan]")
+                    param_details.append((flag, "optional", help_text))
         elif param.default == inspect.Parameter.empty or isinstance(default, ArgumentInfo):
-            params.append(f"[yellow]<{name.upper()}>[/yellow]")
+            arg_name = f"<{name.upper()}>"
+            params.append(f"[yellow]{arg_name}[/yellow]")
+            help_text = default.help if isinstance(default, ArgumentInfo) and hasattr(default, 'help') else ""
+            param_details.append((arg_name, "required", help_text))
     
-    return params
+    return params, param_details
 
 
 def _render_commands(console: Console, commands_by_category: Dict[CommandCategory, List[BaseCommand]]):
@@ -112,7 +124,7 @@ def _render_commands(console: Console, commands_by_category: Dict[CommandCategor
             
             if temp_app.registered_commands:
                 registered = temp_app.registered_commands[0]
-                params = _extract_params(registered.callback)
+                params, param_details = _extract_params_with_help(registered.callback)
                 params_str = " ".join(params) if params else ""
                 
                 # Full executable command
@@ -125,6 +137,13 @@ def _render_commands(console: Console, commands_by_category: Dict[CommandCategor
                 
                 if meta.description:
                     lines.append(Text(f"      {meta.description}", style="dim"))
+                
+                # Add parameter table if params exist
+                if param_details:
+                    lines.append(Text(""))  # spacing
+                    for flag, req_type, help_text in param_details:
+                        if help_text:
+                            lines.append(Text(f"        {flag:20} {help_text}", style="dim italic"))
     
     content = Text("\n").join(lines)
     console.print(Panel(content, title="[bold]Commands[/bold]", border_style="yellow"))
@@ -143,7 +162,7 @@ def _render_root_commands(console: Console, root_commands: List[BaseCommand]):
         
         if temp_app.registered_commands:
             registered = temp_app.registered_commands[0]
-            params = _extract_params(registered.callback)
+            params, param_details = _extract_params_with_help(registered.callback)
             params_str = " ".join(params) if params else ""
             
             # Full executable command
@@ -156,6 +175,13 @@ def _render_root_commands(console: Console, root_commands: List[BaseCommand]):
             
             if meta.description:
                 lines.append(Text(f"    {meta.description}", style="dim"))
+            
+            # Add parameter table
+            if param_details:
+                lines.append(Text(""))
+                for flag, req_type, help_text in param_details:
+                    if help_text:
+                        lines.append(Text(f"      {flag:20} {help_text}", style="dim italic"))
     
     if lines:
         content = Text("\n").join(lines)
