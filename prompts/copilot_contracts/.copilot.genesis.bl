@@ -1,0 +1,230 @@
+# ════════════════════════════════════════════════════════════════════════════
+# .bloom/.core/.copilot.genesis.bl
+# ════════════════════════════════════════════════════════════════════════════
+# GENESIS CONTRACT
+# ONE-TIME INITIALIZATION AUTHORITY
+# ════════════════════════════════════════════════════════════════════════════
+
+## PURPOSE
+
+This contract governs the one-time initialization phase of a Bloom-based project.
+
+GENESIS is a singular cognitive event that occurs exactly once per project.
+GENESIS establishes the initial documentation baseline required for operational intents.
+GENESIS is irreversible and must never execute after completion.
+
+This is NOT documentation.
+This is NOT an intent.
+This is NOT reusable logic.
+
+This is a cognitive execution boundary.
+
+## EXECUTION WINDOW
+
+GENESIS is authorized to execute IF AND ONLY IF:
+
+- Electron application has completed setup
+- User onboarding workflow has completed
+- GitHub authentication has succeeded
+- Nucleus has been created or cloned successfully
+- Project has been created or cloned successfully
+- No GENESIS completion marker exists in .bloom/state/
+
+GENESIS is PROHIBITED from executing if:
+
+- A completion marker file exists at .bloom/state/.genesis.complete
+- Any operational intent has already executed
+- Documentation baseline already exists
+- GENESIS has been previously attempted and completed
+
+## AUTHORITY AND LIMITS
+
+### READ AUTHORITY
+
+GENESIS may read:
+
+- .bloom/core/.copilot.bootstrap.bl
+- .bloom/core/.copilot.intent.*.bl
+- Project metadata files created during onboarding
+- Repository README if cloned
+- Nucleus configuration files
+- GitHub repository metadata
+
+### WRITE AUTHORITY
+
+GENESIS may create:
+
+- .bloom/docs/PROJECT_CONTEXT.md
+- .bloom/docs/ARCHITECTURE_BASELINE.md
+- .bloom/docs/INITIAL_STATE.md
+- .bloom/state/.genesis.complete (completion marker)
+- .bloom/logs/genesis.execution.log
+
+### ABSOLUTE PROHIBITIONS
+
+GENESIS must NEVER:
+
+- Modify source code files
+- Create or modify intent contracts
+- Execute build pipelines
+- Perform linting or formatting
+- Create test files
+- Modify package configuration files
+- Perform speculative architectural decisions
+- Execute iterative refinement loops
+- Invoke health enforcement beyond existence verification
+
+## RELATIONSHIP TO OTHER CONTRACTS
+
+GENESIS exists within the following hierarchy:
+
+BOOTSTRAP > GENESIS > INTENT
+
+BOOTSTRAP defines global authority and cognitive boundaries.
+GENESIS executes once to establish project initialization.
+INTENT contracts govern all subsequent operational work.
+
+GENESIS must NOT:
+
+- Override BOOTSTRAP rules
+- Implement intent logic
+- Duplicate intent responsibilities
+- Reference future intent execution
+- Make assumptions about intent behavior
+
+GENESIS operates in complete isolation from operational intent flows.
+
+## ALLOWED OUTPUTS
+
+GENESIS may produce the following artifacts:
+
+### PROJECT_CONTEXT.md
+
+- Project name and description
+- Repository URL if applicable
+- Initial technology stack identification
+- User-provided project goals
+- Timestamp of initialization
+
+### ARCHITECTURE_BASELINE.md
+
+- Detected file structure snapshot
+- Identified frameworks and dependencies
+- Configuration file inventory
+- Build system identification
+- No architectural recommendations
+
+### INITIAL_STATE.md
+
+- List of files present at initialization
+- Detected source directories
+- Documentation directories if present
+- Configuration file locations
+- No quality assessment
+
+### Completion Marker
+
+- File: .bloom/state/.genesis.complete
+- Content: ISO timestamp of completion
+- Purpose: Prevent re-execution
+
+### Execution Log
+
+- File: .bloom/logs/genesis.execution.log
+- Content: Actions taken, files created, errors encountered
+- Format: Structured log entries with timestamps
+
+## PROHIBITIONS
+
+GENESIS must NEVER perform:
+
+- Code generation or modification
+- Intent contract creation or modification
+- Architectural refactoring
+- Dependency updates
+- Code quality analysis beyond detection
+- Build execution
+- Test execution
+- Documentation generation beyond baseline artifacts
+- Iterative improvement loops
+- Speculative reasoning about future state
+- Auto-correction of detected inconsistencies
+- Pipeline orchestration
+- Health metric enforcement
+
+## COMPLETION CRITERIA
+
+GENESIS is considered complete when ALL of the following exist:
+
+- .bloom/docs/PROJECT_CONTEXT.md created
+- .bloom/docs/ARCHITECTURE_BASELINE.md created
+- .bloom/docs/INITIAL_STATE.md created
+- .bloom/state/.genesis.complete marker created with valid timestamp
+- .bloom/logs/genesis.execution.log created with no fatal errors
+
+Once complete, GENESIS must:
+
+- Terminate immediately
+- Never re-execute regardless of conditions
+- Remain as historical record only
+- Have no authority over subsequent operations
+
+## FAILURE HANDLING
+
+If GENESIS cannot complete due to missing prerequisites:
+
+- Log the specific missing prerequisite to genesis.execution.log
+- Do NOT create partial documentation files
+- Do NOT create the completion marker
+- Surface error to user interface immediately
+- Terminate execution without retry
+
+If GENESIS encounters an error during execution:
+
+- Log the error with full context to genesis.execution.log
+- Do NOT create the completion marker
+- Do NOT leave partial artifacts
+- Surface error to user interface immediately
+- Terminate execution without retry
+
+Silent failure is FORBIDDEN.
+
+If any required output cannot be created:
+
+- GENESIS has failed
+- User must be notified
+- System must not proceed to intent execution
+
+## VALIDATION
+
+Before creating completion marker, GENESIS must verify:
+
+- All three documentation files exist and contain non-zero content
+- Execution log exists and contains structured entries
+- No fatal errors were logged
+- All write operations succeeded
+
+If any verification fails:
+
+- Do NOT create completion marker
+- Report failure to user
+- Terminate
+
+## FINALITY
+
+Once .bloom/state/.genesis.complete exists:
+
+- GENESIS has no further authority
+- This contract becomes historical record
+- All subsequent work is governed by INTENT contracts
+- Re-execution is permanently prohibited
+
+GENESIS is not a service.
+GENESIS is not a persistent process.
+GENESIS is a one-time cognitive boundary condition.
+
+After completion, only INTENT contracts have operational authority.
+
+# ════════════════════════════════════════════════════════════════════════════
+# END OF GENESIS CONTRACT
+# ════════════════════════════════════════════════════════════════════════════

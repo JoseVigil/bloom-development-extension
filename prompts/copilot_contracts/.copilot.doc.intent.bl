@@ -1,0 +1,169 @@
+# ════════════════════════════════════════════════════════════════════════════
+# .bloom/.project/.copilot.doc.intent.bl
+# ════════════════════════════════════════════════════════════════════════════
+# DOC INTENT CONTRACT
+# ════════════════════════════════════════════════════════════════════════════
+
+## PURPOSE (NON-DOCUMENTAL)
+
+This file is a **cognitive bootstrap contract** for GitHub Copilot.
+It defines **authority, limits, invariants, and operating modes**.
+Copilot must treat this file as **higher priority than any README, comment, or inferred pattern**.
+
+This file is **not documentation**. It is an **operational constraint system**.
+
+---
+
+## GLOBAL AXIOMS
+
+1. Filesystem = source of truth.
+2. States are explicit and materialized.
+3. No inference is allowed when a state is declared.
+4. Breaking invariants must surface as visible errors.
+5. Copilot suggestions must obey mode and intent fencing.
+
+---
+
+## BUSINESS MODEL (MINIMAL, OPERATIONAL)
+
+This repository implements a **Bloom-based Intent System**.
+Work is executed through **Intents**, each with:
+
+* a declared purpose
+* explicit states
+* a deterministic pipeline
+
+There are two primary intent classes:
+
+* DEV intents (design, implementation, execution)
+* DOC intents (documentation, explanation, derivation)
+
+All intent state and execution metadata live under `.bloom/`.
+
+---
+
+## DIRECTORY AUTHORITY MAP
+
+.bloom/                  => Cognitive and operational control plane
+.bloom/.core/            => Global rules, instructions, invariants
+.bloom/.intents/         => All DEV and DOC intents
+.bloom/.pipeline/        => Execution payloads and runtime state
+src/                     => Executable source code
+
+Copilot must **never treat `src/` as globally authoritative** without checking intent phase.
+
+---
+
+## SOURCE OF TRUTH BY PHASE (NON-NEGOTIABLE)
+
+PHASE: DEV (Design / Planning)
+
+* Absolute authority: `*_state.json`
+* Code is secondary and may be incomplete
+
+PHASE: PIPELINE (Execution)
+
+* Absolute authority: `.pipeline/.payload.json`
+* Only the active intent is writable
+
+PHASE: RUN / PROD
+
+* Absolute authority: `src/`
+* Intent states become historical
+
+Copilot must **explicitly resolve phase before suggesting changes**.
+
+---
+
+## OPERATING MODES
+
+MODE: DEV
+
+* Write access: active intent only
+* Strict intent fencing
+* No cross-intent suggestions
+
+MODE: DOC
+
+* Read access: global
+* Write access: DOC intents only
+* No structural changes allowed
+
+MODE: PIPELINE
+
+* Write access: active intent only
+* No speculative changes
+
+Mode must be inferred from active intent metadata.
+
+---
+
+## HEALTH SYSTEM
+
+### HEALTH LEVEL 1 — STRUCTURAL (NO CODE EXECUTION)
+
+Validate:
+
+* All required intent phases exist
+* No `### MISSING` markers
+* State files match filesystem reality
+* Pipeline references are resolvable
+
+Failure at this level = INVALID SYSTEM STATE
+
+### HEALTH LEVEL 2 — OPERATIONAL
+
+Validate:
+
+* Code compiles
+* Tests pass
+* Runtime checks succeed
+
+Operational health is irrelevant if structural health fails.
+
+---
+
+## RULE CONSUMPTION MODEL (COPILOT)
+
+Rules are enforced via:
+
+1. Templates (guidance)
+2. Explicit errors and invalid states (authority)
+
+Copilot must assume:
+
+* Errors override templates
+* Invalid state files are blocking
+
+---
+
+## PROHIBITIONS
+
+Copilot must NOT:
+
+* Modify files outside the active intent in DEV or PIPELINE mode
+* Invent phases, states, or pipeline steps
+* Resolve conflicts by inference
+* Silence or remove error markers
+
+---
+
+## REQUIRED BEHAVIOR
+
+Before suggesting or generating code, Copilot must:
+
+1. Identify current mode
+2. Identify active intent
+3. Resolve phase authority
+4. Check structural health signals
+
+If any step fails, Copilot must halt and surface the issue.
+
+---
+
+# ════════════════════════════════════════════════════════════════════════════
+# END OF DOC INTENT CONTRACT
+# ════════════════════════════════════════════════════════════════════════════
+
+This file defines the **maximum authority** for Copilot behavior in this repository.
+Any contradiction elsewhere must defer to this contract.

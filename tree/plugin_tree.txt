@@ -171,9 +171,6 @@ bloom-development-extension/
 │   │   │   ├── ChromeManualExtensionInstaller.js
 │   │   │   └── config.js
 │   │   ├── main.js
-│   │   ├── node_modules/ [... dependencies]
-│   │   ├── out/ [... output files]
-│   │   ├── package-lock.json
 │   │   ├── package.json
 │   │   ├── preload.js
 │   │   ├── registry-scripts/
@@ -203,7 +200,6 @@ bloom-development-extension/
 │   │   │       └── libwinpthread-1.dll
 │   │   └── host/
 │   │       └── com.bloom.nucleus.bridge.json
-│   ├── node_modules/ [... dependencies]
 │   ├── package-lock.json
 │   ├── package.json
 │   └── scripts/
@@ -269,6 +265,7 @@ bloom-development-extension/
 │   │   ├── __pycache__/ [... cache]
 │   │   ├── base.py
 │   │   ├── categories.py
+│   │   ├── help_renderer.py
 │   │   └── registry.py
 │   ├── commands/
 │   │   ├── __init__.py
@@ -280,7 +277,25 @@ bloom-development-extension/
 │   │   │   ├── __init__.py
 │   │   │   ├── __pycache__/ [... cache]
 │   │   │   └── tree.py
+│   │   ├── github/
+│   │   │   ├── __init__.py
+│   │   │   ├── __pycache__/ [... cache]
+│   │   │   ├── auth.py
+│   │   │   ├── auth_login.py
+│   │   │   ├── auth_logout.py
+│   │   │   ├── auth_status.py
+│   │   │   ├── clone.py
+│   │   │   ├── orgs.py
+│   │   │   ├── orgs_list.py
+│   │   │   ├── repos.py
+│   │   │   └── repos_list.py
 │   │   ├── init.py
+│   │   ├── nucleus/
+│   │   │   ├── __init__.py
+│   │   │   ├── __pycache__/ [... cache]
+│   │   │   ├── create.py
+│   │   │   ├── link.py
+│   │   │   └── status.py
 │   │   └── project/
 │   │       ├── __pycache__/ [... cache]
 │   │       ├── load.py
@@ -310,6 +325,15 @@ bloom-development-extension/
 │   │   │   │   ├── rust.py
 │   │   │   │   └── typescript.py
 │   │   │   └── strategy_loader.py
+│   │   ├── git/
+│   │   │   ├── __init__.py
+│   │   │   ├── executor.py
+│   │   │   └── repository.py
+│   │   ├── github/
+│   │   │   ├── __init__.py
+│   │   │   ├── api_client.py
+│   │   │   ├── credentials.py
+│   │   │   └── models.py
 │   │   ├── nucleus_manager.py
 │   │   ├── project_manager.py
 │   │   └── tree_manager.py
@@ -318,6 +342,7 @@ bloom-development-extension/
 │       ├── __init__.py
 │       ├── __pycache__/ [... cache]
 │       ├── context.py
+│       ├── github_types.py
 │       └── shared/
 │           └── context.py
 ├── package.json

@@ -1,0 +1,86 @@
+.bloom/
+│
+└── .nucleus-{organization}/
+	├── .core/
+	│   ├── nucleus-config.json           
+	│   ├── .rules.bl                     
+	│   ├── .standards.bl                 
+	│   ├── .policies.bl                 
+	│   └── .meta.json                   
+	│
+	├── .governance/
+	│   ├── architecture/
+	│   │   ├── .principles.bl           
+	│   │   ├── .patterns.bl            
+	│   │   └── .decisions/              
+	│   │       └── .adr-{uuid}.json
+	│   ├── security/
+	│   │   ├── .security-standards.bl
+	│   │   └── .compliance-requirements.bl
+	│   └── quality/
+	│       ├── .code-standards.bl
+	│       └── .testing-requirements.bl
+	│
+	├── .intents/
+	│   └── .exp/
+	│       └── .{intent-name-uuid}/
+	│           ├── .exp_state.json
+	│           ├── .inquiry/
+	│           │   ├── .inquiry.json
+	│           │   ├── .context_exp_plan.json
+	│           │   └── .files/
+	│           │       ├── .expbase.json
+	│           │       ├── .expbase_index.json
+	│           │       └── [optional files]
+	│           ├── .discovery/
+	│           │   └── .turn_X/
+	│           │       ├── .turn.json           
+	│           │       ├── .context_exp_plan.json
+	│           │       └── .files/
+	│           │           ├── .expbase.json
+	│           │           ├── .expbase_index.json
+	│           │           └── [optional files]
+	│           ├── .findings/
+	│           │   ├── .findings.json            
+	│           │   ├── .context_exp_plan.json  
+	│           │   └── .files/
+	│           │       ├── .expbase.json
+	│           │       ├── .expbase_index.json
+	│           │       └── [optional files]
+	│           └── .pipeline/
+	│               ├── .inquiry/
+	│               │   ├── .payload.json
+	│               │   ├── .index.json
+	│               │   └── .response/
+	│               │       ├── .raw_output.txt
+	│               │       └── .report.json
+	│               └── .discovery/
+	│                   └── .turn_X/
+	│                       ├── .payload.json
+	│                       ├── .index.json
+	│                       └── .response/
+	│                           ├── .raw_output.txt
+	│                           └── .report.json
+	│
+	├── .cache/
+	│   ├── .projects-snapshot.json      
+	│   ├── .semantic-index.json         
+	│   ├── .dependency-graph.json       
+	│   └── .last-sync.json              
+	│
+	├── .relations/
+	│   ├── .project-links.json          
+	│   └── .dependency-map.json         
+	│
+	├── findings/                       
+	│   ├── README.md                    
+	│   └── {intent-name}/
+	│       ├── report.pdf
+	│       ├── report.md
+	│       └── data.json
+	│
+	└── reports/                         
+		├── health-dashboard.json
+		├── statistics.json
+		└── exports/
+			└── {timestamp}-report.pdf

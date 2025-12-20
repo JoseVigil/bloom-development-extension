@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import Dict, List, Set, Optional
+from typing import Dict, List, Optional
 
 class MultiStackDetector:
     """
@@ -19,7 +19,7 @@ class MultiStackDetector:
         # Web / JS / TS
         "package.json": "typescript",
         "tsconfig.json": "typescript",
-        "vite.config.js": "typescript", # Asumimos ecosistema JS/TS
+        "vite.config.js": "typescript", 
         "vite.config.ts": "typescript",
         
         # Python
@@ -30,9 +30,13 @@ class MultiStackDetector:
         
         # Mobile
         "AndroidManifest.xml": "android",
-        "build.gradle": "android", # Si está en app/
+        "build.gradle": "android",
         "build.gradle.kts": "android",
         "Podfile": "ios",
+        
+        # PHP
+        "composer.json": "php",
+        "artisan": "php",
         
         # Otros
         "Dockerfile": "docker",
@@ -45,15 +49,10 @@ class MultiStackDetector:
     def detect(self) -> List[Dict]:
         """
         Retorna una lista de módulos detectados.
-        Ejemplo:
-        [
-            {"type": "python", "path": "core", "markers": ["pyproject.toml"]},
-            {"type": "typescript", "path": ".", "markers": ["package.json"]}
-        ]
         """
         found_modules: Dict[str, Dict] = {}
 
-        # Walk optimizado (evita entrar en node_modules)
+        # Walk optimizado
         for root, dirs, files in os.walk(self.root):
             # Filtrar directorios ignorados in-place
             dirs[:] = [d for d in dirs if d not in self.IGNORED_DIRS]
@@ -64,26 +63,23 @@ class MultiStackDetector:
                 strategy_type = self._match_marker(file)
                 
                 if strategy_type:
-                    # Calcular ruta relativa a la raíz del proyecto
                     try:
                         rel_path = current_path.relative_to(self.root)
                     except ValueError:
-                        continue # Fuera del root (no debería pasar)
+                        continue 
 
                     str_path = str(rel_path).replace('\\', '/')
                     if str_path == '.': str_path = ''
 
-                    # Identificar módulo único por ruta
                     if str_path not in found_modules:
                         found_modules[str_path] = {
-                            "type": strategy_type, # Prioridad al primero encontrado
+                            "type": strategy_type,
                             "path": str_path,
                             "abs_path": current_path,
                             "markers": set()
                         }
                     
-                    # Si encontramos un marcador 'android' en una carpeta que ya tenía 'java',
-                    # actualizamos a android porque es más específico.
+                    # Refinamiento de estrategia (Android gana a Java)
                     if strategy_type == 'android' and found_modules[str_path]['type'] == 'java':
                          found_modules[str_path]['type'] = 'android'
 
@@ -93,11 +89,9 @@ class MultiStackDetector:
         result = []
         for mod in found_modules.values():
             mod['markers'] = list(mod['markers'])
-            # Filtro especial: build.gradle en raíz suele ser config, no un módulo android per-se
-            # a menos que tenga app/build.gradle. Dejamos que la Strategy decida si es válida.
             result.append(mod)
             
-        # Ordenar: Raíz primero, luego alfabético
+        # Ordenar: Raíz primero
         return sorted(result, key=lambda x: (x['path'] != '', x['path']))
 
     def _match_marker(self, filename: str) -> Optional[str]:
