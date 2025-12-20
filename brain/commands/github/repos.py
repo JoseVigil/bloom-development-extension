@@ -205,14 +205,14 @@ class GithubReposCommand(BaseCommand):
         org = data.get("org")
         
         if not repos:
-            typer.echo("📭 No repositories found")
+            typer.echo("🔭 No repositories found")
             return
         
         header = f"@{org}" if org else "Personal"
         typer.echo(f"📦 {header} Repositories ({data['count']}):\n")
         
         for repo in repos:
-            visibility = "🔒" if repo["private"] else "🌐"
+            visibility = "🔒" if repo["private"] else "🌍"
             stars = f"⭐ {repo['stars']}" if repo["stars"] > 0 else ""
             lang = repo.get("language") or "—"
             
@@ -235,7 +235,7 @@ class GithubReposCommand(BaseCommand):
     def _render_get(self, data: dict):
         """Human-readable get output."""
         repo = data["repo"]
-        visibility = "🔒 Private" if repo["private"] else "🌐 Public"
+        visibility = "🔒 Private" if repo["private"] else "🌍 Public"
         
         typer.echo(f"📦 {repo['full_name']} ({visibility})")
         if repo.get("description"):

@@ -11,6 +11,7 @@ class CommandCategory(Enum):
     """
     NUCLEUS = ("nucleus", "Nucleus project management and lifecycle")
     GITHUB = ("github", "GitHub integration and repository management")
+    GEMINI = ("gemini", "Gemini AI key management and operations")
     CONTEXT = ("context", "AI context generation and management")
     PROJECT = ("project", "Project lifecycle and scaffolding")
     FILESYSTEM = ("filesystem", "File operations and directory analysis")

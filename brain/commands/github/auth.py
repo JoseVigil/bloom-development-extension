@@ -35,7 +35,7 @@ class GithubAuthCommand(BaseCommand):
                 "--token", 
                 "-t",
                 help="GitHub Personal Access Token (ghp_...)",
-                envvar="BRAIN_GITHUB_TOKEN"
+                envvar="BLOOM_GITHUB_TOKEN"
             ),
             validate: bool = typer.Option(
                 True,
@@ -50,14 +50,12 @@ class GithubAuthCommand(BaseCommand):
                 gc = GlobalContext()
             
             try:
-                # Lazy import
-                from brain.core.github.credentials import GitHubCredentials
+                from brain.shared.credentials import GitHubCredentials
                 from brain.core.github.api_client import GitHubAPIClient
                 
                 if gc.verbose:
                     typer.echo("🔐 Storing GitHub token...", err=True)
                 
-                # Store token
                 creds = GitHubCredentials()
                 creds.save_token(token)
                 
@@ -67,7 +65,6 @@ class GithubAuthCommand(BaseCommand):
                     "token_stored": True
                 }
                 
-                # Validate if requested
                 if validate:
                     if gc.verbose:
                         typer.echo("✓ Token stored, validating...", err=True)
@@ -107,7 +104,7 @@ class GithubAuthCommand(BaseCommand):
                 gc = GlobalContext()
             
             try:
-                from brain.core.github.credentials import GitHubCredentials
+                from brain.shared.credentials import GitHubCredentials
                 from brain.core.github.api_client import GitHubAPIClient
                 
                 creds = GitHubCredentials()
@@ -121,10 +118,8 @@ class GithubAuthCommand(BaseCommand):
                     gc.output(result, self._render_status_unauthenticated)
                     return
                 
-                # Get stored token
                 token = creds.get_token()
                 
-                # Validate with API
                 client = GitHubAPIClient(token)
                 user = client.get_current_user()
                 orgs = client.get_user_orgs()
@@ -164,7 +159,7 @@ class GithubAuthCommand(BaseCommand):
                 gc = GlobalContext()
             
             try:
-                from brain.core.github.credentials import GitHubCredentials
+                from brain.shared.credentials import GitHubCredentials
                 
                 creds = GitHubCredentials()
                 

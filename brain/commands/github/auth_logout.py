@@ -23,7 +23,7 @@ class GithubAuthLogoutCommand(BaseCommand):
                 gc = GlobalContext()
             
             try:
-                from brain.core.github.credentials import GitHubCredentials
+                from brain.shared.credentials import GitHubCredentials
                 creds = GitHubCredentials()
                 creds.delete_token()
                 
