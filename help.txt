@@ -116,6 +116,36 @@ Brain CLI - Modular system for Bloom
 
 +----------------------------------- FILESYSTEM ------------------------------------+
 |                                                                                   |
+|  COMPRESS - Compress files into optimized JSON for AI consumption                 |
+|                                                                                   |
+|    python -m brain filesystem compress <PATHS> [OPTIONS]                          |
+|                                                                                   |
+|    Parámetros requeridos:                                                         |
+|      <PATHS>              Paths to compress (files or directories)                |
+|                                                                                   |
+|    Parámetros opcionales:                                                         |
+|      -m                   Compression mode: 'codebase' or 'docbase'               |
+|      -o                   Output directory (default: current directory)           |
+|      -e                   Patterns to exclude (can be used multiple times)        |
+|      --no-comments        Remove comments during compression                      |
+|                                                                                   |
+|    Argumentos:                                                                    |
+|      <PATHS>              Paths to compress (files or directories)                |
+|                                                                                   |
+|  EXTRACT - Extract files from compressed JSON format                              |
+|                                                                                   |
+|    python -m brain filesystem extract <JSON_FILE> [OPTIONS]                       |
+|                                                                                   |
+|    Parámetros requeridos:                                                         |
+|      <JSON_FILE>          Compressed JSON file to extract                         |
+|                                                                                   |
+|    Parámetros opcionales:                                                         |
+|      -o                   Output directory (default: extracted_<mode>)            |
+|      --verify-hashes/--no-verify-hashes Verify MD5 hashes during extraction       |
+|                                                                                   |
+|    Argumentos:                                                                    |
+|      <JSON_FILE>          Compressed JSON file to extract                         |
+|                                                                                   |
 |  TREE - Generate visual tree structure with optional MD5 hashing and JSON export  |
 |                                                                                   |
 |    python -m brain filesystem tree <TARGETS> [OPTIONS]                            |

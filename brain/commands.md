@@ -15,6 +15,9 @@ python -m brain --json [comando]
 # Modo estándar (sin hashes, crea tree.txt del raiz)
 python brain tree
 
+# Tree de Brain
+python -m brain filesystem tree brain -o tree/brain_tree.txt
+
 # Genera estructura visual filtrada por carpetas/archivos específicos guardando en ruta personalizada con logs activos.
 python -m brain filesystem tree src installer webview brain package.json tsconfig.json -o tree/plugin_tree.txt
 
