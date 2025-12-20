@@ -19,6 +19,7 @@ bloom-development-extension/
     │   ├── filesystem/
     │   │   ├── __init__.py
     │   │   ├── __pycache__/ [... cache]
+    │   │   ├── compress.py
     │   │   └── tree.py
     │   ├── github/
     │   │   ├── __init__.py
@@ -75,6 +76,11 @@ bloom-development-extension/
     │   │   │   └── typescript.py
     │   │   ├── strategy_base.py
     │   │   └── strategy_loader.py
+    │   ├── filesystem/
+    │   │   ├── __init__.py
+    │   │   ├── code_compressor.py
+    │   │   ├── files_compressor.py
+    │   │   └── files_extractor.py
     │   ├── git/
     │   │   ├── __init__.py
     │   │   ├── executor.py
