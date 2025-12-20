@@ -19,7 +19,7 @@ class NucleusStatusCommand(BaseCommand):
         @app.command("status")
         def status(
             ctx: typer.Context,
-            path: Optional[Path] = typer.Option(None, "--path", "-p", help="Project path")
+            path: Optional[Path] = typer.Option(None, "--path", "-p", help="Nucleus path")
         ):
             """Check if a directory is a valid Nucleus project."""
             gc = ctx.obj

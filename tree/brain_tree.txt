@@ -1,90 +1,569 @@
 bloom-development-extension/
-└── brain/
-    ├── __init__.py
-    ├── __main__.py
-    ├── __pycache__/ [... cache]
-    ├── cli/
+└── bloom-development-extension/
+    ├── .git/ [... git data]
+    ├── .gitignore
+    ├── .vscode/ [... ide]
+    ├── .vscode-test.mjs
+    ├── .vscodeignore
+    ├── README.md
+    ├── brain/
     │   ├── __init__.py
+    │   ├── __main__.py
     │   ├── __pycache__/ [... cache]
-    │   ├── base.py
-    │   ├── categories.py
-    │   ├── help_renderer.py
-    │   └── registry.py
-    ├── commands/
-    │   ├── __init__.py
-    │   ├── __pycache__/ [... cache]
-    │   ├── context/
+    │   ├── cli/
+    │   │   ├── __init__.py
     │   │   ├── __pycache__/ [... cache]
-    │   │   └── generate.py
+    │   │   ├── base.py
+    │   │   ├── categories.py
+    │   │   ├── help_renderer.py
+    │   │   └── registry.py
+    │   ├── commands/
+    │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
+    │   │   ├── context/
+    │   │   │   ├── __pycache__/ [... cache]
+    │   │   │   └── generate.py
+    │   │   ├── filesystem/
+    │   │   │   ├── __init__.py
+    │   │   │   ├── __pycache__/ [... cache]
+    │   │   │   └── tree.py
+    │   │   ├── github/
+    │   │   │   ├── __init__.py
+    │   │   │   ├── __pycache__/ [... cache]
+    │   │   │   ├── auth.py
+    │   │   │   ├── auth_login.py
+    │   │   │   ├── auth_logout.py
+    │   │   │   ├── auth_status.py
+    │   │   │   ├── clone.py
+    │   │   │   ├── orgs.py
+    │   │   │   ├── orgs_list.py
+    │   │   │   ├── repos.py
+    │   │   │   └── repos_list.py
+    │   │   ├── init.py
+    │   │   ├── nucleus/
+    │   │   │   ├── __init__.py
+    │   │   │   ├── __pycache__/ [... cache]
+    │   │   │   ├── create.py
+    │   │   │   ├── link.py
+    │   │   │   └── status.py
+    │   │   └── project/
+    │   │       ├── __pycache__/ [... cache]
+    │   │       ├── load.py
+    │   │       └── nucleus.py
+    │   ├── commands.md
+    │   ├── core/
+    │   │   ├── __pycache__/ [... cache]
+    │   │   ├── context/
+    │   │   │   ├── detector.py
+    │   │   │   ├── generate.py
+    │   │   │   ├── manager.py
+    │   │   │   ├── strategies/
+    │   │   │   │   ├── android.py
+    │   │   │   │   ├── cicd.py
+    │   │   │   │   ├── cpp.py
+    │   │   │   │   ├── dotnet.py
+    │   │   │   │   ├── flutter.py
+    │   │   │   │   ├── go.py
+    │   │   │   │   ├── iac.py
+    │   │   │   │   ├── ios.py
+    │   │   │   │   ├── jvm.py
+    │   │   │   │   ├── macos.py
+    │   │   │   │   ├── multistack_detector.py
+    │   │   │   │   ├── php.py
+    │   │   │   │   ├── python.py
+    │   │   │   │   ├── ruby.py
+    │   │   │   │   ├── rust.py
+    │   │   │   │   └── typescript.py
+    │   │   │   └── strategy_loader.py
+    │   │   ├── git/
+    │   │   │   ├── __init__.py
+    │   │   │   ├── executor.py
+    │   │   │   └── repository.py
+    │   │   ├── github/
+    │   │   │   ├── __init__.py
+    │   │   │   ├── api_client.py
+    │   │   │   ├── credentials.py
+    │   │   │   └── models.py
+    │   │   ├── nucleus_manager.py
+    │   │   ├── project_manager.py
+    │   │   └── tree_manager.py
+    │   ├── pyproject.toml
+    │   └── shared/
+    │       ├── __init__.py
+    │       ├── __pycache__/ [... cache]
+    │       ├── context.py
+    │       ├── github_types.py
+    │       └── shared/
+    │           └── context.py
+    ├── codebase/
+    │   ├── .codebase.json
+    │   ├── .codebase_index.json
+    │   ├── .docbase.json
+    │   └── .docbase_index.json
+    ├── core/
+    │   ├── __init__.py
+    │   ├── __main__.py
+    │   ├── adapters/
+    │   │   ├── __init__.py
+    │   │   └── legacy_bridge.py
+    │   ├── commands.txt
+    │   ├── commnds.md
+    │   ├── config.py
     │   ├── filesystem/
     │   │   ├── __init__.py
-    │   │   ├── __pycache__/ [... cache]
-    │   │   └── tree.py
-    │   ├── github/
+    │   │   ├── code_compressor.py
+    │   │   ├── files_compressor.py
+    │   │   ├── files_extractor.py
+    │   │   ├── payload_manager.py
+    │   │   ├── staging.py
+    │   │   └── tree_manager.py
+    │   ├── generators/
     │   │   ├── __init__.py
+    │   │   ├── context_strategy.py
+    │   │   ├── nucleus_generator.py
+    │   │   └── strategies/
+    │   │       ├── __init__.py
+    │   │       ├── android.py
+    │   │       ├── cicd.py
+    │   │       ├── cpp.py
+    │   │       ├── dotnet.py
+    │   │       ├── flutter.py
+    │   │       ├── go.py
+    │   │       ├── iac.py
+    │   │       ├── ios.py
+    │   │       ├── jvm.py
+    │   │       ├── macos.py
+    │   │       ├── multistack_detector.py
+    │   │       ├── php.py
+    │   │       ├── python.py
+    │   │       ├── ruby.py
+    │   │       ├── rust.py
+    │   │       └── typescript.py
+    │   ├── intelligence/
+    │   │   ├── __init__.py
+    │   │   ├── llm_client.py
+    │   │   └── response_parser.py
+    │   ├── memory/
+    │   │   ├── __init__.py
+    │   │   ├── index_loader.py
+    │   │   ├── meta_manager.py
+    │   │   └── semantic_router.py
+    │   ├── migrate_to_v2_complete.py
+    │   ├── orchestrator/
+    │   │   ├── __init__.py
+    │   │   ├── engine.py
+    │   │   ├── genesis_planner.py
+    │   │   ├── state_machine.py
+    │   │   └── task_dispatcher.py
+    │   ├── requirements.txt
+    │   └── utils/
+    │       ├── __init__.py
+    │       ├── logging_utils.py
+    │       └── path_resolver.py
+    ├── docs/
+    │   ├── v1/
+    │   │   ├── Arquitectura BTIP — Descripción General.md
+    │   │   ├── BLOOM_BTIP.md
+    │   │   ├── BLOOM_BTIP_CLI_SPEC.md
+    │   │   ├── BLOOM_BTIP_CLOUDE_GUIDE.md
+    │   │   ├── BLOOM_BTIP_CLOUDE_GUIDE_SUMMARY.md
+    │   │   ├── BLOOM_BTIP_CREATECODEBASE_IMPLEMENTATION.md
+    │   │   ├── BLOOM_BTIP_INTERFACE_PROMPT.md
+    │   │   ├── BLOOM_BTIP_PLUGIN_PROMPT_GENERAL.md
+    │   │   ├── BLOOM_BTIP_PLUGIN_SPEC.md
+    │   │   ├── BLOOM_BTIP_PLUGIN_SPEC_REVISED.md
+    │   │   ├── BLOOM_BTIP_SPEC_BASE.md
+    │   │   ├── BLOOM_BTIP_UNIVERSAL_CODEBASE_TEMPLATE.md
+    │   │   ├── BLOOM_CODE_BASE_CONCEPTO.md
+    │   │   ├── BLOOM_CODE_CLI_SPEC.md
+    │   │   ├── BLOOM_CODE_PLUGIN_SPEC.md
+    │   │   └── BLOOM_PLUGIN_ARCHITECTURE.md
+    │   ├── v1.0.1/
+    │   │   ├── Prompt Superador para Implementar Intent DEV.md
+    │   │   └── bloom-nucleus_v1.0.1.bl
+    │   ├── v10/
+    │   │   ├── bloom-nucleus-1.0.1.md
+    │   │   └── bloom-unified-specs_backup.md
+    │   ├── v2/
+    │   │   ├── BLOOM_BTIP_INTERFACE_PROMPT.md
+    │   │   ├── BLOOM_BTIP_PLUGIN_PROMPT_GENERAL.md
+    │   │   └── BLOOM_BTIP_PLUGIN_SPEC.md
+    │   ├── v3/
+    │   │   ├── BLOOM_BTIP_INTERFACE_PROMPT.md
+    │   │   ├── BLOOM_BTIP_PLUGIN_PROMPT_GENERAL.md
+    │   │   ├── BLOOM_BTIP_PLUGIN_SPEC_REVISED.md
+    │   │   ├── BLOOM_Codebase_Generator.md
+    │   │   └── SETUP_GUIDE.md
+    │   ├── v4/
+    │   │   ├── BLOOM_BTIP_CODEBASE_GENERATOR.md
+    │   │   └── BLOOM_BTIP_INTENT_MANAGER.md
+    │   ├── v5/
+    │   │   └── bloom_intent_lifecycle.md
+    │   ├── v6/
+    │   │   ├── bloom-lifecycle-updated.md
+    │   │   ├── bloom-nucleus-spec.md
+    │   │   └── nucleus_implementation_guide.md
+    │   ├── v7/
+    │   │   ├── bloom_unified_spec.md
+    │   │   └── nucleus_creation_management.md
+    │   ├── v8/
+    │   │   ├── bloom-btip-resumen.md
+    │   │   └── bloom_unified_spec.md
+    │   └── v9/
+    │       ├── BLOOM – Git Orchestration Plan.md
+    │       ├── Desvincular Nucleus (Unlink Nucleus).md
+    │       ├── bloom_unified_spec.md
+    │       └── git-orchestration-impl.md
+    ├── eslint.config.mjs
+    ├── installer/
+    │   ├── README.md
+    │   ├── chrome-extension/
+    │   │   ├── crx/
+    │   │   │   ├── id.json
+    │   │   │   └── key.pem
+    │   │   └── src/
+    │   │       ├── 128x128.png
+    │   │       ├── background.js
+    │   │       ├── content.js
+    │   │       ├── icon128.png
+    │   │       ├── icon16.png
+    │   │       └── manifest.json
+    │   ├── create_installer.py
+    │   ├── electron-app/
+    │   │   ├── .gitignore
+    │   │   ├── app.manifest
+    │   │   ├── assets/
+    │   │   │   ├── bloom.ico
+    │   │   │   └── installer.gif
+    │   │   ├── config-loader.js
+    │   │   ├── entitlements.plist
+    │   │   ├── forge.config.js
+    │   │   ├── installHelpers.js
+    │   │   ├── installer-config.json
+    │   │   ├── installers/
+    │   │   │   ├── ChromeEnterpriseExtensionInstaller.js
+    │   │   │   ├── ChromeManualExtensionInstaller.js
+    │   │   │   └── config.js
+    │   │   ├── main.js
+    │   │   ├── package.json
+    │   │   ├── preload.js
+    │   │   ├── registry-scripts/
+    │   │   │   ├── cleanup.ps1
+    │   │   │   └── hkcu.ps1
+    │   │   ├── run-admin.bat
+    │   │   ├── run-make-admin.bat
+    │   │   ├── src/
+    │   │   │   ├── event_listeners.js
+    │   │   │   ├── extension_installer.js
+    │   │   │   ├── heartbeat_manager.js
+    │   │   │   ├── index.html
+    │   │   │   ├── installation_manager.js
+    │   │   │   ├── renderer.js
+    │   │   │   ├── styles.css
+    │   │   │   └── ui_manager.js
+    │   │   └── test-installation.js
+    │   ├── native/
+    │   │   ├── bin/
+    │   │   │   ├── darwin/
+    │   │   │   │   ├── arm64/
+    │   │   │   │   │   └── bloom-host
+    │   │   │   │   └── x64/
+    │   │   │   │       └── bloom-host
+    │   │   │   └── win32/
+    │   │   │       ├── bloom-host.exe
+    │   │   │       └── libwinpthread-1.dll
+    │   │   └── host/
+    │   │       └── com.bloom.nucleus.bridge.json
+    │   ├── package-lock.json
+    │   ├── package.json
+    │   └── scripts/
+    │       ├── build-extension.js
+    │       ├── check-health.js
+    │       ├── generate-fixed-key.js
+    │       ├── get-id.js
+    │       ├── god-mode.js
+    │       ├── run-elevated.ps1
+    │       ├── setup-dev.js
+    │       └── validate.js
+    ├── package-lock.json
+    ├── package.json
+    ├── prefacio
+    ├── prompts/
+    │   ├── gzip_format_ai_template.md
+    │   ├── gzip_response_ai_template.md
+    │   ├── patches/
+    │   │   ├── patch_generation.md
+    │   │   ├── patch_generation_example.md
+    │   │   └── patch_generation_short.md
+    │   ├── tokens_template.md
+    │   ├── v1/
+    │   │   ├── PLANTILLA ESTANDARIZADA PARA GENERACIÓN DE CÓDIGO.txt
+    │   │   └── REGENERACION DE CODIGO _ Ejemplo de Uso Real.txt
+    │   └── v2/
+    │       ├── Preguntas Aclaratorias.txt
+    │       ├── RESPUESTAS DIRECTAS A TUS PREGUNTAS.txt
+    │       └── bloom_protocol_delta.md
+    ├── resources/
+    │   ├── bloom-icon.svg
+    │   ├── dark/
+    │   │   ├── document.svg
+    │   │   └── folder.svg
+    │   └── light/
+    │       ├── document.svg
+    │       └── folder.svg
+    ├── scripts/
+    │   ├── ai/
+    │   │   ├── .intent_pipeline/
+    │   │   │   └── ipc/
+    │   │   │       └── host_input.json
+    │   │   ├── btip_env/
+    │   │   │   ├── Scripts/
+    │   │   │   │   ├── Activate.ps1
+    │   │   │   │   ├── activate
+    │   │   │   │   ├── activate.bat
+    │   │   │   │   ├── deactivate.bat
+    │   │   │   │   ├── pip.exe
+    │   │   │   │   ├── pip3.10.exe
+    │   │   │   │   ├── pip3.exe
+    │   │   │   │   ├── python.exe
+    │   │   │   │   └── pythonw.exe
+    │   │   │   └── pyvenv.cfg
+    │   │   ├── core/
+    │   │   │   ├── __init__.py
+    │   │   │   ├── ai_submit_main.py
+    │   │   │   └── test_ping.py
+    │   │   └── requirements.txt
+    │   ├── base/
     │   │   ├── __pycache__/ [... cache]
-    │   │   ├── auth.py
-    │   │   ├── auth_login.py
-    │   │   ├── auth_logout.py
-    │   │   ├── auth_status.py
-    │   │   ├── clone.py
-    │   │   ├── orgs.py
-    │   │   ├── orgs_list.py
-    │   │   ├── repos.py
-    │   │   └── repos_list.py
-    │   ├── init.py
+    │   │   ├── code_compressor.py
+    │   │   ├── file_extractor.py
+    │   │   ├── files_compressor.py
+    │   │   └── protocol_doc.md
+    │   ├── bridge/
+    │   │   └── postinstall.js
+    │   ├── commands.md
+    │   ├── intent/
+    │   │   ├── __pycache__/ [... cache]
+    │   │   ├── compression_metrics.py
+    │   │   ├── create_intent.py
+    │   │   ├── pack_intent_dev_briefing.py
+    │   │   ├── pack_intent_dev_execution.py
+    │   │   └── pack_intent_dev_refinement.py
+    │   ├── md5/
+    │   │   └── fileToMD5.py
     │   ├── nucleus/
-    │   │   ├── __init__.py
-    │   │   ├── __pycache__/ [... cache]
-    │   │   ├── create.py
-    │   │   ├── link.py
-    │   │   └── status.py
-    │   └── project/
-    │       ├── __pycache__/ [... cache]
-    │       ├── load.py
-    │       └── nucleus.py
-    ├── commands.md
-    ├── core/
-    │   ├── __pycache__/ [... cache]
+    │   │   └── generate_nucleus.py
+    │   ├── projects/
+    │   │   └── generate_project_context.py
+    │   ├── python/
+    │   │   └── install_python_deps.js
+    │   ├── strategies/
+    │   │   ├── generate_android_context_strategy.py
+    │   │   └── generate_typescript_node_context_strategy.py
+    │   ├── tests/
+    │   │   ├── generate_test_env.py
+    │   │   └── test_create_intent.py
+    │   └── web-bridge/
+    │       ├── chrome_profile_resolver.py
+    │       ├── claude_bridge.py
+    │       ├── claude_download_artifacts.py
+    │       ├── download_artifacts.py
+    │       ├── quick_download.py
+    │       └── verify_account.py
+    ├── setup.py
+    ├── src/
+    │   ├── ai/
+    │   │   ├── AiAccountChecker.ts
+    │   │   ├── adapters/
+    │   │   │   ├── ChatGPTAdapter.ts
+    │   │   │   ├── ClaudeAdapter.ts
+    │   │   │   ├── CopilotNativeAdapter.ts
+    │   │   │   ├── GeminiAdapter.ts
+    │   │   │   └── GrokAdapter.ts
+    │   │   └── index.ts
+    │   ├── auth/
+    │   │   └── GitHubOAuthServer.ts
+    │   ├── commands/
+    │   │   ├── addToIntent.ts
+    │   │   ├── auth/
+    │   │   │   └── startGithubOAuth.ts
+    │   │   ├── changeIntentStatus.ts
+    │   │   ├── configureIntentProfile.ts
+    │   │   ├── copyContextToClipboard.ts
+    │   │   ├── createBTIPProject.ts
+    │   │   ├── createNucleusProject.ts
+    │   │   ├── debug/
+    │   │   │   └── debugCommands.ts
+    │   │   ├── deleteIntent.ts
+    │   │   ├── deleteIntentFromForm.ts
+    │   │   ├── duplicateIntent.ts
+    │   │   ├── editIntent.ts
+    │   │   ├── generateIntent.ts
+    │   │   ├── generateQuestions.ts
+    │   │   ├── git/
+    │   │   │   └── gitCommands.ts
+    │   │   ├── integrateSnapshot.ts
+    │   │   ├── intent/
+    │   │   │   ├── __tests__/
+    │   │   │   │   └── createIntentDev.test.ts
+    │   │   │   └── createIntentDev.ts
+    │   │   ├── linkToNucleus.ts
+    │   │   ├── manageProject.ts
+    │   │   ├── nucleus/
+    │   │   │   └── nucleusCommands.ts
+    │   │   ├── openFileInVSCode.ts
+    │   │   ├── openIntent.ts
+    │   │   ├── openIntentInBrowser.ts
+    │   │   ├── openMarkdownPreview.ts
+    │   │   ├── profile/
+    │   │   │   ├── addAiAccount.ts
+    │   │   │   ├── checkAiAccounts.ts
+    │   │   │   └── profileCommands.ts
+    │   │   ├── regenerateContext.ts
+    │   │   ├── reloadIntentForm.ts
+    │   │   ├── revealInFinder.ts
+    │   │   ├── searchIntents.ts
+    │   │   └── submitAnswers.ts
     │   ├── context/
-    │   │   ├── detector.py
-    │   │   ├── generate.py
-    │   │   ├── manager.py
-    │   │   ├── strategies/
-    │   │   │   ├── android.py
-    │   │   │   ├── cicd.py
-    │   │   │   ├── cpp.py
-    │   │   │   ├── dotnet.py
-    │   │   │   ├── flutter.py
-    │   │   │   ├── go.py
-    │   │   │   ├── iac.py
-    │   │   │   ├── ios.py
-    │   │   │   ├── jvm.py
-    │   │   │   ├── macos.py
-    │   │   │   ├── multistack_detector.py
-    │   │   │   ├── php.py
-    │   │   │   ├── python.py
-    │   │   │   ├── ruby.py
-    │   │   │   ├── rust.py
-    │   │   │   └── typescript.py
-    │   │   └── strategy_loader.py
-    │   ├── git/
-    │   │   ├── __init__.py
-    │   │   ├── executor.py
-    │   │   └── repository.py
-    │   ├── github/
-    │   │   ├── __init__.py
-    │   │   ├── api_client.py
-    │   │   ├── credentials.py
-    │   │   └── models.py
-    │   ├── nucleus_manager.py
-    │   ├── project_manager.py
-    │   └── tree_manager.py
-    ├── pyproject.toml
-    └── shared/
-        ├── __init__.py
-        ├── __pycache__/ [... cache]
-        ├── context.py
-        ├── github_types.py
-        └── shared/
-            └── context.py
+    │   │   └── ContextCollector.ts
+    │   ├── core/
+    │   │   ├── chromeProfileManager.ts
+    │   │   ├── claudeApiClient.ts
+    │   │   ├── codebaseGenerator.ts
+    │   │   ├── contextGatherer.ts
+    │   │   ├── filePackager.ts
+    │   │   ├── gitOrchestrator.ts
+    │   │   ├── intentAutoSaver.ts
+    │   │   ├── intentGenerator.ts
+    │   │   ├── intentSession.ts
+    │   │   ├── metadataManager.ts
+    │   │   ├── nucleusManager.ts
+    │   │   ├── pythonScriptRunner.ts
+    │   │   └── validator.ts
+    │   ├── extension.ts
+    │   ├── helpers/
+    │   │   └── chromeProfileHelper.ts
+    │   ├── host/
+    │   │   ├── HostExecutor.ts
+    │   │   ├── bloom-host.cpp
+    │   │   ├── build.sh
+    │   │   └── nlohmann/
+    │   │       └── json.hpp
+    │   ├── initialization/
+    │   │   ├── commandRegistry.ts
+    │   │   ├── contextInitializer.ts
+    │   │   ├── criticalCommandsInitializer.ts
+    │   │   ├── initializeProfileAccounts.ts
+    │   │   ├── managersInitializer.ts
+    │   │   ├── providersInitializer.ts
+    │   │   ├── registerProfileCommands.ts
+    │   │   └── serverAndUiInitializer.ts
+    │   ├── managers/
+    │   │   ├── userManager.ts
+    │   │   └── workspaceManager.ts
+    │   ├── models/
+    │   │   ├── bloomConfig.ts
+    │   │   ├── codebaseStrategy.ts
+    │   │   ├── contextLayer.ts
+    │   │   └── intent.ts
+    │   ├── processor/
+    │   │   └── ArtifactProcessor.ts
+    │   ├── providers/
+    │   │   ├── intentTreeProvider.ts
+    │   │   ├── nucleusTreeProvider.ts
+    │   │   └── profileTreeProvider.ts
+    │   ├── server/
+    │   │   ├── BTIPExplorerController.ts
+    │   │   ├── PluginApiServer.ts
+    │   │   ├── WebSocketManager.ts
+    │   │   ├── index.ts
+    │   │   └── routes.ts
+    │   ├── strategies/
+    │   │   ├── AndroidStrategy.ts
+    │   │   ├── GenericStrategy.ts
+    │   │   ├── IOSStrategy.ts
+    │   │   ├── NucleusStrategy.ts
+    │   │   ├── ProjectDetector.ts
+    │   │   ├── ReactStrategy.ts
+    │   │   ├── WebStrategy.ts
+    │   │   └── helpers.ts
+    │   ├── ui/
+    │   │   ├── ClaudeBridgePanel.ts
+    │   │   ├── intent/
+    │   │   │   ├── intentForm.css
+    │   │   │   ├── intentForm.html
+    │   │   │   ├── intentForm.js
+    │   │   │   └── intentFormPanel.ts
+    │   │   ├── markdownPreviewPanel.ts
+    │   │   ├── nucleus/
+    │   │   │   └── NucleusSetupPanel.ts
+    │   │   └── profile/
+    │   │       ├── profileManager.css
+    │   │       ├── profileManager.html
+    │   │       ├── profileManager.js
+    │   │       └── profileManagerPanel.ts
+    │   └── utils/
+    │       ├── gitExecutor.ts
+    │       ├── gitManager.ts
+    │       ├── gitPathResolver.ts
+    │       ├── github.ts
+    │       ├── githubApi.ts
+    │       ├── githubOAuth.ts
+    │       ├── logger.ts
+    │       ├── pythonExecutor.ts
+    │       ├── tokenEstimator.ts
+    │       └── uriHelper.ts
+    ├── tree/
+    │   ├── bloom/
+    │   │   ├── bloom_desc_tree.txt
+    │   │   └── bloom_tree.txt
+    │   ├── brain_tree.txt
+    │   ├── plugin_tree.txt
+    │   └── plugin_tree_hashed.txt
+    ├── tree.txt
+    ├── tsconfig.json
+    └── webview/
+        └── app/
+            ├── .svelte-kit/ [... svelte build]
+            ├── package-lock.json
+            ├── package.json
+            ├── src/
+            │   ├── app.html
+            │   ├── lib/
+            │   │   ├── api.ts
+            │   │   ├── components/
+            │   │   │   ├── BriefingEditor.svelte
+            │   │   │   ├── ChatBTIP.svelte
+            │   │   │   ├── FileTree.svelte
+            │   │   │   ├── GeminiTokenForm.svelte
+            │   │   │   ├── GithubAuthButton.svelte
+            │   │   │   ├── IntentsLink.svelte
+            │   │   │   ├── NucleusPanel.svelte
+            │   │   │   ├── OnboardingWizard.svelte
+            │   │   │   ├── ProjectsPanel.svelte
+            │   │   │   ├── SystemStatus.svelte
+            │   │   │   └── TokenEstimator.svelte
+            │   │   ├── stores/
+            │   │   │   ├── auth.ts
+            │   │   │   ├── intents.ts
+            │   │   │   ├── navigation.ts
+            │   │   │   ├── onboarding.ts
+            │   │   │   ├── system.ts
+            │   │   │   ├── theme.ts
+            │   │   │   └── websocket.ts
+            │   │   ├── types.ts
+            │   │   └── ws.ts
+            │   └── routes/
+            │       ├── +layout.svelte
+            │       ├── +page.svelte
+            │       ├── home/
+            │       │   └── +page.svelte
+            │       ├── intents/
+            │       │   ├── +page.svelte
+            │       │   └── [id]/
+            │       │       ├── +page.svelte
+            │       │       └── response
+            │       └── welcome/
+            │           └── +page.svelte
+            ├── svelte.config.js
+            └── vite.config.ts

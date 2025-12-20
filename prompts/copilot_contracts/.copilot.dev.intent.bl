@@ -1,0 +1,147 @@
+# ════════════════════════════════════════════════════════════════════════════
+# .bloom/.project/.copilot.dev.intent.bl
+# ════════════════════════════════════════════════════════════════════════════
+# DEV INTENT CONTRACT
+# ════════════════════════════════════════════════════════════════════════════
+
+## PURPOSE (OPERATIVE CONTRACT)
+
+This file defines the **DEV Intent Contract** for Copilot.
+It governs how Copilot must reason, suggest, and constrain actions for **development-oriented intents**.
+
+This contract applies exclusively to intents located under:
+`.bloom/.intents/.dev/`
+
+Copilot must treat this file as **authoritative** when operating in DEV mode.
+
+---
+
+## INTENT NATURE — DEV
+
+DEV intents exist to:
+
+* design software structures
+* generate or modify source code
+* evolve implementation iteratively
+
+DEV intents are **stateful**, **phased**, and **write-capable**.
+
+Primary output domains:
+
+* source code
+* technical artifacts
+* developer-facing documentation (secondary)
+
+---
+
+## DEV INTENT LIFECYCLE
+
+A DEV intent progresses through the following phases:
+
+1. BRIEFING
+
+   * Goal definition
+   * Scope delimitation
+   * Initial context loading
+
+2. EXECUTION
+
+   * Code generation or modification
+   * Resolution of missing elements
+   * Functional completion
+
+3. REFINEMENT (TURN-BASED)
+
+   * Incremental changes
+   * Targeted file edits
+   * Controlled evolution
+
+Each phase is explicitly materialized in the filesystem.
+
+---
+
+## DEV PLANNING CONTRACT
+
+Each DEV phase MUST generate or update:
+
+* `.context_dev_plan.json`
+
+This file defines:
+
+* planned steps
+* expected artifacts
+* validation criteria
+* user interaction points
+
+Copilot must:
+
+* read the plan before suggesting code
+* ensure suggestions align with declared steps
+* update or invalidate the plan when constraints change
+
+---
+
+## AUTHORITY MODEL — DEV
+
+Source of truth depends on phase:
+
+* BRIEFING / DESIGN: `.dev_state.json`
+* EXECUTION: `.pipeline/.payload.json`
+* POST-EXECUTION: source code
+
+Copilot must never bypass declared authority.
+
+---
+
+## WRITE PERMISSIONS — DEV
+
+Copilot MAY:
+
+* modify files inside the active DEV intent
+* generate new files declared in the plan
+
+Copilot MUST NOT:
+
+* modify files outside the active intent
+* touch DOC intents
+* change global rules or project metadata
+
+---
+
+## HEALTH REQUIREMENTS — DEV
+
+### Structural Health
+
+DEV intent is invalid if:
+
+* required phases are missing
+* `### MISSING` markers exist
+* state files contradict filesystem
+
+### Operational Health
+
+DEV intent is incomplete if:
+
+* code does not compile
+* tests fail
+
+Structural health failures block execution.
+
+---
+
+## FAILURE BEHAVIOR
+
+If any DEV invariant is violated:
+
+* Copilot must halt suggestions
+* surface the invalid state
+* request corrective action
+
+---
+
+# ════════════════════════════════════════════════════════════════════════════
+# END OF DEV INTENT CONTRACT
+# ════════════════════════════════════════════════════════════════════════════
+
+This contract defines **maximum authority** for DEV intents.
+No other file may override these rules for development operations.

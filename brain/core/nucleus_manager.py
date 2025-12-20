@@ -1,7 +1,6 @@
 """
-Nucleus Manager - Core Business Logic
-Manages the creation, linking, and lifecycle of Bloom Nucleus projects.
-Integrates GitHub operations with local scaffolding.
+Nucleus Manager V2.0 - Meta-Sistema de Gobernanza y Descubrimiento
+Manages Nucleus creation, linking, and cross-project intelligence.
 """
 
 import json
@@ -13,75 +12,85 @@ from uuid import uuid4
 
 class NucleusManager:
     """
-    Manages Bloom Nucleus project structure and lifecycle.
-    Combines GitHub integration with local scaffolding logic.
+    Manages Bloom Nucleus structure and lifecycle.
+    Nucleus = Centro de Control + Motor de Descubrimiento + Archivo Histórico
     """
     
-    NUCLEUS_CONFIG_FILE = "core/nucleus-config.json"
+    NUCLEUS_CONFIG_FILE = ".core/nucleus-config.json"
     
     def __init__(self, root_path: Path):
         """
         Initialize the Nucleus Manager.
         Args:
-            root_path: Root directory (local path) of the project
+            root_path: Root directory of the nucleus
         """
         self.root_path = Path(root_path).resolve()
-        # Intentamos inferir la org del nombre del directorio si es posible, 
-        # sino se pasará en create()
-        self.org_name = None 
+        self.org_name = None
 
     # =========================================================================
-    # LIFECYCLE METHODS (GitHub Integration)
+    # LIFECYCLE METHODS
     # =========================================================================
 
     def create(
         self,
         organization_name: str,
         organization_url: str = "",
-        output_dir: str = ".bloom", # Legacy param, mantained for compatibility
+        output_dir: str = ".bloom",  # Ignored, kept for compatibility
         private: bool = False,
         force: bool = False,
         on_progress: Optional[Callable[[str], None]] = None
     ) -> Dict[str, Any]:
         """
-        Create a complete Nucleus structure with optional GitHub integration.
+        Create a complete Nucleus V2.0 structure.
         
-        If GitHub credentials are setup, it tries to create/clone the repo.
-        Otherwise, it falls back to local creation (Offline mode).
+        Structure:
+        .bloom/.nucleus-{org}/
+            ├── .core/
+            ├── .governance/
+            ├── .intents/.exp/
+            ├── .cache/
+            ├── .relations/
+            ├── findings/     (visible)
+            └── reports/      (visible)
         """
         self.org_name = organization_name
-        repo_name = f"nucleus-{self._slugify(organization_name)}"
+        nucleus_name = f"nucleus-{self._slugify(organization_name)}"
         
-        # 1. GitHub Integration Logic (Try Online First)
+        if on_progress:
+            on_progress(f"Creating Nucleus V2.0 for {organization_name}...")
+        
+        # =====================================================================
+        # 1. GITHUB INTEGRATION (Optional)
+        # =====================================================================
         repo_url = ""
         is_git_repo = False
         
         try:
-            # Intentamos importar componentes de GitHub
-            # Si fallan (no configurados), seguimos en modo local
             from brain.core.github.api_client import GitHubAPIClient
             from brain.core.git.executor import GitExecutor
             
             client = GitHubAPIClient()
             git = GitExecutor()
             
-            # Check if repo exists
-            if on_progress: on_progress(f"Checking GitHub for {organization_name}/{repo_name}...")
+            if on_progress:
+                on_progress(f"Checking GitHub for {organization_name}/{nucleus_name}...")
             
-            if not client.repo_exists(organization_name, repo_name):
-                # Create Repo
-                if on_progress: on_progress(f"Creating repository {organization_name}/{repo_name}...")
+            if not client.repo_exists(organization_name, nucleus_name):
+                if on_progress:
+                    on_progress(f"Creating repository {organization_name}/{nucleus_name}...")
+                
                 repo = client.create_repo(
-                    name=repo_name,
-                    description="Bloom Nucleus Project",
+                    name=nucleus_name,
+                    description=f"Bloom Nucleus - {organization_name} Governance & Discovery",
                     private=private,
                     auto_init=True,
                     org=organization_name if organization_name != client.get_current_user()["login"] else None
                 )
                 repo_url = repo.html_url
                 
-                # Clone
-                if on_progress: on_progress(f"Cloning to {self.root_path}...")
+                if on_progress:
+                    on_progress(f"Cloning to {self.root_path}...")
+                
                 if self.root_path.exists() and force:
                     import shutil
                     shutil.rmtree(self.root_path)
@@ -89,90 +98,166 @@ class NucleusManager:
                 git.clone(repo.clone_url, self.root_path)
                 is_git_repo = True
                 
-        except ImportError:
-            # Modulos de GitHub no disponibles aún en esta fase de migración
-            pass
-        except Exception as e:
-            # Si falla GitHub (no auth, no internet), seguimos en local
-            # print(f"Warning: GitHub integration skipped: {e}") 
+        except (ImportError, Exception):
             pass
 
-        # 2. Local Scaffolding Logic (The Bloom Core)
-        if on_progress: on_progress("Generating Bloom structure...")
+        # =====================================================================
+        # 2. LOCAL SCAFFOLDING
+        # =====================================================================
+        if on_progress:
+            on_progress("Generating Nucleus V2.0 structure...")
         
-        # Check Local Directory
+        # Check if directory exists
         if self.root_path.exists() and any(self.root_path.iterdir()) and not is_git_repo and not force:
-             raise FileExistsError(
-                f"Directory '{self.root_path}' already exists and is not empty. "
-                "Use --force to overwrite."
+            raise FileExistsError(
+                f"Directory '{self.root_path}' already exists and is not empty. Use --force to overwrite."
             )
-            
+        
         self.root_path.mkdir(parents=True, exist_ok=True)
         
-        # Create standard folders
-        bloom_dir = self.root_path / ".bloom" # Estándar nuevo: todo en .bloom o raíz?
-        # NOTA: Tu template original ponía todo en {root}/{output_dir}.
-        # El estándar de Claude es {root}/.bloom/nucleus-config.json
-        # Vamos a respetar TU estructura original de carpetas (core/, organization/, projects/) en la RAÍZ del repo.
+        # Create .bloom/.nucleus-{org}/ structure
+        bloom_dir = self.root_path / ".bloom"
+        nucleus_dir = bloom_dir / f".{nucleus_name}"
         
-        core_dir = self.root_path / "core"
-        organization_dir = self.root_path / "organization"
-        projects_dir = self.root_path / "projects"
-        intents_dir = self.root_path / "intents"
+        # Hidden directories
+        core_dir = nucleus_dir / ".core"
+        governance_dir = nucleus_dir / ".governance"
+        intents_dir = nucleus_dir / ".intents"
+        cache_dir = nucleus_dir / ".cache"
+        relations_dir = nucleus_dir / ".relations"
         
-        core_dir.mkdir(exist_ok=True)
-        organization_dir.mkdir(exist_ok=True)
-        projects_dir.mkdir(exist_ok=True)
-        intents_dir.mkdir(exist_ok=True)
+        # Visible directories
+        findings_dir = nucleus_dir / "findings"
+        reports_dir = nucleus_dir / "reports"
         
-        # Detect sibling projects (Tu lógica original)
+        # Create directory tree
+        self._create_directory_tree(nucleus_dir, {
+            ".core": {},
+            ".governance": {
+                "architecture": {".decisions": {}},
+                "security": {},
+                "quality": {}
+            },
+            ".intents": {".exp": {}},
+            ".cache": {},
+            ".relations": {},
+            "findings": {},
+            "reports": {"exports": {}}
+        })
+        
+        # Detect sibling projects
         projects = self._detect_sibling_projects()
         
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        timestamp = datetime.now().isoformat()
         files_created = []
         
-        # Generate & Write Config
+        # =====================================================================
+        # 3. GENERATE CORE FILES
+        # =====================================================================
+        
+        # nucleus-config.json
         nucleus_config = self._create_nucleus_config(
-            organization_name, 
-            repo_url or organization_url, 
-            repo_name, 
+            organization_name,
+            repo_url or organization_url,
+            nucleus_name,
             projects
         )
         self._write_json(core_dir / "nucleus-config.json", nucleus_config)
-        files_created.append("core/nucleus-config.json")
+        files_created.append(".core/nucleus-config.json")
         
-        # Generate Templates (Tu lógica original)
+        # Core templates
         self._write_file(core_dir / ".rules.bl", self._get_nucleus_rules())
-        files_created.append("core/.rules.bl")
+        files_created.append(".core/.rules.bl")
         
-        self._write_file(core_dir / ".prompt.bl", self._get_nucleus_prompt())
-        files_created.append("core/.prompt.bl")
+        self._write_file(core_dir / ".standards.bl", self._get_nucleus_standards())
+        files_created.append(".core/.standards.bl")
         
-        self._write_file(
-            organization_dir / ".organization.bl",
-            self._get_organization_bl(organization_name, repo_url, timestamp)
-        )
-        files_created.append("organization/.organization.bl")
+        self._write_file(core_dir / ".policies.bl", self._get_nucleus_policies())
+        files_created.append(".core/.policies.bl")
         
-        # ... Resto de templates originales ...
-        self._write_file(organization_dir / "about.bl", self._get_about_bl(organization_name))
-        files_created.append("organization/about.bl")
+        self._write_json(core_dir / ".meta.json", {
+            "type": "nucleus",
+            "version": "2.0",
+            "created_at": timestamp,
+            "organization": organization_name
+        })
+        files_created.append(".core/.meta.json")
         
-        self._write_file(organization_dir / "business-model.bl", self._get_business_model_bl(organization_name))
-        files_created.append("organization/business-model.bl")
+        # =====================================================================
+        # 4. GOVERNANCE FILES
+        # =====================================================================
         
-        self._write_file(organization_dir / "policies.bl", self._get_policies_bl(organization_name))
-        files_created.append("organization/policies.bl")
+        # Architecture
+        arch_dir = governance_dir / "architecture"
+        self._write_file(arch_dir / ".principles.bl", self._get_architecture_principles())
+        files_created.append(".governance/architecture/.principles.bl")
         
-        self._write_file(organization_dir / "protocols.bl", self._get_protocols_bl(organization_name))
-        files_created.append("organization/protocols.bl")
+        self._write_file(arch_dir / ".patterns.bl", self._get_architecture_patterns())
+        files_created.append(".governance/architecture/.patterns.bl")
         
-        self._write_file(projects_dir / "_index.bl", self._get_projects_index_bl(organization_name, nucleus_config["projects"]))
-        files_created.append("projects/_index.bl")
+        # Security
+        security_dir = governance_dir / "security"
+        self._write_file(security_dir / ".security-standards.bl", self._get_security_standards())
+        files_created.append(".governance/security/.security-standards.bl")
+        
+        self._write_file(security_dir / ".compliance-requirements.bl", self._get_compliance_requirements())
+        files_created.append(".governance/security/.compliance-requirements.bl")
+        
+        # Quality
+        quality_dir = governance_dir / "quality"
+        self._write_file(quality_dir / ".code-standards.bl", self._get_code_standards())
+        files_created.append(".governance/quality/.code-standards.bl")
+        
+        self._write_file(quality_dir / ".testing-requirements.bl", self._get_testing_requirements())
+        files_created.append(".governance/quality/.testing-requirements.bl")
+        
+        # =====================================================================
+        # 5. CACHE & RELATIONS
+        # =====================================================================
+        
+        self._write_json(cache_dir / ".projects-snapshot.json", {
+            "generated_at": timestamp,
+            "projects": projects
+        })
+        files_created.append(".cache/.projects-snapshot.json")
+        
+        self._write_json(cache_dir / ".semantic-index.json", {
+            "indexed_at": timestamp,
+            "entries": []
+        })
+        files_created.append(".cache/.semantic-index.json")
+        
+        self._write_json(cache_dir / ".last-sync.json", {
+            "last_sync": timestamp,
+            "projects_synced": len(projects)
+        })
+        files_created.append(".cache/.last-sync.json")
+        
+        self._write_json(relations_dir / ".project-links.json", {
+            "relations": []
+        })
+        files_created.append(".relations/.project-links.json")
+        
+        # =====================================================================
+        # 6. VISIBLE FILES
+        # =====================================================================
+        
+        # findings/README.md
+        self._write_file(findings_dir / "README.md", self._get_findings_readme(organization_name))
+        files_created.append("findings/README.md")
+        
+        # reports/health-dashboard.json
+        self._write_json(reports_dir / "health-dashboard.json", {
+            "generated_at": timestamp,
+            "organization": organization_name,
+            "total_projects": len(projects),
+            "status": "healthy"
+        })
+        files_created.append("reports/health-dashboard.json")
 
         return {
-            "nucleus_name": repo_name,
-            "path": str(self.root_path.absolute()),
+            "nucleus_name": nucleus_name,
+            "path": str(nucleus_dir.absolute()),
             "organization": {
                 "name": organization_name,
                 "url": repo_url
@@ -180,96 +265,322 @@ class NucleusManager:
             "files_created": files_created,
             "projects_detected": len(projects),
             "is_git_repo": is_git_repo,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": timestamp
         }
 
     # =========================================================================
-    # PRIVATE HELPERS (Original Logic Preserved)
+    # PRIVATE HELPERS
     # =========================================================================
     
+    def _create_directory_tree(self, base: Path, structure: Dict[str, Any]) -> None:
+        """Recursively create directory structure."""
+        for name, children in structure.items():
+            dir_path = base / name
+            dir_path.mkdir(parents=True, exist_ok=True)
+            if isinstance(children, dict) and children:
+                self._create_directory_tree(dir_path, children)
+    
     def _slugify(self, text: str) -> str:
+        """Convert text to slug format."""
         return text.lower().replace(" ", "-").replace("_", "-")
     
     def _write_file(self, path: Path, content: str) -> None:
+        """Write text file."""
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
     
     def _write_json(self, path: Path, data: Dict[str, Any]) -> None:
+        """Write JSON file."""
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
     
     def _detect_sibling_projects(self) -> List[Dict[str, Any]]:
-        """Detect sibling projects that could be linked."""
+        """Detect sibling projects for linking."""
         projects = []
         parent_dir = self.root_path.parent
-        if not parent_dir.exists(): return projects
+        
+        if not parent_dir.exists():
+            return projects
+        
         try:
             for item in parent_dir.iterdir():
-                if not item.is_dir() or item.name.startswith(".") or item == self.root_path or item.name.startswith("nucleus-"):
+                # Skip hidden, nucleus, and non-directories
+                if (not item.is_dir() or 
+                    item.name.startswith(".") or 
+                    item == self.root_path or 
+                    item.name.startswith("nucleus-")):
                     continue
+                
                 strategy = self._detect_project_strategy(item)
                 if strategy != "skip":
-                    projects.append({"name": item.name, "path": str(item), "strategy": strategy})
-        except Exception: pass
+                    projects.append({
+                        "name": item.name,
+                        "path": str(item),
+                        "localPath": f"../{item.name}",
+                        "strategy": strategy
+                    })
+        except Exception:
+            pass
+        
         return projects
     
     def _detect_project_strategy(self, project_path: Path) -> str:
-        # Simplificado para brevedad, usando tu lógica original
-        if (project_path / "app" / "build.gradle").exists(): return "android"
-        if (project_path / "package.json").exists(): return "node"
-        if (project_path / "requirements.txt").exists(): return "python"
+        """Detect project type/strategy."""
+        if (project_path / "app" / "build.gradle").exists():
+            return "android"
+        if (project_path / "package.json").exists():
+            return "typescript"
+        if (project_path / "requirements.txt").exists() or (project_path / "pyproject.toml").exists():
+            return "python"
+        if (project_path / "go.mod").exists():
+            return "go"
+        if (project_path / "Cargo.toml").exists():
+            return "rust"
+        
+        # Skip common ignore patterns
         ignore_names = ["node_modules", "vendor", "build", "dist", ".git", "__pycache__"]
-        if project_path.name in ignore_names: return "skip"
+        if project_path.name in ignore_names:
+            return "skip"
+        
         return "generic"
     
-    def _create_nucleus_config(self, org_name, org_url, nucleus_name, projects):
+    def _create_nucleus_config(
+        self,
+        org_name: str,
+        org_url: str,
+        nucleus_name: str,
+        projects: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """Generate nucleus-config.json structure."""
         now = datetime.now().isoformat() + "Z"
+        
         config = {
             "type": "nucleus",
             "version": "2.0",
             "id": str(uuid4()),
-            "organization": {"name": org_name, "url": org_url},
-            "nucleus": {"name": nucleus_name, "createdAt": now},
-            "projects": []
+            "organization": {
+                "name": org_name,
+                "url": org_url
+            },
+            "nucleus": {
+                "name": nucleus_name,
+                "createdAt": now
+            },
+            "projects": [],
+            "relations": []
         }
+        
+        # Add detected projects
         for proj in projects:
             config["projects"].append({
                 "id": str(uuid4()),
                 "name": proj["name"],
                 "strategy": proj.get("strategy", "generic"),
-                "localPath": f"../{proj['name']}",
+                "localPath": proj.get("localPath", f"../{proj['name']}"),
                 "status": "active"
             })
+        
         return config
 
     # =========================================================================
-    # TEMPLATES (Original Logic Preserved)
+    # TEMPLATE GENERATORS
     # =========================================================================
-    # ... (Aquí van tus métodos _get_nucleus_rules, _get_organization_bl, etc.
-    # ...  Mantenlos TAL CUAL los tenías en tu archivo original. 
-    # ...  Son perfectos y no necesitan cambios).
     
     def _get_nucleus_rules(self) -> str:
-        return """# BLOOM NUCLEUS RULES\n## META-INSTRUCCIONES..."""
-        
-    def _get_nucleus_prompt(self) -> str:
-        return """# BLOOM NUCLEUS PROMPT..."""
-        
-    def _get_organization_bl(self, org_name, org_url, timestamp) -> str:
-        return f"""# {org_name} - Centro de Conocimiento..."""
+        return """# BLOOM NUCLEUS RULES V2.0
 
-    def _get_about_bl(self, org_name) -> str:
-        return f"""# About {org_name}..."""
-    
-    def _get_business_model_bl(self, org_name) -> str:
-        return f"""# Modelo de Negocio..."""
-    
-    def _get_policies_bl(self, org_name) -> str:
-        return f"""# Políticas de Desarrollo..."""
-    
-    def _get_protocols_bl(self, org_name) -> str:
-        return f"""# Protocolos Operativos..."""
-        
-    def _get_projects_index_bl(self, org_name, projects) -> str:
-        return f"""# Índice de Proyectos..."""
+## META-INSTRUCCIONES
 
-    def _get_project_overview_bl(self, project) -> str:
-        return f"""# {project.get('name')} - Overview..."""
+Este Nucleus es el **Meta-Sistema de Gobernanza y Descubrimiento** de la organización.
+
+### Propósito
+- Centro de Control estratégico
+- Motor de Descubrimiento cross-project
+- Archivo Histórico de decisiones
+
+### Principios
+1. **No Duplicar**: Lee en tiempo real de proyectos hijos
+2. **Gobernar**: Define estándares y políticas organizacionales
+3. **Descubrir**: Explora patrones y oportunidades cross-project
+4. **Archivar**: Mantiene historial de decisiones arquitectónicas
+
+### Estructura
+- `.core/` - Configuración y metadatos
+- `.governance/` - Políticas, estándares, compliance
+- `.intents/.exp/` - Intents de exploración (Inquiry → Discovery → Findings)
+- `.cache/` - Índices sincronizados de proyectos
+- `.relations/` - Mapeo de relaciones entre proyectos
+- `findings/` - Exportaciones visibles de descubrimientos
+- `reports/` - Reportes operacionales visibles
+"""
+    
+    def _get_nucleus_standards(self) -> str:
+        return """# TECHNICAL STANDARDS
+
+## Coding Standards
+- Follow language-specific best practices
+- Maintain consistent code style across projects
+- Document all public APIs
+
+## Architecture Standards
+- Microservices over monoliths where appropriate
+- API-first design
+- Event-driven architecture for async workflows
+
+## Testing Standards
+- Minimum 80% code coverage
+- Integration tests for all APIs
+- E2E tests for critical paths
+"""
+    
+    def _get_nucleus_policies(self) -> str:
+        return """# DEVELOPMENT POLICIES
+
+## Security
+- No secrets in code
+- Regular dependency updates
+- Security reviews for all PRs
+
+## Quality
+- Code review required for all changes
+- CI/CD pipeline must pass
+- Documentation must be updated
+
+## Compliance
+- GDPR compliance required
+- Accessibility standards (WCAG 2.1)
+- Performance budgets enforced
+"""
+    
+    def _get_architecture_principles(self) -> str:
+        return """# ARCHITECTURE PRINCIPLES
+
+1. **Simplicity**: Choose the simplest solution that works
+2. **Modularity**: Build loosely coupled components
+3. **Scalability**: Design for growth from day one
+4. **Resilience**: Fail gracefully and recover automatically
+5. **Observability**: Monitor everything, alert intelligently
+"""
+    
+    def _get_architecture_patterns(self) -> str:
+        return """# APPROVED ARCHITECTURE PATTERNS
+
+## Backend
+- REST API with OpenAPI specs
+- Event-driven microservices (Kafka/RabbitMQ)
+- CQRS for complex domains
+
+## Frontend
+- Component-based architecture (React/Vue)
+- State management (Redux/Vuex)
+- Progressive Web Apps
+
+## Data
+- Database per service
+- Event sourcing for audit trails
+- Caching strategies (Redis)
+"""
+    
+    def _get_security_standards(self) -> str:
+        return """# SECURITY STANDARDS
+
+## Authentication
+- OAuth 2.0 / OpenID Connect
+- Multi-factor authentication required
+- JWT tokens with short expiry
+
+## Authorization
+- Role-based access control (RBAC)
+- Principle of least privilege
+- Regular access reviews
+
+## Data Protection
+- Encryption at rest and in transit
+- PII anonymization
+- Regular security audits
+"""
+    
+    def _get_compliance_requirements(self) -> str:
+        return """# COMPLIANCE REQUIREMENTS
+
+## Data Privacy
+- GDPR compliance mandatory
+- Data retention policies enforced
+- Right to erasure implemented
+
+## Accessibility
+- WCAG 2.1 Level AA minimum
+- Keyboard navigation support
+- Screen reader compatibility
+
+## Performance
+- Core Web Vitals targets met
+- API response times < 200ms
+- Page load times < 2s
+"""
+    
+    def _get_code_standards(self) -> str:
+        return """# CODE STANDARDS
+
+## General
+- Meaningful variable/function names
+- No magic numbers
+- DRY principle
+- SOLID principles
+
+## Documentation
+- JSDoc/PyDoc for all functions
+- README in every project
+- API documentation auto-generated
+
+## Version Control
+- Semantic versioning
+- Conventional commits
+- Feature branch workflow
+"""
+    
+    def _get_testing_requirements(self) -> str:
+        return """# TESTING REQUIREMENTS
+
+## Coverage
+- Minimum 80% code coverage
+- 100% coverage for critical paths
+- No untested public APIs
+
+## Types
+- Unit tests for all business logic
+- Integration tests for APIs
+- E2E tests for user flows
+
+## Performance
+- Load testing for all endpoints
+- Stress testing for critical services
+- Regression testing automated
+"""
+    
+    def _get_findings_readme(self, org_name: str) -> str:
+        return f"""# {org_name} - Findings
+
+This directory contains exportable findings from Exploration Intents.
+
+## Structure
+```
+findings/
+├── README.md (this file)
+└── {{intent-name}}/
+    ├── report.pdf
+    ├── report.md
+    └── data.json
+```
+
+## Usage
+Each exploration intent generates findings that are exported here for sharing with stakeholders.
+
+### Intent Lifecycle
+1. **Inquiry**: Define strategic question
+2. **Discovery**: Iterative exploration (turns)
+3. **Findings**: Exportable results (this directory)
+
+## Latest Findings
+(This section will be auto-updated by the system)
+"""
