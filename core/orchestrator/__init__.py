@@ -1,1 +1,0 @@
-"""Cerebro de la ejecución"""
