@@ -47,6 +47,7 @@ bloom-development-extension/
     │   └── project/
     │       ├── __pycache__/ [... cache]
     │       ├── add.py
+    │       ├── detect.py
     │       ├── load.py
     │       └── nucleus.py
     ├── commands.md
@@ -94,7 +95,8 @@ bloom-development-extension/
     │   ├── project/
     │   │   ├── __init__.py
     │   │   ├── linker.py
-    │   │   └── models.py
+    │   │   ├── models.py
+    │   │   └── scanner.py
     │   ├── project_manager.py
     │   └── tree_manager.py
     ├── pyproject.toml

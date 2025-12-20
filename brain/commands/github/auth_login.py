@@ -26,7 +26,7 @@ class GithubAuthLoginCommand(BaseCommand):
                 gc = GlobalContext()
             
             try:
-                from brain.core.github.credentials import GitHubCredentials
+                from brain.shared.credentials import GitHubCredentials
                 from brain.core.github.api_client import GitHubAPIClient
                 
                 creds = GitHubCredentials()

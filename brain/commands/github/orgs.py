@@ -85,7 +85,7 @@ class GithubOrgsCommand(BaseCommand):
         orgs = data["organizations"]
         
         if not orgs:
-            typer.echo("📭 No organizations found")
+            typer.echo("🔭 No organizations found")
             return
         
         typer.echo(f"🏢 Organizations ({data['count']}):\n")
