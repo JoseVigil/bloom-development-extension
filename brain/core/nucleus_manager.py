@@ -584,3 +584,745 @@ Each exploration intent generates findings that are exported here for sharing wi
 ## Latest Findings
 (This section will be auto-updated by the system)
 """
+
+def create_exp_intent(
+        self,
+        name: str,
+        inquiry: Optional[str] = None,
+        description: Optional[str] = None,
+        projects: Optional[List[str]] = None,
+        on_progress: Optional[Callable[[str], None]] = None
+    ) -> Dict[str, Any]:
+        """
+        Create a new exploration intent in the nucleus.
+        
+        Args:
+            name: Intent name (will be slugified)
+            inquiry: Initial inquiry question
+            description: Intent description
+            projects: List of project names to include (None = all projects)
+            on_progress: Progress callback
+            
+        Returns:
+            Dict with intent creation results
+            
+        Raises:
+            FileNotFoundError: If nucleus directory not found
+            ValueError: If name is invalid
+        """
+        timestamp = datetime.now().isoformat()
+        
+        # Validate name
+        if not name or len(name.strip()) == 0:
+            raise ValueError("Intent name cannot be empty")
+        
+        slugified_name = self._slugify(name)
+        intent_id = str(uuid4())[:8]  # Short UUID for readability
+        intent_dirname = f".{slugified_name}-{intent_id}"
+        
+        if on_progress:
+            on_progress(f"Creating exploration intent '{name}'...")
+        
+        # Find nucleus directory
+        nucleus_dir = self._find_nucleus_dir()
+        if not nucleus_dir:
+            raise FileNotFoundError(
+                "Nucleus directory not found. Ensure you're in a nucleus directory or specify --path"
+            )
+        
+        # Load nucleus config
+        config_path = nucleus_dir / ".core" / "nucleus-config.json"
+        if not config_path.exists():
+            raise FileNotFoundError(f"Nucleus config not found at {config_path}")
+        
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        
+        # Determine which projects to include
+        all_projects = config.get("projects", [])
+        
+        if projects:
+            # Filter by provided list
+            included_projects = [
+                p for p in all_projects 
+                if p["name"] in projects
+            ]
+            if len(included_projects) == 0:
+                raise ValueError(f"No projects found matching: {', '.join(projects)}")
+        else:
+            # Include all active projects
+            included_projects = [
+                p for p in all_projects 
+                if p.get("status") == "active"
+            ]
+        
+        if on_progress:
+            on_progress(f"Including {len(included_projects)} projects in intent context")
+        
+        # Create intent directory structure
+        intents_dir = nucleus_dir / ".intents" / ".exp"
+        intent_dir = intents_dir / intent_dirname
+        
+        if intent_dir.exists():
+            raise FileExistsError(f"Intent directory already exists: {intent_dir}")
+        
+        # Build directory tree
+        if on_progress:
+            on_progress("Creating intent directory structure...")
+        
+        self._create_directory_tree(intent_dir, {
+            ".inquiry": {".files": {}},
+            ".discovery": {},
+            ".findings": {".files": {}},
+            ".pipeline": {
+                ".inquiry": {".response": {}},
+                ".discovery": {}
+            }
+        })
+        
+        files_created = []
+        
+        # =====================================================================
+        # 1. CREATE .exp_state.json
+        # =====================================================================
+        exp_state = {
+            "intent_id": intent_id,
+            "intent_name": name,
+            "slug": slugified_name,
+            "type": "exploration",
+            "status": "inquiry",
+            "created_at": timestamp,
+            "updated_at": timestamp,
+            "phases": {
+                "inquiry": {
+                    "status": "pending",
+                    "started_at": None,
+                    "completed_at": None
+                },
+                "discovery": {
+                    "status": "not_started",
+                    "turns": [],
+                    "current_turn": 0
+                },
+                "findings": {
+                    "status": "not_started",
+                    "exported": False
+                }
+            },
+            "metadata": {
+                "description": description or "",
+                "projects_included": [p["name"] for p in included_projects]
+            }
+        }
+        
+        self._write_json(intent_dir / ".exp_state.json", exp_state)
+        files_created.append(".exp_state.json")
+        
+        # =====================================================================
+        # 2. CREATE .inquiry/.inquiry.json
+        # =====================================================================
+        inquiry_dir = intent_dir / ".inquiry"
+        
+        inquiry_data = {
+            "intent_id": intent_id,
+            "intent_name": name,
+            "phase": "inquiry",
+            "inquiry": inquiry or f"Exploration inquiry for {name}",
+            "created_at": timestamp,
+            "projects": [
+                {
+                    "id": p["id"],
+                    "name": p["name"],
+                    "strategy": p["strategy"],
+                    "localPath": p["localPath"]
+                }
+                for p in included_projects
+            ],
+            "context": {
+                "organization": config.get("organization", {}).get("name", ""),
+                "total_projects": len(all_projects),
+                "selected_projects": len(included_projects)
+            }
+        }
+        
+        self._write_json(inquiry_dir / ".inquiry.json", inquiry_data)
+        files_created.append(".inquiry/.inquiry.json")
+        
+        # =====================================================================
+        # 3. CREATE .inquiry/.context_exp_plan.json
+        # =====================================================================
+        context_exp_plan = {
+            "intent_id": intent_id,
+            "phase": "inquiry",
+            "generated_at": timestamp,
+            "projects_context": [
+                {
+                    "project_name": p["name"],
+                    "priority": "high",
+                    "files_to_include": [],
+                    "reasoning": f"Core project for {name} analysis"
+                }
+                for p in included_projects
+            ],
+            "total_files": 0,
+            "estimated_tokens": 0,
+            "gemini_prioritized": False
+        }
+        
+        self._write_json(inquiry_dir / ".context_exp_plan.json", context_exp_plan)
+        files_created.append(".inquiry/.context_exp_plan.json")
+        
+        # =====================================================================
+        # 4. CREATE .inquiry/.files/.expbase.json
+        # =====================================================================
+        files_dir = inquiry_dir / ".files"
+        
+        expbase = {
+            "intent_id": intent_id,
+            "phase": "inquiry",
+            "generated_at": timestamp,
+            "projects": [p["name"] for p in included_projects],
+            "files": [],
+            "total_size": 0,
+            "compression_ratio": 0.0
+        }
+        
+        self._write_json(files_dir / ".expbase.json", expbase)
+        files_created.append(".inquiry/.files/.expbase.json")
+        
+        # =====================================================================
+        # 5. CREATE .inquiry/.files/.expbase_index.json
+        # =====================================================================
+        expbase_index = {
+            "intent_id": intent_id,
+            "phase": "inquiry",
+            "indexed_at": timestamp,
+            "total_files": 0,
+            "index": []
+        }
+        
+        self._write_json(files_dir / ".expbase_index.json", expbase_index)
+        files_created.append(".inquiry/.files/.expbase_index.json")
+        
+        # =====================================================================
+        # 6. CREATE .findings/.findings.json (template)
+        # =====================================================================
+        findings_dir = intent_dir / ".findings"
+        
+        findings = {
+            "intent_id": intent_id,
+            "intent_name": name,
+            "status": "pending",
+            "created_at": timestamp,
+            "summary": "",
+            "key_discoveries": [],
+            "recommendations": [],
+            "cross_project_insights": []
+        }
+        
+        self._write_json(findings_dir / ".findings.json", findings)
+        files_created.append(".findings/.findings.json")
+        
+        # =====================================================================
+        # 7. CREATE README in findings export (for later)
+        # =====================================================================
+        findings_export_dir = nucleus_dir / "findings" / slugified_name
+        findings_export_dir.mkdir(parents=True, exist_ok=True)
+        
+        readme_content = f"""# {name}
+
+**Intent ID**: {intent_id}
+**Created**: {timestamp}
+**Status**: In Progress
+
+## Inquiry
+{inquiry or 'To be defined'}
+
+## Projects Included
+{chr(10).join(f'- {p["name"]}' for p in included_projects)}
+
+## Findings
+Results will be exported here once the exploration is complete.
+"""
+        
+        self._write_file(findings_export_dir / "README.md", readme_content)
+        files_created.append(f"findings/{slugified_name}/README.md")
+        
+        if on_progress:
+            on_progress("✅ Intent structure created successfully")
+        
+        return {
+            "intent_id": intent_id,
+            "intent_name": name,
+            "intent_slug": slugified_name,
+            "intent_path": str(intent_dir.absolute()),
+            "intent_dir": intent_dirname,
+            "inquiry": inquiry,
+            "description": description,
+            "projects_included": [p["name"] for p in included_projects],
+            "files_created": files_created,
+            "inquiry_file": str((inquiry_dir / ".inquiry.json").absolute()),
+            "findings_export_dir": str(findings_export_dir.absolute()),
+            "timestamp": timestamp
+        }
+
+def add_discovery_turn(
+        self,
+        intent_id: str,
+        notes: Optional[str] = None,
+        analysis: Optional[str] = None,
+        on_progress: Optional[Callable[[str], None]] = None
+    ) -> Dict[str, Any]:
+        """
+        Add a discovery turn to an exploration intent.
+        
+        Args:
+            intent_id: Intent ID or slug
+            notes: Turn notes/observations
+            analysis: Analysis summary
+            on_progress: Progress callback
+            
+        Returns:
+            Dict with turn creation results
+            
+        Raises:
+            FileNotFoundError: If intent not found
+            ValueError: If intent not in discovery phase
+        """
+        timestamp = datetime.now().isoformat()
+        
+        if on_progress:
+            on_progress(f"Locating intent '{intent_id}'...")
+        
+        # Find nucleus and intent
+        nucleus_dir = self._find_nucleus_dir()
+        if not nucleus_dir:
+            raise FileNotFoundError("Nucleus directory not found")
+        
+        intent_dir = self._find_intent_dir(nucleus_dir, intent_id)
+        if not intent_dir:
+            raise FileNotFoundError(f"Intent '{intent_id}' not found")
+        
+        # Load intent state
+        state_path = intent_dir / ".exp_state.json"
+        with open(state_path, 'r', encoding='utf-8') as f:
+            state = json.load(f)
+        
+        # Check if we can add discovery turns
+        current_status = state.get("status")
+        if current_status == "inquiry":
+            # First turn - transition to discovery
+            state["status"] = "discovery"
+            state["phases"]["inquiry"]["status"] = "completed"
+            state["phases"]["inquiry"]["completed_at"] = timestamp
+            state["phases"]["discovery"]["status"] = "active"
+            state["phases"]["discovery"]["started_at"] = timestamp
+            if on_progress:
+                on_progress("Transitioning from inquiry to discovery phase...")
+        elif current_status != "discovery":
+            raise ValueError(f"Cannot add discovery turn: intent is in '{current_status}' phase")
+        
+        # Determine turn number
+        discovery_dir = intent_dir / ".discovery"
+        existing_turns = [
+            d for d in discovery_dir.iterdir() 
+            if d.is_dir() and d.name.startswith(".turn_")
+        ]
+        turn_number = len(existing_turns) + 1
+        turn_dirname = f".turn_{turn_number}"
+        
+        if on_progress:
+            on_progress(f"Creating discovery turn {turn_number}...")
+        
+        # Create turn directory
+        turn_dir = discovery_dir / turn_dirname
+        self._create_directory_tree(turn_dir, {
+            ".files": {}
+        })
+        
+        files_created = []
+        
+        # =====================================================================
+        # 1. CREATE .turn.json
+        # =====================================================================
+        turn_data = {
+            "intent_id": state["intent_id"],
+            "intent_name": state["intent_name"],
+            "turn_number": turn_number,
+            "phase": "discovery",
+            "created_at": timestamp,
+            "notes": notes or "",
+            "analysis": analysis or "",
+            "previous_turn": turn_number - 1 if turn_number > 1 else None
+        }
+        
+        self._write_json(turn_dir / ".turn.json", turn_data)
+        files_created.append(f".discovery/{turn_dirname}/.turn.json")
+        
+        # =====================================================================
+        # 2. CREATE .context_exp_plan.json
+        # =====================================================================
+        context_plan = {
+            "intent_id": state["intent_id"],
+            "phase": "discovery",
+            "turn": turn_number,
+            "generated_at": timestamp,
+            "projects_context": [],
+            "total_files": 0,
+            "estimated_tokens": 0,
+            "gemini_prioritized": False
+        }
+        
+        self._write_json(turn_dir / ".context_exp_plan.json", context_plan)
+        files_created.append(f".discovery/{turn_dirname}/.context_exp_plan.json")
+        
+        # =====================================================================
+        # 3. CREATE .files/.expbase.json
+        # =====================================================================
+        files_dir = turn_dir / ".files"
+        
+        expbase = {
+            "intent_id": state["intent_id"],
+            "phase": "discovery",
+            "turn": turn_number,
+            "generated_at": timestamp,
+            "files": [],
+            "total_size": 0,
+            "compression_ratio": 0.0
+        }
+        
+        self._write_json(files_dir / ".expbase.json", expbase)
+        files_created.append(f".discovery/{turn_dirname}/.files/.expbase.json")
+        
+        # =====================================================================
+        # 4. CREATE .files/.expbase_index.json
+        # =====================================================================
+        expbase_index = {
+            "intent_id": state["intent_id"],
+            "phase": "discovery",
+            "turn": turn_number,
+            "indexed_at": timestamp,
+            "total_files": 0,
+            "index": []
+        }
+        
+        self._write_json(files_dir / ".expbase_index.json", expbase_index)
+        files_created.append(f".discovery/{turn_dirname}/.files/.expbase_index.json")
+        
+        # =====================================================================
+        # 5. CREATE PIPELINE DIRECTORY
+        # =====================================================================
+        pipeline_dir = intent_dir / ".pipeline" / ".discovery" / turn_dirname
+        self._create_directory_tree(pipeline_dir, {
+            ".response": {}
+        })
+        
+        # Pipeline placeholder files
+        self._write_json(pipeline_dir / ".payload.json", {
+            "turn": turn_number,
+            "created_at": timestamp,
+            "status": "pending"
+        })
+        files_created.append(f".pipeline/.discovery/{turn_dirname}/.payload.json")
+        
+        self._write_json(pipeline_dir / ".index.json", {
+            "turn": turn_number,
+            "indexed_at": timestamp,
+            "entries": []
+        })
+        files_created.append(f".pipeline/.discovery/{turn_dirname}/.index.json")
+        
+        # =====================================================================
+        # 6. UPDATE STATE
+        # =====================================================================
+        state["phases"]["discovery"]["turns"].append({
+            "turn": turn_number,
+            "created_at": timestamp,
+            "status": "active"
+        })
+        state["phases"]["discovery"]["current_turn"] = turn_number
+        state["updated_at"] = timestamp
+        
+        self._write_json(state_path, state)
+        
+        if on_progress:
+            on_progress(f"✅ Turn {turn_number} created successfully")
+        
+        return {
+            "intent_id": state["intent_id"],
+            "intent_name": state["intent_name"],
+            "turn_number": turn_number,
+            "turn_path": str(turn_dir.absolute()),
+            "turn_file": str((turn_dir / ".turn.json").absolute()),
+            "notes": notes,
+            "analysis": analysis,
+            "previous_turns": turn_number - 1,
+            "files_created": files_created,
+            "timestamp": timestamp
+        }
+
+    def export_findings(
+        self,
+        intent_id: str,
+        export_format: str = "markdown",
+        include_raw: bool = False,
+        on_progress: Optional[Callable[[str], None]] = None
+    ) -> Dict[str, Any]:
+        """
+        Export findings from an exploration intent.
+        
+        Args:
+            intent_id: Intent ID or slug
+            export_format: Export format (markdown, json, pdf)
+            include_raw: Include raw turn data
+            on_progress: Progress callback
+            
+        Returns:
+            Dict with export results
+            
+        Raises:
+            FileNotFoundError: If intent not found
+        """
+        timestamp = datetime.now().isoformat()
+        
+        if on_progress:
+            on_progress(f"Locating intent '{intent_id}'...")
+        
+        # Find nucleus and intent
+        nucleus_dir = self._find_nucleus_dir()
+        if not nucleus_dir:
+            raise FileNotFoundError("Nucleus directory not found")
+        
+        intent_dir = self._find_intent_dir(nucleus_dir, intent_id)
+        if not intent_dir:
+            raise FileNotFoundError(f"Intent '{intent_id}' not found")
+        
+        # Load intent state
+        state_path = intent_dir / ".exp_state.json"
+        with open(state_path, 'r', encoding='utf-8') as f:
+            state = json.load(f)
+        
+        intent_name = state["intent_name"]
+        intent_slug = state["slug"]
+        
+        if on_progress:
+            on_progress(f"Loading findings for '{intent_name}'...")
+        
+        # Load inquiry
+        inquiry_path = intent_dir / ".inquiry" / ".inquiry.json"
+        with open(inquiry_path, 'r', encoding='utf-8') as f:
+            inquiry_data = json.load(f)
+        
+        # Load discovery turns
+        discovery_dir = intent_dir / ".discovery"
+        turns = []
+        
+        if discovery_dir.exists():
+            turn_dirs = sorted(
+                [d for d in discovery_dir.iterdir() if d.is_dir() and d.name.startswith(".turn_")],
+                key=lambda x: int(x.name.split("_")[1])
+            )
+            
+            for turn_dir in turn_dirs:
+                turn_file = turn_dir / ".turn.json"
+                if turn_file.exists():
+                    with open(turn_file, 'r', encoding='utf-8') as f:
+                        turn_data = json.load(f)
+                    turns.append(turn_data)
+        
+        # Load findings
+        findings_path = intent_dir / ".findings" / ".findings.json"
+        with open(findings_path, 'r', encoding='utf-8') as f:
+            findings_data = json.load(f)
+        
+        if on_progress:
+            on_progress(f"Generating export files ({export_format})...")
+        
+        # Create export directory
+        export_dir = nucleus_dir / "findings" / intent_slug
+        export_dir.mkdir(parents=True, exist_ok=True)
+        
+        exported_files = []
+        
+        # =====================================================================
+        # 1. EXPORT JSON DATA
+        # =====================================================================
+        export_data = {
+            "intent_id": state["intent_id"],
+            "intent_name": intent_name,
+            "inquiry": inquiry_data.get("inquiry"),
+            "created_at": state["created_at"],
+            "exported_at": timestamp,
+            "total_turns": len(turns),
+            "projects": inquiry_data.get("projects", []),
+            "key_discoveries": findings_data.get("key_discoveries", []),
+            "recommendations": findings_data.get("recommendations", []),
+            "cross_project_insights": findings_data.get("cross_project_insights", []),
+            "summary": findings_data.get("summary", "")
+        }
+        
+        if include_raw:
+            export_data["raw_turns"] = turns
+        
+        json_path = export_dir / "data.json"
+        self._write_json(json_path, export_data)
+        
+        json_size = json_path.stat().st_size
+        exported_files.append({
+            "name": "data.json",
+            "path": str(json_path),
+            "size": f"{json_size / 1024:.1f} KB"
+        })
+        
+        # =====================================================================
+        # 2. EXPORT MARKDOWN REPORT
+        # =====================================================================
+        if export_format in ["markdown", "pdf"]:
+            markdown_content = self._generate_markdown_report(
+                intent_name,
+                inquiry_data,
+                turns,
+                findings_data,
+                timestamp
+            )
+            
+            md_path = export_dir / "report.md"
+            self._write_file(md_path, markdown_content)
+            
+            md_size = md_path.stat().st_size
+            exported_files.append({
+                "name": "report.md",
+                "path": str(md_path),
+                "size": f"{md_size / 1024:.1f} KB"
+            })
+        
+        # =====================================================================
+        # 3. EXPORT PDF (if requested and markdown-to-pdf available)
+        # =====================================================================
+        if export_format == "pdf":
+            if on_progress:
+                on_progress("PDF export would require external library (markdown2pdf)")
+            # TODO: Implement PDF generation with markdown2pdf or weasyprint
+            # pdf_path = export_dir / "report.pdf"
+            # exported_files.append({"name": "report.pdf", ...})
+        
+        # =====================================================================
+        # 4. UPDATE FINDINGS STATE
+        # =====================================================================
+        state["phases"]["findings"]["status"] = "completed"
+        state["phases"]["findings"]["exported"] = True
+        state["phases"]["findings"]["exported_at"] = timestamp
+        state["status"] = "completed"
+        state["updated_at"] = timestamp
+        
+        self._write_json(state_path, state)
+        
+        findings_data["status"] = "exported"
+        findings_data["exported_at"] = timestamp
+        self._write_json(findings_path, findings_data)
+        
+        if on_progress:
+            on_progress("✅ Findings exported successfully")
+        
+        return {
+            "intent_id": state["intent_id"],
+            "intent_name": intent_name,
+            "export_dir": str(export_dir.absolute()),
+            "export_format": export_format,
+            "total_turns": len(turns),
+            "exported_files": exported_files,
+            "key_discoveries": findings_data.get("key_discoveries", []),
+            "timestamp": timestamp
+        }
+    
+    # =========================================================================
+    # HELPER METHODS FOR EXPLORATION INTENTS
+    # =========================================================================
+    
+    def _find_intent_dir(self, nucleus_dir: Path, intent_id: str) -> Optional[Path]:
+        """Find intent directory by ID or slug."""
+        intents_dir = nucleus_dir / ".intents" / ".exp"
+        
+        if not intents_dir.exists():
+            return None
+        
+        # Try exact match first
+        for item in intents_dir.iterdir():
+            if item.is_dir():
+                # Match by full dirname or by ID/slug
+                if intent_id in item.name:
+                    return item
+        
+        return None
+    
+    def _generate_markdown_report(
+        self,
+        intent_name: str,
+        inquiry_data: Dict[str, Any],
+        turns: List[Dict[str, Any]],
+        findings_data: Dict[str, Any],
+        timestamp: str
+    ) -> str:
+        """Generate markdown report from findings."""
+        
+        # Header
+        md = f"# {intent_name}\n\n"
+        md += f"**Exported**: {timestamp}\n\n"
+        md += "---\n\n"
+        
+        # Inquiry
+        md += "## 🎯 Inquiry\n\n"
+        md += f"{inquiry_data.get('inquiry', 'N/A')}\n\n"
+        
+        # Projects
+        projects = inquiry_data.get('projects', [])
+        if projects:
+            md += "## 📦 Projects Analyzed\n\n"
+            for proj in projects:
+                md += f"- **{proj['name']}** ({proj['strategy']})\n"
+            md += "\n"
+        
+        # Discovery Process
+        if turns:
+            md += f"## 🔍 Discovery Process ({len(turns)} turns)\n\n"
+            for turn in turns:
+                md += f"### Turn {turn['turn_number']}\n\n"
+                if turn.get('notes'):
+                    md += f"**Notes**: {turn['notes']}\n\n"
+                if turn.get('analysis'):
+                    md += f"**Analysis**: {turn['analysis']}\n\n"
+        
+        # Key Discoveries
+        discoveries = findings_data.get('key_discoveries', [])
+        if discoveries:
+            md += "## 💡 Key Discoveries\n\n"
+            for i, discovery in enumerate(discoveries, 1):
+                md += f"{i}. {discovery}\n"
+            md += "\n"
+        
+        # Recommendations
+        recommendations = findings_data.get('recommendations', [])
+        if recommendations:
+            md += "## 🎯 Recommendations\n\n"
+            for i, rec in enumerate(recommendations, 1):
+                md += f"{i}. {rec}\n"
+            md += "\n"
+        
+        # Cross-Project Insights
+        insights = findings_data.get('cross_project_insights', [])
+        if insights:
+            md += "## 🔗 Cross-Project Insights\n\n"
+            for insight in insights:
+                md += f"- {insight}\n"
+            md += "\n"
+        
+        # Summary
+        summary = findings_data.get('summary', '')
+        if summary:
+            md += "## 📋 Summary\n\n"
+            md += f"{summary}\n\n"
+        
+        md += "---\n\n"
+        md += "*Generated by Bloom Nucleus Exploration System*\n"
+        
+        return md        
