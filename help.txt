@@ -1,0 +1,233 @@
+
+Brain CLI - Modular system for Bloom
+
++------------------------------------- Options -------------------------------------+
+|   --json       Enable JSON output mode                                            |
+|   --verbose    Enable detailed logging                                            |
+|   --help       Show this help message                                             |
++-----------------------------------------------------------------------------------+
+
++----------------------------------- Categories ------------------------------------+
+|   context       AI context generation and management                              |
+|   filesystem    File operations and directory analysis                            |
+|   github        GitHub integration and repository management                      |
+|   nucleus       Nucleus project management and lifecycle                          |
+|   project       Project lifecycle and scaffolding                                 |
++-----------------------------------------------------------------------------------+
+
++------------------------------------- NUCLEUS -------------------------------------+
+|                                                                                   |
+|  CREATE                                                                           |
+|                                                                                   |
+|  CREATE EXP INTENT - Create a new exploration intent in the nucleus               |
+|                                                                                   |
+|    python -m brain nucleus create-exp-intent -n <VALUE> [OPTIONS]                 |
+|                                                                                   |
+|    Parámetros requeridos:                                                         |
+|      -n                   Intent name (will be slugified)                         |
+|                                                                                   |
+|    Parámetros opcionales:                                                         |
+|      -p                   Nucleus path (default: current dir)                     |
+|      --inquiry            Initial inquiry question                                |
+|      -d                   Intent description                                      |
+|      --projects           Comma-separated project names to include                |
+|                                                                                   |
+|  EXP                                                                              |
+|                                                                                   |
+|  EXP DISCOVERY TURN - Add a discovery turn to an exploration intent               |
+|                                                                                   |
+|    python -m brain nucleus exp-discovery-turn -i <VALUE> [OPTIONS]                |
+|                                                                                   |
+|    Parámetros requeridos:                                                         |
+|      -i                   Intent ID or slug                                       |
+|                                                                                   |
+|    Parámetros opcionales:                                                         |
+|      -p                   Nucleus path (default: current dir)                     |
+|      --notes              Turn notes/observations                                 |
+|      --analysis           Analysis summary for this turn                          |
+|                                                                                   |
+|  EXP EXPORT FINDINGS - Export findings from an exploration intent                 |
+|                                                                                   |
+|    python -m brain nucleus exp-export-findings -i <VALUE> [OPTIONS]               |
+|                                                                                   |
+|    Parámetros requeridos:                                                         |
+|      -i                   Intent ID or slug                                       |
+|                                                                                   |
+|    Parámetros opcionales:                                                         |
+|      -p                   Nucleus path (default: current dir)                     |
+|      -f                   Export format (markdown, json)                          |
+|      --include-raw        Include raw turn data                                   |
+|                                                                                   |
+|  GENERAL                                                                          |
+|                                                                                   |
+|  CREATE - Initialize a new Bloom Nucleus project structure                        |
+|                                                                                   |
+|    python -m brain nucleus create -o <VALUE> [OPTIONS]                            |
+|                                                                                   |
+|    Parámetros requeridos:                                                         |
+|      -o                   Organization name                                       |
+|                                                                                   |
+|    Parámetros opcionales:                                                         |
+|      -p                   Target path (default: current dir)                      |
+|      --output             Output directory name (legacy, kept for compatibility)  |
+|      --url                Organization URL                                        |
+|      -f                   Force overwrite existing directory                      |
+|                                                                                   |
+|  LINK - Link an existing folder as a Nucleus project                              |
+|                                                                                   |
+|    python -m brain nucleus link <PATH>                                            |
+|                                                                                   |
+|    Parámetros requeridos:                                                         |
+|      <PATH>               Path to existing project                                |
+|                                                                                   |
+|    Argumentos:                                                                    |
+|      <PATH>               Path to existing project                                |
+|                                                                                   |
+|  STATUS - Check if a directory is a valid Nucleus project                         |
+|                                                                                   |
+|    python -m brain nucleus status [OPTIONS]                                       |
+|                                                                                   |
+|    Parámetros opcionales:                                                         |
+|      -p                   Nucleus path                                            |
+|                                                                                   |
+|  SYNC - Synchronize projects (git pull) and rebuild nucleus cache                 |
+|                                                                                   |
+|    python -m brain nucleus sync [OPTIONS]                                         |
+|                                                                                   |
+|    Parámetros opcionales:                                                         |
+|      -p                   Nucleus path (default: current dir)                     |
+|      --skip-git           Skip git pull operations                                |
+|      -v                   Show detailed progress                                  |
+|                                                                                   |
++-------------------- Nucleus project management and lifecycle ---------------------+
+
++------------------------------------- CONTEXT -------------------------------------+
+|                                                                                   |
+|  GENERATE - Generate the Bloom Context for the project                            |
+|                                                                                   |
+|    python -m brain context generate [OPTIONS]                                     |
+|                                                                                   |
+|    Parámetros opcionales:                                                         |
+|      -p                   Root path of the project                                |
+|      -o                   Output folder name                                      |
+|      -s                   Force specific strategy                                 |
+|                                                                                   |
++---------------------- AI context generation and management -----------------------+
+
++----------------------------------- FILESYSTEM ------------------------------------+
+|                                                                                   |
+|  TREE - Generate visual tree structure with optional MD5 hashing and JSON export  |
+|                                                                                   |
+|    python -m brain filesystem tree <TARGETS> [OPTIONS]                            |
+|                                                                                   |
+|    Parámetros requeridos:                                                         |
+|      <TARGETS>            Specific directories or files to include.               |
+|                                                                                   |
+|    Parámetros opcionales:                                                         |
+|      -o                   Output file path                                        |
+|      --hash               Include MD5 hashes                                      |
+|      --export-json        Export JSON to disk                                     |
+|                                                                                   |
+|    Argumentos:                                                                    |
+|      <TARGETS>            Specific directories or files to include.               |
+|                                                                                   |
++--------------------- File operations and directory analysis ----------------------+
+
++------------------------------------- GITHUB --------------------------------------+
+|                                                                                   |
+|  AUTENTICACIÓN                                                                    |
+|                                                                                   |
+|  AUTH LOGIN - Store GitHub authentication token                                   |
+|                                                                                   |
+|    python -m brain github auth-login -t <VALUE>                                   |
+|                                                                                   |
+|    Parámetros requeridos:                                                         |
+|      -t                   GitHub Personal Access Token                            |
+|                                                                                   |
+|  AUTH LOGOUT - Remove stored GitHub token                                         |
+|                                                                                   |
+|    python -m brain github auth-logout                                             |
+|                                                                                   |
+|  AUTH STATUS - Check GitHub authentication status                                 |
+|                                                                                   |
+|    python -m brain github auth-status                                             |
+|                                                                                   |
+|  ORGANIZACIONES                                                                   |
+|                                                                                   |
+|  ORGS LIST - List GitHub organizations                                            |
+|                                                                                   |
+|    python -m brain github orgs-list                                               |
+|                                                                                   |
+|  REPOSITORIOS                                                                     |
+|                                                                                   |
+|  REPOS LIST - List GitHub repositories                                            |
+|                                                                                   |
+|    python -m brain github repos-list [OPTIONS]                                    |
+|                                                                                   |
+|    Parámetros opcionales:                                                         |
+|      --org                Organization name                                       |
+|                                                                                   |
+|  GENERAL                                                                          |
+|                                                                                   |
+|  AUTH - Manage GitHub authentication                                              |
+|                                                                                   |
+|    python -m brain github auth                                                    |
+|                                                                                   |
+|  CLONE - Clone GitHub repository                                                  |
+|                                                                                   |
+|    python -m brain github clone <REPO> [OPTIONS]                                  |
+|                                                                                   |
+|    Parámetros requeridos:                                                         |
+|      <REPO>               Repository (owner/repo or full URL)                     |
+|                                                                                   |
+|    Parámetros opcionales:                                                         |
+|      -p                   Target directory (defaults to repo name in current      |
+|  dir)                                                                             |
+|      --progress/--no-progress Show clone progress                                 |
+|                                                                                   |
+|    Argumentos:                                                                    |
+|      <REPO>               Repository (owner/repo or full URL)                     |
+|                                                                                   |
+|  ORGS - List GitHub organizations                                                 |
+|                                                                                   |
+|    python -m brain github orgs                                                    |
+|                                                                                   |
+|  REPOS - Manage GitHub repositories                                               |
+|                                                                                   |
+|    python -m brain github repos                                                   |
+|                                                                                   |
++------------------ GitHub integration and repository management -------------------+
+
++------------------------------------- PROJECT -------------------------------------+
+|                                                                                   |
+|  ADD - Vincula un proyecto local existente a un Nucleus                           |
+|                                                                                   |
+|    python -m brain project add <PROJECT_PATH> -n <VALUE> [OPTIONS]                |
+|                                                                                   |
+|    Parámetros requeridos:                                                         |
+|      <PROJECT_PATH>       Ruta al proyecto a vincular                             |
+|      -n                   Ruta al Nucleus destino                                 |
+|                                                                                   |
+|    Parámetros opcionales:                                                         |
+|      --name               Nombre custom del proyecto (default: nombre de          |
+|  carpeta)                                                                         |
+|      --strategy           Forzar estrategia específica (default: auto-detect)     |
+|      --description        Descripción del proyecto                                |
+|      --repo-url           URL del repositorio GitHub                              |
+|                                                                                   |
+|    Argumentos:                                                                    |
+|      <PROJECT_PATH>       Ruta al proyecto a vincular                             |
+|                                                                                   |
+|  LOAD - Inspect and load project metadata from a path                             |
+|                                                                                   |
+|    python -m brain project load [OPTIONS]                                         |
+|                                                                                   |
+|    Parámetros opcionales:                                                         |
+|      -p                   Path to the project root                                |
+|                                                                                   |
+|  NUCLEUS - Manage Nucleus projects (create, link, status)                         |
+|                                                                                   |
+|    python -m brain project nucleus                                                |
+|                                                                                   |
++------------------------ Project lifecycle and scaffolding ------------------------+
+
