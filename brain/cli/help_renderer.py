@@ -348,7 +348,24 @@ def _render_categories(console: Console, categories: List[CommandCategory], stru
 
 def render_help(registry: CommandRegistry):
     """Main help rendering function with prioritized category order."""
-    console = Console(width=85)
+    import sys
+    
+    # Detectar si stdout está siendo redirigido a un archivo
+    is_file_output = not sys.stdout.isatty()
+    
+    # Configurar console según el contexto
+    if is_file_output:
+        # Para archivos: sin color, sin legacy Windows rendering, UTF-8
+        console = Console(
+            width=100,
+            file=sys.stdout,
+            force_terminal=False,
+            legacy_windows=False,
+            no_color=True
+        )
+    else:
+        # Para terminal: con colores y formato normal
+        console = Console(width=85)
     
     console.print("\n[bold yellow]Brain CLI[/bold yellow] - Modular system for Bloom\n")
     

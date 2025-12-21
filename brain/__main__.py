@@ -7,6 +7,12 @@ import sys
 from brain.commands import discover_commands
 from brain.shared.context import GlobalContext
 
+# Forzar UTF-8 en stdout/stderr para Windows
+if sys.platform == "win32":
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+
 app = typer.Typer(
     no_args_is_help=True,
     help="Brain - Modular CLI system for Bloom",
@@ -60,7 +66,7 @@ def main():
         app()
         
     except Exception as e:
-        print(f"❌ Brain System Error: {e}", file=sys.stderr)
+        print(f"Error: Brain System Error: {e}", file=sys.stderr)
         sys.exit(1)
 
 
