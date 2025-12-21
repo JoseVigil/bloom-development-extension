@@ -12,12 +12,12 @@ Brain CLI - Modular system for Bloom
 │   filesystem    File operations and directory analysis              3 cmds                       │
 │   gemini        Gemini AI key management and operations             5 cmds                       │
 │   github        GitHub integration and repository management        9 cmds                       │
-│   intent        Intent execution system and context planning        4 cmds                       │
-│   nucleus       Nucleus project management and lifecycle            9 cmds                       │
+│   intent        Intent execution system and context planning       11 cmds                       │
+│   nucleus       Nucleus project management and lifecycle           12 cmds                       │
 │   profile       Chrome profile and AI account management            8 cmds                       │
 │   project       Project lifecycle and scaffolding                   6 cmds                       │
 │                                                                 ──────────                       │
-│                                                                    45 cmds                       │
+│                                                                    55 cmds                       │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 
 ╭──────────────────────────────────────────── NUCLEUS ─────────────────────────────────────────────╮
@@ -35,12 +35,34 @@ Brain CLI - Modular system for Bloom
 │      --url                Organization URL                                                       │
 │      -f                   Force overwrite existing directory                                     │
 │                                                                                                  │
+│  DELETE - Delete a complete nucleus                                                              │
+│                                                                                                  │
+│    python -m brain nucleus delete [OPTIONS]                                                      │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -p <VALUE>           Path to the Nucleus root directory to delete                           │
+│      -f                   Skip confirmation prompt                                               │
+│                                                                                                  │
+│  GET - Get complete information about a specific nucleus                                         │
+│                                                                                                  │
+│    python -m brain nucleus get [OPTIONS]                                                         │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -p <VALUE>           Path to the Nucleus root directory                                     │
+│                                                                                                  │
 │  LINK - Link an existing folder as a Nucleus project                                             │
 │                                                                                                  │
 │    python -m brain nucleus link <PATH>                                                           │
 │                                                                                                  │
 │    Argumentos:                                                                                   │
 │      <PATH>               Path to existing project                                               │
+│                                                                                                  │
+│  LIST - List all available nuclei in a parent directory                                          │
+│                                                                                                  │
+│    python -m brain nucleus list [OPTIONS]                                                        │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -d                   Parent directory to scan for nuclei (default: current directory)       │
 │                                                                                                  │
 │  STATUS - Check if a directory is a valid Nucleus project                                        │
 │                                                                                                  │
@@ -305,6 +327,19 @@ Brain CLI - Modular system for Bloom
 
 ╭───────────────────────────────────────────── INTENT ─────────────────────────────────────────────╮
 │                                                                                                  │
+│  ADD                                                                                             │
+│                                                                                                  │
+│  ADD TURN - Add a conversation turn to intent chat                                               │
+│                                                                                                  │
+│    python -m brain intent add-turn [OPTIONS]                                                     │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i                   Intent UUID                                                            │
+│      -f                   Intent folder name                                                     │
+│      -a                   Who is speaking: 'user' or 'ai'                                        │
+│      -c <VALUE>           Content of the message                                                 │
+│      -p                   Path to Bloom project                                                  │
+│                                                                                                  │
 │  BUILD                                                                                           │
 │                                                                                                  │
 │  BUILD PAYLOAD - Build optimized AI payload from context plan                                    │
@@ -330,6 +365,51 @@ Brain CLI - Modular system for Bloom
 │      -p                   Path to the Nucleus (Bloom project root). Auto-detected if not         │
 │  provided.                                                                                       │
 │                                                                                                  │
+│  DELETE - Delete an intent completely                                                            │
+│                                                                                                  │
+│    python -m brain intent delete [OPTIONS]                                                       │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i                   Intent UUID                                                            │
+│      -f                   Intent folder name                                                     │
+│      --force              Skip confirmation and force delete even if locked                      │
+│      -p                   Path to Bloom project                                                  │
+│                                                                                                  │
+│  FINALIZE - Finalize intent and apply changes                                                    │
+│                                                                                                  │
+│    python -m brain intent finalize [OPTIONS]                                                     │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i                   Intent UUID                                                            │
+│      -f                   Intent folder name                                                     │
+│      -p                   Path to Bloom project                                                  │
+│                                                                                                  │
+│  GET - Get complete information about a specific intent                                          │
+│                                                                                                  │
+│    python -m brain intent get [OPTIONS]                                                          │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i                   Intent UUID                                                            │
+│      -f                   Intent folder name                                                     │
+│      -p                   Path to Bloom project                                                  │
+│                                                                                                  │
+│  LIST - List all intents in a Bloom project                                                      │
+│                                                                                                  │
+│    python -m brain intent list [OPTIONS]                                                         │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -p                   Path to Bloom project (auto-detected if not provided)                  │
+│      -t                   Filter by intent type: 'dev' or 'doc'                                  │
+│                                                                                                  │
+│  LOCK - Lock an intent to mark it as in-use (determinism)                                        │
+│                                                                                                  │
+│    python -m brain intent lock [OPTIONS]                                                         │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i                   Intent UUID                                                            │
+│      -f                   Intent folder name                                                     │
+│      -p                   Path to Bloom project                                                  │
+│                                                                                                  │
 │  PLAN - Generate AI context plan with intelligent file prioritization                            │
 │                                                                                                  │
 │    python -m brain intent plan [OPTIONS]                                                         │
@@ -338,6 +418,16 @@ Brain CLI - Modular system for Bloom
 │      --intent-dir <VALUE> Intent directory path                                                  │
 │      --description <VALUE> Intent description                                                    │
 │      --type               Intent type: dev, doc, or seed                                         │
+│                                                                                                  │
+│  UNLOCK - Unlock an intent to free it for use                                                    │
+│                                                                                                  │
+│    python -m brain intent unlock [OPTIONS]                                                       │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i                   Intent UUID                                                            │
+│      -f                   Intent folder name                                                     │
+│      --force              Force unlock even if locked by another host                            │
+│      -p                   Path to Bloom project                                                  │
 │                                                                                                  │
 │  UPDATE - Update an existing intent's name, files, or metadata                                   │
 │                                                                                                  │

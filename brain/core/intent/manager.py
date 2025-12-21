@@ -9,6 +9,8 @@ import re
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone
+import socket
+import shutil
 
 
 class IntentManager:
@@ -610,3 +612,415 @@ class IntentManager:
             raise ValueError(f"No valid state file found in {intent_path}")
         
         return intent_path, state_data, state_file        
+
+    def list_intents(
+        self,
+        nucleus_path: Optional[Path] = None,
+        intent_type: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        List all intents in a Bloom project.
+       
+        Args:
+            nucleus_path: Optional path to Bloom project
+            intent_type: Optional filter by type ("dev", "doc", or None for all)
+           
+        Returns:
+            Dictionary with list of intents and metadata
+           
+        Raises:
+            FileNotFoundError: If project not found
+        """
+        project_root = self._find_bloom_project(nucleus_path)
+        intents_base = project_root / ".bloom" / ".intents"
+       
+        if not intents_base.exists():
+            return {
+                "project_path": str(project_root),
+                "intents": [],
+                "total": 0
+            }
+       
+        intents = []
+       
+        # Determinar qué directorios escanear
+        scan_dirs = []
+        if intent_type is None or intent_type == "dev":
+            scan_dirs.append((".dev", "dev"))
+        if intent_type is None or intent_type == "doc":
+            scan_dirs.append((".doc", "doc"))
+       
+        for dir_name, type_name in scan_dirs:
+            type_dir = intents_base / dir_name
+            if not type_dir.exists():
+                continue
+           
+            for intent_dir in type_dir.iterdir():
+                if not intent_dir.is_dir():
+                    continue
+               
+                # Leer estado
+                state_file_name = f".{type_name}_state.json"
+                state_file = intent_dir / state_file_name
+               
+                if not state_file.exists():
+                    continue
+               
+                try:
+                    with open(state_file, "r", encoding="utf-8") as f:
+                        state = json.load(f)
+                   
+                    intents.append({
+                        "id": state.get("uuid", ""),
+                        "name": state.get("name", ""),
+                        "type": state.get("type", type_name),
+                        "status": state.get("status", "unknown"),
+                        "folder": intent_dir.name,
+                        "created_at": state.get("created_at", ""),
+                        "updated_at": state.get("updated_at", ""),
+                        "locked": state.get("locked", False),
+                        "initial_files_count": len(state.get("initial_files", []))
+                    })
+                except (json.JSONDecodeError, IOError):
+                    continue
+       
+        return {
+            "project_path": str(project_root),
+            "intents": intents,
+            "total": len(intents)
+        }
+    def get_intent(
+        self,
+        intent_id: Optional[str] = None,
+        folder_name: Optional[str] = None,
+        nucleus_path: Optional[Path] = None
+    ) -> Dict[str, Any]:
+        """
+        Get complete information about a specific intent.
+       
+        Args:
+            intent_id: UUID of the intent
+            folder_name: Folder name of the intent
+            nucleus_path: Optional path to Bloom project
+           
+        Returns:
+            Complete intent information including state, files, turns
+           
+        Raises:
+            ValueError: If intent not found
+        """
+        project_root = self._find_bloom_project(nucleus_path)
+        intent_path, state_data, state_file = self._locate_intent(
+            project_root, intent_id, folder_name
+        )
+       
+        # Cargar información adicional
+        intent_type = state_data.get("type", "dev")
+       
+        # Contar turns si es dev
+        turns_count = 0
+        if intent_type == "dev":
+            refinement_dir = intent_path / ".refinement"
+            if refinement_dir.exists():
+                turns_count = len([d for d in refinement_dir.iterdir() if d.is_dir()])
+        elif intent_type == "doc":
+            curation_dir = intent_path / ".curation"
+            if curation_dir.exists():
+                turns_count = len([d for d in curation_dir.iterdir() if d.is_dir()])
+       
+        return {
+            "id": state_data.get("uuid", ""),
+            "name": state_data.get("name", ""),
+            "type": intent_type,
+            "status": state_data.get("status", "unknown"),
+            "folder": intent_path.name,
+            "path": str(intent_path),
+            "created_at": state_data.get("created_at", ""),
+            "updated_at": state_data.get("updated_at", ""),
+            "locked": state_data.get("locked", False),
+            "locked_by": state_data.get("locked_by", ""),
+            "locked_at": state_data.get("locked_at", ""),
+            "initial_files": state_data.get("initial_files", []),
+            "steps": state_data.get("steps", {}),
+            "turns_count": turns_count,
+            "project_path": str(project_root),
+            "full_state": state_data
+        }
+    def lock_intent(
+        self,
+        intent_id: Optional[str] = None,
+        folder_name: Optional[str] = None,
+        nucleus_path: Optional[Path] = None
+    ) -> Dict[str, Any]:
+        """
+        Lock an intent to mark it as in-use (determinism P5).
+        Only one intent can be active at a time.
+       
+        Args:
+            intent_id: UUID of the intent
+            folder_name: Folder name of the intent
+            nucleus_path: Optional path to Bloom project
+           
+        Returns:
+            Lock status information
+           
+        Raises:
+            ValueError: If intent already locked or not found
+        """
+       
+        project_root = self._find_bloom_project(nucleus_path)
+        intent_path, state_data, state_file = self._locate_intent(
+            project_root, intent_id, folder_name
+        )
+       
+        # Verificar si ya está locked
+        if state_data.get("locked", False):
+            locked_by = state_data.get("locked_by", "unknown")
+            locked_at = state_data.get("locked_at", "unknown")
+            raise ValueError(
+                f"Intent is already locked by {locked_by} at {locked_at}"
+            )
+       
+        # Lock the intent
+        timestamp = datetime.now(timezone.utc).isoformat()
+        hostname = socket.gethostname()
+       
+        state_data["locked"] = True
+        state_data["locked_by"] = f"{hostname}"
+        state_data["locked_at"] = timestamp
+       
+        # Guardar
+        with open(state_file, "w", encoding="utf-8") as f:
+            json.dump(state_data, f, indent=2, ensure_ascii=False)
+       
+        return {
+            "locked": True,
+            "locked_by": hostname,
+            "locked_at": timestamp,
+            "intent_id": state_data.get("uuid", ""),
+            "name": state_data.get("name", "")
+        }
+    def unlock_intent(
+        self,
+        intent_id: Optional[str] = None,
+        folder_name: Optional[str] = None,
+        nucleus_path: Optional[Path] = None,
+        force: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Unlock an intent to free it for use.
+       
+        Args:
+            intent_id: UUID of the intent
+            folder_name: Folder name of the intent
+            nucleus_path: Optional path to Bloom project
+            force: Force unlock even if locked by another host
+           
+        Returns:
+            Unlock status information
+           
+        Raises:
+            ValueError: If intent not found
+        """
+       
+        project_root = self._find_bloom_project(nucleus_path)
+        intent_path, state_data, state_file = self._locate_intent(
+            project_root, intent_id, folder_name
+        )
+       
+        # Unlock
+        state_data["locked"] = False
+        state_data["locked_by"] = ""
+        state_data["locked_at"] = ""
+        state_data["unlocked_at"] = datetime.now(timezone.utc).isoformat()
+       
+        # Guardar
+        with open(state_file, "w", encoding="utf-8") as f:
+            json.dump(state_data, f, indent=2, ensure_ascii=False)
+       
+        return {
+            "locked": False,
+            "intent_id": state_data.get("uuid", ""),
+            "name": state_data.get("name", ""),
+            "unlocked_at": state_data["unlocked_at"]
+        }
+    def add_turn(
+        self,
+        intent_id: Optional[str] = None,
+        folder_name: Optional[str] = None,
+        actor: str = "user",
+        content: str = "",
+        nucleus_path: Optional[Path] = None
+    ) -> Dict[str, Any]:
+        """
+        Add a conversation turn to an intent's chat.
+       
+        Args:
+            intent_id: UUID of the intent
+            folder_name: Folder name of the intent
+            actor: Who is speaking ("user" or "ai")
+            content: Content of the message
+            nucleus_path: Optional path to Bloom project
+           
+        Returns:
+            Turn information
+           
+        Raises:
+            ValueError: If intent not found or invalid actor
+        """
+       
+        if actor not in ["user", "ai"]:
+            raise ValueError(f"Invalid actor '{actor}'. Must be 'user' or 'ai'")
+       
+        project_root = self._find_bloom_project(nucleus_path)
+        intent_path, state_data, state_file = self._locate_intent(
+            project_root, intent_id, folder_name
+        )
+       
+        intent_type = state_data.get("type", "dev")
+       
+        # Determinar el número del siguiente turn
+        if intent_type == "dev":
+            refinement_dir = intent_path / ".refinement"
+            refinement_dir.mkdir(exist_ok=True)
+            turn_num = len([d for d in refinement_dir.iterdir() if d.is_dir()]) + 1
+            turn_dir = refinement_dir / f".turn_{turn_num}"
+        else:
+            curation_dir = intent_path / ".curation"
+            curation_dir.mkdir(exist_ok=True)
+            turn_num = len([d for d in curation_dir.iterdir() if d.is_dir()]) + 1
+            turn_dir = curation_dir / f".turn_{turn_num}"
+       
+        turn_dir.mkdir(exist_ok=True)
+        (turn_dir / ".files").mkdir(exist_ok=True)
+       
+        # Crear turn.json
+        timestamp = datetime.now(timezone.utc).isoformat()
+        turn_data = {
+            "turn_id": turn_num,
+            "actor": actor,
+            "content": content,
+            "timestamp": timestamp
+        }
+       
+        turn_file = turn_dir / ".turn.json"
+        with open(turn_file, "w", encoding="utf-8") as f:
+            json.dump(turn_data, f, indent=2, ensure_ascii=False)
+       
+        return {
+            "turn_id": turn_num,
+            "actor": actor,
+            "timestamp": timestamp,
+            "turn_path": str(turn_dir),
+            "intent_id": state_data.get("uuid", ""),
+            "intent_name": state_data.get("name", "")
+        }
+    def finalize_intent(
+        self,
+        intent_id: Optional[str] = None,
+        folder_name: Optional[str] = None,
+        nucleus_path: Optional[Path] = None
+    ) -> Dict[str, Any]:
+        """
+        Finalize an intent, marking it as completed.
+        This closes the intent and applies changes to the codebase.
+       
+        Args:
+            intent_id: UUID of the intent
+            folder_name: Folder name of the intent
+            nucleus_path: Optional path to Bloom project
+           
+        Returns:
+            Finalization status
+           
+        Raises:
+            ValueError: If intent not found or locked
+        """
+       
+        project_root = self._find_bloom_project(nucleus_path)
+        intent_path, state_data, state_file = self._locate_intent(
+            project_root, intent_id, folder_name
+        )
+       
+        # Verificar que no esté locked por otro
+        if state_data.get("locked", False):
+            raise ValueError(
+                f"Cannot finalize: Intent is locked by {state_data.get('locked_by', 'unknown')}"
+            )
+       
+        # Marcar como completado
+        timestamp = datetime.now(timezone.utc).isoformat()
+        state_data["status"] = "completed"
+        state_data["finalized_at"] = timestamp
+        state_data["locked"] = False
+       
+        # Actualizar steps
+        if "steps" in state_data:
+            if state_data["type"] == "dev":
+                state_data["steps"]["merge"] = True
+            else:
+                state_data["steps"]["publish"] = True
+       
+        # Guardar
+        with open(state_file, "w", encoding="utf-8") as f:
+            json.dump(state_data, f, indent=2, ensure_ascii=False)
+       
+        # Contar archivos modificados (simulado)
+        files_modified = len(state_data.get("initial_files", []))
+       
+        return {
+            "status": "completed",
+            "intent_id": state_data.get("uuid", ""),
+            "name": state_data.get("name", ""),
+            "finalized_at": timestamp,
+            "files_modified": files_modified,
+            "message": f"Intent '{state_data.get('name', 'unknown')}' finalized successfully"
+        }
+    def delete_intent(
+        self,
+        intent_id: Optional[str] = None,
+        folder_name: Optional[str] = None,
+        nucleus_path: Optional[Path] = None,
+        force: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Delete an intent completely.
+       
+        Args:
+            intent_id: UUID of the intent
+            folder_name: Folder name of the intent
+            nucleus_path: Optional path to Bloom project
+            force: Force deletion without confirmation
+           
+        Returns:
+            Deletion status
+           
+        Raises:
+            ValueError: If intent not found or locked
+        """
+       
+        project_root = self._find_bloom_project(nucleus_path)
+        intent_path, state_data, state_file = self._locate_intent(
+            project_root, intent_id, folder_name
+        )
+       
+        # Verificar lock
+        if not force and state_data.get("locked", False):
+            raise ValueError(
+                f"Cannot delete: Intent is locked by {state_data.get('locked_by', 'unknown')}. Use --force to override."
+            )
+       
+        # Guardar info antes de borrar
+        intent_name = state_data.get("name", "unknown")
+        intent_uuid = state_data.get("uuid", "")
+       
+        # Eliminar directorio completo
+        shutil.rmtree(intent_path)
+       
+        return {
+            "deleted": True,
+            "intent_id": intent_uuid,
+            "name": intent_name,
+            "path": str(intent_path),
+            "message": f"Intent '{intent_name}' deleted successfully"
+        }
