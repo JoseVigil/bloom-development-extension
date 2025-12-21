@@ -10,6 +10,7 @@ Brain CLI - Modular system for Bloom
 +----------------------------------- Categories ------------------------------------+
 |   context       AI context generation and management                              |
 |   filesystem    File operations and directory analysis                            |
+|   gemini        Gemini AI key management and operations                           |
 |   github        GitHub integration and repository management                      |
 |   nucleus       Nucleus project management and lifecycle                          |
 |   project       Project lifecycle and scaffolding                                 |
@@ -248,6 +249,21 @@ Brain CLI - Modular system for Bloom
 |    Argumentos:                                                                    |
 |      <PROJECT_PATH>       Ruta al proyecto a vincular                             |
 |                                                                                   |
+|  DETECT - Scan directory and detect project types automatically                   |
+|                                                                                   |
+|    python -m brain project detect <PARENT_PATH> [OPTIONS]                         |
+|                                                                                   |
+|    Parámetros requeridos:                                                         |
+|      <PARENT_PATH>        Parent directory to scan for projects                   |
+|                                                                                   |
+|    Parámetros opcionales:                                                         |
+|      -d                   Maximum depth for recursive scanning                    |
+|      -s                   Filter projects by strategy type                        |
+|      -c                   Filter by minimum confidence level (high, medium, low)  |
+|                                                                                   |
+|    Argumentos:                                                                    |
+|      <PARENT_PATH>        Parent directory to scan for projects                   |
+|                                                                                   |
 |  LOAD - Inspect and load project metadata from a path                             |
 |                                                                                   |
 |    python -m brain project load [OPTIONS]                                         |
@@ -260,4 +276,47 @@ Brain CLI - Modular system for Bloom
 |    python -m brain project nucleus                                                |
 |                                                                                   |
 +------------------------ Project lifecycle and scaffolding ------------------------+
+
++------------------------------------- GEMINI --------------------------------------+
+|                                                                                   |
+|  KEYS ADD - Add new Gemini API key                                                |
+|                                                                                   |
+|    python -m brain gemini keys-add -p <VALUE> -k <VALUE> [OPTIONS]                |
+|                                                                                   |
+|    Parámetros requeridos:                                                         |
+|      -p                   Profile name (e.g., 'Personal Chrome')                  |
+|      -k                   Gemini API key                                          |
+|                                                                                   |
+|    Parámetros opcionales:                                                         |
+|      --priority           Priority: 1=preferred, 0=normal, -1=backup              |
+|                                                                                   |
+|  KEYS DELETE - Delete Gemini API key                                              |
+|                                                                                   |
+|    python -m brain gemini keys-delete <PROFILE>                                   |
+|                                                                                   |
+|    Parámetros requeridos:                                                         |
+|      <PROFILE>            Profile name to delete                                  |
+|                                                                                   |
+|    Argumentos:                                                                    |
+|      <PROFILE>            Profile name to delete                                  |
+|                                                                                   |
+|  KEYS LIST - List all Gemini API keys                                             |
+|                                                                                   |
+|    python -m brain gemini keys-list                                               |
+|                                                                                   |
+|  KEYS STATS - Show Gemini keys statistics                                         |
+|                                                                                   |
+|    python -m brain gemini keys-stats                                              |
+|                                                                                   |
+|  KEYS VALIDATE - Validate Gemini API key                                          |
+|                                                                                   |
+|    python -m brain gemini keys-validate <PROFILE>                                 |
+|                                                                                   |
+|    Parámetros requeridos:                                                         |
+|      <PROFILE>            Profile name to validate                                |
+|                                                                                   |
+|    Argumentos:                                                                    |
+|      <PROFILE>            Profile name to validate                                |
+|                                                                                   |
++--------------------- Gemini AI key management and operations ---------------------+
 
