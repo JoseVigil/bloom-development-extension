@@ -1,465 +1,459 @@
 
 Brain CLI - Modular system for Bloom
 
-+------------------------------------- Options -------------------------------------+
-|   --json       Enable JSON output mode                                            |
-|   --verbose    Enable detailed logging                                            |
-|   --help       Show this help message                                             |
-+-----------------------------------------------------------------------------------+
+╭──────────────────────────────────────────── Options ─────────────────────────────────────────────╮
+│   --json       Enable JSON output mode                                                           │
+│   --verbose    Enable detailed logging                                                           │
+│   --help       Show this help message                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 
-+----------------------------------- Categories ------------------------------------+
-|   context       AI context generation and management                              |
-|   filesystem    File operations and directory analysis                            |
-|   gemini        Gemini AI key management and operations                           |
-|   github        GitHub integration and repository management                      |
-|   intent        Intent execution system and context planning                      |
-|   nucleus       Nucleus project management and lifecycle                          |
-|   profile       Chrome profile and AI account management                          |
-|   project       Project lifecycle and scaffolding                                 |
-+-----------------------------------------------------------------------------------+
+╭─────────────────────────────────────────── Categories ───────────────────────────────────────────╮
+│   context       AI context generation and management                 1 cmd                       │
+│   filesystem    File operations and directory analysis              3 cmds                       │
+│   gemini        Gemini AI key management and operations             5 cmds                       │
+│   github        GitHub integration and repository management        9 cmds                       │
+│   intent        Intent execution system and context planning        4 cmds                       │
+│   nucleus       Nucleus project management and lifecycle            9 cmds                       │
+│   profile       Chrome profile and AI account management            8 cmds                       │
+│   project       Project lifecycle and scaffolding                   6 cmds                       │
+│                                                                 ──────────                       │
+│                                                                    45 cmds                       │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 
-+------------------------------------- NUCLEUS -------------------------------------+
-|                                                                                   |
-|  GENERAL                                                                          |
-|                                                                                   |
-|  CREATE - Initialize a new Bloom Nucleus project structure                        |
-|                                                                                   |
-|    python -m brain nucleus create [OPTIONS]                                       |
-|                                                                                   |
-|    Opciones:                                                                      |
-|      -o <VALUE>           Organization name                                       |
-|      -p                   Target path (default: current dir)                      |
-|      --output             Output directory name (legacy, kept for compatibility)  |
-|      --url                Organization URL                                        |
-|      -f                   Force overwrite existing directory                      |
-|                                                                                   |
-|  LINK - Link an existing folder as a Nucleus project                              |
-|                                                                                   |
-|    python -m brain nucleus link <PATH>                                            |
-|                                                                                   |
-|    Argumentos:                                                                    |
-|      <PATH>               Path to existing project                                |
-|                                                                                   |
-|  STATUS - Check if a directory is a valid Nucleus project                         |
-|                                                                                   |
-|    python -m brain nucleus status [OPTIONS]                                       |
-|                                                                                   |
-|    Opciones:                                                                      |
-|      -p                   Nucleus path                                            |
-|                                                                                   |
-|  SYNC - Synchronize projects (git pull) and rebuild nucleus cache                 |
-|                                                                                   |
-|    python -m brain nucleus sync [OPTIONS]                                         |
-|                                                                                   |
-|    Opciones:                                                                      |
-|      -p                   Nucleus path (default: current dir)                     |
-|      --skip-git           Skip git pull operations                                |
-|      -v                   Show detailed progress                                  |
-|                                                                                   |
-|  CREATE                                                                           |
-|                                                                                   |
-|  CREATE EXP INTENT - Create a new exploration intent in the nucleus               |
-|                                                                                   |
-|    python -m brain nucleus create-exp-intent [OPTIONS]                            |
-|                                                                                   |
-|    Opciones:                                                                      |
-|      -n <VALUE>           Intent name (will be slugified)                         |
-|      -p                   Nucleus path (default: current dir)                     |
-|      --inquiry            Initial inquiry question                                |
-|      -d                   Intent description                                      |
-|      --projects           Comma-separated project names to include                |
-|                                                                                   |
-|  EXP                                                                              |
-|                                                                                   |
-|  EXP DISCOVERY TURN - Add a discovery turn to an exploration intent               |
-|                                                                                   |
-|    python -m brain nucleus exp-discovery-turn [OPTIONS]                           |
-|                                                                                   |
-|    Opciones:                                                                      |
-|      -i <VALUE>           Intent ID or slug                                       |
-|      -p                   Nucleus path (default: current dir)                     |
-|      --notes              Turn notes/observations                                 |
-|      --analysis           Analysis summary for this turn                          |
-|                                                                                   |
-|  EXP EXPORT FINDINGS - Export findings from an exploration intent                 |
-|                                                                                   |
-|    python -m brain nucleus exp-export-findings [OPTIONS]                          |
-|                                                                                   |
-|    Opciones:                                                                      |
-|      -i <VALUE>           Intent ID or slug                                       |
-|      -p                   Nucleus path (default: current dir)                     |
-|      -f                   Export format (markdown, json)                          |
-|      --include-raw        Include raw turn data                                   |
-|                                                                                   |
-|  LIST                                                                             |
-|                                                                                   |
-|  LIST PROJECTS - List all projects linked to the nucleus                          |
-|                                                                                   |
-|    python -m brain nucleus list-projects [OPTIONS]                                |
-|                                                                                   |
-|    Opciones:                                                                      |
-|      -p                   Nucleus root path (default: current directory)          |
-|      -s                   Filter by project strategy (python, typescript, go,     |
-|  etc.)                                                                            |
-|      --active-only        Show only active projects                               |
-|                                                                                   |
-|  PROJECT                                                                          |
-|                                                                                   |
-|  PROJECT INFO - Display detailed info about a specific project in the nucleus     |
-|                                                                                   |
-|    python -m brain nucleus project-info <PROJECT_NAME> [OPTIONS]                  |
-|                                                                                   |
-|    Argumentos:                                                                    |
-|      <PROJECT_NAME>       Name of the project to inspect                          |
-|                                                                                   |
-|    Opciones:                                                                      |
-|      -p                   Nucleus root path (default: current directory)          |
-|                                                                                   |
-+-------------------- Nucleus project management and lifecycle ---------------------+
+╭──────────────────────────────────────────── NUCLEUS ─────────────────────────────────────────────╮
+│                                                                                                  │
+│  GENERAL                                                                                         │
+│                                                                                                  │
+│  CREATE - Initialize a new Bloom Nucleus project structure                                       │
+│                                                                                                  │
+│    python -m brain nucleus create [OPTIONS]                                                      │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -o <VALUE>           Organization name                                                      │
+│      -p                   Target path (default: current dir)                                     │
+│      --output             Output directory name (legacy, kept for compatibility)                 │
+│      --url                Organization URL                                                       │
+│      -f                   Force overwrite existing directory                                     │
+│                                                                                                  │
+│  LINK - Link an existing folder as a Nucleus project                                             │
+│                                                                                                  │
+│    python -m brain nucleus link <PATH>                                                           │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PATH>               Path to existing project                                               │
+│                                                                                                  │
+│  STATUS - Check if a directory is a valid Nucleus project                                        │
+│                                                                                                  │
+│    python -m brain nucleus status [OPTIONS]                                                      │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -p                   Nucleus path                                                           │
+│                                                                                                  │
+│  SYNC - Synchronize projects (git pull) and rebuild nucleus cache                                │
+│                                                                                                  │
+│    python -m brain nucleus sync [OPTIONS]                                                        │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -p                   Nucleus path (default: current dir)                                    │
+│      --skip-git           Skip git pull operations                                               │
+│      -v                   Show detailed progress                                                 │
+│                                                                                                  │
+│  CREATE                                                                                          │
+│                                                                                                  │
+│  CREATE EXP INTENT - Create a new exploration intent in the nucleus                              │
+│                                                                                                  │
+│    python -m brain nucleus create-exp-intent [OPTIONS]                                           │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -n <VALUE>           Intent name (will be slugified)                                        │
+│      -p                   Nucleus path (default: current dir)                                    │
+│      --inquiry            Initial inquiry question                                               │
+│      -d                   Intent description                                                     │
+│      --projects           Comma-separated project names to include                               │
+│                                                                                                  │
+│  EXP                                                                                             │
+│                                                                                                  │
+│  EXP DISCOVERY TURN - Add a discovery turn to an exploration intent                              │
+│                                                                                                  │
+│    python -m brain nucleus exp-discovery-turn [OPTIONS]                                          │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i <VALUE>           Intent ID or slug                                                      │
+│      -p                   Nucleus path (default: current dir)                                    │
+│      --notes              Turn notes/observations                                                │
+│      --analysis           Analysis summary for this turn                                         │
+│                                                                                                  │
+│  EXP EXPORT FINDINGS - Export findings from an exploration intent                                │
+│                                                                                                  │
+│    python -m brain nucleus exp-export-findings [OPTIONS]                                         │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i <VALUE>           Intent ID or slug                                                      │
+│      -p                   Nucleus path (default: current dir)                                    │
+│      -f                   Export format (markdown, json)                                         │
+│      --include-raw        Include raw turn data                                                  │
+│                                                                                                  │
+│  LIST                                                                                            │
+│                                                                                                  │
+│  LIST PROJECTS - List all projects linked to the nucleus                                         │
+│                                                                                                  │
+│    python -m brain nucleus list-projects [OPTIONS]                                               │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -p                   Nucleus root path (default: current directory)                         │
+│      -s                   Filter by project strategy (python, typescript, go, etc.)              │
+│      --active-only        Show only active projects                                              │
+│                                                                                                  │
+│  PROJECT                                                                                         │
+│                                                                                                  │
+│  PROJECT INFO - Display detailed info about a specific project in the nucleus                    │
+│                                                                                                  │
+│    python -m brain nucleus project-info <PROJECT_NAME> [OPTIONS]                                 │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PROJECT_NAME>       Name of the project to inspect                                         │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -p                   Nucleus root path (default: current directory)                         │
+│                                                                                                  │
+╰──────────────────────────── Nucleus project management and lifecycle ────────────────────────────╯
 
-+------------------------------------- CONTEXT -------------------------------------+
-|                                                                                   |
-|  GENERATE - Generate the Bloom Context for the project                            |
-|                                                                                   |
-|    python -m brain context generate [OPTIONS]                                     |
-|                                                                                   |
-|    Opciones:                                                                      |
-|      -p                   Root path of the project                                |
-|      -o                   Output folder name                                      |
-|      -s                   Force specific strategy                                 |
-|                                                                                   |
-+---------------------- AI context generation and management -----------------------+
+╭──────────────────────────────────────────── CONTEXT ─────────────────────────────────────────────╮
+│                                                                                                  │
+│  GENERATE - Generate the Bloom Context for the project                                           │
+│                                                                                                  │
+│    python -m brain context generate [OPTIONS]                                                    │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -p                   Root path of the project                                               │
+│      -o                   Output folder name                                                     │
+│      -s                   Force specific strategy                                                │
+│                                                                                                  │
+╰────────────────────────────── AI context generation and management ──────────────────────────────╯
 
-+----------------------------------- FILESYSTEM ------------------------------------+
-|                                                                                   |
-|  COMPRESS - Compress files into optimized JSON for AI consumption                 |
-|                                                                                   |
-|    python -m brain filesystem compress <PATHS> [OPTIONS]                          |
-|                                                                                   |
-|    Argumentos:                                                                    |
-|      <PATHS>              Paths to compress (files or directories)                |
-|                                                                                   |
-|    Opciones:                                                                      |
-|      -m                   Compression mode: 'codebase' or 'docbase'               |
-|      -o                   Output directory (default: current directory)           |
-|      -e                   Patterns to exclude (can be used multiple times)        |
-|      --no-comments        Remove comments during compression                      |
-|                                                                                   |
-|  EXTRACT - Extract files from compressed JSON format                              |
-|                                                                                   |
-|    python -m brain filesystem extract <JSON_FILE> [OPTIONS]                       |
-|                                                                                   |
-|    Argumentos:                                                                    |
-|      <JSON_FILE>          Compressed JSON file to extract                         |
-|                                                                                   |
-|    Opciones:                                                                      |
-|      -o                   Output directory (default: extracted_<mode>)            |
-|      --verify-hashes/--no-verify-hashes Verify MD5 hashes during extraction       |
-|                                                                                   |
-|  TREE - Generate visual tree structure with optional MD5 hashing and JSON export  |
-|                                                                                   |
-|    python -m brain filesystem tree <TARGETS> [OPTIONS]                            |
-|                                                                                   |
-|    Argumentos:                                                                    |
-|      <TARGETS>            Specific directories or files to include.               |
-|                                                                                   |
-|    Opciones:                                                                      |
-|      -o                   Output file path                                        |
-|      --hash               Include MD5 hashes                                      |
-|      --export-json        Export JSON to disk                                     |
-|                                                                                   |
-+--------------------- File operations and directory analysis ----------------------+
+╭─────────────────────────────────────────── FILESYSTEM ───────────────────────────────────────────╮
+│                                                                                                  │
+│  COMPRESS - Compress files into optimized JSON for AI consumption                                │
+│                                                                                                  │
+│    python -m brain filesystem compress <PATHS> [OPTIONS]                                         │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PATHS>              Paths to compress (files or directories)                               │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -m                   Compression mode: 'codebase' or 'docbase'                              │
+│      -o                   Output directory (default: current directory)                          │
+│      -e                   Patterns to exclude (can be used multiple times)                       │
+│      --no-comments        Remove comments during compression                                     │
+│                                                                                                  │
+│  EXTRACT - Extract files from compressed JSON format                                             │
+│                                                                                                  │
+│    python -m brain filesystem extract <JSON_FILE> [OPTIONS]                                      │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <JSON_FILE>          Compressed JSON file to extract                                        │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -o                   Output directory (default: extracted_<mode>)                           │
+│      --verify-hashes/--no-verify-hashes Verify MD5 hashes during extraction                      │
+│                                                                                                  │
+│  TREE - Generate visual tree structure with optional MD5 hashing and JSON export                 │
+│                                                                                                  │
+│    python -m brain filesystem tree <TARGETS> [OPTIONS]                                           │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <TARGETS>            Specific directories or files to include.                              │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -o                   Output file path                                                       │
+│      --hash               Include MD5 hashes                                                     │
+│      --export-json        Export JSON to disk                                                    │
+│                                                                                                  │
+╰───────────────────────────── File operations and directory analysis ─────────────────────────────╯
 
-+------------------------------------- GITHUB --------------------------------------+
-|                                                                                   |
-|  GENERAL                                                                          |
-|                                                                                   |
-|  AUTH - Manage GitHub authentication                                              |
-|                                                                                   |
-|    python -m brain github auth                                                    |
-|                                                                                   |
-|  CLONE - Clone GitHub repository                                                  |
-|                                                                                   |
-|    python -m brain github clone <REPO> [OPTIONS]                                  |
-|                                                                                   |
-|    Argumentos:                                                                    |
-|      <REPO>               Repository (owner/repo or full URL)                     |
-|                                                                                   |
-|    Opciones:                                                                      |
-|      -p                   Target directory (defaults to repo name in current      |
-|  dir)                                                                             |
-|      --progress/--no-progress Show clone progress                                 |
-|                                                                                   |
-|  ORGS - List GitHub organizations                                                 |
-|                                                                                   |
-|    python -m brain github orgs                                                    |
-|                                                                                   |
-|  REPOS - Manage GitHub repositories                                               |
-|                                                                                   |
-|    python -m brain github repos                                                   |
-|                                                                                   |
-|  AUTENTICACI�N                                                                    |
-|                                                                                   |
-|  AUTH LOGIN - Store GitHub authentication token                                   |
-|                                                                                   |
-|    python -m brain github auth-login [OPTIONS]                                    |
-|                                                                                   |
-|    Opciones:                                                                      |
-|      -t <VALUE>           GitHub Personal Access Token                            |
-|                                                                                   |
-|  AUTH LOGOUT - Remove stored GitHub token                                         |
-|                                                                                   |
-|    python -m brain github auth-logout                                             |
-|                                                                                   |
-|  AUTH STATUS - Check GitHub authentication status                                 |
-|                                                                                   |
-|    python -m brain github auth-status                                             |
-|                                                                                   |
-|  ORGANIZACIONES                                                                   |
-|                                                                                   |
-|  ORGS LIST - List GitHub organizations                                            |
-|                                                                                   |
-|    python -m brain github orgs-list                                               |
-|                                                                                   |
-|  REPOSITORIOS                                                                     |
-|                                                                                   |
-|  REPOS LIST - List GitHub repositories                                            |
-|                                                                                   |
-|    python -m brain github repos-list [OPTIONS]                                    |
-|                                                                                   |
-|    Opciones:                                                                      |
-|      --org                Organization name                                       |
-|                                                                                   |
-+------------------ GitHub integration and repository management -------------------+
+╭───────────────────────────────────────────── GITHUB ─────────────────────────────────────────────╮
+│                                                                                                  │
+│  GENERAL                                                                                         │
+│                                                                                                  │
+│  AUTH - Manage GitHub authentication                                                             │
+│                                                                                                  │
+│    python -m brain github auth                                                                   │
+│                                                                                                  │
+│  CLONE - Clone GitHub repository                                                                 │
+│                                                                                                  │
+│    python -m brain github clone <REPO> [OPTIONS]                                                 │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <REPO>               Repository (owner/repo or full URL)                                    │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -p                   Target directory (defaults to repo name in current dir)                │
+│      --progress/--no-progress Show clone progress                                                │
+│                                                                                                  │
+│  ORGS - List GitHub organizations                                                                │
+│                                                                                                  │
+│    python -m brain github orgs                                                                   │
+│                                                                                                  │
+│  REPOS - Manage GitHub repositories                                                              │
+│                                                                                                  │
+│    python -m brain github repos                                                                  │
+│                                                                                                  │
+│  AUTENTICACIÓN                                                                                   │
+│                                                                                                  │
+│  AUTH LOGIN - Store GitHub authentication token                                                  │
+│                                                                                                  │
+│    python -m brain github auth-login [OPTIONS]                                                   │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -t <VALUE>           GitHub Personal Access Token                                           │
+│                                                                                                  │
+│  AUTH LOGOUT - Remove stored GitHub token                                                        │
+│                                                                                                  │
+│    python -m brain github auth-logout                                                            │
+│                                                                                                  │
+│  AUTH STATUS - Check GitHub authentication status                                                │
+│                                                                                                  │
+│    python -m brain github auth-status                                                            │
+│                                                                                                  │
+│  ORGANIZACIONES                                                                                  │
+│                                                                                                  │
+│  ORGS LIST - List GitHub organizations                                                           │
+│                                                                                                  │
+│    python -m brain github orgs-list                                                              │
+│                                                                                                  │
+│  REPOSITORIOS                                                                                    │
+│                                                                                                  │
+│  REPOS LIST - List GitHub repositories                                                           │
+│                                                                                                  │
+│    python -m brain github repos-list [OPTIONS]                                                   │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      --org                Organization name                                                      │
+│                                                                                                  │
+╰────────────────────────── GitHub integration and repository management ──────────────────────────╯
 
-+------------------------------------- PROJECT -------------------------------------+
-|                                                                                   |
-|  GENERAL                                                                          |
-|                                                                                   |
-|  ADD - Vincula un proyecto local existente a un Nucleus                           |
-|                                                                                   |
-|    python -m brain project add <PROJECT_PATH> [OPTIONS]                           |
-|                                                                                   |
-|    Argumentos:                                                                    |
-|      <PROJECT_PATH>       Ruta al proyecto a vincular                             |
-|                                                                                   |
-|    Opciones:                                                                      |
-|      -n <VALUE>           Ruta al Nucleus destino                                 |
-|      --name               Nombre custom del proyecto (default: nombre de          |
-|  carpeta)                                                                         |
-|      --strategy           Forzar estrategia espec�fica (default: auto-detect)     |
-|      --description        Descripci�n del proyecto                                |
-|      --repo-url           URL del repositorio GitHub                              |
-|                                                                                   |
-|  DETECT - Scan directory and detect project types automatically                   |
-|                                                                                   |
-|    python -m brain project detect <PARENT_PATH> [OPTIONS]                         |
-|                                                                                   |
-|    Argumentos:                                                                    |
-|      <PARENT_PATH>        Parent directory to scan for projects                   |
-|                                                                                   |
-|    Opciones:                                                                      |
-|      -d                   Maximum depth for recursive scanning                    |
-|      -s                   Filter projects by strategy type                        |
-|      -c                   Filter by minimum confidence level (high, medium, low)  |
-|                                                                                   |
-|  INFO - Inspect and display Bloom project metadata                                |
-|                                                                                   |
-|    python -m brain project info [OPTIONS]                                         |
-|                                                                                   |
-|    Opciones:                                                                      |
-|      -p                   Project root path (default: current directory)          |
-|      --show-intents       Show list of intents in the project                     |
-|      --show-tree          Show project tree structure                             |
-|                                                                                   |
-|  LOAD - Inspect and load project metadata from a path                             |
-|                                                                                   |
-|    python -m brain project load [OPTIONS]                                         |
-|                                                                                   |
-|    Opciones:                                                                      |
-|      -p                   Path to the project root                                |
-|                                                                                   |
-|  NUCLEUS - Manage Nucleus projects (create, link, status)                         |
-|                                                                                   |
-|    python -m brain project nucleus                                                |
-|                                                                                   |
-|  CLONE                                                                            |
-|                                                                                   |
-|  CLONE AND ADD - Clone a Git repository and automatically link it to the current  |
-|  Nucleus                                                                          |
-|                                                                                   |
-|    python -m brain project clone-and-add <REPO_URL> [OPTIONS]                     |
-|                                                                                   |
-|    Argumentos:                                                                    |
-|      <REPO_URL>           Git repository URL (HTTPS or SSH)                       |
-|                                                                                   |
-|    Opciones:                                                                      |
-|      -d                   Absolute path where to clone the repository. If not     |
-|  provided, clones to Nucleus root using repo name.                                |
-|                                                                                   |
-+------------------------ Project lifecycle and scaffolding ------------------------+
+╭──────────────────────────────────────────── PROJECT ─────────────────────────────────────────────╮
+│                                                                                                  │
+│  GENERAL                                                                                         │
+│                                                                                                  │
+│  ADD - Vincula un proyecto local existente a un Nucleus                                          │
+│                                                                                                  │
+│    python -m brain project add <PROJECT_PATH> [OPTIONS]                                          │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PROJECT_PATH>       Ruta al proyecto a vincular                                            │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -n <VALUE>           Ruta al Nucleus destino                                                │
+│      --name               Nombre custom del proyecto (default: nombre de carpeta)                │
+│      --strategy           Forzar estrategia específica (default: auto-detect)                    │
+│      --description        Descripción del proyecto                                               │
+│      --repo-url           URL del repositorio GitHub                                             │
+│                                                                                                  │
+│  DETECT - Scan directory and detect project types automatically                                  │
+│                                                                                                  │
+│    python -m brain project detect <PARENT_PATH> [OPTIONS]                                        │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PARENT_PATH>        Parent directory to scan for projects                                  │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -d                   Maximum depth for recursive scanning                                   │
+│      -s                   Filter projects by strategy type                                       │
+│      -c                   Filter by minimum confidence level (high, medium, low)                 │
+│                                                                                                  │
+│  INFO - Inspect and display Bloom project metadata                                               │
+│                                                                                                  │
+│    python -m brain project info [OPTIONS]                                                        │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -p                   Project root path (default: current directory)                         │
+│      --show-intents       Show list of intents in the project                                    │
+│      --show-tree          Show project tree structure                                            │
+│                                                                                                  │
+│  LOAD - Inspect and load project metadata from a path                                            │
+│                                                                                                  │
+│    python -m brain project load [OPTIONS]                                                        │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -p                   Path to the project root                                               │
+│                                                                                                  │
+│  NUCLEUS - Manage Nucleus projects (create, link, status)                                        │
+│                                                                                                  │
+│    python -m brain project nucleus                                                               │
+│                                                                                                  │
+│  CLONE                                                                                           │
+│                                                                                                  │
+│  CLONE AND ADD - Clone a Git repository and automatically link it to the current Nucleus         │
+│                                                                                                  │
+│    python -m brain project clone-and-add <REPO_URL> [OPTIONS]                                    │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <REPO_URL>           Git repository URL (HTTPS or SSH)                                      │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -d                   Absolute path where to clone the repository. If not provided, clones   │
+│  to Nucleus root using repo name.                                                                │
+│                                                                                                  │
+╰─────────────────────────────── Project lifecycle and scaffolding ────────────────────────────────╯
 
+╭───────────────────────────────────────────── INTENT ─────────────────────────────────────────────╮
+│                                                                                                  │
+│  BUILD                                                                                           │
+│                                                                                                  │
+│  BUILD PAYLOAD - Build optimized AI payload from context plan                                    │
+│                                                                                                  │
+│    python -m brain intent build-payload [OPTIONS]                                                │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      --plan <VALUE>       Path to context_plan.json                                              │
+│      --output             Output path for payload (default: same dir as plan)                    │
+│                                                                                                  │
+│  GENERAL                                                                                         │
+│                                                                                                  │
+│  CREATE - Create a new development or documentation intent in the current project                │
+│                                                                                                  │
+│    python -m brain intent create [OPTIONS]                                                       │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -t <VALUE>           Intent type: 'dev' for development or 'doc' for documentation          │
+│      -n <VALUE>           Human-readable name for the intent (e.g., 'Fix login authentication    │
+│  flow')                                                                                          │
+│      -f                   Initial files to include in the intent context (can be repeated or     │
+│  comma-separated)                                                                                │
+│      -p                   Path to the Nucleus (Bloom project root). Auto-detected if not         │
+│  provided.                                                                                       │
+│                                                                                                  │
+│  PLAN - Generate AI context plan with intelligent file prioritization                            │
+│                                                                                                  │
+│    python -m brain intent plan [OPTIONS]                                                         │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      --intent-dir <VALUE> Intent directory path                                                  │
+│      --description <VALUE> Intent description                                                    │
+│      --type               Intent type: dev, doc, or seed                                         │
+│                                                                                                  │
+│  UPDATE - Update an existing intent's name, files, or metadata                                   │
+│                                                                                                  │
+│    python -m brain intent update [OPTIONS]                                                       │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i                   UUID of the intent to update                                           │
+│      -f                   Folder name of the intent (e.g., .fix-login-a1b2c3d4)                  │
+│      -n                   New name for the intent (triggers folder rename)                       │
+│      --files              Replace all initial files with this new list                           │
+│      --add-files          Add files to the existing initial_files list                           │
+│      --remove-files       Remove files from the initial_files list                               │
+│      -p                   Path to the Nucleus (Bloom project root). Auto-detected if not         │
+│  provided.                                                                                       │
+│                                                                                                  │
+╰────────────────────────── Intent execution system and context planning ──────────────────────────╯
 
-[RENDERER DEBUG] INTENT commands: ['build-payload', 'create', 'plan', 'update']
-+------------------------------------- INTENT --------------------------------------+
-|                                                                                   |
-|  BUILD                                                                            |
-|                                                                                   |
-|  BUILD PAYLOAD - Build optimized AI payload from context plan                     |
-|                                                                                   |
-|    python -m brain intent build-payload [OPTIONS]                                 |
-|                                                                                   |
-|    Opciones:                                                                      |
-|      --plan <VALUE>       Path to context_plan.json                               |
-|      --output             Output path for payload (default: same dir as plan)     |
-|                                                                                   |
-|  GENERAL                                                                          |
-|                                                                                   |
-|  CREATE - Create a new development or documentation intent in the current         |
-|  project                                                                          |
-|                                                                                   |
-|    python -m brain intent create [OPTIONS]                                        |
-|                                                                                   |
-|    Opciones:                                                                      |
-|      -t <VALUE>           Intent type: 'dev' for development or 'doc' for         |
-|  documentation                                                                    |
-|      -n <VALUE>           Human-readable name for the intent (e.g., 'Fix login    |
-|  authentication flow')                                                            |
-|      -f                   Initial files to include in the intent context (can be  |
-|  repeated or comma-separated)                                                     |
-|      -p                   Path to the Nucleus (Bloom project root).               |
-|  Auto-detected if not provided.                                                   |
-|                                                                                   |
-|  PLAN - Generate AI context plan with intelligent file prioritization             |
-|                                                                                   |
-|    python -m brain intent plan [OPTIONS]                                          |
-|                                                                                   |
-|    Opciones:                                                                      |
-|      --intent-dir <VALUE> Intent directory path                                   |
-|      --description <VALUE> Intent description                                     |
-|      --type               Intent type: dev, doc, or seed                          |
-|                                                                                   |
-|  UPDATE - Update an existing intent's name, files, or metadata                    |
-|                                                                                   |
-|    python -m brain intent update [OPTIONS]                                        |
-|                                                                                   |
-|    Opciones:                                                                      |
-|      -i                   UUID of the intent to update                            |
-|      -f                   Folder name of the intent (e.g., .fix-login-a1b2c3d4)   |
-|      -n                   New name for the intent (triggers folder rename)        |
-|      --files              Replace all initial files with this new list            |
-|      --add-files          Add files to the existing initial_files list            |
-|      --remove-files       Remove files from the initial_files list                |
-|      -p                   Path to the Nucleus (Bloom project root).               |
-|  Auto-detected if not provided.                                                   |
-|                                                                                   |
-+------------------ Intent execution system and context planning -------------------+
+╭───────────────────────────────────────────── GEMINI ─────────────────────────────────────────────╮
+│                                                                                                  │
+│  KEYS                                                                                            │
+│                                                                                                  │
+│  KEYS ADD - Add new Gemini API key                                                               │
+│                                                                                                  │
+│    python -m brain gemini keys-add [OPTIONS]                                                     │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -p <VALUE>           Profile name (e.g., 'Personal Chrome')                                 │
+│      -k <VALUE>           Gemini API key                                                         │
+│      --priority           Priority: 1=preferred, 0=normal, -1=backup                             │
+│                                                                                                  │
+│  KEYS DELETE - Delete Gemini API key                                                             │
+│                                                                                                  │
+│    python -m brain gemini keys-delete <PROFILE>                                                  │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PROFILE>            Profile name to delete                                                 │
+│                                                                                                  │
+│  KEYS LIST - List all Gemini API keys                                                            │
+│                                                                                                  │
+│    python -m brain gemini keys-list                                                              │
+│                                                                                                  │
+│  KEYS STATS - Show Gemini keys statistics                                                        │
+│                                                                                                  │
+│    python -m brain gemini keys-stats                                                             │
+│                                                                                                  │
+│  KEYS VALIDATE - Validate Gemini API key                                                         │
+│                                                                                                  │
+│    python -m brain gemini keys-validate <PROFILE>                                                │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PROFILE>            Profile name to validate                                               │
+│                                                                                                  │
+╰──────────────────────────── Gemini AI key management and operations ─────────────────────────────╯
 
-+------------------------------------- GEMINI --------------------------------------+
-|                                                                                   |
-|  KEYS                                                                             |
-|                                                                                   |
-|  KEYS ADD - Add new Gemini API key                                                |
-|                                                                                   |
-|    python -m brain gemini keys-add [OPTIONS]                                      |
-|                                                                                   |
-|    Opciones:                                                                      |
-|      -p <VALUE>           Profile name (e.g., 'Personal Chrome')                  |
-|      -k <VALUE>           Gemini API key                                          |
-|      --priority           Priority: 1=preferred, 0=normal, -1=backup              |
-|                                                                                   |
-|  KEYS DELETE - Delete Gemini API key                                              |
-|                                                                                   |
-|    python -m brain gemini keys-delete <PROFILE>                                   |
-|                                                                                   |
-|    Argumentos:                                                                    |
-|      <PROFILE>            Profile name to delete                                  |
-|                                                                                   |
-|  KEYS LIST - List all Gemini API keys                                             |
-|                                                                                   |
-|    python -m brain gemini keys-list                                               |
-|                                                                                   |
-|  KEYS STATS - Show Gemini keys statistics                                         |
-|                                                                                   |
-|    python -m brain gemini keys-stats                                              |
-|                                                                                   |
-|  KEYS VALIDATE - Validate Gemini API key                                          |
-|                                                                                   |
-|    python -m brain gemini keys-validate <PROFILE>                                 |
-|                                                                                   |
-|    Argumentos:                                                                    |
-|      <PROFILE>            Profile name to validate                                |
-|                                                                                   |
-+--------------------- Gemini AI key management and operations ---------------------+
-
-+------------------------------------- PROFILE -------------------------------------+
-|                                                                                   |
-|  ACCOUNTS                                                                         |
-|                                                                                   |
-|  ACCOUNTS REGISTER - Registra una cuenta (Google, OpenAI, etc) en un perfil       |
-|                                                                                   |
-|    python -m brain profile accounts-register <PROFILE_ID> <PROVIDER> <EMAIL>      |
-|                                                                                   |
-|    Argumentos:                                                                    |
-|      <PROFILE_ID>         ID del perfil                                           |
-|      <PROVIDER>           Proveedor (google, openai, anthropic, etc)              |
-|      <EMAIL>              Email o identificador de la cuenta                      |
-|                                                                                   |
-|  ACCOUNTS REMOVE - Remueve una cuenta registrada de un perfil                     |
-|                                                                                   |
-|    python -m brain profile accounts-remove <PROFILE_ID> <PROVIDER>                |
-|                                                                                   |
-|    Argumentos:                                                                    |
-|      <PROFILE_ID>         ID del perfil                                           |
-|      <PROVIDER>           Proveedor a remover                                     |
-|                                                                                   |
-|  GENERAL                                                                          |
-|                                                                                   |
-|  CREATE - Crea un nuevo perfil de Chrome aislado                                  |
-|                                                                                   |
-|    python -m brain profile create <ALIAS>                                         |
-|                                                                                   |
-|    Argumentos:                                                                    |
-|      <ALIAS>              Nombre descriptivo del perfil                           |
-|                                                                                   |
-|  DESTROY - Elimina un perfil y todos sus datos                                    |
-|                                                                                   |
-|    python -m brain profile destroy <PROFILE_ID> [OPTIONS]                         |
-|                                                                                   |
-|    Argumentos:                                                                    |
-|      <PROFILE_ID>         ID del perfil a eliminar                                |
-|                                                                                   |
-|    Opciones:                                                                      |
-|      -f                   Forzar sin confirmaci�n                                 |
-|                                                                                   |
-|  LAUNCH - Lanza Chrome con un perfil de Worker                                    |
-|                                                                                   |
-|    python -m brain profile launch <PROFILE_ID> [OPTIONS]                          |
-|                                                                                   |
-|    Argumentos:                                                                    |
-|      <PROFILE_ID>         ID del perfil a lanzar                                  |
-|                                                                                   |
-|    Opciones:                                                                      |
-|      --url                URL inicial o modo App                                  |
-|                                                                                   |
-|  LINK - Vincula una cuenta de email a un perfil de Chrome                         |
-|                                                                                   |
-|    python -m brain profile link <PROFILE_ID> <EMAIL>                              |
-|                                                                                   |
-|    Argumentos:                                                                    |
-|      <PROFILE_ID>         ID del perfil                                           |
-|      <EMAIL>              Email de la cuenta a vincular                           |
-|                                                                                   |
-|  LIST - Lista todos los perfiles de Chrome Workers                                |
-|                                                                                   |
-|    python -m brain profile list                                                   |
-|                                                                                   |
-|  UNLINK - Desvincula la cuenta asociada a un perfil                               |
-|                                                                                   |
-|    python -m brain profile unlink <PROFILE_ID>                                    |
-|                                                                                   |
-|    Argumentos:                                                                    |
-|      <PROFILE_ID>         ID del perfil                                           |
-|                                                                                   |
-+-------------------- Chrome profile and AI account management ---------------------+
+╭──────────────────────────────────────────── PROFILE ─────────────────────────────────────────────╮
+│                                                                                                  │
+│  ACCOUNTS                                                                                        │
+│                                                                                                  │
+│  ACCOUNTS REGISTER - Registra una cuenta (Google, OpenAI, etc) en un perfil                      │
+│                                                                                                  │
+│    python -m brain profile accounts-register <PROFILE_ID> <PROVIDER> <EMAIL>                     │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PROFILE_ID>         ID del perfil                                                          │
+│      <PROVIDER>           Proveedor (google, openai, anthropic, etc)                             │
+│      <EMAIL>              Email o identificador de la cuenta                                     │
+│                                                                                                  │
+│  ACCOUNTS REMOVE - Remueve una cuenta registrada de un perfil                                    │
+│                                                                                                  │
+│    python -m brain profile accounts-remove <PROFILE_ID> <PROVIDER>                               │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PROFILE_ID>         ID del perfil                                                          │
+│      <PROVIDER>           Proveedor a remover                                                    │
+│                                                                                                  │
+│  GENERAL                                                                                         │
+│                                                                                                  │
+│  CREATE - Crea un nuevo perfil de Chrome aislado                                                 │
+│                                                                                                  │
+│    python -m brain profile create <ALIAS>                                                        │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <ALIAS>              Nombre descriptivo del perfil                                          │
+│                                                                                                  │
+│  DESTROY - Elimina un perfil y todos sus datos                                                   │
+│                                                                                                  │
+│    python -m brain profile destroy <PROFILE_ID> [OPTIONS]                                        │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PROFILE_ID>         ID del perfil a eliminar                                               │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -f                   Forzar sin confirmación                                                │
+│                                                                                                  │
+│  LAUNCH - Lanza Chrome con un perfil de Worker                                                   │
+│                                                                                                  │
+│    python -m brain profile launch <PROFILE_ID> [OPTIONS]                                         │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PROFILE_ID>         ID del perfil a lanzar                                                 │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      --url                URL inicial o modo App                                                 │
+│                                                                                                  │
+│  LINK - Vincula una cuenta de email a un perfil de Chrome                                        │
+│                                                                                                  │
+│    python -m brain profile link <PROFILE_ID> <EMAIL>                                             │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PROFILE_ID>         ID del perfil                                                          │
+│      <EMAIL>              Email de la cuenta a vincular                                          │
+│                                                                                                  │
+│  LIST - Lista todos los perfiles de Chrome Workers                                               │
+│                                                                                                  │
+│    python -m brain profile list                                                                  │
+│                                                                                                  │
+│  UNLINK - Desvincula la cuenta asociada a un perfil                                              │
+│                                                                                                  │
+│    python -m brain profile unlink <PROFILE_ID>                                                   │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PROFILE_ID>         ID del perfil                                                          │
+│                                                                                                  │
+╰──────────────────────────── Chrome profile and AI account management ────────────────────────────╯
 
