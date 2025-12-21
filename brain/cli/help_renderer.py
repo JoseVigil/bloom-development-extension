@@ -166,41 +166,34 @@ def _render_command_detail(cmd: BaseCommand, category: CommandCategory) -> List[
     # 2. Full command syntax
     syntax_parts = ["python -m brain", category.value, meta.name]
     
-    # Add required parameters to syntax
-    required_params = [p for p in params if p.is_required]
-    optional_params = [p for p in params if not p.is_required]
+    # Separate arguments and options
+    arguments = [p for p in params if p.is_argument]
+    options = [p for p in params if not p.is_argument]
     
-    for param in required_params:
-        syntax_parts.append(param.flag)
+    # Add arguments to syntax
+    for arg in arguments:
+        syntax_parts.append(arg.flag)
     
-    if optional_params:
+    # Add [OPTIONS] if there are any options
+    if options:
         syntax_parts.append("[OPTIONS]")
     
     syntax = " ".join(syntax_parts)
     lines.append(Text(f"  {syntax}", style="green"))
     lines.append(Text())  # Empty line
     
-    # 3. Required parameters section
-    if required_params:
-        lines.append(Text("  Parámetros requeridos:", style="bold cyan"))
-        for param in required_params:
-            flag_display = param.flag.split()[0]  # Remove <VALUE> for display
-            lines.append(Text(f"    {flag_display:20} {param.help_text}", style="white"))
-        lines.append(Text())  # Empty line
-    
-    # 4. Optional parameters section
-    if optional_params:
-        lines.append(Text("  Parámetros opcionales:", style="bold cyan"))
-        for param in optional_params:
-            lines.append(Text(f"    {param.flag:20} {param.help_text}", style="white"))
-        lines.append(Text())  # Empty line
-    
-    # 5. Arguments/Targets section (if any non-flag arguments)
-    arguments = [p for p in params if p.is_argument]
+    # 3. Arguments section (positional parameters)
     if arguments:
         lines.append(Text("  Argumentos:", style="bold cyan"))
         for arg in arguments:
             lines.append(Text(f"    {arg.flag:20} {arg.help_text}", style="white"))
+        lines.append(Text())  # Empty line
+    
+    # 4. Options section (flags and optional parameters)
+    if options:
+        lines.append(Text("  Opciones:", style="bold cyan"))
+        for opt in options:
+            lines.append(Text(f"    {opt.flag:20} {opt.help_text}", style="white"))
         lines.append(Text())  # Empty line
     
     return lines
@@ -285,31 +278,34 @@ def _render_root_commands(console: Console, root_commands: List[BaseCommand]):
         # Full syntax
         syntax_parts = ["python -m brain", meta.name]
         
-        required_params = [p for p in params if p.is_required]
-        optional_params = [p for p in params if not p.is_required]
+        # Separate arguments and options
+        arguments = [p for p in params if p.is_argument]
+        options = [p for p in params if not p.is_argument]
         
-        for param in required_params:
-            syntax_parts.append(param.flag)
+        # Add arguments to syntax
+        for arg in arguments:
+            syntax_parts.append(arg.flag)
         
-        if optional_params:
+        # Add [OPTIONS] if there are any options
+        if options:
             syntax_parts.append("[OPTIONS]")
         
         syntax = " ".join(syntax_parts)
         content_lines.append(Text(f"  {syntax}", style="green"))
         content_lines.append(Text())
         
-        # Parameters
-        if required_params:
-            content_lines.append(Text("  Parámetros requeridos:", style="bold cyan"))
-            for param in required_params:
-                flag_display = param.flag.split()[0]
-                content_lines.append(Text(f"    {flag_display:20} {param.help_text}", style="white"))
+        # Arguments section
+        if arguments:
+            content_lines.append(Text("  Argumentos:", style="bold cyan"))
+            for arg in arguments:
+                content_lines.append(Text(f"    {arg.flag:20} {arg.help_text}", style="white"))
             content_lines.append(Text())
         
-        if optional_params:
-            content_lines.append(Text("  Parámetros opcionales:", style="bold cyan"))
-            for param in optional_params:
-                content_lines.append(Text(f"    {param.flag:20} {param.help_text}", style="white"))
+        # Options section
+        if options:
+            content_lines.append(Text("  Opciones:", style="bold cyan"))
+            for opt in options:
+                content_lines.append(Text(f"    {opt.flag:20} {opt.help_text}", style="white"))
             content_lines.append(Text())
     
     # Remove trailing empty lines

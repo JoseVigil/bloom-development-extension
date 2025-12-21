@@ -21,6 +21,14 @@ bloom-development-extension/
     │   │   ├── __pycache__/ [... cache]
     │   │   ├── compress.py
     │   │   └── tree.py
+    │   ├── gemini/
+    │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
+    │   │   ├── keys_add.py
+    │   │   ├── keys_delete.py
+    │   │   ├── keys_list.py
+    │   │   ├── keys_stats.py
+    │   │   └── keys_validate.py
     │   ├── github/
     │   │   ├── __init__.py
     │   │   ├── __pycache__/ [... cache]
@@ -34,6 +42,11 @@ bloom-development-extension/
     │   │   ├── repos.py
     │   │   └── repos_list.py
     │   ├── init.py
+    │   ├── intent/
+    │   │   ├── __pycache__/ [... cache]
+    │   │   ├── build_payload.py
+    │   │   ├── plan.py
+    │   │   └── router_prompt.md
     │   ├── nucleus/
     │   │   ├── __init__.py
     │   │   ├── __pycache__/ [... cache]
@@ -44,6 +57,11 @@ bloom-development-extension/
     │   │   ├── link.py
     │   │   ├── status.py
     │   │   └── sync.py
+    │   ├── profile/
+    │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
+    │   │   ├── accounts.py
+    │   │   └── profiles.py
     │   └── project/
     │       ├── __pycache__/ [... cache]
     │       ├── add.py
@@ -53,6 +71,8 @@ bloom-development-extension/
     ├── commands.md
     ├── core/
     │   ├── __pycache__/ [... cache]
+    │   ├── browser/
+    │   │   └── profile_manager.py
     │   ├── context/
     │   │   ├── __init__.py
     │   │   ├── detector.py
@@ -77,6 +97,10 @@ bloom-development-extension/
     │   │   │   └── typescript.py
     │   │   ├── strategy_base.py
     │   │   └── strategy_loader.py
+    │   ├── context_planning/
+    │   │   ├── enriched_tree_generator.py
+    │   │   ├── gemini_router.py
+    │   │   └── payload_builder.py
     │   ├── filesystem/
     │   │   ├── __init__.py
     │   │   ├── code_compressor.py
@@ -89,7 +113,6 @@ bloom-development-extension/
     │   ├── github/
     │   │   ├── __init__.py
     │   │   ├── api_client.py
-    │   │   ├── credentials.py
     │   │   └── models.py
     │   ├── nucleus_manager.py
     │   ├── project/
@@ -104,4 +127,5 @@ bloom-development-extension/
         ├── __init__.py
         ├── __pycache__/ [... cache]
         ├── context.py
+        ├── credentials.py
         └── github_types.py
