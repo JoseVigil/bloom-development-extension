@@ -131,6 +131,7 @@ bloom-development-extension/
 │   │       ├── profileManager.js
 │   │       └── profileManagerPanel.ts
 │   └── utils/
+│       ├── brainExecutor.ts
 │       ├── gitExecutor.ts
 │       ├── gitManager.ts
 │       ├── gitPathResolver.ts
@@ -276,7 +277,16 @@ bloom-development-extension/
 │   │   ├── filesystem/
 │   │   │   ├── __init__.py
 │   │   │   ├── __pycache__/ [... cache]
+│   │   │   ├── compress.py
 │   │   │   └── tree.py
+│   │   ├── gemini/
+│   │   │   ├── __init__.py
+│   │   │   ├── __pycache__/ [... cache]
+│   │   │   ├── keys_add.py
+│   │   │   ├── keys_delete.py
+│   │   │   ├── keys_list.py
+│   │   │   ├── keys_stats.py
+│   │   │   └── keys_validate.py
 │   │   ├── github/
 │   │   │   ├── __init__.py
 │   │   │   ├── __pycache__/ [... cache]
@@ -294,17 +304,25 @@ bloom-development-extension/
 │   │   │   ├── __init__.py
 │   │   │   ├── __pycache__/ [... cache]
 │   │   │   ├── create.py
+│   │   │   ├── create_exp_intent.py
+│   │   │   ├── exp_discovery_turn.py
+│   │   │   ├── exp_export_findings.py
 │   │   │   ├── link.py
-│   │   │   └── status.py
+│   │   │   ├── status.py
+│   │   │   └── sync.py
 │   │   └── project/
 │   │       ├── __pycache__/ [... cache]
+│   │       ├── add.py
+│   │       ├── detect.py
 │   │       ├── load.py
 │   │       └── nucleus.py
 │   ├── commands.md
 │   ├── core/
 │   │   ├── __pycache__/ [... cache]
 │   │   ├── context/
+│   │   │   ├── __init__.py
 │   │   │   ├── detector.py
+│   │   │   ├── detector.py.backup
 │   │   │   ├── generate.py
 │   │   │   ├── manager.py
 │   │   │   ├── strategies/
@@ -318,13 +336,18 @@ bloom-development-extension/
 │   │   │   │   ├── ios.py
 │   │   │   │   ├── jvm.py
 │   │   │   │   ├── macos.py
-│   │   │   │   ├── multistack_detector.py
 │   │   │   │   ├── php.py
 │   │   │   │   ├── python.py
 │   │   │   │   ├── ruby.py
 │   │   │   │   ├── rust.py
 │   │   │   │   └── typescript.py
+│   │   │   ├── strategy_base.py
 │   │   │   └── strategy_loader.py
+│   │   ├── filesystem/
+│   │   │   ├── __init__.py
+│   │   │   ├── code_compressor.py
+│   │   │   ├── files_compressor.py
+│   │   │   └── files_extractor.py
 │   │   ├── git/
 │   │   │   ├── __init__.py
 │   │   │   ├── executor.py
@@ -332,9 +355,13 @@ bloom-development-extension/
 │   │   ├── github/
 │   │   │   ├── __init__.py
 │   │   │   ├── api_client.py
-│   │   │   ├── credentials.py
 │   │   │   └── models.py
 │   │   ├── nucleus_manager.py
+│   │   ├── project/
+│   │   │   ├── __init__.py
+│   │   │   ├── linker.py
+│   │   │   ├── models.py
+│   │   │   └── scanner.py
 │   │   ├── project_manager.py
 │   │   └── tree_manager.py
 │   ├── pyproject.toml
@@ -342,8 +369,7 @@ bloom-development-extension/
 │       ├── __init__.py
 │       ├── __pycache__/ [... cache]
 │       ├── context.py
-│       ├── github_types.py
-│       └── shared/
-│           └── context.py
+│       ├── credentials.py
+│       └── github_types.py
 ├── package.json
 └── tsconfig.json

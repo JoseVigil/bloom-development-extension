@@ -15,8 +15,9 @@ class CommandCategory(Enum):
     CONTEXT = ("context", "AI context generation and management")
     PROJECT = ("project", "Project lifecycle and scaffolding")
     FILESYSTEM = ("filesystem", "File operations and directory analysis")
-    INTENT = ("intent", "Intent execution system")
+    INTENT = ("intent", "Intent execution system and context planning")
     AI = ("ai", "AI-powered features")
+    PROFILE = ("profile", "Chrome profile and AI account management")
     
     def __init__(self, value: str, description: str):
         self._value_ = value

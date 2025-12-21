@@ -1,0 +1,326 @@
+import json
+import shutil
+import subprocess
+import os
+import uuid
+import platform
+from pathlib import Path
+from typing import List, Dict, Any, Optional
+from datetime import datetime
+
+class ProfileManager:
+    """
+    Gestor de perfiles aislados de Chrome (Workers).
+    Maneja el sistema de archivos y la ejecución de procesos.
+    """
+    
+    def __init__(self):
+        """Inicializa las rutas base según el sistema operativo"""
+        self.base_dir = self._get_base_directory()
+        self.workers_dir = self.base_dir / "Workers"
+        self.profiles_file = self.base_dir / "profiles.json"
+        
+        # Crear directorios si no existen
+        self.base_dir.mkdir(parents=True, exist_ok=True)
+        self.workers_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Inicializar archivo JSON si no existe
+        if not self.profiles_file.exists():
+            self._save_profiles([])
+    
+    def _get_base_directory(self) -> Path:
+        """Determina el directorio base según el sistema operativo"""
+        system = platform.system()
+        
+        if system == "Windows":
+            appdata = os.environ.get("APPDATA")
+            if not appdata:
+                raise RuntimeError("Variable APPDATA no encontrada")
+            return Path(appdata) / "BloomNucleus"
+        
+        elif system == "Darwin":  # macOS
+            home = Path.home()
+            return home / "Library" / "Application Support" / "BloomNucleus"
+        
+        else:  # Linux y otros
+            home = Path.home()
+            return home / ".local" / "share" / "BloomNucleus"
+    
+    def _load_profiles(self) -> List[Dict[str, Any]]:
+        """Carga los perfiles desde el archivo JSON"""
+        try:
+            with open(self.profiles_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except (json.JSONDecodeError, FileNotFoundError):
+            return []
+    
+    def _save_profiles(self, profiles: List[Dict[str, Any]]) -> None:
+        """Guarda los perfiles en el archivo JSON"""
+        with open(self.profiles_file, 'w', encoding='utf-8') as f:
+            json.dump(profiles, f, indent=2, ensure_ascii=False)
+    
+    def _find_profile(self, profile_id: str) -> Optional[Dict[str, Any]]:
+        """Busca un perfil por su ID"""
+        profiles = self._load_profiles()
+        for profile in profiles:
+            if profile.get('id') == profile_id:
+                return profile
+        return None
+    
+    def list_profiles(self) -> List[Dict[str, Any]]:
+        """Lista todos los perfiles existentes"""
+        profiles = self._load_profiles()
+        
+        # Enriquecer con información de ruta
+        for profile in profiles:
+            profile_path = self.workers_dir / profile['id']
+            profile['path'] = str(profile_path)
+            profile['exists'] = profile_path.exists()
+        
+        return profiles
+    
+    def create_profile(self, alias: str) -> Dict[str, Any]:
+        """
+        Crea un nuevo perfil con el alias especificado.
+        
+        Args:
+            alias: Nombre descriptivo del perfil
+            
+        Returns:
+            Dict con los datos del perfil creado
+        """
+        profiles = self._load_profiles()
+        
+        # Generar UUID único
+        profile_id = str(uuid.uuid4())
+        profile_path = self.workers_dir / profile_id
+        
+        # Crear carpeta del perfil
+        profile_path.mkdir(parents=True, exist_ok=True)
+        
+        # Crear registro del perfil
+        profile_data = {
+            "id": profile_id,
+            "alias": alias,
+            "created_at": datetime.now().isoformat(),
+            "linked_account": None
+        }
+        
+        profiles.append(profile_data)
+        self._save_profiles(profiles)
+        
+        return {
+            **profile_data,
+            "path": str(profile_path)
+        }
+    
+    def launch_profile(self, profile_id: str, url: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Lanza Chrome con el perfil especificado.
+        
+        Args:
+            profile_id: ID del perfil a lanzar
+            url: URL opcional para abrir
+            
+        Returns:
+            Dict con información del proceso lanzado
+        """
+        # Verificar que el perfil existe
+        profile = self._find_profile(profile_id)
+        if not profile:
+            raise ValueError(f"Perfil no encontrado: {profile_id}")
+        
+        profile_path = self.workers_dir / profile_id
+        if not profile_path.exists():
+            raise RuntimeError(f"Directorio del perfil no existe: {profile_path}")
+        
+        # Detectar Chrome
+        chrome_path = self._find_chrome_executable()
+        if not chrome_path:
+            raise RuntimeError("No se encontró el ejecutable de Chrome")
+        
+        # Detectar extensión
+        extension_path = self._find_extension_path()
+        
+        # Construir argumentos de Chrome
+        chrome_args = [
+            chrome_path,
+            f"--user-data-dir={profile_path}",
+            "--no-first-run",
+            "--no-default-browser-check",
+        ]
+        
+        # Agregar extensión si existe
+        if extension_path:
+            chrome_args.append(f"--load-extension={extension_path}")
+        
+        # Agregar URL
+        if url:
+            if url.startswith("http://") or url.startswith("https://"):
+                chrome_args.append(f"--app={url}")
+            else:
+                chrome_args.append(url)
+        
+        # Lanzar proceso en modo detached
+        if platform.system() == "Windows":
+            process = subprocess.Popen(
+                chrome_args,
+                creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+        else:
+            process = subprocess.Popen(
+                chrome_args,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True
+            )
+        
+        return {
+            "profile_id": profile_id,
+            "alias": profile.get('alias'),
+            "pid": process.pid,
+            "url": url,
+            "chrome_path": chrome_path,
+            "extension_loaded": extension_path is not None
+        }
+    
+    def destroy_profile(self, profile_id: str) -> Dict[str, Any]:
+        """
+        Elimina un perfil y sus datos del disco.
+        
+        Args:
+            profile_id: ID del perfil a eliminar
+            
+        Returns:
+            Dict con información de la eliminación
+        """
+        profiles = self._load_profiles()
+        
+        # Buscar y eliminar del JSON
+        profile_found = None
+        updated_profiles = []
+        
+        for profile in profiles:
+            if profile.get('id') == profile_id:
+                profile_found = profile
+            else:
+                updated_profiles.append(profile)
+        
+        if not profile_found:
+            raise ValueError(f"Perfil no encontrado: {profile_id}")
+        
+        # Eliminar carpeta física
+        profile_path = self.workers_dir / profile_id
+        deleted_files = 0
+        
+        if profile_path.exists():
+            # Contar archivos antes de borrar
+            try:
+                deleted_files = sum(1 for _ in profile_path.rglob('*') if _.is_file())
+                shutil.rmtree(profile_path)
+            except Exception as e:
+                raise RuntimeError(f"Error al eliminar carpeta: {e}")
+        
+        # Guardar cambios en JSON
+        self._save_profiles(updated_profiles)
+        
+        return {
+            "profile_id": profile_id,
+            "alias": profile_found.get('alias'),
+            "deleted_files": deleted_files
+        }
+    
+    def set_account(self, profile_id: str, email: Optional[str]) -> Dict[str, Any]:
+        """
+        Asocia o desasocia una cuenta de email al perfil.
+        
+        Args:
+            profile_id: ID del perfil
+            email: Email a asociar (None para desasociar)
+            
+        Returns:
+            Dict con los datos actualizados del perfil
+        """
+        profiles = self._load_profiles()
+        
+        profile_found = None
+        for profile in profiles:
+            if profile.get('id') == profile_id:
+                profile['linked_account'] = email
+                profile_found = profile
+                break
+        
+        if not profile_found:
+            raise ValueError(f"Perfil no encontrado: {profile_id}")
+        
+        self._save_profiles(profiles)
+        
+        return {
+            "profile_id": profile_id,
+            "alias": profile_found.get('alias'),
+            "linked_account": email
+        }
+    
+    def _find_chrome_executable(self) -> Optional[str]:
+        """Busca el ejecutable de Chrome según el sistema operativo"""
+        system = platform.system()
+        
+        possible_paths = []
+        
+        if system == "Windows":
+            possible_paths = [
+                os.path.join(os.environ.get("ProgramFiles", ""), "Google", "Chrome", "Application", "chrome.exe"),
+                os.path.join(os.environ.get("ProgramFiles(x86)", ""), "Google", "Chrome", "Application", "chrome.exe"),
+                os.path.join(os.environ.get("LOCALAPPDATA", ""), "Google", "Chrome", "Application", "chrome.exe"),
+            ]
+        
+        elif system == "Darwin":  # macOS
+            possible_paths = [
+                "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            ]
+        
+        else:  # Linux
+            possible_paths = [
+                "/usr/bin/google-chrome",
+                "/usr/bin/google-chrome-stable",
+                "/usr/bin/chromium",
+                "/usr/bin/chromium-browser",
+            ]
+        
+        # Buscar el primer ejecutable que existe
+        for path in possible_paths:
+            if os.path.exists(path):
+                return path
+        
+        return None
+    
+    def _find_extension_path(self) -> Optional[str]:
+        """
+        Busca la ruta de la extensión Bloom.
+        Orden de búsqueda:
+        1. Ruta relativa de desarrollo: installer/chrome-extension/src
+        2. Variable de entorno BLOOM_EXTENSION_PATH
+        3. Ruta de producción (recursos empaquetados)
+        """
+        # 1. Intentar ruta relativa de desarrollo
+        # Asumiendo que brain/ está en la raíz del proyecto
+        current_file = Path(__file__)  # brain/core/browser/profile_manager.py
+        project_root = current_file.parent.parent.parent.parent  # Subir 4 niveles
+        dev_extension_path = project_root / "installer" / "chrome-extension" / "src"
+        
+        if dev_extension_path.exists() and (dev_extension_path / "manifest.json").exists():
+            return str(dev_extension_path)
+        
+        # 2. Variable de entorno personalizada
+        env_path = os.environ.get("BLOOM_EXTENSION_PATH")
+        if env_path:
+            env_extension_path = Path(env_path)
+            if env_extension_path.exists() and (env_extension_path / "manifest.json").exists():
+                return str(env_extension_path)
+        
+        # 3. TODO: Ruta de producción (recursos empaquetados)
+        # Aquí se buscaría en el directorio de instalación de la app
+        
+        return None

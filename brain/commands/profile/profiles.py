@@ -1,0 +1,305 @@
+"""
+Comandos para gestión de perfiles de Chrome (Workers).
+Organiza los comandos de creación, listado, lanzamiento y destrucción de perfiles.
+"""
+
+import typer
+from typing import Optional
+from brain.cli.base import BaseCommand, CommandMetadata
+from brain.cli.categories import CommandCategory
+
+
+class ProfilesListCommand(BaseCommand):
+    """Lista todos los perfiles de Workers existentes."""
+    
+    def metadata(self) -> CommandMetadata:
+        return CommandMetadata(
+            name="list",
+            category=CommandCategory.PROFILE,
+            version="1.0.0",
+            description="Lista todos los perfiles de Chrome Workers",
+            examples=[
+                "brain profile list",
+                "brain profile list --json"
+            ]
+        )
+
+    def register(self, app: typer.Typer) -> None:
+        @app.command(name="list")
+        def list_profiles(ctx: typer.Context):
+            """Lista todos los perfiles existentes con su información."""
+            gc = ctx.obj
+            if gc is None:
+                from brain.shared.context import GlobalContext
+                gc = GlobalContext()
+            
+            try:
+                from brain.core.browser.profile_manager import ProfileManager
+                
+                if gc.verbose:
+                    typer.echo("🔍 Cargando perfiles...", err=True)
+                
+                pm = ProfileManager()
+                profiles = pm.list_profiles()
+                
+                result = {
+                    "status": "success",
+                    "operation": "list",
+                    "data": {"profiles": profiles, "count": len(profiles)}
+                }
+                
+                gc.output(result, self._render_list)
+            except Exception as e:
+                self._handle_error(gc, f"Error al listar perfiles: {str(e)}")
+
+    def _render_list(self, data: dict) -> None:
+        """Renderiza la lista de perfiles en formato humano."""
+        profiles = data.get("profiles", [])
+        
+        if not profiles:
+            typer.echo("\n📋 No hay perfiles creados")
+            typer.echo("💡 Crea uno con: brain profile create <alias>\n")
+            return
+        
+        typer.echo(f"\n📋 Perfiles de Workers ({data['count']} total)\n")
+        typer.echo(f"{'Estado':<8} {'ID':<38} {'Alias':<20} {'Cuenta':<30} {'Creado'}")
+        typer.echo("-" * 130)
+        
+        for p in profiles:
+            exists = p.get('exists', False)
+            status = "✓ Activo" if exists else "✗ Borrado"
+            profile_id = p.get('id', 'N/A')[:36]
+            alias = p.get('alias', 'N/A')[:18]
+            account = p.get('linked_account') or '-'
+            created = p.get('created_at', 'N/A')[:10]
+            typer.echo(f"{status:<8} {profile_id} {alias:<20} {account:<30} {created}")
+        
+        typer.echo()
+
+    def _handle_error(self, gc, message: str):
+        """Manejo unificado de errores."""
+        if gc.json_mode:
+            import json
+            typer.echo(json.dumps({"status": "error", "message": message}))
+        else:
+            typer.echo(f"❌ {message}", err=True)
+        raise typer.Exit(code=1)
+
+
+class ProfilesCreateCommand(BaseCommand):
+    """Crea un nuevo perfil de Chrome Worker."""
+    
+    def metadata(self) -> CommandMetadata:
+        return CommandMetadata(
+            name="create",
+            category=CommandCategory.PROFILE,
+            version="1.0.0",
+            description="Crea un nuevo perfil de Chrome aislado",
+            examples=[
+                "brain profile create 'ChatGPT Work'",
+                "brain profile create 'Claude Personal' --json"
+            ]
+        )
+
+    def register(self, app: typer.Typer) -> None:
+        @app.command(name="create")
+        def create_profile(
+            ctx: typer.Context,
+            alias: str = typer.Argument(..., help="Nombre descriptivo del perfil")
+        ):
+            """Crea un nuevo perfil con el alias especificado."""
+            gc = ctx.obj
+            if gc is None:
+                from brain.shared.context import GlobalContext
+                gc = GlobalContext()
+            
+            try:
+                from brain.core.browser.profile_manager import ProfileManager
+                
+                if gc.verbose:
+                    typer.echo(f"🔨 Creando perfil '{alias}'...", err=True)
+                
+                pm = ProfileManager()
+                profile_data = pm.create_profile(alias)
+                
+                result = {
+                    "status": "success",
+                    "operation": "create",
+                    "data": profile_data
+                }
+                
+                gc.output(result, self._render_create)
+            except Exception as e:
+                self._handle_error(gc, f"Error al crear perfil: {str(e)}")
+
+    def _render_create(self, data: dict) -> None:
+        """Renderiza la confirmación de creación."""
+        typer.echo(f"\n✅ Perfil creado exitosamente")
+        typer.echo(f"   ID:    {data.get('id')}")
+        typer.echo(f"   Alias: {data.get('alias')}")
+        typer.echo(f"   Ruta:  {data.get('path')}")
+        typer.echo(f"\n💡 Lanza con: brain profile launch {data.get('id')[:8]}...\n")
+
+    def _handle_error(self, gc, message: str):
+        """Manejo unificado de errores."""
+        if gc.json_mode:
+            import json
+            typer.echo(json.dumps({"status": "error", "message": message}))
+        else:
+            typer.echo(f"❌ {message}", err=True)
+        raise typer.Exit(code=1)
+
+
+class ProfilesLaunchCommand(BaseCommand):
+    """Lanza Chrome con un perfil específico."""
+    
+    def metadata(self) -> CommandMetadata:
+        return CommandMetadata(
+            name="launch",
+            category=CommandCategory.PROFILE,
+            version="1.0.0",
+            description="Lanza Chrome con un perfil de Worker",
+            examples=[
+                "brain profile launch <profile-id>",
+                "brain profile launch <profile-id> --url https://chatgpt.com",
+                "brain profile launch <profile-id> --url https://claude.ai"
+            ]
+        )
+
+    def register(self, app: typer.Typer) -> None:
+        @app.command(name="launch")
+        def launch_profile(
+            ctx: typer.Context,
+            profile_id: str = typer.Argument(..., help="ID del perfil a lanzar"),
+            url: Optional[str] = typer.Option(None, "--url", help="URL inicial o modo App")
+        ):
+            """Lanza Chrome con el perfil especificado y la extensión Bloom."""
+            gc = ctx.obj
+            if gc is None:
+                from brain.shared.context import GlobalContext
+                gc = GlobalContext()
+            
+            try:
+                from brain.core.browser.profile_manager import ProfileManager
+                
+                if gc.verbose:
+                    typer.echo(f"🚀 Lanzando perfil {profile_id}...", err=True)
+                
+                pm = ProfileManager()
+                launch_data = pm.launch_profile(profile_id, url)
+                
+                result = {
+                    "status": "success",
+                    "operation": "launch",
+                    "data": launch_data
+                }
+                
+                gc.output(result, self._render_launch)
+            except Exception as e:
+                self._handle_error(gc, f"Error al lanzar perfil: {str(e)}")
+
+    def _render_launch(self, data: dict) -> None:
+        """Renderiza la confirmación de lanzamiento."""
+        typer.echo(f"\n🚀 Chrome lanzado exitosamente")
+        typer.echo(f"   Perfil: {data.get('alias', 'N/A')} ({data.get('profile_id')[:8]}...)")
+        
+        if data.get('url'):
+            typer.echo(f"   URL:    {data.get('url')}")
+        
+        typer.echo(f"   PID:    {data.get('pid')}")
+        
+        if data.get('extension_loaded'):
+            typer.echo("   ✅ Extensión Bloom cargada correctamente")
+        else:
+            typer.echo("   ⚠️  Extensión Bloom no encontrada")
+            typer.echo("      Tip: Establece BLOOM_EXTENSION_PATH o ejecuta desde el proyecto")
+        
+        typer.echo()
+
+    def _handle_error(self, gc, message: str):
+        """Manejo unificado de errores."""
+        if gc.json_mode:
+            import json
+            typer.echo(json.dumps({"status": "error", "message": message}))
+        else:
+            typer.echo(f"❌ {message}", err=True)
+        raise typer.Exit(code=1)
+
+
+class ProfilesDestroyCommand(BaseCommand):
+    """Elimina un perfil y sus datos del disco."""
+    
+    def metadata(self) -> CommandMetadata:
+        return CommandMetadata(
+            name="destroy",
+            category=CommandCategory.PROFILE,
+            version="1.0.0",
+            description="Elimina un perfil y todos sus datos",
+            examples=[
+                "brain profile destroy <profile-id>",
+                "brain profile destroy <profile-id> --force"
+            ]
+        )
+
+    def register(self, app: typer.Typer) -> None:
+        @app.command(name="destroy")
+        def destroy_profile(
+            ctx: typer.Context,
+            profile_id: str = typer.Argument(..., help="ID del perfil a eliminar"),
+            force: bool = typer.Option(False, "--force", "-f", help="Forzar sin confirmación")
+        ):
+            """Elimina un perfil y sus datos. Requiere confirmación a menos que se use --force."""
+            gc = ctx.obj
+            if gc is None:
+                from brain.shared.context import GlobalContext
+                gc = GlobalContext()
+            
+            try:
+                from brain.core.browser.profile_manager import ProfileManager
+                
+                pm = ProfileManager()
+                
+                # Confirmación interactiva (solo en modo no-JSON)
+                if not force and not gc.json_mode:
+                    if gc.verbose:
+                        typer.echo(f"⚠️  Preparando eliminación de perfil {profile_id}...", err=True)
+                    
+                    confirm = typer.confirm(
+                        f"⚠️  ¿Eliminar perfil {profile_id}? Esta acción es IRREVERSIBLE"
+                    )
+                    if not confirm:
+                        typer.echo("❌ Operación cancelada por el usuario")
+                        raise typer.Exit(0)
+                
+                if gc.verbose:
+                    typer.echo(f"🗑️  Eliminando perfil...", err=True)
+                
+                destroy_data = pm.destroy_profile(profile_id)
+                
+                result = {
+                    "status": "success",
+                    "operation": "destroy",
+                    "data": destroy_data
+                }
+                
+                gc.output(result, self._render_destroy)
+            except typer.Exit:
+                raise
+            except Exception as e:
+                self._handle_error(gc, f"Error al eliminar perfil: {str(e)}")
+
+    def _render_destroy(self, data: dict) -> None:
+        """Renderiza la confirmación de eliminación."""
+        typer.echo(f"\n🗑️  Perfil eliminado correctamente")
+        typer.echo(f"   ID:       {data.get('profile_id')}")
+        typer.echo(f"   Alias:    {data.get('alias', 'N/A')}")
+        typer.echo(f"   Archivos: {data.get('deleted_files', 0)} eliminados\n")
+
+    def _handle_error(self, gc, message: str):
+        """Manejo unificado de errores."""
+        if gc.json_mode:
+            import json
+            typer.echo(json.dumps({"status": "error", "message": message}))
+        else:
+            typer.echo(f"❌ {message}", err=True)
+        raise typer.Exit(code=1)
