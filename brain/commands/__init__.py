@@ -38,6 +38,8 @@ def discover_commands():
                         instance = obj()
                         registry.register(instance)
             except Exception as e:
-                print(f"⚠️  Error cargando {module_path}: {e}")
+                import traceback
+                print(f"[ERROR] Error loading {module_path}:")
+                traceback.print_exc()
     
     return registry

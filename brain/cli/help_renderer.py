@@ -108,6 +108,9 @@ def _detect_subsections(category: CommandCategory, commands: List[BaseCommand]) 
     Detect subsections based on command name prefixes.
     E.g., auth-login, auth-status → subsection "AUTENTICACIÓN"
     """
+    if not commands:
+        return {'': []}
+    
     subsections = defaultdict(list)
     
     # Mapping of prefixes to subsection titles
@@ -115,6 +118,7 @@ def _detect_subsections(category: CommandCategory, commands: List[BaseCommand]) 
         'auth': 'AUTENTICACIÓN',
         'repos': 'REPOSITORIOS',
         'orgs': 'ORGANIZACIONES',
+        'build': 'BUILD',
     }
     
     for cmd in commands:
@@ -126,19 +130,18 @@ def _detect_subsections(category: CommandCategory, commands: List[BaseCommand]) 
         else:
             subsections['_main'].append(cmd)
     
-    # If we only have _main or only have a few commands, don't create subsections
-    if len(subsections) == 1 or len(commands) <= 3:
-        return {'': commands}
+    # Si solo hay _main (no hay subsecciones), retornar sin encabezado
+    if len(subsections) == 1 and '_main' in subsections:
+        return {'': subsections['_main']}
     
-    # Remove empty _main if exists
-    result = {k: v for k, v in subsections.items() if k != '_main' or v}
-    
-    # If _main has items and there are subsections, add _main items to first subsection
-    if '_main' in result and len(result) > 1:
-        main_items = result.pop('_main')
-        # Create a general section or merge with first section
-        if main_items:
-            result['GENERAL'] = main_items
+    # Si hay subsecciones mixtas, preservar TODO
+    result = {}
+    for section_name, section_commands in subsections.items():
+        if section_name == '_main' and section_commands:
+            # Comandos sin guión van a GENERAL
+            result['GENERAL'] = section_commands
+        elif section_commands:  # Solo agregar si hay comandos
+            result[section_name] = section_commands
     
     return result
 
@@ -321,14 +324,27 @@ def _render_root_commands(console: Console, root_commands: List[BaseCommand]):
     ))
 
 
-def _render_categories(console: Console, categories: List[CommandCategory]):
+def _render_categories(console: Console, categories: List[CommandCategory], structure: HelpStructure):
+    """Render categories table with command counts."""
     table = Table(show_header=False, box=None, padding=(0, 2))
     table.add_column(style="green", no_wrap=True)
     table.add_column(style="dim")
+    table.add_column(style="cyan", justify="right")  # Nueva columna para contadores
+    
+    total_commands = 0
+    
     for cat in categories:
-        table.add_row(cat.value, cat.description)
+        # Contar comandos en esta categoría
+        count = len(structure.commands_by_category.get(cat, []))
+        total_commands += count
+        
+        table.add_row(cat.value, cat.description, f"{count} cmd{'s' if count != 1 else ''}")
+    
+    # Fila de total (sin líneas extras arriba/abajo)
+    table.add_row("", "", f"{'─' * 10}")
+    table.add_row("", "", f"{total_commands} cmds", style="bold cyan")
+    
     console.print(Panel(table, title="[bold]Categories[/bold]", border_style="green"))
-
 
 def render_help(registry: CommandRegistry):
     """Main help rendering function with prioritized category order."""
@@ -340,7 +356,7 @@ def render_help(registry: CommandRegistry):
     
     _render_options(console)
     console.print()
-    _render_categories(console, structure.categories)
+    _render_categories(console, structure.categories, structure)
     console.print()
     
     # Render root commands if any
@@ -362,7 +378,9 @@ def render_help(registry: CommandRegistry):
     # Render each category in priority order
     for category in priority_order:
         if category in structure.commands_by_category:
-            _render_category_panel(console, category, structure.commands_by_category[category])
+            commands = structure.commands_by_category[category]           
+               
+            _render_category_panel(console, category, commands)
             console.print()
     
     # Render any remaining categories not in priority list

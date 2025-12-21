@@ -43,10 +43,13 @@ bloom-development-extension/
     │   │   └── repos_list.py
     │   ├── init.py
     │   ├── intent/
+    │   │   ├── __init__.py
     │   │   ├── __pycache__/ [... cache]
     │   │   ├── build_payload.py
+    │   │   ├── create.py
     │   │   ├── plan.py
-    │   │   └── router_prompt.md
+    │   │   ├── router_prompt.md
+    │   │   └── update.py
     │   ├── nucleus/
     │   │   ├── __init__.py
     │   │   ├── __pycache__/ [... cache]
@@ -54,7 +57,10 @@ bloom-development-extension/
     │   │   ├── create_exp_intent.py
     │   │   ├── exp_discovery_turn.py
     │   │   ├── exp_export_findings.py
+    │   │   ├── info.py
     │   │   ├── link.py
+    │   │   ├── list_projects.py
+    │   │   ├── project_info.py
     │   │   ├── status.py
     │   │   └── sync.py
     │   ├── profile/
@@ -65,12 +71,14 @@ bloom-development-extension/
     │   └── project/
     │       ├── __pycache__/ [... cache]
     │       ├── add.py
+    │       ├── clone_and_add.py
     │       ├── detect.py
     │       ├── load.py
     │       └── nucleus.py
     ├── commands.md
     ├── core/
     │   ├── __pycache__/ [... cache]
+    │   ├── bloom_project_inspector.py
     │   ├── browser/
     │   │   └── profile_manager.py
     │   ├── context/
@@ -114,9 +122,13 @@ bloom-development-extension/
     │   │   ├── __init__.py
     │   │   ├── api_client.py
     │   │   └── models.py
+    │   ├── intent/
+    │   │   └── manager.py
+    │   ├── nucleus_inspector.py
     │   ├── nucleus_manager.py
     │   ├── project/
     │   │   ├── __init__.py
+    │   │   ├── clone_manager.py
     │   │   ├── linker.py
     │   │   ├── models.py
     │   │   └── scanner.py

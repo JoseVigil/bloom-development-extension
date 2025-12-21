@@ -20,6 +20,42 @@ Brain CLI - Modular system for Bloom
 
 +------------------------------------- NUCLEUS -------------------------------------+
 |                                                                                   |
+|  GENERAL                                                                          |
+|                                                                                   |
+|  CREATE - Initialize a new Bloom Nucleus project structure                        |
+|                                                                                   |
+|    python -m brain nucleus create [OPTIONS]                                       |
+|                                                                                   |
+|    Opciones:                                                                      |
+|      -o <VALUE>           Organization name                                       |
+|      -p                   Target path (default: current dir)                      |
+|      --output             Output directory name (legacy, kept for compatibility)  |
+|      --url                Organization URL                                        |
+|      -f                   Force overwrite existing directory                      |
+|                                                                                   |
+|  LINK - Link an existing folder as a Nucleus project                              |
+|                                                                                   |
+|    python -m brain nucleus link <PATH>                                            |
+|                                                                                   |
+|    Argumentos:                                                                    |
+|      <PATH>               Path to existing project                                |
+|                                                                                   |
+|  STATUS - Check if a directory is a valid Nucleus project                         |
+|                                                                                   |
+|    python -m brain nucleus status [OPTIONS]                                       |
+|                                                                                   |
+|    Opciones:                                                                      |
+|      -p                   Nucleus path                                            |
+|                                                                                   |
+|  SYNC - Synchronize projects (git pull) and rebuild nucleus cache                 |
+|                                                                                   |
+|    python -m brain nucleus sync [OPTIONS]                                         |
+|                                                                                   |
+|    Opciones:                                                                      |
+|      -p                   Nucleus path (default: current dir)                     |
+|      --skip-git           Skip git pull operations                                |
+|      -v                   Show detailed progress                                  |
+|                                                                                   |
 |  CREATE                                                                           |
 |                                                                                   |
 |  CREATE EXP INTENT - Create a new exploration intent in the nucleus               |
@@ -79,24 +115,6 @@ Brain CLI - Modular system for Bloom
 |    Opciones:                                                                      |
 |      -p                   Nucleus root path (default: current directory)          |
 |                                                                                   |
-|  GENERAL                                                                          |
-|                                                                                   |
-|  STATUS - Check if a directory is a valid Nucleus project                         |
-|                                                                                   |
-|    python -m brain nucleus status [OPTIONS]                                       |
-|                                                                                   |
-|    Opciones:                                                                      |
-|      -p                   Nucleus path                                            |
-|                                                                                   |
-|  SYNC - Synchronize projects (git pull) and rebuild nucleus cache                 |
-|                                                                                   |
-|    python -m brain nucleus sync [OPTIONS]                                         |
-|                                                                                   |
-|    Opciones:                                                                      |
-|      -p                   Nucleus path (default: current dir)                     |
-|      --skip-git           Skip git pull operations                                |
-|      -v                   Show detailed progress                                  |
-|                                                                                   |
 +-------------------- Nucleus project management and lifecycle ---------------------+
 
 +------------------------------------- CONTEXT -------------------------------------+
@@ -154,6 +172,32 @@ Brain CLI - Modular system for Bloom
 
 +------------------------------------- GITHUB --------------------------------------+
 |                                                                                   |
+|  GENERAL                                                                          |
+|                                                                                   |
+|  AUTH - Manage GitHub authentication                                              |
+|                                                                                   |
+|    python -m brain github auth                                                    |
+|                                                                                   |
+|  CLONE - Clone GitHub repository                                                  |
+|                                                                                   |
+|    python -m brain github clone <REPO> [OPTIONS]                                  |
+|                                                                                   |
+|    Argumentos:                                                                    |
+|      <REPO>               Repository (owner/repo or full URL)                     |
+|                                                                                   |
+|    Opciones:                                                                      |
+|      -p                   Target directory (defaults to repo name in current      |
+|  dir)                                                                             |
+|      --progress/--no-progress Show clone progress                                 |
+|                                                                                   |
+|  ORGS - List GitHub organizations                                                 |
+|                                                                                   |
+|    python -m brain github orgs                                                    |
+|                                                                                   |
+|  REPOS - Manage GitHub repositories                                               |
+|                                                                                   |
+|    python -m brain github repos                                                   |
+|                                                                                   |
 |  AUTENTICACIÓN                                                                    |
 |                                                                                   |
 |  AUTH LOGIN - Store GitHub authentication token                                   |
@@ -186,35 +230,11 @@ Brain CLI - Modular system for Bloom
 |    Opciones:                                                                      |
 |      --org                Organization name                                       |
 |                                                                                   |
-|  GENERAL                                                                          |
-|                                                                                   |
-|  AUTH - Manage GitHub authentication                                              |
-|                                                                                   |
-|    python -m brain github auth                                                    |
-|                                                                                   |
-|  CLONE - Clone GitHub repository                                                  |
-|                                                                                   |
-|    python -m brain github clone <REPO> [OPTIONS]                                  |
-|                                                                                   |
-|    Argumentos:                                                                    |
-|      <REPO>               Repository (owner/repo or full URL)                     |
-|                                                                                   |
-|    Opciones:                                                                      |
-|      -p                   Target directory (defaults to repo name in current      |
-|  dir)                                                                             |
-|      --progress/--no-progress Show clone progress                                 |
-|                                                                                   |
-|  ORGS - List GitHub organizations                                                 |
-|                                                                                   |
-|    python -m brain github orgs                                                    |
-|                                                                                   |
-|  REPOS - Manage GitHub repositories                                               |
-|                                                                                   |
-|    python -m brain github repos                                                   |
-|                                                                                   |
 +------------------ GitHub integration and repository management -------------------+
 
 +------------------------------------- PROJECT -------------------------------------+
+|                                                                                   |
+|  GENERAL                                                                          |
 |                                                                                   |
 |  ADD - Vincula un proyecto local existente a un Nucleus                           |
 |                                                                                   |
@@ -263,9 +283,27 @@ Brain CLI - Modular system for Bloom
 |                                                                                   |
 |    python -m brain project nucleus                                                |
 |                                                                                   |
+|  CLONE                                                                            |
+|                                                                                   |
+|  CLONE AND ADD - Clone a Git repository and automatically link it to the current  |
+|  Nucleus                                                                          |
+|                                                                                   |
+|    python -m brain project clone-and-add <REPO_URL> [OPTIONS]                     |
+|                                                                                   |
+|    Argumentos:                                                                    |
+|      <REPO_URL>           Git repository URL (HTTPS or SSH)                       |
+|                                                                                   |
+|    Opciones:                                                                      |
+|      -d                   Absolute path where to clone the repository. If not     |
+|  provided, clones to Nucleus root using repo name.                                |
+|                                                                                   |
 +------------------------ Project lifecycle and scaffolding ------------------------+
 
+
+[RENDERER DEBUG] INTENT commands: ['build-payload', 'create', 'plan', 'update']
 +------------------------------------- INTENT --------------------------------------+
+|                                                                                   |
+|  BUILD                                                                            |
 |                                                                                   |
 |  BUILD PAYLOAD - Build optimized AI payload from context plan                     |
 |                                                                                   |
@@ -274,6 +312,23 @@ Brain CLI - Modular system for Bloom
 |    Opciones:                                                                      |
 |      --plan <VALUE>       Path to context_plan.json                               |
 |      --output             Output path for payload (default: same dir as plan)     |
+|                                                                                   |
+|  GENERAL                                                                          |
+|                                                                                   |
+|  CREATE - Create a new development or documentation intent in the current         |
+|  project                                                                          |
+|                                                                                   |
+|    python -m brain intent create [OPTIONS]                                        |
+|                                                                                   |
+|    Opciones:                                                                      |
+|      -t <VALUE>           Intent type: 'dev' for development or 'doc' for         |
+|  documentation                                                                    |
+|      -n <VALUE>           Human-readable name for the intent (e.g., 'Fix login    |
+|  authentication flow')                                                            |
+|      -f                   Initial files to include in the intent context (can be  |
+|  repeated or comma-separated)                                                     |
+|      -p                   Path to the Nucleus (Bloom project root).               |
+|  Auto-detected if not provided.                                                   |
 |                                                                                   |
 |  PLAN - Generate AI context plan with intelligent file prioritization             |
 |                                                                                   |
@@ -284,9 +339,25 @@ Brain CLI - Modular system for Bloom
 |      --description <VALUE> Intent description                                     |
 |      --type               Intent type: dev, doc, or seed                          |
 |                                                                                   |
+|  UPDATE - Update an existing intent's name, files, or metadata                    |
+|                                                                                   |
+|    python -m brain intent update [OPTIONS]                                        |
+|                                                                                   |
+|    Opciones:                                                                      |
+|      -i                   UUID of the intent to update                            |
+|      -f                   Folder name of the intent (e.g., .fix-login-a1b2c3d4)   |
+|      -n                   New name for the intent (triggers folder rename)        |
+|      --files              Replace all initial files with this new list            |
+|      --add-files          Add files to the existing initial_files list            |
+|      --remove-files       Remove files from the initial_files list                |
+|      -p                   Path to the Nucleus (Bloom project root).               |
+|  Auto-detected if not provided.                                                   |
+|                                                                                   |
 +------------------ Intent execution system and context planning -------------------+
 
 +------------------------------------- GEMINI --------------------------------------+
+|                                                                                   |
+|  KEYS                                                                             |
 |                                                                                   |
 |  KEYS ADD - Add new Gemini API key                                                |
 |                                                                                   |

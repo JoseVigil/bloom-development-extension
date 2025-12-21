@@ -16,7 +16,10 @@ class CommandRegistry:
     def register(self, command: BaseCommand) -> None:
         """Registra un comando y lo indexa por categoría"""
         meta = command.metadata()
-        self._commands[meta.name] = command
+        
+        # Usar key única: category.name para evitar colisiones
+        unique_key = f"{meta.category.value}.{meta.name}"
+        self._commands[unique_key] = command
         
         if meta.category not in self._by_category:
             self._by_category[meta.category] = []
