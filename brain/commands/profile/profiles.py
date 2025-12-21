@@ -303,3 +303,255 @@ class ProfilesDestroyCommand(BaseCommand):
         else:
             typer.echo(f"❌ {message}", err=True)
         raise typer.Exit(code=1)
+
+
+class ProfilesLinkCommand(BaseCommand):
+    """Vincula una cuenta de email a un perfil de Chrome (DEPRECATED - usar accounts-register)."""
+    
+    def metadata(self) -> CommandMetadata:
+        return CommandMetadata(
+            name="link",
+            category=CommandCategory.PROFILE,
+            version="1.0.0",
+            description="Vincula una cuenta de email a un perfil de Chrome",
+            examples=[
+                "brain profile link <profile-id> <email>"
+            ]
+        )
+
+    def register(self, app: typer.Typer) -> None:
+        @app.command(name="link")
+        def link_profile(
+            ctx: typer.Context,
+            profile_id: str = typer.Argument(..., help="ID del perfil"),
+            email: str = typer.Argument(..., help="Email de la cuenta a vincular")
+        ):
+            """Vincula una cuenta de email a un perfil (DEPRECATED - usar accounts-register)."""
+            gc = ctx.obj
+            if gc is None:
+                from brain.shared.context import GlobalContext
+                gc = GlobalContext()
+            
+            try:
+                from brain.core.browser.profile_manager import ProfileManager
+                
+                if gc.verbose:
+                    typer.echo(f"🔗 Vinculando {email} a {profile_id}...", err=True)
+                
+                pm = ProfileManager()
+                link_data = pm.link_account(profile_id, email)
+                
+                result = {
+                    "status": "success",
+                    "operation": "link",
+                    "data": link_data
+                }
+                
+                gc.output(result, self._render_link)
+            except Exception as e:
+                self._handle_error(gc, f"Error al vincular cuenta: {str(e)}")
+
+    def _render_link(self, data: dict) -> None:
+        """Renderiza la confirmación de vinculación."""
+        typer.echo(f"\n🔗 Cuenta vinculada exitosamente")
+        typer.echo(f"   Perfil: {data.get('profile_id')[:8]}...")
+        typer.echo(f"   Email:  {data.get('email')}\n")
+
+    def _handle_error(self, gc, message: str):
+        """Manejo unificado de errores."""
+        if gc.json_mode:
+            import json
+            typer.echo(json.dumps({"status": "error", "message": message}))
+        else:
+            typer.echo(f"❌ {message}", err=True)
+        raise typer.Exit(code=1)
+
+
+class ProfilesUnlinkCommand(BaseCommand):
+    """Desvincula la cuenta asociada a un perfil (DEPRECATED - usar accounts-remove)."""
+    
+    def metadata(self) -> CommandMetadata:
+        return CommandMetadata(
+            name="unlink",
+            category=CommandCategory.PROFILE,
+            version="1.0.0",
+            description="Desvincula la cuenta asociada a un perfil",
+            examples=[
+                "brain profile unlink <profile-id>"
+            ]
+        )
+
+    def register(self, app: typer.Typer) -> None:
+        @app.command(name="unlink")
+        def unlink_profile(
+            ctx: typer.Context,
+            profile_id: str = typer.Argument(..., help="ID del perfil")
+        ):
+            """Desvincula la cuenta asociada a un perfil (DEPRECATED - usar accounts-remove)."""
+            gc = ctx.obj
+            if gc is None:
+                from brain.shared.context import GlobalContext
+                gc = GlobalContext()
+            
+            try:
+                from brain.core.browser.profile_manager import ProfileManager
+                
+                if gc.verbose:
+                    typer.echo(f"🔓 Desvinculando cuenta de {profile_id}...", err=True)
+                
+                pm = ProfileManager()
+                unlink_data = pm.unlink_account(profile_id)
+                
+                result = {
+                    "status": "success",
+                    "operation": "unlink",
+                    "data": unlink_data
+                }
+                
+                gc.output(result, self._render_unlink)
+            except Exception as e:
+                self._handle_error(gc, f"Error al desvincular cuenta: {str(e)}")
+
+    def _render_unlink(self, data: dict) -> None:
+        """Renderiza la confirmación de desvinculación."""
+        typer.echo(f"\n🔓 Cuenta desvinculada exitosamente")
+        typer.echo(f"   Perfil: {data.get('profile_id')[:8]}...\n")
+
+    def _handle_error(self, gc, message: str):
+        """Manejo unificado de errores."""
+        if gc.json_mode:
+            import json
+            typer.echo(json.dumps({"status": "error", "message": message}))
+        else:
+            typer.echo(f"❌ {message}", err=True)
+        raise typer.Exit(code=1)
+
+
+class ProfilesAccountsRegisterCommand(BaseCommand):
+    """Registra una nueva cuenta en un perfil de Chrome."""
+    
+    def metadata(self) -> CommandMetadata:
+        return CommandMetadata(
+            name="accounts-register",
+            category=CommandCategory.PROFILE,
+            version="1.0.0",
+            description="Registra una cuenta (Google, OpenAI, etc) en un perfil",
+            examples=[
+                "brain profile accounts-register <profile-id> google user@gmail.com",
+                "brain profile accounts-register <profile-id> openai user@example.com",
+                "brain profile accounts-register <profile-id> anthropic user@company.com"
+            ]
+        )
+
+    def register(self, app: typer.Typer) -> None:
+        @app.command(name="accounts-register")
+        def register_account(
+            ctx: typer.Context,
+            profile_id: str = typer.Argument(..., help="ID del perfil"),
+            provider: str = typer.Argument(..., help="Proveedor (google, openai, anthropic, etc)"),
+            email: str = typer.Argument(..., help="Email o identificador de la cuenta")
+        ):
+            """Registra una nueva cuenta en un perfil."""
+            gc = ctx.obj
+            if gc is None:
+                from brain.shared.context import GlobalContext
+                gc = GlobalContext()
+            
+            try:
+                from brain.core.browser.profile_manager import ProfileManager
+                
+                if gc.verbose:
+                    typer.echo(f"🔗 Registrando {provider} ({email}) en {profile_id}...", err=True)
+                
+                pm = ProfileManager()
+                result_data = pm.register_account(profile_id, provider, email)
+                
+                result = {
+                    "status": "success",
+                    "operation": "accounts-register",
+                    "data": result_data
+                }
+                
+                gc.output(result, self._render_register)
+            except Exception as e:
+                self._handle_error(gc, f"Error al registrar cuenta: {str(e)}")
+
+    def _render_register(self, data: dict) -> None:
+        """Renderiza la confirmación de registro."""
+        typer.echo(f"\n🔗 Cuenta registrada exitosamente")
+        typer.echo(f"   Perfil:   {data.get('profile_alias')} ({data.get('profile_id')[:8]}...)")
+        typer.echo(f"   Provider: {data.get('provider')}")
+        typer.echo(f"   Cuenta:   {data.get('identifier')}\n")
+
+    def _handle_error(self, gc, message: str):
+        """Manejo unificado de errores."""
+        if gc.json_mode:
+            import json
+            typer.echo(json.dumps({"status": "error", "message": message}))
+        else:
+            typer.echo(f"❌ {message}", err=True)
+        raise typer.Exit(code=1)
+
+
+class ProfilesAccountsRemoveCommand(BaseCommand):
+    """Remueve una cuenta de un perfil de Chrome."""
+    
+    def metadata(self) -> CommandMetadata:
+        return CommandMetadata(
+            name="accounts-remove",
+            category=CommandCategory.PROFILE,
+            version="1.0.0",
+            description="Remueve una cuenta registrada de un perfil",
+            examples=[
+                "brain profile accounts-remove <profile-id> google",
+                "brain profile accounts-remove <profile-id> openai"
+            ]
+        )
+
+    def register(self, app: typer.Typer) -> None:
+        @app.command(name="accounts-remove")
+        def remove_account(
+            ctx: typer.Context,
+            profile_id: str = typer.Argument(..., help="ID del perfil"),
+            provider: str = typer.Argument(..., help="Proveedor a remover")
+        ):
+            """Remueve una cuenta registrada de un perfil."""
+            gc = ctx.obj
+            if gc is None:
+                from brain.shared.context import GlobalContext
+                gc = GlobalContext()
+            
+            try:
+                from brain.core.browser.profile_manager import ProfileManager
+                
+                if gc.verbose:
+                    typer.echo(f"🔓 Removiendo {provider} de {profile_id}...", err=True)
+                
+                pm = ProfileManager()
+                result_data = pm.remove_account(profile_id, provider)
+                
+                result = {
+                    "status": "success",
+                    "operation": "accounts-remove",
+                    "data": result_data
+                }
+                
+                gc.output(result, self._render_remove)
+            except Exception as e:
+                self._handle_error(gc, f"Error al remover cuenta: {str(e)}")
+
+    def _render_remove(self, data: dict) -> None:
+        """Renderiza la confirmación de remoción."""
+        typer.echo(f"\n🔓 Cuenta removida exitosamente")
+        typer.echo(f"   Perfil:   {data.get('profile_id')[:8]}...")
+        typer.echo(f"   Provider: {data.get('provider')}")
+        typer.echo(f"   Cuentas restantes: {len(data.get('remaining_accounts', []))}\n")
+
+    def _handle_error(self, gc, message: str):
+        """Manejo unificado de errores."""
+        if gc.json_mode:
+            import json
+            typer.echo(json.dumps({"status": "error", "message": message}))
+        else:
+            typer.echo(f"❌ {message}", err=True)
+        raise typer.Exit(code=1)

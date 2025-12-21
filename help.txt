@@ -12,7 +12,9 @@ Brain CLI - Modular system for Bloom
 |   filesystem    File operations and directory analysis                            |
 |   gemini        Gemini AI key management and operations                           |
 |   github        GitHub integration and repository management                      |
+|   intent        Intent execution system and context planning                      |
 |   nucleus       Nucleus project management and lifecycle                          |
+|   profile       Chrome profile and AI account management                          |
 |   project       Project lifecycle and scaffolding                                 |
 +-----------------------------------------------------------------------------------+
 
@@ -60,29 +62,6 @@ Brain CLI - Modular system for Bloom
 |      --include-raw        Include raw turn data                                   |
 |                                                                                   |
 |  GENERAL                                                                          |
-|                                                                                   |
-|  CREATE - Initialize a new Bloom Nucleus project structure                        |
-|                                                                                   |
-|    python -m brain nucleus create -o <VALUE> [OPTIONS]                            |
-|                                                                                   |
-|    Parámetros requeridos:                                                         |
-|      -o                   Organization name                                       |
-|                                                                                   |
-|    Parámetros opcionales:                                                         |
-|      -p                   Target path (default: current dir)                      |
-|      --output             Output directory name (legacy, kept for compatibility)  |
-|      --url                Organization URL                                        |
-|      -f                   Force overwrite existing directory                      |
-|                                                                                   |
-|  LINK - Link an existing folder as a Nucleus project                              |
-|                                                                                   |
-|    python -m brain nucleus link <PATH>                                            |
-|                                                                                   |
-|    Parámetros requeridos:                                                         |
-|      <PATH>               Path to existing project                                |
-|                                                                                   |
-|    Argumentos:                                                                    |
-|      <PATH>               Path to existing project                                |
 |                                                                                   |
 |  STATUS - Check if a directory is a valid Nucleus project                         |
 |                                                                                   |
@@ -277,6 +256,32 @@ Brain CLI - Modular system for Bloom
 |                                                                                   |
 +------------------------ Project lifecycle and scaffolding ------------------------+
 
++------------------------------------- INTENT --------------------------------------+
+|                                                                                   |
+|  BUILD PAYLOAD - Build optimized AI payload from context plan                     |
+|                                                                                   |
+|    python -m brain intent build-payload --plan <VALUE> [OPTIONS]                  |
+|                                                                                   |
+|    Parámetros requeridos:                                                         |
+|      --plan               Path to context_plan.json                               |
+|                                                                                   |
+|    Parámetros opcionales:                                                         |
+|      --output             Output path for payload (default: same dir as plan)     |
+|                                                                                   |
+|  PLAN - Generate AI context plan with intelligent file prioritization             |
+|                                                                                   |
+|    python -m brain intent plan --intent-dir <VALUE> --description <VALUE>         |
+|  [OPTIONS]                                                                        |
+|                                                                                   |
+|    Parámetros requeridos:                                                         |
+|      --intent-dir         Intent directory path                                   |
+|      --description        Intent description                                      |
+|                                                                                   |
+|    Parámetros opcionales:                                                         |
+|      --type               Intent type: dev, doc, or seed                          |
+|                                                                                   |
++------------------ Intent execution system and context planning -------------------+
+
 +------------------------------------- GEMINI --------------------------------------+
 |                                                                                   |
 |  KEYS ADD - Add new Gemini API key                                                |
@@ -319,4 +324,76 @@ Brain CLI - Modular system for Bloom
 |      <PROFILE>            Profile name to validate                                |
 |                                                                                   |
 +--------------------- Gemini AI key management and operations ---------------------+
+
++------------------------------------- PROFILE -------------------------------------+
+|                                                                                   |
+|  ACCOUNTS - Gestión de cuentas vinculadas:                                        |
+|      register <ID> <PROVIDER> <EMAIL>                                             |
+|      remove   <ID> <PROVIDER>                                                     |
+|                                                                                   |
+|    python -m brain profile accounts                                               |
+|                                                                                   |
+|  CREATE - Crea un nuevo perfil de Chrome aislado                                  |
+|                                                                                   |
+|    python -m brain profile create <ALIAS>                                         |
+|                                                                                   |
+|    Parámetros requeridos:                                                         |
+|      <ALIAS>              Nombre descriptivo del perfil                           |
+|                                                                                   |
+|    Argumentos:                                                                    |
+|      <ALIAS>              Nombre descriptivo del perfil                           |
+|                                                                                   |
+|  DESTROY - Elimina un perfil y todos sus datos                                    |
+|                                                                                   |
+|    python -m brain profile destroy <PROFILE_ID> [OPTIONS]                         |
+|                                                                                   |
+|    Parámetros requeridos:                                                         |
+|      <PROFILE_ID>         ID del perfil a eliminar                                |
+|                                                                                   |
+|    Parámetros opcionales:                                                         |
+|      -f                   Forzar sin confirmación                                 |
+|                                                                                   |
+|    Argumentos:                                                                    |
+|      <PROFILE_ID>         ID del perfil a eliminar                                |
+|                                                                                   |
+|  LAUNCH - Lanza Chrome con un perfil de Worker                                    |
+|                                                                                   |
+|    python -m brain profile launch <PROFILE_ID> [OPTIONS]                          |
+|                                                                                   |
+|    Parámetros requeridos:                                                         |
+|      <PROFILE_ID>         ID del perfil a lanzar                                  |
+|                                                                                   |
+|    Parámetros opcionales:                                                         |
+|      --url                URL inicial o modo App                                  |
+|                                                                                   |
+|    Argumentos:                                                                    |
+|      <PROFILE_ID>         ID del perfil a lanzar                                  |
+|                                                                                   |
+|  LINK - Vincula una cuenta de email a un perfil de Chrome                         |
+|                                                                                   |
+|    python -m brain profile link <PROFILE_ID> <EMAIL>                              |
+|                                                                                   |
+|    Parámetros requeridos:                                                         |
+|      <PROFILE_ID>         ID del perfil                                           |
+|      <EMAIL>              Email de la cuenta a vincular                           |
+|                                                                                   |
+|    Argumentos:                                                                    |
+|      <PROFILE_ID>         ID del perfil                                           |
+|      <EMAIL>              Email de la cuenta a vincular                           |
+|                                                                                   |
+|  LIST - Lista todos los perfiles de Chrome Workers                                |
+|                                                                                   |
+|    python -m brain profile list                                                   |
+|                                                                                   |
+|  UNLINK - Desvincula la cuenta asociada a un perfil                               |
+|                                                                                   |
+|    python -m brain profile unlink <PROFILE_ID>                                    |
+|                                                                                   |
+|    Parámetros requeridos:                                                         |
+|      <PROFILE_ID>         ID del perfil                                           |
+|                                                                                   |
+|    Argumentos:                                                                    |
+|      <PROFILE_ID>         ID del perfil                                           |
+|                                                                                   |
++-------------------- Chrome profile and AI account management ---------------------+
 
