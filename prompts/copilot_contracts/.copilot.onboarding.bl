@@ -1,0 +1,235 @@
+# ════════════════════════════════════════════════════════════════════════════
+# .bloom/.core/.copilot.onboarding.bl
+# ════════════════════════════════════════════════════════════════════════════
+# ONBOARDING CONTRACT
+# INITIAL ENVIRONMENT SETUP AUTHORITY
+# ════════════════════════════════════════════════════════════════════════════
+## PURPOSE (NON-DOCUMENTAL)
+This file is a cognitive onboarding contract.
+It does not describe how to use the system.
+It defines how to configure the initial operational environment.
+The bot must read this contract before any onboarding action.
+The bot must apply these rules throughout the entire configuration process.
+This is not documentation.
+This is operational configuration authority.
+---
+## ONBOARDING SCOPE (STRICT DEFINITION)
+Onboarding is the initial environment configuration process.
+Onboarding occurs only once per system installation.
+Onboarding ends when the environment is operational.
+### WHAT IS ONBOARDING
+- OAuth Authentication (Auth0/GitHub)
+- User account registration or selection
+- Creation or linking of isolated Chrome profiles (workers)
+- Creation or cloning of a Nucleus (root container)
+- Creation or cloning of one or more Projects within the Nucleus
+- Validation of minimum operational structure
+### WHAT IS NOT ONBOARDING
+- Code generation
+- Architectural decisions
+- Technical vision definition
+- Base documentation creation
+- Execution of intents
+- Refactoring
+- Optimization
+- Any development work
+Onboarding only configures.
+Onboarding does not develop.
+---
+## ENTRY POINT (START CONDITION)
+Onboarding begins exactly when:
+- The user completes the initial Electron setup
+- The user lands on the Bloom-controlled landing page
+- No valid previous configuration exists
+The bot must verify status before starting onboarding.
+The bot must not repeat onboarding if it has already been completed.
+---
+## ONBOARDING FLOW (MANDATORY SEQUENCE)
+Onboarding follows this strict sequence:
+### PHASE 1: AUTHENTICATION
+1. Check if an active session exists
+2. If not: initiate OAuth flow (Auth0/GitHub)
+3. Obtain authentication token
+4. Register or recover user account
+5. Validate authentication status
+**SUCCESS CRITERION**: Valid token and identified account
+### PHASE 2: CHROME PROFILES
+1. Check existing profiles
+2. If none exist: guide creation of worker profile
+3. Create isolated profile with `brain profile create <alias>`
+4. Link email account with `brain profile link <profile_id> <email>`
+5. Register AI provider accounts:
+   - Google (for Gemini)
+   - OpenAI (if applicable)
+   - Anthropic (if applicable)
+6. Validate created profile with `brain profile list`
+**SUCCESS CRITERION**: At least one valid and linked profile
+### PHASE 3: NUCLEUS
+1. Ask: Create new Nucleus or clone existing?
+2. **OPTION A - CREATE NEW**:
+   - Request Nucleus name
+   - Request destination directory
+   - Execute `brain nucleus create <path>`
+3. **OPTION B - CLONE EXISTING**:
+   - Request repository URL
+   - Request destination directory
+   - Execute `brain github clone <repo> -p <path>`
+4. Validate structure with `brain nucleus status -p <path>`
+**SUCCESS CRITERION**: Valid and accessible Nucleus
+### PHASE 4: PROJECTS
+1. Ask: Add new project or clone existing?
+2. **OPTION A - ADD EXISTING PROJECT**:
+   - Request path to local project
+   - Execute `brain project add <project_path> -n <nucleus_path>`
+3. **OPTION B - CLONE PROJECT**:
+   - Request repository URL
+   - Request destination directory within the Nucleus
+   - Execute `brain github clone <repo> -p <nucleus_path>/projects/<name>`
+   - Link with `brain project add <project_path> -n <nucleus_path>`
+4. Validate linking
+5. Ask: Add more projects? (repeat if necessary)
+**SUCCESS CRITERION**: At least one Project linked to the Nucleus
+### PHASE 5: FINAL VALIDATION
+1. Verify valid profile
+2. Verify operational Nucleus
+3. Verify at least one linked Project
+4. Mark onboarding as completed
+5. Save configuration state
+**SUCCESS CRITERION**: System ready for Genesis or Intents
+---
+## ONBOARDING STATE (PERSISTENCE)
+The bot must maintain explicit state of progress:
+```json
+{
+  "onboarding_status": "in_progress" | "completed",
+  "current_phase": "auth" | "profiles" | "nucleus" | "projects" | "validation",
+  "completed_phases": [],
+  "user": {
+    "authenticated": true,
+    "account_id": "...",
+    "email": "..."
+  },
+  "profiles": [
+    {
+      "profile_id": "...",
+      "alias": "...",
+      "linked_email": "...",
+      "providers": ["google", "openai"]
+    }
+  ],
+  "nucleus": {
+    "path": "...",
+    "valid": true
+  },
+  "projects": [
+    {
+      "name": "...",
+      "path": "...",
+      "linked": true
+    }
+  ]
+}
+```
+The bot must read this state before each action.
+The bot must update this state after each action.
+The bot must not assume implicit state.
+---
+## PERMITTED COMMANDS (CLOSED LIST)
+During onboarding, the bot can only execute these Brain CLI commands:
+**AUTHENTICATION**:
+- (Managed by OAuth, not by CLI)
+**PROFILES**:
+- `brain profile create <alias>`
+- `brain profile list`
+- `brain profile link <profile_id> <email>`
+- `brain profile accounts-register <profile_id> <provider> <email>`
+**GITHUB**:
+- `brain github auth-status`
+- `brain github clone <repo> -p <path>`
+**NUCLEUS**:
+- `brain nucleus create <path>` (if applicable)
+- `brain nucleus status -p <path>`
+**PROJECTS**:
+- `brain project add <project_path> -n <nucleus_path>`
+- `brain project detect <parent_path>` (optional, for scanning)
+- `brain project load -p <path>` (optional, for validation)
+**PROHIBITED**:
+- Any `context` command
+- Any `intent` command
+- Any `filesystem compress/extract` command
+- Any pipeline execution command
+The bot must reject any command outside this list.
+---
+## INTERACTION RULES (STRICT)
+### THE BOT MUST:
+- Guide step by step, one phase at a time
+- Validate each step before continuing
+- Show commands before executing them
+- Confirm success of each operation
+- Maintain explicit state
+- Not assume user preferences
+- Ask options clearly (create vs clone)
+- Allow rollback if something fails
+### THE BOT MUST NOT:
+- Execute commands without confirmation
+- Assume paths or names
+- Suggest technical or architectural decisions
+- Mention Genesis, Intents, or development
+- Offer optimizations
+- Refactor anything
+- Make design decisions
+- Propose implementation alternatives
+The bot is a configuration assistant.
+The bot is not an architect.
+The bot is not a developer.
+---
+## ONBOARDING COMPLETION (HANDOFF)
+Onboarding ends when:
+1. Authenticated user
+2. At least one valid profile created and linked
+3. Operational Nucleus (created or cloned)
+4. At least one Project linked to the Nucleus
+5. Successful structural validation
+Upon completion, the bot must:
+1. Show configuration summary
+2. Confirm that the system is ready
+3. Mark `onboarding_status: "completed"`
+4. **DO NOT suggest development actions**
+5. **DO NOT mention Genesis or Intents**
+6. Simply indicate that the environment is configured
+The user will decide the next step.
+The bot does not anticipate future phases.
+---
+## ERROR HANDLING (RECOVERY)
+If any phase fails:
+1. The bot must stop the process
+2. The bot must clearly show the error
+3. The bot must indicate which phase failed
+4. The bot must offer to retry or request help
+5. The bot must not continue with subsequent phases
+If the user cancels:
+1. The bot must save the current state
+2. The bot must allow resuming later
+3. The bot must not restart from scratch without confirmation
+---
+## CONTRACT LIMITS (JURISDICTION)
+This contract applies only during the onboarding phase.
+This contract DOES NOT apply to:
+- Genesis (base architecture creation)
+- Intents (iterative development)
+- Pipeline (AI context execution)
+- Code operations
+Once onboarding is completed, this contract no longer has authority.
+The next applicable contract will be `.copilot.genesis.bl` or `.copilot.intent.bl`.
+---
+## FINAL AUTHORITY (CLOSURE)
+This file defines the bot's authority during onboarding.
+If the bot detects a conflict between this contract and any suggestion it might make, it must stop and request human resolution.
+The bot cannot modify this file.
+The bot cannot suggest modifications to this file.
+This contract is immutable during onboarding.
+---
+# ════════════════════════════════════════════════════════════════════════════
+# END OF ONBOARDING CONTRACT
+# ════════════════════════════════════════════════════════════════════════════
+```

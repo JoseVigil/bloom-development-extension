@@ -9,15 +9,15 @@
 
 This contract governs the one-time initialization phase of a Bloom-based project.
 
-GENESIS is a singular cognitive event that occurs exactly once per project.
-GENESIS establishes the initial documentation baseline required for operational intents.
+GENESIS is a singular cognitive event that occurs exactly once per Nucleus.
+GENESIS establishes the foundational cognitive structure required for operational intents.
 GENESIS is irreversible and must never execute after completion.
 
 This is NOT documentation.
 This is NOT an intent.
 This is NOT reusable logic.
 
-This is a cognitive execution boundary.
+This is a cognitive execution boundary that gives initial form to the system.
 
 ## EXECUTION WINDOW
 
@@ -26,15 +26,13 @@ GENESIS is authorized to execute IF AND ONLY IF:
 - Electron application has completed setup
 - User onboarding workflow has completed
 - GitHub authentication has succeeded
-- Nucleus has been created or cloned successfully
-- Project has been created or cloned successfully
 - No GENESIS completion marker exists in .bloom/state/
 
 GENESIS is PROHIBITED from executing if:
 
 - A completion marker file exists at .bloom/state/.genesis.complete
-- Any operational intent has already executed
-- Documentation baseline already exists
+- Any operational intent (DEV or DOC) has already executed
+- Project Strategy has already been materialized
 - GENESIS has been previously attempted and completed
 
 ## AUTHORITY AND LIMITS
@@ -45,34 +43,101 @@ GENESIS may read:
 
 - .bloom/core/.copilot.bootstrap.bl
 - .bloom/core/.copilot.intent.*.bl
-- Project metadata files created during onboarding
-- Repository README if cloned
-- Nucleus configuration files
+- User onboarding input (project type, domain, goals, stack)
 - GitHub repository metadata
+- Raw documentation provided during onboarding (repos, docs, markdown, notes)
 
 ### WRITE AUTHORITY
 
 GENESIS may create:
 
-- .bloom/docs/PROJECT_CONTEXT.md
-- .bloom/docs/ARCHITECTURE_BASELINE.md
-- .bloom/docs/INITIAL_STATE.md
+- Nucleus structure and metadata
+- One or more Project structures
+- .bloom/docs/PROJECT_STRATEGY.md (explicit, non-implicit)
+- .bloom/docs/NUCLEUS_BASELINE.md
+- .bloom/docs/INITIAL_COGNITIVE_STATE.md
 - .bloom/state/.genesis.complete (completion marker)
 - .bloom/logs/genesis.execution.log
+
+GENESIS may execute:
+
+- `nucleus.sync` commands to materialize structure, metadata, and cross-references
+- Nucleus ⇄ Project synchronization operations (NOT as intents, but as valid side effects)
 
 ### ABSOLUTE PROHIBITIONS
 
 GENESIS must NEVER:
 
+- Generate or execute DEV intents
+- Generate or execute DOC intents
 - Modify source code files
 - Create or modify intent contracts
 - Execute build pipelines
 - Perform linting or formatting
 - Create test files
 - Modify package configuration files
-- Perform speculative architectural decisions
+- Perform detailed design decisions
 - Execute iterative refinement loops
-- Invoke health enforcement beyond existence verification
+- Interpret or plan based on ingested documentation
+- Make architectural recommendations
+- Produce code generation of any kind
+
+## COGNITIVE SCOPE
+
+GENESIS establishes cognitive form through:
+
+### Project Strategy Materialization
+
+GENESIS must create `.bloom/docs/PROJECT_STRATEGY.md` containing:
+
+- Product type (library, application, service, tool, etc.)
+- Domain and technical context
+- Explicit technical objectives
+- Expected stack (languages, frameworks, tools)
+- Technical constraints and boundaries
+- Evolution criteria and growth principles
+- Cross-project dependencies if applicable
+
+This file is EXPLICIT and MANDATORY.
+This file is NOT implicit, inferred, or optional.
+This file is the cognitive anchor for all future intents.
+
+### Nucleus Creation or Cloning
+
+GENESIS establishes the Nucleus:
+
+- Creates new Nucleus if starting from scratch
+- Clones existing Nucleus if provided
+- Executes `nucleus.sync` to materialize structure
+- Establishes metadata and cross-references
+- Validates Nucleus structural coherence
+
+### Project Creation or Cloning
+
+GENESIS establishes one or more Projects:
+
+- Creates new Project structures
+- Clones existing Projects if provided
+- Links Projects to Nucleus
+- Establishes Project metadata
+- Executes sync operations (Nucleus ⇄ Project)
+
+### Raw Documentation Ingestion
+
+GENESIS may ingest raw documentation ONLY as cognitive base:
+
+- Repository documentation
+- Markdown files
+- Technical notes
+- User-provided context
+
+Ingestion rules:
+
+- NO interpretation
+- NO planning
+- NO execution
+- NO decision-making
+- ONLY storage as reference material
 
 ## RELATIONSHIP TO OTHER CONTRACTS
 
@@ -81,8 +146,10 @@ GENESIS exists within the following hierarchy:
 BOOTSTRAP > GENESIS > INTENT
 
 BOOTSTRAP defines global authority and cognitive boundaries.
-GENESIS executes once to establish project initialization.
-INTENT contracts govern all subsequent operational work.
+GENESIS executes once to establish cognitive form and project strategy.
+INTENT contracts (DEV, DOC) govern all subsequent operational work.
+
+CRITICAL: No intent (DEV or DOC) can exist if GENESIS is not closed.
 
 GENESIS must NOT:
 
@@ -98,40 +165,42 @@ GENESIS operates in complete isolation from operational intent flows.
 
 GENESIS may produce the following artifacts:
 
-### PROJECT_CONTEXT.md
+### PROJECT_STRATEGY.md (MANDATORY)
 
-- Project name and description
-- Repository URL if applicable
-- Initial technology stack identification
-- User-provided project goals
-- Timestamp of initialization
+- Product type
+- Domain and technical context
+- Explicit technical objectives
+- Expected stack
+- Technical constraints
+- Evolution criteria
+- Timestamp of materialization
 
-### ARCHITECTURE_BASELINE.md
+### NUCLEUS_BASELINE.md
 
-- Detected file structure snapshot
-- Identified frameworks and dependencies
-- Configuration file inventory
-- Build system identification
-- No architectural recommendations
+- Nucleus structure snapshot
+- Cross-project references
+- Metadata inventory
+- Sync operation results
+- Structural coherence validation
 
-### INITIAL_STATE.md
+### INITIAL_COGNITIVE_STATE.md
 
-- List of files present at initialization
-- Detected source directories
-- Documentation directories if present
-- Configuration file locations
+- List of Projects created or cloned
+- Raw documentation ingested (references only)
+- Initial system topology
+- Cognitive boundaries established
 - No quality assessment
 
 ### Completion Marker
 
 - File: .bloom/state/.genesis.complete
-- Content: ISO timestamp of completion
-- Purpose: Prevent re-execution
+- Content: ISO timestamp of completion + `genesis.completed = true`
+- Purpose: Prevent re-execution and authorize intent execution
 
 ### Execution Log
 
 - File: .bloom/logs/genesis.execution.log
-- Content: Actions taken, files created, errors encountered
+- Content: Actions taken, files created, sync operations, errors encountered
 - Format: Structured log entries with timestamps
 
 ## PROHIBITIONS
@@ -142,7 +211,7 @@ GENESIS must NEVER perform:
 - Intent contract creation or modification
 - Architectural refactoring
 - Dependency updates
-- Code quality analysis beyond detection
+- Code quality analysis
 - Build execution
 - Test execution
 - Documentation generation beyond baseline artifacts
@@ -150,24 +219,30 @@ GENESIS must NEVER perform:
 - Speculative reasoning about future state
 - Auto-correction of detected inconsistencies
 - Pipeline orchestration
-- Health metric enforcement
+- Detailed design decisions
+- Intent execution of any kind (DEV or DOC)
 
 ## COMPLETION CRITERIA
 
 GENESIS is considered complete when ALL of the following exist:
 
-- .bloom/docs/PROJECT_CONTEXT.md created
-- .bloom/docs/ARCHITECTURE_BASELINE.md created
-- .bloom/docs/INITIAL_STATE.md created
-- .bloom/state/.genesis.complete marker created with valid timestamp
+- Nucleus created or cloned successfully
+- At least one Project created or cloned successfully
+- `nucleus.sync` executed successfully
+- .bloom/docs/PROJECT_STRATEGY.md created and validated
+- .bloom/docs/NUCLEUS_BASELINE.md created
+- .bloom/docs/INITIAL_COGNITIVE_STATE.md created
+- .bloom/state/.genesis.complete marker created with valid timestamp and `genesis.completed = true`
 - .bloom/logs/genesis.execution.log created with no fatal errors
 
 Once complete, GENESIS must:
 
+- Set `genesis.completed = true` in completion marker
 - Terminate immediately
 - Never re-execute regardless of conditions
 - Remain as historical record only
 - Have no authority over subsequent operations
+- Authorize intent execution (DEV or DOC)
 
 ## FAILURE HANDLING
 
@@ -199,7 +274,11 @@ If any required output cannot be created:
 
 Before creating completion marker, GENESIS must verify:
 
-- All three documentation files exist and contain non-zero content
+- PROJECT_STRATEGY.md exists and contains explicit strategy
+- NUCLEUS_BASELINE.md exists and contains structural snapshot
+- INITIAL_COGNITIVE_STATE.md exists and contains system topology
+- Nucleus and at least one Project exist and are structurally coherent
+- `nucleus.sync` completed successfully
 - Execution log exists and contains structured entries
 - No fatal errors were logged
 - All write operations succeeded
@@ -210,20 +289,45 @@ If any verification fails:
 - Report failure to user
 - Terminate
 
-## FINALITY
+## FINALITY AND IRREVERSIBILITY
 
-Once .bloom/state/.genesis.complete exists:
+Once .bloom/state/.genesis.complete exists with `genesis.completed = true`:
 
 - GENESIS has no further authority
 - This contract becomes historical record
-- All subsequent work is governed by INTENT contracts
+- All subsequent work is governed by INTENT contracts (DEV, DOC)
 - Re-execution is permanently prohibited
+- Intent execution is now authorized
+
+CRITICAL ENFORCEMENT:
+
+**No DEV intent can execute if genesis.completed ≠ true**
+**No DOC intent can execute if genesis.completed ≠ true**
 
 GENESIS is not a service.
 GENESIS is not a persistent process.
-GENESIS is a one-time cognitive boundary condition.
+GENESIS is not reversible.
+GENESIS is a one-time cognitive boundary condition that gives form to the system.
 
 After completion, only INTENT contracts have operational authority.
+
+## COGNITIVE ANCHOR
+
+GENESIS establishes:
+
+- System identity (Nucleus + Projects)
+- Strategic direction (PROJECT_STRATEGY.md)
+- Minimal stable context (raw documentation as reference)
+- Structural coherence (sync operations)
+- Cognitive boundaries (no planning, no execution, no detailed design)
+
+The result is a system that is:
+
+- Structurally coherent
+- Strategically explicit
+- Contextually grounded
+- Cognitively bounded
+- Ready for intent-based evolution
 
 # ════════════════════════════════════════════════════════════════════════════
 # END OF GENESIS CONTRACT
