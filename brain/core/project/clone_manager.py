@@ -31,7 +31,11 @@ class CloneAndLinkManager:
     def execute(
         self,
         repo_url: str,
-        dest_path: Optional[str] = None
+        dest_path: Optional[str] = None,
+        nucleus_path: Optional[str] = None,
+        custom_name: Optional[str] = None,
+        force_strategy: Optional[str] = None,
+        description: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Execute the complete clone-and-link operation.
@@ -39,6 +43,10 @@ class CloneAndLinkManager:
         Args:
             repo_url: Git repository URL (HTTPS or SSH format)
             dest_path: Optional absolute path for cloning. If None, uses Nucleus root + repo name
+            nucleus_path: Optional explicit Nucleus path. If None, auto-detects from current directory
+            custom_name: Optional custom name for the project. If None, uses repo name
+            force_strategy: Optional technology strategy to force. If None, auto-detects
+            description: Optional project description
             
         Returns:
             Dictionary containing:
@@ -60,13 +68,18 @@ class CloneAndLinkManager:
         
         repo_url = repo_url.strip()
         
-        # Step 1: Detect Nucleus
-        nucleus_path = self._detect_nucleus()
-        if not nucleus_path:
-            raise FileNotFoundError(
-                "No Nucleus found. Please run this command from within a Nucleus "
-                "or one of its subdirectories."
-            )
+        # Step 1: Detect or validate Nucleus
+        if nucleus_path:
+            detected_nucleus = Path(nucleus_path).resolve()
+            # Validate it's a valid Nucleus
+            self._validate_nucleus(detected_nucleus)
+        else:
+            detected_nucleus = self._detect_nucleus()
+            if not detected_nucleus:
+                raise FileNotFoundError(
+                    "No Nucleus found. Please run this command from within a Nucleus "
+                    "or one of its subdirectories, or specify --nucleus-path explicitly."
+                )
         
         # Step 2: Determine destination path
         repo_name = self._extract_repo_name(repo_url)
@@ -74,7 +87,7 @@ class CloneAndLinkManager:
             final_dest = Path(dest_path).resolve()
         else:
             # Clone to parent of Nucleus root (sibling to Nucleus)
-            nucleus_parent = nucleus_path.parent
+            nucleus_parent = detected_nucleus.parent
             final_dest = nucleus_parent / repo_name
         
         # Step 3: Check destination doesn't exist
@@ -93,31 +106,72 @@ class CloneAndLinkManager:
                 f"Clone operation completed but directory is empty or missing: {final_dest}"
             )
         
-        # Step 6: Detect technologies
-        detected_strategies = self._detect_technologies(final_dest)
+        # Step 6: Detect technologies (unless forced)
+        if force_strategy:
+            detected_strategies = [force_strategy]
+        else:
+            detected_strategies = self._detect_technologies(final_dest)
         
-        # Step 7: Link to Nucleus
-        self._link_to_nucleus(final_dest, nucleus_path)
+        # Determine final strategy to use for linking
+        final_strategy = force_strategy or (detected_strategies[0] if detected_strategies else "generic")
+        
+        # Step 7: Link to Nucleus using ProjectLinker
+        project_name = custom_name or repo_name
+        self._link_to_nucleus(
+            project_path=final_dest,
+            nucleus_path=detected_nucleus,
+            name=project_name,
+            strategy=final_strategy,
+            description=description,
+            repo_url=repo_url
+        )
         
         # Step 8: Return structured data
         return {
             "project_path": str(final_dest),
-            "project_name": repo_name,
-            "nucleus_path": str(nucleus_path),
+            "project_name": project_name,
+            "nucleus_path": str(detected_nucleus),
             "detected_strategies": detected_strategies,
             "linked": True,
             "metadata": {
                 "repo_url": repo_url,
                 "clone_method": "custom" if dest_path else "auto",
-                "strategies_count": len(detected_strategies)
+                "strategies_count": len(detected_strategies),
+                "forced_strategy": force_strategy is not None,
+                "custom_name": custom_name is not None,
+                "has_description": description is not None
             }
         }
+    
+    def _validate_nucleus(self, nucleus_path: Path) -> None:
+        """
+        Validate that the given path is a valid Nucleus.
+        
+        Args:
+            nucleus_path: Path to validate
+            
+        Raises:
+            FileNotFoundError: If path doesn't exist
+            ValueError: If path is not a valid Nucleus
+        """
+        if not nucleus_path.exists():
+            raise FileNotFoundError(f"Nucleus path does not exist: {nucleus_path}")
+        
+        if not nucleus_path.is_dir():
+            raise ValueError(f"Nucleus path is not a directory: {nucleus_path}")
+        
+        # Check for .bloom/core/nucleus-config.json
+        nucleus_config = nucleus_path / ".bloom" / "core" / "nucleus-config.json"
+        if not nucleus_config.exists():
+            raise ValueError(
+                f"Not a valid Nucleus project (missing nucleus-config.json): {nucleus_path}"
+            )
     
     def _detect_nucleus(self) -> Optional[Path]:
         """
         Detect the nearest Nucleus by searching upward from current directory.
         
-        Looks for `.bloom/.nucleus-*` directories in parent hierarchy.
+        Looks for `.bloom/core/nucleus-config.json` in parent hierarchy.
         
         Returns:
             Path to Nucleus root, or None if not found
@@ -126,12 +180,9 @@ class CloneAndLinkManager:
         
         # Search upward through directory tree
         for parent in [current] + list(current.parents):
-            bloom_dir = parent / ".bloom"
-            if bloom_dir.exists() and bloom_dir.is_dir():
-                # Look for .nucleus-* directories
-                for item in bloom_dir.iterdir():
-                    if item.is_dir() and item.name.startswith(".nucleus-"):
-                        return parent  # Return the root containing .bloom
+            nucleus_config = parent / ".bloom" / "core" / "nucleus-config.json"
+            if nucleus_config.exists():
+                return parent  # Return the root containing .bloom
         
         return None
     
@@ -241,11 +292,14 @@ class CloneAndLinkManager:
         try:
             from brain.core.context.detector import MultiStackDetector
             
-            detector = MultiStackDetector()
-            strategies = detector.detect(project_path)
+            detector = MultiStackDetector(project_path)
+            detected = detector.detect()
             
-            # Extract strategy names
-            strategy_names = [s.__class__.__name__ for s in strategies]
+            if not detected:
+                return []
+            
+            # Extract strategy types from detected modules
+            strategy_names = [module["type"] for module in detected]
             
             return strategy_names
             
@@ -254,15 +308,25 @@ class CloneAndLinkManager:
             # but log that detection failed
             return []
     
-    def _link_to_nucleus(self, project_path: Path, nucleus_path: Path) -> None:
+    def _link_to_nucleus(
+        self,
+        project_path: Path,
+        nucleus_path: Path,
+        name: str,
+        strategy: str,
+        description: Optional[str],
+        repo_url: str
+    ) -> None:
         """
-        Link the project to the Nucleus.
-        
-        Uses ProjectLinker from brain.core.project.linker.
+        Link the project to the Nucleus using ProjectLinker.
         
         Args:
             project_path: Path to the project to link
             nucleus_path: Path to the Nucleus
+            name: Name for the project
+            strategy: Technology strategy
+            description: Optional project description
+            repo_url: Git repository URL
             
         Raises:
             RuntimeError: If linking fails
@@ -270,10 +334,17 @@ class CloneAndLinkManager:
         try:
             from brain.core.project.linker import ProjectLinker
             
-            linker = ProjectLinker()
-            linker.link(
+            linker = ProjectLinker(
                 project_path=project_path,
                 nucleus_path=nucleus_path
+            )
+            
+            linker.link(
+                name=name,
+                strategy=strategy,
+                description=description,
+                repo_url=repo_url,
+                verbose=False
             )
             
         except Exception as e:

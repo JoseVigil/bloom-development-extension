@@ -45,6 +45,27 @@ class CloneAndAddCommand(BaseCommand):
                 "--dest-path",
                 "-d",
                 help="Absolute path where to clone the repository. If not provided, clones to Nucleus root using repo name."
+            ),
+            nucleus_path: Optional[str] = typer.Option(
+                None,
+                "--nucleus-path",
+                "-n",
+                help="Path to the Nucleus project. Auto-detected from current directory if not provided."
+            ),
+            name: Optional[str] = typer.Option(
+                None,
+                "--name",
+                help="Custom name for the project (default: repository name)"
+            ),
+            strategy: Optional[str] = typer.Option(
+                None,
+                "--strategy",
+                help="Force specific technology strategy (e.g., python, typescript, android)"
+            ),
+            description: Optional[str] = typer.Option(
+                None,
+                "--description",
+                help="Project description"
             )
         ):
             """
@@ -71,20 +92,33 @@ class CloneAndAddCommand(BaseCommand):
                 
                 # 3. Verbose logging
                 if gc.verbose:
-                    typer.echo("🔍 Detecting nearest Nucleus...", err=True)
-                    typer.echo(f"📦 Repository URL: {repo_url}", err=True)
+                    typer.echo("Detecting nearest Nucleus...", err=True)
+                    typer.echo(f"Repository URL: {repo_url}", err=True)
                     if dest_path:
-                        typer.echo(f"📂 Destination: {dest_path}", err=True)
+                        typer.echo(f"Destination: {dest_path}", err=True)
+                    if nucleus_path:
+                        typer.echo(f"Nucleus path: {nucleus_path}", err=True)
+                    if name:
+                        typer.echo(f"Custom name: {name}", err=True)
+                    if strategy:
+                        typer.echo(f"Forced strategy: {strategy}", err=True)
                 
                 # 4. Ejecutar lógica del Core
                 manager = CloneAndLinkManager()
-                data = manager.execute(repo_url=repo_url, dest_path=dest_path)
+                data = manager.execute(
+                    repo_url=repo_url,
+                    dest_path=dest_path,
+                    nucleus_path=nucleus_path,
+                    custom_name=name,
+                    force_strategy=strategy,
+                    description=description
+                )
                 
                 # 5. Verbose logging durante el proceso
                 if gc.verbose:
-                    typer.echo(f"✅ Repository cloned to: {data['project_path']}", err=True)
-                    typer.echo(f"🔗 Linked to Nucleus: {data['nucleus_path']}", err=True)
-                    typer.echo(f"🎯 Detected {len(data['detected_strategies'])} strategies", err=True)
+                    typer.echo(f"Repository cloned to: {data['project_path']}", err=True)
+                    typer.echo(f"Linked to Nucleus: {data['nucleus_path']}", err=True)
+                    typer.echo(f"Detected {len(data['detected_strategies'])} strategies", err=True)
                 
                 # 6. Empaquetar resultado
                 result = {
