@@ -1,0 +1,99 @@
+.bloom/
+│
+└── .nucleus-{organization}/
+    │
+    ├── .core/
+    │   ├── nucleus-config.json              # ✨ ENHANCED - Now with comprehensive metadata
+    │   │                                    #    - organization (name, url, slug)
+    │   │                                    #    - nucleus (paths, status, statistics, directorySchema)
+    │   │                                    #    - projects[] (detailed with absolutePath, metadata)
+    │   │                                    #    - features (flags for capabilities)
+    │   │                                    #    - metadata (tooling info, version, tags)
+    │   ├── .rules.bl                        # Nucleus governance rules
+    │   ├── .standards.bl                    # Technical standards
+    │   ├── .policies.bl                     # Development policies
+    │   └── .meta.json                       # Core metadata (type, version, created_at, organization)
+    │
+    ├── .governance/
+    │   ├── architecture/
+    │   │   ├── .principles.bl               # Architecture principles
+    │   │   ├── .patterns.bl                 # Approved patterns
+    │   │   └── .decisions/                  # Architecture Decision Records
+    │   │       └── .adr-{uuid}.json         # Individual ADR files
+    │   ├── security/
+    │   │   ├── .security-standards.bl       # Security standards
+    │   │   └── .compliance-requirements.bl  # Compliance requirements
+    │   └── quality/
+    │       ├── .code-standards.bl           # Code quality standards
+    │       └── .testing-requirements.bl     # Testing requirements
+    │
+    ├── .intents/
+    │   └── .exp/                            # Exploration intents directory
+    │       └── .{intent-name-uuid}/         # Individual exploration intent
+    │           ├── .exp_state.json          # Intent lifecycle state
+    │           │
+    │           ├── .inquiry/                # Phase 1: Inquiry
+    │           │   ├── .inquiry.json        # Inquiry definition
+    │           │   ├── .context_exp_plan.json # Context planning
+    │           │   └── .files/
+    │           │       ├── .expbase.json
+    │           │       ├── .expbase_index.json
+    │           │       └── [optional files]
+    │           │
+    │           ├── .discovery/              # Phase 2: Discovery
+    │           │   └── .turn_X/             # Discovery turns (iterative)
+    │           │       ├── .turn.json
+    │           │       ├── .context_exp_plan.json
+    │           │       └── .files/
+    │           │           ├── .expbase.json
+    │           │           ├── .expbase_index.json
+    │           │           └── [optional files]
+    │           │
+    │           ├── .findings/               # Phase 3: Findings
+    │           │   ├── .findings.json       # Structured findings
+    │           │   ├── .context_exp_plan.json
+    │           │   └── .files/
+    │           │       ├── .expbase.json
+    │           │       ├── .expbase_index.json
+    │           │       └── [optional files]
+    │           │
+    │           └── .pipeline/               # AI processing pipeline
+    │               ├── .inquiry/
+    │               │   ├── .payload.json
+    │               │   ├── .index.json
+    │               │   └── .response/
+    │               │       ├── .raw_output.txt
+    │               │       └── .report.json
+    │               └── .discovery/
+    │                   └── .turn_X/
+    │                       ├── .payload.json
+    │                       ├── .index.json
+    │                       └── .response/
+    │                           ├── .raw_output.txt
+    │                           └── .report.json
+    │
+    ├── .cache/                              # ✨ UPDATED - Minimalist cache for sync
+    │   ├── .projects-snapshot.json          # ✨ SIMPLIFIED - Only for diff detection
+    │   │                                    #    - scanned_at (timestamp)
+    │   │                                    #    - project_names[] (array of names)
+    │   │                                    #    - checksum (MD5 hash for quick comparison)
+    │   ├── .semantic-index.json             # Semantic search index
+    │   ├── .dependency-graph.json           # Project dependency graph (optional)
+    │   └── .last-sync.json                  # Last synchronization info
+    │
+    ├── .relations/
+    │   ├── .project-links.json              # Cross-project relationships
+    │   └── .dependency-map.json             # Dependency mapping (optional)
+    │
+    ├── findings/                            # 📁 VISIBLE - Exportable findings
+    │   ├── README.md                        # Findings directory documentation
+    │   └── {intent-name}/                   # Per-intent findings export
+    │       ├── report.pdf                   # PDF report (optional)
+    │       ├── report.md                    # Markdown report
+    │       └── data.json                    # Structured data export
+    │
+    └── reports/                             # 📁 VISIBLE - Operational reports
+        ├── health-dashboard.json            # Nucleus health metrics
+        ├── statistics.json                  # Usage statistics (optional)
+        └── exports/                         # Report exports
+            └── {timestamp}-report.pdf       # Timestamped reports
