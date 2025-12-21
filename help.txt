@@ -294,6 +294,12 @@ Brain CLI - Modular system for Bloom
 │    Opciones:                                                                                     │
 │      -d                   Absolute path where to clone the repository. If not provided, clones   │
 │  to Nucleus root using repo name.                                                                │
+│      -n                   Path to the Nucleus project. Auto-detected from current directory if   │
+│  not provided.                                                                                   │
+│      --name               Custom name for the project (default: repository name)                 │
+│      --strategy           Force specific technology strategy (e.g., python, typescript,          │
+│  android)                                                                                        │
+│      --description        Project description                                                    │
 │                                                                                                  │
 ╰─────────────────────────────── Project lifecycle and scaffolding ────────────────────────────────╯
 
