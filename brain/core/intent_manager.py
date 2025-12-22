@@ -1023,4 +1023,197 @@ class IntentManager:
             "name": intent_name,
             "path": str(intent_path),
             "message": f"Intent '{intent_name}' deleted successfully"
+        }    
+    def submit_intent(
+        self,
+        intent_id: Optional[str] = None,
+        folder_name: Optional[str] = None,
+        provider: str = "claude",
+        nucleus_path: Optional[Path] = None,
+        profile_path: Optional[str] = None,
+        host: str = "127.0.0.1",
+        port: int = 5678,
+        timeout: int = 30
+    ) -> Dict[str, Any]:
+        """
+        Submit an intent payload to AI provider through native host bridge.
+        
+        This is the SUBMIT step (Step 5) in the Intent lifecycle.
+        Reads the built payload and sends it to the native host via TCP.
+        
+        Args:
+            intent_id: UUID of the intent
+            folder_name: Folder name of the intent
+            provider: AI provider to use ("claude", "gemini", etc.)
+            nucleus_path: Optional path to Bloom project
+            profile_path: Optional Chrome profile path for the AI provider
+            host: Native host IP address (default: 127.0.0.1)
+            port: Native host TCP port (default: 5678)
+            timeout: Connection timeout in seconds (default: 30)
+            
+        Returns:
+            Dictionary containing:
+                - intent_id: Intent UUID
+                - intent_name: Intent name
+                - provider: AI provider used
+                - command_id: Generated command ID for tracking
+                - host_response: Response from native host
+                - payload_size: Size of payload in bytes
+                - submitted_at: ISO timestamp
+                
+        Raises:
+            ValueError: If intent not found or payload files missing
+            FileNotFoundError: If payload or index files don't exist
+            ConnectionError: If cannot connect to native host
+            TimeoutError: If connection times out
+        """
+        import struct
+        import time
+        
+        # 1. Locate intent
+        project_root = self._find_bloom_project(nucleus_path)
+        intent_path, state_data, state_file = self._locate_intent(
+            project_root, intent_id, folder_name
+        )
+        
+        intent_type = state_data.get("type", "dev")
+        intent_uuid = state_data.get("uuid", "")
+        intent_name = state_data.get("name", "unknown")
+        
+        # 2. Locate payload and index files in .pipeline/.briefing/
+        pipeline_dir = intent_path / ".pipeline" / ".briefing"
+        
+        if not pipeline_dir.exists():
+            raise FileNotFoundError(
+                f"Pipeline directory not found. Has the payload been built? "
+                f"Run 'brain intent build-payload' first."
+            )
+        
+        # Look for payload.json and index.json (or .payload.json and .index.json)
+        payload_file = None
+        index_file = None
+        
+        for name in ["payload.json", ".payload.json"]:
+            test_path = pipeline_dir / name
+            if test_path.exists():
+                payload_file = test_path
+                break
+        
+        for name in ["index.json", ".index.json"]:
+            test_path = pipeline_dir / name
+            if test_path.exists():
+                index_file = test_path
+                break
+        
+        if not payload_file:
+            raise FileNotFoundError(
+                f"Payload file not found in {pipeline_dir}. "
+                f"Run 'brain intent build-payload' first."
+            )
+        
+        if not index_file:
+            raise FileNotFoundError(
+                f"Index file not found in {pipeline_dir}. "
+                f"Run 'brain intent build-payload' first."
+            )
+        
+        # 3. Read payload and index
+        with open(index_file, "r", encoding="utf-8") as f:
+            index_data = json.load(f)
+        
+        with open(payload_file, "r", encoding="utf-8") as f:
+            payload_data = json.load(f)
+        
+        # 4. Generate command ID (use intent UUID or generate new one)
+        command_id = index_data.get("intent_id", intent_uuid)
+        if not command_id:
+            command_id = str(uuid.uuid4())
+        
+        # 5. Build message for native host (following protocol from ai_submit_main.py)
+        timestamp = time.time()
+        message = {
+            "id": command_id,
+            "command": f"{provider}.submit",  # e.g., "claude.submit"
+            "payload": {
+                "provider": provider,
+                "text": payload_data.get("content", ""),
+                "context_files": payload_data.get("context_files", []),
+                "parameters": payload_data.get("parameters", {}),
+                "profile": profile_path or index_data.get("profile_path", "")
+            },
+            "timestamp": timestamp
+        }
+        
+        # 6. Send to native host via TCP
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(timeout)
+                s.connect((host, port))
+                
+                # Serialize JSON
+                json_str = json.dumps(message)
+                json_bytes = json_str.encode('utf-8')
+                
+                # Create 4-byte header (Little Endian) with size
+                header = struct.pack('<I', len(json_bytes))
+                
+                # Send header + payload
+                s.sendall(header + json_bytes)
+                
+                # Wait for response
+                resp_header = s.recv(4)
+                if not resp_header:
+                    raise ConnectionError("No response header from native host")
+                
+                resp_len = struct.unpack('<I', resp_header)[0]
+                
+                # Receive response data
+                chunks = []
+                bytes_recd = 0
+                while bytes_recd < resp_len:
+                    chunk = s.recv(min(resp_len - bytes_recd, 4096))
+                    if not chunk:
+                        break
+                    chunks.append(chunk)
+                    bytes_recd += len(chunk)
+                
+                resp_data = b''.join(chunks).decode('utf-8')
+                host_response = json.loads(resp_data)
+                
+        except socket.timeout:
+            raise TimeoutError(
+                f"Connection to native host timed out after {timeout} seconds. "
+                f"Is bloom-host running at {host}:{port}?"
+            )
+        except ConnectionRefusedError:
+            raise ConnectionError(
+                f"Could not connect to native host at {host}:{port}. "
+                f"Is bloom-host.exe running?"
+            )
+        except Exception as e:
+            raise ConnectionError(f"Communication error with native host: {e}")
+        
+        # 7. Update intent state
+        submitted_at = datetime.now(timezone.utc).isoformat()
+        
+        if "steps" in state_data:
+            state_data["steps"]["submit"] = True
+        
+        state_data["last_submitted_at"] = submitted_at
+        state_data["last_provider"] = provider
+        
+        # Save state
+        with open(state_file, "w", encoding="utf-8") as f:
+            json.dump(state_data, f, indent=2, ensure_ascii=False)
+        
+        # 8. Return structured result
+        return {
+            "intent_id": intent_uuid,
+            "intent_name": intent_name,
+            "provider": provider,
+            "command_id": command_id,
+            "host_response": host_response,
+            "payload_size": len(json_bytes),
+            "submitted_at": submitted_at,
+            "message": f"Intent '{intent_name}' submitted to {provider} successfully"
         }
