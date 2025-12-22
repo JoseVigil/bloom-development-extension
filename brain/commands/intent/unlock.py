@@ -76,7 +76,7 @@ class UnlockCommand(BaseCommand):
                         typer.echo(f"   Using --force", err=True)
                 
                 # 4. Lazy Import del Core
-                from brain.core.intent.manager import IntentManager
+                from brain.core.intent_manager import IntentManager
                 
                 # 5. Unlock intent
                 manager = IntentManager()

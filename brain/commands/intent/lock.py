@@ -71,7 +71,7 @@ class LockCommand(BaseCommand):
                     typer.echo(f"🔒 Locking intent...", err=True)
                 
                 # 4. Lazy Import del Core
-                from brain.core.intent.manager import IntentManager
+                from brain.core.intent_manager import IntentManager
                 
                 # 5. Lock intent
                 manager = IntentManager()

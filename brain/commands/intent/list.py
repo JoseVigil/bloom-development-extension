@@ -67,7 +67,7 @@ class ListCommand(BaseCommand):
                         typer.echo(f"   Type filter: {intent_type}", err=True)
                 
                 # 4. Lazy Import del Core
-                from brain.core.intent.manager import IntentManager
+                from brain.core.intent_manager import IntentManager
                 
                 # 5. Listar intents
                 manager = IntentManager()

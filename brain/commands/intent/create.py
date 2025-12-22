@@ -108,7 +108,7 @@ class CreateCommand(BaseCommand):
                         typer.echo(f"🔍 Initial files: {len(processed_files)} file(s)", err=True)
                 
                 # 5. Lazy Import del Core
-                from brain.core.intent.manager import IntentManager
+                from brain.core.intent_manager import IntentManager
                 
                 # 6. Ejecutar lógica del Core
                 manager = IntentManager()

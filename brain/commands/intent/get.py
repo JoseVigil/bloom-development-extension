@@ -70,7 +70,7 @@ class GetCommand(BaseCommand):
                     typer.echo(f"🔍 Loading intent...", err=True)
                 
                 # 4. Lazy Import del Core
-                from brain.core.intent.manager import IntentManager
+                from brain.core.intent_manager import IntentManager
                 
                 # 5. Obtener intent
                 manager = IntentManager()

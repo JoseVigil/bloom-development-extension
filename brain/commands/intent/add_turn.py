@@ -88,7 +88,7 @@ class AddTurnCommand(BaseCommand):
                     typer.echo(f"   Content length: {len(content)} chars", err=True)
                 
                 # 5. Lazy Import del Core
-                from brain.core.intent.manager import IntentManager
+                from brain.core.intent_manager import IntentManager
                 
                 # 6. Add turn
                 manager = IntentManager()
