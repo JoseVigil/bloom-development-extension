@@ -131,87 +131,98 @@ export class BrainExecutor {
 
     /**
      * Execute Brain CLI command and parse JSON output
-     * 
-     * IMPROVED: Uses spawn instead of exec for better security and real-time output
      */
     private static async execute<T = any>(
-        args: string[],
-        options: {
-            cwd?: string;
-            timeout?: number;
-            onProgress?: (line: string) => void;
-        } = {}
+    commands: string[],
+    args: Record<string, any> = {},
+    options: {
+        cwd?: string;
+        timeout?: number;
+        onProgress?: (line: string) => void;
+    } = {}
     ): Promise<BrainResult<T>> {
-        return new Promise((resolve, reject) => {
-            if (!this.pythonPath || !this.brainModulePath) {
-                reject(new Error('BrainExecutor not initialized. Call initialize() first.'));
-                return;
-            }
+    return new Promise((resolve, reject) => {
+        if (!this.pythonPath || !this.brainModulePath) {
+        reject(new Error('BrainExecutor not initialized. Call initialize() first.'));
+        return;
+        }
 
-            // Build args: python -m brain <args> --json
-            const fullArgs = ['-m', 'brain', ...args, '--json'];
-            
-            console.log(`[BrainExecutor] ${this.pythonPath} ${fullArgs.join(' ')}`);
-            console.log(`[BrainExecutor] CWD: ${options.cwd || this.brainModulePath}`);
-
-            const proc = spawn(this.pythonPath, fullArgs, {
-                cwd: options.cwd || this.brainModulePath,
-                env: {
-                    ...process.env,
-                    PYTHONPATH: this.brainModulePath
-                }
-            });
-
-            let stdout = '';
-            let stderr = '';
-
-            proc.stdout.on('data', (data) => {
-                stdout += data.toString();
-            });
-
-            proc.stderr.on('data', (data) => {
-                const line = data.toString().trim();
-                stderr += line + '\n';
-                
-                // Send progress updates to callback
-                if (options.onProgress && line) {
-                    options.onProgress(line);
-                }
-            });
-
-            // Timeout handling
-            const timeoutId = setTimeout(() => {
-                proc.kill();
-                reject(new Error(`Command timeout after ${options.timeout || 60000}ms`));
-            }, options.timeout || 60000);
-
-            proc.on('close', (code) => {
-                clearTimeout(timeoutId);
-
-                try {
-                    // Parse JSON output
-                    const result = JSON.parse(stdout.trim()) as BrainResult<T>;
-                    
-                    if (result.status === 'success') {
-                        console.log(`[BrainExecutor] ✅ Success:`, result.operation || args[0]);
-                    } else {
-                        console.warn(`[BrainExecutor] ⚠️ Non-success status:`, result);
-                    }
-                    
-                    resolve(result);
-                } catch (error) {
-                    // JSON parse failed - return error result
-                    reject(new Error(
-                        `Failed to parse Brain output:\n${stdout}\n\nStderr: ${stderr}`
-                    ));
-                }
-            });
-
-            proc.on('error', (error) => {
-                clearTimeout(timeoutId);
-                reject(error);
-            });
+        // Build args: python -m brain <commands> [args] --json
+        const fullArgs = ['-m', 'brain', ...commands];
+        
+        // Add arguments
+        Object.entries(args).forEach(([key, value]) => {
+        if (typeof value === 'boolean' && value) {
+            fullArgs.push(key);
+        } else if (value !== undefined && value !== null) {
+            fullArgs.push(key, value.toString());
+        }
         });
+        
+        // Always add --json for structured output
+        fullArgs.push('--json');
+        
+        console.log(`[BrainExecutor] ${this.pythonPath} ${fullArgs.join(' ')}`);
+        console.log(`[BrainExecutor] CWD: ${options.cwd || this.brainModulePath}`);
+
+        const proc = spawn(this.pythonPath, fullArgs, {
+        cwd: options.cwd || this.brainModulePath,
+        env: {
+            ...process.env,
+            PYTHONPATH: this.brainModulePath
+        }
+        });
+
+        let stdout = '';
+        let stderr = '';
+
+        proc.stdout.on('data', (data) => {
+        stdout += data.toString();
+        });
+
+        proc.stderr.on('data', (data) => {
+        const line = data.toString().trim();
+        stderr += line + '\n';
+        
+        // Send progress updates to callback
+        if (options.onProgress && line) {
+            options.onProgress(line);
+        }
+        });
+
+        // Timeout handling
+        const timeoutId = setTimeout(() => {
+        proc.kill();
+        reject(new Error(`Command timeout after ${options.timeout || 60000}ms`));
+        }, options.timeout || 60000);
+
+        proc.on('close', (code) => {
+        clearTimeout(timeoutId);
+
+        try {
+            // Parse JSON output
+            const result = JSON.parse(stdout.trim()) as BrainResult<T>;
+            
+            if (result.status === 'success') {
+            console.log(`[BrainExecutor] ✅ Success:`, result.operation || commands[0]);
+            } else {
+            console.warn(`[BrainExecutor] ⚠️ Non-success status:`, result);
+            }
+            
+            resolve(result);
+        } catch (error) {
+            // JSON parse failed - return error result
+            reject(new Error(
+            `Failed to parse Brain output:\n${stdout}\n\nStderr: ${stderr}`
+            ));
+        }
+        });
+
+        proc.on('error', (error) => {
+        clearTimeout(timeoutId);
+        reject(error);
+        });
+    });
     }
 
     // ========================================================================
