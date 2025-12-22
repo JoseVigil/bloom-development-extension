@@ -45,21 +45,33 @@ bloom-development-extension/
     │   ├── intent/
     │   │   ├── __init__.py
     │   │   ├── __pycache__/ [... cache]
+    │   │   ├── add_turn.py
     │   │   ├── build_payload.py
     │   │   ├── create.py
+    │   │   ├── delete.py
+    │   │   ├── finalize.py
+    │   │   ├── get.py
+    │   │   ├── list.py
+    │   │   ├── lock.py
     │   │   ├── plan.py
     │   │   ├── router_prompt.md
+    │   │   ├── unlock.py
     │   │   └── update.py
     │   ├── nucleus/
     │   │   ├── __init__.py
     │   │   ├── __pycache__/ [... cache]
     │   │   ├── create.py
     │   │   ├── create_exp_intent.py
+    │   │   ├── delete.py
     │   │   ├── exp_discovery_turn.py
     │   │   ├── exp_export_findings.py
+    │   │   ├── get.py
     │   │   ├── info.py
     │   │   ├── link.py
+    │   │   ├── list.py
     │   │   ├── list_projects.py
+    │   │   ├── onboarding_complete.py
+    │   │   ├── onboarding_status.py
     │   │   ├── project_info.py
     │   │   ├── status.py
     │   │   └── sync.py
@@ -134,7 +146,9 @@ bloom-development-extension/
     │   │   └── scanner.py
     │   ├── project_manager.py
     │   └── tree_manager.py
+    ├── libs/ [... python vendored dependencies]
     ├── pyproject.toml
+    ├── requirements.txt
     └── shared/
         ├── __init__.py
         ├── __pycache__/ [... cache]

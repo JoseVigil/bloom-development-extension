@@ -153,7 +153,7 @@ class UpdateCommand(BaseCommand):
                         typer.echo(f"🔍 Removing files: {len(processed_remove_files)} file(s)", err=True)
                 
                 # 6. Lazy Import del Core
-                from brain.core.intent.manager import IntentManager
+                from brain.core.intent_manager import IntentManager
                 
                 # 7. Ejecutar lógica del Core
                 manager = IntentManager()

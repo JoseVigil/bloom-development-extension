@@ -78,7 +78,7 @@ class DeleteCommand(BaseCommand):
                 # 3. Confirmar si no hay --force y no es JSON mode
                 if not force and not gc.json_mode:
                     # Obtener info del intent primero
-                    from brain.core.intent.manager import IntentManager
+                    from brain.core.intent_manager import IntentManager
                     manager = IntentManager()
                     
                     try:
@@ -116,7 +116,7 @@ class DeleteCommand(BaseCommand):
                     typer.echo(f"🗑️  Deleting intent...", err=True)
                 
                 # 5. Lazy Import del Core
-                from brain.core.intent.manager import IntentManager
+                from brain.core.intent_manager import IntentManager
                 
                 # 6. Delete intent
                 manager = IntentManager()
