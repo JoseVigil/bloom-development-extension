@@ -13,11 +13,11 @@ Brain CLI - Modular system for Bloom
 │   gemini        Gemini AI key management and operations             5 cmds                       │
 │   github        GitHub integration and repository management        9 cmds                       │
 │   intent        Intent execution system and context planning       11 cmds                       │
-│   nucleus       Nucleus project management and lifecycle           12 cmds                       │
+│   nucleus       Nucleus project management and lifecycle           14 cmds                       │
 │   profile       Chrome profile and AI account management            8 cmds                       │
 │   project       Project lifecycle and scaffolding                   6 cmds                       │
 │                                                                 ──────────                       │
-│                                                                    55 cmds                       │
+│                                                                    57 cmds                       │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 
 ╭──────────────────────────────────────────── NUCLEUS ─────────────────────────────────────────────╮
@@ -125,6 +125,24 @@ Brain CLI - Modular system for Bloom
 │      -p                   Nucleus root path (default: current directory)                         │
 │      -s                   Filter by project strategy (python, typescript, go, etc.)              │
 │      --active-only        Show only active projects                                              │
+│                                                                                                  │
+│  ONBOARDING                                                                                      │
+│                                                                                                  │
+│  ONBOARDING COMPLETE - Mark an onboarding step or entire onboarding as completed                 │
+│                                                                                                  │
+│    python -m brain nucleus onboarding-complete [OPTIONS]                                         │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -s                   Step name to mark as completed                                         │
+│      -a                   Mark entire onboarding as completed                                    │
+│      -p                   Nucleus root path (default: current dir)                               │
+│                                                                                                  │
+│  ONBOARDING STATUS - Get the current onboarding status from nucleus configuration                │
+│                                                                                                  │
+│    python -m brain nucleus onboarding-status [OPTIONS]                                           │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -p                   Nucleus root path (default: current dir)                               │
 │                                                                                                  │
 │  PROJECT                                                                                         │
 │                                                                                                  │
