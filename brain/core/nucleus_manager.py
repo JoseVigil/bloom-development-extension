@@ -219,6 +219,159 @@ class NucleusManager:
             "is_git_repo": is_git_repo,
             "timestamp": timestamp
         }
+    
+    def get_onboarding_status(self) -> Dict[str, Any]:
+        """
+        Get the current onboarding status from nucleus configuration.
+        
+        Returns:
+            Dictionary with onboarding status and steps
+            
+        Raises:
+            FileNotFoundError: If nucleus config doesn't exist
+            ValueError: If config is invalid
+        """
+        nucleus_dir = self._find_nucleus_dir()
+        if not nucleus_dir:
+            raise FileNotFoundError("No nucleus directory found. Create one first with 'brain nucleus create'")
+        
+        config_path = nucleus_dir / self.NUCLEUS_CONFIG_FILE
+        if not config_path.exists():
+            raise FileNotFoundError(f"Nucleus config not found at {config_path}")
+        
+        try:
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON in nucleus config: {e}")
+        
+        # Return onboarding section or default structure
+        onboarding = config.get("onboarding", {
+            "completed": False,
+            "completed_at": None,
+            "steps": {
+                "github_auth": False,
+                "gemini_setup": False,
+                "nucleus_created": False,
+                "projects_linked": False
+            }
+        })
+        
+        return onboarding
+    
+    def complete_onboarding_step(self, step_name: str) -> Dict[str, Any]:
+        """
+        Mark a specific onboarding step as completed.
+        
+        Args:
+            step_name: Name of the step to mark as completed
+            
+        Returns:
+            Dictionary with updated onboarding status
+            
+        Raises:
+            FileNotFoundError: If nucleus config doesn't exist
+            ValueError: If step_name is invalid
+        """
+        nucleus_dir = self._find_nucleus_dir()
+        if not nucleus_dir:
+            raise FileNotFoundError("No nucleus directory found. Create one first with 'brain nucleus create'")
+        
+        config_path = nucleus_dir / self.NUCLEUS_CONFIG_FILE
+        if not config_path.exists():
+            raise FileNotFoundError(f"Nucleus config not found at {config_path}")
+        
+        try:
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON in nucleus config: {e}")
+        
+        # Initialize onboarding if it doesn't exist
+        if "onboarding" not in config:
+            config["onboarding"] = {
+                "completed": False,
+                "completed_at": None,
+                "steps": {
+                    "github_auth": False,
+                    "gemini_setup": False,
+                    "nucleus_created": False,
+                    "projects_linked": False
+                }
+            }
+        
+        # Validate step name
+        if step_name not in config["onboarding"]["steps"]:
+            valid_steps = ", ".join(config["onboarding"]["steps"].keys())
+            raise ValueError(f"Invalid step '{step_name}'. Valid steps are: {valid_steps}")
+        
+        # Mark step as completed
+        config["onboarding"]["steps"][step_name] = True
+        
+        # Check if all steps are completed
+        all_completed = all(config["onboarding"]["steps"].values())
+        if all_completed and not config["onboarding"]["completed"]:
+            config["onboarding"]["completed"] = True
+            config["onboarding"]["completed_at"] = datetime.now().isoformat()
+        
+        # Save updated config
+        self._write_json(config_path, config)
+        
+        return {
+            "step": step_name,
+            "completed_all": False,
+            "onboarding": config["onboarding"]
+        }
+    
+    def complete_onboarding_all(self) -> Dict[str, Any]:
+        """
+        Mark entire onboarding as completed (all steps).
+        
+        Returns:
+            Dictionary with updated onboarding status
+            
+        Raises:
+            FileNotFoundError: If nucleus config doesn't exist
+        """
+        nucleus_dir = self._find_nucleus_dir()
+        if not nucleus_dir:
+            raise FileNotFoundError("No nucleus directory found. Create one first with 'brain nucleus create'")
+        
+        config_path = nucleus_dir / self.NUCLEUS_CONFIG_FILE
+        if not config_path.exists():
+            raise FileNotFoundError(f"Nucleus config not found at {config_path}")
+        
+        try:
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON in nucleus config: {e}")
+        
+        # Initialize onboarding if it doesn't exist
+        if "onboarding" not in config:
+            config["onboarding"] = {
+                "completed": False,
+                "completed_at": None,
+                "steps": {
+                    "github_auth": False,
+                    "gemini_setup": False,
+                    "nucleus_created": False,
+                    "projects_linked": False
+                }
+            }
+        
+        # Mark all steps as completed
+        for step in config["onboarding"]["steps"]:
+            config["onboarding"]["steps"][step] = True
+        
+        config["onboarding"]["completed"] = True
+        config["onboarding"]["completed_at"] = datetime.now().isoformat()
+        
+        # Save updated config
+        self._write_json(config_path, config)
+        
+        return {
+            "step": None,
+            "completed_all": True,
+            "onboarding": config["onboarding"]
+        }
 
     def _create_enhanced_nucleus_config(
         self,
@@ -282,6 +435,17 @@ class NucleusManager:
                     "totalIntents": 0,
                     "totalFindings": 0,
                     "strategiesDistribution": strategies_count
+                }
+            },
+            
+            "onboarding": {
+                "completed": False,
+                "completed_at": None,
+                "steps": {
+                    "github_auth": False,
+                    "gemini_setup": False,
+                    "nucleus_created": True,
+                    "projects_linked": False
                 }
             },
             
