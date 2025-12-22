@@ -142,4 +142,5 @@ bloom-development-extension/
 │       ├── pythonExecutor.ts
 │       ├── tokenEstimator.ts
 │       └── uriHelper.ts
-└── package.json
+├── package.json
+└── tsconfig.json

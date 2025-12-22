@@ -28,9 +28,18 @@ import { registerGitCommands } from '../commands/git/gitCommands';
 import { registerDebugCommands } from '../commands/debug/debugCommands';
 import { createIntentDevCommand } from '../commands/intent/createIntentDev';
 
+// ============================================================================
+// MIGRATED COMMANDS - Using Brain CLI
+// ============================================================================
+import { registerManageProjectCommands } from '../commands/manageProject';
+import { registerCreateNucleusProjectCommands } from '../commands/createNucleusProject';
+import { registerLinkToNucleusCommands } from '../commands/linkToNucleus';
+
 /**
  * Registra TODOS los comandos del plugin
  * Organizado por categorías
+ * 
+ * UPDATED: Includes migrated Brain CLI commands for project management
  */
 export function registerAllCommands(
     context: vscode.ExtensionContext,
@@ -63,28 +72,41 @@ export function registerAllCommands(
     
     // ========================================
     // CATEGORÍA 2: COMANDOS DE NUCLEUS
+    // (Incluye comandos migrados a Brain CLI)
     // ========================================
     registerNucleusCommands(context, logger, managers, providers);
     logger.info('✅ Nucleus commands registered');
     
     // ========================================
-    // CATEGORÍA 3: COMANDOS DE PROFILES
+    // CATEGORÍA 3: COMANDOS DE PROJECT MANAGEMENT
+    // NEW: Migrated to Brain CLI
+    // ========================================
+    registerManageProjectCommands(context);
+    registerCreateNucleusProjectCommands(context);
+    registerLinkToNucleusCommands(context);
+    logger.info('✅ Project management commands registered (Brain CLI)');
+    
+    // ========================================
+    // CATEGORÍA 4: COMANDOS DE PROFILES
     // ========================================
     registerProfileCommands(context, logger, managers);
     logger.info('✅ Profile commands registered');
     
     // ========================================
-    // CATEGORÍA 4: COMANDOS DE GIT
+    // CATEGORÍA 5: COMANDOS DE GIT
     // ========================================
     registerGitCommands(context, logger);
     logger.info('✅ Git commands registered');
     
     // ========================================
-    // CATEGORÍA 5: COMANDOS DE DEBUG
+    // CATEGORÍA 6: COMANDOS DE DEBUG
     // ========================================
     registerDebugCommands(context, logger);
     logger.info('✅ Debug commands registered');
 
+    // ========================================
+    // CATEGORÍA 7: COMANDOS ESPECIALES
+    // ========================================
     const createIntentDevDisposable = vscode.commands.registerCommand(
         'bloom.createIntentDev',
         () => createIntentDevCommand(context, logger)
@@ -92,4 +114,6 @@ export function registerAllCommands(
     context.subscriptions.push(createIntentDevDisposable);
     
     logger.info('✅ All commands registered successfully');
+    logger.info('   📊 Total categories: 7');
+    logger.info('   🧠 Brain CLI integration: Active');
 }

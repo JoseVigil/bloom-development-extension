@@ -1,445 +1,261 @@
-// src/commands/linkToNucleus.ts
-// Command to link a BTIP project to a Nucleus project
+/**
+ * Link to Nucleus - Migrated to Brain CLI v2.0
+ * 
+ * BEFORE: 300+ lines with manual validation + metadata creation + config updates
+ * AFTER:  ~50 lines - everything delegated to Brain CLI
+ * 
+ * Changes:
+ * - ALL linking logic → BrainExecutor.projectAdd()
+ * - Removed: validateProject(), detectType(), createMetadata(), updateNucleusConfig()
+ * - Kept: VSCode UI feedback only
+ */
 
 import * as vscode from 'vscode';
-import * as path from 'path';
-import * as fs from 'fs';
-import {
-    NucleusConfig,
-    LinkedProject,
-    NucleusLink,
-    createLinkedProject,
-    createNucleusLink,
-    loadNucleusConfig,
-    saveNucleusConfig,
-    saveNucleusLink
-} from '../models/bloomConfig';
-import { ProjectDetector } from '../strategies/ProjectDetector';
+import { BrainExecutor } from '../utils/brainExecutor';
 
-export async function linkToNucleus(uri?: vscode.Uri): Promise<void> {
+// ============================================================================
+// MAIN FUNCTION: Link Project to Nucleus
+// ============================================================================
+
+/**
+ * Link an existing project to the Nucleus
+ * 
+ * This is the core linking function used by multiple commands:
+ * - Right-click on project folder → "Link to Nucleus"
+ * - Command Palette → "Bloom: Link Current Project to Nucleus"
+ * - Called programmatically after project creation
+ * 
+ * @param projectPath - Absolute path to project to link
+ * @param nucleusPath - Absolute path to Nucleus (optional, will prompt if not provided)
+ * @returns true if successful, false otherwise
+ */
+export async function linkProjectToNucleus(
+    projectPath: string,
+    nucleusPath?: string
+): Promise<boolean> {
     try {
-        // Get current project root
-        let currentProjectRoot: string;
-        
-        if (uri && uri.fsPath) {
-            currentProjectRoot = uri.fsPath;
-        } else if (vscode.workspace.workspaceFolders) {
-            currentProjectRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
-        } else {
-            vscode.window.showErrorMessage('No workspace folder found');
-            return;
+        // 1. Get Nucleus path if not provided
+        if (!nucleusPath) {
+            nucleusPath = await getNucleusPath();
+            if (!nucleusPath) {
+                return false;
+            }
         }
         
-        // Verify current project has .bloom/
-        const bloomPath = path.join(currentProjectRoot, '.bloom');
-        if (!fs.existsSync(bloomPath)) {
-            vscode.window.showErrorMessage('Current project is not a Bloom project (.bloom/ folder not found)');
-            return;
-        }
+        // 2. Show progress
+        const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left);
+        statusBar.text = '$(sync~spin) Linking project to Nucleus...';
+        statusBar.show();
         
-        // Check if already linked
-        const nucleusLinkPath = path.join(bloomPath, 'nucleus.json');
-        if (fs.existsSync(nucleusLinkPath)) {
-            const overwrite = await vscode.window.showWarningMessage(
-                'This project is already linked to a Nucleus. Re-link?',
-                'Yes', 'No'
+        // 3. Link using Brain CLI (handles everything!)
+        const result = await BrainExecutor.projectAdd({
+            projectPath,
+            nucleusPath
+            // Brain CLI will auto-detect strategy, name, etc.
+        });
+        
+        statusBar.dispose();
+        
+        // 4. Handle result
+        if (result.status === 'error') {
+            vscode.window.showErrorMessage(
+                `Failed to link project: ${result.message || 'Unknown error'}`
             );
+            return false;
+        }
+        
+        // 5. Success
+        if (result.data) {
+            vscode.window.showInformationMessage(
+                `✅ Project '${result.data.project.name}' linked to Nucleus`
+            );
+        }
+        
+        // 6. Refresh UI
+        await vscode.commands.executeCommand('bloom.projectExplorer.refresh');
+        
+        return true;
+        
+    } catch (error) {
+        console.error('[linkProjectToNucleus] Error:', error);
+        vscode.window.showErrorMessage(
+            `Error linking project: ${error instanceof Error ? error.message : 'Unknown error'}`
+        );
+        return false;
+    }
+}
+
+// ============================================================================
+// COMMAND: Link Current Project
+// ============================================================================
+
+/**
+ * Command: Bloom: Link Current Project to Nucleus
+ * 
+ * Links the currently open workspace folder to the Nucleus
+ */
+export async function linkCurrentProjectCommand(): Promise<void> {
+    try {
+        // Get current workspace folder
+        const workspaceFolders = vscode.workspace.workspaceFolders;
+        
+        if (!workspaceFolders || workspaceFolders.length === 0) {
+            vscode.window.showWarningMessage(
+                'No folder is currently open in workspace. Please open a project folder first.'
+            );
+            return;
+        }
+        
+        let projectPath: string;
+        
+        // If multiple folders, ask which one to link
+        if (workspaceFolders.length > 1) {
+            const items = workspaceFolders.map(folder => ({
+                label: folder.name,
+                description: folder.uri.fsPath,
+                path: folder.uri.fsPath
+            }));
             
-            if (overwrite !== 'Yes') {
+            const selected = await vscode.window.showQuickPick(items, {
+                placeHolder: 'Select project to link to Nucleus'
+            });
+            
+            if (!selected) {
                 return;
             }
+            
+            projectPath = selected.path;
+        } else {
+            projectPath = workspaceFolders[0].uri.fsPath;
         }
         
-        // Detect current project strategy
-        const strategy = await ProjectDetector.getStrategyName(currentProjectRoot);
+        // Link it
+        await linkProjectToNucleus(projectPath);
         
-        if (strategy === 'nucleus') {
-            vscode.window.showWarningMessage('Cannot link a Nucleus project to itself');
-            return;
-        }
-        
-        // Ask user to select Nucleus project
-        const nucleusPath = await selectNucleusProject(currentProjectRoot);
-        
-        if (!nucleusPath) {
-            return;
-        }
-        
-        // Load Nucleus config
-        const nucleusBloomPath = path.join(nucleusPath, '.bloom');
-        const nucleusConfig = loadNucleusConfig(nucleusBloomPath);
-        
-        if (!nucleusConfig) {
-            vscode.window.showErrorMessage('Invalid Nucleus project (nucleus-config.json not found or invalid)');
-            return;
-        }
-        
-        // Get project information
-        const projectName = path.basename(currentProjectRoot);
-        
-        const displayName = await vscode.window.showInputBox({
-            prompt: 'Enter display name for this project',
-            placeHolder: 'e.g., Bloom Video Server',
-            value: toTitleCase(projectName)
-        });
-        
-        if (!displayName) {
-            return;
-        }
-        
-        const description = await vscode.window.showInputBox({
-            prompt: 'Enter project description (optional)',
-            placeHolder: 'e.g., Node.js server for video processing'
-        });
-        
-        const repoUrl = await vscode.window.showInputBox({
-            prompt: 'Enter project repository URL',
-            placeHolder: 'e.g., https://github.com/org/project.git',
-            value: inferRepoUrl(nucleusConfig.organization.url, projectName)
-        });
-        
-        if (!repoUrl) {
-            return;
-        }
-        
-        // Calculate relative path from Nucleus to this project
-        const relativePath = path.relative(nucleusPath, currentProjectRoot);
-        
-        // Show progress
-        await vscode.window.withProgress({
-            location: vscode.ProgressLocation.Notification,
-            title: 'Linking project to Nucleus...',
-            cancellable: false
-        }, async (progress) => {
-            
-            progress.report({ message: 'Creating project entry...' });
-            
-            // Create LinkedProject entry
-            const linkedProject = createLinkedProject(
-                projectName,
-                displayName,
-                strategy as any,
-                repoUrl,
-                relativePath
-            );
-            
-            if (description) {
-                linkedProject.description = description;
-            }
-            
-            // Update Nucleus config
-            nucleusConfig.projects.push(linkedProject);
-            nucleusConfig.nucleus.updatedAt = new Date().toISOString();
-            
-            saveNucleusConfig(nucleusBloomPath, nucleusConfig);
-            
-            progress.report({ message: 'Creating nucleus link...' });
-            
-            // Create NucleusLink in current project
-            const nucleusLink = createNucleusLink(
-                nucleusConfig,
-                linkedProject.id,
-                path.relative(currentProjectRoot, nucleusPath)
-            );
-            
-            saveNucleusLink(bloomPath, nucleusLink);
-            
-            progress.report({ message: 'Creating project overview...' });
-            
-            // Create project overview in Nucleus
-            await createProjectOverview(nucleusPath, projectName, linkedProject, nucleusConfig);
-            
-            progress.report({ message: 'Updating projects index...' });
-            
-            // Update projects index
-            await updateProjectsIndex(nucleusPath, nucleusConfig);
-            
-            progress.report({ message: 'Done!' });
-        });
-        
-        // Show success message
-        vscode.window.showInformationMessage(
-            `✅ Project "${displayName}" linked to Nucleus "${nucleusConfig.nucleus.name}" successfully!`
+    } catch (error) {
+        console.error('[linkCurrentProject] Error:', error);
+        vscode.window.showErrorMessage(
+            `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
         );
-        
-    } catch (error: any) {
-        vscode.window.showErrorMessage(`Error linking to Nucleus: ${error.message}`);
-        console.error('Link to Nucleus error:', error);
     }
 }
 
-async function selectNucleusProject(currentPath: string): Promise<string | null> {
-    // Look for Nucleus projects in parent directory
-    const parentDir = path.dirname(currentPath);
-    
-    const nucleusProjects: string[] = [];
-    
-    try {
-        const items = fs.readdirSync(parentDir, { withFileTypes: true });
-        
-        for (const item of items) {
-            if (!item.isDirectory()) {
-                continue;
-            }
-            
-            const itemPath = path.join(parentDir, item.name);
-            const bloomPath = path.join(itemPath, '.bloom');
-            
-            if (!fs.existsSync(bloomPath)) {
-                continue;
-            }
-            
-            // Check if it's a Nucleus project
-            const configPath = path.join(bloomPath, 'core', 'nucleus-config.json');
-            if (fs.existsSync(configPath)) {
-                nucleusProjects.push(itemPath);
-            }
-        }
-    } catch (error) {
-        // Ignore errors
+// ============================================================================
+// COMMAND: Link from Context Menu
+// ============================================================================
+
+/**
+ * Command: Link to Nucleus (from right-click context menu)
+ * 
+ * @param uri - URI of the folder clicked in explorer
+ */
+export async function linkFromContextMenuCommand(uri: vscode.Uri): Promise<void> {
+    if (!uri) {
+        vscode.window.showWarningMessage('No folder selected');
+        return;
     }
     
-    if (nucleusProjects.length === 0) {
-        // Let user browse for Nucleus
-        const selected = await vscode.window.showOpenDialog({
-            canSelectFiles: false,
-            canSelectFolders: true,
-            canSelectMany: false,
-            openLabel: 'Select Nucleus Project Folder',
-            title: 'Select Nucleus Project'
-        });
-        
-        if (!selected || selected.length === 0) {
-            return null;
+    await linkProjectToNucleus(uri.fsPath);
+}
+
+// ============================================================================
+// HELPERS
+// ============================================================================
+
+/**
+ * Get Nucleus path from config or prompt user
+ */
+async function getNucleusPath(): Promise<string | undefined> {
+    const config = vscode.workspace.getConfiguration('bloom');
+    let nucleusPath = config.get<string>('nucleusPath');
+    
+    // Validate existing path
+    if (nucleusPath) {
+        try {
+            const status = await BrainExecutor.nucleusStatus(nucleusPath);
+            if (status.status === 'success' && status.data?.is_nucleus) {
+                return nucleusPath;
+            }
+        } catch (error) {
+            console.warn('[getNucleusPath] Invalid configured path:', error);
         }
-        
-        const selectedPath = selected[0].fsPath;
-        
-        // Verify it's a Nucleus project
-        const bloomPath = path.join(selectedPath, '.bloom');
-        const configPath = path.join(bloomPath, 'core', 'nucleus-config.json');
-        
-        if (!fs.existsSync(configPath)) {
-            vscode.window.showErrorMessage('Selected folder is not a Nucleus project');
-            return null;
-        }
-        
-        return selectedPath;
     }
     
-    // Let user pick from detected Nucleus projects
-    const items = nucleusProjects.map(p => ({
-        label: path.basename(p),
-        description: p,
-        detail: `Nucleus project at ${p}`
-    }));
+    // Prompt for Nucleus
+    const action = await vscode.window.showInformationMessage(
+        'No Nucleus project configured. Please select your Nucleus folder.',
+        'Select Nucleus', 'Create New Nucleus', 'Cancel'
+    );
     
-    const selected = await vscode.window.showQuickPick(items, {
-        placeHolder: 'Select Nucleus project to link to'
+    if (action === 'Create New Nucleus') {
+        await vscode.commands.executeCommand('bloom.nucleus.create');
+        return undefined;
+    }
+    
+    if (action !== 'Select Nucleus') {
+        return undefined;
+    }
+    
+    const selected = await vscode.window.showOpenDialog({
+        canSelectFolders: true,
+        canSelectFiles: false,
+        openLabel: 'Select Nucleus Project',
+        title: 'Select your Nucleus project folder'
     });
     
-    if (!selected) {
-        return null;
+    if (!selected || selected.length === 0) {
+        vscode.window.showWarningMessage('Nucleus path is required to link projects');
+        return undefined;
     }
     
-    return selected.description!;
+    nucleusPath = selected[0].fsPath;
+    
+    // Verify it's a Nucleus
+    const status = await BrainExecutor.nucleusStatus(nucleusPath);
+    if (status.status === 'error' || !status.data?.is_nucleus) {
+        vscode.window.showErrorMessage(
+            'Selected folder is not a valid Nucleus project. Please create a Nucleus first.'
+        );
+        return undefined;
+    }
+    
+    // Save to config
+    await config.update(
+        'nucleusPath',
+        nucleusPath,
+        vscode.ConfigurationTarget.Workspace
+    );
+    
+    return nucleusPath;
 }
 
-async function createProjectOverview(
-    nucleusPath: string,
-    projectName: string,
-    linkedProject: LinkedProject,
-    nucleusConfig: NucleusConfig
-): Promise<void> {
-    const projectOverviewDir = path.join(nucleusPath, '.bloom', 'projects', projectName);
-    fs.mkdirSync(projectOverviewDir, { recursive: true });
-    
-    const overviewPath = path.join(projectOverviewDir, 'overview.bl');
-    
-    const template = `# ${linkedProject.displayName} - Overview
+// ============================================================================
+// COMMAND REGISTRATION
+// ============================================================================
 
-## Información General
-
-**Nombre:** ${linkedProject.name}
-**Estrategia:** ${linkedProject.strategy}
-**Repositorio:** ${linkedProject.repoUrl}
-**Estado:** ${linkedProject.status}
-
-
-## 🎯 Propósito
-
-[¿Por qué existe este proyecto? ¿Qué problema resuelve?]
-
-
-## 👥 Usuarios
-
-[¿Quién usa este proyecto? ¿Qué roles interactúan con él?]
-
-
-## 💼 Lógica de Negocio
-
-${linkedProject.description || '[Cómo contribuye al modelo de negocio de la organización]'}
-
-
-## 🔗 Dependencias
-
-### Depende de:
-- [Proyecto X] - Para [funcionalidad]
-
-### Es usado por:
-- [Proyecto Y] - Para [funcionalidad]
-
-
-## 📊 Estado Actual
-
-- **Versión:** [X.X.X]
-- **Última release:** [Fecha]
-- **Issues abiertos:** [N]
-
-
-## 🔑 Conceptos Clave
-
-- **[Término 1]:** [Definición en contexto de este proyecto]
-
-
-## 📁 Ubicación del Código
-
-**Local:** ${linkedProject.localPath}
-**Remote:** ${linkedProject.repoUrl}
-
-
----
-bloom/v1
-document_type: "project_overview"
-project_id: "${linkedProject.id}"
-linked_at: "${linkedProject.linkedAt}"
-`;
-    
-    fs.writeFileSync(overviewPath, template, 'utf-8');
+/**
+ * Register all link commands
+ */
+export function registerLinkToNucleusCommands(context: vscode.ExtensionContext): void {
+    context.subscriptions.push(
+        vscode.commands.registerCommand('bloom.project.linkCurrent', linkCurrentProjectCommand),
+        vscode.commands.registerCommand('bloom.project.linkFromMenu', linkFromContextMenuCommand)
+    );
 }
 
-async function updateProjectsIndex(nucleusPath: string, config: NucleusConfig): Promise<void> {
-    const indexPath = path.join(nucleusPath, '.bloom', 'projects', '_index.bl');
-    
-    // Group projects by type
-    const mobile: LinkedProject[] = [];
-    const backend: LinkedProject[] = [];
-    const web: LinkedProject[] = [];
-    const tools: LinkedProject[] = [];
-    const other: LinkedProject[] = [];
-    
-    for (const project of config.projects) {
-        switch (project.strategy) {
-            case 'android':
-            case 'ios':
-                mobile.push(project);
-                break;
-            case 'node':
-            case 'python-flask':
-            case 'php-laravel':
-                backend.push(project);
-                break;
-            case 'react-web':
-                web.push(project);
-                break;
-            default:
-                other.push(project);
-                break;
-        }
-    }
-    
-    let tree = `${config.organization.name}/\n`;
-    tree += `├── 🏢 ${config.nucleus.name}           [Este proyecto - Centro de conocimiento]\n`;
-    tree += `│\n`;
-    
-    if (mobile.length > 0) {
-        tree += `├── 📱 MOBILE\n`;
-        mobile.forEach((p, i) => {
-            const isLast = i === mobile.length - 1;
-            tree += `│   ${isLast ? '└' : '├'}── ${p.name}           [${p.strategy} - ${p.description || p.displayName}]\n`;
-        });
-        tree += `│\n`;
-    }
-    
-    if (backend.length > 0) {
-        tree += `├── ⚙️ BACKEND\n`;
-        backend.forEach((p, i) => {
-            const isLast = i === backend.length - 1;
-            tree += `│   ${isLast ? '└' : '├'}── ${p.name}           [${p.strategy} - ${p.description || p.displayName}]\n`;
-        });
-        tree += `│\n`;
-    }
-    
-    if (web.length > 0) {
-        tree += `├── 🌐 WEB\n`;
-        web.forEach((p, i) => {
-            const isLast = i === web.length - 1;
-            tree += `│   ${isLast ? '└' : '├'}── ${p.name}           [${p.strategy} - ${p.description || p.displayName}]\n`;
-        });
-        tree += `│\n`;
-    }
-    
-    if (other.length > 0) {
-        tree += `└── 🔧 OTHER\n`;
-        other.forEach((p, i) => {
-            const isLast = i === other.length - 1;
-            tree += `    ${isLast ? '└' : '├'}── ${p.name}           [${p.strategy} - ${p.description || p.displayName}]\n`;
-        });
-    }
-    
-    const content = `# Índice de Proyectos - ${config.organization.displayName}
+// ============================================================================
+// EXPORT FOR PROGRAMMATIC USE
+// ============================================================================
 
-## Árbol de Proyectos
-
-\`\`\`
-${tree}
-\`\`\`
-
-
-## Proyectos Activos
-
-| Proyecto | Estrategia | Estado | Última Actualización |
-|----------|------------|--------|---------------------|
-${config.projects.map(p => `| ${p.name} | ${p.strategy} | ${getStatusIcon(p.status)} ${p.status} | ${new Date(p.linkedAt).toISOString().split('T')[0]} |`).join('\n')}
-
-
-## Relaciones Entre Proyectos
-
-[Completar manualmente con las relaciones entre proyectos]
-
-
----
-bloom/v1
-document_type: "projects_index"
-auto_generated: true
-last_updated: "${new Date().toISOString()}"
-`;
-    
-    fs.writeFileSync(indexPath, content, 'utf-8');
-}
-
-function toTitleCase(str: string): string {
-    return str
-        .split(/[-_]/)
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-        .join(' ');
-}
-
-function inferRepoUrl(orgUrl: string, projectName: string): string {
-    return `${orgUrl}/${projectName}.git`;
-}
-
-function getStatusIcon(status: string): string {
-    switch (status) {
-        case 'active':
-            return '✅';
-        case 'development':
-            return '🚧';
-        case 'archived':
-            return '📦';
-        case 'planned':
-            return '📋';
-        default:
-            return '❓';
-    }
-}
+/**
+ * Export the core linking function for use by other commands
+ * 
+ * Example usage:
+ * ```typescript
+ * import { linkProjectToNucleus } from './linkToNucleus';
+ * 
+ * // After cloning a repo
+ * const success = await linkProjectToNucleus(clonedPath, nucleusPath);
+ * ```
+ */
+export { linkProjectToNucleus as default };
