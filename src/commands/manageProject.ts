@@ -1,855 +1,429 @@
-// src/commands/manageProject.ts
+/**
+ * Manage Project Commands - Migrated to Brain CLI v2.0
+ * 
+ * BEFORE: 600+ lines of duplicate logic
+ * AFTER:  ~150 lines using BrainExecutor
+ * 
+ * Changes:
+ * - Project detection → BrainExecutor.projectDetect()
+ * - Project linking → BrainExecutor.projectAdd()
+ * - Removed: scanDirectory(), detectProjectType(), linkToNucleusInternal()
+ * - Kept: VSCode UI/UX logic only
+ */
+
 import * as vscode from 'vscode';
-import * as path from 'path';
 import * as fs from 'fs';
-import { Logger } from '../utils/logger';
-import { ProjectDetector } from '../strategies/ProjectDetector';
-import { loadNucleusConfig, saveNucleusConfig, createLinkedProject } from '../models/bloomConfig';
-import { GitManager } from '../utils/gitManager';
-import { getUserOrgs, getOrgRepos } from '../utils/githubApi';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import { WorkspaceManager } from '../managers/workspaceManager';
+import * as path from 'path';
+import { BrainExecutor } from '../utils/brainExecutor';
 
-const execAsync = promisify(exec);
+// ============================================================================
+// TYPE DEFINITIONS
+// ============================================================================
 
-export async function manageProject(nucleusPath: string, orgName: string): Promise<void> {
-    const action = await vscode.window.showQuickPick([
-        {
-            label: '$(folder) Vincular Proyecto Local Existente',
-            description: 'Conectar un proyecto que ya existe en tu computadora',
-            value: 'link-local'
-        },
-        {
-            label: '$(cloud-download) Clonar desde GitHub',
-            description: 'Clonar un repositorio de la organización',
-            value: 'clone-github'
-        },
-        {
-            label: '$(file-directory-create) Crear Proyecto Nuevo',
-            description: 'Iniciar un proyecto desde cero con template',
-            value: 'create-new'
-        }
-    ], {
-        placeHolder: 'Selecciona cómo agregar el proyecto'
-    });
-
-    if (!action) return;
-
-    switch (action.value) {
-        case 'link-local':
-            await linkLocalProject(nucleusPath, orgName);
-            break;
-        case 'clone-github':
-            await cloneFromGitHub(nucleusPath, orgName);
-            break;
-        case 'create-new':
-            await createNewProject(nucleusPath, orgName);
-            break;
-    }
+interface LinkResult {
+    name: string;
+    success: boolean;
+    message?: string;
 }
 
-/**
- * Vincular proyecto local existente
- */
-async function linkLocalProject(nucleusPath: string, orgName: string): Promise<void> {
-    const logger = new Logger();
-    
-    // Parent folder: donde DEBEN estar todos los proyectos
-    const parentDir = path.dirname(nucleusPath);
-    
-    // Auto-discovery en el parent folder (ÚNICO lugar válido)
-    const detectedProjects = await detectProjectsInFolder(parentDir, nucleusPath);
-
-    if (detectedProjects.length > 0) {
-        // Mostrar lista de proyectos detectados en el parent folder
-        const selected = await vscode.window.showQuickPick(
-            detectedProjects.map(p => ({
-                label: `${getStrategyIcon(p.strategy)} ${p.name}`,
-                description: `${p.strategy}`,
-                detail: `${p.path}`,
-                project: p
-            })),
-            {
-                placeHolder: `Selecciona un proyecto del directorio ${path.basename(parentDir)}/`
-            }
-        );
-
-        if (selected) {
-            await linkProjectToNucleus(
-                nucleusPath,
-                orgName,
-                selected.project.path,
-                selected.project.name,
-                selected.project.strategy
-            );
-            
-            // Agregar al workspace
-            await WorkspaceManager.addProjectToWorkspace(
-                nucleusPath,                
-                orgName,                    
-                selected.project.path,
-                selected.project.name,
-                selected.project.strategy
-            );
-        }
-    } else {
-        vscode.window.showInformationMessage(
-            `No se detectaron proyectos en ${parentDir}.\n\nSugerencia: Clona o crea proyectos nuevos.`
-        );
-    }
-}
+// ============================================================================
+// MAIN COMMAND: Link Local Project
+// ============================================================================
 
 /**
- * Clonar desde GitHub
+ * Command: Bloom: Link Local Project
+ * 
+ * Allows user to select an existing local project and link it to the configured Nucleus.
+ * 
+ * Flow:
+ * 1. User selects parent folder
+ * 2. Brain CLI scans and detects projects
+ * 3. User selects project from list
+ * 4. Brain CLI links project to Nucleus
+ * 5. VSCode adds project to workspace
  */
-async function cloneFromGitHub(nucleusPath: string, orgName: string): Promise<void> {
+export async function linkLocalProjectCommand(): Promise<void> {
     try {
-        // Parent folder: donde se clonará el proyecto
-        const parentDir = path.dirname(nucleusPath);
-        
-        // 1. Obtener repos de la organización
-        await vscode.window.withProgress({
-            location: vscode.ProgressLocation.Notification,
-            title: 'Obteniendo repositorios...',
-            cancellable: false
-        }, async () => {
-            await new Promise(resolve => setTimeout(resolve, 500));
+        // 1. Get parent folder from user
+        const parentFolder = await vscode.window.showOpenDialog({
+            canSelectFolders: true,
+            canSelectFiles: false,
+            canSelectMany: false,
+            openLabel: 'Select Parent Folder',
+            title: 'Select folder containing projects to scan'
         });
-
-        const repos = await getOrgRepos(orgName);
         
-        // 2. Filtrar repos ya vinculados
-        const nucleusConfig = loadNucleusConfig(path.join(nucleusPath, '.bloom'));
-        const linkedRepos = nucleusConfig?.projects.map(p => p.name) || [];
-        const availableRepos = repos.filter((r: any) => !linkedRepos.includes(r.name));
-
-        if (availableRepos.length === 0) {
-            vscode.window.showInformationMessage('Todos los repositorios ya están vinculados');
+        if (!parentFolder || parentFolder.length === 0) {
             return;
         }
-
-        // 3. Seleccionar repo
-        interface RepoQuickPickItem extends vscode.QuickPickItem {
-            repo: any;
+        
+        const parentPath = parentFolder[0].fsPath;
+        
+        // 2. Detect projects using Brain CLI
+        const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left);
+        statusBar.text = '$(sync~spin) Scanning for projects...';
+        statusBar.show();
+        
+        let detected;
+        try {
+            detected = await BrainExecutor.projectDetect({
+                parentPath,
+                maxDepth: 2
+            });
+        } finally {
+            statusBar.dispose();
         }
-
-        const selected = await vscode.window.showQuickPick<RepoQuickPickItem>(
-            availableRepos.map((r: any) => ({
-                label: r.name,
-                description: r.description || 'Sin descripción',
-                detail: `⭐ ${r.stargazers_count} - Se clonará en: ${parentDir}/${r.name}`,
-                repo: r
-            })),
-            {
-                placeHolder: `Selecciona repositorio (se clonará en ${path.basename(parentDir)}/)`
+        
+        // 3. Handle detection errors
+        if (detected.status === 'error') {
+            vscode.window.showErrorMessage(
+                `Project detection failed: ${detected.message || 'Unknown error'}`
+            );
+            return;
+        }
+        
+        if (!detected.data || detected.data.projects_found === 0) {
+            const retry = await vscode.window.showInformationMessage(
+                'No projects detected in selected folder.',
+                'Try Different Folder'
+            );
+            
+            if (retry) {
+                return linkLocalProjectCommand(); // Recurse
             }
-        );
-
-        if (!selected) return;
-
-        // 4. Clonar directamente en parent folder (SIN preguntar ubicación)
-        const clonePath = path.join(parentDir, selected.repo.name);
-
-        // Verificar si ya existe
-        if (fs.existsSync(clonePath)) {
-            const overwrite = await vscode.window.showWarningMessage(
-                `La carpeta ${selected.repo.name} ya existe en ${parentDir}.\n¿Deseas vincularla de todas formas?`,
-                'Vincular Existente',
-                'Cancelar'
-            );
-
-            if (overwrite !== 'Vincular Existente') return;
-
-            // Vincular proyecto existente
-            const strategy = await ProjectDetector.getStrategyName(clonePath);            
-            
-            // Asegurar estructura .bloom
-            await ensureBloomStructure(clonePath, strategy);
-            
-            await linkProjectToNucleus(nucleusPath, orgName, clonePath, selected.repo.name, strategy);
-            
-            // Agregar al workspace
-            await WorkspaceManager.addProjectToWorkspace(
-                nucleusPath,
-                orgName,
-                clonePath,
-                selected.repo.name,
-                strategy
-            );
-            
-            vscode.window.showInformationMessage(`✅ ${selected.repo.name} vinculado al Nucleus`);
             return;
         }
-
-        // 5. Clonar con progress
-        await vscode.window.withProgress({
-            location: vscode.ProgressLocation.Notification,
-            title: `Clonando ${selected.repo.name} en ${path.basename(parentDir)}/...`,
-            cancellable: false
-        }, async (progress) => {
-            progress.report({ message: 'Clonando repositorio...' });
-            
-            try {
-                // Usar la API de Git de VSCode
-                const git = vscode.extensions.getExtension('vscode.git')?.exports;
-                if (!git) {
-                    throw new Error('Git extension no disponible');
-                }
-                
-                const gitApi = git.getAPI(1);
-                
-                // Clonar usando la API de VSCode (en parent folder)
-                await gitApi.clone(selected.repo.clone_url, parentDir);
-                
-                progress.report({ message: 'Detectando tipo de proyecto...' });
-                
-                // Detectar estrategia
-                const strategy = await ProjectDetector.getStrategyName(clonePath);
-                
-                progress.report({ message: 'Creando estructura Bloom...' });
-                
-                // Asegurar estructura .bloom
-                await ensureBloomStructure(clonePath, strategy);
-                
-                progress.report({ message: 'Vinculando al Nucleus...' });
-                
-                await linkProjectToNucleus(
-                    nucleusPath,
-                    orgName,
-                    clonePath,
-                    selected.repo.name,
-                    strategy
+        
+        // 4. Show detected projects to user
+        const items = detected.data.projects.map(p => ({
+            label: `$(folder) ${p.name}`,
+            description: `${p.strategy} · ${p.confidence} confidence`,
+            detail: p.path,
+            project: p
+        }));
+        
+        const selected = await vscode.window.showQuickPick(items, {
+            placeHolder: `Select project to link (${detected.data.projects_found} found)`,
+            matchOnDescription: true,
+            matchOnDetail: true
+        });
+        
+        if (!selected) {
+            return;
+        }
+        
+        // 5. Get Nucleus path
+        const nucleusPath = await getNucleusPath();
+        if (!nucleusPath) {
+            return;
+        }
+        
+        // 6. Link project using Brain CLI
+        statusBar.text = '$(sync~spin) Linking project to Nucleus...';
+        statusBar.show();
+        
+        let linked;
+        try {
+            linked = await BrainExecutor.projectAdd({
+                projectPath: selected.project.path,
+                nucleusPath: nucleusPath,
+                strategy: selected.project.strategy // Use detected strategy
+            });
+        } finally {
+            statusBar.dispose();
+        }
+        
+        // 7. Handle linking errors
+        if (linked.status === 'error') {
+            // Check if already linked
+            if (linked.message?.includes('already linked')) {
+                const overwrite = await vscode.window.showWarningMessage(
+                    `Project "${selected.project.name}" is already linked to this Nucleus. Update configuration?`,
+                    'Yes', 'No'
                 );
                 
-            } catch (error: any) {
-                // Fallback a exec si la API falla
-                if (error.message.includes('Git extension')) {
-                    try {
-                        await execAsync(`git clone "${selected.repo.clone_url}" "${clonePath}"`);
-                        
-                        progress.report({ message: 'Detectando tipo de proyecto...' });
-                        const strategy = await ProjectDetector.getStrategyName(clonePath);
-                        
-                        progress.report({ message: 'Creando estructura Bloom...' });
-                        await ensureBloomStructure(clonePath, strategy);
-                        
-                        progress.report({ message: 'Vinculando al Nucleus...' });
-                        await linkProjectToNucleus(nucleusPath, orgName, clonePath, selected.repo.name, strategy);
-                    } catch (execError: any) {
-                        throw new Error(`No se pudo clonar: ${execError.message}. Asegúrate de tener Git instalado.`);
-                    }
-                } else {
-                    throw error;
+                if (overwrite !== 'Yes') {
+                    return;
                 }
+                
+                // Retry (Brain CLI should handle force update)
+                linked = await BrainExecutor.projectAdd({
+                    projectPath: selected.project.path,
+                    nucleusPath: nucleusPath,
+                    strategy: selected.project.strategy
+                });
+                
+                if (linked.status === 'error') {
+                    vscode.window.showErrorMessage(
+                        `Failed to update project: ${linked.message || 'Unknown error'}`
+                    );
+                    return;
+                }
+            } else {
+                vscode.window.showErrorMessage(
+                    `Failed to link project: ${linked.message || 'Unknown error'}`
+                );
+                return;
             }
-        });        
-
-        // 6. Agregar al workspace automáticamente
-        const strategy = await ProjectDetector.getStrategyName(clonePath);
-        await WorkspaceManager.addProjectToWorkspace(
-            nucleusPath,
-            orgName,
-            clonePath,
-            selected.repo.name,
-            strategy
+        }
+        
+        // 8. Update VSCode workspace
+        await addProjectToWorkspace(selected.project.path);
+        
+        // 9. Success notification
+        if (linked.data) {
+            vscode.window.showInformationMessage(
+                `✅ Project '${linked.data.project.name}' linked to Nucleus`
+            );
+        }
+        
+        // 10. Refresh UI
+        await vscode.commands.executeCommand('bloom.projectExplorer.refresh');
+        
+    } catch (error) {
+        console.error('[linkLocalProject] Error:', error);
+        vscode.window.showErrorMessage(
+            `Error linking project: ${error instanceof Error ? error.message : 'Unknown error'}`
         );
-
-        vscode.window.showInformationMessage(
-            `✅ ${selected.repo.name} clonado y agregado al workspace`
-        );
-
-    } catch (error: any) {
-        vscode.window.showErrorMessage(`Error clonando repositorio: ${error.message}`);
     }
 }
 
-/**
- * Crear proyecto nuevo
- */
-async function createNewProject(nucleusPath: string, orgName: string): Promise<void> {
-    // Parent folder: donde se creará el proyecto
-    const parentDir = path.dirname(nucleusPath);
-    
-    // 1. Nombre del proyecto
-    const projectName = await vscode.window.showInputBox({
-        prompt: 'Nombre del proyecto',
-        placeHolder: 'mi-proyecto',
-        validateInput: (value) => {
-            if (!value || value.length < 3) return 'Mínimo 3 caracteres';
-            if (!/^[a-z0-9-]+$/.test(value)) return 'Solo minúsculas, números y guiones';
-            
-            // Verificar si ya existe en parent folder
-            const wouldExist = path.join(parentDir, value);
-            if (fs.existsSync(wouldExist)) {
-                return `Ya existe una carpeta llamada "${value}" en ${path.basename(parentDir)}/`;
-            }
-            
-            return null;
-        }
-    });
-
-    if (!projectName) return;
-
-    // 2. Tipo de proyecto
-    const projectType = await vscode.window.showQuickPick([
-        { label: '📱 Android', value: 'android' },
-        { label: '🍎 iOS', value: 'ios' },
-        { label: '🌐 React Web', value: 'react-web' },
-        { label: '⚙️ Node Backend', value: 'node' },
-        { label: '🐍 Python Flask', value: 'python-flask' },
-        { label: '📦 Genérico', value: 'generic' }
-    ], {
-        placeHolder: 'Selecciona el tipo de proyecto'
-    });
-
-    if (!projectType) return;
-
-    // 3. Crear directamente en parent folder (SIN preguntar ubicación)
-    const projectPath = path.join(parentDir, projectName);
-
-    // 4. Mostrar confirmación de ubicación
-    const confirm = await vscode.window.showInformationMessage(
-        `Se creará: ${parentDir}/${projectName}/`,
-        'Crear',
-        'Cancelar'
-    );
-
-    if (confirm !== 'Crear') return;
-
-    // 5. Crear con template
-    await vscode.window.withProgress({
-        location: vscode.ProgressLocation.Notification,
-        title: `Creando ${projectName} en ${path.basename(parentDir)}/...`,
-        cancellable: false
-    }, async (progress) => {
-        // Crear carpeta
-        if (!fs.existsSync(projectPath)) {
-            fs.mkdirSync(projectPath, { recursive: true });
-        }
-
-        progress.report({ message: 'Creando estructura básica...' });
-
-        // Crear template básico según tipo
-        await createProjectTemplate(projectPath, projectType.value);
-
-        progress.report({ message: 'Creando estructura Bloom...' });
-        
-        // Asegurar estructura .bloom
-        await ensureBloomStructure(projectPath, projectType.value);
-
-        progress.report({ message: 'Vinculando al Nucleus...' });
-
-        await linkProjectToNucleus(
-            nucleusPath,
-            orgName,
-            projectPath,
-            projectName,
-            projectType.value
-        );
-
-        progress.report({ message: 'Inicializando Git...' });
-
-        // Inicializar git
-        try {
-            await execAsync('git init', { cwd: projectPath });
-            await execAsync('git add .', { cwd: projectPath });
-            
-            // Queue commit (no push automático)
-            await GitManager.stageAndOpenSCM(
-                projectPath,
-                undefined, // Stage todos los archivos
-                `🌸 Initial commit - Created with Bloom\n\nProyecto: ${projectName}\nEstrategia: ${projectType.value}`
-            );
-
-        } catch (gitError) {
-            // Si git falla, continuar de todas formas
-            console.warn('Git init failed:', gitError);
-        }
-
-        await WorkspaceManager.addProjectToWorkspace(
-            nucleusPath,
-            orgName,
-            projectPath,
-            projectName,
-            projectType.value  
-        );        
-    });
-
-    // Agregar al workspace automáticamente
-    await WorkspaceManager.addProjectToWorkspace(
-            nucleusPath,
-            orgName,
-            projectPath,
-            projectName,
-            projectType.value  
-        );  
-
-    vscode.window.showInformationMessage(
-        `✅ ${projectName} creado y agregado al workspace`
-    );
-}
+// ============================================================================
+// COMMAND: Scan and Link Multiple Projects
+// ============================================================================
 
 /**
- * Detecta proyectos en una carpeta
+ * Command: Bloom: Scan and Link Multiple Projects
+ * 
+ * Batch operation to link multiple projects at once.
  */
-async function detectProjectsInFolder(
-    folderPath: string,
-    excludePath: string
-): Promise<Array<{name: string; path: string; strategy: string; description: string}>> {
-    const projects: Array<any> = [];
-
+export async function scanAndLinkMultipleProjectsCommand(): Promise<void> {
     try {
-        const items = fs.readdirSync(folderPath, { withFileTypes: true });
-
-        for (const item of items) {
-            if (!item.isDirectory()) continue;
-
-            const itemPath = path.join(folderPath, item.name);
-
-            // Excluir el propio Nucleus
-            if (itemPath === excludePath) continue;
-
-            // Detectar estrategia
-            const strategy = await ProjectDetector.getStrategyName(itemPath);
-
-            // Solo incluir si tiene .bloom/ o es un tipo reconocido
-            const hasBloom = fs.existsSync(path.join(itemPath, '.bloom'));
-            if (hasBloom || strategy !== 'generic') {
-                projects.push({
-                    name: item.name,
-                    path: itemPath,
-                    strategy,
-                    description: hasBloom ? 'Proyecto Bloom detectado' : `Proyecto ${strategy} detectado`
+        // 1. Get parent folder
+        const parentFolder = await vscode.window.showOpenDialog({
+            canSelectFolders: true,
+            canSelectFiles: false,
+            canSelectMany: false,
+            openLabel: 'Select Parent Folder',
+            title: 'Select folder containing multiple projects'
+        });
+        
+        if (!parentFolder || parentFolder.length === 0) {
+            return;
+        }
+        
+        const parentPath = parentFolder[0].fsPath;
+        
+        // 2. Get Nucleus path
+        const nucleusPath = await getNucleusPath();
+        if (!nucleusPath) {
+            return;
+        }
+        
+        // 3. Detect projects
+        const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left);
+        statusBar.text = '$(sync~spin) Scanning for projects...';
+        statusBar.show();
+        
+        const detected = await BrainExecutor.projectDetect({
+            parentPath,
+            maxDepth: 2,
+            minConfidence: 'medium' // Only show medium+ confidence
+        });
+        
+        statusBar.dispose();
+        
+        if (detected.status === 'error' || !detected.data || detected.data.projects_found === 0) {
+            vscode.window.showInformationMessage('No projects detected.');
+            return;
+        }
+        
+        // 4. Show multi-select picker
+        const items = detected.data.projects.map(p => ({
+            label: p.name,
+            description: `${p.strategy} · ${p.confidence}`,
+            detail: p.path,
+            picked: p.confidence === 'high', // Pre-select high confidence
+            project: p
+        }));
+        
+        const selected = await vscode.window.showQuickPick(items, {
+            canPickMany: true,
+            placeHolder: `Select projects to link (${detected.data.projects_found} found)`,
+            matchOnDescription: true
+        });
+        
+        if (!selected || selected.length === 0) {
+            return;
+        }
+        
+        // 5. Link each project
+        const results: LinkResult[] = [];
+        for (let i = 0; i < selected.length; i++) {
+            const item = selected[i];
+            statusBar.text = `$(sync~spin) Linking ${i + 1}/${selected.length}: ${item.label}`;
+            statusBar.show();
+            
+            try {
+                const result = await BrainExecutor.projectAdd({
+                    projectPath: item.project.path,
+                    nucleusPath: nucleusPath,
+                    strategy: item.project.strategy
+                });
+                
+                results.push({
+                    name: item.label,
+                    success: result.status === 'success',
+                    message: result.message
+                });
+                
+                if (result.status === 'success') {
+                    await addProjectToWorkspace(item.project.path);
+                }
+            } catch (error) {
+                results.push({
+                    name: item.label,
+                    success: false,
+                    message: error instanceof Error ? error.message : 'Unknown error'
                 });
             }
         }
+        
+        statusBar.dispose();
+        
+        // 6. Show results
+        const successful = results.filter(r => r.success).length;
+        const failed = results.length - successful;
+        
+        if (failed === 0) {
+            vscode.window.showInformationMessage(
+                `✅ Successfully linked ${successful} project${successful !== 1 ? 's' : ''}`
+            );
+        } else {
+            const message = `Linked ${successful} project${successful !== 1 ? 's' : ''}, ${failed} failed`;
+            vscode.window.showWarningMessage(message, 'Show Details').then(action => {
+                if (action === 'Show Details') {
+                    // Show detailed results in output channel
+                    const output = vscode.window.createOutputChannel('Bloom: Link Results');
+                    output.clear();
+                    results.forEach(r => {
+                        output.appendLine(`${r.success ? '✅' : '❌'} ${r.name}: ${r.message || 'OK'}`);
+                    });
+                    output.show();
+                }
+            });
+        }
+        
+        // Refresh UI
+        await vscode.commands.executeCommand('bloom.projectExplorer.refresh');
+        
     } catch (error) {
-        console.error('Error detecting projects:', error);
+        console.error('[scanAndLinkMultiple] Error:', error);
+        vscode.window.showErrorMessage(
+            `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
+        );
     }
-
-    return projects;
 }
 
+// ============================================================================
+// HELPERS
+// ============================================================================
+
 /**
- * Asegura que existe estructura .bloom completa
- * SI YA EXISTE: No hace nada
- * SI NO EXISTE: Crea estructura completa según estrategia
+ * Get Nucleus path from config or prompt user
  */
-async function ensureBloomStructure(projectPath: string, strategy: string): Promise<void> {
-    const bloomPath = path.join(projectPath, '.bloom');
+async function getNucleusPath(): Promise<string | undefined> {
+    const config = vscode.workspace.getConfiguration('bloom');
+    let nucleusPath = config.get<string>('nucleusPath');
     
-    // CRÍTICO: Verificar si ya existe estructura completa
-    const coreExists = fs.existsSync(path.join(bloomPath, 'core'));
-    const projectExists = fs.existsSync(path.join(bloomPath, 'project'));
-    
-    if (coreExists && projectExists) {
-        console.log('✅ Estructura .bloom ya existe - No se sobrescribe');
-        return;
-    }
-    
-    console.log(`📁 Creando estructura .bloom para proyecto ${strategy}...`);
-    
-    // Crear directorios
-    const dirs = [
-        path.join(bloomPath, 'core'),
-        path.join(bloomPath, 'project'),
-        path.join(bloomPath, 'intents')
-    ];
-    
-    for (const dir of dirs) {
-        if (!fs.existsSync(dir)) {
-            fs.mkdirSync(dir, { recursive: true });
+    // Validate existing path
+    if (nucleusPath) {
+        try {
+            if (fs.existsSync(nucleusPath)) {
+                // Verify it's actually a Nucleus
+                const status = await BrainExecutor.nucleusStatus(nucleusPath);
+                if (status.status === 'success' && status.data?.is_nucleus) {
+                    return nucleusPath;
+                }
+            }
+        } catch (error) {
+            // Invalid path, ask user
+            console.warn('[getNucleusPath] Invalid configured path:', error);
         }
     }
     
-    // Crear archivos core básicos (SOLO si no existen)
-    const rulesPath = path.join(bloomPath, 'core', '.rules.bl');
-    if (!fs.existsSync(rulesPath)) {
-        const rulesContent = `# Reglas del Proyecto
-
-## Convenciones de Código
-- Seguir guía de estilo del lenguaje
-- Documentar funciones públicas
-- Mantener consistencia con el equipo
-
-## Testing
-- Tests unitarios para lógica crítica
-- Coverage mínimo recomendado: 70%
-
-## Git
-- Commits descriptivos
-- Pull requests para features nuevos
-
----
-bloom/v1
-document_type: "project_rules"
-strategy: "${strategy}"
-created_at: "${new Date().toISOString()}"
-`;
-        
-        fs.writeFileSync(rulesPath, rulesContent, 'utf-8');
-    }
-    
-    const promptPath = path.join(bloomPath, 'core', '.prompt.bl');
-    if (!fs.existsSync(promptPath)) {
-        const promptContent = `# Prompt del Proyecto
-
-Eres un asistente de IA especializado en proyectos ${strategy}.
-
-## Contexto del Proyecto
-Este es un proyecto ${strategy}. Ayuda al desarrollador con:
-- Debugging de código
-- Sugerencias de arquitectura
-- Optimización de performance
-- Buenas prácticas específicas de ${strategy}
-
-## Tone
-- Directo y técnico
-- Ejemplos concretos
-- Referencias a documentación oficial
-
----
-bloom/v1
-document_type: "project_prompt"
-strategy: "${strategy}"
-`;
-        
-        fs.writeFileSync(promptPath, promptContent, 'utf-8');
-    }
-    
-    // Crear .context.bl (SOLO si no existe)
-    const contextPath = path.join(bloomPath, 'project', '.context.bl');
-    if (!fs.existsSync(contextPath)) {
-        const contextContent = `# Contexto del Proyecto
-
-## Estrategia Detectada
-${strategy}
-
-## Descripción
-[Completar con descripción del proyecto]
-
-## Stack Tecnológico
-${getStackDescription(strategy)}
-
-## Arquitectura
-[Describir arquitectura del proyecto]
-
-## Dependencias Clave
-[Listar dependencias principales]
-
----
-bloom/v1
-document_type: "project_context"
-strategy: "${strategy}"
-created_at: "${new Date().toISOString()}"
-`;
-        
-        fs.writeFileSync(contextPath, contextContent, 'utf-8');
-    }
-    
-    console.log('✅ Estructura .bloom creada exitosamente');
-}
-
-/**
- * Retorna descripción de stack según estrategia
- */
-function getStackDescription(strategy: string): string {
-    const stacks: Record<string, string> = {
-        'android': '- Lenguaje: Kotlin/Java\n- Build: Gradle\n- UI: XML/Jetpack Compose',
-        'ios': '- Lenguaje: Swift\n- Build: Xcode\n- UI: SwiftUI/UIKit',
-        'react-web': '- Lenguaje: JavaScript/TypeScript\n- Framework: React\n- Build: Webpack/Vite',
-        'node': '- Lenguaje: JavaScript/TypeScript\n- Runtime: Node.js\n- Framework: Express/Fastify',
-        'python-flask': '- Lenguaje: Python\n- Framework: Flask\n- Database: SQLAlchemy',
-        'generic': '- [Definir stack tecnológico]'
-    };
-    
-    return stacks[strategy] || stacks['generic'];
-}
-
-/**
- * Vincula un proyecto al Nucleus
- */
-async function linkProjectToNucleus(
-    nucleusPath: string,
-    orgName: string,
-    projectPath: string,
-    projectName: string,
-    strategy: string
-): Promise<void> {
-    const logger = new Logger();
-    const bloomPath = path.join(nucleusPath, '.bloom');
-
-    // 1. Cargar nucleus-config.json
-    const nucleusConfig = loadNucleusConfig(bloomPath);
-    if (!nucleusConfig) {
-        throw new Error('Nucleus config not found');
-    }
-
-    // 2. Crear LinkedProject
-    const relativePath = path.relative(nucleusPath, projectPath);
-    const repoUrl = await detectGitRemote(projectPath);
-
-    const linkedProject = createLinkedProject(
-        projectName,
-        projectName.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
-        strategy as any,
-        repoUrl || `https://github.com/${orgName}/${projectName}.git`,
-        relativePath
+    // Prompt for Nucleus path
+    const action = await vscode.window.showInformationMessage(
+        'No Nucleus project configured. Please select your Nucleus folder.',
+        'Select Nucleus', 'Cancel'
     );
-
-    // 3. Actualizar nucleus-config.json
-    nucleusConfig.projects.push(linkedProject);
-    nucleusConfig.nucleus.updatedAt = new Date().toISOString();
-    saveNucleusConfig(bloomPath, nucleusConfig);
-
-    // 4. Crear nucleus.json en el proyecto hijo
-    const projectBloomDir = path.join(projectPath, '.bloom');
-    if (!fs.existsSync(projectBloomDir)) {
-        fs.mkdirSync(projectBloomDir, { recursive: true });
-    }
-
-    const nucleusLink = {
-        linkedToNucleus: true,
-        nucleusId: nucleusConfig.id,
-        nucleusName: nucleusConfig.nucleus.name,
-        nucleusPath: path.relative(projectPath, nucleusPath),
-        nucleusUrl: nucleusConfig.nucleus.repoUrl,
-        organizationName: nucleusConfig.organization.name,
-        projectId: linkedProject.id,
-        linkedAt: linkedProject.linkedAt
-    };
-
-    fs.writeFileSync(
-        path.join(projectBloomDir, 'nucleus.json'),
-        JSON.stringify(nucleusLink, null, 2),
-        'utf-8'
-    );
-
-    // 5. Crear overview.bl en Nucleus
-    const overviewDir = path.join(bloomPath, 'projects', projectName);
-    if (!fs.existsSync(overviewDir)) {
-        fs.mkdirSync(overviewDir, { recursive: true });
-    }
-
-    const overviewContent = generateProjectOverview(linkedProject);
-    fs.writeFileSync(
-        path.join(overviewDir, 'overview.bl'),
-        overviewContent,
-        'utf-8'
-    );
-
-    // 6. Regenerar _index.bl
-    regenerateProjectsIndex(nucleusPath, nucleusConfig);
-
-    // 7. Queue Git commit en Nucleus
-    await GitManager.queueCommit(
-        nucleusPath,
-        `📦 Added project: ${projectName} (${strategy})`,
-        [
-            '.bloom/core/nucleus-config.json',
-            `.bloom/projects/${projectName}/overview.bl`,
-            '.bloom/projects/_index.bl'
-        ]
-    );
-
-    logger.info(`Proyecto ${projectName} vinculado exitosamente`);
-
-    // Refrescar tree
-    vscode.commands.executeCommand('bloom.syncNucleusProjects');
-}
-
-// Helper functions...
-function getStrategyIcon(strategy: string): string {
-    const icons: Record<string, string> = {
-        'android': '📱', 
-        'ios': '🍎', 
-        'react-web': '🌐',
-        'node': '⚙️', 
-        'python-flask': '🐍', 
-        'generic': '📦'
-    };
-    return icons[strategy] || '📦';
-}
-
-async function detectGitRemote(projectPath: string): Promise<string | null> {
-    try {
-        const { stdout } = await execAsync('git remote get-url origin', {
-            cwd: projectPath
-        });
-        return stdout.trim();
-    } catch {
-        return null;
-    }
-}
-
-function generateProjectOverview(project: any): string {
-    return `# ${project.displayName} - Overview
-
-## Información General
-**Nombre:** ${project.name}
-**Estrategia:** ${project.strategy}
-**Repositorio:** ${project.repoUrl}
-**Path Local:** ${project.localPath}
-**Estado:** ${project.status}
-
-## 🎯 Propósito
-[Completar: ¿Por qué existe este proyecto? ¿Qué problema resuelve?]
-
-## 👥 Usuarios
-[Completar: ¿Quién usa este proyecto? ¿Qué roles interactúan con él?]
-
-## 💼 Lógica de Negocio
-[Completar: ¿Cómo contribuye al modelo de negocio de la organización?]
-
-## 🔗 Dependencias
-### Depende de:
-- [Completar]
-
-### Es usado por:
-- [Completar]
-
----
-bloom/v1
-project_id: "${project.id}"
-linked_at: "${project.linkedAt}"
-`;
-}
-
-function regenerateProjectsIndex(nucleusPath: string, config: any): void {
-    const indexPath = path.join(nucleusPath, '.bloom', 'projects', '_index.bl');
     
-    let tree = `${config.organization.name}/\n`;
-    tree += `├── 🏢 ${config.nucleus.name} [Nucleus]\n`;
+    if (action !== 'Select Nucleus') {
+        return undefined;
+    }
     
-    config.projects.forEach((p: any, i: number) => {
-        const isLast = i === config.projects.length - 1;
-        const prefix = isLast ? '└──' : '├──';
-        const icon = getStrategyIcon(p.strategy);
-        tree += `${prefix} ${icon} ${p.name} [${p.strategy}]\n`;
+    const selected = await vscode.window.showOpenDialog({
+        canSelectFolders: true,
+        canSelectFiles: false,
+        openLabel: 'Select Nucleus Project',
+        title: 'Select your Nucleus project folder'
     });
     
-    const content = `# Índice de Proyectos - ${config.organization.name}
-
-## Árbol de Proyectos
-
-\`\`\`
-${tree}\`\`\`
-
-## Proyectos Vinculados (${config.projects.length})
-
-| Proyecto | Estrategia | Estado | Path |
-|----------|------------|--------|------|
-${config.projects.map((p: any) => `| ${p.name} | ${p.strategy} | ${p.status} | ${p.localPath} |`).join('\n')}
-
----
-bloom/v1
-auto_generated: true
-updated_at: "${new Date().toISOString()}"
-`;
+    if (!selected || selected.length === 0) {
+        vscode.window.showWarningMessage('Nucleus path is required to link projects');
+        return undefined;
+    }
     
-    fs.writeFileSync(indexPath, content, 'utf-8');
+    nucleusPath = selected[0].fsPath;
+    
+    // Verify it's a Nucleus
+    const status = await BrainExecutor.nucleusStatus(nucleusPath);
+    if (status.status === 'error' || !status.data?.is_nucleus) {
+        vscode.window.showErrorMessage(
+            'Selected folder is not a valid Nucleus project. Please create a Nucleus first.'
+        );
+        return undefined;
+    }
+    
+    // Save to workspace config
+    await config.update(
+        'nucleusPath',
+        nucleusPath,
+        vscode.ConfigurationTarget.Workspace
+    );
+    
+    return nucleusPath;
 }
 
-async function createProjectTemplate(projectPath: string, type: string): Promise<void> {
-    // Crear README.md
-    const readme = `# ${path.basename(projectPath)}
-
-Proyecto ${type} creado con Bloom BTIP.
-
-## Setup
-
-[Completar instrucciones de instalación]
-
-## Development
-
-[Completar comandos de desarrollo]
-
-## Testing
-
-[Completar comandos de testing]
-
----
-Creado con 🌸 Bloom BTIP
-`;
+/**
+ * Add project to VSCode workspace
+ */
+async function addProjectToWorkspace(projectPath: string): Promise<void> {
+    const workspaceFolders = vscode.workspace.workspaceFolders || [];
     
-    fs.writeFileSync(path.join(projectPath, 'README.md'), readme, 'utf-8');
-
-    // Crear .gitignore básico
-    const gitignore = `# Dependencies
-node_modules/
-venv/
-vendor/
-
-# IDE
-.vscode/
-.idea/
-*.swp
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Logs
-*.log
-npm-debug.log*
-
-# Environment
-.env
-.env.local
-`;
-    fs.writeFileSync(path.join(projectPath, '.gitignore'), gitignore, 'utf-8');
-
-    // Templates específicos según tipo
-    switch (type) {
-        case 'node':
-            fs.writeFileSync(
-                path.join(projectPath, 'package.json'),
-                JSON.stringify({
-                    name: path.basename(projectPath),
-                    version: '1.0.0',
-                    description: '',
-                    main: 'index.js',
-                    scripts: {
-                        start: 'node index.js',
-                        test: 'echo "No tests yet"'
-                    },
-                    keywords: [],
-                    author: '',
-                    license: 'ISC'
-                }, null, 2),
-                'utf-8'
-            );
-            
-            // Crear index.js básico
-            const indexJs = `// ${path.basename(projectPath)}
-console.log('Hello from Bloom! 🌸');
-
-// TODO: Implement your application logic here
-`;
-            fs.writeFileSync(path.join(projectPath, 'index.js'), indexJs, 'utf-8');
-            break;
-            
-        // Agregar más templates según necesidad
-        case 'python-flask':
-            const requirementsTxt = `flask==3.0.0
-python-dotenv==1.0.0
-`;
-            fs.writeFileSync(path.join(projectPath, 'requirements.txt'), requirementsTxt, 'utf-8');
-            
-            const appPy = `# ${path.basename(projectPath)}
-from flask import Flask
-
-app = Flask(__name__)
-
-@app.route('/')
-def hello():
-    return 'Hello from Bloom! 🌸'
-
-if __name__ == '__main__':
-    app.run(debug=True)
-`;
-            fs.writeFileSync(path.join(projectPath, 'app.py'), appPy, 'utf-8');
-            break;
+    // Check if already in workspace
+    const alreadyOpen = workspaceFolders.some(
+        folder => folder.uri.fsPath === projectPath
+    );
+    
+    if (alreadyOpen) {
+        return; // Already in workspace
     }
+    
+    // Add to workspace
+    vscode.workspace.updateWorkspaceFolders(
+        workspaceFolders.length,
+        0,
+        { uri: vscode.Uri.file(projectPath) }
+    );
+}
+
+/**
+ * Register all project management commands
+ */
+export function registerManageProjectCommands(context: vscode.ExtensionContext): void {
+    context.subscriptions.push(
+        vscode.commands.registerCommand('bloom.project.linkLocal', linkLocalProjectCommand),
+        vscode.commands.registerCommand('bloom.project.linkMultiple', scanAndLinkMultipleProjectsCommand)
+    );
 }

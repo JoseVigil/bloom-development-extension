@@ -10,12 +10,9 @@
  * ALL communication with Brain goes through this class.
  */
 
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { spawn } from 'child_process';
 import * as vscode from 'vscode';
 import * as path from 'path';
-
-const execAsync = promisify(exec);
 
 // ============================================================================
 // TYPE DEFINITIONS
@@ -83,6 +80,22 @@ export interface CloneResult {
     clone_url: string;
 }
 
+export interface DetectedProject {
+    path: string;
+    name: string;
+    strategy: string;
+    confidence: 'high' | 'medium' | 'low';
+    indicators_found: string[];
+}
+
+export interface LinkedProject {
+    name: string;
+    path: string;
+    strategy: string;
+    nucleus_path: string;
+    repo_url?: string;
+}
+
 // ============================================================================
 // BRAIN EXECUTOR CLASS
 // ============================================================================
@@ -118,6 +131,8 @@ export class BrainExecutor {
 
     /**
      * Execute Brain CLI command and parse JSON output
+     * 
+     * IMPROVED: Uses spawn instead of exec for better security and real-time output
      */
     private static async execute<T = any>(
         args: string[],
@@ -127,71 +142,76 @@ export class BrainExecutor {
             onProgress?: (line: string) => void;
         } = {}
     ): Promise<BrainResult<T>> {
-        try {
+        return new Promise((resolve, reject) => {
             if (!this.pythonPath || !this.brainModulePath) {
-                throw new Error('BrainExecutor not initialized. Call initialize() first.');
+                reject(new Error('BrainExecutor not initialized. Call initialize() first.'));
+                return;
             }
 
-            // Build command: python -m brain <args> --json
-            const fullArgs = [...args, '--json'];
-            const command = `"${this.pythonPath}" -m brain ${fullArgs.join(' ')}`;
+            // Build args: python -m brain <args> --json
+            const fullArgs = ['-m', 'brain', ...args, '--json'];
+            
+            console.log(`[BrainExecutor] ${this.pythonPath} ${fullArgs.join(' ')}`);
+            console.log(`[BrainExecutor] CWD: ${options.cwd || this.brainModulePath}`);
 
-            console.log(`[BrainExecutor] Executing: ${command}`);
-            console.log(`[BrainExecutor] CWD: ${options.cwd || 'current'}`);
-
-            // Execute with proper environment
-            const { stdout, stderr } = await execAsync(command, {
+            const proc = spawn(this.pythonPath, fullArgs, {
                 cwd: options.cwd || this.brainModulePath,
-                timeout: options.timeout || 60000,
                 env: {
                     ...process.env,
                     PYTHONPATH: this.brainModulePath
                 }
             });
 
-            // Log stderr if present (warnings, progress)
-            if (stderr && options.onProgress) {
-                stderr.split('\n').forEach(line => {
-                    if (line.trim()) {
-                        options.onProgress!(line.trim());
-                    }
-                });
-            }
+            let stdout = '';
+            let stderr = '';
 
-            // Parse JSON output
-            const result = JSON.parse(stdout.trim()) as BrainResult<T>;
+            proc.stdout.on('data', (data) => {
+                stdout += data.toString();
+            });
 
-            // Log result
-            if (result.status === 'success') {
-                console.log(`[BrainExecutor] ✅ Success:`, result.operation || args[0]);
-            } else {
-                console.warn(`[BrainExecutor] ⚠️ Non-success status:`, result);
-            }
-
-            return result;
-
-        } catch (error: any) {
-            // Handle execution errors
-            console.error('[BrainExecutor] Execution error:', error);
-
-            // Try to parse JSON from error output
-            if (error.stdout) {
-                try {
-                    const result = JSON.parse(error.stdout.trim());
-                    return result;
-                } catch {
-                    // Not JSON, continue with error handling
+            proc.stderr.on('data', (data) => {
+                const line = data.toString().trim();
+                stderr += line + '\n';
+                
+                // Send progress updates to callback
+                if (options.onProgress && line) {
+                    options.onProgress(line);
                 }
-            }
+            });
 
-            // Return error in standard format
-            return {
-                status: 'error',
-                operation: args[0],
-                error: error.message,
-                message: `Brain CLI execution failed: ${error.message}`
-            };
-        }
+            // Timeout handling
+            const timeoutId = setTimeout(() => {
+                proc.kill();
+                reject(new Error(`Command timeout after ${options.timeout || 60000}ms`));
+            }, options.timeout || 60000);
+
+            proc.on('close', (code) => {
+                clearTimeout(timeoutId);
+
+                try {
+                    // Parse JSON output
+                    const result = JSON.parse(stdout.trim()) as BrainResult<T>;
+                    
+                    if (result.status === 'success') {
+                        console.log(`[BrainExecutor] ✅ Success:`, result.operation || args[0]);
+                    } else {
+                        console.warn(`[BrainExecutor] ⚠️ Non-success status:`, result);
+                    }
+                    
+                    resolve(result);
+                } catch (error) {
+                    // JSON parse failed - return error result
+                    reject(new Error(
+                        `Failed to parse Brain output:\n${stdout}\n\nStderr: ${stderr}`
+                    ));
+                }
+            });
+
+            proc.on('error', (error) => {
+                clearTimeout(timeoutId);
+                reject(error);
+            });
+        });
     }
 
     // ========================================================================
@@ -224,7 +244,7 @@ export class BrainExecutor {
     // GITHUB REPOSITORIES
     // ========================================================================
 
-    static async githubReposList(org?: string): Promise<BrainResult<{ repos: GitHubRepository[] }>> {
+    static async githubReposList(org?: string): Promise<BrainResult<{ repositories: GitHubRepository[] }>> {
         const args = ['github', 'repos-list'];
         if (org) {
             args.push('--org', org);
@@ -326,6 +346,161 @@ export class BrainExecutor {
         return this.execute(args, { cwd: path });
     }
 
+    static async nucleusListProjects(options?: {
+        nucleusPath?: string;
+        strategy?: string;
+        activeOnly?: boolean;
+    }): Promise<BrainResult<{
+        nucleus_path: string;
+        projects_count: number;
+        projects: Array<LinkedProject>;
+    }>> {
+        const args = ['nucleus', 'list-projects'];
+        
+        if (options?.nucleusPath) {
+            args.push('-p', options.nucleusPath);
+        }
+        if (options?.strategy) {
+            args.push('-s', options.strategy);
+        }
+        if (options?.activeOnly) {
+            args.push('--active-only');
+        }
+        
+        return this.execute(args, { cwd: options?.nucleusPath });
+    }
+
+    // ========================================================================
+    // PROJECT COMMANDS (NEW - Migration Phase 1)
+    // ========================================================================
+
+    /**
+     * Detect projects in a parent directory
+     * Maps to: brain project detect <PARENT_PATH> [OPTIONS]
+     */
+    static async projectDetect(options: {
+        parentPath: string;
+        maxDepth?: number;
+        strategy?: string;
+        minConfidence?: 'high' | 'medium' | 'low';
+    }): Promise<BrainResult<{
+        parent_path: string;
+        projects_found: number;
+        projects: DetectedProject[];
+    }>> {
+        const args = ['project', 'detect', options.parentPath];
+        
+        if (options.maxDepth !== undefined) {
+            args.push('-d', options.maxDepth.toString());
+        }
+        if (options.strategy) {
+            args.push('-s', options.strategy);
+        }
+        if (options.minConfidence) {
+            args.push('-c', options.minConfidence);
+        }
+        
+        return this.execute(args);
+    }
+
+    /**
+     * Link existing project to Nucleus
+     * Maps to: brain project add <PROJECT_PATH> [OPTIONS]
+     */
+    static async projectAdd(options: {
+        projectPath: string;
+        nucleusPath: string;
+        name?: string;
+        strategy?: string;
+        description?: string;
+        repoUrl?: string;
+    }): Promise<BrainResult<{
+        project: LinkedProject;
+    }>> {
+        const args = ['project', 'add', options.projectPath];
+        
+        // Required: nucleus path
+        args.push('-n', options.nucleusPath);
+        
+        // Optional metadata
+        if (options.name) {
+            args.push('--name', options.name);
+        }
+        if (options.strategy) {
+            args.push('--strategy', options.strategy);
+        }
+        if (options.description) {
+            args.push('--description', options.description);
+        }
+        if (options.repoUrl) {
+            args.push('--repo-url', options.repoUrl);
+        }
+        
+        return this.execute(args);
+    }
+
+    /**
+     * Clone Git repo and auto-link to Nucleus
+     * Maps to: brain project clone-and-add <REPO_URL> [OPTIONS]
+     * 
+     * IMPORTANT: Nucleus is auto-detected from cwd, so we pass nucleusPath as cwd
+     */
+    static async projectCloneAndAdd(options: {
+        repo: string;
+        nucleusPath: string;
+        destination?: string;
+        name?: string;
+        strategy?: string;
+        description?: string;
+        onProgress?: (line: string) => void;
+    }): Promise<BrainResult<{
+        cloned_path: string;
+        repo_url: string;
+        project: {
+            name: string;
+            strategy: string;
+            nucleus_path: string;
+        };
+    }>> {
+        const args = ['project', 'clone-and-add', options.repo];
+        
+        if (options.destination) {
+            args.push('-d', options.destination);
+        }
+        if (options.name) {
+            args.push('--name', options.name);
+        }
+        if (options.strategy) {
+            args.push('--strategy', options.strategy);
+        }
+        if (options.description) {
+            args.push('--description', options.description);
+        }
+        
+        // CRITICAL: Execute from Nucleus directory so Brain can auto-detect it
+        return this.execute(args, {
+            cwd: options.nucleusPath,
+            onProgress: options.onProgress,
+            timeout: 180000 // 3 minutes for cloning
+        });
+    }
+
+    /**
+     * Load project metadata
+     * Maps to: brain project load [OPTIONS]
+     */
+    static async projectLoad(options: {
+        projectPath: string;
+    }): Promise<BrainResult<{
+        strategy: string;
+        indicators_found: string[];
+        file_count: number;
+        size_mb: number;
+        [key: string]: any;
+    }>> {
+        return this.execute(['project', 'load', '-p', options.projectPath]);
+    }
+
     // ========================================================================
     // CONTEXT GENERATION
     // ========================================================================
@@ -375,6 +550,49 @@ export class BrainExecutor {
         return this.execute(args);
     }
 
+    static async filesystemCompress(options: {
+        paths: string[];
+        mode: 'codebase' | 'docbase';
+        output?: string;
+        exclude?: string[];
+        noComments?: boolean;
+    }): Promise<BrainResult<{ compressed_file: string }>> {
+        const args = ['filesystem', 'compress', ...options.paths];
+        
+        args.push('-m', options.mode);
+        
+        if (options.output) {
+            args.push('-o', options.output);
+        }
+        if (options.exclude) {
+            options.exclude.forEach(pattern => {
+                args.push('-e', pattern);
+            });
+        }
+        if (options.noComments) {
+            args.push('--no-comments');
+        }
+
+        return this.execute(args);
+    }
+
+    static async filesystemExtract(options: {
+        jsonFile: string;
+        output?: string;
+        verifyHashes?: boolean;
+    }): Promise<BrainResult<{ extracted_path: string }>> {
+        const args = ['filesystem', 'extract', options.jsonFile];
+        
+        if (options.output) {
+            args.push('-o', options.output);
+        }
+        if (options.verifyHashes !== undefined) {
+            args.push(options.verifyHashes ? '--verify-hashes' : '--no-verify-hashes');
+        }
+
+        return this.execute(args);
+    }
+
     // ========================================================================
     // UTILITIES
     // ========================================================================
@@ -396,7 +614,7 @@ export class BrainExecutor {
      */
     static async getVersion(): Promise<string> {
         try {
-            const result = await this.execute(['--help']);
+            await this.execute(['--help']);
             return 'Brain CLI v2.0';
         } catch {
             return 'Unknown';

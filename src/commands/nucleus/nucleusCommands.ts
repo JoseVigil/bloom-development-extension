@@ -5,11 +5,17 @@ import { Managers } from '../../initialization/managersInitializer';
 import { Providers } from '../../initialization/providersInitializer';
 import { UserManager } from '../../managers/userManager';
 import { openNucleusProject } from '../../providers/nucleusTreeProvider';
-import { linkToNucleus } from '../linkToNucleus';
-import { manageProject } from '../manageProject';
+
+// ============================================================================
+// MIGRATED IMPORTS - Using new Brain CLI commands
+// ============================================================================
+import { linkProjectToNucleus } from '../linkToNucleus';
+import { linkLocalProjectCommand } from '../manageProject';
 
 /**
  * Registra todos los comandos relacionados con Nucleus
+ * 
+ * UPDATED: Now uses migrated Brain CLI commands for project management
  */
 export function registerNucleusCommands(
     context: vscode.ExtensionContext,
@@ -19,6 +25,7 @@ export function registerNucleusCommands(
 ): void {
     // ========================================
     // COMANDO: Add Project to Nucleus
+    // MIGRATED: Uses new linkLocalProjectCommand with Brain CLI
     // ========================================
     context.subscriptions.push(
         vscode.commands.registerCommand('bloom.addProjectToNucleus', async (treeItem: any) => {
@@ -35,7 +42,18 @@ export function registerNucleusCommands(
                     return;
                 }
 
-                await manageProject(nucleusPath, orgName);
+                // Set Nucleus path in config before calling command
+                const config = vscode.workspace.getConfiguration('bloom');
+                await config.update(
+                    'nucleusPath',
+                    nucleusPath,
+                    vscode.ConfigurationTarget.Workspace
+                );
+
+                // Call migrated command (uses BrainExecutor internally)
+                await linkLocalProjectCommand();
+                
+                logger.info(`Project added to Nucleus: ${orgName}`);
             } catch (error: any) {
                 logger.error('Error adding project to nucleus', error);
                 vscode.window.showErrorMessage(`Error: ${error.message}`);
@@ -45,11 +63,52 @@ export function registerNucleusCommands(
 
     // ========================================
     // COMANDO: Link to Nucleus
+    // MIGRATED: Uses new linkProjectToNucleus with Brain CLI
     // ========================================
     context.subscriptions.push(
         vscode.commands.registerCommand('bloom.linkToNucleus', async (uri?: vscode.Uri) => {
             try {
-                await linkToNucleus(uri);
+                if (uri) {
+                    // Called from context menu with URI
+                    await linkProjectToNucleus(uri.fsPath);
+                } else {
+                    // Called from command palette - get current workspace folder
+                    const workspaceFolders = vscode.workspace.workspaceFolders;
+                    
+                    if (!workspaceFolders || workspaceFolders.length === 0) {
+                        vscode.window.showWarningMessage(
+                            'No folder is currently open. Please open a project folder first.'
+                        );
+                        return;
+                    }
+                    
+                    let projectPath: string;
+                    
+                    if (workspaceFolders.length > 1) {
+                        // Multiple folders - ask which one
+                        const items = workspaceFolders.map(folder => ({
+                            label: folder.name,
+                            description: folder.uri.fsPath,
+                            path: folder.uri.fsPath
+                        }));
+                        
+                        const selected = await vscode.window.showQuickPick(items, {
+                            placeHolder: 'Select project to link to Nucleus'
+                        });
+                        
+                        if (!selected) {
+                            return;
+                        }
+                        
+                        projectPath = selected.path;
+                    } else {
+                        projectPath = workspaceFolders[0].uri.fsPath;
+                    }
+                    
+                    await linkProjectToNucleus(projectPath);
+                }
+                
+                logger.info('Project linked to Nucleus');
             } catch (error: any) {
                 logger.error('Error linking to nucleus', error);
                 vscode.window.showErrorMessage(`Error: ${error.message}`);
@@ -183,4 +242,6 @@ export function registerNucleusCommands(
             }
         })
     );
+    
+    logger.info('✅ Nucleus commands registered (using Brain CLI)');
 }
