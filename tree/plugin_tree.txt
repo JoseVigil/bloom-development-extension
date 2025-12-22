@@ -9,6 +9,17 @@ bloom-development-extension/
 │   │   │   ├── GeminiAdapter.ts
 │   │   │   └── GrokAdapter.ts
 │   │   └── index.ts
+│   ├── api/
+│   │   └── adapters/
+│   │       ├── BrainApiAdapter.ts
+│   │       ├── routes/
+│   │       │   ├── auth.routes.ts
+│   │       │   ├── copilot.routes.ts
+│   │       │   ├── intent.routes.ts
+│   │       │   ├── nucleus.routes.ts
+│   │       │   ├── profile.routes.ts
+│   │       │   └── project.routes.ts
+│   │       └── server.ts
 │   ├── auth/
 │   │   └── GitHubOAuthServer.ts
 │   ├── commands/
@@ -115,6 +126,10 @@ bloom-development-extension/
 │   │   ├── ReactStrategy.ts
 │   │   ├── WebStrategy.ts
 │   │   └── helpers.ts
+│   ├── types/
+│   │   ├── api-contracts.ts
+│   │   ├── brain-schemas.ts
+│   │   └── ws-events.ts
 │   ├── ui/
 │   │   ├── ClaudeBridgePanel.ts
 │   │   ├── intent/
@@ -142,5 +157,290 @@ bloom-development-extension/
 │       ├── pythonExecutor.ts
 │       ├── tokenEstimator.ts
 │       └── uriHelper.ts
+├── installer/
+│   ├── README.md
+│   ├── chrome-extension/
+│   │   ├── crx/
+│   │   │   ├── id.json
+│   │   │   └── key.pem
+│   │   └── src/
+│   │       ├── 128x128.png
+│   │       ├── background.js
+│   │       ├── content.js
+│   │       ├── icon128.png
+│   │       ├── icon16.png
+│   │       └── manifest.json
+│   ├── create_installer.py
+│   ├── electron-app/
+│   │   ├── .gitignore
+│   │   ├── app.manifest
+│   │   ├── assets/
+│   │   │   ├── bloom.ico
+│   │   │   └── installer.gif
+│   │   ├── config-loader.js
+│   │   ├── entitlements.plist
+│   │   ├── forge.config.js
+│   │   ├── installHelpers.js
+│   │   ├── installer-config.json
+│   │   ├── installers/
+│   │   │   ├── ChromeEnterpriseExtensionInstaller.js
+│   │   │   ├── ChromeManualExtensionInstaller.js
+│   │   │   └── config.js
+│   │   ├── main.js
+│   │   ├── package.json
+│   │   ├── preload.js
+│   │   ├── registry-scripts/
+│   │   │   ├── cleanup.ps1
+│   │   │   └── hkcu.ps1
+│   │   ├── run-admin.bat
+│   │   ├── run-make-admin.bat
+│   │   ├── src/
+│   │   │   ├── event_listeners.js
+│   │   │   ├── extension_installer.js
+│   │   │   ├── heartbeat_manager.js
+│   │   │   ├── index.html
+│   │   │   ├── installation_manager.js
+│   │   │   ├── renderer.js
+│   │   │   ├── styles.css
+│   │   │   └── ui_manager.js
+│   │   └── test-installation.js
+│   ├── native/
+│   │   ├── bin/
+│   │   │   ├── darwin/
+│   │   │   │   ├── arm64/
+│   │   │   │   │   └── bloom-host
+│   │   │   │   └── x64/
+│   │   │   │       └── bloom-host
+│   │   │   └── win32/
+│   │   │       ├── bloom-host.exe
+│   │   │       └── libwinpthread-1.dll
+│   │   └── host/
+│   │       └── com.bloom.nucleus.bridge.json
+│   ├── package-lock.json
+│   ├── package.json
+│   └── scripts/
+│       ├── build-extension.js
+│       ├── check-health.js
+│       ├── generate-fixed-key.js
+│       ├── get-id.js
+│       ├── god-mode.js
+│       ├── run-elevated.ps1
+│       ├── setup-dev.js
+│       └── validate.js
+├── webview/
+│   └── app/
+│       ├── .svelte-kit/ [... svelte build]
+│       ├── package-lock.json
+│       ├── package.json
+│       ├── src/
+│       │   ├── app.html
+│       │   ├── lib/
+│       │   │   ├── api.ts
+│       │   │   ├── components/
+│       │   │   │   ├── BriefingEditor.svelte
+│       │   │   │   ├── ChatBTIP.svelte
+│       │   │   │   ├── CopilotChat.svelte
+│       │   │   │   ├── FileTree.svelte
+│       │   │   │   ├── GeminiTokenForm.svelte
+│       │   │   │   ├── GithubAuthButton.svelte
+│       │   │   │   ├── IntentsLink.svelte
+│       │   │   │   ├── NucleusPanel.svelte
+│       │   │   │   ├── OnboardingWizard.svelte
+│       │   │   │   ├── ProjectsPanel.svelte
+│       │   │   │   ├── SystemStatus.svelte
+│       │   │   │   └── TokenEstimator.svelte
+│       │   │   ├── stores/
+│       │   │   │   ├── auth.ts
+│       │   │   │   ├── intents.ts
+│       │   │   │   ├── navigation.ts
+│       │   │   │   ├── nucleus.ts
+│       │   │   │   ├── onboarding.ts
+│       │   │   │   ├── system.ts
+│       │   │   │   ├── theme.ts
+│       │   │   │   └── websocket.ts
+│       │   │   ├── types.ts
+│       │   │   ├── views/
+│       │   │   │   ├── DevIntentView.svelte
+│       │   │   │   ├── DocIntentView.svelte
+│       │   │   │   ├── GenesisView.svelte
+│       │   │   │   └── OnboardingView.svelte
+│       │   │   └── ws.ts
+│       │   └── routes/
+│       │       ├── +layout.svelte
+│       │       ├── +page.svelte
+│       │       ├── genesis/
+│       │       │   └── +page.svelte
+│       │       ├── home/
+│       │       │   └── +page.svelte
+│       │       ├── intents/
+│       │       │   ├── +page.svelte
+│       │       │   ├── [id]/
+│       │       │   │   ├── +page.svelte
+│       │       │   │   └── response
+│       │       │   ├── dev/
+│       │       │   │   └── [id]/
+│       │       │   │       └── +page.svelte
+│       │       │   └── doc/
+│       │       │       └── [id]/
+│       │       │           └── +page.svelte
+│       │       ├── onboarding/
+│       │       │   └── +page.svelte
+│       │       └── welcome/
+│       │           └── +page.svelte
+│       ├── svelte.config.js
+│       └── vite.config.ts
+├── brain/
+│   ├── __init__.py
+│   ├── __main__.py
+│   ├── __pycache__/ [... cache]
+│   ├── cli/
+│   │   ├── __init__.py
+│   │   ├── __pycache__/ [... cache]
+│   │   ├── base.py
+│   │   ├── categories.py
+│   │   ├── help_renderer.py
+│   │   └── registry.py
+│   ├── commands/
+│   │   ├── __init__.py
+│   │   ├── __pycache__/ [... cache]
+│   │   ├── context/
+│   │   │   ├── __pycache__/ [... cache]
+│   │   │   └── generate.py
+│   │   ├── filesystem/
+│   │   │   ├── __init__.py
+│   │   │   ├── __pycache__/ [... cache]
+│   │   │   ├── compress.py
+│   │   │   └── tree.py
+│   │   ├── gemini/
+│   │   │   ├── __init__.py
+│   │   │   ├── __pycache__/ [... cache]
+│   │   │   ├── keys_add.py
+│   │   │   ├── keys_delete.py
+│   │   │   ├── keys_list.py
+│   │   │   ├── keys_stats.py
+│   │   │   └── keys_validate.py
+│   │   ├── github/
+│   │   │   ├── __init__.py
+│   │   │   ├── __pycache__/ [... cache]
+│   │   │   ├── auth.py
+│   │   │   ├── auth_login.py
+│   │   │   ├── auth_logout.py
+│   │   │   ├── auth_status.py
+│   │   │   ├── clone.py
+│   │   │   ├── orgs.py
+│   │   │   ├── orgs_list.py
+│   │   │   ├── repos.py
+│   │   │   └── repos_list.py
+│   │   ├── init.py
+│   │   ├── intent/
+│   │   │   ├── __init__.py
+│   │   │   ├── __pycache__/ [... cache]
+│   │   │   ├── add_turn.py
+│   │   │   ├── build_payload.py
+│   │   │   ├── create.py
+│   │   │   ├── delete.py
+│   │   │   ├── finalize.py
+│   │   │   ├── get.py
+│   │   │   ├── list.py
+│   │   │   ├── lock.py
+│   │   │   ├── plan.py
+│   │   │   ├── router_prompt.md
+│   │   │   ├── unlock.py
+│   │   │   └── update.py
+│   │   ├── nucleus/
+│   │   │   ├── __init__.py
+│   │   │   ├── __pycache__/ [... cache]
+│   │   │   ├── create.py
+│   │   │   ├── create_exp_intent.py
+│   │   │   ├── delete.py
+│   │   │   ├── exp_discovery_turn.py
+│   │   │   ├── exp_export_findings.py
+│   │   │   ├── get.py
+│   │   │   ├── info.py
+│   │   │   ├── link.py
+│   │   │   ├── list.py
+│   │   │   ├── list_projects.py
+│   │   │   ├── project_info.py
+│   │   │   ├── status.py
+│   │   │   └── sync.py
+│   │   ├── profile/
+│   │   │   ├── __init__.py
+│   │   │   ├── __pycache__/ [... cache]
+│   │   │   ├── accounts.py
+│   │   │   └── profiles.py
+│   │   └── project/
+│   │       ├── __pycache__/ [... cache]
+│   │       ├── add.py
+│   │       ├── clone_and_add.py
+│   │       ├── detect.py
+│   │       ├── load.py
+│   │       └── nucleus.py
+│   ├── commands.md
+│   ├── core/
+│   │   ├── __pycache__/ [... cache]
+│   │   ├── bloom_project_inspector.py
+│   │   ├── browser/
+│   │   │   └── profile_manager.py
+│   │   ├── context/
+│   │   │   ├── __init__.py
+│   │   │   ├── detector.py
+│   │   │   ├── detector.py.backup
+│   │   │   ├── generate.py
+│   │   │   ├── manager.py
+│   │   │   ├── strategies/
+│   │   │   │   ├── android.py
+│   │   │   │   ├── cicd.py
+│   │   │   │   ├── cpp.py
+│   │   │   │   ├── dotnet.py
+│   │   │   │   ├── flutter.py
+│   │   │   │   ├── go.py
+│   │   │   │   ├── iac.py
+│   │   │   │   ├── ios.py
+│   │   │   │   ├── jvm.py
+│   │   │   │   ├── macos.py
+│   │   │   │   ├── php.py
+│   │   │   │   ├── python.py
+│   │   │   │   ├── ruby.py
+│   │   │   │   ├── rust.py
+│   │   │   │   └── typescript.py
+│   │   │   ├── strategy_base.py
+│   │   │   └── strategy_loader.py
+│   │   ├── context_planning/
+│   │   │   ├── enriched_tree_generator.py
+│   │   │   ├── gemini_router.py
+│   │   │   └── payload_builder.py
+│   │   ├── filesystem/
+│   │   │   ├── __init__.py
+│   │   │   ├── code_compressor.py
+│   │   │   ├── files_compressor.py
+│   │   │   └── files_extractor.py
+│   │   ├── git/
+│   │   │   ├── __init__.py
+│   │   │   ├── executor.py
+│   │   │   └── repository.py
+│   │   ├── github/
+│   │   │   ├── __init__.py
+│   │   │   ├── api_client.py
+│   │   │   └── models.py
+│   │   ├── intent/
+│   │   │   └── manager.py
+│   │   ├── nucleus_inspector.py
+│   │   ├── nucleus_manager.py
+│   │   ├── project/
+│   │   │   ├── __init__.py
+│   │   │   ├── clone_manager.py
+│   │   │   ├── linker.py
+│   │   │   ├── models.py
+│   │   │   └── scanner.py
+│   │   ├── project_manager.py
+│   │   └── tree_manager.py
+│   ├── pyproject.toml
+│   ├── requirements.txt
+│   └── shared/
+│       ├── __init__.py
+│       ├── __pycache__/ [... cache]
+│       ├── context.py
+│       ├── credentials.py
+│       └── github_types.py
 ├── package.json
 └── tsconfig.json

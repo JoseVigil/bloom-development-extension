@@ -1,157 +1,340 @@
-let baseUrl = 'http://localhost:4123/api/v1';
-const fallbackPorts = ['http://localhost:5888', 'http://localhost:48215'];
+const baseUrl = 'http://localhost:48215/api/v1';
 
-export function setBaseUrl(url: string) {
-  baseUrl = url;
-}
+// ============================================================================
+// ERROR HANDLING
+// ============================================================================
 
-async function fetchWithFallback(endpoint: string, options: RequestInit = {}) {
-  try {
-    const response = await fetch(`${baseUrl}${endpoint}`, options);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return response;
-  } catch (error) {
-    for (const fallback of fallbackPorts) {
-      try {
-        const response = await fetch(`${fallback}${endpoint}`, options);
-        if (response.ok) return response;
-      } catch {}
-    }
-    throw error;
+class ApiError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+    public details?: any
+  ) {
+    super(message);
+    this.name = 'ApiError';
   }
 }
 
-export interface BTIPNode {
+async function handleResponse(response: Response) {
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+    throw new ApiError(
+      error.error || error.message || 'Request failed',
+      response.status,
+      error
+    );
+  }
+  return response.json();
+}
+
+// ============================================================================
+// NUCLEUS API
+// ============================================================================
+
+export async function listNuclei(parentDir?: string) {
+  const query = parentDir ? `?parent=${encodeURIComponent(parentDir)}` : '';
+  const response = await fetch(`${baseUrl}/nucleus/list${query}`);
+  return handleResponse(response);
+}
+
+export async function getNucleus(nucleusPath: string) {
+  const response = await fetch(
+    `${baseUrl}/nucleus/get?path=${encodeURIComponent(nucleusPath)}`
+  );
+  return handleResponse(response);
+}
+
+export async function createNucleus(params: {
+  org: string;
+  path?: string;
+  url?: string;
+  force?: boolean;
+}) {
+  const response = await fetch(`${baseUrl}/nucleus/create`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params)
+  });
+  return handleResponse(response);
+}
+
+export async function deleteNucleus(nucleusPath: string, force?: boolean) {
+  const response = await fetch(`${baseUrl}/nucleus/delete`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: nucleusPath, force })
+  });
+  return handleResponse(response);
+}
+
+export async function syncNucleus(nucleusPath: string, skipGit?: boolean) {
+  const response = await fetch(`${baseUrl}/nucleus/sync`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: nucleusPath, skip_git: skipGit })
+  });
+  return handleResponse(response);
+}
+
+export async function listNucleusProjects(nucleusPath: string, strategy?: string) {
+  const query = new URLSearchParams({ path: nucleusPath });
+  if (strategy) query.set('strategy', strategy);
+  
+  const response = await fetch(`${baseUrl}/nucleus/projects?${query}`);
+  return handleResponse(response);
+}
+
+// ============================================================================
+// INTENT API
+// ============================================================================
+
+export async function listIntents(nucleusPath: string, type?: 'dev' | 'doc') {
+  const query = new URLSearchParams({ nucleus: nucleusPath });
+  if (type) query.set('type', type);
+  
+  const response = await fetch(`${baseUrl}/intent/list?${query}`);
+  return handleResponse(response);
+}
+
+export async function getIntent(intentId: string, nucleusPath: string) {
+  const query = new URLSearchParams({ id: intentId, nucleus: nucleusPath });
+  const response = await fetch(`${baseUrl}/intent/get?${query}`);
+  return handleResponse(response);
+}
+
+export async function createIntent(params: {
+  type: 'dev' | 'doc';
   name: string;
-  path: string;
-  type: 'file' | 'directory';
-  children?: BTIPNode[];
-}
-
-export async function getTree(path: string = ''): Promise<BTIPNode[]> {
-  const response = await fetchWithFallback(`/btip/explorer/tree?path=${encodeURIComponent(path)}`);
-  return response.json();
-}
-
-export async function getFile(path: string): Promise<{ path: string; content: string; extension: string }> {
-  const response = await fetchWithFallback(`/btip/explorer/file?path=${encodeURIComponent(path)}`);
-  return response.json();
-}
-
-export async function getSystemStatus() {
-  const response = await fetchWithFallback('/health');
-  return response.json();
-}
-
-export async function getAuthStatus() {
-  const response = await fetchWithFallback('/btip/auth/status');
-  return response.json();
-}
-
-export async function getIntents() {
-  const response = await fetchWithFallback('/intents/list');
-  const data = await response.json();
-  return data.intents || [];
-}
-
-export async function getIntent(id: string) {
-  const response = await fetchWithFallback(`/intents/get?id=${encodeURIComponent(id)}`);
-  return response.json();
-}
-
-export async function createIntentDoc(data: any) {
-  const response = await fetchWithFallback('/intents/doc/create', {
+  files: string[];
+  nucleus: string;
+}) {
+  const response = await fetch(`${baseUrl}/intent/create`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
+    body: JSON.stringify(params)
   });
-  return response.json();
+  return handleResponse(response);
 }
 
-export async function estimateTokens(content: string) {
-  const response = await fetchWithFallback('/doc/generate', {
+export async function lockIntent(intentId: string, nucleusPath: string) {
+  const response = await fetch(`${baseUrl}/intent/lock`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content })
+    body: JSON.stringify({ id: intentId, nucleus: nucleusPath })
   });
-  return response.json();
+  return handleResponse(response);
 }
 
-export async function runExecution(intentId: string, data: any) {
-  const response = await fetchWithFallback(`/intents/run`, {
+export async function unlockIntent(
+  intentId: string,
+  nucleusPath: string,
+  force?: boolean
+) {
+  const response = await fetch(`${baseUrl}/intent/unlock`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ intentId, ...data })
+    body: JSON.stringify({ id: intentId, nucleus: nucleusPath, force })
   });
-  return response.json();
+  return handleResponse(response);
 }
 
-export async function getProfiles() {
-  const response = await fetchWithFallback('/api/v1/profiles');
-  const data = await response.json();
-  return data.profiles || [];
-}
-
-export async function createProfile(data: any) {
-  const response = await fetchWithFallback('/api/v1/profiles/create', {
+export async function addIntentTurn(params: {
+  id: string;
+  actor: 'user' | 'ai';
+  content: string;
+  nucleus: string;
+}) {
+  const response = await fetch(`${baseUrl}/intent/add-turn`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
+    body: JSON.stringify(params)
   });
-  return response.json();
+  return handleResponse(response);
 }
 
-export async function refreshAccounts(profileId: string) {
-  const response = await fetchWithFallback(`/api/v1/profiles/${profileId}/refresh-accounts`, {
-    method: 'POST'
-  });
-  return response.json();
-}
-
-export async function testGemini(apiKey: string) {
-  const response = await fetchWithFallback('/btip/auth/gemini', {
+export async function finalizeIntent(intentId: string, nucleusPath: string) {
+  const response = await fetch(`${baseUrl}/intent/finalize`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ apiKey })
+    body: JSON.stringify({ id: intentId, nucleus: nucleusPath })
   });
-  return response.json();
+  return handleResponse(response);
 }
 
-export async function getNucleusList() {
-  const response = await fetchWithFallback('/nucleus/list');
-  const data = await response.json();
-  return data.nuclei || [];
+export async function deleteIntent(
+  intentId: string,
+  nucleusPath: string,
+  force?: boolean
+) {
+  const response = await fetch(`${baseUrl}/intent/delete`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: intentId, nucleus: nucleusPath, force })
+  });
+  return handleResponse(response);
 }
 
-export async function createNucleus(name: string, org?: string, url?: string) {
-  const response = await fetchWithFallback('/btip/nucleus/create', {
+// ============================================================================
+// PROJECT API
+// ============================================================================
+
+export async function detectProjects(params: {
+  parent_path: string;
+  max_depth?: number;
+  strategy?: string;
+  min_confidence?: 'high' | 'medium' | 'low';
+}) {
+  const response = await fetch(`${baseUrl}/project/detect`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, org, repoUrl: url })
+    body: JSON.stringify(params)
   });
-  return response.json();
+  return handleResponse(response);
 }
 
-export async function getProjects() {
-  const response = await fetchWithFallback('/project/list');
-  const data = await response.json();
-  return data.projects || [];
-}
-
-export async function createProject(nucleusId: string, name: string) {
-  const response = await fetchWithFallback('/project/create', {
+export async function addProject(params: {
+  project_path: string;
+  nucleus_path: string;
+  name?: string;
+  strategy?: string;
+  description?: string;
+  repo_url?: string;
+}) {
+  const response = await fetch(`${baseUrl}/project/add`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ nucleusId, name })
+    body: JSON.stringify(params)
   });
+  return handleResponse(response);
+}
+
+export async function cloneAndAddProject(params: {
+  repo_url: string;
+  nucleus_path: string;
+  destination?: string;
+  name?: string;
+  strategy?: string;
+}) {
+  const response = await fetch(`${baseUrl}/project/clone-and-add`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params)
+  });
+  return handleResponse(response);
+}
+
+// ============================================================================
+// PROFILE API
+// ============================================================================
+
+export async function listProfiles() {
+  const response = await fetch(`${baseUrl}/profile/list`);
+  return handleResponse(response);
+}
+
+export async function createProfile(alias: string) {
+  const response = await fetch(`${baseUrl}/profile/create`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ alias })
+  });
+  return handleResponse(response);
+}
+
+export async function validateProfile(profileId: string) {
+  const response = await fetch(`${baseUrl}/profile/validate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: profileId })
+  });
+  return handleResponse(response);
+}
+
+export async function registerAccount(params: {
+  profile_id: string;
+  provider: string;
+  email: string;
+}) {
+  const response = await fetch(`${baseUrl}/profile/account/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params)
+  });
+  return handleResponse(response);
+}
+
+export async function deleteProfile(profileId: string, force?: boolean) {
+  const query = force ? '?force=true' : '';
+  const response = await fetch(`${baseUrl}/profile/${profileId}${query}`, {
+    method: 'DELETE'
+  });
+  return handleResponse(response);
+}
+
+// ============================================================================
+// AUTH API
+// ============================================================================
+
+export async function getGithubAuthStatus() {
+  const response = await fetch(`${baseUrl}/auth/github/status`);
+  return handleResponse(response);
+}
+
+export async function loginGithub(token: string) {
+  const response = await fetch(`${baseUrl}/auth/github/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token })
+  });
+  return handleResponse(response);
+}
+
+export async function listGithubOrgs() {
+  const response = await fetch(`${baseUrl}/auth/github/orgs`);
+  return handleResponse(response);
+}
+
+export async function listGithubRepos(org?: string) {
+  const query = org ? `?org=${encodeURIComponent(org)}` : '';
+  const response = await fetch(`${baseUrl}/auth/github/repos${query}`);
+  return handleResponse(response);
+}
+
+export async function addGeminiKey(params: {
+  profile: string;
+  key: string;
+  priority?: number;
+}) {
+  const response = await fetch(`${baseUrl}/auth/gemini/key`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params)
+  });
+  return handleResponse(response);
+}
+
+export async function listGeminiKeys() {
+  const response = await fetch(`${baseUrl}/auth/gemini/keys`);
+  return handleResponse(response);
+}
+
+export async function validateGeminiKey(profile: string) {
+  const response = await fetch(`${baseUrl}/auth/gemini/validate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ profile })
+  });
+  return handleResponse(response);
+}
+
+// ============================================================================
+// SYSTEM API
+// ============================================================================
+
+export async function getSystemHealth() {
+  const response = await fetch('http://localhost:48215/health');
   return response.json();
 }
 
-export async function saveGeminiToken(token: string) {
-  const response = await fetchWithFallback('/btip/auth/gemini', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ apiKey: token })
-  });
-  return response.json();
-}
+// Export error class for handling
+export { ApiError };

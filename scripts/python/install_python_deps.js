@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 
 // ============================================================================
-// CONFIGURACIÓN DE RUTAS (CORREGIDO)
+// CONFIGURACIÓN DE RUTAS (ACTUALIZADO PARA BRAIN/)
 // ============================================================================
 // El script está en: .../scripts/python/install_python_deps.js
 // __dirname = .../scripts/python
@@ -11,9 +11,9 @@ const fs = require('fs');
 // ../..     = .../ (Raíz del proyecto)
 
 const ROOT_DIR = path.resolve(__dirname, '..', '..');
-const CORE_DIR = path.join(ROOT_DIR, 'core');
-const LIBS_DIR = path.join(CORE_DIR, 'libs');
-const REQUIREMENTS_FILE = path.join(CORE_DIR, 'requirements.txt');
+const BRAIN_DIR = path.join(ROOT_DIR, 'brain');
+const LIBS_DIR = path.join(BRAIN_DIR, 'libs');
+const REQUIREMENTS_FILE = path.join(BRAIN_DIR, 'requirements.txt');
 
 // Detectar comando de Python
 const isWin = process.platform === "win32";
@@ -21,7 +21,7 @@ const pythonCommand = isWin ? 'python' : 'python3';
 
 const MINIMUM_PYTHON_VERSION = [3, 8]; // Python 3.8+
 
-console.log('🐍 [Bloom Install] Iniciando instalación de dependencias Python...');
+console.log('🌸 [Bloom Install] Iniciando instalación de dependencias Python...');
 console.log(`📂 Contexto (Root): ${ROOT_DIR}`);
 
 // ============================================================================
@@ -31,6 +31,7 @@ console.log(`📂 Contexto (Root): ${ROOT_DIR}`);
 if (!fs.existsSync(REQUIREMENTS_FILE)) {
     console.error(`❌ [Bloom Install] No se encontró: ${REQUIREMENTS_FILE}`);
     console.error(`   Ruta buscada: ${REQUIREMENTS_FILE}`);
+    console.error(`   Asegúrate de que el directorio 'brain/' exista en la raíz del proyecto.`);
     process.exit(1);
 }
 
@@ -96,8 +97,9 @@ versionCheck.on('close', (code) => {
 function installDependencies() {
     console.log(`📂 Target (Vendoring): ${LIBS_DIR}`);
     
-    // Asegurar que existe el directorio
+    // Asegurar que existe el directorio brain/libs
     if (!fs.existsSync(LIBS_DIR)) {
+        console.log(`📁 Creando directorio: ${LIBS_DIR}`);
         fs.mkdirSync(LIBS_DIR, { recursive: true });
     }
 
@@ -129,12 +131,13 @@ function installDependencies() {
 
     installProcess.on('close', (code) => {
         if (code === 0) {
-            console.log('\n✅ [Bloom Install] Dependencias Python instaladas correctamente en core/libs.');
+            console.log('\n✅ [Bloom Install] Dependencias Python instaladas correctamente en brain/libs.');
             
             // Crear __init__.py si no existe para asegurar que sea un paquete importable
             const initFile = path.join(LIBS_DIR, '__init__.py');
             if (!fs.existsSync(initFile)) {
                 fs.writeFileSync(initFile, '');
+                console.log('📝 Creado: brain/libs/__init__.py');
             }
             
             console.log('🎯 Listo para empaquetar con Electron\n');
