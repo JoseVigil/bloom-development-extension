@@ -12,12 +12,12 @@ Brain CLI - Modular system for Bloom
 │   filesystem    File operations and directory analysis              3 cmds                       │
 │   gemini        Gemini AI key management and operations             5 cmds                       │
 │   github        GitHub integration and repository management        9 cmds                       │
-│   intent        Intent execution system and context planning       11 cmds                       │
+│   intent        Intent execution system and context planning       12 cmds                       │
 │   nucleus       Nucleus project management and lifecycle           14 cmds                       │
 │   profile       Chrome profile and AI account management            8 cmds                       │
 │   project       Project lifecycle and scaffolding                   6 cmds                       │
 │                                                                 ──────────                       │
-│                                                                    57 cmds                       │
+│                                                                    58 cmds                       │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 
 ╭──────────────────────────────────────────── NUCLEUS ─────────────────────────────────────────────╮
@@ -436,6 +436,21 @@ Brain CLI - Modular system for Bloom
 │      --intent-dir <VALUE> Intent directory path                                                  │
 │      --description <VALUE> Intent description                                                    │
 │      --type               Intent type: dev, doc, or seed                                         │
+│                                                                                                  │
+│  SUBMIT - Submit an intent payload to AI provider through native host bridge                     │
+│                                                                                                  │
+│    python -m brain intent submit [OPTIONS]                                                       │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i                   UUID of the intent to submit                                           │
+│      -f                   Folder name of the intent (e.g., .fix-login-a1b2c3d4)                  │
+│      --provider           AI provider to use: 'claude', 'gemini', etc.                           │
+│      -p                   Path to the Nucleus (Bloom project root). Auto-detected if not         │
+│  provided.                                                                                       │
+│      --profile-path       Chrome profile path for the AI provider (optional)                     │
+│      --host               Native host IP address                                                 │
+│      --port               Native host TCP port                                                   │
+│      --timeout            Connection timeout in seconds                                          │
 │                                                                                                  │
 │  UNLOCK - Unlock an intent to free it for use                                                    │
 │                                                                                                  │
