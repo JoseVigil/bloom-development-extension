@@ -10,7 +10,9 @@
 #include <ctime>
 #include <sstream>
 #include <iomanip>
+#include <map>
 #include <nlohmann/json.hpp>
+#include <openssl/sha.h> // Requiere libssl-dev / openssl
 
 #ifdef _WIN32
 #include <winsock2.h>
@@ -20,6 +22,8 @@
 #include <io.h>
 #include <fcntl.h>
 #pragma comment(lib, "ws2_32.lib")
+#pragma comment(lib, "libcrypto.lib")
+#pragma comment(lib, "libssl.lib")
 typedef SOCKET socket_t;
 #define INVALID_SOCK INVALID_SOCKET
 #define close_socket closesocket
@@ -38,11 +42,14 @@ typedef int socket_t;
 
 using json = nlohmann::json;
 
-const std::string VERSION = "1.0.0";
-const int BUILD = 1;
+const std::string VERSION = "1.1.0"; // Incrementada por soporte de chunks
+const int BUILD = 2;
 const int PROTOCOL = 1;
 const int BASE_PORT = 5678;
 const int MAX_PORT_ATTEMPTS = 20;
+
+const size_t MAX_ACTIVE_BUFFERS = 10;
+const size_t MAX_MESSAGE_SIZE = 50 * 1024 * 1024; // 50MB
 
 // ============================================================================
 // GLOBALS
@@ -50,28 +57,10 @@ const int MAX_PORT_ATTEMPTS = 20;
 std::atomic<socket_t> vscode_socket{INVALID_SOCK};
 std::mutex stdout_mutex;
 std::atomic<bool> shutdown_requested{false};
-
-// Variable para rastrear la última vez que Chrome envió datos (Heartbeat o mensajes)
 std::atomic<time_t> last_chrome_activity{0};
 
-// ============================================================================
-// FILE SYSTEM
-// ============================================================================
-std::string get_app_data_path() {
-#ifdef _WIN32
-    char path[MAX_PATH];
-    if (SHGetFolderPathA(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, path) == S_OK) {
-        return std::string(path) + "\\BloomNucleus";
-    }
-    return "C:\\BloomNucleus";
-#else
-    return "/tmp/bloom-nucleus";
-#endif
-}
-
-void ensure_directory(const std::string& path) {
-    mkdir_p(path.c_str());
-}
+// Forward Declarations
+void write_socket(socket_t sock, const std::string& s);
 
 // ============================================================================
 // LOGGER
@@ -82,61 +71,28 @@ private:
     std::ofstream log_file;
     std::mutex log_mutex;
     bool enabled;
-    size_t max_size = 5 * 1024 * 1024;
-
-    std::string get_timestamp() {
-        auto now = std::chrono::system_clock::now();
-        auto time = std::chrono::system_clock::to_time_t(now);
-        std::stringstream ss;
-        ss << std::put_time(std::localtime(&time), "%Y-%m-%d %H:%M:%S");
-        return ss.str();
-    }
-
-    std::string get_log_filename() {
-        auto now = std::chrono::system_clock::now();
-        auto time = std::chrono::system_clock::to_time_t(now);
-        std::stringstream ss;
-        ss << std::put_time(std::localtime(&time), "host-%Y%m%d-%H%M.log");
-        return ss.str();
-    }
-
-    void rotate_if_needed() {
-        if (!log_file.is_open()) return;
-        auto pos = log_file.tellp();
-        if (pos > static_cast<std::streamoff>(max_size)) {
-            log_file.close();
-            std::string new_filename = log_dir + "/" + get_log_filename();
-            log_file.open(new_filename, std::ios::app);
-        }
-    }
-
 public:
     Logger(bool enable = true) : enabled(enable) {
         if (enabled) {
-            std::string base = get_app_data_path();
-            ensure_directory(base);
+            #ifdef _WIN32
+                char path[MAX_PATH];
+                SHGetFolderPathA(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, path);
+                std::string base = std::string(path) + "\\BloomNucleus";
+            #else
+                std::string base = "/tmp/bloom-nucleus";
+            #endif
+            mkdir_p(base.c_str());
             log_dir = base + "/logs";
-            ensure_directory(log_dir);
-            std::string filename = log_dir + "/" + get_log_filename();
-            log_file.open(filename, std::ios::app);
+            mkdir_p(log_dir.c_str());
+            log_file.open(log_dir + "/host.log", std::ios::app);
         }
     }
-
-    ~Logger() {
-        if (log_file.is_open()) log_file.close();
-    }
-
     void log(const std::string& level, const std::string& msg) {
         if (!enabled) return;
         std::lock_guard<std::mutex> lock(log_mutex);
-        std::string line = "[" + get_timestamp() + "] [" + level + "] " + msg + "\n";
-        if (log_file.is_open()) {
-            log_file << line;
-            log_file.flush();
-            rotate_if_needed();
-        }
+        auto now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+        log_file << "[" << std::put_time(std::localtime(&now), "%Y-%m-%d %H:%M:%S") << "] [" << level << "] " << msg << std::endl;
     }
-
     void info(const std::string& msg) { log("INFO", msg); }
     void error(const std::string& msg) { log("ERROR", msg); }
     void debug(const std::string& msg) { log("DEBUG", msg); }
@@ -146,80 +102,127 @@ public:
 Logger g_logger(true);
 
 // ============================================================================
-// STATE MANAGER
+// CHUNKED MESSAGE BUFFER
 // ============================================================================
-class StateManager {
+class ChunkedMessageBuffer {
+public:
+    enum ChunkResult { INCOMPLETE, COMPLETE_VALID, COMPLETE_INVALID_CHECKSUM, ERROR };
+    
 private:
-    std::string state_file;
-    std::mutex state_mutex;
+    struct InProgressMessage {
+        std::string message_id;
+        std::vector<uint8_t> buffer;
+        size_t expected_size;
+        size_t total_chunks;
+        size_t received_chunks;
+        std::chrono::time_point<std::chrono::steady_clock> started_at;
+    };
+    
+    std::map<std::string, InProgressMessage> active_buffers;
+    std::mutex buffer_mutex;
+
+    std::vector<uint8_t> base64_decode(const std::string& encoded) {
+        static const std::string base64_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        std::vector<uint8_t> decoded;
+        int val = 0, valb = -8;
+        for (unsigned char c : encoded) {
+            if (c == '=') break;
+            size_t pos = base64_chars.find(c);
+            if (pos == std::string::npos) continue;
+            val = (val << 6) + (int)pos;
+            valb += 6;
+            if (valb >= 0) {
+                decoded.push_back((val >> valb) & 0xFF);
+                valb -= 8;
+            }
+        }
+        return decoded;
+    }
+
+    std::string calculate_sha256(const std::vector<uint8_t>& data) {
+        unsigned char hash[SHA256_DIGEST_LENGTH];
+        SHA256(data.data(), data.size(), hash);
+        std::stringstream ss;
+        for(int i = 0; i < SHA256_DIGEST_LENGTH; i++)
+            ss << std::hex << std::setw(2) << std::setfill('0') << (int)hash[i];
+        return ss.str();
+    }
 
 public:
-    StateManager() {
-        std::string base = get_app_data_path();
-        std::string state_dir = base + "/state";
-        ensure_directory(base);
-        ensure_directory(state_dir);
-        state_file = state_dir + "/server.json";
+    ChunkResult process_chunk(const json& msg) {
+        std::lock_guard<std::mutex> lock(buffer_mutex);
+        const auto& chunk = msg["bloom_chunk"];
+        std::string type = chunk.value("type", "");
+        std::string msg_id = chunk.value("message_id", "");
+
+        if (type == "header") {
+            if (active_buffers.size() >= MAX_ACTIVE_BUFFERS) return ERROR;
+            size_t size = chunk.value("total_size_bytes", 0);
+            if (size > MAX_MESSAGE_SIZE) return ERROR;
+
+            InProgressMessage ipm;
+            ipm.message_id = msg_id;
+            ipm.expected_size = size;
+            ipm.total_chunks = chunk.value("total_chunks", 0);
+            ipm.received_chunks = 0;
+            ipm.buffer.reserve(size);
+            ipm.started_at = std::chrono::steady_clock::now();
+            active_buffers[msg_id] = std::move(ipm);
+            g_logger.info("Buffering started: " + msg_id + " (" + std::to_string(size) + " bytes)");
+            return INCOMPLETE;
+        }
+
+        if (active_buffers.find(msg_id) == active_buffers.end()) return ERROR;
+        auto& ipm = active_buffers[msg_id];
+
+        if (type == "data") {
+            std::vector<uint8_t> decoded = base64_decode(chunk.value("data", ""));
+            ipm.buffer.insert(ipm.buffer.end(), decoded.begin(), decoded.end());
+            ipm.received_chunks++;
+            return INCOMPLETE;
+        }
+
+        if (type == "footer") {
+            if (ipm.received_chunks != ipm.total_chunks) return ERROR;
+            std::string computed = calculate_sha256(ipm.buffer);
+            if (computed != chunk.value("checksum_verify", "")) return COMPLETE_INVALID_CHECKSUM;
+            return COMPLETE_VALID;
+        }
+        return ERROR;
     }
 
-    void write_state(int port, const std::string& status) {
-        std::lock_guard<std::mutex> lock(state_mutex);
-        json state = {
-            {"port", port},
-            {"status", status},
-            {"version", VERSION},
-            {"build", BUILD},
-            {"protocol", PROTOCOL},
-            {"timestamp", std::time(nullptr)}
-        };
-        std::ofstream out(state_file);
-        out << state.dump(2);
-        out.close();
+    std::string get_and_clear(const std::string& msg_id) {
+        std::lock_guard<std::mutex> lock(buffer_mutex);
+        auto it = active_buffers.find(msg_id);
+        if (it == active_buffers.end()) return "";
+        std::string result(it->second.buffer.begin(), it->second.buffer.end());
+        active_buffers.erase(it);
+        return result;
     }
 
-    void clear_state() {
-        std::lock_guard<std::mutex> lock(state_mutex);
-        std::remove(state_file.c_str());
+    void cleanup_expired() {
+        std::lock_guard<std::mutex> lock(buffer_mutex);
+        auto now = std::chrono::steady_clock::now();
+        for (auto it = active_buffers.begin(); it != active_buffers.end(); ) {
+            if (std::chrono::duration_cast<std::chrono::minutes>(now - it->second.started_at).count() > 5) {
+                g_logger.warn("Removing stale buffer: " + it->first);
+                it = active_buffers.erase(it);
+            } else ++it;
+        }
     }
 };
 
-StateManager g_state;
+ChunkedMessageBuffer g_chunked_buffer;
 
 // ============================================================================
-// PROTOCOL
+// PROTOCOL HELPERS
 // ============================================================================
-uint32_t read_size(std::istream& in) {
-    uint32_t size = 0;
-    in.read(reinterpret_cast<char*>(&size), 4);
-    return (in.gcount() == 4) ? size : 0;
-}
-
-std::string read_payload(std::istream& in, uint32_t size) {
-    if (size == 0 || size > 10 * 1024 * 1024) return "";
-    std::string msg(size, '\0');
-    in.read(&msg[0], size);
-    return msg;
-}
-
 void write_message(std::ostream& out, const std::string& s) {
     std::lock_guard<std::mutex> lock(stdout_mutex);
     uint32_t len = static_cast<uint32_t>(s.size());
     out.write(reinterpret_cast<const char*>(&len), 4);
     out.write(s.c_str(), len);
     out.flush();
-}
-
-uint32_t read_size_socket(socket_t sock) {
-    uint32_t size = 0;
-    int ret = recv(sock, reinterpret_cast<char*>(&size), 4, 0);
-    return (ret == 4) ? size : 0;
-}
-
-std::string read_payload_socket(socket_t sock, uint32_t size) {
-    if (size == 0 || size > 10 * 1024 * 1024) return "";
-    std::string msg(size, '\0');
-    int ret = recv(sock, &msg[0], size, 0);
-    return (ret == static_cast<int>(size)) ? msg : "";
 }
 
 void write_socket(socket_t sock, const std::string& s) {
@@ -232,292 +235,124 @@ void write_socket(socket_t sock, const std::string& s) {
 // MESSAGE PROCESSING
 // ============================================================================
 json process_message(const json& msg) {
-    if (!msg.contains("command")) {
-        return {{"ok", false}, {"error", {{"type", "INVALID_COMMAND"}, {"message", "Missing command"}}}};
-    }
+    // Check for Chunked Protocol
+    if (msg.contains("bloom_chunk")) {
+        auto result = g_chunked_buffer.process_chunk(msg);
+        std::string msg_id = msg["bloom_chunk"].value("message_id", "unknown");
 
-    std::string cmd = msg["command"];
-
-    // Control commands
-    if (cmd == "shutdown") {
-        shutdown_requested.store(true);
-        g_logger.info("Shutdown requested");
-        return {{"ok", true}, {"message", "Shutting down"}};
-    }
-
-    if (cmd == "ping") {
-        return {{"ok", true}, {"version", VERSION}, {"build", BUILD}, {"protocol", PROTOCOL}};
-    }
-
-    // Comando para que el Instalador verifique la conexión
-    if (cmd == "get_status") {
-        time_t now = std::time(nullptr);
-        time_t last = last_chrome_activity.load();
-        
-        // Consideramos conectado si hubo actividad en los últimos 30 segundos
-        bool chrome_connected = (last > 0) && ((now - last) < 30); 
-
-        return {
-            {"ok", true},
-            {"status", {
-                {"version", VERSION},
-                {"chrome_connected", chrome_connected},
-                {"last_activity_seconds_ago", (last > 0 ? (now - last) : -1)},
-                {"vscode_connected", (vscode_socket.load() != INVALID_SOCK)}
-            }}
-        };
-    }
-
-    // Local file operations
-    if (cmd == "save_artifact") {
-        try {
-            std::string filename = msg.value("filename", "artifact.html");
-            std::string content = msg.value("content", "");
-            std::ofstream out(filename, std::ios::binary);
-            out << content;
-            out.close();
-            g_logger.info("Saved: " + filename);
-            return {{"ok", true}, {"path", filename}};
-        } catch (const std::exception& e) {
-            g_logger.error("Save failed: " + std::string(e.what()));
-            return {{"ok", false}, {"error", {{"type", "SAVE_ERROR"}, {"message", e.what()}}}};
-        }
-    }
-
-    if (cmd == "read_file") {
-        try {
-            std::string filename = msg.value("filename", "");
-            std::ifstream in(filename, std::ios::binary | std::ios::ate);
-            if (!in) {
-                return {{"ok", false}, {"error", {{"type", "FILE_NOT_FOUND"}, {"message", "Cannot open file"}}}};
+        if (result == ChunkedMessageBuffer::INCOMPLETE) {
+            return {{"ok", true}, {"status", "chunk_accepted"}};
+        } else if (result == ChunkedMessageBuffer::COMPLETE_VALID) {
+            std::string full_content = g_chunked_buffer.get_and_clear(msg_id);
+            g_logger.info("Message " + msg_id + " assembled. Forwarding to Brain...");
+            
+            socket_t sock = vscode_socket.load();
+            if (sock != INVALID_SOCK) {
+                write_socket(sock, full_content);
+                return {{"ok", true}, {"status", "assembled_and_forwarded"}};
             }
-            auto fsize = in.tellg();
-            in.seekg(0);
-            std::string content(static_cast<size_t>(fsize), '\0');
-            in.read(&content[0], fsize);
-            g_logger.info("Read: " + filename);
-            return {{"ok", true}, {"content", content}};
-        } catch (const std::exception& e) {
-            g_logger.error("Read failed: " + std::string(e.what()));
-            return {{"ok", false}, {"error", {{"type", "READ_ERROR"}, {"message", e.what()}}}};
+            return {{"ok", false}, {"error", "Brain not connected"}};
+        } else {
+            return {{"ok", false}, {"error", "chunk_process_failed"}};
         }
     }
 
-    // Forward to VSCode if connected
+    // Standard commands
+    std::string cmd = msg.value("command", "");
+    if (cmd == "ping") return {{"ok", true}, {"version", VERSION}};
+    
+    // Forward directly if not a chunk and VSCode is connected
     socket_t sock = vscode_socket.load();
     if (sock != INVALID_SOCK) {
         write_socket(sock, msg.dump());
-        g_logger.debug("Forwarded to VSCode");
         return {{"ok", true}, {"forwarded", true}};
     }
 
-    return {{"ok", false}, {"error", {{"type", "NO_HANDLER"}, {"message", "Command not handled"}}}};
+    return {{"ok", false}, {"error", "no_handler"}};
 }
 
 // ============================================================================
-// CHROME LOOP (stdin/stdout)
+// LOOPS
 // ============================================================================
 void chrome_loop() {
-    g_logger.info("Chrome loop started (stdin/stdout)");
-    
 #ifdef _WIN32
     _setmode(_fileno(stdin), _O_BINARY);
     _setmode(_fileno(stdout), _O_BINARY);
 #endif
-
     while (!shutdown_requested.load()) {
-        uint32_t size = read_size(std::cin);
-        if (size == 0) {
-            if (std::cin.eof()) {
-                g_logger.info("stdin closed (EOF) - initiating shutdown");
-                shutdown_requested.store(true);
-                break;
-            }
-            continue;
-        }
+        uint32_t size = 0;
+        std::cin.read(reinterpret_cast<char*>(&size), 4);
+        if (std::cin.eof()) break;
+        if (size == 0 || size > 10 * 1024 * 1024) continue;
 
-        // Actualizar timestamp cada vez que Chrome envía algo (Heartbeat o mensaje)
+        std::string buffer(size, '\0');
+        std::cin.read(&buffer[0], size);
         last_chrome_activity.store(std::time(nullptr));
 
-        std::string msg = read_payload(std::cin, size);
-        if (msg.empty()) continue;
-
         try {
-            auto j = json::parse(msg);
-            g_logger.debug("Chrome msg: " + j.dump().substr(0, 100));
-
-            json response = process_message(j);
+            json response = process_message(json::parse(buffer));
             write_message(std::cout, response.dump());
-
-        } catch (const std::exception& e) {
-            g_logger.error("Chrome parse error: " + std::string(e.what()));
-            json err = {{"ok", false}, {"error", {{"type", "PARSE_ERROR"}, {"message", e.what()}}}};
-            write_message(std::cout, err.dump());
+        } catch (...) {
+            write_message(std::cout, "{\"ok\":false}");
         }
     }
-
-    g_logger.info("Chrome loop ended");
+    shutdown_requested.store(true);
 }
 
-// ============================================================================
-// VSCODE CLIENT HANDLER
-// ============================================================================
-void handle_vscode_client(socket_t client) {
-    vscode_socket.store(client);
-    g_logger.info("VSCode connected");
-
-    while (!shutdown_requested.load()) {
-        uint32_t size = read_size_socket(client);
-        if (size == 0) break;
-
-        std::string msg = read_payload_socket(client, size);
-        if (msg.empty()) break;
-
-        try {
-            auto j = json::parse(msg);
-            g_logger.debug("VSCode msg: " + j.dump().substr(0, 100));
-
-            json response = process_message(j);
-            write_socket(client, response.dump());
-
-            // También enviar a Chrome si está activo
-            write_message(std::cout, j.dump());
-
-        } catch (const std::exception& e) {
-            g_logger.error("VSCode parse error: " + std::string(e.what()));
-            json err = {{"ok", false}, {"error", {{"type", "PARSE_ERROR"}, {"message", e.what()}}}};
-            write_socket(client, err.dump());
-        }
-    }
-
-    vscode_socket.store(INVALID_SOCK);
-    close_socket(client);
-    g_logger.info("VSCode disconnected");
-}
-
-// ============================================================================
-// TCP SERVER (VSCode)
-// ============================================================================
-int find_available_port(int preferred) {
-    for (int attempt = 0; attempt < MAX_PORT_ATTEMPTS; attempt++) {
-        int port = preferred + attempt;
-        
-        socket_t test_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-        if (test_sock == INVALID_SOCK) continue;
-
-        int opt = 1;
-        setsockopt(test_sock, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&opt), sizeof(opt));
-
-        sockaddr_in addr{};
-        addr.sin_family = AF_INET;
-        addr.sin_port = htons(port);
-        addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-
-        if (bind(test_sock, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) == 0) {
-            close_socket(test_sock);
-            g_logger.info("Found available port: " + std::to_string(port));
-            return port;
-        }
-
-        close_socket(test_sock);
-        g_logger.warn("Port " + std::to_string(port) + " in use");
-    }
-
-    g_logger.error("No available ports");
-    return -1;
-}
-
-void tcp_server_loop(int preferred_port) {
-    g_logger.info("Starting TCP server");
-
-    int port = find_available_port(preferred_port);
-    if (port == -1) {
-        g_state.write_state(0, "error_no_port");
-        return;
-    }
-
-    socket_t listen_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (listen_sock == INVALID_SOCK) {
-        g_logger.error("Cannot create socket");
-        g_state.write_state(0, "error_socket");
-        return;
-    }
-
-    int opt = 1;
-    setsockopt(listen_sock, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&opt), sizeof(opt));
-
+void tcp_server_loop(int port) {
+    socket_t listen_sock = socket(AF_INET, SOCK_STREAM, 0);
     sockaddr_in addr{};
     addr.sin_family = AF_INET;
     addr.sin_port = htons(port);
     addr.sin_addr.s_addr = inet_addr("127.0.0.1");
 
-    if (bind(listen_sock, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0) {
-        g_logger.error("Bind failed");
-        close_socket(listen_sock);
-        g_state.write_state(0, "error_bind");
-        return;
-    }
-
-    if (listen(listen_sock, SOMAXCONN) != 0) {
-        g_logger.error("Listen failed");
-        close_socket(listen_sock);
-        g_state.write_state(0, "error_listen");
-        return;
-    }
-
-    g_logger.info("Listening on 127.0.0.1:" + std::to_string(port));
-    g_state.write_state(port, "running");
+    bind(listen_sock, (sockaddr*)&addr, sizeof(addr));
+    listen(listen_sock, 1);
+    g_logger.info("TCP Server listening on " + std::to_string(port));
 
     while (!shutdown_requested.load()) {
-        socket_t client = accept(listen_sock, nullptr, nullptr);
-        if (client == INVALID_SOCK) {
-            if (shutdown_requested.load()) break;
-            continue;
+        socket_t client = accept(listen_sock, NULL, NULL);
+        if (client == INVALID_SOCK) continue;
+        
+        vscode_socket.store(client);
+        g_logger.info("Brain/VSCode connected");
+
+        while (!shutdown_requested.load()) {
+            uint32_t size = 0;
+            if (recv(client, (char*)&size, 4, 0) <= 0) break;
+            std::string buf(size, '\0');
+            if (recv(client, &buf[0], size, 0) <= 0) break;
+            write_message(std::cout, buf); // Forward Brain -> Chrome
         }
-
-        std::thread([client]() {
-            handle_vscode_client(client);
-        }).detach();
+        
+        vscode_socket.store(INVALID_SOCK);
+        close_socket(client);
+        g_logger.info("Brain/VSCode disconnected");
     }
-
     close_socket(listen_sock);
-    g_state.clear_state();
-    g_logger.info("TCP server stopped");
 }
 
-// ============================================================================
-// MAIN
-// ============================================================================
 int main(int argc, char* argv[]) {
 #ifdef _WIN32
-    WSADATA wsa;
-    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) return 1;
+    WSADATA wsa; WSAStartup(MAKEWORD(2, 2), &wsa);
 #endif
 
     int port = BASE_PORT;
-    for (int i = 1; i < argc; i++) {
-        std::string arg = argv[i];
-        if (arg.find("--port=") == 0) {
-            port = std::stoi(arg.substr(7));
+    std::thread server_thread(tcp_server_loop, port);
+    
+    // Background Cleanup Thread
+    std::thread cleanup_thread([]() {
+        while (!shutdown_requested.load()) {
+            std::this_thread::sleep_for(std::chrono::minutes(1));
+            g_chunked_buffer.cleanup_expired();
         }
-    }
-
-    g_logger.info("=== Bloom Host Started ===");
-    g_logger.info("Version: " + VERSION);
-
-    // Start TCP server in background thread
-    std::thread server_thread([port]() {
-        tcp_server_loop(port);
     });
 
-    // Main thread handles Chrome stdin/stdout
     chrome_loop();
 
-    // Wait for server thread to finish
     shutdown_requested.store(true);
     server_thread.join();
-
-    g_logger.info("=== Bloom Host Stopped ===");
+    if (cleanup_thread.joinable()) cleanup_thread.join();
 
 #ifdef _WIN32
     WSACleanup();
