@@ -11,6 +11,8 @@ from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone
 import socket
 import shutil
+import hashlib
+from brain.core.filesystem.code_compressor import CodeCompressor
 
 
 class IntentManager:
@@ -120,6 +122,119 @@ class IntentManager:
             "project_path": str(project_root),
             "created_at": timestamp,
             "message": f"Intent '{name}' ({intent_type}) created successfully"
+        }
+    
+    def hydrate_intent(
+        self,
+        intent_id: Optional[str] = None,
+        folder_name: Optional[str] = None,
+        briefing: str = "",
+        files: Optional[List[str]] = None,
+        nucleus_path: Optional[Path] = None,
+        verbose: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Populate the intent with files and briefing instructions.
+        Generates .codebase.json and .codebase_index.json.
+        """
+        project_root = self._find_bloom_project(nucleus_path)
+        intent_path, state_data, state_file = self._locate_intent(
+            project_root, intent_id, folder_name
+        )
+       
+        intent_type = state_data["type"]
+       
+        if intent_type == "dev":
+            content_dir = intent_path / ".briefing"
+            content_file = content_dir / ".briefing.json"
+            content_key = "instruction"
+        else:
+            content_dir = intent_path / ".context"
+            content_file = content_dir / ".context.json"
+            content_key = "instruction"
+       
+        files_dir = content_dir / ".files"
+        files_dir.mkdir(parents=True, exist_ok=True)
+        # 3. Process Briefing
+        briefing_updated = False
+        if briefing:
+            briefing_data = {
+                content_key: briefing,
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }
+            with open(content_file, 'w', encoding="utf-8") as f:
+                json.dump(briefing_data, f, indent=2)
+            briefing_updated = True
+        # 4. Process Files (The Hydration)
+        stats = {"total_files": 0, "total_size_kb": 0.0}
+       
+        # Load existing files from state or args
+        files_to_process = set(files) if files else set()
+        files_to_process.update(state_data.get("initial_files", []))
+       
+        if files_to_process:
+            compressor = CodeCompressor(preserve_comments=False)
+           
+            codebase_entries = []
+            index_entries = []
+           
+            for file_path_str in files_to_process:
+                full_path = project_root / file_path_str
+                if not full_path.exists():
+                    if verbose: print(f"⚠️ Warning: File skipped (not found): {file_path_str}")
+                    continue
+               
+                # Determine language (simple extension check)
+                ext = full_path.suffix.lower().replace('.', '')
+                lang_map = {'py': 'python', 'js': 'javascript', 'ts': 'typescript', 'md': 'markdown'}
+                language = lang_map.get(ext, 'text')
+                content = full_path.read_text(encoding='utf-8', errors='ignore')
+               
+                # Compress
+                compressed_data = compressor.compress_file(content, language)
+               
+                # Metadata
+                file_hash = hashlib.md5(content.encode()).hexdigest()
+               
+                # Entry for .codebase.json (Content)
+                codebase_entries.append({
+                    "path": file_path_str,
+                    "content": compressed_data, # {'c': 'gz:...', 'stats': ...}
+                    "hash": file_hash
+                })
+               
+                # Entry for .codebase_index.json (Structure/Meta)
+                index_entries.append({
+                    "path": file_path_str,
+                    "hash": file_hash,
+                    "size": len(content),
+                    "language": language,
+                    "tokens_est": len(content) // 4 # Rough estimate
+                })
+               
+                stats["total_files"] += 1
+                stats["total_size_kb"] += len(content) / 1024
+            # Write .codebase.json
+            with open(files_dir / ".codebase.json", 'w', encoding="utf-8") as f:
+                json.dump({"files": codebase_entries}, f)
+            # Write .codebase_index.json
+            with open(files_dir / ".codebase_index.json", 'w', encoding="utf-8") as f:
+                json.dump({"index": index_entries}, f, indent=2)
+        # 5. Update State
+        state_data["status"] = "hydrated" # or "briefing_completed"
+        state_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+        if "steps" in state_data:
+            state_data["steps"]["hydrate"] = True
+        with open(state_file, 'w', encoding="utf-8") as f:
+            json.dump(state_data, f, indent=2)
+        return {
+            "intent_id": state_data.get("uuid"),
+            "status": state_data["status"],
+            "briefing_updated": briefing_updated,
+            "stats": {
+                "total_files": stats["total_files"],
+                "total_size_kb": round(stats["total_size_kb"], 2)
+            }
         }
     
     def _slugify(self, text: str) -> str:

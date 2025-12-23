@@ -12,12 +12,12 @@ Brain CLI - Modular system for Bloom
 │   filesystem    File operations and directory analysis              3 cmds                       │
 │   gemini        Gemini AI key management and operations             5 cmds                       │
 │   github        GitHub integration and repository management        9 cmds                       │
-│   intent        Intent execution system and context planning       12 cmds                       │
+│   intent        Intent execution system and context planning       19 cmds                       │
 │   nucleus       Nucleus project management and lifecycle           14 cmds                       │
 │   profile       Chrome profile and AI account management            8 cmds                       │
 │   project       Project lifecycle and scaffolding                   6 cmds                       │
 │                                                                 ──────────                       │
-│                                                                    58 cmds                       │
+│                                                                    65 cmds                       │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 
 ╭──────────────────────────────────────────── NUCLEUS ─────────────────────────────────────────────╮
@@ -393,6 +393,20 @@ Brain CLI - Modular system for Bloom
 │      --force              Skip confirmation and force delete even if locked                      │
 │      -p                   Path to Bloom project                                                  │
 │                                                                                                  │
+│  DOWNLOAD - Download AI response and save to .response/ directory                                │
+│                                                                                                  │
+│    python -m brain intent download [OPTIONS]                                                     │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i                   Intent UUID to download response for                                   │
+│      --folder             Intent folder name (alternative to intent-id)                          │
+│      --socket-mode        Listen on TCP socket for Host connection                               │
+│      --input-file         Read response from file (for testing)                                  │
+│      --host               Host IP to listen on                                                   │
+│      --port               Port to listen on (different from Host's 5678)                         │
+│      --timeout            Socket timeout in seconds                                              │
+│      --nucleus-path       Path to Bloom project (auto-detected if omitted)                       │
+│                                                                                                  │
 │  FINALIZE - Finalize intent and apply changes                                                    │
 │                                                                                                  │
 │    python -m brain intent finalize [OPTIONS]                                                     │
@@ -411,6 +425,18 @@ Brain CLI - Modular system for Bloom
 │      -f                   Intent folder name                                                     │
 │      -p                   Path to Bloom project                                                  │
 │                                                                                                  │
+│  HYDRATE - Populate intent with code context and briefing                                        │
+│                                                                                                  │
+│    python -m brain intent hydrate [OPTIONS]                                                      │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i                   Intent UUID                                                            │
+│      -f                   Intent folder name                                                     │
+│      -b                   Briefing text (instruction)                                            │
+│      -B                   Path to text file containing briefing                                  │
+│      -F                   Files to include in context (comma-separated)                          │
+│      -p                   Path to Bloom project root                                             │
+│                                                                                                  │
 │  LIST - List all intents in a Bloom project                                                      │
 │                                                                                                  │
 │    python -m brain intent list [OPTIONS]                                                         │
@@ -428,6 +454,32 @@ Brain CLI - Modular system for Bloom
 │      -f                   Intent folder name                                                     │
 │      -p                   Path to Bloom project                                                  │
 │                                                                                                  │
+│  MERGE - Merge staged files into codebase with backup                                            │
+│                                                                                                  │
+│    python -m brain intent merge [OPTIONS]                                                        │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i                   Intent UUID to merge files for                                         │
+│      -f                   Intent folder name (e.g., .fix-login-a1b2c3d4)                         │
+│      -s                   Pipeline stage (briefing, execution, refinement_X). Auto-detect if     │
+│  not provided.                                                                                   │
+│      --force              Skip approval check and merge anyway                                   │
+│      --dry-run            Show what would be merged without applying                             │
+│      --no-backup          Skip backup creation (DANGEROUS)                                       │
+│      -p                   Path to Bloom project (auto-detected if not provided)                  │
+│                                                                                                  │
+│  PARSE - Parse and validate .raw_output.json against Bloom protocol                              │
+│                                                                                                  │
+│    python -m brain intent parse [OPTIONS]                                                        │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i <VALUE>           Intent UUID to parse                                                   │
+│      -s                   Pipeline stage (briefing, execution, refinement_X). Auto-detect if     │
+│  not provided.                                                                                   │
+│      --strict             Fail on any protocol violation (no fallback parser)                    │
+│      --output-report      Generate .parse_report.json                                            │
+│      -n                   Path to nucleus root (default: current directory)                      │
+│                                                                                                  │
 │  PLAN - Generate AI context plan with intelligent file prioritization                            │
 │                                                                                                  │
 │    python -m brain intent plan [OPTIONS]                                                         │
@@ -436,6 +488,30 @@ Brain CLI - Modular system for Bloom
 │      --intent-dir <VALUE> Intent directory path                                                  │
 │      --description <VALUE> Intent description                                                    │
 │      --type               Intent type: dev, doc, or seed                                         │
+│                                                                                                  │
+│  RECOVER - Recover interrupted intents from lock state                                           │
+│                                                                                                  │
+│    python -m brain intent recover [OPTIONS]                                                      │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i                   Intent UUID to recover                                                 │
+│      -f                   Intent folder name (e.g., .fix-login-abc123)                           │
+│      --auto-detect        Find and recover all interrupted intents                               │
+│      --force-unlock       Force unlock without attempting recovery                               │
+│      -p                   Path to Bloom project (auto-detected if not provided)                  │
+│                                                                                                  │
+│  STAGE - Prepare files in .staging/ directory for merge                                          │
+│                                                                                                  │
+│    python -m brain intent stage [OPTIONS]                                                        │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i                   Intent UUID to stage files for                                         │
+│      -f                   Intent folder name (e.g., .fix-login-a1b2c3d4)                         │
+│      -s                   Pipeline stage (briefing, execution, refinement_X). Auto-detect if     │
+│  not provided.                                                                                   │
+│      --dry-run            Show what would be staged without writing files                        │
+│      --overwrite          Overwrite existing .staging/ directory                                 │
+│      -p                   Path to Bloom project (auto-detected if not provided)                  │
 │                                                                                                  │
 │  SUBMIT - Submit an intent payload to AI provider through native host bridge                     │
 │                                                                                                  │
@@ -475,6 +551,19 @@ Brain CLI - Modular system for Bloom
 │      --remove-files       Remove files from the initial_files list                               │
 │      -p                   Path to the Nucleus (Bloom project root). Auto-detected if not         │
 │  provided.                                                                                       │
+│                                                                                                  │
+│  VALIDATE - Validate staging files using Gemini analysis                                         │
+│                                                                                                  │
+│    python -m brain intent validate [OPTIONS]                                                     │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i                   Intent UUID                                                            │
+│      -f                   Intent folder name (e.g., .fix-login-abc123)                           │
+│      -s                   Pipeline stage (briefing, execution, refinement_X)                     │
+│      --auto-approve       Skip manual review and approve automatically                           │
+│      --gemini-model       Gemini model to use for analysis                                       │
+│      --skip-gemini        Skip Gemini analysis (only basic validation)                           │
+│      -p                   Path to Bloom project (auto-detected if omitted)                       │
 │                                                                                                  │
 ╰────────────────────────── Intent execution system and context planning ──────────────────────────╯
 

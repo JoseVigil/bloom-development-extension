@@ -341,10 +341,12 @@ bloom-development-extension/
 │   │   │   ├── delete.py
 │   │   │   ├── finalize.py
 │   │   │   ├── get.py
+│   │   │   ├── hydrate.py
 │   │   │   ├── list.py
 │   │   │   ├── lock.py
 │   │   │   ├── plan.py
 │   │   │   ├── router_prompt.md
+│   │   │   ├── submit.py
 │   │   │   ├── unlock.py
 │   │   │   └── update.py
 │   │   ├── nucleus/
@@ -360,6 +362,8 @@ bloom-development-extension/
 │   │   │   ├── link.py
 │   │   │   ├── list.py
 │   │   │   ├── list_projects.py
+│   │   │   ├── onboarding_complete.py
+│   │   │   ├── onboarding_status.py
 │   │   │   ├── project_info.py
 │   │   │   ├── status.py
 │   │   │   └── sync.py
@@ -422,8 +426,7 @@ bloom-development-extension/
 │   │   │   ├── __init__.py
 │   │   │   ├── api_client.py
 │   │   │   └── models.py
-│   │   ├── intent/
-│   │   │   └── manager.py
+│   │   ├── intent_manager.py
 │   │   ├── nucleus_inspector.py
 │   │   ├── nucleus_manager.py
 │   │   ├── project/
@@ -434,6 +437,7 @@ bloom-development-extension/
 │   │   │   └── scanner.py
 │   │   ├── project_manager.py
 │   │   └── tree_manager.py
+│   ├── libs/ [... python vendored dependencies]
 │   ├── pyproject.toml
 │   ├── requirements.txt
 │   └── shared/
