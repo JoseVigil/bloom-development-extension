@@ -132,7 +132,7 @@ export class BrainExecutor {
     /**
      * Execute Brain CLI command and parse JSON output
      */
-    private static async execute<T = any>(
+    public static async execute<T = any>(
     commands: string[],
     args: Record<string, any> = {},
     options: {
@@ -204,9 +204,9 @@ export class BrainExecutor {
             const result = JSON.parse(stdout.trim()) as BrainResult<T>;
             
             if (result.status === 'success') {
-            console.log(`[BrainExecutor] ✅ Success:`, result.operation || commands[0]);
+            console.log(`[BrainExecutor] âœ… Success:`, result.operation || commands[0]);
             } else {
-            console.warn(`[BrainExecutor] ⚠️ Non-success status:`, result);
+            console.warn(`[BrainExecutor] âš ï¸ Non-success status:`, result);
             }
             
             resolve(result);

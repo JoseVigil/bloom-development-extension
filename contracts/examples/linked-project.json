@@ -1,9 +1,0 @@
-"linked-project.json": {
-    "name": "my-web-app",
-    "path": "/Users/developer/projects/my-web-app",
-    "strategy": "nodejs",
-    "nucleus_path": "/Users/developer/bloom/acme-nucleus",
-    "repo_url": "https://github.com/acme-corp/my-web-app",
-    "description": "Main web application with React frontend",
-    "linked_at": "2025-01-15T11:00:00.000Z"
-  }

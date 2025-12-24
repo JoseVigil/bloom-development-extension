@@ -1,6 +1,0 @@
-"brain-result-error.json": {
-    "status": "error",
-    "operation": "intent:create",
-    "error": "Invalid intent type",
-    "message": "Intent type must be 'dev' or 'doc'"
-  }

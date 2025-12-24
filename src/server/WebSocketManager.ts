@@ -1,3 +1,5 @@
+// src/server/WebSocketManager.ts (corregido con attachHost agregado)
+
 import WebSocket, { WebSocketServer } from 'ws';
 import type { IncomingMessage } from 'http';
 import { EventEmitter } from 'events';
@@ -6,6 +8,7 @@ import { CopilotNativeAdapter } from '../ai/adapters/CopilotNativeAdapter';
 import { BrainApiAdapter } from '../api/adapters/BrainApiAdapter';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { HostExecutor } from '../host/HostExecutor';  // Import agregado basado en la ubicación proporcionada (src/host/HostExecutor.ts)
 
 interface ExtendedWebSocket extends WebSocket {
   isAlive: boolean;
@@ -38,6 +41,9 @@ export class WebSocketManager extends EventEmitter {
   private activeProcesses: Map<string, CopilotProcess> = new Map();
   private readonly PORT = 4124;
   private readonly HEARTBEAT_INTERVAL = 20000;
+
+  // Nueva propiedad para el HostExecutor
+  private hostExecutor?: HostExecutor;
 
   private constructor() {
     super();
@@ -572,5 +578,14 @@ Explain and derive, don't implement`
       clients: this.clients.size,
       activeProcesses: this.activeProcesses.size
     };
+  }
+
+  // Método agregado como recomendado por Claude
+  public attachHost(hostExecutor: HostExecutor): void {
+    this.hostExecutor = hostExecutor;
+    console.log('[WebSocketManager] HostExecutor attached successfully');
+    // Integración adicional: Si es necesario, puedes agregar lógica aquí para usar el hostExecutor en otros métodos.
+    // Por ejemplo, en handleCopilotPrompt, podrías delegar ejecuciones al hostExecutor si aplica.
+    // Ejemplo básico: this.hostExecutor.onMessage((msg) => this.broadcast('host_message', msg));
   }
 }

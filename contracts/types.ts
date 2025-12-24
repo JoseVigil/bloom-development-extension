@@ -252,7 +252,7 @@ export interface IntentDev extends Intent {
  *   status: 'active',
  *   phase: 'execution',
  *   locked: false,
- *   initial_files: ['src/api/**/*.ts'],
+ *   initial_files: ['src/api/**\/*.ts'],
  *   created_at: '2025-01-21T09:00:00Z',
  *   updated_at: '2025-01-21T09:30:00Z',
  *   context: {
@@ -558,6 +558,7 @@ export type ErrorCode =
   // Auth errors
   | 'NOT_AUTHENTICATED'
   | 'NOT_NUCLEUS'
+  | 'AUTH_FAILED'
   // Resource not found
   | 'NUCLEUS_NOT_FOUND'
   | 'INTENT_NOT_FOUND'
@@ -570,6 +571,7 @@ export type ErrorCode =
   | 'AI_QUOTA_EXCEEDED'
   | 'AI_AUTH_FAILED'
   | 'AI_TIMEOUT'
+  | 'RATE_LIMIT_EXCEEDED'
   // Generic errors
   | 'VALIDATION_ERROR'
   | 'INTERNAL_ERROR';

@@ -1,6 +1,0 @@
-"brain-result-not-authenticated.json": {
-    "status": "not_authenticated",
-    "operation": "github:repos",
-    "error": "GitHub authentication required",
-    "message": "Please authenticate with GitHub to access repositories"
-  }

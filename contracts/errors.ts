@@ -119,6 +119,16 @@ export const ERROR_CATALOG: Record<ErrorCode, ErrorCatalogEntry> = {
     telemetry_category: 'resource'
   },
 
+  AUTH_FAILED: {
+    severity: 'critical',
+    default_message: 'Authentication failed',
+    user_action: 'Verify your credentials and try again',
+    retry_strategy: 'manual',
+    http_status: 401,
+    docs_url: '/docs/getting-started/authentication',
+    telemetry_category: 'auth'
+  },
+
   // ============================================================================
   // RESOURCE NOT FOUND ERRORS
   // ============================================================================
@@ -229,6 +239,16 @@ export const ERROR_CATALOG: Record<ErrorCode, ErrorCatalogEntry> = {
     http_status: 504,
     docs_url: '/docs/troubleshooting/timeouts',
     telemetry_category: 'ai_service'
+  },
+
+  RATE_LIMIT_EXCEEDED: {
+    severity: 'warning',
+    default_message: 'Rate limit exceeded',
+    user_action: 'Wait a moment and try again',
+    retry_strategy: 'exponential',
+    http_status: 429,
+    docs_url: '/docs/troubleshooting/rate-limits',
+    telemetry_category: 'system'
   },
 
   // ============================================================================

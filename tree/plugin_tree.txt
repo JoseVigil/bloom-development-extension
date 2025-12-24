@@ -10,16 +10,30 @@ bloom-development-extension/
 │   │   │   └── GrokAdapter.ts
 │   │   └── index.ts
 │   ├── api/
-│   │   └── adapters/
-│   │       ├── BrainApiAdapter.ts
-│   │       ├── routes/
-│   │       │   ├── auth.routes.ts
-│   │       │   ├── copilot.routes.ts
-│   │       │   ├── intent.routes.ts
-│   │       │   ├── nucleus.routes.ts
-│   │       │   ├── profile.routes.ts
-│   │       │   └── project.routes.ts
-│   │       └── server.ts
+│   │   ├── adapters/
+│   │   │   ├── BrainApiAdapter.ts
+│   │   │   └── routes/
+│   │   │       └── auth.routes.ts
+│   │   ├── index.ts
+│   │   ├── middleware/
+│   │   │   ├── errorHandler.ts
+│   │   │   └── validation.ts
+│   │   ├── routes/
+│   │   │   ├── auth.routes.ts
+│   │   │   ├── copilot.routes.ts
+│   │   │   ├── explorer.routes.ts
+│   │   │   ├── intent.routes.ts
+│   │   │   ├── nucleus.routes.ts
+│   │   │   ├── profile.routes.ts
+│   │   │   └── project.routes.ts
+│   │   ├── schemas/
+│   │   │   ├── auth.schema.ts
+│   │   │   ├── explorer.schema.ts
+│   │   │   ├── intent.schema.ts
+│   │   │   ├── nucleus.schema.ts
+│   │   │   ├── profile.schema.ts
+│   │   │   └── project.schema.ts
+│   │   └── server.ts
 │   ├── auth/
 │   │   └── GitHubOAuthServer.ts
 │   ├── commands/
@@ -115,8 +129,7 @@ bloom-development-extension/
 │   │   ├── BTIPExplorerController.ts
 │   │   ├── PluginApiServer.ts
 │   │   ├── WebSocketManager.ts
-│   │   ├── index.ts
-│   │   └── routes.ts
+│   │   └── index.ts
 │   ├── strategies/
 │   │   ├── AndroidStrategy.ts
 │   │   ├── GenericStrategy.ts
@@ -239,7 +252,6 @@ bloom-development-extension/
 │       │   │   ├── components/
 │       │   │   │   ├── BriefingEditor.svelte
 │       │   │   │   ├── ChatBTIP.svelte
-│       │   │   │   ├── CopilotChat.svelte
 │       │   │   │   ├── FileTree.svelte
 │       │   │   │   ├── GeminiTokenForm.svelte
 │       │   │   │   ├── GithubAuthButton.svelte
@@ -253,17 +265,11 @@ bloom-development-extension/
 │       │   │   │   ├── auth.ts
 │       │   │   │   ├── intents.ts
 │       │   │   │   ├── navigation.ts
-│       │   │   │   ├── nucleus.ts
 │       │   │   │   ├── onboarding.ts
 │       │   │   │   ├── system.ts
 │       │   │   │   ├── theme.ts
 │       │   │   │   └── websocket.ts
 │       │   │   ├── types.ts
-│       │   │   ├── views/
-│       │   │   │   ├── DevIntentView.svelte
-│       │   │   │   ├── DocIntentView.svelte
-│       │   │   │   ├── GenesisView.svelte
-│       │   │   │   └── OnboardingView.svelte
 │       │   │   └── ws.ts
 │       │   └── routes/
 │       │       ├── +layout.svelte
@@ -339,16 +345,22 @@ bloom-development-extension/
 │   │   │   ├── build_payload.py
 │   │   │   ├── create.py
 │   │   │   ├── delete.py
+│   │   │   ├── download.py
 │   │   │   ├── finalize.py
 │   │   │   ├── get.py
 │   │   │   ├── hydrate.py
 │   │   │   ├── list.py
 │   │   │   ├── lock.py
+│   │   │   ├── merge.py
+│   │   │   ├── parse.py
 │   │   │   ├── plan.py
+│   │   │   ├── recover.py
 │   │   │   ├── router_prompt.md
+│   │   │   ├── stage.py
 │   │   │   ├── submit.py
 │   │   │   ├── unlock.py
-│   │   │   └── update.py
+│   │   │   ├── update.py
+│   │   │   └── validate.py
 │   │   ├── nucleus/
 │   │   │   ├── __init__.py
 │   │   │   ├── __pycache__/ [... cache]
@@ -413,6 +425,7 @@ bloom-development-extension/
 │   │   │   ├── enriched_tree_generator.py
 │   │   │   ├── gemini_router.py
 │   │   │   └── payload_builder.py
+│   │   ├── download_manager.py
 │   │   ├── filesystem/
 │   │   │   ├── __init__.py
 │   │   │   ├── code_compressor.py
@@ -426,6 +439,12 @@ bloom-development-extension/
 │   │   │   ├── __init__.py
 │   │   │   ├── api_client.py
 │   │   │   └── models.py
+│   │   ├── intent/
+│   │   │   ├── merge_manager.py
+│   │   │   ├── recovery_manager.py
+│   │   │   ├── response_parser.py
+│   │   │   ├── staging_manager.py
+│   │   │   └── validation_manager.py
 │   │   ├── intent_manager.py
 │   │   ├── nucleus_inspector.py
 │   │   ├── nucleus_manager.py
@@ -437,7 +456,6 @@ bloom-development-extension/
 │   │   │   └── scanner.py
 │   │   ├── project_manager.py
 │   │   └── tree_manager.py
-│   ├── libs/ [... python vendored dependencies]
 │   ├── pyproject.toml
 │   ├── requirements.txt
 │   └── shared/
@@ -446,5 +464,16 @@ bloom-development-extension/
 │       ├── context.py
 │       ├── credentials.py
 │       └── github_types.py
+├── contracts/
+│   ├── README.md
+│   ├── errors.js
+│   ├── errors.js.map
+│   ├── errors.ts
+│   ├── integration.test.ts
+│   ├── state-machines.ts
+│   ├── types.js
+│   ├── types.js.map
+│   ├── types.ts
+│   └── websocket-protocol.ts
 ├── package.json
 └── tsconfig.json

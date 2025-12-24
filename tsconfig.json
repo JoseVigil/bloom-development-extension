@@ -4,7 +4,7 @@
     "module": "commonjs",
     "lib": ["ES2020"],
     "outDir": "out",
-    "rootDir": "src",
+    "rootDir": ".",
     "strict": true,
     "sourceMap": true,
     "esModuleInterop": true,
@@ -12,13 +12,22 @@
     "forceConsistentCasingInFileNames": true,
     "moduleResolution": "node",
     "resolveJsonModule": true,
-    "types": ["vscode", "mocha", "node"]
+    "types": ["vscode", "mocha", "node"],
+    "baseUrl": ".",
+    "paths": {
+      "@/contracts/*": ["./contracts/*"]
+    }
   },
-  "include": ["src/**/*.ts", "src/bridge/HostExecutor.tss"],
+  "include": [
+    "src/**/*.ts",
+    "contracts/**/*.ts"
+  ],
   "exclude": [
     "node_modules",
     "out",
     "backups/**",
-    ".vscode-test"
+    ".vscode-test",
+    "**/*.test.ts",
+    "**/*.spec.ts"
   ]
 }
