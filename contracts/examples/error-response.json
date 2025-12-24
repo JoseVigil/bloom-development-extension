@@ -1,0 +1,13 @@
+"error-response.json": {
+    "error": "INTENT_LOCKED",
+    "error_code": "INTENT_LOCKED",
+    "message": "Intent is currently locked by another process",
+    "details": {
+      "locked_by": "copilot-process-abc123",
+      "locked_at": "2025-01-23T10:00:00.000Z",
+      "intent_id": "intent-dev-auth-jwt-456"
+    },
+    "recoverable": true,
+    "retry_after": 5000,
+    "timestamp": "2025-01-23T10:05:00.000Z"
+  }
