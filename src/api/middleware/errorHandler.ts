@@ -1,6 +1,6 @@
 import type { FastifyError, FastifyRequest, FastifyReply } from 'fastify';
-import { createErrorResponse } from '@/contracts/errors';
-import type { ErrorCode } from '@/contracts/types';
+import { createErrorResponse } from '../../../contracts/errors';
+import type { ErrorCode } from '../../../contracts/types';
 
 /**
  * Global error handler for Fastify

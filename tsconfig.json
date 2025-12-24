@@ -15,7 +15,7 @@
     "types": ["vscode", "mocha", "node"],
     "baseUrl": ".",
     "paths": {
-      "@/contracts/*": ["./contracts/*"]
+      "@/contracts/*": ["contracts/*"] 
     }
   },
   "include": [

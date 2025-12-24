@@ -1,8 +1,8 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { BrainApiAdapter } from '../BrainApiAdapter';
 import { authSchemas } from '../../schemas/auth.schema';
-import type { GitHubAuthStatus } from '@/contracts/types';
-import { createErrorResponse } from '@/contracts/errors';
+import type { GitHubAuthStatus } from '../../../../contracts/types';
+import { createErrorResponse } from '../../../../contracts/errors';
 
 /**
  * Auth Routes - GitHub and Gemini authentication

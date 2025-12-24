@@ -1,8 +1,8 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { BrainApiAdapter } from '../adapters/BrainApiAdapter';
 import { intentSchemas } from '../schemas/intent.schema';
-import type { Intent } from '@/contracts/types';
-import { createErrorResponse } from '@/contracts/errors';
+import type { Intent } from '../../../contracts/types';
+import { createErrorResponse } from '../../../contracts/errors';
 
 /**
  * Intent Routes - Full workflow support

@@ -4,7 +4,7 @@
   "description": "Bloom Nucleus Installer - Local First AI Automation",
   "version": "1.0.0",
   "publisher": "Jose Vigil",
-  "main": "./out/extension.js",
+  "main": "./out/src/extension.js",
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -573,11 +573,11 @@
     "module-alias": "^2.2.3",
     "punycode": "^2.3.0",
     "simple-git": "^3.30.0",
+    "tsconfig-paths": "^4.2.0",
     "uuid": "^9.0.0",
     "ws": "^8.18.3"
   },
   "_moduleAliases": {
     "@": "out"
   }
-  
 }
