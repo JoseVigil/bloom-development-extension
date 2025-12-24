@@ -1,6 +1,8 @@
+// src/api/routes/auth.routes.ts (corregido con paths ajustados para asumir estructura estándar; verifica imports en tu setup)
+
 import type { FastifyPluginAsync } from 'fastify';
-import { BrainApiAdapter } from '../BrainApiAdapter';
-import { authSchemas } from '../../schemas/auth.schema';
+import { BrainApiAdapter } from '../adapters/BrainApiAdapter';  // Ajusta si adapters no está al mismo nivel: e.g., '../../adapters/BrainApiAdapter'
+import { authSchemas } from '../schemas/auth.schema';  // Ajusta si schemas no está al mismo nivel: e.g., '../../schemas/auth.schema'
 import type { GitHubAuthStatus } from '@/contracts/types';
 import { createErrorResponse } from '@/contracts/errors';
 
@@ -273,4 +275,4 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       timestamp: new Date().toISOString()
     };
   });
-};``
+};

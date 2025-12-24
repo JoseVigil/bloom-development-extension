@@ -1,7 +1,11 @@
+// src/extension.ts (corregido con integración de HostExecutor)
+
 import * as vscode from 'vscode';
+import 'module-alias/register';
 import { BloomApiServer } from './api/server';
 import { WebSocketManager } from './server/WebSocketManager';
 import { BrainExecutor } from './utils/brainExecutor';
+import { HostExecutor } from './host/HostExecutor';  
 
 let apiServer: BloomApiServer | null = null;
 let wsManager: WebSocketManager | null = null;
@@ -22,6 +26,13 @@ export async function activate(context: vscode.ExtensionContext) {
     wsManager = WebSocketManager.getInstance();
     await wsManager.start();
     outputChannel.appendLine(`✅ WebSocket server running on ws://localhost:4124`);
+
+    // Nueva integración: Attach HostExecutor
+    const hostExecutor = new HostExecutor(context);
+    wsManager.attachHost(hostExecutor);
+    await hostExecutor.start();
+    outputChannel.appendLine('✅ HostExecutor attached and started');
+    context.subscriptions.push({ dispose: () => hostExecutor.stop() });  // Limpieza
 
     // 3. Start Fastify API Server
     outputChannel.appendLine('Starting Bloom API Server...');

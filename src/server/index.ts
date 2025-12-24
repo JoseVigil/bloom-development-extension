@@ -1,141 +1,21 @@
 // src/server/index.ts
 import * as vscode from 'vscode';
-import { PluginApiServer } from './PluginApiServer';
+import { BloomApiServer } from '../api/server';
 import { WebSocketManager } from './WebSocketManager';
 import { HostExecutor } from '../host/HostExecutor';
 import { BTIPExplorerController } from './BTIPExplorerController';
-import { ChromeProfileManager } from '../core/chromeProfileManager';  // AJUSTE: Importar para instanciar
-import { AiAccountChecker } from '../ai/AiAccountChecker';  // AJUSTE: Importar para instanciar
-import { Logger } from '../utils/logger';  // AJUSTE: Importar Logger para instanciar
 
-// ============================================================================
-// STUB IMPLEMENTATIONS - Reemplazar cuando existan las clases reales
-// ============================================================================
-
-class StubNucleusManager {
-    async create(data: any) { 
-        return { success: true, message: 'Stub: nucleus created' }; 
-    }
-    async clone(data: any) { 
-        return { success: true, message: 'Stub: nucleus cloned' }; 
-    }
-    async list() { 
-        return []; 
-    }
-}
-
-class StubProjectManager {
-    async create(data: any) { 
-        return { success: true, message: 'Stub: project created' }; 
-    }
-    async list() { 
-        return []; 
-    }
-}
-
-class StubIntentManager {
-    async list() { 
-        return []; 
-    }
-    async get(id: string) { 
-        return { id, content: 'Stub intent' }; 
-    }
-    async run(data: any) { 
-        return { success: true, message: 'Stub: intent run' }; 
-    }
-}
-
-class StubGeminiClient {
-    async generate(data: any) { 
-        return { success: true, content: 'Stub: generated content' }; 
-    }
-    async refine(data: any) { 
-        return { success: true, content: 'Stub: refined content' }; 
-    }
-    async summarize(data: any) { 
-        return { success: true, summary: 'Stub: summary' }; 
-    }
-}
-
-class StubHostClient {
-    async getStatus() { 
-        return { 
-            connected: false, 
-            message: 'Stub: host not connected' 
-        }; 
-    }
-}
-
-class StubUserManager {
-    public globalState: vscode.Memento;
-
-    constructor(context: vscode.ExtensionContext) {
-        this.globalState = context.globalState;
-    }
-
-    async getGithubUsername(): Promise<string | undefined> {
-        return this.globalState.get('github.username');
-    }
-
-    async getGithubOrgs(): Promise<string[]> {
-        return this.globalState.get('github.orgs', []);
-    }
-
-    async setGithubUser(username: string, orgs: string[]): Promise<void> {
-        await this.globalState.update('github.username', username);
-        await this.globalState.update('github.orgs', orgs);
-        await this.globalState.update('github.authenticated', true);
-    }
-
-    async isGithubAuthenticated(): Promise<boolean> {
-        return this.globalState.get('github.authenticated', false);
-    }
-
-    async getGeminiApiKey(): Promise<string | undefined> {
-        return this.globalState.get('gemini.apiKey');
-    }
-
-    async setGeminiApiKey(apiKey: string): Promise<void> {
-        await this.globalState.update('gemini.apiKey', apiKey);
-        await this.globalState.update('gemini.configured', true);
-    }
-
-    async isGeminiConfigured(): Promise<boolean> {
-        return this.globalState.get('gemini.configured', false);
-    }
-}
-
-// ============================================================================
-// INITIALIZATION
-// ============================================================================
-
+/**
+ * Inicializa el servidor API, WebSocket Manager y Host Executor
+ */
 export async function initializeServer(context: vscode.ExtensionContext) {
     console.log('[Server] Initializing components...');
-
-    // AJUSTE: Crear instancia de Logger (asumiendo que Logger se puede instanciar sin args; ajusta si requiere params)
-    const logger = new Logger();  // AJUSTE: Instanciar Logger para pasarlo a ChromeProfileManager
 
     // 1. Crear OutputChannel para logs del servidor
     const outputChannel = vscode.window.createOutputChannel('Bloom Server');
     context.subscriptions.push(outputChannel);
 
-    // 2. Obtener versión del plugin
-    const pluginVersion = context.extension.packageJSON.version || '1.0.0';
-
-    // 3. Crear dependencias (stubs temporales)
-    // TODO: Reemplazar con implementaciones reales cuando existan
-    const nucleusManager = new StubNucleusManager();
-    const projectManager = new StubProjectManager();
-    const intentManager = new StubIntentManager();
-    const geminiClient = new StubGeminiClient();
-    const hostClient = new StubHostClient();
-    const userManager = new StubUserManager(context);
-
-    // AJUSTE: Instanciar las dependencias faltantes para PluginApiServerConfig
-    const chromeProfileManager = new ChromeProfileManager(context, logger);  // AJUSTE: Pasar context y logger requeridos
-    const aiAccountChecker = AiAccountChecker.init(context);  // AJUSTE: Usar método estático init() en lugar de new (constructor privado)
-
-    // 4. Inicializar WebSocket Manager (singleton)
+    // 2. Inicializar WebSocket Manager (singleton)
     const ws = WebSocketManager.getInstance();
     await ws.start();
     context.subscriptions.push({
@@ -143,36 +23,29 @@ export async function initializeServer(context: vscode.ExtensionContext) {
     });
     console.log('[Server] WebSocketManager started on port 4124');
 
-    // 5. Inicializar API Server
-    const api = new PluginApiServer({
+    // 3. Inicializar API Server
+    const api = new BloomApiServer({
         context,
         wsManager: ws,
-        nucleusManager,
-        projectManager,
-        intentManager,
-        geminiClient,
-        hostClient,
-        userManager,
         outputChannel,
-        pluginVersion,
-        chromeProfileManager,  // AJUSTE: Agregar la propiedad faltante
-        aiAccountChecker       // AJUSTE: Agregar la propiedad faltante
+        port: 48215
     });
+    
     await api.start();
-    console.log(`[Server] PluginApiServer started on port ${api.getPort()}`);
+    console.log(`[Server] BloomApiServer started on port ${api.getPort()}`);
     
     context.subscriptions.push({
         dispose: () => api.stop()
     });
 
-    // 6. Inicializar HostExecutor
+    // 4. Inicializar HostExecutor
     const host = new HostExecutor(context);
     
-    // 7. Vincular Host con WebSocketManager
+    // 5. Vincular Host con WebSocketManager
     ws.attachHost(host);
     console.log('[Server] HostExecutor attached to WebSocketManager');
 
-    // 8. Configurar FileSystemWatcher para .bloom/**
+    // 6. Configurar FileSystemWatcher para .bloom/**
     const fileWatcher = vscode.workspace.createFileSystemWatcher('**/.bloom/**/*');
 
     const notifyUpdate = (uri: vscode.Uri) => {
@@ -191,7 +64,7 @@ export async function initializeServer(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(fileWatcher);
 
-    // 9. Limpieza al desactivar
+    // 7. Limpieza al desactivar
     context.subscriptions.push({
         dispose: () => {
             console.log('[Server] Cleaning up Host...');
