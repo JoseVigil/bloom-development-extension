@@ -1,7 +1,7 @@
 // src/extension.ts (corregido con integración de HostExecutor)
 
-import * as vscode from 'vscode';
 import 'module-alias/register';
+import * as vscode from 'vscode';
 import { BloomApiServer } from './api/server';
 import { WebSocketManager } from './server/WebSocketManager';
 import { BrainExecutor } from './utils/brainExecutor';

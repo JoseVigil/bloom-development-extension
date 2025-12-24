@@ -11,9 +11,6 @@
   "categories": [
     "Other"
   ],
-  "_moduleAliases": {
-    "@": "out"
-  },
   "activationEvents": [
     "onCommand:bloom.openMarkdownPreview",
     "onCommand:bloom.generateIntent",
@@ -578,6 +575,9 @@
     "simple-git": "^3.30.0",
     "uuid": "^9.0.0",
     "ws": "^8.18.3"
+  },
+  "_moduleAliases": {
+    "@": "out"
   }
   
 }
