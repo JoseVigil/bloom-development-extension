@@ -1,8 +1,8 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { BrainApiAdapter } from '../adapters/BrainApiAdapter';
 import { profileSchemas } from '../schemas/profile.schema';
-import type { ChromeProfile } from '@/contracts/types';
-import { createErrorResponse } from '@/contracts/errors';
+import type { ChromeProfile } from '../../../contracts/types';
+import { createErrorResponse } from '../../../contracts/errors';
 
 /**
  * Profile Routes - Chrome profile and AI account management

@@ -11,7 +11,7 @@ import type {
   GitHubAuthStatus,
   GitHubRepository,
   GitHubOrganization
-} from '@/contracts/types';
+} from '../../../contracts/types';
 
 /**
  * BrainApiAdapter - Unified adapter for all Brain CLI operations
