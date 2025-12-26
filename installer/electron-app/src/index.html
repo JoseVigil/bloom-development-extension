@@ -14,23 +14,25 @@
     <div class="screen active" id="welcome-screen">
       <div class="card">
         <div class="logo">B</div>
-        <h1>Bloom Nucleus Installer</h1>
+        <h1>Bloom Nucleus</h1>
         <p class="text-center">
-          Este instalador configurará el sistema completo de Bloom Nucleus en tu máquina:
-          Servicio de Background, Motor Python y Extensión de Chrome.
+          Instalación automática de tu asistente IA local.<br>
+          <strong>Zero Config. Zero Admin. Modo Dios.</strong>
         </p>
         
         <div class="info-box">
-          <strong>Ubicación de instalación:</strong>
-          <code id="install-path">Cargando...</code>
+          <strong>📍 Ubicación:</strong>
+          <code id="install-path">%LOCALAPPDATA%\BloomNucleus</code>
         </div>
 
-        <div class="info-box">
-          ✅ Instalación local (No requiere permisos de administrador).
+        <div class="info-box" style="background: #f0fff4; border-left-color: #48bb78;">
+          ✅ Instalación local (Sin permisos de administrador)<br>
+          ✅ Motor IA + Chrome Profile aislado<br>
+          ✅ Extensión configurada automáticamente
         </div>
 
         <div class="button-group">
-          <button class="button" id="start-button" disabled>Cargando sistema...</button>
+          <button class="button" id="start-button">🚀 INSTALAR BLOOM NUCLEUS</button>
         </div>
       </div>
     </div>
@@ -39,176 +41,91 @@
     <div class="screen" id="installation-screen">
       <div class="card">
         <div class="logo">B</div>
-        <h1>Instalando Bloom Nucleus</h1>
-        <p class="text-center">Por favor espera mientras se configura el entorno...</p>
+        <h1>Desplegando Sistema</h1>
+        <p class="text-center">Configurando motor IA, perfiles y extensión...</p>
+        
         <div class="progress-container">
           <div class="progress-bar">
             <div class="progress-fill" id="progress-fill"></div>
           </div>
-          <div class="progress-text" id="progress-text">Iniciando...</div>
+          <div class="progress-text" id="progress-text">Iniciando despliegue...</div>
         </div>
+        
         <div class="spinner"></div>
-      </div>
-    </div>
-
-    <!-- 3. SERVICE CONFIGURATION SCREEN -->
-    <div class="screen" id="service-screen">
-      <div class="card">
-        <div class="logo">B</div>
-        <h1>Configurando Servicio</h1>
         
-        <div id="service-status-container" style="text-align: center;">
-          <div class="spinner"></div>
-          <p id="service-status-text" style="margin-top: 20px; color: #4a5568;">Instalando servicio...</p>
-        </div>
-
-        <div id="service-result" style="display: none;">
-          <div class="success-box">
-            <strong>✓ Servicio instalado correctamente</strong>
-            Puerto: <code id="detected-port">5678</code>
-          </div>
-          <div class="button-group">
-            <button class="button" id="continue-from-service-btn">Continuar</button>
-          </div>
-        </div>
-
-        <div id="service-error" style="display: none;">
-          <div class="warning-box">
-            <strong>⚠️ Error al instalar el servicio</strong>
-            <p id="service-error-text"></p>
-          </div>
-          <div class="button-group">
-            <button class="button button-secondary" id="retry-service-btn">Reintentar</button>
-            <button class="button" id="skip-service-btn">Continuar sin servicio</button>
-          </div>
-        </div>
-      </div>  
-    </div>
-
-    <!-- 4. MANUAL INSTALL SCREEN -->
-    <div class="screen" id="manual-install-screen">
-      <div class="card">
-        <div class="logo">B</div>
-        <h1>Instalar Extensión</h1>
-        
-        <div style="margin: 30px 0; display: flex; flex-direction: column; align-items: center;">
-          <p style="margin-bottom: 15px; color: #4a5568; text-align: center;">
-            1. Haz <strong>clic abajo</strong> para abrir la carpeta, luego<br>
-            arrastra el archivo hacia <strong>chrome://extensions</strong>
-          </p>
-          
-          <!-- Se eliminó draggable="true" y se cambió el icono a carpeta -->
-          <div id="draggable-crx" class="file-icon-card" style="cursor: pointer;">
-            <div style="font-size: 42px; line-height: 1;">📂</div>
-            <div style="text-align: left;">
-              <div style="font-weight: 700; color: #2d3748; font-size: 15px;">Abrir Ubicación</div>
-              <div style="font-size: 11px; color: #718096;">Click para ver archivo</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="info-box">
-          <p>2. Pega el ID de la extensión:</p>
-          <div style="display: flex; gap: 10px;">
-            <input type="text" id="extension-id-input" placeholder="ID de la extensión..." style="flex: 1; padding: 8px;">
-            <button class="button" id="confirm-id-btn">Conectar</button>
-          </div>
-          <p id="id-error-msg" style="color: red; display: none;"></p>
-        </div>
-
-        <div class="button-group">
-          <button class="button button-secondary" id="open-chrome-ext-btn-manual">
-            Abrir Chrome Extensions
-          </button>
-        </div>
-        
-        <div id="manual-connection-status" style="display:none; text-align:center;">
-          <p id="heartbeat-status">Sincronizando...</p>
+        <div id="installation-details" style="margin-top: 30px; font-size: 13px; color: #718096; text-align: center;">
+          <p id="detail-line-1">• Copiando runtime Python...</p>
+          <p id="detail-line-2">• Instalando motor Brain...</p>
+          <p id="detail-line-3">• Registrando Native Host...</p>
+          <p id="detail-line-4">• Calculando Extension ID...</p>
+          <p id="detail-line-5">• Creando perfil maestro...</p>
         </div>
       </div>
     </div>
 
-    <!-- 5. HANDSHAKE SCREEN -->
-    <div class="screen" id="handshake-screen">
-      <div class="card">
-        <div class="logo">B</div>
-        <h1 id="handshake-title">Configurando...</h1>
-        
-        <div id="handshake-steps">
-          <div id="step-installing" style="text-align: center;">
-            <div class="spinner"></div>
-            <p>Aplicando configuración Enterprise...</p>
-          </div>
-
-          <div id="step-waiting-chrome" style="display: none; text-align: center;">
-            <div class="info-box" style="background: #ebf8ff; border-left-color: #4299e1;">
-              <strong>Sincronizando...</strong>
-              <div id="step2-message">Validando conexión con Chrome...</div>
-            </div>
-            
-            <div style="margin: 30px 0;">
-              <div class="status-dot red" id="heartbeat-dot"></div>
-              <p style="margin-top: 10px; font-size: 14px; color: #718096;">Esperando señal del sistema...</p>
-            </div>
-          </div>
-          
-          <div id="step-success" style="display: none; text-align: center;">
-            <div class="success-icon" style="transform: scale(1.5); margin: 40px auto;">✓</div>
-            <h2 style="color: #48bb78; margin-bottom: 20px;">¡Conectado!</h2>
-            <p>Sistema sincronizado correctamente.</p>
-            
-            <div class="button-group">
-              <button class="button" id="finish-handshake-btn">Finalizar</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 6. SUCCESS SCREEN -->    
+    <!-- 3. SUCCESS SCREEN CON HEARTBEAT -->
     <div class="screen" id="success-screen">
       <div class="card">
         <div class="success-icon">✓</div>
-        <h1>¡Instalación Completa!</h1>
-        <p class="text-center">Bloom Nucleus ha sido configurado correctamente.</p>
+        <h1>¡Sistema Listo!</h1>
+        <p class="text-center">Bloom Nucleus está instalado y configurado.</p>
 
         <div class="success-box">
-          <strong>Estado del Sistema:</strong>
-          <ul style="margin-left: 20px; margin-top: 10px;">
-            <li>Servicio Host: <strong>Activo</strong> (Puerto <span id="final-port">...</span>)</li>
-            <li>Extensión Chrome: <strong>Instalada</strong></li>
-            <li>Motor IA: <strong>Listo</strong></li>
+          <strong>📊 Componentes Desplegados:</strong>
+          <ul style="margin-left: 20px; margin-top: 10px; text-align: left;">
+            <li>Motor IA: <strong>Activo</strong> (<code id="final-brain-dir">...</code>)</li>
+            <li>Extension ID: <code id="final-extension-id">...</code></li>
+            <li>Perfil Maestro: <code id="final-profile-id">...</code></li>
+            <li>Native Host: <strong>Registrado en HKCU</strong></li>
           </ul>
         </div>
 
-        <div class="info-box" style="background: #fffaf0; border-left-color: #ed8936; text-align: left;">
-          <strong>🛠️ Modo Desarrollo - Siguiente Paso:</strong>
-          <ol style="margin-left: 20px; margin-top: 10px; line-height: 1.8;">
-            <li>Abre VSCode en la carpeta <code>vscode-extension</code></li>
-            <li>Presiona <strong>F5</strong> para iniciar debug</li>
-            <li>Espera a que cargue (aparecerá nueva ventana VSCode)</li>
-            <li>Vuelve aquí y haz clic en <strong>"Configurar Bloom"</strong></li>
-          </ol>
-          <p style="margin-top: 10px; font-size: 13px; color: #744210;">
-            💡 El instalador verificará automáticamente que el servidor esté corriendo.
-          </p>
+        <!-- HEARTBEAT VISUAL (Post-Launch) -->
+        <div id="heartbeat-container" style="display: none; margin: 30px 0;">
+          <div class="info-box" style="background: #ebf8ff; border-left-color: #4299e1; text-align: center;">
+            <strong>🔗 Validando Conexión</strong>
+            <div style="margin: 20px 0;">
+              <div class="status-dot red" id="heartbeat-dot"></div>
+            </div>
+            <p id="heartbeat-status" style="font-size: 14px; color: #4a5568; margin-top: 10px;">
+              Esperando señal de Chrome...
+            </p>
+          </div>
+        </div>
+
+        <!-- SUCCESS BADGE (Post-Heartbeat) -->
+        <div id="connection-success" style="display: none; margin: 30px 0;">
+          <div class="success-box" style="text-align: center;">
+            <div style="font-size: 48px; margin-bottom: 15px;">✓</div>
+            <strong style="font-size: 18px; color: #48bb78;">¡Conexión Verificada!</strong>
+            <p style="margin-top: 10px; font-size: 14px; color: #2d5016;">
+              El sistema está operacional. Puedes cerrar este instalador.
+            </p>
+          </div>
         </div>
 
         <div class="button-group">
-          <button class="button button-secondary" id="final-view-logs-btn">Ver Logs</button>
-          <button class="button" id="open-onboarding-btn">🚀 Configurar Bloom</button>
+          <button class="button button-secondary" id="final-view-logs-btn">📄 Ver Logs</button>
+          <button class="button" id="launch-bloom-btn">🚀 LANZAR BLOOM</button>
         </div>
       </div>
     </div>
 
-    <!-- 7. ERROR SCREEN -->
+    <!-- 4. ERROR SCREEN -->
     <div class="screen" id="error-screen">
       <div class="card">
         <div class="error-icon">✕</div>
         <h1>Error en la Instalación</h1>
         <p class="text-center" id="error-message">Ha ocurrido un error.</p>
+        
+        <div class="warning-box" style="text-align: left; margin-top: 20px;">
+          <strong>🔍 Información de Debug:</strong>
+          <pre id="error-stack" style="font-size: 11px; overflow-x: auto; margin-top: 10px;"></pre>
+        </div>
+        
         <div class="button-group">
-          <button class="button" id="retry-button">Reintentar</button>
+          <button class="button button-secondary" id="view-error-logs-btn">Ver Logs Completos</button>
+          <button class="button" id="retry-button">🔄 Reintentar</button>
         </div>
       </div>
     </div>

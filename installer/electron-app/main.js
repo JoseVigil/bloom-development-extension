@@ -2,7 +2,8 @@ const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('path');
 const fs = require('fs-extra');
 const crypto = require('crypto');
-const { exec, spawn } = require('child_process');
+const { exec } = require('child_process');
+const { execSync } = require('child_process');
 const util = require('util');
 const execPromise = util.promisify(exec);
 
@@ -240,19 +241,28 @@ async function initializeBrainProfile() {
 // 3. LANZAMIENTO (IGNITION)
 // ============================================================================
 
-ipcMain.handle('brain:launch', async () => {  // ← CAMBIO
+ipcMain.handle('brain:launch', async () => {
   try {
     const config = await fs.readJson(paths.configFile);
     const profileId = config.masterProfileId;
-    if (!profileId) throw new Error("No hay perfil maestro configurado");
-    const python = paths.pythonExe;
-    const cmd = `"${python}" -I -m brain profile launch "${profileId}" --url "https://chatgpt.com"`;
-    console.log("🚀 Lanzando Modo Dios...");
-    const subprocess = spawn(cmd, { shell: true, detached: true, stdio: 'ignore' });
-    subprocess.unref();
-    return { success: true };
+    if (!profileId) throw new Error("No hay perfil maestro");
+    
+    const cmd = `"${paths.pythonExe}" -I -m brain --json profile launch "${profileId}" --url "https://chatgpt.com"`;
+    console.log("🚀 EJECUTANDO:", cmd);
+    console.log("📂 CWD:", paths.runtimeDir);
+    
+    // BLOQUEAR HASTA QUE TERMINE
+    const output = execSync(cmd, { 
+      cwd: paths.runtimeDir,
+      encoding: 'utf8',
+      timeout: 10000
+    });
+    
+    console.log("✅ OUTPUT:", output);
+    return { success: true, output };
+    
   } catch (error) {
-    console.error("Error lanzando:", error);
+    console.error("❌ ERROR COMPLETO:", error.message);
     return { success: false, error: error.message };
   }
 });
@@ -299,6 +309,31 @@ ipcMain.handle('open-chrome-extensions', async () => {
 
 ipcMain.handle('open-external', async (event, url) => {
   await shell.openExternal(url);
+});
+
+ipcMain.handle('extension:heartbeat', async () => {
+  try {
+    // Verificar si el host está corriendo (puerto 5678 por defecto)
+    const http = require('http');
+    
+    return new Promise((resolve) => {
+      const req = http.get('http://localhost:5678/health', (res) => {
+        resolve({ chromeConnected: res.statusCode === 200 });
+      });
+      
+      req.on('error', () => {
+        resolve({ chromeConnected: false });
+      });
+      
+      req.setTimeout(1000, () => {
+        req.destroy();
+        resolve({ chromeConnected: false });
+      });
+    });
+    
+  } catch (error) {
+    return { chromeConnected: false, error: error.message };
+  }
 });
 
 // Helper: Verificar VC++ Redistributables (Windows)
