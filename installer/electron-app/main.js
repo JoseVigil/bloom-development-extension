@@ -20,15 +20,55 @@ let isExtensionInstalling = false;
 const platform = process.platform;
 const isDevMode = process.argv.includes('--dev') || !app.isPackaged;
 
-const getResourcePath = (relativePath) => {
+/**
+ * Resuelve la ruta absoluta de un recurso (runtime, brain, native)
+ * Maneja la diferencia estructural entre DEV y PROD.
+ * @param {string} resourceName - Nombre del recurso ('runtime', 'brain', 'native', etc.)
+ */
+const getResourcePath = (resourceName) => {
+  // ---------------------------------------------------------
+  // MODO PRODUCCIÓN (Empaquetado .exe)
+  // ---------------------------------------------------------
   if (app.isPackaged) {
-    return path.join(process.resourcesPath, relativePath);
+    // En producción, 'forge' aplana todo dentro de la carpeta resources/
+    // Mapeamos 'core' a 'brain' por si quedó alguna referencia vieja
+    const finalName = resourceName === 'core' ? 'brain' : resourceName;
+    
+    // Si es 'native', buscamos bin/win32 o lo que corresponda, pero
+    // generalmente forge lo pone en resources/native o resources/bin
+    return path.join(process.resourcesPath, finalName);
   }
-  // En dev, 'native' está en ../native y 'core' en ../../core
-  if (relativePath.startsWith('core')) {
-    return path.join(__dirname, '..', '..', relativePath);
+
+  // ---------------------------------------------------------
+  // MODO DESARROLLO (npm start)
+  // ---------------------------------------------------------
+  // Base: installer/electron-app/
+  const installerRoot = path.join(__dirname, '..'); // -> installer/
+  const repoRoot = path.join(__dirname, '..', '..'); // -> bloom-development-extension/
+
+  switch (resourceName) {
+    case 'runtime':
+      // El script lo extrajo en: installer/resources/runtime
+      return path.join(installerRoot, 'resources', 'runtime');
+
+    case 'brain':
+    case 'core': 
+      // Está en la raíz del repo: bloom-development-extension/brain
+      return path.join(repoRoot, 'brain');
+
+    case 'native':
+      // Está en: installer/native
+      return path.join(installerRoot, 'native');
+
+    case 'extension':
+    case 'src':
+      // Está en: bloom-development-extension/src (o chrome-extension/src)
+      return path.join(repoRoot, 'src'); // Ajusta si es 'chrome-extension/src'
+
+    default:
+      // Fallback genérico
+      return path.join(installerRoot, 'resources', resourceName);
   }
-  return path.join(__dirname, '..', relativePath);
 };
 
 const paths = {
@@ -36,7 +76,7 @@ const paths = {
   appData: app.getPath('appData'),
   localAppData: platform === 'win32' ? process.env.LOCALAPPDATA : app.getPath('appData'),
   
-  // ✅ BASE: Todo bajo una carpeta principal en espacio de usuario
+  // 1. BASE: Todo bajo una carpeta principal en espacio de usuario (%LOCALAPPDATA%)
   get bloomBase() {
     if (platform === 'win32') {
       return path.join(process.env.LOCALAPPDATA, 'BloomNucleus');
@@ -47,35 +87,47 @@ const paths = {
     }
   },
   
-  // ✅ DERIVADAS: Todas calculadas desde bloomBase
-  get hostInstallDir() { return path.join(this.bloomBase, 'native'); },
-  get coreInstallDir() { return path.join(this.bloomBase, 'core'); },
-  get configDir() { return path.join(this.bloomBase, 'config'); },
+  // 2. DESTINOS DE INSTALACIÓN (Donde vivirán los archivos)
+  // Estructura: BloomNucleus/engine/{runtime, brain} y BloomNucleus/native
+  get engineDir() { return path.join(this.bloomBase, 'engine'); },
+  get runtimeDir() { return path.join(this.engineDir, 'runtime'); },
+  get brainDir()   { return path.join(this.runtimeDir, 'brain'); }, 
+  get nativeDir()  { return path.join(this.bloomBase, 'native'); },
+  get extensionDir() { return path.join(this.bloomBase, 'extension'); }, 
+  get configDir()  { return path.join(this.bloomBase, 'config'); },
   
-  // ✅ HELPERS: Rutas específicas de archivos
+  // 3. FUENTES DE RECURSOS (De dónde copiamos)
+  // Usan la función getResourcePath que arreglamos para distinguir Dev vs Prod
+  runtimeSource: getResourcePath('runtime'),
+  brainSource:   getResourcePath('brain'),
+  nativeSource:  getResourcePath('native'),
+  extensionSource: getResourcePath('extension'), // Asegúrate que getResourcePath maneje 'src' o 'chrome-extension'
+
+  // 4. EJECUTABLES Y BINARIOS (Rutas finales)
   get pythonExe() {
     const exeName = platform === 'win32' ? 'python.exe' : 'python3';
-    return path.join(this.coreInstallDir, 'runtime', exeName);
+    return path.join(this.runtimeDir, exeName);
   },
   get hostBinary() {
     const binaryName = platform === 'win32' ? 'bloom-host.exe' : 'bloom-host';
-    return path.join(this.hostInstallDir, binaryName);
+    return path.join(this.nativeDir, binaryName);
   },
   get manifestPath() {
-    return path.join(this.hostInstallDir, 'com.bloom.nucleus.bridge.json');
+    return path.join(this.nativeDir, 'com.bloom.nucleus.bridge.json');
   },
   
-  // Chrome User Data (se mantiene igual)
+  // 5. CHROME USER DATA (Se mantiene igual)
   chromeUserData: platform === 'win32'
     ? path.join(process.env.LOCALAPPDATA, 'Google', 'Chrome', 'User Data')
     : platform === 'darwin'
     ? path.join(app.getPath('home'), 'Library', 'Application Support', 'Google', 'Chrome')
     : path.join(app.getPath('home'), '.config', 'google-chrome'),
   
-  // ✅ MANTENER: CRX paths (ya los tienes)
+  // 6. LEGACY / MANUAL INSTALL (CRX)
+  // Mantenemos esto por si acaso el drag & drop manual sigue siendo una opción
   crxDir: app.isPackaged
     ? path.join(process.resourcesPath, 'crx')
-    : path.join(__dirname, '..', 'chrome-extension', 'crx'),
+    : path.join(__dirname, '..', '..', 'installer', 'chrome-extension', 'crx'), // Ajustado para dev
   
   get extensionCrx() { return path.join(this.crxDir, 'extension.crx'); },
   get extensionId() { return path.join(this.crxDir, 'id.json'); }
@@ -299,29 +351,32 @@ ipcMain.handle('get-system-info', async () => {
   };
 });
 
+
 ipcMain.handle('preflight-checks', async () => {
-  const vcRedistInstalled = await checkVCRedistInstalled();
-  
-  const results = {    
-    previousInstall: await checkPreviousInstallation(),
-    portAvailable: await checkPortAvailable(DEFAULT_PORT),
-    diskSpace: await checkDiskSpace(),
-    vcRedistInstalled: vcRedistInstalled
-  };
-  
-  console.log('Preflight checks:', results);
-  return results;
+  try {
+    // CORRECCIÓN: Usamos el nombre real de tu función
+    const vcRedistInstalled = await checkVCRedistInstalled();
+    
+    // Chequeo de instalación previa
+    const previousInstall = await checkPreviousInstallation();
+    
+    return {
+      vcRedistInstalled, // true o false
+      previousInstall
+    };
+  } catch (error) {
+    console.error('Preflight check error:', error);
+    return { vcRedistInstalled: false, error: error.message }; 
+  }
 });
 
 ipcMain.handle('start-installation', async (event, config) => {
   try {
     const steps = [
       { name: 'Deteniendo servicios previos', fn: stopRunningServices },
-      { name: 'Creando directorios', fn: createDirectories },
-      { name: 'Respaldando instalación previa', fn: backupPreviousInstallation },
+      { name: 'Creando directorios', fn: createDirectories },      
       { name: 'Instalando Native Host', fn: installHost },
-      { name: 'Instalando Bloom Core (Python)', fn: installCore },
-      { name: 'Copiando DLLs dependientes', fn: copyDependencies },
+      { name: 'Instalando Bloom Core (Python)', fn: installCore },      
       { name: 'Creando configuración inicial', fn: createInitialConfig }
     ];
 
@@ -344,34 +399,31 @@ ipcMain.handle('start-installation', async (event, config) => {
   }
 });
 
+// Handler principal de instalación de componentes
 ipcMain.handle('install-service', async () => {
   try {
-    console.log(`=== INSTALACIÓN DE HOST INICIADA (${platform}) ===`);
+    console.log(`=== INICIANDO DESPLIEGUE (${process.platform}) ===`);
 
-    // 1. Limpieza de procesos previos (sustituye al 'stop service')
     await cleanupProcesses();
+    await createDirectories();
+    await installCore();       
+    await installNativeHost(); 
 
-    // 2. Preparar binarios (Copia a AppData/Home)
-    await prepareNativeHost();
+    // 5. Manifiesto
+    const manifestSource = path.join(paths.nativeSource, 'com.bloom.nucleus.bridge.json');
+    const manifestDest = paths.manifestPath;
 
-    // 3. Registrar según plataforma (Sustituye a tus funciones viejas)
-    // Usamos el ID de la extensión que el usuario pegó en la pantalla anterior
-    const extensionId = await getStoredExtensionId(); 
-    const manifestPath = await generateNativeManifest(extensionId);
-
-    if (platform === 'win32') {
-      await registerWindowsNativeHost(manifestPath);
-    } else if (platform === 'darwin') {
-      await registerMacNativeHost(manifestPath);
-    } else if (platform === 'linux') {
-      await registerLinuxNativeHost(manifestPath);
+    if (fs.existsSync(manifestSource)) {
+      const manifest = await fs.readJson(manifestSource);
+      manifest.path = paths.hostBinary; 
+      await fs.writeJson(manifestDest, manifest, { spaces: 2 });
     }
 
-    console.log('=== INSTALACIÓN FINALIZADA CON ÉXITO ===');
+    console.log('=== DESPLIEGUE FINALIZADO ===');
     return { success: true };
 
   } catch (error) {
-    console.error('ERROR EN INSTALACIÓN:', error);
+    console.error('❌ ERROR:', error);
     return { success: false, error: error.message };
   }
 });
@@ -778,80 +830,178 @@ async function forceCopyFile(source, dest) {
 }
 
 async function installHost() {
-  const hostBinary = platform === 'win32' ? 'bloom-host.exe' : 'bloom-host';
-  const sourcePath = getResourcePath(path.join('native', 'bin', platform, hostBinary));
-  const destPath = path.join(paths.hostInstallDir, hostBinary);
+  console.log("📦 Instalando Host Nativo...");
 
-  console.log(`Installing Host Binary: ${hostBinary}`);
-  await forceCopyFile(sourcePath, destPath);
+  // 1. CORRECCIÓN: Usamos las variables NUEVAS del objeto paths
+  const source = paths.nativeSource; // Antes calculabas el path a mano
+  const dest = paths.nativeDir;      // Antes paths.hostInstallDir (que ahora es undefined)
+
+  // 2. Validación de seguridad
+  if (!dest) throw new Error("CRÍTICO: paths.nativeDir es undefined. Revisa tu objeto paths.");
   
-  if (platform !== 'win32') {
-    await fs.chmod(destPath, '755');
+  // 3. Copia
+  // Copiamos la carpeta completa (exe + dlls)
+  if (fs.existsSync(source)) {
+    console.log(`  → Copiando desde: ${source}`);
+    await fs.ensureDir(dest);
+    await fs.copy(source, dest, { overwrite: true });
+  } else {
+    // Si no existe la fuente, advertimos (en dev pasa mucho)
+    console.warn(`⚠️ Fuente no encontrada: ${source}`);
+    if (app.isPackaged) throw new Error(`Binarios no encontrados en el paquete: ${source}`);
   }
+
+  // 4. Permisos (Solo Linux/Mac)
+  if (platform !== 'win32') {
+    const binary = path.join(dest, 'bloom-host');
+    if (fs.existsSync(binary)) await fs.chmod(binary, 0o755);
+  }
+  
+  console.log(`✅ Host instalado en: ${dest}`);
 }
 
 async function installCore() {
   console.log('📦 Instalando Bloom AI Engine...');
-  
-  // 1. Instalar Python Runtime Embebido
-  const runtimeSource = getResourcePath(path.join('installer', 'resources', 'runtime'));
-  const runtimeDest = paths.runtime;
-  
-  if (!await fs.pathExists(runtimeSource)) {
-    throw new Error(
-      'Runtime no encontrado. Ejecuta: npm run prepare:runtime\n' +
-      `Ruta buscada: ${runtimeSource}`
-    );
-  }
-  
-  console.log('  → Copiando runtime embebido...');
-  await fs.copy(runtimeSource, runtimeDest, { overwrite: true });
-  
-  // 2. Instalar brain CLI
-  const coreSource = getResourcePath('core');
-  const coreDest = paths.core;
-  
-  if (!await fs.pathExists(coreSource)) {
-    throw new Error(
-      'Core (brain) no encontrado.\n' +
-      `Ruta buscada: ${coreSource}\n` +
-      'Asegúrate de que la carpeta "core" esté en la raíz del proyecto.'
-    );
-  }
-  
-  console.log('  → Copiando brain CLI...');
-  await fs.copy(coreSource, coreDest, { 
-    overwrite: true,
-    filter: (src) => !src.includes('__pycache__') && !src.includes('.pyc')
-  });
-  
-  // 3. Validar instalación (Critical Check)
-  console.log('  → Validando instalación...');
-  const pythonExe = paths.pythonExe;
-  
-  if (!await fs.pathExists(pythonExe)) {
-    throw new Error(`Python no encontrado en: ${pythonExe}`);
-  }
-  
+
   try {
-    const { stdout } = await execPromise(`"${pythonExe}" --version`, { timeout: 5000 });
-    console.log(`  ✅ Python detectado: ${stdout.trim()}`);
+    // 1. Instalar Runtime
+    const runtimeSource = paths.runtimeSource;
+    const runtimeDest = paths.runtimeDir;
+
+    if (!fs.existsSync(runtimeSource)) {
+       throw new Error(`Runtime Source no encontrado. Ejecuta: npm run prepare:brain`);
+    }
+
+    console.log('  → Copiando runtime embebido...');
+    await fs.copy(runtimeSource, runtimeDest, { overwrite: true });
+
+    // 2. Instalar Brain
+    const brainSource = paths.brainSource;
+    const brainDest = paths.brainDir;
+
+    if (!fs.existsSync(brainSource)) {
+       throw new Error(`Brain Source no encontrado en: ${brainSource}`);
+    }
+
+    // Validación PREVIA de dependencias
+    const libsSource = path.join(brainSource, 'libs');
+    if (!fs.existsSync(libsSource) || fs.readdirSync(libsSource).length === 0) {
+        throw new Error(`⛔ La carpeta 'brain/libs' está vacía. Ejecuta 'npm run prepare:brain'.`);
+    }
+
+    console.log('  → Copiando brain CLI...');
+    await fs.copy(brainSource, brainDest, { 
+      overwrite: true, 
+      filter: (src) => !src.includes('__pycache__') && !src.includes('.pyc') && !src.includes('.git')
+    });
+
+    // 3. INYECCIÓN DE BOOTLOADER
+    console.log('  → Inyectando bootloader de dependencias...');
+    const mainPyPath = path.join(brainDest, '__main__.py');
+    if (fs.existsSync(mainPyPath)) {
+        let content = fs.readFileSync(mainPyPath, 'utf8');
+        
+        const bootloader = [
+            "import sys",
+            "import os",
+            "# [Bloom Installer] Bootloader inyectado",
+            "libs_dir = os.path.join(os.path.dirname(__file__), 'libs')",
+            "if libs_dir not in sys.path:",
+            "    sys.path.insert(0, libs_dir)",
+            "# [End Bootloader]",
+            ""
+        ].join('\n');
+
+        if (!content.includes("[Bloom Installer] Bootloader")) {
+            fs.writeFileSync(mainPyPath, bootloader + content);
+        }
+    }
+
+    // 4. Parche ._pth (Respaldo)
+    try {
+        const pthFiles = fs.readdirSync(runtimeDest).filter(f => f.endsWith('._pth'));
+        if (pthFiles.length > 0) {
+            const pthPath = path.join(runtimeDest, pthFiles[0]);
+            let pthContent = fs.readFileSync(pthPath, 'utf8');
+            if (!pthContent.includes("brain/libs")) {
+                const newLine = "brain/libs";
+                pthContent = pthContent.includes('import site') 
+                    ? pthContent.replace('import site', `${newLine}\nimport site`)
+                    : `${pthContent}\n${newLine}`;
+                fs.writeFileSync(pthPath, pthContent);
+            }
+        }
+    } catch (e) {}
+
+    // 5. Extensión
+    if (fs.existsSync(paths.extensionSource)) {
+        await fs.copy(paths.extensionSource, paths.extensionDir, { overwrite: true });
+    }
+
+    // 6. VALIDACIÓN FINAL (CORREGIDA)
+    // Cambiamos --version por --help, ya que --version no existe en tu CLI
+    console.log('  → Validando motor...');
+    const pythonExe = paths.pythonExe;
     
-    // Verificar que brain esté accesible
-    const { stdout: brainVersion } = await execPromise(
-      `"${pythonExe}" -I -m brain --version`,
-      { cwd: paths.core, timeout: 5000 }
+    const { stdout: brainOut } = await execPromise(
+        `"${pythonExe}" -I -m brain --help`, 
+        { timeout: 15000 }
     );
-    console.log(`  ✅ Brain CLI: ${brainVersion.trim()}`);
     
+    // Si llegamos aquí, Python corrió y Typer mostró la ayuda. ¡ÉXITO!
+    console.log(`  ✅ Brain CLI operativo.`);
+
+    console.log('✅ Bloom AI Engine instalado correctamente\n');
+    return { success: true };
+
   } catch (error) {
-    throw new Error(
-      `Validación del motor falló: ${error.message}\n` +
-      'El runtime está corrupto o brain no está instalado correctamente.'
-    );
+    console.error("❌ Error instalando Core:", error);
+    if (error.stderr) console.error("   Python Stderr:", error.stderr.toString());
+    throw new Error(`Fallo en instalación del motor: ${error.message}`);
   }
-  
-  console.log('✅ Bloom AI Engine instalado correctamente\n');
+}
+
+
+/**
+ * Función corregida para instalar el Host Nativo
+ * Usa: paths.nativeSource -> paths.nativeDir
+ */
+async function installNativeHost() {
+  console.log("📦 Instalando Host Nativo...");
+
+  try {
+    // 1. Usar las nuevas definiciones del objeto paths
+    const source = paths.nativeSource; 
+    const dest = paths.nativeDir;      
+
+    // 2. Validación de seguridad para evitar el error "undefined"
+    if (!source || !dest) {
+        throw new Error(`Rutas inválidas en installNativeHost.\nSource: ${source}\nDest: ${dest}`);
+    }
+
+    // 3. Verificar origen
+    if (!fs.existsSync(source)) {
+        // En desarrollo a veces falta, pero en producción es crítico
+        const msg = `Native Source no encontrado en: ${source}`;
+        console.warn(`⚠️ ${msg}`);
+        if (app.isPackaged) throw new Error(msg);
+        return { success: false };
+    }
+
+    // 4. Asegurar destino
+    await fs.ensureDir(dest);
+
+    // 5. Copiar
+    console.log(`  → Copiando binarios a: ${dest}`);
+    await fs.copy(source, dest, { overwrite: true });
+
+    console.log("✅ Host Nativo instalado.");
+    return { success: true };
+
+  } catch (error) {
+    console.error("❌ Error instalando Host:", error);
+    throw new Error(`Error instalando Host: ${error.message}`);
+  }
 }
 
 async function copyDependencies() {
@@ -876,37 +1026,76 @@ async function copyDependencies() {
   }
 }
 
+// EN: installer/electron-app/main.js
+
 async function createDirectories() {
   try {
-    // Crear estructura completa en espacio de usuario
-    await fs.ensureDir(paths.hostInstallDir);
-    await fs.ensureDir(paths.coreInstallDir);
-    await fs.ensureDir(path.join(paths.configDir, 'config'));
-    await fs.ensureDir(path.join(paths.configDir, 'state'));
-    await fs.ensureDir(path.join(paths.configDir, 'logs'));
-    await fs.ensureDir(path.join(paths.configDir, 'backups'));
+    const dirsToCreate = [
+      paths.bloomBase,
+      paths.engineDir,    
+      paths.runtimeDir,
+      paths.brainDir,     
+      paths.nativeDir,    
+      paths.configDir,
+      paths.extensionDir  
+    ];
+
+    for (const dirPath of dirsToCreate) {
+      if (!dirPath) throw new Error("Intento de crear directorio undefined");
+      // console.log(`Creating: ${dirPath}`); // Debug opcional
+      await fs.ensureDir(dirPath);
+    }
     
-    console.log('✅ Directorios creados en:', paths.bloomBase);
+    console.log(`✅ Directorios creados en: ${paths.bloomBase}`);
+    return { success: true };
   } catch (error) {
+    console.error("Error creating directories:", error);
     throw new Error(`Error creando directorios: ${error.message}`);
   }
 }
 
-async function backupPreviousInstallation() {
-  const hostBinary = platform === 'win32' ? 'bloom-host.exe' : 'bloom-host';
-  const sourcePath = path.join(paths.hostInstallDir, hostBinary);
-  
-  if (await fs.pathExists(sourcePath)) {
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const backupPath = path.join(paths.configDir, 'backups', `${hostBinary}_${timestamp}.bak`);
-    // Try copy instead of rename to avoid locking issues with backup
-    try {
-      await fs.copy(sourcePath, backupPath);
-    } catch(e) {
-      console.warn('Backup failed, skipping:', e.message);
+
+async function cleanupProcesses() {
+  console.log("🧹 Limpiando instalación previa (Modo Sobreescritura)...");
+
+  try {
+    // 1. Intentar detener procesos que puedan bloquear archivos
+    if (process.platform === 'win32') {
+      try {
+        const { execSync } = require('child_process');
+        // Intentamos matar bloom-host.exe para liberar el puerto y archivos
+        execSync('taskkill /F /IM bloom-host.exe /T', { stdio: 'ignore' });
+      } catch (e) { 
+        // Es normal que falle si no está corriendo
+      }
     }
+
+    // 2. Definir carpetas a eliminar para una instalación fresca
+    // Usamos las NUEVAS variables del objeto paths
+    const foldersToWipe = [
+      paths.engineDir,    // Borra todo el python viejo
+      paths.nativeDir,    // Borra el host viejo
+      paths.extensionDir  // Borra la extensión vieja
+    ];
+
+    for (const folder of foldersToWipe) {
+      // Verificamos si existe antes de intentar borrar
+      if (folder && fs.existsSync(folder)) {
+        // console.log(`  → Eliminando: ${folder}`); // Debug opcional
+        await fs.remove(folder); // fs.remove de fs-extra es recursivo y seguro
+      }
+    }
+
+    console.log("✅ Limpieza completada. Listo para instalar.");
+    return { success: true };
+
+  } catch (error) {
+    // Si falla (ej: archivo bloqueado por Admin), advertimos pero intentamos seguir
+    console.warn("⚠️ Advertencia durante limpieza:", error.message);
+    return { success: true }; 
   }
 }
+
 
 async function createInitialConfig() {
   const serverConfigPath = path.join(paths.configDir, 'config', 'server.json');
@@ -919,9 +1108,21 @@ async function createInitialConfig() {
 }
 
 async function checkPreviousInstallation() {
-  const hostBinary = platform === 'win32' ? 'bloom-host.exe' : 'bloom-host';
-  const binaryPath = path.join(paths.hostInstallDir, hostBinary);
-  return await fs.pathExists(binaryPath);
+  // Usamos las NUEVAS propiedades del objeto paths
+  // paths.pythonExe y paths.hostBinary ya están definidos en el objeto paths
+  // y apuntan a las rutas correctas dentro de BloomNucleus/engine y BloomNucleus/native
+  
+  const pythonExists = fs.existsSync(paths.pythonExe);
+  const hostExists = fs.existsSync(paths.hostBinary);
+
+  // Debug (Opcional)
+  console.log(`Check Previous: Python=${pythonExists}, Host=${hostExists}`);
+
+  return {
+    isInstalled: pythonExists && hostExists,
+    python: pythonExists,
+    host: hostExists
+  };
 }
 
 async function checkPortAvailable(port) {
