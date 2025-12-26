@@ -1,11 +1,33 @@
 
 Brain CLI - Modular system for Bloom
 
-╭──────────────────────────────────────────── Options ─────────────────────────────────────────────╮
-│   --json       Enable JSON output mode                                                           │
-│   --verbose    Enable detailed logging                                                           │
-│   --help       Show this help message                                                            │
+╭────────────────────────────────────────── Uso / Usage ───────────────────────────────────────────╮
+│                                                                                                  │
+│  python -m brain [GLOBAL_OPTIONS] <category> <command> [ARGS] [OPTIONS]                          │
+│                                                                                                  │
+│  Ejemplos:                                                                                       │
+│                                                                                                  │
+│    # Comando básico                                                                              │
+│    python -m brain profile list                                                                  │
+│                                                                                                  │
+│    # Con flag global (--json ANTES del subcomando)                                               │
+│    python -m brain --json profile create 'My Profile'                                            │
+│                                                                                                  │
+│    # Con múltiples flags globales                                                                │
+│    python -m brain --json --verbose nucleus list                                                 │
+│                                                                                                  │
+│  ⚠️  IMPORTANTE:                                                                                  │
+│     Los flags globales (--json, --verbose) DEBEN ir ANTES del nombre de la categoría.            │
+│     Ejemplo correcto:   python -m brain --json profile create 'test'                             │
+│     Ejemplo incorrecto: python -m brain profile create 'test' --json                             │
+│                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+╭─────────────────────────────── Opciones Globales / Global Options ───────────────────────────────╮
+│   --json       Salida en formato JSON (debe ir ANTES del comando)                                │
+│   --verbose    Habilitar logging detallado (debe ir ANTES del comando)                           │
+│   --help       Mostrar este mensaje de ayuda                                                     │
+╰────────────── Estas opciones deben ir inmediatamente después de 'python -m brain' ───────────────╯
 
 ╭─────────────────────────────────────────── Categories ───────────────────────────────────────────╮
 │   context       AI context generation and management                 1 cmd                       │
@@ -26,7 +48,7 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  CREATE - Initialize a new Bloom Nucleus project structure                                       │
 │                                                                                                  │
-│    python -m brain nucleus create [OPTIONS]                                                      │
+│    python -m brain [GLOBAL_OPTIONS] nucleus create [OPTIONS]                                     │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      -o <VALUE>           Organization name                                                      │
@@ -37,7 +59,7 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  DELETE - Delete a complete nucleus                                                              │
 │                                                                                                  │
-│    python -m brain nucleus delete [OPTIONS]                                                      │
+│    python -m brain [GLOBAL_OPTIONS] nucleus delete [OPTIONS]                                     │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      -p <VALUE>           Path to the Nucleus root directory to delete                           │
@@ -45,35 +67,35 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  GET - Get complete information about a specific nucleus                                         │
 │                                                                                                  │
-│    python -m brain nucleus get [OPTIONS]                                                         │
+│    python -m brain [GLOBAL_OPTIONS] nucleus get [OPTIONS]                                        │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      -p <VALUE>           Path to the Nucleus root directory                                     │
 │                                                                                                  │
 │  LINK - Link an existing folder as a Nucleus project                                             │
 │                                                                                                  │
-│    python -m brain nucleus link <PATH>                                                           │
+│    python -m brain [GLOBAL_OPTIONS] nucleus link <PATH>                                          │
 │                                                                                                  │
 │    Argumentos:                                                                                   │
 │      <PATH>               Path to existing project                                               │
 │                                                                                                  │
 │  LIST - List all available nuclei in a parent directory                                          │
 │                                                                                                  │
-│    python -m brain nucleus list [OPTIONS]                                                        │
+│    python -m brain [GLOBAL_OPTIONS] nucleus list [OPTIONS]                                       │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      -d                   Parent directory to scan for nuclei (default: current directory)       │
 │                                                                                                  │
 │  STATUS - Check if a directory is a valid Nucleus project                                        │
 │                                                                                                  │
-│    python -m brain nucleus status [OPTIONS]                                                      │
+│    python -m brain [GLOBAL_OPTIONS] nucleus status [OPTIONS]                                     │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      -p                   Nucleus path                                                           │
 │                                                                                                  │
 │  SYNC - Synchronize projects (git pull) and rebuild nucleus cache                                │
 │                                                                                                  │
-│    python -m brain nucleus sync [OPTIONS]                                                        │
+│    python -m brain [GLOBAL_OPTIONS] nucleus sync [OPTIONS]                                       │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      -p                   Nucleus path (default: current dir)                                    │
@@ -84,7 +106,7 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  CREATE EXP INTENT - Create a new exploration intent in the nucleus                              │
 │                                                                                                  │
-│    python -m brain nucleus create-exp-intent [OPTIONS]                                           │
+│    python -m brain [GLOBAL_OPTIONS] nucleus create-exp-intent [OPTIONS]                          │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      -n <VALUE>           Intent name (will be slugified)                                        │
@@ -97,7 +119,7 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  EXP DISCOVERY TURN - Add a discovery turn to an exploration intent                              │
 │                                                                                                  │
-│    python -m brain nucleus exp-discovery-turn [OPTIONS]                                          │
+│    python -m brain [GLOBAL_OPTIONS] nucleus exp-discovery-turn [OPTIONS]                         │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      -i <VALUE>           Intent ID or slug                                                      │
@@ -107,7 +129,7 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  EXP EXPORT FINDINGS - Export findings from an exploration intent                                │
 │                                                                                                  │
-│    python -m brain nucleus exp-export-findings [OPTIONS]                                         │
+│    python -m brain [GLOBAL_OPTIONS] nucleus exp-export-findings [OPTIONS]                        │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      -i <VALUE>           Intent ID or slug                                                      │
@@ -119,7 +141,7 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  LIST PROJECTS - List all projects linked to the nucleus                                         │
 │                                                                                                  │
-│    python -m brain nucleus list-projects [OPTIONS]                                               │
+│    python -m brain [GLOBAL_OPTIONS] nucleus list-projects [OPTIONS]                              │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      -p                   Nucleus root path (default: current directory)                         │
@@ -130,7 +152,7 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  ONBOARDING COMPLETE - Mark an onboarding step or entire onboarding as completed                 │
 │                                                                                                  │
-│    python -m brain nucleus onboarding-complete [OPTIONS]                                         │
+│    python -m brain [GLOBAL_OPTIONS] nucleus onboarding-complete [OPTIONS]                        │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      -s                   Step name to mark as completed                                         │
@@ -139,7 +161,7 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  ONBOARDING STATUS - Get the current onboarding status from nucleus configuration                │
 │                                                                                                  │
-│    python -m brain nucleus onboarding-status [OPTIONS]                                           │
+│    python -m brain [GLOBAL_OPTIONS] nucleus onboarding-status [OPTIONS]                          │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      -p                   Nucleus root path (default: current dir)                               │
@@ -148,7 +170,7 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  PROJECT INFO - Display detailed info about a specific project in the nucleus                    │
 │                                                                                                  │
-│    python -m brain nucleus project-info <PROJECT_NAME> [OPTIONS]                                 │
+│    python -m brain [GLOBAL_OPTIONS] nucleus project-info <PROJECT_NAME> [OPTIONS]                │
 │                                                                                                  │
 │    Argumentos:                                                                                   │
 │      <PROJECT_NAME>       Name of the project to inspect                                         │
@@ -162,7 +184,7 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  GENERATE - Generate the Bloom Context for the project                                           │
 │                                                                                                  │
-│    python -m brain context generate [OPTIONS]                                                    │
+│    python -m brain [GLOBAL_OPTIONS] context generate [OPTIONS]                                   │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      -p                   Root path of the project                                               │
@@ -175,7 +197,7 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  COMPRESS - Compress files into optimized JSON for AI consumption                                │
 │                                                                                                  │
-│    python -m brain filesystem compress <PATHS> [OPTIONS]                                         │
+│    python -m brain [GLOBAL_OPTIONS] filesystem compress <PATHS> [OPTIONS]                        │
 │                                                                                                  │
 │    Argumentos:                                                                                   │
 │      <PATHS>              Paths to compress (files or directories)                               │
@@ -188,7 +210,7 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  EXTRACT - Extract files from compressed JSON format                                             │
 │                                                                                                  │
-│    python -m brain filesystem extract <JSON_FILE> [OPTIONS]                                      │
+│    python -m brain [GLOBAL_OPTIONS] filesystem extract <JSON_FILE> [OPTIONS]                     │
 │                                                                                                  │
 │    Argumentos:                                                                                   │
 │      <JSON_FILE>          Compressed JSON file to extract                                        │
@@ -199,7 +221,7 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  TREE - Generate visual tree structure with optional MD5 hashing and JSON export                 │
 │                                                                                                  │
-│    python -m brain filesystem tree <TARGETS> [OPTIONS]                                           │
+│    python -m brain [GLOBAL_OPTIONS] filesystem tree <TARGETS> [OPTIONS]                          │
 │                                                                                                  │
 │    Argumentos:                                                                                   │
 │      <TARGETS>            Specific directories or files to include.                              │
@@ -217,11 +239,11 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  AUTH - Manage GitHub authentication                                                             │
 │                                                                                                  │
-│    python -m brain github auth                                                                   │
+│    python -m brain [GLOBAL_OPTIONS] github auth                                                  │
 │                                                                                                  │
 │  CLONE - Clone GitHub repository                                                                 │
 │                                                                                                  │
-│    python -m brain github clone <REPO> [OPTIONS]                                                 │
+│    python -m brain [GLOBAL_OPTIONS] github clone <REPO> [OPTIONS]                                │
 │                                                                                                  │
 │    Argumentos:                                                                                   │
 │      <REPO>               Repository (owner/repo or full URL)                                    │
@@ -232,40 +254,40 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  ORGS - List GitHub organizations                                                                │
 │                                                                                                  │
-│    python -m brain github orgs                                                                   │
+│    python -m brain [GLOBAL_OPTIONS] github orgs                                                  │
 │                                                                                                  │
 │  REPOS - Manage GitHub repositories                                                              │
 │                                                                                                  │
-│    python -m brain github repos                                                                  │
+│    python -m brain [GLOBAL_OPTIONS] github repos                                                 │
 │                                                                                                  │
 │  AUTENTICACIÓN                                                                                   │
 │                                                                                                  │
 │  AUTH LOGIN - Store GitHub authentication token                                                  │
 │                                                                                                  │
-│    python -m brain github auth-login [OPTIONS]                                                   │
+│    python -m brain [GLOBAL_OPTIONS] github auth-login [OPTIONS]                                  │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      -t <VALUE>           GitHub Personal Access Token                                           │
 │                                                                                                  │
 │  AUTH LOGOUT - Remove stored GitHub token                                                        │
 │                                                                                                  │
-│    python -m brain github auth-logout                                                            │
+│    python -m brain [GLOBAL_OPTIONS] github auth-logout                                           │
 │                                                                                                  │
 │  AUTH STATUS - Check GitHub authentication status                                                │
 │                                                                                                  │
-│    python -m brain github auth-status                                                            │
+│    python -m brain [GLOBAL_OPTIONS] github auth-status                                           │
 │                                                                                                  │
 │  ORGANIZACIONES                                                                                  │
 │                                                                                                  │
 │  ORGS LIST - List GitHub organizations                                                           │
 │                                                                                                  │
-│    python -m brain github orgs-list                                                              │
+│    python -m brain [GLOBAL_OPTIONS] github orgs-list                                             │
 │                                                                                                  │
 │  REPOSITORIOS                                                                                    │
 │                                                                                                  │
 │  REPOS LIST - List GitHub repositories                                                           │
 │                                                                                                  │
-│    python -m brain github repos-list [OPTIONS]                                                   │
+│    python -m brain [GLOBAL_OPTIONS] github repos-list [OPTIONS]                                  │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      --org                Organization name                                                      │
@@ -278,7 +300,7 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  ADD - Vincula un proyecto local existente a un Nucleus                                          │
 │                                                                                                  │
-│    python -m brain project add <PROJECT_PATH> [OPTIONS]                                          │
+│    python -m brain [GLOBAL_OPTIONS] project add <PROJECT_PATH> [OPTIONS]                         │
 │                                                                                                  │
 │    Argumentos:                                                                                   │
 │      <PROJECT_PATH>       Ruta al proyecto a vincular                                            │
@@ -292,7 +314,7 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  DETECT - Scan directory and detect project types automatically                                  │
 │                                                                                                  │
-│    python -m brain project detect <PARENT_PATH> [OPTIONS]                                        │
+│    python -m brain [GLOBAL_OPTIONS] project detect <PARENT_PATH> [OPTIONS]                       │
 │                                                                                                  │
 │    Argumentos:                                                                                   │
 │      <PARENT_PATH>        Parent directory to scan for projects                                  │
@@ -304,7 +326,7 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  INFO - Inspect and display Bloom project metadata                                               │
 │                                                                                                  │
-│    python -m brain project info [OPTIONS]                                                        │
+│    python -m brain [GLOBAL_OPTIONS] project info [OPTIONS]                                       │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      -p                   Project root path (default: current directory)                         │
@@ -313,20 +335,20 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  LOAD - Inspect and load project metadata from a path                                            │
 │                                                                                                  │
-│    python -m brain project load [OPTIONS]                                                        │
+│    python -m brain [GLOBAL_OPTIONS] project load [OPTIONS]                                       │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      -p                   Path to the project root                                               │
 │                                                                                                  │
 │  NUCLEUS - Manage Nucleus projects (create, link, status)                                        │
 │                                                                                                  │
-│    python -m brain project nucleus                                                               │
+│    python -m brain [GLOBAL_OPTIONS] project nucleus                                              │
 │                                                                                                  │
 │  CLONE                                                                                           │
 │                                                                                                  │
 │  CLONE AND ADD - Clone a Git repository and automatically link it to the current Nucleus         │
 │                                                                                                  │
-│    python -m brain project clone-and-add <REPO_URL> [OPTIONS]                                    │
+│    python -m brain [GLOBAL_OPTIONS] project clone-and-add <REPO_URL> [OPTIONS]                   │
 │                                                                                                  │
 │    Argumentos:                                                                                   │
 │      <REPO_URL>           Git repository URL (HTTPS or SSH)                                      │
@@ -349,7 +371,7 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  ADD TURN - Add a conversation turn to intent chat                                               │
 │                                                                                                  │
-│    python -m brain intent add-turn [OPTIONS]                                                     │
+│    python -m brain [GLOBAL_OPTIONS] intent add-turn [OPTIONS]                                    │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      -i                   Intent UUID                                                            │
@@ -362,7 +384,7 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  BUILD PAYLOAD - Build optimized AI payload from context plan                                    │
 │                                                                                                  │
-│    python -m brain intent build-payload [OPTIONS]                                                │
+│    python -m brain [GLOBAL_OPTIONS] intent build-payload [OPTIONS]                               │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      --plan <VALUE>       Path to context_plan.json                                              │
@@ -372,7 +394,7 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  CREATE - Create a new development or documentation intent in the current project                │
 │                                                                                                  │
-│    python -m brain intent create [OPTIONS]                                                       │
+│    python -m brain [GLOBAL_OPTIONS] intent create [OPTIONS]                                      │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      -t <VALUE>           Intent type: 'dev' for development or 'doc' for documentation          │
@@ -385,7 +407,7 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  DELETE - Delete an intent completely                                                            │
 │                                                                                                  │
-│    python -m brain intent delete [OPTIONS]                                                       │
+│    python -m brain [GLOBAL_OPTIONS] intent delete [OPTIONS]                                      │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      -i                   Intent UUID                                                            │
@@ -395,7 +417,7 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  DOWNLOAD - Download AI response and save to .response/ directory                                │
 │                                                                                                  │
-│    python -m brain intent download [OPTIONS]                                                     │
+│    python -m brain [GLOBAL_OPTIONS] intent download [OPTIONS]                                    │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      -i                   Intent UUID to download response for                                   │
@@ -409,7 +431,7 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  FINALIZE - Finalize intent and apply changes                                                    │
 │                                                                                                  │
-│    python -m brain intent finalize [OPTIONS]                                                     │
+│    python -m brain [GLOBAL_OPTIONS] intent finalize [OPTIONS]                                    │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      -i                   Intent UUID                                                            │
@@ -418,7 +440,7 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  GET - Get complete information about a specific intent                                          │
 │                                                                                                  │
-│    python -m brain intent get [OPTIONS]                                                          │
+│    python -m brain [GLOBAL_OPTIONS] intent get [OPTIONS]                                         │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      -i                   Intent UUID                                                            │
@@ -427,7 +449,7 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  HYDRATE - Populate intent with code context and briefing                                        │
 │                                                                                                  │
-│    python -m brain intent hydrate [OPTIONS]                                                      │
+│    python -m brain [GLOBAL_OPTIONS] intent hydrate [OPTIONS]                                     │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      -i                   Intent UUID                                                            │
@@ -439,7 +461,7 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  LIST - List all intents in a Bloom project                                                      │
 │                                                                                                  │
-│    python -m brain intent list [OPTIONS]                                                         │
+│    python -m brain [GLOBAL_OPTIONS] intent list [OPTIONS]                                        │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      -p                   Path to Bloom project (auto-detected if not provided)                  │
@@ -447,7 +469,7 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  LOCK - Lock an intent to mark it as in-use (determinism)                                        │
 │                                                                                                  │
-│    python -m brain intent lock [OPTIONS]                                                         │
+│    python -m brain [GLOBAL_OPTIONS] intent lock [OPTIONS]                                        │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      -i                   Intent UUID                                                            │
@@ -456,7 +478,7 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  MERGE - Merge staged files into codebase with backup                                            │
 │                                                                                                  │
-│    python -m brain intent merge [OPTIONS]                                                        │
+│    python -m brain [GLOBAL_OPTIONS] intent merge [OPTIONS]                                       │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      -i                   Intent UUID to merge files for                                         │
@@ -470,7 +492,7 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  PARSE - Parse and validate .raw_output.json against Bloom protocol                              │
 │                                                                                                  │
-│    python -m brain intent parse [OPTIONS]                                                        │
+│    python -m brain [GLOBAL_OPTIONS] intent parse [OPTIONS]                                       │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      -i <VALUE>           Intent UUID to parse                                                   │
@@ -482,7 +504,7 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  PLAN - Generate AI context plan with intelligent file prioritization                            │
 │                                                                                                  │
-│    python -m brain intent plan [OPTIONS]                                                         │
+│    python -m brain [GLOBAL_OPTIONS] intent plan [OPTIONS]                                        │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      --intent-dir <VALUE> Intent directory path                                                  │
@@ -491,7 +513,7 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  RECOVER - Recover interrupted intents from lock state                                           │
 │                                                                                                  │
-│    python -m brain intent recover [OPTIONS]                                                      │
+│    python -m brain [GLOBAL_OPTIONS] intent recover [OPTIONS]                                     │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      -i                   Intent UUID to recover                                                 │
@@ -502,7 +524,7 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  STAGE - Prepare files in .staging/ directory for merge                                          │
 │                                                                                                  │
-│    python -m brain intent stage [OPTIONS]                                                        │
+│    python -m brain [GLOBAL_OPTIONS] intent stage [OPTIONS]                                       │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      -i                   Intent UUID to stage files for                                         │
@@ -515,7 +537,7 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  SUBMIT - Submit an intent payload to AI provider through native host bridge                     │
 │                                                                                                  │
-│    python -m brain intent submit [OPTIONS]                                                       │
+│    python -m brain [GLOBAL_OPTIONS] intent submit [OPTIONS]                                      │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      -i                   UUID of the intent to submit                                           │
@@ -530,7 +552,7 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  UNLOCK - Unlock an intent to free it for use                                                    │
 │                                                                                                  │
-│    python -m brain intent unlock [OPTIONS]                                                       │
+│    python -m brain [GLOBAL_OPTIONS] intent unlock [OPTIONS]                                      │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      -i                   Intent UUID                                                            │
@@ -540,7 +562,7 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  UPDATE - Update an existing intent's name, files, or metadata                                   │
 │                                                                                                  │
-│    python -m brain intent update [OPTIONS]                                                       │
+│    python -m brain [GLOBAL_OPTIONS] intent update [OPTIONS]                                      │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      -i                   UUID of the intent to update                                           │
@@ -554,7 +576,7 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  VALIDATE - Validate staging files using Gemini analysis                                         │
 │                                                                                                  │
-│    python -m brain intent validate [OPTIONS]                                                     │
+│    python -m brain [GLOBAL_OPTIONS] intent validate [OPTIONS]                                    │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      -i                   Intent UUID                                                            │
@@ -573,7 +595,7 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  KEYS ADD - Add new Gemini API key                                                               │
 │                                                                                                  │
-│    python -m brain gemini keys-add [OPTIONS]                                                     │
+│    python -m brain [GLOBAL_OPTIONS] gemini keys-add [OPTIONS]                                    │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      -p <VALUE>           Profile name (e.g., 'Personal Chrome')                                 │
@@ -582,22 +604,22 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  KEYS DELETE - Delete Gemini API key                                                             │
 │                                                                                                  │
-│    python -m brain gemini keys-delete <PROFILE>                                                  │
+│    python -m brain [GLOBAL_OPTIONS] gemini keys-delete <PROFILE>                                 │
 │                                                                                                  │
 │    Argumentos:                                                                                   │
 │      <PROFILE>            Profile name to delete                                                 │
 │                                                                                                  │
 │  KEYS LIST - List all Gemini API keys                                                            │
 │                                                                                                  │
-│    python -m brain gemini keys-list                                                              │
+│    python -m brain [GLOBAL_OPTIONS] gemini keys-list                                             │
 │                                                                                                  │
 │  KEYS STATS - Show Gemini keys statistics                                                        │
 │                                                                                                  │
-│    python -m brain gemini keys-stats                                                             │
+│    python -m brain [GLOBAL_OPTIONS] gemini keys-stats                                            │
 │                                                                                                  │
 │  KEYS VALIDATE - Validate Gemini API key                                                         │
 │                                                                                                  │
-│    python -m brain gemini keys-validate <PROFILE>                                                │
+│    python -m brain [GLOBAL_OPTIONS] gemini keys-validate <PROFILE>                               │
 │                                                                                                  │
 │    Argumentos:                                                                                   │
 │      <PROFILE>            Profile name to validate                                               │
@@ -610,7 +632,7 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  ACCOUNTS REGISTER - Registra una cuenta (Google, OpenAI, etc) en un perfil                      │
 │                                                                                                  │
-│    python -m brain profile accounts-register <PROFILE_ID> <PROVIDER> <EMAIL>                     │
+│    python -m brain [GLOBAL_OPTIONS] profile accounts-register <PROFILE_ID> <PROVIDER> <EMAIL>    │
 │                                                                                                  │
 │    Argumentos:                                                                                   │
 │      <PROFILE_ID>         ID del perfil                                                          │
@@ -619,7 +641,7 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  ACCOUNTS REMOVE - Remueve una cuenta registrada de un perfil                                    │
 │                                                                                                  │
-│    python -m brain profile accounts-remove <PROFILE_ID> <PROVIDER>                               │
+│    python -m brain [GLOBAL_OPTIONS] profile accounts-remove <PROFILE_ID> <PROVIDER>              │
 │                                                                                                  │
 │    Argumentos:                                                                                   │
 │      <PROFILE_ID>         ID del perfil                                                          │
@@ -629,14 +651,14 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  CREATE - Crea un nuevo perfil de Chrome aislado                                                 │
 │                                                                                                  │
-│    python -m brain profile create <ALIAS>                                                        │
+│    python -m brain [GLOBAL_OPTIONS] profile create <ALIAS>                                       │
 │                                                                                                  │
 │    Argumentos:                                                                                   │
 │      <ALIAS>              Nombre descriptivo del perfil                                          │
 │                                                                                                  │
 │  DESTROY - Elimina un perfil y todos sus datos                                                   │
 │                                                                                                  │
-│    python -m brain profile destroy <PROFILE_ID> [OPTIONS]                                        │
+│    python -m brain [GLOBAL_OPTIONS] profile destroy <PROFILE_ID> [OPTIONS]                       │
 │                                                                                                  │
 │    Argumentos:                                                                                   │
 │      <PROFILE_ID>         ID del perfil a eliminar                                               │
@@ -646,7 +668,7 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  LAUNCH - Lanza Chrome con un perfil de Worker                                                   │
 │                                                                                                  │
-│    python -m brain profile launch <PROFILE_ID> [OPTIONS]                                         │
+│    python -m brain [GLOBAL_OPTIONS] profile launch <PROFILE_ID> [OPTIONS]                        │
 │                                                                                                  │
 │    Argumentos:                                                                                   │
 │      <PROFILE_ID>         ID del perfil a lanzar                                                 │
@@ -656,7 +678,7 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  LINK - Vincula una cuenta de email a un perfil de Chrome                                        │
 │                                                                                                  │
-│    python -m brain profile link <PROFILE_ID> <EMAIL>                                             │
+│    python -m brain [GLOBAL_OPTIONS] profile link <PROFILE_ID> <EMAIL>                            │
 │                                                                                                  │
 │    Argumentos:                                                                                   │
 │      <PROFILE_ID>         ID del perfil                                                          │
@@ -664,11 +686,11 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  LIST - Lista todos los perfiles de Chrome Workers                                               │
 │                                                                                                  │
-│    python -m brain profile list                                                                  │
+│    python -m brain [GLOBAL_OPTIONS] profile list                                                 │
 │                                                                                                  │
 │  UNLINK - Desvincula la cuenta asociada a un perfil                                              │
 │                                                                                                  │
-│    python -m brain profile unlink <PROFILE_ID>                                                   │
+│    python -m brain [GLOBAL_OPTIONS] profile unlink <PROFILE_ID>                                  │
 │                                                                                                  │
 │    Argumentos:                                                                                   │
 │      <PROFILE_ID>         ID del perfil                                                          │

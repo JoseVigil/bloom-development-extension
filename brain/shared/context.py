@@ -13,12 +13,18 @@ class GlobalContext:
 
     def output(self, data: Any, render_func: Optional[Callable[[Any], None]] = None):
         """
-        Maneja la salida inteligente: JSON puro para VS Code o Renderizado para humanos.
+        Maneja la salida inteligente: JSON puro para máquinas o Renderizado para humanos.
+        
+        CRÍTICO para integraciones (Electron, VS Code):
+        - En modo JSON: escribe SOLO JSON puro a stdout, sin texto adicional
+        - En modo normal: usa el renderizador custom para output humano
         """
         if self.json_mode:
-            # Salida estricta para máquinas (VS Code parsea esto)
-            # Usamos sys.stdout directamente para asegurar limpieza
-            print(json.dumps(data, default=str))
+            # Salida estricta para máquinas (Electron, VS Code, etc)
+            # Escribir directamente a stdout para evitar contaminación
+            sys.stdout.write(json.dumps(data, default=str))
+            sys.stdout.write('\n')
+            sys.stdout.flush()  # Forzar flush inmediato para evitar buffering
         else:
             # Salida para humanos
             if render_func:

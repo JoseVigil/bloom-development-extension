@@ -120,7 +120,7 @@ class InstallationManager {
   async startInstallation() {
     this.ui.showScreen('installation-screen');
     
-    const result = await this.api.startInstallation({ devMode: true });
+    const result = await this.api.installService();
     
     if (result.success) {
       return { success: true };

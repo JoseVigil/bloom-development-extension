@@ -504,9 +504,7 @@
   "scripts": {
     "prepare:runtime": "node installer/scripts/setup_runtime.js",
     "clean:runtime": "rimraf installer/resources/runtime .cache",
-    "prebuild": "npm run build:bridge && npm run build:webview && npm run prepare:runtime",
-    "package": "npm run prepare:runtime && npm run install:python && electron-forge package",
-    "make": "npm run prepare:runtime && npm run install-py-deps && electron-forge make",
+    "prebuild": "npm run build:bridge && npm run build:webview && npm run prepare:runtime",    
     "install:bridge": "node scripts/bridge/postinstall.js",
     "install:python": "node scripts/python/install_python_deps.js",
     "postinstall": "npm run install:bridge && npm run install:python",
@@ -527,8 +525,7 @@
     "rebuild": "npm run clean && npm run build",
     "package:installer": "npm run build:bridge:all && node installer/scripts/build.js",
     "dev": "run-admin.bat",
-    "dev:admin": "run-admin.bat",
-    "start": "electron-forge start -- --dev",
+    "dev:admin": "run-admin.bat",    
     "package:vscode": "vsce package --out ../installer/vscode/bloom-extension.vsix",
     "package:all": "npm run package:vscode && npm run package",
     "test:python-install": "python -m core verify"

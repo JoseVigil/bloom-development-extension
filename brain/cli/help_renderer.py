@@ -166,8 +166,8 @@ def _render_command_detail(cmd: BaseCommand, category: CommandCategory) -> List[
     lines.append(Text(f"{cmd_display_name} - {meta.description}", style="bold white"))
     lines.append(Text())  # Empty line
     
-    # 2. Full command syntax
-    syntax_parts = ["python -m brain", category.value, meta.name]
+    # 2. Full command syntax with GLOBAL OPTIONS placement
+    syntax_parts = ["python -m brain", "[GLOBAL_OPTIONS]", category.value, meta.name]
     
     # Separate arguments and options
     arguments = [p for p in params if p.is_argument]
@@ -245,15 +245,65 @@ def _render_category_panel(console: Console, category: CommandCategory, commands
     ))
 
 
+def _render_usage(console: Console):
+    """Render usage section explaining global options placement."""
+    content_lines = []
+    
+    # Basic syntax
+    content_lines.append(Text("python -m brain [GLOBAL_OPTIONS] <category> <command> [ARGS] [OPTIONS]", style="bold green"))
+    content_lines.append(Text())
+    
+    # Examples section
+    content_lines.append(Text("Ejemplos:", style="bold cyan"))
+    content_lines.append(Text())
+    
+    # Example 1: Basic command
+    content_lines.append(Text("  # Comando básico", style="dim"))
+    content_lines.append(Text("  python -m brain profile list", style="white"))
+    content_lines.append(Text())
+    
+    # Example 2: With global flag BEFORE subcommand
+    content_lines.append(Text("  # Con flag global (--json ANTES del subcomando)", style="dim"))
+    content_lines.append(Text("  python -m brain --json profile create 'My Profile'", style="white"))
+    content_lines.append(Text())
+    
+    # Example 3: With multiple global flags
+    content_lines.append(Text("  # Con múltiples flags globales", style="dim"))
+    content_lines.append(Text("  python -m brain --json --verbose nucleus list", style="white"))
+    content_lines.append(Text())
+    
+    # Important note
+    content_lines.append(Text("⚠️  IMPORTANTE:", style="bold yellow"))
+    content_lines.append(Text("   Los flags globales (--json, --verbose) DEBEN ir ANTES del nombre de la categoría.", style="yellow"))
+    content_lines.append(Text("   Ejemplo correcto:   python -m brain --json profile create 'test'", style="green"))
+    content_lines.append(Text("   Ejemplo incorrecto: python -m brain profile create 'test' --json", style="red dim"))
+    
+    content = Text("\n").join(content_lines)
+    
+    console.print(Panel(
+        content,
+        title="[bold]Uso / Usage[/bold]",
+        border_style="yellow",
+        padding=(1, 2)
+    ))
+
+
 def _render_options(console: Console):
-    """Render global CLI options."""
+    """Render global CLI options with clear explanation."""
     table = Table(show_header=False, box=None, padding=(0, 2))
     table.add_column(style="cyan", no_wrap=True)
     table.add_column()
-    table.add_row("--json", "Enable JSON output mode")
-    table.add_row("--verbose", "Enable detailed logging")
-    table.add_row("--help", "Show this help message")
-    console.print(Panel(table, title="[bold]Options[/bold]", border_style="green"))
+    
+    table.add_row("--json", "Salida en formato JSON (debe ir ANTES del comando)")
+    table.add_row("--verbose", "Habilitar logging detallado (debe ir ANTES del comando)")
+    table.add_row("--help", "Mostrar este mensaje de ayuda")
+    
+    console.print(Panel(
+        table, 
+        title="[bold]Opciones Globales / Global Options[/bold]",
+        subtitle="[dim]Estas opciones deben ir inmediatamente después de 'python -m brain'[/dim]",
+        border_style="green"
+    ))
 
 
 def _render_root_commands(console: Console, root_commands: List[BaseCommand]):
@@ -278,8 +328,8 @@ def _render_root_commands(console: Console, root_commands: List[BaseCommand]):
         content_lines.append(Text(f"{cmd_display_name} - {meta.description}", style="bold white"))
         content_lines.append(Text())
         
-        # Full syntax
-        syntax_parts = ["python -m brain", meta.name]
+        # Full syntax with GLOBAL OPTIONS
+        syntax_parts = ["python -m brain", "[GLOBAL_OPTIONS]", meta.name]
         
         # Separate arguments and options
         arguments = [p for p in params if p.is_argument]
@@ -370,6 +420,10 @@ def render_help(registry: CommandRegistry):
     console.print("\n[bold yellow]Brain CLI[/bold yellow] - Modular system for Bloom\n")
     
     structure = _extract_structure(registry)
+    
+    # NEW: Render usage section FIRST to explain global options
+    _render_usage(console)
+    console.print()
     
     _render_options(console)
     console.print()
