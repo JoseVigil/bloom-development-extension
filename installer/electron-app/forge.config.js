@@ -5,13 +5,15 @@ const fs = require('fs');
 
 module.exports = {
   packagerConfig: {
-    asar: false,
+    asar: false, // Importante: false para que Python pueda leer sus archivos sin problemas
     icon: path.join(__dirname, 'assets', 'electron'),
     extraResource: [
       path.join(__dirname, 'assets'),
       path.join(__dirname, '..', 'native'),
-      path.join(__dirname, '..', '..', 'core'),
-      path.join(__dirname, '..', 'chrome-extension', 'crx') 
+      // CORRECCIÓN CRÍTICA: Cambiado de 'core' a 'brain'
+      path.join(__dirname, '..', '..', 'brain'),
+      // Incluimos la extensión compilada (ajusta 'out' o 'src' según donde esté tu build final)
+      path.join(__dirname, '..', '..', 'src') 
     ],
     ignore: (filePath) => {
       if (!filePath) return false;
@@ -30,6 +32,7 @@ module.exports = {
         /^\/package-lock\.json/,
         /^\/npm-debug\.log/,
         /^\/__pycache__/,
+        // CORRECCIÓN: Permitimos .py, solo ignoramos compilados y specs
         /\.pyc$/,
         /\.spec$/
       ];
@@ -42,7 +45,8 @@ module.exports = {
       ProductName: 'Bloom Nucleus',
       InternalName: 'BloomNucleusInstaller',
       OriginalFilename: 'bloom-nucleus-installer.exe',
-      requestedExecutionLevel: 'requireAdministrator'
+      // USER MODE: No pide admin
+      requestedExecutionLevel: 'asInvoker'
     },
     osxSign: {
       identity: process.env.APPLE_IDENTITY || undefined,
@@ -62,54 +66,25 @@ module.exports = {
     {
       name: '@electron-forge/maker-squirrel',
       config: {
-        name: 'BloomNucleusInstaller',
+        name: 'BloomNucleusHub',
         setupIcon: path.join(__dirname, 'assets', 'bloom.ico'),
+        // Url placeholder, puedes cambiarla o quitarla
         iconUrl: 'https://raw.githubusercontent.com/electron/electron/main/shell/browser/resources/win/electron.ico',
         loadingGif: path.join(__dirname, 'assets', 'installer.gif'),
         authors: 'BTIP Studio',
         description: 'Bloom Nucleus - Local automation server',
-        noMsi: true
+        noMsi: true,
+        // USER MODE: Instalación en AppData
+        perMachine: false 
       }
     },
     {
       name: '@electron-forge/maker-dmg',
       config: {
-        name: 'BloomNucleusInstaller',
+        name: 'BloomNucleusHub',
         icon: path.join(__dirname, 'assets', 'icon.icns'),
-        background: path.join(__dirname, 'assets', 'dmg-background.png'),
         format: 'ULFO',
-        overwrite: true,
-        additionalDMGOptions: {
-          window: {
-            size: {
-              width: 660,
-              height: 400
-            }
-          }
-        }
-      }
-    },
-    {
-      name: '@electron-forge/maker-deb',
-      config: {
-        options: {
-          maintainer: 'BTIP Studio',
-          homepage: 'https://bloom.local',
-          icon: path.join(__dirname, 'assets', 'icon.png'),
-          categories: ['Development', 'Utility'],
-          section: 'devel'
-        }
-      }
-    },
-    {
-      name: '@electron-forge/maker-rpm',
-      config: {
-        options: {
-          maintainer: 'BTIP Studio',
-          homepage: 'https://bloom.local',
-          icon: path.join(__dirname, 'assets', 'icon.png'),
-          categories: ['Development', 'Utility']
-        }
+        overwrite: true
       }
     },
     {
@@ -129,7 +104,7 @@ module.exports = {
     })
   ],
   hooks: {
-    prePackage: async (forgeConfig, options) => {
+      prePackage: async (forgeConfig, options) => {
       console.log('Pre-package: Validating assets...');
       
       const assetsDir = path.join(__dirname, 'assets');
@@ -137,54 +112,23 @@ module.exports = {
         fs.mkdirSync(assetsDir, { recursive: true });
       }
       
-      const nativeDir = path.join(__dirname, '..', 'native');
-      if (!fs.existsSync(nativeDir)) {
-        console.warn('WARNING: Native binaries directory not found');
+      const runtimeDir = path.join(__dirname, '..', 'resources', 'runtime');
+      const pythonExe = path.join(runtimeDir, 'python.exe');
+      
+      // Verificación estricta del Runtime antes de empaquetar
+      if (!fs.existsSync(pythonExe)) {
+        console.warn(
+          '⚠️ ADVERTENCIA: Python Runtime no detectado en: ' + pythonExe + '\n' +
+          '   Asegúrate de haber ejecutado el script de setup del runtime.\n' +
+          '   (Si estás en desarrollo puro, esto puede ser normal, pero fallará en producción)'
+        );
+      } else {
+        console.log('✅ Python Runtime detectado.');
       }
     },
     postPackage: async (forgeConfig, options) => {
-      console.log('Post-package: Copying additional resources...');
-      
-      const outputPath = options.outputPaths[0];
-      const resourcesPath = path.join(outputPath, 'resources');
-      
-      const chromeExtPath = path.join(__dirname, '..', 'chrome-extension');
-      if (fs.existsSync(chromeExtPath)) {
-        const destExtPath = path.join(resourcesPath, 'chrome-extension');
-        fs.cpSync(chromeExtPath, destExtPath, { recursive: true });
-        console.log('✓ Chrome extension copied');
-      }
-      
-      const configPath = path.join(__dirname, 'installer-config.json');
-      if (fs.existsSync(configPath)) {
-        const destConfigPath = path.join(resourcesPath, 'installer-config.json');
-        fs.copyFileSync(configPath, destConfigPath);
-        console.log('✓ Config copied');
-      }
-    },
-    postMake: async (forgeConfig, makeResults) => {
-      console.log('Post-make: Build complete');
-      console.log('Artifacts:', makeResults.map(r => r.artifacts).flat());
+      console.log('Post-package: Final checks...');
+      // Aquí puedes agregar lógica extra si necesitas copiar algo manual
     }
   }
 };
-
-function copyRecursive(src, dest) {
-  const exists = fs.existsSync(src);
-  const stats = exists && fs.statSync(src);
-  const isDirectory = exists && stats.isDirectory();
-  
-  if (isDirectory) {
-    if (!fs.existsSync(dest)) {
-      fs.mkdirSync(dest, { recursive: true });
-    }
-    fs.readdirSync(src).forEach(childItemName => {
-      copyRecursive(
-        path.join(src, childItemName),
-        path.join(dest, childItemName)
-      );
-    });
-  } else {
-    fs.copyFileSync(src, dest);
-  }
-}

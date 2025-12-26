@@ -35,29 +35,50 @@ const paths = {
   home: app.getPath('home'),
   appData: app.getPath('appData'),
   localAppData: platform === 'win32' ? process.env.LOCALAPPDATA : app.getPath('appData'),
-  hostInstallDir: platform === 'win32' 
-    ? 'C:\\Program Files\\BloomNucleus\\native'
-    : platform === 'darwin'
-    ? '/Library/Application Support/BloomNucleus/native'
-    : '/opt/bloom-nucleus/native',
-  coreInstallDir: platform === 'win32'
-    ? 'C:\\Program Files\\BloomNucleus\\core'
-    : platform === 'darwin'
-    ? '/Library/Application Support/BloomNucleus/core'
-    : '/opt/bloom-nucleus/core',
-  configDir: platform === 'win32'
-    ? path.join(process.env.LOCALAPPDATA, 'BloomNucleus')
-    : path.join(app.getPath('home'), '.config', 'BloomNucleus'),
+  
+  // ✅ BASE: Todo bajo una carpeta principal en espacio de usuario
+  get bloomBase() {
+    if (platform === 'win32') {
+      return path.join(process.env.LOCALAPPDATA, 'BloomNucleus');
+    } else if (platform === 'darwin') {
+      return path.join(app.getPath('home'), 'Library', 'Application Support', 'BloomNucleus');
+    } else {
+      return path.join(app.getPath('home'), '.local', 'share', 'BloomNucleus');
+    }
+  },
+  
+  // ✅ DERIVADAS: Todas calculadas desde bloomBase
+  get hostInstallDir() { return path.join(this.bloomBase, 'native'); },
+  get coreInstallDir() { return path.join(this.bloomBase, 'core'); },
+  get configDir() { return path.join(this.bloomBase, 'config'); },
+  
+  // ✅ HELPERS: Rutas específicas de archivos
+  get pythonExe() {
+    const exeName = platform === 'win32' ? 'python.exe' : 'python3';
+    return path.join(this.coreInstallDir, 'runtime', exeName);
+  },
+  get hostBinary() {
+    const binaryName = platform === 'win32' ? 'bloom-host.exe' : 'bloom-host';
+    return path.join(this.hostInstallDir, binaryName);
+  },
+  get manifestPath() {
+    return path.join(this.hostInstallDir, 'com.bloom.nucleus.bridge.json');
+  },
+  
+  // Chrome User Data (se mantiene igual)
   chromeUserData: platform === 'win32'
     ? path.join(process.env.LOCALAPPDATA, 'Google', 'Chrome', 'User Data')
     : platform === 'darwin'
     ? path.join(app.getPath('home'), 'Library', 'Application Support', 'Google', 'Chrome')
     : path.join(app.getPath('home'), '.config', 'google-chrome'),
-    
-  // --- CAMBIO AQUÍ: Definimos la carpeta contenedora del CRX ---
+  
+  // ✅ MANTENER: CRX paths (ya los tienes)
   crxDir: app.isPackaged
-    ? path.join(process.resourcesPath, 'crx')                 // Producción
-    : path.join(__dirname, '..', 'chrome-extension', 'crx')   // Desarrollo
+    ? path.join(process.resourcesPath, 'crx')
+    : path.join(__dirname, '..', 'chrome-extension', 'crx'),
+  
+  get extensionCrx() { return path.join(this.crxDir, 'extension.crx'); },
+  get extensionId() { return path.join(this.crxDir, 'id.json'); }
 };
 
 // --- AGREGAR ESTO JUSTO DEBAJO DE }; ---
@@ -106,9 +127,163 @@ app.on('activate', () => {
   }
 });
 
+/**
+ * Construye el comando base para ejecutar brain
+ * @returns {string} Comando base (ej: "C:\...\python.exe" -I -m brain)
+ */
+function getBrainCommand() {
+  const pythonExe = paths.pythonExe;
+  
+  if (!fs.existsSync(pythonExe)) {
+    throw new Error(
+      'Bloom AI Engine no está instalado.\n' +
+      `Ruta esperada: ${pythonExe}`
+    );
+  }
+  
+  // -I: Modo aislado (ignora PYTHONPATH y sitio del usuario)
+  // -m brain: Ejecuta como módulo
+  return `"${pythonExe}" -I -m brain`;
+}
+
+/**
+ * Ejecuta un comando de brain y devuelve el resultado
+ * @param {string} subCommand - Comando (ej: "profile create Master --json")
+ * @returns {Promise<object>} Output parseado como JSON
+ */
+async function execBrain(subCommand) {
+  const brainCmd = getBrainCommand();
+  const fullCommand = `${brainCmd} ${subCommand}`;
+  
+  console.log(`[Brain] Ejecutando: ${subCommand}`);
+  
+  try {
+    const { stdout, stderr } = await execPromise(fullCommand, {
+      cwd: paths.core,
+      timeout: 30000,
+      env: {
+        ...process.env,
+        PYTHONPATH: '', // Limpiar para garantizar aislamiento
+        BLOOM_HOME: paths.bloomBase // Variable de entorno para brain
+      }
+    });
+    
+    if (stderr && stderr.trim()) {
+      console.warn(`[Brain] Warning: ${stderr.trim()}`);
+    }
+    
+    // Si el comando pide JSON, parsearlo
+    if (subCommand.includes('--json')) {
+      return JSON.parse(stdout);
+    }
+    
+    return { success: true, output: stdout.trim() };
+    
+  } catch (error) {
+    console.error(`[Brain] Error: ${error.message}`);
+    throw new Error(`Brain CLI falló: ${error.message}`);
+  }
+}
+
 // ============================================================================
 // IPC HANDLERS
 // ============================================================================
+
+// ============================================================================
+// BRAIN CLI HANDLERS
+// ============================================================================
+
+/**
+ * Verifica que brain esté funcionando
+ */
+ipcMain.handle('check-brain-status', async () => {
+  try {
+    const result = await execBrain('nucleus status --json', true);
+    return { success: true, status: result };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+/**
+ * Crea el perfil maestro "Modo Dios"
+ */
+ipcMain.handle('create-master-profile', async () => {
+  try {
+    console.log('🎭 Creando perfil maestro...');
+    
+    const result = await execBrain('profile create "Bloom Master" --json', true);
+    
+    if (!result || !result.id) {
+      throw new Error('Brain no devolvió un ID de perfil válido');
+    }
+    
+    const profileId = result.id;
+    console.log(`✅ Perfil creado: ${profileId}`);
+    
+    // Guardar en config para uso futuro
+    const configPath = path.join(paths.configDir, 'config', 'config.json');
+    let config = {};
+    
+    if (await fs.pathExists(configPath)) {
+      config = await fs.readJson(configPath);
+    }
+    
+    config.profileId = profileId;
+    config.profileCreatedAt = new Date().toISOString();
+    
+    await fs.ensureDir(path.dirname(configPath));
+    await fs.writeJson(configPath, config, { spaces: 2 });
+    
+    return { success: true, profileId };
+    
+  } catch (error) {
+    console.error('Error creando perfil:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+/**
+ * Lanza Chrome con el perfil maestro
+ */
+ipcMain.handle('launch-master-profile', async (event, profileId) => {
+  try {
+    if (!profileId) {
+      throw new Error('No se proporcionó profileId');
+    }
+    
+    console.log(`🚀 Lanzando perfil: ${profileId}`);
+    
+    // brain profile launch maneja automáticamente:
+    // - El flag --user-data-dir
+    // - El flag --load-extension
+    // - La inyección del Native Host
+    const result = await execBrain(`profile launch ${profileId} --url "https://chatgpt.com"`);
+    
+    console.log('✅ Chrome lanzado correctamente');
+    
+    // IMPORTANTE: El Native Host (bloom-host.exe) se inicia AHORA
+    // como proceso hijo de Chrome, NO antes
+    
+    return { success: true, output: result.output };
+    
+  } catch (error) {
+    console.error('Error lanzando perfil:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+/**
+ * Lista perfiles existentes
+ */
+ipcMain.handle('list-profiles', async () => {
+  try {
+    const result = await execBrain('profile list --json', true);
+    return { success: true, profiles: result };
+  } catch (error) {
+    return { success: false, error: error.message, profiles: [] };
+  }
+});
 
 ipcMain.handle('get-system-info', async () => {
   return {
@@ -127,8 +302,7 @@ ipcMain.handle('get-system-info', async () => {
 ipcMain.handle('preflight-checks', async () => {
   const vcRedistInstalled = await checkVCRedistInstalled();
   
-  const results = {
-    hasAdmin: await checkAdminPrivileges(),
+  const results = {    
     previousInstall: await checkPreviousInstallation(),
     portAvailable: await checkPortAvailable(DEFAULT_PORT),
     diskSpace: await checkDiskSpace(),
@@ -172,38 +346,32 @@ ipcMain.handle('start-installation', async (event, config) => {
 
 ipcMain.handle('install-service', async () => {
   try {
-    console.log('=== SERVICE INSTALLATION STARTED ===');
-    
-    const availablePort = await findAvailablePort(DEFAULT_PORT, PORT_RANGE_MAX);
-    console.log(`Port ${availablePort} is available`);
-    
+    console.log(`=== INSTALACIÓN DE HOST INICIADA (${platform}) ===`);
+
+    // 1. Limpieza de procesos previos (sustituye al 'stop service')
+    await cleanupProcesses();
+
+    // 2. Preparar binarios (Copia a AppData/Home)
+    await prepareNativeHost();
+
+    // 3. Registrar según plataforma (Sustituye a tus funciones viejas)
+    // Usamos el ID de la extensión que el usuario pegó en la pantalla anterior
+    const extensionId = await getStoredExtensionId(); 
+    const manifestPath = await generateNativeManifest(extensionId);
+
     if (platform === 'win32') {
-      await installWindowsService(availablePort);
+      await registerWindowsNativeHost(manifestPath);
     } else if (platform === 'darwin') {
-      await installMacOSService(availablePort);
-    } else {
-      await installLinuxService(availablePort);
+      await registerMacNativeHost(manifestPath);
+    } else if (platform === 'linux') {
+      await registerLinuxNativeHost(manifestPath);
     }
-    
-    await saveServerState({ port: availablePort });
-    console.log(`Server state saved (port: ${availablePort})`);
-    
-    console.log('Starting health check...');
-    const healthy = await healthCheckService(availablePort, 30000);
-    
-    if (!healthy) {
-      console.error('Health check failed');
-    }
-    
-    console.log('=== SERVICE INSTALLATION FINISHED ===');
-    
-    return { 
-      success: healthy, 
-      port: availablePort,
-      error: healthy ? null : 'Service timeout. Check logs.'
-    };
+
+    console.log('=== INSTALACIÓN FINALIZADA CON ÉXITO ===');
+    return { success: true };
+
   } catch (error) {
-    console.error('SERVICE ERROR:', error);
+    console.error('ERROR EN INSTALACIÓN:', error);
     return { success: false, error: error.message };
   }
 });
@@ -623,22 +791,67 @@ async function installHost() {
 }
 
 async function installCore() {
-  const sourcePath = getResourcePath('core');
-  const destPath = paths.coreInstallDir;
-
-  console.log(`Copying core from ${sourcePath} to ${destPath}`);
-
-  if (!await fs.pathExists(sourcePath)) {
-    throw new Error(`Core modules not found at: ${sourcePath}. Did you run 'npm run package'?`);
-  }
-
-  await fs.ensureDir(destPath);
+  console.log('📦 Instalando Bloom AI Engine...');
   
-  // Usamos fs.copy normal para directorios, filtrando __pycache__
-  await fs.copy(sourcePath, destPath, { 
+  // 1. Instalar Python Runtime Embebido
+  const runtimeSource = getResourcePath(path.join('installer', 'resources', 'runtime'));
+  const runtimeDest = paths.runtime;
+  
+  if (!await fs.pathExists(runtimeSource)) {
+    throw new Error(
+      'Runtime no encontrado. Ejecuta: npm run prepare:runtime\n' +
+      `Ruta buscada: ${runtimeSource}`
+    );
+  }
+  
+  console.log('  → Copiando runtime embebido...');
+  await fs.copy(runtimeSource, runtimeDest, { overwrite: true });
+  
+  // 2. Instalar brain CLI
+  const coreSource = getResourcePath('core');
+  const coreDest = paths.core;
+  
+  if (!await fs.pathExists(coreSource)) {
+    throw new Error(
+      'Core (brain) no encontrado.\n' +
+      `Ruta buscada: ${coreSource}\n` +
+      'Asegúrate de que la carpeta "core" esté en la raíz del proyecto.'
+    );
+  }
+  
+  console.log('  → Copiando brain CLI...');
+  await fs.copy(coreSource, coreDest, { 
     overwrite: true,
-    filter: (src) => !src.includes('__pycache__')
+    filter: (src) => !src.includes('__pycache__') && !src.includes('.pyc')
   });
+  
+  // 3. Validar instalación (Critical Check)
+  console.log('  → Validando instalación...');
+  const pythonExe = paths.pythonExe;
+  
+  if (!await fs.pathExists(pythonExe)) {
+    throw new Error(`Python no encontrado en: ${pythonExe}`);
+  }
+  
+  try {
+    const { stdout } = await execPromise(`"${pythonExe}" --version`, { timeout: 5000 });
+    console.log(`  ✅ Python detectado: ${stdout.trim()}`);
+    
+    // Verificar que brain esté accesible
+    const { stdout: brainVersion } = await execPromise(
+      `"${pythonExe}" -I -m brain --version`,
+      { cwd: paths.core, timeout: 5000 }
+    );
+    console.log(`  ✅ Brain CLI: ${brainVersion.trim()}`);
+    
+  } catch (error) {
+    throw new Error(
+      `Validación del motor falló: ${error.message}\n` +
+      'El runtime está corrupto o brain no está instalado correctamente.'
+    );
+  }
+  
+  console.log('✅ Bloom AI Engine instalado correctamente\n');
 }
 
 async function copyDependencies() {
@@ -665,17 +878,17 @@ async function copyDependencies() {
 
 async function createDirectories() {
   try {
+    // Crear estructura completa en espacio de usuario
     await fs.ensureDir(paths.hostInstallDir);
     await fs.ensureDir(paths.coreInstallDir);
     await fs.ensureDir(path.join(paths.configDir, 'config'));
     await fs.ensureDir(path.join(paths.configDir, 'state'));
     await fs.ensureDir(path.join(paths.configDir, 'logs'));
     await fs.ensureDir(path.join(paths.configDir, 'backups'));
+    
+    console.log('✅ Directorios creados en:', paths.bloomBase);
   } catch (error) {
-    if (error.code === 'EPERM' || error.code === 'EACCES') {
-      throw new Error('Requiere permisos de administrador');
-    }
-    throw error;
+    throw new Error(`Error creando directorios: ${error.message}`);
   }
 }
 
@@ -703,21 +916,6 @@ async function createInitialConfig() {
     logLevel: 'info'
   };
   await fs.writeJson(serverConfigPath, serverConfig, { spaces: 2 });
-}
-
-// ... Resto de funciones (Windows Service, Checks, etc.) se mantienen ...
-// Aseguramos que checkAdminPrivileges etc estén presentes
-
-async function checkAdminPrivileges() {
-  if (platform === 'win32') {
-    try {
-      await execPromise('net session');
-      return true;
-    } catch {
-      return false;
-    }
-  }
-  return process.getuid && process.getuid() === 0;
 }
 
 async function checkPreviousInstallation() {
@@ -775,9 +973,10 @@ async function checkVCRedistInstalled() {
 
 async function installWindowsService(port) {
   const hostBinary = 'bloom-host.exe';
-  const binaryPath = path.join(paths.hostInstallDir, hostBinary);
-  
+  const binaryPath = paths.hostBinary; 
+
   console.log('=== Windows Service Installation ===');
+  console.log('📍 Binary path:', binaryPath);  
   
   if (!await fs.pathExists(binaryPath)) {
     throw new Error(`Binary not found: ${binaryPath}`);
@@ -927,22 +1126,60 @@ async function registerNativeHost() {
 }
 
 async function registerWindowsNativeHost(manifestPath) {
+  // ✅ HKCU no requiere Admin (antes era HKLM)
   const regKey = 'HKCU\\SOFTWARE\\Google\\Chrome\\NativeMessagingHosts\\com.bloom.nucleus.bridge';
   const escapedPath = manifestPath.replace(/\\/g, '\\\\');
+  
+  console.log('🪟 Registrando Native Host en HKCU (sin Admin)');
+  
   try {
+    // Método 1: PowerShell (más confiable)
     const psCommand = `New-Item -Path "Registry::${regKey}" -Force | New-ItemProperty -Name "(Default)" -Value "${escapedPath}" -Force`;
     await execPromise(`powershell -Command "${psCommand}"`, { shell: 'powershell.exe' });
   } catch (error) {
+    // Fallback: reg.exe directo
+    console.log('⚠️ PowerShell falló, intentando con reg.exe...');
     const command = `reg add "${regKey}" /ve /d "${escapedPath}" /f`;
     await execPromise(command);
   }
+  
+  console.log('✅ Host registrado en Registry (HKCU)');
 }
 
 async function registerMacNativeHost(manifestPath) {
-  const nativeMessagingDir = path.join(paths.home, 'Library', 'Application Support', 'Google', 'Chrome', 'NativeMessagingHosts');
+  // ✅ Carpeta de usuario (no /Library que requiere sudo)
+  const nativeMessagingDir = path.join(
+    paths.home, 
+    'Library', 
+    'Application Support', 
+    'Google', 
+    'Chrome', 
+    'NativeMessagingHosts'
+  );
+  
   await fs.ensureDir(nativeMessagingDir);
   const destPath = path.join(nativeMessagingDir, 'com.bloom.nucleus.bridge.json');
+  
+  console.log('🍎 Registrando Host en macOS (user space)');
   await fs.copy(manifestPath, destPath);
+  console.log('✅ Host registrado');
+}
+
+async function registerLinuxNativeHost(manifestPath) {
+  // ✅ Carpeta de usuario (no /etc que requiere sudo)
+  const nativeMessagingDir = path.join(
+    paths.home, 
+    '.config', 
+    'google-chrome', 
+    'NativeMessagingHosts'
+  );
+  
+  await fs.ensureDir(nativeMessagingDir);
+  const destPath = path.join(nativeMessagingDir, 'com.bloom.nucleus.bridge.json');
+  
+  console.log('🐧 Registrando Host en Linux (user space)');
+  await fs.copy(manifestPath, destPath);
+  console.log('✅ Host registrado');
 }
 
 async function registerLinuxNativeHost(manifestPath) {

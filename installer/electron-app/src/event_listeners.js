@@ -33,7 +33,7 @@ export class EventListeners {
         const result = await this.installation.startInstallation();
         if (result.success) {
           this.ui.showScreen('service-screen');
-          await this.installation.installService();
+          await this.installation.validateEngine(); // Conectar validación de motor
         }
       });
     }
@@ -45,7 +45,7 @@ export class EventListeners {
       retryBtn.addEventListener('click', async () => {
         this.ui.toggleElement('service-error', false);
         this.ui.toggleElement('service-status-container', true);
-        await this.installation.installService();
+        await this.installation.validateEngine(); // Retry validación
       });
     }
     const skipBtn = document.getElementById('skip-service-btn');
@@ -56,6 +56,22 @@ export class EventListeners {
       continueBtn.addEventListener('click', async () => {
         this.ui.showScreen('manual-install-screen');
         await this.extension.prepareCrxFile();
+      });
+    }
+
+    // Nuevo: Botón para crear perfil (asumiendo ID 'create-profile-btn' en UI)
+    const createProfileBtn = document.getElementById('create-profile-btn');
+    if (createProfileBtn) {
+      createProfileBtn.addEventListener('click', async () => {
+        await this.installation.createMasterProfile();
+      });
+    }
+
+    // Nuevo: Botón para lanzar Chrome (asumiendo ID 'launch-chrome-btn' en UI)
+    const launchChromeBtn = document.getElementById('launch-chrome-btn');
+    if (launchChromeBtn) {
+      launchChromeBtn.addEventListener('click', async () => {
+        await this.installation.launchMasterProfile();
       });
     }
   }

@@ -1,130 +1,22 @@
-// installation-manager.js
-// Maneja toda la lógica del proceso de instalación
-
 export class InstallationManager {
   constructor(api, uiManager) {
     this.api = api;
     this.ui = uiManager;
     this.servicePort = 5678;
     this.systemInfo = null;
+    this.profileId = null; // ✅ NUEVO: Guardar ID del perfil
   }
 
   /**
-   * Inicializa el sistema y carga información
-   */
-  async initialize() {
-    try {
-      if (!this.api) throw new Error("API not loaded");
-      
-      this.systemInfo = await this.api.getSystemInfo();
-      
-      // Actualizar UI con info del sistema
-      this.ui.updateText('install-path', this.systemInfo.paths.hostInstallDir);
-      this.ui.setButtonState('start-button', false, 'Comenzar Instalación');
-      
-      return { success: true };
-    } catch (error) {
-      console.error("Init failed:", error);
-      this.ui.setButtonState('start-button', true, 'Error de carga');
-      return { success: false, error: error.message };
-    }
-  }
-
-  /**
-   * Inicia el proceso de instalación
+   * FASE 1: Despliegue de Artefactos
    */
   async startInstallation() {
     this.ui.showScreen('installation-screen');
     
     const result = await this.api.startInstallation({ devMode: true });
     
-    if (result.success) {
-      return { success: true };
-    } else {
-      this.ui.showError(result.error);
-      return { success: false, error: result.error };
-    }
-  }
-
-  /**
-   * Instala y arranca el servicio, dejándolo listo para cuando se instale la extensión.
-   */
-  async installService() {
-      if (!this.systemInfo) {
-        return { success: false, error: 'System info not loaded' };
-      }
-
-      try {
-        // 1. Verificar dependencias (VC++ en Windows)
-        if (this.systemInfo.platform === 'win32') {
-          this.ui.updateText('service-status-text', 'Verificando dependencias...');
-          const preflight = await this.api.preflightChecks();
-          
-          if (!preflight.vcRedistInstalled) {
-            this.ui.updateText('service-status-text', 'Instalando dependencias VC++...');
-            await this.api.installVCRedist();
-          }
-        }
-
-        // 2. Instalar y Arrancar el Servicio
-        this.ui.updateText('service-status-text', 'Instalando e iniciando servicio...');
-        
-        // Asumimos que tu api.installService() hace la copia Y el arranque del proceso
-        const result = await this.api.installService();
-
-        if (result.success) {
-          // Guardamos el puerto que nos devuelve el backend
-          this.servicePort = result.port || 5678;
-          
-          // 3. ACTUALIZACIÓN UI: Éxito
-          this.ui.updateText('service-status-text', 'Servicio activo y escuchando.');
-          this.ui.updateText('detected-port', this.servicePort);
-          
-          // Ocultamos el spinner y mostramos el panel de resultado positivo
-          this.ui.hideSpinner('service-status-container', 'service-result');
-          
-          console.log(`✅ Servicio instalado y corriendo en puerto ${this.servicePort}`);
-          
-          // Retornamos true para que el Instalador avance a la pantalla de la Extensión
-          return { success: true, port: this.servicePort };
-
-        } else {
-          // Fallo en la instalación o arranque
-          throw new Error(result.error || "No se pudo iniciar el servicio.");
-        }
-
-      } catch (error) {
-        console.error("❌ Error en installService:", error);
-        
-        this.ui.updateText('service-error-text', error.message || error);
-        this.ui.toggleElement('service-status-container', false);
-        this.ui.toggleElement('service-error', true);
-        
-        return { success: false, error: error.message };
-      }
-    }
-
-  /**
-   * Prepara extensión para instalación manual
-   */
-  async prepareExtension() {
-    const result = await this.api.installExtension();
-    
-    if (result.success) {
-      return { success: true, crxPath: result.crxPath };
-    } else {
-      this.ui.showError("No se pudo preparar el archivo CRX: " + result.error);
-      return { success: false, error: result.error };
-    }
-  }
-
-  /**
-   * Actualiza el ID de la extensión en el sistema
-   */
-  async updateExtensionId(extensionId) {
-    const result = await this.api.updateExtensionId(extensionId);
-    
     if (!result.success) {
+      this.ui.showError(result.error);
       return { success: false, error: result.error };
     }
     
@@ -132,23 +24,151 @@ export class InstallationManager {
   }
 
   /**
-   * Finaliza la configuración
+   * FASE 2: Validar Motor IA
    */
-  async finalizeSetup(extensionId) {
-    const result = await this.api.finalizeSetup({ 
-      extensionId: extensionId,
-      profiles: [] 
-    });
-
-    if (result.success) {
-      this.ui.updateText('final-port', this.servicePort);
+  async validateEngine() {
+    try {
+      this.ui.updateText('service-status-text', 'Validando Bloom AI Engine...');
+      
+      const status = await this.api.checkBrainStatus();
+      
+      if (!status.success) {
+        throw new Error('El motor IA no responde correctamente');
+      }
+      
+      this.ui.updateText('service-status-text', '✅ Motor validado');
       return { success: true };
-    } else {
-      return { success: false, error: result.error };
+      
+    } catch (error) {
+      this.ui.showError(`Error validando motor: ${error.message}`);
+      return { success: false, error: error.message };
     }
   }
 
-  getServicePort() {
-    return this.servicePort;
+  /**
+   * FASE 3: Crear Perfil "Modo Dios"
+   */
+  async createMasterProfile() {
+    try {
+      this.ui.updateText('service-status-text', 'Creando perfil maestro...');
+      
+      const result = await this.api.createMasterProfile();
+      
+      if (!result.success) {
+        throw new Error(result.error);
+      }
+      
+      this.profileId = result.profileId;
+      this.ui.updateText('service-status-text', `✅ Perfil creado: ${this.profileId.substring(0, 8)}...`);
+      
+      return { success: true, profileId: this.profileId };
+      
+    } catch (error) {
+      this.ui.showError(`Error creando perfil: ${error.message}`);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * FASE 4: Preparar Extensión (sin instalar aún)
+   */
+  async prepareExtension() {
+    try {
+      this.ui.updateText('service-status-text', 'Preparando extensión...');
+      
+      const result = await this.api.installExtension();
+      
+      if (!result.success) {
+        throw new Error(result.error);
+      }
+      
+      this.ui.updateText('service-status-text', '✅ Extensión lista');
+      return { success: true, crxPath: result.crxPath };
+      
+    } catch (error) {
+      this.ui.showError(`Error preparando extensión: ${error.message}`);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * FASE 5: Registrar Native Host (Estrategia APPEND)
+   */
+  async registerNativeHost(extensionId) {
+    try {
+      this.ui.updateText('service-status-text', 'Registrando Native Host...');
+      
+      const result = await this.api.updateExtensionId(extensionId);
+      
+      if (!result.success) {
+        throw new Error(result.error);
+      }
+      
+      this.ui.updateText('service-status-text', '✅ Host registrado');
+      return { success: true };
+      
+    } catch (error) {
+      this.ui.showError(`Error registrando host: ${error.message}`);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * FASE 6: Lanzar Chrome (El Host se inicia AHORA como hijo)
+   */
+  async launchMasterProfile() {
+    try {
+      if (!this.profileId) {
+        throw new Error('No hay perfil creado');
+      }
+      
+      this.ui.updateText('service-status-text', 'Lanzando Chrome...');
+      
+      const result = await this.api.launchMasterProfile(this.profileId);
+      
+      if (!result.success) {
+        throw new Error(result.error);
+      }
+      
+      this.ui.updateText('service-status-text', '✅ Chrome abierto');
+      return { success: true };
+      
+    } catch (error) {
+      this.ui.showError(`Error lanzando Chrome: ${error.message}`);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Flujo completo (llamado desde UI)
+   */
+  async runFullInstallation(extensionId) {
+    // FASE 1: Despliegue
+    let result = await this.startInstallation();
+    if (!result.success) return result;
+    
+    this.ui.showScreen('service-screen');
+    
+    // FASE 2: Validar Motor
+    result = await this.validateEngine();
+    if (!result.success) return result;
+    
+    // FASE 3: Crear Perfil
+    result = await this.createMasterProfile();
+    if (!result.success) return result;
+    
+    // FASE 4: Preparar Extensión
+    result = await this.prepareExtension();
+    if (!result.success) return result;
+    
+    // FASE 5: Registrar Host
+    result = await this.registerNativeHost(extensionId);
+    if (!result.success) return result;
+    
+    // FASE 6: Lanzar Chrome (Host se inicia como hijo)
+    result = await this.launchMasterProfile();
+    if (!result.success) return result;
+    
+    return { success: true };
   }
 }

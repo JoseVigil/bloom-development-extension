@@ -56,3 +56,7 @@ MANIFEST
 *.local
 .env
 .env.local
+
+# Python Runtime (se descarga en build-time)
+installer/resources/runtime/
+.cache/
