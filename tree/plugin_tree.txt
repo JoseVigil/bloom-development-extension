@@ -205,8 +205,6 @@ bloom-development-extension/
 │   │   ├── registry-scripts/
 │   │   │   ├── cleanup.ps1
 │   │   │   └── hkcu.ps1
-│   │   ├── run-admin.bat
-│   │   ├── run-make-admin.bat
 │   │   ├── src/
 │   │   │   ├── event_listeners.js
 │   │   │   ├── extension_installer.js
@@ -231,6 +229,8 @@ bloom-development-extension/
 │   │       └── com.bloom.nucleus.bridge.json
 │   ├── package-lock.json
 │   ├── package.json
+│   ├── resources/
+│   │   └── .gitkeep
 │   └── scripts/
 │       ├── build-extension.js
 │       ├── check-health.js
@@ -239,6 +239,7 @@ bloom-development-extension/
 │       ├── god-mode.js
 │       ├── run-elevated.ps1
 │       ├── setup-dev.js
+│       ├── setup_runtime.js
 │       └── validate.js
 ├── webview/
 │   └── app/
@@ -456,6 +457,7 @@ bloom-development-extension/
 │   │   │   └── scanner.py
 │   │   ├── project_manager.py
 │   │   └── tree_manager.py
+│   ├── libs/ [... python vendored dependencies]
 │   ├── pyproject.toml
 │   ├── requirements.txt
 │   └── shared/
@@ -470,10 +472,14 @@ bloom-development-extension/
 │   ├── errors.js.map
 │   ├── errors.ts
 │   ├── integration.test.ts
+│   ├── state-machines.js
+│   ├── state-machines.js.map
 │   ├── state-machines.ts
 │   ├── types.js
 │   ├── types.js.map
 │   ├── types.ts
+│   ├── websocket-protocol.js
+│   ├── websocket-protocol.js.map
 │   └── websocket-protocol.ts
 ├── package.json
 └── tsconfig.json
