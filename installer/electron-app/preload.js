@@ -22,13 +22,11 @@ contextBridge.exposeInMainWorld('api', {
   installVCRedist: () => ipcRenderer.invoke('install-vc-redist'),
 
   // ==========================================
-  // 3. EXTENSIÓN Y ONBOARDING
+  // 3. EXTENSIÓN Y HEARTBEAT
   // ==========================================
   
-  installExtension: () => ipcRenderer.invoke('install-extension'),
-  checkExtensionHeartbeat: () => ipcRenderer.invoke('check-extension-heartbeat'),
-  openBTIPConfig: () => ipcRenderer.invoke('open-btip-config'),
-  checkOnboardingStatus: () => ipcRenderer.invoke('check-onboarding-status'),
+  // NUEVO: Para el heartbeat post-launch
+  checkExtensionHeartbeat: () => ipcRenderer.invoke('extension:heartbeat'),
 
   // ==========================================
   // 4. HELPERS DE SISTEMA

@@ -116,15 +116,11 @@ export class EventListeners {
     }
   }
 
-  setupSuccessScreen() {
+  setupSuccessScreen() {    
     const logsBtn = document.getElementById('final-view-logs-btn');
-    if (logsBtn) logsBtn.addEventListener('click', () => this.api.openLogsFolder());
-
-    const onboardingBtn = document.getElementById('open-onboarding-btn');
-    if (onboardingBtn) {
-      onboardingBtn.addEventListener('click', async () => {
-        await this.api.openBTIPConfig();
-        setTimeout(() => window.close(), 3000);
+    if (logsBtn) {
+      logsBtn.addEventListener('click', () => {
+        this.api.openLogsFolder();
       });
     }
   }

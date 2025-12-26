@@ -89,92 +89,159 @@ class UIManager {
 }
 
 // ========================================================================
-// 2. INSTALLATION MANAGER
+// INSTALLATION MANAGER - FLUJO AUTOMÁTICO COMPLETO
+// Reemplaza la clase completa en renderer.js (líneas ~80-150)
 // ========================================================================
 class InstallationManager {
   constructor(api, uiManager) {
     this.api = api;
     this.ui = uiManager;
-    this.servicePort = 5678;
-    this.systemInfo = null;
+    this.extensionId = null;
+    this.profileId = null;
   }
 
   async initialize() {
-    try {
-      if (!this.api) throw new Error("API not loaded");
-      
-      this.systemInfo = await this.api.getSystemInfo();
-      
-      // Actualizar UI con info del sistema
-      this.ui.updateText('install-path', this.systemInfo.paths.hostInstallDir);
-      this.ui.setButtonState('start-button', false, 'Comenzar Instalación');
-      
-      return { success: true };
-    } catch (error) {
-      console.error("Init failed:", error);
-      this.ui.setButtonState('start-button', true, 'Error de carga');
-      return { success: false, error: error.message };
-    }
+    this.ui.updateText('install-path', '%LOCALAPPDATA%\\BloomNucleus');
+    this.ui.setButtonState('start-button', false, '🚀 INSTALAR BLOOM NUCLEUS');
+    return { success: true };
   }
 
   async startInstallation() {
+    console.log("🚀 [AUTO] Iniciando flujo automático...");
     this.ui.showScreen('installation-screen');
-    
-    const result = await this.api.installService();
-    
-    if (result.success) {
-      return { success: true };
-    } else {
-      this.ui.showError(result.error);
-      return { success: false, error: result.error };
-    }
-  }
 
-  async installService() {
-    if (!this.systemInfo) {
-      return { success: false, error: 'System info not loaded' };
-    }
-
-    // Verificar dependencias VC++ en Windows
-    if (this.systemInfo.platform === 'win32') {
-      this.ui.updateText('service-status-text', 'Verificando dependencias...');
+    try {
+      // PASO 1: INSTALAR TODO
+      console.log("📦 [AUTO] Llamando backend...");
+      const result = await this.api.installService();
       
-      const preflight = await this.api.preflightChecks();
-      if (!preflight.vcRedistInstalled) {
-        this.ui.updateText('service-status-text', 'Instalando dependencias VC++...');
-        await this.api.installVCRedist();
+      if (!result.success) {
+        throw new Error(result.error || "Error en instalación");
       }
-    }
 
-    // Iniciar servicio
-    this.ui.updateText('service-status-text', 'Iniciando servicio...');
-    const result = await this.api.installService();
+      this.extensionId = result.extensionId;
+      this.profileId = result.profileId;
+      
+      console.log("✅ [AUTO] Backend completó instalación");
+      console.log("📊 Extension:", this.extensionId);
+      console.log("📊 Profile:", this.profileId);
+      
+      this.ui.updateProgress(100, 100, "¡Instalación completa!");
+      await this.sleep(800);
 
-    if (result.success) {
-      this.servicePort = result.port;
-      this.ui.updateText('detected-port', result.port);
-      this.ui.hideSpinner('service-status-container', 'service-result');
-      return { success: true, port: result.port };
-    } else {
-      this.ui.updateText('service-error-text', result.error);
-      this.ui.toggleElement('service-status-container', false);
-      this.ui.toggleElement('service-error', true);
-      return { success: false, error: result.error };
+      // PASO 2: MOSTRAR PANTALLA SUCCESS
+      console.log("🎨 [AUTO] Mostrando success screen...");
+      this.ui.showScreen('success-screen');
+      this.ui.updateText('final-extension-id', this.extensionId);
+      this.ui.updateText('final-profile-id', this.profileId);
+      
+      await this.sleep(500);
+
+      // PASO 3: LANZAR CHROME AUTOMÁTICAMENTE
+      console.log("🚀 [AUTO] Lanzando Chrome automáticamente...");
+      const launchResult = await this.api.launchGodMode();
+      
+      if (!launchResult.success) {
+        throw new Error("Chrome no pudo iniciar: " + launchResult.error);
+      }
+      
+      console.log("✅ [AUTO] Chrome ejecutado, PID:", launchResult.output);
+
+      // PASO 4: OCULTAR BOTÓN Y MOSTRAR HEARTBEAT
+      console.log("💓 [AUTO] Activando heartbeat...");
+      const launchBtn = document.getElementById('launch-bloom-btn');
+      if (launchBtn) launchBtn.style.display = 'none';
+      
+      this.ui.toggleElement('heartbeat-container', true);
+      this.startHeartbeatMonitoring();
+
+      return { success: true };
+      
+    } catch (error) {
+      console.error("❌ [AUTO] Error en flujo:", error);
+      this.ui.showError(error.message);
+      return { success: false };
     }
   }
 
-  async finalizeSetup(extensionId) {
-    const result = await this.api.finalizeSetup({ 
-      extensionId: extensionId,
-      profiles: [] 
-    });
+  startHeartbeatMonitoring() {
+    console.log("💓 [Heartbeat] Iniciando polling...");
+    
+    let attempts = 0;
+    const maxAttempts = 60;
+    
+    const interval = setInterval(async () => {
+      attempts++;
+      
+      // Animar dot (titilante)
+      const dot = document.getElementById('heartbeat-dot');
+      if (dot) {
+        dot.style.opacity = dot.style.opacity === '0.5' ? '1' : '0.5';
+      }
+      
+      this.ui.updateText('heartbeat-status', 
+        `Esperando conexión con Chrome... (${attempts}/${maxAttempts})`
+      );
+      
+      // Verificar si extension conectó
+      try {
+        const status = await this.api.checkExtensionHeartbeat();
+        console.log(`💓 [Heartbeat] Intento ${attempts}:`, status);
+        
+        if (status && status.chromeConnected) {
+          clearInterval(interval);
+          console.log("✅ [Heartbeat] ¡CONEXIÓN DETECTADA!");
+          
+          // Cambiar dot a verde
+          if (dot) {
+            dot.classList.remove('red');
+            dot.classList.add('green');
+            dot.style.opacity = '1';
+          }
+          
+          // Ocultar heartbeat, mostrar success badge
+          this.ui.toggleElement('heartbeat-container', false);
+          this.ui.toggleElement('connection-success', true);
+          
+          // Abrir onboarding después de 1.5s
+          setTimeout(() => {
+            console.log("🌐 [Redirect] Abriendo localhost:5678...");
+            this.api.openExternal('http://localhost:5678');
+            
+            // Cerrar instalador después de 3s
+            setTimeout(() => {
+              console.log("🏁 [Installer] Cerrando aplicación...");
+              window.close();
+            }, 3000);
+          }, 1500);
+          
+          return;
+        }
+      } catch (error) {
+        console.warn(`⚠️ [Heartbeat] Check ${attempts} falló:`, error.message);
+      }
+      
+      // Timeout
+      if (attempts >= maxAttempts) {
+        clearInterval(interval);
+        console.error("❌ [Heartbeat] Timeout alcanzado");
+        
+        this.ui.updateHTML('heartbeat-status', 
+          '<strong style="color:#e53e3e;">No se detectó conexión después de 60 segundos</strong><br>' +
+          '<small>Verifica que Chrome abrió y la extensión está activa</small>'
+        );
+        
+        if (dot) {
+          dot.classList.add('red');
+          dot.style.opacity = '1';
+        }
+      }
+      
+    }, 1000);
+  }
 
-    if (result.success) {
-      this.ui.updateText('final-port', this.servicePort);
-      return { success: true };
-    } else {
-      return { success: false, error: result.error };
-    }
+  sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 }
 
@@ -379,189 +446,122 @@ class ExtensionInstaller {
 }
 
 // ========================================================================
-// 5. EVENT LISTENERS
+// EVENT LISTENERS SIMPLIFICADOS
 // ========================================================================
 class EventListeners {
-  constructor(api, uiManager, installationManager, heartbeatManager, extensionInstaller) {
+  constructor(api, uiManager, installationManager) {
     this.api = api;
     this.ui = uiManager;
     this.installation = installationManager;
-    this.heartbeat = heartbeatManager;
-    this.extension = extensionInstaller;
   }
 
   setupAll() {
-    this.setupAPIListeners();
     this.setupWelcomeScreen();
-    this.setupServiceScreen();
-    this.setupManualInstallScreen();
-    this.setupHandshakeScreen();
     this.setupSuccessScreen();
     this.setupErrorScreen();
   }
 
-  setupAPIListeners() {
-    this.api.onInstallationProgress((data) => {
-      this.ui.updateProgress(data.step, data.total, data.message);
-    });
-
-    this.api.onServerStatus((data) => {
-      if (data.status === 'checking') {
-        this.ui.setButtonState('open-onboarding-btn', true, 'Verificando...');
-      }
-    });
-  }
-
+  /**
+   * WELCOME SCREEN: Solo botón "Instalar"
+   */
   setupWelcomeScreen() {
     const startBtn = document.getElementById('start-button');
-    if (startBtn) {
-      startBtn.addEventListener('click', async () => {
-        const result = await this.installation.startInstallation();
-        if (result.success) {
-          this.ui.showScreen('service-screen');
-          await this.installation.installService();
-        }
-      });
-    }
-  }
-
-  setupServiceScreen() {
-    const retryBtn = document.getElementById('retry-service-btn');
-    if (retryBtn) {
-      retryBtn.addEventListener('click', async () => {
-        this.ui.toggleElement('service-error', false);
-        this.ui.toggleElement('service-status-container', true);
-        await this.installation.installService();
-      });
-    }
-
-    const skipBtn = document.getElementById('skip-service-btn');
-    if (skipBtn) {
-      skipBtn.addEventListener('click', () => {
-        this.ui.showScreen('manual-install-screen');
-      });
-    }
-
-    const continueBtn = document.getElementById('continue-from-service-btn');
-    if (continueBtn) {
-      continueBtn.addEventListener('click', async () => {
-        this.ui.showScreen('manual-install-screen');
-        const result = await this.extension.prepareCrxFile();
-        if (result.success) {
-          console.log('✅ CRX preparado:', result.path);
-        }
-      });
-    }
-  }
-
-  setupManualInstallScreen() {
-    this.extension.setupDragAndDrop('draggable-crx');
+    if (!startBtn) return;
     
-    this.extension.setupIdInput(
-      'extension-id-input',
-      'confirm-id-btn',
-      'id-error-msg',
-      (extensionId) => {
-        this.ui.toggleElement('manual-connection-status', true);
-        this.heartbeat.startManualPolling();
-      }
-    );
-
-    const openChromeBtn = document.getElementById('open-chrome-ext-btn-manual');
-    if (openChromeBtn) {
-      openChromeBtn.addEventListener('click', () => {
-        this.extension.openChromeExtensions();
-      });
-    }
+    startBtn.addEventListener('click', async () => {
+      console.log("👆 [UI] Usuario hizo clic en Instalar");
+      await this.installation.startInstallation();
+    });
   }
 
-  setupHandshakeScreen() {
-    const finishBtn = document.getElementById('finish-handshake-btn');
-    if (finishBtn) {
-      finishBtn.addEventListener('click', async () => {
-        const result = await this.installation.finalizeSetup('kalbnicbomhpdljbnkfhmjnibfjeninc');
-        if (result.success) {
-          this.ui.showScreen('success-screen');
-        } else {
-          this.ui.showError(result.error);
-        }
-      });
-    }
-  }
-
+  /**
+   * SUCCESS SCREEN: Botón "Lanzar" + "Ver Logs"
+   */
   setupSuccessScreen() {
+    // Botón de lanzamiento
+    const launchBtn = document.getElementById('launch-bloom-btn');
+    if (launchBtn) {
+      launchBtn.addEventListener('click', async () => {
+        console.log("👆 [UI] Usuario hizo clic en LANZAR"); 
+        console.log("🔍 [Debug] API disponible:", !!this.api.launchGodMode);        
+        await this.installation.launchProfile();
+      });
+    }
+    
+    // Botón de logs
     const logsBtn = document.getElementById('final-view-logs-btn');
     if (logsBtn) {
       logsBtn.addEventListener('click', () => {
+        console.log("👆 [UI] Usuario abrió carpeta de logs");
         this.api.openLogsFolder();
-      });
-    }
-
-    const onboardingBtn = document.getElementById('open-onboarding-btn');
-    if (onboardingBtn) {
-      onboardingBtn.addEventListener('click', async () => {
-        await this.api.openBTIPConfig();
-        setTimeout(() => window.close(), 3000);
       });
     }
   }
 
+  /**
+   * ERROR SCREEN: Botón "Reintentar" + "Ver Logs"
+   */
   setupErrorScreen() {
     const retryBtn = document.getElementById('retry-button');
     if (retryBtn) {
       retryBtn.addEventListener('click', () => {
+        console.log("👆 [UI] Usuario reintentó instalación");
         location.reload();
+      });
+    }
+    
+    const errorLogsBtn = document.getElementById('view-error-logs-btn');
+    if (errorLogsBtn) {
+      errorLogsBtn.addEventListener('click', () => {
+        this.api.openLogsFolder();
       });
     }
   }
 }
 
 // ========================================================================
-// 6. MAIN APP INITIALIZATION
+// MAIN APP INITIALIZATION
 // ========================================================================
 class BloomInstaller {
   constructor() {
     this.ui = null;
     this.installation = null;
-    this.heartbeat = null;
-    this.extension = null;
     this.events = null;
   }
 
   async init() {
     try {
       if (!window.api) {
-        throw new Error("API not loaded");
+        throw new Error("API not loaded - preload.js failed");
       }
 
+      console.log("🔧 [Installer] Inicializando Modo Dios...");
+
+      // Instanciar managers
       this.ui = new UIManager();
       this.installation = new InstallationManager(window.api, this.ui);
-      this.heartbeat = new HeartbeatManager(window.api, this.ui);
-      this.extension = new ExtensionInstaller(window.api, this.ui);
-      this.events = new EventListeners(
-        window.api,
-        this.ui,
-        this.installation,
-        this.heartbeat,
-        this.extension
-      );
+      this.events = new EventListeners(window.api, this.ui, this.installation);
 
+      // Inicializar UI
       const result = await this.installation.initialize();
       
       if (!result.success) {
-        console.error("Failed to initialize:", result.error);
+        console.error("❌ [Installer] Inicialización falló:", result.error);
         return;
       }
 
+      // Setup listeners
       this.events.setupAll();
-      console.log('✅ Bloom Installer inicializado correctamente');
+      
+      console.log("✅ [Installer] Sistema listo. Esperando acción del usuario.");
 
     } catch (error) {
-      console.error("❌ Error crítico en inicialización:", error);
+      console.error("💥 [Installer] Error crítico en inicialización:", error);
       this.ui?.showError("Error crítico: " + error.message);
     }
   }
 }
 
+// Auto-init cuando el DOM esté listo
 const app = new BloomInstaller();
 app.init();
