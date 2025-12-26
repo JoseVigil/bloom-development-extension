@@ -200,6 +200,9 @@ bloom-development-extension/
 │   │   │   ├── ChromeManualExtensionInstaller.js
 │   │   │   └── config.js
 │   │   ├── main.js
+│   │   ├── node_modules/ [... dependencies]
+│   │   ├── out/ [... output files]
+│   │   ├── package-lock.json
 │   │   ├── package.json
 │   │   ├── preload.js
 │   │   ├── registry-scripts/
@@ -230,13 +233,49 @@ bloom-development-extension/
 │   ├── package-lock.json
 │   ├── package.json
 │   ├── resources/
-│   │   └── .gitkeep
+│   │   ├── .gitkeep
+│   │   └── runtime/
+│   │       ├── LICENSE.txt
+│   │       ├── _asyncio.pyd
+│   │       ├── _bz2.pyd
+│   │       ├── _ctypes.pyd
+│   │       ├── _decimal.pyd
+│   │       ├── _elementtree.pyd
+│   │       ├── _hashlib.pyd
+│   │       ├── _lzma.pyd
+│   │       ├── _msi.pyd
+│   │       ├── _multiprocessing.pyd
+│   │       ├── _overlapped.pyd
+│   │       ├── _queue.pyd
+│   │       ├── _socket.pyd
+│   │       ├── _sqlite3.pyd
+│   │       ├── _ssl.pyd
+│   │       ├── _uuid.pyd
+│   │       ├── _zoneinfo.pyd
+│   │       ├── libcrypto-1_1.dll
+│   │       ├── libffi-7.dll
+│   │       ├── libssl-1_1.dll
+│   │       ├── pyexpat.pyd
+│   │       ├── python.cat
+│   │       ├── python.exe
+│   │       ├── python3.dll
+│   │       ├── python310._pth
+│   │       ├── python310.dll
+│   │       ├── python310.zip
+│   │       ├── pythonw.exe
+│   │       ├── select.pyd
+│   │       ├── sqlite3.dll
+│   │       ├── unicodedata.pyd
+│   │       ├── vcruntime140.dll
+│   │       ├── vcruntime140_1.dll
+│   │       └── winsound.pyd
 │   └── scripts/
 │       ├── build-extension.js
 │       ├── check-health.js
 │       ├── generate-fixed-key.js
 │       ├── get-id.js
 │       ├── god-mode.js
+│       ├── python-runtime.config.json
 │       ├── run-elevated.ps1
 │       ├── setup-dev.js
 │       ├── setup_runtime.js

@@ -1,44 +1,57 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
-  // Métodos de información del sistema
-  getSystemInfo: () => ipcRenderer.invoke('get-system-info'),
+  // ==========================================
+  // 1. CORE: INSTALACIÓN Y LANZAMIENTO
+  // ==========================================
   
-  // Métodos de instalación
+  // CAMBIO: Renombrado de 'install-service' a 'brain:install-extension'
+  installService: () => ipcRenderer.invoke('brain:install-extension'),
+  
+  // CAMBIO: Renombrado de 'launch-god-mode' a 'brain:launch'
+  launchGodMode: () => ipcRenderer.invoke('brain:launch'),
+
+  // ==========================================
+  // 2. DEPENDENCIAS Y SISTEMA
+  // ==========================================
+  
+  // CAMBIO: Renombrado de 'get-system-info' a 'system:info'
+  getSystemInfo: () => ipcRenderer.invoke('system:info'),
+  
   preflightChecks: () => ipcRenderer.invoke('preflight-checks'),
-  startInstallation: (config) => ipcRenderer.invoke('start-installation', config),
   installVCRedist: () => ipcRenderer.invoke('install-vc-redist'),
-  installService: () => ipcRenderer.invoke('install-service'),
-  checkServiceStatus: () => ipcRenderer.invoke('check-service-status'),
-  finalizeSetup: (config) => ipcRenderer.invoke('finalize-setup', config),
+
+  // ==========================================
+  // 3. EXTENSIÓN Y ONBOARDING
+  // ==========================================
   
-  // Métodos de Chrome y extensiones
-  detectChromeProfiles: () => ipcRenderer.invoke('detect-chrome-profiles'),
-  validateExtensionId: (extensionId) => ipcRenderer.invoke('validate-extension-id', extensionId),
-  openChromeExtensions: () => ipcRenderer.invoke('open-chrome-extensions'),
-  
-  // Métodos de configuración y archivos
+  installExtension: () => ipcRenderer.invoke('install-extension'),
+  checkExtensionHeartbeat: () => ipcRenderer.invoke('check-extension-heartbeat'),
   openBTIPConfig: () => ipcRenderer.invoke('open-btip-config'),
-  openFolder: (folderPath) => ipcRenderer.invoke('open-folder', folderPath),
-  showItemInFolder: (filePath) => ipcRenderer.invoke('show-item-in-folder', filePath),
-  openLogsFolder: () => ipcRenderer.invoke('open-logs-folder'),
-  
-  // Métodos de estado
   checkOnboardingStatus: () => ipcRenderer.invoke('check-onboarding-status'),
+
+  // ==========================================
+  // 4. HELPERS DE SISTEMA
+  // ==========================================
   
-  // Listeners de eventos
+  openFolder: (path) => ipcRenderer.invoke('open-folder', path),
+  openChromeExtensions: () => ipcRenderer.invoke('open-chrome-extensions'),
+  openLogsFolder: () => ipcRenderer.invoke('open-logs-folder'),
+  openExternal: (url) => ipcRenderer.invoke('open-external', url),
+
+  // ==========================================
+  // 5. EVENTOS (UI FEEDBACK)
+  // ==========================================
+  
   onInstallationProgress: (callback) => {
     ipcRenderer.on('installation-progress', (event, data) => callback(data));
   },
-  
+
+  onInstallationError: (callback) => {
+    ipcRenderer.on('installation-error', (event, error) => callback(error));
+  },
+
   onServerStatus: (callback) => {
     ipcRenderer.on('server-status', (event, data) => callback(data));
-  },
-   getChromeProfiles: () => ipcRenderer.invoke('get-chrome-profiles'),
-  installExtension: () => ipcRenderer.invoke('install-extension'),
-  checkExtensionHeartbeat: () => ipcRenderer.invoke('check-extension-heartbeat'),
-  launchChromeProfile: (args) => ipcRenderer.invoke('launch-chrome-profile', args),
-  
-  startDrag: (filePath) => ipcRenderer.send('ondragstart', filePath),
-  updateExtensionId: (newId) => ipcRenderer.invoke('update-extension-id', newId),
+  }
 });
