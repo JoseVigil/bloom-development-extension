@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs-extra');
 const crypto = require('crypto');
 const { exec } = require('child_process');
-const { execSync } = require('child_process');
+const { execSync, spawn } = require('child_process');
 const util = require('util');
 const execPromise = util.promisify(exec);
 
@@ -23,8 +23,8 @@ const getResourcePath = (resourceName) => {
   switch (resourceName) {
     case 'runtime': return path.join(installerRoot, 'resources', 'runtime');
     case 'brain':   return path.join(repoRoot, 'brain');
-    case 'native':  return path.join(installerRoot, 'native');
-    case 'extension': return path.join(installerRoot, 'chrome-extension', 'src'); // ✅ CORRECTO
+    case 'native':  return path.join(installerRoot, 'native', 'bin', 'win32'); // ✅ FIX
+    case 'extension': return path.join(installerRoot, 'chrome-extension', 'src');
     case 'assets': return path.join(installerRoot, 'electron-app', 'assets');
     default: return path.join(installerRoot, 'resources', resourceName);
   }
@@ -41,7 +41,7 @@ const paths = {
   // DESTINOS
   get engineDir() { return path.join(this.bloomBase, 'engine'); },
   get runtimeDir() { return path.join(this.engineDir, 'runtime'); },
-  get brainDir()   { return path.join(this.runtimeDir, 'brain'); }, // Brain dentro de Runtime
+  get brainDir()   { return path.join(this.runtimeDir, 'brain'); }, // ❌ YA NO SE USA
   get nativeDir()  { return path.join(this.bloomBase, 'native'); },
   get extensionDir() { return path.join(this.bloomBase, 'extension'); },
   get configDir()  { return path.join(this.bloomBase, 'config'); },
@@ -53,7 +53,7 @@ const paths = {
   nativeSource:  getResourcePath('native'),
   extensionSource: getResourcePath('extension'),
 
-    // BINARIOS
+  // BINARIOS
   get pythonExe() {
     return path.join(this.runtimeDir, process.platform === 'win32' ? 'python.exe' : 'python3');
   },
@@ -69,7 +69,7 @@ const paths = {
 // 2. LÓGICA DE INSTALACIÓN (GOLDEN PATH)
 // ============================================================================
 
-ipcMain.handle('brain:install-extension', async () => {  // ← CAMBIO
+ipcMain.handle('brain:install-extension', async () => {
   try {
     console.log(`=== INICIANDO DESPLIEGUE MODO DIOS (${process.platform}) ===`);
     await cleanupProcesses();
@@ -95,43 +95,89 @@ async function createDirectories() {
 
 async function cleanupProcesses() {
   if (process.platform === 'win32') {
-    try { require('child_process').execSync('taskkill /F /IM bloom-host.exe /T', { stdio: 'ignore' }); } catch (e) {}
+    try { 
+      execSync('taskkill /F /IM bloom-host.exe /T', { stdio: 'ignore' }); 
+    } catch (e) {}
   }
-  // Limpieza simple de carpetas para asegurar versión fresca
-  await fs.emptyDir(paths.extensionDir); 
-  // Nota: No borramos engineDir para no perder tiempo si ya existe, fs.copy con overwrite basta
+  
+  // ✅ NUEVO: Limpiar brain del runtime si existe
+  if (await fs.pathExists(paths.brainDir)) {
+    console.log("🧹 Eliminando brain/ del runtime (ya no se usa)...");
+    await fs.remove(paths.brainDir);
+  }
+  
+  await fs.emptyDir(paths.extensionDir);
 }
 
 async function installCore() {
-  console.log("📦 Instalando Motor IA...");
-  if (!fs.existsSync(paths.runtimeSource)) throw new Error("Runtime Source no encontrado. Ejecuta 'npm run prepare:brain'");
+  console.log("📦 Instalando Motor IA (solo Python runtime)...");
+  if (!fs.existsSync(paths.runtimeSource)) {
+    throw new Error("Runtime Source no encontrado. Ejecuta 'npm run prepare:runtime'");
+  }
   
-  await fs.copy(paths.runtimeSource, paths.runtimeDir, { overwrite: true });
-  await fs.copy(paths.brainSource, paths.brainDir, { 
-    overwrite: true, 
-    filter: (src) => !src.includes('__pycache__') && !src.includes('.git')
+  // ✅ Solo copiar Python runtime, NO brain
+  await fs.copy(paths.runtimeSource, paths.runtimeDir, { 
+    overwrite: true,
+    filter: (src) => {
+      // Excluir brain si estuviera en el runtime source
+      return !src.includes('brain');
+    }
   });
   
-  // Inyección de Bootloader en __main__.py (Para que encuentre libs)
-  const mainPy = path.join(paths.brainDir, '__main__.py');
-  if (fs.existsSync(mainPy)) {
-    let content = fs.readFileSync(mainPy, 'utf8');
-    if (!content.includes("[Bloom Installer]")) {
-      const bootloader = `import sys\nimport os\nlibs_dir = os.path.join(os.path.dirname(__file__), 'libs')\nif libs_dir not in sys.path:\n    sys.path.insert(0, libs_dir)\n# [Bloom Installer] Bootloader End\n\n`;
-      fs.writeFileSync(mainPy, bootloader + content);
-    }
-  }
+  console.log("   ✅ Python runtime instalado");
+  console.log("   ℹ️  Brain se ejecutará desde el plugin directamente");
 }
 
 async function installNativeHost() {
   console.log("📦 Instalando Host Nativo...");
-  if (!fs.existsSync(paths.nativeSource)) throw new Error("Native Source no encontrado");
+  if (!fs.existsSync(paths.nativeSource)) {
+    throw new Error("Native Source no encontrado en: " + paths.nativeSource);
+  }
+  
+  // Verificar que bloom-host.exe existe
+  const hostExe = path.join(paths.nativeSource, 'bloom-host.exe');
+  if (!fs.existsSync(hostExe)) {
+    throw new Error(`bloom-host.exe no encontrado en: ${paths.nativeSource}`);
+  }
+  
   await fs.copy(paths.nativeSource, paths.nativeDir, { overwrite: true });
+  console.log("   ✅ Archivos copiados");
+  
+  // ✅ Iniciar el host
+  await startNativeHost();
+}
+
+async function startNativeHost() {
+  console.log("🚀 Iniciando Native Host...");
+  
+  const hostExe = paths.hostBinary;
+  
+  if (!fs.existsSync(hostExe)) {
+    throw new Error(`Host binary no encontrado: ${hostExe}`);
+  }
+  
+  // Spawn detached para que sobreviva al instalador
+  const hostProcess = spawn(hostExe, [], {
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: true
+  });
+  
+  hostProcess.unref();
+  
+  console.log(`   ✅ Host iniciado (PID: ${hostProcess.pid})`);
+  
+  // Guardar PID para cleanup futuro
+  const config = fs.existsSync(paths.configFile) ? await fs.readJson(paths.configFile) : {};
+  config.hostPid = hostProcess.pid;
+  await fs.writeJson(paths.configFile, config, { spaces: 2 });
 }
 
 async function installExtension() {
   console.log("📦 Desplegando Extensión (Unpacked)...");
-  if (!fs.existsSync(paths.extensionSource)) throw new Error("Extension Source no encontrada");
+  if (!fs.existsSync(paths.extensionSource)) {
+    throw new Error("Extension Source no encontrada");
+  }
   await fs.copy(paths.extensionSource, paths.extensionDir, { overwrite: true });
 }
 
@@ -140,17 +186,19 @@ async function installExtension() {
 async function configureBridge() {
   console.log("🔗 Configurando Puente Nativo...");
 
-  // 1. Calcular ID desde el manifest.json de la extensión instalada
   const extManifestPath = path.join(paths.extensionDir, 'manifest.json');
-  if (!fs.existsSync(extManifestPath)) throw new Error("Manifest de extensión no encontrado en destino");
+  if (!fs.existsSync(extManifestPath)) {
+    throw new Error("Manifest de extensión no encontrado en destino");
+  }
   
   const extManifest = await fs.readJson(extManifestPath);
-  if (!extManifest.key) throw new Error("La extensión no tiene una 'key' fija en manifest.json. Modo Dios requiere key.");
+  if (!extManifest.key) {
+    throw new Error("La extensión no tiene una 'key' fija en manifest.json");
+  }
   
   const extensionId = calculateExtensionId(extManifest.key);
   console.log(`   🆔 ID Calculado: ${extensionId}`);
 
-  // 2. Generar Manifiesto del Host
   const hostManifest = {
     name: "com.bloom.nucleus.bridge",
     description: "Bloom Nucleus Host",
@@ -160,11 +208,9 @@ async function configureBridge() {
   };
   await fs.writeJson(paths.manifestPath, hostManifest, { spaces: 2 });
 
-  // 3. Registrar en Windows (HKCU)
   if (process.platform === 'win32') {
     const regKey = 'HKCU\\SOFTWARE\\Google\\Chrome\\NativeMessagingHosts\\com.bloom.nucleus.bridge';
-    const jsonPath = paths.manifestPath.replace(/\\/g, '\\\\'); // Escapar para registro
-    // Usamos reg.exe que no pide admin para HKCU
+    const jsonPath = paths.manifestPath.replace(/\\/g, '\\\\');
     const cmd = `reg add "${regKey}" /ve /d "${jsonPath}" /f`;
     await execPromise(cmd);
     console.log("   ✅ Host registrado en HKCU");
@@ -173,17 +219,13 @@ async function configureBridge() {
   return extensionId;
 }
 
-/**
- * Calcula el ID de Chrome basado en la Key pública (Algoritmo SHA256 -> a-p mapping)
- */
 function calculateExtensionId(base64Key) {
   const buffer = Buffer.from(base64Key, 'base64');
   const hash = crypto.createHash('sha256').update(buffer).digest('hex').slice(0, 32);
   
-  // Mapeo de caracteres: 0-9 -> a-j, a-f -> k-p
   return hash.split('').map(char => {
     const code = parseInt(char, 16);
-    return String.fromCharCode(97 + code); // 97 = 'a'
+    return String.fromCharCode(97 + code);
   }).join('');
 }
 
@@ -193,37 +235,43 @@ async function initializeBrainProfile() {
   console.log("🧠 Inicializando Perfil Maestro...");
   
   const python = paths.pythonExe;
+  const brainPath = paths.brainSource;
   
-  // CORRECCIÓN: El flag --json va ANTES del subcomando profile
-  const command = `"${python}" -I -m brain --json profile create "Master Worker"`;
+  // ✅ Configurar python310._pth con RUTAS ABSOLUTAS
+  const pthFile = path.join(paths.runtimeDir, 'python310._pth');
+  const pthContent = [
+    '.',
+    'python310.zip',
+    path.dirname(brainPath),           // Parent de brain/ (para -m brain)
+    path.join(brainPath, 'libs'),      // brain/libs (dependencias)
+    'import site'
+  ].join('\n');
+  
+  await fs.writeFile(pthFile, pthContent, 'utf8');
+  console.log("   ✅ python310._pth:", pthContent.split('\n').join(', '));
+  
+  // ✅ Ejecutar con CWD en runtime (donde está python.exe)
+  const command = `"${python}" -m brain --json profile create "Master Worker"`;
 
   try {
-    const { stdout } = await execPromise(command, { timeout: 15000 });
+    const { stdout } = await execPromise(command, { 
+      timeout: 15000,
+      cwd: paths.runtimeDir  // ✅ CWD = donde está python.exe
+    });
     
-    console.log("   → Respuesta cruda de Brain:", stdout.trim()); // Debug útil
-
-    // Parseamos la salida JSON
-    let result;
-    try {
-        result = JSON.parse(stdout);
-    } catch (e) {
-        throw new Error(`La salida no es JSON válido: ${stdout.substring(0, 100)}...`);
-    }
-
-    // Buscamos el ID (puede venir directo o en un array)
-    let profileId = result.data?.id || result.id;  // ← FIX AQUÍ
+    console.log("   → Respuesta:", stdout.trim());
+    
+    let result = JSON.parse(stdout);
+    let profileId = result.data?.id || result.id;
 
     if (!profileId && Array.isArray(result)) {
-        profileId = result[0]?.id;
+      profileId = result[0]?.id;
     }
 
-    if (!profileId) {
-        console.error("Estructura recibida:", JSON.stringify(result, null, 2));
-        throw new Error("No se pudo obtener el Profile ID de brain");
-    }
+    if (!profileId) throw new Error("No se pudo obtener el Profile ID");
+    
     console.log(`   👤 Perfil Listo: ${profileId}`);
     
-    // Guardamos el ID en config
     await fs.ensureDir(paths.configDir);
     const config = fs.existsSync(paths.configFile) ? await fs.readJson(paths.configFile) : {};
     config.masterProfileId = profileId;
@@ -232,7 +280,6 @@ async function initializeBrainProfile() {
     return profileId;
   } catch (error) {
     console.error("Error creando perfil:", error);
-    // IMPORTANTE: Si falla la creación del perfil, lanzamos el error para que la UI lo sepa
     throw new Error(`Fallo al crear perfil: ${error.message}`);
   }
 }
@@ -247,13 +294,12 @@ ipcMain.handle('brain:launch', async () => {
     const profileId = config.masterProfileId;
     if (!profileId) throw new Error("No hay perfil maestro");
     
-    const cmd = `"${paths.pythonExe}" -I -m brain --json profile launch "${profileId}" --url "https://chatgpt.com"`;
-    console.log("🚀 EJECUTANDO:", cmd);
-    console.log("📂 CWD:", paths.runtimeDir);
+    const cmd = `"${paths.pythonExe}" -m brain --json profile launch "${profileId}" --url "https://chatgpt.com"`;
     
-    // BLOQUEAR HASTA QUE TERMINE
+    console.log("🚀 EJECUTANDO:", cmd);
+    
     const output = execSync(cmd, { 
-      cwd: paths.runtimeDir,
+      cwd: paths.runtimeDir,  // ✅ CWD = runtime
       encoding: 'utf8',
       timeout: 10000
     });
@@ -262,8 +308,40 @@ ipcMain.handle('brain:launch', async () => {
     return { success: true, output };
     
   } catch (error) {
-    console.error("❌ ERROR COMPLETO:", error.message);
+    console.error("❌ ERROR:", error.message);
     return { success: false, error: error.message };
+  }
+});
+
+// ============================================================================
+// 4. HEARTBEAT CORREGIDO
+// ============================================================================
+
+ipcMain.handle('extension:heartbeat', async () => {
+  try {
+    const net = require('net');
+    
+    return new Promise((resolve) => {
+      const client = new net.Socket();
+      
+      client.setTimeout(2000);
+      
+      client.connect(5678, '127.0.0.1', () => {
+        client.destroy();
+        resolve({ chromeConnected: true });
+      });
+      
+      client.on('error', () => {
+        resolve({ chromeConnected: false });
+      });
+      
+      client.on('timeout', () => {
+        client.destroy();
+        resolve({ chromeConnected: false });
+      });
+    });
+  } catch (error) {
+    return { chromeConnected: false, error: error.message };
   }
 });
 
@@ -279,7 +357,7 @@ ipcMain.handle('system:info', async () => {
     paths: {
       hostInstallDir: paths.nativeDir,
       configDir: paths.configDir,
-      brainDir: paths.brainDir,
+      brainDir: paths.brainSource, // ✅ Apunta al plugin
       extensionDir: paths.extensionDir
     }
   };
@@ -287,7 +365,7 @@ ipcMain.handle('system:info', async () => {
 
 ipcMain.handle('preflight-checks', async () => {
   return {
-    hasAdmin: true, // En user scope no necesitamos admin
+    hasAdmin: true,
     diskSpace: true,
     vcRedistInstalled: await checkVCRedistInstalled()
   };
@@ -311,32 +389,6 @@ ipcMain.handle('open-external', async (event, url) => {
   await shell.openExternal(url);
 });
 
-ipcMain.handle('extension:heartbeat', async () => {
-  try {
-    // Verificar si el host está corriendo (puerto 5678 por defecto)
-    const http = require('http');
-    
-    return new Promise((resolve) => {
-      const req = http.get('http://localhost:5678/health', (res) => {
-        resolve({ chromeConnected: res.statusCode === 200 });
-      });
-      
-      req.on('error', () => {
-        resolve({ chromeConnected: false });
-      });
-      
-      req.setTimeout(1000, () => {
-        req.destroy();
-        resolve({ chromeConnected: false });
-      });
-    });
-    
-  } catch (error) {
-    return { chromeConnected: false, error: error.message };
-  }
-});
-
-// Helper: Verificar VC++ Redistributables (Windows)
 async function checkVCRedistInstalled() {
   if (process.platform !== 'win32') return true;
   
@@ -356,7 +408,7 @@ async function checkVCRedistInstalled() {
 }
 
 // ============================================================================
-// 4. BOILERPLATE ELECTRON
+// 6. BOILERPLATE ELECTRON
 // ============================================================================
 let mainWindow;
 function createWindow() {
@@ -373,7 +425,10 @@ function createWindow() {
   });
   
   mainWindow.loadFile(path.join(__dirname, 'src', 'index.html'));
-  mainWindow.webContents.openDevTools(); // Debug
+  mainWindow.webContents.openDevTools();
 }
+
 app.whenReady().then(createWindow);
-app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+app.on('window-all-closed', () => { 
+  if (process.platform !== 'darwin') app.quit(); 
+});

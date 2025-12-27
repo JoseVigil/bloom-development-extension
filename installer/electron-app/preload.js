@@ -2,30 +2,23 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
   // ==========================================
-  // 1. CORE: INSTALACIÓN Y LANZAMIENTO
+  // 1. INSTALACIÓN COMPLETA (GOLDEN PATH)
   // ==========================================
   
-  // CAMBIO: Renombrado de 'install-service' a 'brain:install-extension'
   installService: () => ipcRenderer.invoke('brain:install-extension'),
-  
-  // CAMBIO: Renombrado de 'launch-god-mode' a 'brain:launch'
   launchGodMode: () => ipcRenderer.invoke('brain:launch'),
 
   // ==========================================
-  // 2. DEPENDENCIAS Y SISTEMA
+  // 2. SISTEMA E INFO
   // ==========================================
   
-  // CAMBIO: Renombrado de 'get-system-info' a 'system:info'
   getSystemInfo: () => ipcRenderer.invoke('system:info'),
-  
   preflightChecks: () => ipcRenderer.invoke('preflight-checks'),
-  installVCRedist: () => ipcRenderer.invoke('install-vc-redist'),
 
   // ==========================================
-  // 3. EXTENSIÓN Y HEARTBEAT
+  // 3. HEARTBEAT Y VALIDACIÓN
   // ==========================================
   
-  // NUEVO: Para el heartbeat post-launch
   checkExtensionHeartbeat: () => ipcRenderer.invoke('extension:heartbeat'),
 
   // ==========================================
