@@ -60,3 +60,6 @@ MANIFEST
 # Python Runtime (se descarga en build-time)
 installer/resources/runtime/
 .cache/
+
+# Host dependencies
+src/host/mingw-deps
