@@ -39,9 +39,80 @@ fi
 if command -v x86_64-w64-mingw32-g++ &> /dev/null; then
     echo -e "${YELLOW}� Compiling for Windows...${NC}"
     
-    x86_64-w64-mingw32-g++ -std=c++20 -O2 -I. "$SRC_FILE" \
+    # Detectar OpenSSL para MinGW
+    OPENSSL_INCLUDE=""
+    OPENSSL_LIB=""
+    
+    # 1. Buscar OpenSSL compilado localmente (setup-openssl-mingw.sh)
+    LOCAL_OPENSSL="$SCRIPT_DIR/mingw-deps/openssl-mingw"
+    if [ -d "$LOCAL_OPENSSL/include" ]; then
+        OPENSSL_INCLUDE="$LOCAL_OPENSSL/include"
+        # Intentar lib64 primero, luego lib
+        if [ -d "$LOCAL_OPENSSL/lib64" ] && [ -f "$LOCAL_OPENSSL/lib64/libssl.a" ]; then
+            OPENSSL_LIB="$LOCAL_OPENSSL/lib64"
+        elif [ -d "$LOCAL_OPENSSL/lib" ] && [ -f "$LOCAL_OPENSSL/lib/libssl.a" ]; then
+            OPENSSL_LIB="$LOCAL_OPENSSL/lib"
+        fi
+        if [ -n "$OPENSSL_LIB" ]; then
+            echo -e "${GREEN}✓ Found local OpenSSL: $LOCAL_OPENSSL${NC}"
+            echo -e "${GREEN}✓ Libraries in: $OPENSSL_LIB${NC}"
+        fi
+    fi
+    
+    # 2. Buscar en Homebrew (mingw-w64-openssl)
+    if [ -z "$OPENSSL_INCLUDE" ]; then
+        POSSIBLE_OPENSSL_PATHS=(
+            "/opt/homebrew/opt/mingw-w64-openssl"
+            "/usr/local/opt/mingw-w64-openssl"
+            "/opt/homebrew/Cellar/mingw-w64-openssl"
+            "/usr/local/Cellar/mingw-w64-openssl"
+        )
+        
+        for path in "${POSSIBLE_OPENSSL_PATHS[@]}"; do
+            if [ -d "$path" ]; then
+                if [ -d "$path/generic/include" ]; then
+                    OPENSSL_INCLUDE="$path/generic/include"
+                    OPENSSL_LIB="$path/generic/lib"
+                    break
+                elif [ -d "$path/include" ]; then
+                    OPENSSL_INCLUDE="$path/include"
+                    OPENSSL_LIB="$path/lib"
+                    break
+                fi
+            fi
+        done
+    fi
+    
+    # 3. Buscar con find
+    if [ -z "$OPENSSL_INCLUDE" ]; then
+        echo -e "${YELLOW}  Searching for OpenSSL headers...${NC}"
+        FOUND_HEADER=$(find "$SCRIPT_DIR" /opt/homebrew /usr/local -path "*/mingw*/include/openssl/sha.h" 2>/dev/null | head -1)
+        if [ -n "$FOUND_HEADER" ]; then
+            OPENSSL_INCLUDE=$(dirname $(dirname "$FOUND_HEADER"))
+            OPENSSL_LIB=$(dirname "$OPENSSL_INCLUDE")/lib
+        fi
+    fi
+    
+    if [ -z "$OPENSSL_INCLUDE" ]; then
+        echo -e "${RED}✗ OpenSSL for MinGW not found!${NC}"
+        echo ""
+        echo -e "${YELLOW}Please run setup script first:${NC}"
+        echo -e "${YELLOW}  ./setup-openssl-mingw.sh${NC}"
+        echo ""
+        echo -e "${YELLOW}Or install via Homebrew (if available):${NC}"
+        echo -e "${YELLOW}  brew install mingw-w64-openssl${NC}"
+        exit 1
+    fi
+    
+    echo -e "${GREEN}✓ Found OpenSSL: $OPENSSL_INCLUDE${NC}"
+    
+    # Compilar con OpenSSL estático
+    x86_64-w64-mingw32-g++ -std=c++20 -O2 -I. -I"$OPENSSL_INCLUDE" "$SRC_FILE" \
         -o "$OUT_DIR/win32/bloom-host.exe" \
-        -lws2_32 -lshell32 -static-libgcc -static-libstdc++ \
+        -L"$OPENSSL_LIB" \
+        "$OPENSSL_LIB/libssl.a" "$OPENSSL_LIB/libcrypto.a" \
+        -lws2_32 -lshell32 -lcrypt32 -luser32 -lgdi32 \
+        -static-libgcc -static-libstdc++ \
         -Wl,--subsystem,console
     
     echo -e "${GREEN}✓ bloom-host.exe created${NC}"
@@ -86,7 +157,7 @@ if command -v x86_64-w64-mingw32-g++ &> /dev/null; then
         # Detectar qué DLLs necesita el ejecutable
         REQUIRED_DLLS=$(x86_64-w64-mingw32-objdump -p "$OUT_DIR/win32/bloom-host.exe" | \
             grep "DLL Name:" | \
-            grep -v "KERNEL32\|api-ms-win\|SHELL32\|WS2_32" | \
+            grep -v "KERNEL32\|api-ms-win\|SHELL32\|WS2_32\|CRYPT32\|ADVAPI32\|USER32\|GDI32" | \
             awk '{print $3}')
         
         if [ -n "$REQUIRED_DLLS" ]; then
@@ -107,25 +178,96 @@ if command -v x86_64-w64-mingw32-g++ &> /dev/null; then
             echo -e "${GREEN}✓ No external DLLs required (fully static)${NC}"
         fi
     else
-        echo -e "${YELLOW}⚠ Could not find MinGW bin directory${NC}"
-        echo -e "${YELLOW}  If the executable fails, manually copy DLLs to:${NC}"
-        echo -e "${YELLOW}  $OUT_DIR/win32/${NC}"
+        echo -e "${YELLOW}⚠  Could not find MinGW bin directory${NC}"
+        echo -e "${YELLOW}  The executable should still work if OpenSSL was statically linked${NC}"
     fi
 fi
 
 # macOS (SEPARADO POR ARQUITECTURA)
 if [[ "$OSTYPE" == "darwin"* ]]; then
-    echo -e "${YELLOW}� Compiling for macOS (ARM64)...${NC}"
-    clang++ -arch arm64 -std=c++20 -O2 -I. "$SRC_FILE" \
-        -o "$OUT_DIR/darwin/arm64/bloom-host"
-    chmod +x "$OUT_DIR/darwin/arm64/bloom-host"
+    # Detectar OpenSSL para macOS
+    MACOS_OPENSSL_INCLUDE=""
+    MACOS_OPENSSL_LIB=""
+    
+    # Buscar OpenSSL de Homebrew (intentar ARM64 primero, luego Intel)
+    if [ -d "/opt/homebrew/opt/openssl@3" ]; then
+        # ARM64 Homebrew
+        MACOS_OPENSSL_INCLUDE="/opt/homebrew/opt/openssl@3/include"
+        MACOS_OPENSSL_LIB="/opt/homebrew/opt/openssl@3/lib"
+        echo -e "${GREEN}✓ Found ARM64 OpenSSL${NC}"
+    elif [ -d "/usr/local/opt/openssl@3" ]; then
+        # Intel Homebrew
+        MACOS_OPENSSL_INCLUDE="/usr/local/opt/openssl@3/include"
+        MACOS_OPENSSL_LIB="/usr/local/opt/openssl@3/lib"
+        echo -e "${YELLOW}⚠ Found x86_64 OpenSSL (may not support ARM64 cross-compilation)${NC}"
+    elif [ -d "/opt/homebrew/opt/openssl@1.1" ]; then
+        MACOS_OPENSSL_INCLUDE="/opt/homebrew/opt/openssl@1.1/include"
+        MACOS_OPENSSL_LIB="/opt/homebrew/opt/openssl@1.1/lib"
+    elif [ -d "/usr/local/opt/openssl@1.1" ]; then
+        MACOS_OPENSSL_INCLUDE="/usr/local/opt/openssl@1.1/include"
+        MACOS_OPENSSL_LIB="/usr/local/opt/openssl@1.1/lib"
+    fi
+    
+    if [ -z "$MACOS_OPENSSL_INCLUDE" ]; then
+        echo -e "${RED}✗ OpenSSL not found for macOS${NC}"
+        echo -e "${YELLOW}Install with: brew install openssl@3${NC}"
+        exit 1
+    fi
+    
+    # Detectar arquitectura nativa
+    NATIVE_ARCH=$(uname -m)
+    echo -e "${YELLOW}� Native architecture: $NATIVE_ARCH${NC}"
+    
+    # Verificar si OpenSSL soporta múltiples arquitecturas
+    if lipo -info "$MACOS_OPENSSL_LIB/libssl.dylib" 2>/dev/null | grep -q "arm64.*x86_64\|x86_64.*arm64"; then
+        echo -e "${GREEN}✓ OpenSSL supports universal binary${NC}"
+        BUILD_ARM64=true
+        BUILD_X86_64=true
+    elif lipo -info "$MACOS_OPENSSL_LIB/libssl.dylib" 2>/dev/null | grep -q "arm64"; then
+        echo -e "${YELLOW}⚠ OpenSSL only supports ARM64${NC}"
+        BUILD_ARM64=true
+        BUILD_X86_64=false
+    elif lipo -info "$MACOS_OPENSSL_LIB/libssl.dylib" 2>/dev/null | grep -q "x86_64"; then
+        echo -e "${YELLOW}⚠ OpenSSL only supports x86_64${NC}"
+        BUILD_ARM64=false
+        BUILD_X86_64=true
+    else
+        echo -e "${YELLOW}⚠ Could not determine OpenSSL architectures, building for native only${NC}"
+        BUILD_ARM64=$([ "$NATIVE_ARCH" = "arm64" ] && echo true || echo false)
+        BUILD_X86_64=$([ "$NATIVE_ARCH" = "x86_64" ] && echo true || echo false)
+    fi
+    
+    # Compilar para ARM64
+    if [ "$BUILD_ARM64" = true ]; then
+        echo -e "${YELLOW}� Compiling for macOS (ARM64)...${NC}"
+        clang++ -arch arm64 -std=c++20 -O2 -I. -I"$MACOS_OPENSSL_INCLUDE" "$SRC_FILE" \
+            -o "$OUT_DIR/darwin/arm64/bloom-host" \
+            -L"$MACOS_OPENSSL_LIB" -lssl -lcrypto
+        chmod +x "$OUT_DIR/darwin/arm64/bloom-host"
+        echo -e "${GREEN}✓ ARM64 binary created${NC}"
+    else
+        echo -e "${YELLOW}⊘ Skipping ARM64 build (OpenSSL not available for this arch)${NC}"
+    fi
 
-    echo -e "${YELLOW}� Compiling for macOS (x64)...${NC}"
-    clang++ -arch x86_64 -std=c++20 -O2 -I. "$SRC_FILE" \
-        -o "$OUT_DIR/darwin/x64/bloom-host"
-    chmod +x "$OUT_DIR/darwin/x64/bloom-host"
+    # Compilar para x86_64
+    if [ "$BUILD_X86_64" = true ]; then
+        echo -e "${YELLOW}� Compiling for macOS (x64)...${NC}"
+        clang++ -arch x86_64 -std=c++20 -O2 -I. -I"$MACOS_OPENSSL_INCLUDE" "$SRC_FILE" \
+            -o "$OUT_DIR/darwin/x64/bloom-host" \
+            -L"$MACOS_OPENSSL_LIB" -lssl -lcrypto
+        chmod +x "$OUT_DIR/darwin/x64/bloom-host"
+        echo -e "${GREEN}✓ x86_64 binary created${NC}"
+    else
+        echo -e "${YELLOW}⊘ Skipping x86_64 build (OpenSSL not available for this arch)${NC}"
+    fi
 
-    echo -e "${GREEN}✓ bloom-host created for both macOS architectures${NC}"
+    if [ "$BUILD_ARM64" = true ] && [ "$BUILD_X86_64" = true ]; then
+        echo -e "${GREEN}✓ bloom-host created for both macOS architectures${NC}"
+    elif [ "$BUILD_ARM64" = true ]; then
+        echo -e "${GREEN}✓ bloom-host created for macOS ARM64${NC}"
+    elif [ "$BUILD_X86_64" = true ]; then
+        echo -e "${GREEN}✓ bloom-host created for macOS x86_64${NC}"
+    fi
 fi
 
 # Linux
@@ -133,7 +275,7 @@ if command -v g++ &> /dev/null && [[ "$OSTYPE" == "linux-gnu"* ]]; then
     echo -e "${YELLOW}� Compiling for Linux...${NC}"
     g++ -std=c++20 -O2 -I. "$SRC_FILE" \
         -o "$OUT_DIR/linux/bloom-host" \
-        -lpthread -static-libgcc -static-libstdc++
+        -lpthread -lssl -lcrypto -static-libgcc -static-libstdc++
     chmod +x "$OUT_DIR/linux/bloom-host"
     echo -e "${GREEN}✓ bloom-host created${NC}"
 fi

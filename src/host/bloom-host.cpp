@@ -106,7 +106,8 @@ Logger g_logger(true);
 // ============================================================================
 class ChunkedMessageBuffer {
 public:
-    enum ChunkResult { INCOMPLETE, COMPLETE_VALID, COMPLETE_INVALID_CHECKSUM, ERROR };
+    // Renombrado ERROR a CHUNK_ERROR para evitar conflicto con macro de Windows
+    enum ChunkResult { INCOMPLETE, COMPLETE_VALID, COMPLETE_INVALID_CHECKSUM, CHUNK_ERROR };
     
 private:
     struct InProgressMessage {
@@ -156,9 +157,9 @@ public:
         std::string msg_id = chunk.value("message_id", "");
 
         if (type == "header") {
-            if (active_buffers.size() >= MAX_ACTIVE_BUFFERS) return ERROR;
+            if (active_buffers.size() >= MAX_ACTIVE_BUFFERS) return CHUNK_ERROR;
             size_t size = chunk.value("total_size_bytes", 0);
-            if (size > MAX_MESSAGE_SIZE) return ERROR;
+            if (size > MAX_MESSAGE_SIZE) return CHUNK_ERROR;
 
             InProgressMessage ipm;
             ipm.message_id = msg_id;
@@ -172,7 +173,7 @@ public:
             return INCOMPLETE;
         }
 
-        if (active_buffers.find(msg_id) == active_buffers.end()) return ERROR;
+        if (active_buffers.find(msg_id) == active_buffers.end()) return CHUNK_ERROR;
         auto& ipm = active_buffers[msg_id];
 
         if (type == "data") {
@@ -183,12 +184,12 @@ public:
         }
 
         if (type == "footer") {
-            if (ipm.received_chunks != ipm.total_chunks) return ERROR;
+            if (ipm.received_chunks != ipm.total_chunks) return CHUNK_ERROR;
             std::string computed = calculate_sha256(ipm.buffer);
             if (computed != chunk.value("checksum_verify", "")) return COMPLETE_INVALID_CHECKSUM;
             return COMPLETE_VALID;
         }
-        return ERROR;
+        return CHUNK_ERROR;
     }
 
     std::string get_and_clear(const std::string& msg_id) {
