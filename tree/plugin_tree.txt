@@ -100,8 +100,9 @@ bloom-development-extension/
 │   │   ├── HostExecutor.ts
 │   │   ├── bloom-host.cpp
 │   │   ├── build.sh
-│   │   └── nlohmann/
-│   │       └── json.hpp
+│   │   ├── nlohmann/
+│   │   │   └── json.hpp
+│   │   └── setup-openssl-mingw.sh
 │   ├── initialization/
 │   │   ├── commandRegistry.ts
 │   │   ├── contextInitializer.ts
@@ -201,13 +202,14 @@ bloom-development-extension/
 │   │   │   └── config.js
 │   │   ├── main.js
 │   │   ├── node_modules/ [... dependencies]
-│   │   ├── out/ [... output files]
 │   │   ├── package-lock.json
 │   │   ├── package.json
 │   │   ├── preload.js
 │   │   ├── registry-scripts/
 │   │   │   ├── cleanup.ps1
 │   │   │   └── hkcu.ps1
+│   │   ├── run-admin.bat
+│   │   ├── run-make-admin.bat
 │   │   ├── src/
 │   │   │   ├── event_listeners.js
 │   │   │   ├── extension_installer.js
@@ -221,8 +223,6 @@ bloom-development-extension/
 │   ├── native/
 │   │   ├── bin/
 │   │   │   ├── darwin/
-│   │   │   │   ├── arm64/
-│   │   │   │   │   └── bloom-host
 │   │   │   │   └── x64/
 │   │   │   │       └── bloom-host
 │   │   │   └── win32/
@@ -436,6 +436,7 @@ bloom-development-extension/
 │   │   ├── __pycache__/ [... cache]
 │   │   ├── bloom_project_inspector.py
 │   │   ├── browser/
+│   │   │   ├── __pycache__/ [... cache]
 │   │   │   └── profile_manager.py
 │   │   ├── context/
 │   │   │   ├── __init__.py

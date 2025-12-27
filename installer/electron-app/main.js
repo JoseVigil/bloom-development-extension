@@ -2,8 +2,7 @@ const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('path');
 const fs = require('fs-extra');
 const crypto = require('crypto');
-const { exec } = require('child_process');
-const { execSync, spawn } = require('child_process');
+const { exec, execSync, spawn } = require('child_process');
 const util = require('util');
 const execPromise = util.promisify(exec);
 
@@ -11,7 +10,6 @@ const execPromise = util.promisify(exec);
 // 1. CONFIGURACIÓN DE RUTAS (USER SCOPE / %LOCALAPPDATA%)
 // ============================================================================
 
-// Función para resolver recursos en Dev vs Prod
 const getResourcePath = (resourceName) => {
   if (app.isPackaged) {
     const finalName = resourceName === 'core' ? 'brain' : resourceName;
@@ -23,42 +21,46 @@ const getResourcePath = (resourceName) => {
   switch (resourceName) {
     case 'runtime': return path.join(installerRoot, 'resources', 'runtime');
     case 'brain':   return path.join(repoRoot, 'brain');
-    case 'native':  return path.join(installerRoot, 'native', 'bin', 'win32'); // ✅ FIX
+    case 'native':  return path.join(installerRoot, 'native', 'bin', 'win32');
+    case 'nssm':    return path.join(installerRoot, 'native', 'nssm', 'win64');
     case 'extension': return path.join(installerRoot, 'chrome-extension', 'src');
     case 'assets': return path.join(installerRoot, 'electron-app', 'assets');
     default: return path.join(installerRoot, 'resources', resourceName);
   }
 };
 
+const SERVICE_NAME = 'BloomNucleusHost';
+const DEFAULT_PORT = 5678;
+
 const paths = {
-  // BASE: %LOCALAPPDATA%\BloomNucleus
   get bloomBase() {
     return process.platform === 'win32' 
       ? path.join(process.env.LOCALAPPDATA, 'BloomNucleus')
       : path.join(app.getPath('home'), '.local', 'share', 'BloomNucleus');
   },
   
-  // DESTINOS
   get engineDir() { return path.join(this.bloomBase, 'engine'); },
   get runtimeDir() { return path.join(this.engineDir, 'runtime'); },
-  get brainDir()   { return path.join(this.runtimeDir, 'brain'); }, // ❌ YA NO SE USA
+  get brainDir()   { return path.join(this.runtimeDir, 'brain'); },
   get nativeDir()  { return path.join(this.bloomBase, 'native'); },
   get extensionDir() { return path.join(this.bloomBase, 'extension'); },
   get configDir()  { return path.join(this.bloomBase, 'config'); },
   get configFile() { return path.join(this.configDir, 'installer-config.json'); },
 
-  // FUENTES
   runtimeSource: getResourcePath('runtime'),
   brainSource:   getResourcePath('brain'),
   nativeSource:  getResourcePath('native'),
   extensionSource: getResourcePath('extension'),
+  nssmSource:    getResourcePath('nssm'),
 
-  // BINARIOS
   get pythonExe() {
     return path.join(this.runtimeDir, process.platform === 'win32' ? 'python.exe' : 'python3');
   },
   get hostBinary() {
     return path.join(this.nativeDir, process.platform === 'win32' ? 'bloom-host.exe' : 'bloom-host');
+  },
+  get nssmExe() {
+    return path.join(this.nativeDir, 'nssm.exe');
   },
   get manifestPath() {
     return path.join(this.nativeDir, 'com.bloom.nucleus.bridge.json');
@@ -66,11 +68,47 @@ const paths = {
 };
 
 // ============================================================================
-// 2. LÓGICA DE INSTALACIÓN (GOLDEN PATH)
+// 2. PRIVILEGIOS
+// ============================================================================
+
+async function isElevated() {
+  if (process.platform !== 'win32') return true;
+  try {
+    execSync('net session', { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function relaunchAsAdmin() {
+  const exe = process.execPath;
+  const args = process.argv.slice(1).join(' ');
+
+  spawn('powershell', [
+    '-Command',
+    `Start-Process "${exe}" -ArgumentList "${args}" -Verb RunAs`
+  ], {
+    detached: true,
+    stdio: 'ignore'
+  });
+
+  app.quit();
+}
+
+// ============================================================================
+// 3. LÓGICA DE INSTALACIÓN
 // ============================================================================
 
 ipcMain.handle('brain:install-extension', async () => {
   try {
+    if (process.platform === 'win32' && !(await isElevated())) {
+      console.log('⚠️ Se requieren privilegios de administrador para instalar el servicio.');
+      console.log('🔄 Solicitando elevación...');
+      relaunchAsAdmin();
+      return { success: false, relaunching: true, message: 'Relanzando con privilegios de administrador...' };
+    }
+
     console.log(`=== INICIANDO DESPLIEGUE MODO DIOS (${process.platform}) ===`);
     await cleanupProcesses();
     await createDirectories();
@@ -87,7 +125,6 @@ ipcMain.handle('brain:install-extension', async () => {
   }
 });
 
-// --- FUNCIONES AUXILIARES DE FASE 1 ---
 async function createDirectories() {
   const dirs = [paths.bloomBase, paths.engineDir, paths.runtimeDir, paths.nativeDir, paths.extensionDir, paths.configDir];
   for (const d of dirs) await fs.ensureDir(d);
@@ -95,12 +132,13 @@ async function createDirectories() {
 
 async function cleanupProcesses() {
   if (process.platform === 'win32') {
+    await removeService(SERVICE_NAME);
+    
     try { 
       execSync('taskkill /F /IM bloom-host.exe /T', { stdio: 'ignore' }); 
     } catch (e) {}
   }
   
-  // ✅ NUEVO: Limpiar brain del runtime si existe
   if (await fs.pathExists(paths.brainDir)) {
     console.log("🧹 Eliminando brain/ del runtime (ya no se usa)...");
     await fs.remove(paths.brainDir);
@@ -115,11 +153,9 @@ async function installCore() {
     throw new Error("Runtime Source no encontrado. Ejecuta 'npm run prepare:runtime'");
   }
   
-  // ✅ Solo copiar Python runtime, NO brain
   await fs.copy(paths.runtimeSource, paths.runtimeDir, { 
     overwrite: true,
     filter: (src) => {
-      // Excluir brain si estuviera en el runtime source
       return !src.includes('brain');
     }
   });
@@ -128,13 +164,227 @@ async function installCore() {
   console.log("   ℹ️  Brain se ejecutará desde el plugin directamente");
 }
 
+function serviceExists(name) {
+  try {
+    execSync(`sc query ${name}`, { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function removeService(name) {
+  if (!serviceExists(name)) {
+    console.log(`   ℹ️  Servicio ${name} no existe, omitiendo limpieza`);
+    return;
+  }
+
+  console.log(`   🧹 Removiendo servicio existente: ${name}`);
+  
+  const nssm = paths.nssmExe;
+  
+  // Estrategia 1: NSSM si existe
+  if (fs.existsSync(nssm)) {
+    try {
+      console.log(`   🛑 Deteniendo con NSSM...`);
+      execSync(`"${nssm}" stop ${name}`, { stdio: 'ignore', timeout: 10000 });
+      await new Promise(r => setTimeout(r, 3000));
+      
+      console.log(`   🗑️  Removiendo con NSSM...`);
+      execSync(`"${nssm}" remove ${name} confirm`, { stdio: 'ignore', timeout: 10000 });
+      
+      // Verificar eliminación
+      for (let i = 0; i < 10; i++) {
+        if (!serviceExists(name)) {
+          console.log(`   ✅ Servicio eliminado con NSSM`);
+          return;
+        }
+        await new Promise(r => setTimeout(r, 1000));
+      }
+      console.warn(`   ⚠️  NSSM no eliminó el servicio completamente`);
+    } catch (nssmError) {
+      console.warn(`   ⚠️  NSSM falló:`, nssmError.message);
+    }
+  }
+
+  // Estrategia 2: Matar procesos relacionados primero
+  try {
+    console.log(`   💀 Terminando procesos bloom-host.exe...`);
+    execSync('taskkill /F /IM bloom-host.exe /T', { stdio: 'ignore', timeout: 5000 });
+    await new Promise(r => setTimeout(r, 2000));
+  } catch {}
+
+  // Estrategia 3: PowerShell con privilegios elevados
+  try {
+    console.log(`   🛑 Deteniendo con PowerShell...`);
+    execSync(`powershell -Command "Stop-Service -Name '${name}' -Force -ErrorAction SilentlyContinue"`, { 
+      stdio: 'ignore',
+      timeout: 10000 
+    });
+    await new Promise(r => setTimeout(r, 3000));
+  } catch {}
+
+  // Estrategia 4: sc stop
+  try {
+    console.log(`   🛑 Deteniendo con sc...`);
+    execSync(`sc stop ${name}`, { stdio: 'ignore', timeout: 5000 });
+    await new Promise(r => setTimeout(r, 2000));
+  } catch {}
+
+  // Verificar que esté detenido
+  console.log(`   ⏳ Esperando detención completa...`);
+  let stopped = false;
+  for (let i = 0; i < 20; i++) {
+    try {
+      const out = execSync(`sc query ${name}`, { timeout: 3000 }).toString();
+      if (out.includes('STOPPED') || !out.includes('RUNNING')) {
+        console.log(`   ✅ Servicio detenido`);
+        stopped = true;
+        break;
+      }
+    } catch {}
+    await new Promise(r => setTimeout(r, 1000));
+  }
+
+  if (!stopped) {
+    console.warn(`   ⚠️  El servicio no responde, forzando eliminación...`);
+  }
+
+  // Estrategia 5: Eliminar con sc delete
+  try {
+    console.log(`   🗑️  Eliminando servicio con sc delete...`);
+    execSync(`sc delete ${name}`, { stdio: 'pipe', timeout: 5000 });
+    await new Promise(r => setTimeout(r, 3000));
+  } catch (delErr) {
+    console.warn(`   ⚠️  sc delete falló:`, delErr.message);
+  }
+
+  // Verificar eliminación final
+  console.log(`   ⏳ Esperando eliminación completa...`);
+  for (let i = 0; i < 20; i++) {
+    if (!serviceExists(name)) {
+      console.log(`   ✅ Servicio eliminado completamente`);
+      return;
+    }
+    await new Promise(r => setTimeout(r, 1000));
+  }
+
+  // Si llegamos aquí, el servicio sigue existiendo
+  console.warn(`   ⚠️  El servicio aún existe después de todos los intentos`);
+  console.warn(`   💡 Intentando continuar de todas formas...`);
+}
+
+async function installWindowsService() {
+  const binary = paths.hostBinary;
+  const nssm = paths.nssmExe;
+
+  if (!fs.existsSync(binary)) {
+    throw new Error(`Host binary no encontrado: ${binary}`);
+  }
+
+  console.log("🔧 Configurando servicio de Windows con NSSM...");
+
+  await removeService(SERVICE_NAME);
+
+  if (!fs.existsSync(nssm)) {
+    console.warn("   ⚠️  NSSM no encontrado, intentando con sc directo...");
+    await installWindowsServiceDirect();
+    return;
+  }
+
+  // Si el servicio aún existe después de removeService, no intentar crear uno nuevo
+  if (serviceExists(SERVICE_NAME)) {
+    console.warn("   ⚠️  El servicio aún existe y no se pudo eliminar");
+    console.warn("   💡 Intentando reconfigurar el servicio existente...");
+    
+    try {
+      // Intentar reconfigurar en lugar de crear
+      execSync(`"${nssm}" set ${SERVICE_NAME} Application "${binary}"`, { stdio: 'ignore' });
+      execSync(`"${nssm}" set ${SERVICE_NAME} AppParameters "--server --port=${DEFAULT_PORT}"`, { stdio: 'ignore' });
+      execSync(`"${nssm}" set ${SERVICE_NAME} AppDirectory "${paths.nativeDir}"`, { stdio: 'ignore' });
+      
+      console.log(`   🚀 Iniciando servicio reconfigurado: ${SERVICE_NAME}`);
+      execSync(`"${nssm}" start ${SERVICE_NAME}`, { stdio: 'pipe' });
+      console.log("   ✅ Servicio reconfigurado e iniciado");
+      return;
+    } catch (reconfigError) {
+      console.error("   ❌ No se pudo reconfigurar el servicio existente");
+      throw new Error(`El servicio ${SERVICE_NAME} existe y no se puede modificar. Ejecuta manualmente: sc delete ${SERVICE_NAME}`);
+    }
+  }
+
+  console.log(`   ➕ Instalando servicio con NSSM: ${SERVICE_NAME}`);
+  
+  try {
+    execSync(
+      `"${nssm}" install ${SERVICE_NAME} "${binary}" --server --port=${DEFAULT_PORT}`,
+      { stdio: 'pipe' }
+    );
+  } catch (installError) {
+    console.error("   ❌ Error instalando servicio:", installError.message);
+    throw new Error(`No se pudo instalar el servicio: ${installError.message}`);
+  }
+
+  try {
+    execSync(`"${nssm}" set ${SERVICE_NAME} Description "Bloom Nucleus Native Messaging Host"`, { stdio: 'ignore' });
+    execSync(`"${nssm}" set ${SERVICE_NAME} Start SERVICE_AUTO_START`, { stdio: 'ignore' });
+    execSync(`"${nssm}" set ${SERVICE_NAME} AppDirectory "${paths.nativeDir}"`, { stdio: 'ignore' });
+    execSync(`"${nssm}" set ${SERVICE_NAME} AppExit Default Restart`, { stdio: 'ignore' });
+  } catch {}
+
+  console.log(`   🚀 Iniciando servicio: ${SERVICE_NAME}`);
+  try {
+    execSync(`"${nssm}" start ${SERVICE_NAME}`, { stdio: 'pipe' });
+    console.log("   ✅ Servicio de Windows instalado e iniciado con NSSM");
+  } catch (startError) {
+    console.warn("   ⚠️  Servicio instalado pero no pudo iniciarse");
+    console.warn("   📋 Error:", startError.message);
+    
+    try {
+      execSync(`sc start ${SERVICE_NAME}`, { stdio: 'inherit' });
+      console.log("   ✅ Servicio iniciado con sc");
+    } catch {
+      console.warn("   ⚠️  El servicio se iniciará automáticamente en el próximo reinicio");
+    }
+  }
+}
+
+async function installWindowsServiceDirect() {
+  const binary = paths.hostBinary;
+
+  console.log("🔧 Configurando servicio de Windows (modo directo)...");
+
+  const binPath = `"${binary}" --server --port=${DEFAULT_PORT}`;
+
+  console.log(`   ➕ Creando servicio: ${SERVICE_NAME}`);
+  execSync(
+    `sc create ${SERVICE_NAME} binPath= "${binPath}" start= auto DisplayName= "Bloom Nucleus Host"`,
+    { stdio: 'inherit' }
+  );
+
+  console.log(`   🔧 Configurando recuperación automática`);
+  execSync(
+    `sc failure ${SERVICE_NAME} reset= 86400 actions= restart/60000`,
+    { stdio: 'inherit' }
+  );
+
+  console.log(`   🚀 Iniciando servicio: ${SERVICE_NAME}`);
+  try {
+    execSync(`sc start ${SERVICE_NAME}`, { stdio: 'pipe' });
+    console.log("   ✅ Servicio iniciado");
+  } catch (startError) {
+    console.warn("   ⚠️  Error 1053: El binario no responde como servicio Windows");
+    console.warn("   💡 Solución: El servicio requiere NSSM o ser compilado como servicio");
+    console.warn("   ℹ️  El servicio se iniciará automáticamente en el próximo reinicio");
+  }
+}
+
 async function installNativeHost() {
   console.log("📦 Instalando Host Nativo...");
   if (!fs.existsSync(paths.nativeSource)) {
     throw new Error("Native Source no encontrado en: " + paths.nativeSource);
   }
   
-  // Verificar que bloom-host.exe existe
   const hostExe = path.join(paths.nativeSource, 'bloom-host.exe');
   if (!fs.existsSync(hostExe)) {
     throw new Error(`bloom-host.exe no encontrado en: ${paths.nativeSource}`);
@@ -143,8 +393,19 @@ async function installNativeHost() {
   await fs.copy(paths.nativeSource, paths.nativeDir, { overwrite: true });
   console.log("   ✅ Archivos copiados");
   
-  // ✅ Iniciar el host
-  await startNativeHost();
+  if (fs.existsSync(paths.nssmSource)) {
+    const nssmExe = path.join(paths.nssmSource, 'nssm.exe');
+    if (fs.existsSync(nssmExe)) {
+      await fs.copy(nssmExe, paths.nssmExe, { overwrite: true });
+      console.log("   ✅ NSSM copiado");
+    }
+  }
+  
+  if (process.platform === 'win32') {
+    await installWindowsService();
+  } else {
+    await startNativeHost();
+  }
 }
 
 async function startNativeHost() {
@@ -156,7 +417,6 @@ async function startNativeHost() {
     throw new Error(`Host binary no encontrado: ${hostExe}`);
   }
   
-  // Spawn detached para que sobreviva al instalador
   const hostProcess = spawn(hostExe, [], {
     detached: true,
     stdio: 'ignore',
@@ -167,7 +427,6 @@ async function startNativeHost() {
   
   console.log(`   ✅ Host iniciado (PID: ${hostProcess.pid})`);
   
-  // Guardar PID para cleanup futuro
   const config = fs.existsSync(paths.configFile) ? await fs.readJson(paths.configFile) : {};
   config.hostPid = hostProcess.pid;
   await fs.writeJson(paths.configFile, config, { spaces: 2 });
@@ -180,8 +439,6 @@ async function installExtension() {
   }
   await fs.copy(paths.extensionSource, paths.extensionDir, { overwrite: true });
 }
-
-// --- FUNCIONES AUXILIARES DE FASE 2 (EL PUENTE) ---
 
 async function configureBridge() {
   console.log("🔗 Configurando Puente Nativo...");
@@ -229,34 +486,30 @@ function calculateExtensionId(base64Key) {
   }).join('');
 }
 
-// --- FUNCIONES AUXILIARES DE FASE 3 (BRAIN INIT) ---
-
 async function initializeBrainProfile() {
   console.log("🧠 Inicializando Perfil Maestro...");
   
   const python = paths.pythonExe;
   const brainPath = paths.brainSource;
   
-  // ✅ Configurar python310._pth con RUTAS ABSOLUTAS
   const pthFile = path.join(paths.runtimeDir, 'python310._pth');
   const pthContent = [
     '.',
     'python310.zip',
-    path.dirname(brainPath),           // Parent de brain/ (para -m brain)
-    path.join(brainPath, 'libs'),      // brain/libs (dependencias)
+    path.dirname(brainPath),
+    path.join(brainPath, 'libs'),
     'import site'
   ].join('\n');
   
   await fs.writeFile(pthFile, pthContent, 'utf8');
   console.log("   ✅ python310._pth:", pthContent.split('\n').join(', '));
   
-  // ✅ Ejecutar con CWD en runtime (donde está python.exe)
   const command = `"${python}" -m brain --json profile create "Master Worker"`;
 
   try {
     const { stdout } = await execPromise(command, { 
       timeout: 15000,
-      cwd: paths.runtimeDir  // ✅ CWD = donde está python.exe
+      cwd: paths.runtimeDir
     });
     
     console.log("   → Respuesta:", stdout.trim());
@@ -285,7 +538,7 @@ async function initializeBrainProfile() {
 }
 
 // ============================================================================
-// 3. LANZAMIENTO (IGNITION)
+// 4. LANZAMIENTO
 // ============================================================================
 
 ipcMain.handle('brain:launch', async () => {
@@ -299,7 +552,7 @@ ipcMain.handle('brain:launch', async () => {
     console.log("🚀 EJECUTANDO:", cmd);
     
     const output = execSync(cmd, { 
-      cwd: paths.runtimeDir,  // ✅ CWD = runtime
+      cwd: paths.runtimeDir,
       encoding: 'utf8',
       timeout: 10000
     });
@@ -314,7 +567,7 @@ ipcMain.handle('brain:launch', async () => {
 });
 
 // ============================================================================
-// 4. HEARTBEAT CORREGIDO
+// 5. HEARTBEAT
 // ============================================================================
 
 ipcMain.handle('extension:heartbeat', async () => {
@@ -326,7 +579,7 @@ ipcMain.handle('extension:heartbeat', async () => {
       
       client.setTimeout(2000);
       
-      client.connect(5678, '127.0.0.1', () => {
+      client.connect(DEFAULT_PORT, '127.0.0.1', () => {
         client.destroy();
         resolve({ chromeConnected: true });
       });
@@ -346,7 +599,7 @@ ipcMain.handle('extension:heartbeat', async () => {
 });
 
 // ============================================================================
-// 5. HANDLERS DE SISTEMA E INFO
+// 6. HANDLERS DE SISTEMA
 // ============================================================================
 
 ipcMain.handle('system:info', async () => {  
@@ -357,7 +610,7 @@ ipcMain.handle('system:info', async () => {
     paths: {
       hostInstallDir: paths.nativeDir,
       configDir: paths.configDir,
-      brainDir: paths.brainSource, // ✅ Apunta al plugin
+      brainDir: paths.brainSource,
       extensionDir: paths.extensionDir
     }
   };
@@ -365,7 +618,7 @@ ipcMain.handle('system:info', async () => {
 
 ipcMain.handle('preflight-checks', async () => {
   return {
-    hasAdmin: true,
+    hasAdmin: await isElevated(),
     diskSpace: true,
     vcRedistInstalled: await checkVCRedistInstalled()
   };
@@ -408,8 +661,9 @@ async function checkVCRedistInstalled() {
 }
 
 // ============================================================================
-// 6. BOILERPLATE ELECTRON
+// 7. BOILERPLATE ELECTRON
 // ============================================================================
+
 let mainWindow;
 function createWindow() {
   mainWindow = new BrowserWindow({

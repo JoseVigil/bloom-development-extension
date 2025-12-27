@@ -523,9 +523,14 @@
     "clean": "rimraf out installer/native/bin/* src/bridge/bin webview/btip-explorer/build",
     "clean:bridge": "rimraf installer/native/bin/* src/bridge/c++/nlohmann",
     "rebuild": "npm run clean && npm run build",
+    
+    "// === NUEVO: Scripts del Instalador Electron ===": "",
+    "installer:dev": "cd installer/electron-app && npm run dev",
+    "installer:dev-no-admin": "cd installer/electron-app && npm run dev:no-admin",
+    "installer:build": "cd installer/electron-app && npm run build",
+    "installer:check-admin": "cd installer/electron-app && npm run check-admin",
+    
     "package:installer": "npm run build:bridge:all && node installer/scripts/build.js",
-    "dev": "run-admin.bat",
-    "dev:admin": "run-admin.bat",    
     "package:vscode": "vsce package --out ../installer/vscode/bloom-extension.vsix",
     "package:all": "npm run package:vscode && npm run package",
     "test:python-install": "python -m core verify"
