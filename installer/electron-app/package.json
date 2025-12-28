@@ -13,6 +13,7 @@
     "// === DESARROLLO ===": "",
     "dev": "run-admin.bat",
     "dev:no-admin": "run-dev.bat",
+    "dev:launch": "electron . --mode=launch",
     "electron:dev": "electron .",
     "check-admin": "powershell -ExecutionPolicy Bypass -File check-admin.ps1",
     
@@ -64,7 +65,7 @@
       "allowElevation": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Bloom Nucleus",
+      "shortcutName": "Bloom Nucleus Installer",
       "runAfterFinish": true,
       "installerIcon": "assets/bloom.ico",
       "uninstallerIcon": "assets/bloom.ico",
@@ -100,6 +101,11 @@
       {
         "from": "../native/bin/win32",
         "to": "native",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "../native/nssm/win64",
+        "to": "nssm",
         "filter": ["**/*"]
       },
       {
