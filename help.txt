@@ -34,14 +34,52 @@ Brain CLI - Modular system for Bloom
 │   filesystem    File operations and directory analysis              3 cmds                       │
 │   gemini        Gemini AI key management and operations             5 cmds                       │
 │   github        GitHub integration and repository management        9 cmds                       │
-│   health        System health checks and diagnostics                2 cmds                       │
+│   health        System health checks and diagnostics                3 cmds                       │
 │   intent        Intent execution system and context planning       19 cmds                       │
 │   nucleus       Nucleus project management and lifecycle           14 cmds                       │
 │   profile       Chrome profile and AI account management            8 cmds                       │
 │   project       Project lifecycle and scaffolding                   6 cmds                       │
 │                                                                 ──────────                       │
-│                                                                    67 cmds                       │
+│                                                                    68 cmds                       │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+╭───────────────────────────────────────────── HEALTH ─────────────────────────────────────────────╮
+│                                                                                                  │
+│  FULL                                                                                            │
+│                                                                                                  │
+│  FULL STACK - Verify complete stack health (host, API, extension, Brain, onboarding)             │
+│                                                                                                  │
+│    python -m brain [GLOBAL_OPTIONS] health full-stack [OPTIONS]                                  │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -t                   Timeout per check in seconds                                           │
+│      --json               Output raw JSON                                                        │
+│      -v                   Detailed logging                                                       │
+│                                                                                                  │
+│  ONBOARDING                                                                                      │
+│                                                                                                  │
+│  ONBOARDING STATUS - Verify onboarding completion status (GitHub, Gemini, Nucleus, Projects)     │
+│                                                                                                  │
+│    python -m brain [GLOBAL_OPTIONS] health onboarding-status [OPTIONS]                           │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -r                   Force re-check, ignore cache                                           │
+│      --json               Output raw JSON                                                        │
+│      -v                   Detailed logging of each check                                         │
+│                                                                                                  │
+│  WEBSOCKET                                                                                       │
+│                                                                                                  │
+│  WEBSOCKET STATUS - Verify WebSocket server status on localhost:4124                             │
+│                                                                                                  │
+│    python -m brain [GLOBAL_OPTIONS] health websocket-status [OPTIONS]                            │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -t                   Connection timeout in seconds                                          │
+│      --test-sub           Test event subscription capability                                     │
+│      --json               Output raw JSON                                                        │
+│      -v                   Detailed connection logging                                            │
+│                                                                                                  │
+╰────────────────────────────── System health checks and diagnostics ──────────────────────────────╯
 
 ╭──────────────────────────────────────────── NUCLEUS ─────────────────────────────────────────────╮
 │                                                                                                  │
@@ -626,32 +664,6 @@ Brain CLI - Modular system for Bloom
 │      <PROFILE>            Profile name to validate                                               │
 │                                                                                                  │
 ╰──────────────────────────── Gemini AI key management and operations ─────────────────────────────╯
-
-╭───────────────────────────────────────────── HEALTH ─────────────────────────────────────────────╮
-│                                                                                                  │
-│  FULL                                                                                            │
-│                                                                                                  │
-│  FULL STACK - Verify complete stack health (host, API, extension, Brain, onboarding)             │
-│                                                                                                  │
-│    python -m brain [GLOBAL_OPTIONS] health full-stack [OPTIONS]                                  │
-│                                                                                                  │
-│    Opciones:                                                                                     │
-│      -t                   Timeout per check in seconds                                           │
-│      --json               Output raw JSON                                                        │
-│      -v                   Detailed logging                                                       │
-│                                                                                                  │
-│  ONBOARDING                                                                                      │
-│                                                                                                  │
-│  ONBOARDING STATUS - Verify onboarding completion status (GitHub, Gemini, Nucleus, Projects)     │
-│                                                                                                  │
-│    python -m brain [GLOBAL_OPTIONS] health onboarding-status [OPTIONS]                           │
-│                                                                                                  │
-│    Opciones:                                                                                     │
-│      -r                   Force re-check, ignore cache                                           │
-│      --json               Output raw JSON                                                        │
-│      -v                   Detailed logging of each check                                         │
-│                                                                                                  │
-╰────────────────────────────── System health checks and diagnostics ──────────────────────────────╯
 
 ╭──────────────────────────────────────────── PROFILE ─────────────────────────────────────────────╮
 │                                                                                                  │

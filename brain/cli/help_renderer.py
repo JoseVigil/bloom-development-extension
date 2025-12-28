@@ -45,7 +45,7 @@ def _extract_structure(registry: CommandRegistry) -> HelpStructure:
             commands_by_category[meta.category].append(cmd)
     
     return HelpStructure(
-        categories=sorted(categories, key=lambda c: c.value),
+        categories=sorted(categories, key=lambda c: c.category_name),
         commands_by_category=dict(commands_by_category),
         root_commands=root_commands
     )
@@ -167,7 +167,7 @@ def _render_command_detail(cmd: BaseCommand, category: CommandCategory) -> List[
     lines.append(Text())  # Empty line
     
     # 2. Full command syntax with GLOBAL OPTIONS placement
-    syntax_parts = ["python -m brain", "[GLOBAL_OPTIONS]", category.value, meta.name]
+    syntax_parts = ["python -m brain", "[GLOBAL_OPTIONS]", category.category_name, meta.name]
     
     # Separate arguments and options
     arguments = [p for p in params if p.is_argument]
@@ -233,8 +233,8 @@ def _render_category_panel(console: Console, category: CommandCategory, commands
     content = Text("\n").join(content_lines)
     
     # Create panel
-    title = f"[bold]{category.value.upper()}[/bold]"
-    subtitle = category.description
+    title = f"[bold]{category.category_name.upper()}[/bold]"
+    subtitle = category.category_description
     
     console.print(Panel(
         content,
@@ -388,7 +388,12 @@ def _render_categories(console: Console, categories: List[CommandCategory], stru
         count = len(structure.commands_by_category.get(cat, []))
         total_commands += count
         
-        table.add_row(cat.value, cat.description, f"{count} cmd{'s' if count != 1 else ''}")
+        # FIX: Usar .category_name y .category_description en lugar de .value y .description
+        table.add_row(
+            cat.category_name,  # ✅ FIX: Cambio de cat.value a cat.category_name
+            cat.category_description,  # ✅ FIX: Cambio de cat.description a cat.category_description
+            f"{count} cmd{'s' if count != 1 else ''}"
+        )
     
     # Fila de total (sin líneas extras arriba/abajo)
     table.add_row("", "", f"{'─' * 10}")
@@ -444,7 +449,6 @@ def render_help(registry: CommandRegistry):
         CommandCategory.GITHUB,
         CommandCategory.PROJECT,
         CommandCategory.INTENT,
-        CommandCategory.AI,
     ]
     
     # Render each category in priority order
