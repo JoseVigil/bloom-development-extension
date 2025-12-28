@@ -191,6 +191,7 @@ bloom-development-extension/
 │   │   ├── assets/
 │   │   │   ├── bloom.ico
 │   │   │   └── installer.gif
+│   │   ├── check-admin.ps1
 │   │   ├── config-loader.js
 │   │   ├── entitlements.plist
 │   │   ├── forge.config.js
@@ -209,7 +210,9 @@ bloom-development-extension/
 │   │   │   ├── cleanup.ps1
 │   │   │   └── hkcu.ps1
 │   │   ├── run-admin.bat
-│   │   ├── run-make-admin.bat
+│   │   ├── run-dev.bat
+│   │   ├── run-elevated.bat
+│   │   ├── run-elevated.js
 │   │   ├── src/
 │   │   │   ├── event_listeners.js
 │   │   │   ├── extension_installer.js
@@ -228,8 +231,13 @@ bloom-development-extension/
 │   │   │   └── win32/
 │   │   │       ├── bloom-host.exe
 │   │   │       └── libwinpthread-1.dll
-│   │   └── host/
-│   │       └── com.bloom.nucleus.bridge.json
+│   │   ├── host/
+│   │   │   └── com.bloom.nucleus.bridge.json
+│   │   └── nssm/
+│   │       ├── win32/
+│   │       │   └── nssm.exe
+│   │       └── win64/
+│   │           └── nssm.exe
 │   ├── package-lock.json
 │   ├── package.json
 │   ├── resources/

@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const { exec, execSync, spawn } = require('child_process');
 const util = require('util');
 const execPromise = util.promisify(exec);
+const HealthCheckManager = require('./src/healthCheck');
 
 // ============================================================================
 // 1. CONFIGURACIÓN DE RUTAS (USER SCOPE / %LOCALAPPDATA%)
@@ -660,6 +661,7 @@ async function checkVCRedistInstalled() {
   }
 }
 
+
 // ============================================================================
 // 7. BOILERPLATE ELECTRON
 // ============================================================================
@@ -686,3 +688,4 @@ app.whenReady().then(createWindow);
 app.on('window-all-closed', () => { 
   if (process.platform !== 'darwin') app.quit(); 
 });
+
