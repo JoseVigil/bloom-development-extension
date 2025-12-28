@@ -17,6 +17,9 @@ import { explorerRoutes } from './routes/explorer.routes';
 // Import middleware
 import { errorHandler } from './middleware/errorHandler';
 
+//Import Health
+import { healthRoutes } from './routes/health.routes';
+
 export interface BloomApiServerConfig {
   context: vscode.ExtensionContext;
   wsManager: WebSocketManager;
@@ -30,7 +33,7 @@ export interface BloomApiServerConfig {
  */
 export async function createAPIServer(config: BloomApiServerConfig): Promise<FastifyInstance> {
   const port = config.port || 48215;
-  
+
   const fastify = Fastify({
     logger: {
       level: 'info',
@@ -51,7 +54,7 @@ export async function createAPIServer(config: BloomApiServerConfig): Promise<Fas
   await fastify.register(cors, {
     origin: [
       'http://localhost:5173',
-      'http://localhost:3000', 
+      'http://localhost:3000',
       /^vscode-webview:\/\/.*/
     ],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -73,6 +76,7 @@ export async function createAPIServer(config: BloomApiServerConfig): Promise<Fas
         { url: `http://localhost:${port}`, description: 'Local Development' }
       ],
       tags: [
+        { name: 'health', description: 'System health check endpoints - Brain CLI integration' }, // ← AGREGAR PRIMERO
         { name: 'nucleus', description: 'Nucleus management operations' },
         { name: 'intent', description: 'Intent lifecycle and workflow' },
         { name: 'project', description: 'Project detection and linking' },
@@ -133,6 +137,7 @@ export async function createAPIServer(config: BloomApiServerConfig): Promise<Fas
   }));
 
   // Register all route modules
+  await fastify.register(healthRoutes, { prefix: '/api/v1/health' }); 
   await fastify.register(nucleusRoutes, { prefix: '/api/v1/nucleus' });
   await fastify.register(intentRoutes, { prefix: '/api/v1/intent' });
   await fastify.register(projectRoutes, { prefix: '/api/v1/project' });
@@ -152,7 +157,7 @@ export async function createAPIServer(config: BloomApiServerConfig): Promise<Fas
 export async function startAPIServer(config: BloomApiServerConfig): Promise<FastifyInstance> {
   const port = config.port || 48215;
   const server = await createAPIServer(config);
-  
+
   try {
     await server.listen({ port, host: '127.0.0.1' });
     config.outputChannel.appendLine(`[Bloom API] Server started on http://localhost:${port}`);

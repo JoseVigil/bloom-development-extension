@@ -437,6 +437,7 @@ def render_help(registry: CommandRegistry):
     
     # Priority order for categories
     priority_order = [
+        CommandCategory.HEALTH,
         CommandCategory.NUCLEUS,
         CommandCategory.CONTEXT,
         CommandCategory.FILESYSTEM,
