@@ -5,26 +5,70 @@ const os = require('os');
 const { exec } = require('child_process');
 const { paths } = require('../config/paths');
 
-/**
- * Crea el launcher y los accesos directos
- */
 async function createLauncherShortcuts() {
   try {
-
-    emitProgress?.(mainWindow, 'launcher', 'Creando accesos directos');
-
     console.log('🚀 Creating Bloom Launcher...');
 
     const launcherPath = paths.launcherExe;
+    const sourceExe = app.getPath('exe');
+    const sourceDir = path.dirname(sourceExe);
 
-    // Crear directorio de binarios
     await fs.ensureDir(paths.binDir);
 
-    // Copiar el ejecutable actual como launcher
-    await fs.copy(app.getPath('exe'), launcherPath, { overwrite: true });
+    // Copiar ejecutable
+    await fs.copy(sourceExe, launcherPath, { overwrite: true });
     console.log(` ✅ Launcher created at: ${launcherPath}`);
 
-    // Crear acceso directo en el escritorio
+    // Copiar DLLs necesarias
+    const requiredDlls = [
+      'ffmpeg.dll',
+      'libGLESv2.dll',
+      'libEGL.dll',
+      'vk_swiftshader.dll',
+      'vulkan-1.dll',
+      'd3dcompiler_47.dll',
+      'chrome_100_percent.pak',
+      'chrome_200_percent.pak',
+      'resources.pak',
+      'v8_context_snapshot.bin',
+      'snapshot_blob.bin',
+      'icudtl.dat'
+    ];
+
+    console.log(' 📦 Copying Electron dependencies...');
+    let copiedCount = 0;
+
+    for (const dll of requiredDlls) {
+      const sourcePath = path.join(sourceDir, dll);
+      const destPath = path.join(paths.binDir, dll);
+
+      if (await fs.pathExists(sourcePath)) {
+        await fs.copy(sourcePath, destPath, { overwrite: true });
+        copiedCount++;
+      }
+    }
+
+    console.log(` 📊 Copied: ${copiedCount} files`);
+
+    // Copiar carpeta locales
+    const localesSource = path.join(sourceDir, 'locales');
+    const localesDest = path.join(paths.binDir, 'locales');
+    
+    if (await fs.pathExists(localesSource)) {
+      await fs.copy(localesSource, localesDest, { overwrite: true });
+      console.log(' ✅ Locales folder copied');
+    }
+
+    // Copiar carpeta resources
+    const resourcesSource = path.join(sourceDir, 'resources');
+    const resourcesDest = path.join(paths.binDir, 'resources');
+    
+    if (await fs.pathExists(resourcesSource)) {
+      await fs.copy(resourcesSource, resourcesDest, { overwrite: true });
+      console.log(' ✅ Resources folder copied');
+    }
+
+    // Crear shortcuts
     await createShortcut(
       path.join(app.getPath('desktop'), 'Bloom Nucleus.lnk'),
       launcherPath,
@@ -33,7 +77,6 @@ async function createLauncherShortcuts() {
     );
     console.log(' ✅ Desktop shortcut created');
 
-    // Crear acceso directo en el menú de inicio
     const startMenuPath = path.join(
       app.getPath('appData'),
       'Microsoft',
@@ -56,7 +99,8 @@ async function createLauncherShortcuts() {
     
     return {
       success: true,
-      launcherPath
+      launcherPath,
+      filescopied: copiedCount
     };
   } catch (error) {
     console.error('❌ Error creating launcher shortcuts:', error);
@@ -67,9 +111,6 @@ async function createLauncherShortcuts() {
   }
 }
 
-/**
- * Crea un acceso directo usando VBScript
- */
 async function createShortcut(linkPath, targetPath, args, description) {
   const vbsScript = `
 Set oWS = WScript.CreateObject("WScript.Shell")

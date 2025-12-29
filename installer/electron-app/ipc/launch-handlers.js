@@ -93,9 +93,14 @@ function setupLaunchHandlers() {
     
     return new Promise((resolve, reject) => {
       exec(`"${launcherPath}" ${args}`, (error, stdout, stderr) => {
+        // LOG EL ERROR REAL
+        console.log('STDOUT:', stdout);
+        console.log('STDERR:', stderr);
+        
         if (error) {
           console.error('❌ Error launching BloomLauncher:', error);
-          reject(error);
+          console.error('Exit code:', error.code);
+          reject(new Error(`Launcher failed: ${stderr || error.message}`));
         } else {
           console.log('✅ BloomLauncher opened successfully');
           resolve({ success: true });

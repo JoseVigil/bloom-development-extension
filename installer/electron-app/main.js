@@ -28,19 +28,16 @@ app.whenReady().then(async () => {
   // Crear ventana principal
   mainWindow = createMainWindow(IS_LAUNCH_MODE);
 
-  // Configurar handlers IPC compartidos
+  // ✅ CRÍTICO: Configurar handlers IPC - AMBOS MODOS SIEMPRE
   setupSharedHandlers();
+  setupInstallHandlers();
+  setupLaunchHandlers(); // ⬅️ FIX CRÍTICO: Siempre registrado
 
   if (IS_LAUNCH_MODE) {
-    // Modo Launch: configurar handlers y ejecutar dashboard
-    setupLaunchHandlers();
-    
+    // Modo Launch: ejecutar dashboard
     mainWindow.webContents.once('did-finish-load', () => {
       runLaunchMode(mainWindow);
     });
-  } else {
-    // Modo Install: configurar handlers
-    setupInstallHandlers();
   }
 
   app.on('activate', () => {

@@ -37,7 +37,7 @@ contextBridge.exposeInMainWorld('api', {
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
   openUrl: (url) => ipcRenderer.invoke('open-url', url),
 
-  // ✅ AGREGAR ESTO:
+  // ✅ CRÍTICO: Handler para abrir Bloom Launcher
   launchBloomLauncher: (onboarding = false) => 
     ipcRenderer.invoke('launcher:open', { onboarding }),
 
