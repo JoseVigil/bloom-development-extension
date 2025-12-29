@@ -10,6 +10,9 @@ const { paths } = require('../config/paths');
  */
 async function createLauncherShortcuts() {
   try {
+
+    emitProgress?.(mainWindow, 'launcher', 'Creando accesos directos');
+
     console.log('🚀 Creating Bloom Launcher...');
 
     const launcherPath = paths.launcherExe;

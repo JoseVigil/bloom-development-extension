@@ -11,7 +11,12 @@ function execBrainCommand(args, options = {}) {
 
     const child = spawn(pythonPath, ['-m', 'brain', ...args], {
       cwd: brainPath,
-      env: { ...process.env, PYTHONPATH: brainPath },
+      env: { 
+        ...process.env, 
+        PYTHONPATH: brainPath,
+        BLOOM_EXTENSION_PATH: paths.extensionBrainDir,
+        PYTHONNOUSERSITE: '1'
+      },
       ...options
     });
 

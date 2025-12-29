@@ -5,6 +5,39 @@ const { installCore, initializeBrainProfile } = require('./core-installer');
 const { installNativeHost } = require('./native-host-installer');
 const { installExtension, configureBridge } = require('./extension-installer');
 const { createLauncherShortcuts } = require('./launcher-creator');
+const { BrowserWindow } = require('electron');
+
+// LÍNEA 25: AGREGAR función helper
+function emitProgress(mainWindow, stepKey, detail = '') {
+  const step = INSTALLATION_STEPS.find(s => s.key === stepKey);
+  if (!step) return;
+
+  const stepIndex = INSTALLATION_STEPS.indexOf(step);
+  const totalSteps = INSTALLATION_STEPS.length;
+
+  mainWindow?.webContents.send('installation-progress', {
+    step: stepIndex + 1,
+    total: totalSteps,
+    percentage: step.percentage,
+    message: step.message,
+    detail: detail || ''
+  });
+
+  console.log(`[${step.percentage}%] ${step.message}${detail ? ' - ' + detail : ''}`);
+}
+
+// LÍNEA 50: AGREGAR map de pasos
+const INSTALLATION_STEPS = [
+  { key: 'cleanup', percentage: 0, message: '🧹 Limpiando instalación anterior...' },
+  { key: 'directories', percentage: 10, message: '📁 Creando estructura de directorios...' },
+  { key: 'core', percentage: 25, message: '🧠 Instalando motor Brain + Python runtime...' },
+  { key: 'native', percentage: 50, message: '🔧 Configurando Native Host como servicio...' },
+  { key: 'extension', percentage: 65, message: '🧩 Desplegando extensión Chrome...' },
+  { key: 'bridge', percentage: 75, message: '🔗 Registrando Native Messaging Bridge...' },
+  { key: 'profile', percentage: 85, message: '👤 Creando perfil Master Worker...' },
+  { key: 'launcher', percentage: 95, message: '🚀 Generando launcher y accesos directos...' },
+  { key: 'complete', percentage: 100, message: '✅ ¡Instalación completada exitosamente!' }
+];
 
 /**
  * Crea la estructura de directorios necesaria
@@ -155,7 +188,7 @@ async function cleanNativeDir() {
 /**
  * Ejecuta la instalación completa
  */
-async function runFullInstallation() {
+async function runFullInstallation(mainWindow = null) {
   // Verificar privilegios de administrador en Windows
   if (process.platform === 'win32' && !(await isElevated())) {
     console.log('⚠️ Admin privileges required for service installation.');
@@ -172,26 +205,37 @@ async function runFullInstallation() {
 
   try {
     // PASO 1: Limpieza agresiva de procesos (mata el servicio/proceso)
+    emitProgress(mainWindow, 'cleanup', 'Deteniendo servicios anteriores');
     await cleanupProcesses();
     
     // PASO 2: Limpiar directorio native/ mientras los procesos están muertos
+    emitProgress(mainWindow, 'cleanup', 'Limpiando directorio native');
     await cleanNativeDir();
     
     // PASO 3: Crear directorios base
+    emitProgress(mainWindow, 'directories', 'Creando en %LOCALAPPDATA%');
     await createDirectories();
     
     // PASO 4: Instalar core
+    emitProgress(mainWindow, 'core', 'Copiando 127 archivos...');
     await installCore();
     
     // PASO 5: Instalar Native Host (copia archivos y crea servicio)
+    emitProgress(mainWindow, 'native', 'Configurando servicio');
     await installNativeHost();
     
     // PASO 8: Resto de instalación
+    emitProgress(mainWindow, 'extension', 'Desplegando extensión');
     await installExtension();
+    emitProgress(mainWindow, 'bridge', 'Registrando bridge');
     const extensionId = await configureBridge();
+    emitProgress(mainWindow, 'profile', 'Creando perfil');
     const profileId = await initializeBrainProfile();
     
+    emitProgress(mainWindow, 'launcher', 'Generando launcher');
     const launcherResult = await createLauncherShortcuts();
+
+    emitProgress(mainWindow, 'complete');
 
     console.log('\n=== DEPLOYMENT COMPLETED SUCCESSFULLY ===\n');
 

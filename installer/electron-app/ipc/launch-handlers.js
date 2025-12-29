@@ -76,6 +76,35 @@ function setupLaunchHandlers() {
       }
     };
   });
+
+  // Handler para abrir BloomLauncher (onboarding)
+  const { exec } = require('child_process');
+
+  ipcMain.handle('launcher:open', async (event, { onboarding = false }) => {
+    const launcherPath = paths.launcherExe;
+    
+    console.log(`🚀 Opening launcher: ${launcherPath}`);
+    
+    if (!fs.existsSync(launcherPath)) {
+      throw new Error('BloomLauncher.exe not found. Path: ' + launcherPath);
+    }
+
+    const args = onboarding ? '--mode=launch --onboarding' : '--mode=launch';
+    
+    return new Promise((resolve, reject) => {
+      exec(`"${launcherPath}" ${args}`, (error, stdout, stderr) => {
+        if (error) {
+          console.error('❌ Error launching BloomLauncher:', error);
+          reject(error);
+        } else {
+          console.log('✅ BloomLauncher opened successfully');
+          resolve({ success: true });
+        }
+      });
+    });
+  });
+
+  console.log('✅ Launch Mode IPC handlers configured');
 }
 
 module.exports = { setupLaunchHandlers };

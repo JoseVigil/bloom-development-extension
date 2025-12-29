@@ -136,74 +136,34 @@ async function removeService(name) {
   // PASO 4: Detener con PowerShell
   try {
     console.log(` 🛑 Stopping with PowerShell...`);
-    execSync(`powershell -Command "Stop-Service -Name '${name}' -Force -ErrorAction SilentlyContinue"`, {
-      stdio: 'ignore',
-      timeout: 10000
-    });
+    const psStop = `Stop-Service -Name "${name}" -Force -ErrorAction SilentlyContinue`;
+    execSync(`powershell -Command "${psStop}"`, { stdio: 'pipe', timeout: 10000 });
     await new Promise(r => setTimeout(r, 3000));
   } catch {}
 
-  // PASO 5: Detener con sc
+  // PASO 5: Eliminar con SC
   try {
-    console.log(` 🛑 Stopping with sc...`);
-    execSync(`sc stop ${name}`, { stdio: 'ignore', timeout: 5000 });
-    await new Promise(r => setTimeout(r, 2000));
+    console.log(` 🗑️ Removing with SC...`);
+    execSync(`sc delete ${name}`, { stdio: 'pipe', timeout: 10000 });
+    await new Promise(r => setTimeout(r, 3000));
   } catch {}
 
-  // PASO 6: Esperar detención completa
-  console.log(` ⏳ Waiting for complete stop...`);
-  let stopped = false;
-  for (let i = 0; i < 20; i++) {
-    try {
-      const out = execSync(`sc query ${name}`, { timeout: 3000 }).toString();
-      if (out.includes('STOPPED') || !out.includes('RUNNING')) {
-        console.log(` ✅ Service stopped`);
-        stopped = true;
-        break;
-      }
-    } catch {}
-    await new Promise(r => setTimeout(r, 1000));
+  // PASO 6: Verificación final
+  if (serviceExists(name)) {
+    console.error(` ❌ Service ${name} couldn't be removed completely`);
+    throw new Error(`Failed to remove service ${name}. Manual intervention required: sc delete ${name}`);
   }
 
-  if (!stopped) {
-    console.warn(` ⚠️ Service not responding, forcing deletion...`);
-  }
-
-  // PASO 7: Matar procesos de nuevo
-  await killAllBloomProcesses();
-
-  // PASO 8: Eliminar servicio
-  try {
-    console.log(` 🗑️ Deleting service with sc delete...`);
-    execSync(`sc delete ${name}`, { stdio: 'pipe', timeout: 5000 });
-    await new Promise(r => setTimeout(r, 3000));
-  } catch (delErr) {
-    console.warn(` ⚠️ sc delete failed:`, delErr.message);
-  }
-
-  // PASO 9: Verificar eliminación completa
-  console.log(` ⏳ Waiting for complete deletion...`);
-  for (let i = 0; i < 20; i++) {
-    if (!serviceExists(name)) {
-      console.log(` ✅ Service completely removed`);
-      break;
-    }
-    await new Promise(r => setTimeout(r, 1000));
-  }
-
-  // PASO 10: Matar procesos una última vez
-  await killAllBloomProcesses();
-  
-  // PASO 11: CRÍTICO - Esperar que los archivos se liberen
-  await waitForFilesUnlocked(30);
-
-  console.log(`✅ SERVICE REMOVAL COMPLETED\n`);
+  console.log(` ✅ Service ${name} removed successfully`);
+  await waitForFilesUnlocked(20);
 }
 
 /**
- * Instala el servicio Windows con NSSM
+ * Instala el servicio Windows (preferentemente con NSSM)
  */
 async function installWindowsService() {
+  if (process.platform !== 'win32') return;
+
   const binary = paths.hostBinary;
   const nssm = paths.nssmExe;
 
