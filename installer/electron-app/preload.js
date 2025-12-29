@@ -37,6 +37,10 @@ contextBridge.exposeInMainWorld('api', {
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
   openUrl: (url) => ipcRenderer.invoke('open-url', url),
 
+  // ✅ AGREGAR ESTO:
+  launchBloomLauncher: (onboarding = false) => 
+    ipcRenderer.invoke('launcher:open', { onboarding }),
+
   // ==========================================
   // EVENT LISTENERS
   // ==========================================

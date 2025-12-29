@@ -19,7 +19,7 @@ function isAllowedUrl(url) {
 function createMainWindow(isLaunchMode) {
   const windowConfig = {
     width: isLaunchMode ? 1400 : 900,
-    height: isLaunchMode ? 900 : 600,
+    height: isLaunchMode ? 900 : 800,  // ⬅️ 600 → 800 (+200px)
     minWidth: isLaunchMode ? 1000 : 800,
     minHeight: isLaunchMode ? 600 : 500,
     backgroundColor: '#1a1a1a',

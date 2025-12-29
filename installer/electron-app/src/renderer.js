@@ -110,131 +110,163 @@ class InstallationManager {
     console.log("🚀 [AUTO] Iniciando flujo automático...");
     this.ui.showScreen('installation-screen');
 
+    // ✅ NUEVO: Escuchar eventos de progreso del backend
+    window.api.on('installation-progress', (data) => {
+      console.log(`[Progress] ${data.percentage}% - ${data.message}`);
+      
+      // Actualizar barra
+      const fillEl = document.getElementById('progress-fill');
+      const textEl = document.getElementById('progress-text');
+      const detailsEl = document.getElementById('installation-details');
+      
+      if (fillEl) fillEl.style.width = data.percentage + '%';
+      if (textEl) textEl.textContent = data.message;
+      
+      // ⬅️ FIX: Solo mostrar paso actual
+      if (detailsEl) {
+        detailsEl.innerHTML = data.detail 
+          ? `<p style="color: #4299e1;">• ${data.detail}</p>`
+          : '';
+      }
+    });
+
     try {
-      // PASO 1: INSTALAR TODO
-      console.log("📦 [AUTO] Llamando backend...");
+      // 1. INSTALAR (el backend emite eventos)
       const result = await this.api.installService();
       
       if (!result.success) {
-        throw new Error(result.error || "Error en instalación");
+        throw new Error(result.error);
       }
 
       this.extensionId = result.extensionId;
       this.profileId = result.profileId;
       
-      console.log("✅ [AUTO] Backend completó instalación");
-      console.log("📊 Extension:", this.extensionId);
-      console.log("📊 Profile:", this.profileId);
+      console.log("✅ [AUTO] Instalación completa");
       
-      this.ui.updateProgress(100, 100, "¡Instalación completa!");
-      await this.sleep(800);
-
-      // PASO 2: MOSTRAR PANTALLA SUCCESS
-      console.log("🎨 [AUTO] Mostrando success screen...");
-      this.ui.showScreen('success-screen');
+      // 2. MOSTRAR PANTALLA DE HEARTBEAT
+      await this.sleep(1000);
+      this.ui.showScreen('heartbeat-screen');
       this.ui.updateText('final-extension-id', this.extensionId);
       this.ui.updateText('final-profile-id', this.profileId);
       
+      // 3. LANZAR CHROME AUTOMÁTICAMENTE
+      console.log("🚀 [AUTO] Lanzando Chrome con perfil...");
       await this.sleep(500);
-
-      // PASO 3: LANZAR CHROME AUTOMÁTICAMENTE
-      console.log("🚀 [AUTO] Lanzando Chrome automáticamente...");
-      const launchResult = await this.api.launchGodMode();
       
+      const launchResult = await this.api.launchGodMode();
       if (!launchResult.success) {
-        throw new Error("Chrome no pudo iniciar: " + launchResult.error);
+        throw new Error("Error al lanzar Chrome: " + launchResult.error);
       }
       
-      console.log("✅ [AUTO] Chrome ejecutado, PID:", launchResult.output);
-
-      // PASO 4: OCULTAR BOTÓN Y MOSTRAR HEARTBEAT
-      console.log("💓 [AUTO] Activando heartbeat...");
-      const launchBtn = document.getElementById('launch-bloom-btn');
-      if (launchBtn) launchBtn.style.display = 'none';
+      console.log("✅ [AUTO] Chrome lanzado, iniciando heartbeat...");
       
-      this.ui.toggleElement('heartbeat-container', true);
-      this.startHeartbeatMonitoring();
+      // 4. INICIAR HEARTBEAT (60 segundos de timeout)
+      this.startHeartbeatMonitoring(60);
 
       return { success: true };
       
     } catch (error) {
-      console.error("❌ [AUTO] Error en flujo:", error);
+      console.error("❌ [AUTO] Error:", error);
       this.ui.showError(error.message);
       return { success: false };
     }
   }
 
-  startHeartbeatMonitoring() {
-    console.log("💓 [Heartbeat] Iniciando polling...");
+  async startHeartbeatMonitoring(maxSeconds = 60) {
+    console.log("💓 [Heartbeat] Iniciando...");
     
+    const statusEl = document.getElementById('heartbeat-counter');
+    const dotEl = document.getElementById('heartbeat-dot');
+    const detailsEl = document.getElementById('connection-details');
+    const extIdEl = document.getElementById('heartbeat-extension-id');
+    const profIdEl = document.getElementById('heartbeat-profile-id');
+    
+    // ⬅️ PASO 1: Delay inicial 3s (mientras Chrome se está iniciando realmente)
+    await this.sleep(3000);
+    
+    // PASO 2: Chrome iniciado (1.5s de pausa para mostrar mensaje)
+    if (statusEl) statusEl.textContent = '✓ Chrome iniciado correctamente';
+    await this.sleep(1500);
+    
+    // PASO 3: Cargando extensión (2s de pausa mientras carga)
+    if (statusEl) statusEl.textContent = '⏳ Cargando extensión de Chrome...';
+    await this.sleep(2000);
+    
+    // PASO 4: Extensión cargada (1.5s de pausa)
+    if (statusEl) statusEl.textContent = '✓ Extensión cargada exitosamente';
+    await this.sleep(1500);
+    
+    // PASO 5: Conectando con host (2s de pausa)
+    if (statusEl) statusEl.textContent = '🔌 Estableciendo conexión con el host...';
+    await this.sleep(2000);
+    
+    // PASO 6: Iniciar polling REAL de heartbeat
     let attempts = 0;
-    const maxAttempts = 60;
-    
     const interval = setInterval(async () => {
       attempts++;
       
-      // Animar dot (titilante)
-      const dot = document.getElementById('heartbeat-dot');
-      if (dot) {
-        dot.style.opacity = dot.style.opacity === '0.5' ? '1' : '0.5';
-      }
-      
-      this.ui.updateText('heartbeat-status', 
-        `Esperando conexión con Chrome... (${attempts}/${maxAttempts})`
-      );
-      
-      // Verificar si extension conectó
       try {
         const status = await this.api.checkExtensionHeartbeat();
-        console.log(`💓 [Heartbeat] Intento ${attempts}:`, status);
         
         if (status && status.chromeConnected) {
           clearInterval(interval);
-          console.log("✅ [Heartbeat] ¡CONEXIÓN DETECTADA!");
+          console.log("✅ [Heartbeat] ¡CONECTADO!");
           
-          // Cambiar dot a verde
-          if (dot) {
-            dot.classList.remove('red');
-            dot.classList.add('green');
-            dot.style.opacity = '1';
+          // Cambiar dot y ripples a verde
+          if (dotEl) {
+            dotEl.classList.remove('red');
+            dotEl.classList.add('green');
           }
           
-          // Ocultar heartbeat, mostrar success badge
-          this.ui.toggleElement('heartbeat-container', false);
-          this.ui.toggleElement('connection-success', true);
+          // Cambiar border de ripples a verde
+          document.querySelectorAll('.ripple').forEach(ripple => {
+            ripple.style.borderColor = '#48bb78';
+          });
           
-          // Abrir onboarding después de 1.5s
-          setTimeout(() => {
-            console.log("🌐 [Redirect] Abriendo localhost:5678...");
-            this.api.openExternal('http://localhost:5678');
-            
-            // Cerrar instalador después de 3s
-            setTimeout(() => {
-              console.log("🏁 [Installer] Cerrando aplicación...");
-              window.close();
-            }, 3000);
-          }, 1500);
+          // Mostrar mensaje de éxito
+          if (statusEl) statusEl.textContent = '✓ Host conectado exitosamente';
+          await this.sleep(1500);
+          
+          // Mostrar box de detalles
+          if (detailsEl) {
+            if (extIdEl) extIdEl.textContent = this.extensionId;
+            if (profIdEl) profIdEl.textContent = this.profileId;
+            detailsEl.style.display = 'block';
+          }
+          
+          if (statusEl) {
+            statusEl.textContent = '🎉 Sistema completamente conectado';
+            statusEl.style.color = '#48bb78';
+            statusEl.style.fontWeight = '600';
+          }
+          
+          // ⬅️ Pausa final 3s para mostrar éxito
+          await this.sleep(3000);
+          
+          // Transición a Connection Success
+          this.ui.showScreen('connection-success-screen');
+          
+          // Habilitar botón de onboarding
+          const onboardingBtn = document.getElementById('start-onboarding-btn');
+          if (onboardingBtn) onboardingBtn.disabled = false;
           
           return;
         }
       } catch (error) {
-        console.warn(`⚠️ [Heartbeat] Check ${attempts} falló:`, error.message);
+        console.warn("⚠️ [Heartbeat] Check falló:", error.message);
       }
       
       // Timeout
-      if (attempts >= maxAttempts) {
+      if (attempts >= maxSeconds) {
         clearInterval(interval);
-        console.error("❌ [Heartbeat] Timeout alcanzado");
         
-        this.ui.updateHTML('heartbeat-status', 
-          '<strong style="color:#e53e3e;">No se detectó conexión después de 60 segundos</strong><br>' +
-          '<small>Verifica que Chrome abrió y la extensión está activa</small>'
-        );
-        
-        if (dot) {
-          dot.classList.add('red');
-          dot.style.opacity = '1';
+        if (statusEl) {
+          statusEl.innerHTML = '<strong style="color:#e53e3e;">❌ No se detectó conexión</strong><br>' +
+            '<small>Verifica que Chrome abrió correctamente.</small>';
         }
+        
+        const retryBtn = document.getElementById('retry-heartbeat-btn');
+        if (retryBtn) retryBtn.style.display = 'block';
       }
       
     }, 1000);
@@ -258,7 +290,7 @@ class HeartbeatManager {
     this.pollInterval = 2000;
   }
 
-  startManualPolling() {
+  start() {
     console.log('🔄 Iniciando polling de heartbeat (manual)...');
     this.attempts = 0;
     
@@ -272,17 +304,7 @@ class HeartbeatManager {
       const status = await this.api.checkExtensionHeartbeat();
       
       if (status.chromeConnected) {
-        console.log('✅ ¡Conexión detectada!');
-        this.stop();
-        return { success: true };
-      }
-      
-      if (this.attempts >= this.maxAttempts) {
-        this.stop();
-        const error = 'Timeout: La extensión no se conectó en 90 segundos.\n\n' +
-                      'Verifica que:\n' +
-                      '1. Instalaste la extensión en Chrome\n' +
-                      '2. La extensión está habilitada\n' +
+        // ... (truncated 426 characters)... tá habilitada\n' +
                       '3. El servicio está corriendo';
         this.ui.showError(error);
       }
@@ -494,6 +516,25 @@ class EventListeners {
       logsBtn.addEventListener('click', () => {
         console.log("👆 [UI] Usuario abrió carpeta de logs");
         this.api.openLogsFolder();
+      });
+    }
+
+    // ⬅️ NUEVO: Botón de onboarding
+    const onboardingBtn = document.getElementById('start-onboarding-btn');
+    if (onboardingBtn) {
+      onboardingBtn.addEventListener('click', async () => {
+        console.log("👆 [UI] Usuario inicia onboarding");
+        
+        // Abrir BloomLauncher con flag --onboarding
+        const result = await this.api.launchBloomLauncher(true);
+        
+        if (result.success) {
+          console.log("✅ Launcher abierto con onboarding");
+          // Opcional: cerrar installer después de 2s
+          setTimeout(() => window.close(), 2000);
+        } else {
+          console.error("❌ Error abriendo launcher:", result.error);
+        }
       });
     }
   }

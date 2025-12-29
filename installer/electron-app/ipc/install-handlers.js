@@ -1,4 +1,4 @@
-const { ipcMain } = require('electron');
+const { ipcMain, BrowserWindow } = require('electron');
 const fs = require('fs-extra');
 const { execSync } = require('child_process');
 const net = require('net');
@@ -37,7 +37,8 @@ function setupInstallHandlers() {
 
   // Handler principal de instalación
   ipcMain.handle('brain:install-extension', async () => {
-    return await runFullInstallation();
+    const mainWindow = BrowserWindow.getFocusedWindow();
+    return await runFullInstallation(mainWindow);
   });
 
   // Handler para lanzar el perfil maestro después de la instalación
