@@ -58,7 +58,7 @@ const paths = {
   },
   
   get extensionDir() {
-    return path.join(this.bloomBase, 'extension');
+    return path.join(process.env.LOCALAPPDATA, 'BloomNucleus', 'extension');
   },
   
   get configDir() {
@@ -83,6 +83,13 @@ const paths = {
   nativeSource: getResourcePath('native'),
   extensionSource: getResourcePath('extension'),
   nssmSource: getResourcePath('nssm'),
+
+  extensionBrainDir: path.join(
+    process.env.LOCALAPPDATA, 
+    'BloomNucleus', 
+    'extensions', 
+    'chrome'
+  ),
   
   // Executable paths
   get pythonExe() {

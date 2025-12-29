@@ -22,6 +22,7 @@ bloom-development-extension/
 │   │   │   ├── auth.routes.ts
 │   │   │   ├── copilot.routes.ts
 │   │   │   ├── explorer.routes.ts
+│   │   │   ├── health.routes.ts
 │   │   │   ├── intent.routes.ts
 │   │   │   ├── nucleus.routes.ts
 │   │   │   ├── profile.routes.ts
@@ -192,15 +193,40 @@ bloom-development-extension/
 │   │   │   ├── bloom.ico
 │   │   │   └── installer.gif
 │   │   ├── check-admin.ps1
+│   │   ├── config/
+│   │   │   ├── constants.js
+│   │   │   └── paths.js
 │   │   ├── config-loader.js
+│   │   ├── core/
+│   │   │   ├── admin-utils.js
+│   │   │   ├── menu-builder.js
+│   │   │   └── window-manager.js
+│   │   ├── dist/ [... build output]
+│   │   ├── electron-readme.md
 │   │   ├── entitlements.plist
 │   │   ├── forge.config.js
+│   │   ├── install/
+│   │   │   ├── core-installer.js
+│   │   │   ├── extension-installer.js
+│   │   │   ├── installer.js
+│   │   │   ├── launcher-creator.js
+│   │   │   ├── native-host-installer.js
+│   │   │   └── service-installer.js
 │   │   ├── installHelpers.js
 │   │   ├── installer-config.json
 │   │   ├── installers/
 │   │   │   ├── ChromeEnterpriseExtensionInstaller.js
 │   │   │   ├── ChromeManualExtensionInstaller.js
 │   │   │   └── config.js
+│   │   ├── ipc/
+│   │   │   ├── install-handlers.js
+│   │   │   ├── launch-handlers.js
+│   │   │   └── shared-handlers.js
+│   │   ├── launch/
+│   │   │   ├── brain-commands.js
+│   │   │   ├── health-monitor.js
+│   │   │   ├── launcher.js
+│   │   │   └── profile-manager.js
 │   │   ├── main.js
 │   │   ├── node_modules/ [... dependencies]
 │   │   ├── package-lock.json
@@ -213,16 +239,25 @@ bloom-development-extension/
 │   │   ├── run-dev.bat
 │   │   ├── run-elevated.bat
 │   │   ├── run-elevated.js
+│   │   ├── scripts/
+│   │   │   ├── check-status.bat
+│   │   │   └── emergency-cleanup.bat
 │   │   ├── src/
 │   │   │   ├── event_listeners.js
 │   │   │   ├── extension_installer.js
+│   │   │   ├── healthCheck.js
 │   │   │   ├── heartbeat_manager.js
 │   │   │   ├── index.html
 │   │   │   ├── installation_manager.js
+│   │   │   ├── launch/
+│   │   │   │   ├── index_launch.html
+│   │   │   │   └── renderer_launch.js
 │   │   │   ├── renderer.js
 │   │   │   ├── styles.css
 │   │   │   └── ui_manager.js
-│   │   └── test-installation.js
+│   │   ├── test-installation.js
+│   │   └── utils/
+│   │       └── exec-helper.js
 │   ├── native/
 │   │   ├── bin/
 │   │   │   ├── darwin/
@@ -385,6 +420,12 @@ bloom-development-extension/
 │   │   │   ├── orgs_list.py
 │   │   │   ├── repos.py
 │   │   │   └── repos_list.py
+│   │   ├── health/
+│   │   │   ├── __init__.py
+│   │   │   ├── __pycache__/ [... cache]
+│   │   │   ├── full_stack.py
+│   │   │   ├── onboarding_status.py
+│   │   │   └── websocket_status.py
 │   │   ├── init.py
 │   │   ├── intent/
 │   │   │   ├── __init__.py
@@ -488,6 +529,11 @@ bloom-development-extension/
 │   │   │   ├── __init__.py
 │   │   │   ├── api_client.py
 │   │   │   └── models.py
+│   │   ├── health/
+│   │   │   ├── __init__.py
+│   │   │   ├── full_stack_manager.py
+│   │   │   ├── onboarding_status_manager.py
+│   │   │   └── websocket_status_manager.py
 │   │   ├── intent/
 │   │   │   ├── merge_manager.py
 │   │   │   ├── recovery_manager.py
