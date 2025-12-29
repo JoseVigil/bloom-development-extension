@@ -111,16 +111,20 @@ async function installBrainDependencies() {
 async function configurePythonPath() {
   const pthFile = path.join(paths.runtimeDir, 'python310._pth');
   
+  // CAMBIO CRÍTICO: Paths relativos explícitos para modo isolated
   const pthContent = [
     '.',
+    '.\\Lib',
+    '.\\Lib\\site-packages',
     'python310.zip',
-    'Lib',
-    'Lib\\site-packages',
-    // NO incluir "import site" - modo isolated
   ].join('\n');
 
   await fs.writeFile(pthFile, pthContent, 'utf8');
   console.log(" ✅ Python configured in ISOLATED mode");
+  
+  // DEBUG: Mostrar contenido del archivo .pth
+  console.log(" 📄 Contents of python310._pth:");
+  console.log(pthContent.split('\n').map(line => `    ${line}`).join('\n'));
 }
 
 /**
@@ -133,6 +137,28 @@ async function verifyBrainDependencies() {
   
   if (!fs.existsSync(python)) {
     throw new Error(`Python executable not found: ${python}`);
+  }
+
+  // DEBUG: Verificar dónde Python busca módulos
+  console.log(" 🔍 Checking Python module search paths...");
+  try {
+    const debugCmd = `"${python}" -I -c "import sys; print('\\n'.join(sys.path))"`;
+    const { stdout: pathsOutput } = await execPromise(debugCmd, {
+      timeout: 5000,
+      cwd: paths.runtimeDir,
+      env: {
+        PYTHONNOUSERSITE: '1',
+        PATH: process.env.PATH,
+        SYSTEMROOT: process.env.SYSTEMROOT,
+      }
+    });
+    console.log(" 📍 Python sys.path:");
+    pathsOutput.split('\n').forEach(p => console.log(`    ${p}`));
+  } catch (debugError) {
+    console.warn(" ⚠️ Could not check sys.path:", debugError.message);
+    if (debugError.stderr) {
+      console.warn("    stderr:", debugError.stderr);
+    }
   }
 
   // Verificar dependencias críticas
@@ -150,7 +176,7 @@ async function verifyBrainDependencies() {
     });
     
     if (stderr && stderr.trim() && !stdout.includes('OK')) {
-      console.warn(" ⚠️  Warning:", stderr.trim());
+      console.warn(" ⚠️ Warning:", stderr.trim());
     }
     
     if (!stdout.includes('OK')) {
@@ -162,13 +188,18 @@ async function verifyBrainDependencies() {
     
   } catch (error) {
     console.error("\n❌ DEPENDENCY VERIFICATION FAILED");
-    console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     console.error("Python:", python);
     console.error("Error:", error.message);
     
     if (error.stderr) {
       console.error("\nPython Error:");
       console.error(error.stderr);
+    }
+    
+    if (error.stdout) {
+      console.error("\nPython Output:");
+      console.error(error.stdout);
     }
     
     // Listar qué hay realmente en site-packages
@@ -181,7 +212,7 @@ async function verifyBrainDependencies() {
       console.error("Could not list site-packages:", e.message);
     }
     
-    console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
     
     throw new Error(
       'Brain dependencies verification failed. ' +
@@ -216,6 +247,32 @@ async function initializeBrainProfile() {
   console.log(` 📂 Brain: ${brainPath}`);
   console.log(` 🔒 Mode: ISOLATED`);
 
+  // DEBUG: Verificar que brain es importable
+  console.log(" 🔍 Testing brain import...");
+  try {
+    const testCmd = `"${python}" -I -c "import brain; print('Brain import: OK')"`;
+    const { stdout: testOut, stderr: testErr } = await execPromise(testCmd, {
+      timeout: 5000,
+      cwd: paths.runtimeDir,
+      env: {
+        PYTHONNOUSERSITE: '1',
+        PATH: process.env.PATH,
+        SYSTEMROOT: process.env.SYSTEMROOT,
+      }
+    });
+    console.log(` ✅ ${testOut.trim()}`);
+    if (testErr && testErr.trim()) {
+      console.warn(` ⚠️ Import warnings: ${testErr.trim()}`);
+    }
+  } catch (importError) {
+    console.error(" ❌ Brain import failed!");
+    console.error("    Error:", importError.message);
+    if (importError.stderr) {
+      console.error("    Stderr:", importError.stderr);
+    }
+    throw new Error(`Brain module cannot be imported: ${importError.message}`);
+  }
+
   // Usar nombre sin espacios para evitar problemas de escaping en Windows
   const profileName = "MasterWorker";
   const command = `"${python}" -I -m brain --json profile create ${profileName}`;
@@ -233,11 +290,13 @@ async function initializeBrainProfile() {
         SYSTEMROOT: process.env.SYSTEMROOT,
         TEMP: process.env.TEMP,
         TMP: process.env.TMP,
+        APPDATA: process.env.APPDATA,
+        LOCALAPPDATA: process.env.LOCALAPPDATA,
       }
     });
 
     if (stderr && stderr.trim()) {
-      console.log(" ⚠️  Stderr:", stderr.trim());
+      console.log(" ⚠️ Stderr:", stderr.trim());
     }
 
     console.log(" → Response:", stdout.trim());
@@ -283,19 +342,25 @@ async function initializeBrainProfile() {
     
   } catch (error) {
     console.error("\n❌ PROFILE CREATION FAILED");
-    console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     console.error("Python:", python);
     console.error("Exists:", fs.existsSync(python));
     console.error("Brain:", brainPath);
     console.error("Exists:", fs.existsSync(brainPath));
+    console.error("Command:", command);
     console.error("Error:", error.message);
     
     if (error.stderr) {
-      console.error("\nPython Error:");
+      console.error("\nPython Stderr:");
       console.error(error.stderr);
     }
     
-    console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    if (error.stdout) {
+      console.error("\nPython Stdout:");
+      console.error(error.stdout);
+    }
+    
+    console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
     
     throw new Error(`Failed to create profile: ${error.message}`);
   }

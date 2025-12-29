@@ -134,11 +134,15 @@ class ProfilesCreateCommand(BaseCommand):
 
     def _render_create(self, data: dict) -> None:
         """Renderiza la confirmación de creación."""
+        profile = data.get('data', {})  # Accede al inner data
         typer.echo(f"\n✅ Perfil creado exitosamente")
-        typer.echo(f"   ID:    {data.get('id')}")
-        typer.echo(f"   Alias: {data.get('alias')}")
-        typer.echo(f"   Ruta:  {data.get('path')}")
-        typer.echo(f"\n💡 Lanza con: brain profile launch {data.get('id')[:8]}...\n")
+        typer.echo(f"   ID:    {profile.get('id', 'N/A')}")
+        typer.echo(f"   Alias: {profile.get('alias', 'N/A')}")
+        typer.echo(f"   Ruta:  {profile.get('path', 'N/A')}")
+        
+        profile_id = profile.get('id')
+        launch_id = (profile_id[:8] + '...') if isinstance(profile_id, str) and profile_id else 'N/A'
+        typer.echo(f"\n💡 Lanza con: brain profile launch {launch_id}\n")
 
     def _handle_error(self, gc, message: str):
         """Manejo unificado de errores."""
@@ -201,18 +205,24 @@ class ProfilesLaunchCommand(BaseCommand):
     def _render_launch(self, data: dict) -> None:
         """Renderiza la confirmación de lanzamiento."""
         typer.echo(f"\n🚀 Chrome lanzado exitosamente")
-        typer.echo(f"   Perfil: {data.get('alias', 'N/A')} ({data.get('profile_id')[:8]}...)")
+        
+        # Obtener profile_id de forma segura
+        profile_id = data.get('profile_id')
+        profile_id_display = (profile_id[:8] + '...') if isinstance(profile_id, str) and profile_id else 'N/A'
+        
+        typer.echo(f"   Perfil: {data.get('alias', 'N/A')} ({profile_id_display})")
         
         if data.get('url'):
             typer.echo(f"   URL:    {data.get('url')}")
         
         typer.echo(f"   PID:    {data.get('pid')}")
-        
-        if data.get('extension_loaded'):
-            typer.echo("   ✅ Extensión Bloom cargada correctamente")
-        else:
+
+        if not data.get('extension_loaded'):
             typer.echo("   ⚠️  Extensión Bloom no encontrada")
+            typer.echo("      Intentos: Verifica BLOOM_EXTENSION_PATH, ruta dev, o producción en BloomNucleus")
             typer.echo("      Tip: Establece BLOOM_EXTENSION_PATH o ejecuta desde el proyecto")
+        else:
+            typer.echo("   ✅ Extensión Bloom cargada correctamente")        
         
         typer.echo()
 

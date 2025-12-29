@@ -59,7 +59,7 @@ def main():
                     help=meta.category.description,
                     no_args_is_help=True
                 )
-                app.add_typer(sub_apps[meta.category], name=meta.category.value)
+                app.add_typer(sub_apps[meta.category], name=meta.category.name)
             
             command.register(sub_apps[meta.category])
         
