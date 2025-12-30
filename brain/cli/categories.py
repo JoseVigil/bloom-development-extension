@@ -23,7 +23,8 @@ class CommandCategory(Enum):
     PROFILE = ("profile", "Chrome profile and AI account management")
     PROJECT = ("project", "Project lifecycle and scaffolding")
     HEALTH = ("health", "System health checks and diagnostics")
-    
+    EXTENSION = ("extension", "Chrome extension lifecycle management")
+
     def __init__(self, name: str, description: str):
         self.category_name = name
         self.category_description = description
@@ -66,4 +67,5 @@ INTENT = CommandCategory.INTENT
 NUCLEUS = CommandCategory.NUCLEUS
 PROFILE = CommandCategory.PROFILE
 PROJECT = CommandCategory.PROJECT
-HEALTH = CommandCategory.HEALTH  # NEW
+HEALTH = CommandCategory.HEALTH  
+EXTENSION = CommandCategory.EXTENSION  

@@ -1,0 +1,152 @@
+bloom-development-extension/
+└── installer/
+    ├── README.md
+    ├── chrome-extension/
+    │   ├── crx/
+    │   │   ├── id.json
+    │   │   └── key.pem
+    │   └── src/
+    │       ├── 128x128.png
+    │       ├── background.js
+    │       ├── content.js
+    │       ├── icon128.png
+    │       ├── icon16.png
+    │       └── manifest.json
+    ├── create_installer.py
+    ├── electron-app/
+    │   ├── .gitignore
+    │   ├── app.manifest
+    │   ├── assets/
+    │   │   ├── bloom.ico
+    │   │   └── installer.gif
+    │   ├── check-admin.ps1
+    │   ├── config/
+    │   │   ├── constants.js
+    │   │   └── paths.js
+    │   ├── config-loader.js
+    │   ├── core/
+    │   │   ├── admin-utils.js
+    │   │   ├── menu-builder.js
+    │   │   └── window-manager.js
+    │   ├── dist/ [... build output]
+    │   ├── electron-readme.md
+    │   ├── entitlements.plist
+    │   ├── forge.config.js
+    │   ├── install/
+    │   │   ├── core-installer.js
+    │   │   ├── extension-installer.js
+    │   │   ├── installer.js
+    │   │   ├── launcher-creator.js
+    │   │   ├── native-host-installer.js
+    │   │   └── service-installer.js
+    │   ├── installHelpers.js
+    │   ├── installer-config.json
+    │   ├── installers/
+    │   │   ├── ChromeEnterpriseExtensionInstaller.js
+    │   │   ├── ChromeManualExtensionInstaller.js
+    │   │   └── config.js
+    │   ├── ipc/
+    │   │   ├── install-handlers.js
+    │   │   ├── launch-handlers.js
+    │   │   └── shared-handlers.js
+    │   ├── launch/
+    │   │   ├── brain-commands.js
+    │   │   ├── health-monitor.js
+    │   │   ├── launcher.js
+    │   │   └── profile-manager.js
+    │   ├── main.js
+    │   ├── node_modules/ [... dependencies]
+    │   ├── package-lock.json
+    │   ├── package.json
+    │   ├── preload.js
+    │   ├── registry-scripts/
+    │   │   ├── cleanup.ps1
+    │   │   └── hkcu.ps1
+    │   ├── run-admin.bat
+    │   ├── run-dev.bat
+    │   ├── run-elevated.bat
+    │   ├── run-elevated.js
+    │   ├── scripts/
+    │   │   ├── check-status.bat
+    │   │   └── emergency-cleanup.bat
+    │   ├── src/
+    │   │   ├── event_listeners.js
+    │   │   ├── extension_installer.js
+    │   │   ├── healthCheck.js
+    │   │   ├── heartbeat_manager.js
+    │   │   ├── index.html
+    │   │   ├── installation_manager.js
+    │   │   ├── launch/
+    │   │   │   ├── index_launch.html
+    │   │   │   └── renderer_launch.js
+    │   │   ├── renderer.js
+    │   │   ├── styles.css
+    │   │   └── ui_manager.js
+    │   ├── test-installation.js
+    │   └── utils/
+    │       └── exec-helper.js
+    ├── native/
+    │   ├── bin/
+    │   │   ├── darwin/
+    │   │   │   └── x64/
+    │   │   │       └── bloom-host
+    │   │   └── win32/
+    │   │       ├── bloom-host.exe
+    │   │       └── libwinpthread-1.dll
+    │   ├── host/
+    │   │   └── com.bloom.nucleus.bridge.json
+    │   └── nssm/
+    │       ├── win32/
+    │       │   └── nssm.exe
+    │       └── win64/
+    │           └── nssm.exe
+    ├── package-lock.json
+    ├── package.json
+    ├── resources/
+    │   ├── .gitkeep
+    │   └── runtime/
+    │       ├── LICENSE.txt
+    │       ├── _asyncio.pyd
+    │       ├── _bz2.pyd
+    │       ├── _ctypes.pyd
+    │       ├── _decimal.pyd
+    │       ├── _elementtree.pyd
+    │       ├── _hashlib.pyd
+    │       ├── _lzma.pyd
+    │       ├── _msi.pyd
+    │       ├── _multiprocessing.pyd
+    │       ├── _overlapped.pyd
+    │       ├── _queue.pyd
+    │       ├── _socket.pyd
+    │       ├── _sqlite3.pyd
+    │       ├── _ssl.pyd
+    │       ├── _uuid.pyd
+    │       ├── _zoneinfo.pyd
+    │       ├── libcrypto-1_1.dll
+    │       ├── libffi-7.dll
+    │       ├── libssl-1_1.dll
+    │       ├── pyexpat.pyd
+    │       ├── python.cat
+    │       ├── python.exe
+    │       ├── python3.dll
+    │       ├── python310._pth
+    │       ├── python310.dll
+    │       ├── python310.zip
+    │       ├── pythonw.exe
+    │       ├── select.pyd
+    │       ├── sqlite3.dll
+    │       ├── unicodedata.pyd
+    │       ├── vcruntime140.dll
+    │       ├── vcruntime140_1.dll
+    │       └── winsound.pyd
+    └── scripts/
+        ├── build-extension.js
+        ├── check-health.js
+        ├── generate-fixed-key.js
+        ├── get-id.js
+        ├── god-mode.js
+        ├── python-runtime.config.json
+        ├── run-elevated.ps1
+        ├── setup-dev.js
+        ├── setup_runtime.js
+        └── validate.js

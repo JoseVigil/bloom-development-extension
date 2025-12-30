@@ -1,282 +1,437 @@
+const { execSync, spawn } = require('child_process');
+const path = require('path');
 const fs = require('fs-extra');
-const { execSync } = require('child_process');
 const { paths } = require('../config/paths');
-const { SERVICE_NAME, DEFAULT_PORT } = require('../config/constants');
 
 /**
- * Verifica si un servicio existe
+ * Verifica si un servicio existe en el sistema
  */
-function serviceExists(name) {
+function serviceExists(serviceName) {
   try {
-    execSync(`sc query ${name}`, { stdio: 'ignore' });
-    return true;
-  } catch {
+    const result = execSync(`sc query "${serviceName}"`, { 
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore']
+    });
+    return !result.includes('does not exist');
+  } catch (error) {
     return false;
   }
 }
 
 /**
- * Mata TODOS los procesos bloom-host.exe de forma agresiva
+ * Detiene un servicio Windows
  */
-async function killAllBloomProcesses() {
-  console.log(` 💀 Killing all bloom-host.exe processes...`);
+async function stopService(serviceName, maxRetries = 5) {
+  console.log(`🛑 Attempting to stop service: ${serviceName}`);
   
-  // Intentar 3 veces con taskkill
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      execSync('taskkill /F /IM bloom-host.exe /T', { stdio: 'pipe', timeout: 5000 });
-      console.log(` ✅ Processes killed (attempt ${attempt + 1})`);
-    } catch (e) {
-      // Si el error es "no encontrado", está bien
-      if (e.message.includes('not found') || e.message.includes('no se encuentra')) {
-        console.log(` ℹ️ No bloom-host.exe processes running`);
-        return true;
-      }
-    }
-    
-    await new Promise(r => setTimeout(r, 2000));
-    
-    // Verificar si quedan procesos
-    try {
-      const result = execSync('tasklist /FI "IMAGENAME eq bloom-host.exe"', { encoding: 'utf8' });
-      if (!result.includes('bloom-host.exe')) {
-        console.log(` ✅ All processes terminated`);
-        return true;
-      }
-    } catch {}
-  }
-  
-  // Último intento con WMIC
-  try {
-    console.log(` ⚠️ Using WMIC for force termination...`);
-    execSync('wmic process where name="bloom-host.exe" delete', { stdio: 'pipe', timeout: 5000 });
-    await new Promise(r => setTimeout(r, 3000));
-  } catch {}
-  
-  return false;
-}
-
-/**
- * Espera hasta que los archivos estén liberados
- */
-async function waitForFilesUnlocked(maxWaitSeconds = 30) {
-  console.log(` ⏳ Waiting for files to be released...`);
-  
-  const testFile = paths.hostBinary;
-  
-  for (let i = 0; i < maxWaitSeconds; i++) {
-    try {
-      // Intentar abrir el archivo en modo exclusivo
-      const handle = fs.openSync(testFile, 'r+');
-      fs.closeSync(handle);
-      console.log(` ✅ Files unlocked after ${i} seconds`);
-      return true;
-    } catch (e) {
-      if (i % 5 === 0) {
-        console.log(` ⏳ Still waiting... (${i}/${maxWaitSeconds}s)`);
-      }
-    }
-    await new Promise(r => setTimeout(r, 1000));
-  }
-  
-  console.warn(` ⚠️ Files may still be locked after ${maxWaitSeconds}s`);
-  return false;
-}
-
-/**
- * Elimina un servicio de Windows de forma completa
- */
-async function removeService(name) {
-  console.log(`\n🧹 STARTING SERVICE REMOVAL: ${name}`);
-  
-  // PASO 1: Matar todos los procesos PRIMERO
-  await killAllBloomProcesses();
-  await new Promise(r => setTimeout(r, 2000));
-  
-  if (!serviceExists(name)) {
-    console.log(` ℹ️ Service ${name} doesn't exist`);
-    // Aún así, esperar que los archivos se liberen
-    await waitForFilesUnlocked(10);
-    return;
+  if (!serviceExists(serviceName)) {
+    console.log(`ℹ️ Service ${serviceName} does not exist, skipping stop`);
+    return true;
   }
 
-  console.log(` 🔍 Service exists, proceeding with removal`);
-  const nssm = paths.nssmExe;
-
-  // PASO 2: Intentar con NSSM
-  if (fs.existsSync(nssm)) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      console.log(` 🛑 Stopping with NSSM...`);
-      execSync(`"${nssm}" stop ${name}`, { stdio: 'ignore', timeout: 10000 });
-      await new Promise(r => setTimeout(r, 3000));
-
-      console.log(` 🗑️ Removing with NSSM...`);
-      execSync(`"${nssm}" remove ${name} confirm`, { stdio: 'ignore', timeout: 10000 });
-
-      // Verificar eliminación
+      // Intentar detener el servicio
+      execSync(`sc stop "${serviceName}"`, { 
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'ignore']
+      });
+      
+      console.log(`⏳ Waiting for service to stop (attempt ${attempt}/${maxRetries})...`);
+      
+      // Esperar a que el servicio esté STOPPED
       for (let i = 0; i < 10; i++) {
-        if (!serviceExists(name)) {
-          console.log(` ✅ Service removed with NSSM`);
-          await killAllBloomProcesses(); // Por si acaso
-          await waitForFilesUnlocked(15);
-          return;
-        }
         await new Promise(r => setTimeout(r, 1000));
+        
+        const status = execSync(`sc query "${serviceName}"`, { encoding: 'utf8' });
+        
+        if (status.includes('STOPPED')) {
+          console.log(`✅ Service stopped successfully on attempt ${attempt}`);
+          return true;
+        }
+        
+        if (status.includes('STOP_PENDING')) {
+          console.log(`⏳ Service is stopping... (${i + 1}/10)`);
+          continue;
+        }
       }
       
-      console.warn(` ⚠️ NSSM didn't remove service completely`);
-    } catch (nssmError) {
-      console.warn(` ⚠️ NSSM failed:`, nssmError.message);
+      // Si después de 10 segundos no se detuvo, intentar force kill
+      if (attempt < maxRetries) {
+        console.warn(`⚠️ Service did not stop gracefully, force killing processes...`);
+        await killAllBloomProcesses();
+        await new Promise(r => setTimeout(r, 2000));
+      }
+      
+    } catch (error) {
+      if (error.message.includes('does not exist')) {
+        console.log(`ℹ️ Service no longer exists`);
+        return true;
+      }
+      
+      if (attempt === maxRetries) {
+        console.error(`❌ Failed to stop service after ${maxRetries} attempts:`, error.message);
+        // Intentar force kill como último recurso
+        await killAllBloomProcesses();
+        await new Promise(r => setTimeout(r, 3000));
+        return false;
+      }
+      
+      console.warn(`⚠️ Attempt ${attempt} failed, retrying...`);
+      await new Promise(r => setTimeout(r, 2000));
     }
   }
-
-  // PASO 3: Matar procesos de nuevo por si acaso
-  await killAllBloomProcesses();
-
-  // PASO 4: Detener con PowerShell
-  try {
-    console.log(` 🛑 Stopping with PowerShell...`);
-    const psStop = `Stop-Service -Name "${name}" -Force -ErrorAction SilentlyContinue`;
-    execSync(`powershell -Command "${psStop}"`, { stdio: 'pipe', timeout: 10000 });
-    await new Promise(r => setTimeout(r, 3000));
-  } catch {}
-
-  // PASO 5: Eliminar con SC
-  try {
-    console.log(` 🗑️ Removing with SC...`);
-    execSync(`sc delete ${name}`, { stdio: 'pipe', timeout: 10000 });
-    await new Promise(r => setTimeout(r, 3000));
-  } catch {}
-
-  // PASO 6: Verificación final
-  if (serviceExists(name)) {
-    console.error(` ❌ Service ${name} couldn't be removed completely`);
-    throw new Error(`Failed to remove service ${name}. Manual intervention required: sc delete ${name}`);
-  }
-
-  console.log(` ✅ Service ${name} removed successfully`);
-  await waitForFilesUnlocked(20);
-}
-
-/**
- * Instala el servicio Windows (preferentemente con NSSM)
- */
-async function installWindowsService() {
-  if (process.platform !== 'win32') return;
-
-  const binary = paths.hostBinary;
-  const nssm = paths.nssmExe;
-
-  if (!fs.existsSync(binary)) {
-    throw new Error(`Host binary not found: ${binary}`);
-  }
-
-  console.log("🔧 Configuring Windows service with NSSM...");
   
-  // CRÍTICO: Asegurar limpieza completa antes de instalar
-  await removeService(SERVICE_NAME);
+  return false;
+}
 
-  if (!fs.existsSync(nssm)) {
-    console.warn(" ⚠️ NSSM not found, trying direct sc...");
-    await installWindowsServiceDirect();
-    return;
+/**
+ * Elimina un servicio Windows
+ */
+async function removeService(serviceName) {
+  console.log(`🗑️ Removing service: ${serviceName}`);
+  
+  if (!serviceExists(serviceName)) {
+    console.log(`ℹ️ Service ${serviceName} does not exist, nothing to remove`);
+    return true;
   }
-
-  // Si el servicio aún existe, intentar reconfigurar
-  if (serviceExists(SERVICE_NAME)) {
-    console.warn(" ⚠️ Service still exists and couldn't be removed");
-    console.warn(" 💡 Attempting to reconfigure existing service...");
-
-    try {
-      execSync(`"${nssm}" set ${SERVICE_NAME} Application "${binary}"`, { stdio: 'ignore' });
-      execSync(`"${nssm}" set ${SERVICE_NAME} AppParameters "--server --port=${DEFAULT_PORT}"`, { stdio: 'ignore' });
-      execSync(`"${nssm}" set ${SERVICE_NAME} AppDirectory "${paths.nativeDir}"`, { stdio: 'ignore' });
-
-      console.log(` 🚀 Starting reconfigured service: ${SERVICE_NAME}`);
-      execSync(`"${nssm}" start ${SERVICE_NAME}`, { stdio: 'pipe' });
-      console.log(" ✅ Service reconfigured and started");
-      return;
-    } catch (reconfigError) {
-      console.error(" ❌ Couldn't reconfigure existing service");
-      throw new Error(`Service ${SERVICE_NAME} exists and can't be modified. Run manually: sc delete ${SERVICE_NAME}`);
+  
+  // Primero, detener el servicio
+  await stopService(serviceName);
+  
+  // Esperar un poco más para asegurar que todo esté liberado
+  await new Promise(r => setTimeout(r, 2000));
+  
+  // Eliminar el servicio
+  try {
+    execSync(`sc delete "${serviceName}"`, { 
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore']
+    });
+    console.log(`✅ Service ${serviceName} removed successfully`);
+    
+    // Esperar a que Windows procese la eliminación
+    await new Promise(r => setTimeout(r, 2000));
+    
+    return true;
+  } catch (error) {
+    if (error.message.includes('does not exist')) {
+      console.log(`ℹ️ Service already removed`);
+      return true;
     }
-  }
-
-  // Instalar servicio nuevo
-  console.log(` ➕ Installing service with NSSM: ${SERVICE_NAME}`);
-
-  try {
-    execSync(
-      `"${nssm}" install ${SERVICE_NAME} "${binary}" --server --port=${DEFAULT_PORT}`,
-      { stdio: 'pipe' }
-    );
-  } catch (installError) {
-    console.error(" ❌ Error installing service:", installError.message);
-    throw new Error(`Couldn't install service: ${installError.message}`);
-  }
-
-  // Configurar servicio
-  try {
-    execSync(`"${nssm}" set ${SERVICE_NAME} Description "Bloom Nucleus Native Messaging Host"`, { stdio: 'ignore' });
-    execSync(`"${nssm}" set ${SERVICE_NAME} Start SERVICE_AUTO_START`, { stdio: 'ignore' });
-    execSync(`"${nssm}" set ${SERVICE_NAME} AppDirectory "${paths.nativeDir}"`, { stdio: 'ignore' });
-    execSync(`"${nssm}" set ${SERVICE_NAME} AppExit Default Restart`, { stdio: 'ignore' });
-  } catch {}
-
-  // Iniciar servicio
-  console.log(` 🚀 Starting service: ${SERVICE_NAME}`);
-  try {
-    execSync(`"${nssm}" start ${SERVICE_NAME}`, { stdio: 'pipe' });
-    console.log(" ✅ Windows service installed and started with NSSM");
-  } catch (startError) {
-    console.warn(" ⚠️ Service installed but couldn't start");
-    console.warn(" 📋 Error:", startError.message);
-
-    try {
-      execSync(`sc start ${SERVICE_NAME}`, { stdio: 'inherit' });
-      console.log(" ✅ Service started with sc");
-    } catch {
-      console.warn(" ⚠️ Service will start automatically on next reboot");
-    }
+    console.error(`❌ Failed to remove service:`, error.message);
+    return false;
   }
 }
 
 /**
- * Instala el servicio Windows directamente (sin NSSM)
+ * Mata todos los procesos relacionados con Bloom
  */
-async function installWindowsServiceDirect() {
-  const binary = paths.hostBinary;
-  console.log("🔧 Configuring Windows service (direct mode)...");
-
-  const binPath = `"${binary}" --server --port=${DEFAULT_PORT}`;
-
-  console.log(` ➕ Creating service: ${SERVICE_NAME}`);
-  execSync(
-    `sc create ${SERVICE_NAME} binPath= "${binPath}" start= auto DisplayName= "Bloom Nucleus Host"`,
-    { stdio: 'inherit' }
-  );
-
-  console.log(` 🔧 Configuring auto-recovery`);
-  execSync(
-    `sc failure ${SERVICE_NAME} reset= 86400 actions= restart/60000`,
-    { stdio: 'inherit' }
-  );
-
-  console.log(` 🚀 Starting service: ${SERVICE_NAME}`);
-  try {
-    execSync(`sc start ${SERVICE_NAME}`, { stdio: 'pipe' });
-    console.log(" ✅ Service started");
-  } catch (startError) {
-    console.warn(" ⚠️ Error 1053: Binary doesn't respond as Windows service");
-    console.warn(" 💡 Solution: Service requires NSSM or compilation as service");
-    console.warn(" ℹ️ Service will start automatically on next reboot");
+async function killAllBloomProcesses() {
+  console.log('🔪 Killing all Bloom-related processes...');
+  
+  const processesToKill = [
+    'bloom-host.exe',
+    'python.exe',  // Solo los que están en nuestro directorio
+    'pythonw.exe'
+  ];
+  
+  let killedCount = 0;
+  
+  for (const processName of processesToKill) {
+    try {
+      // Verificar si el proceso existe
+      const tasklistResult = execSync(
+        `tasklist /FI "IMAGENAME eq ${processName}"`, 
+        { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }
+      );
+      
+      if (!tasklistResult.includes(processName)) {
+        continue;
+      }
+      
+      // Si es python.exe, solo matar los que están en nuestro directorio
+      if (processName === 'python.exe' || processName === 'pythonw.exe') {
+        try {
+          // Usar wmic para obtener la ruta del comando
+          const wmicResult = execSync(
+            `wmic process where "name='${processName}'" get commandline,processid /format:csv`,
+            { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }
+          );
+          
+          const lines = wmicResult.split('\n').filter(l => l.trim());
+          for (const line of lines) {
+            // Si la línea contiene la ruta de Bloom, matar ese proceso
+            if (line.includes(paths.bloomBase) || line.includes('BloomNucleus')) {
+              const pidMatch = line.match(/,(\d+)$/);
+              if (pidMatch) {
+                const pid = pidMatch[1];
+                try {
+                  execSync(`taskkill /F /PID ${pid}`, { 
+                    stdio: ['pipe', 'pipe', 'ignore'] 
+                  });
+                  killedCount++;
+                  console.log(`  ✅ Killed ${processName} (PID: ${pid})`);
+                } catch (e) {
+                  // Ignorar si el proceso ya no existe
+                }
+              }
+            }
+          }
+        } catch (wmicError) {
+          // Si wmic falla, usar taskkill simple como fallback
+          try {
+            execSync(`taskkill /F /IM ${processName}`, { 
+              stdio: ['pipe', 'pipe', 'ignore'] 
+            });
+            killedCount++;
+            console.log(`  ✅ Killed all ${processName} processes (fallback)`);
+          } catch (e) {
+            // Ignorar errores
+          }
+        }
+      } else {
+        // Para bloom-host.exe, matar todos
+        try {
+          execSync(`taskkill /F /IM ${processName}`, { 
+            stdio: ['pipe', 'pipe', 'ignore'] 
+          });
+          killedCount++;
+          console.log(`  ✅ Killed ${processName}`);
+        } catch (e) {
+          // Ignorar si el proceso ya no existe
+        }
+      }
+      
+    } catch (error) {
+      // Ignorar errores de tasklist (proceso no existe)
+    }
   }
+  
+  if (killedCount > 0) {
+    console.log(`✅ Killed ${killedCount} processes`);
+    // Esperar a que Windows libere los file handles
+    await new Promise(r => setTimeout(r, 2000));
+  } else {
+    console.log('ℹ️ No Bloom processes found running');
+  }
+}
+
+/**
+ * Instala un servicio Windows usando NSSM
+ */
+async function installService(serviceName, exePath, displayName, description) {
+  console.log(`📦 Installing service: ${serviceName}`);
+  
+  // Buscar NSSM en múltiples ubicaciones siguiendo la configuración de paths.js
+  let nssmPath = null;
+  
+  // Opción 1: En el directorio nativeDir (después de copiar) - paths.nssmExe
+  if (await fs.pathExists(paths.nssmExe)) {
+    nssmPath = paths.nssmExe;
+    console.log(`✅ Found NSSM at installed location: ${nssmPath}`);
+  }
+  
+  // Opción 2: En el directorio source (antes de copiar) - paths.nssmSource
+  if (!nssmPath && paths.nssmSource) {
+    const sourceNssm = path.join(paths.nssmSource, 'nssm.exe');
+    if (await fs.pathExists(sourceNssm)) {
+      nssmPath = sourceNssm;
+      console.log(`✅ Found NSSM at source location: ${nssmPath}`);
+      
+      // Si estamos usando el source, copiarlo primero al destino para futuras ejecuciones
+      try {
+        await fs.ensureDir(paths.nativeDir);
+        await fs.copy(sourceNssm, paths.nssmExe, { overwrite: true });
+        console.log(`📋 Copied NSSM to: ${paths.nssmExe}`);
+        nssmPath = paths.nssmExe; // Usar la copia
+      } catch (copyError) {
+        console.warn(`⚠️ Could not copy NSSM, using source: ${copyError.message}`);
+        // Seguir usando nssmPath del source si la copia falla
+      }
+    }
+  }
+  
+  if (!nssmPath) {
+    throw new Error(`NSSM not found. Searched in:\n  - ${paths.nssmExe}\n  - ${paths.nssmSource}/nssm.exe`);
+  }
+  
+  // Verificar que el ejecutable existe
+  if (!await fs.pathExists(exePath)) {
+    throw new Error(`Executable not found at: ${exePath}`);
+  }
+  
+  // Si el servicio ya existe, removerlo primero
+  if (serviceExists(serviceName)) {
+    console.log('⚠️ Service already exists, removing first...');
+    await removeService(serviceName);
+  }
+  
+  try {
+    // Instalar el servicio
+    execSync(`"${nssmPath}" install "${serviceName}" "${exePath}"`, {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore']
+    });
+    
+    // Configurar el servicio
+    execSync(`"${nssmPath}" set "${serviceName}" DisplayName "${displayName}"`, {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore']
+    });
+    
+    execSync(`"${nssmPath}" set "${serviceName}" Description "${description}"`, {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore']
+    });
+    
+    // Configurar inicio automático
+    execSync(`"${nssmPath}" set "${serviceName}" Start SERVICE_AUTO_START`, {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore']
+    });
+    
+    // Configurar el directorio de trabajo
+    const workDir = path.dirname(exePath);
+    execSync(`"${nssmPath}" set "${serviceName}" AppDirectory "${workDir}"`, {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore']
+    });
+    
+    // Configurar logs
+    const logDir = paths.logsDir;
+    await fs.ensureDir(logDir);
+    
+    execSync(`"${nssmPath}" set "${serviceName}" AppStdout "${path.join(logDir, 'service-stdout.log')}"`, {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore']
+    });
+    
+    execSync(`"${nssmPath}" set "${serviceName}" AppStderr "${path.join(logDir, 'service-stderr.log')}"`, {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore']
+    });
+    
+    console.log(`✅ Service ${serviceName} installed successfully`);
+    return true;
+    
+  } catch (error) {
+    console.error(`❌ Failed to install service:`, error.message);
+    throw error;
+  }
+}
+
+/**
+ * Inicia un servicio Windows
+ */
+async function startService(serviceName, maxRetries = 3) {
+  console.log(`▶️ Starting service: ${serviceName}`);
+  
+  if (!serviceExists(serviceName)) {
+    throw new Error(`Service ${serviceName} does not exist`);
+  }
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      execSync(`sc start "${serviceName}"`, {
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'ignore']
+      });
+      
+      // Esperar a que el servicio esté RUNNING
+      for (let i = 0; i < 10; i++) {
+        await new Promise(r => setTimeout(r, 1000));
+        
+        const status = execSync(`sc query "${serviceName}"`, { encoding: 'utf8' });
+        
+        if (status.includes('RUNNING')) {
+          console.log(`✅ Service started successfully on attempt ${attempt}`);
+          return true;
+        }
+        
+        if (status.includes('START_PENDING')) {
+          console.log(`⏳ Service is starting... (${i + 1}/10)`);
+          continue;
+        }
+      }
+      
+      if (attempt < maxRetries) {
+        console.warn(`⚠️ Service did not start, retrying...`);
+        await new Promise(r => setTimeout(r, 2000));
+      }
+      
+    } catch (error) {
+      if (attempt === maxRetries) {
+        console.error(`❌ Failed to start service after ${maxRetries} attempts:`, error.message);
+        throw error;
+      }
+      
+      console.warn(`⚠️ Attempt ${attempt} failed, retrying...`);
+      await new Promise(r => setTimeout(r, 2000));
+    }
+  }
+  
+  throw new Error(`Service did not start after ${maxRetries} attempts`);
+}
+
+/**
+ * Obtiene el estado de un servicio
+ */
+function getServiceStatus(serviceName) {
+  try {
+    if (!serviceExists(serviceName)) {
+      return 'NOT_INSTALLED';
+    }
+    
+    const result = execSync(`sc query "${serviceName}"`, { encoding: 'utf8' });
+    
+    if (result.includes('RUNNING')) return 'RUNNING';
+    if (result.includes('STOPPED')) return 'STOPPED';
+    if (result.includes('STOP_PENDING')) return 'STOPPING';
+    if (result.includes('START_PENDING')) return 'STARTING';
+    
+    return 'UNKNOWN';
+  } catch (error) {
+    return 'ERROR';
+  }
+}
+
+/**
+ * Wrapper para instalar servicio Windows con configuración específica de Bloom
+ * Esta función es llamada por native-host-installer.js sin argumentos
+ * Obtiene automáticamente la configuración desde paths y constants
+ */
+async function installWindowsService(serviceName = null, exePath = null, options = {}) {
+  // Si no se proporcionan argumentos, obtener de la configuración del proyecto
+  if (!serviceName || !exePath) {
+    const { paths: pathsConfig } = require('../config/paths');
+    const constants = require('../config/constants');
+    
+    serviceName = serviceName || constants.SERVICE_NAME || 'BloomNucleusHost';
+    exePath = exePath || pathsConfig.hostBinary;
+    
+    console.log('📋 Using default configuration:');
+    console.log(`   Service Name: ${serviceName}`);
+    console.log(`   Executable: ${exePath}`);
+  }
+  
+  const displayName = options.displayName || 'Bloom Nucleus Host Service';
+  const description = options.description || 'Native messaging host for Bloom Nucleus Chrome extension';
+  
+  console.log(`📦 Installing Windows service: ${serviceName}`);
+  console.log(`   Executable: ${exePath}`);
+  console.log(`   Display Name: ${displayName}`);
+  
+  return await installService(serviceName, exePath, displayName, description);
 }
 
 module.exports = {
   serviceExists,
+  stopService,
   removeService,
-  installWindowsService,
-  installWindowsServiceDirect,
-  killAllBloomProcesses
+  killAllBloomProcesses,
+  installService,
+  installWindowsService,  // Exportar la función wrapper
+  startService,
+  getServiceStatus
 };

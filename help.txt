@@ -31,6 +31,7 @@ Brain CLI - Modular system for Bloom
 
 ╭─────────────────────────────────────────── Categories ───────────────────────────────────────────╮
 │   context       AI context generation and management                 1 cmd                       │
+│   extension     Chrome extension lifecycle management               4 cmds                       │
 │   filesystem    File operations and directory analysis              3 cmds                       │
 │   gemini        Gemini AI key management and operations             5 cmds                       │
 │   github        GitHub integration and repository management        9 cmds                       │
@@ -40,7 +41,7 @@ Brain CLI - Modular system for Bloom
 │   profile       Chrome profile and AI account management            8 cmds                       │
 │   project       Project lifecycle and scaffolding                   6 cmds                       │
 │                                                                 ──────────                       │
-│                                                                    68 cmds                       │
+│                                                                    72 cmds                       │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 
 ╭───────────────────────────────────────────── HEALTH ─────────────────────────────────────────────╮
@@ -627,6 +628,33 @@ Brain CLI - Modular system for Bloom
 │      -p                   Path to Bloom project (auto-detected if omitted)                       │
 │                                                                                                  │
 ╰────────────────────────── Intent execution system and context planning ──────────────────────────╯
+
+╭─────────────────────────────────────────── EXTENSION ────────────────────────────────────────────╮
+│                                                                                                  │
+│  BACKUPS - Manage Chrome extension version backups                                               │
+│                                                                                                  │
+│    python -m brain [GLOBAL_OPTIONS] extension backups                                            │
+│                                                                                                  │
+│  INSTALL - Install Chrome extension from source to permanent location                            │
+│                                                                                                  │
+│    python -m brain [GLOBAL_OPTIONS] extension install [OPTIONS]                                  │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -s                   Source directory (auto-detects if not provided)                        │
+│      -f                   Force reinstall even if same version exists                            │
+│                                                                                                  │
+│  UPDATE - Update Chrome extension to latest version                                              │
+│                                                                                                  │
+│    python -m brain [GLOBAL_OPTIONS] extension update [OPTIONS]                                   │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -s                   Source directory (auto-detects if not provided)                        │
+│                                                                                                  │
+│  VERIFY - Verify Chrome extension installation integrity                                         │
+│                                                                                                  │
+│    python -m brain [GLOBAL_OPTIONS] extension verify                                             │
+│                                                                                                  │
+╰───────────────────────────── Chrome extension lifecycle management ──────────────────────────────╯
 
 ╭───────────────────────────────────────────── GEMINI ─────────────────────────────────────────────╮
 │                                                                                                  │
