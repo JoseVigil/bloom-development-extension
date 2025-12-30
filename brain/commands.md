@@ -21,6 +21,10 @@ python -m brain filesystem tree brain -o tree/brain_tree.txt
 # Genera estructura visual filtrada por carpetas/archivos específicos guardando en ruta personalizada con logs activos.
 python -m brain filesystem tree src installer webview brain contracts package.json tsconfig.json -o tree/plugin_tree.txt
 
+python -m brain filesystem tree installer -o tree/installer_tree.txt
+
+
+
 # Añade cálculo de hashes MD5 (por archivo y global) al reporte para control de integridad y detección de cambios.
 python -m brain --verbose tree --hash -o tree/plugin_tree_hashed.txt src installer webview brain core package.json tsconfig.json
 ```

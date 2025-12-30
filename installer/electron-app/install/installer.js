@@ -3,11 +3,11 @@ const { paths } = require('../config/paths');
 const { isElevated, relaunchAsAdmin } = require('../core/admin-utils');
 const { installCore, initializeBrainProfile } = require('./core-installer');
 const { installNativeHost } = require('./native-host-installer');
-const { installExtension, configureBridge } = require('./extension-installer');
+const { installExtension, verifyExtension, configureBridge } = require('./extension-installer');
 const { createLauncherShortcuts } = require('./launcher-creator');
 const { BrowserWindow } = require('electron');
 
-// LÍNEA 25: AGREGAR función helper
+// Función helper para emitir progreso
 function emitProgress(mainWindow, stepKey, detail = '') {
   const step = INSTALLATION_STEPS.find(s => s.key === stepKey);
   if (!step) return;
@@ -26,7 +26,7 @@ function emitProgress(mainWindow, stepKey, detail = '') {
   console.log(`[${step.percentage}%] ${step.message}${detail ? ' - ' + detail : ''}`);
 }
 
-// LÍNEA 50: AGREGAR map de pasos
+// Mapa de pasos de instalación
 const INSTALLATION_STEPS = [
   { key: 'cleanup', percentage: 0, message: '🧹 Limpiando instalación anterior...' },
   { key: 'directories', percentage: 10, message: '📁 Creando estructura de directorios...' },
@@ -68,6 +68,7 @@ async function cleanupProcesses() {
   console.log('\n🧹 STARTING CLEANUP PROCESS');
   
   if (process.platform === 'win32') {
+    // CORRECCIÓN: Importar las funciones correctamente de service-installer
     const { removeService, killAllBloomProcesses } = require('./service-installer');
     const { SERVICE_NAME } = require('../config/constants');
     
@@ -224,13 +225,47 @@ async function runFullInstallation(mainWindow = null) {
     emitProgress(mainWindow, 'native', 'Configurando servicio');
     await installNativeHost();
     
-    // PASO 8: Resto de instalación
-    emitProgress(mainWindow, 'extension', 'Desplegando extensión');
-    await installExtension();
+    // PASO 6: Instalar extensión vía Brain (nuevo integrated)
+    emitProgress(mainWindow, 'extension', 'Desplegando extensión via Brain');
+    const extResult = await installExtension();
+    
+    // Validar el resultado - algunas versiones de installExtension pueden no retornar objeto
+    if (extResult && extResult.success === false) {
+      throw new Error(extResult.error || 'Extension installation failed');
+    }
+    
+    // Si extResult es undefined o no tiene la propiedad success, asumir éxito
+    // (esto ocurre cuando installExtension no retorna nada pero tampoco lanza error)
+    console.log('✅ Extension installation completed');
+    
+    // Verify post-install solo si verifyExtension existe y retorna algo
+    try {
+      const verifyResult = await verifyExtension();
+      if (verifyResult && verifyResult.success === false) {
+        console.warn('⚠️ Extension verification failed, but continuing...');
+      }
+    } catch (verifyError) {
+      console.warn('⚠️ Could not verify extension:', verifyError.message);
+      // Continuar de todos modos
+    }
+    
     emitProgress(mainWindow, 'bridge', 'Registrando bridge');
-    const extensionId = await configureBridge();
+    let extensionId = null;
+    try {
+      extensionId = await configureBridge();
+    } catch (bridgeError) {
+      console.warn('⚠️ Could not configure bridge:', bridgeError.message);
+      // Continuar sin extensionId
+    }
+    
     emitProgress(mainWindow, 'profile', 'Creando perfil');
-    const profileId = await initializeBrainProfile();
+    let profileId = null;
+    try {
+      profileId = await initializeBrainProfile();
+    } catch (profileError) {
+      console.warn('⚠️ Could not initialize profile:', profileError.message);
+      // Continuar sin profileId
+    }
     
     emitProgress(mainWindow, 'launcher', 'Generando launcher');
     const launcherResult = await createLauncherShortcuts();

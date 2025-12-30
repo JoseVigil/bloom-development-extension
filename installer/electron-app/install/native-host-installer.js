@@ -2,7 +2,8 @@ const fs = require('fs-extra');
 const { spawn } = require('child_process');
 const path = require('path');
 const { paths } = require('../config/paths');
-const { installWindowsService } = require('./service-installer');
+const { installWindowsService, startService } = require('./service-installer');
+const { SERVICE_NAME } = require('../config/constants');
 
 /**
  * Instala el Native Host y lo inicia como servicio o proceso
@@ -34,7 +35,7 @@ async function installNativeHost() {
         errorOnExist: false 
       });
       
-      console.log(" ✅ Native files copied successfully");
+      console.log("  ✅ Native files copied successfully");
       copySuccess = true;
       break;
       
@@ -57,41 +58,33 @@ async function installNativeHost() {
   }
   
   if (!copySuccess) {
-    console.error(" ❌ Failed to copy native files after 3 attempts");
-    console.error(" 💡 The process might still be running. Try:");
+    console.error("  ❌ Failed to copy native files after 3 attempts");
+    console.error("  💡 The process might still be running. Try:");
     console.error("    1. Close this app completely");
     console.error("    2. Open Task Manager and kill bloom-host.exe manually");
     console.error("    3. Run installer again");
     throw new Error(`Failed to copy native files: ${lastError.message}`);
   }
 
-  // PASO 2: Copiar NSSM si existe
-  if (fs.existsSync(paths.nssmSource)) {
-    const nssmExe = path.join(paths.nssmSource, 'nssm.exe');
-    if (fs.existsSync(nssmExe)) {
-      try {
-        await fs.copy(nssmExe, paths.nssmExe, { overwrite: true });
-        console.log(" ✅ NSSM copied");
-      } catch (nssmError) {
-        console.warn(" ⚠️ Could not copy NSSM:", nssmError.message);
-      }
-    }
-  }
-
-  // PASO 3: Verificar que los archivos copiados existen
+  // PASO 2: Verificar que los archivos copiados existen
   if (!fs.existsSync(paths.hostBinary)) {
     throw new Error(`bloom-host.exe not found after copy: ${paths.hostBinary}`);
   }
+  
+  console.log("  ✅ All native files ready");
 
-  // PASO 4: Iniciar como servicio (Windows) o proceso directo (Linux/Mac)
+  // PASO 3: Iniciar como servicio (Windows) o proceso directo (Linux/Mac)
   if (process.platform === 'win32') {
     console.log("\n🔧 Installing as Windows Service...\n");
     
-    // CRÍTICO: NO iniciar como proceso en Windows
-    // Solo instalar el servicio
+    // Instalar el servicio (esto usa las rutas por defecto desde config)
     await installWindowsService();
     
-    console.log("\n✅ Native Host installed as Windows Service\n");
+    // Iniciar el servicio
+    console.log("\n▶️ Starting service...\n");
+    await startService(SERVICE_NAME);
+    
+    console.log("\n✅ Native Host installed and started as Windows Service\n");
   } else {
     // En Linux/Mac, sí usar proceso independiente
     console.log("\n🔧 Starting as background process...\n");
@@ -125,7 +118,7 @@ async function startNativeHost() {
 
   hostProcess.unref();
 
-  console.log(` ✅ Host started (PID: ${hostProcess.pid})`);
+  console.log(`  ✅ Host started (PID: ${hostProcess.pid})`);
 
   // Guardar PID en configuración
   const config = fs.existsSync(paths.configFile)
