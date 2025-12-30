@@ -19,7 +19,7 @@ async function createLauncherShortcuts() {
     await fs.copy(sourceExe, launcherPath, { overwrite: true });
     console.log(` ✅ Launcher executable: ${launcherPath}`);
 
-    // 2. Copiar DLLs individuales necesarios para Electron
+    // 2. Copiar DLLs individuales
     const requiredDlls = [
       'ffmpeg.dll',
       'libGLESv2.dll',
@@ -35,7 +35,7 @@ async function createLauncherShortcuts() {
       'icudtl.dat'
     ];
 
-    console.log(' 📦 Copying Electron dependencies...');
+    console.log(' 📦 Copying individual dependencies...');
     let copiedCount = 0;
 
     for (const dll of requiredDlls) {
@@ -46,11 +46,11 @@ async function createLauncherShortcuts() {
         await fs.copy(sourcePath, destPath, { overwrite: true });
         copiedCount++;
       } else {
-        console.warn(` ⚠️  Not found: ${dll}`);
+        console.warn(` ⚠️ Missing: ${dll}`);
       }
     }
 
-    console.log(` 📊 Individual files: ${copiedCount}/${requiredDlls.length}`);
+    console.log(` 📊 Individual files copied: ${copiedCount}/${requiredDlls.length}`);
 
     // 3. Copiar carpeta locales COMPLETA
     const localesSource = path.join(sourceDir, 'locales');
@@ -59,136 +59,95 @@ async function createLauncherShortcuts() {
     if (await fs.pathExists(localesSource)) {
       await fs.copy(localesSource, localesDest, { overwrite: true });
       const localesFiles = await fs.readdir(localesDest);
-      console.log(` ✅ Locales: ${localesFiles.length} files`);
+      console.log(` ✅ Locales folder: ${localesFiles.length} files`);
     } else {
-      console.error(' ❌ CRITICAL: locales/ not found');
+      console.error(' ❌ CRITICAL: locales/ folder not found!');
     }
 
-    // 4. CRÍTICO: Copiar carpeta resources/ con app.asar
+    // 4. Copiar carpeta resources COMPLETA (incluyendo app.asar)
     const resourcesSource = path.join(sourceDir, 'resources');
     const resourcesDest = path.join(paths.binDir, 'resources');
     
-    console.log(' 📂 Copying resources folder...');
-    console.log(`    Source: ${resourcesSource}`);
-    console.log(`    Dest:   ${resourcesDest}`);
-    
     if (await fs.pathExists(resourcesSource)) {
-      // Copiar toda la carpeta resources/
-      await fs.copy(resourcesSource, resourcesDest, { 
-        overwrite: true,
-        errorOnExist: false,
-        recursive: true
-      });
+      await fs.copy(resourcesSource, resourcesDest, { overwrite: true });
       
-      // Verificar app.asar
+      // Verificar archivos críticos
       const appAsarPath = path.join(resourcesDest, 'app.asar');
+      const appAsarExists = await fs.pathExists(appAsarPath);
       
-      if (await fs.pathExists(appAsarPath)) {
+      if (appAsarExists) {
         const stats = await fs.stat(appAsarPath);
-        console.log(` ✅ app.asar copied (${(stats.size / 1024 / 1024).toFixed(2)} MB)`);
+        console.log(` ✅ Resources folder copied (app.asar: ${(stats.size / 1024 / 1024).toFixed(2)} MB)`);
       } else {
-        // Si no existe app.asar, buscar en app.asar.unpacked
-        const unpackedDir = path.join(resourcesSource, 'app.asar.unpacked');
-        if (await fs.pathExists(unpackedDir)) {
-          console.log(' 📦 Found app.asar.unpacked, copying...');
-          await fs.copy(
-            unpackedDir, 
-            path.join(resourcesDest, 'app.asar.unpacked'),
-            { overwrite: true, recursive: true }
-          );
-        }
-        
-        // En desarrollo, copiar directamente el código
-        const appDir = path.join(resourcesSource, 'app');
-        if (await fs.pathExists(appDir)) {
-          console.log(' 📦 Development mode: copying app folder...');
-          await fs.copy(
-            appDir,
-            path.join(resourcesDest, 'app'),
-            { overwrite: true, recursive: true }
-          );
-        } else {
-          console.error(' ❌ CRITICAL: No app.asar, app.asar.unpacked, or app/ folder found!');
-        }
+        console.error(' ❌ CRITICAL: app.asar not found in resources!');
       }
     } else {
-      console.error(' ❌ CRITICAL: resources/ folder not found at:', resourcesSource);
+      console.error(' ❌ CRITICAL: resources/ folder not found!');
     }
 
-    // 5. Copiar swiftshader (para rendering GPU)
+    // 5. Copiar swiftshader (opcional pero recomendado)
     const swiftshaderSource = path.join(sourceDir, 'swiftshader');
     const swiftshaderDest = path.join(paths.binDir, 'swiftshader');
     
     if (await fs.pathExists(swiftshaderSource)) {
       await fs.copy(swiftshaderSource, swiftshaderDest, { overwrite: true });
-      console.log(' ✅ Swiftshader copied');
+      console.log(' ✅ Swiftshader folder copied');
     }
 
-    // 6. VERIFICACIÓN CRÍTICA
+    // 6. Verificar que el launcher puede ejecutarse
     console.log(' 🔍 Verifying launcher integrity...');
-    const verification = await verifyLauncherIntegrity(paths.binDir);
+    const canExecute = await verifyLauncherIntegrity(paths.binDir);
     
-    if (!verification.success) {
-      console.error(' ❌ Verification failed!');
-      console.error('    Missing files:', verification.missing);
-      
-      // No fallar completamente, pero advertir
-      console.warn(' ⚠️  Continuing anyway, launcher might not work properly');
-    } else {
-      console.log(' ✅ All critical files present');
+    if (!canExecute.success) {
+      console.error(' ❌ Launcher verification failed:', canExecute.missing);
+      return {
+        success: false,
+        error: 'Missing critical dependencies',
+        missing: canExecute.missing
+      };
     }
 
-    // 7. Crear shortcuts con icono correcto
-    const iconPath = paths.bloomIcon;
+    // 7. Crear shortcuts
+    const iconPath = path.join(__dirname, '..', 'assets', 'bloom.ico');
     
-    try {
-      await createShortcut(
-        path.join(app.getPath('desktop'), 'Bloom Nucleus.lnk'),
-        launcherPath,
-        '--mode=launch',
-        'Bloom Nucleus AI Hub',
-        iconPath
-      );
-      console.log(' ✅ Desktop shortcut created');
-    } catch (err) {
-      console.warn(' ⚠️  Desktop shortcut failed:', err.message);
-    }
+    await createShortcut(
+      path.join(app.getPath('desktop'), 'Bloom Nucleus.lnk'),
+      launcherPath,
+      '--mode=launch',
+      'Bloom Nucleus AI Hub',
+      iconPath
+    );
+    console.log(' ✅ Desktop shortcut created');
 
-    try {
-      const startMenuPath = path.join(
-        app.getPath('appData'),
-        'Microsoft',
-        'Windows',
-        'Start Menu',
-        'Programs',
-        'Bloom Nucleus'
-      );
-      await fs.ensureDir(startMenuPath);
-      
-      await createShortcut(
-        path.join(startMenuPath, 'Bloom Nucleus.lnk'),
-        launcherPath,
-        '--mode=launch',
-        'Bloom Nucleus AI Hub',
-        iconPath
-      );
-      console.log(' ✅ Start Menu shortcut created');
-    } catch (err) {
-      console.warn(' ⚠️  Start Menu shortcut failed:', err.message);
-    }
+    const startMenuPath = path.join(
+      app.getPath('appData'),
+      'Microsoft',
+      'Windows',
+      'Start Menu',
+      'Programs',
+      'Bloom Nucleus'
+    );
+    await fs.ensureDir(startMenuPath);
+    
+    await createShortcut(
+      path.join(startMenuPath, 'Bloom Nucleus.lnk'),
+      launcherPath,
+      '--mode=launch',
+      'Bloom Nucleus AI Hub',
+      iconPath
+    );
+    console.log(' ✅ Start Menu shortcut created');
 
-    console.log('✅ Launcher creation completed');
+    console.log('✅ Launcher creation completed successfully');
     
     return {
       success: true,
       launcherPath,
       filescopied: copiedCount,
-      verified: verification.success,
-      warnings: verification.missing.length > 0 ? verification.missing : undefined
+      verified: true
     };
-    
   } catch (error) {
-    console.error('❌ Error creating launcher:', error);
+    console.error('❌ Error creating launcher shortcuts:', error);
     return {
       success: false,
       error: error.message,
@@ -204,17 +163,9 @@ async function verifyLauncherIntegrity(binDir) {
   const critical = [
     'BloomLauncher.exe',
     'resources.pak',
+    path.join('resources', 'app.asar'),
     path.join('locales', 'en-US.pak')
   ];
-
-  // app.asar O app.asar.unpacked O app/ folder
-  const appAsarPath = path.join(binDir, 'resources', 'app.asar');
-  const appUnpackedPath = path.join(binDir, 'resources', 'app.asar.unpacked');
-  const appFolderPath = path.join(binDir, 'resources', 'app');
-  
-  const hasAppCode = await fs.pathExists(appAsarPath) || 
-                      await fs.pathExists(appUnpackedPath) ||
-                      await fs.pathExists(appFolderPath);
 
   const missing = [];
 
@@ -223,10 +174,6 @@ async function verifyLauncherIntegrity(binDir) {
     if (!await fs.pathExists(filePath)) {
       missing.push(file);
     }
-  }
-
-  if (!hasAppCode) {
-    missing.push('resources/app.asar (or app.asar.unpacked or app/)');
   }
 
   return {

@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld('api', {
   
   getSystemInfo: () => ipcRenderer.invoke('system:info'),
   getAppInfo: () => ipcRenderer.invoke('get-app-info'),
+  launcherDiagnose: () => ipcRenderer.invoke('launcher:diagnose'),
   openFolder: (path) => ipcRenderer.invoke('open-folder', path),
   openChromeExtensions: () => ipcRenderer.invoke('open-chrome-extensions'),
   openLogsFolder: () => ipcRenderer.invoke('open-logs-folder'),
@@ -80,7 +81,7 @@ contextBridge.exposeInMainWorld('api', {
 
   onServerStatus: (callback) => {
     ipcRenderer.on('server-status', (event, data) => callback(data));
-  }
+  },
 });
 
 // Development tools exposure
