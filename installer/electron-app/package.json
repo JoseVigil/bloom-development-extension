@@ -123,7 +123,10 @@
     "asarUnpack": [
       "**/*.node",
       "**/brain/**/*",
-      "**/runtime/**/*"
+      "**/runtime/**/*",
+      "**/native/**/*",
+      "**/extension/**/*",
+      "assets/**/*"
     ]
   },
   "dependencies": {
