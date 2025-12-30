@@ -1,7 +1,8 @@
-const { ipcMain } = require('electron');
+const { ipcMain, shell } = require('electron');
 const fs = require('fs-extra');
 const os = require('os');
 const path = require('path');
+const { spawn } = require('child_process'); // Cambio de exec a spawn
 const { paths } = require('../config/paths');
 const { APP_VERSION } = require('../config/constants');
 const {
@@ -77,36 +78,92 @@ function setupLaunchHandlers() {
     };
   });
 
-  // Handler para abrir BloomLauncher (onboarding)
-  const { exec } = require('child_process');
-
+  // ✅ HANDLER CORREGIDO PARA LAUNCHER
   ipcMain.handle('launcher:open', async (event, { onboarding = false }) => {
     const launcherPath = paths.launcherExe;
     
     console.log(`🚀 Opening launcher: ${launcherPath}`);
+    console.log(`📌 Onboarding mode: ${onboarding}`);
     
-    if (!fs.existsSync(launcherPath)) {
-      throw new Error('BloomLauncher.exe not found. Path: ' + launcherPath);
-    }
+    try {
+      // Verificar existencia del ejecutable
+      if (!await fs.pathExists(launcherPath)) {
+        throw new Error(`BloomLauncher.exe not found at: ${launcherPath}`);
+      }
 
-    const args = onboarding ? '--mode=launch --onboarding' : '--mode=launch';
-    
-    return new Promise((resolve, reject) => {
-      exec(`"${launcherPath}" ${args}`, (error, stdout, stderr) => {
-        // LOG EL ERROR REAL
-        console.log('STDOUT:', stdout);
-        console.log('STDERR:', stderr);
-        
-        if (error) {
-          console.error('❌ Error launching BloomLauncher:', error);
-          console.error('Exit code:', error.code);
-          reject(new Error(`Launcher failed: ${stderr || error.message}`));
-        } else {
-          console.log('✅ BloomLauncher opened successfully');
-          resolve({ success: true });
+      // Verificar dependencias críticas
+      const binDir = path.dirname(launcherPath);
+      const criticalFiles = [
+        'resources.pak',
+        path.join('resources', 'app.asar')
+      ];
+
+      for (const file of criticalFiles) {
+        const filePath = path.join(binDir, file);
+        if (!await fs.pathExists(filePath)) {
+          console.warn(`⚠️ Missing dependency: ${filePath}`);
         }
+      }
+
+      // Construir argumentos como array (spawn requiere esto)
+      const args = ['--mode=launch'];
+      if (onboarding) {
+        args.push('--onboarding');
+      }
+
+      console.log(`📋 Launch arguments:`, args);
+
+      // Usar spawn en lugar de exec (mejor para argumentos complejos)
+      return new Promise((resolve, reject) => {
+        const child = spawn(launcherPath, args, {
+          detached: true,
+          stdio: 'ignore',
+          cwd: binDir, // Importante: working directory
+          windowsHide: false
+        });
+
+        // Desacoplar el proceso para que sobreviva al installer
+        child.unref();
+
+        // Timeout de 3 segundos para verificar que arrancó
+        const timeout = setTimeout(() => {
+          console.log('✅ BloomLauncher launched (detached)');
+          resolve({ success: true });
+        }, 3000);
+
+        child.on('error', (error) => {
+          clearTimeout(timeout);
+          console.error('❌ Spawn error:', error);
+          
+          // Fallback: intentar con shell.openPath (solo abre, sin args)
+          if (error.code === 'ENOENT' || error.code === 'EPERM') {
+            console.log('🔄 Trying fallback: shell.openPath...');
+            shell.openPath(launcherPath)
+              .then(() => resolve({ 
+                success: true, 
+                warning: 'Launched without arguments (fallback)' 
+              }))
+              .catch(fallbackError => reject(new Error(
+                `Both spawn and fallback failed: ${fallbackError.message}`
+              )));
+          } else {
+            reject(error);
+          }
+        });
+
+        child.on('exit', (code, signal) => {
+          clearTimeout(timeout);
+          if (code !== 0 && code !== null) {
+            console.error(`❌ Process exited with code ${code}`);
+            reject(new Error(`Launcher exited with code ${code}`));
+          }
+        });
       });
-    });
+
+    } catch (error) {
+      console.error('❌ Error in launcher:open handler:', error);
+      throw new Error(`Failed to launch: ${error.message}`);
+    }
   });
 
   console.log('✅ Launch Mode IPC handlers configured');
