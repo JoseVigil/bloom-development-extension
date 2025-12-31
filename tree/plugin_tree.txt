@@ -395,6 +395,13 @@ bloom-development-extension/
 │   │   ├── context/
 │   │   │   ├── __pycache__/ [... cache]
 │   │   │   └── generate.py
+│   │   ├── extension/
+│   │   │   ├── __init__.py
+│   │   │   ├── __pycache__/ [... cache]
+│   │   │   ├── backups.py
+│   │   │   ├── install.py
+│   │   │   ├── update.py
+│   │   │   └── verify.py
 │   │   ├── filesystem/
 │   │   │   ├── __init__.py
 │   │   │   ├── __pycache__/ [... cache]
@@ -516,6 +523,10 @@ bloom-development-extension/
 │   │   │   ├── gemini_router.py
 │   │   │   └── payload_builder.py
 │   │   ├── download_manager.py
+│   │   ├── extension/
+│   │   │   ├── __init__.py
+│   │   │   ├── __pycache__/ [... cache]
+│   │   │   └── manager.py
 │   │   ├── filesystem/
 │   │   │   ├── __init__.py
 │   │   │   ├── code_compressor.py
