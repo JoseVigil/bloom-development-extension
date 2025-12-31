@@ -1,0 +1,56 @@
+bloom-development-extension/
+└── webview/
+    └── app/
+        ├── .svelte-kit/ [... svelte build]
+        ├── package-lock.json
+        ├── package.json
+        ├── src/
+        │   ├── app.html
+        │   ├── lib/
+        │   │   ├── api.ts
+        │   │   ├── components/
+        │   │   │   ├── BriefingEditor.svelte
+        │   │   │   ├── ChatBTIP.svelte
+        │   │   │   ├── FileTree.svelte
+        │   │   │   ├── GeminiTokenForm.svelte
+        │   │   │   ├── GithubAuthButton.svelte
+        │   │   │   ├── IntentsLink.svelte
+        │   │   │   ├── NucleusPanel.svelte
+        │   │   │   ├── OnboardingWizard.svelte
+        │   │   │   ├── ProjectsPanel.svelte
+        │   │   │   ├── SystemStatus.svelte
+        │   │   │   └── TokenEstimator.svelte
+        │   │   ├── stores/
+        │   │   │   ├── auth.ts
+        │   │   │   ├── intents.ts
+        │   │   │   ├── navigation.ts
+        │   │   │   ├── onboarding.ts
+        │   │   │   ├── system.ts
+        │   │   │   ├── theme.ts
+        │   │   │   └── websocket.ts
+        │   │   ├── types.ts
+        │   │   └── ws.ts
+        │   └── routes/
+        │       ├── +layout.svelte
+        │       ├── +page.svelte
+        │       ├── genesis/
+        │       │   └── +page.svelte
+        │       ├── home/
+        │       │   └── +page.svelte
+        │       ├── intents/
+        │       │   ├── +page.svelte
+        │       │   ├── [id]/
+        │       │   │   ├── +page.svelte
+        │       │   │   └── response
+        │       │   ├── dev/
+        │       │   │   └── [id]/
+        │       │   │       └── +page.svelte
+        │       │   └── doc/
+        │       │       └── [id]/
+        │       │           └── +page.svelte
+        │       ├── onboarding/
+        │       │   └── +page.svelte
+        │       └── welcome/
+        │           └── +page.svelte
+        ├── svelte.config.js
+        └── vite.config.ts
