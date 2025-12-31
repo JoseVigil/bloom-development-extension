@@ -1,12 +1,16 @@
 const { app } = require('electron');
 const { APP_VERSION, IS_DEV, IS_LAUNCH_MODE } = require('./config/constants');
 const { createMainWindow } = require('./core/window-manager');
-const { isElevated, relaunchAsAdmin } = require('./core/admin-utils');
 const { setupInstallHandlers } = require('./ipc/install-handlers');
 const { setupLaunchHandlers } = require('./ipc/launch-handlers');
 const { setupSharedHandlers } = require('./ipc/shared-handlers');
 const { runInstallMode } = require('./install/installer');
 const { runLaunchMode } = require('./launch/launcher');
+const { exec } = require('child_process');
+const { promisify } = require('util');
+const path = require('path');
+
+const execAsync = promisify(exec);
 
 // ============================================================================
 // ENHANCED LOGGING FOR DEVELOPMENT
@@ -29,11 +33,33 @@ function getEmojiName(emoji) {
     '📋': 'INFO',
     '⚠️': 'WARN',
     '🔍': 'DEBUG',
-    '📍': 'URL',
-    '🔄': 'NAV',
+    '🔗': 'URL',
+    '📄': 'NAV',
     '📨': 'EVENT'
   };
   return map[emoji] || 'LOG';
+}
+
+// ============================================================================
+// ONBOARDING STATUS CHECK
+// ============================================================================
+async function checkOnboardingStatus() {
+  try {
+    safeLog('🔍', 'Checking onboarding status...');
+    
+    // Call brain CLI to check onboarding status
+    const brainPath = path.join(__dirname, 'brain', 'brain.py');
+    const { stdout } = await execAsync(`python "${brainPath}" onboarding status --json`);
+    
+    const status = JSON.parse(stdout);
+    safeLog('📋', 'Onboarding status:', status);
+    
+    return status.completed || false;
+  } catch (error) {
+    safeLog('⚠️', 'Error checking onboarding status:', error.message);
+    // If we can't check, assume onboarding is needed
+    return false;
+  }
 }
 
 // ============================================================================
@@ -49,7 +75,6 @@ console.log(`
 ╚═══════════════════════════════════════════╝
 `);
 
-// Mostrar argumentos de línea de comando en desarrollo
 if (IS_DEV) {
   safeLog('🔧', 'CLI Arguments:', process.argv.slice(2));
 }
@@ -58,6 +83,7 @@ if (IS_DEV) {
 // GLOBAL STATE
 // ============================================================================
 let mainWindow = null;
+let needsOnboarding = false;
 
 // ============================================================================
 // APP LIFECYCLE
@@ -65,54 +91,63 @@ let mainWindow = null;
 app.whenReady().then(async () => {
   safeLog('🚀', 'App ready, initializing...');
 
-  // Crear ventana principal
+  // ============================================================================
+  // CRITICAL: Check onboarding status BEFORE creating window
+  // ============================================================================
+  const forceOnboarding = process.argv.includes('--onboarding');
+  
+  if (IS_LAUNCH_MODE) {
+    needsOnboarding = forceOnboarding || !(await checkOnboardingStatus());
+    
+    if (needsOnboarding) {
+      safeLog('📨', 'Onboarding required - will load onboarding flow');
+    } else {
+      safeLog('✅', 'Onboarding completed - loading dashboard');
+    }
+  }
+
+  // Create main window
   mainWindow = createMainWindow(IS_LAUNCH_MODE);
 
-  // ✅ CRÍTICO: Configurar handlers IPC - AMBOS MODOS SIEMPRE
+  // Setup IPC handlers - BOTH MODES ALWAYS
   setupSharedHandlers();
   setupInstallHandlers();
-  setupLaunchHandlers(); // ⬅️ FIX CRÍTICO: Siempre registrado
+  setupLaunchHandlers();
 
   // ============================================================================
-  // URL TRACKING & LOGGING (DESARROLLO)
+  // URL TRACKING & LOGGING (DEVELOPMENT)
   // ============================================================================
   if (IS_DEV) {
-    // Log URL inicial
     mainWindow.webContents.once('did-finish-load', () => {
       const currentURL = mainWindow.webContents.getURL();
-      safeLog('📍', 'Initial URL loaded:', currentURL);
+      safeLog('🔗', 'Initial URL loaded:', currentURL);
     });
 
-    // Track todas las navegaciones
     mainWindow.webContents.on('did-navigate', (event, url) => {
-      safeLog('🔄', 'Page navigated to:', url);
+      safeLog('📄', 'Page navigated to:', url);
     });
 
     mainWindow.webContents.on('did-navigate-in-page', (event, url, isMainFrame) => {
       if (isMainFrame) {
-        safeLog('🔄', 'In-page navigation:', url);
+        safeLog('📄', 'In-page navigation:', url);
       }
     });
 
-    // Log cuando la página termina de cargar
     mainWindow.webContents.on('did-finish-load', () => {
       const url = mainWindow.webContents.getURL();
       safeLog('✅', 'Page fully loaded:', url);
     });
 
-    // Capturar errores de carga
     mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
       safeLog('❌', 'Failed to load:', validatedURL, `(${errorDescription})`);
     });
 
-    // Capturar logs del renderer (console.log desde el HTML/JS)
     mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
       const levels = ['LOG', 'WARN', 'ERROR'];
       const emoji = ['📋', '⚠️', '❌'][level];
       safeLog(emoji, `[RENDERER:${levels[level]}]`, message, `(${sourceId}:${line})`);
     });
 
-    // Log cuando se abre DevTools
     mainWindow.webContents.on('devtools-opened', () => {
       safeLog('🔧', 'DevTools opened');
     });
@@ -124,18 +159,25 @@ app.whenReady().then(async () => {
   if (IS_LAUNCH_MODE) {
     safeLog('🚀', 'Running in LAUNCH mode...');
     
-    // Modo Launch: ejecutar dashboard
     mainWindow.webContents.once('did-finish-load', () => {
-      runLaunchMode(mainWindow);
+      // CRITICAL: Send onboarding state to renderer
+      mainWindow.webContents.send('app:initialized', {
+        needsOnboarding,
+        mode: 'launch'
+      });
       
-      // Si hay flag --onboarding en los args
-      if (process.argv.includes('--onboarding')) {
-        safeLog('📨', 'Sending onboarding event to renderer...');
+      if (needsOnboarding) {
+        safeLog('📨', 'Sending show-onboarding event to renderer...');
         mainWindow.webContents.send('show-onboarding');
+      } else {
+        // Only run launch mode (health checks) if onboarding is complete
+        safeLog('✅', 'Starting dashboard with health monitoring...');
+        runLaunchMode(mainWindow);
       }
     });
   } else {
     safeLog('📦', 'Running in INSTALL mode...');
+    // Install mode doesn't need onboarding check
   }
 
   app.on('activate', () => {

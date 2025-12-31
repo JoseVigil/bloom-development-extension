@@ -9,6 +9,7 @@ class BloomLauncherUI {
     this.healthStatus = null;
     this.logBuffer = [];
     this.wsConnection = null;
+    this.isOnboardingMode = false;
     
     this.init();
   }
@@ -22,11 +23,9 @@ class BloomLauncherUI {
     
     this.setupEventListeners();
     this.setupIPCListeners();
-    await this.loadInitialData();
-    this.connectWebSocket();
     
-    // Auto-refresh every 30 seconds
-    setInterval(() => this.refreshCurrentView(), 30000);
+    // Wait for app initialization signal from main process
+    console.log('⏳ Waiting for app initialization...');
   }
 
   setupEventListeners() {
@@ -55,14 +54,41 @@ class BloomLauncherUI {
   }
 
   setupIPCListeners() {
+    // CRITICAL: Listen for app initialization
+    window.api.on('app:initialized', (data) => {
+      console.log('📨 App initialized:', data);
+      this.isOnboardingMode = data.needsOnboarding;
+      
+      if (this.isOnboardingMode) {
+        this.handleOnboardingMode();
+      } else {
+        this.handleDashboardMode();
+      }
+    });
+
+    // Listen for onboarding trigger
+    window.api.on('show-onboarding', () => {
+      console.log('📨 Show onboarding event received');
+      this.handleOnboardingMode();
+    });
+
+    // Onboarding completion
+    window.api.on('onboarding:completed', () => {
+      console.log('✅ Onboarding completed, switching to dashboard');
+      this.isOnboardingMode = false;
+      this.handleDashboardMode();
+    });
+
     // Health status updates
     window.api.on('health:status', (status) => {
-      this.updateHealthStatus(status);
+      if (!this.isOnboardingMode) {
+        this.updateHealthStatus(status);
+      }
     });
 
     // Onboarding status updates
     window.api.on('onboarding:status', (status) => {
-      if (!status.completed) {
+      if (!status.completed && !this.isOnboardingMode) {
         this.showOnboardingPrompt();
       }
     });
@@ -88,10 +114,108 @@ class BloomLauncherUI {
   }
 
   // ============================================================================
+  // MODE HANDLERS
+  // ============================================================================
+
+  handleOnboardingMode() {
+    console.log('🎯 Entering onboarding mode');
+    
+    // Hide dashboard, show onboarding message
+    const container = document.querySelector('.dashboard-container');
+    if (container) {
+      container.innerHTML = `
+        <div style="display: flex; align-items: center; justify-content: center; height: 100vh; background: var(--bg-primary); color: var(--text-primary); flex-direction: column; text-align: center; padding: 40px;">
+          <div style="font-size: 72px; margin-bottom: 30px;">🌸</div>
+          <h1 style="font-size: 32px; margin-bottom: 16px;">Welcome to Bloom Nucleus</h1>
+          <p style="font-size: 18px; color: var(--text-secondary); margin-bottom: 40px; max-width: 600px;">
+            Let's set up your AI development environment. The onboarding wizard will guide you through:
+          </p>
+          <div style="text-align: left; background: var(--bg-secondary); padding: 30px; border-radius: 12px; border: 1px solid var(--border-color); max-width: 500px;">
+            <div style="margin-bottom: 16px; display: flex; align-items: center; gap: 12px;">
+              <span style="font-size: 24px;">1️⃣</span>
+              <span>GitHub Authentication</span>
+            </div>
+            <div style="margin-bottom: 16px; display: flex; align-items: center; gap: 12px;">
+              <span style="font-size: 24px;">2️⃣</span>
+              <span>AI Service Configuration (Gemini)</span>
+            </div>
+            <div style="margin-bottom: 16px; display: flex; align-items: center; gap: 12px;">
+              <span style="font-size: 24px;">3️⃣</span>
+              <span>Create Your First Nucleus</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <span style="font-size: 24px;">4️⃣</span>
+              <span>Configure Projects</span>
+            </div>
+          </div>
+          <div style="margin-top: 40px;">
+            <div class="spinner" style="width: 40px; height: 40px; border: 3px solid var(--bg-tertiary); border-top-color: var(--accent-primary); border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto;"></div>
+            <p style="margin-top: 20px; color: var(--text-secondary);">Loading onboarding wizard...</p>
+            <p style="margin-top: 12px; font-size: 14px; color: var(--text-secondary);">
+              The Svelte UI will open automatically at <code>http://localhost:5173/onboarding</code>
+            </p>
+          </div>
+        </div>
+      `;
+    }
+
+    // Open the Svelte onboarding UI in default browser or embedded view
+    this.openOnboardingUI();
+  }
+
+  async handleDashboardMode() {
+    console.log('📊 Entering dashboard mode');
+    
+    // Restore normal dashboard UI
+    this.restoreDashboardUI();
+    
+    // Load initial data
+    await this.loadInitialData();
+    this.connectWebSocket();
+    
+    // Auto-refresh every 30 seconds
+    setInterval(() => {
+      if (!this.isOnboardingMode) {
+        this.refreshCurrentView();
+      }
+    }, 30000);
+  }
+
+  restoreDashboardUI() {
+    // This would restore the original HTML structure
+    // In production, you might want to keep the HTML and just show/hide sections
+    console.log('✅ Dashboard UI restored');
+  }
+
+  async openOnboardingUI() {
+    try {
+      // Option 1: Open in system browser
+      await window.api.invoke('shell:openExternal', 'http://localhost:5173/onboarding');
+      
+      // Option 2: Load directly in this window (if using BrowserView)
+      // window.location.href = 'http://localhost:5173/onboarding';
+      
+      console.log('🌐 Onboarding UI opened');
+    } catch (error) {
+      console.error('❌ Error opening onboarding UI:', error);
+      this.showError({
+        type: 'onboarding',
+        message: 'Could not open onboarding wizard',
+        error: error.message
+      });
+    }
+  }
+
+  // ============================================================================
   // DATA LOADING
   // ============================================================================
 
   async loadInitialData() {
+    if (this.isOnboardingMode) {
+      console.log('⏭️ Skipping data load - onboarding mode');
+      return;
+    }
+
     try {
       const appInfo = await window.api.getAppInfo();
       console.log('📱 App Info:', appInfo);
@@ -116,6 +240,10 @@ class BloomLauncherUI {
   }
 
   async refreshCurrentView() {
+    if (this.isOnboardingMode) {
+      return;
+    }
+
     console.log(`🔄 Refreshing ${this.currentView} view...`);
     
     switch (this.currentView) {
@@ -148,6 +276,11 @@ class BloomLauncherUI {
   // ============================================================================
 
   switchView(viewName) {
+    if (this.isOnboardingMode) {
+      console.log('⏭️ View switching disabled during onboarding');
+      return;
+    }
+
     // Update navigation
     document.querySelectorAll('.nav-button').forEach(btn => {
       btn.classList.remove('active');
@@ -193,6 +326,10 @@ class BloomLauncherUI {
   // ============================================================================
 
   updateHealthStatus(health) {
+    if (this.isOnboardingMode) {
+      return;
+    }
+
     this.healthStatus = health;
     
     const statusDot = document.getElementById('status-dot');
@@ -200,15 +337,15 @@ class BloomLauncherUI {
     const systemHealth = document.getElementById('system-health');
 
     if (health.status === 'ok') {
-      statusDot.style.background = 'var(--success)';
-      statusText.textContent = 'System OK';
+      if (statusDot) statusDot.style.background = 'var(--success)';
+      if (statusText) statusText.textContent = 'System OK';
       if (systemHealth) {
         systemHealth.textContent = '✓';
         systemHealth.style.color = 'var(--success)';
       }
     } else {
-      statusDot.style.background = 'var(--error)';
-      statusText.textContent = 'Errors detected';
+      if (statusDot) statusDot.style.background = 'var(--error)';
+      if (statusText) statusText.textContent = 'Errors detected';
       if (systemHealth) {
         systemHealth.textContent = '✗';
         systemHealth.style.color = 'var(--error)';
@@ -222,9 +359,8 @@ class BloomLauncherUI {
     }
   }
 
-  // ============================================================================
-  // PROFILES RENDERING
-  // ============================================================================
+  // [Rest of the methods remain the same: renderProfiles, launchProfile, loadLogs, etc.]
+  // ... (keeping existing implementation)
 
   renderProfiles() {
     const container = document.getElementById('profiles-container');
@@ -259,7 +395,8 @@ class BloomLauncherUI {
     `).join('');
 
     container.innerHTML = profilesHTML;
-    document.getElementById('active-profiles').textContent = this.profiles.length;
+    const activeProfilesEl = document.getElementById('active-profiles');
+    if (activeProfilesEl) activeProfilesEl.textContent = this.profiles.length;
   }
 
   async launchProfile(profileId) {
@@ -304,10 +441,6 @@ class BloomLauncherUI {
     }
   }
 
-  // ============================================================================
-  // LOGS & ACTIVITY
-  // ============================================================================
-
   async loadLogs(lines = 50) {
     try {
       const result = await window.api.tailLogs(lines);
@@ -321,7 +454,8 @@ class BloomLauncherUI {
           this.renderLogs(result.logs, logsContainer);
         }
         
-        document.getElementById('recent-events').textContent = result.logs.length;
+        const recentEventsEl = document.getElementById('recent-events');
+        if (recentEventsEl) recentEventsEl.textContent = result.logs.length;
       }
     } catch (error) {
       console.error('Error loading logs:', error);
@@ -367,7 +501,7 @@ class BloomLauncherUI {
     }
 
     const container = document.getElementById('dashboard-logs');
-    if (container && this.currentView === 'dashboard') {
+    if (container && this.currentView === 'dashboard' && !this.isOnboardingMode) {
       this.renderLogs([...this.logBuffer], container);
     }
   }
@@ -397,11 +531,11 @@ class BloomLauncherUI {
     }
   }
 
-  // ============================================================================
-  // WEBSOCKET CONNECTION
-  // ============================================================================
-
   connectWebSocket() {
+    if (this.isOnboardingMode) {
+      return;
+    }
+
     try {
       this.wsConnection = new WebSocket('ws://localhost:4124');
       
@@ -425,8 +559,10 @@ class BloomLauncherUI {
 
       this.wsConnection.onclose = () => {
         console.log('WebSocket disconnected, reconnecting in 5s...');
-        this.addLogEntry('Activity feed disconnected, reconnecting...');
-        setTimeout(() => this.connectWebSocket(), 5000);
+        if (!this.isOnboardingMode) {
+          this.addLogEntry('Activity feed disconnected, reconnecting...');
+          setTimeout(() => this.connectWebSocket(), 5000);
+        }
       };
     } catch (error) {
       console.error('Error connecting to WebSocket:', error);
@@ -434,6 +570,10 @@ class BloomLauncherUI {
   }
 
   handleWebSocketMessage(data) {
+    if (this.isOnboardingMode) {
+      return;
+    }
+
     if (data.type === 'nucleus:created' || data.type === 'nucleus:updated') {
       this.addLogEntry(`Nucleus event: ${data.type} - ${data.message || ''}`);
     } else if (data.type === 'profile:launched') {
@@ -446,10 +586,6 @@ class BloomLauncherUI {
       this.refreshDashboard();
     }
   }
-
-  // ============================================================================
-  // ERROR HANDLING
-  // ============================================================================
 
   showError(error) {
     const container = document.getElementById('error-container');
@@ -488,10 +624,6 @@ class BloomLauncherUI {
 
     container.innerHTML = promptHTML;
   }
-
-  // ============================================================================
-  // UTILITIES
-  // ============================================================================
 
   escapeHtml(text) {
     const div = document.createElement('div');

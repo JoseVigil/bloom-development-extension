@@ -1,20 +1,88 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { page } from '$app/stores';
+  import { goto } from '$app/navigation';
   import { theme } from '$lib/stores/theme';
-  import { onboardingStore } from '$lib/stores/onboarding';
+  import { onboardingStore, requiresOnboarding } from '$lib/stores/onboarding';
   import SystemStatus from '$lib/components/SystemStatus.svelte';
   import { Menu, X, Home, FileText, Zap, GitBranch, User, Settings } from 'lucide-svelte';
   
   let sidebarCollapsed = false;
   let rightPaneCollapsed = false;
   let isWebview = false;
+  let isChecking = true;
+  let isElectron = false;
   
   $: showSidebar = $onboardingStore.step !== 'welcome' && $onboardingStore.completed;
   
-  onMount(() => {
+  onMount(async () => {
     isWebview = typeof window !== 'undefined' && !!(window as any).vscode;
+    isElectron = typeof window !== 'undefined' && !!(window as any).api;
     document.documentElement.classList.add('dark');
+    
+    // Initialize onboarding state
+    await onboardingStore.init();
+    isChecking = false;
+    
+    // Handle routing based on onboarding status
+    handleRouting();
+    
+    // Listen for Electron events
+    if (isElectron && (window as any).api?.on) {
+      // Handle app initialization
+      (window as any).api.on('app:initialized', (data: { needsOnboarding: boolean; mode: string }) => {
+        console.log('📨 App initialized:', data);
+        
+        if (data.needsOnboarding) {
+          onboardingStore.reset();
+        }
+      });
+      
+      // Handle show onboarding
+      (window as any).api.on('show-onboarding', () => {
+        console.log('📨 Show onboarding event received');
+        goto('/onboarding');
+      });
+      
+      // Handle onboarding completion
+      (window as any).api.on('onboarding:completed', () => {
+        console.log('✅ Onboarding completed event received');
+        goto('/home');
+      });
+    }
   });
+  
+  // React to changes in onboarding status
+  $: if (!isChecking) {
+    handleRouting();
+  }
+  
+  function handleRouting() {
+    const currentPath = $page.url.pathname;
+    
+    // Don't redirect during initial check
+    if (isChecking) return;
+    
+    // If onboarding is required and we're not on the onboarding page
+    if ($requiresOnboarding && currentPath !== '/onboarding') {
+      console.log('🔄 Redirecting to onboarding...');
+      goto('/onboarding');
+      return;
+    }
+    
+    // If onboarding is complete and we're on the onboarding page
+    if (!$requiresOnboarding && currentPath === '/onboarding') {
+      console.log('✅ Onboarding complete, redirecting to home...');
+      goto('/home');
+      return;
+    }
+    
+    // If onboarding is complete and we're on root, go to home
+    if (!$requiresOnboarding && currentPath === '/') {
+      goto('/home');
+      return;
+    }
+  }
   
   function toggleSidebar() {
     sidebarCollapsed = !sidebarCollapsed;
@@ -25,81 +93,88 @@
   }
 </script>
 
-<div class="btip-layout">
-  {#if showSidebar}
-    <header class="header">
-      <div class="header-left">
-        <button on:click={toggleSidebar} class="icon-btn" aria-label="Toggle sidebar">
-          {#if sidebarCollapsed}<Menu size={20} />{:else}<X size={20} />{/if}
-        </button>
-        <h1 class="title">BTIP Studio</h1>
-      </div>
-      <div class="header-center">
-        <SystemStatus mode="badge" />
-      </div>
-      <div class="header-right">
-        <button class="action-btn" aria-label="Create Nucleus">
-          <Zap size={16} />
-          <span>Crear Nucleus</span>
-        </button>
-        <button class="action-btn" aria-label="Open Explorer">
-          <FileText size={16} />
-          <span>Explorer</span>
-        </button>
-      </div>
-    </header>
+{#if isChecking}
+  <div class="loading-screen">
+    <div class="spinner"></div>
+    <p>Loading Bloom Nucleus...</p>
+  </div>
+{:else}
+  <div class="btip-layout">
+    {#if showSidebar}
+      <header class="header">
+        <div class="header-left">
+          <button on:click={toggleSidebar} class="icon-btn" aria-label="Toggle sidebar">
+            {#if sidebarCollapsed}<Menu size={20} />{:else}<X size={20} />{/if}
+          </button>
+          <h1 class="title">BTIP Studio</h1>
+        </div>
+        <div class="header-center">
+          <SystemStatus mode="badge" />
+        </div>
+        <div class="header-right">
+          <button class="action-btn" aria-label="Create Nucleus">
+            <Zap size={16} />
+            <span>Crear Nucleus</span>
+          </button>
+          <button class="action-btn" aria-label="Open Explorer">
+            <FileText size={16} />
+            <span>Explorer</span>
+          </button>
+        </div>
+      </header>
 
-    <div class="main-container">
-      <aside class="sidebar" class:collapsed={sidebarCollapsed} role="navigation" aria-label="Main navigation">
-        <nav class="nav">
-          <a href="/" class="nav-item" aria-label="Home">
-            <Home size={18} aria-hidden="true" />
-            {#if !sidebarCollapsed}<span>Home</span>{/if}
-          </a>
-          <a href="/intents" class="nav-item" aria-label="Intents">
-            <FileText size={18} aria-hidden="true" />
-            {#if !sidebarCollapsed}<span>Intents</span>{/if}
-          </a>
-          <a href="/nucleus" class="nav-item" aria-label="Nucleus">
-            <Zap size={18} aria-hidden="true" />
-            {#if !sidebarCollapsed}<span>Nucleus</span>{/if}
-          </a>
-          <a href="/projects" class="nav-item" aria-label="Projects">
-            <GitBranch size={18} aria-hidden="true" />
-            {#if !sidebarCollapsed}<span>Projects</span>{/if}
-          </a>
-          <a href="/profiles" class="nav-item" aria-label="Profiles">
-            <User size={18} aria-hidden="true" />
-            {#if !sidebarCollapsed}<span>Profiles</span>{/if}
-          </a>
-          <a href="/account" class="nav-item" aria-label="Account">
-            <Settings size={18} aria-hidden="true" />
-            {#if !sidebarCollapsed}<span>Account</span>{/if}
-          </a>
-        </nav>
-      </aside>
+      <div class="main-container">
+        <aside class="sidebar" class:collapsed={sidebarCollapsed} role="navigation" aria-label="Main navigation">
+          <nav class="nav">
+            <a href="/" class="nav-item" aria-label="Home">
+              <Home size={18} aria-hidden="true" />
+              {#if !sidebarCollapsed}<span>Home</span>{/if}
+            </a>
+            <a href="/intents" class="nav-item" aria-label="Intents">
+              <FileText size={18} aria-hidden="true" />
+              {#if !sidebarCollapsed}<span>Intents</span>{/if}
+            </a>
+            <a href="/nucleus" class="nav-item" aria-label="Nucleus">
+              <Zap size={18} aria-hidden="true" />
+              {#if !sidebarCollapsed}<span>Nucleus</span>{/if}
+            </a>
+            <a href="/projects" class="nav-item" aria-label="Projects">
+              <GitBranch size={18} aria-hidden="true" />
+              {#if !sidebarCollapsed}<span>Projects</span>{/if}
+            </a>
+            <a href="/profiles" class="nav-item" aria-label="Profiles">
+              <User size={18} aria-hidden="true" />
+              {#if !sidebarCollapsed}<span>Profiles</span>{/if}
+            </a>
+            <a href="/account" class="nav-item" aria-label="Account">
+              <Settings size={18} aria-hidden="true" />
+              {#if !sidebarCollapsed}<span>Account</span>{/if}
+            </a>
+          </nav>
+        </aside>
 
-      <main class="content" role="main">
+        <main class="content" role="main">
+          <slot />
+        </main>
+
+        <aside class="right-pane" class:collapsed={rightPaneCollapsed} role="region" aria-label="Side panel">
+          <button on:click={toggleRightPane} class="collapse-btn" aria-label="Toggle side panel">
+            {rightPaneCollapsed ? '◀' : '▶'}
+          </button>
+          {#if !rightPaneCollapsed}
+            <div class="right-content">
+              <slot name="right-pane" />
+            </div>
+          {/if}
+        </aside>
+      </div>
+    {:else}
+      <main class="content-full" role="main">
         <slot />
       </main>
-
-      <aside class="right-pane" class:collapsed={rightPaneCollapsed} role="region" aria-label="Side panel">
-        <button on:click={toggleRightPane} class="collapse-btn" aria-label="Toggle side panel">
-          {rightPaneCollapsed ? '◀' : '▶'}
-        </button>
-        {#if !rightPaneCollapsed}
-          <div class="right-content">
-            <slot name="right-pane" />
-          </div>
-        {/if}
-      </aside>
-    </div>
-  {:else}
-    <main class="content-full" role="main">
-      <slot />
-    </main>
-  {/if}
-</div>
+    {/if}
+  </div>
+{/if}
 
 <style>
   :global(body) {
@@ -123,6 +198,35 @@
     --border-color: #333;
     --accent: #007acc;
     --accent-hover: #005a9e;
+  }
+
+  .loading-screen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    background: var(--bg-primary, #0f0f0f);
+    color: var(--text-primary, #ffffff);
+  }
+  
+  .spinner {
+    width: 48px;
+    height: 48px;
+    border: 4px solid rgba(139, 92, 246, 0.1);
+    border-top-color: #8b5cf6;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 20px;
+  }
+  
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+  
+  .loading-screen p {
+    font-size: 16px;
+    color: var(--text-secondary, #a1a1aa);
   }
 
   .btip-layout {

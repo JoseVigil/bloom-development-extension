@@ -4,24 +4,24 @@ Contains commands for verifying system health and component status.
 
 Available commands:
 - full-stack: Complete stack health verification
-- onboarding-status: Onboarding completion status
+- onboarding-check: Onboarding completion status check (aggregated)
 - websocket-status: WebSocket server connectivity
 """
 
 from .full_stack import HealthFullStackCommand
-from .onboarding_status import HealthOnboardingStatusCommand
+from .onboarding_check import HealthOnboardingCheckCommand  
 from .websocket_status import HealthWebSocketStatusCommand
 
 __all__ = [
     'HealthFullStackCommand',
-    'HealthOnboardingStatusCommand',
+    'HealthOnboardingCheckCommand',  # ✅ Y aquí
     'HealthWebSocketStatusCommand'
 ]
 
 # Command metadata for discovery
 COMMANDS = [
     HealthFullStackCommand,
-    HealthOnboardingStatusCommand,
+    HealthOnboardingCheckCommand,  # ✅ Y aquí
     HealthWebSocketStatusCommand
 ]
 
