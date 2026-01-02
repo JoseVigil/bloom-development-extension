@@ -1,0 +1,18 @@
+COMPILE & RUN:
+
+Plugin
+/c/repos/bloom-videos/bloom-development-extension
+npm run compile
+F5
+
+Electron
+/c/repos/bloom-videos/bloom-development-extension/installer/electron-app
+npm run build
+npx electron main.js --mode=launch --launch
+npx electron main.js --mode=launch --onboarding
+
+Web server port 5173
+/c/repos/bloom-videos/bloom-development-extension/webview/app
+npm run build
+npm run dev
+

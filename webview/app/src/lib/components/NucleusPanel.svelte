@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { getNucleusList, createNucleus } from '../api';
+  import { listNuclei, createNucleus } from '../api';  
   import type { Nucleus } from '../types';
   
   let nuclei: Nucleus[] = [];
@@ -11,7 +11,7 @@
   async function loadNuclei() {
     loading = true;
     try {
-      const result = await getNucleusList();
+      const result = await listNuclei();  
       nuclei = result.nuclei || [];
     } catch (error) {
       console.error('Error loading nuclei:', error);
@@ -25,7 +25,7 @@
     
     creating = true;
     try {
-      await createNucleus(newName);
+      await createNucleus({ org: newName });  
       newName = '';
       await loadNuclei();
     } catch (error) {

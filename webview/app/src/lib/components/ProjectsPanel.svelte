@@ -1,21 +1,21 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { getProjects, createProject, getNucleusList } from '../api';
+  import { listNuclei, listNucleusProjects, addProject } from '../api'; // ← CAMBIOS AQUÍ
   import type { Project, Nucleus } from '../types';
   
   let nuclei: Nucleus[] = [];
-  let selectedNucleusId = '';
+  let selectedNucleusPath = '';
   let projects: Project[] = [];
   let loading = false;
-  let newName = '';
+  let newProjectPath = '';
   let creating = false;
   
   async function loadNuclei() {
     try {
-      const result = await getNucleusList();
+      const result = await listNuclei();
       nuclei = result.nuclei || [];
       if (nuclei.length > 0) {
-        selectedNucleusId = nuclei[0].id;
+        selectedNucleusPath = nuclei[0].path || nuclei[0].id;
         await loadProjects();
       }
     } catch (error) {
@@ -24,11 +24,11 @@
   }
   
   async function loadProjects() {
-    if (!selectedNucleusId) return;
+    if (!selectedNucleusPath) return;
     
     loading = true;
     try {
-      const result = await getProjects(selectedNucleusId);
+      const result = await listNucleusProjects(selectedNucleusPath);
       projects = result.projects || [];
     } catch (error) {
       console.error('Error loading projects:', error);
@@ -38,12 +38,15 @@
   }
   
   async function handleCreate() {
-    if (!newName.trim() || !selectedNucleusId) return;
+    if (!newProjectPath.trim() || !selectedNucleusPath) return;
     
     creating = true;
     try {
-      await createProject(selectedNucleusId, newName);
-      newName = '';
+      await addProject({
+        project_path: newProjectPath,
+        nucleus_path: selectedNucleusPath
+      });
+      newProjectPath = '';
       await loadProjects();
     } catch (error) {
       console.error('Error creating project:', error);
@@ -61,9 +64,9 @@
   {#if nuclei.length === 0}
     <p>Primero crea un Nucleus</p>
   {:else}
-    <select bind:value={selectedNucleusId} on:change={loadProjects}>
+    <select bind:value={selectedNucleusPath} on:change={loadProjects}>
       {#each nuclei as nucleus}
-        <option value={nucleus.id}>{nucleus.name}</option>
+        <option value={nucleus.path || nucleus.id}>{nucleus.name}</option>
       {/each}
     </select>
     
@@ -80,12 +83,12 @@
     <div class="create">
       <input 
         type="text" 
-        bind:value={newName} 
-        placeholder="Nombre del nuevo proyecto"
+        bind:value={newProjectPath} 
+        placeholder="Path del proyecto"
         disabled={creating}
       />
-      <button on:click={handleCreate} disabled={creating || !newName.trim()}>
-        {creating ? 'Creando...' : 'Crear'}
+      <button on:click={handleCreate} disabled={creating || !newProjectPath.trim()}>
+        {creating ? 'Agregando...' : 'Agregar'}
       </button>
     </div>
   {/if}

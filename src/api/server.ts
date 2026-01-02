@@ -18,7 +18,7 @@ import { explorerRoutes } from './routes/explorer.routes';
 import { errorHandler } from './middleware/errorHandler';
 
 //Import Health
-import { healthRoutes } from './routes/health.routes';
+import healthRoutes from './routes/health.routes';
 
 export interface BloomApiServerConfig {
   context: vscode.ExtensionContext;

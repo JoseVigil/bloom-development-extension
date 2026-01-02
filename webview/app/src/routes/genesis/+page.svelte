@@ -1,5 +1,4 @@
-<script>
-  import GenesisView from './GenesisView.svelte';  // Asume que existe; ajusta path si no
+<script lang="ts">
+  import SystemStatus from '$lib/components/SystemStatus.svelte';
 </script>
-
-<GenesisView />
+<SystemStatus />

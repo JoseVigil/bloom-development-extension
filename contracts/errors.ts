@@ -359,7 +359,7 @@ export function createErrorResponse(
   message?: string,
   details?: Record<string, unknown>
 ): ErrorResponse {
-  const catalog = ERROR_CATALOG[code];
+  const catalog = ERROR_CATALOG[code as ErrorCode];
   
   // Calculate retry_after based on strategy
   let retryAfter: number | undefined;
@@ -471,57 +471,4 @@ export function shouldLogToTelemetry(code: ErrorCode): boolean {
 export function getTelemetryEventName(code: ErrorCode): string {
   const catalog = ERROR_CATALOG[code];
   return `error.${catalog.telemetry_category}.${code.toLowerCase()}`;
-}
-
-/**
- * Check if error is a Copilot-specific error
- *
- * @param code - Error code to check
- * @returns True if error is Copilot-related
- *
- * @example
- * ```typescript
- * if (isCopilotError('COPILOT_STREAM_ERROR')) {
- * // Handle Copilot-specific error
- * }
- * ```
- */
-export function isCopilotError(code: string): boolean {
-  return code.startsWith('COPILOT_');
-}
-
-/**
- * Format error for user display
- *
- * @param error - ErrorResponse object
- * @returns User-friendly error message
- *
- * @example
- * ```typescript
- * const userMsg = formatErrorForUser(errorResponse);
- * // "Invalid Copilot prompt format or missing required fields. Check your prompt structure and required fields (Details: {...})"
- * ```
- */
-export function formatErrorForUser(error: ErrorResponse): string {
-  const catalog = ERROR_CATALOG[error.error];
-  let message = error.message || catalog.default_message;
-  message += `. ${catalog.user_action}`;
-  if (error.details) {
-    message += ` (Details: ${JSON.stringify(error.details)})`;
-  }
-  return message;
-}
-
-/**
- * Assert error code exists in catalog (throws if invalid)
- * Useful for debugging and type safety
- *
- * @throws Error if code not in catalog
- */
-export function assertValidErrorCode(code: string): asserts code is ErrorCode {
-  if (!(code in ERROR_CATALOG)) {
-    throw new Error(
-      `Invalid error code: ${code}. Valid codes: ${Object.keys(ERROR_CATALOG).join(', ')}`
-    );
-  }
 }

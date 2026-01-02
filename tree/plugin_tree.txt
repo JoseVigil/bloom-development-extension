@@ -251,7 +251,9 @@ bloom-development-extension/
 │   │   │   ├── index.html
 │   │   │   ├── installation_manager.js
 │   │   │   ├── launch/
+│   │   │   │   ├── index_launch copy.html
 │   │   │   │   ├── index_launch.html
+│   │   │   │   ├── renderer_launch copy.js
 │   │   │   │   └── renderer_launch.js
 │   │   │   ├── renderer.js
 │   │   │   ├── styles.css
@@ -340,9 +342,11 @@ bloom-development-extension/
 │       │   │   │   ├── CopilotChat.svelte
 │       │   │   │   ├── FileTree.svelte
 │       │   │   │   ├── GeminiTokenForm.svelte
+│       │   │   │   ├── GenesisView.svelte
 │       │   │   │   ├── GithubAuthButton.svelte
 │       │   │   │   ├── IntentsLink.svelte
 │       │   │   │   ├── NucleusPanel.svelte
+│       │   │   │   ├── OnboardingView.svelte
 │       │   │   │   ├── OnboardingWizard.svelte
 │       │   │   │   ├── ProjectsPanel.svelte
 │       │   │   │   ├── SystemStatus.svelte
@@ -356,6 +360,9 @@ bloom-development-extension/
 │       │   │   │   ├── theme.ts
 │       │   │   │   └── websocket.ts
 │       │   │   ├── types.ts
+│       │   │   ├── views/
+│       │   │   │   ├── DevIntentView.svelte
+│       │   │   │   └── DocIntentView.svelte
 │       │   │   └── ws.ts
 │       │   └── routes/
 │       │       ├── +layout.svelte
