@@ -6,8 +6,8 @@ This directory contains the formal contract that defines how all layers of the B
 
 ```
 UI (Svelte) ↔ Plugin API ↔ Brain CLI ↔ Filesystem
-         ↕
-    WebSocket Protocol
+         ⇕
+    WebSocket Protocol (with Copilot streaming)
 ```
 
 ---
@@ -16,10 +16,10 @@ UI (Svelte) ↔ Plugin API ↔ Brain CLI ↔ Filesystem
 
 ### Core Type Definitions
 
-- **`types.ts`** - All TypeScript types (Nucleus, Intent, Profile, etc.)
-- **`websocket-protocol.ts`** - WebSocket message protocol (client ↔ server)
-- **`errors.ts`** - Error catalog with severity and retry strategies
-- **`state-machines.ts`** - UI state machines with valid transitions
+- **`types.ts`** - All TypeScript types (Nucleus, Intent, Profile, Copilot, etc.)
+- **`websocket-protocol.ts`** - WebSocket message protocol (client ↔ server, including Copilot streaming)
+- **`errors.ts`** - Error catalog with severity and retry strategies (including Copilot errors)
+- **`state-machines.ts`** - UI state machines with valid transitions (including CopilotState)
 
 ### Examples & Tests
 
@@ -33,10 +33,11 @@ UI (Svelte) ↔ Plugin API ↔ Brain CLI ↔ Filesystem
 ### ✅ What This Contract Provides
 
 1. **Type Safety** - Shared types prevent drift between UI and Plugin
-2. **Protocol Definition** - Formal WebSocket message spec
+2. **Protocol Definition** - Formal WebSocket message spec (including Copilot streaming)
 3. **Error Standards** - Consistent error codes and recovery strategies
 4. **State Management** - Validated state machine transitions
 5. **Integration Tests** - Verify contract compliance
+6. **Copilot Integration** - Full protocol for AI-assisted workflows
 
 ### ❌ What This Contract Prevents
 
@@ -56,6 +57,7 @@ UI (Svelte) ↔ Plugin API ↔ Brain CLI ↔ Filesystem
 // In UI components
 import type { Intent, Nucleus } from '@/contracts/types';
 import type { CopilotState } from '@/contracts/state-machines';
+import type { CopilotPromptPayload } from '@/contracts/websocket-protocol';
 
 // In Plugin API
 import type { APIResponse, ErrorResponse } from './contracts/types';
@@ -65,92 +67,122 @@ import { createErrorResponse } from './contracts/errors';
 import type { BrainResult } from './contracts/types';
 ```
 
-### Using State Machines
+### Using Copilot State Machine
 
 ```typescript
 import { useState } from 'react';
 import type { CopilotState } from '@/contracts/state-machines';
 import { isValidTransition, COPILOT_STATE_TRANSITIONS } from '@/contracts/state-machines';
 
-const [state, setState] = useState<CopilotState>({ status: 'idle', streaming: false });
+const [state, setState] = useState<CopilotState>({ 
+  status: 'idle', 
+  streaming: false 
+});
 
 // Validate transition before updating
 function transition(to: CopilotState['status']) {
   if (isValidTransition(COPILOT_STATE_TRANSITIONS, state.status, to)) {
-    setState({ status: to, ... });
+    setState({ status: to, streaming: to === 'streaming', ... });
   } else {
-    console.error(`Invalid transition: ${state.status} → ${to}`);
+    console.error(`Invalid Copilot transition: ${state.status} → ${to}`);
   }
 }
+
+// Example flow:
+// idle → connecting → streaming → completed → idle
 ```
 
-### Handling Errors
+### Handling Copilot Errors
 
 ```typescript
-import { createErrorResponse, getRetryDelay } from '@/contracts/errors';
-import type { APIResponse } from '@/contracts/types';
+import { createErrorResponse, isCopilotError, getRetryDelay } from '@/contracts/errors';
+import type { CopilotErrorPayload } from '@/contracts/websocket-protocol';
 
-async function fetchNucleus(id: string): Promise<APIResponse<Nucleus>> {
-  try {
-    const result = await brainExecutor('nucleus:get', { id });
+// Handle WebSocket error event
+ws.onmessage = (event) => {
+  const msg = JSON.parse(event.data);
+  
+  if (msg.event === 'copilot.error') {
+    const errorPayload: CopilotErrorPayload = msg.data;
     
-    if (result.status === 'success') {
-      return {
-        ok: true,
-        data: result.data,
-        timestamp: new Date().toISOString()
-      };
-    } else {
-      return {
-        ok: false,
-        error: createErrorResponse('NUCLEUS_NOT_FOUND', result.error)
-      };
+    // Create standardized error response
+    const error = createErrorResponse(
+      errorPayload.error_code as any,
+      errorPayload.details
+    );
+    
+    // Check if Copilot-specific error
+    if (isCopilotError(error.error_code)) {
+      console.log('Copilot error detected');
     }
-  } catch (err) {
-    return {
-      ok: false,
-      error: createErrorResponse('BRAIN_EXECUTION_FAILED', err.message)
-    };
+    
+    // Get retry delay if recoverable
+    if (error.recoverable) {
+      const delay = getRetryDelay(error.error_code as any, attemptNumber);
+      if (delay) {
+        setTimeout(() => retryPrompt(), delay);
+      }
+    }
   }
-}
-
-// Retry logic
-const delay = getRetryDelay('INTENT_LOCKED', attemptNumber);
-if (delay) {
-  setTimeout(() => retry(), delay);
-}
+};
 ```
 
-### WebSocket Communication
+### WebSocket Communication with Copilot
 
 ```typescript
 import { ClientMessageBuilder } from '@/contracts/websocket-protocol';
 import type { ServerMessage } from '@/contracts/websocket-protocol';
 
-// Send message
+// Send Copilot prompt
 const msg = ClientMessageBuilder.copilotPrompt({
   context: 'dev',
-  text: 'Add authentication',
-  intentId: 'intent-dev-123'
+  text: 'Add user authentication with JWT',
+  intentId: 'intent-dev-123',
+  profileId: 'profile-default'
 });
 ws.send(JSON.stringify(msg));
 
-// Handle response
+// Handle Copilot streaming response
 ws.onmessage = (event) => {
   const msg: ServerMessage = JSON.parse(event.data);
   
   switch (msg.event) {
     case 'copilot.stream_start':
       console.log('Process ID:', msg.data.processId);
+      console.log('Cancellable:', msg.data.cancellable);
+      setStreaming(true);
       break;
+      
     case 'copilot.stream_chunk':
       appendChunk(msg.data.chunk);
+      console.log('Chunk #', msg.data.sequence);
       break;
+      
     case 'copilot.stream_end':
+      console.log('Total chunks:', msg.data.total_chunks);
+      console.log('Total chars:', msg.data.total_chars);
+      console.log('Model used:', msg.data.model_used);
+      setStreaming(false);
       finalizeResponse();
+      break;
+      
+    case 'copilot.error':
+      handleCopilotError(msg.data);
+      setStreaming(false);
+      break;
+      
+    case 'copilot.cancelled':
+      console.log('Process cancelled, chunks sent:', msg.data.chunks_sent);
+      setStreaming(false);
       break;
   }
 };
+
+// Cancel ongoing process
+function cancelCopilot(processId: string) {
+  const msg = ClientMessageBuilder.copilotCancel(processId);
+  ws.send(JSON.stringify(msg));
+}
 ```
 
 ---
@@ -182,7 +214,7 @@ npm run validate:examples
 
 ---
 
-## 🔄 Contract Evolution
+## 📄 Contract Evolution
 
 ### Adding New Types
 
@@ -221,6 +253,17 @@ npm run validate:examples
 | `IntentDoc` | Documentation intent | See `examples/intent-doc.json` |
 | `ChromeProfile` | Chrome profile with AI accounts | See `examples/profile.json` |
 
+### Copilot Types
+
+| Type | Description | Usage |
+|------|-------------|-------|
+| `CopilotPromptPayload` | User prompt to Copilot | Client → Server |
+| `StreamStartPayload` | Streaming begins | Server → Client |
+| `StreamChunkPayload` | Text chunk | Server → Client |
+| `StreamEndPayload` | Streaming complete | Server → Client |
+| `CopilotErrorPayload` | Copilot error | Server → Client |
+| `CancelledPayload` | Process cancelled | Server → Client |
+
 ### API Types
 
 | Type | Description |
@@ -236,7 +279,7 @@ npm run validate:examples
 | Type | Description | States |
 |------|-------------|--------|
 | `LoadingState<T>` | Generic async operation | idle, loading, success, error |
-| `CopilotState` | Copilot streaming | idle, connecting, streaming, completed, error |
+| `CopilotState` | Copilot streaming | idle, connecting, streaming, completed, cancelled, error |
 | `IntentEditorState` | Intent editor | loading, editing, saving, locked_by_other, error |
 | `NucleusListState` | Nucleus list | loading, loaded, empty, error |
 
@@ -251,6 +294,7 @@ npm run validate:examples
 - `NOT_AUTHENTICATED` - GitHub auth required
 - `NOT_NUCLEUS` - Invalid nucleus directory
 - `AI_AUTH_FAILED` - AI service auth failed
+- `COPILOT_STREAM_ERROR` - Copilot streaming failed (fatal)
 - `INTERNAL_ERROR` - Unexpected error
 
 ### Recoverable Errors (Automatic Retry)
@@ -259,18 +303,53 @@ npm run validate:examples
 - `INTENT_NOT_FOUND` - Retry immediately
 - `INTENT_LOCKED` - Exponential backoff
 - `AI_TIMEOUT` - Retry immediately
+- `COPILOT_PROMPT_INVALID` - Fix and retry (1s delay)
+- `COPILOT_CONTEXT_UNKNOWN` - Retry with valid context (500ms)
 
 ### Warnings (Manual Intervention)
 
 - `INTENT_LOCKED_BY_OTHER` - User action needed
 - `AI_RATE_LIMIT` - Wait or switch account
 - `AI_QUOTA_EXCEEDED` - Add API key
+- `COPILOT_PROCESS_NOT_FOUND` - Process already completed
+- `COPILOT_CANCELLED` - User cancelled
 
 See `errors.ts` for complete catalog with retry strategies.
 
 ---
 
 ## 🔗 Integration Points
+
+### UI ↔ WebSocket (Copilot Streaming)
+
+```typescript
+import { websocketStore } from '@/stores/websocket';
+import type { CopilotPromptPayload } from '@/contracts/types';
+
+// Connect to WebSocket
+websocketStore.connect();
+
+// Send Copilot prompt
+websocketStore.sendPrompt({
+  context: 'onboarding',
+  text: 'How do I configure GitHub?',
+  profileId: 'profile-default'
+});
+
+// Subscribe to streaming updates
+websocketStore.subscribe($ws => {
+  if ($ws.streaming) {
+    console.log('Streaming:', $ws.chunks.join(''));
+  }
+  
+  if ($ws.error) {
+    console.error('Copilot error:', $ws.error.message);
+  }
+});
+
+// Cancel process
+websocketStore.cancelProcess(processId);
+```
 
 ### UI → Plugin API
 
@@ -310,25 +389,6 @@ if (result.status === 'success') {
 }
 ```
 
-### UI ↔ WebSocket
-
-```typescript
-// Client → Server
-const msg = ClientMessageBuilder.copilotPrompt({
-  context: 'dev',
-  text: 'Add auth'
-});
-ws.send(JSON.stringify(msg));
-
-// Server → Client
-ws.onmessage = (event) => {
-  const msg: ServerMessage = JSON.parse(event.data);
-  if (msg.event === 'copilot.stream_chunk') {
-    // Handle streaming chunk
-  }
-};
-```
-
 ---
 
 ## 📋 Checklist for Contract Changes
@@ -357,6 +417,18 @@ cat tsconfig.json | grep contracts
 
 # Should see:
 "@/contracts/*": ["./contracts/*"]
+```
+
+### Copilot WebSocket not connecting
+
+```bash
+# Check backend is running
+curl http://localhost:8080/health
+
+# Check WebSocket endpoint
+wscat -c ws://localhost:8080
+
+# Expected: {"event":"connected","data":{...}}
 ```
 
 ### Examples don't match types
@@ -391,6 +463,9 @@ assertValidTransition(
 5. **Add JSDoc** - Document all public types with examples
 6. **No `any` types** - Use `unknown` and validate at runtime
 7. **Test serialization** - Ensure types survive JSON round-trip
+8. **Use Copilot state machine** - Always validate transitions before updating UI
+9. **Handle streaming gracefully** - Accumulate chunks, handle cancellation
+10. **Check Copilot errors** - Use `isCopilotError()` for specific handling
 
 ---
 
@@ -403,6 +478,13 @@ assertValidTransition(
 ---
 
 ## 📜 Version History
+
+- **v1.1.0** (2025-12-31) - Copilot Integration (PROMPT 1)
+  - Added Copilot streaming protocol to websocket-protocol.ts
+  - Added CopilotState machine to state-machines.ts
+  - Added 5 new Copilot error codes to errors.ts
+  - Added helper functions: `isCopilotError()`, `formatErrorForUser()`
+  - Updated README with Copilot examples
 
 - **v1.0.0** (2025-01-23) - Initial contract (PROMPT 0)
   - Core types: Nucleus, Intent, Profile
@@ -418,7 +500,8 @@ assertValidTransition(
 // Import everything you need
 import type {
   Nucleus, Intent, IntentDev, ChromeProfile,
-  APIResponse, ErrorResponse, BrainResult
+  APIResponse, ErrorResponse, BrainResult,
+  CopilotPromptPayload, StreamChunkPayload
 } from '@/contracts/types';
 
 import type {
@@ -432,7 +515,9 @@ import type {
 import {
   createErrorResponse,
   isRecoverableError,
-  getRetryDelay
+  getRetryDelay,
+  isCopilotError,
+  formatErrorForUser
 } from '@/contracts/errors';
 
 import {

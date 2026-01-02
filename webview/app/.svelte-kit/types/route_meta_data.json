@@ -1,6 +1,11 @@
 {
 	"/": [],
+	"/genesis": [],
 	"/home": [],
 	"/intents": [],
+	"/intents/dev/[id]": [],
+	"/intents/doc/[id]": [],
+	"/intents/[id]": [],
+	"/onboarding": [],
 	"/welcome": []
 }

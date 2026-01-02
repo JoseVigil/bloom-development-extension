@@ -376,13 +376,13 @@ export class BrainApiAdapter {
 
   /**
    * Execute onboarding status check.
-   * Maps to: brain health onboarding-status
-   * 
+   * Maps to: brain health onboarding-check
+   *
    * @returns {Promise<BrainResult>} Onboarding completion status
    * @timeout 10000ms (10 seconds)
    */
   static async healthOnboardingStatus(): Promise<BrainResult> {
-    return BrainExecutor.execute(['health', 'onboarding-status'], {
+    return BrainExecutor.execute(['health', 'onboarding-check'], {
       parseJson: true,
       timeout: 10000 // 10s timeout
     });

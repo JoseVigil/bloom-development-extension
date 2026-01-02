@@ -226,6 +226,7 @@ bloom-development-extension/
 │   │   │   ├── brain-commands.js
 │   │   │   ├── health-monitor.js
 │   │   │   ├── launcher.js
+│   │   │   ├── preload_launch.js
 │   │   │   └── profile-manager.js
 │   │   ├── main.js
 │   │   ├── node_modules/ [... dependencies]
@@ -326,6 +327,7 @@ bloom-development-extension/
 ├── webview/
 │   └── app/
 │       ├── .svelte-kit/ [... svelte build]
+│       ├── node_modules/ [... dependencies]
 │       ├── package-lock.json
 │       ├── package.json
 │       ├── src/
@@ -335,6 +337,7 @@ bloom-development-extension/
 │       │   │   ├── components/
 │       │   │   │   ├── BriefingEditor.svelte
 │       │   │   │   ├── ChatBTIP.svelte
+│       │   │   │   ├── CopilotChat.svelte
 │       │   │   │   ├── FileTree.svelte
 │       │   │   │   ├── GeminiTokenForm.svelte
 │       │   │   │   ├── GithubAuthButton.svelte
@@ -431,7 +434,7 @@ bloom-development-extension/
 │   │   │   ├── __init__.py
 │   │   │   ├── __pycache__/ [... cache]
 │   │   │   ├── full_stack.py
-│   │   │   ├── onboarding_status.py
+│   │   │   ├── onboarding_check.py
 │   │   │   └── websocket_status.py
 │   │   ├── init.py
 │   │   ├── intent/
@@ -542,6 +545,7 @@ bloom-development-extension/
 │   │   │   └── models.py
 │   │   ├── health/
 │   │   │   ├── __init__.py
+│   │   │   ├── __pycache__/ [... cache]
 │   │   │   ├── full_stack_manager.py
 │   │   │   ├── onboarding_status_manager.py
 │   │   │   └── websocket_status_manager.py

@@ -8,97 +8,77 @@ const execAsync = promisify(exec);
 
 let mainWindow = null;
 
+function setMainWindow(window) {
+  mainWindow = window;
+}
+
 function setupLaunchHandlers() {
   console.log('📡 Setting up launch IPC handlers...');
 
-  // ============================================================================
-  // ONBOARDING HANDLERS
-  // ============================================================================
+  const projectRoot = path.join(__dirname, '..'); // electron-app/
 
+  // ============================================================================
+  // ONBOARDING STATUS
+  // ============================================================================
+  ipcMain.removeAllListeners('onboarding:status');
   ipcMain.handle('onboarding:status', async () => {
     try {
-      const brainPath = path.join(__dirname, '..', 'brain', 'brain.py');
-      const { stdout } = await execAsync(`python "${brainPath}" onboarding status --json`);
-      
+      const brainCommand = process.platform === 'win32'
+        ? 'python -m brain --json health onboarding-check'
+        : 'python3 -m brain --json health onboarding-check';
+
+      const { stdout } = await execAsync(brainCommand, {
+        cwd: projectRoot,
+        windowsHide: true,
+        timeout: 15000
+      });
+
       const result = JSON.parse(stdout);
-      console.log('✅ Onboarding status:', result);
-      
+
+      if (result.status !== 'success') {
+        return { success: false, completed: false, error: 'Invalid brain response' };
+      }
+
       return {
         success: true,
-        completed: result.completed || false,
-        steps: result.steps || {}
+        completed: result.data.ready === true,
+        current_step: result.data.current_step || 'unknown',
+        details: result.data.details || {}
       };
     } catch (error) {
-      console.error('❌ Error checking onboarding status:', error);
-      return {
-        success: false,
-        completed: false,
-        error: error.message
-      };
-    }
-  });
-
-  ipcMain.handle('onboarding:complete', async (event, data) => {
-    try {
-      const brainPath = path.join(__dirname, '..', 'brain', 'brain.py');
-      await execAsync(`python "${brainPath}" onboarding complete`);
-      
-      console.log('✅ Onboarding marked as complete');
-      
-      // Notify all windows
-      if (mainWindow) {
-        mainWindow.webContents.send('onboarding:completed');
-      }
-      
-      return { success: true };
-    } catch (error) {
-      console.error('❌ Error completing onboarding:', error);
-      return {
-        success: false,
-        error: error.message
-      };
-    }
-  });
-
-  ipcMain.handle('onboarding:reset', async () => {
-    try {
-      const brainPath = path.join(__dirname, '..', 'brain', 'brain.py');
-      await execAsync(`python "${brainPath}" onboarding reset`);
-      
-      console.log('🔄 Onboarding reset');
-      
-      return { success: true };
-    } catch (error) {
-      console.error('❌ Error resetting onboarding:', error);
-      return {
-        success: false,
-        error: error.message
-      };
+      console.error('❌ Onboarding status error:', error.message || error);
+      return { success: false, completed: false, error: error.message || 'Brain CLI failed' };
     }
   });
 
   // ============================================================================
-  // HEALTH CHECK HANDLERS
+  // HEALTH CHECK
   // ============================================================================
-
+  ipcMain.removeAllListeners('health:check');
   ipcMain.handle('health:check', async () => {
     try {
-      // Only run health checks if onboarding is complete
-      const onboardingResult = await ipcMain.handle('onboarding:status', {});
-      
-      if (!onboardingResult.completed) {
+      const onboardingResult = await ipcMain.handle('onboarding:status');
+
+      if (!onboardingResult.success || !onboardingResult.completed) {
         return {
           success: true,
           status: 'pending-onboarding',
-          message: 'Health checks disabled until onboarding is complete'
+          message: 'Complete onboarding first'
         };
       }
 
-      const brainPath = path.join(__dirname, '..', 'brain', 'brain.py');
-      const { stdout } = await execAsync(`python "${brainPath}" health check --json`);
-      
+      const brainCommand = process.platform === 'win32'
+        ? 'python -m brain --json health full-stack'
+        : 'python3 -m brain --json health full-stack';
+
+      const { stdout } = await execAsync(brainCommand, {
+        cwd: projectRoot,
+        windowsHide: true,
+        timeout: 20000
+      });
+
       const result = JSON.parse(stdout);
-      
+
       return {
         success: true,
         status: result.status || 'unknown',
@@ -106,149 +86,34 @@ function setupLaunchHandlers() {
         issues: result.issues || []
       };
     } catch (error) {
-      console.error('❌ Error running health check:', error);
-      return {
-        success: false,
-        status: 'error',
-        error: error.message
-      };
+      console.error('❌ Health check error:', error.message || error);
+      return { success: false, status: 'error', error: error.message || 'Unknown' };
     }
   });
 
   // ============================================================================
-  // PROFILE MANAGEMENT
+  // APP INFO & SHELL
   // ============================================================================
+  ipcMain.removeAllListeners('app:info');
+  ipcMain.handle('app:info', () => ({
+    success: true,
+    version: '1.0.0',
+    mode: 'launch',
+    platform: process.platform
+  }));
 
-  ipcMain.handle('profiles:list', async () => {
-    try {
-      const brainPath = path.join(__dirname, '..', 'brain', 'brain.py');
-      const { stdout } = await execAsync(`python "${brainPath}" profiles list --json`);
-      
-      const result = JSON.parse(stdout);
-      
-      return {
-        success: true,
-        profiles: result.profiles || []
-      };
-    } catch (error) {
-      console.error('❌ Error listing profiles:', error);
-      return {
-        success: false,
-        profiles: [],
-        error: error.message
-      };
-    }
-  });
-
-  ipcMain.handle('profiles:launch', async (event, profileId, url) => {
-    try {
-      const brainPath = path.join(__dirname, '..', 'brain', 'brain.py');
-      const urlArg = url ? `--url "${url}"` : '';
-      const { stdout } = await execAsync(`python "${brainPath}" profiles launch "${profileId}" ${urlArg}`);
-      
-      const result = JSON.parse(stdout);
-      
-      return {
-        success: true,
-        pid: result.pid,
-        profileId
-      };
-    } catch (error) {
-      console.error('❌ Error launching profile:', error);
-      return {
-        success: false,
-        error: error.message
-      };
-    }
-  });
-
-  // ============================================================================
-  // APP INFO
-  // ============================================================================
-
-  ipcMain.handle('app:info', async () => {
-    return {
-      success: true,
-      version: require('../package.json').version,
-      mode: 'launch',
-      platform: process.platform
-    };
-  });
-
-  // ============================================================================
-  // LOGS
-  // ============================================================================
-
-  ipcMain.handle('logs:tail', async (event, lines = 50) => {
-    try {
-      const fs = require('fs');
-      const logPath = path.join(__dirname, '..', 'logs', 'bloom.log');
-      
-      if (!fs.existsSync(logPath)) {
-        return {
-          success: true,
-          logs: []
-        };
-      }
-
-      const content = fs.readFileSync(logPath, 'utf-8');
-      const allLines = content.split('\n').filter(line => line.trim());
-      const lastLines = allLines.slice(-lines);
-      
-      return {
-        success: true,
-        logs: lastLines
-      };
-    } catch (error) {
-      console.error('❌ Error tailing logs:', error);
-      return {
-        success: false,
-        logs: [],
-        error: error.message
-      };
-    }
-  });
-
-  ipcMain.handle('logs:open-folder', async () => {
-    try {
-      const { shell } = require('electron');
-      const logDir = path.join(__dirname, '..', 'logs');
-      await shell.openPath(logDir);
-      
-      return { success: true };
-    } catch (error) {
-      console.error('❌ Error opening logs folder:', error);
-      return {
-        success: false,
-        error: error.message
-      };
-    }
-  });
-
-  // ============================================================================
-  // SHELL COMMANDS
-  // ============================================================================
-
+  ipcMain.removeAllListeners('shell:openExternal');
   ipcMain.handle('shell:openExternal', async (event, url) => {
+    const { shell } = require('electron');
     try {
-      const { shell } = require('electron');
       await shell.openExternal(url);
-      
       return { success: true };
-    } catch (error) {
-      console.error('❌ Error opening external URL:', error);
-      return {
-        success: false,
-        error: error.message
-      };
+    } catch (err) {
+      return { success: false, error: err.message };
     }
   });
 
   console.log('✅ Launch IPC handlers registered');
-}
-
-function setMainWindow(window) {
-  mainWindow = window;
 }
 
 module.exports = {

@@ -1,6 +1,6 @@
 """
-Core business logic for onboarding status verification.
-Integrates with existing Brain commands via subprocess.
+Onboarding status manager - Pure business logic.
+Aggregates status from multiple Brain subsystems.
 """
 
 import subprocess
@@ -11,255 +11,233 @@ from datetime import datetime
 
 class OnboardingStatusManager:
     """
-    Manages onboarding status checks by orchestrating existing Brain commands.
-    Pure orchestration - no business logic duplication.
+    Manager for aggregating onboarding completion status.
+    Checks GitHub auth, Gemini keys, Nucleus creation, and project additions.
     """
     
-    def __init__(self, gc):
-        self.gc = gc
-        self.verbose = gc.verbose if hasattr(gc, 'verbose') else False
+    def __init__(self, global_context=None):
+        """
+        Initialize onboarding status manager.
+        
+        Args:
+            global_context: Optional GlobalContext for verbose logging
+        """
+        self.gc = global_context
+        self.verbose = global_context.verbose if global_context else False
     
     def check_onboarding_status(self, refresh: bool = False) -> Dict[str, Any]:
         """
-        Aggregate onboarding status from multiple components.
+        Check onboarding completion by aggregating multiple component checks.
         
         Args:
-            refresh: Force re-check, ignore any caching
+            refresh: If True, force re-check ignoring cache
             
         Returns:
-            Onboarding status dictionary
+            Dict with ready status, current_step, completion_percentage, and details
         """
-        details = {
+        if self.verbose:
+            print("🔍 Aggregating onboarding status...")
+        
+        # Check all onboarding components
+        checks = {
             'github': self._check_github_auth(),
             'gemini': self._check_gemini_keys(),
             'nucleus': self._check_nucleus_exists(),
             'projects': self._check_projects_added()
         }
         
-        # Determine current step
-        current_step = self._determine_current_step(details)
-        
         # Calculate completion
-        completed_count = sum(
-            1 for component in details.values() 
-            if self._is_component_complete(component)
-        )
-        completion_percentage = int((completed_count / 4) * 100)
+        completed_steps = sum(1 for v in checks.values() if v.get('authenticated') or 
+                                                             v.get('configured') or 
+                                                             v.get('exists') or 
+                                                             v.get('added', False))
+        total_steps = len(checks)
+        completion_percentage = int((completed_steps / total_steps) * 100)
         
-        ready = (current_step == "completed")
+        # Determine current step and readiness
+        if not checks['github'].get('authenticated'):
+            current_step = 'welcome'
+            ready = False
+        elif not checks['gemini'].get('configured'):
+            current_step = 'gemini'
+            ready = False
+        elif not checks['nucleus'].get('exists'):
+            current_step = 'nucleus'
+            ready = False
+        elif not checks['projects'].get('added'):
+            current_step = 'projects'
+            ready = False
+        else:
+            current_step = 'completed'
+            ready = True
         
         return {
             'ready': ready,
             'current_step': current_step,
             'completed': ready,
-            'details': details,
-            'timestamp': datetime.utcnow().isoformat() + 'Z',
-            'completion_percentage': completion_percentage
+            'completion_percentage': completion_percentage,
+            'details': checks,
+            'timestamp': datetime.utcnow().isoformat() + 'Z'
         }
     
     def _check_github_auth(self) -> Dict[str, Any]:
-        """Check GitHub authentication via brain github auth-status"""
+        """Check GitHub authentication status"""
         if self.verbose:
-            print("🔍 Checking GitHub authentication...")
+            print("  🔍 Checking GitHub authentication...")
         
         try:
             result = subprocess.run(
                 ['python', '-m', 'brain', 'github', 'auth-status', '--json'],
                 capture_output=True,
                 text=True,
-                timeout=10
+                encoding='utf-8',
+                errors='ignore',  # Ignore encoding errors
+                timeout=10,
+                env={**subprocess.os.environ, 'PYTHONIOENCODING': 'utf-8'}
             )
             
             if result.returncode == 0:
-                data = json.loads(result.stdout)
-                return {
-                    'authenticated': data.get('authenticated', False),
-                    'username': data.get('username', 'unknown'),
-                    'checked_at': datetime.utcnow().isoformat() + 'Z'
-                }
+                try:
+                    data = json.loads(result.stdout)
+                    authenticated = data.get('data', {}).get('authenticated', False)
+                    return {
+                        'authenticated': authenticated,
+                        'username': data.get('data', {}).get('username', 'N/A'),
+                        'checked_at': datetime.utcnow().isoformat() + 'Z'
+                    }
+                except json.JSONDecodeError:
+                    return {'authenticated': False, 'error': 'Invalid JSON response'}
             else:
-                return {
-                    'authenticated': False,
-                    'error': 'Failed to check auth status',
-                    'checked_at': datetime.utcnow().isoformat() + 'Z'
-                }
+                return {'authenticated': False, 'error': 'GitHub auth check failed'}
+        except subprocess.TimeoutExpired:
+            return {'authenticated': False, 'error': 'Timeout'}
         except Exception as e:
-            return {
-                'authenticated': False,
-                'error': str(e),
-                'checked_at': datetime.utcnow().isoformat() + 'Z'
-            }
+            return {'authenticated': False, 'error': str(e)}
     
     def _check_gemini_keys(self) -> Dict[str, Any]:
-        """Check Gemini keys via brain gemini keys-list"""
+        """Check Gemini API keys configuration"""
         if self.verbose:
-            print("🔍 Checking Gemini API keys...")
+            print("  🔍 Checking Gemini API keys...")
         
         try:
-            # First, list keys
             result = subprocess.run(
                 ['python', '-m', 'brain', 'gemini', 'keys-list', '--json'],
                 capture_output=True,
                 text=True,
-                timeout=10
+                encoding='utf-8',
+                errors='ignore',
+                timeout=10,
+                env={**subprocess.os.environ, 'PYTHONIOENCODING': 'utf-8'}
             )
             
-            if result.returncode != 0:
-                return {
-                    'configured': False,
-                    'valid_keys': 0,
-                    'error': 'Failed to list keys',
-                    'checked_at': datetime.utcnow().isoformat() + 'Z'
-                }
-            
-            keys_data = json.loads(result.stdout)
-            keys_count = len(keys_data.get('keys', []))
-            
-            if keys_count == 0:
-                return {
-                    'configured': False,
-                    'valid_keys': 0,
-                    'checked_at': datetime.utcnow().isoformat() + 'Z'
-                }
-            
-            # Validate keys
-            validate_result = subprocess.run(
-                ['python', '-m', 'brain', 'gemini', 'validate', '--json'],
-                capture_output=True,
-                text=True,
-                timeout=15
-            )
-            
-            if validate_result.returncode == 0:
-                validate_data = json.loads(validate_result.stdout)
-                valid_count = validate_data.get('valid_keys', 0)
-                
-                return {
-                    'configured': valid_count > 0,
-                    'valid_keys': valid_count,
-                    'total_keys': keys_count,
-                    'checked_at': datetime.utcnow().isoformat() + 'Z'
-                }
+            if result.returncode == 0:
+                try:
+                    data = json.loads(result.stdout)
+                    keys = data.get('data', {}).get('keys', [])
+                    configured = len(keys) > 0
+                    return {
+                        'configured': configured,
+                        'key_count': len(keys),
+                        'checked_at': datetime.utcnow().isoformat() + 'Z'
+                    }
+                except json.JSONDecodeError:
+                    return {'configured': False, 'error': 'Invalid JSON response'}
             else:
-                return {
-                    'configured': True,  # Keys exist but validation failed
-                    'valid_keys': 0,
-                    'total_keys': keys_count,
-                    'error': 'Key validation failed',
-                    'checked_at': datetime.utcnow().isoformat() + 'Z'
-                }
-                
+                return {'configured': False, 'error': 'Gemini keys check failed'}
+        except subprocess.TimeoutExpired:
+            return {'configured': False, 'error': 'Timeout'}
         except Exception as e:
-            return {
-                'configured': False,
-                'valid_keys': 0,
-                'error': str(e),
-                'checked_at': datetime.utcnow().isoformat() + 'Z'
-            }
+            return {'configured': False, 'error': str(e)}
     
     def _check_nucleus_exists(self) -> Dict[str, Any]:
-        """Check if nucleus exists via brain nucleus list"""
+        """Check if at least one Nucleus exists"""
         if self.verbose:
-            print("🔍 Checking Nucleus existence...")
+            print("  🔍 Checking Nucleus existence...")
         
         try:
             result = subprocess.run(
                 ['python', '-m', 'brain', 'nucleus', 'list', '--json'],
                 capture_output=True,
                 text=True,
-                timeout=10
+                encoding='utf-8',
+                errors='ignore',
+                timeout=10,
+                env={**subprocess.os.environ, 'PYTHONIOENCODING': 'utf-8'}
             )
             
             if result.returncode == 0:
-                data = json.loads(result.stdout)
-                nuclei = data.get('nuclei', [])
-                count = len(nuclei)
-                
-                if count > 0:
-                    active = nuclei[0] if nuclei else {}
+                try:
+                    data = json.loads(result.stdout)
+                    nuclei = data.get('data', {}).get('nuclei', [])
+                    exists = len(nuclei) > 0
                     return {
-                        'exists': True,
-                        'count': count,
-                        'active_id': active.get('id', 'unknown'),
+                        'exists': exists,
+                        'nucleus_count': len(nuclei),
                         'checked_at': datetime.utcnow().isoformat() + 'Z'
                     }
-                else:
-                    return {
-                        'exists': False,
-                        'count': 0,
-                        'checked_at': datetime.utcnow().isoformat() + 'Z'
-                    }
+                except json.JSONDecodeError:
+                    return {'exists': False, 'error': 'Invalid JSON response'}
             else:
-                return {
-                    'exists': False,
-                    'count': 0,
-                    'error': 'Failed to list nuclei',
-                    'checked_at': datetime.utcnow().isoformat() + 'Z'
-                }
+                return {'exists': False, 'error': 'Nucleus list check failed'}
+        except subprocess.TimeoutExpired:
+            return {'exists': False, 'error': 'Timeout'}
         except Exception as e:
-            return {
-                'exists': False,
-                'count': 0,
-                'error': str(e),
-                'checked_at': datetime.utcnow().isoformat() + 'Z'
-            }
+            return {'exists': False, 'error': str(e)}
     
     def _check_projects_added(self) -> Dict[str, Any]:
-        """Check if projects are added via brain nucleus projects"""
+        """Check if projects have been added to Nucleus"""
         if self.verbose:
-            print("🔍 Checking projects addition...")
+            print("  🔍 Checking added projects...")
         
         try:
+            # First get nucleus list
             result = subprocess.run(
-                ['python', '-m', 'brain', 'nucleus', 'projects', '--json'],
+                ['python', '-m', 'brain', 'nucleus', 'list', '--json'],
                 capture_output=True,
                 text=True,
-                timeout=10
+                encoding='utf-8',
+                errors='ignore',
+                timeout=10,
+                env={**subprocess.os.environ, 'PYTHONIOENCODING': 'utf-8'}
             )
             
             if result.returncode == 0:
-                data = json.loads(result.stdout)
-                projects = data.get('projects', [])
-                count = len(projects)
-                
-                return {
-                    'added': count > 0,
-                    'count': count,
-                    'checked_at': datetime.utcnow().isoformat() + 'Z'
-                }
+                try:
+                    data = json.loads(result.stdout)
+                    nuclei = data.get('data', {}).get('nuclei', [])
+                    
+                    if not nuclei:
+                        return {'added': False, 'error': 'No nucleus found'}
+                    
+                    # Check first nucleus for projects
+                    first_nucleus = nuclei[0].get('path', '.')
+                    
+                    projects_result = subprocess.run(
+                        ['python', '-m', 'brain', 'nucleus', 'list-projects', '-p', first_nucleus, '--json'],
+                        capture_output=True,
+                        text=True,
+                        encoding='utf-8',
+                        errors='ignore',
+                        timeout=10,
+                        env={**subprocess.os.environ, 'PYTHONIOENCODING': 'utf-8'}
+                    )
+                    
+                    if projects_result.returncode == 0:
+                        projects_data = json.loads(projects_result.stdout)
+                        projects = projects_data.get('data', {}).get('projects', [])
+                        added = len(projects) > 0
+                        return {
+                            'added': added,
+                            'project_count': len(projects),
+                            'checked_at': datetime.utcnow().isoformat() + 'Z'
+                        }
+                    else:
+                        return {'added': False, 'error': 'Failed to list projects'}
+                except json.JSONDecodeError:
+                    return {'added': False, 'error': 'Invalid JSON response'}
             else:
-                return {
-                    'added': False,
-                    'count': 0,
-                    'error': 'Failed to list projects',
-                    'checked_at': datetime.utcnow().isoformat() + 'Z'
-                }
+                return {'added': False, 'error': 'Nucleus list failed'}
+        except subprocess.TimeoutExpired:
+            return {'added': False, 'error': 'Timeout'}
         except Exception as e:
-            return {
-                'added': False,
-                'count': 0,
-                'error': str(e),
-                'checked_at': datetime.utcnow().isoformat() + 'Z'
-            }
-    
-    def _is_component_complete(self, component: Dict[str, Any]) -> bool:
-        """Check if a component is complete"""
-        return (
-            component.get('authenticated', False) or
-            component.get('configured', False) or
-            component.get('exists', False) or
-            component.get('added', False)
-        )
-    
-    def _determine_current_step(self, details: Dict[str, Any]) -> str:
-        """Determine current onboarding step based on component status"""
-        if not self._is_component_complete(details['github']):
-            return "welcome"
-        elif not self._is_component_complete(details['gemini']):
-            return "gemini"
-        elif not self._is_component_complete(details['nucleus']):
-            return "nucleus"
-        elif not self._is_component_complete(details['projects']):
-            return "projects"
-        else:
-            return "completed"
+            return {'added': False, 'error': str(e)}
