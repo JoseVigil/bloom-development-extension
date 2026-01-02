@@ -1,41 +1,32 @@
-const { checkHealthStatus, checkOnboardingStatus } = require('./health-monitor');
-const { listProfiles, launchProfile } = require('./profile-manager');
-
+// installer/electron-app/launch/launcher.js
 /**
  * Inicializa el dashboard del modo Launch
+ * Versión corregida 2026 - Solo envía eventos al renderer
+ * NO carga health-monitor aquí (se carga en renderer vía <script>)
  */
 async function runLaunchMode(mainWindow) {
   try {
-    console.log('🎨 Initializing dashboard...');
+    console.log('🎨 Initializing dashboard in launch mode...');
 
-    // Verificar salud del sistema
-    const health = await checkHealthStatus();
-    mainWindow.webContents.send('health:status', health);
+    // Ya no hacemos checks aquí - todo se maneja en renderer o main.js
+    // Solo notificamos al renderer que estamos listos para el dashboard
 
-    if (health.status !== 'ok') {
-      console.warn('⚠️ Health check failed:', health);
-      mainWindow.webContents.send('dashboard:error', {
-        type: 'health',
-        message: 'System health check failed. Please resolve issues before continuing.',
-        details: health
-      });
-      return;
+    mainWindow.webContents.send('dashboard:ready', {
+      message: 'Launch mode initialized',
+      timestamp: new Date().toISOString()
+    });
+
+    // Opcional: cargar lista de perfiles si la tienes en otro módulo que NO use renderer-only code
+    // Si profile-manager.js solo usa brain CLI, está bien
+    const { listProfiles } = require('./profile-manager');
+    try {
+      const profiles = await listProfiles();
+      mainWindow.webContents.send('profiles:list', profiles);
+    } catch (err) {
+      console.warn('Could not load profiles:', err.message);
     }
 
-    // Verificar estado de onboarding
-    const onboarding = await checkOnboardingStatus();
-    mainWindow.webContents.send('onboarding:status', onboarding);
-
-    if (!onboarding.completed) {
-      console.log('📝 Onboarding incomplete, launching onboarding flow...');
-      await launchProfile('bloom-worker-profile', 'http://localhost:48215/onboarding');
-    }
-
-    // Cargar lista de perfiles
-    const profiles = await listProfiles();
-    mainWindow.webContents.send('profiles:list', profiles);
-
-    console.log('✅ Dashboard initialized successfully');
+    console.log('✅ Dashboard ready signal sent to renderer');
   } catch (error) {
     console.error('❌ Dashboard initialization failed:', error);
     mainWindow.webContents.send('dashboard:error', {

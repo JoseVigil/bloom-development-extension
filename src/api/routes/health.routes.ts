@@ -93,41 +93,36 @@ export const healthRoutes: FastifyPluginAsync = async (fastify) => {
 
   /**
    * GET /api/v1/health/onboarding
-   * Onboarding status check - verifies completion of onboarding steps.
+   * Check onboarding completion status.
    */
   fastify.get('/onboarding', {
     schema: {
       tags: ['health'],
       summary: 'Onboarding status check',
-      description: 'Verifies completion of onboarding steps (GitHub, Gemini, Nucleus, Projects)',
+      description: 'Verifies onboarding completion using aggregated checks',
       response: {
         200: {
-          description: 'Onboarding status retrieved successfully',
+          description: 'Onboarding status',
           type: 'object',
           properties: {
+            status: { type: 'string', enum: ['ok', 'partial', 'error'] },
             ready: { type: 'boolean' },
             current_step: { type: 'string' },
-            completed: { type: 'boolean' },
-            details: { type: 'object' },
-            completion_percentage: { type: 'number' }
-          }
-        },
-        500: {
-          description: 'Failed to check onboarding status',
-          type: 'object',
-          properties: {
-            status: { type: 'string', enum: ['error'] },
-            error: { type: 'string' }
+            details: { type: 'object' }
           }
         }
       }
     }
   }, async (request, reply) => {
     try {
-      const result: BrainResult = await BrainApiAdapter.healthOnboardingStatus();
-      
+      const result = await BrainApiAdapter.healthOnboardingStatus();
       if (result.status === 'success' && result.data) {
-        return reply.code(200).send(result.data);
+        return reply.code(200).send({
+          status: 'ok',
+          ready: result.data.ready,
+          current_step: result.data.current_step,
+          details: result.data.details || {}
+        });
       } else {
         return reply.code(500).send({
           status: 'error',
@@ -135,7 +130,7 @@ export const healthRoutes: FastifyPluginAsync = async (fastify) => {
         });
       }
     } catch (error) {
-      fastify.log.error('Onboarding status check error:', error);
+      fastify.log.error('Onboarding check error:', error);
       return reply.code(500).send({
         status: 'error',
         error: error instanceof Error ? error.message : 'Unknown error'

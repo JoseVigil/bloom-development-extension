@@ -1,6 +1,6 @@
 """
-Health check command for full Bloom Nucleus stack verification.
-Verifies bloom-host, API REST, Chrome extension, Brain CLI, and onboarding status.
+Full stack health check command.
+Verifies complete Bloom Nucleus stack health.
 """
 
 import typer
@@ -11,8 +11,8 @@ from brain.cli.categories import CommandCategory
 
 class HealthFullStackCommand(BaseCommand):
     """
-    Comprehensive health check for entire Bloom Nucleus stack.
-    Executes idempotent checks on all critical components.
+    Comprehensive health check for all Bloom Nucleus components.
+    Checks: bloom-host, API REST, Chrome extension, Brain CLI, and onboarding.
     """
     
     def metadata(self) -> CommandMetadata:
@@ -58,12 +58,11 @@ class HealthFullStackCommand(BaseCommand):
                 from brain.shared.context import GlobalContext
                 gc = GlobalContext()
             
-            # Override verbosity if flag present
             if verbose:
                 gc.verbose = True
             
             if gc.verbose:
-                typer.echo("🏥 Iniciando verificación de salud completa del stack...", err=True)
+                typer.echo("🔍 Verificando salud completa del stack...", err=True)
             
             try:
                 from brain.core.health.full_stack_manager import FullStackHealthManager
@@ -84,130 +83,75 @@ class HealthFullStackCommand(BaseCommand):
                     gc.output(result, self._render_success)
                 
             except Exception as e:
-                self._handle_error(gc, f"Error durante health check: {str(e)}")
+                self._handle_error(gc, f"Error checking stack health: {str(e)}")
 
     def _render_success(self, result: dict):
-        """Render human-friendly health report"""
+        """Render human-friendly full stack health report"""
         data = result['data']
-        status = data.get('status', 'unknown')
+        overall_status = data.get('status', 'unknown')
+        health_score = data.get('overall_health_score', 0)
         
-        # Header
+        # Header with health score
         status_emoji = {
             'ok': '✅',
             'partial': '⚠️',
-            'error': '❌',
-            'unknown': '❓'
-        }
+            'error': '❌'
+        }.get(overall_status, '❓')
         
-        emoji = status_emoji.get(status, '❓')
-        typer.echo(f"\n{emoji} Status General: {status.upper()}")
-        typer.echo(f"📊 Health Score: {data.get('overall_health_score', 0)}%")
-        typer.echo(f"⏱️  Check Duration: {data.get('check_duration_ms', 0)}ms")
-        typer.echo(f"🕐 Timestamp: {data.get('timestamp', 'unknown')}\n")
+        typer.echo(f"\n{status_emoji} Stack Health: {overall_status.upper()}")
+        typer.echo(f"Overall Score: {health_score}%")
+        typer.echo(f"Check Duration: {data.get('check_duration_ms', 'N/A')}ms")
+        typer.echo(f"Timestamp: {data.get('timestamp', 'N/A')}\n")
         
         # Component details
         details = data.get('details', {})
         
-        # Host check
-        if 'host' in details:
-            host = details['host']
-            host_status = host.get('status', 'unknown')
-            icon = '✅' if host_status == 'connected' else '❌'
-            typer.echo(f"{icon} bloom-host.exe (TCP {host.get('port', 5678)})")
-            typer.echo(f"   Status: {host_status}")
-            if 'response_time_ms' in host:
-                typer.echo(f"   Response Time: {host['response_time_ms']}ms")
-            if 'error' in host:
-                typer.echo(f"   Error: {host['error']}")
-            typer.echo()
+        typer.echo("Component Status:\n")
+        self._render_component("Bloom Host (TCP 5678)", details.get('host', {}))
+        self._render_component("API REST (HTTP 48215)", details.get('api', {}))
+        self._render_component("Chrome Extension", details.get('extension', {}))
+        self._render_component("Brain CLI", details.get('brain', {}))
+        self._render_component("Onboarding", details.get('onboarding', {}))
         
-        # API check
-        if 'api' in details:
-            api = details['api']
-            api_status = api.get('status', 'unknown')
-            icon = '✅' if api_status == 'online' else '❌'
-            typer.echo(f"{icon} API REST (HTTP {api.get('port', 48215)})")
-            typer.echo(f"   Status: {api_status}")
-            if 'version' in api:
-                typer.echo(f"   Version: {api['version']}")
-            if 'response_time_ms' in api:
-                typer.echo(f"   Response Time: {api['response_time_ms']}ms")
-            if 'error' in api:
-                typer.echo(f"   Error: {api['error']}")
-            typer.echo()
+        # Summary
+        if overall_status != 'ok':
+            typer.echo("\n💡 Issues detected. Run individual checks for details.")
+
+    def _render_component(self, name: str, data: dict):
+        """Render individual component status"""
+        status = data.get('status', 'unknown')
         
-        # Extension check
-        if 'extension' in details:
-            ext = details['extension']
-            ext_status = ext.get('status', 'unknown')
-            icon = '✅' if ext_status == 'installed' else '❌'
-            typer.echo(f"{icon} Chrome Extension")
-            typer.echo(f"   Status: {ext_status}")
-            if 'method' in ext:
-                typer.echo(f"   Detection Method: {ext['method']}")
-            if 'manifest_version' in ext:
-                typer.echo(f"   Manifest Version: {ext['manifest_version']}")
-            if 'error' in ext:
-                typer.echo(f"   Error: {ext['error']}")
-            typer.echo()
+        status_icons = {
+            'connected': '🟢',
+            'online': '🟢',
+            'installed': '🟢',
+            'ok': '🟢',
+            'ready': '🟢',
+            'disconnected': '🔴',
+            'offline': '🔴',
+            'not_found': '🔴',
+            'error': '🔴',
+            'timeout': '🟡',
+            'incomplete': '🟡'
+        }
         
-        # Brain CLI check
-        if 'brain' in details:
-            brain = details['brain']
-            brain_status = brain.get('status', 'unknown')
-            icon = '✅' if brain_status == 'ok' else '❌'
-            typer.echo(f"{icon} Brain CLI")
-            typer.echo(f"   Status: {brain_status}")
-            if 'version' in brain:
-                typer.echo(f"   Version: {brain['version']}")
-            if 'uptime_seconds' in brain:
-                uptime_hrs = brain['uptime_seconds'] / 3600
-                typer.echo(f"   Uptime: {uptime_hrs:.2f} hours")
-            if 'error' in brain:
-                typer.echo(f"   Error: {brain['error']}")
-            typer.echo()
+        emoji = status_icons.get(status, '❓')
+        typer.echo(f"{emoji} {name}: {status.upper()}")
         
-        # Onboarding check
-        if 'onboarding' in details:
-            onb = details['onboarding']
-            onb_status = onb.get('status', 'unknown')
-            icon = '✅' if onb_status in ['ready', 'ok'] else '❌'
-            typer.echo(f"{icon} Onboarding Status")
-            typer.echo(f"   Status: {onb_status}")
-            if 'current_step' in onb:
-                typer.echo(f"   Current Step: {onb['current_step']}")
-            if 'details' in onb:
-                onb_details = onb['details']
-                typer.echo(f"   Details:")
-                for key, value in onb_details.items():
-                    check_icon = '✅' if value else '❌'
-                    typer.echo(f"     {check_icon} {key}: {value}")
-            if 'error' in onb:
-                typer.echo(f"   Error: {onb['error']}")
-            typer.echo()
+        # Show key metrics
+        if 'response_time_ms' in data:
+            typer.echo(f"   └─ Response Time: {data['response_time_ms']}ms")
+        if 'version' in data:
+            typer.echo(f"   └─ Version: {data['version']}")
+        if 'error' in data:
+            typer.echo(f"   └─ ⚠️  Error: {data['error']}")
         
-        # Recommendations if status is not ok
-        if status != 'ok':
-            typer.echo("💡 Recomendaciones:")
-            if 'host' in details and details['host'].get('status') != 'connected':
-                typer.echo("   • Verificar que bloom-host.exe esté ejecutándose como servicio Windows")
-            if 'api' in details and details['api'].get('status') != 'online':
-                typer.echo("   • Verificar que la API REST esté iniciada en puerto 48215")
-            if 'extension' in details and details['extension'].get('status') != 'installed':
-                typer.echo("   • Instalar extensión de Chrome desde Chrome Web Store")
-            typer.echo()
+        typer.echo()
 
     def _handle_error(self, gc, message: str):
-        """Handle errors with unified output format"""
         if gc.json_mode:
             import json
             typer.echo(json.dumps({"status": "error", "message": message}))
         else:
             typer.echo(f"❌ {message}", err=True)
         raise typer.Exit(code=1)
-
-
-def register_command(app: typer.Typer):
-    """Register the health full-stack command"""
-    command = HealthFullStackCommand()
-    command.register(app)

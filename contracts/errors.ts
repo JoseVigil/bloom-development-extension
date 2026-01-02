@@ -252,6 +252,60 @@ export const ERROR_CATALOG: Record<ErrorCode, ErrorCatalogEntry> = {
   },
 
   // ============================================================================
+  // COPILOT ERRORS
+  // ============================================================================
+
+  COPILOT_PROMPT_INVALID: {
+    severity: 'recoverable',
+    default_message: 'Invalid Copilot prompt format or missing required fields',
+    user_action: 'Check your prompt structure and required fields',
+    retry_strategy: 'immediate',
+    http_status: 400,
+    docs_url: '/docs/copilot/prompts',
+    telemetry_category: 'ai_service'
+  },
+
+  COPILOT_CONTEXT_UNKNOWN: {
+    severity: 'recoverable',
+    default_message: 'Unknown or unsupported Copilot context',
+    user_action: 'Verify the context type and parameters',
+    retry_strategy: 'immediate',
+    http_status: 400,
+    docs_url: '/docs/copilot/context',
+    telemetry_category: 'ai_service'
+  },
+
+  COPILOT_STREAM_ERROR: {
+    severity: 'critical',
+    default_message: 'Copilot streaming failed unexpectedly',
+    user_action: 'Check connection and try again. Report if persists',
+    retry_strategy: 'manual',
+    http_status: 500,
+    docs_url: '/docs/troubleshooting/copilot-stream',
+    telemetry_category: 'ai_service'
+  },
+
+  COPILOT_PROCESS_NOT_FOUND: {
+    severity: 'warning',
+    default_message: 'Copilot process not found or already completed',
+    user_action: 'Start a new Copilot process if needed',
+    retry_strategy: 'none',
+    http_status: 404,
+    docs_url: '/docs/copilot/processes',
+    telemetry_category: 'ai_service'
+  },
+
+  COPILOT_CANCELLED: {
+    severity: 'warning',
+    default_message: 'Copilot process was cancelled by user',
+    user_action: 'No action needed, process was intentionally cancelled',
+    retry_strategy: 'none',
+    http_status: 499,
+    docs_url: '/docs/copilot/cancellation',
+    telemetry_category: 'ai_service'
+  },
+
+  // ============================================================================
   // VALIDATION & SYSTEM ERRORS
   // ============================================================================
 
@@ -417,4 +471,57 @@ export function shouldLogToTelemetry(code: ErrorCode): boolean {
 export function getTelemetryEventName(code: ErrorCode): string {
   const catalog = ERROR_CATALOG[code];
   return `error.${catalog.telemetry_category}.${code.toLowerCase()}`;
+}
+
+/**
+ * Check if error is a Copilot-specific error
+ *
+ * @param code - Error code to check
+ * @returns True if error is Copilot-related
+ *
+ * @example
+ * ```typescript
+ * if (isCopilotError('COPILOT_STREAM_ERROR')) {
+ * // Handle Copilot-specific error
+ * }
+ * ```
+ */
+export function isCopilotError(code: string): boolean {
+  return code.startsWith('COPILOT_');
+}
+
+/**
+ * Format error for user display
+ *
+ * @param error - ErrorResponse object
+ * @returns User-friendly error message
+ *
+ * @example
+ * ```typescript
+ * const userMsg = formatErrorForUser(errorResponse);
+ * // "Invalid Copilot prompt format or missing required fields. Check your prompt structure and required fields (Details: {...})"
+ * ```
+ */
+export function formatErrorForUser(error: ErrorResponse): string {
+  const catalog = ERROR_CATALOG[error.error];
+  let message = error.message || catalog.default_message;
+  message += `. ${catalog.user_action}`;
+  if (error.details) {
+    message += ` (Details: ${JSON.stringify(error.details)})`;
+  }
+  return message;
+}
+
+/**
+ * Assert error code exists in catalog (throws if invalid)
+ * Useful for debugging and type safety
+ *
+ * @throws Error if code not in catalog
+ */
+export function assertValidErrorCode(code: string): asserts code is ErrorCode {
+  if (!(code in ERROR_CATALOG)) {
+    throw new Error(
+      `Invalid error code: ${code}. Valid codes: ${Object.keys(ERROR_CATALOG).join(', ')}`
+    );
+  }
 }

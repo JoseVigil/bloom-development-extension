@@ -1,2 +1,5 @@
-// routes/onboarding/+page.svelte
-export { default } from './OnboardingView.svelte';
+<script>
+  import OnboardingView from './OnboardingView.svelte';
+</script>
+
+<OnboardingView />

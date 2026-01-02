@@ -255,10 +255,12 @@ class FullStackHealthManager:
         try:
             # Get version
             result = subprocess.run(
-                ['python', '-m', 'brain', '--version'],
+                [...],
                 capture_output=True,
                 text=True,
-                timeout=5
+                encoding='utf-8', 
+                errors='replace',  
+                timeout=...
             )
             version = result.stdout.strip() if result.returncode == 0 else 'unknown'
             

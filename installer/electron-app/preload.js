@@ -1,4 +1,5 @@
 const { contextBridge, ipcRenderer } = require('electron');
+const path = require('path');
 
 // ============================================================================
 // UNIFIED API EXPOSURE - WORKS FOR BOTH MODES
@@ -24,6 +25,13 @@ contextBridge.exposeInMainWorld('api', {
   launchProfile: (profileId, url) => ipcRenderer.invoke('profile:launch', { profileId, url }),
   createProfile: (name, type) => ipcRenderer.invoke('profile:create', { name, type }),
   tailLogs: (lines) => ipcRenderer.invoke('logs:tail', { lines }),
+
+  // Agregado: Exponer path utilities (fix require in renderer)
+  path: {
+    join: (...args) => require('path').join(...args),
+    basename: (p) => path.basename(p),
+    dirname: (p) => path.dirname(p)
+  },
 
   // ==========================================
   // SHARED HANDLERS
@@ -89,6 +97,8 @@ if (process.env.NODE_ENV === 'development') {
   contextBridge.exposeInMainWorld('devTools', {
     log: (...args) => console.log('[Renderer]', ...args),
     error: (...args) => console.error('[Renderer]', ...args),
-    warn: (...args) => console.warn('[Renderer]', ...args)
+    warn: (...args) => console.warn('[Renderer]', ...args),
+    getDirname: () => __dirname,
+    pathJoin: (...args) => path.join(...args)
   });
 }

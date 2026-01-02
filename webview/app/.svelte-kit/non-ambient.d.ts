@@ -27,17 +27,26 @@ export {};
 
 declare module "$app/types" {
 	export interface AppTypes {
-		RouteId(): "/" | "/home" | "/intents" | "/welcome";
+		RouteId(): "/" | "/genesis" | "/home" | "/intents" | "/intents/dev" | "/intents/dev/[id]" | "/intents/doc" | "/intents/doc/[id]" | "/intents/[id]" | "/onboarding" | "/welcome";
 		RouteParams(): {
-			
+			"/intents/dev/[id]": { id: string };
+			"/intents/doc/[id]": { id: string };
+			"/intents/[id]": { id: string }
 		};
 		LayoutParams(): {
-			"/": Record<string, never>;
+			"/": { id?: string };
+			"/genesis": Record<string, never>;
 			"/home": Record<string, never>;
-			"/intents": Record<string, never>;
+			"/intents": { id?: string };
+			"/intents/dev": { id?: string };
+			"/intents/dev/[id]": { id: string };
+			"/intents/doc": { id?: string };
+			"/intents/doc/[id]": { id: string };
+			"/intents/[id]": { id: string };
+			"/onboarding": Record<string, never>;
 			"/welcome": Record<string, never>
 		};
-		Pathname(): "/" | "/home" | "/home/" | "/intents" | "/intents/" | "/welcome" | "/welcome/";
+		Pathname(): "/" | "/genesis" | "/genesis/" | "/home" | "/home/" | "/intents" | "/intents/" | "/intents/dev" | "/intents/dev/" | `/intents/dev/${string}` & {} | `/intents/dev/${string}/` & {} | "/intents/doc" | "/intents/doc/" | `/intents/doc/${string}` & {} | `/intents/doc/${string}/` & {} | `/intents/${string}` & {} | `/intents/${string}/` & {} | "/onboarding" | "/onboarding/" | "/welcome" | "/welcome/";
 		ResolvedPathname(): `${"" | `/${string}`}${ReturnType<AppTypes['Pathname']>}`;
 		Asset(): string & {};
 	}
