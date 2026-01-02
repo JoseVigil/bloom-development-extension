@@ -16,11 +16,10 @@ import type {
 /**
  * BrainApiAdapter - Unified adapter for all Brain CLI operations
  * 
- * CRITICAL CHANGES:
- * - Removed all local schema imports and .parse() calls
- * - All methods return Promise<BrainResult<T>> with T from contracts/types
- * - Added Intent workflow methods (state, submit, approve, cancel, recover)
- * - Preserved all existing GitHub, Gemini, Profile methods
+ * CRITICAL FIX:
+ * - All commands now use --json as GLOBAL flag (before category)
+ * - Format: python -m brain --json <category> <command> [ARGS]
+ * - Added comprehensive logging for debugging
  */
 export class BrainApiAdapter {
 
@@ -29,11 +28,11 @@ export class BrainApiAdapter {
   // ============================================================================
 
   static async nucleusList(parentDir?: string): Promise<BrainResult<{ nuclei: Nucleus[] }>> {
-    return BrainExecutor.execute(['nucleus', 'list'], parentDir ? { '-d': parentDir } : {});
+    return BrainExecutor.execute(['--json', 'nucleus', 'list'], parentDir ? { '-d': parentDir } : {});
   }
 
   static async nucleusGet(nucleusPath: string): Promise<BrainResult<Nucleus>> {
-    return BrainExecutor.execute(['nucleus', 'get'], { '-p': nucleusPath });
+    return BrainExecutor.execute(['--json', 'nucleus', 'get'], { '-p': nucleusPath });
   }
 
   static async nucleusCreate(params: {
@@ -48,36 +47,36 @@ export class BrainApiAdapter {
     if (params.url) args['--url'] = params.url;
     if (params.force) args['-f'] = true;
 
-    return BrainExecutor.execute(['nucleus', 'create'], args, { onProgress: params.onProgress });
+    return BrainExecutor.execute(['--json', 'nucleus', 'create'], args, { onProgress: params.onProgress });
   }
 
   static async nucleusDelete(nucleusPath: string, force?: boolean): Promise<BrainResult<void>> {
     const args: Record<string, any> = { '-p': nucleusPath };
     if (force) args['-f'] = true;
-    return BrainExecutor.execute(['nucleus', 'delete'], args);
+    return BrainExecutor.execute(['--json', 'nucleus', 'delete'], args);
   }
 
   static async nucleusSync(nucleusPath: string, skipGit?: boolean): Promise<BrainResult<void>> {
     const args: Record<string, any> = { '-p': nucleusPath };
     if (skipGit) args['--skip-git'] = true;
-    return BrainExecutor.execute(['nucleus', 'sync'], args);
+    return BrainExecutor.execute(['--json', 'nucleus', 'sync'], args);
   }
 
   static async nucleusListProjects(nucleusPath: string, strategy?: string): Promise<BrainResult<{ projects: LinkedProject[] }>> {
     const args: Record<string, any> = { '-p': nucleusPath };
     if (strategy) args['-s'] = strategy;
-    return BrainExecutor.execute(['nucleus', 'list-projects'], args);
+    return BrainExecutor.execute(['--json', 'nucleus', 'list-projects'], args);
   }
 
   static async nucleusOnboardingStatus(path: string): Promise<BrainResult<OnboardingState>> {
-    return BrainExecutor.execute(['nucleus', 'onboarding-status'], { '-p': path });
+    return BrainExecutor.execute(['--json', 'nucleus', 'onboarding-status'], { '-p': path });
   }
 
   static async nucleusOnboardingComplete(
     path: string,
     step: keyof OnboardingState['steps']
   ): Promise<BrainResult<void>> {
-    return BrainExecutor.execute(['nucleus', 'onboarding-complete'], {
+    return BrainExecutor.execute(['--json', 'nucleus', 'onboarding-complete'], {
       '-p': path,
       '--step': step
     });
@@ -90,11 +89,11 @@ export class BrainApiAdapter {
   static async intentList(nucleusPath: string, type?: 'dev' | 'doc'): Promise<BrainResult<{ intents: Intent[] }>> {
     const args: Record<string, any> = { '-p': nucleusPath };
     if (type) args['-t'] = type;
-    return BrainExecutor.execute(['intent', 'list'], args);
+    return BrainExecutor.execute(['--json', 'intent', 'list'], args);
   }
 
   static async intentGet(intentId: string, nucleusPath: string): Promise<BrainResult<Intent>> {
-    return BrainExecutor.execute(['intent', 'get'], { '-i': intentId, '-p': nucleusPath });
+    return BrainExecutor.execute(['--json', 'intent', 'get'], { '-i': intentId, '-p': nucleusPath });
   }
 
   static async intentCreate(params: {
@@ -115,36 +114,33 @@ export class BrainApiAdapter {
     if (params.problem) args['--problem'] = params.problem;
     if (params.expectedOutput) args['--expected-output'] = params.expectedOutput;
 
-    return BrainExecutor.execute(['intent', 'create'], args);
+    return BrainExecutor.execute(['--json', 'intent', 'create'], args);
   }
 
   static async intentLock(intentId: string, nucleusPath: string): Promise<BrainResult<void>> {
-    return BrainExecutor.execute(['intent', 'lock'], { '-i': intentId, '-p': nucleusPath });
+    return BrainExecutor.execute(['--json', 'intent', 'lock'], { '-i': intentId, '-p': nucleusPath });
   }
 
   static async intentUnlock(intentId: string, nucleusPath: string, force?: boolean): Promise<BrainResult<void>> {
     const args: Record<string, any> = { '-i': intentId, '-p': nucleusPath };
     if (force) args['--force'] = true;
-    return BrainExecutor.execute(['intent', 'unlock'], args);
+    return BrainExecutor.execute(['--json', 'intent', 'unlock'], args);
   }
 
-  // NEW: Intent workflow methods (Addendum requirement)
   static async intentState(intentId: string, nucleusPath: string): Promise<BrainResult<Intent>> {
-    return BrainExecutor.execute(['intent', 'state'], { '-i': intentId, '-p': nucleusPath });
+    return BrainExecutor.execute(['--json', 'intent', 'state'], { '-i': intentId, '-p': nucleusPath });
   }
 
   static async intentSubmit(intentId: string, nucleusPath: string): Promise<BrainResult<void>> {
-    return BrainExecutor.execute(['intent', 'submit'], { '-i': intentId, '-p': nucleusPath });
+    return BrainExecutor.execute(['--json', 'intent', 'submit'], { '-i': intentId, '-p': nucleusPath });
   }
 
   static async intentApprove(intentId: string, nucleusPath: string): Promise<BrainResult<void>> {
-    // IMPORTANT: Uses 'merge' command per Addendum
-    return BrainExecutor.execute(['intent', 'merge'], { '-i': intentId, '-p': nucleusPath });
+    return BrainExecutor.execute(['--json', 'intent', 'merge'], { '-i': intentId, '-p': nucleusPath });
   }
 
   static async intentCancel(intentId: string, nucleusPath: string): Promise<BrainResult<void>> {
-    // IMPORTANT: Uses 'unlock' with '--cleanup' per Addendum
-    return BrainExecutor.execute(['intent', 'unlock'], {
+    return BrainExecutor.execute(['--json', 'intent', 'unlock'], {
       '-i': intentId,
       '-p': nucleusPath,
       '--cleanup': true
@@ -152,7 +148,7 @@ export class BrainApiAdapter {
   }
 
   static async intentRecover(intentId: string, nucleusPath: string): Promise<BrainResult<void>> {
-    return BrainExecutor.execute(['intent', 'recover'], { '-i': intentId, '-p': nucleusPath });
+    return BrainExecutor.execute(['--json', 'intent', 'recover'], { '-i': intentId, '-p': nucleusPath });
   }
 
   static async intentAddTurn(params: {
@@ -161,7 +157,7 @@ export class BrainApiAdapter {
     content: string;
     nucleusPath: string;
   }): Promise<BrainResult<void>> {
-    return BrainExecutor.execute(['intent', 'add-turn'], {
+    return BrainExecutor.execute(['--json', 'intent', 'add-turn'], {
       '-i': params.intentId,
       '-a': params.actor,
       '-c': params.content,
@@ -170,13 +166,13 @@ export class BrainApiAdapter {
   }
 
   static async intentFinalize(intentId: string, nucleusPath: string): Promise<BrainResult<void>> {
-    return BrainExecutor.execute(['intent', 'finalize'], { '-i': intentId, '-p': nucleusPath });
+    return BrainExecutor.execute(['--json', 'intent', 'finalize'], { '-i': intentId, '-p': nucleusPath });
   }
 
   static async intentDelete(intentId: string, nucleusPath: string, force?: boolean): Promise<BrainResult<void>> {
     const args: Record<string, any> = { '-i': intentId, '-p': nucleusPath };
     if (force) args['--force'] = true;
-    return BrainExecutor.execute(['intent', 'delete'], args);
+    return BrainExecutor.execute(['--json', 'intent', 'delete'], args);
   }
 
   static async intentUpdate(params: {
@@ -197,7 +193,7 @@ export class BrainApiAdapter {
     if (params.addFiles) args['--add-files'] = params.addFiles.join(',');
     if (params.removeFiles) args['--remove-files'] = params.removeFiles.join(',');
 
-    return BrainExecutor.execute(['intent', 'update'], args);
+    return BrainExecutor.execute(['--json', 'intent', 'update'], args);
   }
 
   // ============================================================================
@@ -215,7 +211,7 @@ export class BrainApiAdapter {
     if (params.strategy) args['-s'] = params.strategy;
     if (params.minConfidence) args['-c'] = params.minConfidence;
 
-    return BrainExecutor.execute(['project', 'detect', params.parentPath], args);
+    return BrainExecutor.execute(['--json', 'project', 'detect', params.parentPath], args);
   }
 
   static async projectAdd(params: {
@@ -232,7 +228,7 @@ export class BrainApiAdapter {
     if (params.description) args['--description'] = params.description;
     if (params.repoUrl) args['--repo-url'] = params.repoUrl;
 
-    return BrainExecutor.execute(['project', 'add', params.projectPath], args);
+    return BrainExecutor.execute(['--json', 'project', 'add', params.projectPath], args);
   }
 
   static async projectCloneAndAdd(params: {
@@ -249,7 +245,7 @@ export class BrainApiAdapter {
     if (params.strategy) args['--strategy'] = params.strategy;
 
     return BrainExecutor.execute(
-      ['project', 'clone-and-add', params.repoUrl],
+      ['--json', 'project', 'clone-and-add', params.repoUrl],
       args,
       {
         cwd: params.nucleusPath,
@@ -260,25 +256,25 @@ export class BrainApiAdapter {
   }
 
   // ============================================================================
-  // PROFILE OPERATIONS (Preserved from legacy)
+  // PROFILE OPERATIONS
   // ============================================================================
 
   static async profileList(): Promise<BrainResult<{ profiles: ChromeProfile[] }>> {
-    return BrainExecutor.execute(['profile', 'list'], {});
+    return BrainExecutor.execute(['--json', 'profile', 'list'], {});
   }
 
   static async profileCreate(alias: string): Promise<BrainResult<ChromeProfile>> {
-    return BrainExecutor.execute(['profile', 'create', alias], {});
+    return BrainExecutor.execute(['--json', 'profile', 'create', alias], {});
   }
 
   static async profileDestroy(profileId: string, force?: boolean): Promise<BrainResult<void>> {
     const args: Record<string, any> = {};
     if (force) args['-f'] = true;
-    return BrainExecutor.execute(['profile', 'destroy', profileId], args);
+    return BrainExecutor.execute(['--json', 'profile', 'destroy', profileId], args);
   }
 
   static async profileRefreshAccounts(profileId: string): Promise<BrainResult<{ accounts: AIAccount[] }>> {
-    return BrainExecutor.execute(['profile', 'accounts-refresh', profileId], {});
+    return BrainExecutor.execute(['--json', 'profile', 'accounts-refresh', profileId], {});
   }
 
   static async profileAccountsRegister(
@@ -287,35 +283,35 @@ export class BrainApiAdapter {
     email: string
   ): Promise<BrainResult<void>> {
     return BrainExecutor.execute(
-      ['profile', 'accounts-register', profileId, provider, email],
+      ['--json', 'profile', 'accounts-register', profileId, provider, email],
       {}
     );
   }
 
   // ============================================================================
-  // GITHUB OPERATIONS (Preserved from legacy)
+  // GITHUB OPERATIONS
   // ============================================================================
 
   static async githubAuthStatus(): Promise<BrainResult<GitHubAuthStatus>> {
-    return BrainExecutor.execute(['github', 'auth-status'], {});
+    return BrainExecutor.execute(['--json', 'github', 'auth-status'], {});
   }
 
   static async githubAuthLogin(token: string): Promise<BrainResult<GitHubAuthStatus>> {
-    return BrainExecutor.execute(['github', 'auth-login'], { '-t': token });
+    return BrainExecutor.execute(['--json', 'github', 'auth-login'], { '-t': token });
   }
 
   static async githubAuthLogout(): Promise<BrainResult<void>> {
-    return BrainExecutor.execute(['github', 'auth-logout'], {});
+    return BrainExecutor.execute(['--json', 'github', 'auth-logout'], {});
   }
 
   static async githubOrgsList(): Promise<BrainResult<{ organizations: GitHubOrganization[] }>> {
-    return BrainExecutor.execute(['github', 'orgs-list'], {});
+    return BrainExecutor.execute(['--json', 'github', 'orgs-list'], {});
   }
 
   static async githubReposList(org?: string): Promise<BrainResult<{ repositories: GitHubRepository[] }>> {
     const args: Record<string, any> = {};
     if (org) args['--org'] = org;
-    return BrainExecutor.execute(['github', 'repos-list'], args);
+    return BrainExecutor.execute(['--json', 'github', 'repos-list'], args);
   }
 
   static async githubReposCreate(options: {
@@ -324,7 +320,7 @@ export class BrainApiAdapter {
     description?: string;
     private?: boolean;
   }): Promise<BrainResult<{ repo: GitHubRepository }>> {
-    const args: string[] = ['github', 'repos', 'create', options.name];
+    const args: string[] = ['--json', 'github', 'repos', 'create', options.name];
     const params: Record<string, any> = {};
 
     if (options.org) params['--org'] = options.org;
@@ -335,7 +331,7 @@ export class BrainApiAdapter {
   }
 
   // ============================================================================
-  // GEMINI OPERATIONS (Preserved from legacy)
+  // GEMINI OPERATIONS
   // ============================================================================
 
   static async geminiKeysAdd(
@@ -345,62 +341,42 @@ export class BrainApiAdapter {
   ): Promise<BrainResult<void>> {
     const args: Record<string, any> = { '-p': profile, '-k': key };
     if (priority !== undefined) args['--priority'] = priority.toString();
-    return BrainExecutor.execute(['gemini', 'keys-add'], args);
+    return BrainExecutor.execute(['--json', 'gemini', 'keys-add'], args);
   }
 
   static async geminiKeysList(): Promise<BrainResult<{ keys: any[] }>> {
-    return BrainExecutor.execute(['gemini', 'keys-list'], {});
+    return BrainExecutor.execute(['--json', 'gemini', 'keys-list'], {});
   }
 
   static async geminiKeysValidate(profile: string): Promise<BrainResult<{ valid: boolean }>> {
-    return BrainExecutor.execute(['gemini', 'keys-validate', profile], {});
+    return BrainExecutor.execute(['--json', 'gemini', 'keys-validate', profile], {});
   }
 
   // ============================================================================
-  // HEALTH OPERATIONS 
+  // HEALTH OPERATIONS
   // ============================================================================
 
   /**
- * Execute full-stack health check.
- * Maps to: brain health full-stack
- * 
- * @returns {Promise<BrainResult>} Aggregated health status
- * @timeout 15000ms (15 seconds)
- */
+   * Execute full-stack health check.
+   * Maps to: python -m brain --json health full-stack
+   */
   static async healthFullStack(): Promise<BrainResult> {
-    return BrainExecutor.execute(['health', 'full-stack'], {
-      parseJson: true,
-      timeout: 15000 // 15s timeout for comprehensive check
-    });
+    return BrainExecutor.execute(['--json', 'health', 'full-stack'], {});
   }
 
   /**
    * Execute onboarding status check.
-   * Maps to: brain health onboarding-check
-   *
-   * @returns {Promise<BrainResult>} Onboarding completion status
-   * @timeout 10000ms (10 seconds)
+   * Maps to: python -m brain --json health onboarding-check
    */
   static async healthOnboardingStatus(): Promise<BrainResult> {
-    return BrainExecutor.execute(['health', 'onboarding-check'], {
-      parseJson: true,
-      timeout: 10000 // 10s timeout
-    });
+    return BrainExecutor.execute(['--json', 'health', 'onboarding-check'], {});
   }
 
   /**
    * Execute WebSocket status check.
-   * Maps to: brain health websocket-status
-   * 
-   * @returns {Promise<BrainResult>} WebSocket connection status
-   * @timeout 8000ms (8 seconds)
+   * Maps to: python -m brain --json health websocket-status
    */
   static async healthWebSocketStatus(): Promise<BrainResult> {
-    return BrainExecutor.execute(['health', 'websocket-status'], {
-      parseJson: true,
-      timeout: 8000 // 8s timeout for WS check
-    });
+    return BrainExecutor.execute(['--json', 'health', 'websocket-status'], {});
   }
-
-
 }
