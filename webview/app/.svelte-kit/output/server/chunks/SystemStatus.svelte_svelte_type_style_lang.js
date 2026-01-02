@@ -1,1 +1,0 @@
-import{w as a}from"./svelte.js";function n(){const{subscribe:o,set:r,update:s}=a({plugin:!1,host:!1,extension:!1,profiles:[],accounts:[]});return{subscribe:o,set:r,update:s,setProfiles:t=>s(e=>({...e,profiles:t})),setAccounts:t=>s(e=>({...e,accounts:t}))}}const i=n();export{i as s};
