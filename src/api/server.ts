@@ -35,16 +35,7 @@ export async function createAPIServer(config: BloomApiServerConfig): Promise<Fas
   const port = config.port || 48215;
 
   const fastify = Fastify({
-    logger: {
-      level: 'info',
-      transport: {
-        target: 'pino-pretty',
-        options: {
-          translateTime: 'HH:MM:ss Z',
-          ignore: 'pid,hostname'
-        }
-      }
-    }
+    logger: true
   });
 
   // Inject dependencies for routes

@@ -38,7 +38,7 @@ export class HostExecutor {
             platformDir
         );
         
-        const binaryName = platform === 'win32' ? 'native_Host.exe' : 'native_Host';
+        const binaryName = platform === 'win32' ? 'bloom-host.exe' : 'bloom-host';
         const binaryPath = path.join(binDir, binaryName);
 
         // Verificar que existe
