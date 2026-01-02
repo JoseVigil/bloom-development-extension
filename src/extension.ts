@@ -1,41 +1,48 @@
-// src/extension.ts (corregido con integración de HostExecutor)
+// src/extension.ts - COMPLETO con todas las funcionalidades
 
 import 'module-alias/register';
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { BloomApiServer } from './api/server';
 import { WebSocketManager } from './server/WebSocketManager';
 import { BrainExecutor } from './utils/brainExecutor';
-import { HostExecutor } from './host/HostExecutor';  
+import { HostExecutor } from './host/HostExecutor';
 
 let apiServer: BloomApiServer | null = null;
-let wsManager: WebSocketManager | null = null;
+let wsManager: WebSocketManager;
 let outputChannel: vscode.OutputChannel;
 
 export async function activate(context: vscode.ExtensionContext) {
   outputChannel = vscode.window.createOutputChannel('Bloom');
+  outputChannel.show();
   outputChannel.appendLine('🚀 Bloom Extension Activating...');
 
   try {
-    // 1. Initialize Brain Executor
-    outputChannel.appendLine('Initializing Brain CLI...');
-    await BrainExecutor.initialize(context.extensionPath);
+    // 0. CRITICAL: Initialize BrainExecutor FIRST
+    outputChannel.appendLine('[1/5] Initializing Brain CLI...');
+    const brainPath = path.join(context.extensionPath, 'brain', 'brain.py');
+    const pythonPath = 'python';
+    
+    BrainExecutor.initialize(context.extensionPath);
     outputChannel.appendLine('✅ Brain CLI initialized');
+    outputChannel.appendLine(`   Path: ${brainPath}`);
 
-    // 2. Start WebSocket Manager
-    outputChannel.appendLine('Starting WebSocket Manager...');
+    // 1. Start WebSocket Manager
+    outputChannel.appendLine('[2/5] Starting WebSocket Manager...');
     wsManager = WebSocketManager.getInstance();
     await wsManager.start();
-    outputChannel.appendLine(`✅ WebSocket server running on ws://localhost:4124`);
+    outputChannel.appendLine('✅ WebSocket server running on ws://localhost:4124');
 
-    // Nueva integración: Attach HostExecutor
+    // 2. Attach HostExecutor
+    outputChannel.appendLine('[3/5] Attaching HostExecutor...');
     const hostExecutor = new HostExecutor(context);
     wsManager.attachHost(hostExecutor);
     await hostExecutor.start();
     outputChannel.appendLine('✅ HostExecutor attached and started');
-    context.subscriptions.push({ dispose: () => hostExecutor.stop() });  // Limpieza
+    context.subscriptions.push({ dispose: () => hostExecutor.stop() });
 
     // 3. Start Fastify API Server
-    outputChannel.appendLine('Starting Bloom API Server...');
+    outputChannel.appendLine('[4/5] Starting Bloom API Server...');
     apiServer = new BloomApiServer({
       port: 48215,
       wsManager: wsManager,
@@ -43,13 +50,22 @@ export async function activate(context: vscode.ExtensionContext) {
       outputChannel: outputChannel
     });
     await apiServer.start();
-    outputChannel.appendLine(`✅ API server running on http://localhost:48215`);
-    outputChannel.appendLine(`📚 Swagger docs: http://localhost:48215/api/docs`);
+    outputChannel.appendLine('✅ API server running on http://localhost:48215');
+    outputChannel.appendLine('📚 Swagger docs: http://localhost:48215/api/docs');
 
     // 4. Register commands
+    outputChannel.appendLine('[5/5] Registering commands...');
     registerCommands(context);
+    outputChannel.appendLine('✅ Commands registered');
 
     // 5. Show notification
+    outputChannel.appendLine('═══════════════════════════════════════');
+    outputChannel.appendLine('🎉 Bloom Extension Activated Successfully!');
+    outputChannel.appendLine('');
+    outputChannel.appendLine('Quick Test:');
+    outputChannel.appendLine('  curl http://localhost:48215/api/v1/health');
+    outputChannel.appendLine('  wscat -c ws://localhost:4124');
+    
     vscode.window.showInformationMessage(
       'Bloom is ready! Open the UI to get started.',
       'Open UI',
@@ -62,10 +78,9 @@ export async function activate(context: vscode.ExtensionContext) {
       }
     });
 
-    outputChannel.appendLine('✅ Bloom Extension Activated Successfully!');
-
   } catch (error: any) {
     outputChannel.appendLine(`❌ Activation failed: ${error.message}`);
+    outputChannel.appendLine(`Stack: ${error.stack}`);
     vscode.window.showErrorMessage(`Bloom activation failed: ${error.message}`);
     throw error;
   }
@@ -175,7 +190,7 @@ UI: http://localhost:5173
       
       try {
         const result = await BrainExecutor.execute(
-          ['nucleus', 'create'],
+          ['--json', 'nucleus', 'create'],
           { '-o': org, '-p': workspacePath }
         );
         
@@ -215,7 +230,7 @@ UI: http://localhost:5173
       
       try {
         const result = await BrainExecutor.execute(
-          ['intent', 'create'],
+          ['--json', 'intent', 'create'],
           { '-t': type, '-n': name, '-p': workspacePath, '-f': '' }
         );
         
@@ -230,6 +245,4 @@ UI: http://localhost:5173
       }
     })
   );
-
-  outputChannel.appendLine('✅ Commands registered');
 }
