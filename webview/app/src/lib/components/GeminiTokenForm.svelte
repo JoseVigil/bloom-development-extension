@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { saveGeminiToken } from '../api';
+  import { addGeminiKey } from '../api';  // ← CAMBIO AQUÍ
   import { geminiToken } from '../stores/auth';
   
   let token = '';
@@ -13,7 +13,12 @@
     message = '';
     
     try {
-      await saveGeminiToken(token);
+      // ← CAMBIO AQUÍ: usar addGeminiKey con los parámetros correctos
+      await addGeminiKey({
+        profile: 'default',
+        key: token.trim(),
+        priority: 0
+      });
       geminiToken.set(token);
       message = 'Token guardado correctamente';
     } catch (error) {

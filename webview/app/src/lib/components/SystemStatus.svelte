@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { getSystemStatus } from '$lib/api';
+  import { getSystemHealth } from '$lib/api';  // ← CAMBIO AQUÍ
   import { systemStatus } from '$lib/stores/system';
   
   export let mode: 'badge' | 'full' = 'full';
@@ -10,9 +10,9 @@
   async function loadStatus() {
     loading = true;
     try {
-      const status = await getSystemStatus();
+      const health = await getSystemHealth();  // ← CAMBIO AQUÍ
       systemStatus.set({
-        plugin: status.status === 'ok',
+        plugin: health.status === 'ok',
         host: false,
         extension: true
       });

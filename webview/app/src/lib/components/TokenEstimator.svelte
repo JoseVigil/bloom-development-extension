@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { estimateTokens } from '$lib/api';
+  // import { estimateTokens } from '$lib/api'; // ← NO EXISTE
   import { Loader } from 'lucide-svelte';
   
   export let content: string;
@@ -9,16 +9,20 @@
   let loading = false;
   let error: string | null = null;
   
+  // Función local para estimar tokens (aproximación: 1 token ≈ 4 caracteres)
+  function estimateTokens(text: string): number {
+    return Math.ceil(text.length / 4);
+  }
+  
   $: if (content) {
     estimateContent();
   }
   
-  async function estimateContent() {
+  function estimateContent() {
     loading = true;
     error = null;
     try {
-      const result = await estimateTokens(content);
-      tokens = result.estimated || Math.floor(content.length / 4);
+      tokens = estimateTokens(content);
     } catch (err) {
       error = 'Failed to estimate';
       tokens = Math.floor(content.length / 4);
@@ -80,10 +84,6 @@
 
   .loading {
     color: white;
-  }
-
-  .spin {
-    animation: spin 1s linear infinite;
   }
 
   @keyframes spin {

@@ -1,4 +1,4 @@
-// main.js - Versión corregida 100% para tu estructura de carpetas
+// main.js - Versión corregida con handler IPC registrado ANTES de crear ventana
 
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
@@ -12,7 +12,7 @@ const execAsync = promisify(exec);
 // CONSTANTES Y RUTAS CRÍTICAS (CORREGIDAS PARA TU REPO)
 // ============================================================================
 
-const REPO_ROOT = path.join(__dirname, '..', '..', '..'); // → C:/repos/bloom-videos/bloom-development-extension
+const REPO_ROOT = path.join(__dirname, '..', '..'); // → C:/repos/bloom-videos/bloom-development-extension
 const BRAIN_PY_PATH = path.join(REPO_ROOT, 'brain', 'brain.py');
 const LAUNCH_HTML_PATH = path.join(__dirname, 'src', 'launch', 'index_launch.html');
 const WEBVIEW_BUILD_PATH = path.join(REPO_ROOT, 'webview', 'app', 'build', 'index.html');
@@ -30,6 +30,43 @@ function error(...args) {
   console.error('❌', ...args);
 }
 
+console.log('🔍 Process arguments:', process.argv);
+console.log('🔍 IS_DEV:', IS_DEV);
+console.log('🔍 IS_LAUNCH_MODE:', IS_LAUNCH_MODE);
+
+// ============================================================================
+// IPC HANDLERS - REGISTRAR TODOS ANTES DE CREAR VENTANA
+// ============================================================================
+function registerIPCHandlers() {
+  // Handler para resolver rutas de forma segura
+  ipcMain.handle('path:resolve', (event, { type, args }) => {
+    try {
+      switch (type) {
+        case 'join':
+          return path.join(...args);
+        case 'dirname':
+          return path.dirname(args[0]);
+        case 'basename':
+          return path.basename(args[0]);
+        case 'webview-build':
+          return WEBVIEW_BUILD_PATH; // Ruta pre-calculada para webview build
+        default:
+          throw new Error(`Tipo de ruta desconocido: ${type}`);
+      }
+    } catch (err) {
+      error('Error resolviendo ruta:', err.message);
+      return null;
+    }
+  });
+  
+  // Agrega otros handlers si tenías (shared, install, launch)
+  // Por ejemplo:
+  ipcMain.handle('health:check', async () => {
+    // Lógica de health check aquí
+    return { status: 'ok', checks: { websocket: true } }; // Placeholder
+  });
+}
+
 // ============================================================================
 // ONBOARDING CHECK - RUTA CORRECTA A BRAIN.PY
 // ============================================================================
@@ -41,7 +78,7 @@ async function checkOnboardingStatus() {
 
   try {
     const { stdout } = await execAsync(
-      `"${process.execPath.includes('python') ? 'python' : 'python'}" "${BRAIN_PY_PATH}" health onboarding-check --json`,
+      `python "${BRAIN_PY_PATH}" health onboarding-check --json`,
       {
         cwd: REPO_ROOT,
         timeout: 15000,
@@ -87,7 +124,8 @@ async function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      webSecurity: false  // Necesario para cargar file:// locales en iframe
+      webSecurity: false,  // Necesario para cargar file:// locales en iframe
+      sandbox: false  // Desactiva sandbox para permitir preload completo (usa solo en dev si es necesario)
     }
   });
 
@@ -139,10 +177,16 @@ async function createWindow() {
 // ============================================================================
 app.whenReady().then(async () => {
   log('App ready, inicializando...');
+  
+  // CRÍTICO: Registrar handlers ANTES de crear ventana
+  registerIPCHandlers();
+  
   await createWindow();
 
   app.on('activate', async () => {
-    if (BrowserWindow.getAllWindows().length === 0) await createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) {
+      await createWindow();
+    }
   });
 });
 

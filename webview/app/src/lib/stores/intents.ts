@@ -1,54 +1,81 @@
 import { writable } from 'svelte/store';
-import { getIntents, getIntent, createIntentDoc, runExecution } from '$lib/api';
+import { listIntents, getIntent, createIntent, finalizeIntent } from '$lib/api';
 
 interface Intent {
   id: string;
-  type: 'DEV' | 'DOC';
-  title: string;
-  profile: string;
-  project: string;
+  type: 'dev' | 'doc';
+  name: string;
+  profile?: string;
+  project?: string;
   derivedFrom?: string;
   status: string;
-  briefing: {
+  briefing?: {
     problem: string;
     expectedOutput: string;
     currentBehavior: string;
     desiredBehavior: string;
     considerations: string;
   };
-  questions: Array<{ label: string; answer: string }>;
+  questions?: Array<{ label: string; answer: string }>;
   turns?: any[];
   briefingSummary?: string;
+  files?: string[];
 }
 
 interface IntentsState {
   list: Intent[];
   current: Intent | null;
   wizardState: 'briefing' | 'questions' | 'refinement';
+  nucleusPath: string;
 }
 
 function createIntentsStore() {
   const { subscribe, set, update } = writable<IntentsState>({
     list: [],
     current: null,
-    wizardState: 'briefing'
+    wizardState: 'briefing',
+    nucleusPath: '' // Debe ser configurado por el usuario
   });
 
   return {
     subscribe,
     
-    async load() {
+    setNucleusPath(path: string) {
+      update(state => ({ ...state, nucleusPath: path }));
+    },
+    
+    async load(nucleusPath?: string) {
       try {
-        const intents = await getIntents();
+        let path = nucleusPath;
+        if (!path) {
+          // Obtener el path del estado
+          const state = await new Promise<IntentsState>(resolve => {
+            const unsubscribe = subscribe(s => {
+              unsubscribe();
+              resolve(s);
+            });
+          });
+          path = state.nucleusPath;
+        }
+        
+        if (!path) {
+          console.warn('No nucleus path provided');
+          return [];
+        }
+        
+        const result = await listIntents(path);
+        const intents = result.intents || [];
         update(state => ({ ...state, list: intents }));
+        return intents;
       } catch (error) {
         console.error('Failed to load intents:', error);
+        return [];
       }
     },
     
-    async loadIntent(id: string) {
+    async loadIntent(id: string, nucleusPath: string) {
       try {
-        const intent = await getIntent(id);
+        const intent = await getIntent(id, nucleusPath);
         update(state => ({ ...state, current: intent }));
       } catch (error) {
         console.error('Failed to load intent:', error);
@@ -58,8 +85,8 @@ function createIntentsStore() {
     createNew() {
       const newIntent: Intent = {
         id: 'new',
-        type: 'DOC',
-        title: 'New Intent',
+        type: 'doc',
+        name: 'New Intent',
         profile: 'main',
         project: '',
         status: 'draft',
@@ -77,7 +104,8 @@ function createIntentsStore() {
           { label: 'Question 4', answer: '' },
           { label: 'Question 5', answer: '' }
         ],
-        turns: []
+        turns: [],
+        files: []
       };
       update(state => ({ ...state, current: newIntent, wizardState: 'briefing' }));
     },
@@ -86,20 +114,26 @@ function createIntentsStore() {
       update(state => ({ ...state, wizardState }));
     },
     
-    async execute(intentId: string) {
+    async execute(intentId: string, nucleusPath: string) {
       try {
-        const result = await runExecution(intentId, {});
-        // Update state with result
-        console.log('Execution result:', result);
+        // Por ahora solo retornamos un mensaje, ya que runExecution no existe en la API
+        console.log('Execution started for intent:', intentId);
+        // Aquí podrías usar lockIntent y addIntentTurn si es necesario
+        return { status: 'started' };
       } catch (error) {
         console.error('Execution failed:', error);
         throw error;
       }
     },
     
-    async finalize(intentId: string) {
-      // Finalize intent
-      console.log('Finalizing intent:', intentId);
+    async finalize(intentId: string, nucleusPath: string) {
+      try {
+        await finalizeIntent(intentId, nucleusPath);
+        console.log('Intent finalized:', intentId);
+      } catch (error) {
+        console.error('Finalization failed:', error);
+        throw error;
+      }
     },
     
     async addTurn(intentId: string, turn: any) {
@@ -119,8 +153,8 @@ function createIntentsStore() {
       // Simulate AI response
       setTimeout(() => {
         const aiTurn = {
-          id: Date.now(),
-          actor: 'AI',
+          id: Date.now().toString(),
+          actor: 'ai',
           content: 'Processing your request...',
           timestamp: new Date().toISOString()
         };

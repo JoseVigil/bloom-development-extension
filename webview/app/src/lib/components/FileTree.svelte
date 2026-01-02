@@ -1,7 +1,15 @@
 <script lang="ts">
-  import type { BTIPNode } from '$lib/api';
-  import { getFile } from '$lib/api';
+  // import type { BTIPNode } from '$lib/api'; // ← NO EXISTE
+  // import { getFile } from '$lib/api'; // ← NO EXISTE
   import { Folder, File, ChevronRight, ChevronDown } from 'lucide-svelte';
+  
+  // Definir tipo localmente
+  type BTIPNode = {
+    path: string;
+    name: string;
+    type: 'file' | 'directory';
+    children?: BTIPNode[];
+  };
   
   export let tree: BTIPNode[] = [];
   export let level: number = 0;
@@ -22,8 +30,12 @@
     } else {
       loading = true;
       try {
-        const file = await getFile(node.path);
-        selectedFile = file;
+        // Simular carga de archivo por ahora
+        selectedFile = {
+          path: node.path,
+          content: 'File content will be loaded here...',
+          extension: node.name.split('.').pop() || ''
+        };
         
         if (typeof window !== 'undefined' && (window as any).vscode) {
           (window as any).vscode.postMessage({
@@ -52,12 +64,12 @@
   }
 </script>
 
-<div class="file-tree" on:dragover={handleDragOver} on:drop={handleDrop}>
+<div class="file-tree" role="tree" on:dragover={handleDragOver} on:drop={handleDrop}>
   {#if tree.length === 0}
     <div class="empty">No files</div>
   {:else}
     {#each tree as node (node.path)}
-      <div class="node" style="padding-left: {level * 1rem}px">
+      <div class="node" style="padding-left: {level * 16}px">
         <button
           class="node-button"
           on:click={() => handleClick(node)}

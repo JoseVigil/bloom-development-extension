@@ -1,11 +1,18 @@
+// preload.js - CORREGIDO: Sin require('path') ni otros módulos Node
 const { contextBridge, ipcRenderer } = require('electron');
-const path = require('path');
 
 // ============================================================================
 // UNIFIED API EXPOSURE - WORKS FOR BOTH MODES
 // ============================================================================
 
-contextBridge.exposeInMainWorld('api', {
+contextBridge.exposeInMainWorld('electronAPI', {
+  // ==========================================
+  // PATH UTILITIES (VIA IPC - NO DIRECT REQUIRE)
+  // ==========================================
+  
+  // Solicita al main process que calcule rutas de forma segura
+  getPath: (type, ...args) => ipcRenderer.invoke('path:resolve', { type, args }),
+  
   // ==========================================
   // INSTALL MODE HANDLERS
   // ==========================================
@@ -23,35 +30,18 @@ contextBridge.exposeInMainWorld('api', {
   getOnboardingStatus: () => ipcRenderer.invoke('onboarding:status'),
   listProfiles: () => ipcRenderer.invoke('profile:list'),
   launchProfile: (profileId, url) => ipcRenderer.invoke('profile:launch', { profileId, url }),
-  createProfile: (name, type) => ipcRenderer.invoke('profile:create', { name, type }),
   tailLogs: (lines) => ipcRenderer.invoke('logs:tail', { lines }),
-
-  // Agregado: Exponer path utilities (fix require in renderer)
-  path: {
-    join: (...args) => require('path').join(...args),
-    basename: (p) => path.basename(p),
-    dirname: (p) => path.dirname(p)
-  },
 
   // ==========================================
   // SHARED HANDLERS
   // ==========================================
   
   getSystemInfo: () => ipcRenderer.invoke('system:info'),
-  getAppInfo: () => ipcRenderer.invoke('get-app-info'),
-  launcherDiagnose: () => ipcRenderer.invoke('launcher:diagnose'),
-  openFolder: (path) => ipcRenderer.invoke('open-folder', path),
-  openChromeExtensions: () => ipcRenderer.invoke('open-chrome-extensions'),
-  openLogsFolder: () => ipcRenderer.invoke('open-logs-folder'),
-  openExternal: (url) => ipcRenderer.invoke('open-external', url),
-  openUrl: (url) => ipcRenderer.invoke('open-url', url),
-
-  // ✅ CRÍTICO: Handler para abrir Bloom Launcher
-  launchBloomLauncher: (onboarding = false) => 
-    ipcRenderer.invoke('launcher:open', { onboarding }),
+  getAppVersion: () => ipcRenderer.invoke('app:version'),
+  openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
 
   // ==========================================
-  // EVENT LISTENERS
+  // EVENT HANDLERS
   // ==========================================
   
   on: (channel, callback) => {
@@ -63,7 +53,11 @@ contextBridge.exposeInMainWorld('api', {
       'onboarding:status',
       'profiles:list',
       'dashboard:error',
-      'error'
+      'error',
+      'app:initialized',
+      'show-onboarding',
+      'show-dashboard',
+      'services:status'
     ];
     
     if (validChannels.includes(channel)) {
