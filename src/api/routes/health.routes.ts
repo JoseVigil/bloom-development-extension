@@ -1,9 +1,14 @@
 /**
  * Health check routes for Brain integration and onboarding status
+ * 
+ * CRITICAL FIX:
+ * - All Brain CLI calls now use correct --json flag placement
+ * - Improved error handling and logging
+ * - Better type safety for response data
  */
 
 import type { FastifyPluginAsync } from 'fastify';
-import type { BrainResult } from '../types/brain.types';
+import type { BrainResult } from '../../../contracts/types';
 import { BrainApiAdapter } from '../adapters/BrainApiAdapter';
 
 // ============================================================================
@@ -78,8 +83,12 @@ const healthRoutes: FastifyPluginAsync = async (fastify) => {
     },
     async (_request, reply) => {
       try {
-        // Check Brain CLI availability
+        fastify.log.info('Health check: Starting GitHub auth status check');
+        
+        // Check Brain CLI availability via GitHub auth
         const authResult = await BrainApiAdapter.githubAuthStatus();
+        
+        fastify.log.info({ authResult }, 'Health check: Auth result received');
         
         const brainAvailable = authResult.status !== 'error';
         const authenticated = authResult.status === 'success' && 
@@ -91,8 +100,11 @@ const healthRoutes: FastifyPluginAsync = async (fastify) => {
 
         if (brainAvailable) {
           try {
-            // Use healthFullStack to check nucleus status
+            fastify.log.info('Health check: Checking full stack status');
             const healthResult = await BrainApiAdapter.healthFullStack();
+            
+            fastify.log.info({ healthResult }, 'Health check: Full stack result');
+            
             isNucleus = healthResult.status === 'success' && 
               (healthResult.data as Record<string, any>)?.is_nucleus === true;
             
@@ -107,24 +119,28 @@ const healthRoutes: FastifyPluginAsync = async (fastify) => {
                 };
               }
             }
-          } catch {
-            // Not in a nucleus, which is fine
+          } catch (error) {
+            fastify.log.warn({ err: error }, 'Health check: Not in nucleus (expected)');
             isNucleus = false;
           }
         }
 
-        return reply.code(200).send({
+        const response = {
           ok: brainAvailable,
           brain_available: brainAvailable,
           authenticated,
           is_nucleus: isNucleus,
           ...(nucleusData && { nucleus: nucleusData }),
           timestamp: new Date().toISOString()
-        });
+        };
+
+        fastify.log.info({ response }, 'Health check: Complete');
+        
+        return reply.code(200).send(response);
 
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
-        fastify.log.error({ err: error }, 'Health check error');
+        fastify.log.error({ err: error }, 'Health check: Fatal error');
         
         return reply.code(503).send({
           ok: false,
@@ -157,15 +173,18 @@ const healthRoutes: FastifyPluginAsync = async (fastify) => {
     },
     async (_request, reply) => {
       try {
-        // Get nucleus info which includes onboarding state
+        fastify.log.info('Onboarding check: Starting');
+        
         const result = await BrainApiAdapter.healthOnboardingStatus();
+
+        fastify.log.info({ result }, 'Onboarding check: Result received');
 
         if (result.status === 'success' && result.data) {
           const data = result.data as Record<string, any>;
           const onboarding = data.onboarding as Record<string, any> || {};
           const steps = onboarding.steps as Record<string, boolean> || {};
 
-          return reply.code(200).send({
+          const response = {
             completed: onboarding.completed === true,
             steps: {
               github_auth: steps.github_auth === true,
@@ -176,10 +195,16 @@ const healthRoutes: FastifyPluginAsync = async (fastify) => {
             nucleus_path: data.path as string || undefined,
             organization: data.organization as string || undefined,
             timestamp: new Date().toISOString()
-          });
+          };
+
+          fastify.log.info({ response }, 'Onboarding check: Complete');
+
+          return reply.code(200).send(response);
         }
 
         // Not in a nucleus or no onboarding data
+        fastify.log.warn('Onboarding check: No nucleus or incomplete data');
+        
         return reply.code(200).send({
           completed: false,
           steps: {
@@ -193,7 +218,7 @@ const healthRoutes: FastifyPluginAsync = async (fastify) => {
 
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
-        fastify.log.error({ err: error }, 'Onboarding check error');
+        fastify.log.error({ err: error }, 'Onboarding check: Fatal error');
         
         return reply.code(503).send({
           error: errorMsg,

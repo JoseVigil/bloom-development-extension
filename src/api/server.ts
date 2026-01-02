@@ -14,11 +14,11 @@ import { profileRoutes } from './routes/profile.routes';
 import { authRoutes } from './routes/auth.routes';
 import { explorerRoutes } from './routes/explorer.routes';
 
+// Import health routes - FIXED: Use default import directly
+import healthRoutes from './routes/health.routes';
+
 // Import middleware
 import { errorHandler } from './middleware/errorHandler';
-
-//Import Health
-import healthRoutes from './routes/health.routes';
 
 export interface BloomApiServerConfig {
   context: vscode.ExtensionContext;
@@ -67,7 +67,7 @@ export async function createAPIServer(config: BloomApiServerConfig): Promise<Fas
         { url: `http://localhost:${port}`, description: 'Local Development' }
       ],
       tags: [
-        { name: 'health', description: 'System health check endpoints - Brain CLI integration' }, // ← AGREGAR PRIMERO
+        { name: 'health', description: 'System health check endpoints - Brain CLI integration' },
         { name: 'nucleus', description: 'Nucleus management operations' },
         { name: 'intent', description: 'Intent lifecycle and workflow' },
         { name: 'project', description: 'Project detection and linking' },
@@ -105,10 +105,10 @@ export async function createAPIServer(config: BloomApiServerConfig): Promise<Fas
     transformStaticCSP: (header) => header
   });
 
-  // Health check
+  // Basic health check (keep this as fallback at root)
   fastify.get('/health', {
     schema: {
-      description: 'Health check endpoint',
+      description: 'Basic health check endpoint',
       tags: ['system'],
       response: {
         200: {
@@ -127,8 +127,17 @@ export async function createAPIServer(config: BloomApiServerConfig): Promise<Fas
     version: '1.0.0'
   }));
 
-  // Register all route modules
-  await fastify.register(healthRoutes, { prefix: '/api/v1/health' }); 
+  // ⚠️ FIX: Register health routes with proper error handling
+  try {
+    console.log('[Server] Registering health routes...');
+    await fastify.register(healthRoutes, { prefix: '/api/v1/health' });
+    console.log('[Server] ✅ Health routes registered successfully');
+  } catch (error) {
+    console.error('[Server] ❌ Failed to register health routes:', error);
+    throw error;
+  }
+
+  // Register all other route modules
   await fastify.register(nucleusRoutes, { prefix: '/api/v1/nucleus' });
   await fastify.register(intentRoutes, { prefix: '/api/v1/intent' });
   await fastify.register(projectRoutes, { prefix: '/api/v1/project' });
@@ -138,6 +147,12 @@ export async function createAPIServer(config: BloomApiServerConfig): Promise<Fas
 
   // Error handler (must be last)
   fastify.setErrorHandler(errorHandler);
+
+  // Log all registered routes for debugging
+  fastify.ready(() => {
+    console.log('[Server] 📋 Registered routes:');
+    fastify.printRoutes();
+  });
 
   return fastify;
 }
