@@ -130,7 +130,7 @@ export async function createAPIServer(config: BloomApiServerConfig): Promise<Fas
   // ⚠️ FIX: Register health routes with proper error handling
   try {
     console.log('[Server] Registering health routes...');
-    await fastify.register(healthRoutes, { prefix: '/api/v1/health' });
+    await fastify.register(healthRoutes, { prefix: '/api/v1' });
     console.log('[Server] ✅ Health routes registered successfully');
   } catch (error) {
     console.error('[Server] ❌ Failed to register health routes:', error);

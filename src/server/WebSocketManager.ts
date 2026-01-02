@@ -68,8 +68,19 @@ export class WebSocketManager extends EventEmitter {
           port: this.PORT,
           verifyClient: (info: { origin: string; req: IncomingMessage; secure: boolean }) => {
             const origin = info.origin || (info.req.headers.origin as string | undefined);
+            
+            // Allow vscode webviews
             if (origin?.startsWith('vscode-webview://')) return true;
+            
+            // Allow localhost/127.0.0.1
             if (origin?.includes('localhost') || origin?.includes('127.0.0.1')) return true;
+            
+            // Allow file:// protocol (Electron) and null origin (same)
+            if (!origin || origin === 'null' || origin.startsWith('file://')) {
+              console.log('[WebSocketManager] Allowing connection from file:// or null origin');
+              return true;
+            }
+            
             console.warn('[WebSocketManager] Connection rejected from origin:', origin);
             return false;
           },
