@@ -1,1 +1,0 @@
-import"./NGysjSll.js";import{J as n,K as r,d as u}from"./OFsEVZk6.js";var i=n('<button class="svelte-152f3lr">Conectar GitHub</button>');function l(o){function a(){window.location.href="http://localhost:5888/btip/auth/github/start"}var t=i();r("click",t,a),u(o,t)}export{l as G};

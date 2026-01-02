@@ -1,1 +1,0 @@
-import"clsx";import"@sveltejs/kit/internal";import"./exports.js";import"./utils.js";import{w as r}from"./svelte.js";import"@sveltejs/kit/internal/server";import"./state.svelte.js";function e(){const{set:o,subscribe:t}=r(!1);return{subscribe:t,check:async()=>!1}}const u={updated:e()};function l(o,t={}){throw new Error("Cannot call goto(...) on the server")}export{l as g,u as s};
