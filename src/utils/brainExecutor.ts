@@ -13,6 +13,8 @@
 import { spawn } from 'child_process';
 import * as vscode from 'vscode';
 import * as path from 'path';
+import { resolveBloomPython } from './runtimeResolver';
+
 
 // ============================================================================
 // TYPE DEFINITIONS
@@ -101,6 +103,7 @@ export interface LinkedProject {
 // ============================================================================
 
 export class BrainExecutor {
+
     private static pythonPath: string | null = null;
     private static brainModulePath: string | null = null;
 
@@ -109,22 +112,44 @@ export class BrainExecutor {
      * Called once during extension activation
      */
     static async initialize(extensionPath: string): Promise<void> {
+
+        // Python Path
+        this.pythonPath = resolveBloomPython();
+
         // Detect Python
-        const config = vscode.workspace.getConfiguration('bloom');
-        this.pythonPath = config.get<string>('pythonPath', 'python');
+        const config = vscode.workspace.getConfiguration('bloom');        
 
         // Set brain module path
-        this.brainModulePath = path.join(extensionPath, 'brain');
+        this.brainModulePath = path.join(extensionPath, 'brain');        
 
         // Verify Brain is accessible
         try {
-            const result = await this.execute(['--help']);
+            await new Promise<void>((resolve, reject) => {
+                const proc = spawn(
+                    this.pythonPath!,
+                    ['-m', 'brain', '--help'],
+                    {
+                        cwd: this.brainModulePath!,
+                        env: {
+                            ...process.env,
+                            PYTHONPATH: this.brainModulePath!
+                        }
+                    }
+                );
+
+                proc.on('error', reject);
+
+                proc.on('close', (code) => {
+                    if (code === 0) resolve();
+                    else reject(new Error(`Brain exited with code ${code}`));
+                });
+            });
+
             console.log('[BrainExecutor] Initialized successfully');
         } catch (error: any) {
-            console.error('[BrainExecutor] Initialization failed:', error);
             throw new Error(
                 `Brain CLI not accessible: ${error.message}\n` +
-                `Make sure Python is installed and Brain module exists at: ${this.brainModulePath}`
+                `Make sure Brain module exists at: ${this.brainModulePath}`
             );
         }
     }
@@ -148,7 +173,7 @@ export class BrainExecutor {
         }
 
         // Build args: python -m brain <commands> [args] --json
-        const fullArgs = ['-m', 'brain', ...commands];
+        const fullArgs = ['-m', 'brain', '--json', ...commands];
         
         // Add arguments
         Object.entries(args).forEach(([key, value]) => {
@@ -157,10 +182,7 @@ export class BrainExecutor {
         } else if (value !== undefined && value !== null) {
             fullArgs.push(key, value.toString());
         }
-        });
-        
-        // Always add --json for structured output
-        fullArgs.push('--json');
+        });       
         
         console.log(`[BrainExecutor] ${this.pythonPath} ${fullArgs.join(' ')}`);
         console.log(`[BrainExecutor] CWD: ${options.cwd || this.brainModulePath}`);
