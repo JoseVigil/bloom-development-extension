@@ -63,3 +63,6 @@ installer/resources/runtime/
 
 # Host dependencies
 src/host/mingw-deps
+
+# Svelt SvelteKit
+.svelte-kit/
