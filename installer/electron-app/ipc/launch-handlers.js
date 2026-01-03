@@ -1,10 +1,8 @@
 // ipc/launch-handlers.js
 const { ipcMain } = require('electron');
-const { exec } = require('child_process');
-const { promisify } = require('util');
+const { spawn } = require('child_process');
 const path = require('path');
-
-const execAsync = promisify(exec);
+const { paths } = require('../config/paths');
 
 let mainWindow = null;
 
@@ -12,10 +10,71 @@ function setMainWindow(window) {
   mainWindow = window;
 }
 
+/**
+ * ✅ MIGRATED: Helper to execute Brain CLI with direct execution
+ */
+async function execBrainJson(args, options = {}) {
+  return new Promise((resolve, reject) => {
+    const pythonPath = paths.pythonExe;
+    const brainMainPy = path.join(paths.brainDir, '__main__.py');
+
+    // ✅ NEW: Direct execution - python brain/__main__.py --json [command] [args]
+    const fullArgs = [brainMainPy, '--json', ...args];
+
+    console.log(`[launch-handlers] ${pythonPath} ${fullArgs.join(' ')}`);
+
+    const child = spawn(pythonPath, fullArgs, {
+      cwd: paths.brainDir,
+      windowsHide: true,
+      timeout: options.timeout || 15000,
+      // ✅ NO PYTHONPATH needed - brain handles sys.path internally
+      env: {
+        ...process.env,
+        PYTHONNOUSERSITE: '1'
+      }
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout.on('data', (data) => {
+      stdout += data.toString();
+    });
+
+    child.stderr.on('data', (data) => {
+      stderr += data.toString();
+    });
+
+    const timeoutId = setTimeout(() => {
+      child.kill();
+      reject(new Error(`Timeout after ${options.timeout || 15000}ms`));
+    }, options.timeout || 15000);
+
+    child.on('close', (code) => {
+      clearTimeout(timeoutId);
+
+      if (code !== 0) {
+        reject(new Error(`Brain exited with code ${code}: ${stderr || stdout}`));
+        return;
+      }
+
+      try {
+        const result = JSON.parse(stdout.trim());
+        resolve(result);
+      } catch (err) {
+        reject(new Error(`Failed to parse JSON: ${err.message}\nOutput: ${stdout}`));
+      }
+    });
+
+    child.on('error', (err) => {
+      clearTimeout(timeoutId);
+      reject(new Error(`Failed to spawn: ${err.message}`));
+    });
+  });
+}
+
 function setupLaunchHandlers() {
   console.log('📡 Setting up launch IPC handlers...');
-
-  const projectRoot = path.join(__dirname, '..'); // electron-app/
 
   // ============================================================================
   // ONBOARDING STATUS
@@ -23,20 +82,16 @@ function setupLaunchHandlers() {
   ipcMain.removeAllListeners('onboarding:status');
   ipcMain.handle('onboarding:status', async () => {
     try {
-      const brainCommand = process.platform === 'win32'
-        ? 'python -m brain --json health onboarding-check'
-        : 'python3 -m brain --json health onboarding-check';
-
-      const { stdout } = await execAsync(brainCommand, {
-        cwd: projectRoot,
-        windowsHide: true,
+      const result = await execBrainJson(['health', 'onboarding-check'], {
         timeout: 15000
       });
 
-      const result = JSON.parse(stdout);
-
       if (result.status !== 'success') {
-        return { success: false, completed: false, error: 'Invalid brain response' };
+        return { 
+          success: false, 
+          completed: false, 
+          error: result.error || 'Invalid brain response' 
+        };
       }
 
       return {
@@ -47,7 +102,11 @@ function setupLaunchHandlers() {
       };
     } catch (error) {
       console.error('❌ Onboarding status error:', error.message || error);
-      return { success: false, completed: false, error: error.message || 'Brain CLI failed' };
+      return { 
+        success: false, 
+        completed: false, 
+        error: error.message || 'Brain CLI failed' 
+      };
     }
   });
 
@@ -57,6 +116,7 @@ function setupLaunchHandlers() {
   ipcMain.removeAllListeners('health:check');
   ipcMain.handle('health:check', async () => {
     try {
+      // First check onboarding
       const onboardingResult = await ipcMain.handle('onboarding:status');
 
       if (!onboardingResult.success || !onboardingResult.completed) {
@@ -67,17 +127,10 @@ function setupLaunchHandlers() {
         };
       }
 
-      const brainCommand = process.platform === 'win32'
-        ? 'python -m brain --json health full-stack'
-        : 'python3 -m brain --json health full-stack';
-
-      const { stdout } = await execAsync(brainCommand, {
-        cwd: projectRoot,
-        windowsHide: true,
+      // Run full stack health check
+      const result = await execBrainJson(['health', 'full-stack'], {
         timeout: 20000
       });
-
-      const result = JSON.parse(stdout);
 
       return {
         success: true,
@@ -87,7 +140,11 @@ function setupLaunchHandlers() {
       };
     } catch (error) {
       console.error('❌ Health check error:', error.message || error);
-      return { success: false, status: 'error', error: error.message || 'Unknown' };
+      return { 
+        success: false, 
+        status: 'error', 
+        error: error.message || 'Unknown' 
+      };
     }
   });
 
@@ -113,7 +170,7 @@ function setupLaunchHandlers() {
     }
   });
 
-  console.log('✅ Launch IPC handlers registered');
+  console.log('✅ Launch IPC handlers registered (direct execution mode)');
 }
 
 module.exports = {

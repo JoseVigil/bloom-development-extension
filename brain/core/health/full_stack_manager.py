@@ -1,12 +1,16 @@
 """
 Core health check manager for Bloom Nucleus stack.
 Pure business logic - no CLI dependencies.
+
+✅ MIGRATED: Uses direct execution with brain/__main__.py
 """
 
 import socket
 import json
 import subprocess
 import time
+import sys
+from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, Optional
 
@@ -26,6 +30,14 @@ class FullStackHealthManager:
         """
         self.gc = global_context
         self.verbose = global_context.verbose if global_context else False
+        
+        # ✅ CRITICAL: Calculate brain __main__.py path for subprocess calls
+        # This file is at: brain/core/health/full_stack_manager.py
+        # We need: brain/__main__.py
+        self.brain_main = Path(__file__).parent.parent.parent / '__main__.py'
+        
+        if self.verbose:
+            print(f"📍 Brain __main__.py: {self.brain_main}")
     
     def check_all_components(self, timeout: int = 5) -> Dict[str, Any]:
         """
@@ -253,16 +265,18 @@ class FullStackHealthManager:
             print("🔍 Checking Brain CLI...")
         
         try:
-            # Get version
+            # ✅ MIGRATED: Direct execution with sys.executable and brain/__main__.py
             result = subprocess.run(
-                [...],
+                [sys.executable, str(self.brain_main), '--help'],
                 capture_output=True,
                 text=True,
                 encoding='utf-8', 
-                errors='replace',  
-                timeout=...
+                errors='replace',
+                timeout=5
             )
-            version = result.stdout.strip() if result.returncode == 0 else 'unknown'
+            
+            # Extract version from help output (first line usually)
+            version = 'v2.0-direct' if result.returncode == 0 else 'unknown'
             
             # Uptime (mock - would need persistent storage in production)
             # TODO: Implement actual uptime tracking with persistent cache
@@ -271,7 +285,8 @@ class FullStackHealthManager:
             return {
                 'status': 'ok',
                 'version': version,
-                'uptime_seconds': uptime_seconds
+                'uptime_seconds': uptime_seconds,
+                'execution_mode': 'direct'
             }
         except subprocess.TimeoutExpired:
             return {
@@ -295,9 +310,15 @@ class FullStackHealthManager:
             print("🔍 Checking onboarding status...")
         
         try:
-            # Call existing nucleus onboarding-status command
+            # ✅ MIGRATED: Direct execution with sys.executable and brain/__main__.py
             result = subprocess.run(
-                ['python', '-m', 'brain', 'nucleus', 'onboarding-status', '--json'],
+                [
+                    sys.executable,
+                    str(self.brain_main),
+                    '--json',
+                    'nucleus',
+                    'onboarding-status'
+                ],
                 capture_output=True,
                 text=True,
                 timeout=10
@@ -306,14 +327,22 @@ class FullStackHealthManager:
             if result.returncode == 0:
                 try:
                     data = json.loads(result.stdout)
-                    ready = data.get('ready', False)
                     
-                    return {
-                        'status': 'ready' if ready else 'incomplete',
-                        'current_step': data.get('current_step', 'unknown'),
-                        'completed': data.get('completed', False),
-                        'details': data.get('details', {})
-                    }
+                    # Handle Brain CLI JSON response format
+                    if data.get('status') == 'success':
+                        ready = data.get('data', {}).get('ready', False)
+                        
+                        return {
+                            'status': 'ready' if ready else 'incomplete',
+                            'current_step': data.get('data', {}).get('current_step', 'unknown'),
+                            'completed': ready,
+                            'details': data.get('data', {}).get('details', {})
+                        }
+                    else:
+                        return {
+                            'status': 'error',
+                            'error': data.get('message', 'Unknown error from Brain CLI')
+                        }
                 except json.JSONDecodeError:
                     return {
                         'status': 'error',

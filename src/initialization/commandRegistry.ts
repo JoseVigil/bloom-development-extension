@@ -17,7 +17,6 @@ import { registerRevealInFinder } from '../commands/revealInFinder';
 import { registerCreateBTIPProject } from '../commands/createBTIPProject';
 import { registerGenerateQuestions } from '../commands/generateQuestions';
 import { registerSubmitAnswers } from '../commands/submitAnswers';
-import { registerIntegrateSnapshot } from '../commands/integrateSnapshot';
 import { registerReloadIntentForm } from '../commands/reloadIntentForm';
 import { registerRegenerateContext } from '../commands/regenerateContext';
 
@@ -39,7 +38,8 @@ import { registerLinkToNucleusCommands } from '../commands/linkToNucleus';
  * Registra TODOS los comandos del plugin
  * Organizado por categorías
  * 
- * UPDATED: Includes migrated Brain CLI commands for project management
+ * UPDATED: Removed integrateSnapshot (migrated to Brain CLI workflow)
+ * UPDATED: All commands now use BrainExecutor for Python operations
  */
 export function registerAllCommands(
     context: vscode.ExtensionContext,
@@ -64,7 +64,7 @@ export function registerAllCommands(
     registerCreateBTIPProject(context, logger);
     registerGenerateQuestions(context, logger);
     registerSubmitAnswers(context, logger);
-    registerIntegrateSnapshot(context, logger);
+    // ❌ REMOVED: registerIntegrateSnapshot - Now handled by Brain CLI intent merge workflow
     registerReloadIntentForm(context, logger);
     registerRegenerateContext(context, logger);
     
@@ -79,7 +79,7 @@ export function registerAllCommands(
     
     // ========================================
     // CATEGORÍA 3: COMANDOS DE PROJECT MANAGEMENT
-    // NEW: Migrated to Brain CLI
+    // ✅ MIGRATED: Using Brain CLI
     // ========================================
     registerManageProjectCommands(context);
     registerCreateNucleusProjectCommands(context);
@@ -106,6 +106,7 @@ export function registerAllCommands(
 
     // ========================================
     // CATEGORÍA 7: COMANDOS ESPECIALES
+    // ✅ MIGRATED: Uses BrainExecutor.createIntentDev
     // ========================================
     const createIntentDevDisposable = vscode.commands.registerCommand(
         'bloom.createIntentDev',
@@ -116,4 +117,5 @@ export function registerAllCommands(
     logger.info('✅ All commands registered successfully');
     logger.info('   📊 Total categories: 7');
     logger.info('   🧠 Brain CLI integration: Active');
+    logger.info('   ✅ Legacy Python scripts: Removed');
 }

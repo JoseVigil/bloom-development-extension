@@ -1,11 +1,11 @@
-// src/core/gitOrchestrator.ts (fragmento con cambios clave)
+// src/core/gitOrchestrator.ts - MIGRATED to BrainExecutor
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import { GitExecutor } from '../utils/gitExecutor';
 import { GitManager } from '../utils/gitManager';
 import { WorkspaceManager } from '../managers/workspaceManager';
-import { PythonScriptRunner } from './pythonScriptRunner';
+import { BrainExecutor } from '../utils/brainExecutor';
 
 export interface NucleusStatus {
     exists: boolean;
@@ -88,7 +88,7 @@ export class GitOrchestrator {
 
     /**
      * Crea un nuevo Nucleus desde cero
-     * AHORA USA GitExecutor para todas las operaciones Git
+     * ✅ MIGRATED: Uses BrainExecutor.generateNucleusStructure()
      */
     static async createNucleus(
         org: string,
@@ -132,18 +132,36 @@ export class GitOrchestrator {
 
             if (!createResponse.ok) {
                 const error = await createResponse.json();
-                throw new Error(`GitHub API error: ${error}`);
+                const errorMsg = typeof error === 'object' && error !== null && 'message' in error 
+                    ? String(error.message) 
+                    : JSON.stringify(error);
+                throw new Error(`GitHub API error: ${errorMsg}`);
             }
 
             // 4. Agregar remote origin usando GitExecutor
             console.log('[GitOrchestrator] Adding remote origin');
             await GitExecutor.addRemote(nucleusPath, repoUrl);
 
-            // 5. Ejecutar script Python para generar estructura
-            console.log('[GitOrchestrator] Running Python script to generate structure');
-            await PythonScriptRunner.generateNucleusStructure(nucleusPath, org, {
-                url: repoUrl
-            });
+            // 5. ✅ MIGRATED: Ejecutar Brain CLI para generar estructura
+            console.log('[GitOrchestrator] Generating Nucleus structure via Brain CLI');
+            const structureResult = await BrainExecutor.generateNucleusStructure(
+                nucleusPath,
+                org,
+                {
+                    url: repoUrl,
+                    force: false,
+                    onProgress: (line) => {
+                        console.log(`[Brain] ${line}`);
+                        if (logger) {
+                            logger.info(line);
+                        }
+                    }
+                }
+            );
+
+            if (structureResult.status !== 'success') {
+                throw new Error(`Failed to generate Nucleus structure: ${structureResult.error || structureResult.message}`);
+            }
 
             // 6. Inicializar workspace file DENTRO del Nucleus
             console.log('[GitOrchestrator] Creating workspace file');
@@ -184,7 +202,7 @@ export class GitOrchestrator {
 
     /**
      * Clona un Nucleus existente desde GitHub
-     * AHORA USA GitExecutor.clone()
+     * ✅ MIGRATED: Uses BrainExecutor.generateNucleusStructure()
      */
     static async cloneNucleus(
         org: string,
@@ -209,10 +227,21 @@ export class GitOrchestrator {
             const hasValidStructure = this.validateBloomStructure(nucleusPath);
 
             if (!hasValidStructure) {
-                console.log('[GitOrchestrator] Structure incomplete, completing...');
-                await PythonScriptRunner.generateNucleusStructure(nucleusPath, org, {
-                    skipExisting: true
-                });
+                console.log('[GitOrchestrator] Structure incomplete, completing via Brain CLI...');
+                
+                // ✅ MIGRATED: Completar estructura con Brain CLI
+                const structureResult = await BrainExecutor.generateNucleusStructure(
+                    nucleusPath,
+                    org,
+                    {
+                        skipExisting: true,
+                        onProgress: (line) => console.log(`[Brain] ${line}`)
+                    }
+                );
+
+                if (structureResult.status !== 'success') {
+                    console.warn('[GitOrchestrator] Failed to complete structure:', structureResult.error);
+                }
 
                 // Stage cambios si se completó la estructura
                 await GitManager.stageAndOpenSCM(
@@ -252,7 +281,7 @@ export class GitOrchestrator {
 
     /**
      * Vincula un Nucleus existente local con GitHub
-     * AHORA USA GitExecutor
+     * ✅ MIGRATED: Uses BrainExecutor.generateNucleusStructure()
      */
     static async linkNucleus(
         localPath: string,
@@ -289,10 +318,21 @@ export class GitOrchestrator {
             // Completar estructura si falta
             const hasValidStructure = this.validateBloomStructure(localPath);
             if (!hasValidStructure) {
-                console.log('[GitOrchestrator] Completing structure...');
-                await PythonScriptRunner.generateNucleusStructure(localPath, org, {
-                    skipExisting: true
-                });
+                console.log('[GitOrchestrator] Completing structure via Brain CLI...');
+                
+                // ✅ MIGRATED: Completar estructura con Brain CLI
+                const structureResult = await BrainExecutor.generateNucleusStructure(
+                    localPath,
+                    org,
+                    {
+                        skipExisting: true,
+                        onProgress: (line) => console.log(`[Brain] ${line}`)
+                    }
+                );
+
+                if (structureResult.status !== 'success') {
+                    console.warn('[GitOrchestrator] Failed to complete structure:', structureResult.error);
+                }
             }
 
             // Verificar workspace file
