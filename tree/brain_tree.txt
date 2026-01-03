@@ -16,6 +16,13 @@ bloom-development-extension/
     │   ├── context/
     │   │   ├── __pycache__/ [... cache]
     │   │   └── generate.py
+    │   ├── extension/
+    │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
+    │   │   ├── backups.py
+    │   │   ├── install.py
+    │   │   ├── update.py
+    │   │   └── verify.py
     │   ├── filesystem/
     │   │   ├── __init__.py
     │   │   ├── __pycache__/ [... cache]
@@ -41,6 +48,12 @@ bloom-development-extension/
     │   │   ├── orgs_list.py
     │   │   ├── repos.py
     │   │   └── repos_list.py
+    │   ├── health/
+    │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
+    │   │   ├── full_stack.py
+    │   │   ├── onboarding_check.py
+    │   │   └── websocket_status.py
     │   ├── init.py
     │   ├── intent/
     │   │   ├── __init__.py
@@ -49,14 +62,22 @@ bloom-development-extension/
     │   │   ├── build_payload.py
     │   │   ├── create.py
     │   │   ├── delete.py
+    │   │   ├── download.py
     │   │   ├── finalize.py
     │   │   ├── get.py
+    │   │   ├── hydrate.py
     │   │   ├── list.py
     │   │   ├── lock.py
+    │   │   ├── merge.py
+    │   │   ├── parse.py
     │   │   ├── plan.py
+    │   │   ├── recover.py
     │   │   ├── router_prompt.md
+    │   │   ├── stage.py
+    │   │   ├── submit.py
     │   │   ├── unlock.py
-    │   │   └── update.py
+    │   │   ├── update.py
+    │   │   └── validate.py
     │   ├── nucleus/
     │   │   ├── __init__.py
     │   │   ├── __pycache__/ [... cache]
@@ -92,6 +113,7 @@ bloom-development-extension/
     │   ├── __pycache__/ [... cache]
     │   ├── bloom_project_inspector.py
     │   ├── browser/
+    │   │   ├── __pycache__/ [... cache]
     │   │   └── profile_manager.py
     │   ├── context/
     │   │   ├── __init__.py
@@ -121,6 +143,11 @@ bloom-development-extension/
     │   │   ├── enriched_tree_generator.py
     │   │   ├── gemini_router.py
     │   │   └── payload_builder.py
+    │   ├── download_manager.py
+    │   ├── extension/
+    │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
+    │   │   └── manager.py
     │   ├── filesystem/
     │   │   ├── __init__.py
     │   │   ├── code_compressor.py
@@ -134,8 +161,19 @@ bloom-development-extension/
     │   │   ├── __init__.py
     │   │   ├── api_client.py
     │   │   └── models.py
+    │   ├── health/
+    │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
+    │   │   ├── full_stack_manager.py
+    │   │   ├── onboarding_status_manager.py
+    │   │   └── websocket_status_manager.py
     │   ├── intent/
-    │   │   └── manager.py
+    │   │   ├── merge_manager.py
+    │   │   ├── recovery_manager.py
+    │   │   ├── response_parser.py
+    │   │   ├── staging_manager.py
+    │   │   └── validation_manager.py
+    │   ├── intent_manager.py
     │   ├── nucleus_inspector.py
     │   ├── nucleus_manager.py
     │   ├── project/
@@ -146,6 +184,7 @@ bloom-development-extension/
     │   │   └── scanner.py
     │   ├── project_manager.py
     │   └── tree_manager.py
+    ├── entry.py
     ├── libs/ [... python vendored dependencies]
     ├── pyproject.toml
     ├── requirements.txt
@@ -154,4 +193,5 @@ bloom-development-extension/
         ├── __pycache__/ [... cache]
         ├── context.py
         ├── credentials.py
+        ├── environment.py
         └── github_types.py
