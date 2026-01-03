@@ -23,6 +23,8 @@ python -m brain filesystem tree src installer webview brain contracts package.js
 
 python -m brain filesystem tree installer -o tree/installer_tree.txt
 
+python -m brain filesystem tree brain -o tree/brain_tree.txt
+
 python -m brain filesystem tree installer/electron-app -o tree/electron_tree.txt
 
 # Añade cálculo de hashes MD5 (por archivo y global) al reporte para control de integridad y detección de cambios.
@@ -81,13 +83,3 @@ python -m brain load --path "C:\Repos\mi-app-react"
 python -m brain --json load --path ./backend-api
 ```
 
-
-
-
-🛠️ Resumen de Argumentos Comunes
-Argumento	Alias	Descripción
---path	-p	Ruta raíz del proyecto a analizar/modificar.
---output	-o	Nombre de la carpeta o archivo de salida.
---strategy	-s	Fuerza una tecnología específica (android, python, etc.).
---json	N/A	(Global) Forza salida JSON pura en stdout.
---verbose	N/A	(Global) Muestra logs de depuración en stderr.

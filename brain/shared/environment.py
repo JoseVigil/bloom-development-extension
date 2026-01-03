@@ -1,6 +1,9 @@
 """
 Sistema de detección de entorno para Brain CLI.
 Determina si está corriendo en desarrollo o producción y resuelve rutas críticas.
+
+MODIFICADO: Agregada detección de paths runtime para Windows y macOS,
+permitiendo ejecución directa sin -m en entornos aislados.
 """
 
 import os
@@ -22,6 +25,9 @@ class EnvironmentDetector:
     """
     Detecta el entorno de ejecución y provee rutas específicas.
     
+    MODIFICADO: Agregada detección de runtime paths para soporte de
+    ejecución directa en Windows y macOS.
+    
     Estrategia de detección:
     1. Marker file: brain/.production_marker (creado por instalador)
     2. Heurística: Si ejecutable está en %LOCALAPPDATA%/BloomNucleus → producción
@@ -32,6 +38,7 @@ class EnvironmentDetector:
         self._env_type: Optional[Environment] = None
         self._repo_root: Optional[Path] = None
         self._data_dir: Optional[Path] = None
+        self._runtime_path: Optional[Path] = None  # MODIFICADO: Cache para runtime path
         self._cache: Dict[str, Any] = {}
     
     @property
@@ -55,6 +62,14 @@ class EnvironmentDetector:
             if localappdata and executable.is_relative_to(Path(localappdata) / "BloomNucleus"):
                 self._env_type = Environment.PRODUCTION
                 return self._env_type
+        elif platform.system() == "Darwin":  # MODIFICADO: Detección para macOS
+            app_support = Path.home() / "Library" / "Application Support" / "BloomNucleus"
+            try:
+                if executable.is_relative_to(app_support):
+                    self._env_type = Environment.PRODUCTION
+                    return self._env_type
+            except ValueError:
+                pass  # No está relativo a app_support
         
         # 3. Buscar .git en ancestors (desarrollo)
         current = brain_module_path
@@ -85,11 +100,86 @@ class EnvironmentDetector:
             return self._repo_root
         return None
     
+    def get_runtime_path(self) -> Optional[Path]:
+        """
+        MODIFICADO: Retorna el path del runtime Python aislado.
+        
+        Esta función es crítica para ejecución directa sin -m.
+        Detecta el runtime en:
+        - Windows: %LOCALAPPDATA%\\BloomNucleus\\engine\\runtime
+        - macOS: ~/Library/Application Support/BloomNucleus/engine/runtime
+        
+        Returns:
+            Path al directorio runtime si existe, None si no se encuentra
+        """
+        if self._runtime_path is not None:
+            return self._runtime_path
+        
+        system = platform.system()
+        
+        if system == "Windows":
+            localappdata = os.environ.get("LOCALAPPDATA")
+            if not localappdata:
+                return None
+            runtime = Path(localappdata) / "BloomNucleus" / "engine" / "runtime"
+        
+        elif system == "Darwin":  # macOS
+            home = Path.home()
+            runtime = home / "Library" / "Application Support" / "BloomNucleus" / "engine" / "runtime"
+        
+        else:
+            # Linux u otros - no soportado en producción por ahora
+            return None
+        
+        # Validar que exista y tenga estructura esperada
+        if runtime.exists() and (runtime / "python.exe").exists() if system == "Windows" else (runtime / "bin" / "python3").exists():
+            self._runtime_path = runtime
+            return runtime
+        
+        return None
+    
+    def get_brain_path(self) -> Optional[Path]:
+        """
+        MODIFICADO: Retorna el path al paquete brain en site-packages.
+        
+        Útil para construcción de comandos de ejecución directa.
+        
+        Returns:
+            Path a brain/__main__.py si se encuentra en site-packages
+        """
+        runtime = self.get_runtime_path()
+        if not runtime:
+            return None
+        
+        system = platform.system()
+        
+        if system == "Windows":
+            site_packages = runtime / "Lib" / "site-packages"
+        elif system == "Darwin":
+            # macOS puede tener varias versiones de Python, buscar la activa
+            lib_path = runtime / "lib"
+            if not lib_path.exists():
+                return None
+            
+            # Buscar python3.x/site-packages
+            python_dirs = list(lib_path.glob("python3.*"))
+            if not python_dirs:
+                return None
+            site_packages = python_dirs[0] / "site-packages"
+        else:
+            return None
+        
+        brain_main = site_packages / "brain" / "__main__.py"
+        if brain_main.exists():
+            return brain_main
+        
+        return None
+    
     def get_data_directory(self) -> Path:
         """
         Retorna el directorio base de datos según el sistema operativo.
         
-        Windows: %APPDATA%\BloomNucleus
+        Windows: %APPDATA%\\BloomNucleus
         macOS: ~/Library/Application Support/BloomNucleus
         Linux: ~/.local/share/BloomNucleus
         """
@@ -170,8 +260,13 @@ class EnvironmentDetector:
         return None
     
     def get_info(self) -> Dict[str, Any]:
-        """Retorna información completa del entorno para debugging."""
+        """
+        MODIFICADO: Retorna información completa del entorno para debugging,
+        incluyendo runtime paths.
+        """
         extension_path = self.get_extension_path()
+        runtime_path = self.get_runtime_path()
+        brain_path = self.get_brain_path()
         
         return {
             "environment": self.environment.value,
@@ -179,6 +274,8 @@ class EnvironmentDetector:
             "is_production": self.is_production,
             "repo_root": str(self.repo_root) if self.repo_root else None,
             "data_directory": str(self.get_data_directory()),
+            "runtime_path": str(runtime_path) if runtime_path else None,  # MODIFICADO
+            "brain_path": str(brain_path) if brain_path else None,  # MODIFICADO
             "extension_path": str(extension_path) if extension_path else None,
             "extension_found": extension_path is not None,
             "platform": platform.system(),

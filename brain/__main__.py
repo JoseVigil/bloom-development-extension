@@ -2,8 +2,20 @@
 Brain CLI - Auto-discovery entry point.
 NO MAINTENANCE REQUIRED when adding new commands.
 """
-import typer
 import sys
+from pathlib import Path
+
+# CRÍTICO: Inyectar site-packages ANTES de importar brain
+# Esto permite ejecución directa sin -m
+current_file = Path(__file__).resolve()
+brain_package = current_file.parent
+site_packages = brain_package.parent
+site_packages_str = str(site_packages)
+if site_packages_str not in sys.path:
+    sys.path.insert(0, site_packages_str)
+
+# AHORA sí importar brain
+import typer
 from brain.commands import discover_commands
 from brain.shared.context import GlobalContext
 
