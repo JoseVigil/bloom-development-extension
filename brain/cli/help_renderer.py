@@ -1,8 +1,10 @@
 """Auto-generated help renderer using Rich with categorized panels."""
 from dataclasses import dataclass
 from collections import defaultdict
-from typing import Dict, List, Tuple
+from typing import Dict, List
 import inspect
+import platform
+from pathlib import Path
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -28,6 +30,17 @@ class CommandParameter:
     is_required: bool
     help_text: str
     is_argument: bool = False
+
+
+def _get_runtime_example() -> str:
+    """Get platform-specific runtime path example."""
+    system = platform.system()
+    if system == "Windows":
+        return r"python %LOCALAPPDATA%\BloomNucleus\engine\runtime\Lib\site-packages\brain\__main__.py"
+    elif system == "Darwin":
+        return "python ~/Library/Application\\ Support/BloomNucleus/engine/runtime/lib/python3.x/site-packages/brain/__main__.py"
+    else:
+        return "python ~/.local/share/BloomNucleus/engine/runtime/lib/python3.x/site-packages/brain/__main__.py"
 
 
 def _extract_structure(registry: CommandRegistry) -> HelpStructure:
@@ -147,7 +160,7 @@ def _detect_subsections(category: CommandCategory, commands: List[BaseCommand]) 
 
 
 def _render_command_detail(cmd: BaseCommand, category: CommandCategory) -> List[Text]:
-    """Render a command with full detailed formatting."""
+    """Render a command with full detailed formatting using runtime syntax."""
     meta = cmd.metadata()
     
     # Extract command parameters
@@ -166,8 +179,8 @@ def _render_command_detail(cmd: BaseCommand, category: CommandCategory) -> List[
     lines.append(Text(f"{cmd_display_name} - {meta.description}", style="bold white"))
     lines.append(Text())  # Empty line
     
-    # 2. Full command syntax with GLOBAL OPTIONS placement
-    syntax_parts = ["python -m brain", "[GLOBAL_OPTIONS]", category.category_name, meta.name]
+    # 2. RUNTIME syntax (predeterminado)
+    runtime_parts = ["python brain/__main__.py", "[GLOBAL_OPTIONS]", category.category_name, meta.name]
     
     # Separate arguments and options
     arguments = [p for p in params if p.is_argument]
@@ -175,14 +188,14 @@ def _render_command_detail(cmd: BaseCommand, category: CommandCategory) -> List[
     
     # Add arguments to syntax
     for arg in arguments:
-        syntax_parts.append(arg.flag)
+        runtime_parts.append(arg.flag)
     
     # Add [OPTIONS] if there are any options
     if options:
-        syntax_parts.append("[OPTIONS]")
+        runtime_parts.append("[OPTIONS]")
     
-    syntax = " ".join(syntax_parts)
-    lines.append(Text(f"  {syntax}", style="green"))
+    runtime_syntax = " ".join(runtime_parts)
+    lines.append(Text(f"  {runtime_syntax}", style="green"))
     lines.append(Text())  # Empty line
     
     # 3. Arguments section (positional parameters)
@@ -246,45 +259,77 @@ def _render_category_panel(console: Console, category: CommandCategory, commands
 
 
 def _render_usage(console: Console):
-    """Render usage section explaining global options placement."""
+    """Render usage section explaining both execution modes."""
     content_lines = []
     
-    # Basic syntax
-    content_lines.append(Text("python -m brain [GLOBAL_OPTIONS] <category> <command> [ARGS] [OPTIONS]", style="bold green"))
+    # Título
+    content_lines.append(Text("Brain CLI soporta dos modos de ejecución:", style="bold white"))
     content_lines.append(Text())
     
-    # Examples section
-    content_lines.append(Text("Ejemplos:", style="bold cyan"))
+    # Modo 1: RUNTIME (Recomendado)
+    content_lines.append(Text("1. MODO RUNTIME (Recomendado)", style="bold green"))
+    content_lines.append(Text("   Ejecución directa sin configuración de PYTHONPATH", style="dim green"))
+    content_lines.append(Text())
+    content_lines.append(Text("   python <RUNTIME_PATH>/brain/__main__.py [OPTIONS] <category> <command>", style="green"))
+    content_lines.append(Text())
+    content_lines.append(Text("   ✅ No requiere PYTHONPATH", style="dim green"))
+    content_lines.append(Text("   ✅ Funciona en entornos aislados (Electron, VS Code)", style="dim green"))
+    content_lines.append(Text("   ✅ Más robusto para integraciones", style="dim green"))
+    content_lines.append(Text())
+    
+    # Runtime path según plataforma
+    system = platform.system()
+    if system == "Windows":
+        content_lines.append(Text("   Windows: %LOCALAPPDATA%\\BloomNucleus\\engine\\runtime\\Lib\\site-packages", style="dim cyan"))
+    elif system == "Darwin":
+        content_lines.append(Text("   macOS: ~/Library/Application Support/BloomNucleus/engine/runtime/lib/python3.x/site-packages", style="dim cyan"))
+    else:
+        content_lines.append(Text("   Linux: ~/.local/share/BloomNucleus/engine/runtime/lib/python3.x/site-packages", style="dim cyan"))
+    content_lines.append(Text())
+    
+    # Modo 2: MODULE
+    content_lines.append(Text("2. MODO MODULE", style="bold yellow"))
+    content_lines.append(Text("   Ejecución como módulo Python (requiere PYTHONPATH)", style="dim yellow"))
+    content_lines.append(Text())
+    content_lines.append(Text("   python -m brain [OPTIONS] <category> <command>", style="yellow"))
+    content_lines.append(Text())
+    content_lines.append(Text("   [!] Requiere PYTHONPATH configurado apuntando a site-packages", style="dim yellow"))
+    content_lines.append(Text("   [!] Puede fallar en entornos runtime aislados", style="dim yellow"))
+    content_lines.append(Text())
+    
+    # Ejemplos
+    content_lines.append(Text("Ejemplos (Modo Runtime):", style="bold cyan"))
     content_lines.append(Text())
     
     # Example 1: Basic command
     content_lines.append(Text("  # Comando básico", style="dim"))
-    content_lines.append(Text("  python -m brain profile list", style="white"))
+    content_lines.append(Text("  python brain/__main__.py health onboarding-check", style="white"))
     content_lines.append(Text())
     
-    # Example 2: With global flag BEFORE subcommand
-    content_lines.append(Text("  # Con flag global (--json ANTES del subcomando)", style="dim"))
+    # Example 2: With global flags
+    content_lines.append(Text("  # Con flags globales (ANTES del comando)", style="dim"))
+    content_lines.append(Text("  python brain/__main__.py --json --verbose nucleus list", style="white"))
+    content_lines.append(Text())
+    
+    # Example 3: Module mode
+    content_lines.append(Text("  # Modo MODULE (alternativo)", style="dim"))
     content_lines.append(Text("  python -m brain --json profile create 'My Profile'", style="white"))
     content_lines.append(Text())
     
-    # Example 3: With multiple global flags
-    content_lines.append(Text("  # Con múltiples flags globales", style="dim"))
-    content_lines.append(Text("  python -m brain --json --verbose nucleus list", style="white"))
-    content_lines.append(Text())
-    
-    # Important note
-    content_lines.append(Text("⚠️  IMPORTANTE:", style="bold yellow"))
-    content_lines.append(Text("   Los flags globales (--json, --verbose) DEBEN ir ANTES del nombre de la categoría.", style="yellow"))
-    content_lines.append(Text("   Ejemplo correcto:   python -m brain --json profile create 'test'", style="green"))
-    content_lines.append(Text("   Ejemplo incorrecto: python -m brain profile create 'test' --json", style="red dim"))
+    # IMPORTANTE
+    content_lines.append(Text("[!] IMPORTANTE:", style="bold yellow"))
+    content_lines.append(Text("   • Los flags globales (--json, --verbose) van ANTES de <category>", style="yellow"))
+    content_lines.append(Text("   • Todos los comandos usan sintaxis RUNTIME por defecto", style="yellow"))
+    content_lines.append(Text("   • Para MODULE: reemplazar 'python brain/__main__.py' → 'python -m brain'", style="yellow"))
     
     content = Text("\n").join(content_lines)
     
     console.print(Panel(
         content,
-        title="[bold]Uso / Usage[/bold]",
+        title="[bold]Uso / Usage - Dual Mode Support[/bold]",
         border_style="yellow",
-        padding=(1, 2)
+        padding=(1, 2),
+        width=95  # Aumentado para evitar cortes
     ))
 
 
@@ -301,7 +346,7 @@ def _render_options(console: Console):
     console.print(Panel(
         table, 
         title="[bold]Opciones Globales / Global Options[/bold]",
-        subtitle="[dim]Estas opciones deben ir inmediatamente después de 'python -m brain'[/dim]",
+        subtitle="[dim]Estas opciones deben ir después de 'python brain/__main__.py' o 'python -m brain'[/dim]",
         border_style="green"
     ))
 
@@ -328,8 +373,8 @@ def _render_root_commands(console: Console, root_commands: List[BaseCommand]):
         content_lines.append(Text(f"{cmd_display_name} - {meta.description}", style="bold white"))
         content_lines.append(Text())
         
-        # Full syntax with GLOBAL OPTIONS
-        syntax_parts = ["python -m brain", "[GLOBAL_OPTIONS]", meta.name]
+        # RUNTIME syntax
+        syntax_parts = ["python brain/__main__.py", "[GLOBAL_OPTIONS]", meta.name]
         
         # Separate arguments and options
         arguments = [p for p in params if p.is_argument]
@@ -379,7 +424,7 @@ def _render_categories(console: Console, categories: List[CommandCategory], stru
     table = Table(show_header=False, box=None, padding=(0, 2))
     table.add_column(style="green", no_wrap=True)
     table.add_column(style="dim")
-    table.add_column(style="cyan", justify="right")  # Nueva columna para contadores
+    table.add_column(style="cyan", justify="right")
     
     total_commands = 0
     
@@ -388,21 +433,21 @@ def _render_categories(console: Console, categories: List[CommandCategory], stru
         count = len(structure.commands_by_category.get(cat, []))
         total_commands += count
         
-        # FIX: Usar .category_name y .category_description en lugar de .value y .description
         table.add_row(
-            cat.category_name,  # ✅ FIX: Cambio de cat.value a cat.category_name
-            cat.category_description,  # ✅ FIX: Cambio de cat.description a cat.category_description
+            cat.category_name,
+            cat.category_description,
             f"{count} cmd{'s' if count != 1 else ''}"
         )
     
-    # Fila de total (sin líneas extras arriba/abajo)
+    # Fila de total
     table.add_row("", "", f"{'─' * 10}")
     table.add_row("", "", f"{total_commands} cmds", style="bold cyan")
     
     console.print(Panel(table, title="[bold]Categories[/bold]", border_style="green"))
 
+
 def render_help(registry: CommandRegistry):
-    """Main help rendering function with prioritized category order."""
+    """Main help rendering function with dual mode support."""
     import sys
     
     # Detectar si stdout está siendo redirigido a un archivo
@@ -419,14 +464,14 @@ def render_help(registry: CommandRegistry):
             no_color=True
         )
     else:
-        # Para terminal: con colores y formato normal
-        console = Console(width=85)
+        # Para terminal: con colores y formato normal - aumentado para evitar wrapping
+        console = Console(width=95)
     
     console.print("\n[bold yellow]Brain CLI[/bold yellow] - Modular system for Bloom\n")
     
     structure = _extract_structure(registry)
     
-    # NEW: Render usage section FIRST to explain global options
+    # Render usage section explaining both modes
     _render_usage(console)
     console.print()
     
@@ -454,8 +499,7 @@ def render_help(registry: CommandRegistry):
     # Render each category in priority order
     for category in priority_order:
         if category in structure.commands_by_category:
-            commands = structure.commands_by_category[category]           
-               
+            commands = structure.commands_by_category[category]
             _render_category_panel(console, category, commands)
             console.print()
     
