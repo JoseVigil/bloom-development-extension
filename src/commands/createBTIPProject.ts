@@ -3,7 +3,7 @@ import { Logger } from '../utils/logger';
 import { ProjectStrategy, createDefaultConfig, BloomConfig } from '../models/bloomConfig';
 import * as path from 'path';
 import { joinPath } from '../utils/uriHelper';
-import { PythonExecutor } from '../utils/pythonExecutor';
+import { BrainExecutor } from '../utils/brainExecutor';
 
 export function registerCreateBTIPProject(
     context: vscode.ExtensionContext,
@@ -39,22 +39,8 @@ export function registerCreateBTIPProject(
                 // No existe, continuar
             }
 
-            // Verificar Python disponible
-            const pythonExecutor = new PythonExecutor(logger);
-            const pythonAvailable = await pythonExecutor.checkPythonAvailable();
-
-            if (!pythonAvailable) {
-                const configure = await vscode.window.showErrorMessage(
-                    'Python no está disponible. El script generate_project_context.py requiere Python 3.',
-                    'Configurar Python Path',
-                    'Cancelar'
-                );
-
-                if (configure === 'Configurar Python Path') {
-                    await vscode.commands.executeCommand('workbench.action.openSettings', 'bloom.pythonPath');
-                }
-                return;
-            }
+            // ✅ REMOVED: Ya no necesitamos verificar Python manualmente
+            // BrainExecutor.initialize() lo maneja automáticamente
 
             // Seleccionar estrategia
             const strategy = await promptStrategy();
@@ -74,27 +60,38 @@ export function registerCreateBTIPProject(
                 async (progress) => {
                     progress.report({ message: 'Ejecutando generate_project_context.py...' });
 
-                    // Ejecutar script Python
-                    const result = await pythonExecutor.generateContext(
+                    // ✅ MIGRADO: Usar BrainExecutor.generateProjectContext
+                    const result = await BrainExecutor.generateProjectContext(
                         workspaceFolder.uri.fsPath,
                         strategy,
-                        '.bloom'
+                        {
+                            outputPath: '.bloom/project',
+                            skipExisting: false
+                        }
                     );
 
-                    if (!result.success) {
-                        throw new Error(`Error al generar contexto: ${result.stderr}`);
+                    if (result.status !== 'success') {
+                        throw new Error(`Error al generar contexto: ${result.error || result.message}`);
                     }
 
-                    logger.info(`Script ejecutado exitosamente: ${result.stdout}`);
+                    logger.info(`Contexto generado exitosamente: ${result.message}`);
 
                     progress.report({ message: 'Generando tree.txt inicial...' });
 
-                    // Generar tree.txt
+                    // ✅ MIGRADO: Usar BrainExecutor.generateTree
                     const treeOutputPath = path.join(bloomPath, 'project', 'tree.txt');
-                    await pythonExecutor.generateTree(
+                    const treeResult = await BrainExecutor.generateTree(
                         treeOutputPath,
-                        [workspaceFolder.uri.fsPath]
+                        [workspaceFolder.uri.fsPath],
+                        {
+                            hash: false,
+                            exportJson: true
+                        }
                     );
+
+                    if (treeResult.status !== 'success') {
+                        logger.warn(`Tree generation warning: ${treeResult.message}`);
+                    }
 
                     progress.report({ message: 'Creando config.json...' });
 
@@ -144,7 +141,6 @@ export function registerCreateBTIPProject(
     logger.info('Comando "bloom.createBTIPProject" registrado');
 }
 
-// ✅ Agregar tipo de retorno
 async function getProjectRoot(uri?: vscode.Uri): Promise<vscode.WorkspaceFolder | undefined> {
     if (uri) {
         return vscode.workspace.getWorkspaceFolder(uri);
@@ -152,7 +148,6 @@ async function getProjectRoot(uri?: vscode.Uri): Promise<vscode.WorkspaceFolder 
     return vscode.workspace.workspaceFolders?.[0];
 }
 
-// ✅ Agregar tipo de retorno
 async function promptStrategy(): Promise<ProjectStrategy | undefined> {
     const strategies: { label: string; value: ProjectStrategy }[] = [
         { label: '🤖 Android (Kotlin/Java)', value: 'android' },
@@ -176,7 +171,6 @@ async function promptStrategy(): Promise<ProjectStrategy | undefined> {
     return strategies.find(s => s.label === selected)?.value;
 }
 
-// ✅ Agregar tipo de retorno
 async function promptStrategyConfig(strategy: ProjectStrategy): Promise<any> {
     switch (strategy) {
         case 'android':

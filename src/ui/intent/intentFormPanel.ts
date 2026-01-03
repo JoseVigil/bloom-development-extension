@@ -9,7 +9,7 @@ import { MetadataManager } from '../../core/metadataManager';
 import { CodebaseGenerator } from '../../core/codebaseGenerator';
 import { IntentSession } from '../../core/intentSession';
 import { TokenEstimator, TokenEstimation } from '../../utils/tokenEstimator';
-import { PythonExecutor } from '../../utils/pythonExecutor';
+import { BrainExecutor } from '../../utils/brainExecutor';
 import { IntentFormData, TokenStats } from '../../models/intent';
 import { joinPath } from '../../utils/uriHelper';
 import { v4 as uuid4 } from 'uuid';
@@ -20,7 +20,6 @@ export class IntentFormPanel {
     private session: IntentSession | undefined;
     private isEditMode: boolean = false;
     private intentName: string | undefined;
-    private pythonExecutor: PythonExecutor;
     private tokenEstimation: TokenEstimation | undefined;
 
     constructor(
@@ -33,7 +32,6 @@ export class IntentFormPanel {
     ) {
         this.intentName = existingIntentName;
         this.isEditMode = !!existingIntentName;
-        this.pythonExecutor = new PythonExecutor(logger);
     }
 
     async show(): Promise<void> {
@@ -381,7 +379,7 @@ export class IntentFormPanel {
 
                     progress.report({ message: 'Generando codebase.bl...' });
 
-                    // Generar codebase.bl (con opción de script Python)
+                    // Generar codebase.bl (con opción de Brain CLI)
                     await this.generateCodebase();
 
                     progress.report({ message: 'Guardando intent...' });
@@ -421,15 +419,21 @@ export class IntentFormPanel {
             .get('useCustomCodebaseGenerator', false);
 
         if (useCustom) {
-            // Intentar usar script Python personalizado
+            // ✅ MIGRATED: Intentar usar Brain CLI
             const intentPath = this.session!.getState().intentFolder.fsPath;
-            const result = await this.pythonExecutor.generateCodebase(
-                intentPath,
-                this.relativePaths
+            const outputFile = path.join(intentPath, 'codebase.bl');
+            
+            const result = await BrainExecutor.generateCodebase(
+                outputFile,
+                this.relativePaths.map(p => path.join(this.workspaceFolder.uri.fsPath, p)),
+                {
+                    mode: 'codebase',
+                    noComments: false
+                }
             );
 
-            if (!result.success) {
-                this.logger.warn('Script Python falló, usando generador nativo');
+            if (result.status !== 'success') {
+                this.logger.warn('Brain CLI falló, usando generador nativo');
                 await this.generateCodebaseNative();
             }
         } else {
@@ -477,7 +481,6 @@ export class IntentFormPanel {
     }
 
     private getHtmlContent(): string {
-        // ✅ FIX: Usar paths correctos desde out/ui/
         const htmlPath = vscode.Uri.joinPath(
             this.context.extensionUri, 
             'out', 'ui', 'intent', 'intentForm.html'
@@ -521,21 +524,16 @@ export class IntentFormPanel {
             return;
         }
         try {
-            const args = [
-                '--name', name,
-                '--uid', uid,
-                '--profile', profileId,
-                '--provider', aiProvider,
-                '--account', aiAccountId,
-                '--files', JSON.stringify(files),
-                '--workspace', workspacePath
-            ];
-            if (problem) args.push('--problem', problem);
-            if (expectedOutput) args.push('--expected-output', expectedOutput);
-            const result = await this.pythonExecutor.createIntentDev(args);
-            if (result.success) {
+            // ✅ MIGRATED: Usar BrainExecutor.createIntentDev
+            const result = await BrainExecutor.createIntentDev(name, {
+                nucleusPath: workspacePath,
+                files: files,
+                onProgress: (line) => this.logger.info(`[Brain] ${line}`)
+            });
+
+            if (result.status === 'success') {
                 const createdData = {
-                    id: uuid4(), // Extract from Python output if needed
+                    id: uuid4(),
                     name,
                     uid,
                     profileId,
@@ -554,7 +552,7 @@ export class IntentFormPanel {
                         uid,
                         path: path.join(workspacePath, '.bloom', 'intents', 'dev', `${name}-${uid}`),
                         url: `/intents/${name}-${uid}`,
-                        summary: result.stdout || 'Intent DEV created'  // Cambiado de result.summary a result.stdout
+                        summary: result.message || 'Intent DEV created'
                     }
                 });
             } else {
@@ -562,8 +560,8 @@ export class IntentFormPanel {
                     command: 'intentDevCreateResponse',
                     data: {
                         ok: false,
-                        error: 'Script failed',
-                        stderr: result.stderr
+                        error: result.error || result.message,
+                        stderr: result.error
                     }
                 });
             }

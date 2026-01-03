@@ -34,7 +34,9 @@ bloom-development-extension/
 │   │   │   ├── nucleus.schema.ts
 │   │   │   ├── profile.schema.ts
 │   │   │   └── project.schema.ts
-│   │   └── server.ts
+│   │   ├── server.ts
+│   │   └── types/
+│   │       └── brain.types.ts
 │   ├── auth/
 │   │   └── GitHubOAuthServer.ts
 │   ├── commands/
@@ -170,6 +172,7 @@ bloom-development-extension/
 │       ├── githubOAuth.ts
 │       ├── logger.ts
 │       ├── pythonExecutor.ts
+│       ├── runtimeResolver.ts
 │       ├── tokenEstimator.ts
 │       └── uriHelper.ts
 ├── installer/
@@ -253,7 +256,6 @@ bloom-development-extension/
 │   │   │   ├── launch/
 │   │   │   │   ├── index_launch copy.html
 │   │   │   │   ├── index_launch.html
-│   │   │   │   ├── renderer_launch copy.js
 │   │   │   │   └── renderer_launch.js
 │   │   │   ├── renderer.js
 │   │   │   ├── styles.css
@@ -329,6 +331,7 @@ bloom-development-extension/
 ├── webview/
 │   └── app/
 │       ├── .svelte-kit/ [... svelte build]
+│       ├── build/ [... build output]
 │       ├── node_modules/ [... dependencies]
 │       ├── package-lock.json
 │       ├── package.json
@@ -387,6 +390,7 @@ bloom-development-extension/
 │       │       └── welcome/
 │       │           └── +page.svelte
 │       ├── svelte.config.js
+│       ├── tsconfig.json
 │       └── vite.config.ts
 ├── brain/
 │   ├── __init__.py
@@ -573,6 +577,7 @@ bloom-development-extension/
 │   │   │   └── scanner.py
 │   │   ├── project_manager.py
 │   │   └── tree_manager.py
+│   ├── entry.py
 │   ├── libs/ [... python vendored dependencies]
 │   ├── pyproject.toml
 │   ├── requirements.txt

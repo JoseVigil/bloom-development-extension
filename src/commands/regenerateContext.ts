@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { Logger } from '../utils/logger';
-import { PythonExecutor } from '../utils/pythonExecutor';
+import { BrainExecutor } from '../utils/brainExecutor';
 import * as path from 'path';
 
 export function registerRegenerateContext(
@@ -64,25 +64,36 @@ export function registerRegenerateContext(
                 async (progress) => {
                     progress.report({ message: 'Analizando proyecto...' });
 
-                    const pythonExecutor = new PythonExecutor(logger);
-                    const result = await pythonExecutor.generateContext(
+                    // ✅ MIGRATED: BrainExecutor.generateProjectContext
+                    const result = await BrainExecutor.generateProjectContext(
                         workspaceFolder.uri.fsPath,
                         strategy,
-                        '.bloom'
+                        {
+                            outputPath: '.bloom/project',
+                            skipExisting: false
+                        }
                     );
 
-                    if (!result.success) {
-                        throw new Error(`Error regenerando contexto: ${result.stderr}`);
+                    if (result.status !== 'success') {
+                        throw new Error(`Error regenerando contexto: ${result.error || result.message}`);
                     }
 
                     progress.report({ message: 'Regenerando tree.txt...' });
 
-                    // Regenerar tree.txt también
+                    // ✅ MIGRATED: BrainExecutor.generateTree
                     const treeOutputPath = path.join(bloomPath, 'project', 'tree.txt');
-                    await pythonExecutor.generateTree(
+                    const treeResult = await BrainExecutor.generateTree(
                         treeOutputPath,
-                        [workspaceFolder.uri.fsPath]
+                        [workspaceFolder.uri.fsPath],
+                        {
+                            hash: false,
+                            exportJson: true
+                        }
                     );
+
+                    if (treeResult.status !== 'success') {
+                        logger.warn(`Tree generation warning: ${treeResult.message}`);
+                    }
 
                     logger.info('Contexto regenerado exitosamente');
                 }

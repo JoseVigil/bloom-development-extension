@@ -2,6 +2,7 @@ const { ipcMain, BrowserWindow } = require('electron');
 const fs = require('fs-extra');
 const { execSync } = require('child_process');
 const net = require('net');
+const path = require('path');
 const { runFullInstallation } = require('../install/installer');
 const { paths } = require('../config/paths');
 const { DEFAULT_PORT } = require('../config/constants');
@@ -51,14 +52,21 @@ function setupInstallHandlers() {
         throw new Error("No master profile found");
       }
 
-      const cmd = `"${paths.pythonExe}" -m brain profile launch "${profileId}" --url "https://chatgpt.com"`;
+      // ✅ MIGRATED: Direct execution with brain/__main__.py
+      const brainMainPy = path.join(paths.brainDir, '__main__.py');
+      const cmd = `"${paths.pythonExe}" "${brainMainPy}" profile launch "${profileId}" --url "https://chatgpt.com"`;
 
       console.log("🚀 EXECUTING:", cmd);
 
       const output = execSync(cmd, {
-        cwd: paths.runtimeDir,
+        cwd: paths.brainDir,
         encoding: 'utf8',
-        timeout: 10000
+        timeout: 10000,
+        // ✅ NO PYTHONPATH needed
+        env: {
+          ...process.env,
+          PYTHONNOUSERSITE: '1'
+        }
       });
 
       console.log("✅ OUTPUT:", output);
