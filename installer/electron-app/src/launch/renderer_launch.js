@@ -1,5 +1,5 @@
 // installer/electron-app/src/launch/renderer_launch.js
-// FIXED: Better loading handling with API/WS verification BEFORE iframe load
+// FIXED: Detección TCP robusta de dev server via IPC
 
 const DEV_SERVER_URL = 'http://localhost:5173';
 const WS_URL = 'ws://localhost:4124';
@@ -39,8 +39,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     console.log('✅ [INIT] Backend ready!');
     debugInfo.backendReady = true;
 
-    // 2. Check dev server availability
-    console.log('🔍 [INIT] Step 2: Checking dev server...');
+    // 2. Check dev server availability (NUEVA LÓGICA TCP)
+    console.log('🔍 [INIT] Step 2: Checking dev server with TCP...');
     await checkServicesHealth();
 
     // 3. Determine mode
@@ -140,12 +140,15 @@ async function checkWebSocket() {
 }
 
 // ============================================================================
-// SERVICE HEALTH CHECKS
+// SERVICE HEALTH CHECKS (NUEVA LÓGICA TCP PARA DEV SERVER)
 // ============================================================================
 async function checkServicesHealth() {
   console.log('🔍 [HEALTH] Checking services...');
   
-  debugInfo.devServerAvailable = await checkService(DEV_SERVER_URL, 'Dev Server', true);
+  // ✨ NUEVO: Usar TCP check via IPC para dev server (más confiable)
+  debugInfo.devServerAvailable = await checkDevServerTCP();
+  
+  // API check con HTTP (como antes)
   debugInfo.apiAvailable = await checkService(API_URL, 'API', true);
   
   console.log('🔍 [HEALTH] Results:', {
@@ -154,20 +157,32 @@ async function checkServicesHealth() {
   });
 }
 
-async function checkService(baseUrl, name, verbose = true) {
-  // Si es Dev Server, solo verificar que responda (sin rutas específicas, ya que es frontend)
-  if (baseUrl === DEV_SERVER_URL) {
-    try {
-      const response = await fetch(baseUrl, { method: 'HEAD', signal: AbortSignal.timeout(2000) });
-      if (verbose) console.log(`✅ [HEALTH] ${name} OK`);
-      return response.ok;
-    } catch {
-      if (verbose) console.log(`❌ [HEALTH] ${name} unavailable`);
+/**
+ * ✨ NUEVO: Verificación TCP robusta del dev server via IPC
+ * Evita problemas de CORS y timing con fetch()
+ */
+async function checkDevServerTCP() {
+  try {
+    console.log('🔍 [TCP] Checking port 5173 via IPC...');
+    const isOpen = await window.electronAPI.checkPort(5173, 'localhost');
+    
+    if (isOpen) {
+      console.log('✅ [TCP] Dev server (port 5173) is OPEN');
+      return true;
+    } else {
+      console.log('❌ [TCP] Dev server (port 5173) is CLOSED');
       return false;
     }
+  } catch (error) {
+    console.error('❌ [TCP] Error checking port:', error);
+    return false;
   }
- 
-  // Para API, probar rutas específicas
+}
+
+/**
+ * Verificación HTTP para servicios backend (API)
+ */
+async function checkService(baseUrl, name, verbose = true) {
   const routes = ['/health', '/api/v1/health', '/'];
   
   if (verbose) console.log(`🔍 [HEALTH] Checking ${name} at ${baseUrl}...`);
@@ -194,50 +209,6 @@ async function checkService(baseUrl, name, verbose = true) {
     }
   }
   
-  if (verbose) console.warn(`❌ [HEALTH] ${name} unavailable`);
-  return false;
-}
-
-async function checkService(baseUrl, name, verbose = true) {
-  // Si es Dev Server, solo verificar que responda (sin rutas específicas, ya que es frontend)
-  if (baseUrl === DEV_SERVER_URL) {
-    try {
-      const response = await fetch(baseUrl, { method: 'HEAD', signal: AbortSignal.timeout(2000) });
-      if (verbose) console.log(`✅ [HEALTH] ${name} OK`);
-      return response.ok;
-    } catch {
-      if (verbose) console.log(`❌ [HEALTH] ${name} unavailable`);
-      return false;
-    }
-  }
-
-  // Para API, probar rutas específicas
-  const routes = ['/health', '/api/v1/health', '/'];
-
-  if (verbose) console.log(`🔍 [HEALTH] Checking ${name} at ${baseUrl}...`);
-
-  for (const route of routes) {
-    try {
-      const url = baseUrl + route;
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2000);
-
-      const response = await fetch(url, {
-        method: 'HEAD',
-        signal: controller.signal
-      });
-
-      clearTimeout(timeoutId);
-
-      if (response.ok) {
-        if (verbose) console.log(`✅ [HEALTH] ${name} OK at ${route}`);
-        return true;
-      }
-    } catch (error) {
-      if (verbose) console.log(`❌ [HEALTH] ${name} failed at ${baseUrl}${route}`);
-    }
-  }
-
   if (verbose) console.warn(`❌ [HEALTH] ${name} unavailable`);
   return false;
 }
@@ -285,12 +256,13 @@ function showOnboarding() {
     return;
   }
 
-  // Build URL
+  // Build URL (usando isDevMode detectado con TCP)
   const onboardingUrl = isDevMode
     ? `${DEV_SERVER_URL}/onboarding`
     : `${PROD_BUILD_PATH}#/onboarding`;
 
   console.log('🔗 [VIEW] Loading:', onboardingUrl);
+  console.log('🔗 [VIEW] isDevMode:', isDevMode);
 
   // Update layout
   if (dashboardContainer) dashboardContainer.classList.add('hidden');
@@ -377,7 +349,7 @@ function displayServiceStatus() {
     <div style="font-weight: bold; margin-bottom: 8px;">🔍 Debug Status</div>
     <div>API (48215): ${debugInfo.apiAvailable ? '✅' : '❌'}</div>
     <div>WS (4124): ${debugInfo.wsAvailable ? '✅' : '❌'}</div>
-    <div>Dev (5173): ${debugInfo.devServerAvailable ? '✅' : '❌'}</div>
+    <div>Dev (5173): ${debugInfo.devServerAvailable ? '✅ TCP' : '❌'}</div>
     <div>Backend: ${debugInfo.backendReady ? '✅' : '❌'}</div>
     <div>Mode: ${isDevMode ? 'DEV' : 'PROD'}</div>
     <div style="margin-top: 8px;">
@@ -392,7 +364,7 @@ function displayServiceStatus() {
 // FALLBACK UI
 // ============================================================================
 function showFallbackOnboarding() {
-  console.log('📄 [FALLBACK] Showing troubleshooting guide');
+  console.log('🔄 [FALLBACK] Showing troubleshooting guide');
 
   const fullscreenContainer = document.getElementById('fullscreen-container');
   if (!fullscreenContainer) return;
@@ -430,7 +402,8 @@ function showFallbackOnboarding() {
         '1. cd webview/app',
         '2. npm install',
         '3. npm run dev',
-        '4. Wait for "ready in Xms" message'
+        '4. Wait for "ready in Xms" message',
+        '5. Note: TCP check via IPC'
       ]
     });
   }

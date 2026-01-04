@@ -1,6 +1,6 @@
 ### Análisis del Entry Point para Brain CLI en el Plugin
 
-Basado en una búsqueda exhaustiva en todos los archivos que proporcionaste (usando análisis de código para imports, llamadas y referencias), aquí va un resumen preciso y estructurado. Me enfoqué en cómo se integra con el onboarding (e.g., checks como `health onboarding-check` se llaman via este flujo).
+Basado en una búsqueda exhaustiva en todos los archivos que proporcionaste (usando análisis de código para imports, llamadas y referencias), aquí va un resumen preciso y estructurado. Me enfoqué en cómo se integra con el onboarding (e.g., checks como `health onboarding-status` se llaman via este flujo).
 
 #### 1. **Entry Point Principal: BrainApiAdapter.ts**
 - **Descripción:** Este archivo es el **wrapper unificado** (adapter) para todas las operaciones de Brain CLI. Es el punto de entrada efectivo para interactuar con Brain desde el plugin (extensión VSCode). No es `brainExecutor.ts` directamente el entry point, sino que `BrainApiAdapter` lo usa como utilidad interna para ejecutar comandos Python.
@@ -19,7 +19,7 @@ Basado en una búsqueda exhaustiva en todos los archivos que proporcionaste (usa
   - **Llamadas directas:** Todas en `BrainApiAdapter.ts`. Ejemplos (relevantes para onboarding):
     ```typescript
     static async healthOnboardingStatus(): Promise<BrainResult> {
-      return BrainExecutor.execute(['health', 'onboarding-check'], {
+      return BrainExecutor.execute(['health', 'onboarding-status'], {
         parseJson: true,
         timeout: 10000 // 10s timeout
       });

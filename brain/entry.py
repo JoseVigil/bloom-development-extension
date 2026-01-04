@@ -6,7 +6,7 @@ en scripts o llamadas directas sin necesidad de usar -m.
 
 Uso:
     from brain.entry import run_cli
-    run_cli(['health', 'onboarding-check', '--json'])
+    run_cli(['health', 'onboarding-status', '--json'])
 """
 
 import sys
@@ -19,12 +19,12 @@ def run_cli(args: Optional[List[str]] = None):
     Ejecuta Brain CLI con argumentos personalizados.
     
     Args:
-        args: Lista de argumentos (ej: ['health', 'check', '--json']).
+        args: Lista de argumentos (ej: ['health', 'status', '--json']).
               Si es None, usa sys.argv[1:]
     
     Example:
         >>> from brain.entry import run_cli
-        >>> run_cli(['health', 'onboarding-check', '--json'])
+        >>> run_cli(['health', 'onboarding-status', '--json'])
     """
     if args is not None:
         # Guardar argv original

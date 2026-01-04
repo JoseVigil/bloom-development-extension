@@ -365,15 +365,15 @@ export class BrainApiAdapter {
   }
 
   /**
-   * Execute onboarding status check.
-   * Maps to: python -m brain --json health onboarding-check
+   * Execute onboarding status.
+   * Maps to: python -m brain --json health onboarding-status
    */
   static async healthOnboardingStatus(): Promise<BrainResult> {
-    return BrainExecutor.execute(['--json', 'health', 'onboarding-check'], {});
+    return BrainExecutor.execute(['--json', 'health', 'onboarding-status'], {});
   }
 
   /**
-   * Execute WebSocket status check.
+   * Execute WebSocket status status.
    * Maps to: python -m brain --json health websocket-status
    */
   static async healthWebSocketStatus(): Promise<BrainResult> {

@@ -9,7 +9,7 @@
 
 import type { FastifyPluginAsync } from 'fastify';
 import type { BrainResult } from '../../../contracts/types';
-import { BrainApiAdapter } from '../adapters/BrainApiAdapter';
+import { BrainExecutor } from '../../utils/brainExecutor';
 
 // ============================================================================
 // SCHEMAS
@@ -55,6 +55,51 @@ const onboardingStatusResponseSchema = {
   }
 } as const;
 
+const onboardingStepsResponseSchema = {
+  type: 'object',
+  required: ['ready', 'current_step', 'completed', 'details', 'timestamp'],
+  properties: {
+    ready: { type: 'boolean' },
+    current_step: { type: 'string' },
+    completed: { type: 'boolean' },
+    details: {
+      type: 'object',
+      properties: {
+        github: {
+          type: 'object',
+          properties: {
+            authenticated: { type: 'boolean' },
+            username: { type: 'string' }
+          }
+        },
+        gemini: {
+          type: 'object',
+          properties: {
+            configured: { type: 'boolean' },
+            profile_count: { type: 'number' }
+          }
+        },
+        nucleus: {
+          type: 'object',
+          properties: {
+            exists: { type: 'boolean' },
+            path: { type: 'string' },
+            organization: { type: 'string' }
+          }
+        },
+        projects: {
+          type: 'object',
+          properties: {
+            linked: { type: 'boolean' },
+            count: { type: 'number' }
+          }
+        }
+      }
+    },
+    timestamp: { type: 'string', format: 'date-time' }
+  }
+} as const;
+
 // ============================================================================
 // ROUTES
 // ============================================================================
@@ -86,7 +131,7 @@ const healthRoutes: FastifyPluginAsync = async (fastify) => {
         fastify.log.info('Health check: Starting GitHub auth status check');
         
         // Check Brain CLI availability via GitHub auth
-        const authResult = await BrainApiAdapter.githubAuthStatus();
+        const authResult = await BrainExecutor.githubAuthStatus();
         
         fastify.log.info({ authResult }, 'Health check: Auth result received');
         
@@ -101,7 +146,7 @@ const healthRoutes: FastifyPluginAsync = async (fastify) => {
         if (brainAvailable) {
           try {
             fastify.log.info('Health check: Checking full stack status');
-            const healthResult = await BrainApiAdapter.healthFullStack();
+            const healthResult = await BrainExecutor.healthFullStack();
             
             fastify.log.info({ healthResult }, 'Health check: Full stack result');
             
@@ -153,12 +198,15 @@ const healthRoutes: FastifyPluginAsync = async (fastify) => {
 
   /**
    * GET /health/onboarding
-   * Get onboarding progress status
+   * NUEVO: Onboarding-specific status 
+   * Usa: python brain\__main__.py --json health onboarding-status
    */
   fastify.get(
     '/health/onboarding',
     {
       schema: {
+        description: 'Get onboarding progress status (GitHub, Gemini, Nucleus, Projects)',
+        tags: ['health'],
         response: {
           200: onboardingStatusResponseSchema,
           503: {
@@ -173,52 +221,38 @@ const healthRoutes: FastifyPluginAsync = async (fastify) => {
     },
     async (_request, reply) => {
       try {
-        fastify.log.info('Onboarding check: Starting');
+        fastify.log.info('[Health] Checking onboarding status...');
         
-        const result = await BrainApiAdapter.healthOnboardingStatus();
-
-        fastify.log.info({ result }, 'Onboarding check: Result received');
+        const result = await BrainExecutor.healthOnboardingStatus();
 
         if (result.status === 'success' && result.data) {
-          const data = result.data as Record<string, any>;
-          const onboarding = data.onboarding as Record<string, any> || {};
-          const steps = onboarding.steps as Record<string, boolean> || {};
-
           const response = {
-            completed: onboarding.completed === true,
-            steps: {
-              github_auth: steps.github_auth === true,
-              gemini_setup: steps.gemini_setup === true,
-              nucleus_created: steps.nucleus_created === true,
-              projects_linked: steps.projects_linked === true
-            },
-            nucleus_path: data.path as string || undefined,
-            organization: data.organization as string || undefined,
+            ...result.data,
             timestamp: new Date().toISOString()
           };
 
-          fastify.log.info({ response }, 'Onboarding check: Complete');
-
+          fastify.log.info({ response }, '[Health] Onboarding Status complete');
           return reply.code(200).send(response);
         }
 
-        // Not in a nucleus or no onboarding data
-        fastify.log.warn('Onboarding check: No nucleus or incomplete data');
-        
+        // Fallback si no hay data
+        fastify.log.warn('[Health] No onboarding data available');
         return reply.code(200).send({
+          ready: false,
+          current_step: 'welcome',
           completed: false,
-          steps: {
-            github_auth: false,
-            gemini_setup: false,
-            nucleus_created: false,
-            projects_linked: false
+          details: {
+            github: { authenticated: false },
+            gemini: { configured: false, profile_count: 0 },
+            nucleus: { exists: false },
+            projects: { linked: false, count: 0 }
           },
           timestamp: new Date().toISOString()
         });
 
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
-        fastify.log.error({ err: error }, 'Onboarding check: Fatal error');
+        fastify.log.error({ err: error }, '[Health] Onboarding Status failed');
         
         return reply.code(503).send({
           error: errorMsg,
@@ -227,6 +261,7 @@ const healthRoutes: FastifyPluginAsync = async (fastify) => {
       }
     }
   );
+  
 
   /**
    * GET /health/websocket

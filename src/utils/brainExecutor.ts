@@ -9,6 +9,7 @@
 import { spawn } from 'child_process';
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as os from 'os';
 import { resolveBloomPython } from './runtimeResolver';
 
 
@@ -104,6 +105,58 @@ export class BrainExecutor {
     private static brainMainPy: string | null = null;
 
     /**
+     * Get the Brain runtime path for the current OS
+     * Windows: C:\Users\<user>\AppData\Local\BloomNucleus\engine\runtime\Lib\site-packages\brain
+     * macOS: ~/Library/Application Support/BloomNucleus/engine/runtime/lib/python3.11/site-packages/brain
+     * Linux: ~/.local/share/BloomNucleus/engine/runtime/lib/python3.11/site-packages/brain
+     */
+    private static getRuntimePath(): string {
+        const platform = os.platform();
+        const homeDir = os.homedir();
+
+        if (platform === 'win32') {
+            return path.join(
+                homeDir,
+                'AppData',
+                'Local',
+                'BloomNucleus',
+                'engine',
+                'runtime',
+                'Lib',
+                'site-packages',
+                'brain'
+            );
+        } else if (platform === 'darwin') {
+            return path.join(
+                homeDir,
+                'Library',
+                'Application Support',
+                'BloomNucleus',
+                'engine',
+                'runtime',
+                'lib',
+                'python3.11',
+                'site-packages',
+                'brain'
+            );
+        } else {
+            // Linux
+            return path.join(
+                homeDir,
+                '.local',
+                'share',
+                'BloomNucleus',
+                'engine',
+                'runtime',
+                'lib',
+                'python3.11',
+                'site-packages',
+                'brain'
+            );
+        }
+    }
+
+    /**
      * Initialize Brain executor
      * Called once during extension activation
      */
@@ -115,9 +168,9 @@ export class BrainExecutor {
         // Detect Python
         const config = vscode.workspace.getConfiguration('bloom');        
 
-        // ✅ CRITICAL: Set brain __main__.py path for direct execution
-        const brainPackagePath = path.join(extensionPath, 'brain');
-        this.brainMainPy = path.join(brainPackagePath, '__main__.py');
+        // ✅ CRITICAL: Set brain __main__.py path using runtime resolver
+        const runtimePath = this.getRuntimePath();
+        this.brainMainPy = path.join(runtimePath, '__main__.py');
 
         // Verify Brain is accessible via direct execution
         try {
@@ -126,7 +179,7 @@ export class BrainExecutor {
                     this.pythonPath!,
                     [this.brainMainPy!, '--help'],
                     {
-                        cwd: brainPackagePath
+                        cwd: runtimePath
                         // ✅ NO PYTHONPATH needed - brain injects it internally
                     }
                 );
@@ -149,6 +202,7 @@ export class BrainExecutor {
             );
         }
     }
+    
 
     /**
      * Execute Brain CLI command and parse JSON output
@@ -316,6 +370,7 @@ export class BrainExecutor {
     ): Promise<BrainResult<CloneResult>> {
         return this.execute<CloneResult>(
             ['github', 'clone', repo, '-p', targetPath],
+            {},
             { onProgress }
         );
     }
@@ -343,7 +398,7 @@ export class BrainExecutor {
             args.push('-f');
         }
 
-        return this.execute<NucleusProject>(args, {
+        return this.execute<NucleusProject>(args, {}, {
             onProgress: options.onProgress
         });
     }
@@ -371,7 +426,7 @@ export class BrainExecutor {
         if (path) {
             args.push('-p', path);
         }
-        return this.execute(args, { cwd: path });
+        return this.execute(args, {}, { cwd: path });
     }
 
     static async nucleusListProjects(options?: {
@@ -395,7 +450,7 @@ export class BrainExecutor {
             args.push('--active-only');
         }
         
-        return this.execute(args, { cwd: options?.nucleusPath });
+        return this.execute(args, {}, { cwd: options?.nucleusPath });
     }
 
     // ========================================================================
@@ -489,7 +544,7 @@ export class BrainExecutor {
             args.push('--description', options.description);
         }
         
-        return this.execute(args, {
+        return this.execute(args, {}, {
             cwd: options.nucleusPath,
             onProgress: options.onProgress,
             timeout: 180000
@@ -529,7 +584,7 @@ export class BrainExecutor {
             args.push('-s', options.strategy);
         }
 
-        return this.execute(args, { cwd: options.path });
+        return this.execute(args, {}, { cwd: options.path });
     }
 
     // ========================================================================
@@ -598,6 +653,61 @@ export class BrainExecutor {
         }
 
         return this.execute(args);
+    }
+
+    // ========================================================================
+    // HEALTH OPERATIONS
+    // ========================================================================
+
+    /**
+     * Execute onboarding-specific status check.
+     * Maps to: python brain\__main__.py --json health onboarding-status
+     * Returns: { ready, current_step, completed, details: { github, gemini, nucleus, projects } }
+     */
+    static async healthOnboardingStatus(): Promise<BrainResult<{
+        ready: boolean;
+        current_step: string;
+        completed: boolean;
+        details: {
+            github: { authenticated: boolean; username?: string };
+            gemini: { configured: boolean; profile_count: number };
+            nucleus: { exists: boolean; path?: string; organization?: string };
+            projects: { linked: boolean; count: number };
+        };
+    }>> {
+        return this.execute(['health', 'onboarding-status']);
+    }
+
+    /**
+     * Execute full-stack health check.
+     * Maps to: python brain\__main__.py --json health full-stack
+     * Returns: { ok, brain_available, authenticated, is_nucleus, nucleus?, timestamp }
+     */
+    static async healthFullStack(): Promise<BrainResult<{
+        ok: boolean;
+        brain_available: boolean;
+        authenticated: boolean;
+        is_nucleus: boolean;
+        nucleus?: {
+            id: string;
+            organization: string;
+            path: string;
+        };
+    }>> {
+        return this.execute(['health', 'full-stack']);
+    }
+
+    /**
+     * Execute WebSocket status check.
+     * Maps to: python brain\__main__.py --json health websocket-status
+     * Returns: { status: 'running' | 'stopped', connections: number }
+     */
+    static async healthWebSocketStatus(): Promise<BrainResult<{
+        status: 'running' | 'stopped';
+        connections: number;
+        port?: number;
+    }>> {
+        return this.execute(['health', 'websocket-status']);
     }
 
     // ========================================================================
@@ -764,7 +874,7 @@ export class BrainExecutor {
         try {
             // Step 1: Parse (if not already parsed)
             options.onProgress?.('Parsing snapshot...');
-            const parseResult = await this.execute(['intent', 'parse', '-i', intentId], {
+            const parseResult = await this.execute(['intent', 'parse', '-i', intentId], {}, {
                 cwd: projectRoot,
                 onProgress: options.onProgress
             });
@@ -782,7 +892,7 @@ export class BrainExecutor {
             if (options.stage) stageArgs.push('-s', options.stage);
             if (options.dryRun) stageArgs.push('--dry-run');
 
-            const stageResult = await this.execute(stageArgs, {
+            const stageResult = await this.execute(stageArgs, {}, {
                 cwd: projectRoot,
                 onProgress: options.onProgress
             });
@@ -801,7 +911,7 @@ export class BrainExecutor {
                 const validateArgs = ['intent', 'validate', '-i', intentId];
                 if (options.stage) validateArgs.push('-s', options.stage);
                 
-                const validateResult = await this.execute(validateArgs, {
+                const validateResult = await this.execute(validateArgs, {}, {
                     cwd: projectRoot,
                     onProgress: options.onProgress
                 });
@@ -833,7 +943,7 @@ export class BrainExecutor {
             if (options.force) mergeArgs.push('--force');
             if (options.noBackup) mergeArgs.push('--no-backup');
 
-            const mergeResult = await this.execute(mergeArgs, {
+            const mergeResult = await this.execute(mergeArgs, {}, {
                 cwd: projectRoot,
                 onProgress: options.onProgress
             });
@@ -892,7 +1002,7 @@ export class BrainExecutor {
             args.push('-f', options.files.join(','));
         }
 
-        return this.execute(args, {
+        return this.execute(args, {}, {
             cwd: options.nucleusPath,
             onProgress: options.onProgress
         });

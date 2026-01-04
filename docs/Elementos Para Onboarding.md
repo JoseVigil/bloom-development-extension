@@ -6,7 +6,7 @@ El documento aborda la resolución de un problema de onboarding atascado en "Ini
    - **Contexto y Lógica:** Maneja la UI del wizard de onboarding, incluyendo sidebar Copilot con streaming (via WS), historial en localStorage y rendering Markdown. La lógica de negocio radica en inicializar stores (e.g., onboarding.ts, websocket.ts) para conectar con backend, renderizar steps dinámicos y manejar loading states hasta que se confirmen conexiones (WS/API). En dev, usa Vite para hot-reload; en prod, builds estáticos. Verificaciones: HTTP 200 en localhost:5173.
 
 #### 2. **Aplicación Brain de Python (CLI en Runtime)**
-   - **Contexto y Lógica:** Actúa como módulo CLI invocado on-demand para checks de negocio como `health onboarding-check --json`, validando auth (GitHub, Gemini), configuración de Nucleus y proyectos. No es un server persistente, pero soporta lógicas de validación de estado (e.g., ready/false, current_step). Integración con plugin via adapters para ejecutar comandos asincrónicos. Verificaciones: Help output y JSON responses; fix con PYTHONPATH si módulo no encontrado.
+   - **Contexto y Lógica:** Actúa como módulo CLI invocado on-demand para checks de negocio como `health onboarding-status --json`, validando auth (GitHub, Gemini), configuración de Nucleus y proyectos. No es un server persistente, pero soporta lógicas de validación de estado (e.g., ready/false, current_step). Integración con plugin via adapters para ejecutar comandos asincrónicos. Verificaciones: Help output y JSON responses; fix con PYTHONPATH si módulo no encontrado.
 
 #### 3. **Plugin VSCode (Backend con F5 - Ports 4124/48215)**
    - **Contexto y Lógica Principal:** Core del backend, donde residen las lógicas de negocio clave: 

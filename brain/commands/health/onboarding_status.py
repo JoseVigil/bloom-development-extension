@@ -10,7 +10,7 @@ from brain.cli.base import BaseCommand, CommandMetadata
 from brain.cli.categories import CommandCategory
 
 
-class HealthOnboardingCheckCommand(BaseCommand):
+class HealthOnboardingStatusCommand(BaseCommand):
     """
     Check onboarding completion by aggregating multiple component checks.
     Integrates with existing Brain commands without duplicating logic.
@@ -18,14 +18,14 @@ class HealthOnboardingCheckCommand(BaseCommand):
     
     def metadata(self) -> CommandMetadata:
         return CommandMetadata(
-            name="onboarding-check",
+            name="onboarding-status",
             category=CommandCategory.HEALTH,
             version="1.0.0",
-            description="Verify onboarding completion status (GitHub, Gemini, Nucleus, Projects)",
+            description="Check onboarding completion status (GitHub, Gemini, Nucleus, Projects)",
             examples=[
-                "brain health onboarding-check",
-                "brain health onboarding-check --json",
-                "brain health onboarding-check --verbose --refresh"
+                "brain health onboarding-status",
+                "brain health onboarding-status --json",
+                "brain health onboarding-status --verbose --refresh"
             ]
         )
 
