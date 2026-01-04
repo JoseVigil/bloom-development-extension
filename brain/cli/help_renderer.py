@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from collections import defaultdict
 from typing import Dict, List
 import inspect
-import platform
 from pathlib import Path
 from rich.console import Console
 from rich.panel import Panel
@@ -14,6 +13,7 @@ from typer.models import OptionInfo, ArgumentInfo
 from brain.cli.base import BaseCommand, CommandMetadata
 from brain.cli.categories import CommandCategory
 from brain.cli.registry import CommandRegistry
+from brain.shared.runtime_resolver import RuntimeResolver 
 
 
 @dataclass
@@ -30,17 +30,6 @@ class CommandParameter:
     is_required: bool
     help_text: str
     is_argument: bool = False
-
-
-def _get_runtime_example() -> str:
-    """Get platform-specific runtime path example."""
-    system = platform.system()
-    if system == "Windows":
-        return r"python %LOCALAPPDATA%\BloomNucleus\engine\runtime\Lib\site-packages\brain\__main__.py"
-    elif system == "Darwin":
-        return "python ~/Library/Application\\ Support/BloomNucleus/engine/runtime/lib/python3.x/site-packages/brain/__main__.py"
-    else:
-        return "python ~/.local/share/BloomNucleus/engine/runtime/lib/python3.x/site-packages/brain/__main__.py"
 
 
 def _extract_structure(registry: CommandRegistry) -> HelpStructure:
@@ -179,7 +168,7 @@ def _render_command_detail(cmd: BaseCommand, category: CommandCategory) -> List[
     lines.append(Text(f"{cmd_display_name} - {meta.description}", style="bold white"))
     lines.append(Text())  # Empty line
     
-    # 2. RUNTIME syntax (predeterminado)
+    # 2. RUNTIME syntax (usando resolver) ✅
     runtime_parts = ["python brain/__main__.py", "[GLOBAL_OPTIONS]", category.category_name, meta.name]
     
     # Separate arguments and options
@@ -259,15 +248,15 @@ def _render_category_panel(console: Console, category: CommandCategory, commands
 
 
 def _render_usage(console: Console):
-    """Render usage section explaining both execution modes."""
+    """Render usage section explaining both execution modes using RuntimeResolver."""
     content_lines = []
     
     # Título
     content_lines.append(Text("Brain CLI soporta dos modos de ejecución:", style="bold white"))
     content_lines.append(Text())
     
-    # Modo 1: RUNTIME (Recomendado)
-    content_lines.append(Text("1. MODO RUNTIME (Recomendado)", style="bold green"))
+    # Modo 1: RUNTIME (Recomendado) - usando resolver ✅
+    content_lines.append(Text("1. MODO RUNTIME (✅ RECOMENDADO - USAR ESTE)", style="bold green"))
     content_lines.append(Text("   Ejecución directa sin configuración de PYTHONPATH", style="dim green"))
     content_lines.append(Text())
     content_lines.append(Text("   python <RUNTIME_PATH>/brain/__main__.py [OPTIONS] <category> <command>", style="green"))
@@ -277,18 +266,22 @@ def _render_usage(console: Console):
     content_lines.append(Text("   ✅ Más robusto para integraciones", style="dim green"))
     content_lines.append(Text())
     
-    # Runtime path según plataforma
-    system = platform.system()
-    if system == "Windows":
-        content_lines.append(Text("   Windows: %LOCALAPPDATA%\\BloomNucleus\\engine\\runtime\\Lib\\site-packages", style="dim cyan"))
-    elif system == "Darwin":
-        content_lines.append(Text("   macOS: ~/Library/Application Support/BloomNucleus/engine/runtime/lib/python3.x/site-packages", style="dim cyan"))
+    # Runtime path según plataforma - usando resolver ✅
+    runtime_example = RuntimeResolver.get_execution_example(['<command>', '<args>'], use_relative=False)
+    platform_name = RuntimeResolver.get_platform()
+    
+    if platform_name == "Windows":
+        content_lines.append(Text("   Windows:", style="dim cyan"))
+    elif platform_name == "Darwin":
+        content_lines.append(Text("   macOS:", style="dim cyan"))
     else:
-        content_lines.append(Text("   Linux: ~/.local/share/BloomNucleus/engine/runtime/lib/python3.x/site-packages", style="dim cyan"))
+        content_lines.append(Text("   Linux:", style="dim cyan"))
+    
+    content_lines.append(Text(f"   {runtime_example}", style="dim cyan"))
     content_lines.append(Text())
     
     # Modo 2: MODULE
-    content_lines.append(Text("2. MODO MODULE", style="bold yellow"))
+    content_lines.append(Text("2. MODO MODULE (⚠️ Legacy - Solo si PYTHONPATH está configurado)", style="bold yellow"))
     content_lines.append(Text("   Ejecución como módulo Python (requiere PYTHONPATH)", style="dim yellow"))
     content_lines.append(Text())
     content_lines.append(Text("   python -m brain [OPTIONS] <category> <command>", style="yellow"))
@@ -297,18 +290,20 @@ def _render_usage(console: Console):
     content_lines.append(Text("   [!] Puede fallar en entornos runtime aislados", style="dim yellow"))
     content_lines.append(Text())
     
-    # Ejemplos
+    # Ejemplos usando resolver ✅
     content_lines.append(Text("Ejemplos (Modo Runtime):", style="bold cyan"))
     content_lines.append(Text())
     
     # Example 1: Basic command
     content_lines.append(Text("  # Comando básico", style="dim"))
-    content_lines.append(Text("  python brain/__main__.py health onboarding-status", style="white"))
+    example1 = RuntimeResolver.get_execution_example(['health', 'onboarding-status'], use_relative=True)
+    content_lines.append(Text(f"  {example1}", style="white"))
     content_lines.append(Text())
     
     # Example 2: With global flags
     content_lines.append(Text("  # Con flags globales (ANTES del comando)", style="dim"))
-    content_lines.append(Text("  python brain/__main__.py --json --verbose nucleus list", style="white"))
+    example2 = RuntimeResolver.get_execution_example(['nucleus', 'list'], use_relative=True)
+    content_lines.append(Text(f"  {example2}", style="white"))
     content_lines.append(Text())
     
     # Example 3: Module mode
@@ -329,7 +324,7 @@ def _render_usage(console: Console):
         title="[bold]Uso / Usage - Dual Mode Support[/bold]",
         border_style="yellow",
         padding=(1, 2),
-        width=95  # Aumentado para evitar cortes
+        width=95
     ))
 
 
@@ -373,7 +368,7 @@ def _render_root_commands(console: Console, root_commands: List[BaseCommand]):
         content_lines.append(Text(f"{cmd_display_name} - {meta.description}", style="bold white"))
         content_lines.append(Text())
         
-        # RUNTIME syntax
+        # RUNTIME syntax usando resolver ✅
         syntax_parts = ["python brain/__main__.py", "[GLOBAL_OPTIONS]", meta.name]
         
         # Separate arguments and options
@@ -447,7 +442,7 @@ def _render_categories(console: Console, categories: List[CommandCategory], stru
 
 
 def render_help(registry: CommandRegistry):
-    """Main help rendering function with dual mode support."""
+    """Main help rendering function with dual mode support using RuntimeResolver."""
     import sys
     
     # Detectar si stdout está siendo redirigido a un archivo
@@ -464,7 +459,7 @@ def render_help(registry: CommandRegistry):
             no_color=True
         )
     else:
-        # Para terminal: con colores y formato normal - aumentado para evitar wrapping
+        # Para terminal: con colores y formato normal
         console = Console(width=95)
     
     console.print("\n[bold yellow]Brain CLI[/bold yellow] - Modular system for Bloom\n")

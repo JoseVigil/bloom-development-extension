@@ -1,10 +1,11 @@
 /**
  * Health check routes for Brain integration and onboarding status
  * 
- * CRITICAL FIX:
- * - All Brain CLI calls now use correct --json flag placement
- * - Improved error handling and logging
- * - Better type safety for response data
+ * FIXED:
+ * - Two separate endpoints for onboarding:
+ *   1. /health/onboarding → Current state (ready, current_step, details)
+ *   2. /health/onboarding/steps → Wizard steps (github_auth, gemini_setup, etc.)
+ * - Schemas now match actual Brain CLI output structure
  */
 
 import type { FastifyPluginAsync } from 'fastify';
@@ -35,48 +36,36 @@ const healthCheckResponseSchema = {
   }
 } as const;
 
+/**
+ * Schema for /health/onboarding
+ * Matches Brain CLI: health onboarding-status
+ */
 const onboardingStatusResponseSchema = {
-  type: 'object',
-  required: ['completed', 'steps', 'timestamp'],
-  properties: {
-    completed: { type: 'boolean' },
-    steps: {
-      type: 'object',
-      properties: {
-        github_auth: { type: 'boolean' },
-        gemini_setup: { type: 'boolean' },
-        nucleus_created: { type: 'boolean' },
-        projects_linked: { type: 'boolean' }
-      }
-    },
-    nucleus_path: { type: 'string' },
-    organization: { type: 'string' },
-    timestamp: { type: 'string', format: 'date-time' }
-  }
-} as const;
-
-const onboardingStepsResponseSchema = {
   type: 'object',
   required: ['ready', 'current_step', 'completed', 'details', 'timestamp'],
   properties: {
     ready: { type: 'boolean' },
     current_step: { type: 'string' },
     completed: { type: 'boolean' },
+    completion_percentage: { type: 'number' },
     details: {
       type: 'object',
+      required: ['github', 'gemini', 'nucleus', 'projects'],
       properties: {
         github: {
           type: 'object',
           properties: {
             authenticated: { type: 'boolean' },
-            username: { type: 'string' }
+            username: { type: 'string' },
+            error: { type: 'string' }
           }
         },
         gemini: {
           type: 'object',
           properties: {
             configured: { type: 'boolean' },
-            profile_count: { type: 'number' }
+            profile_count: { type: 'number' },
+            error: { type: 'string' }
           }
         },
         nucleus: {
@@ -84,14 +73,74 @@ const onboardingStepsResponseSchema = {
           properties: {
             exists: { type: 'boolean' },
             path: { type: 'string' },
-            organization: { type: 'string' }
+            organization: { type: 'string' },
+            error: { type: 'string' }
           }
         },
         projects: {
           type: 'object',
           properties: {
-            linked: { type: 'boolean' },
-            count: { type: 'number' }
+            added: { type: 'boolean' },
+            count: { type: 'number' },
+            error: { type: 'string' }
+          }
+        }
+      }
+    },
+    timestamp: { type: 'string', format: 'date-time' }
+  }
+} as const;
+
+/**
+ * Schema for /health/onboarding/steps
+ * Simplified wizard steps for UI consumption
+ */
+const onboardingStepsResponseSchema = {
+  type: 'object',
+  required: ['completed', 'steps', 'timestamp'],
+  properties: {
+    completed: { type: 'boolean' },
+    current_step: { type: 'string' },
+    completion_percentage: { type: 'number' },
+    steps: {
+      type: 'object',
+      required: ['github_auth', 'gemini_setup', 'nucleus_created', 'projects_linked'],
+      properties: {
+        github_auth: { 
+          type: 'object',
+          required: ['completed'],
+          properties: {
+            completed: { type: 'boolean' },
+            username: { type: 'string' },
+            error: { type: 'string' }
+          }
+        },
+        gemini_setup: { 
+          type: 'object',
+          required: ['completed'],
+          properties: {
+            completed: { type: 'boolean' },
+            profile_count: { type: 'number' },
+            error: { type: 'string' }
+          }
+        },
+        nucleus_created: { 
+          type: 'object',
+          required: ['completed'],
+          properties: {
+            completed: { type: 'boolean' },
+            path: { type: 'string' },
+            organization: { type: 'string' },
+            error: { type: 'string' }
+          }
+        },
+        projects_linked: { 
+          type: 'object',
+          required: ['completed'],
+          properties: {
+            completed: { type: 'boolean' },
+            count: { type: 'number' },
+            error: { type: 'string' }
           }
         }
       }
@@ -198,14 +247,14 @@ const healthRoutes: FastifyPluginAsync = async (fastify) => {
 
   /**
    * GET /health/onboarding
-   * NUEVO: Onboarding-specific status 
-   * Usa: python brain\__main__.py --json health onboarding-status
+   * Current onboarding state with detailed information
+   * Maps to: brain health onboarding-status --json
    */
   fastify.get(
     '/health/onboarding',
     {
       schema: {
-        description: 'Get onboarding progress status (GitHub, Gemini, Nucleus, Projects)',
+        description: 'Get detailed onboarding status (GitHub, Gemini, Nucleus, Projects)',
         tags: ['health'],
         response: {
           200: onboardingStatusResponseSchema,
@@ -225,27 +274,46 @@ const healthRoutes: FastifyPluginAsync = async (fastify) => {
         
         const result = await BrainExecutor.healthOnboardingStatus();
 
+        fastify.log.info({ result }, '[Health] Raw Brain CLI result');
+
         if (result.status === 'success' && result.data) {
+          // ✅ Brain CLI returns the correct structure directly
           const response = {
             ...result.data,
-            timestamp: new Date().toISOString()
+            timestamp: result.data.timestamp || new Date().toISOString()
           };
 
           fastify.log.info({ response }, '[Health] Onboarding Status complete');
           return reply.code(200).send(response);
         }
 
-        // Fallback si no hay data
-        fastify.log.warn('[Health] No onboarding data available');
+        // ⚠️ Fallback if Brain fails completely
+        fastify.log.warn({ result }, '[Health] Brain CLI returned non-success status');
+        
         return reply.code(200).send({
           ready: false,
           current_step: 'welcome',
           completed: false,
+          completion_percentage: 0,
           details: {
-            github: { authenticated: false },
-            gemini: { configured: false, profile_count: 0 },
-            nucleus: { exists: false },
-            projects: { linked: false, count: 0 }
+            github: { 
+              authenticated: false,
+              error: result.error || result.message || 'Unknown error'
+            },
+            gemini: { 
+              configured: false, 
+              profile_count: 0,
+              error: result.error || result.message || 'Unknown error'
+            },
+            nucleus: { 
+              exists: false,
+              error: result.error || result.message || 'Unknown error'
+            },
+            projects: { 
+              added: false, 
+              count: 0,
+              error: result.error || result.message || 'Unknown error'
+            }
           },
           timestamp: new Date().toISOString()
         });
@@ -261,7 +329,100 @@ const healthRoutes: FastifyPluginAsync = async (fastify) => {
       }
     }
   );
-  
+
+  /**
+   * GET /health/onboarding/steps
+   * Simplified wizard steps for UI consumption
+   * Transforms the detailed status into UI-friendly step format
+   */
+  fastify.get(
+    '/health/onboarding/steps',
+    {
+      schema: {
+        description: 'Get wizard steps for onboarding UI',
+        tags: ['health'],
+        response: {
+          200: onboardingStepsResponseSchema,
+          503: {
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+              timestamp: { type: 'string' }
+            }
+          }
+        }
+      }
+    },
+    async (_request, reply) => {
+      try {
+        fastify.log.info('[Health] Getting onboarding steps...');
+        
+        // Get the detailed status first
+        const result = await BrainExecutor.healthOnboardingStatus();
+
+        if (result.status === 'success' && result.data) {
+          const data = result.data;
+          
+          // Transform to wizard steps format
+          const response = {
+            completed: data.completed || false,
+            current_step: data.current_step || 'welcome',
+            completion_percentage: data.completion_percentage || 0,
+            steps: {
+              github_auth: {
+                completed: data.details?.github?.authenticated || false,
+                username: data.details?.github?.username,
+                error: data.details?.github?.error
+              },
+              gemini_setup: {
+                completed: data.details?.gemini?.configured || false,
+                profile_count: data.details?.gemini?.profile_count || 0,
+                error: data.details?.gemini?.error
+              },
+              nucleus_created: {
+                completed: data.details?.nucleus?.exists || false,
+                path: data.details?.nucleus?.path,
+                organization: data.details?.nucleus?.organization,
+                error: data.details?.nucleus?.error
+              },
+              projects_linked: {
+                completed: data.details?.projects?.added || false,
+                count: data.details?.projects?.count || 0,
+                error: data.details?.projects?.error
+              }
+            },
+            timestamp: new Date().toISOString()
+          };
+
+          fastify.log.info({ response }, '[Health] Onboarding Steps complete');
+          return reply.code(200).send(response);
+        }
+
+        // Fallback
+        return reply.code(200).send({
+          completed: false,
+          current_step: 'welcome',
+          completion_percentage: 0,
+          steps: {
+            github_auth: { completed: false },
+            gemini_setup: { completed: false, profile_count: 0 },
+            nucleus_created: { completed: false },
+            projects_linked: { completed: false, count: 0 }
+          },
+          timestamp: new Date().toISOString()
+        });
+
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        fastify.log.error({ err: error }, '[Health] Onboarding Steps failed');
+        
+        return reply.code(503).send({
+          error: errorMsg,
+          timestamp: new Date().toISOString()
+        });
+      }
+    }
+  );
 
   /**
    * GET /health/websocket

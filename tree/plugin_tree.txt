@@ -58,7 +58,6 @@ bloom-development-extension/
 │   │   ├── generateQuestions.ts
 │   │   ├── git/
 │   │   │   └── gitCommands.ts
-│   │   ├── integrateSnapshot.ts
 │   │   ├── intent/
 │   │   │   ├── __tests__/
 │   │   │   │   └── createIntentDev.test.ts
@@ -94,7 +93,6 @@ bloom-development-extension/
 │   │   ├── intentSession.ts
 │   │   ├── metadataManager.ts
 │   │   ├── nucleusManager.ts
-│   │   ├── pythonScriptRunner.ts
 │   │   └── validator.ts
 │   ├── extension.ts
 │   ├── helpers/
@@ -171,7 +169,6 @@ bloom-development-extension/
 │       ├── githubApi.ts
 │       ├── githubOAuth.ts
 │       ├── logger.ts
-│       ├── pythonExecutor.ts
 │       ├── runtimeResolver.ts
 │       ├── tokenEstimator.ts
 │       └── uriHelper.ts
@@ -444,8 +441,9 @@ bloom-development-extension/
 │   │   ├── health/
 │   │   │   ├── __init__.py
 │   │   │   ├── __pycache__/ [... cache]
+│   │   │   ├── dev_check.py
 │   │   │   ├── full_stack.py
-│   │   │   ├── onboarding_check.py
+│   │   │   ├── onboarding_status.py
 │   │   │   └── websocket_status.py
 │   │   ├── init.py
 │   │   ├── intent/
@@ -552,11 +550,13 @@ bloom-development-extension/
 │   │   │   └── repository.py
 │   │   ├── github/
 │   │   │   ├── __init__.py
+│   │   │   ├── __pycache__/ [... cache]
 │   │   │   ├── api_client.py
 │   │   │   └── models.py
 │   │   ├── health/
 │   │   │   ├── __init__.py
 │   │   │   ├── __pycache__/ [... cache]
+│   │   │   ├── dev_environment_manager.py
 │   │   │   ├── full_stack_manager.py
 │   │   │   ├── onboarding_status_manager.py
 │   │   │   └── websocket_status_manager.py
@@ -587,7 +587,8 @@ bloom-development-extension/
 │       ├── context.py
 │       ├── credentials.py
 │       ├── environment.py
-│       └── github_types.py
+│       ├── github_types.py
+│       └── runtime_resolver.py
 ├── contracts/
 │   ├── README.md
 │   ├── errors.js

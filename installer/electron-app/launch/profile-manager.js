@@ -1,9 +1,110 @@
 const { spawn } = require('child_process');
 const fs = require('fs-extra');
 const path = require('path');
+const os = require('os');
 const { paths } = require('../config/paths');
 const { execBrainCommand } = require('./brain-commands');
 const { profileWindows } = require('../core/window-manager');
+
+/**
+ * Get Brain __main__.py path based on platform
+ * @returns {string} Path to brain/__main__.py
+ */
+function getBrainMainPath() {
+  const platform = os.platform();
+  const homeDir = os.homedir();
+  
+  if (platform === 'win32') {
+    return path.join(
+      homeDir,
+      'AppData',
+      'Local',
+      'BloomNucleus',
+      'engine',
+      'runtime',
+      'Lib',
+      'site-packages',
+      'brain',
+      '__main__.py'
+    );
+  } else if (platform === 'darwin') {
+    return path.join(
+      homeDir,
+      'Library',
+      'Application Support',
+      'BloomNucleus',
+      'engine',
+      'runtime',
+      'lib',
+      'python3.11',
+      'site-packages',
+      'brain',
+      '__main__.py'
+    );
+  } else {
+    // Linux
+    return path.join(
+      homeDir,
+      '.local',
+      'share',
+      'BloomNucleus',
+      'engine',
+      'runtime',
+      'lib',
+      'python3.11',
+      'site-packages',
+      'brain',
+      '__main__.py'
+    );
+  }
+}
+
+/**
+ * Get runtime directory path
+ * @returns {string} Path to runtime directory
+ */
+function getRuntimeDir() {
+  const platform = os.platform();
+  const homeDir = os.homedir();
+  
+  if (platform === 'win32') {
+    return path.join(
+      homeDir,
+      'AppData',
+      'Local',
+      'BloomNucleus',
+      'engine',
+      'runtime',
+      'Lib',
+      'site-packages'
+    );
+  } else if (platform === 'darwin') {
+    return path.join(
+      homeDir,
+      'Library',
+      'Application Support',
+      'BloomNucleus',
+      'engine',
+      'runtime',
+      'lib',
+      'python3.11',
+      'site-packages'
+    );
+  } else {
+    // Linux
+    return path.join(
+      homeDir,
+      '.local',
+      'share',
+      'BloomNucleus',
+      'engine',
+      'runtime',
+      'lib',
+      'python3.11',
+      'site-packages'
+    );
+  }
+}
 
 /**
  * Lista todos los perfiles disponibles
@@ -31,7 +132,8 @@ async function launchProfile(profileId, url = null) {
     }
 
     const pythonPath = paths.pythonExe;
-    const brainPath = paths.runtimeDir;
+    const brainMainPath = getBrainMainPath();
+    const runtimeDir = getRuntimeDir();
 
     // ✅ CRÍTICO: Verificar que extensión existe ANTES de lanzar
     if (!fs.existsSync(paths.extensionBrainDir)) {
@@ -47,21 +149,21 @@ async function launchProfile(profileId, url = null) {
 
     console.log(` ✅ Extension verified at: ${paths.extensionBrainDir}`);
     console.log(` 📂 Python: ${pythonPath}`);
-    console.log(` 📂 Brain: ${brainPath}`);
-    console.log(` 🔧 Command: python -m brain ${args.join(' ')}`);
+    console.log(` 📂 Brain: ${brainMainPath}`);
+    console.log(` 🔧 Command: python "${brainMainPath}" --json ${args.join(' ')}`);
 
-    // ✅ CRÍTICO: Configurar variable de entorno con BLOOM_EXTENSION_PATH
+    // ✅ MIGRADO: Ya no necesita PYTHONPATH - brain lo maneja internamente
     const launchEnv = {
       ...process.env,
-      PYTHONPATH: brainPath,
       BLOOM_EXTENSION_PATH: paths.extensionBrainDir,  // ⬅️ FIX CRÍTICO
       PYTHONNOUSERSITE: '1'
     };
 
     console.log(` 🔑 ENV: BLOOM_EXTENSION_PATH=${launchEnv.BLOOM_EXTENSION_PATH}`);
 
-    const child = spawn(pythonPath, ['-m', 'brain', ...args], {
-      cwd: brainPath,
+    // ✅ MIGRADO: Ejecución directa sin -m brain
+    const child = spawn(pythonPath, [brainMainPath, '--json', ...args], {
+      cwd: runtimeDir,
       env: launchEnv,
       detached: true,
       stdio: ['ignore', 'pipe', 'pipe']  // ✅ Captura stdout/stderr para debug

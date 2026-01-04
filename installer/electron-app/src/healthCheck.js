@@ -247,7 +247,8 @@ class HealthCheckManager {
       this.log('DEBUG', 'CLI', `Python path: ${pythonPath}`);
       this.log('DEBUG', 'CLI', `Working directory: ${bloomDir}`);
       
-      const proc = spawn(pythonPath, ['-m', 'brain', 'health', 'full-stack', '--json'], {
+      const brainMainPath = getBrainMainPath(bloomDir); // Helper function
+      const proc = spawn(pythonPath, [brainMainPath, '--json', 'health', 'full-stack'], {
         cwd: bloomDir,
         timeout: 15000,
         windowsHide: true
@@ -294,6 +295,24 @@ class HealthCheckManager {
         reject(error);
       });
     });
+  }
+
+  /**
+   * Get Brain __main__.py path based on Bloom directory
+   * @param {string} bloomDir - Bloom installation directory
+   * @returns {string} Path to brain/__main__.py
+   * @private
+   */
+  getBrainMainPath(bloomDir) {
+    const platform = require('os').platform();
+    
+    if (platform === 'win32') {
+      return path.join(bloomDir, 'engine', 'runtime', 'Lib', 'site-packages', 'brain', '__main__.py');
+    } else if (platform === 'darwin') {
+      return path.join(bloomDir, 'engine', 'runtime', 'lib', 'python3.11', 'site-packages', 'brain', '__main__.py');
+    } else {
+      return path.join(bloomDir, 'engine', 'runtime', 'lib', 'python3.11', 'site-packages', 'brain', '__main__.py');
+    }
   }
 
   /**

@@ -52,7 +52,7 @@ function setupInstallHandlers() {
         throw new Error("No master profile found");
       }
 
-      // ✅ MIGRATED: Direct execution with brain/__main__.py
+      // ✅ Direct execution with brain/__main__.py
       const brainMainPy = path.join(paths.brainDir, '__main__.py');
       const cmd = `"${paths.pythonExe}" "${brainMainPy}" profile launch "${profileId}" --url "https://chatgpt.com"`;
 

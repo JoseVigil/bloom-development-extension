@@ -5,12 +5,43 @@ const path = require('path');
 const { exec } = require('child_process');
 const { promisify } = require('util');
 const net = require('net');
+const os = require('os');
 
-const execAsync = promisify(exec);
+// ============================================================================
+// PYTHON PATH - BRAIN PATH
+// ============================================================================
+
+function getPythonPath() {
+  const platform = os.platform();
+  const homeDir = os.homedir();
+  
+  if (platform === 'win32') {
+    return path.join(homeDir, 'AppData', 'Local', 'BloomNucleus', 'engine', 'runtime', 'python.exe');
+  } else if (platform === 'darwin') {
+    return path.join(homeDir, 'Library', 'Application Support', 'BloomNucleus', 'engine', 'runtime', 'bin', 'python3');
+  } else {
+    return path.join(homeDir, '.local', 'share', 'BloomNucleus', 'engine', 'runtime', 'bin', 'python3');
+  }
+}
+
+function getBrainMainPath() {
+  const platform = os.platform();
+  const homeDir = os.homedir();
+  
+  if (platform === 'win32') {
+    return path.join(homeDir, 'AppData', 'Local', 'BloomNucleus', 'engine', 'runtime', 'Lib', 'site-packages', 'brain', '__main__.py');
+  } else if (platform === 'darwin') {
+    return path.join(homeDir, 'Library', 'Application Support', 'BloomNucleus', 'engine', 'runtime', 'lib', 'python3.11', 'site-packages', 'brain', '__main__.py');
+  } else {
+    return path.join(homeDir, '.local', 'share', 'BloomNucleus', 'engine', 'runtime', 'lib', 'python3.11', 'site-packages', 'brain', '__main__.py');
+  }
+}
 
 // ============================================================================
 // CONSTANTES Y RUTAS
 // ============================================================================
+
+const execAsync = promisify(exec);
 
 const REPO_ROOT = path.join(__dirname, '..', '..');
 const BRAIN_PY_PATH = path.join(REPO_ROOT, 'brain', 'brain.py');
@@ -19,6 +50,9 @@ const WEBVIEW_BUILD_PATH = path.join(REPO_ROOT, 'webview', 'app', 'build', 'inde
 const IS_DEV = process.argv.includes('--dev') || process.env.NODE_ENV === 'development';
 const IS_LAUNCH_MODE = process.argv.includes('--mode=launch');
 const FORCE_ONBOARDING = process.argv.includes('--onboarding');
+
+const pythonPath = getPythonPath();
+const BRAIN_MAIN_PATH = getBrainMainPath();
 
 // ============================================================================
 // LOGGING
@@ -56,6 +90,8 @@ function checkPortOpen(port, host = 'localhost', timeout = 2000) {
   });
 }
 
+
+
 // ============================================================================
 // IPC HANDLERS - REGISTER FIRST (BEFORE WINDOW CREATION)
 // ============================================================================
@@ -83,6 +119,69 @@ function registerIPCHandlers() {
     const isOpen = await checkPortOpen(port, host);
     log(`Port ${port}: ${isOpen ? '✅ OPEN' : '❌ CLOSED'}`);
     return isOpen;
+  });
+
+  // ✨ Obtener info de entorno via brain.py
+  ipcMain.handle('environment:get', async () => {
+    try {
+      log('🔍 Getting environment from brain.py...');
+      const brainPath = getBrainMainPath();
+      const { stdout } = await execAsync(
+        `"${pythonPath}" "${brainPath}" --json health dev-check`,
+        { cwd: REPO_ROOT, timeout: 10000, windowsHide: true }
+      );
+      
+      const result = JSON.parse(stdout);
+      
+      if (result.status !== 'success') {
+        throw new Error('Brain command failed');
+      }
+      
+      log('✅ Environment:', result.data.is_dev_mode ? 'DEV' : 'PROD');
+      
+      return {
+        isDevMode: result.data.is_dev_mode,
+        reason: result.data.reason,
+        services: result.data.services
+      };
+    } catch (err) {
+      error('Error getting environment:', err.message);
+      return {
+        isDevMode: false,
+        reason: 'Error detecting environment',
+        services: {}
+      };
+    }
+  });
+
+  // ✨ NUEVO: Verificar todos los servicios via brain.py
+  ipcMain.handle('services:check-all', async () => {
+    try {
+      log('🔍 Checking all services via brain.py...');
+      const brainPath = getBrainMainPath();
+      const { stdout } = await execAsync(
+        `"${pythonPath}" "${brainPath}" --json health dev-check`,
+        { cwd: REPO_ROOT, timeout: 10000, windowsHide: true }
+      );
+      
+      const result = JSON.parse(stdout);
+      
+      return {
+        devServer: result.data.services.dev_server.available,
+        devServerHost: result.data.services.dev_server.host,
+        api: result.data.services.api.available,
+        apiHost: result.data.services.api.host,
+        websocket: result.data.services.websocket.available,
+        websocketHost: result.data.services.websocket.host
+      };
+    } catch (err) {
+      error('Error checking services:', err.message);
+      return {
+        devServer: false,
+        api: false,
+        websocket: false
+      };
+    }
   });
 
   ipcMain.handle('health:check', async () => {
