@@ -1,5 +1,4 @@
 // webview/app/src/lib/api.ts
-// FIXED: Correct base URL (48215) with timeout/retry
 
 const baseUrl = 'http://localhost:5173/api/v1';
 
@@ -67,13 +66,24 @@ export async function checkApiHealth(): Promise<boolean> {
   }
 }
 
-export async function getSystemHealth() {
-  const response = await fetchWithTimeout('http://localhost:48215/health');
+/**
+ * NUEVO: Get onboarding-specific status
+ * Endpoint: GET /api/v1/health/onboarding
+ * Response: { ready, current_step, completed, details: { github, gemini, nucleus, projects } }
+ */
+export async function getOnboardingStatus() {
+  const response = await fetchWithTimeout(`${baseUrl}/health/onboarding`, {
+    timeout: 5000,
+    retries: 2
+  });
   return handleResponse(response);
 }
 
-export async function getOnboardingStatus() {
-  const response = await fetchWithTimeout(`${baseUrl}/health/onboarding`);
+/**
+ * MANTENER: Full system health (para otros usos)
+ */
+export async function getSystemHealth() {
+  const response = await fetchWithTimeout(`${baseUrl}/health/full-stack`);
   return handleResponse(response);
 }
 

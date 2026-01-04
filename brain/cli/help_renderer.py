@@ -303,7 +303,7 @@ def _render_usage(console: Console):
     
     # Example 1: Basic command
     content_lines.append(Text("  # Comando básico", style="dim"))
-    content_lines.append(Text("  python brain/__main__.py health onboarding-check", style="white"))
+    content_lines.append(Text("  python brain/__main__.py health onboarding-status", style="white"))
     content_lines.append(Text())
     
     # Example 2: With global flags

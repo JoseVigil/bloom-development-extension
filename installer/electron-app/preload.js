@@ -1,4 +1,4 @@
-// preload.js - CORREGIDO: Sin require('path') ni otros módulos Node
+// preload.js - CORREGIDO: Con checkPort para detección TCP robusta
 const { contextBridge, ipcRenderer } = require('electron');
 
 // ============================================================================
@@ -12,6 +12,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   // Solicita al main process que calcule rutas de forma segura
   getPath: (type, ...args) => ipcRenderer.invoke('path:resolve', { type, args }),
+  
+  // ==========================================
+  // PORT CHECKING (NUEVO - DETECCIÓN TCP ROBUSTA)
+  // ==========================================
+  
+  /**
+   * Verifica si un puerto está abierto usando TCP connect
+   * @param {number} port - Puerto a verificar (ej: 5173)
+   * @param {string} host - Host (default: 'localhost')
+   * @returns {Promise<boolean>} - true si el puerto está abierto
+   */
+  checkPort: (port, host = 'localhost') => 
+    ipcRenderer.invoke('port:check', { port, host }),
   
   // ==========================================
   // INSTALL MODE HANDLERS
@@ -92,7 +105,5 @@ if (process.env.NODE_ENV === 'development') {
     log: (...args) => console.log('[Renderer]', ...args),
     error: (...args) => console.error('[Renderer]', ...args),
     warn: (...args) => console.warn('[Renderer]', ...args),
-    getDirname: () => __dirname,
-    pathJoin: (...args) => path.join(...args)
   });
 }

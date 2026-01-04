@@ -27,7 +27,7 @@ Brain CLI - Modular system for Bloom
 │  Ejemplos (Modo Runtime):                                                                   │
 │                                                                                             │
 │    # Comando básico                                                                         │
-│    python brain/__main__.py health onboarding-check                                         │
+│    python brain/__main__.py health onboarding-status                                        │
 │                                                                                             │
 │    # Con flags globales (ANTES del comando)                                                 │
 │    python brain/__main__.py --json --verbose nucleus list                                   │
@@ -54,16 +54,27 @@ Brain CLI - Modular system for Bloom
 │   filesystem    File operations and directory analysis              3 cmds                       │
 │   gemini        Gemini AI key management and operations             5 cmds                       │
 │   github        GitHub integration and repository management        9 cmds                       │
-│   health        System health checks and diagnostics                3 cmds                       │
+│   health        System health checks and diagnostics                4 cmds                       │
 │   intent        Intent execution system and context planning       19 cmds                       │
 │   nucleus       Nucleus project management and lifecycle           14 cmds                       │
 │   profile       Chrome profile and AI account management            8 cmds                       │
 │   project       Project lifecycle and scaffolding                   6 cmds                       │
 │                                                                 ──────────                       │
-│                                                                    72 cmds                       │
+│                                                                    73 cmds                       │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 
 ╭───────────────────────────────────────────── HEALTH ─────────────────────────────────────────────╮
+│                                                                                                  │
+│  DEV                                                                                             │
+│                                                                                                  │
+│  DEV CHECK - Verify development environment and service status (Vite, API, WebSocket)            │
+│                                                                                                  │
+│    python brain/__main__.py [GLOBAL_OPTIONS] health dev-check [OPTIONS]                          │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -t                   Connection timeout per port check in seconds                           │
+│      --json               Output raw JSON                                                        │
+│      -v                   Detailed logging of each port check                                    │
 │                                                                                                  │
 │  FULL                                                                                            │
 │                                                                                                  │
@@ -78,9 +89,9 @@ Brain CLI - Modular system for Bloom
 │                                                                                                  │
 │  ONBOARDING                                                                                      │
 │                                                                                                  │
-│  ONBOARDING CHECK - Verify onboarding completion status (GitHub, Gemini, Nucleus, Projects)      │
+│  ONBOARDING STATUS - Check onboarding completion status (GitHub, Gemini, Nucleus, Projects)      │
 │                                                                                                  │
-│    python brain/__main__.py [GLOBAL_OPTIONS] health onboarding-check [OPTIONS]                   │
+│    python brain/__main__.py [GLOBAL_OPTIONS] health onboarding-status [OPTIONS]                  │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      -r                   Force re-check, ignore cache                                           │

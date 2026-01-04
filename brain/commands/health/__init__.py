@@ -1,31 +1,32 @@
 """
-Health check commands package.
-Contains commands for verifying system health and component status.
-
-Available commands:
-- full-stack: Complete stack health verification
-- onboarding-check: Onboarding completion status check (aggregated)
-- websocket-status: WebSocket server connectivity
+Health category commands.
+System health checks and diagnostics.
 """
 
+from brain.cli.base import BaseCommand
 from .full_stack import HealthFullStackCommand
-from .onboarding_check import HealthOnboardingCheckCommand  
 from .websocket_status import HealthWebSocketStatusCommand
+from .onboarding_status import HealthOnboardingStatusCommand
+from .dev_check import HealthDevCheckCommand  # ← NUEVO
 
 __all__ = [
     'HealthFullStackCommand',
-    'HealthOnboardingCheckCommand',  # ✅ Y aquí
-    'HealthWebSocketStatusCommand'
+    'HealthWebSocketStatusCommand',
+    'HealthOnboardingStatusCommand',
+    'HealthDevCheckCommand',  # ← NUEVO
 ]
 
-# Command metadata for discovery
-COMMANDS = [
-    HealthFullStackCommand,
-    HealthOnboardingCheckCommand,  # ✅ Y aquí
-    HealthWebSocketStatusCommand
-]
 
-# Category information
-CATEGORY_NAME = "health"
-CATEGORY_DESCRIPTION = "System health checks and diagnostics"
-COMMAND_COUNT = len(COMMANDS)
+def get_health_commands() -> list[BaseCommand]:
+    """
+    Returns all health category commands.
+    
+    Returns:
+        List of instantiated health command objects
+    """
+    return [
+        HealthFullStackCommand(),
+        HealthWebSocketStatusCommand(),
+        HealthOnboardingStatusCommand(),
+        HealthDevCheckCommand(),  # ← NUEVO
+    ]

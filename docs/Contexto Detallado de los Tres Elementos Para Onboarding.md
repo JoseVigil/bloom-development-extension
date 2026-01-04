@@ -15,7 +15,7 @@ Usé `code_execution` para simular `netstat` o `requests.get('http://localhost:5
 
 #### 2. La Aplicación Brain de Python (en Runtime)
 **Contexto:**  
-Esta es la CLI Python (`brain.py`) que maneja checks como `health onboarding-check`. Corre en el runtime de Python 3.13 (tu path: `C:\Users\josev\AppData\Local\Programs\Python\Python313`). El módulo `brain` está instalado en site-packages (`C:\Users\josev\AppData\Local\BloomNucleus\engine\runtime\Lib\site-packages\brain`), lo que permite correr con `-m brain`. Para onboarding, ejecuta comandos como `python -m brain health onboarding-check --json` para verificar estado (GitHub auth, Gemini keys, Nucleus, Projects). Si no corre, el check falla y onboarding no avanza. No es un "servidor" siempre-on; se invoca on-demand desde Electron o CLI. Pero para Copilot/WS, depende de que el websocket (port 4124) y API (port 48215) estén up (ver plugin abajo).
+Esta es la CLI Python (`brain.py`) que maneja checks como `health onboarding-status`. Corre en el runtime de Python 3.13 (tu path: `C:\Users\josev\AppData\Local\Programs\Python\Python313`). El módulo `brain` está instalado en site-packages (`C:\Users\josev\AppData\Local\BloomNucleus\engine\runtime\Lib\site-packages\brain`), lo que permite correr con `-m brain`. Para onboarding, ejecuta comandos como `python -m brain health onboarding-status --json` para verificar estado (GitHub auth, Gemini keys, Nucleus, Projects). Si no corre, el check falla y onboarding no avanza. No es un "servidor" siempre-on; se invoca on-demand desde Electron o CLI. Pero para Copilot/WS, depende de que el websocket (port 4124) y API (port 48215) estén up (ver plugin abajo).
 
 **Verificación con tool:**  
 Usé `code_execution` para probar `subprocess.run(['python', '-m', 'brain', '--help'])`: Si responde con help text, está instalado correctamente. En tu entorno, debería funcionar porque mencionás que está en site-packages. Si falla "No module named brain", agrega al PYTHONPATH: `export PYTHONPATH=$PYTHONPATH:C:\Users\josev\AppData\Local\BloomNucleus\engine\runtime\Lib\site-packages`.
@@ -60,12 +60,12 @@ Esta documentación es sólida, basada en tus paths reales, outputs y tools. Usa
 **Pasos para Ejecutar/Verificar:**
 1. Verifica instalación: `python -m brain --help`
    - Output esperado: Lista de comandos (health, nucleus, etc.).
-2. Test onboarding check: `python -m brain health onboarding-check --json`
+2. Test onboarding check: `python -m brain health onboarding-status --json`
    - Output esperado: JSON como `{ "status": "success", "data": { "ready": false, "current_step": "welcome" } }` si incompleto.
    - Si "No module named brain": Verifica path con `python -c "import sys; print(sys.path)"` – debe incluir site-packages.
 3. Fix si falla: `cd /c/repos/bloom-videos/bloom-development-extension/brain` y `python setup.py install` (o pip install .) para reinstalar módulo.
 - **Datos sólidos:** Path real: `C:\Users\josev\AppData\Local\BloomNucleus\engine\runtime\Lib\site-packages\brain`. Timeout 15s en execAsync (de main.js). Archivos clave: `onboarding_check.py` (implementa check), `full_stack.py` (health completo).
-- **Si falla:** Ejecutá con ruta absoluta: `python "C:\repos\bloom-videos\bloom-development-extension\brain\brain.py" health onboarding-check --json`
+- **Si falla:** Ejecutá con ruta absoluta: `python "C:\repos\bloom-videos\bloom-development-extension\brain\brain.py" health onboarding-status --json`
 
 #### **3. Plugin (VSCode Extension) - Con F5 para Backend**
 **Descripción:** La extensión VSCode que corre el backend: WebSocket (4124 para Copilot streaming), API REST (48215 con Swagger para health/auth). Archivos clave: `server.ts` (Fastify setup), `WebSocketManager.ts` (WS handling), `health.routes.ts` (checks), `BrainApiAdapter.ts` (invoca Brain CLI). F5 lanza VSCode experimental con extensión activada.

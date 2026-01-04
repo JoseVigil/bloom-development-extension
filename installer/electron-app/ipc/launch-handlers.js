@@ -82,7 +82,7 @@ function setupLaunchHandlers() {
   ipcMain.removeAllListeners('onboarding:status');
   ipcMain.handle('onboarding:status', async () => {
     try {
-      const result = await execBrainJson(['health', 'onboarding-check'], {
+      const result = await execBrainJson(['health', 'onboarding-status'], {
         timeout: 15000
       });
 

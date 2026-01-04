@@ -24,8 +24,13 @@ python -m brain filesystem tree src installer webview brain contracts package.js
 python -m brain filesystem tree installer -o tree/installer_tree.txt
 
 python -m brain filesystem tree brain -o tree/brain_tree.txt
-
+|
 python -m brain filesystem tree installer/electron-app -o tree/electron_tree.txt
+
+
+josev@LENOVO MINGW64 ~/AppData/Local/BloomNucleus/engine/runtime/Lib/site-packages
+$ python.exe brain/__main__.py health onboarding-status --json
+
 
 # Añade cálculo de hashes MD5 (por archivo y global) al reporte para control de integridad y detección de cambios.
 python -m brain --verbose tree --hash -o tree/plugin_tree_hashed.txt src installer webview brain core package.json tsconfig.json

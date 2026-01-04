@@ -1,4 +1,4 @@
-// main.js - Versión corregida con handler IPC registrado ANTES de crear ventana
+// main.js - FIXED: Event flow + Direct URL loading + TCP port check
 
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
@@ -9,87 +9,110 @@ const net = require('net');
 const execAsync = promisify(exec);
 
 // ============================================================================
-// CONSTANTES Y RUTAS CRÍTICAS (CORREGIDAS PARA TU REPO)
+// CONSTANTES Y RUTAS
 // ============================================================================
 
-const REPO_ROOT = path.join(__dirname, '..', '..'); // → C:/repos/bloom-videos/bloom-development-extension
+const REPO_ROOT = path.join(__dirname, '..', '..');
 const BRAIN_PY_PATH = path.join(REPO_ROOT, 'brain', 'brain.py');
-const LAUNCH_HTML_PATH = path.join(__dirname, 'src', 'launch', 'index_launch.html');
 const WEBVIEW_BUILD_PATH = path.join(REPO_ROOT, 'webview', 'app', 'build', 'index.html');
 
 const IS_DEV = process.argv.includes('--dev') || process.env.NODE_ENV === 'development';
 const IS_LAUNCH_MODE = process.argv.includes('--mode=launch');
+const FORCE_ONBOARDING = process.argv.includes('--onboarding');
 
 // ============================================================================
-// LOGGING SIMPLE
+// LOGGING
 // ============================================================================
 function log(...args) {
-  console.log('🌸', ...args);
+  console.log('🌸 [MAIN]', ...args);
 }
 function error(...args) {
-  console.error('❌', ...args);
+  console.error('❌ [MAIN]', ...args);
 }
 
-console.log('🔍 Process arguments:', process.argv);
-console.log('🔍 IS_DEV:', IS_DEV);
-console.log('🔍 IS_LAUNCH_MODE:', IS_LAUNCH_MODE);
+log('📋 Args:', process.argv);
+log('📋 IS_DEV:', IS_DEV, '| IS_LAUNCH_MODE:', IS_LAUNCH_MODE, '| FORCE_ONBOARDING:', FORCE_ONBOARDING);
 
 // ============================================================================
-// IPC HANDLERS - REGISTRAR TODOS ANTES DE CREAR VENTANA
+// TCP PORT CHECK (ROBUST)
+// ============================================================================
+function checkPortOpen(port, host = 'localhost', timeout = 2000) {
+  return new Promise((resolve) => {
+    const socket = net.createConnection({ port, host }, () => {
+      socket.destroy();
+      log(`✅ Port ${port} OPEN on ${host}`);
+      resolve(true);
+    });
+
+    socket.setTimeout(timeout);
+    socket.on('timeout', () => {
+      socket.destroy();
+      log(`⏱️ Port ${port} timeout`);
+      resolve(false);
+    });
+    socket.on('error', () => {
+      resolve(false);
+    });
+  });
+}
+
+// ============================================================================
+// IPC HANDLERS - REGISTER FIRST (BEFORE WINDOW CREATION)
 // ============================================================================
 function registerIPCHandlers() {
-  // Handler para resolver rutas de forma segura
+  log('🔧 Registering IPC handlers...');
+
   ipcMain.handle('path:resolve', (event, { type, args }) => {
     try {
       switch (type) {
         case 'join':
           return path.join(...args);
-        case 'dirname':
-          return path.dirname(args[0]);
-        case 'basename':
-          return path.basename(args[0]);
         case 'webview-build':
-          return WEBVIEW_BUILD_PATH; // Ruta pre-calculada para webview build
+          return WEBVIEW_BUILD_PATH;
         default:
-          throw new Error(`Tipo de ruta desconocido: ${type}`);
+          throw new Error(`Unknown path type: ${type}`);
       }
     } catch (err) {
-      error('Error resolviendo ruta:', err.message);
+      error('Path resolve error:', err.message);
       return null;
     }
   });
-  
-  // Agrega otros handlers si tenías (shared, install, launch)
-  // Por ejemplo:
-  ipcMain.handle('health:check', async () => {
-    // Lógica de health check aquí
-    return { status: 'ok', checks: { websocket: true } }; // Placeholder
+
+  ipcMain.handle('port:check', async (event, { port, host = 'localhost' }) => {
+    log(`🔍 Checking port ${port}...`);
+    const isOpen = await checkPortOpen(port, host);
+    log(`Port ${port}: ${isOpen ? '✅ OPEN' : '❌ CLOSED'}`);
+    return isOpen;
   });
+
+  ipcMain.handle('health:check', async () => {
+    return { status: 'ok', checks: { websocket: true } };
+  });
+
+  log('✅ IPC handlers registered');
 }
 
 // ============================================================================
-// ONBOARDING CHECK - RUTA CORRECTA A BRAIN.PY
+// ONBOARDING CHECK
 // ============================================================================
 async function checkOnboardingStatus() {
   if (!require('fs').existsSync(BRAIN_PY_PATH)) {
-    error('brain.py no encontrado en:', BRAIN_PY_PATH);
+    error('brain.py not found:', BRAIN_PY_PATH);
     return false;
   }
 
   try {
     const { stdout } = await execAsync(
-      `python "${BRAIN_PY_PATH}" health onboarding-check --json`,
-      {
-        cwd: REPO_ROOT,
-        timeout: 15000,
-        windowsHide: true
-      }
+      `python "${BRAIN_PY_PATH}" health onboarding-status --json`,
+      { cwd: REPO_ROOT, timeout: 15000, windowsHide: true }
     );
 
     const result = JSON.parse(stdout);
-    return result.status === 'success' && result.data?.ready === true;
+    const ready = result.status === 'success' && result.data?.ready === true;
+    log('🔍 Onboarding status:', ready ? '✅ Complete' : '❌ Incomplete');
+    return ready;
   } catch (err) {
-    error('Onboarding check falló:', err.message);
+    error('Onboarding check failed:', err.message);
     return false;
   }
 }
@@ -98,24 +121,17 @@ async function checkOnboardingStatus() {
 // DEV SERVER CHECK
 // ============================================================================
 async function isDevServerRunning() {
-  return new Promise((resolve) => {
-    const socket = net.createConnection(5173, 'localhost', () => {
-      socket.destroy();
-      resolve(true);
-    });
-    socket.setTimeout(2000);
-    socket.on('timeout', () => {
-      socket.destroy();
-      resolve(false);
-    });
-    socket.on('error', () => resolve(false));
-  });
+  const isRunning = await checkPortOpen(5173, 'localhost', 1000);
+  log('Dev server (5173):', isRunning ? '✅ Running' : '❌ Not running');
+  return isRunning;
 }
 
 // ============================================================================
-// CREAR VENTANA
+// CREATE WINDOW - LOAD URL DIRECTLY (NO IFRAME)
 // ============================================================================
 async function createWindow() {
+  log('🪟 Creating window...');
+
   const win = new BrowserWindow({
     width: 1400,
     height: 900,
@@ -124,49 +140,95 @@ async function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      webSecurity: false,  // Necesario para cargar file:// locales en iframe
-      sandbox: false  // Desactiva sandbox para permitir preload completo (usa solo en dev si es necesario)
+      webSecurity: true, // Re-enable for security (file:// works now)
+      sandbox: false
     }
   });
 
-  win.once('ready-to-show', () => win.show());
+  win.once('ready-to-show', () => {
+    log('👁️ Window ready to show');
+    win.show();
+  });
 
-  // ==========================================================================
-  // DECIDIR QUÉ CARGAR
-  // ==========================================================================
-  let loadUrl;
-
-  if (IS_DEV && await isDevServerRunning()) {
-    loadUrl = 'http://localhost:5173';
-    log('🔧 Modo DEV: Cargando desde http://localhost:5173');
-  } else {
-    const fullPath = 'file://' + LAUNCH_HTML_PATH.replace(/\\/g, '/');
-    loadUrl = fullPath;
-    log('📄 Modo PROD: Cargando', fullPath);
-  }
-
-  try {
-    await win.loadURL(loadUrl);
-    log('✅ Página cargada:', loadUrl);
-  } catch (err) {
-    error('💥 Falló al cargar URL:', loadUrl, err.message);
+  // Open DevTools in dev mode
+  if (IS_DEV) {
+    win.webContents.openDevTools();
   }
 
   // ==========================================================================
-  // ONBOARDING LOGIC
+  // CRITICAL: DETERMINE URL BASED ON MODE
   // ==========================================================================
-  win.webContents.once('did-finish-load', async () => {
-    const needsOnboarding = IS_LAUNCH_MODE && !(await checkOnboardingStatus());
+  
+  let targetUrl;
+  let needsOnboarding = false;
 
-    win.webContents.send('app:initialized', {
-      needsOnboarding,
-      mode: IS_LAUNCH_MODE ? 'launch' : 'install'
-    });
+  // Check if dev server is running
+  const devServerAvailable = IS_DEV && await isDevServerRunning();
 
-    if (needsOnboarding) {
-      log('📨 Enviando evento: show-onboarding');
-      win.webContents.send('show-onboarding');
+  if (FORCE_ONBOARDING || (IS_LAUNCH_MODE && !(await checkOnboardingStatus()))) {
+    needsOnboarding = true;
+    
+    if (devServerAvailable) {
+      targetUrl = 'http://localhost:5173/onboarding';
+      log('🔧 DEV MODE: Loading onboarding from Vite dev server');
+    } else {
+      targetUrl = 'file://' + WEBVIEW_BUILD_PATH.replace(/\\/g, '/') + '#/onboarding';
+      log('📦 PROD MODE: Loading onboarding from build');
     }
+  } else {
+    // Normal launch mode (dashboard)
+    if (devServerAvailable) {
+      targetUrl = 'http://localhost:5173/';
+      log('🔧 DEV MODE: Loading home from Vite dev server');
+    } else {
+      targetUrl = 'file://' + WEBVIEW_BUILD_PATH.replace(/\\/g, '/');
+      log('📦 PROD MODE: Loading home from build');
+    }
+  }
+
+  // ==========================================================================
+  // LOAD URL
+  // ==========================================================================
+  
+  log('🚀 Loading URL:', targetUrl);
+  
+  try {
+    await win.loadURL(targetUrl);
+    log('✅ URL loaded successfully');
+  } catch (err) {
+    error('💥 Failed to load URL:', err.message);
+    
+    // Fallback: try to load error page or retry
+    const errorHtml = `
+      <html>
+        <body style="font-family: system-ui; padding: 40px; background: #0f0f0f; color: white;">
+          <h1>⚠️ Load Error</h1>
+          <p>Failed to load: ${targetUrl}</p>
+          <p>Error: ${err.message}</p>
+          <button onclick="location.reload()">Retry</button>
+        </body>
+      </html>
+    `;
+    win.loadURL('data:text/html,' + encodeURIComponent(errorHtml));
+  }
+
+  // ==========================================================================
+  // SEND INITIALIZATION EVENT AFTER PAGE LOADS
+  // ==========================================================================
+  
+  win.webContents.once('did-finish-load', () => {
+    log('📄 Page did-finish-load');
+    
+    // Give renderer time to setup listeners
+    setTimeout(() => {
+      log('📤 Sending app:initialized event');
+      win.webContents.send('app:initialized', {
+        needsOnboarding,
+        mode: IS_LAUNCH_MODE ? 'launch' : 'install',
+        devMode: devServerAvailable,
+        url: targetUrl
+      });
+    }, 100);
   });
 
   return win;
@@ -176,9 +238,9 @@ async function createWindow() {
 // APP READY
 // ============================================================================
 app.whenReady().then(async () => {
-  log('App ready, inicializando...');
+  log('🚀 App ready, initializing...');
   
-  // CRÍTICO: Registrar handlers ANTES de crear ventana
+  // CRITICAL: Register handlers BEFORE creating window
   registerIPCHandlers();
   
   await createWindow();
@@ -191,5 +253,8 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+  if (process.platform !== 'darwin') {
+    log('👋 Quitting app');
+    app.quit();
+  }
 });

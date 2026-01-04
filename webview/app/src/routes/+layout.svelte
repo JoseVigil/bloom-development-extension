@@ -16,40 +16,75 @@
   $: showSidebar = $onboardingStore.step !== 'welcome' && $onboardingStore.completed;
   
   onMount(async () => {
+    console.log('🎨 [Layout] Mounting...');
+    
     isWebview = typeof window !== 'undefined' && !!(window as any).vscode;
     isElectron = typeof window !== 'undefined' && !!(window as any).api;
     document.documentElement.classList.add('dark');
     
-    // Initialize onboarding state
-    await onboardingStore.init();
-    isChecking = false;
+    console.log('🔍 [Layout] Environment:', { isWebview, isElectron });
+    
+    // ========================================================================
+    // FIX: onboardingStore.init() NO EXISTE
+    // El store se auto-inicializa en su constructor (ver onboarding.ts líneas 68-90)
+    // Solo necesitamos esperar a que termine el loading inicial
+    // ========================================================================
+    
+    // Opción 1: Esperar a que loading sea false
+    const unsubscribe = onboardingStore.subscribe(state => {
+      if (!state.loading && isChecking) {
+        console.log('✅ [Layout] Store initialized:', {
+          completed: state.completed,
+          step: state.step,
+          apiAvailable: state.apiAvailable
+        });
+        isChecking = false;
+      }
+    });
+    
+    // Opción 2: Si quieres forzar un refresh explícito
+    // await onboardingStore.refresh();
+    // isChecking = false;
     
     // Handle routing based on onboarding status
     handleRouting();
     
     // Listen for Electron events
     if (isElectron && (window as any).api?.on) {
+      console.log('🎧 [Layout] Setting up Electron event listeners...');
+      
       // Handle app initialization
       (window as any).api.on('app:initialized', (data: { needsOnboarding: boolean; mode: string }) => {
-        console.log('📨 App initialized:', data);
+        console.log('📨 [Layout] App initialized:', data);
         
         if (data.needsOnboarding) {
-          onboardingStore.reset();
+          console.log('🔄 [Layout] Resetting onboarding state');
+          // Si necesitas reset, implementa onboardingStore.reset() en onboarding.ts
+          // onboardingStore.reset();
+          goto('/onboarding');
         }
       });
       
       // Handle show onboarding
       (window as any).api.on('show-onboarding', () => {
-        console.log('📨 Show onboarding event received');
+        console.log('📨 [Layout] Show onboarding event received');
         goto('/onboarding');
       });
       
       // Handle onboarding completion
       (window as any).api.on('onboarding:completed', () => {
-        console.log('✅ Onboarding completed event received');
+        console.log('✅ [Layout] Onboarding completed event received');
         goto('/home');
       });
+      
+      console.log('✅ [Layout] Electron event listeners ready');
     }
+    
+    // Cleanup on unmount
+    return () => {
+      console.log('🧹 [Layout] Unmounting, cleaning up...');
+      unsubscribe();
+    };
   });
   
   // React to changes in onboarding status
@@ -61,35 +96,49 @@
     const currentPath = $page.url.pathname;
     
     // Don't redirect during initial check
-    if (isChecking) return;
+    if (isChecking) {
+      console.log('⏳ [Routing] Still checking, skipping...');
+      return;
+    }
+    
+    console.log('🔀 [Routing] Evaluating:', { 
+      currentPath, 
+      requiresOnboarding: $requiresOnboarding,
+      completed: $onboardingStore.completed 
+    });
     
     // If onboarding is required and we're not on the onboarding page
     if ($requiresOnboarding && currentPath !== '/onboarding') {
-      console.log('🔄 Redirecting to onboarding...');
+      console.log('🔄 [Routing] Redirecting to onboarding...');
       goto('/onboarding');
       return;
     }
     
     // If onboarding is complete and we're on the onboarding page
     if (!$requiresOnboarding && currentPath === '/onboarding') {
-      console.log('✅ Onboarding complete, redirecting to home...');
+      console.log('✅ [Routing] Onboarding complete, redirecting to home...');
       goto('/home');
       return;
     }
     
     // If onboarding is complete and we're on root, go to home
     if (!$requiresOnboarding && currentPath === '/') {
+      console.log('🏠 [Routing] Redirecting to home...');
       goto('/home');
       return;
     }
+    
+    console.log('✅ [Routing] Current route is valid');
   }
   
   function toggleSidebar() {
     sidebarCollapsed = !sidebarCollapsed;
+    console.log('📐 [UI] Sidebar collapsed:', sidebarCollapsed);
   }
   
   function toggleRightPane() {
     rightPaneCollapsed = !rightPaneCollapsed;
+    console.log('📐 [UI] Right pane collapsed:', rightPaneCollapsed);
   }
 </script>
 
