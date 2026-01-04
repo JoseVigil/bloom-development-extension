@@ -18,7 +18,7 @@ async function execBrainJson(args, options = {}) {
     const pythonPath = paths.pythonExe;
     const brainMainPy = path.join(paths.brainDir, '__main__.py');
 
-    // ✅ NEW: Direct execution - python brain/__main__.py --json [command] [args]
+    // ✅ Direct execution - python brain/__main__.py --json [command] [args]
     const fullArgs = [brainMainPy, '--json', ...args];
 
     console.log(`[launch-handlers] ${pythonPath} ${fullArgs.join(' ')}`);

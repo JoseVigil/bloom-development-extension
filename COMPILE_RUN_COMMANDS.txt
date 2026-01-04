@@ -10,8 +10,9 @@ Electron
 npm run build
 npx electron main.js --mode=launch --launch
 npx electron main.js --mode=launch --onboarding
+npx electron main.js --mode=launch --onboarding --dev
 
-Web server port 5173
+DEV Web server port 5173
 /c/repos/bloom-videos/bloom-development-extension/webview/app
 npm run build
 npm run dev

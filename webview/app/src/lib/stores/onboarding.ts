@@ -19,6 +19,9 @@ interface OnboardingState {
 }
 
 const STORAGE_KEY = 'btip_onboarding';
+const AUTO_REFRESH_INTERVAL = 3000; // Poll API every 3s
+
+let refreshTimer: ReturnType<typeof setInterval> | null = null;
 
 function isElectron(): boolean {
   return typeof window !== 'undefined' && (window as any).api !== undefined;
@@ -28,16 +31,18 @@ async function loadInitialState(): Promise<Partial<OnboardingState>> {
   if (typeof window === 'undefined') return {};
   
   try {
-    // Check API health first
+    console.log('🔄 [Onboarding] Loading initial state...');
+    
     const apiAvailable = await checkApiHealth();
     if (!apiAvailable) {
-      console.warn('[Onboarding] API not available, using cache');
+      console.warn('⚠️ [Onboarding] API not available, using cache');
       const stored = localStorage.getItem(STORAGE_KEY);
       return stored ? JSON.parse(stored) : {};
     }
 
-    // Use NEW endpoint: /api/v1/health/onboarding
     const status = await getOnboardingStatus();
+    
+    console.log('✅ [Onboarding] Status loaded:', status);
     
     return {
       githubAuthenticated: status.details?.github?.authenticated || false,
@@ -45,10 +50,11 @@ async function loadInitialState(): Promise<Partial<OnboardingState>> {
       hasNucleus: status.details?.nucleus?.exists || false,
       hasProjects: status.details?.projects?.linked || false,
       completed: status.completed || false,
-      step: (status.current_step as OnboardingStep) || 'welcome'
+      step: (status.current_step as OnboardingStep) || 'welcome',
+      apiAvailable: true
     };
   } catch (error) {
-    console.error('[Onboarding] Failed to load initial state:', error);
+    console.error('❌ [Onboarding] Failed to load initial state:', error);
     const stored = localStorage.getItem(STORAGE_KEY);
     return stored ? JSON.parse(stored) : {};
   }
@@ -65,7 +71,10 @@ function saveToStorage(state: OnboardingState) {
       hasProjects: state.hasProjects,
       completed: state.completed
     }));
-  } catch {}
+    console.log('💾 [Onboarding] State saved to localStorage');
+  } catch (error) {
+    console.error('❌ [Onboarding] Failed to save to localStorage:', error);
+  }
 }
 
 function createOnboardingStore() {
@@ -83,31 +92,53 @@ function createOnboardingStore() {
 
   const { subscribe, set, update } = writable<OnboardingState>(initial);
 
-  // Non-blocking initialization
+  // Initialize store
   if (typeof window !== 'undefined') {
-    // Try cache first
+    // Load from cache first (instant UI)
     const cached = localStorage.getItem(STORAGE_KEY);
     if (cached) {
       try {
-        update(state => ({ ...state, ...JSON.parse(cached), loading: true }));
-      } catch {}
+        const cachedState = JSON.parse(cached);
+        console.log('📦 [Onboarding] Loaded from cache:', cachedState);
+        update(state => ({ ...state, ...cachedState, loading: true }));
+      } catch (error) {
+        console.error('❌ [Onboarding] Cache parse error:', error);
+      }
     }
     
-    // Then load from API
+    // Then fetch from API
     Promise.all([loadInitialState(), checkApiHealth()])
       .then(([loaded, apiAvailable]) => {
         update(state => {
-          const newState = { ...state, ...loaded, apiAvailable, loading: false };
+          const newState = { 
+            ...state, 
+            ...loaded, 
+            apiAvailable, 
+            loading: false,
+            error: null
+          };
+          
+          // Auto-advance step based on state
+          newState.step = determineCurrentStep(newState);
+          
           saveToStorage(newState);
           
+          // Redirect if completed
           if (newState.completed && window.location.pathname === '/onboarding') {
+            console.log('✅ [Onboarding] Completed, redirecting to /home');
             setTimeout(() => goto('/home'), 100);
           }
+          
           return newState;
         });
+        
+        // Start auto-refresh if on onboarding page
+        if (window.location.pathname === '/onboarding') {
+          startAutoRefresh();
+        }
       })
       .catch(error => {
-        console.error('[Onboarding] Init error:', error);
+        console.error('❌ [Onboarding] Init error:', error);
         update(state => ({
           ...state,
           loading: false,
@@ -116,10 +147,82 @@ function createOnboardingStore() {
       });
   }
 
+  function determineCurrentStep(state: OnboardingState): OnboardingStep {
+    // Don't auto-advance if user manually changed step
+    if (state.step && !state.completed) {
+      // But validate: can't be on step X if requirement not met
+      if (state.step === 'gemini' && !state.githubAuthenticated) return 'welcome';
+      if (state.step === 'nucleus' && (!state.githubAuthenticated || !state.geminiConfigured)) return 'gemini';
+      if (state.step === 'projects' && !state.hasNucleus) return 'nucleus';
+    }
+    
+    if (!state.githubAuthenticated) return 'welcome';
+    if (!state.geminiConfigured) return 'gemini';
+    if (!state.hasNucleus) return 'nucleus';
+    if (!state.hasProjects) return 'projects';
+    
+    return 'projects'; // All done
+  }
+
+  function startAutoRefresh() {
+    if (refreshTimer) return;
+    
+    console.log('🔄 [Onboarding] Starting auto-refresh');
+    
+    refreshTimer = setInterval(async () => {
+      try {
+        const current = get({ subscribe });
+        
+        // Skip if loading or completed
+        if (current.loading || current.completed) return;
+        
+        const status = await getOnboardingStatus();
+        
+        update(state => {
+          const newState = {
+            ...state,
+            githubAuthenticated: status.details?.github?.authenticated || false,
+            geminiConfigured: status.details?.gemini?.configured || false,
+            hasNucleus: status.details?.nucleus?.exists || false,
+            hasProjects: status.details?.projects?.linked || false,
+            completed: status.completed || false,
+            apiAvailable: true,
+            error: null
+          };
+          
+          // Auto-advance step
+          newState.step = determineCurrentStep(newState);
+          
+          saveToStorage(newState);
+          
+          // Check if completed
+          if (newState.completed && !state.completed) {
+            console.log('🎉 [Onboarding] Completed!');
+            stopAutoRefresh();
+            setTimeout(() => goto('/home'), 1000);
+          }
+          
+          return newState;
+        });
+      } catch (error) {
+        console.error('❌ [Onboarding] Auto-refresh error:', error);
+      }
+    }, AUTO_REFRESH_INTERVAL);
+  }
+
+  function stopAutoRefresh() {
+    if (refreshTimer) {
+      clearInterval(refreshTimer);
+      refreshTimer = null;
+      console.log('⏹️ [Onboarding] Stopped auto-refresh');
+    }
+  }
+
   return {
     subscribe,
     
     async refresh() {
+      console.log('🔄 [Onboarding] Manual refresh triggered');
       update(state => ({ ...state, loading: true, error: null }));
       
       try {
@@ -133,14 +236,19 @@ function createOnboardingStore() {
             hasNucleus: status.details?.nucleus?.exists || false,
             hasProjects: status.details?.projects?.linked || false,
             completed: status.completed || false,
-            step: (status.current_step as OnboardingStep) || state.step,
+            step: determineCurrentStep(state),
             loading: false,
-            error: null
+            error: null,
+            apiAvailable: true
           };
+          
           saveToStorage(newState);
           return newState;
         });
+        
+        console.log('✅ [Onboarding] Refresh completed');
       } catch (error) {
+        console.error('❌ [Onboarding] Refresh failed:', error);
         update(state => ({
           ...state,
           loading: false,
@@ -150,6 +258,7 @@ function createOnboardingStore() {
     },
     
     setStep(step: OnboardingStep) {
+      console.log('📍 [Onboarding] Step changed to:', step);
       update(state => {
         const newState = { ...state, step };
         saveToStorage(newState);
@@ -158,26 +267,32 @@ function createOnboardingStore() {
     },
     
     async complete() {
+      console.log('🎉 [Onboarding] Marking as completed');
       update(state => {
         const newState = { ...state, completed: true };
         saveToStorage(newState);
         return newState;
       });
-      if (typeof window !== 'undefined') goto('/home');
+      
+      stopAutoRefresh();
+      
+      if (typeof window !== 'undefined') {
+        setTimeout(() => goto('/home'), 500);
+      }
     },
     
     async recheckApi() {
+      console.log('🔍 [Onboarding] Rechecking API...');
       const apiAvailable = await checkApiHealth();
       update(state => ({ ...state, apiAvailable }));
       return apiAvailable;
     },
     
-    // ========================================================================
-    // NUEVO: Reset method para Electron events
-    // ========================================================================
     reset() {
-      console.log('🔄 [Store] Resetting onboarding state');
-     
+      console.log('🔄 [Onboarding] Resetting state');
+      
+      stopAutoRefresh();
+      
       update(state => {
         const resetState = {
           ...state,
@@ -190,21 +305,29 @@ function createOnboardingStore() {
           loading: false,
           error: null
         };
-       
-        // Clear localStorage
+        
         if (typeof window !== 'undefined') {
           localStorage.removeItem(STORAGE_KEY);
         }
-       
+        
         return resetState;
       });
-     
-      // Navigate to onboarding if in browser
+      
       if (typeof window !== 'undefined') {
         import('$app/navigation').then(({ goto }) => {
           goto('/onboarding');
         });
       }
+    },
+    
+    // New: Enable auto-refresh manually
+    startPolling() {
+      startAutoRefresh();
+    },
+    
+    // New: Disable auto-refresh manually
+    stopPolling() {
+      stopAutoRefresh();
     }
   };
 }

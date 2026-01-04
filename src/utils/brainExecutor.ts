@@ -96,6 +96,50 @@ export interface LinkedProject {
 }
 
 // ============================================================================
+// UPDATED TYPE DEFINITIONS FOR ONBOARDING STATUS
+// ============================================================================
+
+export interface OnboardingStatusDetails {
+    github: {
+        authenticated: boolean;
+        username?: string;
+        error?: string;
+        checked_at?: string;
+    };
+    gemini: {
+        configured: boolean;
+        profile_count?: number;
+        key_count?: number;
+        error?: string;
+        checked_at?: string;
+    };
+    nucleus: {
+        exists: boolean;
+        path?: string;
+        organization?: string;
+        nucleus_count?: number;
+        error?: string;
+        checked_at?: string;
+    };
+    projects: {
+        added: boolean;
+        count?: number;
+        project_count?: number;
+        error?: string;
+        checked_at?: string;
+    };
+}
+
+export interface OnboardingStatusResponse {
+    ready: boolean;
+    current_step: string;
+    completed: boolean;
+    completion_percentage?: number;
+    details: OnboardingStatusDetails;
+    timestamp?: string;
+}
+
+// ============================================================================
 // BRAIN EXECUTOR CLASS
 // ============================================================================
 
@@ -658,24 +702,15 @@ export class BrainExecutor {
     // ========================================================================
     // HEALTH OPERATIONS
     // ========================================================================
+   
 
     /**
      * Execute onboarding-specific status check.
      * Maps to: python brain\__main__.py --json health onboarding-status
-     * Returns: { ready, current_step, completed, details: { github, gemini, nucleus, projects } }
+     * Returns: { ready, current_step, completed, completion_percentage?, details, timestamp? }
      */
-    static async healthOnboardingStatus(): Promise<BrainResult<{
-        ready: boolean;
-        current_step: string;
-        completed: boolean;
-        details: {
-            github: { authenticated: boolean; username?: string };
-            gemini: { configured: boolean; profile_count: number };
-            nucleus: { exists: boolean; path?: string; organization?: string };
-            projects: { linked: boolean; count: number };
-        };
-    }>> {
-        return this.execute(['health', 'onboarding-status']);
+    static async healthOnboardingStatus(): Promise<BrainResult<OnboardingStatusResponse>> {
+        return this.execute<OnboardingStatusResponse>(['health', 'onboarding-status']);
     }
 
     /**
@@ -708,6 +743,36 @@ export class BrainExecutor {
         port?: number;
     }>> {
         return this.execute(['health', 'websocket-status']);
+    }
+
+    /**
+     * Execute development environment check.
+     * Maps to: python brain\__main__.py --json health dev-check
+     * Returns: { is_dev_mode, reason, services: { dev_server, api, websocket } }
+     */
+    static async healthDevCheck(): Promise<BrainResult<{
+        is_dev_mode: boolean;
+        reason: string;
+        services: {
+            dev_server: {
+                available: boolean;
+                host: string | null;
+                port: number;
+            };
+            api: {
+                available: boolean;
+                host: string | null;
+                port: number;
+            };
+            websocket: {
+                available: boolean;
+                host: string | null;
+                port: number;
+            };
+        };
+        timestamp: string;
+    }>> {
+        return this.execute(['health', 'dev-check']);
     }
 
     // ========================================================================

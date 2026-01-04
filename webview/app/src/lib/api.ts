@@ -1,110 +1,392 @@
 // webview/app/src/lib/api.ts
+// SOLUCIÓN DEFINITIVA: Backend siempre en 48215, sin importar dónde corra el frontend
 
-const baseUrl = 'http://localhost:5173/api/v1';
+// ============================================================================
+// ARQUITECTURA CLARA
+// ============================================================================
+// DEV:  Frontend en 5173 (Vite) → Backend en 48215 (VSCode Extension)
+// PROD: Frontend en file:// (Static) → Backend en 48215 (Windows Service)
+// 
+// Backend SIEMPRE está separado en puerto 48215
+// Frontend NUNCA tiene API propia
+// ============================================================================
 
-interface FetchOptions extends RequestInit {
-  timeout?: number;
-  retries?: number;
-}
+const API_BASE_URL = 'http://localhost:48215/api/v1';
+const WS_BASE_URL = 'ws://localhost:4124';
 
-async function fetchWithTimeout(url: string, options: FetchOptions = {}): Promise<Response> {
-  const { timeout = 5000, retries = 2, ...fetchOptions } = options;
-  
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeout);
-      
-      const response = await fetch(url, {
-        ...fetchOptions,
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeoutId);
-      return response;
-      
-    } catch (error) {
-      if (attempt === retries) throw error;
-      await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
-    }
-  }
-  
-  throw new Error('Max retries reached');
-}
+console.log('📡 [API] Configuration:', {
+  API_BASE_URL,
+  WS_BASE_URL,
+  environment: import.meta.env.MODE
+});
 
-class ApiError extends Error {
-  constructor(message: string, public status: number, public details?: any) {
+// ============================================================================
+// ERROR CLASSES
+// ============================================================================
+
+export class ApiError extends Error {
+  constructor(
+    public message: string,
+    public status: number,
+    public details?: any
+  ) {
     super(message);
     this.name = 'ApiError';
   }
 }
 
-async function handleResponse(response: Response) {
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ 
-      error: `HTTP ${response.status}: ${response.statusText}` 
-    }));
-    throw new ApiError(
-      error.error || error.message || 'Request failed',
-      response.status,
-      error
-    );
+export class NetworkError extends Error {
+  constructor(message: string, public originalError?: Error) {
+    super(message);
+    this.name = 'NetworkError';
   }
-  return response.json();
 }
 
+// ============================================================================
+// RESPONSE HANDLER
+// ============================================================================
+
+async function handleResponse<T>(response: Response): Promise<T> {
+  if (!response.ok) {
+    let errorDetails;
+    try {
+      errorDetails = await response.json();
+    } catch {
+      errorDetails = { error: response.statusText };
+    }
+
+    const message = errorDetails.detail || errorDetails.error || `HTTP ${response.status}`;
+    throw new ApiError(message, response.status, errorDetails);
+  }
+
+  // Handle 204 No Content
+  if (response.status === 204) {
+    return {} as T;
+  }
+
+  try {
+    return await response.json();
+  } catch {
+    throw new ApiError('Invalid JSON response', response.status);
+  }
+}
+
+// ============================================================================
+// FETCH WITH TIMEOUT & FALLBACK
+// ============================================================================
+
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit = {},
+  timeout: number = 10000
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new NetworkError(`Request timeout after ${timeout}ms`);
+    }
+    
+    throw new NetworkError(
+      'Network request failed - Backend may be offline',
+      error instanceof Error ? error : undefined
+    );
+  }
+}
+
+// ============================================================================
+// HEALTH CHECKS
+// ============================================================================
+
+/**
+ * Check if API backend is available
+ * Returns false if offline (non-blocking)
+ */
 export async function checkApiHealth(): Promise<boolean> {
   try {
-    const response = await fetchWithTimeout('http://localhost:48215/health', {
-      method: 'HEAD',
-      timeout: 2000,
-      retries: 1
-    });
-    return response.ok;
-  } catch {
+    console.log('🔍 [API] Checking backend health...');
+    const response = await fetchWithTimeout(`${API_BASE_URL}/health`, { method: 'HEAD' }, 3000);
+    
+    if (response.ok) {
+      console.log('✅ [API] Backend is healthy');
+      return true;
+    }
+    
+    console.warn('⚠️ [API] Backend returned non-OK status:', response.status);
+    return false;
+  } catch (error) {
+    console.warn('❌ [API] Backend is offline:', error instanceof Error ? error.message : 'Unknown error');
     return false;
   }
 }
 
 /**
- * NUEVO: Get onboarding-specific status
- * Endpoint: GET /api/v1/health/onboarding
- * Response: { ready, current_step, completed, details: { github, gemini, nucleus, projects } }
+ * Check WebSocket availability
+ * Returns false if offline (non-blocking)
  */
-export async function getOnboardingStatus() {
-  const response = await fetchWithTimeout(`${baseUrl}/health/onboarding`, {
-    timeout: 5000,
-    retries: 2
+export async function checkWebSocketHealth(): Promise<boolean> {
+  return new Promise((resolve) => {
+    try {
+      console.log('🔍 [WS] Checking WebSocket health...');
+      const ws = new WebSocket(WS_BASE_URL);
+
+      ws.onopen = () => {
+        console.log('✅ [WS] WebSocket is healthy');
+        ws.close();
+        resolve(true);
+      };
+
+      ws.onerror = () => {
+        console.warn('❌ [WS] WebSocket is offline');
+        resolve(false);
+      };
+
+      setTimeout(() => {
+        if (ws.readyState !== WebSocket.OPEN) {
+          ws.close();
+          resolve(false);
+        }
+      }, 3000);
+    } catch (error) {
+      console.warn('❌ [WS] WebSocket check failed:', error);
+      resolve(false);
+    }
   });
-  return handleResponse(response);
+}
+
+// ============================================================================
+// SYSTEM HEALTH API
+// ============================================================================
+
+export interface SystemHealth {
+  status: 'ok' | 'degraded' | 'error';
+  timestamp: string;
+  services: {
+    api?: { status: string; latency?: number };
+    websocket?: { status: string; connected?: boolean };
+    brain?: { status: string; version?: string };
+  };
 }
 
 /**
- * MANTENER: Full system health (para otros usos)
+ * Get complete system health status
  */
-export async function getSystemHealth() {
-  const response = await fetchWithTimeout(`${baseUrl}/health/full-stack`);
-  return handleResponse(response);
+export async function getSystemHealth(): Promise<SystemHealth> {
+  console.log('📡 [API] Fetching system health...');
+  
+  try {
+    const response = await fetchWithTimeout(
+      `${API_BASE_URL}/health`,
+      { method: 'GET' },
+      5000
+    );
+    
+    const data = await handleResponse<SystemHealth>(response);
+    console.log('✅ [API] System health received:', data);
+    return data;
+  } catch (error) {
+    console.error('❌ [API] Failed to get system health:', error);
+    
+    // Return degraded status
+    return {
+      status: 'error',
+      timestamp: new Date().toISOString(),
+      services: {
+        api: { status: 'offline' },
+        websocket: { status: 'offline' },
+        brain: { status: 'unknown' }
+      }
+    };
+  }
 }
 
-export async function getGithubAuthStatus() {
-  const response = await fetchWithTimeout(`${baseUrl}/auth/github/status`);
-  return handleResponse(response);
+// ============================================================================
+// ONBOARDING API
+// ============================================================================
+
+export interface OnboardingStatus {
+  completed: boolean;
+  current_step: string;
+  details?: {
+    github?: { authenticated: boolean };
+    gemini?: { configured: boolean };
+    nucleus?: { exists: boolean };
+    projects?: { linked: boolean };
+  };
 }
 
-export async function loginGithub(token: string) {
-  const response = await fetchWithTimeout(`${baseUrl}/auth/github/login`, {
+/**
+ * Get onboarding status
+ * Throws on failure (caller should handle)
+ */
+export async function getOnboardingStatus(): Promise<OnboardingStatus> {
+  console.log('📡 [API] Fetching onboarding status...');
+  
+  const response = await fetchWithTimeout(
+    `${API_BASE_URL}/health/onboarding`,
+    { method: 'GET' },
+    5000
+  );
+  
+  const data = await handleResponse<OnboardingStatus>(response);
+  console.log('✅ [API] Onboarding status received:', data);
+  return data;
+}
+
+/**
+ * Get onboarding status with fallback
+ * Returns safe default if backend offline
+ */
+export async function getOnboardingStatusSafe(): Promise<OnboardingStatus> {
+  try {
+    return await getOnboardingStatus();
+  } catch (error) {
+    console.error('❌ [API] Failed to get onboarding status:', error);
+    
+    // Return safe default
+    return {
+      completed: false,
+      current_step: 'welcome',
+      details: {
+        github: { authenticated: false },
+        gemini: { configured: false },
+        nucleus: { exists: false },
+        projects: { linked: false },
+      }
+    };
+  }
+}
+
+// ============================================================================
+// GENERIC API METHODS
+// ============================================================================
+
+export async function apiGet<T>(endpoint: string): Promise<T> {
+  const url = `${API_BASE_URL}${endpoint}`;
+  console.log('📡 [API] GET:', url);
+  
+  const response = await fetchWithTimeout(url, { method: 'GET' });
+  return handleResponse<T>(response);
+}
+
+export async function apiPost<T>(endpoint: string, data?: any): Promise<T> {
+  const url = `${API_BASE_URL}${endpoint}`;
+  console.log('📡 [API] POST:', url);
+  
+  const response = await fetchWithTimeout(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token })
+    body: data ? JSON.stringify(data) : undefined,
   });
-  return handleResponse(response);
+  
+  return handleResponse<T>(response);
 }
 
-export async function listNuclei(parentDir?: string) {
-  const query = parentDir ? `?parent=${encodeURIComponent(parentDir)}` : '';
-  const response = await fetchWithTimeout(`${baseUrl}/nucleus/list${query}`);
-  return handleResponse(response);
+export async function apiPut<T>(endpoint: string, data?: any): Promise<T> {
+  const url = `${API_BASE_URL}${endpoint}`;
+  console.log('📡 [API] PUT:', url);
+  
+  const response = await fetchWithTimeout(url, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: data ? JSON.stringify(data) : undefined,
+  });
+  
+  return handleResponse<T>(response);
+}
+
+export async function apiDelete<T>(endpoint: string): Promise<T> {
+  const url = `${API_BASE_URL}${endpoint}`;
+  console.log('📡 [API] DELETE:', url);
+  
+  const response = await fetchWithTimeout(url, { method: 'DELETE' });
+  return handleResponse<T>(response);
+}
+
+// ============================================================================
+// WEBSOCKET HELPER
+// ============================================================================
+
+export function createWebSocket(path: string = ''): WebSocket {
+  const url = `${WS_BASE_URL}${path}`;
+  console.log('🔌 [WS] Creating WebSocket:', url);
+  return new WebSocket(url);
+}
+
+// ============================================================================
+// ADDITIONAL SYSTEM METHODS (Common in legacy code)
+// ============================================================================
+
+/**
+ * Legacy alias for checkApiHealth
+ */
+export async function isApiAvailable(): Promise<boolean> {
+  return checkApiHealth();
+}
+
+/**
+ * Get API version info
+ */
+export async function getApiVersion(): Promise<{ version: string; build?: string }> {
+  try {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/version`, { method: 'GET' }, 3000);
+    return handleResponse(response);
+  } catch (error) {
+    console.warn('❌ [API] Failed to get version:', error);
+    return { version: 'unknown' };
+  }
+}
+
+/**
+ * Ping endpoint for latency check
+ */
+export async function pingApi(): Promise<number> {
+  const start = performance.now();
+  try {
+    await fetchWithTimeout(`${API_BASE_URL}/health`, { method: 'HEAD' }, 3000);
+    return Math.round(performance.now() - start);
+  } catch {
+    return -1; // Offline
+  }
+}
+
+// ============================================================================
+// GEMINI API
+// ============================================================================
+
+export async function addGeminiKey(params: {
+  profile: string;
+  key: string;
+  priority?: number;
+}): Promise<any> {
+  return apiPost('/auth/gemini/add-key', params);
+}
+
+export async function listGeminiKeys(): Promise<any> {
+  return apiGet('/auth/gemini/keys');
+}
+
+export async function validateGeminiKey(profile: string): Promise<any> {
+  return apiPost('/auth/gemini/validate', { profile });
+}
+
+// ============================================================================
+// NUCLEUS API
+// ============================================================================
+
+export async function listNuclei(parentDir?: string): Promise<any> {
+  const params = parentDir ? `?parent=${encodeURIComponent(parentDir)}` : '';
+  return apiGet(`/nucleus/list${params}`);
 }
 
 export async function createNucleus(params: {
@@ -112,14 +394,30 @@ export async function createNucleus(params: {
   path?: string;
   url?: string;
   force?: boolean;
-}) {
-  const response = await fetchWithTimeout(`${baseUrl}/nucleus/create`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
-    timeout: 30000
-  });
-  return handleResponse(response);
+}): Promise<any> {
+  return apiPost('/nucleus/create', params);
 }
 
-export { ApiError };
+export async function listNucleusProjects(nucleusPath: string, strategy?: string): Promise<any> {
+  const params = strategy ? `?path=${encodeURIComponent(nucleusPath)}&strategy=${strategy}` : `?path=${encodeURIComponent(nucleusPath)}`;
+  return apiGet(`/nucleus/projects${params}`);
+}
+
+// ============================================================================
+// PROJECT API
+// ============================================================================
+
+export async function addProject(params: {
+  project_path: string;
+  nucleus_path: string;
+  name?: string;
+  strategy?: string;
+}): Promise<any> {
+  return apiPost('/project/add', params);
+}
+
+// ============================================================================
+// EXPORTS
+// ============================================================================
+
+export { API_BASE_URL, WS_BASE_URL };

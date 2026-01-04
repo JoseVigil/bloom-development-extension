@@ -13,10 +13,10 @@ function execBrainCommand(args, options = {}) {
   return new Promise((resolve, reject) => {
     const pythonPath = paths.pythonExe;
     
-    // ✅ CRITICAL: Use brain/__main__.py for direct execution
+    // ✅ Use brain/__main__.py for direct execution
     const brainMainPy = path.join(paths.brainDir, '__main__.py');
 
-    // ✅ NEW: Direct execution - python brain/__main__.py [args]
+    // ✅ Direct execution - python brain/__main__.py [args]
     const fullArgs = [brainMainPy, ...args];
 
     console.log(`[brain-commands] Executing: ${pythonPath} ${fullArgs.join(' ')}`);
