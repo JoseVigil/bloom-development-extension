@@ -1,20 +1,10 @@
 // webview/app/src/lib/api.ts
-// SOLUCIÓN DEFINITIVA: Backend siempre en 48215, sin importar dónde corra el frontend
-
-// ============================================================================
-// ARQUITECTURA CLARA
-// ============================================================================
-// DEV:  Frontend en 5173 (Vite) → Backend en 48215 (VSCode Extension)
-// PROD: Frontend en file:// (Static) → Backend en 48215 (Windows Service)
-// 
-// Backend SIEMPRE está separado en puerto 48215
-// Frontend NUNCA tiene API propia
-// ============================================================================
+// UPDATED VERSION with all required exports for enhanced onboarding components
 
 const API_BASE_URL = 'http://localhost:48215/api/v1';
 const WS_BASE_URL = 'ws://localhost:4124';
 
-console.log('📡 [API] Configuration:', {
+console.log('🔡 [API] Configuration:', {
   API_BASE_URL,
   WS_BASE_URL,
   environment: import.meta.env.MODE
@@ -59,7 +49,6 @@ async function handleResponse<T>(response: Response): Promise<T> {
     throw new ApiError(message, response.status, errorDetails);
   }
 
-  // Handle 204 No Content
   if (response.status === 204) {
     return {} as T;
   }
@@ -72,7 +61,7 @@ async function handleResponse<T>(response: Response): Promise<T> {
 }
 
 // ============================================================================
-// FETCH WITH TIMEOUT & FALLBACK
+// FETCH WITH TIMEOUT
 // ============================================================================
 
 async function fetchWithTimeout(
@@ -108,10 +97,6 @@ async function fetchWithTimeout(
 // HEALTH CHECKS
 // ============================================================================
 
-/**
- * Check if API backend is available
- * Returns false if offline (non-blocking)
- */
 export async function checkApiHealth(): Promise<boolean> {
   try {
     console.log('🔍 [API] Checking backend health...');
@@ -130,10 +115,6 @@ export async function checkApiHealth(): Promise<boolean> {
   }
 }
 
-/**
- * Check WebSocket availability
- * Returns false if offline (non-blocking)
- */
 export async function checkWebSocketHealth(): Promise<boolean> {
   return new Promise((resolve) => {
     try {
@@ -178,11 +159,8 @@ export interface SystemHealth {
   };
 }
 
-/**
- * Get complete system health status
- */
 export async function getSystemHealth(): Promise<SystemHealth> {
-  console.log('📡 [API] Fetching system health...');
+  console.log('🔡 [API] Fetching system health...');
   
   try {
     const response = await fetchWithTimeout(
@@ -197,7 +175,6 @@ export async function getSystemHealth(): Promise<SystemHealth> {
   } catch (error) {
     console.error('❌ [API] Failed to get system health:', error);
     
-    // Return degraded status
     return {
       status: 'error',
       timestamp: new Date().toISOString(),
@@ -225,12 +202,8 @@ export interface OnboardingStatus {
   };
 }
 
-/**
- * Get onboarding status
- * Throws on failure (caller should handle)
- */
 export async function getOnboardingStatus(): Promise<OnboardingStatus> {
-  console.log('📡 [API] Fetching onboarding status...');
+  console.log('🔡 [API] Fetching onboarding status...');
   
   const response = await fetchWithTimeout(
     `${API_BASE_URL}/health/onboarding`,
@@ -243,17 +216,12 @@ export async function getOnboardingStatus(): Promise<OnboardingStatus> {
   return data;
 }
 
-/**
- * Get onboarding status with fallback
- * Returns safe default if backend offline
- */
 export async function getOnboardingStatusSafe(): Promise<OnboardingStatus> {
   try {
     return await getOnboardingStatus();
   } catch (error) {
     console.error('❌ [API] Failed to get onboarding status:', error);
     
-    // Return safe default
     return {
       completed: false,
       current_step: 'welcome',
@@ -273,7 +241,7 @@ export async function getOnboardingStatusSafe(): Promise<OnboardingStatus> {
 
 export async function apiGet<T>(endpoint: string): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
-  console.log('📡 [API] GET:', url);
+  console.log('🔡 [API] GET:', url);
   
   const response = await fetchWithTimeout(url, { method: 'GET' });
   return handleResponse<T>(response);
@@ -281,7 +249,7 @@ export async function apiGet<T>(endpoint: string): Promise<T> {
 
 export async function apiPost<T>(endpoint: string, data?: any): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
-  console.log('📡 [API] POST:', url);
+  console.log('🔡 [API] POST:', url);
   
   const response = await fetchWithTimeout(url, {
     method: 'POST',
@@ -294,7 +262,7 @@ export async function apiPost<T>(endpoint: string, data?: any): Promise<T> {
 
 export async function apiPut<T>(endpoint: string, data?: any): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
-  console.log('📡 [API] PUT:', url);
+  console.log('🔡 [API] PUT:', url);
   
   const response = await fetchWithTimeout(url, {
     method: 'PUT',
@@ -307,7 +275,7 @@ export async function apiPut<T>(endpoint: string, data?: any): Promise<T> {
 
 export async function apiDelete<T>(endpoint: string): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
-  console.log('📡 [API] DELETE:', url);
+  console.log('🔡 [API] DELETE:', url);
   
   const response = await fetchWithTimeout(url, { method: 'DELETE' });
   return handleResponse<T>(response);
@@ -324,19 +292,13 @@ export function createWebSocket(path: string = ''): WebSocket {
 }
 
 // ============================================================================
-// ADDITIONAL SYSTEM METHODS (Common in legacy code)
+// ADDITIONAL SYSTEM METHODS
 // ============================================================================
 
-/**
- * Legacy alias for checkApiHealth
- */
 export async function isApiAvailable(): Promise<boolean> {
   return checkApiHealth();
 }
 
-/**
- * Get API version info
- */
 export async function getApiVersion(): Promise<{ version: string; build?: string }> {
   try {
     const response = await fetchWithTimeout(`${API_BASE_URL}/version`, { method: 'GET' }, 3000);
@@ -347,21 +309,18 @@ export async function getApiVersion(): Promise<{ version: string; build?: string
   }
 }
 
-/**
- * Ping endpoint for latency check
- */
 export async function pingApi(): Promise<number> {
   const start = performance.now();
   try {
     await fetchWithTimeout(`${API_BASE_URL}/health`, { method: 'HEAD' }, 3000);
     return Math.round(performance.now() - start);
   } catch {
-    return -1; // Offline
+    return -1;
   }
 }
 
 // ============================================================================
-// GEMINI API
+// GEMINI API (REQUIRED FOR ENHANCED COMPONENTS)
 // ============================================================================
 
 export async function addGeminiKey(params: {
@@ -369,23 +328,27 @@ export async function addGeminiKey(params: {
   key: string;
   priority?: number;
 }): Promise<any> {
+  console.log('🔡 [API] Adding Gemini key for profile:', params.profile);
   return apiPost('/auth/gemini/add-key', params);
 }
 
 export async function listGeminiKeys(): Promise<any> {
+  console.log('🔡 [API] Listing Gemini keys');
   return apiGet('/auth/gemini/keys');
 }
 
 export async function validateGeminiKey(profile: string): Promise<any> {
+  console.log('🔡 [API] Validating Gemini key for profile:', profile);
   return apiPost('/auth/gemini/validate', { profile });
 }
 
 // ============================================================================
-// NUCLEUS API
+// NUCLEUS API (REQUIRED FOR ENHANCED COMPONENTS)
 // ============================================================================
 
 export async function listNuclei(parentDir?: string): Promise<any> {
   const params = parentDir ? `?parent=${encodeURIComponent(parentDir)}` : '';
+  console.log('🔡 [API] Listing nuclei:', parentDir || 'default');
   return apiGet(`/nucleus/list${params}`);
 }
 
@@ -395,16 +358,20 @@ export async function createNucleus(params: {
   url?: string;
   force?: boolean;
 }): Promise<any> {
+  console.log('🔡 [API] Creating nucleus:', params.org);
   return apiPost('/nucleus/create', params);
 }
 
 export async function listNucleusProjects(nucleusPath: string, strategy?: string): Promise<any> {
-  const params = strategy ? `?path=${encodeURIComponent(nucleusPath)}&strategy=${strategy}` : `?path=${encodeURIComponent(nucleusPath)}`;
+  const params = strategy 
+    ? `?path=${encodeURIComponent(nucleusPath)}&strategy=${strategy}` 
+    : `?path=${encodeURIComponent(nucleusPath)}`;
+  console.log('🔡 [API] Listing nucleus projects:', nucleusPath);
   return apiGet(`/nucleus/projects${params}`);
 }
 
 // ============================================================================
-// PROJECT API
+// PROJECT API (REQUIRED FOR ENHANCED COMPONENTS)
 // ============================================================================
 
 export async function addProject(params: {
@@ -413,7 +380,22 @@ export async function addProject(params: {
   name?: string;
   strategy?: string;
 }): Promise<any> {
+  console.log('🔡 [API] Adding project:', params.project_path);
   return apiPost('/project/add', params);
+}
+
+// ============================================================================
+// GITHUB API (ADDITIONAL HELPER)
+// ============================================================================
+
+export async function githubLogin(token: string): Promise<any> {
+  console.log('🔡 [API] GitHub login attempt');
+  return apiPost('/auth/github/login', { token });
+}
+
+export async function githubStatus(): Promise<any> {
+  console.log('🔡 [API] Fetching GitHub status');
+  return apiGet('/auth/github/status');
 }
 
 // ============================================================================

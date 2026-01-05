@@ -1,12 +1,9 @@
-// src/initialization/providersInitializer.ts
+// src/initialization/providersInitializer.ts - ACTUALIZADO
 import * as vscode from 'vscode';
 import { Logger } from '../utils/logger';
 import { IntentTreeProvider } from '../providers/intentTreeProvider';
 import { NucleusTreeProvider } from '../providers/nucleusTreeProvider';
-import { ProfileTreeProvider } from '../providers/profileTreeProvider';
 import { Managers } from './managersInitializer';
-import { WebSocketManager } from '../server/WebSocketManager';
-import { AiAccountChecker } from '../ai/AiAccountChecker';
 
 export interface Providers {
     intentTreeProvider: IntentTreeProvider;
@@ -14,7 +11,13 @@ export interface Providers {
 }
 
 /**
- * Inicializa y registra todos los TreeDataProviders
+ * Inicializa y registra los TreeDataProviders LEGACY
+ * 
+ * ACTUALIZADO: Eliminada la inicialización de ProfileTreeProvider
+ * ya que se maneja en initializeProfileAccounts.ts para evitar duplicación
+ * 
+ * ProfileTreeProvider requiere WebSocketManager y AiAccountChecker que se
+ * inicializan DESPUÉS en el flujo de activación
  */
 export function initializeProviders(
     context: vscode.ExtensionContext,
@@ -22,15 +25,18 @@ export function initializeProviders(
     logger: Logger,
     managers: Managers
 ): Providers {
-    // Intent Tree Provider
+    logger.info('🌲 Initializing tree providers...');
+
+    // 1. Intent Tree Provider
     const intentTreeProvider = new IntentTreeProvider(
         workspaceFolder,
         logger,
         managers.metadataManager
     );
     vscode.window.registerTreeDataProvider('bloomIntents', intentTreeProvider);
+    logger.info('✅ IntentTreeProvider registered');
     
-    // Nucleus Tree Provider (Real)
+    // 2. Nucleus Tree Provider (Real)
     const nucleusTreeProvider = new NucleusTreeProvider(
         workspaceFolder.uri.fsPath,
         context
@@ -42,28 +48,12 @@ export function initializeProviders(
         treeDataProvider: nucleusTreeProvider,
         showCollapseAll: true
     });
+    logger.info('✅ NucleusTreeProvider registered with TreeView');
     
-    // Profile Tree Provider (Singleton)
-    try {
-        // Obtener o inicializar los managers faltantes (singletons)
-        const wsManager = WebSocketManager.getInstance();
-        wsManager.start(); // Asegurar que esté iniciado
-        const accountChecker = AiAccountChecker.init(context);
-        accountChecker.start(); // Asegurar que el scheduler esté activo
-
-        ProfileTreeProvider.initialize(
-            context,
-            logger,
-            managers.chromeProfileManager,
-            wsManager,
-            accountChecker
-        );
-        logger.info('✅ ProfileTreeProvider initialized');
-    } catch (error: any) {
-        logger.error('❌ Error initializing ProfileTreeProvider', error);
-    }
+    // ⚠️ ProfileTreeProvider se inicializa en initializeProfileAccounts.ts
+    // después de que WebSocketManager y AiAccountChecker estén listos
     
-    logger.info('✅ Tree providers registered');
+    logger.info('✅ Legacy tree providers initialized');
     
     return {
         intentTreeProvider,

@@ -4,7 +4,7 @@ import { GitHubOAuthServer } from '../../auth/GitHubOAuthServer';
 import { UserManager } from '../../managers/userManager';
 import { WebSocketManager } from '../../server/WebSocketManager';
 
-let oauthServer: GitHubOAuthServer | null = null;
+export let oauthServer: GitHubOAuthServer | null = null;
 
 export function registerStartGithubOAuthCommand(
     context: vscode.ExtensionContext,

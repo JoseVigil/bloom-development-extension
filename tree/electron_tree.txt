@@ -22,8 +22,10 @@ bloom-development-extension/
     │   ├── core-installer.js
     │   ├── extension-installer.js
     │   ├── installer.js
+    │   ├── landing-generator.js
     │   ├── launcher-creator.js
     │   ├── native-host-installer.js
+    │   ├── profile-manager.js
     │   └── service-installer.js
     ├── installHelpers.js
     ├── installer-config.json
@@ -64,6 +66,7 @@ bloom-development-extension/
     │   ├── index.html
     │   ├── installation_manager.js
     │   ├── launch/
+    │   │   ├── index_launch copy.html
     │   │   ├── index_launch.html
     │   │   └── renderer_launch.js
     │   ├── renderer.js

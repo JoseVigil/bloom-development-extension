@@ -30,11 +30,14 @@ async function checkVCRedistInstalled() {
   }
 }
 
+
+
 /**
  * Configura los handlers IPC para el modo instalación
  */
 function setupInstallHandlers() {
   console.log('📡 Setting up Install Mode IPC handlers...');
+  
 
   // Handler principal de instalación
   ipcMain.handle('brain:install-extension', async () => {
@@ -52,28 +55,27 @@ function setupInstallHandlers() {
         throw new Error("No master profile found");
       }
 
-      // ✅ Direct execution with brain/__main__.py
+      // 🆕 Launch with landing page (no --url flag = uses landing by default)
       const brainMainPy = path.join(paths.brainDir, '__main__.py');
-      const cmd = `"${paths.pythonExe}" "${brainMainPy}" profile launch "${profileId}" --url "https://chatgpt.com"`;
+      const cmd = `"${paths.pythonExe}" "${brainMainPy}" profile launch "${profileId}"`;
 
-      console.log("🚀 EXECUTING:", cmd);
+      console.log("🚀 LAUNCHING WITH LANDING:", cmd);
 
       const output = execSync(cmd, {
         cwd: paths.brainDir,
         encoding: 'utf8',
         timeout: 10000,
-        // ✅ NO PYTHONPATH needed
         env: {
           ...process.env,
           PYTHONNOUSERSITE: '1'
         }
       });
 
-      console.log("✅ OUTPUT:", output);
+      console.log("✅ CHROME LAUNCHED:", output);
       return { success: true, output };
 
     } catch (error) {
-      console.error("❌ ERROR:", error.message);
+      console.error("❌ LAUNCH ERROR:", error.message);
       return { success: false, error: error.message };
     }
   });

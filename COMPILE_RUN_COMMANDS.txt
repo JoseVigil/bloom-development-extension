@@ -8,7 +8,9 @@ F5
 Electron
 /c/repos/bloom-videos/bloom-development-extension/installer/electron-app
 npm run build
-npx electron main.js --mode=launch --launch
+npm start
+npx electron main.js --mode=launch --launch 
+npx electron main.js --mode=launch --launch --dev
 npx electron main.js --mode=launch --onboarding
 npx electron main.js --mode=launch --onboarding --dev
 

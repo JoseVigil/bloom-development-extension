@@ -4,18 +4,14 @@ import { BloomApiServer } from '../api/server';
 import { WebSocketManager } from './WebSocketManager';
 import { HostExecutor } from '../host/HostExecutor';
 import { BTIPExplorerController } from './BTIPExplorerController';
+import { UserManager } from '../managers/userManager';
 
-/**
- * Inicializa el servidor API, WebSocket Manager y Host Executor
- */
 export async function initializeServer(context: vscode.ExtensionContext) {
     console.log('[Server] Initializing components...');
 
-    // 1. Crear OutputChannel para logs del servidor
     const outputChannel = vscode.window.createOutputChannel('Bloom Server');
     context.subscriptions.push(outputChannel);
 
-    // 2. Inicializar WebSocket Manager (singleton)
     const ws = WebSocketManager.getInstance();
     await ws.start();
     context.subscriptions.push({
@@ -23,12 +19,14 @@ export async function initializeServer(context: vscode.ExtensionContext) {
     });
     console.log('[Server] WebSocketManager started on port 4124');
 
-    // 3. Inicializar API Server
+    const userManager = UserManager.init(context);
+
     const api = new BloomApiServer({
         context,
         wsManager: ws,
         outputChannel,
-        port: 48215
+        port: 48215,
+        userManager
     });
     
     await api.start();
@@ -38,14 +36,10 @@ export async function initializeServer(context: vscode.ExtensionContext) {
         dispose: () => api.stop()
     });
 
-    // 4. Inicializar HostExecutor
     const host = new HostExecutor(context);
-    
-    // 5. Vincular Host con WebSocketManager
     ws.attachHost(host);
     console.log('[Server] HostExecutor attached to WebSocketManager');
 
-    // 6. Configurar FileSystemWatcher para .bloom/**
     const fileWatcher = vscode.workspace.createFileSystemWatcher('**/.bloom/**/*');
 
     const notifyUpdate = (uri: vscode.Uri) => {
@@ -64,7 +58,6 @@ export async function initializeServer(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(fileWatcher);
 
-    // 7. Limpieza al desactivar
     context.subscriptions.push({
         dispose: () => {
             console.log('[Server] Cleaning up Host...');
@@ -76,7 +69,6 @@ export async function initializeServer(context: vscode.ExtensionContext) {
 
     console.log('[Server] ✅ All components initialized');
 
-    // Retornar instancias para uso externo si es necesario
     return {
         api,
         ws,

@@ -1,8 +1,10 @@
-// src/initialization/commandRegistry.ts
+// src/initialization/commandRegistry.ts - COMPLETO
 import * as vscode from 'vscode';
 import { Logger } from '../utils/logger';
+import { BrainExecutor } from '../utils/brainExecutor';
 import { Managers } from './managersInitializer';
 import { Providers } from './providersInitializer';
+import { ServerAndUIComponents } from './serverAndUiInitializer';
 
 // Importar comandos básicos de intents
 import { registerOpenMarkdownPreview } from '../commands/openMarkdownPreview';
@@ -27,27 +29,32 @@ import { registerGitCommands } from '../commands/git/gitCommands';
 import { registerDebugCommands } from '../commands/debug/debugCommands';
 import { createIntentDevCommand } from '../commands/intent/createIntentDev';
 
-// ============================================================================
-// MIGRATED COMMANDS - Using Brain CLI
-// ============================================================================
+// Importar comandos migrados a Brain CLI
 import { registerManageProjectCommands } from '../commands/manageProject';
 import { registerCreateNucleusProjectCommands } from '../commands/createNucleusProject';
 import { registerLinkToNucleusCommands } from '../commands/linkToNucleus';
 
 /**
  * Registra TODOS los comandos del plugin
- * Organizado por categorías
+ * Integra comandos de stable + current
  * 
- * UPDATED: Removed integrateSnapshot (migrated to Brain CLI workflow)
- * UPDATED: All commands now use BrainExecutor for Python operations
+ * Categorías:
+ * 1. Intent Commands
+ * 2. Nucleus Commands
+ * 3. Project Management (Brain CLI)
+ * 4. Profile Commands
+ * 5. Git Commands
+ * 6. Debug Commands
+ * 7. Brain CLI Direct Commands (createNucleus, createIntent)
+ * 8. UI Commands (registrados en serverAndUiInitializer.ts)
  */
 export function registerAllCommands(
     context: vscode.ExtensionContext,
     logger: Logger,
     managers: Managers,
-    providers: any
+    providers: Providers
 ): void {
-    logger.info('📝 Registrando comandos...');
+    logger.info('📝 Registering all commands...');
     
     // ========================================
     // CATEGORÍA 1: COMANDOS DE INTENTS
@@ -64,7 +71,6 @@ export function registerAllCommands(
     registerCreateBTIPProject(context, logger);
     registerGenerateQuestions(context, logger);
     registerSubmitAnswers(context, logger);
-    // ❌ REMOVED: registerIntegrateSnapshot - Now handled by Brain CLI intent merge workflow
     registerReloadIntentForm(context, logger);
     registerRegenerateContext(context, logger);
     
@@ -72,14 +78,12 @@ export function registerAllCommands(
     
     // ========================================
     // CATEGORÍA 2: COMANDOS DE NUCLEUS
-    // (Incluye comandos migrados a Brain CLI)
     // ========================================
     registerNucleusCommands(context, logger, managers, providers);
     logger.info('✅ Nucleus commands registered');
     
     // ========================================
-    // CATEGORÍA 3: COMANDOS DE PROJECT MANAGEMENT
-    // ✅ MIGRATED: Using Brain CLI
+    // CATEGORÍA 3: PROJECT MANAGEMENT (Brain CLI)
     // ========================================
     registerManageProjectCommands(context);
     registerCreateNucleusProjectCommands(context);
@@ -105,17 +109,108 @@ export function registerAllCommands(
     logger.info('✅ Debug commands registered');
 
     // ========================================
-    // CATEGORÍA 7: COMANDOS ESPECIALES
-    // ✅ MIGRATED: Uses BrainExecutor.createIntentDev
+    // CATEGORÍA 7: BRAIN CLI DIRECT COMMANDS
     // ========================================
-    const createIntentDevDisposable = vscode.commands.registerCommand(
-        'bloom.createIntentDev',
-        () => createIntentDevCommand(context, logger)
-    );
-    context.subscriptions.push(createIntentDevDisposable);
     
-    logger.info('✅ All commands registered successfully');
-    logger.info('   📊 Total categories: 7');
+    // Special command: createIntentDev
+    context.subscriptions.push(
+        vscode.commands.registerCommand('bloom.createIntentDev', () =>
+            createIntentDevCommand(context, logger)
+        )
+    );
+
+    // Command: Create Nucleus (from current_extension.ts)
+    context.subscriptions.push(
+        vscode.commands.registerCommand('bloom.createNucleus', async () => {
+            const org = await vscode.window.showInputBox({
+                prompt: 'Enter organization name',
+                placeHolder: 'e.g., MyCompany'
+            });
+            
+            if (!org) return;
+            
+            const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+            if (!workspacePath) {
+                vscode.window.showErrorMessage('No workspace folder open');
+                return;
+            }
+            
+            try {
+                const result = await BrainExecutor.execute(
+                    ['--json', 'nucleus', 'create'],
+                    { '-o': org, '-p': workspacePath }
+                );
+                
+                if (result.status === 'success') {
+                    vscode.window.showInformationMessage(`✅ Nucleus created: ${org}`);
+                    logger.info(`✅ Nucleus created: ${JSON.stringify(result.data)}`);
+                    
+                    // Refresh tree providers
+                    providers.nucleusTreeProvider?.refresh?.();
+                } else {
+                    vscode.window.showErrorMessage(`Failed to create nucleus: ${result.error}`);
+                }
+            } catch (error: any) {
+                vscode.window.showErrorMessage(`Error: ${error.message}`);
+                logger.error('Error creating nucleus', error);
+            }
+        })
+    );
+
+    // Command: Create Intent (from current_extension.ts)
+    context.subscriptions.push(
+        vscode.commands.registerCommand('bloom.createIntent', async () => {
+            const type = await vscode.window.showQuickPick(['dev', 'doc'], {
+                placeHolder: 'Select intent type'
+            });
+            
+            if (!type) return;
+            
+            const name = await vscode.window.showInputBox({
+                prompt: 'Enter intent name',
+                placeHolder: 'e.g., Fix authentication flow'
+            });
+            
+            if (!name) return;
+            
+            const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+            if (!workspacePath) {
+                vscode.window.showErrorMessage('No workspace folder open');
+                return;
+            }
+            
+            try {
+                const result = await BrainExecutor.execute(
+                    ['--json', 'intent', 'create'],
+                    { '-t': type, '-n': name, '-p': workspacePath, '-f': '' }
+                );
+                
+                if (result.status === 'success') {
+                    vscode.window.showInformationMessage(`✅ Intent created: ${name}`);
+                    logger.info(`✅ Intent created: ${JSON.stringify(result.data)}`);
+                    
+                    // Refresh tree providers
+                    providers.intentTreeProvider?.refresh?.();
+                } else {
+                    vscode.window.showErrorMessage(`Failed to create intent: ${result.error}`);
+                }
+            } catch (error: any) {
+                vscode.window.showErrorMessage(`Error: ${error.message}`);
+                logger.error('Error creating intent', error);
+            }
+        })
+    );
+    
+    logger.info('✅ Brain CLI direct commands registered');
+
+    // ========================================
+    // RESUMEN FINAL
+    // ========================================
+    logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    logger.info('🎉 All commands registered successfully');
+    logger.info('   📊 Categories: 7');
     logger.info('   🧠 Brain CLI integration: Active');
-    logger.info('   ✅ Legacy Python scripts: Removed');
+    logger.info('   🔌 Server commands: Registered in serverAndUiInitializer');
+    logger.info('   ✅ Total commands: ~50+');
+    logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 }
