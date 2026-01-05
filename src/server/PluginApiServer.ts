@@ -2,13 +2,8 @@ import type * as vscode from 'vscode';
 import type { FastifyInstance } from 'fastify';
 import { WebSocketManager } from './WebSocketManager';
 import { startAPIServer, stopAPIServer } from '../api/server';
+import { UserManager } from '../managers/userManager';
 
-/**
- * PluginApiServer - Wrapper for Fastify API server
- * 
- * UPDATED: Now uses Fastify + Swagger instead of native http.createServer
- * Maintains same external interface for compatibility with extension
- */
 export class PluginApiServer {
   private fastifyServer: FastifyInstance | null = null;
   private port: number = 48215;
@@ -40,11 +35,14 @@ export class PluginApiServer {
     }
 
     try {
+      const userManager = UserManager.init(this.context);
+      
       this.fastifyServer = await startAPIServer({
         context: this.context,
         wsManager: this.wsManager,
         outputChannel: this.outputChannel,
-        port: this.port
+        port: this.port,
+        userManager
       });
 
       this.running = true;
@@ -84,15 +82,3 @@ export class PluginApiServer {
     console.log(logMessage);
   }
 }
-
-/**
- * DEPRECATED METHODS REMOVED:
- * - runPythonScript() - Use BrainApiAdapter instead
- * - handleRequest() - Now handled by Fastify routes
- * - All handle*() methods - Migrated to route modules
- * 
- * PRESERVED:
- * - start() / stop() interface for extension compatibility
- * - getPort() for external consumers
- * - isRunning() status check
- */

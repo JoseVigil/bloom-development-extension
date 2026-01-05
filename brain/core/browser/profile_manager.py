@@ -124,13 +124,53 @@ class ProfileManager:
             "path": str(profile_path)
         }
     
+    def get_landing_url(self, profile_id: str) -> str:
+        """
+        Genera la URL file:// para la landing page del perfil.
+        
+        Args:
+            profile_id: ID del perfil (completo o prefijo)
+            
+        Returns:
+            file:// URL absoluta de index.html
+            
+        Raises:
+            FileNotFoundError: Si la landing page no existe
+        """
+        # Buscar perfil (soporta búsqueda parcial)
+        profile = self._find_profile(profile_id)
+        if not profile:
+            raise ValueError(f"Perfil no encontrado: {profile_id}")
+        
+        # Usar el ID completo encontrado
+        full_profile_id = profile['id']
+        landing_path = self.workers_dir / full_profile_id / 'landing' / 'index.html'
+        
+        if not landing_path.exists():
+            raise FileNotFoundError(
+                f"Landing page no encontrada en: {landing_path}\n"
+                f"Crea la carpeta 'landing' con index.html para usar cockpit mode"
+            )
+        
+        # Convertir a file:// URL según el sistema operativo
+        absolute_path = landing_path.resolve()
+        
+        if platform.system() == "Windows":
+            # Windows: C:\Users\... -> file:///C:/Users/...
+            # Convertir backslashes a forward slashes
+            path_str = str(absolute_path).replace(os.sep, '/')
+            return f"file:///{path_str}"
+        else:
+            # Unix/Mac: /home/user/... -> file:///home/user/...
+            return f"file://{absolute_path}"
+    
     def launch_profile(self, profile_id: str, url: Optional[str] = None) -> Dict[str, Any]:
         """
         Lanza Chrome con el perfil especificado.
         
         Args:
             profile_id: ID del perfil a lanzar (completo o prefijo)
-            url: URL opcional para abrir
+            url: URL opcional para abrir (puede ser http://, https://, o file://)
             
         Returns:
             Dict con información del proceso lanzado
@@ -167,11 +207,13 @@ class ProfileManager:
         if extension_path:
             chrome_args.append(f"--load-extension={extension_path}")
         
-        # Agregar URL
+        # Agregar URL si se especificó
         if url:
-            if url.startswith("http://") or url.startswith("https://"):
+            # Para URLs file://, http://, https://, usar --app para modo app
+            if url.startswith(("http://", "https://", "file://")):
                 chrome_args.append(f"--app={url}")
             else:
+                # Para otras URLs, agregar directamente
                 chrome_args.append(url)
         
         # Lanzar proceso en modo detached

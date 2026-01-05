@@ -14,16 +14,21 @@ import { profileRoutes } from './routes/profile.routes';
 import { authRoutes } from './routes/auth.routes';
 import { explorerRoutes } from './routes/explorer.routes';
 
-// Import health routes - FIXED: Use default import directly
+// ✅ FIX: Import GitHubOAuthServer class (not singleton instance)
+import { GitHubOAuthServer } from '../auth/GitHubOAuthServer';
+
+// Import health routes
 import healthRoutes from './routes/health.routes';
 
 // Import middleware
 import { errorHandler } from './middleware/errorHandler';
+import { UserManager } from '../managers/userManager';
 
 export interface BloomApiServerConfig {
   context: vscode.ExtensionContext;
   wsManager: WebSocketManager;
   outputChannel: vscode.OutputChannel;
+  userManager: UserManager; // ✅ REQUIRED: Pass as dependency
   port?: number;
 }
 
@@ -38,8 +43,24 @@ export async function createAPIServer(config: BloomApiServerConfig): Promise<Fas
     logger: true
   });
 
+  // ✅ Get UserManager from config (passed as dependency)
+  const userManager = config.userManager;
+
+  // ✅ FIX: Create GitHubOAuthServer instance during server creation
+  const githubOAuthServer = new GitHubOAuthServer(
+    config.outputChannel,
+    userManager,
+    port
+  );
+
+  // Set WebSocketManager reference
+  githubOAuthServer.setWebSocketManager(config.wsManager);
+
   // Inject dependencies for routes
-  fastify.decorate('deps', config);
+  fastify.decorate('deps', {
+    ...config,
+    githubOAuthServer // ✅ Now properly initialized
+  });
 
   // CORS - Allow VSCode webviews and localhost
   await fastify.register(cors, {
@@ -127,7 +148,7 @@ export async function createAPIServer(config: BloomApiServerConfig): Promise<Fas
     version: '1.0.0'
   }));
 
-  // ⚠️ FIX: Register health routes with proper error handling
+  // Register health routes with proper error handling
   try {
     console.log('[Server] Registering health routes...');
     await fastify.register(healthRoutes, { prefix: '/api/v1' });

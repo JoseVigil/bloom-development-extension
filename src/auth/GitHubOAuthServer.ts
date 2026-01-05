@@ -2,6 +2,9 @@
 import * as http from 'http';
 import * as crypto from 'crypto';
 import * as vscode from 'vscode';
+import { spawn } from 'child_process';
+import * as os from 'os';
+import * as path from 'path';
 import { UserManager } from '../managers/userManager';
 import { WebSocketManager } from '../server/WebSocketManager';
 
@@ -88,49 +91,175 @@ export class GitHubOAuthServer {
         });
     }
 
+    /**
+     * Launch Brain Profile Master with OAuth URL
+     * Uses the bloom-master profile to navigate to GitHub OAuth
+     */
+    private async launchBrainProfile(oauthUrl: string): Promise<void> {
+        const homeDir = os.homedir();
+        const platform = os.platform();
+        
+        // Resolve Python executable path based on platform
+        const pythonExe = platform === 'win32'
+            ? path.join(homeDir, 'AppData', 'Local', 'BloomNucleus', 'engine', 'runtime', 'python.exe')
+            : platform === 'darwin'
+            ? path.join(homeDir, 'Library', 'Application Support', 'BloomNucleus', 'engine', 'runtime', 'bin', 'python3')
+            : path.join(homeDir, '.local', 'share', 'BloomNucleus', 'engine', 'runtime', 'bin', 'python3');
+        
+        // Resolve brain __main__.py path
+        const brainMainPy = platform === 'win32'
+            ? path.join(homeDir, 'AppData', 'Local', 'BloomNucleus', 'engine', 'runtime', 'Lib', 'site-packages', 'brain', '__main__.py')
+            : platform === 'darwin'
+            ? path.join(homeDir, 'Library', 'Application Support', 'BloomNucleus', 'engine', 'runtime', 'lib', 'python3.11', 'site-packages', 'brain', '__main__.py')
+            : path.join(homeDir, '.local', 'share', 'BloomNucleus', 'engine', 'runtime', 'lib', 'python3.11', 'site-packages', 'brain', '__main__.py');
+        
+        const profileId = 'bloom-master'; // Master profile for OAuth operations
+        
+        this.log(`Launching Brain Profile: ${profileId}`);
+        this.log(`OAuth URL: ${oauthUrl}`);
+        
+        return new Promise((resolve, reject) => {
+            // Command: python brain/__main__.py profile launch <PROFILE_ID> --url <URL>
+            const proc = spawn(pythonExe, [
+                brainMainPy,
+                'profile', 
+                'launch',
+                profileId,
+                '--url', 
+                oauthUrl
+            ], {
+                detached: true,  // Run independently
+                stdio: 'ignore'  // Don't capture output
+            });
+            
+            proc.unref(); // Don't block parent process
+            
+            // Give it a moment to ensure it started
+            setTimeout(() => {
+                this.log('Brain Profile launched successfully');
+                resolve();
+            }, 1500);
+            
+            proc.on('error', (error) => {
+                this.log(`Failed to launch Brain Profile: ${error.message}`);
+                reject(new Error(`Failed to launch Brain Profile: ${error.message}`));
+            });
+        });
+    }
+
+    /**
+     * Store GitHub token using Brain CLI
+     * This makes Brain CLI the source of truth for auth state
+     */
+    private async storeTokenInBrain(token: string): Promise<void> {
+        this.log('Storing token in Brain CLI...');
+        
+        const homeDir = os.homedir();
+        const platform = os.platform();
+        
+        const pythonExe = platform === 'win32'
+            ? path.join(homeDir, 'AppData', 'Local', 'BloomNucleus', 'engine', 'runtime', 'python.exe')
+            : platform === 'darwin'
+            ? path.join(homeDir, 'Library', 'Application Support', 'BloomNucleus', 'engine', 'runtime', 'bin', 'python3')
+            : path.join(homeDir, '.local', 'share', 'BloomNucleus', 'engine', 'runtime', 'bin', 'python3');
+        
+        const brainMainPy = platform === 'win32'
+            ? path.join(homeDir, 'AppData', 'Local', 'BloomNucleus', 'engine', 'runtime', 'Lib', 'site-packages', 'brain', '__main__.py')
+            : platform === 'darwin'
+            ? path.join(homeDir, 'Library', 'Application Support', 'BloomNucleus', 'engine', 'runtime', 'lib', 'python3.11', 'site-packages', 'brain', '__main__.py')
+            : path.join(homeDir, '.local', 'share', 'BloomNucleus', 'engine', 'runtime', 'lib', 'python3.11', 'site-packages', 'brain', '__main__.py');
+        
+        return new Promise((resolve, reject) => {
+            // Command: python brain/__main__.py --json github auth-login -t TOKEN
+            const proc = spawn(pythonExe, [
+                brainMainPy,
+                '--json',
+                'github',
+                'auth-login',
+                '-t',
+                token
+            ]);
+            
+            let stdout = '';
+            let stderr = '';
+            
+            proc.stdout?.on('data', (data) => {
+                stdout += data.toString();
+            });
+            
+            proc.stderr?.on('data', (data) => {
+                stderr += data.toString();
+            });
+            
+            proc.on('close', (code) => {
+                if (code === 0) {
+                    try {
+                        const result = JSON.parse(stdout);
+                        if (result.status === 'success') {
+                            this.log('Token stored successfully in Brain CLI');
+                            resolve();
+                        } else {
+                            reject(new Error(result.error || 'Failed to store token'));
+                        }
+                    } catch (e) {
+                        reject(new Error('Failed to parse Brain CLI response'));
+                    }
+                } else {
+                    this.log(`Brain CLI error: ${stderr}`);
+                    reject(new Error(`Brain CLI exited with code ${code}`));
+                }
+            });
+            
+            proc.on('error', (error) => {
+                reject(new Error(`Failed to execute Brain CLI: ${error.message}`));
+            });
+        });
+    }
+
     async startOAuthFlow(): Promise<void> {
         try {
-            // Get config
             const config = this.getOAuthConfig();
-
-            // Generate state for CSRF protection
             this.state = crypto.randomBytes(16).toString('hex');
-
-            // Find free port
             this.port = await this.findFreePort();
-
+            
             // Start callback server
             await this.startCallbackServer();
-
+            
             // Build OAuth URL
             const redirectUri = `http://localhost:${this.port}/btip/oauth/callback`;
-            const oauthUrl = `https://github.com/login/oauth/authorize?client_id=${config.clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(config.scope)}&state=${this.state}`;
-
+            const oauthUrl = `https://github.com/login/oauth/authorize?` +
+                `client_id=${config.clientId}` +
+                `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+                `&scope=${encodeURIComponent(config.scope)}` +
+                `&state=${this.state}`;
+            
             this.log(`Starting OAuth flow on port ${this.port}`);
-            this.log(`State: ${this.state}`);
-
-            // Open browser
-            await vscode.env.openExternal(vscode.Uri.parse(oauthUrl));
-
-            // Set timeout (5 minutes)
+            
+            // CRITICAL CHANGE: Use Brain Profile instead of system browser
+            await this.launchBrainProfile(oauthUrl);
+            
+            // Set timeout (5 minutes for user to complete OAuth)
             this.timeout = setTimeout(() => {
-                this.log('OAuth flow timeout - no callback received');
+                this.log('OAuth flow timeout - user did not complete authorization');
                 this.cleanup();
+                
                 if (this.wsManager) {
                     this.wsManager.broadcast('auth:error', {
-                        message: 'OAuth timeout - authentication window closed or expired'
+                        message: 'OAuth timeout - please try again'
                     });
                 }
             }, 5 * 60 * 1000);
-
+            
         } catch (error: any) {
             this.log(`Error starting OAuth flow: ${error.message}`);
             this.cleanup();
+            
             if (this.wsManager) {
                 this.wsManager.broadcast('auth:error', {
                     message: error.message
                 });
             }
+            
             throw error;
         }
     }
@@ -154,60 +283,50 @@ export class GitHubOAuthServer {
     }
 
     private async handleCallback(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
-        const url = new URL(req.url || '', `http://localhost:${this.port}`);
-
-        if (url.pathname !== '/btip/oauth/callback') {
-            res.writeHead(404, { 'Content-Type': 'text/plain' });
-            res.end('Not Found');
-            return;
-        }
-
-        const code = url.searchParams.get('code');
-        const state = url.searchParams.get('state');
-        const error = url.searchParams.get('error');
-        const errorDescription = url.searchParams.get('error_description');
-
-        // Handle OAuth errors
-        if (error) {
-            this.log(`OAuth error: ${error} - ${errorDescription}`);
-            this.sendCallbackResponse(res, false, errorDescription || error);
-            this.cleanup();
-            if (this.wsManager) {
-                this.wsManager.broadcast('auth:error', {
-                    message: errorDescription || error
-                });
-            }
-            return;
-        }
-
-        // Validate parameters
-        if (!code || !state) {
-            this.log('Missing code or state in callback');
-            this.sendCallbackResponse(res, false, 'Missing code or state');
-            this.cleanup();
-            return;
-        }
-
-        // Validate state (CSRF)
-        if (state !== this.state) {
-            this.log(`State mismatch: expected ${this.state}, got ${state}`);
-            this.sendCallbackResponse(res, false, 'Invalid state - possible CSRF attack');
-            this.cleanup();
-            return;
-        }
-
-        // Exchange code for token
         try {
+            const url = new URL(req.url || '', `http://localhost:${this.port}`);
+            
+            if (url.pathname !== '/btip/oauth/callback') {
+                res.writeHead(404, { 'Content-Type': 'text/plain' });
+                res.end('Not Found');
+                return;
+            }
+            
+            const code = url.searchParams.get('code');
+            const state = url.searchParams.get('state');
+            
+            // Validate state (CSRF protection)
+            if (!state || state !== this.state) {
+                this.log('Invalid state parameter - possible CSRF attack');
+                this.sendCallbackResponse(res, false, 'Invalid state parameter');
+                return;
+            }
+            
+            if (!code) {
+                this.log('No code parameter in callback');
+                this.sendCallbackResponse(res, false, 'No authorization code received');
+                return;
+            }
+            
+            this.log('Valid callback received, exchanging code for token...');
+            
+            // Exchange code for access token
             const token = await this.exchangeCodeForToken(code);
+            
+            // Fetch user info and organizations
             const { username, orgs } = await this.fetchUserAndOrgs(token);
-
-            // Store token and user data
-            await this.storeToken(token);
+            
+            this.log(`GitHub user authenticated: ${username}`);
+            
+            // CRITICAL: Store token in Brain CLI (source of truth)
+            await this.storeTokenInBrain(token);
+            
+            // Also store in UserManager for backwards compatibility
+            await this.userManager.setGithubToken(token);
             await this.userManager.setGithubUser(username, orgs);
-
+            
             this.log(`Authentication successful for user: ${username}`);
-            this.log(`Organizations: ${orgs.join(', ')}`);
-
+            
             // Notify via WebSocket
             if (this.wsManager) {
                 this.wsManager.broadcast('auth:updated', {
@@ -216,26 +335,24 @@ export class GitHubOAuthServer {
                     allOrgs: orgs
                 });
             }
-
-            // Send success response
+            
+            // Send success response to browser
             this.sendCallbackResponse(res, true);
-
-            // Open Home web with success parameter
-            const homeUrl = `http://localhost:${this.pluginApiPort}/home?oauth=success`;
-            await vscode.env.openExternal(vscode.Uri.parse(homeUrl));
-
+            
             // Cleanup after short delay
             setTimeout(() => this.cleanup(), 1000);
-
+            
         } catch (error: any) {
-            this.log(`Error during token exchange: ${error.message}`);
+            this.log(`Callback handler error: ${error.message}`);
             this.sendCallbackResponse(res, false, error.message);
-            this.cleanup();
+            
             if (this.wsManager) {
                 this.wsManager.broadcast('auth:error', {
                     message: error.message
                 });
             }
+            
+            setTimeout(() => this.cleanup(), 1000);
         }
     }
 
@@ -309,20 +426,16 @@ export class GitHubOAuthServer {
         };
     }
 
-    private async storeToken(token: string): Promise<void> {
-        await this.userManager.setGithubToken(token);
-    }
-
     private sendCallbackResponse(res: http.ServerResponse, success: boolean, error?: string): void {
-        const html = `
+        const html = success
+            ? `
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="UTF-8">
-    <title>Bloom - GitHub Authentication</title>
+    <title>Bloom - Authentication Successful</title>
     <style>
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -331,49 +444,120 @@ export class GitHubOAuthServer {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         }
         .container {
-            background: white;
-            padding: 40px;
-            border-radius: 12px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
             text-align: center;
+            background: white;
+            padding: 3rem;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
             max-width: 400px;
         }
         .icon {
-            font-size: 64px;
-            margin-bottom: 20px;
+            font-size: 4rem;
+            margin-bottom: 1rem;
         }
         h1 {
-            margin: 0 0 10px 0;
-            color: #333;
+            color: #2d3748;
+            margin: 0 0 0.5rem 0;
         }
         p {
-            color: #666;
-            margin: 0 0 20px 0;
+            color: #718096;
+            margin: 0 0 2rem 0;
         }
-        .error {
-            color: #d73a49;
-            background: #ffeef0;
-            padding: 10px;
-            border-radius: 6px;
-            margin-top: 20px;
+        .button {
+            background: #667eea;
+            color: white;
+            padding: 0.75rem 2rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="icon">${success ? '✅' : '❌'}</div>
-        <h1>${success ? 'Authentication Complete!' : 'Authentication Failed'}</h1>
-        <p>${success ? 'You can close this window and return to VS Code.' : 'Please try again.'}</p>
-        ${error ? `<div class="error">${error}</div>` : ''}
+        <div class="icon">✓</div>
+        <h1>Authentication Successful!</h1>
+        <p>You can close this window and return to Bloom</p>
+        <button class="button" onclick="window.close()">Close Window</button>
     </div>
     <script>
         setTimeout(() => window.close(), 3000);
     </script>
 </body>
 </html>
-        `;
-
-        res.writeHead(200, { 'Content-Type': 'text/html' });
+            `
+            : `
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Bloom - Authentication Failed</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+        .container {
+            text-align: center;
+            background: white;
+            padding: 3rem;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 400px;
+        }
+        .icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+        }
+        h1 {
+            color: #2d3748;
+            margin: 0 0 0.5rem 0;
+        }
+        p {
+            color: #718096;
+            margin: 0 0 1rem 0;
+        }
+        .error {
+            background: #fed7d7;
+            color: #c53030;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 2rem;
+            font-size: 0.875rem;
+        }
+        .button {
+            background: #f5576c;
+            color: white;
+            padding: 0.75rem 2rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="icon">✗</div>
+        <h1>Authentication Failed</h1>
+        <p>There was an error during authentication</p>
+        ${error ? `<div class="error">${error}</div>` : ''}
+        <button class="button" onclick="window.close()">Close Window</button>
+    </div>
+</body>
+</html>
+            `;
+        
+        res.writeHead(success ? 200 : 400, { 'Content-Type': 'text/html' });
         res.end(html);
     }
 
@@ -397,4 +581,10 @@ export class GitHubOAuthServer {
     public stop(): void {
         this.cleanup();
     }
+
+
+        
+
+
 }
+

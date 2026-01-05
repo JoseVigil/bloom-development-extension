@@ -1,38 +1,56 @@
 const { app } = require('electron');
 const path = require('path');
+const os = require('os');
+
+const platform = os.platform();
+const homeDir = os.homedir();
 
 // ============================================================================
-// RESOURCE PATH RESOLUTION - Fixed para asar.unpacked
+// BASE DIRECTORY - Cross-platform (Windows, macOS, Linux)
+// ============================================================================
+const getBaseDir = () => {
+  if (platform === 'win32') {
+    return path.join(process.env.LOCALAPPDATA, 'BloomNucleus');
+  } else if (platform === 'darwin') {
+    return path.join(homeDir, 'Library', 'Application Support', 'BloomNucleus');
+  } else {
+    return path.join(homeDir, '.local', 'share', 'BloomNucleus');
+  }
+};
+
+const baseDir = getBaseDir();
+
+// Repository root (for development)
+const repoRoot = path.join(__dirname, '..', '..', '..');
+
+// ============================================================================
+// RESOURCE PATH RESOLUTION - Mantiene soporte para packaged (asar.unpacked)
 // ============================================================================
 const getResourcePath = (resourceName) => {
   if (app.isPackaged) {
-    // En modo packaged, los recursos están en process.resourcesPath
     const finalName = resourceName === 'core' ? 'brain' : resourceName;
     const resourcePath = path.join(process.resourcesPath, finalName);
     
-    // Verificar si existe en app.asar.unpacked (para recursos desempaquetados)
-    const unpackedPath = path.join(process.resourcesPath, 'app.asar.unpacked', finalName);
     const fs = require('fs');
+    const unpackedPath = path.join(process.resourcesPath, 'app.asar.unpacked', finalName);
     
-    // Si existe en unpacked, usar esa ruta
     if (fs.existsSync(unpackedPath)) {
       return unpackedPath;
     }
     
     return resourcePath;
   }
-  
+
   // Modo desarrollo
   const installerRoot = path.join(__dirname, '..', '..');
-  const repoRoot = path.join(__dirname, '..', '..', '..');
-  
+
   switch (resourceName) {
     case 'runtime':
       return path.join(installerRoot, 'resources', 'runtime');
     case 'brain':
       return path.join(repoRoot, 'brain');
     case 'native':
-      return path.join(installerRoot, 'native', 'bin', 'win32');
+      return path.join(installerRoot, 'native', 'bin', 'win32'); // mantener por ahora, se puede ajustar si cambias a native-host
     case 'nssm':
       return path.join(installerRoot, 'native', 'nssm', 'win64');
     case 'extension':
@@ -45,111 +63,79 @@ const getResourcePath = (resourceName) => {
 };
 
 // ============================================================================
-// PATHS OBJECT
+// PATHS OBJECT - Actualizado con las modificaciones
 // ============================================================================
 const paths = {
-  // Base directory en %LOCALAPPDATA%
-  get bloomBase() {
-    return process.platform === 'win32'
-      ? path.join(process.env.LOCALAPPDATA, 'BloomNucleus')
-      : path.join(app.getPath('home'), '.local', 'share', 'BloomNucleus');
+  // Base
+  baseDir,
+  repoRoot,
+
+  // Engine
+  engineDir: path.join(baseDir, 'engine'),
+  runtimeDir: path.join(baseDir, 'engine', 'runtime'),
+
+  // Python executable (cross-platform)
+  get pythonExe() {
+    return platform === 'win32'
+      ? path.join(baseDir, 'engine', 'runtime', 'python.exe')
+      : path.join(baseDir, 'engine', 'runtime', 'bin', 'python3');
   },
-  
-  // Engine directory (instalación de Python runtime)
-  get engineDir() {
-    return path.join(this.bloomBase, 'engine');
-  },
-  
-  // Python runtime directory
-  get runtimeDir() {
-    return path.join(this.engineDir, 'runtime');
-  },
-  
-  // Brain package directory
+
+  // Brain package (cross-platform)
   get brainDir() {
-    return path.join(this.runtimeDir, 'Lib', 'site-packages', 'brain');
+    return platform === 'win32'
+      ? path.join(baseDir, 'engine', 'runtime', 'Lib', 'site-packages', 'brain')
+      : path.join(baseDir, 'engine', 'runtime', 'lib', 'python3.11', 'site-packages', 'brain');
   },
-  
-  // Native host binaries
-  get nativeDir() {
-    return path.join(this.bloomBase, 'native');
+
+  // Extension (DUAL LOCATION)
+  extensionDir: path.join(baseDir, 'extension'), // Legacy
+  extensionBrainDir: path.join(baseDir, 'extensions', 'chrome'), // Brain CLI location
+
+  // Native Host
+  nativeDir: path.join(baseDir, 'native'),
+  hostBinary: platform === 'win32'
+    ? path.join(baseDir, 'native', 'bloom-host.exe')
+    : path.join(baseDir, 'native', 'bloom-host'),
+
+  // Native Messaging Manifest (cross-platform)
+  get manifestPath() {
+    if (platform === 'win32') {
+      return path.join(baseDir, 'native', 'com.bloom.nucleus.bridge.json');
+    } else if (platform === 'darwin') {
+      return path.join(homeDir, 'Library', 'Application Support', 'Google', 'Chrome', 'NativeMessagingHosts', 'com.bloom.nucleus.bridge.json');
+    } else {
+      return path.join(homeDir, '.config', 'google-chrome', 'NativeMessagingHosts', 'com.bloom.nucleus.bridge.json');
+    }
   },
-  
-  // Chrome extension directory
-  get extensionDir() {
-    return path.join(process.env.LOCALAPPDATA, 'BloomNucleus', 'extension');
-  },
-  
-  // Configuration directory
-  get configDir() {
-    return path.join(this.bloomBase, 'config');
-  },
-  
-  // Config file
-  get configFile() {
-    return path.join(this.configDir, 'installer-config.json');
-  },
-  
-  // ⬅️ CRÍTICO: Bin directory para BloomLauncher
-  get binDir() {
-    return path.join(this.bloomBase, 'bin');
-  },
-  
-  // Logs directory
-  get logsDir() {
-    return path.join(this.bloomBase, 'logs');
-  },
-  
+
+  // 🆕 Profiles Directory
+  profilesDir: path.join(baseDir, 'profiles'),
+
+  // Config
+  configFile: path.join(baseDir, 'nucleus.json'),
+
+  // Logs
+  logsDir: path.join(baseDir, 'logs'),
+
   // ============================================================================
   // SOURCE PATHS (de donde se copian los recursos)
   // ============================================================================
   runtimeSource: getResourcePath('runtime'),
   brainSource: getResourcePath('brain'),
-  nativeSource: getResourcePath('native'),
+  nativeSource: getResourcePath('native'), // si cambiaste el nombre a native-host, ajusta aquí
   extensionSource: getResourcePath('extension'),
   nssmSource: getResourcePath('nssm'),
 
-  // Extension brain directory
-  extensionBrainDir: path.join(
-    process.env.LOCALAPPDATA, 
-    'BloomNucleus', 
-    'extensions', 
-    'chrome'
-  ),
-  
-  // ============================================================================
-  // EXECUTABLE PATHS
-  // ============================================================================
-  
-  // Python executable
-  get pythonExe() {
-    return path.join(this.runtimeDir, process.platform === 'win32' ? 'python.exe' : 'python3');
+  // Mantiene las rutas críticas que tenías antes (puedes quitarlas si ya no las usas)
+  get binDir() {
+    return path.join(baseDir, 'bin');
   },
-  
-  // Native host binary
-  get hostBinary() {
-    return path.join(this.nativeDir, process.platform === 'win32' ? 'bloom-host.exe' : 'bloom-host');
-  },
-  
-  // NSSM service manager
-  get nssmExe() {
-    return path.join(this.nativeDir, 'nssm.exe');
-  },
-  
-  // Native messaging manifest
-  get manifestPath() {
-    return path.join(this.nativeDir, 'com.bloom.nucleus.bridge.json');
-  },
-  
-  // ⬅️ CRÍTICO: BloomLauncher executable
   get launcherExe() {
-    return path.join(this.binDir, 'BloomLauncher.exe');
+    return path.join(baseDir, 'bin', 'BloomLauncher.exe');
   },
-
-  // ⬅️ NUEVO: Assets path (para iconos en shortcuts)
   get assetsDir() {
     if (app.isPackaged) {
-      // En packaged, assets está en app.asar.unpacked o resources
       const unpackedAssets = path.join(process.resourcesPath, 'app.asar.unpacked', 'assets');
       const fs = require('fs');
       if (fs.existsSync(unpackedAssets)) {
@@ -159,7 +145,6 @@ const paths = {
     }
     return path.join(__dirname, '..', 'assets');
   },
-
   get bloomIcon() {
     return path.join(this.assetsDir, 'bloom.ico');
   }

@@ -1,4 +1,4 @@
-// src/initialization/initializeProfileAccounts.ts
+// src/initialization/initializeProfileAccounts.ts - ACTUALIZADO
 import * as vscode from 'vscode';
 import { Logger } from '../utils/logger';
 import { AiAccountChecker } from '../ai/AiAccountChecker';
@@ -9,34 +9,33 @@ import { registerProfileCommands } from '../initialization/registerProfileComman
 
 /**
  * Inicializa todo lo relacionado con perfiles de Chrome, cuentas AI y árbol de perfiles
- * @returns Objeto con instancias inicializadas para uso posterior si es necesario
+ * 
+ * ACTUALIZADO: Ahora recibe WebSocketManager y ChromeProfileManager como parámetros
+ * para evitar crear instancias duplicadas
+ * 
+ * @param context - ExtensionContext de VSCode
+ * @param logger - Logger instance
+ * @param wsManager - WebSocketManager singleton (ya inicializado en serverAndUiInitializer)
+ * @param chromeManager - ChromeProfileManager (ya inicializado en managersInitializer)
+ * @returns Objeto con instancias inicializadas
  */
 export function initializeProfileAccounts(
     context: vscode.ExtensionContext,
-    logger: Logger
+    logger: Logger,
+    wsManager: WebSocketManager,
+    chromeManager: ChromeProfileManager
 ): {
-    wsManager: WebSocketManager;
     accountChecker: AiAccountChecker;
-    chromeManager: ChromeProfileManager;
     profileTree: ProfileTreeProvider;
 } {
-    logger.info('Inicializando módulos de perfiles y cuentas AI...');
+    logger.info('🎨 Initializing Chrome profiles & AI accounts module...');
 
-    // 1. WebSocket Manager (singleton)
-    const wsManager = WebSocketManager.getInstance();
-    wsManager.start();
-    logger.info('WebSocketManager conectado');
-
-    // 2. AiAccountChecker (singleton con scheduler)
+    // 1. AiAccountChecker (singleton con scheduler)
     const accountChecker = AiAccountChecker.init(context);
     accountChecker.start();
-    logger.info('AiAccountChecker iniciado (scheduler activo)');
+    logger.info('✅ AiAccountChecker started (scheduler active)');
 
-    // 3. ChromeProfileManager
-    const chromeManager = new ChromeProfileManager(context, logger);
-    logger.info('ChromeProfileManager inicializado');
-
-    // 4. ProfileTreeProvider (singleton estático)
+    // 2. ProfileTreeProvider (singleton estático)
     ProfileTreeProvider.initialize(
         context,
         logger,
@@ -44,21 +43,27 @@ export function initializeProfileAccounts(
         wsManager,
         accountChecker
     );
-    logger.info('ProfileTreeProvider inicializado y registrado');
+    logger.info('✅ ProfileTreeProvider initialized and registered');
 
-    // 5. Registrar comandos relacionados con perfiles y cuentas AI
+    // 3. Registrar comandos relacionados con perfiles y cuentas AI
     registerProfileCommands(context, logger, {
         chromeManager,
         profileTree: ProfileTreeProvider.getInstance(),
         wsManager,
         accountChecker
     });
-    logger.info('Comandos de perfiles y cuentas AI registrados');
+    logger.info('✅ Profile & AI account commands registered');
+
+    logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    logger.info('🎉 Chrome profiles & AI accounts module ready');
+    logger.info('   🌐 WebSocket: Reusing existing instance');
+    logger.info('   🎨 Chrome Manager: Reusing existing instance');
+    logger.info('   🤖 AI Checker: Active with scheduler');
+    logger.info('   🌲 Profile Tree: Registered in sidebar');
+    logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     return {
-        wsManager,
         accountChecker,
-        chromeManager,
         profileTree: ProfileTreeProvider.getInstance()
     };
 }

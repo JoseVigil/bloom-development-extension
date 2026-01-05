@@ -166,7 +166,7 @@ class ProfilesLaunchCommand(BaseCommand):
             examples=[
                 "brain profile launch <profile-id>",
                 "brain profile launch <profile-id> --url https://chatgpt.com",
-                "brain profile launch <profile-id> --url https://claude.ai"
+                "brain profile launch <profile-id> --cockpit"
             ]
         )
 
@@ -175,7 +175,8 @@ class ProfilesLaunchCommand(BaseCommand):
         def launch_profile(
             ctx: typer.Context,
             profile_id: str = typer.Argument(..., help="ID del perfil a lanzar"),
-            url: Optional[str] = typer.Option(None, "--url", help="URL inicial o modo App")
+            url: Optional[str] = typer.Option(None, "--url", help="URL inicial (default: cockpit landing)"),
+            cockpit: bool = typer.Option(False, "--cockpit", help="Fuerza modo cockpit (landing page)")
         ):
             """Lanza Chrome con el perfil especificado y la extensión Bloom."""
             gc = ctx.obj
@@ -190,12 +191,37 @@ class ProfilesLaunchCommand(BaseCommand):
                     typer.echo(f"🚀 Lanzando perfil {profile_id}...", err=True)
                 
                 pm = ProfileManager()
-                launch_data = pm.launch_profile(profile_id, url)
+                
+                # Determine target URL: explicit URL > cockpit flag > default cockpit
+                target_url = None
+                use_cockpit = False
+                
+                if url:
+                    # Explicit URL provided, use it
+                    target_url = url
+                elif cockpit or url is None:
+                    # Cockpit mode: either explicitly requested or default
+                    use_cockpit = True
+                    try:
+                        target_url = pm.get_landing_url(profile_id)
+                        if gc.verbose:
+                            typer.echo(f"🏠 Usando cockpit mode: {target_url}", err=True)
+                    except FileNotFoundError as e:
+                        if gc.verbose:
+                            typer.echo(f"⚠️  Landing page no encontrada: {str(e)}", err=True)
+                        # Fallback: launch without URL
+                        target_url = None
+                
+                # Launch Chrome
+                launch_data = pm.launch_profile(profile_id, target_url)
                 
                 result = {
                     "status": "success",
                     "operation": "launch",
-                    "data": launch_data
+                    "data": {
+                        **launch_data,
+                        "cockpit_mode": use_cockpit
+                    }
                 }
                 
                 gc.output(result, self._render_launch)
@@ -212,8 +238,16 @@ class ProfilesLaunchCommand(BaseCommand):
         
         typer.echo(f"   Perfil: {data.get('alias', 'N/A')} ({profile_id_display})")
         
+        # Cockpit mode indicator
+        if data.get('cockpit_mode'):
+            typer.echo(f"   Modo:   🏠 Cockpit (landing page)")
+        
         if data.get('url'):
-            typer.echo(f"   URL:    {data.get('url')}")
+            url_display = data.get('url')
+            # Truncate file:// URLs for readability
+            if url_display and url_display.startswith('file://'):
+                url_display = f"file://.../{url_display.split('/')[-1]}"
+            typer.echo(f"   URL:    {url_display}")
         
         typer.echo(f"   PID:    {data.get('pid')}")
 

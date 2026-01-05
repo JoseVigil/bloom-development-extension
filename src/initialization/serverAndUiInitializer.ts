@@ -1,92 +1,140 @@
-// src/initialization/serverAndUiInitializer.ts
+// src/initialization/serverAndUiInitializer.ts - CONSOLIDADO
 import * as vscode from 'vscode';
 import { Logger } from '../utils/logger';
 import { BloomApiServer } from '../api/server';
 import { WebSocketManager } from '../server/WebSocketManager';
 import { HostExecutor } from '../host/HostExecutor';
 import { BTIPExplorerController } from '../server/BTIPExplorerController';
+import { registerStartGithubOAuthCommand, stopGithubOAuthServer } from '../commands/auth/startGithubOAuth';
 import { Managers } from './managersInitializer';
-import { Providers } from './providersInitializer';
 
 export interface ServerAndUIComponents {
-    apiServer: BloomApiServer;
+    api: BloomApiServer;
     wsManager: WebSocketManager;
     hostExecutor: HostExecutor;
+    outputChannel: vscode.OutputChannel;
 }
 
 /**
- * Inicializa todo lo relacionado con:
- * - Servidor API local (BloomApiServer)
- * - WebSocketManager
+ * Inicializa el stack completo de servidores:
+ * - BloomApiServer (Fastify + Swagger)
+ * - WebSocketManager (singleton)
  * - HostExecutor
- * - Comandos de UI (bloom.openHome, bloom.openBTIPExplorer, bloom.executeHost)
- * - FileSystemWatcher de .bloom/**
+ * - GitHub OAuth Server
+ * - UI Commands (openHome, openBTIPExplorer, etc.)
+ * - FileSystemWatcher para .bloom/**
+ * 
+ * CONSOLIDADO: Fusiona server/index.ts + serverAndUiInitializer.ts
  */
 export async function initializeServerAndUI(
     context: vscode.ExtensionContext,
     logger: Logger,
-    managers: Managers,
-    providers: Providers
+    managers: Managers
 ): Promise<ServerAndUIComponents> {
-    logger.info('Iniciando BloomApiServer y WebSocketManager...');
+    logger.info('🔧 Starting server stack initialization...');
 
     // 1. Crear OutputChannel para el servidor
     const outputChannel = vscode.window.createOutputChannel('Bloom Server');
     context.subscriptions.push(outputChannel);
+    outputChannel.show();
 
-    // 2. Obtener instancia singleton de WebSocket Manager
+    // 2. Inicializar WebSocket Manager (singleton)
     const wsManager = WebSocketManager.getInstance();
     await wsManager.start();
+    logger.info('✅ WebSocket server running on ws://localhost:4124');
+    
     context.subscriptions.push({
         dispose: () => wsManager.stop()
     });
 
-    // 3. Iniciar API Server con configuración moderna
-    const apiServer = new BloomApiServer({
+    // 3. Inicializar HostExecutor
+    const hostExecutor = new HostExecutor(context);
+    
+    // 4. Vincular Host con WebSocketManager
+    wsManager.attachHost(hostExecutor);
+    await hostExecutor.start();
+    logger.info('✅ HostExecutor attached and started');
+    
+    context.subscriptions.push({
+        dispose: () => {
+            if (hostExecutor.isRunning()) {
+                hostExecutor.stop();
+            }
+        }
+    });
+
+    // 5. Iniciar BloomApiServer (Fastify)
+    const api = new BloomApiServer({
         context,
         wsManager,
         outputChannel,
-        port: 48215
+        port: 48215,
+        userManager: managers.userManager
     });
     
-    await apiServer.start();
-    logger.info(`BloomApiServer corriendo en puerto ${apiServer.getPort()}`);
-
+    await api.start();
+    logger.info(`✅ API server running on http://localhost:${api.getPort()}`);
+    logger.info(`📚 Swagger docs: http://localhost:${api.getPort()}/api/docs`);
+    
     context.subscriptions.push({
-        dispose: () => apiServer.stop()
+        dispose: () => api.stop()
     });
 
-    // 4. Host Executor (solo acepta context)
-    const hostExecutor = new HostExecutor(context);
+    // 6. Registrar GitHub OAuth Command
+    registerStartGithubOAuthCommand(
+        context,
+        outputChannel,
+        managers.userManager,
+        wsManager,
+        api.getPort()
+    );
+    logger.info('✅ GitHub OAuth command registered');
 
-    // 5. Vincular Host con WebSocketManager
-    wsManager.attachHost(hostExecutor);
+    // 7. Registrar comandos de UI (Home, BTIP Explorer, Host, Status, etc.)
+    registerUICommands(context, api, wsManager, hostExecutor, logger);
 
-    // 6. Registrar comandos de UI
-    registerUICommands(context, apiServer, hostExecutor, logger);
+    // 8. FileSystemWatcher para cambios en .bloom/**
+    setupFileWatcher(context, wsManager, logger);
 
-    // 7. FileSystemWatcher para cambios en .bloom/**
-    setupFileWatcher(context, wsManager);
+    logger.info('🎉 Server stack initialization complete');
 
-    logger.info('✅ Server, WebSocket, comandos UI y watcher inicializados correctamente');
-
-    return { apiServer, wsManager, hostExecutor };
+    return {
+        api,
+        wsManager,
+        hostExecutor,
+        outputChannel
+    };
 }
 
 // ============================================================================
-// HELPER FUNCTIONS
+// UI COMMANDS
 // ============================================================================
 
 /**
- * Registra los comandos de UI (Home, BTIP Explorer, Host)
+ * Registra todos los comandos relacionados con UI y servidores
  */
 function registerUICommands(
     context: vscode.ExtensionContext,
-    apiServer: BloomApiServer,
+    api: BloomApiServer,
+    wsManager: WebSocketManager,
     hostExecutor: HostExecutor,
     logger: Logger
 ): void {
-    // Comando: Abrir Home
+    // Command: Open Bloom UI
+    context.subscriptions.push(
+        vscode.commands.registerCommand('bloom.openUI', () => {
+            vscode.env.openExternal(vscode.Uri.parse('http://localhost:5173'));
+        })
+    );
+
+    // Command: Open API Docs
+    context.subscriptions.push(
+        vscode.commands.registerCommand('bloom.openApiDocs', () => {
+            vscode.env.openExternal(vscode.Uri.parse('http://localhost:48215/api/docs'));
+        })
+    );
+
+    // Command: Open Home (Webview)
     context.subscriptions.push(
         vscode.commands.registerCommand('bloom.openHome', async () => {
             const panel = vscode.window.createWebviewPanel(
@@ -100,14 +148,14 @@ function registerUICommands(
                 }
             );
 
-            panel.webview.html = getHomeHTML(apiServer.getPort());
+            panel.webview.html = getHomeHTML(api.getPort());
 
             panel.webview.onDidReceiveMessage(
                 (message) => {
                     if (message.type === 'ready') {
                         panel.webview.postMessage({
                             type: 'config',
-                            baseUrl: `http://localhost:${apiServer.getPort()}`
+                            baseUrl: `http://localhost:${api.getPort()}`
                         });
                     }
                 },
@@ -117,14 +165,14 @@ function registerUICommands(
         })
     );
 
-    // Comando: Abrir BTIP Explorer
+    // Command: Open BTIP Explorer
     context.subscriptions.push(
         vscode.commands.registerCommand('bloom.openBTIPExplorer', () => {
             BTIPExplorerController.open(context);
         })
     );
 
-    // Comando: Ejecutar Host
+    // Command: Execute Host
     context.subscriptions.push(
         vscode.commands.registerCommand('bloom.executeHost', async () => {
             try {
@@ -144,15 +192,71 @@ function registerUICommands(
         })
     );
 
-    logger.info('✅ Comandos UI registrados');
+    // Command: Restart Servers
+    context.subscriptions.push(
+        vscode.commands.registerCommand('bloom.restartServers', async () => {
+            try {
+                logger.info('🔄 Restarting servers...');
+                
+                if (api) {
+                    await api.stop();
+                    await api.start();
+                }
+                
+                if (wsManager) {
+                    await wsManager.stop();
+                    await wsManager.start();
+                }
+                
+                vscode.window.showInformationMessage('✅ Bloom servers restarted successfully');
+                logger.info('✅ Servers restarted');
+            } catch (error: any) {
+                vscode.window.showErrorMessage(`Failed to restart: ${error.message}`);
+                logger.error(`❌ Restart failed: ${error.message}`, error);
+            }
+        })
+    );
+
+    // Command: Show Server Status
+    context.subscriptions.push(
+        vscode.commands.registerCommand('bloom.showStatus', () => {
+            const apiRunning = api?.isRunning() || false;
+            const wsStatus = wsManager?.currentStatus() || { clients: 0, activeProcesses: 0 };
+            
+            const statusMessage = `
+Bloom Status:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+API Server: ${apiRunning ? '✅ Running' : '❌ Stopped'}
+  Port: ${api?.getPort() || 'N/A'}
+  Docs: http://localhost:48215/api/docs
+
+WebSocket Server: ${wsStatus.clients > 0 ? '✅ Active' : '⚠️ No clients'}
+  Port: 4124
+  Connected Clients: ${wsStatus.clients}
+  Active Processes: ${wsStatus.activeProcesses}
+
+UI: http://localhost:5173
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            `.trim();
+            
+            vscode.window.showInformationMessage(statusMessage, { modal: true });
+        })
+    );
+
+    logger.info('✅ UI commands registered');
 }
+
+// ============================================================================
+// FILE WATCHER
+// ============================================================================
 
 /**
  * Configura el FileSystemWatcher para .bloom/**
  */
 function setupFileWatcher(
     context: vscode.ExtensionContext,
-    wsManager: WebSocketManager
+    wsManager: WebSocketManager,
+    logger: Logger
 ): void {
     const fileWatcher = vscode.workspace.createFileSystemWatcher('**/.bloom/**/*');
 
@@ -171,7 +275,12 @@ function setupFileWatcher(
     });
 
     context.subscriptions.push(fileWatcher);
+    logger.info('✅ FileSystemWatcher configured for .bloom/**');
 }
+
+// ============================================================================
+// WEBVIEW HTML
+// ============================================================================
 
 /**
  * Genera el HTML para el webview Home
@@ -266,4 +375,11 @@ function getNonce(): string {
         text += possible.charAt(Math.floor(Math.random() * possible.length));
     }
     return text;
+}
+
+/**
+ * Cleanup del servidor OAuth al desactivar
+ */
+export function cleanupServerStack(): void {
+    stopGithubOAuthServer();
 }
