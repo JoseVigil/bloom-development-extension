@@ -159,6 +159,9 @@ const paths = {
   extensionSource: getResourcePath('extension'),
   nssmSource: getResourcePath('nssm'),
 
+  // ✅ NUEVO: nssmExe (ruta destino del ejecutable)
+  nssmExe: path.join(baseDir, 'native', 'nssm.exe'),
+
   // ✅ NUEVO: Desktop path (para shortcuts)
   desktop: path.join(homeDir, 'Desktop')
 };
@@ -179,6 +182,6 @@ for (const key of criticalPaths) {
 }
 
 console.log('✅ Paths initialized successfully');
-console.log(`📁 Base directory: ${baseDir}`);
+console.log(`📂 Base directory: ${baseDir}`);
 
 module.exports = { paths, getResourcePath };

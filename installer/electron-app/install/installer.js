@@ -8,6 +8,9 @@ const { installExtension, verifyExtension, configureBridge } = require('./extens
 const { createLauncherShortcuts } = require('./launcher-creator');
 const { BrowserWindow, app } = require('electron');
 
+// ✅ FIX: Define APP_VERSION at the top of the file
+const APP_VERSION = app ? app.getVersion() : process.env.npm_package_version || '1.0.0';
+
 // Función helper para emitir progreso
 function emitProgress(mainWindow, stepKey, detail = '') {
   const step = INSTALLATION_STEPS.find(s => s.key === stepKey);
@@ -69,32 +72,25 @@ async function cleanupProcesses() {
   console.log('\n🧹 STARTING CLEANUP PROCESS');
   
   if (process.platform === 'win32') {
-    // CORRECCIÓN: Importar las funciones correctamente de service-installer
     const { removeService, killAllBloomProcesses } = require('./service-installer');
     const { SERVICE_NAME } = require('../config/constants');
     
-    // PASO 1: Remover servicio (esto ya mata procesos internamente)
     console.log(`🛑 Stopping and removing service: ${SERVICE_NAME}`);
     await removeService(SERVICE_NAME);
     
-    // PASO 2: Asegurar que no queden procesos huérfanos (doble verificación)
     console.log('🔍 Verifying no orphan processes remain...');
     await killAllBloomProcesses();
     
-    // PASO 3: Esperar generosamente para file handles
     console.log('⏳ Waiting for file handles to be released...');
     await new Promise(r => setTimeout(r, 5000));
   }
 
-  // PASO 4: Limpiar otros archivos (no native/)
   try {
-    // Limpiar brain/ anterior del runtime
     if (await fs.pathExists(paths.brainDir)) {
       console.log("🧹 Removing old brain/ from runtime...");
       await fs.remove(paths.brainDir);
     }
 
-    // Limpiar extensión anterior
     if (await fs.pathExists(paths.extensionDir)) {
       console.log("🧹 Cleaning extension directory...");
       await fs.emptyDir(paths.extensionDir);
@@ -108,7 +104,7 @@ async function cleanupProcesses() {
 }
 
 /**
- * Limpia el directorio native/ (solo elimina, no copia)
+ * Limpia el directorio native/
  */
 async function cleanNativeDir() {
   console.log('\n🧹 CLEANING NATIVE DIRECTORY');
@@ -119,7 +115,6 @@ async function cleanNativeDir() {
     return;
   }
   
-  // PASO 1: Verificar que bloom-host.exe no esté corriendo
   if (process.platform === 'win32') {
     console.log('🔍 Verifying bloom-host.exe is not running...');
     try {
@@ -141,7 +136,6 @@ async function cleanNativeDir() {
     }
   }
   
-  // PASO 2: Intentar eliminar todo el directorio native/
   try {
     console.log('🗑️ Removing old native directory...');
     await fs.remove(paths.nativeDir);
@@ -149,7 +143,6 @@ async function cleanNativeDir() {
   } catch (removeError) {
     console.warn('⚠️ Could not remove native directory:', removeError.message);
     
-    // Si falla, intentar eliminar archivos individuales
     console.log('💡 Attempting to remove individual files...');
     try {
       const files = await fs.readdir(paths.nativeDir);
@@ -178,11 +171,9 @@ async function cleanNativeDir() {
     }
   }
   
-  // PASO 3: Recrear directorio vacío
   await fs.ensureDir(paths.nativeDir);
   console.log('✅ Native directory ready');
   
-  // PASO 4: Esperar generosamente para asegurar file handles liberados
   console.log('⏳ Waiting for file system to stabilize...');
   await new Promise(r => setTimeout(r, 4000));
 }
@@ -191,7 +182,6 @@ async function cleanNativeDir() {
  * Ejecuta la instalación completa
  */
 async function runFullInstallation(mainWindow = null) {
-  // Verificar privilegios de administrador en Windows
   if (process.platform === 'win32' && !(await isElevated())) {
     console.log('⚠️ Admin privileges required for service installation.');
     console.log('🔄 Requesting elevation...');
@@ -206,40 +196,36 @@ async function runFullInstallation(mainWindow = null) {
   console.log(`\n=== STARTING GOD MODE DEPLOYMENT (${process.platform}) ===\n`);
 
   try {
-    // PASO 1: Limpieza agresiva de procesos (mata el servicio/proceso)
+    // PASO 1: Limpieza
     emitProgress(mainWindow, 'cleanup', 'Deteniendo servicios anteriores');
     await cleanupProcesses();
     
-    // PASO 2: Limpiar directorio native/ mientras los procesos están muertos
     emitProgress(mainWindow, 'cleanup', 'Limpiando directorio native');
     await cleanNativeDir();
     
-    // PASO 3: Crear directorios base
+    // PASO 2: Crear directorios
     emitProgress(mainWindow, 'directories', 'Creando en %LOCALAPPDATA%');
     await createDirectories();
     
-    // PASO 4: Instalar core
+    // PASO 3: Instalar core
     emitProgress(mainWindow, 'core', 'Copiando 127 archivos...');
     await installCore();
     
-    // PASO 5: Instalar Native Host (copia archivos y crea servicio)
+    // PASO 4: Instalar Native Host
     emitProgress(mainWindow, 'native', 'Configurando servicio');
     await installNativeHost();
     
-    // PASO 6: Instalar extensión vía Brain (nuevo integrated)
+    // PASO 5: Instalar extensión
     emitProgress(mainWindow, 'extension', 'Desplegando extensión via Brain');
     const extResult = await installExtension();
     
-    // Validar el resultado - algunas versiones de installExtension pueden no retornar objeto
     if (extResult && extResult.success === false) {
       throw new Error(extResult.error || 'Extension installation failed');
     }
     
-    // Si extResult es undefined o no tiene la propiedad success, asumir éxito
-    // (esto ocurre cuando installExtension no retorna nada pero tampoco lanza error)
     console.log('✅ Extension installation completed');
     
-    // Verify post-install solo si verifyExtension existe y retorna algo
+    // Verificar extensión
     try {
       const verifyResult = await verifyExtension();
       if (verifyResult && verifyResult.success === false) {
@@ -247,67 +233,94 @@ async function runFullInstallation(mainWindow = null) {
       }
     } catch (verifyError) {
       console.warn('⚠️ Could not verify extension:', verifyError.message);
-      // Continuar de todos modos
     }
     
+    // PASO 6: Configurar bridge y capturar Extension ID
     emitProgress(mainWindow, 'bridge', 'Registrando bridge');
+    
     let extensionId = null;
+    
     try {
+      // ✅ configureBridge() retorna string directamente
       extensionId = await configureBridge();
+      
+      if (extensionId) {
+        console.log(`✅ Extension ID captured: ${extensionId}`);
+      } else {
+        console.warn('⚠️ configureBridge() returned null or undefined');
+      }
     } catch (bridgeError) {
-      console.warn('⚠️ Could not configure bridge:', bridgeError.message);
-      // Continuar sin extensionId
+      console.error('❌ Could not configure bridge:', bridgeError.message);
+      throw bridgeError; // Stop installation if bridge fails
     }
     
+    // ✅ PASO 7: GUARDAR CONFIG #1 (ANTES del perfil) - CRÍTICO
+    console.log('📝 Saving initial config with extensionId...');
+    
+    const configPath = paths.configFile;
+    await fs.ensureDir(path.dirname(configPath));
+    
+    const initialConfig = {
+      extensionId: extensionId,
+      extensionPath: paths.extensionDir,
+      brainPath: paths.brainDir,
+      pythonPath: paths.pythonExe,
+      pythonMode: 'isolated',
+      version: APP_VERSION,
+      installed_at: new Date().toISOString()
+    };
+    
+    await fs.writeJson(configPath, initialConfig, { spaces: 2 });
+    console.log('✅ Initial config saved');
+    console.log('   extensionId:', extensionId);
+    console.log('   config path:', configPath);
+    
+    // PASO 8: Crear perfil (ahora nucleus.json YA TIENE extensionId)
     emitProgress(mainWindow, 'profile', 'Creando perfil');
+    
     let profileId = null;
     try {
       profileId = await initializeBrainProfile();
+      console.log('✅ Profile created:', profileId);
     } catch (profileError) {
-      console.warn('⚠️ Could not initialize profile:', profileError.message);
-      // Continuar sin profileId
+      console.error('❌ Could not initialize profile:', profileError.message);
+      throw profileError; // Stop if profile creation fails
     }
     
+    // PASO 9: Crear launcher
     emitProgress(mainWindow, 'launcher', 'Generando launcher');
     const launcherResult = await createLauncherShortcuts();
+    
+    // ✅ PASO 10: ACTUALIZAR CONFIG #2 (agregar profileId)
+    emitProgress(mainWindow, 'complete', 'Guardando configuración final');
+    
+    let finalConfig = await fs.readJson(configPath); // Leer el config existente
+    
+    // Agregar profileId
+    finalConfig.masterProfileId = profileId;
+    finalConfig.default_profile_id = profileId;
+    finalConfig.profileId = profileId;
+    
+    await fs.writeJson(configPath, finalConfig, { spaces: 2 });
+    console.log('✅ Final config saved');
+    console.log('   profileId:', profileId);
+    console.log('   extensionId still present:', finalConfig.extensionId);
 
     emitProgress(mainWindow, 'complete');
 
-// ============================================================================
-// AGREGAR AL FINAL DE runFullInstallation() en installer.js
-// Justo antes del return final
-// ============================================================================
-    // PASO 8.5: Guardar profileId en nucleus.json
-    emitProgress(mainWindow, 'complete', 'Guardando configuración');
-   
-    const configPath = paths.configFile;
-    await fs.ensureDir(path.dirname(configPath));
-   
-    let config = {};
-    if (await fs.pathExists(configPath)) {
-      try {
-        config = await fs.readJson(configPath);
-      } catch (err) {
-        console.warn('⚠️ Could not read existing config, creating new one');
-      }
-    }
-   
-    // Actualizar con el profileId real
-    config.default_profile_id = profileId;
-    config.profileId = profileId; // Alias para compatibilidad
-    config.version = app.getVersion();
-    config.installed_at = new Date().toISOString();
-   
-    await fs.writeJson(configPath, config, { spaces: 2 });
-    console.log('✅ Config saved with profileId:', profileId);
-    emitProgress(mainWindow, 'complete');
     console.log('\n=== DEPLOYMENT COMPLETED SUCCESSFULLY ===\n');
+    console.log('📊 Summary:');
+    console.log('   Extension ID:', extensionId);
+    console.log('   Profile ID:', profileId);
+    console.log('   Version:', APP_VERSION);
+
     return {
       success: true,
       extensionId,
       profileId,
       launcherCreated: launcherResult.success,
-      launcherPath: launcherResult.launcherPath
+      launcherPath: launcherResult.launcherPath,
+      version: APP_VERSION
     };
   } catch (error) {
     console.error('\n❌ FATAL ERROR IN INSTALLATION:', error);

@@ -223,11 +223,11 @@ async function killAllBloomProcesses() {
 async function installService(serviceName, exePath, displayName, description) {
   console.log(`📦 Installing service: ${serviceName}`);
   
-  // Buscar NSSM en múltiples ubicaciones siguiendo la configuración de paths.js
+  // ✅ FIX: Buscar NSSM en múltiples ubicaciones con mejor manejo de errores
   let nssmPath = null;
   
   // Opción 1: En el directorio nativeDir (después de copiar) - paths.nssmExe
-  if (await fs.pathExists(paths.nssmExe)) {
+  if (paths.nssmExe && await fs.pathExists(paths.nssmExe)) {
     nssmPath = paths.nssmExe;
     console.log(`✅ Found NSSM at installed location: ${nssmPath}`);
   }
@@ -240,20 +240,48 @@ async function installService(serviceName, exePath, displayName, description) {
       console.log(`✅ Found NSSM at source location: ${nssmPath}`);
       
       // Si estamos usando el source, copiarlo primero al destino para futuras ejecuciones
-      try {
-        await fs.ensureDir(paths.nativeDir);
-        await fs.copy(sourceNssm, paths.nssmExe, { overwrite: true });
-        console.log(`📋 Copied NSSM to: ${paths.nssmExe}`);
-        nssmPath = paths.nssmExe; // Usar la copia
-      } catch (copyError) {
-        console.warn(`⚠️ Could not copy NSSM, using source: ${copyError.message}`);
-        // Seguir usando nssmPath del source si la copia falla
+      if (paths.nssmExe) {
+        try {
+          await fs.ensureDir(path.dirname(paths.nssmExe));
+          await fs.copy(sourceNssm, paths.nssmExe, { overwrite: true });
+          console.log(`📋 Copied NSSM to: ${paths.nssmExe}`);
+          nssmPath = paths.nssmExe; // Usar la copia
+        } catch (copyError) {
+          console.warn(`⚠️ Could not copy NSSM to destination: ${copyError.message}`);
+          console.warn(`💡 Using source path: ${sourceNssm}`);
+          // Seguir usando nssmPath del source si la copia falla
+        }
+      }
+    }
+  }
+  
+  // Opción 3: Buscar en ubicaciones comunes como fallback
+  if (!nssmPath) {
+    const commonLocations = [
+      path.join(process.cwd(), 'nssm', 'nssm.exe'),
+      path.join(process.cwd(), 'native', 'nssm.exe'),
+      path.join(__dirname, '..', 'nssm', 'nssm.exe'),
+      path.join(__dirname, '..', 'native', 'nssm.exe'),
+      path.join(__dirname, '..', '..', 'nssm', 'nssm.exe'),
+      path.join(__dirname, '..', '..', 'native', 'nssm.exe')
+    ];
+    
+    for (const location of commonLocations) {
+      if (await fs.pathExists(location)) {
+        nssmPath = location;
+        console.log(`✅ Found NSSM at common location: ${nssmPath}`);
+        break;
       }
     }
   }
   
   if (!nssmPath) {
-    throw new Error(`NSSM not found. Searched in:\n  - ${paths.nssmExe}\n  - ${paths.nssmSource}/nssm.exe`);
+    const searchedPaths = [
+      paths.nssmExe || '(nssmExe undefined)',
+      paths.nssmSource ? path.join(paths.nssmSource, 'nssm.exe') : '(nssmSource undefined)',
+      ...commonLocations
+    ];
+    throw new Error(`NSSM not found. Searched in:\n${searchedPaths.map(p => `  - ${p}`).join('\n')}`);
   }
   
   // Verificar que el ejecutable existe

@@ -270,29 +270,7 @@ async function initializeBrainProfile() {
     config.pythonPath = brainPath;
     config.pythonMode = 'isolated';
     
-    await fs.writeJson(paths.configFile, config, { spaces: 2 });
-
-    // 🆕 Generate landing page for master profile
-    console.log(" 🎨 Generating landing page...");
-    const { generateProfileLanding } = require('./landing-generator');
-
-    const metadata = {
-      id: profileId,
-      alias: profileName,
-      role: 'Master Profile',
-      created: new Date().toISOString(),
-      extensionId: config.extensionId || null,
-      accounts: [],
-      stats: {
-        totalLaunches: 0,
-        uptime: '0h',
-        intentsCompleted: 0,
-        lastSync: null
-      }
-    };
-
-    await generateProfileLanding(profileId, metadata);
-    console.log(" ✅ Landing page generated");
+    await fs.writeJson(paths.configFile, config, { spaces: 2 });    
     
     console.log(" ✅ Profile initialized");
     
