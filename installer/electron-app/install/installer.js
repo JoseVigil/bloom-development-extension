@@ -1,3 +1,4 @@
+const path = require('path');
 const fs = require('fs-extra');
 const { paths } = require('../config/paths');
 const { isElevated, relaunchAsAdmin } = require('../core/admin-utils');
@@ -5,7 +6,7 @@ const { installCore, initializeBrainProfile } = require('./core-installer');
 const { installNativeHost } = require('./native-host-installer');
 const { installExtension, verifyExtension, configureBridge } = require('./extension-installer');
 const { createLauncherShortcuts } = require('./launcher-creator');
-const { BrowserWindow } = require('electron');
+const { BrowserWindow, app } = require('electron');
 
 // Función helper para emitir progreso
 function emitProgress(mainWindow, stepKey, detail = '') {
@@ -272,8 +273,35 @@ async function runFullInstallation(mainWindow = null) {
 
     emitProgress(mainWindow, 'complete');
 
+// ============================================================================
+// AGREGAR AL FINAL DE runFullInstallation() en installer.js
+// Justo antes del return final
+// ============================================================================
+    // PASO 8.5: Guardar profileId en nucleus.json
+    emitProgress(mainWindow, 'complete', 'Guardando configuración');
+   
+    const configPath = paths.configFile;
+    await fs.ensureDir(path.dirname(configPath));
+   
+    let config = {};
+    if (await fs.pathExists(configPath)) {
+      try {
+        config = await fs.readJson(configPath);
+      } catch (err) {
+        console.warn('⚠️ Could not read existing config, creating new one');
+      }
+    }
+   
+    // Actualizar con el profileId real
+    config.default_profile_id = profileId;
+    config.profileId = profileId; // Alias para compatibilidad
+    config.version = app.getVersion();
+    config.installed_at = new Date().toISOString();
+   
+    await fs.writeJson(configPath, config, { spaces: 2 });
+    console.log('✅ Config saved with profileId:', profileId);
+    emitProgress(mainWindow, 'complete');
     console.log('\n=== DEPLOYMENT COMPLETED SUCCESSFULLY ===\n');
-
     return {
       success: true,
       extensionId,

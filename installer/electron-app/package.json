@@ -81,7 +81,11 @@
     "files": [
       "main.js",
       "preload.js",
+      "renderer.js",
       "src/**/*",
+      "core/**/*",
+      "install/**/*",
+      "config/**/*",
       "assets/**/*",
       "package.json",
       "!node_modules/**/*",
@@ -109,7 +113,7 @@
         "filter": ["**/*"]
       },
       {
-        "from": "../../chrome-extension/src",
+        "from": "../chrome-extension/src",
         "to": "extension",
         "filter": ["**/*", "!**/node_modules"]
       }
@@ -126,7 +130,14 @@
       "**/runtime/**/*",
       "**/native/**/*",
       "**/extension/**/*",
-      "assets/**/*"
+      "**/nssm/**/*",
+      "assets/**/*",
+      "core/**/*",
+      "install/**/*",
+      "config/**/*",
+      "main.js",
+      "preload.js",
+      "renderer.js"
     ]
   },
   "dependencies": {
@@ -154,7 +165,7 @@
           "../resources/runtime",
           "../../brain",
           "../native/bin/win32",
-          "../../chrome-extension/src"
+          "../chrome-extension/src"
         ]
       },
       "makers": [
