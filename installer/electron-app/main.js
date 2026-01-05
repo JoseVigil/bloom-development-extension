@@ -184,8 +184,9 @@ function registerLaunchHandlers() {
   ipcMain.handle('environment:get', async () => {
     try {
       log('🔍 Getting environment from brain.py...');
+
       const { stdout } = await execAsync(
-        `"${pythonPath}" "${BRAIN_MAIN_PATH}" --json health dev-check`,
+        `"${pythonPath}" -I "${BRAIN_MAIN_PATH}" --json health dev-check`,
         { cwd: REPO_ROOT, timeout: 10000, windowsHide: true }
       );
       
@@ -216,8 +217,9 @@ function registerLaunchHandlers() {
   ipcMain.handle('services:check-all', async () => {
     try {
       log('🔍 Checking all services via brain.py...');
+
       const { stdout } = await execAsync(
-        `"${pythonPath}" "${BRAIN_MAIN_PATH}" --json health dev-check`,
+        `"${pythonPath}" -I "${BRAIN_MAIN_PATH}" --json health dev-check`,
         { cwd: REPO_ROOT, timeout: 10000, windowsHide: true }
       );
       
@@ -347,7 +349,7 @@ ipcMain.handle('brain:launch', async () => {
       
       try {
         const { stdout, stderr } = await execAsync(
-          `"${pythonPath}" "${BRAIN_MAIN_PATH}" --json profile list`,
+          `"${pythonPath}" -I "${BRAIN_MAIN_PATH}" --json profile list`,
           { cwd: REPO_ROOT, timeout: 10000, windowsHide: true }
         );
         
@@ -383,7 +385,7 @@ ipcMain.handle('brain:launch', async () => {
       // Intentar listar y encontrar el UUID del alias
       try {
         const { stdout } = await execAsync(
-          `"${pythonPath}" "${BRAIN_MAIN_PATH}" --json profile list`,
+          `"${pythonPath}" -I "${BRAIN_MAIN_PATH}" --json profile list`,
           { cwd: REPO_ROOT, timeout: 10000, windowsHide: true }
         );
         
@@ -412,7 +414,7 @@ ipcMain.handle('brain:launch', async () => {
     log(`   Command: profile launch ${profileId} --cockpit`);
     
     const { stdout, stderr } = await execAsync(
-      `"${pythonPath}" "${BRAIN_MAIN_PATH}" profile launch ${profileId} --cockpit`,
+      `"${pythonPath}" -I "${BRAIN_MAIN_PATH}" profile launch ${profileId} --cockpit`,
       { cwd: REPO_ROOT, timeout: 15000, windowsHide: true }
     );
     
@@ -441,11 +443,10 @@ ipcMain.handle('brain:launch', async () => {
   // ✅ FIXED: Extension heartbeat - usar comando válido de Brain
   ipcMain.handle('extension:heartbeat', async () => {
     try {
-      log('💓 Checking extension heartbeat...');
+      log('💓 Checking extension heartbeat...');     
       
-      // OPCIÓN 1: Usar health service-status (comando real de Brain)
       const { stdout } = await execAsync(
-        `"${pythonPath}" "${BRAIN_MAIN_PATH}" health service-status --json`,
+        `"${pythonPath}" -I "${BRAIN_MAIN_PATH}" health websocket-status --json`,
         { cwd: REPO_ROOT, timeout: 10000, windowsHide: true }
       );
       
@@ -453,9 +454,9 @@ ipcMain.handle('brain:launch', async () => {
       
       // Interpretar respuesta
       const serviceRunning = result.status === 'success' && 
-                            result.data?.native_host?.running === true;
+                            result.data?.connected === true;
       
-      log(serviceRunning ? '✅ Service running' : '⚠️ Service not running');
+      log(serviceRunning ? '✅ WebSocket connected' : '⚠️ WebSocket not connected');
       
       return {
         chromeConnected: serviceRunning,
@@ -656,7 +657,7 @@ async function checkOnboardingStatus() {
 
   try {
     const { stdout } = await execAsync(
-      `python "${BRAIN_PY_PATH}" health onboarding-status --json`,
+      `"${pythonPath}" -I "${BRAIN_MAIN_PATH}" health onboarding-status --json`,
       { cwd: REPO_ROOT, timeout: 15000, windowsHide: true }
     );
 

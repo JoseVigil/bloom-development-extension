@@ -2,6 +2,7 @@ const fs = require('fs-extra');
 const path = require('path');
 const ChromeExtension = require('crx');
 const crypto = require('crypto');
+const { generateExtensionId } = require('./extension-utils');
 
 // ==========================================
 // CONFIGURACIÓN DE RUTAS
@@ -14,22 +15,6 @@ const crxDir = path.join(extensionRoot, 'crx');
 const privateKeyPath = path.join(crxDir, 'key.pem');
 const distCrx = path.join(crxDir, 'extension.crx');
 const distIdJson = path.join(crxDir, 'id.json');
-
-// ==========================================
-// ALGORITMO OFICIAL DE CHROME PARA IDS
-// ==========================================
-function generateExtensionId(publicKey) {
-    const hash = crypto.createHash('sha256').update(publicKey).digest('hex');
-    const head = hash.slice(0, 32);
-    
-    return head.split('').map(char => {
-        if (char >= '0' && char <= '9') {
-            return String.fromCharCode(char.charCodeAt(0) + 49);
-        } else {
-            return String.fromCharCode(char.charCodeAt(0) + 10);
-        }
-    }).join('');
-}
 
 // ==========================================
 // BUILD

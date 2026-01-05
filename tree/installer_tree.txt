@@ -38,6 +38,7 @@ bloom-development-extension/
     │   │   ├── installer.js
     │   │   ├── launcher-creator.js
     │   │   ├── native-host-installer.js
+    │   │   ├── profile-manager.js
     │   │   └── service-installer.js
     │   ├── installHelpers.js
     │   ├── installer-config.json
@@ -53,6 +54,7 @@ bloom-development-extension/
     │   │   ├── brain-commands.js
     │   │   ├── health-monitor.js
     │   │   ├── launcher.js
+    │   │   ├── preload_launch.js
     │   │   └── profile-manager.js
     │   ├── main.js
     │   ├── node_modules/ [... dependencies]
@@ -77,6 +79,7 @@ bloom-development-extension/
     │   │   ├── index.html
     │   │   ├── installation_manager.js
     │   │   ├── launch/
+    │   │   │   ├── index_launch copy.html
     │   │   │   ├── index_launch.html
     │   │   │   └── renderer_launch.js
     │   │   ├── renderer.js

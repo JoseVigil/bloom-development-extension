@@ -1,9 +1,13 @@
 """
 Generador de landing pages estáticas para perfiles de Chrome.
 Crea HTML/CSS/JS auto-contenidos sin dependencias externas.
+Lee extensionId desde nucleus.json para inyectar en landing.
 """
 
 import json
+import os
+import platform
+import sys
 from pathlib import Path
 from typing import Dict, Any
 from datetime import datetime
@@ -14,21 +18,75 @@ def generate_profile_landing(profile_path: Path, profile_data: Dict[str, Any]) -
     Genera landing page estática para un perfil.
     
     Args:
-        profile_path: Path al directorio del perfil (e.g., Workers/abc-123/)
+        profile_path: Path al directorio del perfil (e.g., profiles/abc-123/)
         profile_data: Dict con {id, alias, created_at, linked_account}
     """
     landing_dir = profile_path / "landing"
     landing_dir.mkdir(parents=True, exist_ok=True)
     
+    # Leer Extension ID desde nucleus.json
+    extension_id = _read_extension_id()
+    
     # Generar archivos
-    _generate_html(landing_dir, profile_data)
+    _generate_html(landing_dir, profile_data, extension_id)
     _generate_css(landing_dir)
-    _generate_js(landing_dir, profile_data)
+    _generate_js(landing_dir)
     _generate_manifest(landing_dir, profile_data)
 
 
-def _generate_html(landing_dir: Path, profile_data: Dict[str, Any]) -> None:
-    """Genera index.html"""
+def _read_extension_id() -> str:
+    """
+    Lee extensionId desde nucleus.json en base_dir.
+    
+    Returns:
+        Extension ID o 'PLACEHOLDER' si no existe
+    """
+    try:
+        base_dir = _get_base_directory()
+        nucleus_path = base_dir / "nucleus.json"
+        
+        if not nucleus_path.exists():
+            print(f"⚠️  nucleus.json not found at: {nucleus_path}", file=sys.stderr)
+            return 'PLACEHOLDER'
+        
+        with open(nucleus_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        
+        extension_id = config.get('extensionId')
+        
+        if not extension_id:
+            print("⚠️  extensionId not found in nucleus.json", file=sys.stderr)
+            return 'PLACEHOLDER'
+        
+        print(f"✅ Extension ID loaded: {extension_id[:16]}...", file=sys.stderr)
+        return extension_id
+        
+    except Exception as e:
+        print(f"⚠️  Error reading extension ID: {e}", file=sys.stderr)
+        return 'PLACEHOLDER'
+
+
+def _get_base_directory() -> Path:
+    """Determina el directorio base según el sistema operativo"""
+    system = platform.system()
+    
+    if system == "Windows":
+        localappdata = os.environ.get("LOCALAPPDATA")
+        if not localappdata:
+            raise RuntimeError("Variable LOCALAPPDATA no encontrada")
+        return Path(localappdata) / "BloomNucleus"
+    
+    elif system == "Darwin":  # macOS
+        home = Path.home()
+        return home / "Library" / "Application Support" / "BloomNucleus"
+    
+    else:  # Linux y otros
+        home = Path.home()
+        return home / ".local" / "share" / "BloomNucleus"
+
+
+def _generate_html(landing_dir: Path, profile_data: Dict[str, Any], extension_id: str) -> None:
+    """Genera index.html con Extension ID real inyectado"""
     
     html_content = f"""<!DOCTYPE html>
 <html lang="en">
@@ -63,8 +121,8 @@ def _generate_html(landing_dir: Path, profile_data: Dict[str, Any]) -> None:
         }
     }, indent=2)};
     
-    // Extension ID (will be injected by system)
-    window.BLOOM_EXTENSION_ID = 'PLACEHOLDER';
+    // Extension ID (injected from nucleus.json)
+    window.BLOOM_EXTENSION_ID = '{extension_id}';
   </script>
   
   <script src="script.js"></script>
@@ -358,7 +416,7 @@ body {
     (landing_dir / "styles.css").write_text(css_content, encoding='utf-8')
 
 
-def _generate_js(landing_dir: Path, profile_data: Dict[str, Any]) -> None:
+def _generate_js(landing_dir: Path) -> None:
     """Genera script.js"""
     
     js_content = """// Bloom Profile Cockpit

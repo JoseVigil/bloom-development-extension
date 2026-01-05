@@ -113,40 +113,36 @@ const { exec } = require('child_process');
 const path = require('path');
 const os = require('os');
 
-// Determinar paths según plataforma
 const platform = os.platform();
 const homeDir = os.homedir();
 
-let pythonPath, brainPath;
+let pythonPath, brainMain;
 
 if (platform === 'win32') {
   pythonPath = path.join(process.env.LOCALAPPDATA, 'BloomNucleus', 'engine', 'runtime', 'python.exe');
-  brainPath = path.join(process.env.LOCALAPPDATA, 'BloomNucleus', 'engine', 'runtime', 'Lib', 'site-packages', 'brain', '__main__.py');
+  brainMain = path.join(process.env.LOCALAPPDATA, 'BloomNucleus', 'engine', 'runtime', 'Lib', 'site-packages', 'brain', '__main__.py');
 } else if (platform === 'darwin') {
   pythonPath = path.join(homeDir, 'Library', 'Application Support', 'BloomNucleus', 'engine', 'runtime', 'bin', 'python3');
-  brainPath = path.join(homeDir, 'Library', 'Application Support', 'BloomNucleus', 'engine', 'runtime', 'lib', 'python3.11', 'site-packages', 'brain', '__main__.py');
+  brainMain = path.join(homeDir, 'Library', 'Application Support', 'BloomNucleus', 'engine', 'runtime', 'lib', 'python3.11', 'site-packages', 'brain', '__main__.py');
 } else {
   pythonPath = path.join(homeDir, '.local', 'share', 'BloomNucleus', 'engine', 'runtime', 'bin', 'python3');
-  brainPath = path.join(homeDir, '.local', 'share', 'BloomNucleus', 'engine', 'runtime', 'lib', 'python3.11', 'site-packages', 'brain', '__main__.py');
+  brainMain = path.join(homeDir, '.local', 'share', 'BloomNucleus', 'engine', 'runtime', 'lib', 'python3.11', 'site-packages', 'brain', '__main__.py');
 }
 
-// Obtener modo desde args
 const args = process.argv.slice(2);
 const mode = args.find(arg => arg.startsWith('--mode='))?.split('=')[1] || 'launch';
 const onboarding = args.includes('--onboarding');
 
-// Construir comando
 let command;
 if (onboarding) {
-  command = \`"\${pythonPath}" "\${brainPath}" --json profile launch MasterWorker --landing onboarding\`;
+  command = \`"\${pythonPath}" -I "\${brainMain}" --json profile launch MasterWorker --landing onboarding\`;
 } else {
-  command = \`"\${pythonPath}" "\${brainPath}" --json profile launch MasterWorker\`;
+  command = \`"\${pythonPath}" -I "\${brainMain}" --json profile launch MasterWorker\`;
 }
 
 console.log('🚀 Launching Bloom Nucleus...');
 console.log('Command:', command);
 
-// Ejecutar
 exec(command, (error, stdout, stderr) => {
   if (error) {
     console.error('❌ Launch error:', error);
@@ -160,7 +156,6 @@ exec(command, (error, stdout, stderr) => {
   console.log('✅ Launched successfully');
   console.log('Output:', stdout);
   
-  // Mantener proceso abierto por 2s para mostrar output
   setTimeout(() => process.exit(0), 2000);
 });
 `;
