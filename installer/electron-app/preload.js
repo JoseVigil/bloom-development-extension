@@ -1,42 +1,40 @@
-// preload.js - CORREGIDO: Con checkPort para detección TCP robusta
+// preload.js - FIXED: Compatible con renderer.js existente
 const { contextBridge, ipcRenderer } = require('electron');
 
 // ============================================================================
 // UNIFIED API EXPOSURE - WORKS FOR BOTH MODES
 // ============================================================================
 
-contextBridge.exposeInMainWorld('electronAPI', {
+const API = {
   // ==========================================
-  // PATH UTILITIES (VIA IPC - NO DIRECT REQUIRE)
+  // PATH UTILITIES
   // ==========================================
   
-  // Solicita al main process que calcule rutas de forma segura
   getPath: (type, ...args) => ipcRenderer.invoke('path:resolve', { type, args }),
   
   // ==========================================
-  // PORT CHECKING (NUEVO - DETECCIÓN TCP ROBUSTA)
+  // PORT CHECKING (TCP robust detection)
   // ==========================================
   
-  /**
-   * Verifica si un puerto está abierto usando TCP connect
-   * @param {number} port - Puerto a verificar (ej: 5173)
-   * @param {string} host - Host (default: 'localhost')
-   * @returns {Promise<boolean>} - true si el puerto está abierto
-   */
   checkPort: (port, host = 'localhost') => 
     ipcRenderer.invoke('port:check', { port, host }),
   
   // ==========================================
-  // INSTALL MODE HANDLERS
+  // INSTALL MODE HANDLERS (Existing)
   // ==========================================
   
-  installService: () => ipcRenderer.invoke('brain:install-extension'),
+  installService: () => ipcRenderer.invoke('install:start'),
   launchGodMode: () => ipcRenderer.invoke('brain:launch'),
   checkExtensionHeartbeat: () => ipcRenderer.invoke('extension:heartbeat'),
   preflightChecks: () => ipcRenderer.invoke('preflight-checks'),
+  
+  // NEW: Métodos adicionales para install mode
+  startInstallation: (options = {}) => ipcRenderer.invoke('install:start', options),
+  checkRequirements: () => ipcRenderer.invoke('install:check-requirements'),
+  cleanupInstallation: () => ipcRenderer.invoke('install:cleanup'),
 
   // ==========================================
-  // LAUNCH MODE HANDLERS
+  // LAUNCH MODE HANDLERS (Existing)
   // ==========================================
   
   healthCheck: () => ipcRenderer.invoke('health:check'),
@@ -44,6 +42,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   listProfiles: () => ipcRenderer.invoke('profile:list'),
   launchProfile: (profileId, url) => ipcRenderer.invoke('profile:launch', { profileId, url }),
   tailLogs: (lines) => ipcRenderer.invoke('logs:tail', { lines }),
+  
+  // NEW: Métodos adicionales para launch mode
+  getEnvironment: () => ipcRenderer.invoke('environment:get'),
+  checkAllServices: () => ipcRenderer.invoke('services:check-all'),
 
   // ==========================================
   // SHARED HANDLERS
@@ -52,6 +54,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getSystemInfo: () => ipcRenderer.invoke('system:info'),
   getAppVersion: () => ipcRenderer.invoke('app:version'),
   openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
+  openLogsFolder: () => ipcRenderer.invoke('shell:openLogsFolder'),
+  launchBloomLauncher: (withOnboarding = false) => 
+    ipcRenderer.invoke('launcher:open', { onboarding: withOnboarding }),
 
   // ==========================================
   // EVENT HANDLERS
@@ -59,18 +64,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   on: (channel, callback) => {
     const validChannels = [
+      // Install mode events
       'installation-progress',
       'installation-error',
+      'installation-complete',
+      
+      // Launch mode events
       'server-status',
       'health:status',
       'onboarding:status',
       'profiles:list',
       'dashboard:error',
+      'services:status',
+      
+      // Shared events
       'error',
       'app:initialized',
       'show-onboarding',
-      'show-dashboard',
-      'services:status'
+      'show-dashboard'
     ];
     
     if (validChannels.includes(channel)) {
@@ -97,13 +108,37 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onServerStatus: (callback) => {
     ipcRenderer.on('server-status', (event, data) => callback(data));
   },
-});
+};
 
-// Development tools exposure
+// ============================================================================
+// EXPOSE API WITH MULTIPLE NAMES (for compatibility)
+// ============================================================================
+
+// Nombre nuevo (para código futuro)
+contextBridge.exposeInMainWorld('electronAPI', API);
+
+// Nombre legacy (para renderer.js existente)
+contextBridge.exposeInMainWorld('api', API);
+
+// ============================================================================
+// DEVELOPMENT TOOLS
+// ============================================================================
+
 if (process.env.NODE_ENV === 'development') {
   contextBridge.exposeInMainWorld('devTools', {
     log: (...args) => console.log('[Renderer]', ...args),
     error: (...args) => console.error('[Renderer]', ...args),
     warn: (...args) => console.warn('[Renderer]', ...args),
+    info: (...args) => console.info('[Renderer]', ...args),
   });
+}
+
+// ============================================================================
+// LOGGING
+// ============================================================================
+
+console.log('🌸 [PRELOAD] Preload script loaded');
+console.log('📋 [PRELOAD] API exposed as: window.api & window.electronAPI');
+if (process.env.NODE_ENV === 'development') {
+  console.log('🔧 [PRELOAD] DevTools exposed');
 }

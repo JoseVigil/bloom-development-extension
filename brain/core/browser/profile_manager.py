@@ -8,6 +8,7 @@ import time
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime
+from brain.core.browser.landing_generator import generate_profile_landing
 
 
 class ProfileManager:
@@ -19,7 +20,7 @@ class ProfileManager:
     def __init__(self):
         """Inicializa las rutas base según el sistema operativo"""
         self.base_dir = self._get_base_directory()
-        self.workers_dir = self.base_dir / "Workers"
+        self.workers_dir = self.base_dir / "profiles"
         self.profiles_file = self.base_dir / "profiles.json"
         
         # Crear directorios si no existen
@@ -29,16 +30,19 @@ class ProfileManager:
         # Inicializar archivo JSON si no existe
         if not self.profiles_file.exists():
             self._save_profiles([])
+        
+        # Auto-recuperación de perfiles huérfanos
+        self._auto_recover_orphaned_profiles()
     
     def _get_base_directory(self) -> Path:
         """Determina el directorio base según el sistema operativo"""
         system = platform.system()
         
         if system == "Windows":
-            appdata = os.environ.get("APPDATA")
-            if not appdata:
-                raise RuntimeError("Variable APPDATA no encontrada")
-            return Path(appdata) / "BloomNucleus"
+            localappdata = os.environ.get("LOCALAPPDATA")
+            if not localappdata:
+                raise RuntimeError("Variable LOCALAPPDATA no encontrada")
+            return Path(localappdata) / "BloomNucleus"
         
         elif system == "Darwin":  # macOS
             home = Path.home()
@@ -60,6 +64,82 @@ class ProfileManager:
         """Guarda los perfiles en el archivo JSON"""
         with open(self.profiles_file, 'w', encoding='utf-8') as f:
             json.dump(profiles, f, indent=2, ensure_ascii=False)
+    
+    def _auto_recover_orphaned_profiles(self) -> None:
+        """
+        Detecta y recupera perfiles físicos sin registro en JSON.
+        
+        Previene desincronización entre filesystem y database cuando:
+        - profiles.json se corrompe o elimina
+        - Hay cambio de rutas entre versiones
+        - Perfiles creados manualmente o por scripts externos
+        
+        Ejecuta silenciosamente en __init__ sin output (excepto verbose mode).
+        """
+        if not self.workers_dir.exists():
+            return
+        
+        profiles = self._load_profiles()
+        registered_ids = {p['id'] for p in profiles}
+        
+        # Escanear carpetas físicas
+        physical_folders = [f for f in self.workers_dir.iterdir() if f.is_dir()]
+        
+        orphaned = []
+        for folder in physical_folders:
+            folder_id = folder.name
+            
+            # Validar que es un UUID válido (formato de profile_id)
+            try:
+                uuid.UUID(folder_id)
+            except ValueError:
+                # No es un UUID válido, ignorar (podría ser otra carpeta)
+                continue
+            
+            # Si no está registrado en JSON, es un perfil huérfano
+            if folder_id not in registered_ids:
+                # Intentar recuperar alias de landing/manifest.json
+                alias = self._recover_alias_from_landing(folder)
+                if not alias:
+                    alias = f"Recovered {folder_id[:8]}"
+                
+                # Usar fecha de creación de la carpeta
+                created_timestamp = folder.stat().st_ctime
+                created_at = datetime.fromtimestamp(created_timestamp).isoformat()
+                
+                orphaned.append({
+                    "id": folder_id,
+                    "alias": alias,
+                    "created_at": created_at,
+                    "linked_account": None
+                })
+        
+        # Registrar perfiles huérfanos silenciosamente
+        if orphaned:
+            profiles.extend(orphaned)
+            self._save_profiles(profiles)
+            # Note: No hay output aquí. El logging se maneja en CLI layer con verbose flag
+    
+    def _recover_alias_from_landing(self, folder: Path) -> Optional[str]:
+        """
+        Intenta recuperar el alias original desde landing/manifest.json.
+        
+        Args:
+            folder: Path del perfil
+            
+        Returns:
+            Alias encontrado o None si no existe
+        """
+        manifest_path = folder / "landing" / "manifest.json"
+        if not manifest_path.exists():
+            return None
+        
+        try:
+            with open(manifest_path, 'r', encoding='utf-8') as f:
+                manifest = json.load(f)
+                return manifest.get('profile', {}).get('alias')
+        except (json.JSONDecodeError, KeyError, IOError):
+            return None
     
     def _find_profile(self, profile_id: str) -> Optional[Dict[str, Any]]:
         """Busca un perfil por su ID (soporta búsqueda parcial)"""
@@ -119,6 +199,9 @@ class ProfileManager:
         profiles.append(profile_data)
         self._save_profiles(profiles)
         
+        # 🆕 Generar landing page
+        generate_profile_landing(profile_path, profile_data)
+        
         return {
             **profile_data,
             "path": str(profile_path)
@@ -135,6 +218,7 @@ class ProfileManager:
             file:// URL absoluta de index.html
             
         Raises:
+            ValueError: Si el perfil no existe
             FileNotFoundError: Si la landing page no existe
         """
         # Buscar perfil (soporta búsqueda parcial)
@@ -144,12 +228,14 @@ class ProfileManager:
         
         # Usar el ID completo encontrado
         full_profile_id = profile['id']
-        landing_path = self.workers_dir / full_profile_id / 'landing' / 'index.html'
+        profile_path = self.workers_dir / full_profile_id
+        landing_path = profile_path / 'landing' / 'index.html'
         
         if not landing_path.exists():
             raise FileNotFoundError(
-                f"Landing page no encontrada en: {landing_path}\n"
-                f"Crea la carpeta 'landing' con index.html para usar cockpit mode"
+                f"Landing page no encontrada.\n"
+                f"Ruta esperada: {landing_path}\n"
+                f"Tip: Crea la carpeta 'landing' con index.html en el perfil"
             )
         
         # Convertir a file:// URL según el sistema operativo
@@ -157,12 +243,13 @@ class ProfileManager:
         
         if platform.system() == "Windows":
             # Windows: C:\Users\... -> file:///C:/Users/...
-            # Convertir backslashes a forward slashes
             path_str = str(absolute_path).replace(os.sep, '/')
-            return f"file:///{path_str}"
+            url = f"file:///{path_str}"
         else:
             # Unix/Mac: /home/user/... -> file:///home/user/...
-            return f"file://{absolute_path}"
+            url = f"file://{absolute_path}"
+        
+        return url
     
     def launch_profile(self, profile_id: str, url: Optional[str] = None) -> Dict[str, Any]:
         """

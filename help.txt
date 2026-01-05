@@ -5,7 +5,7 @@ Brain CLI - Modular system for Bloom
 │                                                                                             │
 │  Brain CLI soporta dos modos de ejecución:                                                  │
 │                                                                                             │
-│  1. MODO RUNTIME (Recomendado)                                                              │
+│  1. MODO RUNTIME (✅ RECOMENDADO - USAR ESTE)                                               │
 │     Ejecución directa sin configuración de PYTHONPATH                                       │
 │                                                                                             │
 │     python <RUNTIME_PATH>/brain/__main__.py [OPTIONS] <category> <command>                  │
@@ -14,9 +14,11 @@ Brain CLI - Modular system for Bloom
 │     ✅ Funciona en entornos aislados (Electron, VS Code)                                    │
 │     ✅ Más robusto para integraciones                                                       │
 │                                                                                             │
-│     Windows: %LOCALAPPDATA%\BloomNucleus\engine\runtime\Lib\site-packages                   │
+│     Windows:                                                                                │
+│     python %LOCALAPPDATA%\BloomNucleus\engine\runtime\Lib\site-packages\brain\__main__.py   │
+│  --json <command> <args>                                                                    │
 │                                                                                             │
-│  2. MODO MODULE                                                                             │
+│  2. MODO MODULE (⚠️ Legacy - Solo si PYTHONPATH está configurado)                            │
 │     Ejecución como módulo Python (requiere PYTHONPATH)                                      │
 │                                                                                             │
 │     python -m brain [OPTIONS] <category> <command>                                          │
@@ -27,10 +29,10 @@ Brain CLI - Modular system for Bloom
 │  Ejemplos (Modo Runtime):                                                                   │
 │                                                                                             │
 │    # Comando básico                                                                         │
-│    python brain/__main__.py health onboarding-status                                        │
+│    python brain/__main__.py --json health onboarding-status                                 │
 │                                                                                             │
 │    # Con flags globales (ANTES del comando)                                                 │
-│    python brain/__main__.py --json --verbose nucleus list                                   │
+│    python brain/__main__.py --json nucleus list                                             │
 │                                                                                             │
 │    # Modo MODULE (alternativo)                                                              │
 │    python -m brain --json profile create 'My Profile'                                       │
@@ -772,7 +774,8 @@ Brain CLI - Modular system for Bloom
 │      <PROFILE_ID>         ID del perfil a lanzar                                                 │
 │                                                                                                  │
 │    Opciones:                                                                                     │
-│      --url                URL inicial o modo App                                                 │
+│      --url                URL inicial (default: cockpit landing)                                 │
+│      --cockpit            Fuerza modo cockpit (landing page)                                     │
 │                                                                                                  │
 │  LINK - Vincula una cuenta de email a un perfil de Chrome                                        │
 │                                                                                                  │
