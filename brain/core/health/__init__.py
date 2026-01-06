@@ -6,5 +6,6 @@ __all__ = [
     'FullStackHealthManager',
     'OnboardingStatusManager',
     'WebSocketStatusManager',
-    'DevEnvironmentManager'  
+    'DevEnvironmentManager',
+    'NativeHostManager'  
 ]

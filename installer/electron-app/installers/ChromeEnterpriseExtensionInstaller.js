@@ -228,7 +228,9 @@ class ChromeEnterpriseExtensionInstaller {
       description: 'Bloom Bridge Host',
       path: hostPath.replace(/\\/g, '\\\\'),
       type: 'stdio',
-      allowed_origins: [`chrome-extension://${extensionId}/`]
+      allowed_origins: [
+        `chrome-extension://${extensionId}/`
+      ]
     };
 
     await fs.writeJson(manifestPath, manifest, { spaces: 2 });

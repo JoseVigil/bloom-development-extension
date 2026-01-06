@@ -73,7 +73,7 @@ export class InstallationManager {
     console.log("💓 [Heartbeat] Iniciando...");
     
     let attempts = 0;
-    const maxAttempts = 60;
+    const maxAttempts = 120;
     
     const interval = setInterval(async () => {
       attempts++;

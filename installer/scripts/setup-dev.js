@@ -71,7 +71,9 @@ const hostData = {
     description: "Bloom Nucleus Host (Dev)",
     path: HOST_EXE_PATH,
     type: "stdio",
-    allowed_origins: [`chrome-extension://${extensionId}/`]
+    allowed_origins: [
+       `chrome-extension://${extensionId}/`
+    ]
 };
 
 // Crear carpeta si falta

@@ -8,7 +8,7 @@ F5
 Electron
 /c/repos/bloom-videos/bloom-development-extension/installer/electron-app
 npm run build
-npm start
+npm run dev
 npx electron main.js --mode=launch --launch 
 npx electron main.js --mode=launch --launch --dev
 npx electron main.js --mode=launch --onboarding
@@ -18,4 +18,14 @@ DEV Web server port 5173
 /c/repos/bloom-videos/bloom-development-extension/webview/app
 npm run build
 npm run dev
+
+
+Commands
+python.exe -I Lib\site-packages\brain\__main__.py profile launch iofbckileookkfiokffblaomlhfenkea --cockpit
+    
+python.exe -I Lib\site-packages\brain\__main__.py --json health native-ping 
+
+"C:\Program Files\Google\Chrome\Application\chrome.exe" --user-data-dir="C:\Users\josev\AppData\Local\BloomNucleus\profiles\44356914-ec8f-4106-adf8-68c4f412f3d6" --load-extension="C:\Users\josev\AppData\Local\BloomNucleus\extension" --disable-extensions-except="C:\Users\josev\AppData\Local\BloomNucleus\extension" --allowlisted-extension-id="iofbckileookkfiokffblaomlhfenkea" --no-first-run --disable-background-networking
+
+"C:\Users\josev\AppData\Local\BloomNucleus\engine\runtime\python.exe" -I "C:\Users\josev\AppData\Local\BloomNucleus\engine\runtime\Lib\site-packages\brain\__main__.py" profile launch 9047af76-1fc3-4912-aa85-75a0d6166a83 --cockpit
 

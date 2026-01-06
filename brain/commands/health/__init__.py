@@ -7,13 +7,15 @@ from brain.cli.base import BaseCommand
 from .full_stack import HealthFullStackCommand
 from .websocket_status import HealthWebSocketStatusCommand
 from .onboarding_status import HealthOnboardingStatusCommand
-from .dev_check import HealthDevCheckCommand  # ← NUEVO
+from .dev_check import HealthDevCheckCommand
+from .native_ping import HealthNativePingCommand  
 
 __all__ = [
     'HealthFullStackCommand',
     'HealthWebSocketStatusCommand',
     'HealthOnboardingStatusCommand',
-    'HealthDevCheckCommand',  # ← NUEVO
+    'HealthDevCheckCommand',
+    'HealthNativePingCommand',  
 ]
 
 
@@ -28,5 +30,6 @@ def get_health_commands() -> list[BaseCommand]:
         HealthFullStackCommand(),
         HealthWebSocketStatusCommand(),
         HealthOnboardingStatusCommand(),
-        HealthDevCheckCommand(),  # ← NUEVO
+        HealthDevCheckCommand(),
+        HealthNativePingCommand(),  
     ]
