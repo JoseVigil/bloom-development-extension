@@ -1,5 +1,6 @@
 bloom-development-extension/
 └── installer/
+    ├── .DS_Store
     ├── README.md
     ├── chrome-extension/
     │   ├── crx/
@@ -28,7 +29,6 @@ bloom-development-extension/
     │   │   ├── admin-utils.js
     │   │   ├── menu-builder.js
     │   │   └── window-manager.js
-    │   ├── dist/ [... build output]
     │   ├── electron-readme.md
     │   ├── entitlements.plist
     │   ├── forge.config.js
@@ -57,8 +57,6 @@ bloom-development-extension/
     │   │   ├── preload_launch.js
     │   │   └── profile-manager.js
     │   ├── main.js
-    │   ├── node_modules/ [... dependencies]
-    │   ├── package-lock.json
     │   ├── package.json
     │   ├── preload.js
     │   ├── registry-scripts/
@@ -69,6 +67,7 @@ bloom-development-extension/
     │   ├── run-elevated.bat
     │   ├── run-elevated.js
     │   ├── scripts/
+    │   │   ├── calc-true-id.js
     │   │   ├── check-status.bat
     │   │   └── emergency-cleanup.bat
     │   ├── src/
@@ -89,7 +88,9 @@ bloom-development-extension/
     │   └── utils/
     │       └── exec-helper.js
     ├── native/
+    │   ├── .DS_Store
     │   ├── bin/
+    │   │   ├── .DS_Store
     │   │   ├── darwin/
     │   │   │   └── x64/
     │   │   │       └── bloom-host
@@ -106,45 +107,11 @@ bloom-development-extension/
     ├── package-lock.json
     ├── package.json
     ├── resources/
-    │   ├── .gitkeep
-    │   └── runtime/
-    │       ├── LICENSE.txt
-    │       ├── _asyncio.pyd
-    │       ├── _bz2.pyd
-    │       ├── _ctypes.pyd
-    │       ├── _decimal.pyd
-    │       ├── _elementtree.pyd
-    │       ├── _hashlib.pyd
-    │       ├── _lzma.pyd
-    │       ├── _msi.pyd
-    │       ├── _multiprocessing.pyd
-    │       ├── _overlapped.pyd
-    │       ├── _queue.pyd
-    │       ├── _socket.pyd
-    │       ├── _sqlite3.pyd
-    │       ├── _ssl.pyd
-    │       ├── _uuid.pyd
-    │       ├── _zoneinfo.pyd
-    │       ├── libcrypto-1_1.dll
-    │       ├── libffi-7.dll
-    │       ├── libssl-1_1.dll
-    │       ├── pyexpat.pyd
-    │       ├── python.cat
-    │       ├── python.exe
-    │       ├── python3.dll
-    │       ├── python310._pth
-    │       ├── python310.dll
-    │       ├── python310.zip
-    │       ├── pythonw.exe
-    │       ├── select.pyd
-    │       ├── sqlite3.dll
-    │       ├── unicodedata.pyd
-    │       ├── vcruntime140.dll
-    │       ├── vcruntime140_1.dll
-    │       └── winsound.pyd
+    │   └── .gitkeep
     └── scripts/
         ├── build-extension.js
         ├── check-health.js
+        ├── extension-utils.js
         ├── generate-fixed-key.js
         ├── get-id.js
         ├── god-mode.js

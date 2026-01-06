@@ -19,6 +19,17 @@ DEV Web server port 5173
 npm run build
 npm run dev
 
+# Full clean build (recommended)
+python build.py --clean
+
+# Quick build (skip command loader regeneration)
+python build.py --skip-gen
+
+# Build without copying to installer directory
+python build.py --no-copy
+
+# Test the compiled executable
+./installer/native/bin/win32/brain/brain.exe --help
 
 Commands
 python.exe -I Lib\site-packages\brain\__main__.py profile launch iofbckileookkfiokffblaomlhfenkea --cockpit

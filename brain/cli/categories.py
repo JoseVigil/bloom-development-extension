@@ -13,7 +13,7 @@ class CommandCategory(Enum):
     Each category has a name and description.
     """
     
-    # Existing categories
+    # Core system categories
     CONTEXT = ("context", "AI context generation and management")
     FILESYSTEM = ("filesystem", "File operations and directory analysis")
     GEMINI = ("gemini", "Gemini AI key management and operations")
@@ -24,6 +24,9 @@ class CommandCategory(Enum):
     PROJECT = ("project", "Project lifecycle and scaffolding")
     HEALTH = ("health", "System health checks and diagnostics")
     EXTENSION = ("extension", "Chrome extension lifecycle management")
+    
+    # ✅ NEW: Service daemon category
+    SERVICE = ("service", "Background connection multiplexer and task runner")
 
     def __init__(self, name: str, description: str):
         self.category_name = name
@@ -68,4 +71,5 @@ NUCLEUS = CommandCategory.NUCLEUS
 PROFILE = CommandCategory.PROFILE
 PROJECT = CommandCategory.PROJECT
 HEALTH = CommandCategory.HEALTH  
-EXTENSION = CommandCategory.EXTENSION  
+EXTENSION = CommandCategory.EXTENSION
+SERVICE = CommandCategory.SERVICE  
