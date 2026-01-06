@@ -1,12 +1,11 @@
 """
 Brain CLI - Auto-discovery entry point.
-NO MAINTENANCE REQUIRED when adding new commands.
+Compatible with PyInstaller frozen executables.
 """
 import sys
 from pathlib import Path
 
 # CRÍTICO: Inyectar site-packages ANTES de importar brain
-# Esto permite ejecución directa sin -m
 current_file = Path(__file__).resolve()
 brain_package = current_file.parent
 site_packages = brain_package.parent
@@ -16,7 +15,6 @@ if site_packages_str not in sys.path:
 
 # AHORA sí importar brain
 import typer
-from brain.commands import discover_commands
 from brain.shared.context import GlobalContext
 
 # Forzar UTF-8 en stdout/stderr para Windows
@@ -42,18 +40,35 @@ def main_config(
     ctx.obj = GlobalContext(json_mode=json_mode, verbose=verbose, root_path=".")
 
 
+def is_frozen():
+    """Detecta si estamos corriendo como ejecutable empaquetado."""
+    return getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS')
+
+
+def load_commands():
+    """Carga comandos - Compatible con modo frozen y desarrollo."""
+    if is_frozen():
+        # Modo FROZEN (PyInstaller) - Usar cargador explícito
+        from brain.cli.command_loader import load_all_commands_explicit
+        return load_all_commands_explicit()
+    else:
+        # Modo DESARROLLO - Usar auto-discovery
+        from brain.commands import discover_commands
+        return discover_commands()
+
+
 def main():
     """Main entry point with auto-discovery."""
     
     # Intercept --help BEFORE Typer processes anything
     if "--help" in sys.argv and len(sys.argv) == 2:
         from brain.cli.help_renderer import render_help
-        registry = discover_commands()
+        registry = load_commands()
         render_help(registry)
         sys.exit(0)
     
     try:
-        registry = discover_commands()
+        registry = load_commands()
         sub_apps = {}
         
         # Auto-register all commands
@@ -79,6 +94,9 @@ def main():
         
     except Exception as e:
         print(f"Error: Brain System Error: {e}", file=sys.stderr)
+        if not is_frozen():  # Solo mostrar traceback en desarrollo
+            import traceback
+            traceback.print_exc()
         sys.exit(1)
 
 
