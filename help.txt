@@ -56,13 +56,13 @@ Brain CLI - Modular system for Bloom
 │   filesystem    File operations and directory analysis              3 cmds                       │
 │   gemini        Gemini AI key management and operations             5 cmds                       │
 │   github        GitHub integration and repository management        9 cmds                       │
-│   health        System health checks and diagnostics                4 cmds                       │
+│   health        System health checks and diagnostics                5 cmds                       │
 │   intent        Intent execution system and context planning       19 cmds                       │
 │   nucleus       Nucleus project management and lifecycle           14 cmds                       │
 │   profile       Chrome profile and AI account management            8 cmds                       │
 │   project       Project lifecycle and scaffolding                   6 cmds                       │
 │                                                                 ──────────                       │
-│                                                                    73 cmds                       │
+│                                                                    74 cmds                       │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 
 ╭───────────────────────────────────────────── HEALTH ─────────────────────────────────────────────╮
@@ -88,6 +88,17 @@ Brain CLI - Modular system for Bloom
 │      -t                   Timeout per check in seconds                                           │
 │      --json               Output raw JSON                                                        │
 │      -v                   Detailed logging                                                       │
+│                                                                                                  │
+│  NATIVE                                                                                          │
+│                                                                                                  │
+│  NATIVE PING - Ping native host (bloom-host.exe) via TCP to verify connectivity                  │
+│                                                                                                  │
+│    python brain/__main__.py [GLOBAL_OPTIONS] health native-ping [OPTIONS]                        │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -t                   Timeout in milliseconds for ping response                              │
+│      -p                   Specific TCP port to test (auto-detect if not provided)                │
+│      --check-ws/--no-check-ws Also verify WebSocket port status                                  │
 │                                                                                                  │
 │  ONBOARDING                                                                                      │
 │                                                                                                  │

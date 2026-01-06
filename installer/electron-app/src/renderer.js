@@ -1,8 +1,9 @@
-// renderer.js
-// Script principal consolidado - Contiene toda la lógica del frontend
+// renderer.js - REFACTORED: Adaptado para usar TCP heartbeat
+// ✅ Mantiene toda la lógica UI original
+// ✅ Solo actualiza llamadas API para compatibilidad TCP
 
 // ========================================================================
-// 1. UI MANAGER
+// 1. UI MANAGER (Sin Cambios)
 // ========================================================================
 class UIManager {
   constructor() {
@@ -89,8 +90,7 @@ class UIManager {
 }
 
 // ========================================================================
-// INSTALLATION MANAGER - FLUJO AUTOMÁTICO COMPLETO
-// Reemplaza la clase completa en renderer.js (líneas ~80-150)
+// 2. INSTALLATION MANAGER (Lógica Original + TCP Compatible)
 // ========================================================================
 class InstallationManager {
   constructor(api, uiManager) {
@@ -110,11 +110,10 @@ class InstallationManager {
     console.log("🚀 [AUTO] Iniciando flujo automático...");
     this.ui.showScreen('installation-screen');
 
-    // ✅ NUEVO: Escuchar eventos de progreso del backend
+    // Escuchar eventos de progreso del backend
     window.api.on('installation-progress', (data) => {
       console.log(`[Progress] ${data.percentage}% - ${data.message}`);
       
-      // Actualizar barra
       const fillEl = document.getElementById('progress-fill');
       const textEl = document.getElementById('progress-text');
       const detailsEl = document.getElementById('installation-details');
@@ -122,7 +121,6 @@ class InstallationManager {
       if (fillEl) fillEl.style.width = data.percentage + '%';
       if (textEl) textEl.textContent = data.message;
       
-      // ⬅️ FIX: Solo mostrar paso actual
       if (detailsEl) {
         detailsEl.innerHTML = data.detail 
           ? `<p style="color: #4299e1;">• ${data.detail}</p>`
@@ -181,53 +179,57 @@ class InstallationManager {
     const extIdEl = document.getElementById('heartbeat-extension-id');
     const profIdEl = document.getElementById('heartbeat-profile-id');
     
-    // ⬅️ PASO 1: Delay inicial 3s (mientras Chrome se está iniciando realmente)
+    // PASO 1: Delay inicial (Chrome iniciando)
     await this.sleep(3000);
     
-    // PASO 2: Chrome iniciado (1.5s de pausa para mostrar mensaje)
+    // PASO 2: Chrome iniciado
     if (statusEl) statusEl.textContent = '✓ Chrome iniciado correctamente';
     await this.sleep(1500);
     
-    // PASO 3: Cargando extensión (2s de pausa mientras carga)
+    // PASO 3: Cargando extensión
     if (statusEl) statusEl.textContent = '⏳ Cargando extensión de Chrome...';
     await this.sleep(2000);
     
-    // PASO 4: Extensión cargada (1.5s de pausa)
+    // PASO 4: Extensión cargada
     if (statusEl) statusEl.textContent = '✓ Extensión cargada exitosamente';
     await this.sleep(1500);
     
-    // PASO 5: Conectando con host (2s de pausa)
+    // PASO 5: Conectando con host
     if (statusEl) statusEl.textContent = '🔌 Estableciendo conexión con el host...';
     await this.sleep(2000);
     
-    // PASO 6: Iniciar polling REAL de heartbeat
+    // PASO 6: Polling REAL de heartbeat TCP
     let attempts = 0;
     const interval = setInterval(async () => {
       attempts++;
       
       try {
+        // ✅ REFACTORED: Usa la nueva API TCP
         const status = await this.api.checkExtensionHeartbeat();
         
+        // ✅ TCP heartbeat retorna: { chromeConnected, latency, protocol, port }
         if (status && status.chromeConnected) {
           clearInterval(interval);
-          console.log("✅ [Heartbeat] ¡CONECTADO!");
+          console.log("✅ [Heartbeat] ¡CONECTADO via TCP!");
+          console.log(`   Latencia: ${status.latency}ms`);
+          console.log(`   Protocolo: ${status.protocol}`);
           
-          // Cambiar dot y ripples a verde
+          // Cambiar dot a verde
           if (dotEl) {
             dotEl.classList.remove('red');
             dotEl.classList.add('green');
           }
           
-          // Cambiar border de ripples a verde
+          // Cambiar ripples a verde
           document.querySelectorAll('.ripple').forEach(ripple => {
             ripple.style.borderColor = '#48bb78';
           });
           
-          // Mostrar mensaje de éxito
+          // Mensaje de éxito
           if (statusEl) statusEl.textContent = '✓ Host conectado exitosamente';
           await this.sleep(1500);
           
-          // Mostrar box de detalles
+          // Mostrar detalles
           if (detailsEl) {
             if (extIdEl) extIdEl.textContent = this.extensionId;
             if (profIdEl) profIdEl.textContent = this.profileId;
@@ -240,10 +242,10 @@ class InstallationManager {
             statusEl.style.fontWeight = '600';
           }
           
-          // ⬅️ Pausa final 3s para mostrar éxito
+          // Pausa final
           await this.sleep(3000);
           
-          // Transición a Connection Success
+          // Transición a Success
           this.ui.showScreen('connection-success-screen');
           
           // Habilitar botón de onboarding
@@ -278,7 +280,7 @@ class InstallationManager {
 }
 
 // ========================================================================
-// 3. HEARTBEAT MANAGER
+// 3. HEARTBEAT MANAGER (Adaptado para TCP)
 // ========================================================================
 class HeartbeatManager {
   constructor(api, uiManager) {
@@ -301,18 +303,32 @@ class HeartbeatManager {
         `Intento ${this.attempts}/${this.maxAttempts} - Esperando señal de Chrome...`
       );
       
+      // ✅ REFACTORED: Usa TCP heartbeat
       const status = await this.api.checkExtensionHeartbeat();
       
       if (status.chromeConnected) {
-        // ... (truncated 426 characters)... tá habilitada\n' +
-                      '3. El servicio está corriendo';
+        console.log('✅ ¡Conexión detectada via TCP!');
+        console.log(`   Latencia: ${status.latency}ms`);
+        this.stop();
+        return { success: true };
+      }
+      
+      // Timeout
+      if (this.attempts >= this.maxAttempts) {
+        this.stop();
+        const error = 'Timeout: La extensión no se conectó en 90 segundos.\n\n' +
+                      'Verifica que:\n' +
+                      '1. Instalaste la extensión en Chrome\n' +
+                      '2. La extensión está habilitada\n' +
+                      '3. El Native Host está corriendo (puerto 5678)';
         this.ui.showError(error);
+        return { success: false, error };
       }
     }, this.pollInterval);
   }
 
   startHandshakePolling(onSuccess) {
-    console.log('🔄 Iniciando polling de handshake (enterprise)...');
+    console.log('🔄 Iniciando validación estricta de conexión (TCP)...');
     this.attempts = 0;
     const MAX_ATTEMPTS = 30;
     const POLL_INTERVAL = 3000;
@@ -323,16 +339,20 @@ class HeartbeatManager {
       this.ui.animateHeartbeat('heartbeat-dot');
       
       this.ui.updateHTML('step2-message', `
-        <p>Validando conexión con Chrome...</p>
+        <p>Validando conexión con Chrome via TCP...</p>
         <p style="font-size: 12px; color: #a0aec0; margin-top: 5px;">
           Intento ${this.attempts}/${MAX_ATTEMPTS}
         </p>
       `);
       
+      // ✅ REFACTORED: Usa TCP heartbeat
       const status = await this.api.checkExtensionHeartbeat();
       
       if (status.chromeConnected) {
         this.stop();
+        console.log('✅ Handshake TCP exitoso');
+        console.log(`   Latencia: ${status.latency}ms`);
+        
         this.ui.setHeartbeatState('heartbeat-dot', true);
         this.ui.toggleElement('step-waiting-chrome', false);
         this.ui.toggleElement('step-success', true);
@@ -347,7 +367,7 @@ class HeartbeatManager {
         const error = `Timeout: Chrome no respondió después de ${MAX_ATTEMPTS * 3} segundos.\n` +
                       'Verifica:\n' +
                       '1. Chrome se cerró completamente antes de reabrir\n' +
-                      '2. El registro se aplicó correctamente\n' +
+                      '2. El Native Host está corriendo (puerto 5678)\n' +
                       '3. No hay políticas de dominio bloqueando extensiones';
         this.ui.showError(error);
       }
@@ -364,7 +384,7 @@ class HeartbeatManager {
 }
 
 // ========================================================================
-// 4. EXTENSION INSTALLER (Versión Corregida en renderer.js)
+// 4. EXTENSION INSTALLER (Sin Cambios - No usa heartbeat directamente)
 // ========================================================================
 class ExtensionInstaller {
   constructor(api, uiManager) {
@@ -378,7 +398,6 @@ class ExtensionInstaller {
     
     if (result.success) {
       this.currentCrxPath = result.crxPath;
-      // LOG IMPORTANTE: Verificamos que tenemos la ruta
       console.log('📦 Archivo listo en:', this.currentCrxPath);
       return { success: true, path: result.crxPath };
     } else {
@@ -387,11 +406,9 @@ class ExtensionInstaller {
     }
   }
 
-  // ESTA ES LA FUNCIÓN QUE CAMBIA
   setupDragAndDrop(elementId) {
     const cardEl = document.getElementById(elementId);
     
-    // Verificación de seguridad
     if (!cardEl) {
       console.error(`❌ ERROR CRÍTICO: No encontré el elemento con ID '${elementId}'`);
       return;
@@ -399,20 +416,16 @@ class ExtensionInstaller {
 
     console.log('✅ Elemento encontrado, configurando click para:', elementId);
 
-    // 1. Estilo visual
     cardEl.style.cursor = 'pointer';
-    cardEl.removeAttribute('draggable'); // Quitamos el drag viejo
+    cardEl.removeAttribute('draggable');
 
-    // 2. Limpiamos listeners viejos clonando el nodo
     const newElement = cardEl.cloneNode(true);
     cardEl.parentNode.replaceChild(newElement, cardEl);
 
-    // 3. Agregamos el evento CLICK
     newElement.addEventListener('click', () => {
       console.log('🖱️ CLICK DETECTADO. Ruta actual:', this.currentCrxPath);
       
       if (this.currentCrxPath && this.currentCrxPath.length > 0) {
-        // Llamada a la API
         this.api.showItemInFolder(this.currentCrxPath);
       } else {
         alert("⚠️ El archivo aún no está listo. Espera unos segundos.");
@@ -468,7 +481,7 @@ class ExtensionInstaller {
 }
 
 // ========================================================================
-// EVENT LISTENERS SIMPLIFICADOS
+// 5. EVENT LISTENERS (Sin Cambios - Lógica Original)
 // ========================================================================
 class EventListeners {
   constructor(api, uiManager, installationManager) {
@@ -483,9 +496,6 @@ class EventListeners {
     this.setupErrorScreen();
   }
 
-  /**
-   * WELCOME SCREEN: Solo botón "Instalar"
-   */
   setupWelcomeScreen() {
     const startBtn = document.getElementById('start-button');
     if (!startBtn) return;
@@ -496,11 +506,7 @@ class EventListeners {
     });
   }
 
-  /**
-   * SUCCESS SCREEN: Botón "Lanzar" + "Ver Logs"
-   */
   setupSuccessScreen() {
-    // Botón de lanzamiento
     const launchBtn = document.getElementById('launch-bloom-btn');
     if (launchBtn) {
       launchBtn.addEventListener('click', async () => {
@@ -510,7 +516,6 @@ class EventListeners {
       });
     }
     
-    // Botón de logs
     const logsBtn = document.getElementById('final-view-logs-btn');
     if (logsBtn) {
       logsBtn.addEventListener('click', () => {
@@ -519,18 +524,15 @@ class EventListeners {
       });
     }
 
-    // ⬅️ NUEVO: Botón de onboarding
     const onboardingBtn = document.getElementById('start-onboarding-btn');
     if (onboardingBtn) {
       onboardingBtn.addEventListener('click', async () => {
         console.log("👆 [UI] Usuario inicia onboarding");
         
-        // Abrir BloomLauncher con flag --onboarding
         const result = await this.api.launchBloomLauncher(true);
         
         if (result.success) {
           console.log("✅ Launcher abierto con onboarding");
-          // Opcional: cerrar installer después de 2s
           setTimeout(() => window.close(), 2000);
         } else {
           console.error("❌ Error abriendo launcher:", result.error);
@@ -539,9 +541,6 @@ class EventListeners {
     }
   }
 
-  /**
-   * ERROR SCREEN: Botón "Reintentar" + "Ver Logs"
-   */
   setupErrorScreen() {
     const retryBtn = document.getElementById('retry-button');
     if (retryBtn) {
@@ -561,7 +560,7 @@ class EventListeners {
 }
 
 // ========================================================================
-// MAIN APP INITIALIZATION
+// 6. MAIN APP INITIALIZATION (Sin Cambios)
 // ========================================================================
 class BloomInstaller {
   constructor() {
@@ -576,7 +575,7 @@ class BloomInstaller {
         throw new Error("API not loaded - preload.js failed");
       }
 
-      console.log("🔧 [Installer] Inicializando Modo Dios...");
+      console.log("🔧 [Installer] Inicializando...");
 
       // Instanciar managers
       this.ui = new UIManager();

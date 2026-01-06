@@ -253,36 +253,25 @@ class ProfileManager:
     
     def launch_profile(self, profile_id: str, url: Optional[str] = None) -> Dict[str, Any]:
         """
-        Lanza Chrome con el perfil especificado.
-        
-        Args:
-            profile_id: ID del perfil a lanzar (completo o prefijo)
-            url: URL opcional para abrir (puede ser http://, https://, o file://)
-            
-        Returns:
-            Dict con información del proceso lanzado
+        Lanza Chrome con el perfil especificado (Versión Debuggeada).
         """
-        # Verificar que el perfil existe (soporta búsqueda parcial)
+        # Verificar que el perfil existe
         profile = self._find_profile(profile_id)
         if not profile:
             raise ValueError(f"Perfil no encontrado: {profile_id}")
         
-        # Usar el ID completo encontrado
         full_profile_id = profile['id']
         profile_path = self.workers_dir / full_profile_id
         
-        if not profile_path.exists():
-            raise RuntimeError(f"Directorio del perfil no existe: {profile_path}")
-        
         # Detectar Chrome
         chrome_path = self._find_chrome_executable()
-        if not chrome_path:
-            raise RuntimeError("No se encontró el ejecutable de Chrome")
         
-        # Detectar extensión usando el nuevo sistema
-        extension_path = self._find_extension_path()
+        # --- DIAGNÓSTICO CRÍTICO ---
+        print(f"\n🚀 [DEBUG-LAUNCH] Iniciando lanzamiento...")
+        extension_path = self._get_extension_path() # <--- Aquí llama a tu función de búsqueda
+        print(f"👉 [DEBUG-LAUNCH] _get_extension_path retornó: '{extension_path}'")
         
-        # Construir argumentos de Chrome
+        # Construir argumentos
         chrome_args = [
             chrome_path,
             f"--user-data-dir={profile_path}",
@@ -290,20 +279,22 @@ class ProfileManager:
             "--no-default-browser-check",
         ]
         
-        # Agregar extensión si existe
+        # Lógica de Extensión
         if extension_path:
+            print(f"✅ [DEBUG-LAUNCH] Agregando flag --load-extension")
             chrome_args.append(f"--load-extension={extension_path}")
+        else:
+            print(f"⚠️ [DEBUG-LAUNCH] extension_path es None/Empty. No se cargará extensión.")
         
-        # Agregar URL si se especificó
+        # URL Logic...
         if url:
-            # Para URLs file://, http://, https://, usar --app para modo app
             if url.startswith(("http://", "https://", "file://")):
                 chrome_args.append(f"--app={url}")
             else:
-                # Para otras URLs, agregar directamente
                 chrome_args.append(url)
         
-        # Lanzar proceso en modo detached
+        # Lanzamiento
+        pid = None
         try:
             if platform.system() == "Windows":
                 process = subprocess.Popen(
@@ -319,23 +310,26 @@ class ProfileManager:
                     stderr=subprocess.DEVNULL,
                     start_new_session=True
                 )
-            
-            # Esperar brevemente para capturar PID
-            time.sleep(0.1)
+            time.sleep(0.5)
             pid = process.pid if process.poll() is None else None
+            print(f"🏁 [DEBUG-LAUNCH] Proceso lanzado. PID: {pid}")
             
         except Exception as e:
             raise RuntimeError(f"Error al lanzar Chrome: {e}")
         
-        return {
+        # Retorno explícito
+        result_data = {
             "profile_id": full_profile_id,
             "alias": profile.get('alias'),
             "pid": pid,
             "url": url,
             "chrome_path": chrome_path,
-            "extension_loaded": extension_path is not None,
+            "extension_loaded": bool(extension_path), # Forzamos booleano
             "extension_path": extension_path
         }
+        
+        print(f"📦 [DEBUG-LAUNCH] Retornando datos al CLI: loaded={result_data['extension_loaded']}")
+        return result_data
     
     def destroy_profile(self, profile_id: str) -> Dict[str, Any]:
         """
@@ -538,65 +532,49 @@ class ProfileManager:
         
         return None
     
-    def _find_extension_path(self) -> Optional[str]:
-        """
-        Busca la ruta de la extensión Bloom usando el detector de entorno.
+    def _get_extension_path(self) -> Optional[str]:
+        """Busca la extensión Bloom con diagnóstico detallado."""
+        import sys
         
-        Orden de búsqueda:
-        1. Variable de entorno BLOOM_EXTENSION_PATH
-        2. Desarrollo: repo_root/installer/chrome-extension/src
-        3. Producción: %LOCALAPPDATA%/BloomNucleus/installer/chrome-extension/src
-        4. Producción: %APPDATA%/BloomNucleus/installer/chrome-extension/src
-        """
-        try:
-            from brain.shared.environment import get_environment_detector
-            detector = get_environment_detector()
-            ext_path = detector.get_extension_path()
-            return str(ext_path) if ext_path else None
-        except ImportError:
-            # Fallback si no está disponible el detector
-            return self._find_extension_path_legacy()
-    
-    def _find_extension_path_legacy(self) -> Optional[str]:
-        """Método legacy de búsqueda de extensión (fallback)"""
-        # 1. Variable de entorno
+        # Lista de candidatos a probar
+        candidates = []
+        
+        # 1. Variable de entorno (Prioridad Máxima)
         env_path = os.environ.get("BLOOM_EXTENSION_PATH")
         if env_path:
-            env_extension_path = Path(env_path)
-            if env_extension_path.exists() and (env_extension_path / "manifest.json").exists():
-                return str(env_extension_path)
+            candidates.append(("ENV_VAR", Path(env_path)))
+
+        # 2. Producción (AppData/BloomNucleus/extension)
+        # Probamos FLAT (extension/manifest.json) y ANIDADA (extension/src/manifest.json)
+        prod_root = self.base_dir / "extension"
+        candidates.append(("PROD_FLAT", prod_root))
+        candidates.append(("PROD_SRC", prod_root / "src"))
+
+        # 3. Desarrollo (Relativo al script)
+        try:
+            dev_path = Path(__file__).parents[4] / "chrome-extension" / "src"
+            candidates.append(("DEV_REPO", dev_path))
+        except:
+            pass
+
+        # === DIAGNÓSTICO (Se imprimirá al lanzar) ===
+        print(f"\n🔎 [DEBUG] Buscando extensión Bloom...")
         
-        # 2. Rutas de producción automáticas
-        possible_bases = []
-        system = platform.system()
+        for source, path_obj in candidates:
+            manifest = path_obj / "manifest.json"
+            exists = path_obj.exists()
+            has_manifest = manifest.exists()
+            
+            # Solo imprimimos si existe la carpeta para no ensuciar, 
+            # o si es la variable de entorno (para ver si llega mal)
+            if exists or source == "ENV_VAR":
+                print(f"   - {source}: {path_obj}")
+                print(f"     ¿Carpeta existe? {exists}")
+                print(f"     ¿Tiene manifest? {has_manifest}")
+            
+            if exists and has_manifest:
+                print(f"   ✅ ENCONTRADA en: {source}\n")
+                return str(path_obj)
         
-        if system == "Windows":
-            local_appdata = os.environ.get("LOCALAPPDATA")
-            if local_appdata:
-                possible_bases.append(Path(local_appdata) / "BloomNucleus")
-            appdata = os.environ.get("APPDATA")
-            if appdata:
-                possible_bases.append(Path(appdata) / "BloomNucleus")
-        
-        elif system == "Darwin":  # macOS
-            home = Path.home()
-            possible_bases.append(home / "Library" / "Application Support" / "BloomNucleus")
-        
-        else:  # Linux
-            home = Path.home()
-            possible_bases.append(home / ".local" / "share" / "BloomNucleus")
-        
-        # Subcarpetas comunes
-        common_subpaths = [
-            Path("installer") / "chrome-extension" / "src",
-            Path("extensions") / "bloom",
-            Path("chrome-extension") / "src",
-        ]
-        
-        for base in possible_bases:
-            for subpath in common_subpaths:
-                prod_extension_path = base / subpath
-                if prod_extension_path.exists() and (prod_extension_path / "manifest.json").exists():
-                    return str(prod_extension_path)
-        
+        print("   ❌ NO SE ENCONTRÓ LA EXTENSIÓN EN NINGUNA RUTA.\n")
         return None

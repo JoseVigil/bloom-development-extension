@@ -1,5 +1,7 @@
-// main.js - UNIFIED: Dual-mode (Install + Launch) with full Launch functionality
-// Integrates: main.js (launch logic) + main-backup.js (dual-mode architecture)
+// main.js - REFACTORED: WebSocket → TCP Native Heartbeat
+// ============================================================================
+// Native Host TCP Protocol: [4-byte LE Header] + [UTF-8 JSON Payload]
+// ============================================================================
 
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
@@ -15,15 +17,29 @@ const fs = require('fs');
 
 const execAsync = promisify(exec);
 
-// Mode detection from CLI args
 const IS_DEV = process.argv.includes('--dev') || process.env.NODE_ENV === 'development';
 const IS_LAUNCH_MODE = process.argv.includes('--mode=launch') || process.argv.includes('--launch');
 const FORCE_ONBOARDING = process.argv.includes('--onboarding');
 
-// App metadata
 const APP_VERSION = app.getVersion();
 const isWindows = process.platform === 'win32';
 const useEmojis = !isWindows || process.env.FORCE_EMOJIS === 'true';
+
+// ============================================================================
+// TCP HEARTBEAT CONFIGURATION
+// ============================================================================
+
+const TCP_CONFIG = {
+  HOST: '127.0.0.1',
+  PORT: 5678,
+  TIMEOUT: 2000,           // 2 seconds per ping
+  POLL_INTERVAL: 30000,    // 30 seconds between checks (when enabled)
+  RETRY_DELAY: 5000        // 5 seconds on failure before retry
+};
+
+let heartbeatInterval = null;
+let lastHeartbeatStatus = 'unknown';
+let heartbeatEnabled = false; // ✅ NEW: Only start after installation
 
 // ============================================================================
 // PATHS - Cross-platform Python & Brain
@@ -77,7 +93,8 @@ function getEmojiName(emoji) {
     '🌸': 'BLOOM', '🚀': 'LAUNCH', '✅': 'OK', '❌': 'ERROR',
     '🔧': 'DEV', '📋': 'INFO', '⚠️': 'WARN', '🔍': 'DEBUG',
     '🔗': 'URL', '📄': 'NAV', '📨': 'EVENT', '📦': 'PROD',
-    '🪟': 'WINDOW', '💥': 'FATAL', '👋': 'QUIT', '🔄': 'RELOAD'
+    '🪟': 'WINDOW', '💥': 'FATAL', '👋': 'QUIT', '🔄': 'RELOAD',
+    '💓': 'HEARTBEAT', '🔌': 'TCP', '🏓': 'PING'
   };
   return map[emoji] || 'LOG';
 }
@@ -90,13 +107,14 @@ function error(...args) { console.error('❌', '[MAIN]', ...args); }
 // ============================================================================
 
 console.log(`
-╔═══════════════════════════════════════════╗
+╔═════════════════════════════════════════╗
 ║ 🌸 BLOOM NUCLEUS ${IS_LAUNCH_MODE ? 'LAUNCHER' : 'INSTALLER'}        ║
 ║ Mode: ${IS_LAUNCH_MODE ? 'LAUNCH' : 'INSTALL'}                        ║
 ║ Version: ${APP_VERSION.padEnd(28)} ║
 ║ Environment: ${IS_DEV ? 'DEVELOPMENT' : 'PRODUCTION'.padEnd(20)} ║
 ║ Packaged: ${(app.isPackaged ? 'YES' : 'NO').padEnd(26)} ║
-╚═══════════════════════════════════════════╝
+║ TCP Heartbeat: ENABLED (Port ${TCP_CONFIG.PORT})    ║
+╚═════════════════════════════════════════╝
 `);
 
 if (IS_DEV) {
@@ -107,14 +125,145 @@ log('📋 Paths:');
 log('  - REPO_ROOT:', REPO_ROOT);
 log('  - Python:', pythonPath);
 log('  - Brain:', BRAIN_MAIN_PATH);
-if (IS_LAUNCH_MODE) {
-  log('  - Webview:', WEBVIEW_BUILD_PATH);
-} else {
-  log('  - Install HTML:', INSTALL_HTML_PATH);
+log('  - TCP Host:', `${TCP_CONFIG.HOST}:${TCP_CONFIG.PORT}`);
+
+// ============================================================================
+// 🔥 TCP HEARTBEAT IMPLEMENTATION (Native Protocol)
+// ============================================================================
+
+/**
+ * Creates a properly formatted TCP message with binary header
+ * Protocol: [4-byte LE header with payload size] + [UTF-8 JSON payload]
+ */
+function createTCPMessage(payload) {
+  const payloadStr = JSON.stringify(payload);
+  const payloadBuf = Buffer.from(payloadStr, 'utf8');
+  
+  // Create 4-byte Little Endian header
+  const header = Buffer.alloc(4);
+  header.writeUInt32LE(payloadBuf.length, 0);
+  
+  return Buffer.concat([header, payloadBuf]);
+}
+
+/**
+ * Performs a single TCP ping to the Native Host
+ * Returns: { alive: boolean, latency: number, error?: string }
+ */
+function checkHostHeartbeat() {
+  return new Promise((resolve) => {
+    const startTime = Date.now();
+    const socket = new net.Socket();
+    
+    // Set connection timeout
+    socket.setTimeout(TCP_CONFIG.TIMEOUT);
+    
+    // Attempt connection
+    socket.connect(TCP_CONFIG.PORT, TCP_CONFIG.HOST, () => {
+      // Build ping message
+      const payload = {
+        command: 'ping',
+        source: 'electron',
+        timestamp: Date.now()
+      };
+      
+      const message = createTCPMessage(payload);
+      
+      // Send ping
+      socket.write(message);
+      safeLog('🏓', `[TCP] Ping sent to ${TCP_CONFIG.HOST}:${TCP_CONFIG.PORT}`);
+    });
+    
+    // Handle response
+    socket.on('data', (data) => {
+      const latency = Date.now() - startTime;
+      safeLog('💓', `[TCP] Host is ALIVE (latency: ${latency}ms)`);
+      
+      socket.destroy();
+      resolve({ alive: true, latency });
+    });
+    
+    // Handle errors
+    socket.on('error', (err) => {
+      safeLog('⚠️', `[TCP] Host unreachable: ${err.message}`);
+      socket.destroy();
+      resolve({ alive: false, latency: 0, error: err.message });
+    });
+    
+    // Handle timeout
+    socket.on('timeout', () => {
+      safeLog('⚠️', `[TCP] Ping timeout (${TCP_CONFIG.TIMEOUT}ms)`);
+      socket.destroy();
+      resolve({ alive: false, latency: TCP_CONFIG.TIMEOUT, error: 'timeout' });
+    });
+  });
+}
+
+/**
+ * Starts automatic heartbeat polling
+ * ⚠️ Should ONLY be called AFTER Host is installed and running
+ */
+function startHeartbeatPolling() {
+  if (heartbeatInterval) {
+    log('⚠️ Heartbeat polling already running');
+    return;
+  }
+  
+  if (!heartbeatEnabled) {
+    log('⚠️ Heartbeat disabled - call enableHeartbeat() first');
+    return;
+  }
+  
+  log('🔌 Starting TCP heartbeat polling...');
+  log(`   Interval: ${TCP_CONFIG.POLL_INTERVAL}ms (${TCP_CONFIG.POLL_INTERVAL / 1000}s)`);
+  log(`   Timeout: ${TCP_CONFIG.TIMEOUT}ms per ping`);
+  
+  // Initial check
+  checkHostHeartbeat().then(status => {
+    lastHeartbeatStatus = status.alive ? 'online' : 'offline';
+    if (!status.alive) {
+      log('⚠️ Initial heartbeat failed - Host may not be running yet');
+    }
+  });
+  
+  // Periodic checks
+  heartbeatInterval = setInterval(async () => {
+    const status = await checkHostHeartbeat();
+    const previousStatus = lastHeartbeatStatus;
+    lastHeartbeatStatus = status.alive ? 'online' : 'offline';
+    
+    // Log only on status change
+    if (previousStatus !== lastHeartbeatStatus) {
+      if (status.alive) {
+        log('✅ Host came online');
+      } else {
+        log('❌ Host went offline');
+      }
+    }
+  }, TCP_CONFIG.POLL_INTERVAL);
+}
+
+/**
+ * Enables heartbeat system (call after Host installation)
+ */
+function enableHeartbeat() {
+  log('✅ Heartbeat system enabled');
+  heartbeatEnabled = true;
+}
+
+/**
+ * Stops heartbeat polling
+ */
+function stopHeartbeatPolling() {
+  if (heartbeatInterval) {
+    clearInterval(heartbeatInterval);
+    heartbeatInterval = null;
+    log('🔌 Heartbeat polling stopped');
+  }
 }
 
 // ============================================================================
-// TCP PORT CHECK
+// LEGACY TCP PORT CHECK (Basic connectivity test - no protocol handshake)
 // ============================================================================
 
 function checkPortOpen(port, host = 'localhost', timeout = 2000) {
@@ -166,8 +315,17 @@ function registerSharedHandlers() {
     return isOpen;
   });
 
+  // ✅ REFACTORED: TCP-based health check
   ipcMain.handle('health:check', async () => {
-    return { status: 'ok', checks: { websocket: true } };
+    const status = await checkHostHeartbeat();
+    return { 
+      status: status.alive ? 'ok' : 'offline', 
+      checks: { 
+        tcp: status.alive,
+        latency: status.latency,
+        port: TCP_CONFIG.PORT
+      } 
+    };
   });
 
   log('✅ Shared IPC handlers registered');
@@ -213,11 +371,15 @@ function registerLaunchHandlers() {
     }
   });
 
-  // Check all services via brain.py
+  // ✅ REFACTORED: Check services using TCP directly (no WebSocket validation)
   ipcMain.handle('services:check-all', async () => {
     try {
-      log('🔍 Checking all services via brain.py...');
+      log('🔍 Checking services (TCP + Brain API check)...');
 
+      // TCP heartbeat check
+      const tcpStatus = await checkHostHeartbeat();
+
+      // Brain dev-check (for API/dev server info only)
       const { stdout } = await execAsync(
         `"${pythonPath}" -I "${BRAIN_MAIN_PATH}" --json health dev-check`,
         { cwd: REPO_ROOT, timeout: 10000, windowsHide: true }
@@ -226,19 +388,19 @@ function registerLaunchHandlers() {
       const result = JSON.parse(stdout);
       
       return {
+        tcp: tcpStatus.alive,
+        tcpLatency: tcpStatus.latency,
         devServer: result.data.services.dev_server.available,
         devServerHost: result.data.services.dev_server.host,
         api: result.data.services.api.available,
-        apiHost: result.data.services.api.host,
-        websocket: result.data.services.websocket.available,
-        websocketHost: result.data.services.websocket.host
+        apiHost: result.data.services.api.host
       };
     } catch (err) {
       error('Error checking services:', err.message);
       return {
+        tcp: false,
         devServer: false,
-        api: false,
-        websocket: false
+        api: false
       };
     }
   });
@@ -247,7 +409,7 @@ function registerLaunchHandlers() {
 }
 
 // ============================================================================
-// INSTALL MODE IPC HANDLERS - FIXED
+// INSTALL MODE IPC HANDLERS - REFACTORED
 // ============================================================================
 
 function registerInstallHandlers() {
@@ -310,169 +472,176 @@ function registerInstallHandlers() {
     }
   });
 
-// ✅ FIXED: Brain launch handler - Reemplazar en main.js (línea ~180)
-ipcMain.handle('brain:launch', async () => {
-  try {
-    log('🚀 Launching Chrome profile via Brain...');
-    
-    const { paths } = require('./config/paths');
-    const configPath = paths.configFile;
-    
-    let profileId = null;
-    
-    // PASO 1: Intentar leer profileId desde nucleus.json
-    if (fs.existsSync(configPath)) {
-      try {
-        const configContent = fs.readFileSync(configPath, 'utf8');
-        log('📋 Config file content:', configContent);
-        
-        const config = JSON.parse(configContent);
-        
-        // ✅ FIXED: Buscar masterProfileId (nombre correcto en nucleus.json)
-        profileId = config.masterProfileId || config.default_profile_id || config.profileId;
-        
-        if (profileId) {
-          log(`✅ Found profileId in config: ${profileId}`);
-        } else {
-          log('⚠️ Config exists but no profileId found. Keys:', Object.keys(config));
-        }
-      } catch (err) {
-        log('⚠️ Could not read/parse config:', err.message);
-      }
-    } else {
-      log('⚠️ Config file does not exist:', configPath);
-    }
-    
-    // PASO 2: Si no hay config, listar perfiles y usar el primero
-    if (!profileId) {
-      log('📋 No profileId in config, listing profiles...');
+  // ✅ FIXED: Brain launch handler (corrected profileId resolution)
+  ipcMain.handle('brain:launch', async () => {
+    try {
+      log('🚀 Launching Chrome profile via Brain...');
       
-      try {
-        const { stdout, stderr } = await execAsync(
-          `"${pythonPath}" -I "${BRAIN_MAIN_PATH}" --json profile list`,
-          { cwd: REPO_ROOT, timeout: 10000, windowsHide: true }
-        );
-        
-        if (stderr) {
-          log('⚠️ Profile list stderr:', stderr);
-        }
-        
-        log('📋 Profile list output:', stdout);
-        
-        const result = JSON.parse(stdout);
-        
-        if (result.status === 'success' && result.data?.profiles?.length > 0) {
-          // ✅ FIXED: Extraer el UUID (id), NO el alias
-          profileId = result.data.profiles[0].id;
-          log(`✅ Using first available profile ID: ${profileId}`);
-          log(`   Profile alias: ${result.data.profiles[0].alias}`);
-        } else {
-          throw new Error('No profiles found. Please run installation again.');
-        }
-      } catch (listErr) {
-        error('❌ Failed to list profiles:', listErr.message);
-        throw new Error('Could not determine profile to launch');
-      }
-    }
-    
-    // PASO 3: Validar que profileId sea un UUID, no un alias
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    
-    if (!uuidRegex.test(profileId)) {
-      error('❌ Profile ID is not a valid UUID:', profileId);
-      error('   This looks like an alias. Attempting to resolve to UUID...');
+      const { paths } = require('./config/paths');
+      const configPath = paths.configFile;
       
-      // Intentar listar y encontrar el UUID del alias
-      try {
-        const { stdout } = await execAsync(
-          `"${pythonPath}" -I "${BRAIN_MAIN_PATH}" --json profile list`,
-          { cwd: REPO_ROOT, timeout: 10000, windowsHide: true }
-        );
+      let profileId = null;
+      
+      // STEP 1: Try to read profileId from nucleus.json
+      if (fs.existsSync(configPath)) {
+        try {
+          const configContent = fs.readFileSync(configPath, 'utf8');
+          log('📋 Config file content:', configContent);
+          
+          const config = JSON.parse(configContent);
+          
+          // ✅ FIXED: Look for masterProfileId (correct key in nucleus.json)
+          profileId = config.masterProfileId || config.default_profile_id || config.profileId;
+          
+          if (profileId) {
+            log(`✅ Found profileId in config: ${profileId}`);
+          } else {
+            log('⚠️ Config exists but no profileId found. Keys:', Object.keys(config));
+          }
+        } catch (err) {
+          log('⚠️ Could not read/parse config:', err.message);
+        }
+      } else {
+        log('⚠️ Config file does not exist:', configPath);
+      }
+      
+      // STEP 2: If no config, list profiles and use first one
+      if (!profileId) {
+        log('📋 No profileId in config, listing profiles...');
         
-        const result = JSON.parse(stdout);
-        
-        if (result.status === 'success' && result.data?.profiles) {
-          const matchingProfile = result.data.profiles.find(
-            p => p.alias === profileId
+        try {
+          const { stdout, stderr } = await execAsync(
+            `"${pythonPath}" -I "${BRAIN_MAIN_PATH}" --json profile list`,
+            { cwd: REPO_ROOT, timeout: 10000, windowsHide: true }
           );
           
-          if (matchingProfile) {
-            profileId = matchingProfile.id;
-            log(`✅ Resolved alias to UUID: ${profileId}`);
-          } else {
-            throw new Error(`No profile found with alias: ${profileId}`);
+          if (stderr) log('⚠️ Profile list stderr:', stderr);
+          log('📋 Profile list output:', stdout);
+          
+          let result; 
+          try {
+            result = JSON.parse(stdout);
+          } catch (parseError) {
+            console.error("❌ Invalid JSON response:", stdout);  
+            throw new Error(`Invalid JSON: ${parseError.message}`);
           }
+          
+          if (result.status === 'success' && result.data?.profiles?.length > 0) {
+            // ✅ FIXED: Extract UUID (id), NOT alias
+            profileId = result.data.profiles[0].id;
+            log(`✅ Using first available profile ID: ${profileId}`);
+            log(`   Profile alias: ${result.data.profiles[0].alias}`);
+          } else {
+            throw new Error('No profiles found. Please run installation again.');
+          }
+        } catch (listErr) {
+          error('❌ Failed to list profiles:', listErr.message);
+          throw new Error('Could not determine profile to launch');
         }
-      } catch (resolveErr) {
-        error('❌ Failed to resolve alias to UUID:', resolveErr.message);
-        throw resolveErr;
       }
-    }
-    
-    // PASO 4: Lanzar con el UUID correcto
-    log(`🚀 Launching profile with UUID: ${profileId}`);
-    log(`   Command: profile launch ${profileId} --cockpit`);
-    
-    const { stdout, stderr } = await execAsync(
-      `"${pythonPath}" -I "${BRAIN_MAIN_PATH}" profile launch ${profileId} --cockpit`,
-      { cwd: REPO_ROOT, timeout: 15000, windowsHide: true }
-    );
-    
-    log('✅ Chrome launched with cockpit');
-    if (stdout) log('📋 Output:', stdout);
-    if (stderr) log('⚠️ Stderr:', stderr);
-    
-    return { 
-      success: true,
-      profileId: profileId,
-      mode: 'cockpit'
-    };
-    
-  } catch (err) {
-    error('❌ Launch error:', err.message);
-    if (err.stack) {
-      error('Stack trace:', err.stack);
-    }
-    return {
-      success: false,
-      error: err.message
-    };
-  }
-});
-
-  // ✅ FIXED: Extension heartbeat - usar comando válido de Brain
-  ipcMain.handle('extension:heartbeat', async () => {
-    try {
-      log('💓 Checking extension heartbeat...');     
       
-      const { stdout } = await execAsync(
-        `"${pythonPath}" -I "${BRAIN_MAIN_PATH}" health websocket-status --json`,
-        { cwd: REPO_ROOT, timeout: 10000, windowsHide: true }
+      // STEP 3: Validate profileId is UUID, not alias
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      
+      if (!uuidRegex.test(profileId)) {
+        error('❌ Profile ID is not a valid UUID:', profileId);
+        error('   This looks like an alias. Attempting to resolve to UUID...');
+        
+        // Try to list and find UUID from alias
+        try {
+          const { stdout } = await execAsync(
+            `"${pythonPath}" -I "${BRAIN_MAIN_PATH}" --json profile list`,
+            { cwd: REPO_ROOT, timeout: 10000, windowsHide: true }
+          );
+          
+          const result = JSON.parse(stdout);
+          
+          if (result.status === 'success' && result.data?.profiles) {
+            const matchingProfile = result.data.profiles.find(
+              p => p.alias === profileId
+            );
+            
+            if (matchingProfile) {
+              profileId = matchingProfile.id;
+              log(`✅ Resolved alias to UUID: ${profileId}`);
+            } else {
+              throw new Error(`No profile found with alias: ${profileId}`);
+            }
+          }
+        } catch (resolveErr) {
+          error('❌ Failed to resolve alias to UUID:', resolveErr.message);
+          throw resolveErr;
+        }
+      }
+      
+      // STEP 4: Launch with correct UUID
+      log(`🚀 Launching profile with UUID: ${profileId}`);
+      log(`   Command: profile launch ${profileId} --cockpit`);
+      
+      const { stdout, stderr } = await execAsync(
+        `"${pythonPath}" -I "${BRAIN_MAIN_PATH}" profile launch ${profileId} --cockpit`,
+        { cwd: REPO_ROOT, timeout: 15000, windowsHide: true }
       );
       
-      const result = JSON.parse(stdout);
+      log('✅ Chrome launched with cockpit');
+      if (stdout) log('📋 Output:', stdout);
+      if (stderr) log('⚠️ Stderr:', stderr);
       
-      // Interpretar respuesta
-      const serviceRunning = result.status === 'success' && 
-                            result.data?.connected === true;
+      return { 
+        success: true,
+        profileId: profileId,
+        mode: 'cockpit'
+      };
       
-      log(serviceRunning ? '✅ WebSocket connected' : '⚠️ WebSocket not connected');
+    } catch (err) {
+      error('❌ Launch error:', err.message);
+      if (err.stack) {
+        error('Stack trace:', err.stack);
+      }
+      return {
+        success: false,
+        error: err.message
+      };
+    }
+  });
+
+  // ✅ REFACTORED: Extension heartbeat using TCP directly
+  // Called by renderer AFTER installation completes
+  ipcMain.handle('extension:heartbeat', async () => {
+    try {
+      log('💓 Checking extension heartbeat via TCP...');
+      
+      const status = await checkHostHeartbeat();
+      
+      if (status.alive) {
+        log('✅ TCP connection successful - Host is online');
+        
+        // ✅ Enable automatic polling after first successful connection
+        if (!heartbeatEnabled) {
+          enableHeartbeat();
+          startHeartbeatPolling();
+        }
+      } else {
+        log('⚠️ TCP connection failed - Host may be offline');
+      }
       
       return {
-        chromeConnected: serviceRunning,
-        data: result.data || {}
+        chromeConnected: status.alive,
+        latency: status.latency,
+        protocol: 'tcp',
+        port: TCP_CONFIG.PORT,
+        error: status.error
       };
       
     } catch (err) {
       error('Heartbeat check failed:', err.message);
       
-      // ✅ FALLBACK: Simplemente retornar mock success después de 5s
-      // (Chrome ya se lanzó, asumimos que está conectado)
-      log('⚠️ Using fallback heartbeat (assuming connected)');
-      
       return {
-        chromeConnected: true,
-        data: { fallback: true }
+        chromeConnected: false,
+        latency: 0,
+        protocol: 'tcp',
+        port: TCP_CONFIG.PORT,
+        error: err.message
       };
     }
   });
@@ -482,9 +651,9 @@ ipcMain.handle('brain:launch', async () => {
     try {
       log('🚀 Opening Bloom Launcher in onboarding mode...');
       
+      const { paths } = require('./config/paths');
       const launcherPath = paths.launcherExe;
       
-      // Verificar que el launcher existe
       if (!fs.existsSync(launcherPath)) {
         error('❌ Launcher not found at:', launcherPath);
         return {
@@ -495,7 +664,6 @@ ipcMain.handle('brain:launch', async () => {
       
       log('📋 Launcher path:', launcherPath);
       
-      // Spawn el launcher con el flag --onboarding
       const { spawn } = require('child_process');
       
       const launcherProcess = spawn(launcherPath, ['--onboarding'], {
@@ -504,18 +672,15 @@ ipcMain.handle('brain:launch', async () => {
         windowsHide: false
       });
       
-      // Desconectar el proceso para que corra independiente
       launcherProcess.unref();
       
       log('✅ Launcher spawned successfully');
       log('⏳ Waiting 2 seconds before closing installer...');
       
-      // Esperar un poco para asegurar que el launcher inició
       await new Promise(resolve => setTimeout(resolve, 2000));
       
       log('👋 Closing installer window...');
       
-      // Cerrar la ventana del installer
       const mainWindow = BrowserWindow.getAllWindows()[0];
       if (mainWindow) {
         mainWindow.close();
@@ -547,7 +712,8 @@ ipcMain.handle('brain:launch', async () => {
         node: false,
         python: false,
         diskSpace: true,
-        adminRights: false
+        adminRights: false,
+        tcpPort: false
       };
       
       try {
@@ -563,6 +729,10 @@ ipcMain.handle('brain:launch', async () => {
       } catch {
         log('⚠️ Python not found in PATH');
       }
+      
+      // Check TCP port availability
+      const portOpen = await checkPortOpen(TCP_CONFIG.PORT, TCP_CONFIG.HOST, 1000);
+      requirements.tcpPort = portOpen;
       
       if (process.platform === 'win32') {
         const { isElevated } = require('./core/admin-utils');
@@ -616,8 +786,13 @@ ipcMain.handle('brain:launch', async () => {
         installerExists: fs.existsSync(path.join(__dirname, 'install', 'installer.js')),
         pythonExists: fs.existsSync(pythonPath),
         brainExists: fs.existsSync(BRAIN_MAIN_PATH),
-        adminRights: false
+        adminRights: false,
+        tcpPortAvailable: false
       };
+      
+      // Check TCP port
+      const tcpStatus = await checkHostHeartbeat();
+      checks.tcpPortAvailable = tcpStatus.alive;
       
       if (process.platform === 'win32') {
         const { isElevated } = require('./core/admin-utils');
@@ -874,6 +1049,10 @@ app.whenReady().then(async () => {
   // Create window (mode-specific)
   mainWindow = await createWindow();
 
+  // ✅ DO NOT start heartbeat automatically
+  // It will be enabled when renderer calls 'extension:heartbeat' after installation
+  log('ℹ️  TCP heartbeat will start after Host installation completes');
+
   app.on('activate', async () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       log('🔄 Reactivating window...');
@@ -883,6 +1062,9 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
+  // Stop heartbeat when app closes
+  stopHeartbeatPolling();
+  
   if (process.platform !== 'darwin') {
     log('👋 All windows closed, quitting...');
     app.quit();
@@ -891,6 +1073,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   log('👋 Application closing...');
+  stopHeartbeatPolling();
 });
 
 // ============================================================================

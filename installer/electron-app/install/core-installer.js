@@ -1,7 +1,10 @@
 const fs = require('fs-extra');
-const path = require('path');
+const path = require('path'); 
 const { execPromise } = require('../utils/exec-helper');
 const { paths } = require('../config/paths');
+const { promisify } = require('util');
+const { exec } = require('child_process');
+const execAsync = promisify(exec);
 
 /**
  * Instala el runtime de Python y el paquete Brain
@@ -48,6 +51,52 @@ async function installCore() {
   // Verificar dependencias críticas
   await verifyBrainDependencies();
 
+  // Instalar dependencias Python desde requirements.txt (incluye websockets)
+  console.log('📦 Installing Python dependencies from requirements.txt...');
+
+  const requirementsPath = path.join(paths.brainDir, 'requirements.txt');
+
+  if (!fs.existsSync(requirementsPath)) {
+    throw new Error(`requirements.txt not found at ${requirementsPath}`);
+  }
+
+  // Copiar dependencias vendoreadas desde runtime_libs/ directamente a site-packages en AppData
+  console.log('📦 Installing vendored Python dependencies from runtime_libs...');
+  const runtimeLibsSource = path.resolve(paths.brainSource, 'runtime_libs');
+  const sitePackagesDest = path.resolve(paths.brainDir, '../Lib/site-packages');
+
+  if (fs.existsSync(runtimeLibsSource)) {
+    // Lee el config para copiar solo lo necesario (opcional, pero hace eco de tu idea)
+    const configPath = path.join(runtimeLibsSource, 'libs_to_copy.txt');
+    let libsToCopy = [];
+    if (fs.existsSync(configPath)) {
+      libsToCopy = fs.readFileSync(configPath, 'utf-8').split('\n').map(l => l.trim()).filter(Boolean);
+      console.log(`🔍 Libs a copiar según config: ${libsToCopy.join(', ')}`);
+    } else {
+      console.warn('⚠️ No hay libs_to_copy.txt - copiando todo de runtime_libs/');
+    }
+
+    // Copia (usando fs-extra o nativo; instalá fs-extra si no tenés cp recursivo)
+    if (libsToCopy.length > 0) {
+      for (const lib of libsToCopy) {
+        const srcDir = path.join(runtimeLibsSource, lib);
+        const destDir = path.join(sitePackagesDest, lib);
+        if (fs.existsSync(srcDir)) {
+          await fs.cp(srcDir, destDir, { recursive: true, force: true });  // O fs-extra.copy
+          console.log(`✅ Copiado: ${lib}`);
+        } else {
+          console.warn(`⚠️ No encontrado: ${lib}`);
+        }
+      }
+    } else {
+      // Si no hay config, copia todo
+      await fs.cp(runtimeLibsSource, sitePackagesDest, { recursive: true, force: true, filter: src => !src.endsWith('libs_to_copy.txt') });
+      console.log('✅ Todo runtime_libs/ copiado a site-packages');
+    }
+  } else {
+    console.warn('⚠️ No se encontró runtime_libs/ - asumiendo dependencias ya bundled');
+  }
+  
   console.log(" ✅ AI Engine installation complete");
 }
 
@@ -267,7 +316,7 @@ async function initializeBrainProfile() {
     
     config.masterProfileId = profileId;
     config.brainPath = brainPath;
-    config.pythonPath = brainPath;
+    config.pythonPath = paths.pythonExe;
     config.pythonMode = 'isolated';
     
     await fs.writeJson(paths.configFile, config, { spaces: 2 });    
