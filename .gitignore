@@ -66,3 +66,37 @@ src/host/mingw-deps
 
 # SvelteKit
 **/.svelte-kit/
+
+
+# PyInstaller build artifacts
+build/
+dist/
+*.spec.bak
+
+# Compiled executable and dependencies
+installer/native/bin/win32/brain/
+!installer/native/bin/win32/brain/.gitkeep
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
