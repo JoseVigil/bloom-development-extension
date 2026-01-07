@@ -132,7 +132,7 @@ def compile_with_pyinstaller(clean=False):
         print_error(f"No existe: {spec_file}")
         return False
     
-    cmd = ["pyinstaller", str(spec_file)]
+    cmd = ["pyinstaller", str(spec_file), "--noconfirm"]  # ← Agregar --noconfirm
     if clean:
         cmd.append("--clean")
     

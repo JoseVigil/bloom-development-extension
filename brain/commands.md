@@ -23,9 +23,21 @@ python -m brain filesystem tree src installer webview brain contracts package.js
 
 python -m brain filesystem tree installer -o tree/installer_tree.txt
 
+
+
 python -m brain filesystem tree brain -o tree/brain_tree.txt
 |
 python -m brain filesystem tree installer/electron-app -o tree/electron_tree.txt
+
+.\brain.exe profile launch <PROFILE_ID> --cockpit
+
+.\brain.exe profile launch 33c3be18-5f93-4549-b24f-88ac8fc6e33f --cockpit
+
+.\brain.exe profile launch bfc87a4b-728d-4eca-bbd0-eb0b329c6eed --cockpit
+
+bfc87a4b-728d-4eca-bbd0-eb0b329c6eed
+
+brain profile launch 33c3be18-5f93-4549-b24f-88ac8fc6e33f --cockpit
 
 
 josev@LENOVO MINGW64 ~/AppData/Local/BloomNucleus/engine/runtime/Lib/site-packages

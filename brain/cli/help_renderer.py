@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 from collections import defaultdict
 from typing import Dict, List
+import sys
 import inspect
 from pathlib import Path
 from rich.console import Console
@@ -13,7 +14,21 @@ from typer.models import OptionInfo, ArgumentInfo
 from brain.cli.base import BaseCommand, CommandMetadata
 from brain.cli.categories import CommandCategory
 from brain.cli.registry import CommandRegistry
-from brain.shared.runtime_resolver import RuntimeResolver 
+
+
+def is_frozen_executable():
+    """Detecta si estamos corriendo como ejecutable empaquetado."""
+    return getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS')
+
+
+def get_executable_name():
+    """Retorna el nombre del ejecutable según el contexto."""
+    if is_frozen_executable():
+        # En modo frozen, usar el nombre simple del ejecutable
+        return "brain"
+    else:
+        # En modo desarrollo, usar sintaxis Python
+        return "python brain/__main__.py"
 
 
 @dataclass
@@ -121,6 +136,8 @@ def _detect_subsections(category: CommandCategory, commands: List[BaseCommand]) 
         'repos': 'REPOSITORIOS',
         'orgs': 'ORGANIZACIONES',
         'build': 'BUILD',
+        'keys': 'KEYS',
+        'accounts': 'ACCOUNTS',
     }
     
     for cmd in commands:
@@ -149,7 +166,7 @@ def _detect_subsections(category: CommandCategory, commands: List[BaseCommand]) 
 
 
 def _render_command_detail(cmd: BaseCommand, category: CommandCategory) -> List[Text]:
-    """Render a command with full detailed formatting using runtime syntax."""
+    """Render a command with full detailed formatting using executable syntax."""
     meta = cmd.metadata()
     
     # Extract command parameters
@@ -168,8 +185,9 @@ def _render_command_detail(cmd: BaseCommand, category: CommandCategory) -> List[
     lines.append(Text(f"{cmd_display_name} - {meta.description}", style="bold white"))
     lines.append(Text())  # Empty line
     
-    # 2. RUNTIME syntax (usando resolver) ✅
-    runtime_parts = ["python brain/__main__.py", "[GLOBAL_OPTIONS]", category.category_name, meta.name]
+    # 2. Syntax (executable-aware)
+    exe_name = get_executable_name()
+    syntax_parts = [exe_name, "[GLOBAL_OPTIONS]", category.category_name, meta.name]
     
     # Separate arguments and options
     arguments = [p for p in params if p.is_argument]
@@ -177,14 +195,14 @@ def _render_command_detail(cmd: BaseCommand, category: CommandCategory) -> List[
     
     # Add arguments to syntax
     for arg in arguments:
-        runtime_parts.append(arg.flag)
+        syntax_parts.append(arg.flag)
     
     # Add [OPTIONS] if there are any options
     if options:
-        runtime_parts.append("[OPTIONS]")
+        syntax_parts.append("[OPTIONS]")
     
-    runtime_syntax = " ".join(runtime_parts)
-    lines.append(Text(f"  {runtime_syntax}", style="green"))
+    syntax = " ".join(syntax_parts)
+    lines.append(Text(f"  {syntax}", style="green"))
     lines.append(Text())  # Empty line
     
     # 3. Arguments section (positional parameters)
@@ -248,80 +266,65 @@ def _render_category_panel(console: Console, category: CommandCategory, commands
 
 
 def _render_usage(console: Console):
-    """Render usage section explaining both execution modes using RuntimeResolver."""
+    """Render usage section with executable-aware syntax."""
     content_lines = []
     
-    # Título
-    content_lines.append(Text("Brain CLI soporta dos modos de ejecución:", style="bold white"))
-    content_lines.append(Text())
+    exe_name = get_executable_name()
+    is_exe = is_frozen_executable()
     
-    # Modo 1: RUNTIME (Recomendado) - usando resolver ✅
-    content_lines.append(Text("1. MODO RUNTIME (✅ RECOMENDADO - USAR ESTE)", style="bold green"))
-    content_lines.append(Text("   Ejecución directa sin configuración de PYTHONPATH", style="dim green"))
-    content_lines.append(Text())
-    content_lines.append(Text("   python <RUNTIME_PATH>/brain/__main__.py [OPTIONS] <category> <command>", style="green"))
-    content_lines.append(Text())
-    content_lines.append(Text("   ✅ No requiere PYTHONPATH", style="dim green"))
-    content_lines.append(Text("   ✅ Funciona en entornos aislados (Electron, VS Code)", style="dim green"))
-    content_lines.append(Text("   ✅ Más robusto para integraciones", style="dim green"))
-    content_lines.append(Text())
-    
-    # Runtime path según plataforma - usando resolver ✅
-    runtime_example = RuntimeResolver.get_execution_example(['<command>', '<args>'], use_relative=False)
-    platform_name = RuntimeResolver.get_platform()
-    
-    if platform_name == "Windows":
-        content_lines.append(Text("   Windows:", style="dim cyan"))
-    elif platform_name == "Darwin":
-        content_lines.append(Text("   macOS:", style="dim cyan"))
+    if is_exe:
+        # Modo EJECUTABLE (.exe)
+        content_lines.append(Text("Brain CLI - Ejecutable standalone", style="bold white"))
+        content_lines.append(Text())
+        content_lines.append(Text("Uso:", style="bold green"))
+        content_lines.append(Text(f"  {exe_name} [OPTIONS] <category> <command>", style="green"))
+        content_lines.append(Text())
+        content_lines.append(Text("Ejemplos:", style="bold cyan"))
+        content_lines.append(Text())
+        content_lines.append(Text("  # Comando básico", style="dim"))
+        content_lines.append(Text(f"  {exe_name} health native-ping", style="white"))
+        content_lines.append(Text())
+        content_lines.append(Text("  # Con flags globales", style="dim"))
+        content_lines.append(Text(f"  {exe_name} --json nucleus list", style="white"))
+        content_lines.append(Text())
+        content_lines.append(Text("  # Con verbose", style="dim"))
+        content_lines.append(Text(f"  {exe_name} --verbose profile create 'My Profile'", style="white"))
+        content_lines.append(Text())
+        content_lines.append(Text("[!] Los flags globales (--json, --verbose) van ANTES de <category>", style="yellow"))
+        
     else:
-        content_lines.append(Text("   Linux:", style="dim cyan"))
-    
-    content_lines.append(Text(f"   {runtime_example}", style="dim cyan"))
-    content_lines.append(Text())
-    
-    # Modo 2: MODULE
-    content_lines.append(Text("2. MODO MODULE (⚠️ Legacy - Solo si PYTHONPATH está configurado)", style="bold yellow"))
-    content_lines.append(Text("   Ejecución como módulo Python (requiere PYTHONPATH)", style="dim yellow"))
-    content_lines.append(Text())
-    content_lines.append(Text("   python -m brain [OPTIONS] <category> <command>", style="yellow"))
-    content_lines.append(Text())
-    content_lines.append(Text("   [!] Requiere PYTHONPATH configurado apuntando a site-packages", style="dim yellow"))
-    content_lines.append(Text("   [!] Puede fallar en entornos runtime aislados", style="dim yellow"))
-    content_lines.append(Text())
-    
-    # Ejemplos usando resolver ✅
-    content_lines.append(Text("Ejemplos (Modo Runtime):", style="bold cyan"))
-    content_lines.append(Text())
-    
-    # Example 1: Basic command
-    content_lines.append(Text("  # Comando básico", style="dim"))
-    example1 = RuntimeResolver.get_execution_example(['health', 'onboarding-status'], use_relative=True)
-    content_lines.append(Text(f"  {example1}", style="white"))
-    content_lines.append(Text())
-    
-    # Example 2: With global flags
-    content_lines.append(Text("  # Con flags globales (ANTES del comando)", style="dim"))
-    example2 = RuntimeResolver.get_execution_example(['nucleus', 'list'], use_relative=True)
-    content_lines.append(Text(f"  {example2}", style="white"))
-    content_lines.append(Text())
-    
-    # Example 3: Module mode
-    content_lines.append(Text("  # Modo MODULE (alternativo)", style="dim"))
-    content_lines.append(Text("  python -m brain --json profile create 'My Profile'", style="white"))
-    content_lines.append(Text())
-    
-    # IMPORTANTE
-    content_lines.append(Text("[!] IMPORTANTE:", style="bold yellow"))
-    content_lines.append(Text("   • Los flags globales (--json, --verbose) van ANTES de <category>", style="yellow"))
-    content_lines.append(Text("   • Todos los comandos usan sintaxis RUNTIME por defecto", style="yellow"))
-    content_lines.append(Text("   • Para MODULE: reemplazar 'python brain/__main__.py' → 'python -m brain'", style="yellow"))
+        # Modo DESARROLLO (Python)
+        content_lines.append(Text("Brain CLI soporta dos modos de ejecución:", style="bold white"))
+        content_lines.append(Text())
+        
+        # Modo Runtime
+        content_lines.append(Text("1. MODO RUNTIME (✅ RECOMENDADO)", style="bold green"))
+        content_lines.append(Text("   Ejecución directa sin configuración de PYTHONPATH", style="dim green"))
+        content_lines.append(Text())
+        content_lines.append(Text(f"   {exe_name} [OPTIONS] <category> <command>", style="green"))
+        content_lines.append(Text())
+        
+        # Modo Module
+        content_lines.append(Text("2. MODO MODULE (⚠️ Legacy)", style="bold yellow"))
+        content_lines.append(Text("   python -m brain [OPTIONS] <category> <command>", style="yellow"))
+        content_lines.append(Text())
+        
+        # Ejemplos
+        content_lines.append(Text("Ejemplos:", style="bold cyan"))
+        content_lines.append(Text())
+        content_lines.append(Text("  # Comando básico", style="dim"))
+        content_lines.append(Text(f"  {exe_name} --json health onboarding-status", style="white"))
+        content_lines.append(Text())
+        content_lines.append(Text("  # Modo MODULE (alternativo)", style="dim"))
+        content_lines.append(Text("  python -m brain --json nucleus list", style="white"))
     
     content = Text("\n").join(content_lines)
     
+    title = "[bold]Uso / Usage[/bold]" if is_exe else "[bold]Uso / Usage - Dual Mode Support[/bold]"
+    
     console.print(Panel(
         content,
-        title="[bold]Uso / Usage - Dual Mode Support[/bold]",
+        title=title,
         border_style="yellow",
         padding=(1, 2),
         width=95
@@ -329,7 +332,7 @@ def _render_usage(console: Console):
 
 
 def _render_options(console: Console):
-    """Render global CLI options with clear explanation."""
+    """Render global CLI options."""
     table = Table(show_header=False, box=None, padding=(0, 2))
     table.add_column(style="cyan", no_wrap=True)
     table.add_column()
@@ -338,10 +341,13 @@ def _render_options(console: Console):
     table.add_row("--verbose", "Habilitar logging detallado (debe ir ANTES del comando)")
     table.add_row("--help", "Mostrar este mensaje de ayuda")
     
+    exe_name = get_executable_name()
+    subtitle = f"[dim]Estas opciones deben ir después de '{exe_name}'[/dim]"
+    
     console.print(Panel(
         table, 
         title="[bold]Opciones Globales / Global Options[/bold]",
-        subtitle="[dim]Estas opciones deben ir después de 'python brain/__main__.py' o 'python -m brain'[/dim]",
+        subtitle=subtitle,
         border_style="green"
     ))
 
@@ -352,6 +358,7 @@ def _render_root_commands(console: Console, root_commands: List[BaseCommand]):
         return
     
     content_lines = []
+    exe_name = get_executable_name()
     
     for cmd in sorted(root_commands, key=lambda c: c.metadata().name):
         meta = cmd.metadata()
@@ -368,8 +375,8 @@ def _render_root_commands(console: Console, root_commands: List[BaseCommand]):
         content_lines.append(Text(f"{cmd_display_name} - {meta.description}", style="bold white"))
         content_lines.append(Text())
         
-        # RUNTIME syntax usando resolver ✅
-        syntax_parts = ["python brain/__main__.py", "[GLOBAL_OPTIONS]", meta.name]
+        # Syntax
+        syntax_parts = [exe_name, "[GLOBAL_OPTIONS]", meta.name]
         
         # Separate arguments and options
         arguments = [p for p in params if p.is_argument]
@@ -424,7 +431,6 @@ def _render_categories(console: Console, categories: List[CommandCategory], stru
     total_commands = 0
     
     for cat in categories:
-        # Contar comandos en esta categoría
         count = len(structure.commands_by_category.get(cat, []))
         total_commands += count
         
@@ -434,7 +440,7 @@ def _render_categories(console: Console, categories: List[CommandCategory], stru
             f"{count} cmd{'s' if count != 1 else ''}"
         )
     
-    # Fila de total
+    # Total row
     table.add_row("", "", f"{'─' * 10}")
     table.add_row("", "", f"{total_commands} cmds", style="bold cyan")
     
@@ -442,9 +448,7 @@ def _render_categories(console: Console, categories: List[CommandCategory], stru
 
 
 def render_help(registry: CommandRegistry):
-    """Main help rendering function with dual mode support using RuntimeResolver."""
-    import sys
-    
+    """Main help rendering function with executable-aware syntax."""
     # Detectar si stdout está siendo redirigido a un archivo
     is_file_output = not sys.stdout.isatty()
     
@@ -462,11 +466,12 @@ def render_help(registry: CommandRegistry):
         # Para terminal: con colores y formato normal
         console = Console(width=95)
     
-    console.print("\n[bold yellow]Brain CLI[/bold yellow] - Modular system for Bloom\n")
+    exe_type = "Executable" if is_frozen_executable() else "Development Mode"
+    console.print(f"\n[bold yellow]Brain CLI[/bold yellow] - Modular system for Bloom [dim]({exe_type})[/dim]\n")
     
     structure = _extract_structure(registry)
     
-    # Render usage section explaining both modes
+    # Render usage section
     _render_usage(console)
     console.print()
     

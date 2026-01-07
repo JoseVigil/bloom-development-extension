@@ -3,6 +3,8 @@ Brain CLI - Auto-discovery entry point.
 Compatible with PyInstaller frozen executables.
 """
 import sys
+import os
+import multiprocessing  # <--- CORRECCIÓN: Importación añadida
 from pathlib import Path
 
 # CRÍTICO: Inyectar site-packages ANTES de importar brain
@@ -13,15 +15,16 @@ site_packages_str = str(site_packages)
 if site_packages_str not in sys.path:
     sys.path.insert(0, site_packages_str)
 
-# AHORA sí importar brain
+# AHORA sí importar brain y dependencias
 import typer
 from brain.shared.context import GlobalContext
 
 # Forzar UTF-8 en stdout/stderr para Windows
 if sys.platform == "win32":
     import io
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+    if hasattr(sys.stdout, 'buffer'):
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 app = typer.Typer(
     no_args_is_help=True,
@@ -59,6 +62,8 @@ def load_commands():
 
 def main():
     """Main entry point with auto-discovery."""
+    # ✅ CRÍTICO para Windows + PyInstaller + Asyncio/Multiprocessing
+    multiprocessing.freeze_support() 
     
     # Intercept --help BEFORE Typer processes anything
     if "--help" in sys.argv and len(sys.argv) == 2:
@@ -93,7 +98,8 @@ def main():
         app()
         
     except Exception as e:
-        print(f"Error: Brain System Error: {e}", file=sys.stderr)
+        # Usar sys.stderr para errores críticos
+        sys.stderr.write(f"❌ Error: Brain System Error: {e}\n")
         if not is_frozen():  # Solo mostrar traceback en desarrollo
             import traceback
             traceback.print_exc()

@@ -35,10 +35,12 @@ class ServiceCommand(BaseCommand):
     def register(self, app: typer.Typer) -> None:
         """
         Register service subcommands in the Typer application.
-        """
-        service_app = typer.Typer(help="Service management commands")
         
-        @service_app.command(name="start")
+        IMPORTANTE: app ya es el grupo 'service' creado por __main__.py,
+        así que registramos los subcomandos DIRECTAMENTE en él.
+        """
+        
+        @app.command(name="start")
         def start(
             ctx: typer.Context,
             port: int = typer.Option(5678, "--port", "-p", help="TCP port to bind"),
@@ -97,7 +99,7 @@ class ServiceCommand(BaseCommand):
             except Exception as e:
                 self._handle_error(gc, f"Failed to start service: {e}")
         
-        @service_app.command(name="status")
+        @app.command(name="status")
         def status(ctx: typer.Context):
             """
             Check the current status of the Brain service.
@@ -122,7 +124,7 @@ class ServiceCommand(BaseCommand):
             except Exception as e:
                 self._handle_error(gc, f"Failed to check status: {e}")
         
-        @service_app.command(name="stop")
+        @app.command(name="stop")
         def stop(ctx: typer.Context):
             """
             Stop the running Brain service.
@@ -146,8 +148,6 @@ class ServiceCommand(BaseCommand):
                 
             except Exception as e:
                 self._handle_error(gc, f"Failed to stop service: {e}")
-        
-        app.add_typer(service_app, name="service")
     
     def _render_daemon_start(self, data: dict):
         """Output humano para inicio en modo daemon."""
