@@ -169,40 +169,87 @@ async function sendChunkWithRetry(chunk, retries = CHUNKING_CONFIG.MAX_RETRIES) 
   }
 }
 
-// --- ROUTER DE MENSAJES (Manejo Centralizado) ---
+// --- ROUTER DE MENSAJES (Manejo Centralizado y Filtrado) ---
 async function handleHostMessage(message) {
-  if (message.command === "ping" || (message.ok && message.version)) return;
+  // 1. FILTRADO DE MENSAJES DE SISTEMA (No procesar como comandos)
+  // Evitamos advertencias de "Comando desconocido" para protocolos internos
+  if (message.command === "system_ready") {
+    console.log("✅ [Bloom] Conexión establecida: Host C++ <-> Brain Service");
+    chrome.storage.local.set({ hostStatus: "connected", lastSync: Date.now() });
+    return;
+  }
 
+  if (message.command === "pong" || message.status === "pong" || (message.ok && message.version)) {
+    // Heartbeats o respuestas de estado simples, ignorar silenciosamente
+    return;
+  }
+
+  // Ignorar broadcasts de registro que el Service envía a todas las tabs
+  if (message.type === "REGISTER_HOST") {
+    console.log(`📡 [Bloom] Nueva instancia de Host detectada (PID: ${message.pid})`);
+    return;
+  }
+
+  // 2. EXTRACCIÓN DE DATOS
   const { id, command, payload } = message;
-  console.log(`📨 [Bloom] Comando recibido: ${command}`, payload);
+
+  // Si no hay comando, no podemos rutear nada
+  if (!command) {
+    if (Object.keys(message).length > 0) {
+      console.log("ℹ️ [Bloom] Mensaje informativo recibido:", message);
+    }
+    return;
+  }
+
+  console.log(`📨 [Bloom] Comando recibido: ${command}`, payload || "");
 
   try {
     let result;
 
-    if (command === "claude.submit") {
-      result = await dispatchToActiveTab("ai.submit", payload);
-    } else if (command === "open_tab") {
-      result = await openTab(payload);
-    } else if (command === "navigate") {
-      result = await navigate(payload);
-    } else if (command === "download_response") {
-      result = await handleDownloadResponse(payload);
-    } else if (command === "download_response_large") {
-      result = await handleDownloadResponseLarge(payload);
-    } else {
-      if (payload && payload.tabId) {
-         result = await chrome.tabs.sendMessage(payload.tabId, { action: command, ...payload });
-      } else {
-         console.warn("Comando sin handler específico o tabId:", command);
-         return;
-      }
+    // 3. ROUTER DE COMANDOS PRINCIPALES
+    switch (command) {
+      case "claude.submit":
+        result = await dispatchToActiveTab("ai.submit", payload);
+        break;
+
+      case "open_tab":
+        result = await openTab(payload);
+        break;
+
+      case "navigate":
+        result = await navigate(payload);
+        break;
+
+      case "download_response":
+        result = await handleDownloadResponse(payload);
+        break;
+
+      case "download_response_large":
+        result = await handleDownloadResponseLarge(payload);
+        break;
+
+      default:
+        // 4. RUTEADO DINÁMICO POR TAB_ID
+        // Si el comando no es interno, intentamos enviarlo a una pestaña específica
+        if (payload && payload.tabId) {
+          result = await chrome.tabs.sendMessage(payload.tabId, { action: command, ...payload });
+        } else {
+          // Si llegamos aquí, es un comando que no sabemos manejar
+          console.warn(`⚠️ [Bloom] Comando no reconocido o sin destino (tabId): ${command}`);
+          return;
+        }
     }
 
-    if (id) sendToHost({ id, status: "ok", result });
+    // 5. NOTIFICAR RESULTADO AL SERVICIO (Si el mensaje original tenía un ID)
+    if (id) {
+      sendToHost({ id, status: "ok", result });
+    }
 
   } catch (error) {
-    console.error(`❌ Error en ${command}:`, error);
-    if (id) sendToHost({ id, status: "error", result: { message: error.message } });
+    console.error(`❌ [Bloom] Error ejecutando [${command}]:`, error);
+    if (id) {
+      sendToHost({ id, status: "error", result: { message: error.message } });
+    }
   }
 }
 
