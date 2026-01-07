@@ -45,7 +45,7 @@ def main():
     # Pasar todos los argumentos al script real
     cmd = [sys.executable, str(build_script)] + sys.argv[1:]
     
-    # Ejecutar
+    # Ejecutar SIN capturar output (se muestra en tiempo real)
     result = subprocess.run(cmd)
     sys.exit(result.returncode)
 

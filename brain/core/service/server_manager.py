@@ -1,193 +1,373 @@
 """
-Service command for Brain CLI.
-Manages the central TCP multiplexer server for Chrome Native Host connections.
+Server Manager - Core business logic for TCP multiplexer service.
+Pure logic without CLI dependencies.
 """
 
-import typer
-from typing import Optional
-from brain.cli.base import BaseCommand, CommandMetadata
-from brain.cli.categories import CommandCategory
+import asyncio
+import socket
+import signal
+import os
+import sys
+import time
+import json
+from pathlib import Path
+from typing import Dict, Any, Optional
+from datetime import datetime, timedelta
 
 
-class ServiceCommand(BaseCommand):
+class ServerManager:
     """
-    Service management command for Brain's central TCP multiplexer.
+    Manages the Brain TCP multiplexer service lifecycle.
     
-    This command starts/stops/monitors the background service that acts as
-    a central connection hub for all Chrome Native Host instances.
+    This class handles server startup, shutdown, status checks, and
+    process management without any CLI dependencies.
     """
     
-    def metadata(self) -> CommandMetadata:
-        return CommandMetadata(
-            name="service",
-            category=CommandCategory.SERVICE,
-            version="1.0.0",
-            description="Manage the Brain TCP multiplexer service",
-            examples=[
-                "brain service start",
-                "brain service start --port 5678 --host 0.0.0.0",
-                "brain service start --json",
-                "brain service status",
-                "brain service stop"
-            ]
-        )
-
-    def register(self, app: typer.Typer) -> None:
+    def __init__(self, host: str = "127.0.0.1", port: int = 5678):
         """
-        Register service subcommands in the Typer application.
-        """
-        service_app = typer.Typer(help="Service management commands")
+        Initialize the server manager.
         
-        @service_app.command(name="start")
-        def start(
-            ctx: typer.Context,
-            port: int = typer.Option(5678, "--port", "-p", help="TCP port to bind"),
-            host: str = typer.Option("127.0.0.1", "--host", "-h", help="Host address to bind"),
-            daemon: bool = typer.Option(False, "--daemon", "-d", help="Run as background daemon")
-        ):
-            """
-            Start the Brain TCP multiplexer service.
+        Args:
+            host: Host address to bind (default: 127.0.0.1)
+            port: TCP port to bind (default: 5678)
+        """
+        self.host = host
+        self.port = port
+        self.pid_file = Path.home() / ".brain" / "service.pid"
+        self.log_file = Path.home() / ".brain" / "service.log"
+        self.stats_file = Path.home() / ".brain" / "service.stats"
+        
+        # Ensure .brain directory exists
+        self.pid_file.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Session statistics
+        self.stats = {
+            "start_time": None,
+            "total_connections": 0,
+            "messages_processed": 0,
+            "active_clients": 0
+        }
+    
+    def start_blocking(self) -> Dict[str, Any]:
+        """
+        Start the server in foreground mode (blocking).
+        """
+        # ✅ FIX: Configurar política de loop para Windows (Crítico para Python 3.13 + Sockets)
+        if sys.platform == 'win32':
+            asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
+        # Check if already running
+        if self._is_running():
+            raise RuntimeError(f"Service already running (PID: {self._get_pid()})")
+        
+        # Initialize stats
+        self.stats["start_time"] = datetime.now().isoformat()
+        
+        try:
+            # Create and run the asyncio event loop
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
             
-            The service acts as a central hub for Chrome Native Host connections,
-            handling message routing and client management.
-            """
+            # Start the server
+            server = loop.run_until_complete(self._start_server(loop))
             
-            # 1. Recuperar GlobalContext
-            gc = ctx.obj
-            if gc is None:
-                from brain.shared.context import GlobalContext
-                gc = GlobalContext()
+            # Write PID file
+            self._write_pid()
             
+            # ✅ Confirmation message with FORCED FLUSH
+            sys.stdout.write(f"🚀 Brain Service listening on {self.host}:{self.port}\n")
+            sys.stdout.write(f"📋 PID: {os.getpid()}\n")
+            sys.stdout.write(f"⏳ Waiting for connections...\n\n")
+            sys.stdout.flush() 
+            
+            # Setup signal handlers
+            if sys.platform != 'win32':
+                for sig in (signal.SIGTERM, signal.SIGINT):
+                    signal.signal(sig, lambda s, f: loop.stop())
+            else:
+                # En Windows, SIGTERM no es estándar de la misma forma
+                signal.signal(signal.SIGINT, lambda s, f: loop.stop())
+            
+            # Run until interrupted
             try:
-                # 2. Lazy Import del Core
-                from brain.core.service.server_manager import ServerManager
-                
-                # 3. Verbose logging
-                if gc.verbose:
-                    typer.echo(f"🔌 Starting TCP server on {host}:{port}...", err=True)
-                
-                # 4. Ejecutar lógica del Core
-                manager = ServerManager(host=host, port=port)
-                
-                if daemon:
-                    # Daemon mode (background process)
-                    result = manager.start_daemon()
-                    gc.output(result, self._render_daemon_start)
-                else:
-                    # Foreground mode (blocking)
-                    if gc.verbose:
-                        typer.echo("ℹ️  Press Ctrl+C to stop the server", err=True)
-                    
-                    result = manager.start_blocking()
-                    
-                    # This will only be reached after server stops
-                    gc.output(result, self._render_stop)
-                
-            except KeyboardInterrupt:
-                if gc.verbose:
-                    typer.echo("\n🛑 Received shutdown signal...", err=True)
-                
-                result = {
-                    "status": "success",
-                    "operation": "service_shutdown",
-                    "data": {"reason": "user_interrupt"}
+                loop.run_forever()
+            finally:
+                # Cleanup
+                server.close()
+                loop.run_until_complete(server.wait_closed())
+                loop.close()
+                self._cleanup_pid()
+            
+            return {
+                "status": "success",
+                "operation": "service_start",
+                "data": {
+                    "host": self.host,
+                    "port": self.port,
+                    "mode": "foreground",
+                    "reason": "shutdown",
+                    "stats": self._get_stats()
                 }
-                gc.output(result, self._render_stop)
-                
-            except Exception as e:
-                self._handle_error(gc, f"Failed to start service: {e}")
+            }
+            
+        except OSError as e:
+            if "Address already in use" in str(e):
+                raise RuntimeError(f"Port {self.port} is already in use")
+            raise RuntimeError(f"Failed to start server: {e}")
+
+    def start_daemon(self) -> Dict[str, Any]:
+        """
+        Start the server in background daemon mode.
+        """
+        # ✅ FIX: Windows no soporta fork()
+        if sys.platform == 'win32':
+            raise RuntimeError(
+                "Daemon mode via fork is not supported on Windows. "
+                "Please run the service without the --daemon flag or use a Windows service wrapper."
+            )
+
+        # Check if already running
+        if self._is_running():
+            raise RuntimeError(f"Service already running (PID: {self._get_pid()})")
         
-        @service_app.command(name="status")
-        def status(ctx: typer.Context):
-            """
-            Check the current status of the Brain service.
-            """
+        # Fork process for daemon mode (Solo Unix)
+        try:
+            pid = os.fork()
+            if pid > 0:
+                # Parent process
+                time.sleep(0.5)
+                if not self._is_running():
+                    raise RuntimeError("Daemon failed to start")
+                
+                return {
+                    "status": "success",
+                    "operation": "service_start_daemon",
+                    "data": {
+                        "pid": self._get_pid(),
+                        "port": self.port,
+                        "host": self.host,
+                        "log_file": str(self.log_file)
+                    }
+                }
+        except OSError as e:
+            raise RuntimeError(f"Failed to fork daemon: {e}")
+        
+        # Child process
+        os.setsid()
+        with open(self.log_file, 'w') as log:
+            os.dup2(log.fileno(), 1)
+            os.dup2(log.fileno(), 2)
+        
+        self.start_blocking()
+        os._exit(0)
+    
+    def stop(self) -> Dict[str, Any]:
+        """
+        Stop the running service.
+        """
+        if not self._is_running():
+            raise RuntimeError("Service is not running")
+        
+        pid = self._get_pid()
+        
+        try:
+            # En Windows usamos signal.CTRL_C_EVENT o simplemente matamos el proceso
+            if sys.platform == 'win32':
+                os.kill(pid, signal.SIGTERM)
+            else:
+                os.kill(pid, signal.SIGTERM)
             
-            gc = ctx.obj
-            if gc is None:
-                from brain.shared.context import GlobalContext
-                gc = GlobalContext()
+            # Wait for process to terminate
+            for _ in range(50):
+                if not self._is_running():
+                    break
+                time.sleep(0.1)
             
+            if self._is_running():
+                # Force kill
+                if sys.platform == 'win32':
+                    import subprocess
+                    subprocess.run(['taskkill', '/F', '/PID', str(pid)], capture_output=True)
+                else:
+                    os.kill(pid, signal.SIGKILL)
+                time.sleep(0.5)
+            
+            stats = self._load_stats()
+            self._cleanup_pid()
+            
+            return {
+                "status": "success",
+                "operation": "service_stop",
+                "data": {
+                    "pid": pid,
+                    "reason": "manual_stop",
+                    "stats": stats
+                }
+            }
+            
+        except (ProcessLookupError, PermissionError) as e:
+            self._cleanup_pid()
+            return {
+                "status": "success",
+                "operation": "service_stop",
+                "data": {"pid": pid, "reason": "already_stopped", "stats": {}}
+            }
+    
+    def get_status(self) -> Dict[str, Any]:
+        """Get the current service status."""
+        if not self._is_running():
+            return {
+                "status": "success",
+                "operation": "service_status",
+                "data": {"running": False}
+            }
+        
+        pid = self._get_pid()
+        stats = self._load_stats()
+        
+        uptime = "N/A"
+        if stats.get("start_time"):
             try:
-                from brain.core.service.server_manager import ServerManager
-                
-                if gc.verbose:
-                    typer.echo("🔍 Checking service status...", err=True)
-                
-                manager = ServerManager()
-                result = manager.get_status()
-                
-                gc.output(result, self._render_status)
-                
-            except Exception as e:
-                self._handle_error(gc, f"Failed to check status: {e}")
+                start = datetime.fromisoformat(stats["start_time"])
+                delta = datetime.now() - start
+                uptime = str(delta).split('.')[0]
+            except:
+                pass
         
-        @service_app.command(name="stop")
-        def stop(ctx: typer.Context):
-            """
-            Stop the running Brain service.
-            """
-            
-            gc = ctx.obj
-            if gc is None:
-                from brain.shared.context import GlobalContext
-                gc = GlobalContext()
-            
+        return {
+            "status": "success",
+            "operation": "service_status",
+            "data": {
+                "running": True,
+                "host": self.host,
+                "port": self.port,
+                "pid": pid,
+                "uptime": uptime,
+                "active_clients": stats.get("active_clients", 0),
+                "total_connections": stats.get("total_connections", 0),
+                "messages_processed": stats.get("messages_processed", 0)
+            }
+        }
+    
+    # ==================== Private Methods ====================
+    
+    async def _start_server(self, loop) -> asyncio.Server:
+        server = await asyncio.start_server(
+            self._handle_client,
+            self.host,
+            self.port
+        )
+        return server
+    
+    async def _handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+        addr = writer.get_extra_info('peername')
+        self.stats["total_connections"] += 1
+        self.stats["active_clients"] += 1
+        
+        sys.stdout.write(f"✅ [NEW CONNECTION] Client connected from {addr}\n")
+        sys.stdout.flush()
+        
+        try:
+            while True:
+                length_data = await reader.readexactly(4)
+                if not length_data:
+                    break
+                
+                message_length = int.from_bytes(length_data, byteorder='big')
+                data = await reader.readexactly(message_length)
+                
+                if not data:
+                    break
+                
+                self.stats["messages_processed"] += 1
+                
+                try:
+                    message = json.loads(data.decode('utf-8'))
+                    if message.get('type') == 'handshake':
+                        sys.stdout.write(f"📦 [HANDSHAKE] Registered Host | PID: {message.get('pid', 'N/A')}\n")
+                        sys.stdout.flush()
+                    
+                    response = data
+                    response_length = len(response).to_bytes(4, byteorder='big')
+                    writer.write(response_length + response)
+                    await writer.drain()
+                except json.JSONDecodeError:
+                    pass
+                
+        except (asyncio.IncompleteReadError, ConnectionResetError):
+            pass
+        except Exception as e:
+            sys.stdout.write(f"⚠️  [ERROR] Client handler error: {e}\n")
+            sys.stdout.flush()
+        finally:
+            self.stats["active_clients"] -= 1
+            sys.stdout.write(f"❌ [DISCONNECT] Client disconnected from {addr}\n")
+            sys.stdout.flush()
+            writer.close()
             try:
-                from brain.core.service.server_manager import ServerManager
-                
-                if gc.verbose:
-                    typer.echo("🛑 Stopping service...", err=True)
-                
-                manager = ServerManager()
-                result = manager.stop()
-                
-                gc.output(result, self._render_stop)
-                
-            except Exception as e:
-                self._handle_error(gc, f"Failed to stop service: {e}")
-        
-        app.add_typer(service_app, name="service")
+                await writer.wait_closed()
+            except:
+                pass
+            self._save_stats()
     
-    def _render_daemon_start(self, data: dict):
-        """Output humano para inicio en modo daemon."""
-        typer.echo(f"✅ Service started in background")
-        typer.echo(f"   PID: {data['data'].get('pid', 'unknown')}")
-        typer.echo(f"   Port: {data['data'].get('port', 5678)}")
-        typer.echo(f"   Log: {data['data'].get('log_file', 'N/A')}")
+    def _is_running(self) -> bool:
+        pid = self._get_pid()
+        if pid is None:
+            return False
+        try:
+            if sys.platform == 'win32':
+                # En Windows, os.kill(pid, 0) funciona para chequear existencia
+                os.kill(pid, 0)
+            else:
+                os.kill(pid, 0)
+            return True
+        except (ProcessLookupError, PermissionError, OSError):
+            return False
     
-    def _render_stop(self, data: dict):
-        """Output humano para detención del servicio."""
-        reason = data['data'].get('reason', 'unknown')
-        typer.echo(f"✅ Service stopped ({reason})")
-        
-        stats = data['data'].get('stats', {})
-        if stats:
-            typer.echo(f"\n📊 Session Statistics:")
-            typer.echo(f"   Total connections: {stats.get('total_connections', 0)}")
-            typer.echo(f"   Messages processed: {stats.get('messages_processed', 0)}")
-            typer.echo(f"   Uptime: {stats.get('uptime', 'N/A')}")
+    def _get_pid(self) -> Optional[int]:
+        if not self.pid_file.exists():
+            return None
+        try:
+            return int(self.pid_file.read_text().strip())
+        except:
+            return None
     
-    def _render_status(self, data: dict):
-        """Output humano para estado del servicio."""
-        status_data = data['data']
-        running = status_data.get('running', False)
-        
-        if running:
-            typer.echo(f"✅ Service is running")
-            typer.echo(f"   Host: {status_data.get('host', 'N/A')}")
-            typer.echo(f"   Port: {status_data.get('port', 'N/A')}")
-            typer.echo(f"   PID: {status_data.get('pid', 'N/A')}")
-            typer.echo(f"   Uptime: {status_data.get('uptime', 'N/A')}")
-            typer.echo(f"   Active clients: {status_data.get('active_clients', 0)}")
+    def _write_pid(self):
+        self.pid_file.write_text(str(os.getpid()))
+    
+    def _cleanup_pid(self):
+        if self.pid_file.exists():
+            try:
+                self.pid_file.unlink()
+            except:
+                pass
+    
+    def _save_stats(self):
+        try:
+            self.stats_file.write_text(json.dumps(self.stats))
+        except:
+            pass
+    
+    def _load_stats(self) -> Dict[str, Any]:
+        if not self.stats_file.exists():
+            return {}
+        try:
+            return json.loads(self.stats_file.read_text())
+        except:
+            return {}
+    
+    def _get_stats(self) -> Dict[str, Any]:
+        if self.stats["start_time"]:
+            try:
+                start = datetime.fromisoformat(self.stats["start_time"])
+                uptime = str(datetime.now() - start).split('.')[0]
+            except:
+                uptime = "N/A"
         else:
-            typer.echo(f"⚠️  Service is not running")
-    
-    def _handle_error(self, gc, message: str):
-        """Manejo unificado de errores."""
-        if gc.json_mode:
-            import json
-            typer.echo(json.dumps({"status": "error", "message": message}))
-        else:
-            typer.echo(f"❌ {message}", err=True)
-        raise typer.Exit(code=1)
+            uptime = "N/A"
+        
+        return {
+            "total_connections": self.stats["total_connections"],
+            "messages_processed": self.stats["messages_processed"],
+            "uptime": uptime
+        }

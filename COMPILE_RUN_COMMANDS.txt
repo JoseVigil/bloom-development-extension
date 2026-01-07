@@ -19,6 +19,8 @@ DEV Web server port 5173
 npm run build
 npm run dev
 
+
+
 # Full clean build (recommended)
 python build.py --clean
 
@@ -30,6 +32,10 @@ python build.py --no-copy
 
 # Test the compiled executable
 ./installer/native/bin/win32/brain/brain.exe --help
+
+# Compilar directamente para ver el error completo
+pyinstaller brain/build_deploy/brain.spec --clean
+
 
 Commands
 python.exe -I Lib\site-packages\brain\__main__.py profile launch iofbckileookkfiokffblaomlhfenkea --cockpit

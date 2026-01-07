@@ -31,6 +31,34 @@ os.chdir(project_root)
 print(f"Working directory: {os.getcwd()}")
 
 
+def get_core_modules():
+    """
+    Escanea brain/core/ y retorna todos los módulos Python.
+    """
+    core_path = Path("brain/core")
+    
+    if not core_path.exists():
+        print("Warning: brain/core/ no existe", file=sys.stderr)
+        return []
+    
+    modules = []
+    
+    # Escanear recursivamente todos los .py en brain/core
+    for py_file in core_path.rglob("*.py"):
+        if py_file.name == "__init__.py":
+            # Para __init__.py, usar el path del directorio
+            rel_path = py_file.parent.relative_to(Path("."))
+        else:
+            # Para otros archivos, incluir el nombre sin .py
+            rel_path = py_file.relative_to(Path(".")).with_suffix("")
+        
+        # Convertir path a módulo (brain/core/service/manager.py -> brain.core.service.manager)
+        module = str(rel_path).replace(os.sep, ".")
+        modules.append(module)
+    
+    return sorted(set(modules))
+
+
 def get_hiddenimports_from_loader_file():
     """
     Lee command_loader.py directamente y extrae los imports.
@@ -143,24 +171,28 @@ def main():
     print("Leyendo command_loader.py...")
     command_imports = get_hiddenimports_from_loader_file()
     
-    if not command_imports:
-        print("Error: No se encontraron imports de comandos", file=sys.stderr)
+    print("Escaneando brain/core/...")
+    core_imports = get_core_modules()
+    
+    # Combinar ambos
+    all_imports = command_imports + core_imports
+    
+    if not all_imports:
+        print("Error: No se encontraron imports", file=sys.stderr)
         sys.exit(1)
     
-    print(f"Encontrados {len(command_imports)} módulos de comandos:")
-    for imp in command_imports[:5]:  # Mostrar solo los primeros 5
-        print(f"  - {imp}")
-    if len(command_imports) > 5:
-        print(f"  ... y {len(command_imports) - 5} más")
+    print(f"Encontrados {len(command_imports)} módulos de comandos")
+    print(f"Encontrados {len(core_imports)} módulos core")
+    print(f"Total: {len(all_imports)} módulos")
     
     print(f"\nActualizando {spec_path}...")
-    total = update_spec_file(spec_path, command_imports)
+    total = update_spec_file(spec_path, all_imports)
     
-    print(f"\n[OK] brain.spec actualizado con {total} comandos")
+    print(f"\n[OK] brain.spec actualizado con {total} módulos")
     print("\nProximos pasos:")
     print("  1. Revisa brain.spec")
-    print("  2. Compila: pyinstaller brain.spec --clean")
-    print("  3. Prueba: dist/brain/brain.exe --help")
+    print("  2. Compila: python build.py --clean")
+    print("  3. Prueba: brain.exe service start")
 
 
 if __name__ == "__main__":

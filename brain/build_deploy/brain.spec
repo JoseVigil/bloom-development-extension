@@ -22,7 +22,6 @@ PROJECT_ROOT = Path(SPECPATH).parent.parent
 block_cipher = None
 
 # Imports ocultos necesarios para Brain
-# IMPORTANTE: Actualizar esta lista después de ejecutar generate_command_loader.py
 hiddenimports = [
     # Core Brain
     'brain',
@@ -113,13 +112,72 @@ hiddenimports = [
     'brain.commands.project.load',
     'brain.commands.project.nucleus',
     'brain.commands.service.service',
+    'brain.core.bloom_project_inspector',
+    'brain.core.browser.landing_generator',
+    'brain.core.browser.profile_manager',
+    'brain.core.context',
+    'brain.core.context.detector',
+    'brain.core.context.generate',
+    'brain.core.context.manager',
+    'brain.core.context.strategies.android',
+    'brain.core.context.strategies.cicd',
+    'brain.core.context.strategies.cpp',
+    'brain.core.context.strategies.dotnet',
+    'brain.core.context.strategies.flutter',
+    'brain.core.context.strategies.go',
+    'brain.core.context.strategies.iac',
+    'brain.core.context.strategies.ios',
+    'brain.core.context.strategies.jvm',
+    'brain.core.context.strategies.macos',
+    'brain.core.context.strategies.php',
+    'brain.core.context.strategies.python',
+    'brain.core.context.strategies.ruby',
+    'brain.core.context.strategies.rust',
+    'brain.core.context.strategies.typescript',
+    'brain.core.context.strategy_base',
+    'brain.core.context.strategy_loader',
+    'brain.core.context_planning.enriched_tree_generator',
+    'brain.core.context_planning.gemini_router',
+    'brain.core.context_planning.payload_builder',
+    'brain.core.download_manager',
+    'brain.core.extension',
+    'brain.core.extension.manager',
+    'brain.core.filesystem',
+    'brain.core.filesystem.code_compressor',
+    'brain.core.filesystem.files_compressor',
+    'brain.core.filesystem.files_extractor',
+    'brain.core.git',
+    'brain.core.git.executor',
+    'brain.core.git.repository',
+    'brain.core.github',
+    'brain.core.github.api_client',
+    'brain.core.github.models',
+    'brain.core.health',
+    'brain.core.health.dev_environment_manager',
+    'brain.core.health.full_stack_manager',
+    'brain.core.health.native_host_manager',
+    'brain.core.health.onboarding_status_manager',
+    'brain.core.health.websocket_status_manager',
+    'brain.core.intent.merge_manager',
+    'brain.core.intent.recovery_manager',
+    'brain.core.intent.response_parser',
+    'brain.core.intent.staging_manager',
+    'brain.core.intent.validation_manager',
+    'brain.core.intent_manager',
+    'brain.core.nucleus_inspector',
+    'brain.core.nucleus_manager',
+    'brain.core.project',
+    'brain.core.project.clone_manager',
+    'brain.core.project.linker',
+    'brain.core.project.models',
+    'brain.core.project.scanner',
+    'brain.core.project_manager',
+    'brain.core.service.server_manager',
+    'brain.core.tree_manager',
 ]
 
 # Datos adicionales que deben incluirse (configs, templates, etc.)
-datas = [
-    # Ejemplo: ('brain/config/templates', 'brain/config/templates'),
-    # Ejemplo: ('brain/assets', 'brain/assets'),
-]
+datas = []
 
 # Binarios adicionales (DLLs, .so, etc.)
 binaries = []
@@ -134,7 +192,6 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
-        # Excluir paquetes innecesarios para reducir tamaño
         'matplotlib',
         'numpy',
         'scipy',
@@ -166,14 +223,14 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,  # Comprimir con UPX (opcional, reduce tamaño)
-    console=True,  # True para CLI, False para GUI
+    upx=False,
+    console=True,
     disable_windowed_traceback=False,
     argv_emulation=False,
-    target_arch=None,
+    target_arch='x86_64', 
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,  # Opcional: 'brain/assets/icon.ico'
+    icon=None,
 )
 
 coll = COLLECT(
@@ -182,7 +239,7 @@ coll = COLLECT(
     a.zipfiles,
     a.datas,
     strip=False,
-    upx=True,
+    upx=False,
     upx_exclude=[],
     name='brain'
 )
