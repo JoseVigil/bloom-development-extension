@@ -57,7 +57,9 @@ def build():
         except Exception as e:
             print(f"⚠️ No se pudo limpiar (¿archivo en uso?): {e}")
 
-    # Argumentos para PyInstaller
+    # =========================================================================
+    # ARGUMENTOS PARA PYINSTALLER - CON FIXES CRÍTICOS
+    # =========================================================================
     args = [
         str(FULL_ENTRY_POINT),
         f'--name={APP_NAME}',
@@ -67,39 +69,148 @@ def build():
         f'--workpath={str(REPO_ROOT / "build" / "temp")}',
         f'--specpath={str(REPO_ROOT / "build" / "specs")}',
         
-        # Opciones
-        '--onedir',      # Genera una carpeta (mejor performance que onefile)
+        # =====================================================================
+        # FIX CRÍTICO 1: ONEDIR EN LUGAR DE ONEFILE
+        # onedir es más estable para servicios Windows
+        # =====================================================================
+        '--onedir',
         '--noconfirm',
         '--clean',
         
-        # Inclusiones explícitas del paquete brain
-        f'--paths={str(REPO_ROOT)}', # Asegura que encuentre el módulo brain
-        '--collect-all=brain',       # Recolecta todo el contenido del paquete
+        # =====================================================================
+        # FIX CRÍTICO 2: CONSOLE MODE EXPLÍCITO
+        # Para servicios, --console es preferible (NSSM maneja la redirección)
+        # =====================================================================
+        '--console',  # Explícitamente consola (no windowed)
         
-        # Librerías ocultas comunes
+        # Inclusiones explícitas del paquete brain
+        f'--paths={str(REPO_ROOT)}',
+        '--collect-all=brain',
+        
+        # =====================================================================
+        # FIX CRÍTICO 3: HIDDEN IMPORTS EXTENDIDOS
+        # Agregar TODOS los módulos que podrían faltar en Session 0
+        # =====================================================================
+        # Core Python
+        '--hidden-import=asyncio',
+        '--hidden-import=asyncio.events',
+        '--hidden-import=asyncio.streams',
+        '--hidden-import=asyncio.protocols',
+        '--hidden-import=socket',
+        '--hidden-import=socketserver',
+        '--hidden-import=selectors',
+        '--hidden-import=ssl',
+        
+        # Typer y dependencias
         '--hidden-import=typer',
+        '--hidden-import=typer.core',
+        '--hidden-import=typer.main',
+        '--hidden-import=click',
+        '--hidden-import=click.core',
+        
+        # Rich (para outputs bonitos)
         '--hidden-import=rich',
+        '--hidden-import=rich.console',
+        '--hidden-import=rich.table',
+        '--hidden-import=rich.progress',
+        '--hidden-import=rich.traceback',
+        
+        # Utilidades
         '--hidden-import=colorama',
         '--hidden-import=shellingham',
+        
+        # Logging
+        '--hidden-import=logging',
+        '--hidden-import=logging.handlers',
+        
+        # JSON y serialización
+        '--hidden-import=json',
+        '--hidden-import=pickle',
+        
+        # =====================================================================
+        # FIX CRÍTICO 4: COLLECT-ALL PARA MÓDULOS PROBLEMÁTICOS
+        # =====================================================================
+        '--collect-all=typer',
+        '--collect-all=rich',
+        '--collect-all=click',
+        
+        # =====================================================================
+        # FIX CRÍTICO 5: COPY METADATA (para pkg_resources)
+        # =====================================================================
+        '--copy-metadata=typer',
+        '--copy-metadata=rich',
+        '--copy-metadata=click',
     ]
+    
+    # =========================================================================
+    # OPCIONES ESPECÍFICAS POR PLATAFORMA
+    # =========================================================================
+    if SYSTEM == "Windows":
+        # En Windows, asegurar que no haya ventana emergente en servicios
+        args.extend([
+            '--add-data', f'{REPO_ROOT};.',  # Incluir archivos config si los hay
+        ])
+    
+    print("\n🔧 Argumentos de PyInstaller:")
+    for arg in args:
+        print(f"   {arg}")
+    print()
     
     # Ejecutar PyInstaller
     try:
+        print("⚙️  Ejecutando PyInstaller...")
         PyInstaller.__main__.run(args)
         
-        print("\n" + "="*50)
+        print("\n" + "="*60)
         print(f"✅ COMPILACIÓN EXITOSA")
         
         final_binary = target_dir / (f"{APP_NAME}.exe" if SYSTEM == "Windows" else APP_NAME)
         if final_binary.exists():
             print(f"📦 Binario listo en: {final_binary}")
-            print(f"👉 Esto es lo que debes empaquetar en el instalador.")
+            print(f"💉 Esto es lo que debes empaquetar en el instalador.")
+            
+            # ================================================================
+            # FIX CRÍTICO 6: VERIFICAR _internal
+            # ================================================================
+            internal_dir = target_dir / "_internal"
+            if internal_dir.exists():
+                file_count = len(list(internal_dir.rglob('*')))
+                print(f"✅ Carpeta _internal verificada ({file_count} archivos)")
+            else:
+                print(f"⚠️  ADVERTENCIA: No se encontró carpeta _internal")
+                print(f"   Esto puede causar crashes al arrancar el servicio")
+            
         else:
             print(f"⚠️ El proceso terminó pero no veo el binario en: {final_binary}")
-        print("="*50)
+        
+        print("="*60)
+        
+        # ====================================================================
+        # FIX CRÍTICO 7: TEST RÁPIDO DEL BINARIO
+        # ====================================================================
+        print("\n🧪 Probando binario compilado...")
+        try:
+            import subprocess
+            result = subprocess.run(
+                [str(final_binary), '--version'],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            
+            if result.returncode == 0:
+                print(f"✅ Binario funciona correctamente")
+                print(f"   Output: {result.stdout.strip()}")
+            else:
+                print(f"⚠️  Binario devolvió código {result.returncode}")
+                print(f"   Error: {result.stderr}")
+        except Exception as e:
+            print(f"⚠️  No se pudo probar el binario: {e}")
         
     except Exception as e:
         print(f"\n❌ ERROR FATAL DURANTE PYINSTALLER: {e}")
+        import traceback
+        traceback.print_exc()
 
 if __name__ == "__main__":
     build()

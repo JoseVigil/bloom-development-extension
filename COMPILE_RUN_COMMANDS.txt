@@ -1,5 +1,8 @@
 COMPILE & RUN:
 
+brain
+python build.py
+
 Plugin
 /c/repos/bloom-videos/bloom-development-extension
 npm run compile

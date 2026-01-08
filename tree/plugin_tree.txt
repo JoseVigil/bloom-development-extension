@@ -173,6 +173,7 @@ bloom-development-extension/
 │       ├── tokenEstimator.ts
 │       └── uriHelper.ts
 ├── installer/
+│   ├── .DS_Store
 │   ├── README.md
 │   ├── chrome-extension/
 │   │   ├── crx/
@@ -206,20 +207,15 @@ bloom-development-extension/
 │   │   ├── entitlements.plist
 │   │   ├── forge.config.js
 │   │   ├── install/
-│   │   │   ├── core-installer.js
 │   │   │   ├── extension-installer.js
 │   │   │   ├── installer.js
-│   │   │   ├── landing-generator.js
 │   │   │   ├── launcher-creator.js
 │   │   │   ├── native-host-installer.js
 │   │   │   ├── profile-manager.js
-│   │   │   └── service-installer.js
+│   │   │   ├── service-installer.js
+│   │   │   └── shortcut-installer.js
 │   │   ├── installHelpers.js
 │   │   ├── installer-config.json
-│   │   ├── installers/
-│   │   │   ├── ChromeEnterpriseExtensionInstaller.js
-│   │   │   ├── ChromeManualExtensionInstaller.js
-│   │   │   └── config.js
 │   │   ├── ipc/
 │   │   │   ├── install-handlers.js
 │   │   │   ├── launch-handlers.js
@@ -243,13 +239,10 @@ bloom-development-extension/
 │   │   ├── run-elevated.bat
 │   │   ├── run-elevated.js
 │   │   ├── scripts/
+│   │   │   ├── calc-true-id.js
 │   │   │   ├── check-status.bat
 │   │   │   └── emergency-cleanup.bat
 │   │   ├── src/
-│   │   │   ├── event_listeners.js
-│   │   │   ├── extension_installer.js
-│   │   │   ├── healthCheck.js
-│   │   │   ├── heartbeat_manager.js
 │   │   │   ├── index.html
 │   │   │   ├── installation_manager.js
 │   │   │   ├── launch/
@@ -263,12 +256,719 @@ bloom-development-extension/
 │   │   └── utils/
 │   │       └── exec-helper.js
 │   ├── native/
+│   │   ├── .DS_Store
 │   │   ├── bin/
+│   │   │   ├── .DS_Store
 │   │   │   ├── darwin/
 │   │   │   │   └── x64/
 │   │   │   │       └── bloom-host
 │   │   │   └── win32/
 │   │   │       ├── bloom-host.exe
+│   │   │       ├── brain/
+│   │   │       │   ├── _internal/
+│   │   │       │   │   ├── VCRUNTIME140.dll
+│   │   │       │   │   ├── VCRUNTIME140_1.dll
+│   │   │       │   │   ├── _asyncio.pyd
+│   │   │       │   │   ├── _bz2.pyd
+│   │   │       │   │   ├── _ctypes.pyd
+│   │   │       │   │   ├── _decimal.pyd
+│   │   │       │   │   ├── _elementtree.pyd
+│   │   │       │   │   ├── _hashlib.pyd
+│   │   │       │   │   ├── _lzma.pyd
+│   │   │       │   │   ├── _multiprocessing.pyd
+│   │   │       │   │   ├── _overlapped.pyd
+│   │   │       │   │   ├── _queue.pyd
+│   │   │       │   │   ├── _socket.pyd
+│   │   │       │   │   ├── _ssl.pyd
+│   │   │       │   │   ├── _uuid.pyd
+│   │   │       │   │   ├── _wmi.pyd
+│   │   │       │   │   ├── _zoneinfo.pyd
+│   │   │       │   │   ├── api-ms-win-core-console-l1-1-0.dll
+│   │   │       │   │   ├── api-ms-win-core-datetime-l1-1-0.dll
+│   │   │       │   │   ├── api-ms-win-core-debug-l1-1-0.dll
+│   │   │       │   │   ├── api-ms-win-core-errorhandling-l1-1-0.dll
+│   │   │       │   │   ├── api-ms-win-core-fibers-l1-1-0.dll
+│   │   │       │   │   ├── api-ms-win-core-fibers-l1-1-1.dll
+│   │   │       │   │   ├── api-ms-win-core-file-l1-1-0.dll
+│   │   │       │   │   ├── api-ms-win-core-file-l1-2-0.dll
+│   │   │       │   │   ├── api-ms-win-core-file-l2-1-0.dll
+│   │   │       │   │   ├── api-ms-win-core-handle-l1-1-0.dll
+│   │   │       │   │   ├── api-ms-win-core-heap-l1-1-0.dll
+│   │   │       │   │   ├── api-ms-win-core-interlocked-l1-1-0.dll
+│   │   │       │   │   ├── api-ms-win-core-kernel32-legacy-l1-1-1.dll
+│   │   │       │   │   ├── api-ms-win-core-libraryloader-l1-1-0.dll
+│   │   │       │   │   ├── api-ms-win-core-localization-l1-2-0.dll
+│   │   │       │   │   ├── api-ms-win-core-memory-l1-1-0.dll
+│   │   │       │   │   ├── api-ms-win-core-namedpipe-l1-1-0.dll
+│   │   │       │   │   ├── api-ms-win-core-processenvironment-l1-1-0.dll
+│   │   │       │   │   ├── api-ms-win-core-processthreads-l1-1-0.dll
+│   │   │       │   │   ├── api-ms-win-core-processthreads-l1-1-1.dll
+│   │   │       │   │   ├── api-ms-win-core-profile-l1-1-0.dll
+│   │   │       │   │   ├── api-ms-win-core-rtlsupport-l1-1-0.dll
+│   │   │       │   │   ├── api-ms-win-core-string-l1-1-0.dll
+│   │   │       │   │   ├── api-ms-win-core-synch-l1-1-0.dll
+│   │   │       │   │   ├── api-ms-win-core-synch-l1-2-0.dll
+│   │   │       │   │   ├── api-ms-win-core-sysinfo-l1-1-0.dll
+│   │   │       │   │   ├── api-ms-win-core-sysinfo-l1-2-0.dll
+│   │   │       │   │   ├── api-ms-win-core-timezone-l1-1-0.dll
+│   │   │       │   │   ├── api-ms-win-core-util-l1-1-0.dll
+│   │   │       │   │   ├── api-ms-win-crt-conio-l1-1-0.dll
+│   │   │       │   │   ├── api-ms-win-crt-convert-l1-1-0.dll
+│   │   │       │   │   ├── api-ms-win-crt-environment-l1-1-0.dll
+│   │   │       │   │   ├── api-ms-win-crt-filesystem-l1-1-0.dll
+│   │   │       │   │   ├── api-ms-win-crt-heap-l1-1-0.dll
+│   │   │       │   │   ├── api-ms-win-crt-locale-l1-1-0.dll
+│   │   │       │   │   ├── api-ms-win-crt-math-l1-1-0.dll
+│   │   │       │   │   ├── api-ms-win-crt-process-l1-1-0.dll
+│   │   │       │   │   ├── api-ms-win-crt-runtime-l1-1-0.dll
+│   │   │       │   │   ├── api-ms-win-crt-stdio-l1-1-0.dll
+│   │   │       │   │   ├── api-ms-win-crt-string-l1-1-0.dll
+│   │   │       │   │   ├── api-ms-win-crt-time-l1-1-0.dll
+│   │   │       │   │   ├── api-ms-win-crt-utility-l1-1-0.dll
+│   │   │       │   │   ├── base_library.zip
+│   │   │       │   │   ├── certifi/
+│   │   │       │   │   │   ├── cacert.pem
+│   │   │       │   │   │   └── py.typed
+│   │   │       │   │   ├── charset_normalizer/
+│   │   │       │   │   │   ├── md.cp313-win_amd64.pyd
+│   │   │       │   │   │   └── md__mypyc.cp313-win_amd64.pyd
+│   │   │       │   │   ├── click-8.3.1.dist-info/
+│   │   │       │   │   │   ├── INSTALLER
+│   │   │       │   │   │   ├── METADATA
+│   │   │       │   │   │   ├── RECORD
+│   │   │       │   │   │   ├── WHEEL
+│   │   │       │   │   │   └── licenses/
+│   │   │       │   │   │       └── LICENSE.txt
+│   │   │       │   │   ├── google/
+│   │   │       │   │   │   └── _upb/
+│   │   │       │   │   │       └── _message.pyd
+│   │   │       │   │   ├── google_api_core-2.28.1.dist-info/
+│   │   │       │   │   │   ├── INSTALLER
+│   │   │       │   │   │   ├── METADATA
+│   │   │       │   │   │   ├── RECORD
+│   │   │       │   │   │   ├── WHEEL
+│   │   │       │   │   │   ├── licenses/
+│   │   │       │   │   │   │   └── LICENSE
+│   │   │       │   │   │   └── top_level.txt
+│   │   │       │   │   ├── google_api_python_client-2.187.0.dist-info/
+│   │   │       │   │   │   ├── INSTALLER
+│   │   │       │   │   │   ├── METADATA
+│   │   │       │   │   │   ├── RECORD
+│   │   │       │   │   │   ├── WHEEL
+│   │   │       │   │   │   ├── licenses/
+│   │   │       │   │   │   │   └── LICENSE
+│   │   │       │   │   │   └── top_level.txt
+│   │   │       │   │   ├── googleapiclient/
+│   │   │       │   │   │   └── discovery_cache/
+│   │   │       │   │   │       └── documents/
+│   │   │       │   │   │           ├── abusiveexperiencereport.v1.json
+│   │   │       │   │   │           ├── acceleratedmobilepageurl.v1.json
+│   │   │       │   │   │           ├── accessapproval.v1.json
+│   │   │       │   │   │           ├── accesscontextmanager.v1.json
+│   │   │       │   │   │           ├── accesscontextmanager.v1beta.json
+│   │   │       │   │   │           ├── acmedns.v1.json
+│   │   │       │   │   │           ├── addressvalidation.v1.json
+│   │   │       │   │   │           ├── adexchangebuyer.v1.2.json
+│   │   │       │   │   │           ├── adexchangebuyer.v1.3.json
+│   │   │       │   │   │           ├── adexchangebuyer.v1.4.json
+│   │   │       │   │   │           ├── adexchangebuyer2.v2beta1.json
+│   │   │       │   │   │           ├── adexperiencereport.v1.json
+│   │   │       │   │   │           ├── admin.datatransfer_v1.json
+│   │   │       │   │   │           ├── admin.datatransferv1.json
+│   │   │       │   │   │           ├── admin.directory_v1.json
+│   │   │       │   │   │           ├── admin.directoryv1.json
+│   │   │       │   │   │           ├── admin.reports_v1.json
+│   │   │       │   │   │           ├── admin.reportsv1.json
+│   │   │       │   │   │           ├── admob.v1.json
+│   │   │       │   │   │           ├── admob.v1beta.json
+│   │   │       │   │   │           ├── adsense.v2.json
+│   │   │       │   │   │           ├── adsensehost.v4.1.json
+│   │   │       │   │   │           ├── adsenseplatform.v1.json
+│   │   │       │   │   │           ├── adsenseplatform.v1alpha.json
+│   │   │       │   │   │           ├── advisorynotifications.v1.json
+│   │   │       │   │   │           ├── aiplatform.v1.json
+│   │   │       │   │   │           ├── aiplatform.v1beta1.json
+│   │   │       │   │   │           ├── airquality.v1.json
+│   │   │       │   │   │           ├── alertcenter.v1beta1.json
+│   │   │       │   │   │           ├── alloydb.v1.json
+│   │   │       │   │   │           ├── alloydb.v1alpha.json
+│   │   │       │   │   │           ├── alloydb.v1beta.json
+│   │   │       │   │   │           ├── analytics.v3.json
+│   │   │       │   │   │           ├── analyticsadmin.v1alpha.json
+│   │   │       │   │   │           ├── analyticsadmin.v1beta.json
+│   │   │       │   │   │           ├── analyticsdata.v1alpha.json
+│   │   │       │   │   │           ├── analyticsdata.v1beta.json
+│   │   │       │   │   │           ├── analyticshub.v1.json
+│   │   │       │   │   │           ├── analyticshub.v1beta1.json
+│   │   │       │   │   │           ├── analyticsreporting.v4.json
+│   │   │       │   │   │           ├── androiddeviceprovisioning.v1.json
+│   │   │       │   │   │           ├── androidenterprise.v1.json
+│   │   │       │   │   │           ├── androidmanagement.v1.json
+│   │   │       │   │   │           ├── androidpublisher.v3.json
+│   │   │       │   │   │           ├── apigateway.v1.json
+│   │   │       │   │   │           ├── apigateway.v1beta.json
+│   │   │       │   │   │           ├── apigee.v1.json
+│   │   │       │   │   │           ├── apigeeregistry.v1.json
+│   │   │       │   │   │           ├── apihub.v1.json
+│   │   │       │   │   │           ├── apikeys.v2.json
+│   │   │       │   │   │           ├── apim.v1alpha.json
+│   │   │       │   │   │           ├── appengine.v1.json
+│   │   │       │   │   │           ├── appengine.v1alpha.json
+│   │   │       │   │   │           ├── appengine.v1beta.json
+│   │   │       │   │   │           ├── appengine.v1beta4.json
+│   │   │       │   │   │           ├── appengine.v1beta5.json
+│   │   │       │   │   │           ├── apphub.v1.json
+│   │   │       │   │   │           ├── apphub.v1alpha.json
+│   │   │       │   │   │           ├── area120tables.v1alpha1.json
+│   │   │       │   │   │           ├── areainsights.v1.json
+│   │   │       │   │   │           ├── artifactregistry.v1.json
+│   │   │       │   │   │           ├── artifactregistry.v1beta1.json
+│   │   │       │   │   │           ├── artifactregistry.v1beta2.json
+│   │   │       │   │   │           ├── assuredworkloads.v1.json
+│   │   │       │   │   │           ├── assuredworkloads.v1beta1.json
+│   │   │       │   │   │           ├── authorizedbuyersmarketplace.v1.json
+│   │   │       │   │   │           ├── authorizedbuyersmarketplace.v1alpha.json
+│   │   │       │   │   │           ├── authorizedbuyersmarketplace.v1beta.json
+│   │   │       │   │   │           ├── backupdr.v1.json
+│   │   │       │   │   │           ├── baremetalsolution.v1.json
+│   │   │       │   │   │           ├── baremetalsolution.v1alpha1.json
+│   │   │       │   │   │           ├── baremetalsolution.v2.json
+│   │   │       │   │   │           ├── batch.v1.json
+│   │   │       │   │   │           ├── beyondcorp.v1.json
+│   │   │       │   │   │           ├── beyondcorp.v1alpha.json
+│   │   │       │   │   │           ├── biglake.v1.json
+│   │   │       │   │   │           ├── bigquery.v2.json
+│   │   │       │   │   │           ├── bigqueryconnection.v1.json
+│   │   │       │   │   │           ├── bigqueryconnection.v1beta1.json
+│   │   │       │   │   │           ├── bigquerydatapolicy.v1.json
+│   │   │       │   │   │           ├── bigquerydatapolicy.v2.json
+│   │   │       │   │   │           ├── bigquerydatatransfer.v1.json
+│   │   │       │   │   │           ├── bigqueryreservation.v1.json
+│   │   │       │   │   │           ├── bigqueryreservation.v1alpha2.json
+│   │   │       │   │   │           ├── bigqueryreservation.v1beta1.json
+│   │   │       │   │   │           ├── bigtableadmin.v1.json
+│   │   │       │   │   │           ├── bigtableadmin.v2.json
+│   │   │       │   │   │           ├── billingbudgets.v1.json
+│   │   │       │   │   │           ├── billingbudgets.v1beta1.json
+│   │   │       │   │   │           ├── binaryauthorization.v1.json
+│   │   │       │   │   │           ├── binaryauthorization.v1beta1.json
+│   │   │       │   │   │           ├── blockchainnodeengine.v1.json
+│   │   │       │   │   │           ├── blogger.v2.json
+│   │   │       │   │   │           ├── blogger.v3.json
+│   │   │       │   │   │           ├── books.v1.json
+│   │   │       │   │   │           ├── businessprofileperformance.v1.json
+│   │   │       │   │   │           ├── calendar.v3.json
+│   │   │       │   │   │           ├── certificatemanager.v1.json
+│   │   │       │   │   │           ├── chat.v1.json
+│   │   │       │   │   │           ├── checks.v1alpha.json
+│   │   │       │   │   │           ├── chromemanagement.v1.json
+│   │   │       │   │   │           ├── chromepolicy.v1.json
+│   │   │       │   │   │           ├── chromeuxreport.v1.json
+│   │   │       │   │   │           ├── chromewebstore.v1.1.json
+│   │   │       │   │   │           ├── chromewebstore.v2.json
+│   │   │       │   │   │           ├── civicinfo.v2.json
+│   │   │       │   │   │           ├── classroom.v1.json
+│   │   │       │   │   │           ├── cloudasset.v1.json
+│   │   │       │   │   │           ├── cloudasset.v1beta1.json
+│   │   │       │   │   │           ├── cloudasset.v1p1beta1.json
+│   │   │       │   │   │           ├── cloudasset.v1p4beta1.json
+│   │   │       │   │   │           ├── cloudasset.v1p5beta1.json
+│   │   │       │   │   │           ├── cloudasset.v1p7beta1.json
+│   │   │       │   │   │           ├── cloudbilling.v1.json
+│   │   │       │   │   │           ├── cloudbilling.v1beta.json
+│   │   │       │   │   │           ├── cloudbuild.v1.json
+│   │   │       │   │   │           ├── cloudbuild.v1alpha1.json
+│   │   │       │   │   │           ├── cloudbuild.v1alpha2.json
+│   │   │       │   │   │           ├── cloudbuild.v1beta1.json
+│   │   │       │   │   │           ├── cloudbuild.v2.json
+│   │   │       │   │   │           ├── cloudchannel.v1.json
+│   │   │       │   │   │           ├── cloudcommerceprocurement.v1.json
+│   │   │       │   │   │           ├── cloudcontrolspartner.v1.json
+│   │   │       │   │   │           ├── cloudcontrolspartner.v1beta.json
+│   │   │       │   │   │           ├── clouddebugger.v2.json
+│   │   │       │   │   │           ├── clouddeploy.v1.json
+│   │   │       │   │   │           ├── clouderrorreporting.v1beta1.json
+│   │   │       │   │   │           ├── cloudfunctions.v1.json
+│   │   │       │   │   │           ├── cloudfunctions.v2.json
+│   │   │       │   │   │           ├── cloudfunctions.v2alpha.json
+│   │   │       │   │   │           ├── cloudfunctions.v2beta.json
+│   │   │       │   │   │           ├── cloudidentity.v1.json
+│   │   │       │   │   │           ├── cloudidentity.v1beta1.json
+│   │   │       │   │   │           ├── cloudiot.v1.json
+│   │   │       │   │   │           ├── cloudkms.v1.json
+│   │   │       │   │   │           ├── cloudlocationfinder.v1.json
+│   │   │       │   │   │           ├── cloudlocationfinder.v1alpha.json
+│   │   │       │   │   │           ├── cloudprofiler.v2.json
+│   │   │       │   │   │           ├── cloudresourcemanager.v1.json
+│   │   │       │   │   │           ├── cloudresourcemanager.v1beta1.json
+│   │   │       │   │   │           ├── cloudresourcemanager.v2.json
+│   │   │       │   │   │           ├── cloudresourcemanager.v2beta1.json
+│   │   │       │   │   │           ├── cloudresourcemanager.v3.json
+│   │   │       │   │   │           ├── cloudscheduler.v1.json
+│   │   │       │   │   │           ├── cloudscheduler.v1beta1.json
+│   │   │       │   │   │           ├── cloudsearch.v1.json
+│   │   │       │   │   │           ├── cloudshell.v1.json
+│   │   │       │   │   │           ├── cloudshell.v1alpha1.json
+│   │   │       │   │   │           ├── cloudsupport.v2.json
+│   │   │       │   │   │           ├── cloudsupport.v2beta.json
+│   │   │       │   │   │           ├── cloudtasks.v2.json
+│   │   │       │   │   │           ├── cloudtasks.v2beta2.json
+│   │   │       │   │   │           ├── cloudtasks.v2beta3.json
+│   │   │       │   │   │           ├── cloudtrace.v1.json
+│   │   │       │   │   │           ├── cloudtrace.v2.json
+│   │   │       │   │   │           ├── cloudtrace.v2beta1.json
+│   │   │       │   │   │           ├── composer.v1.json
+│   │   │       │   │   │           ├── composer.v1beta1.json
+│   │   │       │   │   │           ├── compute.alpha.json
+│   │   │       │   │   │           ├── compute.beta.json
+│   │   │       │   │   │           ├── compute.v1.json
+│   │   │       │   │   │           ├── config.v1.json
+│   │   │       │   │   │           ├── connectors.v1.json
+│   │   │       │   │   │           ├── connectors.v2.json
+│   │   │       │   │   │           ├── contactcenteraiplatform.v1alpha1.json
+│   │   │       │   │   │           ├── contactcenterinsights.v1.json
+│   │   │       │   │   │           ├── container.v1.json
+│   │   │       │   │   │           ├── container.v1beta1.json
+│   │   │       │   │   │           ├── containeranalysis.v1.json
+│   │   │       │   │   │           ├── containeranalysis.v1alpha1.json
+│   │   │       │   │   │           ├── containeranalysis.v1beta1.json
+│   │   │       │   │   │           ├── content.v2.1.json
+│   │   │       │   │   │           ├── content.v2.json
+│   │   │       │   │   │           ├── contentwarehouse.v1.json
+│   │   │       │   │   │           ├── css.v1.json
+│   │   │       │   │   │           ├── customsearch.v1.json
+│   │   │       │   │   │           ├── datacatalog.v1.json
+│   │   │       │   │   │           ├── datacatalog.v1beta1.json
+│   │   │       │   │   │           ├── dataflow.v1b3.json
+│   │   │       │   │   │           ├── dataform.v1.json
+│   │   │       │   │   │           ├── dataform.v1beta1.json
+│   │   │       │   │   │           ├── datafusion.v1.json
+│   │   │       │   │   │           ├── datafusion.v1beta1.json
+│   │   │       │   │   │           ├── datalabeling.v1beta1.json
+│   │   │       │   │   │           ├── datalineage.v1.json
+│   │   │       │   │   │           ├── datamanager.v1.json
+│   │   │       │   │   │           ├── datamigration.v1.json
+│   │   │       │   │   │           ├── datamigration.v1beta1.json
+│   │   │       │   │   │           ├── datapipelines.v1.json
+│   │   │       │   │   │           ├── dataplex.v1.json
+│   │   │       │   │   │           ├── dataportability.v1.json
+│   │   │       │   │   │           ├── dataportability.v1beta.json
+│   │   │       │   │   │           ├── dataproc.v1.json
+│   │   │       │   │   │           ├── dataproc.v1beta2.json
+│   │   │       │   │   │           ├── datastore.v1.json
+│   │   │       │   │   │           ├── datastore.v1beta1.json
+│   │   │       │   │   │           ├── datastore.v1beta3.json
+│   │   │       │   │   │           ├── datastream.v1.json
+│   │   │       │   │   │           ├── datastream.v1alpha1.json
+│   │   │       │   │   │           ├── deploymentmanager.alpha.json
+│   │   │       │   │   │           ├── deploymentmanager.v2.json
+│   │   │       │   │   │           ├── deploymentmanager.v2beta.json
+│   │   │       │   │   │           ├── developerconnect.v1.json
+│   │   │       │   │   │           ├── dfareporting.v3.3.json
+│   │   │       │   │   │           ├── dfareporting.v3.4.json
+│   │   │       │   │   │           ├── dfareporting.v3.5.json
+│   │   │       │   │   │           ├── dfareporting.v4.json
+│   │   │       │   │   │           ├── dfareporting.v5.json
+│   │   │       │   │   │           ├── dialogflow.v2.json
+│   │   │       │   │   │           ├── dialogflow.v2beta1.json
+│   │   │       │   │   │           ├── dialogflow.v3.json
+│   │   │       │   │   │           ├── dialogflow.v3beta1.json
+│   │   │       │   │   │           ├── digitalassetlinks.v1.json
+│   │   │       │   │   │           ├── discovery.v1.json
+│   │   │       │   │   │           ├── discoveryengine.v1.json
+│   │   │       │   │   │           ├── discoveryengine.v1alpha.json
+│   │   │       │   │   │           ├── discoveryengine.v1beta.json
+│   │   │       │   │   │           ├── displayvideo.v1.json
+│   │   │       │   │   │           ├── displayvideo.v2.json
+│   │   │       │   │   │           ├── displayvideo.v3.json
+│   │   │       │   │   │           ├── displayvideo.v4.json
+│   │   │       │   │   │           ├── dlp.v2.json
+│   │   │       │   │   │           ├── dns.v1.json
+│   │   │       │   │   │           ├── dns.v1beta2.json
+│   │   │       │   │   │           ├── dns.v2.json
+│   │   │       │   │   │           ├── docs.v1.json
+│   │   │       │   │   │           ├── documentai.v1.json
+│   │   │       │   │   │           ├── documentai.v1beta2.json
+│   │   │       │   │   │           ├── documentai.v1beta3.json
+│   │   │       │   │   │           ├── domains.v1.json
+│   │   │       │   │   │           ├── domains.v1alpha2.json
+│   │   │       │   │   │           ├── domains.v1beta1.json
+│   │   │       │   │   │           ├── domainsrdap.v1.json
+│   │   │       │   │   │           ├── doubleclickbidmanager.v1.1.json
+│   │   │       │   │   │           ├── doubleclickbidmanager.v1.json
+│   │   │       │   │   │           ├── doubleclickbidmanager.v2.json
+│   │   │       │   │   │           ├── doubleclicksearch.v2.json
+│   │   │       │   │   │           ├── drive.v2.json
+│   │   │       │   │   │           ├── drive.v3.json
+│   │   │       │   │   │           ├── driveactivity.v2.json
+│   │   │       │   │   │           ├── drivelabels.v2.json
+│   │   │       │   │   │           ├── drivelabels.v2beta.json
+│   │   │       │   │   │           ├── essentialcontacts.v1.json
+│   │   │       │   │   │           ├── eventarc.v1.json
+│   │   │       │   │   │           ├── eventarc.v1beta1.json
+│   │   │       │   │   │           ├── factchecktools.v1alpha1.json
+│   │   │       │   │   │           ├── fcm.v1.json
+│   │   │       │   │   │           ├── fcmdata.v1beta1.json
+│   │   │       │   │   │           ├── file.v1.json
+│   │   │       │   │   │           ├── file.v1beta1.json
+│   │   │       │   │   │           ├── firebase.v1beta1.json
+│   │   │       │   │   │           ├── firebaseappcheck.v1.json
+│   │   │       │   │   │           ├── firebaseappcheck.v1beta.json
+│   │   │       │   │   │           ├── firebaseappdistribution.v1.json
+│   │   │       │   │   │           ├── firebaseappdistribution.v1alpha.json
+│   │   │       │   │   │           ├── firebaseapphosting.v1.json
+│   │   │       │   │   │           ├── firebaseapphosting.v1beta.json
+│   │   │       │   │   │           ├── firebasedatabase.v1beta.json
+│   │   │       │   │   │           ├── firebasedataconnect.v1.json
+│   │   │       │   │   │           ├── firebasedataconnect.v1beta.json
+│   │   │       │   │   │           ├── firebasedynamiclinks.v1.json
+│   │   │       │   │   │           ├── firebasehosting.v1.json
+│   │   │       │   │   │           ├── firebasehosting.v1beta1.json
+│   │   │       │   │   │           ├── firebaseml.v1.json
+│   │   │       │   │   │           ├── firebaseml.v1beta2.json
+│   │   │       │   │   │           ├── firebaseml.v2beta.json
+│   │   │       │   │   │           ├── firebaserules.v1.json
+│   │   │       │   │   │           ├── firebasestorage.v1beta.json
+│   │   │       │   │   │           ├── firestore.v1.json
+│   │   │       │   │   │           ├── firestore.v1beta1.json
+│   │   │       │   │   │           ├── firestore.v1beta2.json
+│   │   │       │   │   │           ├── fitness.v1.json
+│   │   │       │   │   │           ├── forms.v1.json
+│   │   │       │   │   │           ├── games.v1.json
+│   │   │       │   │   │           ├── gamesConfiguration.v1configuration.json
+│   │   │       │   │   │           ├── gamesManagement.v1management.json
+│   │   │       │   │   │           ├── gameservices.v1.json
+│   │   │       │   │   │           ├── gameservices.v1beta.json
+│   │   │       │   │   │           ├── genomics.v1.json
+│   │   │       │   │   │           ├── genomics.v1alpha2.json
+│   │   │       │   │   │           ├── genomics.v2alpha1.json
+│   │   │       │   │   │           ├── gkebackup.v1.json
+│   │   │       │   │   │           ├── gkehub.v1.json
+│   │   │       │   │   │           ├── gkehub.v1alpha.json
+│   │   │       │   │   │           ├── gkehub.v1alpha2.json
+│   │   │       │   │   │           ├── gkehub.v1beta.json
+│   │   │       │   │   │           ├── gkehub.v1beta1.json
+│   │   │       │   │   │           ├── gkehub.v2.json
+│   │   │       │   │   │           ├── gkehub.v2alpha.json
+│   │   │       │   │   │           ├── gkehub.v2beta.json
+│   │   │       │   │   │           ├── gkeonprem.v1.json
+│   │   │       │   │   │           ├── gmail.v1.json
+│   │   │       │   │   │           ├── gmailpostmastertools.v1.json
+│   │   │       │   │   │           ├── gmailpostmastertools.v1beta1.json
+│   │   │       │   │   │           ├── groupsmigration.v1.json
+│   │   │       │   │   │           ├── groupssettings.v1.json
+│   │   │       │   │   │           ├── healthcare.v1.json
+│   │   │       │   │   │           ├── healthcare.v1beta1.json
+│   │   │       │   │   │           ├── homegraph.v1.json
+│   │   │       │   │   │           ├── iam.v1.json
+│   │   │       │   │   │           ├── iam.v2.json
+│   │   │       │   │   │           ├── iam.v2beta.json
+│   │   │       │   │   │           ├── iamcredentials.v1.json
+│   │   │       │   │   │           ├── iap.v1.json
+│   │   │       │   │   │           ├── iap.v1beta1.json
+│   │   │       │   │   │           ├── ideahub.v1alpha.json
+│   │   │       │   │   │           ├── ideahub.v1beta.json
+│   │   │       │   │   │           ├── identitytoolkit.v1.json
+│   │   │       │   │   │           ├── identitytoolkit.v2.json
+│   │   │       │   │   │           ├── identitytoolkit.v3.json
+│   │   │       │   │   │           ├── ids.v1.json
+│   │   │       │   │   │           ├── index.json
+│   │   │       │   │   │           ├── indexing.v3.json
+│   │   │       │   │   │           ├── integrations.v1.json
+│   │   │       │   │   │           ├── integrations.v1alpha.json
+│   │   │       │   │   │           ├── jobs.v2.json
+│   │   │       │   │   │           ├── jobs.v3.json
+│   │   │       │   │   │           ├── jobs.v3p1beta1.json
+│   │   │       │   │   │           ├── jobs.v4.json
+│   │   │       │   │   │           ├── keep.v1.json
+│   │   │       │   │   │           ├── kgsearch.v1.json
+│   │   │       │   │   │           ├── kmsinventory.v1.json
+│   │   │       │   │   │           ├── language.v1.json
+│   │   │       │   │   │           ├── language.v1beta1.json
+│   │   │       │   │   │           ├── language.v1beta2.json
+│   │   │       │   │   │           ├── language.v2.json
+│   │   │       │   │   │           ├── libraryagent.v1.json
+│   │   │       │   │   │           ├── licensing.v1.json
+│   │   │       │   │   │           ├── lifesciences.v2beta.json
+│   │   │       │   │   │           ├── localservices.v1.json
+│   │   │       │   │   │           ├── logging.v2.json
+│   │   │       │   │   │           ├── looker.v1.json
+│   │   │       │   │   │           ├── managedidentities.v1.json
+│   │   │       │   │   │           ├── managedidentities.v1alpha1.json
+│   │   │       │   │   │           ├── managedidentities.v1beta1.json
+│   │   │       │   │   │           ├── managedkafka.v1.json
+│   │   │       │   │   │           ├── manufacturers.v1.json
+│   │   │       │   │   │           ├── marketingplatformadmin.v1alpha.json
+│   │   │       │   │   │           ├── meet.v2.json
+│   │   │       │   │   │           ├── memcache.v1.json
+│   │   │       │   │   │           ├── memcache.v1beta2.json
+│   │   │       │   │   │           ├── merchantapi.accounts_v1.json
+│   │   │       │   │   │           ├── merchantapi.accounts_v1beta.json
+│   │   │       │   │   │           ├── merchantapi.conversions_v1.json
+│   │   │       │   │   │           ├── merchantapi.conversions_v1beta.json
+│   │   │       │   │   │           ├── merchantapi.datasources_v1.json
+│   │   │       │   │   │           ├── merchantapi.datasources_v1beta.json
+│   │   │       │   │   │           ├── merchantapi.inventories_v1.json
+│   │   │       │   │   │           ├── merchantapi.inventories_v1beta.json
+│   │   │       │   │   │           ├── merchantapi.issueresolution_v1.json
+│   │   │       │   │   │           ├── merchantapi.issueresolution_v1beta.json
+│   │   │       │   │   │           ├── merchantapi.lfp_v1.json
+│   │   │       │   │   │           ├── merchantapi.lfp_v1beta.json
+│   │   │       │   │   │           ├── merchantapi.notifications_v1.json
+│   │   │       │   │   │           ├── merchantapi.notifications_v1beta.json
+│   │   │       │   │   │           ├── merchantapi.ordertracking_v1.json
+│   │   │       │   │   │           ├── merchantapi.ordertracking_v1beta.json
+│   │   │       │   │   │           ├── merchantapi.products_v1.json
+│   │   │       │   │   │           ├── merchantapi.products_v1beta.json
+│   │   │       │   │   │           ├── merchantapi.promotions_v1.json
+│   │   │       │   │   │           ├── merchantapi.promotions_v1beta.json
+│   │   │       │   │   │           ├── merchantapi.quota_v1.json
+│   │   │       │   │   │           ├── merchantapi.quota_v1beta.json
+│   │   │       │   │   │           ├── merchantapi.reports_v1.json
+│   │   │       │   │   │           ├── merchantapi.reports_v1beta.json
+│   │   │       │   │   │           ├── merchantapi.reviews_v1beta.json
+│   │   │       │   │   │           ├── metastore.v1.json
+│   │   │       │   │   │           ├── metastore.v1alpha.json
+│   │   │       │   │   │           ├── metastore.v1beta.json
+│   │   │       │   │   │           ├── metastore.v2.json
+│   │   │       │   │   │           ├── metastore.v2alpha.json
+│   │   │       │   │   │           ├── metastore.v2beta.json
+│   │   │       │   │   │           ├── migrationcenter.v1.json
+│   │   │       │   │   │           ├── migrationcenter.v1alpha1.json
+│   │   │       │   │   │           ├── ml.v1.json
+│   │   │       │   │   │           ├── monitoring.v1.json
+│   │   │       │   │   │           ├── monitoring.v3.json
+│   │   │       │   │   │           ├── mybusinessaccountmanagement.v1.json
+│   │   │       │   │   │           ├── mybusinessbusinesscalls.v1.json
+│   │   │       │   │   │           ├── mybusinessbusinessinformation.v1.json
+│   │   │       │   │   │           ├── mybusinesslodging.v1.json
+│   │   │       │   │   │           ├── mybusinessnotifications.v1.json
+│   │   │       │   │   │           ├── mybusinessplaceactions.v1.json
+│   │   │       │   │   │           ├── mybusinessqanda.v1.json
+│   │   │       │   │   │           ├── mybusinessverifications.v1.json
+│   │   │       │   │   │           ├── netapp.v1.json
+│   │   │       │   │   │           ├── netapp.v1beta1.json
+│   │   │       │   │   │           ├── networkconnectivity.v1.json
+│   │   │       │   │   │           ├── networkconnectivity.v1alpha1.json
+│   │   │       │   │   │           ├── networkmanagement.v1.json
+│   │   │       │   │   │           ├── networkmanagement.v1beta1.json
+│   │   │       │   │   │           ├── networksecurity.v1.json
+│   │   │       │   │   │           ├── networksecurity.v1beta1.json
+│   │   │       │   │   │           ├── networkservices.v1.json
+│   │   │       │   │   │           ├── networkservices.v1beta1.json
+│   │   │       │   │   │           ├── notebooks.v1.json
+│   │   │       │   │   │           ├── notebooks.v2.json
+│   │   │       │   │   │           ├── oauth2.v2.json
+│   │   │       │   │   │           ├── observability.v1.json
+│   │   │       │   │   │           ├── ondemandscanning.v1.json
+│   │   │       │   │   │           ├── ondemandscanning.v1beta1.json
+│   │   │       │   │   │           ├── oracledatabase.v1.json
+│   │   │       │   │   │           ├── orgpolicy.v2.json
+│   │   │       │   │   │           ├── osconfig.v1.json
+│   │   │       │   │   │           ├── osconfig.v1alpha.json
+│   │   │       │   │   │           ├── osconfig.v1beta.json
+│   │   │       │   │   │           ├── osconfig.v2.json
+│   │   │       │   │   │           ├── osconfig.v2beta.json
+│   │   │       │   │   │           ├── oslogin.v1.json
+│   │   │       │   │   │           ├── oslogin.v1alpha.json
+│   │   │       │   │   │           ├── oslogin.v1beta.json
+│   │   │       │   │   │           ├── pagespeedonline.v5.json
+│   │   │       │   │   │           ├── parallelstore.v1.json
+│   │   │       │   │   │           ├── parallelstore.v1beta.json
+│   │   │       │   │   │           ├── parametermanager.v1.json
+│   │   │       │   │   │           ├── paymentsresellersubscription.v1.json
+│   │   │       │   │   │           ├── people.v1.json
+│   │   │       │   │   │           ├── places.v1.json
+│   │   │       │   │   │           ├── playablelocations.v3.json
+│   │   │       │   │   │           ├── playcustomapp.v1.json
+│   │   │       │   │   │           ├── playdeveloperreporting.v1alpha1.json
+│   │   │       │   │   │           ├── playdeveloperreporting.v1beta1.json
+│   │   │       │   │   │           ├── playgrouping.v1alpha1.json
+│   │   │       │   │   │           ├── playintegrity.v1.json
+│   │   │       │   │   │           ├── policyanalyzer.v1.json
+│   │   │       │   │   │           ├── policyanalyzer.v1beta1.json
+│   │   │       │   │   │           ├── policysimulator.v1.json
+│   │   │       │   │   │           ├── policysimulator.v1alpha.json
+│   │   │       │   │   │           ├── policysimulator.v1beta.json
+│   │   │       │   │   │           ├── policysimulator.v1beta1.json
+│   │   │       │   │   │           ├── policytroubleshooter.v1.json
+│   │   │       │   │   │           ├── policytroubleshooter.v1beta.json
+│   │   │       │   │   │           ├── pollen.v1.json
+│   │   │       │   │   │           ├── poly.v1.json
+│   │   │       │   │   │           ├── privateca.v1.json
+│   │   │       │   │   │           ├── privateca.v1beta1.json
+│   │   │       │   │   │           ├── prod_tt_sasportal.v1alpha1.json
+│   │   │       │   │   │           ├── publicca.v1.json
+│   │   │       │   │   │           ├── publicca.v1alpha1.json
+│   │   │       │   │   │           ├── publicca.v1beta1.json
+│   │   │       │   │   │           ├── pubsub.v1.json
+│   │   │       │   │   │           ├── pubsub.v1beta1a.json
+│   │   │       │   │   │           ├── pubsub.v1beta2.json
+│   │   │       │   │   │           ├── pubsublite.v1.json
+│   │   │       │   │   │           ├── rapidmigrationassessment.v1.json
+│   │   │       │   │   │           ├── readerrevenuesubscriptionlinking.v1.json
+│   │   │       │   │   │           ├── realtimebidding.v1.json
+│   │   │       │   │   │           ├── realtimebidding.v1alpha.json
+│   │   │       │   │   │           ├── recaptchaenterprise.v1.json
+│   │   │       │   │   │           ├── recommendationengine.v1beta1.json
+│   │   │       │   │   │           ├── recommender.v1.json
+│   │   │       │   │   │           ├── recommender.v1beta1.json
+│   │   │       │   │   │           ├── redis.v1.json
+│   │   │       │   │   │           ├── redis.v1beta1.json
+│   │   │       │   │   │           ├── remotebuildexecution.v1.json
+│   │   │       │   │   │           ├── remotebuildexecution.v1alpha.json
+│   │   │       │   │   │           ├── remotebuildexecution.v2.json
+│   │   │       │   │   │           ├── reseller.v1.json
+│   │   │       │   │   │           ├── resourcesettings.v1.json
+│   │   │       │   │   │           ├── retail.v2.json
+│   │   │       │   │   │           ├── retail.v2alpha.json
+│   │   │       │   │   │           ├── retail.v2beta.json
+│   │   │       │   │   │           ├── run.v1.json
+│   │   │       │   │   │           ├── run.v1alpha1.json
+│   │   │       │   │   │           ├── run.v1beta1.json
+│   │   │       │   │   │           ├── run.v2.json
+│   │   │       │   │   │           ├── runtimeconfig.v1.json
+│   │   │       │   │   │           ├── runtimeconfig.v1beta1.json
+│   │   │       │   │   │           ├── saasservicemgmt.v1beta1.json
+│   │   │       │   │   │           ├── safebrowsing.v4.json
+│   │   │       │   │   │           ├── safebrowsing.v5.json
+│   │   │       │   │   │           ├── sasportal.v1alpha1.json
+│   │   │       │   │   │           ├── script.v1.json
+│   │   │       │   │   │           ├── searchads360.v0.json
+│   │   │       │   │   │           ├── searchconsole.v1.json
+│   │   │       │   │   │           ├── secretmanager.v1.json
+│   │   │       │   │   │           ├── secretmanager.v1beta1.json
+│   │   │       │   │   │           ├── secretmanager.v1beta2.json
+│   │   │       │   │   │           ├── securesourcemanager.v1.json
+│   │   │       │   │   │           ├── securitycenter.v1.json
+│   │   │       │   │   │           ├── securitycenter.v1beta1.json
+│   │   │       │   │   │           ├── securitycenter.v1beta2.json
+│   │   │       │   │   │           ├── securityposture.v1.json
+│   │   │       │   │   │           ├── serviceconsumermanagement.v1.json
+│   │   │       │   │   │           ├── serviceconsumermanagement.v1beta1.json
+│   │   │       │   │   │           ├── servicecontrol.v1.json
+│   │   │       │   │   │           ├── servicecontrol.v2.json
+│   │   │       │   │   │           ├── servicedirectory.v1.json
+│   │   │       │   │   │           ├── servicedirectory.v1beta1.json
+│   │   │       │   │   │           ├── servicemanagement.v1.json
+│   │   │       │   │   │           ├── servicenetworking.v1.json
+│   │   │       │   │   │           ├── servicenetworking.v1beta.json
+│   │   │       │   │   │           ├── serviceusage.v1.json
+│   │   │       │   │   │           ├── serviceusage.v1beta1.json
+│   │   │       │   │   │           ├── sheets.v4.json
+│   │   │       │   │   │           ├── siteVerification.v1.json
+│   │   │       │   │   │           ├── slides.v1.json
+│   │   │       │   │   │           ├── smartdevicemanagement.v1.json
+│   │   │       │   │   │           ├── solar.v1.json
+│   │   │       │   │   │           ├── sourcerepo.v1.json
+│   │   │       │   │   │           ├── spanner.v1.json
+│   │   │       │   │   │           ├── speech.v1.json
+│   │   │       │   │   │           ├── speech.v1p1beta1.json
+│   │   │       │   │   │           ├── speech.v2beta1.json
+│   │   │       │   │   │           ├── sqladmin.v1.json
+│   │   │       │   │   │           ├── sqladmin.v1beta4.json
+│   │   │       │   │   │           ├── storage.v1.json
+│   │   │       │   │   │           ├── storagebatchoperations.v1.json
+│   │   │       │   │   │           ├── storagetransfer.v1.json
+│   │   │       │   │   │           ├── streetviewpublish.v1.json
+│   │   │       │   │   │           ├── sts.v1.json
+│   │   │       │   │   │           ├── sts.v1beta.json
+│   │   │       │   │   │           ├── tagmanager.v1.json
+│   │   │       │   │   │           ├── tagmanager.v2.json
+│   │   │       │   │   │           ├── tasks.v1.json
+│   │   │       │   │   │           ├── testing.v1.json
+│   │   │       │   │   │           ├── texttospeech.v1.json
+│   │   │       │   │   │           ├── texttospeech.v1beta1.json
+│   │   │       │   │   │           ├── toolresults.v1beta3.json
+│   │   │       │   │   │           ├── tpu.v1.json
+│   │   │       │   │   │           ├── tpu.v1alpha1.json
+│   │   │       │   │   │           ├── tpu.v2.json
+│   │   │       │   │   │           ├── tpu.v2alpha1.json
+│   │   │       │   │   │           ├── trafficdirector.v2.json
+│   │   │       │   │   │           ├── trafficdirector.v3.json
+│   │   │       │   │   │           ├── transcoder.v1.json
+│   │   │       │   │   │           ├── transcoder.v1beta1.json
+│   │   │       │   │   │           ├── translate.v2.json
+│   │   │       │   │   │           ├── translate.v3.json
+│   │   │       │   │   │           ├── translate.v3beta1.json
+│   │   │       │   │   │           ├── travelimpactmodel.v1.json
+│   │   │       │   │   │           ├── vault.v1.json
+│   │   │       │   │   │           ├── vectortile.v1.json
+│   │   │       │   │   │           ├── verifiedaccess.v1.json
+│   │   │       │   │   │           ├── verifiedaccess.v2.json
+│   │   │       │   │   │           ├── versionhistory.v1.json
+│   │   │       │   │   │           ├── videointelligence.v1.json
+│   │   │       │   │   │           ├── videointelligence.v1beta2.json
+│   │   │       │   │   │           ├── videointelligence.v1p1beta1.json
+│   │   │       │   │   │           ├── videointelligence.v1p2beta1.json
+│   │   │       │   │   │           ├── videointelligence.v1p3beta1.json
+│   │   │       │   │   │           ├── vision.v1.json
+│   │   │       │   │   │           ├── vision.v1p1beta1.json
+│   │   │       │   │   │           ├── vision.v1p2beta1.json
+│   │   │       │   │   │           ├── vmmigration.v1.json
+│   │   │       │   │   │           ├── vmmigration.v1alpha1.json
+│   │   │       │   │   │           ├── vmwareengine.v1.json
+│   │   │       │   │   │           ├── vpcaccess.v1.json
+│   │   │       │   │   │           ├── vpcaccess.v1beta1.json
+│   │   │       │   │   │           ├── walletobjects.v1.json
+│   │   │       │   │   │           ├── webfonts.v1.json
+│   │   │       │   │   │           ├── webmasters.v3.json
+│   │   │       │   │   │           ├── webrisk.v1.json
+│   │   │       │   │   │           ├── websecurityscanner.v1.json
+│   │   │       │   │   │           ├── websecurityscanner.v1alpha.json
+│   │   │       │   │   │           ├── websecurityscanner.v1beta.json
+│   │   │       │   │   │           ├── workflowexecutions.v1.json
+│   │   │       │   │   │           ├── workflowexecutions.v1beta.json
+│   │   │       │   │   │           ├── workflows.v1.json
+│   │   │       │   │   │           ├── workflows.v1beta.json
+│   │   │       │   │   │           ├── workloadmanager.v1.json
+│   │   │       │   │   │           ├── workspaceevents.v1.json
+│   │   │       │   │   │           ├── workstations.v1.json
+│   │   │       │   │   │           ├── workstations.v1beta.json
+│   │   │       │   │   │           ├── youtube.v3.json
+│   │   │       │   │   │           ├── youtubeAnalytics.v1.json
+│   │   │       │   │   │           ├── youtubeAnalytics.v2.json
+│   │   │       │   │   │           └── youtubereporting.v1.json
+│   │   │       │   │   ├── grpc/
+│   │   │       │   │   │   └── _cython/
+│   │   │       │   │   │       ├── _credentials/
+│   │   │       │   │   │       │   └── roots.pem
+│   │   │       │   │   │       └── cygrpc.cp313-win_amd64.pyd
+│   │   │       │   │   ├── httplib2/
+│   │   │       │   │   │   └── cacerts.txt
+│   │   │       │   │   ├── libcrypto-3.dll
+│   │   │       │   │   ├── libffi-8.dll
+│   │   │       │   │   ├── libssl-3.dll
+│   │   │       │   │   ├── pydantic-2.12.5.dist-info/
+│   │   │       │   │   │   ├── INSTALLER
+│   │   │       │   │   │   ├── METADATA
+│   │   │       │   │   │   ├── RECORD
+│   │   │       │   │   │   ├── REQUESTED
+│   │   │       │   │   │   ├── WHEEL
+│   │   │       │   │   │   └── licenses/
+│   │   │       │   │   │       └── LICENSE
+│   │   │       │   │   ├── pydantic_core/
+│   │   │       │   │   │   └── _pydantic_core.cp313-win_amd64.pyd
+│   │   │       │   │   ├── pyexpat.pyd
+│   │   │       │   │   ├── python3.dll
+│   │   │       │   │   ├── python313.dll
+│   │   │       │   │   ├── select.pyd
+│   │   │       │   │   ├── setuptools/
+│   │   │       │   │   │   └── _vendor/
+│   │   │       │   │   │       ├── importlib_metadata-8.0.0.dist-info/
+│   │   │       │   │   │       │   ├── INSTALLER
+│   │   │       │   │   │       │   ├── LICENSE
+│   │   │       │   │   │       │   ├── METADATA
+│   │   │       │   │   │       │   ├── RECORD
+│   │   │       │   │   │       │   ├── REQUESTED
+│   │   │       │   │   │       │   ├── WHEEL
+│   │   │       │   │   │       │   └── top_level.txt
+│   │   │       │   │   │       └── jaraco/
+│   │   │       │   │   │           └── text/
+│   │   │       │   │   │               └── Lorem ipsum.txt
+│   │   │       │   │   ├── ucrtbase.dll
+│   │   │       │   │   └── unicodedata.pyd
+│   │   │       │   └── brain.exe
 │   │   │       └── libwinpthread-1.dll
 │   │   ├── host/
 │   │   │   └── com.bloom.nucleus.bridge.json
@@ -277,6 +977,7 @@ bloom-development-extension/
 │   │       │   └── nssm.exe
 │   │       └── win64/
 │   │           └── nssm.exe
+│   ├── node_modules/ [... dependencies]
 │   ├── package-lock.json
 │   ├── package.json
 │   ├── resources/
@@ -319,6 +1020,7 @@ bloom-development-extension/
 │   └── scripts/
 │       ├── build-extension.js
 │       ├── check-health.js
+│       ├── extension-utils.js
 │       ├── generate-fixed-key.js
 │       ├── get-id.js
 │       ├── god-mode.js
@@ -329,9 +1031,6 @@ bloom-development-extension/
 │       └── validate.js
 ├── webview/
 │   └── app/
-│       ├── .svelte-kit/ [... svelte build]
-│       ├── build/ [... build output]
-│       ├── node_modules/ [... dependencies]
 │       ├── package-lock.json
 │       ├── package.json
 │       ├── src/
@@ -341,14 +1040,11 @@ bloom-development-extension/
 │       │   │   ├── components/
 │       │   │   │   ├── BriefingEditor.svelte
 │       │   │   │   ├── ChatBTIP.svelte
-│       │   │   │   ├── CopilotChat.svelte
 │       │   │   │   ├── FileTree.svelte
 │       │   │   │   ├── GeminiTokenForm.svelte
-│       │   │   │   ├── GenesisView.svelte
 │       │   │   │   ├── GithubAuthButton.svelte
 │       │   │   │   ├── IntentsLink.svelte
 │       │   │   │   ├── NucleusPanel.svelte
-│       │   │   │   ├── OnboardingView.svelte
 │       │   │   │   ├── OnboardingWizard.svelte
 │       │   │   │   ├── ProjectsPanel.svelte
 │       │   │   │   ├── SystemStatus.svelte
@@ -362,9 +1058,6 @@ bloom-development-extension/
 │       │   │   │   ├── theme.ts
 │       │   │   │   └── websocket.ts
 │       │   │   ├── types.ts
-│       │   │   ├── views/
-│       │   │   │   ├── DevIntentView.svelte
-│       │   │   │   └── DocIntentView.svelte
 │       │   │   └── ws.ts
 │       │   └── routes/
 │       │       ├── +layout.svelte
@@ -395,11 +1088,18 @@ bloom-development-extension/
 │   ├── __init__.py
 │   ├── __main__.py
 │   ├── __pycache__/ [... cache]
+│   ├── build_deploy/
+│   │   ├── __init__.py
+│   │   ├── brain.spec
+│   │   ├── build_main.py
+│   │   ├── generate_command_loader.py
+│   │   └── update_spec_hiddenimports.py
 │   ├── cli/
 │   │   ├── __init__.py
 │   │   ├── __pycache__/ [... cache]
 │   │   ├── base.py
 │   │   ├── categories.py
+│   │   ├── command_loader.py
 │   │   ├── help_renderer.py
 │   │   └── registry.py
 │   ├── commands/
@@ -445,6 +1145,7 @@ bloom-development-extension/
 │   │   │   ├── __pycache__/ [... cache]
 │   │   │   ├── dev_check.py
 │   │   │   ├── full_stack.py
+│   │   │   ├── native_ping.py
 │   │   │   ├── onboarding_status.py
 │   │   │   └── websocket_status.py
 │   │   ├── init.py
@@ -494,22 +1195,28 @@ bloom-development-extension/
 │   │   │   ├── __pycache__/ [... cache]
 │   │   │   ├── accounts.py
 │   │   │   └── profiles.py
-│   │   └── project/
+│   │   ├── project/
+│   │   │   ├── __init__.py
+│   │   │   ├── __pycache__/ [... cache]
+│   │   │   ├── add.py
+│   │   │   ├── clone_and_add.py
+│   │   │   ├── detect.py
+│   │   │   ├── load.py
+│   │   │   └── nucleus.py
+│   │   └── service/
+│   │       ├── __init__.py
 │   │       ├── __pycache__/ [... cache]
-│   │       ├── add.py
-│   │       ├── clone_and_add.py
-│   │       ├── detect.py
-│   │       ├── load.py
-│   │       └── nucleus.py
+│   │       └── service.py
 │   ├── commands.md
 │   ├── core/
 │   │   ├── __pycache__/ [... cache]
 │   │   ├── bloom_project_inspector.py
 │   │   ├── browser/
-│   │   │   ├── __pycache__/ [... cache]
+│   │   │   ├── landing_generator.py
 │   │   │   └── profile_manager.py
 │   │   ├── context/
 │   │   │   ├── __init__.py
+│   │   │   ├── __pycache__/ [... cache]
 │   │   │   ├── detector.py
 │   │   │   ├── detector.py.backup
 │   │   │   ├── generate.py
@@ -543,11 +1250,13 @@ bloom-development-extension/
 │   │   │   └── manager.py
 │   │   ├── filesystem/
 │   │   │   ├── __init__.py
+│   │   │   ├── __pycache__/ [... cache]
 │   │   │   ├── code_compressor.py
 │   │   │   ├── files_compressor.py
 │   │   │   └── files_extractor.py
 │   │   ├── git/
 │   │   │   ├── __init__.py
+│   │   │   ├── __pycache__/ [... cache]
 │   │   │   ├── executor.py
 │   │   │   └── repository.py
 │   │   ├── github/
@@ -560,6 +1269,7 @@ bloom-development-extension/
 │   │   │   ├── __pycache__/ [... cache]
 │   │   │   ├── dev_environment_manager.py
 │   │   │   ├── full_stack_manager.py
+│   │   │   ├── native_host_manager.py
 │   │   │   ├── onboarding_status_manager.py
 │   │   │   └── websocket_status_manager.py
 │   │   ├── intent/
@@ -573,16 +1283,212 @@ bloom-development-extension/
 │   │   ├── nucleus_manager.py
 │   │   ├── project/
 │   │   │   ├── __init__.py
+│   │   │   ├── __pycache__/ [... cache]
 │   │   │   ├── clone_manager.py
 │   │   │   ├── linker.py
 │   │   │   ├── models.py
 │   │   │   └── scanner.py
 │   │   ├── project_manager.py
+│   │   ├── service/
+│   │   │   ├── __pycache__/ [... cache]
+│   │   │   └── server_manager.py
 │   │   └── tree_manager.py
 │   ├── entry.py
 │   ├── libs/ [... python vendored dependencies]
+│   ├── prepare_runtime_libs.py
 │   ├── pyproject.toml
 │   ├── requirements.txt
+│   ├── runtime_libs/
+│   │   ├── aiofiles/
+│   │   │   ├── __init__.py
+│   │   │   ├── base.py
+│   │   │   ├── os.py
+│   │   │   ├── ospath.py
+│   │   │   ├── tempfile/
+│   │   │   │   ├── __init__.py
+│   │   │   │   └── temptypes.py
+│   │   │   └── threadpool/
+│   │   │       ├── __init__.py
+│   │   │       ├── binary.py
+│   │   │       ├── text.py
+│   │   │       └── utils.py
+│   │   ├── colorama/
+│   │   │   ├── __init__.py
+│   │   │   ├── ansi.py
+│   │   │   ├── ansitowin32.py
+│   │   │   ├── initialise.py
+│   │   │   ├── tests/
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── ansi_test.py
+│   │   │   │   ├── ansitowin32_test.py
+│   │   │   │   ├── initialise_test.py
+│   │   │   │   ├── isatty_test.py
+│   │   │   │   ├── utils.py
+│   │   │   │   └── winterm_test.py
+│   │   │   ├── win32.py
+│   │   │   └── winterm.py
+│   │   ├── libs_to_copy.txt
+│   │   ├── pydantic/
+│   │   │   ├── __init__.py
+│   │   │   ├── _internal/
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── _config.py
+│   │   │   │   ├── _core_metadata.py
+│   │   │   │   ├── _core_utils.py
+│   │   │   │   ├── _dataclasses.py
+│   │   │   │   ├── _decorators.py
+│   │   │   │   ├── _decorators_v1.py
+│   │   │   │   ├── _discriminated_union.py
+│   │   │   │   ├── _docs_extraction.py
+│   │   │   │   ├── _fields.py
+│   │   │   │   ├── _forward_ref.py
+│   │   │   │   ├── _generate_schema.py
+│   │   │   │   ├── _generics.py
+│   │   │   │   ├── _git.py
+│   │   │   │   ├── _import_utils.py
+│   │   │   │   ├── _internal_dataclass.py
+│   │   │   │   ├── _known_annotated_metadata.py
+│   │   │   │   ├── _mock_val_ser.py
+│   │   │   │   ├── _model_construction.py
+│   │   │   │   ├── _namespace_utils.py
+│   │   │   │   ├── _repr.py
+│   │   │   │   ├── _schema_gather.py
+│   │   │   │   ├── _schema_generation_shared.py
+│   │   │   │   ├── _serializers.py
+│   │   │   │   ├── _signature.py
+│   │   │   │   ├── _typing_extra.py
+│   │   │   │   ├── _utils.py
+│   │   │   │   ├── _validate_call.py
+│   │   │   │   └── _validators.py
+│   │   │   ├── _migration.py
+│   │   │   ├── alias_generators.py
+│   │   │   ├── aliases.py
+│   │   │   ├── annotated_handlers.py
+│   │   │   ├── class_validators.py
+│   │   │   ├── color.py
+│   │   │   ├── config.py
+│   │   │   ├── dataclasses.py
+│   │   │   ├── datetime_parse.py
+│   │   │   ├── decorator.py
+│   │   │   ├── deprecated/
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── class_validators.py
+│   │   │   │   ├── config.py
+│   │   │   │   ├── copy_internals.py
+│   │   │   │   ├── decorator.py
+│   │   │   │   ├── json.py
+│   │   │   │   ├── parse.py
+│   │   │   │   └── tools.py
+│   │   │   ├── env_settings.py
+│   │   │   ├── error_wrappers.py
+│   │   │   ├── errors.py
+│   │   │   ├── experimental/
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── arguments_schema.py
+│   │   │   │   ├── missing_sentinel.py
+│   │   │   │   └── pipeline.py
+│   │   │   ├── fields.py
+│   │   │   ├── functional_serializers.py
+│   │   │   ├── functional_validators.py
+│   │   │   ├── generics.py
+│   │   │   ├── json.py
+│   │   │   ├── json_schema.py
+│   │   │   ├── main.py
+│   │   │   ├── mypy.py
+│   │   │   ├── networks.py
+│   │   │   ├── parse.py
+│   │   │   ├── plugin/
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── _loader.py
+│   │   │   │   └── _schema_validator.py
+│   │   │   ├── py.typed
+│   │   │   ├── root_model.py
+│   │   │   ├── schema.py
+│   │   │   ├── tools.py
+│   │   │   ├── type_adapter.py
+│   │   │   ├── types.py
+│   │   │   ├── typing.py
+│   │   │   ├── utils.py
+│   │   │   ├── v1/
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── _hypothesis_plugin.py
+│   │   │   │   ├── annotated_types.py
+│   │   │   │   ├── class_validators.py
+│   │   │   │   ├── color.py
+│   │   │   │   ├── config.py
+│   │   │   │   ├── dataclasses.py
+│   │   │   │   ├── datetime_parse.py
+│   │   │   │   ├── decorator.py
+│   │   │   │   ├── env_settings.py
+│   │   │   │   ├── error_wrappers.py
+│   │   │   │   ├── errors.py
+│   │   │   │   ├── fields.py
+│   │   │   │   ├── generics.py
+│   │   │   │   ├── json.py
+│   │   │   │   ├── main.py
+│   │   │   │   ├── mypy.py
+│   │   │   │   ├── networks.py
+│   │   │   │   ├── parse.py
+│   │   │   │   ├── py.typed
+│   │   │   │   ├── schema.py
+│   │   │   │   ├── tools.py
+│   │   │   │   ├── types.py
+│   │   │   │   ├── typing.py
+│   │   │   │   ├── utils.py
+│   │   │   │   ├── validators.py
+│   │   │   │   └── version.py
+│   │   │   ├── validate_call_decorator.py
+│   │   │   ├── validators.py
+│   │   │   ├── version.py
+│   │   │   └── warnings.py
+│   │   ├── typer/
+│   │   │   ├── __init__.py
+│   │   │   ├── __main__.py
+│   │   │   ├── _completion_classes.py
+│   │   │   ├── _completion_shared.py
+│   │   │   ├── _types.py
+│   │   │   ├── _typing.py
+│   │   │   ├── cli.py
+│   │   │   ├── colors.py
+│   │   │   ├── completion.py
+│   │   │   ├── core.py
+│   │   │   ├── main.py
+│   │   │   ├── models.py
+│   │   │   ├── params.py
+│   │   │   ├── py.typed
+│   │   │   ├── rich_utils.py
+│   │   │   ├── testing.py
+│   │   │   └── utils.py
+│   │   └── watchdog/
+│   │       ├── __init__.py
+│   │       ├── events.py
+│   │       ├── observers/
+│   │       │   ├── __init__.py
+│   │       │   ├── api.py
+│   │       │   ├── fsevents.py
+│   │       │   ├── fsevents2.py
+│   │       │   ├── inotify.py
+│   │       │   ├── inotify_buffer.py
+│   │       │   ├── inotify_c.py
+│   │       │   ├── kqueue.py
+│   │       │   ├── polling.py
+│   │       │   ├── read_directory_changes.py
+│   │       │   └── winapi.py
+│   │       ├── py.typed
+│   │       ├── tricks/
+│   │       │   └── __init__.py
+│   │       ├── utils/
+│   │       │   ├── __init__.py
+│   │       │   ├── bricks.py
+│   │       │   ├── delayed_queue.py
+│   │       │   ├── dirsnapshot.py
+│   │       │   ├── echo.py
+│   │       │   ├── event_debouncer.py
+│   │       │   ├── patterns.py
+│   │       │   ├── platform.py
+│   │       │   └── process_watcher.py
+│   │       ├── version.py
+│   │       └── watchmedo.py
 │   └── shared/
 │       ├── __init__.py
 │       ├── __pycache__/ [... cache]
