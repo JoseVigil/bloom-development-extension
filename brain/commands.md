@@ -19,15 +19,13 @@ python brain tree
 python -m brain filesystem tree brain -o tree/brain_tree.txt
 
 # Genera estructura visual filtrada por carpetas/archivos específicos guardando en ruta personalizada con logs activos.
-python -m brain filesystem tree src installer webview brain contracts package.json tsconfig.json -o tree/plugin_tree.txt
+brain filesystem tree src installer webview brain contracts package.json tsconfig.json -o tree/plugin_tree.txt
 
-python -m brain filesystem tree installer -o tree/installer_tree.txt
+brain filesystem tree installer -o tree/installer_tree.txt
 
-
-
-python -m brain filesystem tree brain -o tree/brain_tree.txt
+brain filesystem tree brain -o tree/brain_tree.txt
 |
-python -m brain filesystem tree installer/electron-app -o tree/electron_tree.txt
+brain filesystem tree installer/electron-app -o tree/electron_tree.txt
 
 .\brain.exe profile launch <PROFILE_ID> --cockpit
 

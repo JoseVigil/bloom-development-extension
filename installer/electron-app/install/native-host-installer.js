@@ -2,134 +2,113 @@ const fs = require('fs-extra');
 const { spawn } = require('child_process');
 const path = require('path');
 const { paths } = require('../config/paths');
-const { installWindowsService, startService } = require('./service-installer');
-const { SERVICE_NAME } = require('../config/constants');
+const { installWindowsService, startService, NEW_SERVICE_NAME } = require('./service-installer');
 
 /**
- * Instala el Native Host y lo inicia como servicio o proceso
+ * Orquesta la instalación de binarios (Host y Brain) y el Servicio.
  */
 async function installNativeHost() {
-  console.log("\n📦 INSTALLING NATIVE HOST\n");
+  console.log("\n📦 DEPLOYING BINARIES & SERVICE\n");
+
+  // ==========================================================================
+  // PASO 1: Copiar Native Host (bloom-host.exe)
+  // Chrome lo necesita para Native Messaging, aunque no sea el servicio.
+  // ==========================================================================
+  console.log("📂 Deploying Native Host (Client)...");
 
   if (!fs.existsSync(paths.nativeSource)) {
     throw new Error("Native Source not found at: " + paths.nativeSource);
   }
 
-  const hostExe = path.join(paths.nativeSource, 'bloom-host.exe');
-  if (!fs.existsSync(hostExe)) {
-    throw new Error(`bloom-host.exe not found in: ${paths.nativeSource}`);
-  }
-
-  // PASO 1: Copiar archivos al directorio de destino con reintentos
-  console.log("📂 Copying native files...");
+  // Copia con reintentos (por si hay bloqueos)
+  await copyWithRetry(paths.nativeSource, paths.nativeDir, 'bloom-host.exe');
   
-  let copySuccess = false;
-  let lastError = null;
-  
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      console.log(`  Attempt ${attempt}/3...`);
-      
-      await fs.copy(paths.nativeSource, paths.nativeDir, { 
-        overwrite: true,
-        errorOnExist: false 
-      });
-      
-      console.log("  ✅ Native files copied successfully");
-      copySuccess = true;
-      break;
-      
-    } catch (copyError) {
-      lastError = copyError;
-      console.warn(`  ⚠️ Attempt ${attempt} failed:`, copyError.message);
-      
-      if (attempt < 3) {
-        console.log(`  ⏳ Waiting 3 seconds before retry...`);
-        await new Promise(r => setTimeout(r, 3000));
-        
-        // Intentar matar procesos de nuevo por si acaso
-        if (process.platform === 'win32') {
-          const { killAllBloomProcesses } = require('./service-installer');
-          await killAllBloomProcesses();
-          await new Promise(r => setTimeout(r, 2000));
-        }
-      }
-    }
-  }
-  
-  if (!copySuccess) {
-    console.error("  ❌ Failed to copy native files after 3 attempts");
-    console.error("  💡 The process might still be running. Try:");
-    console.error("    1. Close this app completely");
-    console.error("    2. Open Task Manager and kill bloom-host.exe manually");
-    console.error("    3. Run installer again");
-    throw new Error(`Failed to copy native files: ${lastError.message}`);
-  }
-
-  // PASO 2: Verificar que los archivos copiados existen
+  // Verificar
   if (!fs.existsSync(paths.hostBinary)) {
     throw new Error(`bloom-host.exe not found after copy: ${paths.hostBinary}`);
   }
-  
-  console.log("  ✅ All native files ready");
+  console.log("  ✅ Native Host deployed");
 
-  // PASO 3: Iniciar como servicio (Windows) o proceso directo (Linux/Mac)
+  // ==========================================================================
+  // PASO 2: Copiar Brain CLI (brain.exe)
+  // Este es el nuevo SERVICIO CENTRAL.
+  // ==========================================================================
+  console.log("📂 Deploying Brain Service (Server)...");
+  
+  console.log(`   Source: ${paths.brainSource}`);
+  console.log(`   Dest:   ${paths.brainDir}`);
+
+  if (!fs.existsSync(paths.brainSource)) {
+    throw new Error(`Brain Source not found at: ${paths.brainSource}. \n👉 Did you run 'python scripts/build_brain.py'?`);
+  }
+
+  // Asegurar que el directorio padre (bin) exista
+  await fs.ensureDir(path.dirname(paths.brainDir));
+
+  // Copiar la carpeta 'brain' completa (incluye _internal y dlls)
+  await copyWithRetry(paths.brainSource, paths.brainDir, 'brain.exe');
+
+  // Verificar
+  if (!fs.existsSync(paths.brainExe)) {
+    throw new Error(`brain.exe not found after copy: ${paths.brainExe}`);
+  }
+  console.log("  ✅ Brain Service deployed");
+
+  // ==========================================================================
+  // PASO 3: Instalar y Arrancar Servicio (Solo Windows)
+  // ==========================================================================
   if (process.platform === 'win32') {
-    console.log("\n🔧 Installing as Windows Service...\n");
+    console.log("\n🔧 Configuring Windows Service...\n");
     
-    // Instalar el servicio (esto usa las rutas por defecto desde config)
+    // Instalar BloomBrainService (apunta a brain.exe)
     await installWindowsService();
     
-    // Iniciar el servicio
+    // Iniciar
     console.log("\n▶️ Starting service...\n");
-    await startService(SERVICE_NAME);
+    await startService(NEW_SERVICE_NAME); // Usamos la constante importada
     
-    console.log("\n✅ Native Host installed and started as Windows Service\n");
+    console.log("\n✅ Infrastructure ready: Brain Service running + Native Host ready for Chrome\n");
   } else {
-    // En Linux/Mac, sí usar proceso independiente
-    console.log("\n🔧 Starting as background process...\n");
-    await startNativeHost();
-    console.log("\n✅ Native Host started as background process\n");
+    // Linux/Mac (Futuro)
+    console.log("\n🔧 Starting background process (Non-Windows)...\n");
+    // TODO: Implementar launchd o systemd para Brain
   }
 }
 
 /**
- * Inicia el Native Host como proceso independiente (Linux/Mac SOLAMENTE)
- * NO DEBE SER LLAMADO EN WINDOWS
+ * Helper para copiar con reintentos y manejo de procesos bloqueados
  */
-async function startNativeHost() {
-  if (process.platform === 'win32') {
-    throw new Error('startNativeHost() should not be called on Windows. Use installWindowsService() instead.');
-  }
-
-  console.log("🚀 Starting Native Host as background process...");
-
-  const hostExe = paths.hostBinary;
-
-  if (!fs.existsSync(hostExe)) {
-    throw new Error(`Host binary not found: ${hostExe}`);
-  }
-
-  const hostProcess = spawn(hostExe, [], {
-    detached: true,
-    stdio: 'ignore',
-    windowsHide: true
-  });
-
-  hostProcess.unref();
-
-  console.log(`  ✅ Host started (PID: ${hostProcess.pid})`);
-
-  // Guardar PID en configuración
-  const config = fs.existsSync(paths.configFile)
-    ? await fs.readJson(paths.configFile)
-    : {};
+async function copyWithRetry(src, dest, processNameToCheck) {
+  let lastError = null;
   
-  config.hostPid = hostProcess.pid;
-  await fs.writeJson(paths.configFile, config, { spaces: 2 });
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      // Intentar copiar
+      await fs.copy(src, dest, { overwrite: true, errorOnExist: false });
+      return; // Éxito
+      
+    } catch (err) {
+      lastError = err;
+      console.warn(`  ⚠️ Copy attempt ${attempt} failed: ${err.message}`);
+      
+      if (attempt < 3) {
+        console.log(`  ⏳ Retrying in 2s...`);
+        
+        // Si estamos en Windows, intentar matar el proceso que podría estar bloqueando el archivo
+        if (process.platform === 'win32' && processNameToCheck) {
+          try {
+            const { execSync } = require('child_process');
+            execSync(`taskkill /F /IM ${processNameToCheck}`, { stdio: 'ignore' });
+            console.log(`  🔪 Forced kill of ${processNameToCheck}`);
+          } catch (e) { /* Ignorar si no estaba corriendo */ }
+        }
+        
+        await new Promise(r => setTimeout(r, 2000));
+      }
+    }
+  }
+  
+  throw new Error(`Failed to copy files after 3 attempts: ${lastError.message}`);
 }
 
-module.exports = {
-  installNativeHost,
-  startNativeHost
-};
+module.exports = { installNativeHost };

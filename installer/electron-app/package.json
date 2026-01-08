@@ -16,23 +16,19 @@
     "dev:launch": "electron . --mode=launch",
     "electron:dev": "electron .",
     "check-admin": "powershell -ExecutionPolicy Bypass -File check-admin.ps1",
-    
     "// === PREPARACIÓN ===": "",
     "prepare:brain": "pip install -r ../../brain/requirements.txt --target ../../brain/libs --upgrade",
     "prepare:runtime": "node ../scripts/setup_runtime.js",
     "prepare:all": "npm run prepare:runtime && npm run prepare:brain",
-    
     "// === BUILD ===": "",
     "prebuild": "npm run prepare:all",
     "build": "electron-builder --win --x64",
     "build:dir": "electron-builder --win --x64 --dir",
     "build:portable": "electron-builder --win portable",
-    
     "// === FORGE (LEGACY - Si necesitas compatibilidad) ===": "",
     "forge:start": "electron-forge start",
     "forge:package": "npm run prepare:brain && electron-forge package",
     "forge:make": "npm run prepare:brain && electron-forge make",
-    
     "// === UTILIDADES ===": "",
     "clean": "rimraf dist release out",
     "clean:all": "npm run clean && rimraf ../resources/runtime ../../brain/libs",
@@ -46,11 +42,15 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         },
         {
           "target": "portable",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "assets/bloom.ico",
@@ -95,27 +95,45 @@
       {
         "from": "../resources/runtime",
         "to": "runtime",
-        "filter": ["**/*", "!**/__pycache__", "!**/*.pyc", "!**/.git"]
+        "filter": [
+          "**/*",
+          "!**/__pycache__",
+          "!**/*.pyc",
+          "!**/.git"
+        ]
       },
       {
         "from": "../../brain",
         "to": "brain",
-        "filter": ["**/*", "!**/__pycache__", "!**/*.pyc", "!**/.git", "!**/tests"]
+        "filter": [
+          "**/*",
+          "!**/__pycache__",
+          "!**/*.pyc",
+          "!**/.git",
+          "!**/tests"
+        ]
       },
       {
         "from": "../native/bin/win32",
         "to": "native",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       },
       {
         "from": "../native/nssm/win64",
         "to": "nssm",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       },
       {
         "from": "../chrome-extension/src",
         "to": "extension",
-        "filter": ["**/*", "!**/node_modules"]
+        "filter": [
+          "**/*",
+          "!**/node_modules"
+        ]
       }
     ],
     "directories": {
@@ -142,7 +160,8 @@
   },
   "dependencies": {
     "electron-squirrel-startup": "^1.0.0",
-    "fs-extra": "^11.2.0"
+    "fs-extra": "^11.3.3",
+    "unzipper": "^0.12.3"
   },
   "devDependencies": {
     "@electron-forge/cli": "^7.3.0",
@@ -179,7 +198,9 @@
         },
         {
           "name": "@electron-forge/maker-zip",
-          "platforms": ["darwin"]
+          "platforms": [
+            "darwin"
+          ]
         },
         {
           "name": "@electron-forge/maker-deb",
