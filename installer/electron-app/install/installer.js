@@ -167,19 +167,21 @@ async function runFullInstallation(mainWindow = null) {
     
     // PASO 10: Config Final
     emitProgress(mainWindow, 'complete', 'Finalizando');
-    let finalConfig = await fs.readJson(configPath);
+    let finalConfig = await fs.readJson(paths.configFile);
     finalConfig.masterProfileId = profileId;
-    finalConfig.default_profile_id = profileId;
     finalConfig.profileId = profileId;
-    await fs.writeJson(configPath, finalConfig, { spaces: 2 });
+    await fs.writeJson(paths.configFile, finalConfig, { spaces: 2 });
 
     emitProgress(mainWindow, 'complete');
     console.log('\n=== DEPLOYMENT COMPLETED SUCCESSFULLY ===\n');
 
+    // CORRECCIÓN: Devolvemos claves redundantes para asegurar compatibilidad con la UI
     return {
       success: true,
-      extensionId,
-      profileId,
+      extensionId: extensionId,
+      profileId: profileId,
+      id: profileId,        
+      uuid: profileId,      
       launcherCreated: launcherResult.success,
       version: APP_VERSION
     };
