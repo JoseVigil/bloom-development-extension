@@ -1,7 +1,25 @@
-const { execSync, spawn } = require('child_process');
+// install/service-installer.js - REFACTORIZADO SEGÚN GUÍA UNIFICADA FINAL
+// ============================================================================
+// ARQUITECTURA HUB & SPOKE (MULTIPLEXOR)
+// - Servicio: BloomBrainService → brain.exe service start (AUTO_START via NSSM)
+// - bloom-host.exe: solo archivo, lanzado por Chrome, nunca por Electron ni instalador
+// ============================================================================
+
+const { execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs-extra');
 const { paths } = require('../config/paths');
+
+// ============================================================================
+// CONSTANTES - GOLDEN TRUTH
+// ============================================================================
+
+const OLD_SERVICE_NAME = 'BloomNucleusHost'; // Servicio VIEJO a eliminar
+const NEW_SERVICE_NAME = 'BloomBrainService'; // Servicio NUEVO correcto
+
+// ============================================================================
+// UTILIDADES BÁSICAS
+// ============================================================================
 
 /**
  * Verifica si un servicio existe en el sistema
@@ -31,7 +49,6 @@ async function stopService(serviceName, maxRetries = 5) {
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      // Intentar detener el servicio
       execSync(`sc stop "${serviceName}"`, { 
         encoding: 'utf8',
         stdio: ['pipe', 'pipe', 'ignore']
@@ -56,7 +73,6 @@ async function stopService(serviceName, maxRetries = 5) {
         }
       }
       
-      // Si después de 10 segundos no se detuvo, intentar force kill
       if (attempt < maxRetries) {
         console.warn(`⚠️ Service did not stop gracefully, force killing processes...`);
         await killAllBloomProcesses();
@@ -71,7 +87,6 @@ async function stopService(serviceName, maxRetries = 5) {
       
       if (attempt === maxRetries) {
         console.error(`❌ Failed to stop service after ${maxRetries} attempts:`, error.message);
-        // Intentar force kill como último recurso
         await killAllBloomProcesses();
         await new Promise(r => setTimeout(r, 3000));
         return false;
@@ -96,23 +111,18 @@ async function removeService(serviceName) {
     return true;
   }
   
-  // Primero, detener el servicio
+  // Primero detener
   await stopService(serviceName);
-  
-  // Esperar un poco más para asegurar que todo esté liberado
   await new Promise(r => setTimeout(r, 2000));
   
-  // Eliminar el servicio
+  // Eliminar con sc
   try {
     execSync(`sc delete "${serviceName}"`, { 
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'ignore']
     });
     console.log(`✅ Service ${serviceName} removed successfully`);
-    
-    // Esperar a que Windows procese la eliminación
     await new Promise(r => setTimeout(r, 2000));
-    
     return true;
   } catch (error) {
     if (error.message.includes('does not exist')) {
@@ -132,7 +142,8 @@ async function killAllBloomProcesses() {
   
   const processesToKill = [
     'bloom-host.exe',
-    'python.exe',  // Solo los que están en nuestro directorio
+    'brain.exe',
+    'python.exe',
     'pythonw.exe'
   ];
   
@@ -140,7 +151,6 @@ async function killAllBloomProcesses() {
   
   for (const processName of processesToKill) {
     try {
-      // Verificar si el proceso existe
       const tasklistResult = execSync(
         `tasklist /FI "IMAGENAME eq ${processName}"`, 
         { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }
@@ -150,10 +160,9 @@ async function killAllBloomProcesses() {
         continue;
       }
       
-      // Si es python.exe, solo matar los que están en nuestro directorio
+      // Para python/pythonw, solo matar los de nuestro directorio
       if (processName === 'python.exe' || processName === 'pythonw.exe') {
         try {
-          // Usar wmic para obtener la ruta del comando
           const wmicResult = execSync(
             `wmic process where "name='${processName}'" get commandline,processid /format:csv`,
             { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }
@@ -161,7 +170,6 @@ async function killAllBloomProcesses() {
           
           const lines = wmicResult.split('\n').filter(l => l.trim());
           for (const line of lines) {
-            // Si la línea contiene la ruta de Bloom, matar ese proceso
             if (line.includes(paths.bloomBase) || line.includes('BloomNucleus')) {
               const pidMatch = line.match(/,(\d+)$/);
               if (pidMatch) {
@@ -173,13 +181,12 @@ async function killAllBloomProcesses() {
                   killedCount++;
                   console.log(`  ✅ Killed ${processName} (PID: ${pid})`);
                 } catch (e) {
-                  // Ignorar si el proceso ya no existe
+                  // Ignorar
                 }
               }
             }
           }
         } catch (wmicError) {
-          // Si wmic falla, usar taskkill simple como fallback
           try {
             execSync(`taskkill /F /IM ${processName}`, { 
               stdio: ['pipe', 'pipe', 'ignore'] 
@@ -187,11 +194,11 @@ async function killAllBloomProcesses() {
             killedCount++;
             console.log(`  ✅ Killed all ${processName} processes (fallback)`);
           } catch (e) {
-            // Ignorar errores
+            // Ignorar
           }
         }
       } else {
-        // Para bloom-host.exe, matar todos
+        // Para brain.exe y bloom-host.exe, matar todos
         try {
           execSync(`taskkill /F /IM ${processName}`, { 
             stdio: ['pipe', 'pipe', 'ignore'] 
@@ -199,148 +206,226 @@ async function killAllBloomProcesses() {
           killedCount++;
           console.log(`  ✅ Killed ${processName}`);
         } catch (e) {
-          // Ignorar si el proceso ya no existe
+          // Ignorar
         }
       }
       
     } catch (error) {
-      // Ignorar errores de tasklist (proceso no existe)
+      // Ignorar
     }
   }
   
   if (killedCount > 0) {
     console.log(`✅ Killed ${killedCount} processes`);
-    // Esperar a que Windows libere los file handles
     await new Promise(r => setTimeout(r, 2000));
   } else {
     console.log('ℹ️ No Bloom processes found running');
   }
 }
 
+// ============================================================================
+// LIMPIEZA AGRESIVA - GOLDEN TRUTH STEP 1
+// ============================================================================
+
 /**
- * Instala un servicio Windows usando NSSM
+ * Elimina TODOS los servicios viejos (BloomNucleusHost)
+ * Usa TANTO nssm como sc para asegurar limpieza completa
  */
-async function installService(serviceName, exePath, displayName, description) {
-  console.log(`📦 Installing service: ${serviceName}`);
+async function cleanupOldServices() {
+  console.log('\n🧹 LIMPIEZA AGRESIVA - Eliminando servicios viejos\n');
   
-  // ✅ FIX: Buscar NSSM en múltiples ubicaciones con mejor manejo de errores
-  let nssmPath = null;
+  const oldServices = [
+    'BloomNucleusHost',
+    'BloomNativeHost',
+    'BloomHost'
+  ];
   
-  // Opción 1: En el directorio nativeDir (después de copiar) - paths.nssmExe
-  if (paths.nssmExe && await fs.pathExists(paths.nssmExe)) {
-    nssmPath = paths.nssmExe;
-    console.log(`✅ Found NSSM at installed location: ${nssmPath}`);
-  }
-  
-  // Opción 2: En el directorio source (antes de copiar) - paths.nssmSource
-  if (!nssmPath && paths.nssmSource) {
-    const sourceNssm = path.join(paths.nssmSource, 'nssm.exe');
-    if (await fs.pathExists(sourceNssm)) {
-      nssmPath = sourceNssm;
-      console.log(`✅ Found NSSM at source location: ${nssmPath}`);
-      
-      // Si estamos usando el source, copiarlo primero al destino para futuras ejecuciones
-      if (paths.nssmExe) {
-        try {
-          await fs.ensureDir(path.dirname(paths.nssmExe));
-          await fs.copy(sourceNssm, paths.nssmExe, { overwrite: true });
-          console.log(`📋 Copied NSSM to: ${paths.nssmExe}`);
-          nssmPath = paths.nssmExe; // Usar la copia
-        } catch (copyError) {
-          console.warn(`⚠️ Could not copy NSSM to destination: ${copyError.message}`);
-          console.warn(`💡 Using source path: ${sourceNssm}`);
-          // Seguir usando nssmPath del source si la copia falla
-        }
-      }
+  for (const serviceName of oldServices) {
+    if (!serviceExists(serviceName)) {
+      console.log(`✅ ${serviceName} no existe (OK)`);
+      continue;
     }
-  }
-  
-  // Opción 3: Buscar en ubicaciones comunes como fallback
-  if (!nssmPath) {
-    const commonLocations = [
-      path.join(process.cwd(), 'nssm', 'nssm.exe'),
-      path.join(process.cwd(), 'native', 'nssm.exe'),
-      path.join(__dirname, '..', 'nssm', 'nssm.exe'),
-      path.join(__dirname, '..', 'native', 'nssm.exe'),
-      path.join(__dirname, '..', '..', 'nssm', 'nssm.exe'),
-      path.join(__dirname, '..', '..', 'native', 'nssm.exe')
-    ];
     
-    for (const location of commonLocations) {
-      if (await fs.pathExists(location)) {
-        nssmPath = location;
-        console.log(`✅ Found NSSM at common location: ${nssmPath}`);
-        break;
+    console.log(`⚠️ Detectado servicio viejo: ${serviceName}`);
+    
+    // Intentar con NSSM primero (si existe)
+    const nssmPath = await findNSSM();
+    if (nssmPath) {
+      try {
+        console.log(`   Intentando: nssm stop ${serviceName}`);
+        execSync(`"${nssmPath}" stop "${serviceName}"`, {
+          encoding: 'utf8',
+          stdio: ['pipe', 'pipe', 'ignore']
+        });
+        await new Promise(r => setTimeout(r, 2000));
+        
+        console.log(`   Intentando: nssm remove ${serviceName} confirm`);
+        execSync(`"${nssmPath}" remove "${serviceName}" confirm`, {
+          encoding: 'utf8',
+          stdio: ['pipe', 'pipe', 'ignore']
+        });
+        console.log(`   ✅ Eliminado con NSSM`);
+      } catch (e) {
+        console.log(`   ⚠️ NSSM falló, usando sc...`);
       }
+    }
+    
+    // Intentar con sc (por si fue instalado sin NSSM)
+    try {
+      console.log(`   Intentando: sc stop ${serviceName}`);
+      execSync(`sc stop "${serviceName}"`, {
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'ignore']
+      });
+      await new Promise(r => setTimeout(r, 2000));
+    } catch (e) {
+      // Ignorar
+    }
+    
+    try {
+      console.log(`   Intentando: sc delete ${serviceName}`);
+      execSync(`sc delete "${serviceName}"`, {
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'ignore']
+      });
+      console.log(`   ✅ Eliminado con sc`);
+    } catch (e) {
+      console.warn(`   ⚠️ No se pudo eliminar: ${e.message}`);
+    }
+    
+    await new Promise(r => setTimeout(r, 2000));
+  }
+  
+  // Matar procesos huérfanos
+  console.log('\n🔪 Matando procesos huérfanos...');
+  await killAllBloomProcesses();
+  
+  console.log('\n✅ Limpieza completada\n');
+}
+
+// ============================================================================
+// BÚSQUEDA DE NSSM
+// ============================================================================
+
+/**
+ * Busca NSSM en múltiples ubicaciones
+ */
+async function findNSSM() {
+  const locations = [
+    paths.nssmExe,
+    paths.nssmSource ? path.join(paths.nssmSource, 'nssm.exe') : null,
+    path.join(process.cwd(), 'nssm', 'nssm.exe'),
+    path.join(process.cwd(), 'native', 'nssm', 'nssm.exe'),
+    path.join(__dirname, '..', 'nssm', 'nssm.exe'),
+    path.join(__dirname, '..', 'native', 'nssm', 'nssm.exe'),
+    path.join(__dirname, '..', '..', 'nssm', 'nssm.exe'),
+    path.join(__dirname, '..', '..', 'native', 'nssm', 'nssm.exe')
+  ].filter(Boolean);
+  
+  for (const location of locations) {
+    if (await fs.pathExists(location)) {
+      console.log(`✅ Found NSSM at: ${location}`);
+      return location;
     }
   }
   
+  return null;
+}
+
+// ============================================================================
+// INSTALACIÓN DEL SERVICIO CORRECTO - GOLDEN TRUTH STEP 2
+// ============================================================================
+
+/**
+ * Instala el servicio CORRECTO: BloomBrainService
+ * Target: brain.exe service start
+ * Configuración: AUTO_START, logs en %LOCALAPPDATA%/BloomNucleus/logs
+ */
+async function installWindowsService() {
+  console.log('\n📦 INSTALANDO SERVICIO CORRECTO: BloomBrainService\n');
+  
+  // 1. Buscar NSSM
+  let nssmPath = await findNSSM();
+  
   if (!nssmPath) {
-    const searchedPaths = [
-      paths.nssmExe || '(nssmExe undefined)',
-      paths.nssmSource ? path.join(paths.nssmSource, 'nssm.exe') : '(nssmSource undefined)',
-      ...commonLocations
-    ];
-    throw new Error(`NSSM not found. Searched in:\n${searchedPaths.map(p => `  - ${p}`).join('\n')}`);
+    throw new Error(`NSSM not found. Searched in multiple locations.`);
   }
   
-  // Verificar que el ejecutable existe
-  if (!await fs.pathExists(exePath)) {
-    throw new Error(`Executable not found at: ${exePath}`);
+  // 2. Verificar que brain.exe existe
+  const brainExe = paths.brainExe;
+  
+  if (!await fs.pathExists(brainExe)) {
+    throw new Error(`brain.exe not found at: ${brainExe}`);
   }
   
-  // Si el servicio ya existe, removerlo primero
-  if (serviceExists(serviceName)) {
-    console.log('⚠️ Service already exists, removing first...');
-    await removeService(serviceName);
+  console.log(`✅ brain.exe encontrado: ${brainExe}`);
+  
+  // 3. Si el servicio correcto ya existe, removerlo primero
+  if (serviceExists(NEW_SERVICE_NAME)) {
+    console.log('⚠️ BloomBrainService ya existe, removiendo...');
+    await removeService(NEW_SERVICE_NAME);
   }
+  
+  // 4. Instalar servicio con NSSM
+  console.log(`\n🔧 Instalando servicio con NSSM...`);
+  console.log(`   Servicio: ${NEW_SERVICE_NAME}`);
+  console.log(`   Ejecutable: ${brainExe}`);
+  console.log(`   Argumentos: service start`);
   
   try {
-    // Instalar el servicio
-    execSync(`"${nssmPath}" install "${serviceName}" "${exePath}"`, {
+    // Comando: nssm install BloomBrainService "C:\...\brain.exe" "service start"
+    execSync(`"${nssmPath}" install "${NEW_SERVICE_NAME}" "${brainExe}" service start`, {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore']
+    });
+    console.log('✅ Servicio instalado');
+    
+    // 5. Configurar Display Name
+    execSync(`"${nssmPath}" set "${NEW_SERVICE_NAME}" DisplayName "Bloom Brain Service"`, {
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'ignore']
     });
     
-    // Configurar el servicio
-    execSync(`"${nssmPath}" set "${serviceName}" DisplayName "${displayName}"`, {
+    // 6. Configurar Description
+    execSync(`"${nssmPath}" set "${NEW_SERVICE_NAME}" Description "Bloom Nucleus Brain TCP Multiplexer Service"`, {
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'ignore']
     });
     
-    execSync(`"${nssmPath}" set "${serviceName}" Description "${description}"`, {
+    // 7. Configurar AUTO_START
+    execSync(`"${nssmPath}" set "${NEW_SERVICE_NAME}" Start SERVICE_AUTO_START`, {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore']
+    });
+    console.log('✅ Configurado como AUTO_START');
+    
+    // 8. Configurar directorio de trabajo
+    const workDir = path.dirname(brainExe);
+    execSync(`"${nssmPath}" set "${NEW_SERVICE_NAME}" AppDirectory "${workDir}"`, {
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'ignore']
     });
     
-    // Configurar inicio automático
-    execSync(`"${nssmPath}" set "${serviceName}" Start SERVICE_AUTO_START`, {
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'ignore']
-    });
-    
-    // Configurar el directorio de trabajo
-    const workDir = path.dirname(exePath);
-    execSync(`"${nssmPath}" set "${serviceName}" AppDirectory "${workDir}"`, {
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'ignore']
-    });
-    
-    // Configurar logs
+    // 9. Configurar LOGS en %LOCALAPPDATA%/BloomNucleus/logs
     const logDir = paths.logsDir;
     await fs.ensureDir(logDir);
     
-    execSync(`"${nssmPath}" set "${serviceName}" AppStdout "${path.join(logDir, 'service-stdout.log')}"`, {
+    const stdoutLog = path.join(logDir, 'brain_service.log');
+    const stderrLog = path.join(logDir, 'brain_service.log');
+    
+    execSync(`"${nssmPath}" set "${NEW_SERVICE_NAME}" AppStdout "${stdoutLog}"`, {
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'ignore']
     });
     
-    execSync(`"${nssmPath}" set "${serviceName}" AppStderr "${path.join(logDir, 'service-stderr.log')}"`, {
+    execSync(`"${nssmPath}" set "${NEW_SERVICE_NAME}" AppStderr "${stderrLog}"`, {
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'ignore']
     });
     
-    console.log(`✅ Service ${serviceName} installed successfully`);
+    console.log(`✅ Logs configurados en: ${stdoutLog}`);
+    
+    console.log('\n✅ Servicio BloomBrainService instalado correctamente\n');
     return true;
     
   } catch (error) {
@@ -349,42 +434,48 @@ async function installService(serviceName, exePath, displayName, description) {
   }
 }
 
+// ============================================================================
+// INICIO DEL SERVICIO
+// ============================================================================
+
 /**
- * Inicia un servicio Windows
+ * Inicia el servicio BloomBrainService
  */
-async function startService(serviceName, maxRetries = 3) {
-  console.log(`▶️ Starting service: ${serviceName}`);
+async function startService(maxRetries = 3) {
+  console.log(`\n▶️ Iniciando servicio: ${NEW_SERVICE_NAME}\n`);
   
-  if (!serviceExists(serviceName)) {
-    throw new Error(`Service ${serviceName} does not exist`);
+  if (!serviceExists(NEW_SERVICE_NAME)) {
+    throw new Error(`Service ${NEW_SERVICE_NAME} does not exist`);
   }
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      execSync(`sc start "${serviceName}"`, {
+      execSync(`sc start "${NEW_SERVICE_NAME}"`, {
         encoding: 'utf8',
         stdio: ['pipe', 'pipe', 'ignore']
       });
       
-      // Esperar a que el servicio esté RUNNING
+      // Esperar a que esté RUNNING
       for (let i = 0; i < 10; i++) {
         await new Promise(r => setTimeout(r, 1000));
         
-        const status = execSync(`sc query "${serviceName}"`, { encoding: 'utf8' });
+        const status = execSync(`sc query "${NEW_SERVICE_NAME}"`, { encoding: 'utf8' });
         
         if (status.includes('RUNNING')) {
-          console.log(`✅ Service started successfully on attempt ${attempt}`);
+          console.log(`✅ Servicio iniciado correctamente (intento ${attempt})`);
+          console.log(`   Puerto TCP: 5678`);
+          console.log(`   Logs: %LOCALAPPDATA%\\BloomNucleus\\logs\\brain_service.log\n`);
           return true;
         }
         
         if (status.includes('START_PENDING')) {
-          console.log(`⏳ Service is starting... (${i + 1}/10)`);
+          console.log(`⏳ Iniciando... (${i + 1}/10)`);
           continue;
         }
       }
       
       if (attempt < maxRetries) {
-        console.warn(`⚠️ Service did not start, retrying...`);
+        console.warn(`⚠️ No se inició en 10 segundos, reintentando...`);
         await new Promise(r => setTimeout(r, 2000));
       }
       
@@ -394,7 +485,7 @@ async function startService(serviceName, maxRetries = 3) {
         throw error;
       }
       
-      console.warn(`⚠️ Attempt ${attempt} failed, retrying...`);
+      console.warn(`⚠️ Intento ${attempt} falló, reintentando...`);
       await new Promise(r => setTimeout(r, 2000));
     }
   }
@@ -402,10 +493,14 @@ async function startService(serviceName, maxRetries = 3) {
   throw new Error(`Service did not start after ${maxRetries} attempts`);
 }
 
+// ============================================================================
+// OBTENER ESTADO
+// ============================================================================
+
 /**
- * Obtiene el estado de un servicio
+ * Obtiene el estado del servicio
  */
-function getServiceStatus(serviceName) {
+function getServiceStatus(serviceName = NEW_SERVICE_NAME) {
   try {
     if (!serviceExists(serviceName)) {
       return 'NOT_INSTALLED';
@@ -424,42 +519,26 @@ function getServiceStatus(serviceName) {
   }
 }
 
-/**
- * Wrapper para instalar servicio Windows con configuración específica de Bloom
- * Esta función es llamada por native-host-installer.js sin argumentos
- * Obtiene automáticamente la configuración desde paths y constants
- */
-async function installWindowsService(serviceName = null, exePath = null, options = {}) {
-  // Si no se proporcionan argumentos, obtener de la configuración del proyecto
-  if (!serviceName || !exePath) {
-    const { paths: pathsConfig } = require('../config/paths');
-    const constants = require('../config/constants');
-    
-    serviceName = serviceName || constants.SERVICE_NAME || 'BloomNucleusHost';
-    exePath = exePath || pathsConfig.hostBinary;
-    
-    console.log('📋 Using default configuration:');
-    console.log(`   Service Name: ${serviceName}`);
-    console.log(`   Executable: ${exePath}`);
-  }
-  
-  const displayName = options.displayName || 'Bloom Nucleus Host Service';
-  const description = options.description || 'Native messaging host for Bloom Nucleus Chrome extension';
-  
-  console.log(`📦 Installing Windows service: ${serviceName}`);
-  console.log(`   Executable: ${exePath}`);
-  console.log(`   Display Name: ${displayName}`);
-  
-  return await installService(serviceName, exePath, displayName, description);
-}
+// ============================================================================
+// EXPORTS
+// ============================================================================
 
 module.exports = {
+  // Limpieza
+  cleanupOldServices,
+  killAllBloomProcesses,
+  
+  // Instalación del servicio correcto
+  installWindowsService,
+  startService,
+  
+  // Utilidades
   serviceExists,
   stopService,
   removeService,
-  killAllBloomProcesses,
-  installService,
-  installWindowsService,  // Exportar la función wrapper
-  startService,
-  getServiceStatus
+  getServiceStatus,
+  
+  // Constantes
+  OLD_SERVICE_NAME,
+  NEW_SERVICE_NAME
 };

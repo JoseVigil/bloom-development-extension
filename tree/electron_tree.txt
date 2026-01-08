@@ -14,7 +14,6 @@ bloom-development-extension/
     │   ├── admin-utils.js
     │   ├── menu-builder.js
     │   └── window-manager.js
-    ├── dist/ [... build output]
     ├── electron-readme.md
     ├── entitlements.plist
     ├── forge.config.js
@@ -22,7 +21,6 @@ bloom-development-extension/
     │   ├── core-installer.js
     │   ├── extension-installer.js
     │   ├── installer.js
-    │   ├── landing-generator.js
     │   ├── launcher-creator.js
     │   ├── native-host-installer.js
     │   ├── profile-manager.js
@@ -44,8 +42,6 @@ bloom-development-extension/
     │   ├── preload_launch.js
     │   └── profile-manager.js
     ├── main.js
-    ├── node_modules/ [... dependencies]
-    ├── package-lock.json
     ├── package.json
     ├── preload.js
     ├── registry-scripts/
@@ -56,6 +52,7 @@ bloom-development-extension/
     ├── run-elevated.bat
     ├── run-elevated.js
     ├── scripts/
+    │   ├── calc-true-id.js
     │   ├── check-status.bat
     │   └── emergency-cleanup.bat
     ├── src/

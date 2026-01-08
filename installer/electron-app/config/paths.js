@@ -10,7 +10,7 @@ const homeDir = os.homedir();
 // ============================================================================
 const getBaseDir = () => {
   if (platform === 'win32') {
-    return path.join(process.env.LOCALAPPDATA, 'BloomNucleus');
+    return path.join(process.env.LOCALAPPDATA || path.join(homeDir, 'AppData', 'Local'), 'BloomNucleus');
   } else if (platform === 'darwin') {
     return path.join(homeDir, 'Library', 'Application Support', 'BloomNucleus');
   } else {
@@ -54,7 +54,6 @@ const getResourcePath = (resourceName) => {
     case 'nssm':
       return path.join(installerRoot, 'native', 'nssm', 'win64');
     case 'extension':
-      // ✅ FIXED: Usar installerRoot en vez de repoRoot
       return path.join(installerRoot, 'chrome-extension', 'src');
     case 'assets':
       return path.join(installerRoot, 'electron-app', 'assets');
@@ -64,15 +63,17 @@ const getResourcePath = (resourceName) => {
 };
 
 // ============================================================================
-// COMPUTED PATHS (sin getters, valores directos)
+// COMPUTED PATHS - Cross-platform
 // ============================================================================
 const pythonExe = platform === 'win32'
   ? path.join(baseDir, 'engine', 'runtime', 'python.exe')
   : path.join(baseDir, 'engine', 'runtime', 'bin', 'python3');
 
-const brainDir = platform === 'win32'
-  ? path.join(baseDir, 'engine', 'runtime', 'Lib', 'site-packages', 'brain')
-  : path.join(baseDir, 'engine', 'runtime', 'lib', 'python3.11', 'site-packages', 'brain');
+const brainDir = path.join(baseDir, 'bin', 'brain');
+
+const brainExe = platform === 'win32'
+  ? path.join(baseDir, 'bin', 'brain', 'brain.exe')
+  : path.join(baseDir, 'bin', 'brain', 'brain');
 
 const hostBinary = platform === 'win32'
   ? path.join(baseDir, 'native', 'bloom-host.exe')
@@ -101,77 +102,74 @@ const assetsDir = (() => {
 })();
 
 // ============================================================================
-// PATHS OBJECT - ✅ FIXED: Todas las props son valores directos (no getters)
+// PATHS OBJECT - Valores directos (no getters)
 // ============================================================================
 const paths = {
-  // Base (✅ Alias agregado para compatibilidad con installer.js)
+  // Base
   baseDir,
-  bloomBase: baseDir, // ✅ NUEVO: Alias para installer.js
+  bloomBase: baseDir,
   repoRoot,
 
-  // Engine
+  // Binarios (✅ NUEVO: Estructura bin/brain)
+  binDir: path.join(baseDir, 'bin'),
+  brainDir,
+  brainExe,
+
+  // Engine & Runtime Python
   engineDir: path.join(baseDir, 'engine'),
   runtimeDir: path.join(baseDir, 'engine', 'runtime'),
-
-  // Python executable (cross-platform) - ✅ FIXED: Ya no es getter
   pythonExe,
 
-  // Brain package (cross-platform) - ✅ FIXED: Ya no es getter
-  brainDir,
-
   // Extension (DUAL LOCATION)
-  extensionDir: path.join(baseDir, 'extension'), // Legacy
-  extensionBrainDir: path.join(baseDir, 'extensions', 'chrome'), // Brain CLI location
+  extensionDir: path.join(baseDir, 'extension'),
+  extensionBrainDir: path.join(baseDir, 'extensions', 'chrome'),
 
   // Native Host
   nativeDir: path.join(baseDir, 'native'),
   hostBinary,
-
-  // Native Messaging Manifest (cross-platform) - ✅ FIXED: Ya no es getter
   manifestPath,
 
   // Profiles Directory
   profilesDir: path.join(baseDir, 'profiles'),
 
-  // Config - ✅ NUEVO: configDir agregado para installer.js
+  // Config
   configDir: path.join(baseDir, 'config'),
-  configFile: path.join(baseDir, 'nucleus.json'),
+  configFile: path.join(baseDir, 'config', 'nucleus.json'),
 
   // Logs
   logsDir: path.join(baseDir, 'logs'),
   installLog: path.join(baseDir, 'logs', 'install.log'),
   runtimeLog: path.join(baseDir, 'logs', 'runtime.log'),
 
-  // Bin
-  binDir: path.join(baseDir, 'bin'),
+  // Launcher (Windows)
   launcherExe: path.join(baseDir, 'bin', 'BloomLauncher.exe'),
 
-  // Assets - ✅ FIXED: Ya no es getter
+  // Assets
   assetsDir,
   bloomIcon: path.join(assetsDir, 'bloom.ico'),
 
-  // ============================================================================
-  // SOURCE PATHS (de donde se copian los recursos)
-  // ============================================================================
-  runtimeSource: getResourcePath('runtime'),
-  brainSource: getResourcePath('brain'),
-  nativeSource: getResourcePath('native'),
-  extensionSource: getResourcePath('extension'),
-  nssmSource: getResourcePath('nssm'),
-
-  // ✅ NUEVO: nssmExe (ruta destino del ejecutable)
+  // NSSM (Windows Service Manager)
   nssmExe: path.join(baseDir, 'native', 'nssm.exe'),
 
-  // ✅ NUEVO: Desktop path (para shortcuts)
-  desktop: path.join(homeDir, 'Desktop')
+  // Desktop (para shortcuts)
+  desktop: path.join(homeDir, 'Desktop'),
+
+  // ============================================================================
+  // SOURCE PATHS (de donde se copian los recursos durante instalación)
+  // ============================================================================
+  runtimeSource: getResourcePath('runtime'),
+  brainSource: path.resolve(__dirname, '..', '..', 'native', 'bin', 'win32', 'brain'),
+  extensionSource: path.resolve(__dirname, '..', '..', '..', 'chrome-extension', 'src'),
+  nativeSource: path.resolve(__dirname, '..', '..', 'native', 'bin', 'win32'),
+  nssmSource: path.resolve(__dirname, '..', '..', 'native', 'nssm', 'win64'),
 };
 
 // ============================================================================
 // VALIDACIÓN - Verificar que ningún path crítico sea undefined
 // ============================================================================
 const criticalPaths = [
-  'baseDir', 'bloomBase', 'engineDir', 'runtimeDir', 'nativeDir',
-  'extensionDir', 'configDir', 'binDir', 'logsDir'
+  'baseDir', 'bloomBase', 'binDir', 'brainDir', 'engineDir', 'runtimeDir',
+  'nativeDir', 'extensionDir', 'configDir', 'logsDir'
 ];
 
 for (const key of criticalPaths) {
@@ -183,5 +181,7 @@ for (const key of criticalPaths) {
 
 console.log('✅ Paths initialized successfully');
 console.log(`📂 Base directory: ${baseDir}`);
+console.log(`🔧 Brain directory: ${brainDir}`);
+console.log(`🐍 Python executable: ${pythonExe}`);
 
 module.exports = { paths, getResourcePath };
