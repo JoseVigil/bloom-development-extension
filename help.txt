@@ -40,9 +40,10 @@ Brain CLI - Modular system for Bloom (Executable)
 │   nucleus       Nucleus project management and lifecycle                14 cmds                  │
 │   profile       Chrome profile and AI account management                 8 cmds                  │
 │   project       Project lifecycle and scaffolding                        6 cmds                  │
+│   runtime       Non-interactive system runtime operations                 1 cmd                  │
 │   service       Background connection multiplexer and task runner         1 cmd                  │
 │                                                                      ──────────                  │
-│                                                                         75 cmds                  │
+│                                                                         76 cmds                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 
 ╭───────────────────────────────────────────── HEALTH ─────────────────────────────────────────────╮
@@ -787,6 +788,14 @@ Brain CLI - Modular system for Bloom (Executable)
 │      <PROFILE_ID>         ID del perfil                                                          │
 │                                                                                                  │
 ╰──────────────────────────── Chrome profile and AI account management ────────────────────────────╯
+
+╭──────────────────────────────────────────── RUNTIME ─────────────────────────────────────────────╮
+│                                                                                                  │
+│  RUN - Start Brain core runtime (non-interactive, blocking)                                      │
+│                                                                                                  │
+│    brain [GLOBAL_OPTIONS] runtime run                                                            │
+│                                                                                                  │
+╰─────────────────────────── Non-interactive system runtime operations ────────────────────────────╯
 
 ╭──────────────────────────────────────────── SERVICE ─────────────────────────────────────────────╮
 │                                                                                                  │

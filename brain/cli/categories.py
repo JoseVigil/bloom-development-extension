@@ -24,9 +24,10 @@ class CommandCategory(Enum):
     PROJECT = ("project", "Project lifecycle and scaffolding")
     HEALTH = ("health", "System health checks and diagnostics")
     EXTENSION = ("extension", "Chrome extension lifecycle management")
-    
-    # ✅ NEW: Service daemon category
     SERVICE = ("service", "Background connection multiplexer and task runner")
+    
+    # ✅ NEW: Runtime category for non-interactive system execution
+    RUNTIME = ("runtime", "Non-interactive system runtime operations")
 
     def __init__(self, name: str, description: str):
         self.category_name = name
@@ -72,4 +73,5 @@ PROFILE = CommandCategory.PROFILE
 PROJECT = CommandCategory.PROJECT
 HEALTH = CommandCategory.HEALTH  
 EXTENSION = CommandCategory.EXTENSION
-SERVICE = CommandCategory.SERVICE  
+SERVICE = CommandCategory.SERVICE
+RUNTIME = CommandCategory.RUNTIME

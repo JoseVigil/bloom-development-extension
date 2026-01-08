@@ -315,178 +315,162 @@ async function cleanupOldServices() {
 // FUNCIÓN 7: INSTALL WINDOWS SERVICE (CON TODOS LOS FIXES)
 // ============================================================================
 async function installWindowsService() {
-  console.log('\n📦 INSTALANDO SERVICIO: BloomBrainService\n');
+  console.log('\n📦 INSTALANDO SERVICIO: BloomBrainService (Force Cleanup Mode)\n');
   
-  // 1. Buscar NSSM
-  let nssmPath = await findNSSM();
-  
-  if (!nssmPath) {
-    throw new Error(`NSSM not found. Searched in multiple locations.`);
-  }
-  
-  // 2. Verificar brain.exe
+  const nssmPath = await findNSSM();
   const brainExe = paths.brainExe;
+  const workDir = path.dirname(brainExe);
+
+  // 1. LIMPIEZA ATÓMICA Y VERIFICADA
+  console.log('🧹 Limpiando registros previos de BloomBrainService...');
   
-  if (!await fs.pathExists(brainExe)) {
-    throw new Error(`brain.exe not found at: ${brainExe}`);
+  // Lista de comandos para asegurar la eliminación
+  const cleanupCommands = [
+    `sc stop "${NEW_SERVICE_NAME}"`,
+    `"${nssmPath}" stop "${NEW_SERVICE_NAME}"`,
+    `"${nssmPath}" remove "${NEW_SERVICE_NAME}" confirm`,
+    `sc delete "${NEW_SERVICE_NAME}"`
+  ];
+
+  for (const cmd of cleanupCommands) {
+    try {
+      execSync(cmd, { stdio: 'ignore', timeout: 5000 });
+    } catch (e) {
+      // Ignoramos errores si el servicio no existe o ya está detenido
+    }
   }
-  
-  console.log(`✅ brain.exe encontrado: ${brainExe}`);
-  
-  // 3. Remover si existe
-  if (serviceExists(NEW_SERVICE_NAME)) {
-    console.log('⚠️ BloomBrainService ya existe, removiendo...');
-    await removeService(NEW_SERVICE_NAME);
+
+  // 2. VERIFICACIÓN DE ESTADO ZOMBIE (Bucle de espera)
+  console.log('⏳ Verificando que el servicio haya sido removido del SCM...');
+  let serviceExistsFlag = true;
+  for (let i = 0; i < 5; i++) {
+    try {
+      execSync(`sc query "${NEW_SERVICE_NAME}"`, { stdio: 'pipe' });
+      console.log(`   ...el servicio aún persiste (intento ${i+1}/5), esperando liberación...`);
+      await new Promise(r => setTimeout(r, 2000));
+    } catch (e) {
+      // Si sc query falla, es que el servicio ya no existe. ¡Éxito!
+      serviceExistsFlag = false;
+      break;
+    }
   }
-  
-  // 4. CREAR LOGS ANTES DE INSTALAR
+
+  if (serviceExistsFlag) {
+    throw new Error(`CRÍTICO: No se pudo eliminar el servicio "${NEW_SERVICE_NAME}". Posiblemente esté bloqueado por services.msc o el Visor de Eventos. Ciérralos e intenta de nuevo.`);
+  }
+
+  // 3. Preparación de Logs
   const logDir = paths.logsDir;
   await fs.ensureDir(logDir);
-  console.log(`✅ Directorio de logs: ${logDir}`);
-  
   const stdoutLog = path.join(logDir, 'brain_service.log');
   const stderrLog = path.join(logDir, 'brain_service.err');
-  
   await fs.ensureFile(stdoutLog);
   await fs.ensureFile(stderrLog);
-  console.log(`✅ Archivos de log creados`);
-  
-  // 5. Instalar con NSSM
-  console.log(`\n🔧 Instalando servicio...`);
-  
+
+  console.log(`🔧 Instalando con NSSM...`);
+
   try {
-    execSync(`"${nssmPath}" install "${NEW_SERVICE_NAME}" "${brainExe}" service start`, {
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'ignore']
-    });
-    console.log('✅ Servicio instalado');
+    // 4. INSTALACIÓN (Sin ignore para capturar errores reales)
+    // Usamos shell: true y quitamos las comillas dobles internas innecesarias si el path ya las tiene
+    execSync(`"${nssmPath}" install "${NEW_SERVICE_NAME}" "${brainExe}" runtime run`, { shell: true });
     
-    // Configuraciones básicas
-    execSync(`"${nssmPath}" set "${NEW_SERVICE_NAME}" DisplayName "Bloom Brain Service"`, {
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'ignore']
-    });
-    
-    execSync(`"${nssmPath}" set "${NEW_SERVICE_NAME}" Description "Bloom Nucleus Brain TCP Multiplexer Service"`, {
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'ignore']
-    });
-    
-    execSync(`"${nssmPath}" set "${NEW_SERVICE_NAME}" Start SERVICE_AUTO_START`, {
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'ignore']
-    });
-    
-    // Directorio de trabajo (CRÍTICO para PyInstaller)
-    const workDir = path.dirname(brainExe);
-    execSync(`"${nssmPath}" set "${NEW_SERVICE_NAME}" AppDirectory "${workDir}"`, {
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'ignore']
-    });
-    console.log(`✅ Working directory: ${workDir}`);
-    
-    // Variables de entorno (CRÍTICO para PyInstaller)
-    execSync(`"${nssmPath}" set "${NEW_SERVICE_NAME}" AppEnvironmentExtra "PYTHONUNBUFFERED=1" "PYTHONIOENCODING=utf-8"`, {
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'ignore']
-    });
-    console.log('✅ Environment variables configured');
-    
-    // Logs
-    execSync(`"${nssmPath}" set "${NEW_SERVICE_NAME}" AppStdout "${stdoutLog}"`, {
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'ignore']
-    });
-    
-    execSync(`"${nssmPath}" set "${NEW_SERVICE_NAME}" AppStderr "${stderrLog}"`, {
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'ignore']
-    });
-    console.log(`✅ Logs: ${stdoutLog}`);
-    
-    // Timeouts extendidos
-    execSync(`"${nssmPath}" set "${NEW_SERVICE_NAME}" AppStopMethodConsole 30000`, {
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'ignore']
-    });
-    console.log('✅ Extended timeouts (30s)');
-    
-    console.log('\n✅ Servicio instalado correctamente\n');
+    // 5. CONFIGURACIÓN DE PARÁMETROS
+    const configParams = [
+      `set "${NEW_SERVICE_NAME}" DisplayName "Bloom Brain Service"`,
+      `set "${NEW_SERVICE_NAME}" Description "Bloom Nucleus Brain TCP Multiplexer"`,
+      `set "${NEW_SERVICE_NAME}" Start SERVICE_AUTO_START`,
+      `set "${NEW_SERVICE_NAME}" AppDirectory "${workDir}"`,
+      `set "${NEW_SERVICE_NAME}" AppStdout "${stdoutLog}"`,
+      `set "${NEW_SERVICE_NAME}" AppStderr "${stderrLog}"`,
+      `set "${NEW_SERVICE_NAME}" AppThrottle 5000`,
+      `set "${NEW_SERVICE_NAME}" AppExit Default Restart`,
+      `set "${NEW_SERVICE_NAME}" AppStopMethodConsole 15000`
+    ];
+
+    for (const param of configParams) {
+      execSync(`"${nssmPath}" ${param}`, { stdio: 'ignore', shell: true });
+    }
+
+    // 6. INYECCIÓN DE ENTORNO (Vital para que brain.exe sepa dónde escribir)
+    const envVars = `"TEMP=${workDir}" "TMP=${workDir}" "LOCALAPPDATA=${workDir}" "PYTHONUNBUFFERED=1"`;
+    execSync(`"${nssmPath}" set "${NEW_SERVICE_NAME}" AppEnvironmentExtra ${envVars}`, { stdio: 'ignore', shell: true });
+
+    console.log('✅ BloomBrainService instalado y configurado correctamente.');
     return true;
     
   } catch (error) {
-    console.error(`❌ Failed to install service:`, error.message);
+    console.error(`❌ Error instalando el servicio:`, error.message);
     throw error;
   }
+}
+
+async function startService(maxRetries = 3) {
+  console.log(`▶️ Iniciando ${NEW_SERVICE_NAME}...`);
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      execSync(`sc start "${NEW_SERVICE_NAME}"`, { stdio: 'ignore' });
+      
+      // Polling de 60s
+      for (let i = 0; i < 60; i++) {
+        await new Promise(r => setTimeout(r, 1000));
+        const status = execSync(`sc query "${NEW_SERVICE_NAME}"`, { encoding: 'utf8' });
+        
+        if (status.includes('RUNNING')) {
+          console.log('✅ Servicio en línea.');
+          return true;
+        }
+        
+        if (status.includes('STOPPED')) {
+          console.error('❌ El servicio se detuvo. Reintentando...');
+          break; 
+        }
+      }
+    } catch (e) {}
+    console.log(`⚠️ Intento ${attempt} fallido, esperando...`);
+    await new Promise(r => setTimeout(r, 5000));
+  }
+  throw new Error('No se pudo iniciar el servicio tras varios intentos.');
 }
 
 // ============================================================================
 // FUNCIÓN 8: START SERVICE (CON TIMEOUT LARGO)
 // ============================================================================
 async function startService(maxRetries = 3) {
-  console.log(`\n▶️ Iniciando servicio: ${NEW_SERVICE_NAME}\n`);
-  
-  if (!serviceExists(NEW_SERVICE_NAME)) {
-    throw new Error(`Service ${NEW_SERVICE_NAME} does not exist`);
-  }
-  
+  console.log(`\n▶️ Iniciando servicio: ${NEW_SERVICE_NAME}`);
+  const errLogPath = path.join(paths.logsDir, 'brain_service.err');
+
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      execSync(`sc start "${NEW_SERVICE_NAME}"`, {
-        encoding: 'utf8',
-        stdio: ['pipe', 'pipe', 'ignore']
-      });
-      
-      console.log('⏳ Esperando arranque (PyInstaller puede tardar 20-30s)...');
-      
-      // Esperar hasta 30 segundos
+      try { execSync(`sc start "${NEW_SERVICE_NAME}"`, { stdio: 'ignore' }); } catch (e) {}
+
+      console.log(`⏳ Esperando estabilidad (Intento ${attempt}/${maxRetries})...`);
+
       for (let i = 0; i < 30; i++) {
         await new Promise(r => setTimeout(r, 1000));
-        
         const status = execSync(`sc query "${NEW_SERVICE_NAME}"`, { encoding: 'utf8' });
-        
+
         if (status.includes('RUNNING')) {
-          console.log(`✅ Servicio iniciado (intento ${attempt}, ${i+1}s)`);
-          console.log(`   Puerto: 5678`);
-          console.log(`   Logs: ${paths.logsDir}\\brain_service.log\n`);
+          console.log(`✅ ¡Servicio en línea!`);
           return true;
         }
-        
-        if (status.includes('START_PENDING')) {
-          if (i % 5 === 0) {
-            console.log(`⏳ Iniciando... (${i + 1}/30s)`);
-          }
-          continue;
-        }
-        
+
         if (status.includes('STOPPED')) {
-          console.error(`❌ El servicio se detuvo inesperadamente`);
-          console.error(`   Revisar: ${paths.logsDir}\\brain_service.err`);
-          break;
+          console.error(`\n❌ CRASH DETECTADO: El servicio se detuvo.`);
+          if (fs.existsSync(errLogPath)) {
+            const errorContent = fs.readFileSync(errLogPath, 'utf8');
+            console.error(`\n📋 ÚLTIMO ERROR DEL BINARIO:\n${errorContent.split('\n').slice(-10).join('\n')}`);
+          }
+          throw new Error("El binario crasheó al iniciar. Revisa el log arriba.");
         }
       }
-      
-      if (attempt < maxRetries) {
-        console.warn(`⚠️ No se inició en 30s, reintentando...`);
-        await new Promise(r => setTimeout(r, 3000));
-      }
-      
     } catch (error) {
-      if (attempt === maxRetries) {
-        console.error(`❌ Failed after ${maxRetries} attempts:`, error.message);
-        console.error(`\n📋 DIAGNÓSTICO:`);
-        console.error(`   1. Log: ${paths.logsDir}\\brain_service.err`);
-        console.error(`   2. Test: cd "${path.dirname(paths.brainExe)}" && .\\brain.exe service start`);
-        console.error(`   3. Puerto: netstat -ano | findstr :5678`);
-        throw error;
-      }
-      
-      console.warn(`⚠️ Intento ${attempt} falló, reintentando...`);
-      await new Promise(r => setTimeout(r, 3000));
+      if (attempt === maxRetries) throw error;
+      console.warn(`⚠️ Reintentando arranque...`);
+      await new Promise(r => setTimeout(r, 2000));
     }
   }
-  
-  throw new Error(`Service did not start after ${maxRetries} attempts`);
+  return false;
 }
 
 // ============================================================================

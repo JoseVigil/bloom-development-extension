@@ -111,6 +111,7 @@ hiddenimports = [
     'brain.commands.project.detect',
     'brain.commands.project.load',
     'brain.commands.project.nucleus',
+    'brain.commands.runtime.run',
     'brain.commands.service.service',
     'brain.core.bloom_project_inspector',
     'brain.core.browser.landing_generator',

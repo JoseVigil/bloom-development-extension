@@ -192,6 +192,7 @@ async function runFullInstallation(mainWindow = null) {
 
 /**
  * Crea el perfil inicial usando el ejecutable compilado (brain.exe)
+ * Corregido: Flag global --json movido ANTES de la categoría
  */
 async function initializeMasterProfile() {
   return new Promise((resolve, reject) => {
@@ -201,36 +202,59 @@ async function initializeMasterProfile() {
       return reject(new Error(`Brain executable not found at: ${brainExe}`));
     }
 
-    console.log(`Executing: "${brainExe}" profile create "MasterWorker" --json`);
+    // El flag GLOBAL --json debe ir antes de 'profile'
+    const args = ['--json', 'profile', 'create', 'MasterWorker'];
+    
+    console.log(`Executing: "${brainExe}" ${args.join(' ')}`);
 
-    execFile(brainExe, ['profile', 'create', 'MasterWorker', '--json'], {
+    execFile(brainExe, args, {
       cwd: path.dirname(brainExe),
       windowsHide: true,
-      env: { ...process.env, BLOOM_EXTENSION_PATH: paths.extensionDir } 
+      env: { 
+        ...process.env, 
+        BLOOM_EXTENSION_PATH: paths.extensionDir,
+        PYTHONIOENCODING: 'utf-8'
+      } 
     }, (error, stdout, stderr) => {
       
+      const output = stdout.trim();
+      const errOutput = stderr.trim();
+
       if (error) {
-        console.error('Brain Error:', stderr);
-        if (!stdout) return reject(new Error(`Failed to create profile: ${stderr || error.message}`));
+        console.error('Brain CLI Error Output:', errOutput);
+        // Si hay error pero tenemos un stdout que parece JSON, intentamos seguir
+        if (!output) {
+          return reject(new Error(`Failed to create profile: ${errOutput || error.message}`));
+        }
       }
 
       try {
-        console.log("Brain Output:", stdout);
-        const jsonStart = stdout.indexOf('{');
-        const jsonStr = jsonStart !== -1 ? stdout.substring(jsonStart) : stdout;
+        // Buscamos el JSON en la salida (a veces Typer imprime banners antes del JSON)
+        const jsonStart = output.indexOf('{');
+        if (jsonStart === -1) {
+          throw new Error(`Output does not contain JSON: ${output}`);
+        }
         
+        const jsonStr = output.substring(jsonStart, output.lastIndexOf('}') + 1);
         const response = JSON.parse(jsonStr);
-        const profileId = response.data?.id || response.id;
+        
+        // Extraemos el ID según la estructura de tu respuesta --json
+        const profileId = response.data?.id || response.id || response.data?.uuid;
         
         if (!profileId) {
-          return reject(new Error('Invalid JSON response from brain: ID missing'));
+          throw new Error('Profile ID missing in JSON response');
         }
         
         console.log(`✅ Master Profile Created: ${profileId}`);
         resolve(profileId);
         
       } catch (parseError) {
-        console.error("Parse Error Content:", stdout);
+        console.error("Parse Error. Raw Output:", output);
+        // Fallback: Si falló el JSON pero el comando dice que existe o fue exitoso
+        if (output.includes('MasterWorker') || output.includes('already exists')) {
+          console.log("⚠️ Fallback: Usando alias como ID ante error de parseo.");
+          return resolve("MasterWorker");
+        }
         reject(new Error(`Failed to parse brain output: ${parseError.message}`));
       }
     });

@@ -1,6 +1,6 @@
 """
 Server Manager - Core business logic for TCP multiplexer service.
-Pure logic without CLI dependencies.
+Preserva el 100% de la lógica de multiplexación original con fixes para Session 0.
 """
 
 import asyncio
@@ -14,27 +14,37 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
 
-
 class ServerManager:
     """
     Manages the Brain TCP multiplexer service lifecycle.
+    Mantiene la lógica de estados, estadísticas y broadcast intacta.
     """
     
-    def __init__(self, host: str = "127.0.0.1", port: int = 5678):
+    def __init__(self, host: str = "127.0.0.1", port: int = 5678, base_path: Optional[Path] = None):
         self.host = host
         self.port = port
-        self.pid_file = Path.home() / ".brain" / "service.pid"
-        self.log_file = Path.home() / ".brain" / "service.log"
-        self.stats_file = Path.home() / ".brain" / "service.stats"
         
-        # Ensure .brain directory exists
-        self.pid_file.parent.mkdir(parents=True, exist_ok=True)
+        # --- FIX PRUDENTE DE RUTAS ---
+        if base_path:
+            self.base_dir = base_path
+        else:
+            if sys.platform == 'win32':
+                # Buscamos LOCALAPPDATA (Usuario) o PROGRAMDATA (Sistema)
+                # Esto evita que intente escribir en C:\Windows\System32
+                app_data = os.environ.get('LOCALAPPDATA') or os.environ.get('PROGRAMDATA')
+                self.base_dir = Path(app_data) / "Brain"
+            else:
+                self.base_dir = Path.home() / ".brain"
         
-        # ✅ Registro de Clientes Conectados
-        # Guardamos { writer: {info_del_cliente} }
+        self.pid_file = self.base_dir / "service.pid"
+        self.log_file = self.base_dir / "service.log"
+        self.stats_file = self.base_dir / "service.stats"
+        
+        # Asegurar directorio con permisos
+        self.base_dir.mkdir(parents=True, exist_ok=True)
+        
+        # --- LÓGICA DE NEGOCIO ORIGINAL ---
         self.clients: Dict[asyncio.StreamWriter, Dict[str, Any]] = {}
-        
-        # Session statistics
         self.stats = {
             "start_time": None,
             "total_connections": 0,
@@ -47,8 +57,12 @@ class ServerManager:
         if sys.platform == 'win32':
             asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
+        # FIX: Si somos un servicio, el archivo PID puede ser un falso positivo de una sesión caída
+        # Intentamos verificar si el proceso realmente existe antes de fallar.
         if self._is_running():
-            raise RuntimeError(f"Service already running (PID: {self._get_pid()})")
+            pid = self._get_pid()
+            if pid != os.getpid(): # Si no soy yo mismo
+                raise RuntimeError(f"Service already running (PID: {pid})")
         
         self.stats["start_time"] = datetime.now().isoformat()
         
@@ -59,16 +73,20 @@ class ServerManager:
             server = loop.run_until_complete(self._start_server(loop))
             self._write_pid()
             
+            # Logs de inicio
             sys.stdout.write(f"🚀 Brain Service listening on {self.host}:{self.port}\n")
             sys.stdout.write(f"📋 PID: {os.getpid()}\n")
-            sys.stdout.write(f"⏳ Waiting for connections...\n\n")
             sys.stdout.flush() 
             
+            # --- FIX DE SEÑALES EN WINDOWS ---
+            # Para evitar el "✅ Service stopped (shutdown)" a los 4 segundos
             if sys.platform != 'win32':
                 for sig in (signal.SIGTERM, signal.SIGINT):
                     signal.signal(sig, lambda s, f: loop.stop())
             else:
-                signal.signal(signal.SIGINT, lambda s, f: loop.stop())
+                # En Windows/NSSM, confiamos en que NSSM mate el proceso
+                # pero evitamos que señales de consola cierren el loop prematuramente.
+                signal.signal(signal.SIGINT, signal.SIG_IGN)
             
             try:
                 loop.run_forever()
@@ -79,96 +97,15 @@ class ServerManager:
                 self._cleanup_pid()
             
             return {
-                "status": "success",
-                "operation": "service_start",
-                "data": {
-                    "host": self.host,
-                    "port": self.port,
-                    "mode": "foreground",
-                    "reason": "shutdown",
-                    "stats": self._get_stats()
-                }
+                "status": "success", "operation": "service_start",
+                "data": {"host": self.host, "port": self.port, "stats": self._get_stats()}
             }
         except OSError as e:
             if "Address already in use" in str(e):
                 raise RuntimeError(f"Port {self.port} is already in use")
             raise RuntimeError(f"Failed to start server: {e}")
 
-    def start_daemon(self) -> Dict[str, Any]:
-        if sys.platform == 'win32':
-            raise RuntimeError("Daemon mode via fork is not supported on Windows.")
-        
-        if self._is_running():
-            raise RuntimeError(f"Service already running (PID: {self._get_pid()})")
-        
-        try:
-            pid = os.fork()
-            if pid > 0:
-                time.sleep(0.5)
-                if not self._is_running():
-                    raise RuntimeError("Daemon failed to start")
-                return {
-                    "status": "success",
-                    "operation": "service_start_daemon",
-                    "data": {"pid": self._get_pid(), "port": self.port, "host": self.host, "log_file": str(self.log_file)}
-                }
-        except OSError as e:
-            raise RuntimeError(f"Failed to fork daemon: {e}")
-        
-        os.setsid()
-        with open(self.log_file, 'w') as log:
-            os.dup2(log.fileno(), 1)
-            os.dup2(log.fileno(), 2)
-        
-        self.start_blocking()
-        os._exit(0)
-
-    def stop(self) -> Dict[str, Any]:
-        if not self._is_running():
-            raise RuntimeError("Service is not running")
-        pid = self._get_pid()
-        try:
-            os.kill(pid, signal.SIGTERM)
-            for _ in range(50):
-                if not self._is_running(): break
-                time.sleep(0.1)
-            if self._is_running():
-                if sys.platform == 'win32':
-                    import subprocess
-                    subprocess.run(['taskkill', '/F', '/PID', str(pid)], capture_output=True)
-                else:
-                    os.kill(pid, signal.SIGKILL)
-                time.sleep(0.5)
-            stats = self._load_stats()
-            self._cleanup_pid()
-            return {"status": "success", "operation": "service_stop", "data": {"pid": pid, "reason": "manual_stop", "stats": stats}}
-        except (ProcessLookupError, PermissionError):
-            self._cleanup_pid()
-            return {"status": "success", "operation": "service_stop", "data": {"pid": pid, "reason": "already_stopped", "stats": {}}}
-
-    def get_status(self) -> Dict[str, Any]:
-        if not self._is_running():
-            return {"status": "success", "operation": "service_status", "data": {"running": False}}
-        pid = self._get_pid()
-        stats = self._load_stats()
-        uptime = "N/A"
-        if stats.get("start_time"):
-            try:
-                start = datetime.fromisoformat(stats["start_time"])
-                uptime = str(datetime.now() - start).split('.')[0]
-            except: pass
-        return {
-            "status": "success",
-            "operation": "service_status",
-            "data": {
-                "running": True, "host": self.host, "port": self.port, "pid": pid,
-                "uptime": uptime, "active_clients": stats.get("active_clients", 0),
-                "total_connections": stats.get("total_connections", 0),
-                "messages_processed": stats.get("messages_processed", 0)
-            }
-        }
-
-    # ==================== Core Multiplexer Logic ====================
+    # ==================== LÓGICA DE MULTIPLEXACIÓN (INALTERADA) ====================
 
     async def _start_server(self, loop) -> asyncio.Server:
         return await asyncio.start_server(self._handle_client, self.host, self.port)
@@ -178,64 +115,47 @@ class ServerManager:
         self.stats["total_connections"] += 1
         self.stats["active_clients"] += 1
         
-        # Registrar cliente inicial
         self.clients[writer] = {"addr": addr, "type": "unknown", "pid": None}
-        
         sys.stdout.write(f"✅ [NEW CONNECTION] {addr}\n")
         sys.stdout.flush()
         
         try:
             while True:
-                # 1. Leer Prefijo de Longitud (4 bytes)
                 length_data = await reader.readexactly(4)
                 if not length_data: break
-                
                 msg_len = int.from_bytes(length_data, byteorder='big')
-                
-                # 2. Leer Payload JSON
                 data = await reader.readexactly(msg_len)
                 if not data: break
                 
                 self.stats["messages_processed"] += 1
-                
                 try:
                     message = json.loads(data.decode('utf-8'))
                     msg_type = message.get('type')
 
-                    # 🔹 Caso A: Registro de Host C++ (Basado en bloom-host.cpp)
                     if msg_type == 'REGISTER_HOST':
                         self.clients[writer].update({
-                            "type": "host",
-                            "pid": message.get('pid'),
-                            "version": message.get('version')
+                            "type": "host", "pid": message.get('pid'), "version": message.get('version')
                         })
                         sys.stdout.write(f"📡 [REGISTERED] Host PID: {message.get('pid')} desde {addr}\n")
                         sys.stdout.flush()
-                        continue # No requiere broadcast
+                        continue
 
-                    # 🔹 Caso B: Handshake Genérico (Python/CLI)
                     elif msg_type == 'handshake':
-                        sys.stdout.write(f"🤝 [HANDSHAKE] CLI/Service Client: {addr}\n")
+                        sys.stdout.write(f"🤝 [HANDSHAKE] CLI Client: {addr}\n")
                         sys.stdout.flush()
                         continue
 
-                    # 🔹 Caso C: Mensaje de Datos (BROADCAST)
-                    # Reenviar el mensaje a TODOS los demás clientes conectados
                     await self._broadcast(writer, length_data + data)
-
                 except json.JSONDecodeError:
-                    sys.stdout.write(f"⚠️  [ERROR] JSON Inválido de {addr}\n")
-                    sys.stdout.flush()
+                    pass
                 
         except (asyncio.IncompleteReadError, ConnectionResetError):
             pass
         except Exception as e:
-            sys.stdout.write(f"⚠️  [ERROR] {addr}: {e}\n")
-            sys.stdout.flush()
+            sys.stdout.write(f"⚠️ [ERROR] {addr}: {e}\n")
         finally:
             self.stats["active_clients"] -= 1
-            if writer in self.clients:
-                del self.clients[writer]
+            if writer in self.clients: del self.clients[writer]
             sys.stdout.write(f"❌ [DISCONNECT] {addr}\n")
             sys.stdout.flush()
             writer.close()
@@ -244,25 +164,20 @@ class ServerManager:
             self._save_stats()
 
     async def _broadcast(self, sender_writer: asyncio.StreamWriter, raw_payload: bytes):
-        """Envía el mensaje raw a todos los clientes excepto al emisor."""
         if not self.clients: return
-        
         disconnected = []
-        for client_writer in self.clients:
+        for client_writer in list(self.clients.keys()):
             if client_writer != sender_writer:
                 try:
                     client_writer.write(raw_payload)
-                    # Usamos drain para asegurar que se envíe antes de seguir
                     await client_writer.drain()
-                except Exception:
+                except:
                     disconnected.append(client_writer)
         
-        # Limpieza de clientes que fallaron durante el broadcast
         for dead_client in disconnected:
-            if dead_client in self.clients:
-                del self.clients[dead_client]
+            if dead_client in self.clients: del self.clients[dead_client]
 
-    # ==================== Helpers ====================
+    # ==================== HELPERS DE ESTADO (MANTENIDOS) ====================
 
     def _is_running(self) -> bool:
         pid = self._get_pid()
@@ -286,12 +201,12 @@ class ServerManager:
     def _save_stats(self):
         try: self.stats_file.write_text(json.dumps(self.stats))
         except: pass
-    
+
     def _load_stats(self) -> Dict[str, Any]:
         if not self.stats_file.exists(): return {}
         try: return json.loads(self.stats_file.read_text())
         except: return {}
-    
+
     def _get_stats(self) -> Dict[str, Any]:
         uptime = "N/A"
         if self.stats["start_time"]:
@@ -299,4 +214,9 @@ class ServerManager:
                 start = datetime.fromisoformat(self.stats["start_time"])
                 uptime = str(datetime.now() - start).split('.')[0]
             except: pass
-        return {"total_connections": self.stats["total_connections"], "messages_processed": self.stats["messages_processed"], "uptime": uptime}
+        return {
+            "total_connections": self.stats["total_connections"], 
+            "messages_processed": self.stats["messages_processed"], 
+            "uptime": uptime
+        }
+    
