@@ -124,6 +124,63 @@ log('  - BLOOM_BASE:', BLOOM_BASE);
 log('  - BRAIN_EXE:', BRAIN_EXE);
 
 // ============================================================================
+// 🔥 JSON PARSING UTILITY
+// ============================================================================
+
+function parseCLIJson(stdout) {
+  try {
+    // Estrategia 1: Buscar líneas que empiecen con { y terminen con }
+    const lines = stdout.split('\n');
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+        try {
+          return JSON.parse(trimmed);
+        } catch {
+          continue;
+        }
+      }
+    }
+    
+    // Estrategia 2: Regex mejorado
+    const potentialJsons = stdout.match(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g);
+    if (potentialJsons) {
+      for (const candidate of potentialJsons) {
+        try {
+          return JSON.parse(candidate);
+        } catch {
+          continue;
+        }
+      }
+    }
+    
+    // Estrategia 3: Fallback con contador de llaves
+    let depth = 0;
+    let start = -1;
+    
+    for (let i = 0; i < stdout.length; i++) {
+      if (stdout[i] === '{') {
+        if (depth === 0) start = i;
+        depth++;
+      } else if (stdout[i] === '}') {
+        depth--;
+        if (depth === 0 && start !== -1) {
+          try {
+            return JSON.parse(stdout.substring(start, i + 1));
+          } catch {
+            start = -1;
+          }
+        }
+      }
+    }
+    
+    throw new Error('No valid JSON found in output');
+  } catch (error) {
+    throw new Error(`JSON parse failed: ${error.message}`);
+  }
+}
+
+// ============================================================================
 // 🔥 HEARTBEAT IMPLEMENTATION (Brain CLI)
 // ============================================================================
 
@@ -135,69 +192,46 @@ log('  - BRAIN_EXE:', BRAIN_EXE);
 async function checkHostStatus() {
   return new Promise((resolve) => {
     const brainPath = getBrainExecutablePath();
+    if (!fs.existsSync(brainPath)) return resolve({ connected: false, port: null, error: 'brain.exe not found' });
     
-    // Verificar que brain.exe existe
-    if (!fs.existsSync(brainPath)) {
-      safeLog('⚠️', '[Heartbeat] brain.exe not found at:', brainPath);
-      return resolve({ connected: false, port: null, error: 'brain.exe not found' });
-    }
-    
-    // Ejecutar: brain health native-ping --json
-    const child = spawn(brainPath, ['health', 'native-ping', '--json'], {
+    const child = spawn(brainPath, ['--json', 'health', 'native-ping'], {
       cwd: getBrainWorkingDirectory(),
-      env: { ...process.env },
+      env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
       shell: true,
       windowsHide: true
     });
     
     let stdout = '';
-    let stderr = '';
-    
-    child.stdout.on('data', (data) => {
-      stdout += data.toString();
-    });
-    
-    child.stderr.on('data', (data) => {
-      stderr += data.toString();
-    });
+    let stderr = ''; 
+
+    child.stdout.on('data', (data) => { stdout += data.toString(); });
+    child.stderr.on('data', (data) => { stderr += data.toString(); }); 
     
     child.on('close', (code) => {
       try {
-        // Parsear la última línea como JSON
-        const lines = stdout.trim().split('\n');
-        const lastLine = lines[lines.length - 1];
-        const json = JSON.parse(lastLine);
+        const json = parseCLIJson(stdout);
         
-        // Estructura esperada: { status: "success", data: { connected: true, port: 5678 } }
         if (json.data) {
           resolve(json.data);
+        } else if (json.connected !== undefined) {
+          resolve(json);
         } else {
-          resolve({ connected: false, port: null });
+          resolve({ connected: false, port: null, error: 'Invalid JSON structure' });
         }
       } catch (e) {
-        safeLog('⚠️', '[Heartbeat] Failed to parse JSON:', e.message);
-        if (IS_DEV) {
-          safeLog('🔍', '[Heartbeat] stdout:', stdout);
-          safeLog('🔍', '[Heartbeat] stderr:', stderr);
+        if (stderr) {  // ← AHORA SÍ EXISTE
+          console.error('[Heartbeat] stderr:', stderr);
         }
-        resolve({ connected: false, port: null, error: 'parse error' });
+        resolve({ connected: false, port: null, error: `parse error: ${e.message}` });
       }
     });
     
-    child.on('error', (err) => {
-      safeLog('⚠️', '[Heartbeat] Command error:', err.message);
-      resolve({ connected: false, port: null, error: err.message });
-    });
-    
-    // Timeout de seguridad
-    setTimeout(() => {
-      if (!child.killed) {
-        child.kill();
-        resolve({ connected: false, port: null, error: 'timeout' });
-      }
-    }, HEARTBEAT_CONFIG.TIMEOUT);
+    child.on('error', (err) => resolve({ connected: false, port: null, error: err.message }));
+    setTimeout(() => { if (!child.killed) child.kill(); resolve({ connected: false, port: null, error: 'timeout' }); }, 10000);
   });
 }
+
+
 
 /**
  * Ejecuta un comando brain genérico y retorna el JSON parseado
@@ -205,50 +239,29 @@ async function checkHostStatus() {
 async function executeBrainCommand(args) {
   return new Promise((resolve, reject) => {
     const brainPath = getBrainExecutablePath();
-    
-    if (!fs.existsSync(brainPath)) {
-      return reject(new Error('brain.exe not found'));
-    }
-    
     const child = spawn(brainPath, args, {
       cwd: getBrainWorkingDirectory(),
-      env: { ...process.env },
+      env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
       shell: true,
       windowsHide: true
     });
     
     let stdout = '';
     let stderr = '';
-    
-    child.stdout.on('data', (data) => {
-      stdout += data.toString();
-    });
-    
-    child.stderr.on('data', (data) => {
-      stderr += data.toString();
-    });
+    child.stdout.on('data', (data) => { stdout += data.toString(); });
     
     child.on('close', (code) => {
       try {
-        const lines = stdout.trim().split('\n');
-        const lastLine = lines[lines.length - 1];
-        const json = JSON.parse(lastLine);
-        resolve(json);
+        const result = parseCLIJson(stdout);  // ← USA LA NUEVA FUNCIÓN
+        resolve(result);
       } catch (e) {
-        reject(new Error(`Failed to parse JSON: ${e.message}`));
+        if (stderr) {
+          console.error('[Brain CLI] stderr:', stderr);
+        }
+        reject(new Error(`Failed to parse JSON: ${e.message}\nOutput: ${stdout.substring(0, 200)}`));
       }
     });
-    
-    child.on('error', (err) => {
-      reject(err);
-    });
-    
-    setTimeout(() => {
-      if (!child.killed) {
-        child.kill();
-        reject(new Error('Command timeout'));
-      }
-    }, HEARTBEAT_CONFIG.TIMEOUT);
+    child.on('error', (err) => reject(err));
   });
 }
 
@@ -469,24 +482,46 @@ function registerInstallHandlers() {
   });
   
   // Launch "God Mode" (brain CLI con profile maestro)
-  ipcMain.handle('brain:launch', async () => {
+  ipcMain.handle('brain:launch', async (event, profileIdOrObject) => {
     try {
-      log('🚀 Launching master profile...');
+      // Normalizar input: aceptar tanto string como objeto
+      let profileId;
       
-      // Ejecutar: brain profile launch master
-      const result = await executeBrainCommand(['profile', 'launch', 'master', '--json']);
-      
-      if (result.success) {
-        log('✅ Master profile launched');
+      if (typeof profileIdOrObject === 'string') {
+        profileId = profileIdOrObject;
+      } else if (typeof profileIdOrObject === 'object' && profileIdOrObject !== null) {
+        profileId = profileIdOrObject.profileId 
+                || profileIdOrObject.id 
+                || profileIdOrObject.uuid
+                || profileIdOrObject.data?.id
+                || profileIdOrObject.data?.profileId;
       }
       
+      log(`🚀 [MAIN] Launching profile: ${profileId}`);
+      
+      if (!profileId || profileId === 'undefined' || profileId === 'null') {
+        const errorMsg = `Profile ID is missing or invalid. Received: ${JSON.stringify(profileIdOrObject)}`;
+        error(`❌ ${errorMsg}`);
+        return { 
+          success: false, 
+          error: errorMsg,
+          received: profileIdOrObject 
+        };
+      }
+      
+      log(`🔧 Executing: brain --json profile launch ${profileId} --cockpit`);
+      
+      const result = await executeBrainCommand(['--json', 'profile', 'launch', profileId, '--cockpit']);
+      
+      log("✅ Profile launched successfully:", result);
       return result;
       
-    } catch (error) {
-      error('❌ Failed to launch profile:', error.message);
-      return {
-        success: false,
-        error: error.message
+    } catch (err) {
+      error("❌ Launch error:", err.message);
+      return { 
+        success: false, 
+        error: err.message,
+        stack: err.stack 
       };
     }
   });

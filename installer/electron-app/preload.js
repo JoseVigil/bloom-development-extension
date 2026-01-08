@@ -24,7 +24,7 @@ const API = {
   // ==========================================
   
   installService: () => ipcRenderer.invoke('install:start'),
-  launchGodMode: () => ipcRenderer.invoke('brain:launch'),
+  launchGodMode: (profileId) => ipcRenderer.invoke('brain:launch', profileId),
   checkExtensionHeartbeat: () => ipcRenderer.invoke('extension:heartbeat'),
   preflightChecks: () => ipcRenderer.invoke('preflight-checks'),
   

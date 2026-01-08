@@ -151,12 +151,15 @@ class InstallationManager {
       console.log("🚀 [AUTO] Lanzando Chrome con perfil...");
       await this.sleep(500);
       
-      const launchResult = await this.api.launchGodMode();
-      if (!launchResult.success) {
-        throw new Error("Error al lanzar Chrome: " + launchResult.error);
+      const launchResult = await this.api.launchGodMode(this.profileId);
+
+      // Validar respuesta - el CLI retorna { status: "success", data: {...} }
+      if (!launchResult || launchResult.status !== 'success') {
+        const errorMsg = launchResult?.error || 'Unknown error';
+        throw new Error("Error al lanzar Chrome: " + errorMsg);
       }
-      
-      console.log("✅ [AUTO] Chrome lanzado, iniciando heartbeat...");
+
+      console.log("✅ [AUTO] Chrome lanzado exitosamente");
       
       // 4. INICIAR HEARTBEAT (60 segundos de timeout)
       this.startHeartbeatMonitoring(60);
