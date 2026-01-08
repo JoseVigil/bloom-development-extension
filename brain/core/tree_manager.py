@@ -19,6 +19,8 @@ class TreeManager:
 
     EXCLUDED_DIRS = {
         'node_modules': '[... dependencies]',
+        '_internal': '[... dependencies]',
+        'runtime_libs': '[... dependencies]',
         '.git': '[... git data]',
         '__pycache__': '[... cache]',
         '.next': '[... build cache]',
