@@ -1,12 +1,16 @@
-// installer.js - SECUENCIA CORREGIDA
+// installer.js - SECUENCIA CORREGIDA Y FUNCIONAL
 // ============================================================================
-// ORDEN SAGRADO DE INSTALACIÓN:
-// 1. Copiar extensión (para detectar manifest.json)
-// 2. Calcular Extension ID (desde la key del manifest)
-// 3. Copiar binarios (brain.exe, bloom-host.exe)
-// 4. Crear JSON del host (con el Extension ID correcto)
-// 5. Registrar en Windows Registry (apuntando al JSON)
-// 6. Crear perfil y configuración final
+// ORDEN SAGRADO DE INSTALACIÓN (CORREGIDO):
+// 1. Limpieza (servicios + procesos)
+// 2. Crear directorios
+// 3. Copiar extensión (para detectar manifest.json)
+// 4. Calcular Extension ID (desde la key del manifest)
+// 5. Instalar runtime (Python engine)
+// 6. Copiar binarios (brain.exe, bloom-host.exe)
+// 7. Crear JSON del host (con el Extension ID correcto)
+// 8. Registrar en Windows Registry (HKLM - global)
+// 9. Instalar y arrancar servicio
+// 10. Crear perfil y configuración final
 // ============================================================================
 
 const path = require('path');
@@ -14,9 +18,8 @@ const fs = require('fs-extra');
 const { paths } = require('../config/paths');
 const { isElevated, relaunchAsAdmin } = require('../core/admin-utils');
 const { BrowserWindow, app } = require('electron');
-const { execFile } = require('child_process'); 
+const { execFile, execSync } = require('child_process'); 
 const crypto = require('crypto');
-const os = require('os');
 
 // Importadores
 const { 
@@ -31,29 +34,8 @@ const {
 } = require('./runtime-installer');
 const { SERVICE_NAME } = require('../config/constants');
 const { installExtension, calculateExtensionIdFromManifest } = require('./extension-installer');
-const { setupNativeHostBridge } = require('./native-host-manifest');
 
 const APP_VERSION = app ? app.getVersion() : process.env.npm_package_version || '1.0.0';
-
-// ============================================================================
-// HELPER: Calcular Extension ID desde Base64 Key
-// ============================================================================
-// NOTA: Esta función está deprecada - usar calculateExtensionIdFromManifest()
-// Se mantiene solo por compatibilidad con código legacy
-function calculateExtensionId(base64Key) {
-  try {
-    const buffer = Buffer.from(base64Key, 'base64');
-    const hash = crypto.createHash('sha256').update(buffer).digest('hex');
-    const head = hash.slice(0, 32);
-    return head.split('').map(char => {
-      const code = parseInt(char, 16);
-      return String.fromCharCode(97 + code);
-    }).join('');
-  } catch (e) {
-    console.error("❌ Error calculando ID:", e);
-    throw e;
-  }
-}
 
 // ============================================================================
 // HELPER: Emitir progreso
@@ -82,18 +64,13 @@ function emitProgress(mainWindow, stepKey, detail = '') {
 const INSTALLATION_STEPS = [
   { key: 'cleanup', percentage: 0, message: '🧹 Limpiando instalación anterior...' },
   { key: 'directories', percentage: 10, message: '📁 Creando estructura de directorios...' },
-  
-  // ⚙️ EL MOTOR: Sin esto el Brain Service no arranca (Offline)
-  { key: 'brain-runtime', percentage: 25, message: '⚙️ Instalando motor Brain (Python Runtime)...' },
-  
-  { key: 'extension', percentage: 40, message: '🧩 Desplegando extensión Chrome...' },
-  { key: 'extension-id', percentage: 50, message: '🔑 Calculando Extension ID...' },
-  
-  // 🔧 LOS BINARIOS: El Service (brain.exe) y el Host (bloom-host.exe)
-  { key: 'binaries', percentage: 65, message: '🔧 Copiando binarios (Brain Service + Host)...' },
-  
-  { key: 'bridge', percentage: 80, message: '🔗 Configurando Native Messaging Bridge...' },
-  { key: 'profile', percentage: 90, message: '👤 Creando perfil Master Worker...' },
+  { key: 'extension', percentage: 25, message: '🧩 Desplegando extensión Chrome...' },
+  { key: 'extension-id', percentage: 35, message: '🔑 Calculando Extension ID...' },
+  { key: 'brain-runtime', percentage: 45, message: '⚙️ Instalando motor Brain (Python Runtime)...' },
+  { key: 'binaries', percentage: 60, message: '🔧 Copiando binarios (Brain Service + Host)...' },
+  { key: 'bridge', percentage: 75, message: '🔗 Configurando Native Messaging Bridge...' },
+  { key: 'service', percentage: 85, message: '🚀 Instalando y arrancando servicio...' },
+  { key: 'profile', percentage: 95, message: '👤 Creando perfil Master Worker...' },
   { key: 'complete', percentage: 100, message: '✅ ¡Instalación completada exitosamente!' }
 ];
 
@@ -116,46 +93,29 @@ async function createDirectories() {
   console.log('✅ Directories created');
 }
 
-async function cleanupProcesses() {
-  console.log('\n🧹 STARTING CLEANUP PROCESS');
-  if (process.platform === 'win32') {
-    const { removeService, OLD_SERVICE_NAME } = require('./service-installer');
-    
-    console.log(`🛑 Stopping services...`);
-    await removeService(SERVICE_NAME);
-    if (OLD_SERVICE_NAME) await removeService(OLD_SERVICE_NAME);
-    
-    console.log('🔍 Verifying no orphan processes remain...');
-    await killAllBloomProcesses();
-    await new Promise(r => setTimeout(r, 2000));
-  }
-  
-  try {
-    if (await fs.pathExists(paths.brainDir)) await fs.remove(paths.brainDir);
-    if (await fs.pathExists(paths.extensionDir)) await fs.emptyDir(paths.extensionDir);
-    console.log('✅ Non-native cleanup completed');
-  } catch (cleanError) {
-    console.warn('⚠️ Cleanup warning:', cleanError.message);
-  }
-}
-
 async function cleanNativeDir() {
-  console.log('\n🧹 CLEANING NATIVE DIRECTORY');
+  console.log('\n🧹 CLEANING NATIVE DIRECTORY (preservando extensión)');
   try {
     if (await fs.pathExists(paths.nativeDir)) {
-      await fs.emptyDir(paths.nativeDir);
+      // Solo limpiar archivos específicos, NO la carpeta completa
+      const files = await fs.readdir(paths.nativeDir);
+      for (const file of files) {
+        const ext = path.extname(file).toLowerCase();
+        if (['.exe', '.json', '.dll', '.log'].includes(ext)) {
+          await fs.remove(path.join(paths.nativeDir, file));
+        }
+      }
     } else {
       await fs.ensureDir(paths.nativeDir);
     }
-    console.log('✅ Native directory cleaned');
+    console.log('✅ Native directory cleaned (extensión preservada)');
   } catch (e) {
-    console.warn('⚠️ Could not clean native dir completely (locked files?)');
+    console.warn('⚠️ Could not clean native dir completely:', e.message);
   }
 }
 
 /**
  * PASO 1: Copiar extensión (estructura plana)
- * Delega al módulo extension-installer
  */
 async function deployExtension() {
   console.log('\n🧩 DEPLOYING CHROME EXTENSION');
@@ -164,57 +124,123 @@ async function deployExtension() {
 
 /**
  * PASO 2: Calcular Extension ID desde el manifest
- * Delega al módulo extension-installer
  */
 async function extractExtensionId() {
   console.log('\n🔑 CALCULATING EXTENSION ID');
-  
-  // Usar la función centralizada
   const extensionId = await calculateExtensionIdFromManifest(paths.extensionDir);
   console.log('🔑 Calculated Extension ID:', extensionId);
-  
   return extensionId;
 }
 
 /**
- * PASO 3: Copiar binarios (brain.exe, bloom-host.exe, python runtime)
+ * PASO 3: Copiar binarios (brain.exe, bloom-host.exe)
  */
 async function deployBinaries() {
   console.log('\n🔧 DEPLOYING BINARIES');
-  
-  // Esta función debe copiar:
-  // - brain.exe → paths.brainExe
-  // - bloom-host.exe → paths.hostBinary
-  // - Python runtime (si aplica)
-  
-  // TODO: Implementar la lógica de copia según tu estructura
-  // Por ahora, asumimos que installNativeHost() lo hace
   const { installNativeHost } = require('./native-host-installer');
   await installNativeHost();
-  
   console.log('✅ Binaries deployed');
 }
 
 /**
- * PASO 4: Crear el manifest JSON del Native Host (CON Extension ID)
- * Delega al módulo native-host-manifest
+ * PASO 4: Crear el manifest JSON del Native Host + Registry HKLM
  */
-async function createHostManifest(extensionId) {
-  console.log('\n📝 CREATING NATIVE HOST MANIFEST');
-  const result = await setupNativeHostBridge(extensionId);
+async function createHostManifestInHKLM(extensionId) {
+  console.log('\n📄 CREATING NATIVE HOST MANIFEST (HKLM)');
   
-  if (!result.success) {
-    throw new Error('Failed to setup Native Host Bridge');
+  // 1. Crear el JSON con el ID correcto
+  const manifestContent = {
+    name: "com.bloom.nucleus.bridge",
+    description: "Bloom Nucleus Native Messaging Host",
+    path: paths.hostBinary.replace(/\//g, '\\'),
+    type: "stdio",
+    allowed_origins: [
+      `chrome-extension://${extensionId}/`
+    ]
+  };
+  
+  const manifestPath = path.join(paths.nativeDir, 'com.bloom.nucleus.bridge.json');
+  
+  // 2. Guardar JSON
+  await fs.writeJson(manifestPath, manifestContent, { spaces: 2 });
+  console.log('✅ Manifest JSON creado:', manifestPath);
+  
+  // 3. Registrar en HKLM (global para todos los usuarios)
+  const { spawnSync } = require('child_process');
+  const hostName = 'com.bloom.nucleus.bridge';
+  const registryKey = `HKLM\\SOFTWARE\\Google\\Chrome\\NativeMessagingHosts\\${hostName}`;
+  const manifestPathWindows = manifestPath.replace(/\//g, '\\');
+  
+  console.log('\n📝 REGISTRANDO EN HKLM (Global)');
+  console.log(`   Clave: ${registryKey}`);
+  console.log(`   Manifest: ${manifestPathWindows}`);
+  console.log(`   Extension ID: ${extensionId}`);
+  
+  try {
+    // Usar spawnSync para evitar problemas de escaping
+    const result = spawnSync('reg', [
+      'add', registryKey,
+      '/ve', '/t', 'REG_SZ',
+      '/d', manifestPathWindows,
+      '/f'
+    ], { 
+      stdio: 'inherit', 
+      windowsHide: true 
+    });
+    
+    if (result.error) throw result.error;
+    
+    // Verificar que se escribió
+    const verifyResult = spawnSync('reg', [
+      'query', registryKey, '/ve'
+    ], { 
+      encoding: 'utf8',
+      windowsHide: true 
+    });
+    
+    const output = verifyResult.stdout || '';
+    
+    if (output.includes(manifestPathWindows)) {
+      console.log('✅ Registry HKLM actualizada y verificada');
+    } else {
+      throw new Error('Verificación falló: Manifest no encontrado en HKLM');
+    }
+    
+  } catch (error) {
+    console.error('❌ Error escribiendo en Registry HKLM:', error.message);
+    
+    // Fallback: intentar con HKCU
+    console.log('\n⚠️ Fallback: Intentando HKCU del usuario actual...');
+    const hkcuKey = `HKCU\\Software\\Google\\Chrome\\NativeMessagingHosts\\${hostName}`;
+    
+    try {
+      const fallbackResult = spawnSync('reg', [
+        'add', hkcuKey,
+        '/ve', '/t', 'REG_SZ',
+        '/d', manifestPathWindows,
+        '/f'
+      ], { 
+        stdio: 'inherit', 
+        windowsHide: true 
+      });
+      
+      if (fallbackResult.error) throw fallbackResult.error;
+      console.log('✅ Registry HKCU actualizada (fallback)');
+    } catch (fallbackError) {
+      throw new Error(`No se pudo escribir en Registry: ${fallbackError.message}`);
+    }
   }
   
-  console.log('✅ Native Host Bridge configured successfully');
-  console.log(`   Extension ID: ${result.extensionId}`);
-  console.log(`   Manifest: ${result.manifestPath}`);
-  console.log(`   Registry Key: ${result.registryKey}`);
+  return {
+    success: true,
+    extensionId,
+    manifestPath: manifestPathWindows,
+    registryKey
+  };
 }
 
 /**
- * PASO 6: Crear perfil maestro usando brain.exe
+ * PASO 5: Crear perfil maestro usando brain.exe
  */
 async function initializeMasterProfile() {
   console.log('\n👤 CREATING MASTER PROFILE');
@@ -235,6 +261,8 @@ async function initializeMasterProfile() {
       windowsHide: true,
       env: { 
         ...process.env, 
+        // 🚨 AJUSTE CRÍTICO: Aseguramos que el CLI use la misma ruta que el runtime-installer
+        LOCALAPPDATA: process.env.LOCALAPPDATA, 
         BLOOM_EXTENSION_PATH: paths.extensionDir,
         PYTHONIOENCODING: 'utf-8'
       } 
@@ -270,6 +298,7 @@ async function initializeMasterProfile() {
         
       } catch (parseError) {
         console.error("Parse Error. Raw Output:", output);
+        // Mantenemos tu robusto fallback por si el perfil ya existe
         if (output.includes('MasterWorker') || output.includes('already exists')) {
           console.log("⚠️ Fallback: Usando alias como ID ante error de parseo.");
           return resolve("MasterWorker");
@@ -290,15 +319,16 @@ async function runFullInstallation(mainWindow = null) {
     return { success: false, relaunching: true, message: 'Relaunching as Admin...' };
   }
 
-  console.log(`\n=== STARTING BRAIN DEPLOYMENT (${process.platform}) ===\n`);
+  console.log(`\n=== STARTING BRAIN DEPLOYMENT (Secuencia Corregida) ===\n`);
 
   try {
     // ========================================================================
-    // PASO 0: LIMPIEZA AGRESIVA
+    // PASO 0: LIMPIEZA AGRESIVA (CORREGIDO)
     // ========================================================================
     emitProgress(mainWindow, 'cleanup', 'Deteniendo servicios y matando procesos');
-    await cleanupOldServices(); // Usa tu lógica de limpieza atómica
-    await cleanNativeDir();
+    await cleanupOldServices();  // ✅ Función correcta
+    await killAllBloomProcesses();  // ✅ Matar procesos huérfanos
+    await cleanNativeDir();  // ✅ Limpiar native/ sin tocar extension/
     
     // ========================================================================
     // PASO 1: CREAR DIRECTORIOS
@@ -307,13 +337,7 @@ async function runFullInstallation(mainWindow = null) {
     await createDirectories();
 
     // ========================================================================
-    // PASO 2: INSTALAR RUNTIME (EL MOTOR) 🚀 <-- RECUPERADO
-    // ========================================================================
-    emitProgress(mainWindow, 'brain-runtime', 'Instalando motor Brain (Python Engine)');
-    await installRuntime(); // Copia el engine/runtime y configura el .pth
-    
-    // ========================================================================
-    // PASO 3: DESPLEGAR EXTENSIÓN E ID
+    // PASO 2: DESPLEGAR EXTENSIÓN E ID (PRIMERO)
     // ========================================================================
     emitProgress(mainWindow, 'extension', 'Desplegando extensión Chrome');
     await deployExtension();
@@ -323,33 +347,40 @@ async function runFullInstallation(mainWindow = null) {
     console.log(`🔑 Extension ID: ${extensionId}`);
     
     // ========================================================================
-    // PASO 4: BINARIOS Y SERVICIO (EL CEREBRO)
+    // PASO 3: INSTALAR RUNTIME (EL MOTOR) 🚀
+    // ========================================================================
+    emitProgress(mainWindow, 'brain-runtime', 'Instalando motor Brain (Python Engine)');
+    await installRuntime();
+    
+    // ========================================================================
+    // PASO 4: BINARIOS (brain.exe + bloom-host.exe)
     // ========================================================================
     emitProgress(mainWindow, 'binaries', 'Instalando Brain Service y Host');
-    await deployBinaries(); // Copia brain.exe y bloom-host.exe
+    await deployBinaries();
     
-    // Instalamos y arrancamos el servicio de Windows (Multiplexor)
-    // Ahora sí funcionará porque el PASO 2 ya instaló el motor de Python
+    // ========================================================================
+    // PASO 5: NATIVE MESSAGING BRIDGE (CON Extension ID correcto)
+    // ========================================================================
+    emitProgress(mainWindow, 'bridge', 'Registrando Native Messaging en HKLM');
+    await createHostManifestInHKLM(extensionId);
+    
+    // ========================================================================
+    // PASO 6: SERVICIO (DESPUÉS del bridge)
+    // ========================================================================
+    emitProgress(mainWindow, 'service', 'Instalando y arrancando multiplexor');
     await installWindowsService();
     const started = await startService();
     if (!started) throw new Error("No se pudo iniciar el multiplexor (Brain Service)");
     
     // ========================================================================
-    // PASO 5: NATIVE MESSAGING BRIDGE
-    // ========================================================================
-    emitProgress(mainWindow, 'bridge', 'Registrando Native Messaging en Windows');
-    await createHostManifest(extensionId); // Crea el JSON con la barra final y registra en HKLM/HKCU
-    
-    // ========================================================================
-    // PASO 6: CREAR PERFIL MAESTRO
+    // PASO 7: CREAR PERFIL MAESTRO
     // ========================================================================
     emitProgress(mainWindow, 'profile', 'Configurando perfil Master Worker');
-    // Esto ejecuta "brain profile create" usando el servicio que ya está arriba
     const profileId = await initializeBrainProfile();
     console.log('✅ Master Profile ID:', profileId);
     
     // ========================================================================
-    // PASO 7: GUARDAR CONFIGURACIÓN FINAL
+    // PASO 8: GUARDAR CONFIGURACIÓN FINAL
     // ========================================================================
     console.log('💾 Saving final config...');
     const configPath = paths.configFile;
@@ -386,7 +417,7 @@ async function runFullInstallation(mainWindow = null) {
 
   } catch (error) {
     console.error('\n❌ FATAL ERROR IN INSTALLATION:', error);
-    // Intentar limpiar si algo falló para no dejar servicios zombies
+    // Intentar limpiar si algo falló
     await cleanupOldServices().catch(() => {});
     return { success: false, error: error.message };
   }
@@ -395,6 +426,5 @@ async function runFullInstallation(mainWindow = null) {
 module.exports = {
   runFullInstallation,
   createDirectories,
-  cleanupProcesses,
   cleanNativeDir
 };

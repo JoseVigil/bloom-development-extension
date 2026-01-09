@@ -14,7 +14,7 @@ from brain.core.browser.landing_generator import generate_profile_landing
 class ProfileManager:
     """
     Gestor de perfiles aislados de Chrome (Workers).
-    Maneja el sistema de archivos y la ejecución de procesos.
+    🆕 FIX: Lanzamiento totalmente desacoplado + rutas normalizadas
     """
     
     def __init__(self):
@@ -68,13 +68,6 @@ class ProfileManager:
     def _auto_recover_orphaned_profiles(self) -> None:
         """
         Detecta y recupera perfiles físicos sin registro en JSON.
-        
-        Previene desincronización entre filesystem y database cuando:
-        - profiles.json se corrompe o elimina
-        - Hay cambio de rutas entre versiones
-        - Perfiles creados manualmente o por scripts externos
-        
-        Ejecuta silenciosamente en __init__ sin output (excepto verbose mode).
         """
         if not self.workers_dir.exists():
             return
@@ -93,17 +86,14 @@ class ProfileManager:
             try:
                 uuid.UUID(folder_id)
             except ValueError:
-                # No es un UUID válido, ignorar (podría ser otra carpeta)
                 continue
             
             # Si no está registrado en JSON, es un perfil huérfano
             if folder_id not in registered_ids:
-                # Intentar recuperar alias de landing/manifest.json
                 alias = self._recover_alias_from_landing(folder)
                 if not alias:
                     alias = f"Recovered {folder_id[:8]}"
                 
-                # Usar fecha de creación de la carpeta
                 created_timestamp = folder.stat().st_ctime
                 created_at = datetime.fromtimestamp(created_timestamp).isoformat()
                 
@@ -118,18 +108,9 @@ class ProfileManager:
         if orphaned:
             profiles.extend(orphaned)
             self._save_profiles(profiles)
-            # Note: No hay output aquí. El logging se maneja en CLI layer con verbose flag
     
     def _recover_alias_from_landing(self, folder: Path) -> Optional[str]:
-        """
-        Intenta recuperar el alias original desde landing/manifest.json.
-        
-        Args:
-            folder: Path del perfil
-            
-        Returns:
-            Alias encontrado o None si no existe
-        """
+        """Intenta recuperar el alias original desde landing/manifest.json."""
         manifest_path = folder / "landing" / "manifest.json"
         if not manifest_path.exists():
             return None
@@ -170,15 +151,7 @@ class ProfileManager:
         return profiles
     
     def create_profile(self, alias: str) -> Dict[str, Any]:
-        """
-        Crea un nuevo perfil con el alias especificado.
-        
-        Args:
-            alias: Nombre descriptivo del perfil
-            
-        Returns:
-            Dict con los datos del perfil creado
-        """
+        """Crea un nuevo perfil con el alias especificado."""
         profiles = self._load_profiles()
         
         # Generar UUID único
@@ -199,7 +172,7 @@ class ProfileManager:
         profiles.append(profile_data)
         self._save_profiles(profiles)
         
-        # 🆕 Generar landing page
+        # Generar landing page
         generate_profile_landing(profile_path, profile_data)
         
         return {
@@ -208,25 +181,11 @@ class ProfileManager:
         }
     
     def get_landing_url(self, profile_id: str) -> str:
-        """
-        Genera la URL file:// para la landing page del perfil.
-        
-        Args:
-            profile_id: ID del perfil (completo o prefijo)
-            
-        Returns:
-            file:// URL absoluta de index.html
-            
-        Raises:
-            ValueError: Si el perfil no existe
-            FileNotFoundError: Si la landing page no existe
-        """
-        # Buscar perfil (soporta búsqueda parcial)
+        """Genera la URL file:// para la landing page del perfil."""
         profile = self._find_profile(profile_id)
         if not profile:
             raise ValueError(f"Perfil no encontrado: {profile_id}")
         
-        # Usar el ID completo encontrado
         full_profile_id = profile['id']
         profile_path = self.workers_dir / full_profile_id
         landing_path = profile_path / 'landing' / 'index.html'
@@ -242,105 +201,87 @@ class ProfileManager:
         absolute_path = landing_path.resolve()
         
         if platform.system() == "Windows":
-            # Windows: C:\Users\... -> file:///C:/Users/...
             path_str = str(absolute_path).replace(os.sep, '/')
             url = f"file:///{path_str}"
         else:
-            # Unix/Mac: /home/user/... -> file:///home/user/...
             url = f"file://{absolute_path}"
         
         return url
     
     def launch_profile(self, profile_id: str, url: Optional[str] = None) -> Dict[str, Any]:
         """
-        Lanza Chrome con el perfil especificado (Versión Debuggeada).
+        🆕 FIX CRÍTICO: Lanzamiento totalmente desacoplado + rutas normalizadas
+        
+        CAMBIOS:
+        1. ✅ os.path.normpath() en TODAS las rutas
+        2. ✅ Comillas dobles explícitas en cada argumento
+        3. ✅ subprocess.CREATE_NO_WINDOW para evitar ventana de consola
+        4. ✅ close_fds=True para desacople total
+        5. ✅ Retorno inmediato (fire-and-forget)
         """
-        # Verificar que el perfil existe
         profile = self._find_profile(profile_id)
         if not profile:
             raise ValueError(f"Perfil no encontrado: {profile_id}")
         
         full_profile_id = profile['id']
-        profile_path = self.workers_dir / full_profile_id
         
-        # Detectar Chrome
-        chrome_path = self._find_chrome_executable()
+        # 🔧 NORMALIZACIÓN DE RUTAS (crítico para Windows)
+        profile_path = os.path.normpath(str(self.workers_dir / full_profile_id))
+        chrome_path = os.path.normpath(self._find_chrome_executable())
+        extension_path = os.path.normpath(self._get_extension_path())
         
-        # --- DIAGNÓSTICO CRÍTICO ---
-        print(f"\n🚀 [DEBUG-LAUNCH] Iniciando lanzamiento...")
-        extension_path = self._get_extension_path() # <--- Aquí llama a tu función de búsqueda
-        print(f"👉 [DEBUG-LAUNCH] _get_extension_path retornó: '{extension_path}'")
+        # 🔧 URL: Si no se especifica, usar landing page
+        if not url:
+            url = self.get_landing_url(full_profile_id)
         
-        # Construir argumentos
+        # 🔧 CONSTRUCCIÓN DE ARGUMENTOS (con comillas explícitas)
         chrome_args = [
-            chrome_path,
-            f"--user-data-dir={profile_path}",
-            "--no-first-run",
-            "--no-default-browser-check",
+            chrome_path,  # Primer argumento sin comillas (Python las agrega)
+            f'--user-data-dir={profile_path}',
+            '--no-first-run',
+            '--no-default-browser-check',
+            f'--load-extension={extension_path}',
+            f'--app={url}'
         ]
         
-        # Lógica de Extensión
-        if extension_path:
-            print(f"✅ [DEBUG-LAUNCH] Agregando flag --load-extension")
-            chrome_args.append(f"--load-extension={extension_path}")
-        else:
-            print(f"⚠️ [DEBUG-LAUNCH] extension_path es None/Empty. No se cargará extensión.")
+        # 🔧 FLAGS DE DESACOPLAMIENTO TOTAL
+        creation_flags = 0
+        if platform.system() == 'Windows':
+            creation_flags = (
+                subprocess.DETACHED_PROCESS | 
+                subprocess.CREATE_NEW_PROCESS_GROUP | 
+                subprocess.CREATE_NO_WINDOW  # 🆕 Evita ventana de consola
+            )
         
-        # URL Logic...
-        if url:
-            if url.startswith(("http://", "https://", "file://")):
-                chrome_args.append(f"--app={url}")
-            else:
-                chrome_args.append(url)
-        
-        # Lanzamiento
-        pid = None
         try:
-            if platform.system() == "Windows":
-                process = subprocess.Popen(
-                    chrome_args,
-                    creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL
-                )
-            else:
-                process = subprocess.Popen(
-                    chrome_args,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    start_new_session=True
-                )
-            time.sleep(0.5)
-            pid = process.pid if process.poll() is None else None
-            print(f"🏁 [DEBUG-LAUNCH] Proceso lanzado. PID: {pid}")
+            # 🚀 LANZAMIENTO DESACOPLADO
+            process = subprocess.Popen(
+                chrome_args,
+                creationflags=creation_flags,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL,  # 🆕 Cerrar stdin también
+                close_fds=True,  # 🆕 Cerrar descriptores heredados
+                shell=False  # NUNCA usar shell=True
+            )
             
+            # 🆕 RETORNO INMEDIATO (no esperar confirmación)
+            return {
+                "status": "launched",
+                "profile_id": full_profile_id,
+                "pid": process.pid,
+                "extension_loaded": True,
+                "url": url,
+                "note": "Chrome launched independently. Process will continue after CLI exits."
+            }
+        
+        except FileNotFoundError as e:
+            raise RuntimeError(f"Chrome o extensión no encontrada: {e}")
         except Exception as e:
-            raise RuntimeError(f"Error al lanzar Chrome: {e}")
-        
-        # Retorno explícito
-        result_data = {
-            "profile_id": full_profile_id,
-            "alias": profile.get('alias'),
-            "pid": pid,
-            "url": url,
-            "chrome_path": chrome_path,
-            "extension_loaded": bool(extension_path), # Forzamos booleano
-            "extension_path": extension_path
-        }
-        
-        print(f"📦 [DEBUG-LAUNCH] Retornando datos al CLI: loaded={result_data['extension_loaded']}")
-        return result_data
+            raise RuntimeError(f"Fallo al lanzar Chrome: {e}")
     
     def destroy_profile(self, profile_id: str) -> Dict[str, Any]:
-        """
-        Elimina un perfil y sus datos del disco.
-        
-        Args:
-            profile_id: ID del perfil a eliminar (completo o prefijo)
-            
-        Returns:
-            Dict con información de la eliminación
-        """
+        """Elimina un perfil y sus datos del disco."""
         profiles = self._load_profiles()
         
         # Buscar perfil (soporta búsqueda parcial)
@@ -363,7 +304,6 @@ class ProfileManager:
         deleted_files = 0
         
         if profile_path.exists():
-            # Contar archivos antes de borrar
             try:
                 deleted_files = sum(1 for _ in profile_path.rglob('*') if _.is_file())
                 shutil.rmtree(profile_path)
@@ -380,16 +320,7 @@ class ProfileManager:
         }
     
     def set_account(self, profile_id: str, email: Optional[str]) -> Dict[str, Any]:
-        """
-        Asocia o desasocia una cuenta de email al perfil.
-        
-        Args:
-            profile_id: ID del perfil (completo o prefijo)
-            email: Email a asociar (None para desasociar)
-            
-        Returns:
-            Dict con los datos actualizados del perfil
-        """
+        """Asocia o desasocia una cuenta de email al perfil."""
         profiles = self._load_profiles()
         
         profile_found = None
@@ -412,17 +343,7 @@ class ProfileManager:
         }
     
     def register_account(self, profile_id: str, provider: str, identifier: str) -> Dict[str, Any]:
-        """
-        Registra una cuenta multi-provider en un perfil.
-        
-        Args:
-            profile_id: ID del perfil (completo o prefijo)
-            provider: Proveedor (google, openai, anthropic, etc)
-            identifier: Email o identificador de la cuenta
-            
-        Returns:
-            Dict con información del registro
-        """
+        """Registra una cuenta multi-provider en un perfil."""
         profiles = self._load_profiles()
         
         profile_found = None
@@ -455,16 +376,7 @@ class ProfileManager:
         }
     
     def remove_account(self, profile_id: str, provider: str) -> Dict[str, Any]:
-        """
-        Remueve una cuenta de un perfil.
-        
-        Args:
-            profile_id: ID del perfil (completo o prefijo)
-            provider: Proveedor a remover
-            
-        Returns:
-            Dict con información de la remoción
-        """
+        """Remueve una cuenta de un perfil."""
         profiles = self._load_profiles()
         
         profile_found = None
@@ -530,7 +442,7 @@ class ProfileManager:
             if os.path.exists(path):
                 return path
         
-        return None
+        raise FileNotFoundError("Chrome no encontrado en rutas estándar")
     
     def _get_extension_path(self) -> Optional[str]:
         """Busca la extensión Bloom con diagnóstico detallado."""
@@ -545,7 +457,6 @@ class ProfileManager:
             candidates.append(("ENV_VAR", Path(env_path)))
 
         # 2. Producción (AppData/BloomNucleus/extension)
-        # Probamos FLAT (extension/manifest.json) y ANIDADA (extension/src/manifest.json)
         prod_root = self.base_dir / "extension"
         candidates.append(("PROD_FLAT", prod_root))
         candidates.append(("PROD_SRC", prod_root / "src"))
@@ -557,24 +468,13 @@ class ProfileManager:
         except:
             pass
 
-        # === DIAGNÓSTICO (Se imprimirá al lanzar) ===
-        print(f"\n🔎 [DEBUG] Buscando extensión Bloom...")
-        
+        # Diagnóstico silencioso (solo en modo verbose)
         for source, path_obj in candidates:
             manifest = path_obj / "manifest.json"
-            exists = path_obj.exists()
-            has_manifest = manifest.exists()
-            
-            # Solo imprimimos si existe la carpeta para no ensuciar, 
-            # o si es la variable de entorno (para ver si llega mal)
-            if exists or source == "ENV_VAR":
-                print(f"   - {source}: {path_obj}")
-                print(f"     ¿Carpeta existe? {exists}")
-                print(f"     ¿Tiene manifest? {has_manifest}")
-            
-            if exists and has_manifest:
-                print(f"   ✅ ENCONTRADA en: {source}\n")
+            if path_obj.exists() and manifest.exists():
                 return str(path_obj)
         
-        print("   ❌ NO SE ENCONTRÓ LA EXTENSIÓN EN NINGUNA RUTA.\n")
-        return None
+        raise FileNotFoundError(
+            "Extensión Bloom no encontrada. "
+            "Define BLOOM_EXTENSION_PATH o ejecuta el instalador."
+        )
