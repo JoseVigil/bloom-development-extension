@@ -52,8 +52,8 @@
 using json = nlohmann::json;
 
 // --- CONFIGURACIÓN E IDENTIFICACIÓN ---
-const std::string VERSION = "1.3.1"; 
-const int BUILD = 8;
+const std::string VERSION = "1.4.0"; // 🆕 Versión con routing
+const int BUILD = 9;
 const int SERVICE_PORT = 5678; 
 const size_t MAX_ACTIVE_BUFFERS = 15;
 const size_t MAX_MESSAGE_SIZE = 50 * 1024 * 1024; // 50MB
@@ -63,6 +63,7 @@ const int RECONNECT_DELAY_MS = 2000;
 std::atomic<socket_t> service_socket{INVALID_SOCK};
 std::mutex stdout_mutex;
 std::atomic<bool> shutdown_requested{false};
+std::string g_profile_id = "";  // 🆕 Profile ID detectado desde Chrome
 
 // ============================================================================
 // LOGGER
@@ -97,6 +98,58 @@ public:
 };
 
 Logger g_logger;
+
+// ============================================================================
+// PROFILE ID EXTRACTION (desde User Data Dir de Chrome)
+// ============================================================================
+std::string extract_profile_id_from_cmdline() {
+    #ifdef _WIN32
+        // Leer la línea de comandos completa del proceso padre (Chrome)
+        DWORD parent_pid = 0;
+        HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if (snapshot != INVALID_HANDLE_VALUE) {
+            PROCESSENTRY32 pe = { sizeof(PROCESSENTRY32) };
+            if (Process32First(snapshot, &pe)) {
+                DWORD current_pid = GetCurrentProcessId();
+                do {
+                    if (pe.th32ProcessID == current_pid) {
+                        parent_pid = pe.th32ParentProcessID;
+                        break;
+                    }
+                } while (Process32Next(snapshot, &pe));
+            }
+            CloseHandle(snapshot);
+        }
+        
+        if (parent_pid == 0) return "";
+        
+        // Abrir el proceso padre para leer su línea de comandos
+        HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, parent_pid);
+        if (!hProcess) return "";
+        
+        // Intentar leer el comando (requiere API específica de Windows)
+        // Alternativa: Buscar en el directorio actual
+        char cwd[MAX_PATH];
+        if (GetCurrentDirectoryA(MAX_PATH, cwd) > 0) {
+            std::string path(cwd);
+            // Buscar "profiles\" en la ruta
+            size_t pos = path.find("\\profiles\\");
+            if (pos != std::string::npos) {
+                std::string after_profiles = path.substr(pos + 10);
+                size_t next_slash = after_profiles.find("\\");
+                if (next_slash != std::string::npos) {
+                    return after_profiles.substr(0, next_slash);
+                }
+                return after_profiles;
+            }
+        }
+        CloseHandle(hProcess);
+    #else
+        // Para Linux/Mac: leer desde /proc o ps
+        // Implementación simplificada
+    #endif
+    return "";
+}
 
 // ============================================================================
 // CHUNKED MESSAGE BUFFER (Soporte para Mensajes Grandes)
@@ -226,14 +279,32 @@ void handle_chrome_message(const std::string& msg_str) {
             return;
         }
 
-        // 2. Handshake Extensión
+        // 2. Handshake Extensión (🆕 Aquí detectamos el profile_id)
         if (msg.value("type", "") == "SYSTEM_HELLO") {
             g_logger.info("Extension Handshake Received");
+            
+            // 🆕 INTENTO DE DETECCIÓN DE PROFILE_ID
+            if (g_profile_id.empty()) {
+                g_profile_id = extract_profile_id_from_cmdline();
+                if (!g_profile_id.empty()) {
+                    g_logger.info("Profile ID detected: " + g_profile_id);
+                } else {
+                    g_logger.info("Profile ID detection failed (using PID as fallback)");
+                    // Fallback: usar PID del proceso
+                    #ifdef _WIN32
+                        g_profile_id = "pid_" + std::to_string(GetCurrentProcessId());
+                    #else
+                        g_profile_id = "pid_" + std::to_string(getpid());
+                    #endif
+                }
+            }
+            
             json ready = {
                 {"command", "system_ready"}, 
                 {"status", "connected"}, 
                 {"host_version", VERSION},
-                {"build", BUILD}
+                {"build", BUILD},
+                {"profile_id", g_profile_id}  // 🆕 Incluir en respuesta
             };
             write_message_to_chrome(ready.dump());
             write_to_service(msg_str);
@@ -276,7 +347,7 @@ void tcp_client_loop() {
         g_logger.info("✅ CONNECTED to Brain Service at 127.0.0.1:" + std::to_string(SERVICE_PORT));
         service_socket.store(sock);
 
-        // Handshake de registro de Host
+        // 🆕 HANDSHAKE DE REGISTRO CON PROFILE_ID
         #ifdef _WIN32
             int current_pid = (int)GetCurrentProcessId();
         #else
@@ -287,9 +358,11 @@ void tcp_client_loop() {
             {"type", "REGISTER_HOST"}, 
             {"pid", current_pid}, 
             {"version", VERSION},
-            {"build", BUILD}
+            {"build", BUILD},
+            {"profile_id", g_profile_id}  // 🆕 Enviar profile_id al Service
         };
         write_to_service(reg.dump());
+        g_logger.info("Handshake sent with profile_id: " + g_profile_id);
 
         // Escuchar mensajes provenientes del Brain Service
         while (!shutdown_requested.load()) {
