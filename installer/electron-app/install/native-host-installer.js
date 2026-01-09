@@ -45,8 +45,18 @@ async function installNativeHost() {
   // Asegurar que el directorio padre (bin) exista
   await fs.ensureDir(path.dirname(paths.brainDir));
 
-  // Copiar la carpeta 'brain' completa (incluye _internal y dlls)
-  await copyWithRetry(paths.brainSource, paths.brainDir, 'brain.exe');
+  console.log("🔂 Deploying Brain Service (Server)...");
+
+  const brainBinDir = path.join(paths.binDir, 'brain');
+  console.log(`   Source: ${paths.brainSource}`);
+  console.log(`   Dest:   ${brainBinDir}`);
+
+  if (!fs.existsSync(paths.brainSource)) {
+    throw new Error(`Brain Source not found at: ${paths.brainSource}`);
+  }
+
+  await fs.ensureDir(brainBinDir);
+  await copyWithRetry(paths.brainSource, brainBinDir, 'brain.exe');
 
   // Verificar
   if (!fs.existsSync(paths.brainExe)) {

@@ -48,7 +48,7 @@ const getResourcePath = (resourceName) => {
     case 'runtime':
       return path.join(installerRoot, 'resources', 'runtime');
     case 'brain':
-      return path.join(repoRoot, 'brain');
+      return path.join(installerRoot, 'native', 'bin', 'win32', 'brain');
     case 'native':
       return path.join(installerRoot, 'native', 'bin', 'win32');
     case 'nssm':
@@ -59,7 +59,8 @@ const getResourcePath = (resourceName) => {
       return path.join(installerRoot, 'electron-app', 'assets');
     default:
       return path.join(installerRoot, 'resources', resourceName);
-  }
+  }  
+
 };
 
 // ============================================================================
@@ -76,6 +77,10 @@ const brainDir = platform === 'win32'
 const hostBinary = platform === 'win32'
   ? path.join(baseDir, 'native', 'bloom-host.exe')
   : path.join(baseDir, 'native', 'bloom-host');
+
+const brainExe = platform === 'win32'
+  ? path.join(baseDir, 'bin', 'brain', 'brain.exe')
+  : path.join(baseDir, 'bin', 'brain', 'brain');
 
 const manifestPath = (() => {
   if (platform === 'win32') {
@@ -106,6 +111,7 @@ const paths = {
   // Base
   baseDir,
   bloomBase: baseDir,
+  installDir: baseDir,
   repoRoot,
 
   // Binarios (✅ NUEVO: Estructura bin/brain)
@@ -147,7 +153,6 @@ const paths = {
   bloomIcon: path.join(assetsDir, 'bloom.ico'),
 
   // NSSM (Windows Service Manager)
-  nssmExe: path.join(baseDir, 'native', 'nssm.exe'),
 
   // Desktop (para shortcuts)
   desktop: path.join(homeDir, 'Desktop'),
@@ -157,6 +162,7 @@ const paths = {
   // ============================================================================
   runtimeSource: getResourcePath('runtime'),
   brainSource: getResourcePath('brain'),
+  nssmExe: path.join(getResourcePath('nssm'), 'nssm.exe'),
   nativeSource: getResourcePath('native'),
   extensionSource: getResourcePath('extension'),
   nssmSource: getResourcePath('nssm'),
