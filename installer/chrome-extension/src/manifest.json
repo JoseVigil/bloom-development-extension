@@ -3,7 +3,7 @@
   "name": "Bloom Nucleus Bridge",
   "version": "1.0.0",
   "description": "Native messaging bridge for browser automation",
-  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArR9LQUunP5gkFNDrMzwd9iolQipvntlkmidrZ2H9t5+0rn4vshqtQH2JS+92ExmnuNazsDF353LbMAuASKNWMmFdHIsGATN6trgSoGYpRiAyDvCCxqr55gb4wZk/l8g00/l8sCOVdBzpEObUkeQPBtYQwM7bT33vJ0Z/p9yMwO0N3POHVlGODaL8T/QUTosVi58qBGx6+KOfaih6MUrr5ImVaCqIdhVMzE08jGNi6TDryuGNB0Ev0fJ1ww7jACUrIXKdzxpOCbL6WZbAqvPDkYtfSE+q6PyMiZ9YdE8fbG6dtY/Fh3KEMyqNqy3ynxBOWHKNHxdpvCylhpLUYMkQhQIDAQAB",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvpLkwKzeLGXF3Me4LckWSMQO6ktiL7gbLC3E8d3jpKfZLTL+lhCOXULTygRUi4vSvWQyy0KrI1eVTUYPrvA6s3pYGhn7GFfmCDXA6JvZjANc+4pq3hcxdVZdMa02E4f1UsIJm17qKBlk5Z6Jv1wD1LtXi2yk+lI/NcAq0XsQSTBDVElDp4/t8QpxRRHGm1WuaoN7DCu7Tmmzq1ztMC434+nmnjqkfMrxG6uC/iC+z+qDLUvolC1eWNPnMFbi2NG+KiZo/ZXEnTpc17OOo3VewOt2/ogTdHp8kpcK1OwXM9d+RUdls9DEUB5QdyWX7uUDsGKISsSawb+j5NiQbgACcQIDAQAB",
   "permissions": [
     "tabs",
     "scripting",
@@ -19,8 +19,12 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_start",
       "all_frames": true
     }

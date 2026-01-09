@@ -63,17 +63,15 @@ const getResourcePath = (resourceName) => {
 };
 
 // ============================================================================
-// COMPUTED PATHS - Cross-platform
+// COMPUTED PATHS (sin getters, valores directos)
 // ============================================================================
 const pythonExe = platform === 'win32'
   ? path.join(baseDir, 'engine', 'runtime', 'python.exe')
   : path.join(baseDir, 'engine', 'runtime', 'bin', 'python3');
 
-const brainDir = path.join(baseDir, 'bin', 'brain');
-
-const brainExe = platform === 'win32'
-  ? path.join(baseDir, 'bin', 'brain', 'brain.exe')
-  : path.join(baseDir, 'bin', 'brain', 'brain');
+const brainDir = platform === 'win32'
+  ? path.join(baseDir, 'engine', 'runtime', 'Lib', 'site-packages', 'brain')
+  : path.join(baseDir, 'engine', 'runtime', 'lib', 'python3.11', 'site-packages', 'brain');
 
 const hostBinary = platform === 'win32'
   ? path.join(baseDir, 'native', 'bloom-host.exe')
@@ -158,10 +156,10 @@ const paths = {
   // SOURCE PATHS (de donde se copian los recursos durante instalación)
   // ============================================================================
   runtimeSource: getResourcePath('runtime'),
-  brainSource: path.resolve(__dirname, '..', '..', 'native', 'bin', 'win32', 'brain'),
-  extensionSource: path.resolve(__dirname, '..', '..', '..', 'chrome-extension', 'src'),
-  nativeSource: path.resolve(__dirname, '..', '..', 'native', 'bin', 'win32'),
-  nssmSource: path.resolve(__dirname, '..', '..', 'native', 'nssm', 'win64'),
+  brainSource: getResourcePath('brain'),
+  nativeSource: getResourcePath('native'),
+  extensionSource: getResourcePath('extension'),
+  nssmSource: getResourcePath('nssm'),
 };
 
 // ============================================================================
