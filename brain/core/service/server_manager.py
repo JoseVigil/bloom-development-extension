@@ -14,9 +14,9 @@ class ServerManager:
         self.base_dir.mkdir(parents=True, exist_ok=True)
         self.pid_file = self.base_dir / "service.pid"
         
-        # 🆕 ROUTING REGISTRY: Mapeo writer -> client_info
+        # ROUTING REGISTRY: Mapeo writer -> client_info
         self.clients = {}
-        # 🆕 PROFILE REGISTRY: Mapeo profile_id -> writer
+        # PROFILE REGISTRY: Mapeo profile_id -> writer
         self.profile_registry = {}
 
     def _get_pid(self):
@@ -61,20 +61,20 @@ class ServerManager:
                 except json.JSONDecodeError:
                     continue
                 
-                # 🆕 HANDSHAKE: Registrar conexión con profile_id
+                # HANDSHAKE: Registrar conexion con profile_id
                 if msg.get('type') == 'REGISTER_HOST':
                     profile_id = msg.get('profile_id')
                     if profile_id:
                         self.clients[writer]['profile_id'] = profile_id
                         self.clients[writer]['type'] = 'host'
                         self.profile_registry[profile_id] = writer
-                        print(f"✅ [Routing] Host registrado: {profile_id} desde {addr}")
+                        print(f"[Routing] Host registrado: {profile_id} desde {addr}")
                     continue
                 
-                # 🆕 REGISTRO DE CLI (para comandos directos)
+                # REGISTRO DE CLI (para comandos directos)
                 if msg.get('type') == 'REGISTER_CLI':
                     self.clients[writer]['type'] = 'cli'
-                    print(f"✅ [Routing] CLI conectado desde {addr}")
+                    print(f"[Routing] CLI conectado desde {addr}")
                     # Responder con lista de perfiles activos
                     response = {
                         "type": "REGISTRY_STATUS",
@@ -87,35 +87,54 @@ class ServerManager:
                     await writer.drain()
                     continue
                 
-                # 🆕 ROUTING ESPECÍFICO
+                # ROUTING ESPECIFICO
                 target_profile = msg.get('target_profile')
+                request_id = msg.get('request_id')  # Para respuestas sincronas
                 
                 if target_profile:
-                    # Ruteo directo a un perfil específico
+                    # Ruteo directo a un perfil especifico
                     target_writer = self.profile_registry.get(target_profile)
                     if target_writer and target_writer in self.clients:
                         try:
                             target_writer.write(header + data)
                             await target_writer.drain()
-                            print(f"📤 [Routing] Mensaje enviado a perfil: {target_profile}")
-                        except:
-                            # Limpiar conexión muerta
-                            del self.clients[target_writer]
-                            del self.profile_registry[target_profile]
-                            print(f"⚠️ [Routing] Perfil desconectado: {target_profile}")
+                            print(f"[Routing] Mensaje enviado a perfil: {target_profile}")
+                            
+                            # ACK SINCRONO: Responder al CLI si tiene request_id
+                            if request_id and self.clients[writer]['type'] == 'cli':
+                                ack = {
+                                    "request_id": request_id,
+                                    "status": "routed",
+                                    "target": target_profile
+                                }
+                                ack_str = json.dumps(ack)
+                                ack_bytes = ack_str.encode('utf-8')
+                                ack_len = len(ack_bytes).to_bytes(4, byteorder='big')
+                                writer.write(ack_len + ack_bytes)
+                                await writer.drain()
+                                print(f"[Routing] ACK enviado al CLI para request_id: {request_id}")
+                        except Exception as e:
+                            # Limpiar conexion muerta
+                            print(f"[Routing] Error enviando a {target_profile}: {e}")
+                            if target_writer in self.clients:
+                                del self.clients[target_writer]
+                            if target_profile in self.profile_registry:
+                                del self.profile_registry[target_profile]
                     else:
                         # Perfil no encontrado, notificar al emisor
                         error_msg = {
                             "status": "error",
-                            "message": f"Profile {target_profile} not connected"
+                            "message": f"Profile {target_profile} not connected",
+                            "request_id": request_id
                         }
                         error_str = json.dumps(error_msg)
                         error_bytes = error_str.encode('utf-8')
                         error_len = len(error_bytes).to_bytes(4, byteorder='big')
                         writer.write(error_len + error_bytes)
                         await writer.drain()
+                        print(f"[Routing] Error notificado: Perfil {target_profile} no encontrado")
                 else:
-                    # 🆕 BROADCAST CONTROLADO: Solo a hosts sin target específico
+                    # BROADCAST CONTROLADO: Solo a hosts sin target especifico
                     # Esto permite comandos globales como "list profiles"
                     for client_writer, client_info in list(self.clients.items()):
                         if client_writer != writer and client_info['type'] == 'host':
@@ -126,18 +145,19 @@ class ServerManager:
                                 profile_id = client_info.get('profile_id')
                                 if profile_id and profile_id in self.profile_registry:
                                     del self.profile_registry[profile_id]
-                                del self.clients[client_writer]
+                                if client_writer in self.clients:
+                                    del self.clients[client_writer]
         
         except asyncio.IncompleteReadError:
             pass
         except Exception as e:
-            print(f"⚠️ [Routing] Error en cliente {addr}: {e}")
+            print(f"[Routing] Error en cliente {addr}: {e}")
         finally:
             # Limpieza al desconectar
             profile_id = self.clients.get(writer, {}).get('profile_id')
             if profile_id and profile_id in self.profile_registry:
                 del self.profile_registry[profile_id]
-                print(f"🔌 [Routing] Perfil desregistrado: {profile_id}")
+                print(f"[Routing] Perfil desregistrado: {profile_id}")
             
             if writer in self.clients:
                 del self.clients[writer]
@@ -152,8 +172,8 @@ class ServerManager:
         asyncio.set_event_loop(loop)
         self.pid_file.write_text(str(os.getpid()))
         server = loop.run_until_complete(asyncio.start_server(self._handle_client, self.host, self.port))
-        print(f"🚀 Brain Service activo en {self.host}:{self.port}")
-        print(f"📡 Modo: Routing Inteligente (Hub-and-Spoke)")
+        print(f"Brain Service activo en {self.host}:{self.port}")
+        print(f"Modo: Routing Inteligente (Hub-and-Spoke)")
         try: 
             loop.run_forever()
         except KeyboardInterrupt: 

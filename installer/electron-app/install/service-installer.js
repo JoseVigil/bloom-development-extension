@@ -65,6 +65,24 @@ async function killAllBloomProcesses() {
       });
     } catch {}
   }
+
+  console.log('🧹 Cleaning lockfiles...');
+  const lockfiles = [
+    path.join(paths.bloomBase, '.brain', 'service.pid'),
+    path.join(paths.bloomBase, '.brain', 'service.lock'),
+    path.join(paths.logsDir, 'brain.log.lock')
+  ];
+  
+  for (const lockfile of lockfiles) {
+    try {
+      if (await fs.pathExists(lockfile)) {
+        await fs.remove(lockfile);
+        console.log(`  🗑️  Removed lockfile: ${path.basename(lockfile)}`);
+      }
+    } catch (e) {
+      console.warn(`  ⚠️  Could not remove ${lockfile}: ${e.message}`);
+    }
+  }
   
   await new Promise(resolve => setTimeout(resolve, 3000));
   console.log('✅ Process cleanup complete');

@@ -32,6 +32,10 @@ const API = {
   startInstallation: (options = {}) => ipcRenderer.invoke('install:start', options),
   checkRequirements: () => ipcRenderer.invoke('install:check-requirements'),
   cleanupInstallation: () => ipcRenderer.invoke('install:cleanup'),
+  // 🆕 REPAIR & DIAGNOSTICS
+  repairBridge: () => ipcRenderer.invoke('repair-bridge'),
+  validateInstallation: () => ipcRenderer.invoke('validate-installation'),
+  runDiagnostics: () => ipcRenderer.invoke('run-diagnostics'),
 
   // ==========================================
   // LAUNCH MODE HANDLERS (Existing)

@@ -233,35 +233,44 @@ async function checkHostStatus() {
 
 
 
-/**
- * Ejecuta un comando brain genérico y retorna el JSON parseado
- */
+// ============================================================================
+// MANTENER executeBrainCommand SOLO para comandos que NO sean launch
+// ============================================================================
+
 async function executeBrainCommand(args) {
   return new Promise((resolve, reject) => {
     const brainPath = getBrainExecutablePath();
     const child = spawn(brainPath, args, {
       cwd: getBrainWorkingDirectory(),
       env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
-      shell: true,
-      windowsHide: true
+      shell: false,  // ✅ FIX: Sin shell para evitar cmd.exe intermedio
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe']
     });
     
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', (data) => { stdout += data.toString(); });
+    child.stderr.on('data', (data) => { stderr += data.toString(); });
     
     child.on('close', (code) => {
       try {
-        const result = parseCLIJson(stdout);  // ← USA LA NUEVA FUNCIÓN
+        const result = parseCLIJson(stdout);
         resolve(result);
       } catch (e) {
-        if (stderr) {
-          console.error('[Brain CLI] stderr:', stderr);
-        }
-        reject(new Error(`Failed to parse JSON: ${e.message}\nOutput: ${stdout.substring(0, 200)}`));
+        if (stderr) console.error('[Brain CLI] stderr:', stderr);
+        reject(new Error(`Failed to parse JSON: ${e.message}`));
       }
     });
+    
     child.on('error', (err) => reject(err));
+    
+    setTimeout(() => {
+      if (!child.killed) {
+        child.kill();
+        reject(new Error('Command timeout'));
+      }
+    }, 30000);
   });
 }
 
@@ -481,10 +490,13 @@ function registerInstallHandlers() {
     }
   });
   
-  // Launch "God Mode" (brain CLI con profile maestro)
+  // ============================================================================
+  // REEMPLAZAR ipcMain.handle('brain:launch') - Línea ~340
+  // ============================================================================
+
   ipcMain.handle('brain:launch', async (event, profileIdOrObject) => {
     try {
-      // Normalizar input: aceptar tanto string como objeto
+      // Normalizar input
       let profileId;
       
       if (typeof profileIdOrObject === 'string') {
@@ -509,7 +521,11 @@ function registerInstallHandlers() {
         };
       }
       
-      log(`🔧 Executing: brain --json profile launch ${profileId} --cockpit`);
+      // ============================================================================
+      // USAR BRAIN.EXE (Respeta la arquitectura)
+      // ============================================================================
+      
+      log(`🔹 Executing: brain --json profile launch ${profileId} --cockpit`);
       
       const result = await executeBrainCommand(['--json', 'profile', 'launch', profileId, '--cockpit']);
       
@@ -580,7 +596,118 @@ function registerInstallHandlers() {
     }
   });
 }
-
+// ============================================================================
+// 🆕 IPC HANDLERS - REPAIR TOOLS
+// Agregar esta función DESPUÉS de registerInstallHandlers()
+// ============================================================================
+function registerRepairHandlers() {
+  log('🔧 Registering repair & diagnostic handlers...');
+ 
+  // Lazy import (solo cargar cuando se necesite)
+  let repairTools = null;
+ 
+  const getRepairTools = () => {
+    if (!repairTools) {
+      repairTools = require('./install/repair-tools');
+      log('📦 Repair tools module loaded');
+    }
+    return repairTools;
+  };
+ 
+  /**
+   * Handler: Reparar Bridge
+   * Actualiza Extension ID en bridge.json y Registry
+   */
+  ipcMain.handle('repair-bridge', async (event) => {
+    log('🔧 [IPC] repair-bridge called');
+   
+    try {
+      const { repairBridgeConnection } = getRepairTools();
+      const result = await repairBridgeConnection();
+     
+      if (result.success) {
+        log('✅ [IPC] Bridge repaired:', result.extensionId);
+      } else {
+        error('❌ [IPC] Bridge repair failed:', result.error);
+      }
+     
+      return result;
+     
+    } catch (err) {
+      error('❌ [IPC] repair-bridge error:', err.message);
+      return {
+        success: false,
+        error: err.message,
+        stack: err.stack
+      };
+    }
+  });
+ 
+  /**
+   * Handler: Validar Instalación
+   * Verifica que todos los componentes estén OK
+   */
+  ipcMain.handle('validate-installation', async (event) => {
+    log('🔍 [IPC] validate-installation called');
+   
+    try {
+      const { validateInstallation } = getRepairTools();
+      const result = await validateInstallation();
+     
+      if (result.success) {
+        log('✅ [IPC] Installation is valid');
+      } else {
+        const failedChecks = Object.entries(result.checks || {})
+          .filter(([k, v]) => !v)
+          .map(([k]) => k);
+       
+        log('⚠️ [IPC] Installation incomplete. Failed:', failedChecks.join(', '));
+      }
+     
+      return result;
+     
+    } catch (err) {
+      error('❌ [IPC] validate-installation error:', err.message);
+      return {
+        success: false,
+        error: err.message,
+        checks: {}
+      };
+    }
+  });
+ 
+  /**
+   * Handler: Ejecutar Diagnósticos
+   * Recopila información completa del sistema
+   */
+  ipcMain.handle('run-diagnostics', async (event) => {
+    log('🔬 [IPC] run-diagnostics called');
+   
+    try {
+      const { runDiagnostics } = getRepairTools();
+      const diagnostics = await runDiagnostics();
+     
+      log('📊 [IPC] Diagnostics completed');
+     
+      // Mostrar resumen en consola
+      if (diagnostics.validation) {
+        const allPassed = diagnostics.validation.success;
+        log(` Validation: ${allPassed ? '✅ PASS' : '❌ FAIL'}`);
+      }
+     
+      return diagnostics;
+     
+    } catch (err) {
+      error('❌ [IPC] run-diagnostics error:', err.message);
+      return {
+        timestamp: new Date().toISOString(),
+        error: err.message
+      };
+    }
+  });
+ 
+  log('✅ Repair handlers registered');
+}
 // ============================================================================
 // WINDOW CREATION
 // ============================================================================
@@ -765,6 +892,7 @@ app.whenReady().then(async () => {
   registerSharedHandlers();
   registerLaunchHandlers();
   registerInstallHandlers();
+  registerRepairHandlers(); // 🆕 AGREGAR ESTA LÍNEA
   
   // Create window
   mainWindow = await createWindow();

@@ -523,6 +523,15 @@ def load_all_commands_explicit() -> CommandRegistry:
     except ImportError as e:
         print(f"Warning: Could not load ServiceCommand: {e}")
     
+    # =================================================================
+    # TWITTER
+    # =================================================================
+    try:
+        from brain.commands.twitter.auth import TwitterAuthCommand
+        registry.register(TwitterAuthCommand())
+    except ImportError as e:
+        print(f"Warning: Could not load TwitterAuthCommand: {e}")
+    
     return registry
 
 
@@ -612,4 +621,5 @@ def get_hiddenimports_list():
         'brain.commands.project.nucleus',
         'brain.commands.runtime.run',
         'brain.commands.service.service',
+        'brain.commands.twitter.auth',
     ]
