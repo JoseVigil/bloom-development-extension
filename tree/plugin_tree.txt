@@ -180,6 +180,7 @@ bloom-development-extension/
 │   │   │   ├── id.json
 │   │   │   └── key.pem
 │   │   ├── pem/
+│   │   │   ├── key_generation_extesion.crx
 │   │   │   └── key_generation_extesion.pem
 │   │   └── src/
 │   │       ├── 128x128.png
@@ -187,8 +188,7 @@ bloom-development-extension/
 │   │       ├── content.js
 │   │       ├── icon128.png
 │   │       ├── icon16.png
-│   │       ├── manifest.json
-│   │       └── manifest.json.original
+│   │       └── manifest.json
 │   ├── create_installer.py
 │   ├── electron-app/
 │   │   ├── .gitignore
@@ -214,7 +214,10 @@ bloom-development-extension/
 │   │   │   ├── installer.js
 │   │   │   ├── launcher-creator.js
 │   │   │   ├── native-host-installer.js
+│   │   │   ├── native-host-manifest.js
 │   │   │   ├── profile-manager.js
+│   │   │   ├── registry-hklm.js
+│   │   │   ├── runtime-installer.js
 │   │   │   ├── service-installer.js
 │   │   │   └── shortcut-installer.js
 │   │   ├── installHelpers.js
@@ -242,10 +245,12 @@ bloom-development-extension/
 │   │   ├── run-elevated.bat
 │   │   ├── run-elevated.js
 │   │   ├── scripts/
-│   │   │   ├── calc-true-id.js
 │   │   │   ├── check-status.bat
+│   │   │   ├── clean_chrome_cache.ps1
+│   │   │   ├── cleanup_zombies.ps1
 │   │   │   ├── emergency-cleanup.bat
-│   │   │   └── gen_new_identity.js
+│   │   │   ├── fix_bridge_id.py
+│   │   │   └── sanitize_manifest.py
 │   │   ├── src/
 │   │   │   ├── index.html
 │   │   │   ├── installation_manager.js
@@ -258,7 +263,8 @@ bloom-development-extension/
 │   │   │   └── ui_manager.js
 │   │   ├── test-installation.js
 │   │   └── utils/
-│   │       └── exec-helper.js
+│   │       ├── exec-helper.js
+│   │       └── repair-tools.js
 │   ├── native/
 │   │   ├── .DS_Store
 │   │   ├── bin/
@@ -266,6 +272,8 @@ bloom-development-extension/
 │   │   │   ├── darwin/
 │   │   │   │   └── x64/
 │   │   │   │       └── bloom-host
+│   │   │   ├── linux/
+│   │   │   │   └── bloom-host
 │   │   │   └── win32/
 │   │   │       ├── bloom-host.exe
 │   │   │       ├── brain/
@@ -322,9 +330,7 @@ bloom-development-extension/
 │   └── scripts/
 │       ├── build-extension.js
 │       ├── check-health.js
-│       ├── extension-utils.js
-│       ├── generate-fixed-key.js
-│       ├── get-id.js
+│       ├── get_extension_key_from_pem_store_key_manfest.js
 │       ├── god-mode.js
 │       ├── python-runtime.config.json
 │       ├── run-elevated.ps1
@@ -509,10 +515,14 @@ bloom-development-extension/
 │   │   │   ├── __init__.py
 │   │   │   ├── __pycache__/ [... cache]
 │   │   │   └── run.py
-│   │   └── service/
+│   │   ├── service/
+│   │   │   ├── __init__.py
+│   │   │   ├── __pycache__/ [... cache]
+│   │   │   └── service.py
+│   │   └── twitter/
 │   │       ├── __init__.py
 │   │       ├── __pycache__/ [... cache]
-│   │       └── service.py
+│   │       └── auth.py
 │   ├── commands.md
 │   ├── core/
 │   │   ├── __pycache__/ [... cache]
@@ -598,7 +608,9 @@ bloom-development-extension/
 │   │   ├── service/
 │   │   │   ├── __pycache__/ [... cache]
 │   │   │   └── server_manager.py
-│   │   └── tree_manager.py
+│   │   ├── tree_manager.py
+│   │   └── twitter/
+│   │       └── auth_manager.py
 │   ├── entry.py
 │   ├── libs/ [... python vendored dependencies]
 │   ├── prepare_runtime_libs.py

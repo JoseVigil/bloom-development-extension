@@ -14,11 +14,11 @@ from brain.core.browser.landing_generator import generate_profile_landing
 class ProfileManager:
     """
     Gestor de perfiles aislados de Chrome (Workers).
-    🆕 FIX: Lanzamiento totalmente desacoplado + rutas normalizadas
+    FIX: Lanzamiento totalmente desacoplado + rutas normalizadas
     """
     
     def __init__(self):
-        """Inicializa las rutas base según el sistema operativo"""
+        """Inicializa las rutas base segun el sistema operativo"""
         self.base_dir = self._get_base_directory()
         self.workers_dir = self.base_dir / "profiles"
         self.profiles_file = self.base_dir / "profiles.json"
@@ -31,11 +31,11 @@ class ProfileManager:
         if not self.profiles_file.exists():
             self._save_profiles([])
         
-        # Auto-recuperación de perfiles huérfanos
+        # Auto-recuperacion de perfiles huerfanos
         self._auto_recover_orphaned_profiles()
     
     def _get_base_directory(self) -> Path:
-        """Determina el directorio base según el sistema operativo"""
+        """Determina el directorio base segun el sistema operativo"""
         system = platform.system()
         
         if system == "Windows":
@@ -67,7 +67,7 @@ class ProfileManager:
     
     def _auto_recover_orphaned_profiles(self) -> None:
         """
-        Detecta y recupera perfiles físicos sin registro en JSON.
+        Detecta y recupera perfiles fisicos sin registro en JSON.
         """
         if not self.workers_dir.exists():
             return
@@ -75,20 +75,20 @@ class ProfileManager:
         profiles = self._load_profiles()
         registered_ids = {p['id'] for p in profiles}
         
-        # Escanear carpetas físicas
+        # Escanear carpetas fisicas
         physical_folders = [f for f in self.workers_dir.iterdir() if f.is_dir()]
         
         orphaned = []
         for folder in physical_folders:
             folder_id = folder.name
             
-            # Validar que es un UUID válido (formato de profile_id)
+            # Validar que es un UUID valido (formato de profile_id)
             try:
                 uuid.UUID(folder_id)
             except ValueError:
                 continue
             
-            # Si no está registrado en JSON, es un perfil huérfano
+            # Si no esta registrado en JSON, es un perfil huerfano
             if folder_id not in registered_ids:
                 alias = self._recover_alias_from_landing(folder)
                 if not alias:
@@ -104,7 +104,7 @@ class ProfileManager:
                     "linked_account": None
                 })
         
-        # Registrar perfiles huérfanos silenciosamente
+        # Registrar perfiles huerfanos silenciosamente
         if orphaned:
             profiles.extend(orphaned)
             self._save_profiles(profiles)
@@ -123,15 +123,15 @@ class ProfileManager:
             return None
     
     def _find_profile(self, profile_id: str) -> Optional[Dict[str, Any]]:
-        """Busca un perfil por su ID (soporta búsqueda parcial)"""
+        """Busca un perfil por su ID (soporta busqueda parcial)"""
         profiles = self._load_profiles()
         
-        # Búsqueda exacta primero
+        # Busqueda exacta primero
         for profile in profiles:
             if profile.get('id') == profile_id:
                 return profile
         
-        # Búsqueda parcial (prefijo)
+        # Busqueda parcial (prefijo)
         for profile in profiles:
             if profile.get('id', '').startswith(profile_id):
                 return profile
@@ -142,7 +142,7 @@ class ProfileManager:
         """Lista todos los perfiles existentes"""
         profiles = self._load_profiles()
         
-        # Enriquecer con información de ruta
+        # Enriquecer con informacion de ruta
         for profile in profiles:
             profile_path = self.workers_dir / profile['id']
             profile['path'] = str(profile_path)
@@ -154,7 +154,7 @@ class ProfileManager:
         """Crea un nuevo perfil con el alias especificado."""
         profiles = self._load_profiles()
         
-        # Generar UUID único
+        # Generar UUID unico
         profile_id = str(uuid.uuid4())
         profile_path = self.workers_dir / profile_id
         
@@ -197,7 +197,7 @@ class ProfileManager:
                 f"Tip: Crea la carpeta 'landing' con index.html en el perfil"
             )
         
-        # Convertir a file:// URL según el sistema operativo
+        # Convertir a file:// URL segun el sistema operativo
         absolute_path = landing_path.resolve()
         
         if platform.system() == "Windows":
@@ -210,14 +210,13 @@ class ProfileManager:
     
     def launch_profile(self, profile_id: str, url: Optional[str] = None) -> Dict[str, Any]:
         """
-        🆕 FIX CRÍTICO: Lanzamiento totalmente desacoplado + rutas normalizadas
+        Lanzamiento de Chrome con Perfil Nivel Dios
         
-        CAMBIOS:
-        1. ✅ os.path.normpath() en TODAS las rutas
-        2. ✅ Comillas dobles explícitas en cada argumento
-        3. ✅ subprocess.CREATE_NO_WINDOW para evitar ventana de consola
-        4. ✅ close_fds=True para desacople total
-        5. ✅ Retorno inmediato (fire-and-forget)
+        CUMPLE:
+        - Rutas normalizadas (os.path.normpath)
+        - Sin comillas manuales (subprocess las agrega)
+        - Desacoplamiento total (DETACHED_PROCESS)
+        - Fire-and-forget (sin esperas)
         """
         profile = self._find_profile(profile_id)
         if not profile:
@@ -225,56 +224,59 @@ class ProfileManager:
         
         full_profile_id = profile['id']
         
-        # 🔧 NORMALIZACIÓN DE RUTAS (crítico para Windows)
+        # ✅ NORMALIZACIÓN DE RUTAS (Windows-safe)
         profile_path = os.path.normpath(str(self.workers_dir / full_profile_id))
         chrome_path = os.path.normpath(self._find_chrome_executable())
         extension_path = os.path.normpath(self._get_extension_path())
         
-        # 🔧 URL: Si no se especifica, usar landing page
         if not url:
             url = self.get_landing_url(full_profile_id)
         
-        # 🔧 CONSTRUCCIÓN DE ARGUMENTOS (con comillas explícitas)
+        # ✅ ARGUMENTOS SIN COMILLAS MANUALES
+        # subprocess.Popen maneja automáticamente los espacios
         chrome_args = [
-            chrome_path,  # Primer argumento sin comillas (Python las agrega)
-            f'--user-data-dir={profile_path}',
+            chrome_path,
+            f'--user-data-dir={profile_path}',  # ← Sin comillas
             '--no-first-run',
             '--no-default-browser-check',
-            f'--load-extension={extension_path}',
+            f'--load-extension={extension_path}',  # ← Sin comillas, sin barra final
             f'--app={url}'
         ]
         
-        # 🔧 FLAGS DE DESACOPLAMIENTO TOTAL
-        creation_flags = 0
-        if platform.system() == 'Windows':
-            creation_flags = (
-                subprocess.DETACHED_PROCESS | 
-                subprocess.CREATE_NEW_PROCESS_GROUP | 
-                subprocess.CREATE_NO_WINDOW  # 🆕 Evita ventana de consola
-            )
-        
+        # ✅ LANZAMIENTO DESACOPLADO (Fire and Forget)
         try:
-            # 🚀 LANZAMIENTO DESACOPLADO
-            process = subprocess.Popen(
-                chrome_args,
-                creationflags=creation_flags,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                stdin=subprocess.DEVNULL,  # 🆕 Cerrar stdin también
-                close_fds=True,  # 🆕 Cerrar descriptores heredados
-                shell=False  # NUNCA usar shell=True
-            )
+            if platform.system() == 'Windows':
+                # Windows: DETACHED_PROCESS para total independencia
+                process = subprocess.Popen(
+                    chrome_args,
+                    creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    stdin=subprocess.DEVNULL,
+                    shell=False  # ← CRÍTICO: Nunca usar shell
+                )
+            else:
+                # Unix/Mac: close_fds para desacople
+                process = subprocess.Popen(
+                    chrome_args,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    stdin=subprocess.DEVNULL,
+                    close_fds=True,
+                    shell=False
+                )
             
-            # 🆕 RETORNO INMEDIATO (no esperar confirmación)
+            # ✅ RETORNO INMEDIATO (sin esperar confirmación)
             return {
                 "status": "launched",
                 "profile_id": full_profile_id,
                 "pid": process.pid,
                 "extension_loaded": True,
                 "url": url,
-                "note": "Chrome launched independently. Process will continue after CLI exits."
+                "chrome_path": chrome_path,
+                "extension_path": extension_path
             }
-        
+            
         except FileNotFoundError as e:
             raise RuntimeError(f"Chrome o extensión no encontrada: {e}")
         except Exception as e:
@@ -284,7 +286,7 @@ class ProfileManager:
         """Elimina un perfil y sus datos del disco."""
         profiles = self._load_profiles()
         
-        # Buscar perfil (soporta búsqueda parcial)
+        # Buscar perfil (soporta busqueda parcial)
         profile_found = None
         updated_profiles = []
         
@@ -298,7 +300,7 @@ class ProfileManager:
         if not profile_found:
             raise ValueError(f"Perfil no encontrado: {profile_id}")
         
-        # Eliminar carpeta física
+        # Eliminar carpeta fisica
         full_profile_id = profile_found['id']
         profile_path = self.workers_dir / full_profile_id
         deleted_files = 0
@@ -412,7 +414,7 @@ class ProfileManager:
         return self.set_account(profile_id, None)
     
     def _find_chrome_executable(self) -> Optional[str]:
-        """Busca el ejecutable de Chrome según el sistema operativo"""
+        """Busca el ejecutable de Chrome segun el sistema operativo"""
         system = platform.system()
         
         possible_paths = []
@@ -442,21 +444,21 @@ class ProfileManager:
             if os.path.exists(path):
                 return path
         
-        raise FileNotFoundError("Chrome no encontrado en rutas estándar")
+        raise FileNotFoundError("Chrome no encontrado en rutas estandar")
     
     def _get_extension_path(self) -> Optional[str]:
-        """Busca la extensión Bloom con diagnóstico detallado."""
+        """Busca la extension Bloom con diagnostico detallado."""
         import sys
         
         # Lista de candidatos a probar
         candidates = []
         
-        # 1. Variable de entorno (Prioridad Máxima)
+        # 1. Variable de entorno (Prioridad Maxima)
         env_path = os.environ.get("BLOOM_EXTENSION_PATH")
         if env_path:
             candidates.append(("ENV_VAR", Path(env_path)))
 
-        # 2. Producción (AppData/BloomNucleus/extension)
+        # 2. Produccion (AppData/BloomNucleus/extension)
         prod_root = self.base_dir / "extension"
         candidates.append(("PROD_FLAT", prod_root))
         candidates.append(("PROD_SRC", prod_root / "src"))
@@ -468,13 +470,13 @@ class ProfileManager:
         except:
             pass
 
-        # Diagnóstico silencioso (solo en modo verbose)
+        # Diagnostico silencioso (solo en modo verbose)
         for source, path_obj in candidates:
             manifest = path_obj / "manifest.json"
             if path_obj.exists() and manifest.exists():
                 return str(path_obj)
         
         raise FileNotFoundError(
-            "Extensión Bloom no encontrada. "
+            "Extension Bloom no encontrada. "
             "Define BLOOM_EXTENSION_PATH o ejecuta el instalador."
         )

@@ -480,4 +480,31 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       });
     }
   });
+
+  // GET /api/v1/auth/twitter/status
+  fastify.get('/twitter/status', async (request, reply) => {
+    try {
+      // Necesitaremos añadir twitterAuthStatus a BrainApiAdapter
+      const result = await BrainApiAdapter.twitterAuthStatus();
+      
+      return {
+        ok: true,
+        data: {
+          authenticated: result.data?.authenticated || false,
+          username: result.data?.username || null
+        },
+        timestamp: new Date().toISOString()
+      };
+    } catch (error: any) {
+      return { ok: true, data: { authenticated: false }, error: error.message };
+    }
+  });
+
+  // GET /api/v1/auth/twitter/start
+  fastify.get('/twitter/start', async (request, reply) => {
+    // Aquí lanzarías el flujo OAuth similar al de GitHub
+    // deps.twitterOAuthServer.startFlow();
+    return { ok: true, message: 'Twitter OAuth flow started' };
+  });
+
 };
