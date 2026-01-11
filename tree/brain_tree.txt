@@ -122,10 +122,14 @@ bloom-development-extension/
     │   │   ├── __init__.py
     │   │   ├── __pycache__/ [... cache]
     │   │   └── run.py
-    │   └── service/
+    │   ├── service/
+    │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
+    │   │   └── service.py
+    │   └── twitter/
     │       ├── __init__.py
     │       ├── __pycache__/ [... cache]
-    │       └── service.py
+    │       └── auth.py
     ├── commands.md
     ├── core/
     │   ├── __pycache__/ [... cache]
@@ -211,7 +215,9 @@ bloom-development-extension/
     │   ├── service/
     │   │   ├── __pycache__/ [... cache]
     │   │   └── server_manager.py
-    │   └── tree_manager.py
+    │   ├── tree_manager.py
+    │   └── twitter/
+    │       └── auth_manager.py
     ├── entry.py
     ├── libs/ [... python vendored dependencies]
     ├── prepare_runtime_libs.py

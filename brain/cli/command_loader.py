@@ -524,6 +524,27 @@ def load_all_commands_explicit() -> CommandRegistry:
         print(f"Warning: Could not load ServiceCommand: {e}")
     
     # =================================================================
+    # SYSTEM
+    # =================================================================
+    try:
+        from brain.commands.system.info import SystemInfoCommand
+        registry.register(SystemInfoCommand())
+    except ImportError as e:
+        print(f"Warning: Could not load SystemInfoCommand: {e}")
+    
+    try:
+        from brain.commands.system.info import SystemPathCommand
+        registry.register(SystemPathCommand())
+    except ImportError as e:
+        print(f"Warning: Could not load SystemPathCommand: {e}")
+    
+    try:
+        from brain.commands.system.info import SystemVersionCommand
+        registry.register(SystemVersionCommand())
+    except ImportError as e:
+        print(f"Warning: Could not load SystemVersionCommand: {e}")
+    
+    # =================================================================
     # TWITTER
     # =================================================================
     try:
@@ -621,5 +642,8 @@ def get_hiddenimports_list():
         'brain.commands.project.nucleus',
         'brain.commands.runtime.run',
         'brain.commands.service.service',
+        'brain.commands.system.info',
+        'brain.commands.system.info',
+        'brain.commands.system.info',
         'brain.commands.twitter.auth',
     ]

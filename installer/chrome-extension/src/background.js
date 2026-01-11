@@ -376,46 +376,6 @@ function handleChunkingError(error, message) {
   chrome.storage.local.set({ pendingResponse: { message, timestamp: Date.now(), error: error.message } });
 }
 
-// Al iniciar, reportar el Extension ID real al sistema
-chrome.runtime.onInstalled.addListener(async () => {
-  const extensionId = chrome.runtime.id;
-  console.log('🔑 Extension ID:', extensionId);
-  
-  // Intentar actualizar el bridge config automáticamente
-  try {
-    // Conectar al native host para informarle el ID real
-    const port = chrome.runtime.connectNative('com.bloom.nucleus.bridge');
-    
-    port.postMessage({
-      type: 'register_extension_id',
-      extensionId: extensionId
-    });
-    
-    port.onMessage.addListener((response) => {
-      console.log('Bridge response:', response);
-      if (response.success) {
-        console.log('✅ Extension ID registered successfully');
-      }
-    });
-    
-    port.onDisconnect.addListener(() => {
-      if (chrome.runtime.lastError) {
-        console.error('❌ Bridge connection failed:', chrome.runtime.lastError);
-        console.log('💡 Run installer to configure bridge with ID:', extensionId);
-      }
-    });
-  } catch (err) {
-    console.error('Failed to connect to native host:', err);
-  }
-});
-
-// También exportar el ID para debugging
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.type === 'get_extension_id') {
-    sendResponse({ extensionId: chrome.runtime.id });
-  }
-});
-
 // Inicialización
 chrome.runtime.onInstalled.addListener(connectToNativeHost);
 chrome.runtime.onStartup.addListener(connectToNativeHost);

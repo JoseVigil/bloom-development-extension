@@ -14,7 +14,7 @@ from brain.core.browser.landing_generator import generate_profile_landing
 class ProfileManager:
     """
     Gestor de perfiles aislados de Chrome (Workers).
-    FIX: Lanzamiento totalmente desacoplado + rutas normalizadas
+    FIX: Lanzamiento totalmente desacoplado + rutas normalizadas + extensión cargada
     """
     
     def __init__(self):
@@ -35,22 +35,41 @@ class ProfileManager:
         self._auto_recover_orphaned_profiles()
     
     def _get_base_directory(self) -> Path:
-        """Determina el directorio base segun el sistema operativo"""
+        """
+        Determina el directorio raíz de BloomNucleus.
+        
+        Estrategia:
+        1. PROD: Si corre como ejecutable compilado (frozen), usa su ubicación relativa.
+           Esto hace que la app sea "portable" y robusta en Windows/Mac/Linux.
+        2. DEV: Si corre como script Python, usa las rutas estándar del SO (AppData, Library, etc).
+        """
+        import sys # Asegúrate de tener import sys arriba
+
+        # --- ESCENARIO 1: PRODUCCIÓN (Ejecutable Compilado) ---
+        if getattr(sys, 'frozen', False):
+            # sys.executable apunta a: .../BloomNucleus/bin/brain.exe (o similar)
+            # Queremos llegar a:       .../BloomNucleus
+            exe_path = Path(sys.executable)
+            
+            # Subimos 2 niveles (bin -> BloomNucleus)
+            # Ajusta esto si tu exe está en la raíz o en otra subcarpeta
+            return exe_path.parent.parent
+
+        # --- ESCENARIO 2: DESARROLLO (Script Python) ---
         system = platform.system()
         
         if system == "Windows":
             localappdata = os.environ.get("LOCALAPPDATA")
             if not localappdata:
-                raise RuntimeError("Variable LOCALAPPDATA no encontrada")
+                # Fallback seguro por si la variable de entorno falla
+                return Path.home() / "AppData" / "Local" / "BloomNucleus"
             return Path(localappdata) / "BloomNucleus"
         
         elif system == "Darwin":  # macOS
-            home = Path.home()
-            return home / "Library" / "Application Support" / "BloomNucleus"
+            return Path.home() / "Library" / "Application Support" / "BloomNucleus"
         
-        else:  # Linux y otros
-            home = Path.home()
-            return home / ".local" / "share" / "BloomNucleus"
+        else:  # Linux y otros (Unix standard)
+            return Path.home() / ".local" / "share" / "BloomNucleus"
     
     def _load_profiles(self) -> List[Dict[str, Any]]:
         """Carga los perfiles desde el archivo JSON"""
@@ -208,77 +227,121 @@ class ProfileManager:
         
         return url
     
-    def launch_profile(self, profile_id: str, url: Optional[str] = None) -> Dict[str, Any]:
+    def _get_extension_path(self) -> str:
         """
-        Lanzamiento de Chrome con Perfil Nivel Dios
+        Busca la extensión en este orden de prioridad:
+        1. Variable de entorno BLOOM_EXTENSION_PATH
+        2. Ruta de desarrollo relativa (dentro del repo)
+        3. Ruta de instalación en AppData (Producción)
+        """
+        # 1. Variable de Entorno
+        env_path = os.environ.get("BLOOM_EXTENSION_PATH")
+        if env_path:
+            path_obj = Path(env_path)
+            if (path_obj / "manifest.json").exists():
+                return str(path_obj)
+
+        # 2. Modo Desarrollo (Asumiendo estructura: repo/installer/brain/profile_manager.py)
+        # Subimos niveles hasta encontrar chrome-extension/src
+        current_file = Path(__file__).resolve()
+        # Ajusta estos .parent según la profundidad de tu archivo python en el repo
+        # Si estás en repo/brain/core/browser/profile_manager.py (ejemplo)
+        repo_root = current_file.parent.parent.parent.parent 
+        dev_path = repo_root / "chrome-extension" / "src"
         
-        CUMPLE:
-        - Rutas normalizadas (os.path.normpath)
-        - Sin comillas manuales (subprocess las agrega)
-        - Desacoplamiento total (DETACHED_PROCESS)
-        - Fire-and-forget (sin esperas)
-        """
+        if (dev_path / "manifest.json").exists():
+            print(f"🐛 [DEV MODE] Usando extensión desde repo: {dev_path}")
+            return str(dev_path)
+
+        # 3. Modo Producción (AppData)
+        prod_path = self.base_dir / "bin" / "extension"
+        # A veces copiamos src dentro de extension, o el contenido directo. 
+        # Verificamos ambas.
+        if (prod_path / "manifest.json").exists():
+            return str(prod_path)
+        if (prod_path / "src" / "manifest.json").exists():
+            return str(prod_path / "src")
+
+        # Si llegamos aquí, pánico.
+        raise FileNotFoundError(
+            f"❌ MANIFEST NO ENCONTRADO.\n"
+            f"Buscado en:\n"
+            f"1. Env Var BLOOM_EXTENSION_PATH\n"
+            f"2. Dev: {dev_path}\n"
+            f"3. Prod: {prod_path}"
+        )
+
+    def launch_profile(self, profile_id: str, url: Optional[str] = None) -> Dict[str, Any]:
         profile = self._find_profile(profile_id)
         if not profile:
             raise ValueError(f"Perfil no encontrado: {profile_id}")
         
         full_profile_id = profile['id']
-        
-        # ✅ NORMALIZACIÓN DE RUTAS (Windows-safe)
         profile_path = os.path.normpath(str(self.workers_dir / full_profile_id))
         chrome_path = os.path.normpath(self._find_chrome_executable())
-        extension_path = os.path.normpath(self._get_extension_path())
         
+        # Intentar obtener extensión, si falla, lanzamos error (es vital para Bloom)
+        try:
+            extension_path = os.path.normpath(self._get_extension_path())
+        except FileNotFoundError as e:
+            print(e)
+            # En modo dev, quizás quieras fallar. En prod, quizás no.
+            # Por ahora dejemos que falle para que te des cuenta.
+            raise e 
+
         if not url:
-            url = self.get_landing_url(full_profile_id)
-        
-        # ✅ ARGUMENTOS SIN COMILLAS MANUALES
-        # subprocess.Popen maneja automáticamente los espacios
+            try:
+                url = self.get_landing_url(full_profile_id)
+            except:
+                url = "about:blank"
+
+        # Argumentos Chrome
         chrome_args = [
             chrome_path,
-            f'--user-data-dir={profile_path}',  # ← Sin comillas
+            f'--user-data-dir={profile_path}',
+            f'--load-extension={extension_path}', # Fundamental
             '--no-first-run',
             '--no-default-browser-check',
-            f'--load-extension={extension_path}',  # ← Sin comillas, sin barra final
-            f'--app={url}'
+            '--enable-logging', # Útil para debug
+            '--v=1',
+            url
         ]
         
-        # ✅ LANZAMIENTO DESACOPLADO (Fire and Forget)
+        print(f"🚀 Lanzando Chrome con perfil: {full_profile_id}")
+        
         try:
+            # En Windows DETACHED es bueno para prod, pero en dev a veces oculta errores
+            creation_flags = 0
             if platform.system() == 'Windows':
-                # Windows: DETACHED_PROCESS para total independencia
-                process = subprocess.Popen(
-                    chrome_args,
-                    creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    stdin=subprocess.DEVNULL,
-                    shell=False  # ← CRÍTICO: Nunca usar shell
-                )
-            else:
-                # Unix/Mac: close_fds para desacople
-                process = subprocess.Popen(
-                    chrome_args,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    stdin=subprocess.DEVNULL,
-                    close_fds=True,
-                    shell=False
-                )
+                creation_flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
             
-            # ✅ RETORNO INMEDIATO (sin esperar confirmación)
+            process = subprocess.Popen(
+                chrome_args,
+                creationflags=creation_flags,
+                # Quitamos DEVNULL en stderr para ver si Chrome grita algo en consola
+                stdout=subprocess.DEVNULL, 
+                stderr=subprocess.PIPE if platform.system() == 'Windows' else subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL,
+                shell=False
+            )
+            
+            # Esperar un poco más para asegurar que no sea un crash inmediato
+            time.sleep(1.0) 
+            
+            # Verificar si murió
+            if process.poll() is not None:
+                _, stderr_out = process.communicate()
+                err_msg = stderr_out.decode('utf-8', errors='ignore') if stderr_out else "Sin output de error"
+                raise RuntimeError(f"Chrome murió inmediatamente. Stderr: {err_msg}")
+            
             return {
                 "status": "launched",
                 "profile_id": full_profile_id,
+                "alias": profile.get('alias'),
                 "pid": process.pid,
-                "extension_loaded": True,
-                "url": url,
-                "chrome_path": chrome_path,
                 "extension_path": extension_path
             }
             
-        except FileNotFoundError as e:
-            raise RuntimeError(f"Chrome o extensión no encontrada: {e}")
         except Exception as e:
             raise RuntimeError(f"Fallo al lanzar Chrome: {e}")
     
@@ -413,7 +476,7 @@ class ProfileManager:
         """DEPRECATED: Usar set_account(profile_id, None) o remove_account"""
         return self.set_account(profile_id, None)
     
-    def _find_chrome_executable(self) -> Optional[str]:
+    def _find_chrome_executable(self) -> str:
         """Busca el ejecutable de Chrome segun el sistema operativo"""
         system = platform.system()
         
@@ -446,37 +509,4 @@ class ProfileManager:
         
         raise FileNotFoundError("Chrome no encontrado en rutas estandar")
     
-    def _get_extension_path(self) -> Optional[str]:
-        """Busca la extension Bloom con diagnostico detallado."""
-        import sys
-        
-        # Lista de candidatos a probar
-        candidates = []
-        
-        # 1. Variable de entorno (Prioridad Maxima)
-        env_path = os.environ.get("BLOOM_EXTENSION_PATH")
-        if env_path:
-            candidates.append(("ENV_VAR", Path(env_path)))
-
-        # 2. Produccion (AppData/BloomNucleus/extension)
-        prod_root = self.base_dir / "extension"
-        candidates.append(("PROD_FLAT", prod_root))
-        candidates.append(("PROD_SRC", prod_root / "src"))
-
-        # 3. Desarrollo (Relativo al script)
-        try:
-            dev_path = Path(__file__).parents[4] / "chrome-extension" / "src"
-            candidates.append(("DEV_REPO", dev_path))
-        except:
-            pass
-
-        # Diagnostico silencioso (solo en modo verbose)
-        for source, path_obj in candidates:
-            manifest = path_obj / "manifest.json"
-            if path_obj.exists() and manifest.exists():
-                return str(path_obj)
-        
-        raise FileNotFoundError(
-            "Extension Bloom no encontrada. "
-            "Define BLOOM_EXTENSION_PATH o ejecuta el instalador."
-        )
+    

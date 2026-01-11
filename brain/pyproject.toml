@@ -1,18 +1,19 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = [
+    "setuptools>=61.0",
+]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "brain-cli"
-version = "0.1.0"
+version = "0.1.1"
 description = "Brain - Sistema de Intenciones Técnicas para Bloom"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
     "typer[all]",
-    "rich"
+    "rich",
 ]
 
-# ESTA ES LA MAGIA: Mapea el comando 'brain' a tu función main
 [project.scripts]
 brain = "brain.__main__:main"

@@ -27,6 +27,7 @@ class CommandCategory(Enum):
     SERVICE = ("service", "Background connection multiplexer and task runner")
     RUNTIME = ("runtime", "Non-interactive system runtime operations")
     TWITTER = ("twitter", "Twitter/X integration and social data analysis")
+    SYSTEM = ("system", "Runtime and system introspection")
 
     def __init__(self, name: str, description: str):
         self.category_name = name
@@ -74,4 +75,4 @@ HEALTH = CommandCategory.HEALTH
 EXTENSION = CommandCategory.EXTENSION
 SERVICE = CommandCategory.SERVICE
 RUNTIME = CommandCategory.RUNTIME
-TWITTER = CommandCategory.TWITTER
+SYSTEM = CommandCategory.SYSTEM 

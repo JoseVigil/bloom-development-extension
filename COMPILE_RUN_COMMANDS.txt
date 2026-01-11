@@ -1,7 +1,8 @@
 COMPILE & RUN:
 
 brain
-python build.py
+.\build.ps1 (powershell admin)
+brain system version --increase --desc "Versioning and info"
 
 Plugin
 /c/repos/bloom-videos/bloom-development-extension
