@@ -7,6 +7,7 @@ bloom-development-extension/
     │   │   ├── id.json
     │   │   └── key.pem
     │   ├── pem/
+    │   │   ├── key_generation_extesion.crx
     │   │   └── key_generation_extesion.pem
     │   └── src/
     │       ├── 128x128.png
@@ -14,8 +15,7 @@ bloom-development-extension/
     │       ├── content.js
     │       ├── icon128.png
     │       ├── icon16.png
-    │       ├── manifest.json
-    │       └── manifest.json.original
+    │       └── manifest.json
     ├── create_installer.py
     ├── electron-app/
     │   ├── .gitignore
@@ -41,7 +41,7 @@ bloom-development-extension/
     │   │   ├── installer.js
     │   │   ├── launcher-creator.js
     │   │   ├── native-host-installer.js
-    │   │   ├── profile-manager.js
+    │   │   ├── runtime-installer.js
     │   │   ├── service-installer.js
     │   │   └── shortcut-installer.js
     │   ├── installHelpers.js
@@ -70,7 +70,11 @@ bloom-development-extension/
     │   ├── run-elevated.js
     │   ├── scripts/
     │   │   ├── check-status.bat
-    │   │   └── emergency-cleanup.bat
+    │   │   ├── clean_chrome_cache.ps1
+    │   │   ├── cleanup_zombies.ps1
+    │   │   ├── emergency-cleanup.bat
+    │   │   ├── fix_bridge_id.py
+    │   │   └── sanitize_manifest.py
     │   ├── src/
     │   │   ├── index.html
     │   │   ├── installation_manager.js
@@ -83,7 +87,8 @@ bloom-development-extension/
     │   │   └── ui_manager.js
     │   ├── test-installation.js
     │   └── utils/
-    │       └── exec-helper.js
+    │       ├── exec-helper.js
+    │       └── repair-tools.js
     ├── native/
     │   ├── .DS_Store
     │   ├── bin/
@@ -91,12 +96,22 @@ bloom-development-extension/
     │   │   ├── darwin/
     │   │   │   └── x64/
     │   │   │       └── bloom-host
+    │   │   ├── linux/
+    │   │   │   └── bloom-host
     │   │   └── win32/
     │   │       ├── bloom-host.exe
     │   │       ├── brain/
     │   │       │   ├── _internal/ [... dependencies]
     │   │       │   └── brain.exe
-    │   │       └── libwinpthread-1.dll
+    │   │       ├── libwinpthread-1.dll
+    │   │       ├── profiles/
+    │   │       │   └── 053fc072-c32c-425f-9da5-ec8fd23d66d6/
+    │   │       │       └── landing/
+    │   │       │           ├── index.html
+    │   │       │           ├── manifest.json
+    │   │       │           ├── script.js
+    │   │       │           └── styles.css
+    │   │       └── profiles.json
     │   ├── host/
     │   │   └── com.bloom.nucleus.bridge.json
     │   └── nssm/
@@ -147,9 +162,7 @@ bloom-development-extension/
     └── scripts/
         ├── build-extension.js
         ├── check-health.js
-        ├── extension-utils.js
-        ├── generate-fixed-key.js
-        ├── get-id.js
+        ├── get_extension_key_from_pem_store_key_manfest.js
         ├── god-mode.js
         ├── python-runtime.config.json
         ├── run-elevated.ps1

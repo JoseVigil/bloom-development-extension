@@ -1,7 +1,6 @@
 bloom-development-extension/
 └── webview/
     └── app/
-        ├── .svelte-kit/ [... svelte build]
         ├── package-lock.json
         ├── package.json
         ├── src/
@@ -53,4 +52,5 @@ bloom-development-extension/
         │       └── welcome/
         │           └── +page.svelte
         ├── svelte.config.js
+        ├── tsconfig.json
         └── vite.config.ts

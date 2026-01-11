@@ -14,23 +14,20 @@ bloom-development-extension/
     │   ├── admin-utils.js
     │   ├── menu-builder.js
     │   └── window-manager.js
+    ├── dist/ [... build output]
     ├── electron-readme.md
     ├── entitlements.plist
     ├── forge.config.js
     ├── install/
-    │   ├── core-installer.js
     │   ├── extension-installer.js
     │   ├── installer.js
     │   ├── launcher-creator.js
     │   ├── native-host-installer.js
-    │   ├── profile-manager.js
-    │   └── service-installer.js
+    │   ├── runtime-installer.js
+    │   ├── service-installer.js
+    │   └── shortcut-installer.js
     ├── installHelpers.js
     ├── installer-config.json
-    ├── installers/
-    │   ├── ChromeEnterpriseExtensionInstaller.js
-    │   ├── ChromeManualExtensionInstaller.js
-    │   └── config.js
     ├── ipc/
     │   ├── install-handlers.js
     │   ├── launch-handlers.js
@@ -42,6 +39,8 @@ bloom-development-extension/
     │   ├── preload_launch.js
     │   └── profile-manager.js
     ├── main.js
+    ├── node_modules/ [... dependencies]
+    ├── package-lock.json
     ├── package.json
     ├── preload.js
     ├── registry-scripts/
@@ -52,14 +51,13 @@ bloom-development-extension/
     ├── run-elevated.bat
     ├── run-elevated.js
     ├── scripts/
-    │   ├── calc-true-id.js
     │   ├── check-status.bat
-    │   └── emergency-cleanup.bat
+    │   ├── clean_chrome_cache.ps1
+    │   ├── cleanup_zombies.ps1
+    │   ├── emergency-cleanup.bat
+    │   ├── fix_bridge_id.py
+    │   └── sanitize_manifest.py
     ├── src/
-    │   ├── event_listeners.js
-    │   ├── extension_installer.js
-    │   ├── healthCheck.js
-    │   ├── heartbeat_manager.js
     │   ├── index.html
     │   ├── installation_manager.js
     │   ├── launch/
@@ -71,4 +69,5 @@ bloom-development-extension/
     │   └── ui_manager.js
     ├── test-installation.js
     └── utils/
-        └── exec-helper.js
+        ├── exec-helper.js
+        └── repair-tools.js

@@ -356,10 +356,22 @@ def load_all_commands_explicit() -> CommandRegistry:
         print(f"Warning: Could not load NucleusGetCommand: {e}")
     
     try:
-        from brain.commands.nucleus.info import ProjectInfoCommand
-        registry.register(ProjectInfoCommand())
+        from brain.commands.nucleus.info import SystemInfoCommand
+        registry.register(SystemInfoCommand())
     except ImportError as e:
-        print(f"Warning: Could not load ProjectInfoCommand: {e}")
+        print(f"Warning: Could not load SystemInfoCommand: {e}")
+    
+    try:
+        from brain.commands.nucleus.info import SystemPathCommand
+        registry.register(SystemPathCommand())
+    except ImportError as e:
+        print(f"Warning: Could not load SystemPathCommand: {e}")
+    
+    try:
+        from brain.commands.nucleus.info import SystemVersionCommand
+        registry.register(SystemVersionCommand())
+    except ImportError as e:
+        print(f"Warning: Could not load SystemVersionCommand: {e}")
     
     try:
         from brain.commands.nucleus.link import NucleusLinkCommand
@@ -625,6 +637,8 @@ def get_hiddenimports_list():
         'brain.commands.nucleus.exp_discovery_turn',
         'brain.commands.nucleus.exp_export_findings',
         'brain.commands.nucleus.get',
+        'brain.commands.nucleus.info',
+        'brain.commands.nucleus.info',
         'brain.commands.nucleus.info',
         'brain.commands.nucleus.link',
         'brain.commands.nucleus.list',

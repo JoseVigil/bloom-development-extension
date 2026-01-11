@@ -1,14 +1,20 @@
 bloom-development-extension/
 └── brain/
+    ├── VERSION
     ├── __init__.py
     ├── __main__.py
     ├── __pycache__/ [... cache]
     ├── build_deploy/
     │   ├── __init__.py
+    │   ├── __pycache__/ [... cache]
     │   ├── brain.spec
     │   ├── build_main.py
+    │   ├── bump_version.py
     │   ├── generate_command_loader.py
-    │   └── update_spec_hiddenimports.py
+    │   ├── generate_commit.py
+    │   ├── update_spec_hiddenimports.py
+    │   ├── update_version.py
+    │   └── versions.json
     ├── cli/
     │   ├── __init__.py
     │   ├── __pycache__/ [... cache]
@@ -126,6 +132,14 @@ bloom-development-extension/
     │   │   ├── __init__.py
     │   │   ├── __pycache__/ [... cache]
     │   │   └── service.py
+    │   ├── synapse/
+    │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
+    │   │   └── synapse_host_cli.py
+    │   ├── system/
+    │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
+    │   │   └── info.py
     │   └── twitter/
     │       ├── __init__.py
     │       ├── __pycache__/ [... cache]
@@ -134,9 +148,6 @@ bloom-development-extension/
     ├── core/
     │   ├── __pycache__/ [... cache]
     │   ├── bloom_project_inspector.py
-    │   ├── browser/
-    │   │   ├── landing_generator.py
-    │   │   └── profile_manager.py
     │   ├── context/
     │   │   ├── __init__.py
     │   │   ├── __pycache__/ [... cache]
@@ -204,6 +215,10 @@ bloom-development-extension/
     │   ├── intent_manager.py
     │   ├── nucleus_inspector.py
     │   ├── nucleus_manager.py
+    │   ├── profile/
+    │   │   ├── discovery_generator.py
+    │   │   ├── landing_generator.py
+    │   │   └── profile_manager.py
     │   ├── project/
     │   │   ├── __init__.py
     │   │   ├── __pycache__/ [... cache]
@@ -215,10 +230,25 @@ bloom-development-extension/
     │   ├── service/
     │   │   ├── __pycache__/ [... cache]
     │   │   └── server_manager.py
+    │   ├── synapse/
+    │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
+    │   │   ├── synapse_exceptions.py
+    │   │   ├── synapse_manager.py
+    │   │   └── synapse_protocol.py
+    │   ├── system/
+    │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
+    │   │   └── info_manager.py
     │   ├── tree_manager.py
     │   └── twitter/
     │       └── auth_manager.py
     ├── entry.py
+    ├── help/
+    │   ├── brain-ai-full.json
+    │   ├── brain-ai-schema.json
+    │   ├── brain-legacy.json
+    │   └── help.txt
     ├── libs/ [... python vendored dependencies]
     ├── prepare_runtime_libs.py
     ├── pyproject.toml

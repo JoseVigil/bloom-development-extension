@@ -34,7 +34,7 @@ class ProfilesListCommand(BaseCommand):
                 gc = GlobalContext()
             
             try:
-                from brain.core.browser.profile_manager import ProfileManager
+                from brain.core.profile.profile_manager import ProfileManager
                 
                 if gc.verbose:
                     typer.echo("🔍 Cargando perfiles...", err=True)
@@ -114,7 +114,7 @@ class ProfilesCreateCommand(BaseCommand):
                 gc = GlobalContext()
             
             try:
-                from brain.core.browser.profile_manager import ProfileManager
+                from brain.core.profile.profile_manager import ProfileManager
                 
                 if gc.verbose:
                     typer.echo(f"🔨 Creando perfil '{alias}'...", err=True)
@@ -161,12 +161,12 @@ class ProfilesLaunchCommand(BaseCommand):
         return CommandMetadata(
             name="launch",
             category=CommandCategory.PROFILE,
-            version="1.0.0",
+            version="1.1.0", # Bump version por nueva feature
             description="Lanza Chrome con un perfil de Worker",
             examples=[
-                "brain profile launch <profile-id>",
-                "brain profile launch <profile-id> --url https://chatgpt.com",
-                "brain profile launch <profile-id> --cockpit"
+                "brain profile launch <id>",
+                "brain profile launch <id> --discovery  (Modo validación)",
+                "brain profile launch <id> --cockpit    (Modo dashboard)"
             ]
         )
 
@@ -175,8 +175,9 @@ class ProfilesLaunchCommand(BaseCommand):
         def launch_profile(
             ctx: typer.Context,
             profile_id: str = typer.Argument(..., help="ID del perfil a lanzar"),
-            url: Optional[str] = typer.Option(None, "--url", help="URL inicial (default: cockpit landing)"),
-            cockpit: bool = typer.Option(False, "--cockpit", help="Fuerza modo cockpit (landing page)")
+            url: Optional[str] = typer.Option(None, "--url", help="URL inicial explícita"),
+            cockpit: bool = typer.Option(False, "--cockpit", help="Fuerza modo cockpit (landing page)"),
+            discovery: bool = typer.Option(False, "--discovery", help="Inicia modo de validación de conexión") # Nuevo Flag
         ):
             """Lanza Chrome con el perfil especificado y la extensión Bloom."""
             gc = ctx.obj
@@ -185,32 +186,44 @@ class ProfilesLaunchCommand(BaseCommand):
                 gc = GlobalContext()
             
             try:
-                from brain.core.browser.profile_manager import ProfileManager
-                
-                if gc.verbose:
-                    typer.echo(f"🚀 Lanzando perfil {profile_id}...", err=True)
+                from brain.core.profile.profile_manager import ProfileManager
                 
                 pm = ProfileManager()
                 
-                # Determine target URL: explicit URL > cockpit flag > default cockpit
+                # --- LÓGICA DE PRIORIDAD DE URL ---
                 target_url = None
-                use_cockpit = False
-                
+                mode_label = "Standard"
+
                 if url:
-                    # Explicit URL provided, use it
+                    # 1. URL Explícita (Prioridad Máxima)
                     target_url = url
-                elif cockpit or url is None:
-                    # Cockpit mode: either explicitly requested or default
-                    use_cockpit = True
+                    mode_label = "Custom URL"
+                    
+                elif discovery:
+                    # 2. Modo Discovery (Instalación/Debug)
+                    if gc.verbose:
+                        typer.echo(f"🔍 Generando entorno de discovery...", err=True)
+                    target_url = pm.get_discovery_url(profile_id)
+                    mode_label = "🔍 Discovery Check"
+                    
+                elif cockpit:
+                    # 3. Modo Cockpit (Dashboard)
                     try:
                         target_url = pm.get_landing_url(profile_id)
-                        if gc.verbose:
-                            typer.echo(f"🏠 Usando cockpit mode: {target_url}", err=True)
-                    except FileNotFoundError as e:
-                        if gc.verbose:
-                            typer.echo(f"⚠️  Landing page no encontrada: {str(e)}", err=True)
-                        # Fallback: launch without URL
-                        target_url = None
+                        mode_label = "🏠 Cockpit"
+                    except Exception:
+                        target_url = "about:blank"
+                
+                else:
+                    # 4. Default (Cockpit si existe, sino blank)
+                    try:
+                        target_url = pm.get_landing_url(profile_id)
+                        mode_label = "🏠 Cockpit (Default)"
+                    except Exception:
+                        target_url = "about:blank"
+
+                if gc.verbose:
+                    typer.echo(f"🚀 Lanzando perfil {profile_id} en modo: {mode_label}", err=True)
                 
                 # Launch Chrome
                 launch_data = pm.launch_profile(profile_id, target_url)
@@ -220,7 +233,7 @@ class ProfilesLaunchCommand(BaseCommand):
                     "operation": "launch",
                     "data": {
                         **launch_data,
-                        "cockpit_mode": use_cockpit
+                        "mode": mode_label
                     }
                 }
                 
@@ -232,31 +245,25 @@ class ProfilesLaunchCommand(BaseCommand):
         """Renderiza la confirmación de lanzamiento."""
         typer.echo(f"\n🚀 Chrome lanzado exitosamente")
         
-        # Obtener profile_id de forma segura
         profile_id = data.get('profile_id')
         profile_id_display = (profile_id[:8] + '...') if isinstance(profile_id, str) and profile_id else 'N/A'
         
         typer.echo(f"   Perfil: {data.get('alias', 'N/A')} ({profile_id_display})")
+        typer.echo(f"   Modo:   {data.get('mode', 'Standard')}")
         
-        # Cockpit mode indicator
-        if data.get('cockpit_mode'):
-            typer.echo(f"   Modo:   🏠 Cockpit (landing page)")
-        
-        if data.get('url'):
-            url_display = data.get('url')
-            # Truncate file:// URLs for readability
-            if url_display and url_display.startswith('file://'):
-                url_display = f"file://.../{url_display.split('/')[-1]}"
-            typer.echo(f"   URL:    {url_display}")
-        
+        url_display = data.get('url', '')
+        if url_display.startswith('file://'):
+            # Limpiar visualmente rutas largas de archivo
+            filename = url_display.split('/')[-2] + '/' + url_display.split('/')[-1]
+            url_display = f"file://.../{filename}"
+            
+        typer.echo(f"   URL:    {url_display}")
         typer.echo(f"   PID:    {data.get('pid')}")
 
         if not data.get('extension_loaded'):
-            typer.echo("   ⚠️  Extensión Bloom no encontrada")
-            typer.echo("      Intentos: Verifica BLOOM_EXTENSION_PATH, ruta dev, o producción en BloomNucleus")
-            typer.echo("      Tip: Establece BLOOM_EXTENSION_PATH o ejecuta desde el proyecto")
+            typer.echo("   ⚠️  Extensión Bloom no encontrada (Revisar instalación)")
         else:
-            typer.echo("   ✅ Extensión Bloom cargada correctamente")        
+            typer.echo("   ✅ Extensión Bloom inyectada")        
         
         typer.echo()
 
@@ -299,7 +306,7 @@ class ProfilesDestroyCommand(BaseCommand):
                 gc = GlobalContext()
             
             try:
-                from brain.core.browser.profile_manager import ProfileManager
+                from brain.core.profile.profile_manager import ProfileManager
                 
                 pm = ProfileManager()
                 
@@ -377,7 +384,7 @@ class ProfilesLinkCommand(BaseCommand):
                 gc = GlobalContext()
             
             try:
-                from brain.core.browser.profile_manager import ProfileManager
+                from brain.core.profile.profile_manager import ProfileManager
                 
                 if gc.verbose:
                     typer.echo(f"🔗 Vinculando {email} a {profile_id}...", err=True)
@@ -438,7 +445,7 @@ class ProfilesUnlinkCommand(BaseCommand):
                 gc = GlobalContext()
             
             try:
-                from brain.core.browser.profile_manager import ProfileManager
+                from brain.core.profile.profile_manager import ProfileManager
                 
                 if gc.verbose:
                     typer.echo(f"🔓 Desvinculando cuenta de {profile_id}...", err=True)
@@ -502,7 +509,7 @@ class ProfilesAccountsRegisterCommand(BaseCommand):
                 gc = GlobalContext()
             
             try:
-                from brain.core.browser.profile_manager import ProfileManager
+                from brain.core.profile.profile_manager import ProfileManager
                 
                 if gc.verbose:
                     typer.echo(f"🔗 Registrando {provider} ({email}) en {profile_id}...", err=True)
@@ -566,7 +573,7 @@ class ProfilesAccountsRemoveCommand(BaseCommand):
                 gc = GlobalContext()
             
             try:
-                from brain.core.browser.profile_manager import ProfileManager
+                from brain.core.profile.profile_manager import ProfileManager
                 
                 if gc.verbose:
                     typer.echo(f"🔓 Removiendo {provider} de {profile_id}...", err=True)
