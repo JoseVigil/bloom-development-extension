@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "brain-cli"
-version = "0.1.1"
+version = "0.1.4"
 description = "Brain - Sistema de Intenciones Técnicas para Bloom"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -17,3 +17,22 @@ dependencies = [
 
 [project.scripts]
 brain = "brain.__main__:main"
+
+[tool.brain.changelog]
+added = [
+    "Synapse Architecture: Native Messaging Bridge v2.0 (Host & Protocol)",
+    "New CLI Command: 'brain synapse host' (Native Listener Loop)",
+    "New CLI Category: CommandCategory.SYNAPSE",
+    "Core Module: brain.core.synapse (Manager, Protocol, Exceptions)",
+]
+changed = [
+    "Extension: Refactored background.js to 'Synapse Router' (Thin Client)",
+    "Extension: Refactored content.js to 'DOM Actuator' (No logic)",
+    "ProfileManager: Hybrid path resolution for Dev vs Prod environments",
+    "Build System: Integrated Python build script into build.ps1",
+]
+details = [
+    "Philosophy: Thin Client (100% Logic in Python, 0% in JS)",
+    "Implemented Dispatcher Pattern (Action Map) for O(1) command handling",
+    "Standardized Native Host args to ['synapse', 'host']",
+]

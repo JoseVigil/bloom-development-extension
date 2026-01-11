@@ -156,6 +156,9 @@ async function createHostManifestInHKLM(extensionId) {
     type: "stdio",
     allowed_origins: [
       `chrome-extension://${extensionId}/`
+    ],
+    "args": [
+      "synapse",  "host"
     ]
   };
   

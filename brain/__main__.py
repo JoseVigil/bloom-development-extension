@@ -65,12 +65,17 @@ def main():
     # ✅ CRÍTICO para Windows + PyInstaller + Asyncio/Multiprocessing
     multiprocessing.freeze_support() 
     
-    # Intercept --help BEFORE Typer processes anything
-    if "--help" in sys.argv and len(sys.argv) == 2:
-        from brain.cli.help_renderer import render_help
-        registry = load_commands()
-        render_help(registry)
-        sys.exit(0)
+    # Intercept --help with AI-native support
+    if "--help" in sys.argv:
+        json_mode = "--json" in sys.argv
+        ai_native = "--ai" in sys.argv or "--ai-native" in sys.argv
+        
+        # Si es solo --help o tiene flags de output
+        if len([arg for arg in sys.argv if not arg.startswith('-')]) == 1:
+            from brain.cli.help_renderer import render_help
+            registry = load_commands()
+            render_help(registry, json_mode=json_mode, ai_native=ai_native)
+            sys.exit(0)
     
     try:
         registry = load_commands()

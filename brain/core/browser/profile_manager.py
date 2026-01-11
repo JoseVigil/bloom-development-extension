@@ -299,10 +299,10 @@ class ProfileManager:
         chrome_args = [
             chrome_path,
             f'--user-data-dir={profile_path}',
-            f'--load-extension={extension_path}', # Fundamental
+            f'--load-extension={extension_path}', 
             '--no-first-run',
             '--no-default-browser-check',
-            '--enable-logging', # Útil para debug
+            '--enable-logging', 
             '--v=1',
             url
         ]
