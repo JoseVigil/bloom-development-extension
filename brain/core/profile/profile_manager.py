@@ -8,8 +8,8 @@ import time
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime
-from brain.core.browser.landing_generator import generate_profile_landing
-
+from brain.core.profile.landing_generator import generate_profile_landing
+from brain.core.profile.discovery_generator import generate_discovery_page
 
 class ProfileManager:
     """
@@ -226,6 +226,35 @@ class ProfileManager:
             url = f"file://{absolute_path}"
         
         return url
+
+    def get_discovery_url(self, profile_id: str) -> str:
+        """
+        Genera los archivos de discovery y devuelve la URL local file://
+        """
+        profile = self._find_profile(profile_id)
+        if not profile:
+            raise ValueError(f"Perfil no encontrado: {profile_id}")
+
+        full_profile_id = profile['id']
+        profile_path = self.workers_dir / full_profile_id
+        
+        # 1. Generar los archivos frescos (HTML/JS/CSS)
+        # Esto asegura que tengan el timestamp y config más recientes
+        generate_discovery_page(profile_path, profile)
+        
+        # 2. Construir ruta al index.html
+        discovery_path = profile_path / "discovery" / "index.html"
+        
+        if not discovery_path.exists():
+             raise FileNotFoundError(f"Error generando discovery page en {discovery_path}")
+
+        # 3. Convertir a URL file://
+        absolute_path = discovery_path.resolve()
+        if platform.system() == "Windows":
+            path_str = str(absolute_path).replace(os.sep, '/')
+            return f"file:///{path_str}"
+        else:
+            return f"file://{absolute_path}"
     
     def _get_extension_path(self) -> str:
         """

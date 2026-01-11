@@ -1,189 +1,382 @@
 """
-Project info command - Inspect individual Bloom project metadata.
-
-Path: brain/commands/project/info.py
-Action: CREATE NEW FILE
+System introspection commands for Brain CLI.
+Provides runtime metadata, version info, and executable location.
 """
 
 import typer
+import sys
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 from brain.cli.base import BaseCommand, CommandMetadata
 from brain.cli.categories import CommandCategory
 
 
-class ProjectInfoCommand(BaseCommand):
+class SystemInfoCommand(BaseCommand):
     """
-    Inspect and display comprehensive information about a Bloom project.
+    Comprehensive system information command.
+    Shows version, executable path, Python runtime, and environment details.
     """
     
     def metadata(self) -> CommandMetadata:
         return CommandMetadata(
             name="info",
-            category=CommandCategory.PROJECT,
-            version="2.0.0",
-            description="Inspect and display Bloom project metadata",
+            category=CommandCategory.SYSTEM,
+            version="1.0.0",
+            description="Display system information, version, and executable location",
             examples=[
-                "brain project info",
-                "brain project info --path ./my-project",
-                "brain project info --show-intents"
+                "brain system info",
+                "brain system info --json",
+                "brain system info --verbose"
             ]
         )
-    
+
     def register(self, app: typer.Typer) -> None:
-        @app.command(name="info")
-        def info(
-            ctx: typer.Context,
-            path: Optional[Path] = typer.Option(
-                None,
-                "--path",
-                "-p",
-                help="Project root path (default: current directory)"
-            ),
-            show_intents: bool = typer.Option(
-                False,
-                "--show-intents",
-                help="Show list of intents in the project"
-            ),
-            show_tree: bool = typer.Option(
-                False,
-                "--show-tree",
-                help="Show project tree structure"
-            )
-        ):
+        @app.command(name=self.metadata().name)
+        def execute(ctx: typer.Context):
             """
-            Inspect and display comprehensive information about a Bloom project.
+            Display comprehensive system information.
             
-            Shows project metadata, strategy, intents, and directory structure
-            from the .bloom/.project/ directory.
+            Shows:
+            - Brain CLI version
+            - Executable location
+            - Python runtime details
+            - Execution mode (frozen/development)
+            - Platform information
             """
-            
-            # 1. Get Global Context
             gc = ctx.obj
             if gc is None:
                 from brain.shared.context import GlobalContext
                 gc = GlobalContext()
             
             try:
-                # 2. Lazy Import
-                from brain.core.bloom_project_inspector import BloomProjectInspector
+                # Lazy import core logic
+                from brain.core.system.info_manager import SystemInfoManager
                 
-                target_path = path or Path.cwd()
-                
-                # 3. Verbose logging
                 if gc.verbose:
-                    typer.echo(f"🔍 Inspecting project at {target_path}...", err=True)
+                    typer.echo("🔍 Gathering system information...", err=True)
                 
-                # 4. Execute business logic
-                inspector = BloomProjectInspector(target_path)
-                info_data = inspector.get_project_info()
+                manager = SystemInfoManager()
+                info = manager.get_system_info()
                 
-                # Add intent list if requested
-                if show_intents:
-                    info_data["intents"] = inspector.get_intents_list()
-                
-                # Add tree if requested
-                if show_tree:
-                    info_data["tree"] = inspector.get_tree_structure()
-                
-                # Add operation metadata
                 result = {
                     "status": "success",
-                    "operation": "project_info",
-                    "data": info_data
+                    "operation": "system_info",
+                    "data": info
                 }
                 
-                # 5. Smart output
-                gc.output(result, self._render_success)
+                gc.output(result, self._render_human)
                 
-            except FileNotFoundError as e:
-                self._handle_error(gc, f"Bloom project not found: {e}")
             except Exception as e:
-                self._handle_error(gc, f"Error reading project info: {e}")
+                self._handle_error(gc, f"Failed to gather system info: {e}")
     
-    def _render_success(self, data: dict):
-        """Render success output for humans."""
+    def _render_human(self, data: dict):
+        """Rich terminal output for system information."""
         info = data.get("data", {})
         
-        # Header
-        typer.echo("\n" + "="*70)
-        typer.echo(f"🌸 BLOOM PROJECT: {info.get('name', 'Unknown')}")
-        typer.echo("="*70 + "\n")
+        typer.echo("\n" + "=" * 70)
+        typer.echo("🧠 BRAIN CLI - System Information")
+        typer.echo("=" * 70)
         
-        # Basic Info
-        typer.echo("📋 PROJECT INFO")
-        typer.echo(f"  Name:      {info.get('name', 'N/A')}")
-        typer.echo(f"  Path:      {info.get('path', 'N/A')}")
-        typer.echo(f"  Strategy:  {info.get('strategy', 'N/A')}")
-        typer.echo(f"  Version:   {info.get('version', 'N/A')}\n")
+        # Version section
+        typer.echo("\n📦 VERSION")
+        typer.echo(f"   Brain CLI:        {info['version']}")
         
-        # Metadata
-        metadata = info.get("metadata", {})
-        if metadata:
-            typer.echo("🏷️  METADATA")
-            typer.echo(f"  Type:      {metadata.get('type', 'N/A')}")
-            typer.echo(f"  Created:   {metadata.get('created_at', 'N/A')}")
-            typer.echo(f"  Updated:   {metadata.get('updated_at', 'N/A')}\n")
+        # Executable section
+        typer.echo("\n🔧 EXECUTABLE")
+        typer.echo(f"   Location:         {info['executable_path']}")
+        typer.echo(f"   Mode:             {info['execution_mode']}")
+        if info.get('frozen_bundle_path'):
+            typer.echo(f"   Bundle Path:      {info['frozen_bundle_path']}")
         
-        # Strategy Info
-        strategy_info = info.get("strategy_info", {})
-        if strategy_info:
-            typer.echo("🎯 STRATEGY")
-            typer.echo(f"  Type:      {strategy_info.get('type', 'N/A')}")
-            typer.echo(f"  Context:   {strategy_info.get('context_file', 'N/A')}")
-            typer.echo(f"  Standards: {strategy_info.get('standards_file', 'N/A')}\n")
+        # Python runtime
+        typer.echo("\n🐍 PYTHON RUNTIME")
+        typer.echo(f"   Version:          {info['python_version']}")
+        typer.echo(f"   Executable:       {info['python_executable']}")
         
-        # Intents
-        intents = info.get("intents", [])
-        if intents is not None:
-            typer.echo(f"🎯 INTENTS ({len(intents)} total)")
-            if intents:
-                typer.echo("-" * 70)
-                for intent in intents[:5]:  # Show first 5
-                    name = intent.get("intent_name", "Unknown")
-                    type_ = intent.get("type", "unknown")
-                    status = intent.get("status", "unknown")
-                    
-                    status_icon = {
-                        "briefing": "📝",
-                        "execution": "⚙️",
-                        "refinement": "🔄",
-                        "completed": "✅"
-                    }.get(status, "❓")
-                    
-                    typer.echo(f"  {status_icon} [{type_:3s}] {name}")
-                    typer.echo(f"     Status: {status}")
-                
-                if len(intents) > 5:
-                    typer.echo(f"\n  ... and {len(intents) - 5} more intents")
-            else:
-                typer.echo("  No intents found.")
-            typer.echo()
+        # Platform
+        typer.echo("\n💻 PLATFORM")
+        typer.echo(f"   System:           {info['platform']}")
+        typer.echo(f"   Architecture:     {info['architecture']}")
         
-        # Tree structure
-        tree = info.get("tree")
-        if tree:
-            typer.echo("📂 PROJECT TREE")
-            typer.echo("-" * 70)
-            typer.echo(tree)
-            typer.echo()
+        # Working directory
+        typer.echo("\n📂 ENVIRONMENT")
+        typer.echo(f"   Working Dir:      {info['working_directory']}")
         
-        # Structure validation
-        validation = info.get("structure_validation", {})
-        if validation:
-            is_valid = validation.get("valid", False)
-            icon = "✅" if is_valid else "⚠️"
-            typer.echo(f"{icon} STRUCTURE VALIDATION: {'Valid' if is_valid else 'Issues found'}")
-            
-            missing = validation.get("missing", [])
-            if missing:
-                typer.echo(f"  Missing: {', '.join(missing)}")
-            typer.echo()
-        
-        typer.echo("="*70 + "\n")
+        typer.echo("\n" + "=" * 70 + "\n")
     
     def _handle_error(self, gc, message: str):
-        """Handle errors with dual output mode."""
+        """Unified error handling."""
+        if gc.json_mode:
+            import json
+            typer.echo(json.dumps({"status": "error", "message": message}))
+        else:
+            typer.echo(f"❌ {message}", err=True)
+        raise typer.Exit(code=1)
+
+
+class SystemVersionCommand(BaseCommand):
+    """
+    Version management command.
+    Display current version or increment with semantic changelog.
+    Supports multiple updates accumulation for the same version.
+    """
+    
+    def metadata(self) -> CommandMetadata:
+        return CommandMetadata(
+            name="version",
+            category=CommandCategory.SYSTEM,
+            version="2.1.0",
+            description="Display or increment Brain CLI version with semantic changelog",
+            examples=[
+                "brain system version",
+                "brain system version --json",
+                "brain system version --added 'New feature X' --changed 'Refactored Y'",
+                "brain system version --details 'Implementation notes'",
+                "brain system version --added 'Feature A' --added 'Feature B' --changed 'Updated C'"
+            ]
+        )
+
+    def register(self, app: typer.Typer) -> None:
+        @app.command(name=self.metadata().name)
+        def execute(
+            ctx: typer.Context,
+            added: Optional[List[str]] = typer.Option(
+                None, 
+                "--added", 
+                help="Feature or capability added (can be used multiple times)"
+            ),
+            changed: Optional[List[str]] = typer.Option(
+                None, 
+                "--changed", 
+                help="Feature or behavior changed (can be used multiple times)"
+            ),
+            details: Optional[List[str]] = typer.Option(
+                None, 
+                "--details", 
+                help="Implementation detail or technical note (can be used multiple times)"
+            )
+        ):
+            """
+            Display or increment the version number.
+            
+            Using any of --added, --changed, or --details will automatically increment
+            the patch version (e.g., 0.1.1 → 0.1.2) and update the changelog.
+            
+            Multiple calls for the same version accumulate changelog entries instead
+            of overwriting previous ones.
+            
+            Examples:
+                brain system version
+                    → Display current version
+                
+                brain system version --added "New AI schema support"
+                    → Increment version and log feature addition
+                
+                brain system version --added "Feature A" --changed "Refactored B"
+                    → Increment once with multiple changelog entries
+                
+                # Multiple calls accumulate:
+                brain system version --added "Feature 1"
+                brain system version --added "Feature 2"
+                brain system version --changed "Updated X"
+                    → All three changelog entries will be in the same version
+            """
+            gc = ctx.obj
+            if gc is None:
+                from brain.shared.context import GlobalContext
+                gc = GlobalContext()
+            
+            # Check if any changelog flags were provided
+            has_changelog = any([added, changed, details])
+            
+            try:
+                from brain.core.system.info_manager import SystemInfoManager
+                
+                manager = SystemInfoManager()
+                
+                if has_changelog:
+                    # Increment version with changelog
+                    if gc.verbose:
+                        typer.echo("📝 Incrementing version with changelog...", err=True)
+                    
+                    new_version = manager.increment_version(
+                        added=added,
+                        changed=changed,
+                        details=details
+                    )
+                    
+                    # Check if request was updated (frozen mode)
+                    is_frozen = manager._is_frozen
+                    is_update = False
+                    update_count = 1
+                    
+                    if is_frozen:
+                        # Try to read update_count from version_request.json
+                        import json
+                        exe_dir = Path(sys.executable).parent
+                        request_file = exe_dir / "version_request.json"
+                        if request_file.exists():
+                            try:
+                                with open(request_file, 'r', encoding='utf-8') as f:
+                                    data = json.load(f)
+                                    update_count = data.get("update_count", 1)
+                                    is_update = update_count > 1
+                            except:
+                                pass
+                    
+                    result = {
+                        "status": "success",
+                        "operation": "version_increment",
+                        "data": {
+                            "version": new_version,
+                            "changelog": {
+                                "added": added or [],
+                                "changed": changed or [],
+                                "details": details or []
+                            },
+                            "mode": "frozen" if is_frozen else "development",
+                            "is_update": is_update,
+                            "update_count": update_count
+                        }
+                    }
+                    
+                    gc.output(result, self._render_increment)
+                else:
+                    # Just display current version
+                    version = manager.get_version()
+                    result = {
+                        "status": "success",
+                        "operation": "version",
+                        "data": {"version": version}
+                    }
+                    
+                    gc.output(result, self._render_version)
+                
+            except ValueError as e:
+                self._handle_error(gc, str(e))
+            except Exception as e:
+                self._handle_error(gc, f"Failed to process version: {e}")
+    
+    def _render_version(self, data: dict):
+        """Simple version output."""
+        version = data["data"]["version"]
+        typer.echo(f"Brain CLI v{version}")
+    
+    def _render_increment(self, data: dict):
+        """Output for version increment with changelog."""
+        info = data["data"]
+        version = info["version"]
+        changelog = info.get("changelog", {})
+        mode = info.get("mode", "unknown")
+        is_update = info.get("is_update", False)
+        update_count = info.get("update_count", 1)
+        
+        typer.echo("\n" + "=" * 70)
+        if is_update:
+            typer.echo(f"🔄 Actualización #{update_count} para versión: {version}")
+        else:
+            typer.echo(f"🎯 Version Increment: {version}")
+        typer.echo("=" * 70)
+        
+        # Display changelog sections
+        added = changelog.get("added", [])
+        changed = changelog.get("changed", [])
+        details = changelog.get("details", [])
+        
+        if added:
+            typer.echo("\n✨ ADDED:")
+            for item in added:
+                typer.echo(f"   • {item}")
+        
+        if changed:
+            typer.echo("\n🔄 CHANGED:")
+            for item in changed:
+                typer.echo(f"   • {item}")
+        
+        if details:
+            typer.echo("\n📋 DETAILS:")
+            for item in details:
+                typer.echo(f"   • {item}")
+        
+        typer.echo("\n" + "-" * 70)
+        
+        if mode == "frozen":
+            if is_update:
+                typer.echo("\n✅ Changelog acumulado actualizado")
+                typer.echo(f"📦 Versión objetivo: {version}")
+                typer.echo(f"🔢 Actualizaciones acumuladas: {update_count}")
+                typer.echo(f"\n💡 Archivo: version_request.json")
+                typer.echo(f"   Todas las entradas se fusionarán al procesar la solicitud.")
+            else:
+                typer.echo("\n✅ Solicitud de incremento guardada")
+                typer.echo(f"📦 Nueva versión solicitada: {version}")
+                typer.echo(f"\n💡 Archivo creado: version_request.json")
+                typer.echo(f"   El launcher procesará esta solicitud y recompilará Brain.")
+        else:
+            typer.echo(f"\n✅ Versión actualizada: {version}")
+            typer.echo(f"📝 Changelog guardado en pyproject.toml y versions.json")
+        
+        typer.echo("\n" + "=" * 70 + "\n")
+    
+    def _handle_error(self, gc, message: str):
+        if gc.json_mode:
+            import json
+            typer.echo(json.dumps({"status": "error", "message": message}))
+        else:
+            typer.echo(f"❌ {message}", err=True)
+        raise typer.Exit(code=1)
+
+
+class SystemPathCommand(BaseCommand):
+    """
+    Executable path display command.
+    Returns absolute path to the brain executable.
+    """
+    
+    def metadata(self) -> CommandMetadata:
+        return CommandMetadata(
+            name="path",
+            category=CommandCategory.SYSTEM,
+            version="1.0.0",
+            description="Display absolute path to Brain CLI executable",
+            examples=[
+                "brain system path",
+                "brain system path --json"
+            ]
+        )
+
+    def register(self, app: typer.Typer) -> None:
+        @app.command(name=self.metadata().name)
+        def execute(ctx: typer.Context):
+            """Display the absolute path to the brain executable."""
+            gc = ctx.obj
+            if gc is None:
+                from brain.shared.context import GlobalContext
+                gc = GlobalContext()
+            
+            try:
+                from brain.core.system.info_manager import SystemInfoManager
+                
+                manager = SystemInfoManager()
+                path = manager.get_executable_path()
+                
+                result = {
+                    "status": "success",
+                    "operation": "executable_path",
+                    "data": {"path": str(path)}
+                }
+                
+                gc.output(result, self._render_path)
+                
+            except Exception as e:
+                self._handle_error(gc, f"Failed to retrieve executable path: {e}")
+    
+    def _render_path(self, data: dict):
+        """Simple path output."""
+        path = data["data"]["path"]
+        typer.echo(path)
+    
+    def _handle_error(self, gc, message: str):
         if gc.json_mode:
             import json
             typer.echo(json.dumps({"status": "error", "message": message}))

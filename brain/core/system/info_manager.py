@@ -29,6 +29,22 @@ class ChangelogEntry:
         """Check if the changelog entry is empty."""
         return not (self.added or self.changed or self.details)
     
+    def merge(self, other: 'ChangelogEntry') -> 'ChangelogEntry':
+        """
+        Merge another changelog entry into this one.
+        
+        Args:
+            other: Another ChangelogEntry to merge
+            
+        Returns:
+            New ChangelogEntry with merged contents
+        """
+        return ChangelogEntry(
+            added=self.added + other.added,
+            changed=self.changed + other.changed,
+            details=self.details + other.details
+        )
+    
     def to_dict(self) -> Dict[str, List[str]]:
         """Convert to dictionary."""
         return {
@@ -36,6 +52,23 @@ class ChangelogEntry:
             "changed": self.changed,
             "details": self.details
         }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, List[str]]) -> 'ChangelogEntry':
+        """
+        Create ChangelogEntry from dictionary.
+        
+        Args:
+            data: Dictionary with 'added', 'changed', 'details' keys
+            
+        Returns:
+            New ChangelogEntry instance
+        """
+        return cls(
+            added=data.get("added", []),
+            changed=data.get("changed", []),
+            details=data.get("details", [])
+        )
 
 
 class SystemInfoManager:
@@ -75,7 +108,7 @@ class SystemInfoManager:
         """
         Increment the patch version with changelog information.
         
-        In frozen mode: Creates version_request.json for external processing
+        In frozen mode: Creates/updates version_request.json for external processing
         In dev mode: Updates pyproject.toml directly
         
         Args:
@@ -98,8 +131,8 @@ class SystemInfoManager:
             )
         
         if self._is_frozen:
-            # Frozen mode: Create request file for launcher to process
-            return self._create_version_request(changelog)
+            # Frozen mode: Create/update request file for launcher to process
+            return self._create_or_update_version_request(changelog)
         else:
             # Development mode: Update directly
             return self._increment_dev_version(changelog)
@@ -237,13 +270,13 @@ class SystemInfoManager:
         
         return None
     
-    def _create_version_request(self, changelog: ChangelogEntry) -> str:
+    def _create_or_update_version_request(self, changelog: ChangelogEntry) -> str:
         """
-        Create a version increment request file for external processing.
+        Create or update version increment request file for external processing.
         
         This is used in frozen mode where the executable cannot modify
-        its own source code. An external tool (like launcher.exe) can
-        read this file and update pyproject.toml + rebuild.
+        its own source code. Multiple calls accumulate changelog entries
+        for the same version instead of overwriting.
         
         Args:
             changelog: Changelog entry with added/changed/details
@@ -261,22 +294,114 @@ class SystemInfoManager:
         new_patch = patch + 1
         new_version = f"{major}.{minor}.{new_patch}"
         
-        # Create request file next to executable
+        # Get request file path
         exe_dir = Path(sys.executable).parent
         request_file = exe_dir / "version_request.json"
         
-        request_data = {
-            "current_version": current_version,
-            "new_version": new_version,
-            "changelog": changelog.to_dict(),
-            "timestamp": datetime.now().isoformat(),
-            "requested_by": "brain.exe (frozen mode)"
-        }
+        # Load existing request if it exists
+        if request_file.exists():
+            try:
+                with open(request_file, 'r', encoding='utf-8') as f:
+                    existing_data = json.load(f)
+                
+                # Check if version matches
+                if existing_data.get("new_version") == new_version:
+                    # Same version - APPEND to existing arrays, don't replace
+                    existing_changelog = existing_data.get("changelog", {})
+                    
+                    # Extend arrays instead of replacing
+                    merged_changelog = {
+                        "added": existing_changelog.get("added", []) + changelog.added,
+                        "changed": existing_changelog.get("changed", []) + changelog.changed,
+                        "details": existing_changelog.get("details", []) + changelog.details
+                    }
+                    
+                    # Update request data preserving original structure
+                    request_data = existing_data.copy()
+                    request_data["changelog"] = merged_changelog
+                    request_data["last_updated"] = datetime.now().isoformat()
+                    request_data["update_count"] = existing_data.get("update_count", 1) + 1
+                else:
+                    # Different version - create new request
+                    request_data = self._create_new_request_data(
+                        current_version, new_version, changelog
+                    )
+            except (json.JSONDecodeError, KeyError) as e:
+                # Corrupted file - create new request
+                print(f"Warning: Could not read existing request: {e}")
+                request_data = self._create_new_request_data(
+                    current_version, new_version, changelog
+                )
+        else:
+            # No existing request - create new
+            request_data = self._create_new_request_data(
+                current_version, new_version, changelog
+            )
         
+        # Save request file
         with open(request_file, 'w', encoding='utf-8') as f:
             json.dump(request_data, f, indent=4, ensure_ascii=False)
         
         return new_version
+    
+    def _create_new_request_data(
+        self, 
+        current_version: str, 
+        new_version: str, 
+        changelog: ChangelogEntry
+    ) -> dict:
+        """
+        Create new version request data structure.
+        
+        Args:
+            current_version: Current version string
+            new_version: New version string
+            changelog: Changelog entry
+            
+        Returns:
+            Request data dictionary
+        """
+        # Get next version number (incremental counter)
+        version_number = self._get_next_version_number()
+        
+        return {
+            "current_version": current_version,
+            "new_version": new_version,
+            "version_number": version_number,
+            "changelog": changelog.to_dict(),
+            "timestamp": datetime.now().isoformat(),
+            "last_updated": datetime.now().isoformat(),
+            "requested_by": "brain.exe (frozen mode)",
+            "update_count": 1
+        }
+    
+    def _get_next_version_number(self) -> int:
+        """
+        Get the next incremental version number from versions.json.
+        
+        Returns:
+            Next version number (integer counter)
+        """
+        try:
+            versions_file = self._find_versions_file()
+            
+            if versions_file.exists():
+                with open(versions_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                
+                history = data.get("history", [])
+                if history:
+                    # Get the last version_number and increment
+                    last_entry = history[-1]
+                    last_version_number = last_entry.get("version_number", 0)
+                    return last_version_number + 1
+            
+            # If no history exists, start at 1
+            return 1
+            
+        except Exception:
+            # On any error, default to 1
+            return 1
     
     def _increment_dev_version(self, changelog: ChangelogEntry) -> str:
         """
@@ -307,6 +432,20 @@ class SystemInfoManager:
         new_patch = patch + 1
         new_version = f"{major}.{minor}.{new_patch}"
         
+        # Get next version number
+        version_number = self._get_next_version_number()
+        
+        # Check if there's existing changelog to merge
+        existing_changelog = self._extract_existing_changelog(content)
+        if existing_changelog and not existing_changelog.is_empty():
+            # APPEND to existing changelog, don't replace
+            merged_changelog = ChangelogEntry(
+                added=existing_changelog.added + changelog.added,
+                changed=existing_changelog.changed + changelog.changed,
+                details=existing_changelog.details + changelog.details
+            )
+            changelog = merged_changelog
+        
         # Update version in pyproject.toml
         new_content = re.sub(
             r'version\s*=\s*["\'][^"\']+["\']',
@@ -314,23 +453,65 @@ class SystemInfoManager:
             content
         )
         
-        # Update changelog section in pyproject.toml
-        new_content = self._update_changelog_in_toml(new_content, changelog)
+        # Update changelog section in pyproject.toml (with version_number)
+        new_content = self._update_changelog_in_toml(new_content, changelog, version_number)
         
         pyproject_path.write_text(new_content, encoding='utf-8')
         
-        # Log the change in versions.json
-        self._log_version_change(new_version, changelog)
+        # Log the change in versions.json (with version_number)
+        self._log_version_change(new_version, changelog, version_number)
         
         return new_version
     
-    def _update_changelog_in_toml(self, content: str, changelog: ChangelogEntry) -> str:
+    def _extract_existing_changelog(self, toml_content: str) -> Optional[ChangelogEntry]:
+        """
+        Extract existing changelog from TOML content.
+        
+        Args:
+            toml_content: TOML file content
+            
+        Returns:
+            ChangelogEntry if found, None otherwise
+        """
+        try:
+            # Find [tool.brain.changelog] section
+            changelog_pattern = r'\[tool\.brain\.changelog\].*?(?=\n\[|\Z)'
+            match = re.search(changelog_pattern, toml_content, re.DOTALL)
+            
+            if not match:
+                return None
+            
+            section = match.group(0)
+            
+            # Extract arrays
+            def extract_array(field_name: str) -> List[str]:
+                pattern = rf'{field_name}\s*=\s*\[(.*?)\]'
+                array_match = re.search(pattern, section, re.DOTALL)
+                if not array_match:
+                    return []
+                
+                array_content = array_match.group(1)
+                # Extract quoted strings
+                items = re.findall(r'"([^"]*)"', array_content)
+                return [item for item in items if item.strip()]
+            
+            added = extract_array('added')
+            changed = extract_array('changed')
+            details = extract_array('details')
+            
+            return ChangelogEntry(added, changed, details)
+            
+        except Exception:
+            return None
+    
+    def _update_changelog_in_toml(self, content: str, changelog: ChangelogEntry, version_number: int) -> str:
         """
         Update the [tool.brain.changelog] section in pyproject.toml.
         
         Args:
             content: Current TOML content
             changelog: New changelog entry
+            version_number: Incremental version number
             
         Returns:
             Updated TOML content
@@ -352,6 +533,7 @@ class SystemInfoManager:
         new_changelog = f"""[tool.brain.changelog]
 # Changelog semántico para versión actual
 # Se actualiza automáticamente con: brain system version --added "..." --changed "..." --details "..."
+version_number = {version_number}
 added = {added_str}
 changed = {changed_str}
 details = {details_str}"""
@@ -365,11 +547,11 @@ details = {details_str}"""
         
         return content
     
-    def _log_version_change(self, version: str, changelog: ChangelogEntry):
+    def _log_version_change(self, version: str, changelog: ChangelogEntry, version_number: int):
         """
         Log the version change to versions.json.
         
-        Creates or appends to versions.json with timestamp and changelog.
+        Creates or appends to versions.json with timestamp, changelog, and version_number.
         """
         versions_file = self._find_versions_file()
         
@@ -386,6 +568,7 @@ details = {details_str}"""
         # Create new entry
         new_entry = {
             "version": version,
+            "version_number": version_number,
             "timestamp": datetime.now().isoformat(),
             "changelog": changelog.to_dict()
         }

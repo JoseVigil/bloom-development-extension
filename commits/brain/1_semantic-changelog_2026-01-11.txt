@@ -1,0 +1,62 @@
+chore(release): 0.1.6
+
+Version: 0.1.5 → 0.1.6
+Build Number: #1
+Requested by: brain.exe (frozen mode)
+Timestamp: 2026-01-11T12:32:17.309607
+Update count: 3
+
+Added:
+- Semantic changelog system with --added, --changed, and --details flags
+- Multiple values support per changelog flag
+- Automatic version increment when any changelog flag is used
+- Enhanced changelog output with categorized sections
+- ChangelogEntry class for structured changelog management
+- TOML changelog section auto-update in pyproject.toml
+- Changelog accumulation for multiple version command calls
+- Git commit integration via generate_commit.py script
+- Discovery page para validación de conexión Extension ↔ Host durante instalación
+- Comando close-profile: Cierra perfil completo (todas las ventanas de Chrome)
+- Comando close-web-page: Cierra tabs específicas con 8 métodos de identificación
+
+Changed:
+- info.py: Removed --increase and --desc flags
+- info.py: Added --added, --changed, --details as new primary flags
+- info.py: Enhanced _render_increment() with categorized changelog display
+- info.py: Added update_count display for accumulated changes
+- info_manager.py: Refactored increment_version() to accept changelog parameters
+- info_manager.py: Added ChangelogEntry dataclass for changelog structure
+- info_manager.py: Renamed to _create_or_update_version_request() with merge logic
+- info_manager.py: Fixed array concatenation instead of replacement
+- info_manager.py: Added _update_changelog_in_toml() for TOML manipulation
+- info_manager.py: Enhanced _increment_dev_version() with proper array merging
+- update_version.py: Updated to process new changelog structure
+- update_version.py: Added print_changelog_summary() for visual feedback
+- update_version.py: Added merge_changelogs() to combine existing entries
+- update_version.py: Added extract_existing_changelog() for pyproject.toml
+- update_version.py: Integrated generate_commit.py execution before deletion
+- update_version.py: Pass full version_request.json path to generate_commit.py
+- pyproject.toml: Added [tool.brain.changelog] section
+- discovery_generator.py: Generador de página de validación con heartbeat visual
+- background.js: Router extendido con comandos close-profile y close-web-page
+- background.js: Handler para discovery_complete event
+- Refactor: Renamed 'brain.core.browser' to 'brain.core.profile' for semantic consistency
+- Imports: Updated all references in CLI and ProfileManager to use new namespace
+
+Details:
+- Single version increment regardless of number of changelog flags used
+- Changelog validation ensures at least one field is provided
+- JSON and TOML format consistency across all storage layers
+- Backward compatible with existing version history format
+- Enhanced error messages for better user guidance
+- Array concatenation fixed: existing + new instead of replacement
+- Update count tracking in version_request.json for audit trail
+- Git commit generated automatically before version_request cleanup
+- generate_commit.py receives full file path as sys.argv[1]
+- Discovery page usa ping continuo cada 1s con timeout de 60 intentos
+- close-web-page soporta: tabId, conversationId, urlContains, urlPattern, domain, url, index
+- Wildcard patterns (* y ?) para matching flexible de URLs largas de AI
+- Profile closing notifica a todos los tabs para cleanup antes de terminar
+- Extension ID se lee desde nucleus.json o native manifest (allowed_origins)
+- Discovery page se genera en profiles/{id}/discovery/ con index.html, styles.css, script.js
+- Standardized directory structure matching CLI categories (profile -> core/profile)
