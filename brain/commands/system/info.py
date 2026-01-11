@@ -6,7 +6,7 @@ Provides runtime metadata, version info, and executable location.
 import typer
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 from brain.cli.base import BaseCommand, CommandMetadata
 from brain.cli.categories import CommandCategory
 
@@ -82,7 +82,7 @@ class SystemInfoCommand(BaseCommand):
         typer.echo(f"   Brain CLI:        {info['version']}")
         
         # Executable section
-        typer.echo("\n📍 EXECUTABLE")
+        typer.echo("\n🔧 EXECUTABLE")
         typer.echo(f"   Location:         {info['executable_path']}")
         typer.echo(f"   Mode:             {info['execution_mode']}")
         if info.get('frozen_bundle_path'):
@@ -116,21 +116,22 @@ class SystemInfoCommand(BaseCommand):
 
 class SystemVersionCommand(BaseCommand):
     """
-    Quick version display command.
-    Provides just the version number for scripting/automation.
-    Supports version increment with description.
+    Version management command.
+    Display current version or increment with semantic changelog.
     """
     
     def metadata(self) -> CommandMetadata:
         return CommandMetadata(
             name="version",
             category=CommandCategory.SYSTEM,
-            version="1.0.0",
-            description="Display or increment Brain CLI version",
+            version="2.0.0",
+            description="Display or increment Brain CLI version with semantic changelog",
             examples=[
                 "brain system version",
                 "brain system version --json",
-                "brain system version --increase --desc 'Added new feature X'"
+                "brain system version --added 'New feature X' --changed 'Refactored Y'",
+                "brain system version --details 'Implementation notes'",
+                "brain system version --added 'Feature A' --added 'Feature B' --changed 'Updated C'"
             ]
         )
 
@@ -138,40 +139,79 @@ class SystemVersionCommand(BaseCommand):
         @app.command(name=self.metadata().name)
         def execute(
             ctx: typer.Context,
-            increase: bool = typer.Option(False, "--increase", help="Increment the patch version (e.g., 1.0.0 → 1.0.1)"),
-            desc: Optional[str] = typer.Option(None, "--desc", help="Description for the version change")
+            added: Optional[List[str]] = typer.Option(
+                None, 
+                "--added", 
+                help="Feature or capability added (can be used multiple times)"
+            ),
+            changed: Optional[List[str]] = typer.Option(
+                None, 
+                "--changed", 
+                help="Feature or behavior changed (can be used multiple times)"
+            ),
+            details: Optional[List[str]] = typer.Option(
+                None, 
+                "--details", 
+                help="Implementation detail or technical note (can be used multiple times)"
+            )
         ):
-            """Display or increment the version number."""
+            """
+            Display or increment the version number.
+            
+            Using any of --added, --changed, or --details will automatically increment
+            the patch version (e.g., 0.1.1 → 0.1.2) and update the changelog.
+            
+            Examples:
+                brain system version
+                    → Display current version
+                
+                brain system version --added "New AI schema support"
+                    → Increment version and log feature addition
+                
+                brain system version --added "Feature A" --changed "Refactored B"
+                    → Increment once with multiple changelog entries
+            """
             gc = ctx.obj
             if gc is None:
                 from brain.shared.context import GlobalContext
                 gc = GlobalContext()
+            
+            # Check if any changelog flags were provided
+            has_changelog = any([added, changed, details])
             
             try:
                 from brain.core.system.info_manager import SystemInfoManager
                 
                 manager = SystemInfoManager()
                 
-                if increase:
-                    # Increment logic
+                if has_changelog:
+                    # Increment version with changelog
                     if gc.verbose:
-                        typer.echo("🔄 Incrementing version...", err=True)
+                        typer.echo("📝 Incrementing version with changelog...", err=True)
                     
-                    new_version = manager.increment_version(desc)
+                    new_version = manager.increment_version(
+                        added=added,
+                        changed=changed,
+                        details=details
+                    )
                     
                     result = {
                         "status": "success",
                         "operation": "version_increment",
                         "data": {
                             "version": new_version,
-                            "description": desc,
+                            "changelog": {
+                                "added": added or [],
+                                "changed": changed or [],
+                                "details": details or []
+                            },
                             "mode": "frozen" if manager._is_frozen else "development"
                         }
                     }
                     
                     gc.output(result, self._render_increment)
                 else:
-                    # Normal display
+                    # Just display current version
                     version = manager.get_version()
                     result = {
                         "status": "success",
@@ -181,6 +221,8 @@ class SystemVersionCommand(BaseCommand):
                     
                     gc.output(result, self._render_version)
                 
+            except ValueError as e:
+                self._handle_error(gc, str(e))
             except Exception as e:
                 self._handle_error(gc, f"Failed to process version: {e}")
     
@@ -190,21 +232,48 @@ class SystemVersionCommand(BaseCommand):
         typer.echo(f"Brain CLI v{version}")
     
     def _render_increment(self, data: dict):
-        """Output for version increment."""
+        """Output for version increment with changelog."""
         info = data["data"]
         version = info["version"]
-        desc = info.get("description", "No description")
+        changelog = info.get("changelog", {})
         mode = info.get("mode", "unknown")
         
+        typer.echo("\n" + "=" * 70)
+        typer.echo(f"🎯 Version Increment: {version}")
+        typer.echo("=" * 70)
+        
+        # Display changelog sections
+        added = changelog.get("added", [])
+        changed = changelog.get("changed", [])
+        details = changelog.get("details", [])
+        
+        if added:
+            typer.echo("\n✨ ADDED:")
+            for item in added:
+                typer.echo(f"   • {item}")
+        
+        if changed:
+            typer.echo("\n🔄 CHANGED:")
+            for item in changed:
+                typer.echo(f"   • {item}")
+        
+        if details:
+            typer.echo("\n📋 DETAILS:")
+            for item in details:
+                typer.echo(f"   • {item}")
+        
+        typer.echo("\n" + "-" * 70)
+        
         if mode == "frozen":
-            typer.echo(f"\n✅ Solicitud de incremento guardada")
-            typer.echo(f"📝 Nueva versión solicitada: {version}")
-            typer.echo(f"📄 Descripción: {desc}")
+            typer.echo("\n✅ Solicitud de incremento guardada")
+            typer.echo(f"📦 Nueva versión solicitada: {version}")
             typer.echo(f"\n💡 Archivo creado: version_request.json")
-            typer.echo(f"   El launcher puede procesar esta solicitud y recompilar Brain.\n")
+            typer.echo(f"   El launcher procesará esta solicitud y recompilará Brain.")
         else:
             typer.echo(f"\n✅ Versión actualizada: {version}")
-            typer.echo(f"📝 Descripción: {desc}\n")
+            typer.echo(f"📝 Changelog guardado en pyproject.toml y versions.json")
+        
+        typer.echo("\n" + "=" * 70 + "\n")
     
     def _handle_error(self, gc, message: str):
         if gc.json_mode:

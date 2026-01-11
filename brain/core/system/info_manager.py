@@ -9,7 +9,33 @@ import json
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
+
+
+class ChangelogEntry:
+    """Represents a changelog entry for a version."""
+    
+    def __init__(
+        self,
+        added: Optional[List[str]] = None,
+        changed: Optional[List[str]] = None,
+        details: Optional[List[str]] = None
+    ):
+        self.added = added or []
+        self.changed = changed or []
+        self.details = details or []
+    
+    def is_empty(self) -> bool:
+        """Check if the changelog entry is empty."""
+        return not (self.added or self.changed or self.details)
+    
+    def to_dict(self) -> Dict[str, List[str]]:
+        """Convert to dictionary."""
+        return {
+            "added": self.added,
+            "changed": self.changed,
+            "details": self.details
+        }
 
 
 class SystemInfoManager:
@@ -40,29 +66,43 @@ class SystemInfoManager:
             # In development, read from pyproject.toml
             return self._get_dev_version()
     
-    def increment_version(self, description: str | None = None) -> str:
+    def increment_version(
+        self,
+        added: Optional[List[str]] = None,
+        changed: Optional[List[str]] = None,
+        details: Optional[List[str]] = None
+    ) -> str:
         """
-        Increment the patch version.
+        Increment the patch version with changelog information.
         
         In frozen mode: Creates version_request.json for external processing
         In dev mode: Updates pyproject.toml directly
         
         Args:
-            description: Optional description for the version change
+            added: List of added features
+            changed: List of changed features
+            details: List of implementation details
             
         Returns:
             New version string
             
         Raises:
             FileNotFoundError: If pyproject.toml not found (dev mode)
-            ValueError: If version cannot be parsed
+            ValueError: If version cannot be parsed or no changelog provided
         """
+        changelog = ChangelogEntry(added, changed, details)
+        
+        if changelog.is_empty():
+            raise ValueError(
+                "At least one changelog field required (--added, --changed, or --details)"
+            )
+        
         if self._is_frozen:
             # Frozen mode: Create request file for launcher to process
-            return self._create_version_request(description)
+            return self._create_version_request(changelog)
         else:
             # Development mode: Update directly
-            return self._increment_dev_version(description)
+            return self._increment_dev_version(changelog)
     
     def get_executable_path(self) -> Path:
         """
@@ -197,7 +237,7 @@ class SystemInfoManager:
         
         return None
     
-    def _create_version_request(self, description: str | None) -> str:
+    def _create_version_request(self, changelog: ChangelogEntry) -> str:
         """
         Create a version increment request file for external processing.
         
@@ -206,7 +246,7 @@ class SystemInfoManager:
         read this file and update pyproject.toml + rebuild.
         
         Args:
-            description: Description for the version change
+            changelog: Changelog entry with added/changed/details
             
         Returns:
             The new version string that was requested
@@ -228,22 +268,22 @@ class SystemInfoManager:
         request_data = {
             "current_version": current_version,
             "new_version": new_version,
-            "description": description or "No description provided",
+            "changelog": changelog.to_dict(),
             "timestamp": datetime.now().isoformat(),
             "requested_by": "brain.exe (frozen mode)"
         }
         
         with open(request_file, 'w', encoding='utf-8') as f:
-            json.dump(request_data, f, indent=4)
+            json.dump(request_data, f, indent=4, ensure_ascii=False)
         
         return new_version
     
-    def _increment_dev_version(self, description: str | None) -> str:
+    def _increment_dev_version(self, changelog: ChangelogEntry) -> str:
         """
         Increment version directly in development mode.
         
         Args:
-            description: Description for the version change
+            changelog: Changelog entry with added/changed/details
             
         Returns:
             New version string
@@ -267,41 +307,94 @@ class SystemInfoManager:
         new_patch = patch + 1
         new_version = f"{major}.{minor}.{new_patch}"
         
-        # Update pyproject.toml
+        # Update version in pyproject.toml
         new_content = re.sub(
             r'version\s*=\s*["\'][^"\']+["\']',
             f'version = "{new_version}"',
             content
         )
+        
+        # Update changelog section in pyproject.toml
+        new_content = self._update_changelog_in_toml(new_content, changelog)
+        
         pyproject_path.write_text(new_content, encoding='utf-8')
         
         # Log the change in versions.json
-        self._log_version_change(new_version, description)
+        self._log_version_change(new_version, changelog)
         
         return new_version
     
-    def _log_version_change(self, version: str, description: str | None):
+    def _update_changelog_in_toml(self, content: str, changelog: ChangelogEntry) -> str:
+        """
+        Update the [tool.brain.changelog] section in pyproject.toml.
+        
+        Args:
+            content: Current TOML content
+            changelog: New changelog entry
+            
+        Returns:
+            Updated TOML content
+        """
+        # Format changelog arrays
+        def format_array(items: List[str]) -> str:
+            if not items:
+                return "[]"
+            formatted_items = [f'    "{item}"' for item in items]
+            return "[\n" + ",\n".join(formatted_items) + "\n]"
+        
+        added_str = format_array(changelog.added)
+        changed_str = format_array(changelog.changed)
+        details_str = format_array(changelog.details)
+        
+        # Find and replace changelog section
+        changelog_pattern = r'\[tool\.brain\.changelog\].*?(?=\n\[|\Z)'
+        
+        new_changelog = f"""[tool.brain.changelog]
+# Changelog semántico para versión actual
+# Se actualiza automáticamente con: brain system version --added "..." --changed "..." --details "..."
+added = {added_str}
+changed = {changed_str}
+details = {details_str}"""
+        
+        if re.search(changelog_pattern, content, re.DOTALL):
+            # Replace existing changelog
+            content = re.sub(changelog_pattern, new_changelog, content, flags=re.DOTALL)
+        else:
+            # Append new changelog section
+            content += f"\n\n{new_changelog}\n"
+        
+        return content
+    
+    def _log_version_change(self, version: str, changelog: ChangelogEntry):
         """
         Log the version change to versions.json.
         
-        Creates or appends to brain/versions.json with timestamp and description.
+        Creates or appends to versions.json with timestamp and changelog.
         """
         versions_file = self._find_versions_file()
         
-        data = []
+        # Load existing history
         if versions_file.exists():
             with open(versions_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
+        else:
+            data = {
+                "project": "brain-cli",
+                "history": []
+            }
         
+        # Create new entry
         new_entry = {
             "version": version,
             "timestamp": datetime.now().isoformat(),
-            "description": description or "No description provided"
+            "changelog": changelog.to_dict()
         }
-        data.append(new_entry)
         
+        data.setdefault("history", []).append(new_entry)
+        
+        # Save updated history
         with open(versions_file, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=4)
+            json.dump(data, f, indent=4, ensure_ascii=False)
     
     def _find_versions_file(self) -> Path:
         """
@@ -311,5 +404,8 @@ class SystemInfoManager:
         root = Path(brain.__file__).parent.parent
         versions_path = root / "versions.json"
         if not versions_path.exists():
-            versions_path.write_text("[]", encoding='utf-8')
+            versions_path.write_text(
+                json.dumps({"project": "brain-cli", "history": []}, indent=4),
+                encoding='utf-8'
+            )
         return versions_path

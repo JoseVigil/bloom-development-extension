@@ -1,0 +1,94 @@
+{
+    "project": "brain-cli",
+    "history": [
+        {
+            "from": "0.1.1",
+            "to": "0.1.2",
+            "changelog": {
+                "added": [
+                    "AI-native JSON Schema output with --ai flag",
+                    "OpenAI Function Calling compatible tool definitions",
+                    "Semantic intent mappings for LLM understanding",
+                    "Command dependency graph and execution policies",
+                    "Enhanced type hints extraction for parameters",
+                    "Custom JSONEncoder for Path/CommandCategory serialization",
+                    "Triple output modes: Rich UI / Legacy JSON / AI Schema"
+                ],
+                "changed": [
+                    "help_renderer.py: Added _build_ai_native_json() for OpenAI schema",
+                    "help_renderer.py: Enhanced _extract_params_with_help() with type hints",
+                    "help_renderer.py: Added JSONEncoder class for serialization",
+                    "__main__.py: Added --ai flag support in help interception"
+                ],
+                "details": [
+                    "JSON Schema v7 compliance",
+                    "Function calling metadata: intents, idempotency, destructive flags",
+                    "Error recovery patterns for common failures",
+                    "Agent protocol specification for autonomous execution"
+                ]
+            },
+            "timestamp": "2026-01-11T02:37:56.566389",
+            "requested_by": "brain.exe (frozen mode)"
+        },
+        {
+            "from": "0.1.2",
+            "to": "0.1.3",
+            "changelog": {
+                "added": [
+                    "Semantic changelog system with --added, --changed, and --details flags",
+                    "Multiple values support per changelog flag",
+                    "Automatic version increment when any changelog flag is used",
+                    "Enhanced changelog output with categorized sections",
+                    "ChangelogEntry class for structured changelog management",
+                    "TOML changelog section auto-update in pyproject.toml"
+                ],
+                "changed": [
+                    "info.py: Removed --increase and --desc flags",
+                    "info.py: Added --added, --changed, --details as new primary flags",
+                    "info.py: Enhanced _render_increment() with categorized changelog display",
+                    "info_manager.py: Refactored increment_version() to accept changelog parameters",
+                    "info_manager.py: Added ChangelogEntry dataclass for changelog structure",
+                    "info_manager.py: Updated _create_version_request() to include changelog",
+                    "info_manager.py: Added _update_changelog_in_toml() for TOML manipulation",
+                    "update_version.py: Updated to process new changelog structure",
+                    "update_version.py: Added print_changelog_summary() for visual feedback",
+                    "pyproject.toml: Added [tool.brain.changelog] section"
+                ],
+                "details": [
+                    "Single version increment regardless of number of changelog flags used",
+                    "Changelog validation ensures at least one field is provided",
+                    "JSON and TOML format consistency across all storage layers",
+                    "Backward compatible with existing version history format",
+                    "Enhanced error messages for better user guidance"
+                ]
+            },
+            "timestamp": "2026-01-11T02:41:34.862745",
+            "requested_by": "brain.exe (frozen mode)"
+        },
+        {
+            "from": "0.1.3",
+            "to": "0.1.4",
+            "changelog": {
+                "added": [
+                    "Synapse Architecture: Native Messaging Bridge v2.0 (Host & Protocol)",
+                    "New CLI Command: 'brain synapse host' (Native Listener Loop)",
+                    "New CLI Category: CommandCategory.SYNAPSE",
+                    "Core Module: brain.core.synapse (Manager, Protocol, Exceptions)"
+                ],
+                "changed": [
+                    "Extension: Refactored background.js to 'Synapse Router' (Thin Client)",
+                    "Extension: Refactored content.js to 'DOM Actuator' (No logic)",
+                    "ProfileManager: Hybrid path resolution for Dev vs Prod environments",
+                    "Build System: Integrated Python build script into build.ps1"
+                ],
+                "details": [
+                    "Philosophy: Thin Client (100% Logic in Python, 0% in JS)",
+                    "Implemented Dispatcher Pattern (Action Map) for O(1) command handling",
+                    "Standardized Native Host args to ['synapse', 'host']"
+                ]
+            },
+            "timestamp": "2026-01-11T02:49:46.424962",
+            "requested_by": "brain.exe (frozen mode)"
+        }
+    ]
+}

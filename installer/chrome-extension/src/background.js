@@ -1,382 +1,278 @@
 // ============================================================================
-// BLOOM NUCLEUS BRIDGE - BACKGROUND
+// BLOOM NUCLEUS: SYNAPSE ROUTER v2.0 (background.js)
+// Filosofía: Router puro. No piensa, solo trafica.
 // ============================================================================
-const HOST_NAME = "com.bloom.nucleus.bridge";
-const HEARTBEAT_INTERVAL = 20000;
-const BASE_RECONNECT_DELAY = 1000;
 
-// Configuración de Chunking
-const CHUNKING_CONFIG = {
-  MAX_CHUNK_SIZE: 900 * 1024,  // 900KB
-  CHUNK_SEND_DELAY_MS: 50,     // Pausa entre chunks
-  MAX_RETRIES: 3,
-  RETRY_DELAY_MS: 1000
-};
+const HOST_NAME = "com.bloom.nucleus.bridge";
+const HEARTBEAT_INTERVAL = 15000;
+const RECONNECT_BASE_DELAY = 2000;
 
 let nativePort = null;
 let heartbeatTimer = null;
-let isConnected = false;
-let retryCount = 0;
-const controlledTabs = new Map();
+let reconnectAttempts = 0;
 
-// --- CONEXIÓN ---
+// ============================================================================
+// 1. GESTIÓN DE CONEXIÓN (Persistencia Resiliente)
+// ============================================================================
+
 function connectToNativeHost() {
   if (nativePort) return;
-  console.log(`🔌 [Bloom] Conectando a ${HOST_NAME}...`);
+  
+  console.log(`🔌 [Synapse Router] Connecting to ${HOST_NAME}...`);
+  
   try {
     nativePort = chrome.runtime.connectNative(HOST_NAME);
-    nativePort.onMessage.addListener(handleHostMessage);
+    
+    nativePort.onMessage.addListener(routeFromBrain);
     nativePort.onDisconnect.addListener(handleDisconnect);
-    sendHandshake();
-    isConnected = true;
-    retryCount = 0;
+    
+    sendSystemHello();
     startHeartbeat();
+    reconnectAttempts = 0;
+    
+    console.log("✅ [Synapse Router] Connected");
+    
   } catch (error) {
-    console.error("❌ [Bloom] Error de conexión:", error);
-    handleDisconnect();
+    console.error("❌ [Synapse Router] Connection failed:", error);
+    scheduleReconnect();
   }
 }
 
-function sendHandshake() {
-  if (!nativePort) return;
-  const manifest = chrome.runtime.getManifest();
-  nativePort.postMessage({
-    type: "SYSTEM_HELLO",
-    status: "installed",
-    id: chrome.runtime.id,
-    version: manifest.version,
-    timestamp: Date.now()
-  });
-  nativePort.postMessage({ command: "ping", source: "handshake" });
-}
-
 function handleDisconnect() {
-  isConnected = false;
+  const error = chrome.runtime.lastError;
+  console.warn("⚠️ [Synapse Router] Disconnected:", error?.message || "Unknown");
+  
   nativePort = null;
   stopHeartbeat();
-  chrome.storage.local.set({ hostStatus: "disconnected" });
-  const delay = Math.min(BASE_RECONNECT_DELAY * Math.pow(2, retryCount), 5000);
-  retryCount++;
+  scheduleReconnect();
+}
+
+function scheduleReconnect() {
+  const delay = Math.min(
+    RECONNECT_BASE_DELAY * Math.pow(2, reconnectAttempts),
+    30000 // Max 30s
+  );
+  
+  reconnectAttempts++;
+  console.log(`🔄 [Synapse Router] Reconnecting in ${delay}ms (attempt ${reconnectAttempts})...`);
+  
   setTimeout(connectToNativeHost, delay);
 }
 
-// --- HEARTBEAT ---
+// ============================================================================
+// 2. HEARTBEAT (Keep-Alive)
+// ============================================================================
+
 function startHeartbeat() {
   stopHeartbeat();
   heartbeatTimer = setInterval(() => {
-    if (isConnected && nativePort) {
-      try { nativePort.postMessage({ command: "ping", source: "heartbeat" }); }
-      catch(e) { handleDisconnect(); }
+    if (nativePort) {
+      try {
+        nativePort.postMessage({ 
+          type: "HEARTBEAT",
+          timestamp: Date.now() 
+        });
+      } catch (e) {
+        handleDisconnect();
+      }
     }
   }, HEARTBEAT_INTERVAL);
 }
 
 function stopHeartbeat() {
-  if (heartbeatTimer) clearInterval(heartbeatTimer);
-  heartbeatTimer = null;
-}
-
-function sendToHost(message) {
-  if (nativePort) {
-    try { nativePort.postMessage(message); }
-    catch (e) { handleDisconnect(); }
-  } else { connectToNativeHost(); }
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
+  }
 }
 
 // ============================================================================
-// CHUNKED MESSAGE SENDER (Lógica para mensajes > 900KB)
+// 3. HANDSHAKE (Identificación del Worker)
 // ============================================================================
 
-async function sendLargeMessage(message, messageId = null) {
-  if (!messageId) messageId = generateUUID();
+function sendSystemHello() {
+  if (!nativePort) return;
   
-  const messageStr = JSON.stringify(message);
-  const messageBytes = new TextEncoder().encode(messageStr);
-  const totalSize = messageBytes.length;
+  const manifest = chrome.runtime.getManifest();
   
-  console.log(`📦 [Bloom Chunking] Message size: ${totalSize} bytes`);
-  
-  if (totalSize <= CHUNKING_CONFIG.MAX_CHUNK_SIZE) {
-    console.log(`✅ [Bloom Chunking] Sending directly (no chunking)`);
-    sendToHost(message);
-    return { chunked: false, message_id: messageId };
-  }
-  
-  console.log(`🔪 [Bloom Chunking] Splitting into chunks...`);
-  const checksum = await calculateSHA256(messageBytes);
-  const chunks = splitIntoChunks(messageBytes, CHUNKING_CONFIG.MAX_CHUNK_SIZE);
-  const totalChunks = chunks.length;
-  
-  console.log(`📦 [Bloom Chunking] Total chunks: ${totalChunks}`);
-  
-  try {
-    // 1. Send Header
-    await sendChunkWithRetry({
-      bloom_chunk: {
-        type: "header",
-        message_id: messageId,
-        total_chunks: totalChunks,
-        total_size_bytes: totalSize,
-        compression: "none",
-        checksum: checksum
-      }
-    });
-
-    // 2. Send Data Chunks
-    for (let i = 0; i < chunks.length; i++) {
-      await sendChunkWithRetry({
-        bloom_chunk: {
-          type: "data",
-          message_id: messageId,
-          chunk_index: i + 1,
-          data: arrayBufferToBase64(chunks[i])
-        }
-      });
-      
-      const progress = Math.round(((i + 1) / totalChunks) * 100);
-      console.log(`📤 [Bloom Chunking] Chunk ${i + 1}/${totalChunks} (${progress}%)`);
-      if (i < chunks.length - 1) await sleep(CHUNKING_CONFIG.CHUNK_SEND_DELAY_MS);
+  nativePort.postMessage({
+    type: "SYSTEM_HELLO",
+    payload: {
+      extension_id: chrome.runtime.id,
+      version: manifest.version,
+      profile_info: null, // TODO: Obtener de chrome.storage
+      capabilities: ["DOM_ACTUATE", "FILE_UPLOAD", "CHUNKED_TRANSFER"],
+      timestamp: new Date().toISOString()
     }
-    
-    // 3. Send Footer
-    await sendChunkWithRetry({
-      bloom_chunk: {
-        type: "footer",
-        message_id: messageId,
-        checksum_verify: checksum
-      }
-    });
-    
-    console.log(`✅ [Bloom Chunking] Complete message sent successfully`);
-    return { chunked: true, message_id: messageId, total_chunks: totalChunks };
-    
-  } catch (error) {
-    console.error(`❌ [Bloom Chunking] Failed to send message:`, error);
-    handleChunkingError(error, message);
-    throw error;
-  }
+  });
+  
+  console.log("👋 [Synapse Router] Handshake sent");
 }
 
-async function sendChunkWithRetry(chunk, retries = CHUNKING_CONFIG.MAX_RETRIES) {
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      sendToHost(chunk);
-      return;
-    } catch (error) {
-      if (attempt === retries) throw error;
-      await sleep(CHUNKING_CONFIG.RETRY_DELAY_MS * attempt);
-    }
-  }
-}
+// ============================================================================
+// 4. ROUTING: BRAIN → TAB (Comandos Downstream)
+// ============================================================================
 
-// --- ROUTER DE MENSAJES (Manejo Centralizado y Filtrado) ---
-async function handleHostMessage(message) {
-  // 1. FILTRADO DE MENSAJES DE SISTEMA (No procesar como comandos)
-  // Evitamos advertencias de "Comando desconocido" para protocolos internos
-  if (message.command === "system_ready") {
-    console.log("✅ [Bloom] Conexión establecida: Host C++ <-> Brain Service");
-    chrome.storage.local.set({ hostStatus: "connected", lastSync: Date.now() });
+async function routeFromBrain(message) {
+  const { type, target, command, payload } = message;
+  
+  // Filtrar mensajes de sistema (no son comandos)
+  if (type === "HEARTBEAT_ACK" || type === "SYSTEM_READY") {
     return;
   }
-
-  if (message.command === "pong" || message.status === "pong" || (message.ok && message.version)) {
-    // Heartbeats o respuestas de estado simples, ignorar silenciosamente
-    return;
-  }
-
-  // Ignorar broadcasts de registro que el Service envía a todas las tabs
-  if (message.type === "REGISTER_HOST") {
-    console.log(`📡 [Bloom] Nueva instancia de Host detectada (PID: ${message.pid})`);
-    return;
-  }
-
-  // 2. EXTRACCIÓN DE DATOS
-  const { id, command, payload } = message;
-
-  // Si no hay comando, no podemos rutear nada
-  if (!command) {
-    if (Object.keys(message).length > 0) {
-      console.log("ℹ️ [Bloom] Mensaje informativo recibido:", message);
-    }
-    return;
-  }
-
-  console.log(`📨 [Bloom] Comando recibido: ${command}`, payload || "");
-
+  
+  console.log(`📥 [Brain → Tab] ${command || type}`, payload);
+  
   try {
     let result;
-
-    // 3. ROUTER DE COMANDOS PRINCIPALES
+    
     switch (command) {
-      case "claude.submit":
-        result = await dispatchToActiveTab("ai.submit", payload);
+      // ──────────────────────────────────────────────────
+      // COMANDOS NATIVOS DEL ROUTER (No van al content.js)
+      // ──────────────────────────────────────────────────
+      
+      case "WINDOW_CLOSE":
+        result = await handleWindowClose();
         break;
-
-      case "open_tab":
-        result = await openTab(payload);
+        
+      case "WINDOW_OPEN_TAB":
+        result = await handleOpenTab(payload);
         break;
-
-      case "navigate":
-        result = await navigate(payload);
+        
+      case "WINDOW_NAVIGATE":
+        result = await handleNavigate(payload);
         break;
-
-      case "download_response":
-        result = await handleDownloadResponse(payload);
-        break;
-
-      case "download_response_large":
-        result = await handleDownloadResponseLarge(payload);
-        break;
-
+      
+      // ──────────────────────────────────────────────────
+      // COMANDOS QUE VAN AL ACTUADOR (content.js)
+      // ──────────────────────────────────────────────────
+      
       default:
-        // 4. RUTEADO DINÁMICO POR TAB_ID
-        // Si el comando no es interno, intentamos enviarlo a una pestaña específica
-        if (payload && payload.tabId) {
-          result = await chrome.tabs.sendMessage(payload.tabId, { action: command, ...payload });
-        } else {
-          // Si llegamos aquí, es un comando que no sabemos manejar
-          console.warn(`⚠️ [Bloom] Comando no reconocido o sin destino (tabId): ${command}`);
-          return;
-        }
+        // Rutear al tab especificado o al activo
+        result = await routeToTab(target, { command, payload });
     }
-
-    // 5. NOTIFICAR RESULTADO AL SERVICIO (Si el mensaje original tenía un ID)
-    if (id) {
-      sendToHost({ id, status: "ok", result });
+    
+    // Responder al Brain si el mensaje tiene ID (para tracking)
+    if (message.id) {
+      sendToBrain({ 
+        id: message.id, 
+        status: "ok", 
+        result 
+      });
     }
-
+    
   } catch (error) {
-    console.error(`❌ [Bloom] Error ejecutando [${command}]:`, error);
-    if (id) {
-      sendToHost({ id, status: "error", result: { message: error.message } });
+    console.error(`❌ [Synapse Router] Error executing [${command}]:`, error);
+    
+    if (message.id) {
+      sendToBrain({ 
+        id: message.id, 
+        status: "error", 
+        error: error.message 
+      });
     }
   }
 }
 
-// --- DOWNLOAD HANDLERS ---
-async function handleDownloadResponse(payload) {
-  console.log(`📥 [Bloom Download] Receiving response from content.js...`);
-  const response = payload.response || payload;
-  const intentId = response.bloom_protocol?.intent_id;
-  
-  if (!intentId) throw new Error("Missing intent_id in response");
-  
-  const profileInfo = await chrome.storage.local.get(['currentProfile']);
-  response.metadata = response.metadata || {};
-  response.metadata.profile_used = profileInfo.currentProfile?.display_name || "Unknown";
-  response.metadata.profile_directory = profileInfo.currentProfile?.directory_name || "Unknown";
-  
-  const responseStr = JSON.stringify(response);
-  const sizeBytes = responseStr.length;
-  
-  if (payload.chunked || sizeBytes > CHUNKING_CONFIG.MAX_CHUNK_SIZE) {
-    await sendLargeMessage(response);
-  } else {
-    sendToHost({ command: "brain_download_response", payload: response });
-  }
-  
-  return { success: true, intent_id: intentId, chunked: sizeBytes > CHUNKING_CONFIG.MAX_CHUNK_SIZE };
-}
+// ============================================================================
+// 5. ROUTING: TAB → BRAIN (Eventos Upstream)
+// ============================================================================
 
-async function handleDownloadResponseLarge(payload) {
-  console.log(`📥 [Bloom Download] Receiving LARGE response...`);
-  const response = payload.payload || payload.response;
-  await sendLargeMessage(response);
-  return { success: true, chunked: true };
-}
-
-// --- COMUNICACIÓN CON CONTENT SCRIPTS ---
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  const { action, event, intent_id, payload } = message;
+  const { event, action, payload } = message;
   
-  // Handlers de Eventos
-  if (event === 'slave_mode_enabled') {
-    chrome.storage.local.set({ slaveMode: true, activeIntentId: intent_id });
-    sendResponse({ received: true });
-  } 
-  else if (event === 'manual_intervention') {
-    chrome.storage.local.set({ slaveMode: false });
-    sendToHost({ command: "manual_intervention", payload: { intent_id, timestamp: message.timestamp } });
-    sendResponse({ received: true });
-  }
-  else if (event === 'interrupted') {
-    sendToHost({ command: "intent_interrupted", payload: { intent_id, reason: message.reason, timestamp: message.timestamp } });
-    sendResponse({ received: true });
-  }
-  else if (action === 'download_response' || action === 'download_response_large') {
-    (async () => {
-      try {
-        const result = action === 'download_response' 
-          ? await handleDownloadResponse(payload) 
-          : await handleDownloadResponseLarge(payload);
-        sendResponse({ success: true, result });
-      } catch (e) {
-        sendResponse({ success: false, error: e.message });
-      }
-    })();
-    return true; 
-  }
-  return false;
+  // Enriquecer con metadata del tab
+  const enrichedMessage = {
+    ...message,
+    source: {
+      tab_id: sender.tab?.id,
+      url: sender.tab?.url,
+      timestamp: Date.now()
+    }
+  };
+  
+  console.log(`📤 [Tab → Brain] ${event || action}`, payload);
+  
+  sendToBrain(enrichedMessage);
+  
+  sendResponse({ received: true });
+  return false; // No async
 });
 
-// --- HELPERS ---
-async function dispatchToActiveTab(action, payload) {
-  const tabs = await chrome.tabs.query({active: true, currentWindow: true});
-  if (!tabs.length) throw new Error("No hay pestaña activa");
-  return await chrome.tabs.sendMessage(tabs[0].id, { action, payload });
+// ============================================================================
+// 6. COMANDOS INTERNOS DEL ROUTER
+// ============================================================================
+
+async function handleWindowClose() {
+  const currentWindow = await chrome.windows.getCurrent();
+  await chrome.windows.remove(currentWindow.id);
+  return { closed: true, window_id: currentWindow.id };
 }
 
-async function openTab({ url }) {
-  const tab = await chrome.tabs.create({ url, active: false });
-  return { tabId: tab.id };
+async function handleOpenTab(payload) {
+  const { url, active = false } = payload;
+  const tab = await chrome.tabs.create({ url, active });
+  return { tab_id: tab.id, url: tab.url };
 }
 
-async function navigate({ tabId, url }) {
-  await chrome.tabs.update(tabId, { url });
-  return { tabId };
-}
-
-function splitIntoChunks(uint8Array, chunkSize) {
-  const chunks = [];
-  for (let i = 0; i < uint8Array.length; i += chunkSize) {
-    chunks.push(uint8Array.slice(i, i + chunkSize));
+async function handleNavigate(payload) {
+  const { tab_id, url } = payload;
+  
+  if (!tab_id) {
+    throw new Error("tab_id required for navigation");
   }
-  return chunks;
+  
+  await chrome.tabs.update(tab_id, { url });
+  return { navigated: true, tab_id, url };
 }
 
-function arrayBufferToBase64(buffer) {
-  let binary = '';
-  const bytes = new Uint8Array(buffer);
-  for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
-  return btoa(binary);
-}
+// ============================================================================
+// 7. HELPERS DE RUTEO
+// ============================================================================
 
-async function calculateSHA256(uint8Array) {
-  const hashBuffer = await crypto.subtle.digest('SHA-256', uint8Array);
-  return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-function generateUUID() {
-  return self.crypto.randomUUID();
-}
-
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-function handleChunkingError(error, message) {
-  if (error.message.includes('Failed after')) {
-    chrome.notifications.create({
-      type: 'basic',
-      iconUrl: 'icon128.png',
-      title: 'Bloom Error',
-      message: 'Error al enviar datos grandes al Host.'
-    });
+async function routeToTab(target, message) {
+  let tabId;
+  
+  if (target === "active" || !target) {
+    // Obtener tab activo
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tabs.length) throw new Error("No active tab found");
+    tabId = tabs[0].id;
+  } else if (typeof target === "number") {
+    tabId = target;
+  } else {
+    throw new Error(`Invalid target: ${target}`);
   }
-  chrome.storage.local.set({ pendingResponse: { message, timestamp: Date.now(), error: error.message } });
+  
+  return await chrome.tabs.sendMessage(tabId, message);
 }
 
-// Inicialización
-chrome.runtime.onInstalled.addListener(connectToNativeHost);
-chrome.runtime.onStartup.addListener(connectToNativeHost);
+function sendToBrain(message) {
+  if (nativePort) {
+    try {
+      nativePort.postMessage(message);
+    } catch (e) {
+      console.error("❌ [Synapse Router] Failed to send to Brain:", e);
+      handleDisconnect();
+    }
+  } else {
+    console.warn("⚠️ [Synapse Router] Cannot send: not connected");
+  }
+}
+
+// ============================================================================
+// 8. INICIALIZACIÓN
+// ============================================================================
+
+chrome.runtime.onInstalled.addListener(() => {
+  console.log("🚀 [Synapse Router] Extension installed");
+  connectToNativeHost();
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  console.log("🚀 [Synapse Router] Browser started");
+  connectToNativeHost();
+});
+
+// Conectar inmediatamente
 connectToNativeHost();

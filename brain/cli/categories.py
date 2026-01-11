@@ -28,6 +28,7 @@ class CommandCategory(Enum):
     RUNTIME = ("runtime", "Non-interactive system runtime operations")
     TWITTER = ("twitter", "Twitter/X integration and social data analysis")
     SYSTEM = ("system", "Runtime and system introspection")
+    SYNAPSE = ("synapse", "Chrome Native Messaging Bridge and protocol management")
 
     def __init__(self, name: str, description: str):
         self.category_name = name
@@ -75,4 +76,6 @@ HEALTH = CommandCategory.HEALTH
 EXTENSION = CommandCategory.EXTENSION
 SERVICE = CommandCategory.SERVICE
 RUNTIME = CommandCategory.RUNTIME
-SYSTEM = CommandCategory.SYSTEM 
+SYSTEM = CommandCategory.SYSTEM
+TWITTER = CommandCategory.TWITTER
+SYNAPSE = CommandCategory.SYNAPSE  
