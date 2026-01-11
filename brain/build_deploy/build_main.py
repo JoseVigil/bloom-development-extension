@@ -24,7 +24,6 @@ if sys.platform == "win32":
 SCRIPT_DIR = Path(__file__).parent.resolve()  # brain/build_deploy/
 PROJECT_ROOT = SCRIPT_DIR.parent.parent       # raíz del proyecto
 
-
 class Colors:
     """Colores para terminal"""
     HEADER = '\033[95m'
@@ -36,6 +35,9 @@ class Colors:
     ENDC = '\033[0m'
     BOLD = '\033[1m'
 
+def run_update_version():
+    script = Path(__file__).parent / "update_version.py"
+    subprocess.run([sys.executable, str(script)], check=True)
 
 def print_step(msg):
     """Imprime un paso del proceso"""
@@ -57,6 +59,32 @@ def print_error(msg):
 def print_warning(msg):
     """Imprime advertencia"""
     print(f"{Colors.WARNING}[WARNING] {msg}{Colors.ENDC}")
+
+def create_version_file():
+    """Crea archivo VERSION desde pyproject.toml para embeder en frozen exe."""
+    print_step("CREANDO VERSION FILE")
+    
+    import re
+    
+    pyproject = PROJECT_ROOT / "brain" / "pyproject.toml"
+    
+    if not pyproject.exists():
+        print_warning(f"pyproject.toml no encontrado en {pyproject}")
+        return False
+    
+    content = pyproject.read_text(encoding='utf-8')
+    match = re.search(r'version\s*=\s*["\']([^"\']+)["\']', content)
+    
+    if not match:
+        print_error("Version no encontrada en pyproject.toml")
+        return False
+    
+    version = match.group(1)
+    version_file = PROJECT_ROOT / "brain" / "VERSION"
+    version_file.write_text(version, encoding='utf-8')
+    
+    print_success(f"VERSION file creado: v{version}")
+    return True
 
 
 def run_command(cmd, description):
@@ -215,7 +243,7 @@ def verify_build():
 
 
 def main():
-    """Proceso principal de compilación"""
+    """Proceso principal de compilación."""
     import argparse
     
     parser = argparse.ArgumentParser(description="Build script para Brain CLI")
@@ -226,14 +254,22 @@ def main():
     args = parser.parse_args()
     
     print(f"{Colors.HEADER}")
-    print("╔════════════════════════════════════════════════════════════════════╗")
-    print("║           BRAIN CLI - BUILD SCRIPT                                 ║")
-    print("╚════════════════════════════════════════════════════════════════════╝")
+    print("╔═══════════════════════════════════════════════════════════════════╗")
+    print("║           BRAIN CLI - BUILD SCRIPT                                ║")
+    print("╚═══════════════════════════════════════════════════════════════════╝")
     print(f"{Colors.ENDC}")
+
+    # 🔥 0. Aplicar versión si existe solicitud
+    run_update_version()
     
     # Paso 1: Limpiar (opcional)
     if args.clean:
         clean_build_dirs()
+    
+    # ✅ NUEVO: Paso 1.5: Crear VERSION file
+    if not create_version_file():
+        print_error("Falló la creación del VERSION file")
+        sys.exit(1)
     
     # Paso 2: Generar command_loader (opcional)
     if not args.skip_gen:

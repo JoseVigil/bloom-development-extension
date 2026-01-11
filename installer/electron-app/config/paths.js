@@ -124,9 +124,9 @@ const paths = {
   runtimeDir: path.join(baseDir, 'engine', 'runtime'),
   pythonExe,
 
-  // Extension (DUAL LOCATION)
-  extensionDir: path.join(baseDir, 'extension'),
-  extensionBrainDir: path.join(baseDir, 'extensions', 'chrome'),
+  // Extension (✅ ACTUALIZADO: Ahora dentro de bin/)
+  extensionDir: path.join(baseDir, 'bin', 'extension'),
+  extensionBrainDir: path.join(baseDir, 'bin', 'extension'), // Unificado con extensionDir
 
   // Native Host
   nativeDir: path.join(baseDir, 'native'),
@@ -187,5 +187,6 @@ console.log('✅ Paths initialized successfully');
 console.log(`📂 Base directory: ${baseDir}`);
 console.log(`🔧 Brain directory: ${brainDir}`);
 console.log(`🐍 Python executable: ${pythonExe}`);
+console.log(`🧩 Extension directory: ${paths.extensionDir}`);
 
 module.exports = { paths, getResourcePath };

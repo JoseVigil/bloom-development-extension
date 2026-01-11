@@ -113,6 +113,7 @@ hiddenimports = [
     'brain.commands.project.nucleus',
     'brain.commands.runtime.run',
     'brain.commands.service.service',
+    'brain.commands.system.info',
     'brain.commands.twitter.auth',
     'brain.core.bloom_project_inspector',
     'brain.core.browser.landing_generator',
@@ -175,12 +176,16 @@ hiddenimports = [
     'brain.core.project.scanner',
     'brain.core.project_manager',
     'brain.core.service.server_manager',
+    'brain.core.system',
+    'brain.core.system.info_manager',
     'brain.core.tree_manager',
     'brain.core.twitter.auth_manager',
 ]
 
 # Datos adicionales que deben incluirse (configs, templates, etc.)
-datas = []
+datas = [
+    (str(PROJECT_ROOT / 'brain' / 'VERSION'), '.'),
+]
 
 # Binarios adicionales (DLLs, .so, etc.)
 binaries = []
