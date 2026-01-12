@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "brain-cli"
-version = "0.1.6"
+version = "0.1.8"
 description = "Brain - Sistema de Intenciones Técnicas para Bloom"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -36,6 +36,15 @@ added = [
     "Discovery page para validación de conexión Extension ↔ Host durante instalación",
     "Comando close-profile: Cierra perfil completo (todas las ventanas de Chrome)",
     "Comando close-web-page: Cierra tabs específicas con 8 métodos de identificación",
+    "PathResolver: Centralized path resolution singleton",
+    "Extension ID unified loading (Native Manifest → nucleus.json fallback)",
+    "Discovery page validation after generation",
+    "PathResolver: Centralized path resolution singleton",
+    "Extension ID unified loading (Native Manifest → nucleus.json fallback)",
+    "Discovery page validation after generation",
+    "PathResolver: Centralized path resolution singleton",
+    "Extension ID unified loading (Native Manifest → nucleus.json fallback)",
+    "Discovery page validation after generation",
 ]
 changed = [
     "Extension: Refactored background.js to 'Synapse Router' (Thin Client)",
@@ -64,6 +73,24 @@ changed = [
     "background.js: Handler para discovery_complete event",
     "Refactor: Renamed 'brain.core.browser' to 'brain.core.profile' for semantic consistency",
     "Imports: Updated all references in CLI and ProfileManager to use new namespace",
+    "profile_manager.py: Removed _get_base_directory() duplication",
+    "landing_generator.py: Uses PathResolver instead of local path logic",
+    "discovery_generator.py: Fixed Path.ctime() bug, uses PathResolver",
+    "profiles.py: Fixed --cockpit vs --discovery flag behavior",
+    "launch_profile(): Removed dangerous rstrip('\\\\\\/') bug",
+    "launch_profile(): Added manifest.json validation before Chrome launch",
+    "profile_manager.py: Removed _get_base_directory() duplication",
+    "landing_generator.py: Uses PathResolver instead of local path logic",
+    "discovery_generator.py: Fixed Path.ctime() bug, uses PathResolver",
+    "profiles.py: Fixed --cockpit vs --discovery flag behavior",
+    "launch_profile(): Removed dangerous rstrip('\\\\\\/') bug",
+    "launch_profile(): Added manifest.json validation before Chrome launch",
+    "profile_manager.py: Removed _get_base_directory() duplication",
+    "landing_generator.py: Uses PathResolver instead of local path logic",
+    "discovery_generator.py: Fixed Path.ctime() bug, uses PathResolver",
+    "profiles.py: Fixed --cockpit vs --discovery flag behavior",
+    "launch_profile(): Removed dangerous rstrip('\\\\\\/') bug",
+    "launch_profile(): Added manifest.json validation before Chrome launch",
 ]
 details = [
     "Philosophy: Thin Client (100% Logic in Python, 0% in JS)",
@@ -85,4 +112,20 @@ details = [
     "Extension ID se lee desde nucleus.json o native manifest (allowed_origins)",
     "Discovery page se genera en profiles/{id}/discovery/ con index.html, styles.css, script.js",
     "Standardized directory structure matching CLI categories (profile -> core/profile)",
+    "Path navigation now consistent: exe → brain/ → bin/ → BloomNucleus/",
+    "Extension path validation ensures manifest.json exists",
+    "Discovery mode generates discovery/index.html, Cockpit uses landing/index.html",
+    "All generators now import from brain.core.profile.path_resolver",
+    "Package exports added to __init__.py for clean imports",
+    "Path navigation now consistent: exe → brain/ → bin/ → BloomNucleus/",
+    "Extension path validation ensures manifest.json exists",
+    "Discovery mode generates discovery/index.html, Cockpit uses landing/index.html",
+    "All generators now import from brain.core.profile.path_resolver",
+    "Package exports added to __init__.py for clean imports",
+    "Path navigation now consistent: exe → brain/ → bin/ → BloomNucleus/",
+    "Extension path validation ensures manifest.json exists",
+    "Discovery mode generates discovery/index.html, Cockpit uses landing/index.html",
+    "All generators now import from brain.core.profile.path_resolver",
+    "Package exports added to __init__.py for clean imports",
 ]
+updated_at = "2026-01-12T03:02:46.113395"

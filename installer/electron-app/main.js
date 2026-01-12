@@ -7,6 +7,33 @@
 // - Todo pasa por brain CLI
 // ============================================================================
 
+// ============================================================================
+// 🔥 UTF-8 CONFIGURATION - MUST BE FIRST
+// ============================================================================
+if (process.platform === 'win32') {
+  // Force UTF-8 encoding for stdout/stderr
+  if (process.stdout && process.stdout._handle) {
+    process.stdout._handle.setBlocking(true);
+  }
+  if (process.stderr && process.stderr._handle) {
+    process.stderr._handle.setBlocking(true);
+  }
+  
+  // Force UTF-8 for all child processes
+  process.env.PYTHONIOENCODING = 'utf-8';
+  process.env.PYTHONUTF8 = '1';
+  process.env.PYTHONLEGACYWINDOWSSTDIO = '0';
+  process.env.NODE_NO_WARNINGS = '1';
+  
+  // Set console code page to UTF-8 (65001)
+  try {
+    const { execSync } = require('child_process');
+    execSync('chcp 65001 > nul 2>&1', { stdio: 'ignore', windowsHide: true });
+  } catch (e) {
+    // Ignore errors - console might not support chcp
+  }
+}
+
 const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
@@ -23,7 +50,8 @@ const FORCE_ONBOARDING = process.argv.includes('--onboarding');
 
 const APP_VERSION = app.getVersion();
 const isWindows = process.platform === 'win32';
-const useEmojis = !isWindows || process.env.FORCE_EMOJIS === 'true';
+// ✅ ENABLE emojis on Windows since we're forcing UTF-8
+const useEmojis = true;
 
 // ============================================================================
 // HEARTBEAT CONFIGURATION
@@ -196,16 +224,25 @@ async function checkHostStatus() {
     
     const child = spawn(brainPath, ['--json', 'health', 'native-ping'], {
       cwd: getBrainWorkingDirectory(),
-      env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+      env: { 
+        ...process.env, 
+        PYTHONIOENCODING: 'utf-8',
+        PYTHONUTF8: '1',
+        PYTHONLEGACYWINDOWSSTDIO: '0'
+      },
       shell: true,
       windowsHide: true
     });
     
+    // ✅ FORZAR ENCODING UTF-8 en los streams
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    
     let stdout = '';
     let stderr = ''; 
 
-    child.stdout.on('data', (data) => { stdout += data.toString(); });
-    child.stderr.on('data', (data) => { stderr += data.toString(); }); 
+    child.stdout.on('data', (data) => { stdout += data; });
+    child.stderr.on('data', (data) => { stderr += data; }); 
     
     child.on('close', (code) => {
       try {
@@ -242,16 +279,25 @@ async function executeBrainCommand(args) {
     const brainPath = getBrainExecutablePath();
     const child = spawn(brainPath, args, {
       cwd: getBrainWorkingDirectory(),
-      env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+      env: { 
+        ...process.env, 
+        PYTHONIOENCODING: 'utf-8',
+        PYTHONUTF8: '1',
+        PYTHONLEGACYWINDOWSSTDIO: '0'
+      },
       shell: false,  // ✅ FIX: Sin shell para evitar cmd.exe intermedio
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe']
     });
     
+    // ✅ FORZAR ENCODING UTF-8 en los streams
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    
     let stdout = '';
     let stderr = '';
-    child.stdout.on('data', (data) => { stdout += data.toString(); });
-    child.stderr.on('data', (data) => { stderr += data.toString(); });
+    child.stdout.on('data', (data) => { stdout += data; });
+    child.stderr.on('data', (data) => { stderr += data; });
     
     child.on('close', (code) => {
       try {
@@ -525,9 +571,9 @@ function registerInstallHandlers() {
       // USAR BRAIN.EXE (Respeta la arquitectura)
       // ============================================================================
       
-      log(`🔹 Executing: brain --json profile launch ${profileId} --cockpit`);
+      log(`🔹 Executing: brain --json profile launch ${profileId} --discovery`);
       
-      const result = await executeBrainCommand(['--json', 'profile', 'launch', profileId, '--cockpit']);
+      const result = await executeBrainCommand(['--json', 'profile', 'launch', profileId, '--discovery']);
       
       log("✅ Profile launched successfully:", result);
       return result;

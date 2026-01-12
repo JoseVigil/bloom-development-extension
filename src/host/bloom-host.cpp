@@ -368,7 +368,7 @@ void tcp_client_loop() {
 // ============================================================================
 // MAIN
 // ============================================================================
-int main() {
+int main(int argc, char* argv[]) {
 #ifdef _WIN32
     WSADATA wsa;
     if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
@@ -377,13 +377,14 @@ int main() {
     _setmode(_fileno(stdin), _O_BINARY);
     _setmode(_fileno(stdout), _O_BINARY);
 #endif
-
-    g_logger.info("=== Bloom Host v" + VERSION + " (Build " + std::to_string(BUILD) + ") Starting ===");
-
-    g_profile_id = extract_profile_id_from_cmdline();
-
+    for (int i = 1; i < argc; i++) {
+        if (std::string(argv[i]) == "--profile-id" && i + 1 < argc) {
+            g_profile_id = argv[i + 1];
+        }
+    }
+    g_logger.info("=== Bloom Host v" + VERSION + " Starting ===");
+    g_logger.info("Profile ID: " + g_profile_id); // Esto saldrá en tu log
     std::thread client_thread(tcp_client_loop);
-
     while (!shutdown_requested.load()) {
         uint32_t msg_len = 0;
         if (!std::cin.read(reinterpret_cast<char*>(&msg_len), 4)) {

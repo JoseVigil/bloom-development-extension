@@ -267,7 +267,9 @@ async function initializeMasterProfile() {
         // 🚨 AJUSTE CRÍTICO: Aseguramos que el CLI use la misma ruta que el runtime-installer
         LOCALAPPDATA: process.env.LOCALAPPDATA, 
         BLOOM_EXTENSION_PATH: paths.extensionDir,
-        PYTHONIOENCODING: 'utf-8'
+        PYTHONIOENCODING: 'utf-8',
+        PYTHONUTF8: '1',
+        PYTHONLEGACYWINDOWSSTDIO: '0'
       } 
     }, (error, stdout, stderr) => {
       

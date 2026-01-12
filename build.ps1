@@ -99,6 +99,26 @@ Write-Host "   -> Esperando liberacion de archivos..." -ForegroundColor Gray
 Start-Sleep -Seconds 2
 
 # ---------------------------------------------------------
+# PASO 1.5: LIMPIAR CACHÉ DE PYINSTALLER
+# ---------------------------------------------------------
+Write-Host "1.5. Limpiando caché de compilación..." -ForegroundColor Yellow
+
+@("build", "dist") | ForEach-Object {
+    if (Test-Path $_) {
+        Remove-Item -Recurse -Force $_ -ErrorAction SilentlyContinue
+        Write-Host "   -> Eliminado: $_" -ForegroundColor Gray
+    }
+}
+
+Get-ChildItem -Recurse -Filter "__pycache__" -ErrorAction SilentlyContinue | 
+    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+
+Get-ChildItem -Recurse -Filter "*.pyc" -ErrorAction SilentlyContinue | 
+    Remove-Item -Force -ErrorAction SilentlyContinue
+
+Write-Host "   -> Caché limpiado" -ForegroundColor Green
+
+# ---------------------------------------------------------
 # PASO 2: COMPILAR (Delegar a Python)
 # ---------------------------------------------------------
 Write-Host "2. Ejecutando build.py..." -ForegroundColor Yellow
@@ -247,28 +267,47 @@ Write-Host "=========================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Ejecutable: $DestDir\brain.exe" -ForegroundColor Cyan
 
-# ---------------------------------------------------------
-# PASO 4: AGREGAR AL PATH (solo si no esta)
-# ---------------------------------------------------------
-Write-Host "4. Verificando PATH del sistema..." -ForegroundColor Yellow
-
-$CurrentPath = [Environment]::GetEnvironmentVariable("Path", "User")
-
-if ($CurrentPath -notlike "*$DestDir*") {
-    Write-Host "   -> Agregando Brain al PATH de usuario..." -ForegroundColor Gray
-    [Environment]::SetEnvironmentVariable(
-        "Path",
-        "$CurrentPath;$DestDir",
-        "User"
-    )
-    Write-Host "   -> PATH actualizado (requiere reiniciar terminal)" -ForegroundColor Green
+Write-Host "5. Procesando actualizaciones de versión..." -ForegroundColor Yellow
+python update_version.py  # Asume que estás en el fuente; ajusta path si necesario
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "WARN: Fallo en update_version.py - Revisa update_version.log" -ForegroundColor Yellow
 } else {
-    Write-Host "   -> Brain ya esta en el PATH" -ForegroundColor Gray
+    Write-Host "   -> Versiones y commit procesados." -ForegroundColor Green
 }
 
-Write-Host ""
-Write-Host "INSTRUCCIONES:" -ForegroundColor Yellow
-Write-Host "1. CIERRA esta terminal PowerShell" -ForegroundColor White
-Write-Host "2. Abre una NUEVA terminal" -ForegroundColor White
-Write-Host "3. Ejecuta: brain --version" -ForegroundColor White
-Write-Host ""
+# ---------------------------------------------------------
+# PASO 4: GESTION INTELIGENTE DEL PATH (DOBLE IMPACTO)
+# ---------------------------------------------------------
+Write-Host "4. Actualizando Variables de Entorno..." -ForegroundColor Yellow
+
+$OldPath = "$env:LOCALAPPDATA\BloomNucleus\bin"
+$NewPath = "$env:LOCALAPPDATA\BloomNucleus\bin\brain"
+
+# --- A. ACTUALIZAR REGISTRO (Para futuras terminales) ---
+$RegistryPath = [Environment]::GetEnvironmentVariable("Path", "User")
+
+# 1. Limpiar ruta vieja en registro
+if ($RegistryPath -like "*$OldPath*" -and $RegistryPath -notlike "*$OldPath\brain*") {
+    $RegistryPath = $RegistryPath.Replace(";$OldPath", "").Replace($OldPath, "")
+    Write-Host "   -> Ruta obsoleta eliminada del Registro" -ForegroundColor Gray
+}
+
+# 2. Agregar nueva ruta al registro
+if ($RegistryPath -notlike "*$NewPath*") {
+    [Environment]::SetEnvironmentVariable("Path", "$RegistryPath;$NewPath", "User")
+    Write-Host "   [OK] Registro de Windows actualizado." -ForegroundColor Green
+} else {
+    Write-Host "   [OK] El Registro ya estaba correcto." -ForegroundColor Gray
+}
+
+# --- B. ACTUALIZAR SESIÓN ACTUAL (Para que ande YA) ---
+# Esto es lo que te faltaba: Inyectar la ruta en la memoria de ESTA terminal
+if ($env:Path -notlike "*$NewPath*") {
+    $env:Path += ";$NewPath"
+    Write-Host "   [OK] Sesión actual actualizada (Ya puedes escribir 'brain')" -ForegroundColor Green
+}
+
+# Al final de build.ps1
+Write-Host "4. Actualizando Sesión..."
+$env:Path = "$env:LOCALAPPDATA\BloomNucleus\bin;" + $env:Path
+Write-Host "✅ Ya puedes escribir 'brain' en esta terminal." -ForegroundColor Green

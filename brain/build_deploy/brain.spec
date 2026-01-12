@@ -168,8 +168,10 @@ hiddenimports = [
     'brain.core.intent_manager',
     'brain.core.nucleus_inspector',
     'brain.core.nucleus_manager',
+    'brain.core.profile',
     'brain.core.profile.discovery_generator',
     'brain.core.profile.landing_generator',
+    'brain.core.profile.path_resolver',
     'brain.core.profile.profile_manager',
     'brain.core.project',
     'brain.core.project.clone_manager',
@@ -191,6 +193,7 @@ hiddenimports = [
 # Datos adicionales que deben incluirse (configs, templates, etc.)
 datas = [
     (str(PROJECT_ROOT / 'brain' / 'VERSION'), '.'),
+    (str(PROJECT_ROOT / 'brain' / 'core' / 'profile' / 'html'), 'brain/core/profile/html'),
 ]
 
 # Binarios adicionales (DLLs, .so, etc.)

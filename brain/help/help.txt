@@ -382,8 +382,8 @@ Brain CLI - Modular system for Bloom (Executable)
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      --url                URL inicial explícita (Optional)                                       │
-│      --cockpit            Fuerza modo cockpit (landing page) (bool) [default: False]             │
-│      --discovery          Inicia modo de validación de conexión (bool) [default: False]          │
+│      --cockpit            Modo cockpit (landing page) (bool) [default: False]                    │
+│      --discovery          Modo de validación de conexión (bool) [default: False]                 │
 │                                                                                                  │
 │  LINK - Vincula una cuenta de email a un perfil de Chrome                                        │
 │                                                                                                  │

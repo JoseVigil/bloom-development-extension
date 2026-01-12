@@ -404,10 +404,12 @@ bloom-development-extension/
 │   ├── __pycache__/ [... cache]
 │   ├── build_deploy/
 │   │   ├── __init__.py
-│   │   ├── __pycache__/ [... cache]
 │   │   ├── brain.spec
 │   │   ├── build_main.py
 │   │   ├── bump_version.py
+│   │   ├── commits/
+│   │   │   └── brain/
+│   │   │       └── 1_semantic-changelog_2026-01-11.txt
 │   │   ├── generate_command_loader.py
 │   │   ├── generate_commit.py
 │   │   ├── update_spec_hiddenimports.py
@@ -425,7 +427,6 @@ bloom-development-extension/
 │   │   ├── __init__.py
 │   │   ├── __pycache__/ [... cache]
 │   │   ├── context/
-│   │   │   ├── __pycache__/ [... cache]
 │   │   │   └── generate.py
 │   │   ├── extension/
 │   │   │   ├── __init__.py
@@ -544,7 +545,6 @@ bloom-development-extension/
 │   │       └── auth.py
 │   ├── commands.md
 │   ├── core/
-│   │   ├── __pycache__/ [... cache]
 │   │   ├── bloom_project_inspector.py
 │   │   ├── context/
 │   │   │   ├── __init__.py
@@ -614,8 +614,11 @@ bloom-development-extension/
 │   │   ├── nucleus_inspector.py
 │   │   ├── nucleus_manager.py
 │   │   ├── profile/
+│   │   │   ├── __init__.py
+│   │   │   ├── __pycache__/ [... cache]
 │   │   │   ├── discovery_generator.py
 │   │   │   ├── landing_generator.py
+│   │   │   ├── path_resolver.py
 │   │   │   └── profile_manager.py
 │   │   ├── project/
 │   │   │   ├── __init__.py
@@ -626,7 +629,6 @@ bloom-development-extension/
 │   │   │   └── scanner.py
 │   │   ├── project_manager.py
 │   │   ├── service/
-│   │   │   ├── __pycache__/ [... cache]
 │   │   │   └── server_manager.py
 │   │   ├── synapse/
 │   │   │   ├── __init__.py
