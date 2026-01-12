@@ -1,3 +1,15 @@
+INFO     | ================================================================================
+INFO     | BRAIN SYSTEM STARTUP
+INFO     | ================================================================================
+INFO     | Python: 3.13.11 (tags/v3.13.11:6278944, Dec  5 2025, 16:26:58) [MSC v.1944 64 bit (AMD64)]
+INFO     | Platform: win32
+INFO     | Executable: C:\repos\bloom-videos\bloom-development-extension\dist\brain\brain.exe
+INFO     | Frozen: True
+INFO     | CWD: C:\repos\bloom-videos\bloom-development-extension
+INFO     | Sys.path: ['C:\\repos\\bloom-videos\\bloom-development-extension\\dist\\brain', 'C:\\repos\\bloom-videos\\bloom-development-extension\\dist\\brain\\_internal\\base_library.zip', 'C:\\repos\\bloom-videos\\bloom-development-extension\\dist\\brain\\_internal\\python3.13\\lib-dynload']...
+INFO     | Log Directory: C:\Users\josev\AppData\Local\BloomNucleus\logs
+INFO     | ================================================================================
+INFO     | Usando cargador expl�cito (modo frozen)
 {
   "cli_info": {
     "name": "Brain CLI",

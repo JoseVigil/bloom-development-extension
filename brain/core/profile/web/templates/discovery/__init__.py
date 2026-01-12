@@ -1,0 +1,1 @@
+"""Discovery page templates."""

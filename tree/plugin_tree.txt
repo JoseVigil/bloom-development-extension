@@ -405,6 +405,7 @@ bloom-development-extension/
 │   ├── build_deploy/
 │   │   ├── __init__.py
 │   │   ├── brain.spec
+│   │   ├── brain.spec.bck
 │   │   ├── build_main.py
 │   │   ├── bump_version.py
 │   │   ├── commits/
@@ -545,6 +546,8 @@ bloom-development-extension/
 │   │       └── auth.py
 │   ├── commands.md
 │   ├── core/
+│   │   ├── __init__.py
+│   │   ├── __pycache__/ [... cache]
 │   │   ├── bloom_project_inspector.py
 │   │   ├── context/
 │   │   │   ├── __init__.py
@@ -616,10 +619,34 @@ bloom-development-extension/
 │   │   ├── profile/
 │   │   │   ├── __init__.py
 │   │   │   ├── __pycache__/ [... cache]
-│   │   │   ├── discovery_generator.py
-│   │   │   ├── landing_generator.py
+│   │   │   ├── logic/
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── __pycache__/ [... cache]
+│   │   │   │   ├── chrome_launcher.py
+│   │   │   │   ├── profile_store.py
+│   │   │   │   └── synapse_handler.py
 │   │   │   ├── path_resolver.py
-│   │   │   └── profile_manager.py
+│   │   │   ├── profile_manager.py
+│   │   │   └── web/
+│   │   │       ├── __init__.py
+│   │   │       ├── __pycache__/ [... cache]
+│   │   │       ├── discovery_generator.py
+│   │   │       ├── landing_generator.py
+│   │   │       └── templates/
+│   │   │           ├── __init__.py
+│   │   │           ├── __pycache__/ [... cache]
+│   │   │           ├── discovery/
+│   │   │           │   ├── __init__.py
+│   │   │           │   ├── __pycache__/ [... cache]
+│   │   │           │   ├── index.html
+│   │   │           │   ├── script.js
+│   │   │           │   └── styles.css
+│   │   │           └── landing/
+│   │   │               ├── __init__.py
+│   │   │               ├── __pycache__/ [... cache]
+│   │   │               ├── inex.html
+│   │   │               ├── script.js
+│   │   │               └── styles.css
 │   │   ├── project/
 │   │   │   ├── __init__.py
 │   │   │   ├── __pycache__/ [... cache]
@@ -661,6 +688,7 @@ bloom-development-extension/
 │       ├── credentials.py
 │       ├── environment.py
 │       ├── github_types.py
+│       ├── logger.py
 │       └── runtime_resolver.py
 ├── contracts/
 │   ├── README.md

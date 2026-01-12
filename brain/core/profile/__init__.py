@@ -1,9 +1,10 @@
+# brain/core/profile/__init__.py
 """
-brain.core.profile package
-Chrome Worker profile management system.
+Core profile management package.
+Imports are done explicitly in consuming modules to avoid circular dependencies.
 """
 
-from brain.core.profile.profile_manager import ProfileManager
-from brain.core.profile.path_resolver import PathResolver
+__all__ = ['PathResolver', 'ProfileManager']
 
-__all__ = ['ProfileManager', 'PathResolver']
+# NO importar aquí - dejar que los módulos consumidores lo hagan explícitamente
+# Esto evita problemas de inicialización en PyInstaller
