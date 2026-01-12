@@ -7,6 +7,10 @@ import typer
 from typing import Optional
 from brain.cli.base import BaseCommand, CommandMetadata
 from brain.cli.categories import CommandCategory
+from brain.shared.logger import get_logger
+
+# Logger para este módulo
+logger = get_logger(__name__)
 
 
 class ProfilesListCommand(BaseCommand):
@@ -27,48 +31,54 @@ class ProfilesListCommand(BaseCommand):
     def register(self, app: typer.Typer) -> None:
         @app.command(name="list")
         def list_profiles(ctx: typer.Context):
-            """Lista todos los perfiles existentes con su información."""
+            """MOSTRAR AL USUARIO (CLI)."""
             gc = ctx.obj
             if gc is None:
                 from brain.shared.context import GlobalContext
                 gc = GlobalContext()
             
             try:
+                # 1. Importar el manager
                 from brain.core.profile.profile_manager import ProfileManager
                 
-                if gc.verbose:
-                    typer.echo("🔍 Cargando perfiles...", err=True)
-                
+                # 2. Llamar a la lógica (el método que acabamos de limpiar)
                 pm = ProfileManager()
-                profiles = pm.list_profiles()
+                data = pm.list_profiles() 
                 
+                # 3. Preparar el resultado para la salida
                 result = {
                     "status": "success",
                     "operation": "list",
-                    "data": {"profiles": profiles, "count": len(profiles)}
+                    "data": {"profiles": data, "count": len(data)}
                 }
                 
+                # 4. Imprimir (Humano o JSON)
                 gc.output(result, self._render_list)
+                
             except Exception as e:
-                self._handle_error(gc, f"Error al listar perfiles: {str(e)}")
+                self._handle_error(gc, f"Error al listar perfiles: {e}")
 
     def _render_list(self, data: dict) -> None:
         """Renderiza la lista de perfiles en formato humano."""
-        profiles = data.get("profiles", [])
+        # Extraemos el contenido de 'data' que es lo que envió el comando
+        payload = data.get("data", {})
+        profiles = payload.get("profiles", [])
+        count = payload.get("count", 0)
+        
+        logger.debug(f"Renderizando {len(profiles)} perfiles")
         
         if not profiles:
             typer.echo("\n📋 No hay perfiles creados")
             typer.echo("💡 Crea uno con: brain profile create <alias>\n")
             return
         
-        typer.echo(f"\n📋 Perfiles de Workers ({data['count']} total)\n")
+        typer.echo(f"\n📋 Perfiles de Workers ({count} total)\n")
         typer.echo(f"{'Estado':<8} {'ID':<38} {'Alias':<20} {'Cuenta':<30} {'Creado'}")
         typer.echo("-" * 130)
         
         for p in profiles:
-            exists = p.get('exists', False)
-            status = "✓ Activo" if exists else "✗ Borrado"
-            profile_id = p.get('id', 'N/A')[:36]
+            status = "✓ Activo" if p.get('exists') else "✗ Borrado"
+            profile_id = p.get('id', 'N/A')
             alias = p.get('alias', 'N/A')[:18]
             account = p.get('linked_account') or '-'
             created = p.get('created_at', 'N/A')[:10]
@@ -108,10 +118,14 @@ class ProfilesCreateCommand(BaseCommand):
             alias: str = typer.Argument(..., help="Nombre descriptivo del perfil")
         ):
             """Crea un nuevo perfil con el alias especificado."""
+            logger.info(f"🔨 Iniciando comando profile create con alias: '{alias}'")
+            
             gc = ctx.obj
             if gc is None:
                 from brain.shared.context import GlobalContext
                 gc = GlobalContext()
+            
+            logger.debug(f"Modo JSON: {gc.json_mode}, Verbose: {gc.verbose}")
             
             try:
                 from brain.core.profile.profile_manager import ProfileManager
@@ -119,8 +133,13 @@ class ProfilesCreateCommand(BaseCommand):
                 if gc.verbose:
                     typer.echo(f"🔨 Creando perfil '{alias}'...", err=True)
                 
+                logger.debug("Inicializando ProfileManager...")
                 pm = ProfileManager()
+                
+                logger.info(f"Creando perfil con alias '{alias}'...")
                 profile_data = pm.create_profile(alias)
+                logger.info(f"✅ Perfil creado: ID={profile_data.get('id', 'N/A')[:8]}...")
+                logger.debug(f"Datos del perfil: {profile_data}")
                 
                 result = {
                     "status": "success",
@@ -129,7 +148,10 @@ class ProfilesCreateCommand(BaseCommand):
                 }
                 
                 gc.output(result, self._render_create)
+                logger.info("✅ Comando profile create completado exitosamente")
+                
             except Exception as e:
+                logger.error(f"❌ Error al crear perfil '{alias}': {str(e)}", exc_info=True)
                 self._handle_error(gc, f"Error al crear perfil: {str(e)}")
 
     def _render_create(self, data: dict) -> None:
@@ -180,14 +202,20 @@ class ProfilesLaunchCommand(BaseCommand):
             discovery: bool = typer.Option(False, "--discovery", help="Modo de validación de conexión")
         ):
             """Lanza Chrome con el perfil especificado y la extensión Bloom."""
+            logger.info(f"🚀 Iniciando comando profile launch")
+            logger.debug(f"Profile ID: {profile_id[:8]}..., URL: {url}, Cockpit: {cockpit}, Discovery: {discovery}")
+            
             gc = ctx.obj
             if gc is None:
                 from brain.shared.context import GlobalContext
                 gc = GlobalContext()
             
+            logger.debug(f"Modo JSON: {gc.json_mode}, Verbose: {gc.verbose}")
+            
             try:
                 from brain.core.profile.profile_manager import ProfileManager
                 
+                logger.debug("Inicializando ProfileManager...")
                 pm = ProfileManager()
                 
                 # URL Priority Logic
@@ -198,36 +226,54 @@ class ProfilesLaunchCommand(BaseCommand):
                     # 1. Explicit URL (Highest Priority)
                     target_url = url
                     mode_label = "Custom URL"
+                    logger.info(f"Modo seleccionado: Custom URL ({url})")
                     
                 elif discovery:
                     # 2. Discovery Mode (Installation/Debug)
                     if gc.verbose:
                         typer.echo(f"🔍 Generando entorno de discovery...", err=True)
+                    logger.info("Modo seleccionado: Discovery")
+                    logger.debug("Generando URL de discovery...")
                     target_url = pm.get_discovery_url(profile_id)
                     mode_label = "🔍 Discovery Check"
+                    logger.debug(f"URL de discovery generada: {target_url[:50]}...")
                     
                 elif cockpit:
                     # 3. Cockpit Mode (Dashboard)
+                    logger.info("Modo seleccionado: Cockpit")
                     try:
+                        logger.debug("Obteniendo landing URL...")
                         target_url = pm.get_landing_url(profile_id)
                         mode_label = "🏠 Cockpit"
-                    except Exception:
+                        logger.debug(f"Landing URL obtenida: {target_url[:50]}...")
+                    except Exception as e:
+                        logger.warning(f"No se pudo obtener landing URL, usando about:blank: {e}")
                         target_url = "about:blank"
                         mode_label = "🏠 Cockpit (Blank)"
                 
                 else:
                     # 4. Default: Cockpit if available, else blank
+                    logger.info("Modo seleccionado: Default (intentando Cockpit)")
                     try:
+                        logger.debug("Intentando obtener landing URL...")
                         target_url = pm.get_landing_url(profile_id)
                         mode_label = "🏠 Cockpit (Default)"
-                    except Exception:
+                        logger.debug(f"Landing URL obtenida: {target_url[:50]}...")
+                    except Exception as e:
+                        logger.warning(f"No se pudo obtener landing URL, usando about:blank: {e}")
                         target_url = "about:blank"
                         mode_label = "Standard (Blank)"
 
                 if gc.verbose:
                     typer.echo(f"🚀 Lanzando perfil {profile_id} en modo: {mode_label}", err=True)
                 
+                logger.info(f"Lanzando perfil {profile_id[:8]}... en modo: {mode_label}")
+                logger.debug(f"Target URL: {target_url}")
+                
                 launch_data = pm.launch_profile(profile_id, target_url)
+                
+                logger.info(f"✅ Chrome lanzado exitosamente (PID: {launch_data.get('pid')})")
+                logger.debug(f"Extensión cargada: {launch_data.get('extension_loaded')}")
                 
                 result = {
                     "status": "success",
@@ -239,32 +285,24 @@ class ProfilesLaunchCommand(BaseCommand):
                 }
                 
                 gc.output(result, self._render_launch)
+                logger.info("✅ Comando profile launch completado exitosamente")
+                
             except Exception as e:
+                logger.error(f"❌ Error al lanzar perfil {profile_id[:8]}...: {str(e)}", exc_info=True)
                 self._handle_error(gc, f"Error al lanzar perfil: {str(e)}")
 
     def _render_launch(self, data: dict) -> None:
         """Renderiza la confirmación de lanzamiento."""
+        # Extraemos el payload
+        payload = data.get("data", {})
+        
         typer.echo(f"\n🚀 Chrome lanzado exitosamente")
+        typer.echo(f"   Perfil: {payload.get('alias', 'N/A')}")
+        typer.echo(f"   Modo:   {payload.get('mode', 'Standard')}")
+        typer.echo(f"   PID:    {payload.get('pid')}")
         
-        profile_id = data.get('profile_id')
-        profile_id_display = (profile_id[:8] + '...') if isinstance(profile_id, str) and profile_id else 'N/A'
-        
-        typer.echo(f"   Perfil: {data.get('alias', 'N/A')} ({profile_id_display})")
-        typer.echo(f"   Modo:   {data.get('mode', 'Standard')}")
-        
-        url_display = data.get('url', '')
-        if url_display.startswith('file://'):
-            filename = '/'.join(url_display.split('/')[-2:])
-            url_display = f"file://.../{filename}"
-            
-        typer.echo(f"   URL:    {url_display}")
-        typer.echo(f"   PID:    {data.get('pid')}")
-
-        if not data.get('extension_loaded'):
-            typer.echo("   ⚠️  Extensión Bloom no encontrada")
-        else:
-            typer.echo("   ✅ Extensión Bloom inyectada")        
-        
+        if payload.get('extension_loaded'):
+            typer.echo("   ✅ Extensión Bloom inyectada")
         typer.echo()
 
     def _handle_error(self, gc, message: str):
@@ -300,31 +338,43 @@ class ProfilesDestroyCommand(BaseCommand):
             force: bool = typer.Option(False, "--force", "-f", help="Forzar sin confirmación")
         ):
             """Elimina un perfil y sus datos. Requiere confirmación a menos que se use --force."""
+            logger.info(f"🗑️  Iniciando comando profile destroy")
+            logger.debug(f"Profile ID: {profile_id[:8]}..., Force: {force}")
+            
             gc = ctx.obj
             if gc is None:
                 from brain.shared.context import GlobalContext
                 gc = GlobalContext()
             
+            logger.debug(f"Modo JSON: {gc.json_mode}, Verbose: {gc.verbose}")
+            
             try:
                 from brain.core.profile.profile_manager import ProfileManager
                 
+                logger.debug("Inicializando ProfileManager...")
                 pm = ProfileManager()
                 
                 if not force and not gc.json_mode:
                     if gc.verbose:
                         typer.echo(f"⚠️  Preparando eliminación de perfil {profile_id}...", err=True)
                     
+                    logger.debug("Solicitando confirmación al usuario...")
                     confirm = typer.confirm(
                         f"⚠️  ¿Eliminar perfil {profile_id}? Esta acción es IRREVERSIBLE"
                     )
                     if not confirm:
+                        logger.info("❌ Operación cancelada por el usuario")
                         typer.echo("❌ Operación cancelada por el usuario")
                         raise typer.Exit(0)
+                    logger.debug("Confirmación recibida, procediendo con eliminación")
                 
                 if gc.verbose:
                     typer.echo(f"🗑️  Eliminando perfil...", err=True)
                 
+                logger.info(f"Eliminando perfil {profile_id[:8]}...")
                 destroy_data = pm.destroy_profile(profile_id)
+                logger.info(f"✅ Perfil eliminado: {destroy_data.get('deleted_files', 0)} archivos eliminados")
+                logger.debug(f"Datos de eliminación: {destroy_data}")
                 
                 result = {
                     "status": "success",
@@ -333,9 +383,12 @@ class ProfilesDestroyCommand(BaseCommand):
                 }
                 
                 gc.output(result, self._render_destroy)
+                logger.info("✅ Comando profile destroy completado exitosamente")
+                
             except typer.Exit:
                 raise
             except Exception as e:
+                logger.error(f"❌ Error al eliminar perfil {profile_id[:8]}...: {str(e)}", exc_info=True)
                 self._handle_error(gc, f"Error al eliminar perfil: {str(e)}")
 
     def _render_destroy(self, data: dict) -> None:
@@ -377,10 +430,16 @@ class ProfilesLinkCommand(BaseCommand):
             email: str = typer.Argument(..., help="Email de la cuenta a vincular")
         ):
             """Vincula una cuenta de email a un perfil (DEPRECATED - usar accounts-register)."""
+            logger.warning(f"🔗 Comando DEPRECATED 'link' usado. Recomendar usar 'accounts-register'")
+            logger.info(f"🔗 Iniciando comando profile link")
+            logger.debug(f"Profile ID: {profile_id[:8]}..., Email: {email}")
+            
             gc = ctx.obj
             if gc is None:
                 from brain.shared.context import GlobalContext
                 gc = GlobalContext()
+            
+            logger.debug(f"Modo JSON: {gc.json_mode}, Verbose: {gc.verbose}")
             
             try:
                 from brain.core.profile.profile_manager import ProfileManager
@@ -388,8 +447,13 @@ class ProfilesLinkCommand(BaseCommand):
                 if gc.verbose:
                     typer.echo(f"🔗 Vinculando {email} a {profile_id}...", err=True)
                 
+                logger.debug("Inicializando ProfileManager...")
                 pm = ProfileManager()
+                
+                logger.info(f"Vinculando cuenta {email} al perfil {profile_id[:8]}...")
                 link_data = pm.link_account(profile_id, email)
+                logger.info(f"✅ Cuenta vinculada exitosamente")
+                logger.debug(f"Datos de vinculación: {link_data}")
                 
                 result = {
                     "status": "success",
@@ -398,7 +462,10 @@ class ProfilesLinkCommand(BaseCommand):
                 }
                 
                 gc.output(result, self._render_link)
+                logger.info("✅ Comando profile link completado exitosamente")
+                
             except Exception as e:
+                logger.error(f"❌ Error al vincular cuenta {email} al perfil {profile_id[:8]}...: {str(e)}", exc_info=True)
                 self._handle_error(gc, f"Error al vincular cuenta: {str(e)}")
 
     def _render_link(self, data: dict) -> None:
@@ -438,10 +505,16 @@ class ProfilesUnlinkCommand(BaseCommand):
             profile_id: str = typer.Argument(..., help="ID del perfil")
         ):
             """Desvincula la cuenta asociada a un perfil (DEPRECATED - usar accounts-remove)."""
+            logger.warning(f"🔓 Comando DEPRECATED 'unlink' usado. Recomendar usar 'accounts-remove'")
+            logger.info(f"🔓 Iniciando comando profile unlink")
+            logger.debug(f"Profile ID: {profile_id[:8]}...")
+            
             gc = ctx.obj
             if gc is None:
                 from brain.shared.context import GlobalContext
                 gc = GlobalContext()
+            
+            logger.debug(f"Modo JSON: {gc.json_mode}, Verbose: {gc.verbose}")
             
             try:
                 from brain.core.profile.profile_manager import ProfileManager
@@ -449,8 +522,13 @@ class ProfilesUnlinkCommand(BaseCommand):
                 if gc.verbose:
                     typer.echo(f"🔓 Desvinculando cuenta de {profile_id}...", err=True)
                 
+                logger.debug("Inicializando ProfileManager...")
                 pm = ProfileManager()
+                
+                logger.info(f"Desvinculando cuenta del perfil {profile_id[:8]}...")
                 unlink_data = pm.unlink_account(profile_id)
+                logger.info(f"✅ Cuenta desvinculada exitosamente")
+                logger.debug(f"Datos de desvinculación: {unlink_data}")
                 
                 result = {
                     "status": "success",
@@ -459,7 +537,10 @@ class ProfilesUnlinkCommand(BaseCommand):
                 }
                 
                 gc.output(result, self._render_unlink)
+                logger.info("✅ Comando profile unlink completado exitosamente")
+                
             except Exception as e:
+                logger.error(f"❌ Error al desvincular cuenta del perfil {profile_id[:8]}...: {str(e)}", exc_info=True)
                 self._handle_error(gc, f"Error al desvincular cuenta: {str(e)}")
 
     def _render_unlink(self, data: dict) -> None:
@@ -502,10 +583,15 @@ class ProfilesAccountsRegisterCommand(BaseCommand):
             email: str = typer.Argument(..., help="Email o identificador de la cuenta")
         ):
             """Registra una nueva cuenta en un perfil."""
+            logger.info(f"🔗 Iniciando comando profile accounts-register")
+            logger.debug(f"Profile ID: {profile_id[:8]}..., Provider: {provider}, Email: {email}")
+            
             gc = ctx.obj
             if gc is None:
                 from brain.shared.context import GlobalContext
                 gc = GlobalContext()
+            
+            logger.debug(f"Modo JSON: {gc.json_mode}, Verbose: {gc.verbose}")
             
             try:
                 from brain.core.profile.profile_manager import ProfileManager
@@ -513,8 +599,13 @@ class ProfilesAccountsRegisterCommand(BaseCommand):
                 if gc.verbose:
                     typer.echo(f"🔗 Registrando {provider} ({email}) en {profile_id}...", err=True)
                 
+                logger.debug("Inicializando ProfileManager...")
                 pm = ProfileManager()
+                
+                logger.info(f"Registrando cuenta {provider}/{email} en perfil {profile_id[:8]}...")
                 result_data = pm.register_account(profile_id, provider, email)
+                logger.info(f"✅ Cuenta registrada exitosamente")
+                logger.debug(f"Datos de registro: {result_data}")
                 
                 result = {
                     "status": "success",
@@ -523,7 +614,10 @@ class ProfilesAccountsRegisterCommand(BaseCommand):
                 }
                 
                 gc.output(result, self._render_register)
+                logger.info("✅ Comando profile accounts-register completado exitosamente")
+                
             except Exception as e:
+                logger.error(f"❌ Error al registrar cuenta {provider}/{email} en perfil {profile_id[:8]}...: {str(e)}", exc_info=True)
                 self._handle_error(gc, f"Error al registrar cuenta: {str(e)}")
 
     def _render_register(self, data: dict) -> None:
@@ -566,10 +660,15 @@ class ProfilesAccountsRemoveCommand(BaseCommand):
             provider: str = typer.Argument(..., help="Proveedor a remover")
         ):
             """Remueve una cuenta registrada de un perfil."""
+            logger.info(f"🔓 Iniciando comando profile accounts-remove")
+            logger.debug(f"Profile ID: {profile_id[:8]}..., Provider: {provider}")
+            
             gc = ctx.obj
             if gc is None:
                 from brain.shared.context import GlobalContext
                 gc = GlobalContext()
+            
+            logger.debug(f"Modo JSON: {gc.json_mode}, Verbose: {gc.verbose}")
             
             try:
                 from brain.core.profile.profile_manager import ProfileManager
@@ -577,8 +676,13 @@ class ProfilesAccountsRemoveCommand(BaseCommand):
                 if gc.verbose:
                     typer.echo(f"🔓 Removiendo {provider} de {profile_id}...", err=True)
                 
+                logger.debug("Inicializando ProfileManager...")
                 pm = ProfileManager()
+                
+                logger.info(f"Removiendo cuenta {provider} del perfil {profile_id[:8]}...")
                 result_data = pm.remove_account(profile_id, provider)
+                logger.info(f"✅ Cuenta removida exitosamente, {len(result_data.get('remaining_accounts', []))} cuentas restantes")
+                logger.debug(f"Datos de remoción: {result_data}")
                 
                 result = {
                     "status": "success",
@@ -587,7 +691,10 @@ class ProfilesAccountsRemoveCommand(BaseCommand):
                 }
                 
                 gc.output(result, self._render_remove)
+                logger.info("✅ Comando profile accounts-remove completado exitosamente")
+                
             except Exception as e:
+                logger.error(f"❌ Error al remover cuenta {provider} del perfil {profile_id[:8]}...: {str(e)}", exc_info=True)
                 self._handle_error(gc, f"Error al remover cuenta: {str(e)}")
 
     def _render_remove(self, data: dict) -> None:

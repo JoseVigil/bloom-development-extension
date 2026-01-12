@@ -201,24 +201,12 @@ hiddenimports = [
 
 # Datos adicionales que deben incluirse (configs, templates, etc.)
 datas = [
+    # VERSION file para mostrar versión en --version
     (str(PROJECT_ROOT / 'brain' / 'VERSION'), '.'),
+    
+    # Templates de profile (discovery y landing pages)
     (str(PROJECT_ROOT / 'brain' / 'core' / 'profile' / 'web' / 'templates'), 'brain/core/profile/web/templates'),
 ]
-
-# Forzar la estructura física de core/profile para evitar el bug de colisión de nombres
-core_profile_src = PROJECT_ROOT / 'brain' / 'core' / 'profile'
-
-datas.extend([
-    (str(core_profile_src / '__init__.py'), 'brain/core/profile'),
-    (str(core_profile_src / 'profile_manager.py'), 'brain/core/profile'),
-    (str(core_profile_src / 'path_resolver.py'), 'brain/core/profile'),
-    # No olvides la lógica interna y web (si no PyInstaller los ignorará)
-    (str(core_profile_src / 'logic' / '__init__.py'), 'brain/core/profile/logic'),
-    (str(core_profile_src / 'logic' / 'profile_store.py'), 'brain/core/profile/logic'),
-    (str(core_profile_src / 'web' / '__init__.py'), 'brain/core/profile/web'),
-    (str(core_profile_src / 'web' / 'discovery_generator.py'), 'brain/core/profile/web'),
-    (str(core_profile_src / 'web' / 'landing_generator.py'), 'brain/core/profile/web'),
-])
 
 # Binarios adicionales (DLLs, .so, etc.)
 binaries = []
@@ -248,6 +236,30 @@ a = Analysis(
     cipher=block_cipher,
     noarchive=False,
 )
+
+# 🔥 PARCHE DE HIERRO (Corregido con tu variable)
+print("\n" + "="*70)
+print("🔍 FORZANDO ARCHIVOS FÍSICOS")
+print("="*70)
+
+profile_root = PROJECT_ROOT / 'brain' / 'core' / 'profile'
+modules_to_force = [
+    ('brain.core.profile.profile_manager', profile_root / 'profile_manager.py'),
+    ('brain.core.profile.path_resolver', profile_root / 'path_resolver.py'),
+]
+
+# Limpieza y re-inyección
+for mod_name, _ in modules_to_force:
+    a.pure = [item for item in a.pure if item[0] != mod_name]
+
+for mod_name, mod_path in modules_to_force:
+    if mod_path.exists():
+        a.pure.insert(0, (mod_name, str(mod_path), 'PYMODULE'))
+        print(f"✅ Forzado: {mod_name}")
+    else:
+        print(f"❌ ERROR: No se encontró {mod_path}")
+
+print("="*70 + "\n")
 
 pyz = PYZ(
     a.pure,

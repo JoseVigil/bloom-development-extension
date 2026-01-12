@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bloom - {{PROFILE_ALIAS}}</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <div class="loading">
+      <div class="spinner"></div>
+      <p>Initializing Cockpit...</p>
+    </div>
+  </div>
+
+  <script>
+    window.BLOOM_PROFILE_DATA = {{PROFILE_DATA_JSON}};
+    
+    window.BLOOM_EXTENSION_ID = '{{EXTENSION_ID}}';
+  </script>
+  
+  <script src="script.js"></script>
+</body>
+</html>
