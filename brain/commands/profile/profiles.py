@@ -134,7 +134,7 @@ class ProfilesCreateCommand(BaseCommand):
 
     def _render_create(self, data: dict) -> None:
         """Renderiza la confirmación de creación."""
-        profile = data.get('data', {})  # Accede al inner data
+        profile = data.get('data', {})
         typer.echo(f"\n✅ Perfil creado exitosamente")
         typer.echo(f"   ID:    {profile.get('id', 'N/A')}")
         typer.echo(f"   Alias: {profile.get('alias', 'N/A')}")
@@ -161,12 +161,12 @@ class ProfilesLaunchCommand(BaseCommand):
         return CommandMetadata(
             name="launch",
             category=CommandCategory.PROFILE,
-            version="1.1.0", # Bump version por nueva feature
+            version="1.1.0",
             description="Lanza Chrome con un perfil de Worker",
             examples=[
                 "brain profile launch <id>",
-                "brain profile launch <id> --discovery  (Modo validación)",
-                "brain profile launch <id> --cockpit    (Modo dashboard)"
+                "brain profile launch <id> --discovery",
+                "brain profile launch <id> --cockpit"
             ]
         )
 
@@ -176,8 +176,8 @@ class ProfilesLaunchCommand(BaseCommand):
             ctx: typer.Context,
             profile_id: str = typer.Argument(..., help="ID del perfil a lanzar"),
             url: Optional[str] = typer.Option(None, "--url", help="URL inicial explícita"),
-            cockpit: bool = typer.Option(False, "--cockpit", help="Fuerza modo cockpit (landing page)"),
-            discovery: bool = typer.Option(False, "--discovery", help="Inicia modo de validación de conexión") # Nuevo Flag
+            cockpit: bool = typer.Option(False, "--cockpit", help="Modo cockpit (landing page)"),
+            discovery: bool = typer.Option(False, "--discovery", help="Modo de validación de conexión")
         ):
             """Lanza Chrome con el perfil especificado y la extensión Bloom."""
             gc = ctx.obj
@@ -190,42 +190,43 @@ class ProfilesLaunchCommand(BaseCommand):
                 
                 pm = ProfileManager()
                 
-                # --- LÓGICA DE PRIORIDAD DE URL ---
+                # URL Priority Logic
                 target_url = None
                 mode_label = "Standard"
 
                 if url:
-                    # 1. URL Explícita (Prioridad Máxima)
+                    # 1. Explicit URL (Highest Priority)
                     target_url = url
                     mode_label = "Custom URL"
                     
                 elif discovery:
-                    # 2. Modo Discovery (Instalación/Debug)
+                    # 2. Discovery Mode (Installation/Debug)
                     if gc.verbose:
                         typer.echo(f"🔍 Generando entorno de discovery...", err=True)
                     target_url = pm.get_discovery_url(profile_id)
                     mode_label = "🔍 Discovery Check"
                     
                 elif cockpit:
-                    # 3. Modo Cockpit (Dashboard)
+                    # 3. Cockpit Mode (Dashboard)
                     try:
                         target_url = pm.get_landing_url(profile_id)
                         mode_label = "🏠 Cockpit"
                     except Exception:
                         target_url = "about:blank"
+                        mode_label = "🏠 Cockpit (Blank)"
                 
                 else:
-                    # 4. Default (Cockpit si existe, sino blank)
+                    # 4. Default: Cockpit if available, else blank
                     try:
                         target_url = pm.get_landing_url(profile_id)
                         mode_label = "🏠 Cockpit (Default)"
                     except Exception:
                         target_url = "about:blank"
+                        mode_label = "Standard (Blank)"
 
                 if gc.verbose:
                     typer.echo(f"🚀 Lanzando perfil {profile_id} en modo: {mode_label}", err=True)
                 
-                # Launch Chrome
                 launch_data = pm.launch_profile(profile_id, target_url)
                 
                 result = {
@@ -253,15 +254,14 @@ class ProfilesLaunchCommand(BaseCommand):
         
         url_display = data.get('url', '')
         if url_display.startswith('file://'):
-            # Limpiar visualmente rutas largas de archivo
-            filename = url_display.split('/')[-2] + '/' + url_display.split('/')[-1]
+            filename = '/'.join(url_display.split('/')[-2:])
             url_display = f"file://.../{filename}"
             
         typer.echo(f"   URL:    {url_display}")
         typer.echo(f"   PID:    {data.get('pid')}")
 
         if not data.get('extension_loaded'):
-            typer.echo("   ⚠️  Extensión Bloom no encontrada (Revisar instalación)")
+            typer.echo("   ⚠️  Extensión Bloom no encontrada")
         else:
             typer.echo("   ✅ Extensión Bloom inyectada")        
         
@@ -310,7 +310,6 @@ class ProfilesDestroyCommand(BaseCommand):
                 
                 pm = ProfileManager()
                 
-                # Confirmación interactiva (solo en modo no-JSON)
                 if not force and not gc.json_mode:
                     if gc.verbose:
                         typer.echo(f"⚠️  Preparando eliminación de perfil {profile_id}...", err=True)

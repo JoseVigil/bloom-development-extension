@@ -75,8 +75,8 @@ const brainDir = platform === 'win32'
   : path.join(baseDir, 'engine', 'runtime', 'lib', 'python3.11', 'site-packages', 'brain');
 
 const hostBinary = platform === 'win32'
-  ? path.join(baseDir, 'native', 'bloom-host.exe')
-  : path.join(baseDir, 'native', 'bloom-host');
+  ? path.join(baseDir, 'bin', 'native', 'bloom-host.exe')
+  : path.join(baseDir, 'bin', 'native', 'bloom-host');
 
 const brainExe = platform === 'win32'
   ? path.join(baseDir, 'bin', 'brain', 'brain.exe')
@@ -84,7 +84,7 @@ const brainExe = platform === 'win32'
 
 const manifestPath = (() => {
   if (platform === 'win32') {
-    return path.join(baseDir, 'native', 'com.bloom.nucleus.bridge.json');
+    return path.join(baseDir, 'bin', 'native', 'com.bloom.nucleus.bridge.json');
   } else if (platform === 'darwin') {
     return path.join(homeDir, 'Library', 'Application Support', 'Google', 'Chrome', 'NativeMessagingHosts', 'com.bloom.nucleus.bridge.json');
   } else {
@@ -129,7 +129,7 @@ const paths = {
   extensionBrainDir: path.join(baseDir, 'bin', 'extension'), // Unificado con extensionDir
 
   // Native Host
-  nativeDir: path.join(baseDir, 'native'),
+  nativeDir: path.join(baseDir, 'bin', 'native'),
   hostBinary,
   manifestPath,
 

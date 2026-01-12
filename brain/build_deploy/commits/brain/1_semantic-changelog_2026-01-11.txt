@@ -1,0 +1,27 @@
+chore(release): 0.1.8
+
+Version: 0.1.7 → 0.1.8
+Build Number: #1
+Requested by: brain.exe (frozen mode)
+Timestamp: 2026-01-11T23:39:33.653813
+Update count: 14
+
+Added:
+- PathResolver: Centralized path resolution singleton
+- Extension ID unified loading (Native Manifest → nucleus.json fallback)
+- Discovery page validation after generation
+
+Changed:
+- profile_manager.py: Removed _get_base_directory() duplication
+- landing_generator.py: Uses PathResolver instead of local path logic
+- discovery_generator.py: Fixed Path.ctime() bug, uses PathResolver
+- profiles.py: Fixed --cockpit vs --discovery flag behavior
+- launch_profile(): Removed dangerous rstrip('\\\/') bug
+- launch_profile(): Added manifest.json validation before Chrome launch
+
+Details:
+- Path navigation now consistent: exe → brain/ → bin/ → BloomNucleus/
+- Extension path validation ensures manifest.json exists
+- Discovery mode generates discovery/index.html, Cockpit uses landing/index.html
+- All generators now import from brain.core.profile.path_resolver
+- Package exports added to __init__.py for clean imports

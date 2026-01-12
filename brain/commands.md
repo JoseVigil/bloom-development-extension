@@ -25,7 +25,11 @@ brain filesystem tree installer -o tree/installer_tree.txt
 
 brain filesystem tree brain -o tree/brain_tree.txt
 |
+brain filesystem tree webview -o tree/webview_tree.txt
+
 brain filesystem tree installer/electron-app -o tree/electron_tree.txt
+
+brain filesystem tree installer/chrome-extension -o tree/chrome_extension_tree.txt
 
 .\brain.exe profile launch <PROFILE_ID> --cockpit
 

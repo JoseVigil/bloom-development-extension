@@ -3,7 +3,6 @@
 // Router puro con capacidades de gestión de Ventanas y Discovery.
 // ============================================================================
 
-const HOST_NAME = "com.bloom.nucleus.bridge";
 const HEARTBEAT_INTERVAL = 15000;
 const RECONNECT_BASE_DELAY = 2000;
 
@@ -11,23 +10,52 @@ let nativePort = null;
 let heartbeatTimer = null;
 let reconnectAttempts = 0;
 
+// 1. Cargar la configuración generada por Python
+try {
+  // Python escribirá este archivo en la carpeta de la extensión del perfil
+  importScripts('synapse.config.js');
+} catch (e) {
+  console.error("❌ [Synapse] No se encontró synapse.config.js. El bridge no funcionará.");
+}
+
+// 2. Obtener el nombre del host de forma segura
+const HOST_NAME = self.SYNAPSE_CONFIG?.bridge_name;
+
+if (!HOST_NAME) {
+  console.error("❌ [Synapse] HOST_NAME no definido. Abortando conexión nativa.");
+}
+
 // ============================================================================
 // 1. GESTIÓN DE CONEXIÓN
 // ============================================================================
 
 function connectToNativeHost() {
+  // 1. Evitar conexiones duplicadas (Tu línea actual)
   if (nativePort) return;
+
+  // 2. Validar que Python inyectó el nombre del bridge correctamente
+  if (!HOST_NAME) {
+    console.error("❌ [Synapse] Abortando: HOST_NAME no está definido en synapse.config.js");
+    // Opcional: reintentar en 2 segundos por si el archivo tardó en cargar
+    setTimeout(connectToNativeHost, 2000); 
+    return;
+  }
+
   console.log(`🔌 [Synapse] Connecting to ${HOST_NAME}...`);
+
   try {
     nativePort = chrome.runtime.connectNative(HOST_NAME);
+    
     nativePort.onMessage.addListener(routeFromBrain);
     nativePort.onDisconnect.addListener(handleDisconnect);
+    
     sendSystemHello();
     startHeartbeat();
     reconnectAttempts = 0;
-    console.log("✅ [Synapse] Connected");
+    
+    console.log("✅ [Synapse] Connected to profile-specific host");
   } catch (error) {
-    console.error("❌ [Synapse] Connection failed:", error);
+    console.error(`❌ [Synapse] Connection failed to ${HOST_NAME}:`, error);
     scheduleReconnect();
   }
 }
@@ -205,21 +233,37 @@ async function handleNavigate(payload) {
 }
 
 // ============================================================================
-// 6. HELPERS
+// 6. HELPERS (Con Blindaje)
 // ============================================================================
 
 async function routeToTab(target, message) {
   let tabId = target;
+  
   if (target === "active" || !target) {
     const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tabs.length) throw new Error("No active tab");
+    
+    if (!tabs.length) {
+      console.warn("⚠️ [Router] No active tab found to route message:", message);
+      // No lanzamos error, solo avisamos que no se pudo entregar
+      return { status: "skipped", reason: "no_active_tab" };
+    }
     tabId = tabs[0].id;
   }
-  return chrome.tabs.sendMessage(tabId, message);
-}
-
-function sendToBrain(msg) {
-  if (nativePort) nativePort.postMessage(msg);
+  
+  try {
+    // Intentamos enviar el mensaje
+    return await chrome.tabs.sendMessage(tabId, message);
+  } catch (error) {
+    // Si el content script no está listo, Chrome lanza "Receiving end does not exist"
+    if (error.message.includes("Receiving end does not exist")) {
+      console.warn(`⚠️ [Router] Tab ${tabId} not ready yet (Content Script missing). Message queued/dropped.`);
+      // Retornamos un estado "pending" en lugar de crashear
+      return { status: "pending", reason: "content_script_not_ready" };
+    }
+    
+    // Otros errores sí los re-lanzamos
+    throw error;
+  }
 }
 
 // Init

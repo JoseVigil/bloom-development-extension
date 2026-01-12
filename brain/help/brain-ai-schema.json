@@ -2452,12 +2452,12 @@
             },
             "--cockpit": {
               "type": "boolean",
-              "description": "Fuerza modo cockpit (landing page)",
+              "description": "Modo cockpit (landing page)",
               "default": false
             },
             "--discovery": {
               "type": "boolean",
-              "description": "Inicia modo de validación de conexión",
+              "description": "Modo de validación de conexión",
               "default": false
             }
           },

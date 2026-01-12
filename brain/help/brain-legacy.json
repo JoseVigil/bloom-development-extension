@@ -2011,14 +2011,14 @@
                 {
                   "flag": "--cockpit",
                   "required": false,
-                  "help": "Fuerza modo cockpit (landing page)",
+                  "help": "Modo cockpit (landing page)",
                   "type": "bool",
                   "default": false
                 },
                 {
                   "flag": "--discovery",
                   "required": false,
-                  "help": "Inicia modo de validación de conexión",
+                  "help": "Modo de validación de conexión",
                   "type": "bool",
                   "default": false
                 }
