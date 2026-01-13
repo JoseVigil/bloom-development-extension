@@ -73,6 +73,9 @@ build/
 dist/
 *.spec.bak
 
+# Runtime Libs
+brain/runtime_libs
+
 # Compiled executable and dependencies
 installer/native/bin/win32/brain/
 !installer/native/bin/win32/brain/.gitkeep
