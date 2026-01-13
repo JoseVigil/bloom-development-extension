@@ -24,7 +24,7 @@ class PathResolver:
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
-            logger.debug("📍 PathResolver singleton created")
+            logger.debug("🔍 PathResolver singleton created")
         return cls._instance
     
     def __init__(self):
@@ -73,107 +73,50 @@ class PathResolver:
     def extension_path(self) -> Path:
         """
         Ruta real de la extensión maestra.
-        Basado en tu ejecutable: .../bin/brain/brain.exe
-        Subimos dos niveles para llegar a .../bin/ y entramos a 'extension'
+        Apunta a bin/extension/
         """
-        # sys.executable es: C:\Users\josev\AppData\Local\BloomNucleus\bin\brain\brain.exe
-        target = Path(sys.executable).resolve().parent.parent / "extension"
+        target = self.bin_dir / "extension"
 
         if (target / "manifest.json").exists():
             return target
-
-        # Si no está ahí, fallback a la base resuelta (que es .../bin según el log)
-        fallback = self.base_dir / "extension"
-        if (fallback / "manifest.json").exists():
-            return fallback
 
         raise FileNotFoundError(f"❌ CRÍTICO: manifest.json no encontrado en {target}")
 
     @property
     def extension_id(self) -> str:
         """ID fijo de la extensión para Synapse v2.0"""
-        return "hpblclepliicmihaplldignhjdggnkdh"
+        if self._extension_id:
+            return self._extension_id
+        
+        # Hardcoded para Synapse v2.0
+        self._extension_id = "hpblclepliicmihaplldignhjdggnkdh"
+        logger.info(f"✅ Extension ID (Synapse v2.0): {self._extension_id}")
+        return self._extension_id
     
     @property
     def native_manifest(self) -> Path:
         """bin/native/com.bloom.nucleus.bridge.json."""
         return self.bin_dir / "native" / "com.bloom.nucleus.bridge.json"
     
-    @property
-    def extension_id(self) -> str:
-        """Extension ID from native manifest or nucleus.json."""
-        if self._extension_id:
-            logger.debug(f"Using cached extension ID: {self._extension_id}")
-            return self._extension_id
-        
-        logger.info("🔍 Resolving extension ID...")
-        
-        # Priority 1: Native Host Manifest
-        if self.native_manifest.exists():
-            try:
-                logger.debug(f"Reading native manifest: {self.native_manifest}")
-                with open(self.native_manifest, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    allowed_origins = data.get("allowed_origins", [])
-                    
-                    if allowed_origins:
-                        origin = allowed_origins[0]
-                        self._extension_id = origin.replace("chrome-extension://", "").rstrip("/")
-                        logger.info(f"✅ Extension ID from native manifest: {self._extension_id}")
-                        return self._extension_id
-            except Exception as e:
-                logger.warning(f"⚠️ Failed to read native manifest: {e}")
-        else:
-            logger.debug(f"Native manifest not found: {self.native_manifest}")
-        
-        # Priority 2: nucleus.json
-        if self.nucleus_json.exists():
-            try:
-                logger.debug(f"Reading nucleus.json: {self.nucleus_json}")
-                with open(self.nucleus_json, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    ext_id = data.get("extensionId") or data.get("extension", {}).get("id")
-                    
-                    if ext_id:
-                        self._extension_id = ext_id
-                        logger.info(f"✅ Extension ID from nucleus.json: {self._extension_id}")
-                        return self._extension_id
-            except Exception as e:
-                logger.warning(f"⚠️ Failed to read nucleus.json: {e}")
-        else:
-            logger.debug(f"nucleus.json not found: {self.nucleus_json}")
-        
-        # Fallback
-        self._extension_id = "EXTENSION_ID_PLACEHOLDER"
-        logger.warning(f"⚠️ Using fallback extension ID: {self._extension_id}")
-        return self._extension_id
-    
     def _resolve_base_directory(self) -> Path:
         is_frozen = getattr(sys, 'frozen', False)
         
         if is_frozen:
             exe_path = Path(sys.executable).resolve()
-            # Estructura: BloomNucleus/bin/brain.exe
-            # Subimos de 'brain.exe' a 'bin' (1), de 'bin' a 'BloomNucleus' (2)
-            base = exe_path.parent.parent 
+            # Estructura: BloomNucleus/bin/brain/brain.exe
+            # Subimos de 'brain.exe' a 'brain/' (1), de 'brain/' a 'bin' (2), de 'bin' a 'BloomNucleus' (3)
+            base = exe_path.parent.parent.parent
             
             # LOG CRÍTICO: Aquí es donde veremos la verdad
-            logger.info(f"📍 [PATH_RESOLVER] Modo Frozen detectado")
-            logger.info(f"📍 [PATH_RESOLVER] Ejecutable: {exe_path}")
-            logger.info(f"📍 [PATH_RESOLVER] BASE CALCULADA: {base}")
+            logger.info(f"🔍 [PATH_RESOLVER] Modo Frozen detectado")
+            logger.info(f"🔍 [PATH_RESOLVER] Ejecutable: {exe_path}")
+            logger.info(f"🔍 [PATH_RESOLVER] BASE CALCULADA: {base}")
             
             # Asegurar que existan los directorios
             for dirname in ['bin', 'config', 'profiles']:
                 (base / dirname).mkdir(parents=True, exist_ok=True)
             
             return base
-        
-        # Modo desarrollo (Windows)
-        localappdata = os.environ.get("LOCALAPPDATA")
-        base = Path(localappdata) / "BloomNucleus" if localappdata else Path.home() / "AppData/Local/BloomNucleus"
-        logger.info(f"🔧 [PATH_RESOLVER] Modo Desarrollo: {base}")
-        base.mkdir(parents=True, exist_ok=True)
-        return base
         
         # --- Modo Development (Sin cambios) ---
         system = platform.system()
@@ -184,6 +127,7 @@ class PathResolver:
             base = Path.home() / "Library/Application Support/BloomNucleus"
         else:
             base = Path.home() / ".local/share/BloomNucleus"
-            
+        
+        logger.info(f"🔧 [PATH_RESOLVER] Modo Desarrollo: {base}")
         base.mkdir(parents=True, exist_ok=True)
         return base

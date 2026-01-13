@@ -45,6 +45,99 @@
   },
   "categories": [
     {
+      "name": "chrome",
+      "description": "Chrome profile debugging and network log analysis",
+      "command_count": 2,
+      "subsections": [
+        {
+          "name": "READ",
+          "commands": [
+            {
+              "name": "read-log",
+              "display_name": "READ LOG",
+              "description": "Read and filter Chrome debug logs for a specific profile.",
+              "syntax": "brain [GLOBAL_OPTIONS] chrome read-log <PROFILE_ID> [OPTIONS]",
+              "arguments": [
+                {
+                  "name": "<PROFILE_ID>",
+                  "required": true,
+                  "help": "Chrome profile UUID",
+                  "type": "str"
+                }
+              ],
+              "options": [
+                {
+                  "flag": "-k",
+                  "required": false,
+                  "help": "Keyword to search for",
+                  "type": "str",
+                  "default": "bloom"
+                },
+                {
+                  "flag": "-b",
+                  "required": false,
+                  "help": "Lines of context before match",
+                  "type": "int",
+                  "default": 5
+                },
+                {
+                  "flag": "-a",
+                  "required": false,
+                  "help": "Lines of context after match",
+                  "type": "int",
+                  "default": 5
+                }
+              ]
+            },
+            {
+              "name": "read-net-log",
+              "display_name": "READ NET LOG",
+              "description": "Analyze Chrome network logs with intelligent filtering.",
+              "syntax": "brain [GLOBAL_OPTIONS] chrome read-net-log <PROFILE_ID> [OPTIONS]",
+              "arguments": [
+                {
+                  "name": "<PROFILE_ID>",
+                  "required": true,
+                  "help": "Chrome profile UUID",
+                  "type": "str"
+                }
+              ],
+              "options": [
+                {
+                  "flag": "--filter-ai",
+                  "required": false,
+                  "help": "Filter for AI service requests only",
+                  "type": "bool",
+                  "default": false
+                },
+                {
+                  "flag": "-e",
+                  "required": false,
+                  "help": "Exclude URL patterns",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "--include-quic",
+                  "required": false,
+                  "help": "Include QUIC protocol events",
+                  "type": "bool",
+                  "default": false
+                },
+                {
+                  "flag": "--show-headers",
+                  "required": false,
+                  "help": "Show HTTP headers in output",
+                  "type": "bool",
+                  "default": false
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "context",
       "description": "AI context generation and management",
       "command_count": 1,
@@ -55,7 +148,7 @@
             {
               "name": "generate",
               "display_name": "GENERATE",
-              "description": "Generate the Bloom Context for the project",
+              "description": "Generate the Bloom Context for the project.",
               "syntax": "brain [GLOBAL_OPTIONS] context generate [OPTIONS]",
               "arguments": [],
               "options": [
@@ -89,23 +182,15 @@
     {
       "name": "extension",
       "description": "Chrome extension lifecycle management",
-      "command_count": 4,
+      "command_count": 3,
       "subsections": [
         {
           "name": null,
           "commands": [
             {
-              "name": "backups",
-              "display_name": "BACKUPS",
-              "description": "Manage Chrome extension version backups",
-              "syntax": "brain [GLOBAL_OPTIONS] extension backups",
-              "arguments": [],
-              "options": []
-            },
-            {
               "name": "install",
               "display_name": "INSTALL",
-              "description": "Install Chrome extension from source to permanent location",
+              "description": "Install Chrome extension to permanent location.",
               "syntax": "brain [GLOBAL_OPTIONS] extension install [OPTIONS]",
               "arguments": [],
               "options": [
@@ -128,7 +213,7 @@
             {
               "name": "update",
               "display_name": "UPDATE",
-              "description": "Update Chrome extension to latest version",
+              "description": "Update Chrome extension to the latest version.",
               "syntax": "brain [GLOBAL_OPTIONS] extension update [OPTIONS]",
               "arguments": [],
               "options": [
@@ -144,7 +229,7 @@
             {
               "name": "verify",
               "display_name": "VERIFY",
-              "description": "Verify Chrome extension installation integrity",
+              "description": "Verify that the Chrome extension is correctly installed.",
               "syntax": "brain [GLOBAL_OPTIONS] extension verify",
               "arguments": [],
               "options": []
@@ -164,7 +249,7 @@
             {
               "name": "compress",
               "display_name": "COMPRESS",
-              "description": "Compress files into optimized JSON for AI consumption",
+              "description": "Compress files into optimized JSON format for AI consumption.",
               "syntax": "brain [GLOBAL_OPTIONS] filesystem compress <PATHS> [OPTIONS]",
               "arguments": [
                 {
@@ -208,7 +293,7 @@
             {
               "name": "extract",
               "display_name": "EXTRACT",
-              "description": "Extract files from compressed JSON format",
+              "description": "Extract files from compressed JSON format.",
               "syntax": "brain [GLOBAL_OPTIONS] filesystem extract <JSON_FILE> [OPTIONS]",
               "arguments": [
                 {
@@ -238,7 +323,7 @@
             {
               "name": "tree",
               "display_name": "TREE",
-              "description": "Generate visual tree structure with optional MD5 hashing and JSON export",
+              "description": "Generate a visual directory tree structure with intelligent exclusions.",
               "syntax": "brain [GLOBAL_OPTIONS] filesystem tree <TARGETS> [OPTIONS]",
               "arguments": [
                 {
@@ -287,7 +372,7 @@
             {
               "name": "keys-add",
               "display_name": "KEYS ADD",
-              "description": "Add new Gemini API key",
+              "description": "Add new Gemini API key with profile.",
               "syntax": "brain [GLOBAL_OPTIONS] gemini keys-add [OPTIONS]",
               "arguments": [],
               "options": [
@@ -317,7 +402,7 @@
             {
               "name": "keys-delete",
               "display_name": "KEYS DELETE",
-              "description": "Delete Gemini API key",
+              "description": "Delete a Gemini API key.",
               "syntax": "brain [GLOBAL_OPTIONS] gemini keys-delete <PROFILE>",
               "arguments": [
                 {
@@ -332,7 +417,7 @@
             {
               "name": "keys-list",
               "display_name": "KEYS LIST",
-              "description": "List all Gemini API keys",
+              "description": "List all Gemini API keys with status.",
               "syntax": "brain [GLOBAL_OPTIONS] gemini keys-list",
               "arguments": [],
               "options": []
@@ -340,7 +425,7 @@
             {
               "name": "keys-stats",
               "display_name": "KEYS STATS",
-              "description": "Show Gemini keys statistics",
+              "description": "Show global Gemini keys statistics.",
               "syntax": "brain [GLOBAL_OPTIONS] gemini keys-stats",
               "arguments": [],
               "options": []
@@ -348,7 +433,7 @@
             {
               "name": "keys-validate",
               "display_name": "KEYS VALIDATE",
-              "description": "Validate Gemini API key",
+              "description": "Validate a Gemini API key by testing connection.",
               "syntax": "brain [GLOBAL_OPTIONS] gemini keys-validate <PROFILE>",
               "arguments": [
                 {
@@ -367,23 +452,52 @@
     {
       "name": "github",
       "description": "GitHub integration and repository management",
-      "command_count": 9,
+      "command_count": 6,
       "subsections": [
         {
-          "name": "GENERAL",
+          "name": "AUTENTICACIÓN",
           "commands": [
             {
-              "name": "auth",
-              "display_name": "AUTH",
-              "description": "Manage GitHub authentication",
-              "syntax": "brain [GLOBAL_OPTIONS] github auth",
+              "name": "auth-login",
+              "display_name": "AUTH LOGIN",
+              "description": "Store GitHub authentication token.",
+              "syntax": "brain [GLOBAL_OPTIONS] github auth-login [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "-t <VALUE>",
+                  "required": true,
+                  "help": "GitHub Personal Access Token",
+                  "type": "str",
+                  "default": null
+                }
+              ]
+            },
+            {
+              "name": "auth-logout",
+              "display_name": "AUTH LOGOUT",
+              "description": "Remove stored GitHub token.",
+              "syntax": "brain [GLOBAL_OPTIONS] github auth-logout",
               "arguments": [],
               "options": []
             },
             {
+              "name": "auth-status",
+              "display_name": "AUTH STATUS",
+              "description": "Check GitHub authentication status.",
+              "syntax": "brain [GLOBAL_OPTIONS] github auth-status",
+              "arguments": [],
+              "options": []
+            }
+          ]
+        },
+        {
+          "name": "GENERAL",
+          "commands": [
+            {
               "name": "clone",
               "display_name": "CLONE",
-              "description": "Clone GitHub repository",
+              "description": "Clone GitHub repository to local directory.",
               "syntax": "brain [GLOBAL_OPTIONS] github clone <REPO> [OPTIONS]",
               "arguments": [
                 {
@@ -409,59 +523,6 @@
                   "default": true
                 }
               ]
-            },
-            {
-              "name": "orgs",
-              "display_name": "ORGS",
-              "description": "List GitHub organizations",
-              "syntax": "brain [GLOBAL_OPTIONS] github orgs",
-              "arguments": [],
-              "options": []
-            },
-            {
-              "name": "repos",
-              "display_name": "REPOS",
-              "description": "Manage GitHub repositories",
-              "syntax": "brain [GLOBAL_OPTIONS] github repos",
-              "arguments": [],
-              "options": []
-            }
-          ]
-        },
-        {
-          "name": "AUTENTICACIÓN",
-          "commands": [
-            {
-              "name": "auth-login",
-              "display_name": "AUTH LOGIN",
-              "description": "Store GitHub authentication token",
-              "syntax": "brain [GLOBAL_OPTIONS] github auth-login [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "-t <VALUE>",
-                  "required": true,
-                  "help": "GitHub Personal Access Token",
-                  "type": "str",
-                  "default": null
-                }
-              ]
-            },
-            {
-              "name": "auth-logout",
-              "display_name": "AUTH LOGOUT",
-              "description": "Remove stored GitHub token",
-              "syntax": "brain [GLOBAL_OPTIONS] github auth-logout",
-              "arguments": [],
-              "options": []
-            },
-            {
-              "name": "auth-status",
-              "display_name": "AUTH STATUS",
-              "description": "Check GitHub authentication status",
-              "syntax": "brain [GLOBAL_OPTIONS] github auth-status",
-              "arguments": [],
-              "options": []
             }
           ]
         },
@@ -471,7 +532,7 @@
             {
               "name": "orgs-list",
               "display_name": "ORGS LIST",
-              "description": "List GitHub organizations",
+              "description": "List GitHub organizations.",
               "syntax": "brain [GLOBAL_OPTIONS] github orgs-list",
               "arguments": [],
               "options": []
@@ -484,7 +545,7 @@
             {
               "name": "repos-list",
               "display_name": "REPOS LIST",
-              "description": "List GitHub repositories",
+              "description": "List GitHub repositories.",
               "syntax": "brain [GLOBAL_OPTIONS] github repos-list [OPTIONS]",
               "arguments": [],
               "options": [
@@ -512,7 +573,7 @@
             {
               "name": "dev-check",
               "display_name": "DEV CHECK",
-              "description": "Verify development environment and service status (Vite, API, WebSocket)",
+              "description": "Check development environment and service status.",
               "syntax": "brain [GLOBAL_OPTIONS] health dev-check [OPTIONS]",
               "arguments": [],
               "options": [
@@ -582,7 +643,7 @@
             {
               "name": "native-ping",
               "display_name": "NATIVE PING",
-              "description": "Ping native host (bloom-host.exe) via TCP using binary framing protocol",
+              "description": "Ping the native host to verify it's alive and responding.",
               "syntax": "brain [GLOBAL_OPTIONS] health native-ping [OPTIONS]",
               "arguments": [],
               "options": [
@@ -701,7 +762,7 @@
             {
               "name": "add-turn",
               "display_name": "ADD TURN",
-              "description": "Add a conversation turn to intent chat",
+              "description": "Add a conversation turn to an intent's chat.",
               "syntax": "brain [GLOBAL_OPTIONS] intent add-turn [OPTIONS]",
               "arguments": [],
               "options": [
@@ -750,7 +811,7 @@
             {
               "name": "build-payload",
               "display_name": "BUILD PAYLOAD",
-              "description": "Build optimized AI payload from context plan",
+              "description": "Build optimized AI payload from context plan.",
               "syntax": "brain [GLOBAL_OPTIONS] intent build-payload [OPTIONS]",
               "arguments": [],
               "options": [
@@ -778,7 +839,7 @@
             {
               "name": "create",
               "display_name": "CREATE",
-              "description": "Create a new development or documentation intent in the current project",
+              "description": "Create a new development or documentation intent.",
               "syntax": "brain [GLOBAL_OPTIONS] intent create [OPTIONS]",
               "arguments": [],
               "options": [
@@ -815,7 +876,7 @@
             {
               "name": "delete",
               "display_name": "DELETE",
-              "description": "Delete an intent completely",
+              "description": "Delete an intent and all its data.",
               "syntax": "brain [GLOBAL_OPTIONS] intent delete [OPTIONS]",
               "arguments": [],
               "options": [
@@ -852,7 +913,7 @@
             {
               "name": "download",
               "display_name": "DOWNLOAD",
-              "description": "Download AI response and save to .response/ directory",
+              "description": "Download AI response from Native Host or file.",
               "syntax": "brain [GLOBAL_OPTIONS] intent download [OPTIONS]",
               "arguments": [],
               "options": [
@@ -917,7 +978,7 @@
             {
               "name": "finalize",
               "display_name": "FINALIZE",
-              "description": "Finalize intent and apply changes",
+              "description": "Finalize an intent, applying changes to the codebase.",
               "syntax": "brain [GLOBAL_OPTIONS] intent finalize [OPTIONS]",
               "arguments": [],
               "options": [
@@ -947,7 +1008,7 @@
             {
               "name": "get",
               "display_name": "GET",
-              "description": "Get complete information about a specific intent",
+              "description": "Get complete details of an intent.",
               "syntax": "brain [GLOBAL_OPTIONS] intent get [OPTIONS]",
               "arguments": [],
               "options": [
@@ -977,7 +1038,7 @@
             {
               "name": "hydrate",
               "display_name": "HYDRATE",
-              "description": "Populate intent with code context and briefing",
+              "description": "Hydrate an intent by processing source files and briefing.",
               "syntax": "brain [GLOBAL_OPTIONS] intent hydrate [OPTIONS]",
               "arguments": [],
               "options": [
@@ -1028,7 +1089,7 @@
             {
               "name": "list",
               "display_name": "LIST",
-              "description": "List all intents in a Bloom project",
+              "description": "List all intents in the project.",
               "syntax": "brain [GLOBAL_OPTIONS] intent list [OPTIONS]",
               "arguments": [],
               "options": [
@@ -1051,7 +1112,7 @@
             {
               "name": "lock",
               "display_name": "LOCK",
-              "description": "Lock an intent to mark it as in-use (determinism)",
+              "description": "Lock an intent for exclusive use.",
               "syntax": "brain [GLOBAL_OPTIONS] intent lock [OPTIONS]",
               "arguments": [],
               "options": [
@@ -1081,7 +1142,7 @@
             {
               "name": "merge",
               "display_name": "MERGE",
-              "description": "Merge staged files into codebase with backup",
+              "description": "Merge staged files from .staging/ into the real codebase.",
               "syntax": "brain [GLOBAL_OPTIONS] intent merge [OPTIONS]",
               "arguments": [],
               "options": [
@@ -1139,7 +1200,7 @@
             {
               "name": "parse",
               "display_name": "PARSE",
-              "description": "Parse and validate .raw_output.json against Bloom protocol",
+              "description": "Parse and validate .raw_output.json from an AI response.",
               "syntax": "brain [GLOBAL_OPTIONS] intent parse [OPTIONS]",
               "arguments": [],
               "options": [
@@ -1183,7 +1244,7 @@
             {
               "name": "plan",
               "display_name": "PLAN",
-              "description": "Generate AI context plan with intelligent file prioritization",
+              "description": "Generate context plan for an intent using Gemini Router.",
               "syntax": "brain [GLOBAL_OPTIONS] intent plan [OPTIONS]",
               "arguments": [],
               "options": [
@@ -1213,7 +1274,7 @@
             {
               "name": "recover",
               "display_name": "RECOVER",
-              "description": "Recover interrupted intents from lock state",
+              "description": "Recover interrupted intents using lock state recovery data.",
               "syntax": "brain [GLOBAL_OPTIONS] intent recover [OPTIONS]",
               "arguments": [],
               "options": [
@@ -1257,7 +1318,7 @@
             {
               "name": "stage",
               "display_name": "STAGE",
-              "description": "Prepare files in .staging/ directory for merge",
+              "description": "Prepare files in .staging/ directory for merge.",
               "syntax": "brain [GLOBAL_OPTIONS] intent stage [OPTIONS]",
               "arguments": [],
               "options": [
@@ -1308,7 +1369,7 @@
             {
               "name": "submit",
               "display_name": "SUBMIT",
-              "description": "Submit an intent payload to AI provider through native host bridge",
+              "description": "Submit an intent payload to an AI provider through the native host bridge.",
               "syntax": "brain [GLOBAL_OPTIONS] intent submit [OPTIONS]",
               "arguments": [],
               "options": [
@@ -1373,7 +1434,7 @@
             {
               "name": "unlock",
               "display_name": "UNLOCK",
-              "description": "Unlock an intent to free it for use",
+              "description": "Unlock an intent to free it for use.",
               "syntax": "brain [GLOBAL_OPTIONS] intent unlock [OPTIONS]",
               "arguments": [],
               "options": [
@@ -1410,7 +1471,7 @@
             {
               "name": "update",
               "display_name": "UPDATE",
-              "description": "Update an existing intent's name, files, or metadata",
+              "description": "Update an existing intent's properties.",
               "syntax": "brain [GLOBAL_OPTIONS] intent update [OPTIONS]",
               "arguments": [],
               "options": [
@@ -1468,7 +1529,7 @@
             {
               "name": "validate",
               "display_name": "VALIDATE",
-              "description": "Validate staging files using Gemini analysis",
+              "description": "Validate staging files using Gemini analysis.",
               "syntax": "brain [GLOBAL_OPTIONS] intent validate [OPTIONS]",
               "arguments": [],
               "options": [
@@ -1538,7 +1599,7 @@
             {
               "name": "create",
               "display_name": "CREATE",
-              "description": "Initialize a new Bloom Nucleus project structure",
+              "description": "Initialize a new Bloom Nucleus V2.0 project structure.",
               "syntax": "brain [GLOBAL_OPTIONS] nucleus create [OPTIONS]",
               "arguments": [],
               "options": [
@@ -1582,7 +1643,7 @@
             {
               "name": "delete",
               "display_name": "DELETE",
-              "description": "Delete a complete nucleus",
+              "description": "Delete a complete nucleus including all its data.",
               "syntax": "brain [GLOBAL_OPTIONS] nucleus delete [OPTIONS]",
               "arguments": [],
               "options": [
@@ -1605,7 +1666,7 @@
             {
               "name": "get",
               "display_name": "GET",
-              "description": "Get complete information about a specific nucleus",
+              "description": "Retrieve complete details of a nucleus.",
               "syntax": "brain [GLOBAL_OPTIONS] nucleus get [OPTIONS]",
               "arguments": [],
               "options": [
@@ -1621,7 +1682,7 @@
             {
               "name": "link",
               "display_name": "LINK",
-              "description": "Link an existing folder as a Nucleus project",
+              "description": "Link an existing folder as a Nucleus project.",
               "syntax": "brain [GLOBAL_OPTIONS] nucleus link <PATH>",
               "arguments": [
                 {
@@ -1636,7 +1697,7 @@
             {
               "name": "list",
               "display_name": "LIST",
-              "description": "List all available nuclei in a parent directory",
+              "description": "List all Nucleus projects found in a parent directory.",
               "syntax": "brain [GLOBAL_OPTIONS] nucleus list [OPTIONS]",
               "arguments": [],
               "options": [
@@ -1652,7 +1713,7 @@
             {
               "name": "status",
               "display_name": "STATUS",
-              "description": "Check if a directory is a valid Nucleus project",
+              "description": "Check if a directory is a valid Nucleus project.",
               "syntax": "brain [GLOBAL_OPTIONS] nucleus status [OPTIONS]",
               "arguments": [],
               "options": [
@@ -1668,7 +1729,7 @@
             {
               "name": "sync",
               "display_name": "SYNC",
-              "description": "Synchronize projects (git pull) and rebuild nucleus cache",
+              "description": "Synchronize projects and rebuild nucleus cache.",
               "syntax": "brain [GLOBAL_OPTIONS] nucleus sync [OPTIONS]",
               "arguments": [],
               "options": [
@@ -1703,7 +1764,7 @@
             {
               "name": "create-exp-intent",
               "display_name": "CREATE EXP INTENT",
-              "description": "Create a new exploration intent in the nucleus",
+              "description": "Create a new exploration intent in the nucleus.",
               "syntax": "brain [GLOBAL_OPTIONS] nucleus create-exp-intent [OPTIONS]",
               "arguments": [],
               "options": [
@@ -1752,7 +1813,7 @@
             {
               "name": "exp-discovery-turn",
               "display_name": "EXP DISCOVERY TURN",
-              "description": "Add a discovery turn to an exploration intent",
+              "description": "Add a discovery turn to an exploration intent.",
               "syntax": "brain [GLOBAL_OPTIONS] nucleus exp-discovery-turn [OPTIONS]",
               "arguments": [],
               "options": [
@@ -1789,7 +1850,7 @@
             {
               "name": "exp-export-findings",
               "display_name": "EXP EXPORT FINDINGS",
-              "description": "Export findings from an exploration intent",
+              "description": "Export findings from an exploration intent.",
               "syntax": "brain [GLOBAL_OPTIONS] nucleus exp-export-findings [OPTIONS]",
               "arguments": [],
               "options": [
@@ -1831,7 +1892,7 @@
             {
               "name": "list-projects",
               "display_name": "LIST PROJECTS",
-              "description": "List all projects linked to the nucleus",
+              "description": "List all projects linked to the nucleus with their details.",
               "syntax": "brain [GLOBAL_OPTIONS] nucleus list-projects [OPTIONS]",
               "arguments": [],
               "options": [
@@ -1866,7 +1927,7 @@
             {
               "name": "onboarding-complete",
               "display_name": "ONBOARDING COMPLETE",
-              "description": "Mark an onboarding step or entire onboarding as completed",
+              "description": "Mark an onboarding step or entire onboarding as completed.",
               "syntax": "brain [GLOBAL_OPTIONS] nucleus onboarding-complete [OPTIONS]",
               "arguments": [],
               "options": [
@@ -1896,7 +1957,7 @@
             {
               "name": "onboarding-status",
               "display_name": "ONBOARDING STATUS",
-              "description": "Get the current onboarding status from nucleus configuration",
+              "description": "Get the current onboarding status from nucleus configuration.",
               "syntax": "brain [GLOBAL_OPTIONS] nucleus onboarding-status [OPTIONS]",
               "arguments": [],
               "options": [
@@ -1917,7 +1978,7 @@
             {
               "name": "project-info",
               "display_name": "PROJECT INFO",
-              "description": "Display detailed info about a specific project in the nucleus",
+              "description": "Display detailed information about a specific project in the nucleus.",
               "syntax": "brain [GLOBAL_OPTIONS] nucleus project-info <PROJECT_NAME> [OPTIONS]",
               "arguments": [
                 {
@@ -1952,7 +2013,7 @@
             {
               "name": "create",
               "display_name": "CREATE",
-              "description": "Crea un nuevo perfil de Chrome aislado",
+              "description": "Crea un nuevo perfil con el alias especificado.",
               "syntax": "brain [GLOBAL_OPTIONS] profile create <ALIAS>",
               "arguments": [
                 {
@@ -1967,7 +2028,7 @@
             {
               "name": "destroy",
               "display_name": "DESTROY",
-              "description": "Elimina un perfil y todos sus datos",
+              "description": "Elimina un perfil y sus datos. Requiere confirmación a menos que se use --force.",
               "syntax": "brain [GLOBAL_OPTIONS] profile destroy <PROFILE_ID> [OPTIONS]",
               "arguments": [
                 {
@@ -1990,7 +2051,7 @@
             {
               "name": "launch",
               "display_name": "LAUNCH",
-              "description": "Lanza Chrome con un perfil de Worker",
+              "description": "Lanza Chrome con el perfil especificado y la extensión Bloom.",
               "syntax": "brain [GLOBAL_OPTIONS] profile launch <PROFILE_ID> [OPTIONS]",
               "arguments": [
                 {
@@ -2027,7 +2088,7 @@
             {
               "name": "link",
               "display_name": "LINK",
-              "description": "Vincula una cuenta de email a un perfil de Chrome",
+              "description": "Vincula una cuenta de email a un perfil (DEPRECATED - usar accounts-register).",
               "syntax": "brain [GLOBAL_OPTIONS] profile link <PROFILE_ID> <EMAIL>",
               "arguments": [
                 {
@@ -2048,7 +2109,7 @@
             {
               "name": "list",
               "display_name": "LIST",
-              "description": "Lista todos los perfiles de Chrome Workers",
+              "description": "MOSTRAR AL USUARIO (CLI).",
               "syntax": "brain [GLOBAL_OPTIONS] profile list",
               "arguments": [],
               "options": []
@@ -2056,7 +2117,7 @@
             {
               "name": "unlink",
               "display_name": "UNLINK",
-              "description": "Desvincula la cuenta asociada a un perfil",
+              "description": "Desvincula la cuenta asociada a un perfil (DEPRECATED - usar accounts-remove).",
               "syntax": "brain [GLOBAL_OPTIONS] profile unlink <PROFILE_ID>",
               "arguments": [
                 {
@@ -2076,7 +2137,7 @@
             {
               "name": "accounts-register",
               "display_name": "ACCOUNTS REGISTER",
-              "description": "Registra una cuenta (Google, OpenAI, etc) en un perfil",
+              "description": "Registra una nueva cuenta en un perfil.",
               "syntax": "brain [GLOBAL_OPTIONS] profile accounts-register <PROFILE_ID> <PROVIDER> <EMAIL>",
               "arguments": [
                 {
@@ -2103,7 +2164,7 @@
             {
               "name": "accounts-remove",
               "display_name": "ACCOUNTS REMOVE",
-              "description": "Remueve una cuenta registrada de un perfil",
+              "description": "Remueve una cuenta registrada de un perfil.",
               "syntax": "brain [GLOBAL_OPTIONS] profile accounts-remove <PROFILE_ID> <PROVIDER>",
               "arguments": [
                 {
@@ -2128,7 +2189,7 @@
     {
       "name": "project",
       "description": "Project lifecycle and scaffolding",
-      "command_count": 5,
+      "command_count": 4,
       "subsections": [
         {
           "name": "GENERAL",
@@ -2136,7 +2197,7 @@
             {
               "name": "add",
               "display_name": "ADD",
-              "description": "Vincula un proyecto local existente a un Nucleus",
+              "description": "Vincula un proyecto local existente a un Nucleus.",
               "syntax": "brain [GLOBAL_OPTIONS] project add <PROJECT_PATH> [OPTIONS]",
               "arguments": [
                 {
@@ -2187,7 +2248,7 @@
             {
               "name": "detect",
               "display_name": "DETECT",
-              "description": "Scan directory and detect project types automatically",
+              "description": "Scan directory and detect project types automatically.",
               "syntax": "brain [GLOBAL_OPTIONS] project detect <PARENT_PATH> [OPTIONS]",
               "arguments": [
                 {
@@ -2224,7 +2285,7 @@
             {
               "name": "load",
               "display_name": "LOAD",
-              "description": "Inspect and load project metadata from a path",
+              "description": "Validates and loads project information. ",
               "syntax": "brain [GLOBAL_OPTIONS] project load [OPTIONS]",
               "arguments": [],
               "options": [
@@ -2236,14 +2297,6 @@
                   "default": "."
                 }
               ]
-            },
-            {
-              "name": "nucleus",
-              "display_name": "NUCLEUS",
-              "description": "Manage Nucleus projects (create, link, status)",
-              "syntax": "brain [GLOBAL_OPTIONS] project nucleus",
-              "arguments": [],
-              "options": []
             }
           ]
         },
@@ -2253,7 +2306,7 @@
             {
               "name": "clone-and-add",
               "display_name": "CLONE AND ADD",
-              "description": "Clone a Git repository and automatically link it to the current Nucleus",
+              "description": "Clone a Git repository and automatically link it to the current Nucleus.",
               "syntax": "brain [GLOBAL_OPTIONS] project clone-and-add <REPO_URL> [OPTIONS]",
               "arguments": [
                 {
@@ -2328,16 +2381,16 @@
     {
       "name": "service",
       "description": "Background connection multiplexer and task runner",
-      "command_count": 1,
+      "command_count": 3,
       "subsections": [
         {
           "name": null,
           "commands": [
             {
-              "name": "service",
-              "display_name": "SERVICE",
-              "description": "Manage the Brain TCP multiplexer service",
-              "syntax": "brain [GLOBAL_OPTIONS] service service [OPTIONS]",
+              "name": "start",
+              "display_name": "START",
+              "description": "Start the Brain TCP multiplexer service.",
+              "syntax": "brain [GLOBAL_OPTIONS] service start [OPTIONS]",
               "arguments": [],
               "options": [
                 {
@@ -2362,6 +2415,22 @@
                   "default": false
                 }
               ]
+            },
+            {
+              "name": "status",
+              "display_name": "STATUS",
+              "description": "Check the current status of the Brain service.",
+              "syntax": "brain [GLOBAL_OPTIONS] service status",
+              "arguments": [],
+              "options": []
+            },
+            {
+              "name": "stop",
+              "display_name": "STOP",
+              "description": "Stop the running Brain service.",
+              "syntax": "brain [GLOBAL_OPTIONS] service stop",
+              "arguments": [],
+              "options": []
             }
           ]
         }
@@ -2370,16 +2439,24 @@
     {
       "name": "synapse",
       "description": "Chrome Native Messaging Bridge and protocol management",
-      "command_count": 1,
+      "command_count": 2,
       "subsections": [
         {
           "name": null,
           "commands": [
             {
-              "name": "bridge",
-              "display_name": "BRIDGE",
-              "description": "Bridge de comunicación nativa con Chrome Extension",
-              "syntax": "brain [GLOBAL_OPTIONS] synapse bridge",
+              "name": "close",
+              "display_name": "CLOSE",
+              "description": "Envía señal de terminación al navegador.",
+              "syntax": "brain [GLOBAL_OPTIONS] synapse close",
+              "arguments": [],
+              "options": []
+            },
+            {
+              "name": "host",
+              "display_name": "HOST",
+              "description": "Inicia el modo Host (Listener Loop).",
+              "syntax": "brain [GLOBAL_OPTIONS] synapse host",
               "arguments": [],
               "options": []
             }
@@ -2398,7 +2475,7 @@
             {
               "name": "info",
               "display_name": "INFO",
-              "description": "Display system information, version, and executable location",
+              "description": "Display comprehensive system information.",
               "syntax": "brain [GLOBAL_OPTIONS] system info",
               "arguments": [],
               "options": []
@@ -2406,7 +2483,7 @@
             {
               "name": "path",
               "display_name": "PATH",
-              "description": "Display absolute path to Brain CLI executable",
+              "description": "Display the absolute path to the brain executable.",
               "syntax": "brain [GLOBAL_OPTIONS] system path",
               "arguments": [],
               "options": []
@@ -2414,7 +2491,7 @@
             {
               "name": "version",
               "display_name": "VERSION",
-              "description": "Display or increment Brain CLI version with semantic changelog",
+              "description": "Display or increment the version number.",
               "syntax": "brain [GLOBAL_OPTIONS] system version [OPTIONS]",
               "arguments": [],
               "options": [
@@ -2448,20 +2525,11 @@
     {
       "name": "twitter",
       "description": "Twitter/X integration and social data analysis",
-      "command_count": 1,
+      "command_count": 0,
       "subsections": [
         {
           "name": null,
-          "commands": [
-            {
-              "name": "twitter",
-              "display_name": "TWITTER",
-              "description": "Manage Twitter/X authentication and data",
-              "syntax": "brain [GLOBAL_OPTIONS] twitter twitter",
-              "arguments": [],
-              "options": []
-            }
-          ]
+          "commands": []
         }
       ]
     }

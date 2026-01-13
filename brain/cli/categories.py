@@ -14,6 +14,7 @@ class CommandCategory(Enum):
     """
     
     # Core system categories
+    CHROME = ("chrome", "Chrome profile debugging and network log analysis")  # ðŸ"¥ AGREGAR ESTA LÃ�NEA
     CONTEXT = ("context", "AI context generation and management")
     FILESYSTEM = ("filesystem", "File operations and directory analysis")
     GEMINI = ("gemini", "Gemini AI key management and operations")
@@ -64,6 +65,7 @@ class CommandCategory(Enum):
 
 
 # Category aliases for backward compatibility
+CHROME = CommandCategory.CHROME  
 CONTEXT = CommandCategory.CONTEXT
 FILESYSTEM = CommandCategory.FILESYSTEM
 GEMINI = CommandCategory.GEMINI
@@ -78,4 +80,4 @@ SERVICE = CommandCategory.SERVICE
 RUNTIME = CommandCategory.RUNTIME
 SYSTEM = CommandCategory.SYSTEM
 TWITTER = CommandCategory.TWITTER
-SYNAPSE = CommandCategory.SYNAPSE  
+SYNAPSE = CommandCategory.SYNAPSE

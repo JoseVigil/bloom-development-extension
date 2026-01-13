@@ -275,3 +275,8 @@ https://claude.ai/chat/66f50f90-bb75-4a2d-bfac-8d737f2b3596
 
 jose gmail bloque ip claude 
 https://claude.ai/chat/8a3a8b54-6099-42e3-9421-5fe6175bbffd
+
+uitool chrome 
+https://aistudio.google.com/prompts/1p9qRSyBNfjoik8t-pL7DyTuNPyKFO7Ov
+roamingpads host-extension vs 9222 - humanizar automatizacion
+https://aistudio.google.com/prompts/1sDxdxod4IB7gISHGIBEuYvpILegEPmPs

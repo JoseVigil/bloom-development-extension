@@ -7,6 +7,8 @@ import io
 import os
 import multiprocessing
 from pathlib import Path
+from dotenv import load_dotenv
+load_dotenv()
 
 # 🔧 FIX CRÍTICO: Windows Service stdout/stderr cerrados
 if sys.platform == 'win32':

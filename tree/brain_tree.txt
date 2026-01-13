@@ -28,6 +28,8 @@ bloom-development-extension/
     ├── commands/
     │   ├── __init__.py
     │   ├── __pycache__/ [... cache]
+    │   ├── chrome/
+    │   │   └── chrome.py
     │   ├── context/
     │   │   └── generate.py
     │   ├── extension/
@@ -145,11 +147,15 @@ bloom-development-extension/
     │       ├── __init__.py
     │       ├── __pycache__/ [... cache]
     │       └── auth.py
-    ├── commands.md
     ├── core/
     │   ├── __init__.py
     │   ├── __pycache__/ [... cache]
     │   ├── bloom_project_inspector.py
+    │   ├── chrome/
+    │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
+    │   │   ├── log_reader.py
+    │   │   └── net_log_analyzer.py
     │   ├── context/
     │   │   ├── __init__.py
     │   │   ├── __pycache__/ [... cache]
@@ -221,7 +227,6 @@ bloom-development-extension/
     │   ├── profile/
     │   │   ├── __init__.py
     │   │   ├── __pycache__/ [... cache]
-    │   │   ├── discovery_generator.py
     │   │   ├── html/
     │   │   │   ├── discovery/
     │   │   │   │   ├── index.html
@@ -231,11 +236,10 @@ bloom-development-extension/
     │   │   │       ├── inex.html
     │   │   │       ├── script.js
     │   │   │       └── styles.css
-    │   │   ├── landing_generator.py
     │   │   ├── logic/
     │   │   │   ├── __init__.py
     │   │   │   ├── __pycache__/ [... cache]
-    │   │   │   ├── chrome_launcher.py
+    │   │   │   ├── chrome_resolver.py
     │   │   │   ├── profile_store.py
     │   │   │   └── synapse_handler.py
     │   │   ├── path_resolver.py
