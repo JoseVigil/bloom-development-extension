@@ -210,13 +210,14 @@ bloom-development-extension/
 │   │   ├── entitlements.plist
 │   │   ├── forge.config.js
 │   │   ├── install/
-│   │   │   ├── diagnose-service.js
+│   │   │   ├── diagnose/
+│   │   │   │   ├── diagnose-service.js
+│   │   │   │   └── service-diagnostics.js
 │   │   │   ├── extension-installer.js
 │   │   │   ├── installer.js
 │   │   │   ├── launcher-creator.js
 │   │   │   ├── native-host-installer.js
 │   │   │   ├── runtime-installer.js
-│   │   │   ├── service-diagnostics.js
 │   │   │   ├── service-installer.js
 │   │   │   └── shortcut-installer.js
 │   │   ├── installHelpers.js
@@ -294,6 +295,7 @@ bloom-development-extension/
 │   │       │   └── nssm.exe
 │   │       └── win64/
 │   │           └── nssm.exe
+│   ├── node_modules/ [... dependencies]
 │   ├── package-lock.json
 │   ├── package.json
 │   ├── resources/
@@ -588,7 +590,8 @@ bloom-development-extension/
 │   │   │   ├── __pycache__/ [... cache]
 │   │   │   ├── code_compressor.py
 │   │   │   ├── files_compressor.py
-│   │   │   └── files_extractor.py
+│   │   │   ├── files_extractor.py
+│   │   │   └── tree_manager.py
 │   │   ├── git/
 │   │   │   ├── __init__.py
 │   │   │   ├── __pycache__/ [... cache]
@@ -678,7 +681,6 @@ bloom-development-extension/
 │   │   │   ├── __init__.py
 │   │   │   ├── __pycache__/ [... cache]
 │   │   │   └── info_manager.py
-│   │   ├── tree_manager.py
 │   │   └── twitter/
 │   │       └── auth_manager.py
 │   ├── entry.py

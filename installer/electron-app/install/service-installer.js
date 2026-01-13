@@ -1,179 +1,168 @@
-const { execFile } = require('child_process');
-const { promisify } = require('util');
+const { exec } = require('child_process');
 const path = require('path');
 const fs = require('fs-extra');
 const { paths } = require('../config/paths');
-const { SERVICE_NAME } = require('../config/constants');
 
-const execFileAsync = promisify(execFile);
+// ============================================================================
+// CONFIGURACIÓN DEL SERVICIO
+// ============================================================================
+const NEW_SERVICE_NAME = 'BloomBrainService';
+const OLD_SERVICE_NAME = 'BloomNucleusHost';
 
-const LEGACY_SERVICES = ['BloomNucleusHost', 'BloomNativeHost', 'BloomHost', 'BloomBrainService'];
+// ============================================================================
+// HELPERS
+// ============================================================================
 
-async function runNSSM(args) {
-  const nssmPath = paths.nssmExe;
-  
-  if (!fs.existsSync(nssmPath)) {
-    throw new Error(`NSSM not found: ${nssmPath}`);
-  }
-
-  try {
-    const { stdout, stderr } = await execFileAsync(nssmPath, args, {
-      timeout: 30000,
-      windowsHide: true
-    });
-    return { stdout, stderr, success: true };
-  } catch (error) {
-    return { stdout: error.stdout || '', stderr: error.stderr || '', success: false, code: error.code };
-  }
-}
-
-async function cleanupOldServices() {
-  console.log('🧹 Cleaning up old services...');
-  
-  const allServices = [...LEGACY_SERVICES, SERVICE_NAME];
-  
-  for (const serviceName of allServices) {
-    try {
-      console.log(`  🗑️  Removing service: ${serviceName}`);
-      
-      await runNSSM(['stop', serviceName]);
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      
-      await runNSSM(['remove', serviceName, 'confirm']);
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      console.log(`    ✅ Removed: ${serviceName}`);
-    } catch (error) {
-      console.log(`    ℹ️  ${serviceName} skipped`);
-    }
-  }
-  
-  await new Promise(resolve => setTimeout(resolve, 2000));
-  console.log('✅ Old services cleanup complete');
-}
-
-async function killAllBloomProcesses() {
-  console.log('🔫 Killing all Bloom-related processes...');
-  
-  const procs = ['brain.exe', 'python.exe', 'pythonw.exe', 'bloom-host.exe', 'nssm.exe'];
-
-  for (const proc of procs) {
-    try {
-      await execFileAsync('taskkill', ['/F', '/IM', proc, '/T'], {
-        timeout: 5000,
-        windowsHide: true
-      });
-    } catch {}
-  }
-
-  console.log('🧹 Cleaning lockfiles...');
-  const lockfiles = [
-    path.join(paths.bloomBase, '.brain', 'service.pid'),
-    path.join(paths.bloomBase, '.brain', 'service.lock'),
-    path.join(paths.logsDir, 'brain.log.lock')
-  ];
-  
-  for (const lockfile of lockfiles) {
-    try {
-      if (await fs.pathExists(lockfile)) {
-        await fs.remove(lockfile);
-        console.log(`  🗑️  Removed lockfile: ${path.basename(lockfile)}`);
+function runCommand(cmd) {
+  return new Promise((resolve, reject) => {
+    // Aumentamos el buffer para evitar cortes
+    exec(cmd, { maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
+      // NSSM a veces escribe en stderr aunque funcione.
+      // Solo fallamos si el stdout está vacío y hay error real.
+      if (error && !stderr.includes('successfully')) {
+        console.warn(`⚠️ Command warning: ${cmd}\n   ${stderr}`);
       }
-    } catch (e) {
-      console.warn(`  ⚠️  Could not remove ${lockfile}: ${e.message}`);
-    }
-  }
-  
-  await new Promise(resolve => setTimeout(resolve, 3000));
-  console.log('✅ Process cleanup complete');
+      resolve(stdout || '');
+    });
+  });
 }
+
+function serviceExists(serviceName) {
+  try {
+    const { execSync } = require('child_process');
+    const result = execSync(`sc query "${serviceName}"`, { stdio: 'pipe', encoding: 'utf8' });
+    return !result.includes('does not exist');
+  } catch {
+    return false;
+  }
+}
+
+// ============================================================================
+// INSTALACIÓN
+// ============================================================================
 
 async function installWindowsService() {
-  console.log('🔧 Installing Windows Service with NSSM...');
+  console.log('\n📦 INSTALANDO SERVICIO: BloomBrainService\n');
+  
+  const nssmPath = path.join(paths.nativeDir, 'nssm.exe');
+  const binaryPath = paths.brainExe; // .../bin/brain/brain.exe
+  const workDir = path.dirname(binaryPath);
+  
+  // 1. Validaciones
+  if (!fs.existsSync(nssmPath)) throw new Error(`NSSM not found at ${nssmPath}`);
+  if (!fs.existsSync(binaryPath)) throw new Error(`Brain binary not found at ${binaryPath}`);
 
-  const brainExe = paths.brainExe;
-
-  if (!fs.existsSync(brainExe)) {
-    throw new Error(`Brain.exe not found: ${brainExe}`);
+  // 2. Limpieza preventiva
+  if (serviceExists(NEW_SERVICE_NAME)) {
+    console.log('🔄 Updating existing service...');
+    await removeService(NEW_SERVICE_NAME);
   }
 
-  console.log('  📦 Installing service...');
-  const installResult = await runNSSM(['install', SERVICE_NAME, brainExe, 'runtime', 'run']);
-  
-  if (!installResult.success && installResult.code === 5) {
-    console.log('  ⚠️  Service exists, force removing...');
-    await killAllBloomProcesses();
-    await runNSSM(['remove', SERVICE_NAME, 'confirm']);
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    await runNSSM(['install', SERVICE_NAME, brainExe, 'runtime', 'run']);
-  }
-  
-  await runNSSM(['set', SERVICE_NAME, 'DisplayName', 'Bloom Brain Service']);
-  await runNSSM(['set', SERVICE_NAME, 'Description', 'AI Agent Runtime for Bloom Nucleus']);
-  await runNSSM(['set', SERVICE_NAME, 'Start', 'SERVICE_AUTO_START']);
-  await runNSSM(['set', SERVICE_NAME, 'AppDirectory', path.dirname(brainExe)]);
-
-  const userLocalAppData = process.env.LOCALAPPDATA;
-  console.log(`  🔑 Injecting LOCALAPPDATA: ${userLocalAppData}`);
-  
-  await runNSSM(['set', SERVICE_NAME, 'AppEnvironmentExtra', `LOCALAPPDATA=${userLocalAppData}`]);
-
-  const logDir = path.join(paths.installDir, 'logs');
+  // 3. Crear Logs
+  const logDir = paths.logsDir;
   await fs.ensureDir(logDir);
-  await runNSSM(['set', SERVICE_NAME, 'AppStdout', path.join(logDir, 'service-stdout.log')]);
-  await runNSSM(['set', SERVICE_NAME, 'AppStderr', path.join(logDir, 'service-stderr.log')]);
-  await runNSSM(['set', SERVICE_NAME, 'AppRotateFiles', '1']);
-  await runNSSM(['set', SERVICE_NAME, 'AppRotateBytes', '10485760']);
+  const stdoutLog = path.join(logDir, 'brain_service.log');
+  const stderrLog = path.join(logDir, 'brain_error.log');
 
-  await runNSSM(['set', SERVICE_NAME, 'AppExit', 'Default', 'Restart']);
-  await runNSSM(['set', SERVICE_NAME, 'AppRestartDelay', '5000']);
+  console.log(`🔧 Configuring NSSM...`);
+  console.log(`   Bin: ${binaryPath}`);
+  console.log(`   Dir: ${workDir}`);
 
-  console.log('✅ Service installation complete');
+  // ---------------------------------------------------------
+  // SECUENCIA DE COMANDOS NSSM
+  // ---------------------------------------------------------
+  
+  // A. Instalar
+  await runCommand(`"${nssmPath}" install "${NEW_SERVICE_NAME}" "${binaryPath}"`);
+  
+  // B. Argumentos (Service Start)
+  await runCommand(`"${nssmPath}" set "${NEW_SERVICE_NAME}" AppParameters "service start"`);
+  
+  // C. Directorio de Trabajo (VITAL para PyInstaller _internal)
+  await runCommand(`"${nssmPath}" set "${NEW_SERVICE_NAME}" AppDirectory "${workDir}"`);
+  
+  // D. Variables de Entorno (VITAL para evitar crashes de IO)
+  // Inyectamos LOCALAPPDATA para que sepa dónde guardar perfiles, y PYTHONUNBUFFERED para logs
+  const envExtra = [
+    `PYTHONUNBUFFERED=1`,
+    `PYTHONIOENCODING=utf-8`,
+    `LOCALAPPDATA=${paths.baseDir.replace('\\BloomNucleus', '')}` // Truco para obtener el root de Local
+  ].join(' ');
+  
+  await runCommand(`"${nssmPath}" set "${NEW_SERVICE_NAME}" AppEnvironmentExtra "${envExtra}"`);
+  
+  // E. Redirección de IO (Logs)
+  await runCommand(`"${nssmPath}" set "${NEW_SERVICE_NAME}" AppStdout "${stdoutLog}"`);
+  await runCommand(`"${nssmPath}" set "${NEW_SERVICE_NAME}" AppStderr "${stderrLog}"`);
+  
+  // F. Configuración de Inicio
+  await runCommand(`"${nssmPath}" set "${NEW_SERVICE_NAME}" Start SERVICE_AUTO_START`);
+  await runCommand(`"${nssmPath}" set "${NEW_SERVICE_NAME}" AppExit Default Restart`);
+  await runCommand(`"${nssmPath}" set "${NEW_SERVICE_NAME}" DisplayName "Bloom Brain Service"`);
+
+  console.log('✅ Service registered.');
 }
 
 async function startService() {
-  console.log('🚀 Starting service...');
-
-  const result = await runNSSM(['start', SERVICE_NAME]);
+  console.log('🚀 Starting Brain Service...');
+  const { execSync } = require('child_process');
   
-  if (result.success || result.stdout.includes('started')) {
-    console.log('✅ Service started successfully');
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    return true;
-  } else {
-    throw new Error('Service failed to start');
-  }
-}
-
-async function stopService() {
-  console.log('🛑 Stopping service...');
-  await runNSSM(['stop', SERVICE_NAME]);
-  await new Promise(resolve => setTimeout(resolve, 2000));
-  return true;
-}
-
-async function getServiceStatus() {
   try {
-    const result = await runNSSM(['status', SERVICE_NAME]);
-    const status = result.stdout.trim().toUpperCase();
+    // Intentamos iniciar
+    execSync(`sc start "${NEW_SERVICE_NAME}"`, { stdio: 'ignore' });
     
-    const statusMap = {
-      'SERVICE_RUNNING': 'RUNNING',
-      'SERVICE_STOPPED': 'STOPPED',
-      'SERVICE_START_PENDING': 'STARTING'
-    };
+    // Esperamos y verificamos
+    console.log('⏳ Waiting for service warmup...');
+    await new Promise(r => setTimeout(r, 3000));
     
-    return statusMap[status] || status || 'UNKNOWN';
-  } catch {
-    return 'NOT_INSTALLED';
+    const status = execSync(`sc query "${NEW_SERVICE_NAME}"`, { encoding: 'utf8' });
+    if (status.includes('RUNNING')) {
+      console.log('✅ Service is RUNNING');
+      return true;
+    } else {
+      throw new Error('Service state is not RUNNING after start command');
+    }
+  } catch (e) {
+    console.error(`❌ Failed to start service: ${e.message}`);
+    // Leemos el log de error para dar pistas
+    try {
+        const logDir = paths.logsDir;
+        const errLog = path.join(logDir, 'brain_error.log');
+        if (fs.existsSync(errLog)) {
+            const content = fs.readFileSync(errLog, 'utf8');
+            console.error('📄 Last Service Error Log:\n', content.slice(-500));
+        }
+    } catch (_) {}
+    return false;
   }
+}
+
+async function removeService(name) {
+  try {
+    const nssmPath = path.join(paths.nativeDir, 'nssm.exe');
+    await runCommand(`"${nssmPath}" stop "${name}"`);
+    await runCommand(`"${nssmPath}" remove "${name}" confirm`);
+  } catch (e) { /* Ignorar */ }
+}
+
+async function cleanupOldServices() {
+    await removeService(OLD_SERVICE_NAME);
+    await killAllBloomProcesses();
+}
+
+async function killAllBloomProcesses() {
+    try {
+        const { execSync } = require('child_process');
+        execSync('taskkill /F /IM bloom-host.exe /T', { stdio: 'ignore' });
+        // No matamos brain.exe aquí porque podría ser el servicio que acabamos de instalar
+    } catch (e) {}
 }
 
 module.exports = {
   installWindowsService,
   startService,
-  stopService,
-  getServiceStatus,
   cleanupOldServices,
-  killAllBloomProcesses
+  killAllBloomProcesses,
+  OLD_SERVICE_NAME,
+  NEW_SERVICE_NAME
 };

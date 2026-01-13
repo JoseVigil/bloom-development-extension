@@ -139,42 +139,34 @@ class ChromeLauncher:
             logger.error(f"❌ Failed to spawn process: {e}", exc_info=True)
             raise
     
-    def _find_chrome_executable(self) -> str:
-        """
-        Discovers Chrome binary location based on OS.
+    def _find_chrome_executable(self) -> Optional[str]:
+        """Busca el ejecutable de Chrome de manera robusta en Windows."""
+        import platform
+        import os
         
-        Returns:
-            Path to Chrome executable
-            
-        Raises:
-            FileNotFoundError: If Chrome is not found
-        """
         system = platform.system()
-        logger.debug(f"🔍 Searching for Chrome on {system}...")
-        
-        paths = []
         
         if system == "Windows":
-            paths = [
-                os.path.join(os.environ.get("ProgramFiles", ""), "Google/Chrome/Application/chrome.exe"),
-                os.path.join(os.environ.get("ProgramFiles(x86)", ""), "Google/Chrome/Application/chrome.exe"),
-                os.path.join(os.environ.get("LOCALAPPDATA", ""), "Google/Chrome/Application/chrome.exe"),
+            # Rutas EXPLICITAS (Hardcoded son las más seguras en instaladores)
+            candidates = [
+                r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+                r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+                os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"),
+                os.path.expandvars(r"%PROGRAMFILES%\Google\Chrome\Application\chrome.exe"),
+                os.path.expandvars(r"%PROGRAMFILES(X86)%\Google\Chrome\Application\chrome.exe")
             ]
-        elif system == "Darwin":
-            paths = ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"]
-        else:
-            paths = ["/usr/bin/google-chrome", "/usr/bin/chromium"]
-        
-        logger.debug(f"Checking {len(paths)} possible locations...")
-        
-        for p in paths:
-            logger.debug(f"  → Checking: {p}")
-            if os.path.exists(p):
-                logger.info(f"  ✅ Found: {p}")
-                return p
-            else:
-                logger.debug(f"  ✗ Not found")
-        
-        logger.error("❌ Chrome executable not found in any standard location")
-        logger.debug(f"Searched paths: {paths}")
-        raise FileNotFoundError("Chrome executable not found on this system")
+            
+            for path in candidates:
+                if os.path.exists(path):
+                    return path
+                    
+        elif system == "Darwin":  # macOS
+            possible_paths = [
+                "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                os.path.expanduser("~/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+            ]
+            for path in possible_paths:
+                if os.path.exists(path):
+                    return path
+
+        return None

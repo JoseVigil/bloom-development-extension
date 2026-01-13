@@ -149,6 +149,7 @@ hiddenimports = [
     'brain.core.filesystem.code_compressor',
     'brain.core.filesystem.files_compressor',
     'brain.core.filesystem.files_extractor',
+    'brain.core.filesystem.tree_manager',
     'brain.core.git',
     'brain.core.git.executor',
     'brain.core.git.repository',
@@ -197,7 +198,6 @@ hiddenimports = [
     'brain.core.synapse.synapse_protocol',
     'brain.core.system',
     'brain.core.system.info_manager',
-    'brain.core.tree_manager',
     'brain.core.twitter.auth_manager',
 ]
 

@@ -132,10 +132,10 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "   -> Compilacion exitosa." -ForegroundColor Green
 
 # ---------------------------------------------------------
-# PASO 3: DEPLOY (Copiar TODA la carpeta con reintentos)
+# PASO 3: DEPLOY - CORREGIDO (Copiar a bin\brain)
 # ---------------------------------------------------------
 $SourceDir = "dist\brain"
-$DestDir = "$env:LOCALAPPDATA\BloomNucleus\bin"
+$DestDir = "$env:LOCALAPPDATA\BloomNucleus\bin\brain"  # ✅ AHORA APUNTA A bin\brain
 
 Write-Host "3. Desplegando a: $DestDir" -ForegroundColor Yellow
 
@@ -144,9 +144,9 @@ if (!(Test-Path $SourceDir)) {
     exit 1
 }
 
-# Limpiar destino con reintentos MEJORADOS
+# Limpiar SOLO el subdirectorio brain/ (no tocar otros archivos en bin/)
 if (Test-Path -Path $DestDir) {
-    Write-Host "   -> Limpiando destino..." -ForegroundColor Gray
+    Write-Host "   -> Limpiando SOLO: $DestDir" -ForegroundColor Gray
     
     $cleanAttempts = 0
     $cleanSuccess = $false
@@ -155,8 +155,7 @@ if (Test-Path -Path $DestDir) {
         $cleanAttempts++
         
         try {
-            # Intentar eliminar recursivamente
-            Get-ChildItem -Path $DestDir -Recurse | Remove-Item -Force -Recurse -ErrorAction Stop
+            # Intentar eliminar recursivamente SOLO bin\brain\
             Remove-Item -Path $DestDir -Force -Recurse -ErrorAction Stop
             $cleanSuccess = $true
             Write-Host "   -> Destino limpiado exitosamente" -ForegroundColor Gray
@@ -207,10 +206,6 @@ if (Test-Path -Path $DestDir) {
                 Write-Host "   1. Cierra TODAS las terminales y ventanas" -ForegroundColor White
                 Write-Host "   2. Busca procesos de Brain en el Administrador de tareas" -ForegroundColor White
                 Write-Host "   3. Reinicia el PC si nada funciona" -ForegroundColor White
-                Write-Host "" -ForegroundColor Red
-                Write-Host "   ALTERNATIVA RAPIDA:" -ForegroundColor Yellow
-                Write-Host "   Ejecuta este comando para encontrar el proceso:" -ForegroundColor White
-                Write-Host "   Get-Process | Where-Object { `$_.Path -like '*BloomNucleus*' }" -ForegroundColor Cyan
                 Write-Host "" -ForegroundColor Red
                 
                 # Intentar mostrar qué procesos podrían estar usando el archivo
@@ -267,8 +262,11 @@ Write-Host "=========================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Ejecutable: $DestDir\brain.exe" -ForegroundColor Cyan
 
-Write-Host "5. Procesando actualizaciones de versión..." -ForegroundColor Yellow
-python update_version.py  # Asume que estás en el fuente; ajusta path si necesario
+# ---------------------------------------------------------
+# PASO 4: PROCESAR VERSIONES
+# ---------------------------------------------------------
+Write-Host "4. Procesando actualizaciones de versión..." -ForegroundColor Yellow
+python update_version.py
 if ($LASTEXITCODE -ne 0) {
     Write-Host "WARN: Fallo en update_version.py - Revisa update_version.log" -ForegroundColor Yellow
 } else {
@@ -276,9 +274,9 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # ---------------------------------------------------------
-# PASO 4: GESTION INTELIGENTE DEL PATH (DOBLE IMPACTO)
+# PASO 5: GESTION INTELIGENTE DEL PATH
 # ---------------------------------------------------------
-Write-Host "4. Actualizando Variables de Entorno..." -ForegroundColor Yellow
+Write-Host "5. Actualizando Variables de Entorno..." -ForegroundColor Yellow
 
 $OldPath = "$env:LOCALAPPDATA\BloomNucleus\bin"
 $NewPath = "$env:LOCALAPPDATA\BloomNucleus\bin\brain"
@@ -300,14 +298,11 @@ if ($RegistryPath -notlike "*$NewPath*") {
     Write-Host "   [OK] El Registro ya estaba correcto." -ForegroundColor Gray
 }
 
-# --- B. ACTUALIZAR SESIÓN ACTUAL (Para que ande YA) ---
-# Esto es lo que te faltaba: Inyectar la ruta en la memoria de ESTA terminal
+# --- B. ACTUALIZAR SESIÓN ACTUAL ---
 if ($env:Path -notlike "*$NewPath*") {
     $env:Path += ";$NewPath"
     Write-Host "   [OK] Sesión actual actualizada (Ya puedes escribir 'brain')" -ForegroundColor Green
 }
 
-# Al final de build.ps1
-Write-Host "4. Actualizando Sesión..."
-$env:Path = "$env:LOCALAPPDATA\BloomNucleus\bin;" + $env:Path
+Write-Host ""
 Write-Host "✅ Ya puedes escribir 'brain' en esta terminal." -ForegroundColor Green

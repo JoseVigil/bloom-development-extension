@@ -244,7 +244,7 @@
                 {
                   "name": "<TARGETS>",
                   "required": true,
-                  "help": "Specific directories or files to include.",
+                  "help": "Specific directories or files to include (supports absolute paths).",
                   "type": "Optional"
                 }
               ],

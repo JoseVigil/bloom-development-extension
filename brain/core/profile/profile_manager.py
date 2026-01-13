@@ -387,6 +387,7 @@ class ProfileManager:
     def launch_profile(self, profile_id: str, mode: str = "normal") -> Dict[str, Any]:
         """
         Lanza Chrome con perfil en el modo especificado.
+        Maneja correctamente procesos DETACHED en Windows.
         
         Args:
             profile_id: UUID completo o prefijo
@@ -412,6 +413,7 @@ class ProfileManager:
         
         # Determinar URL
         if mode == "discovery":
+            # Usar la página de la extensión si está disponible
             url = f"chrome-extension://{self.paths.extension_id}/discovery/index.html"
             logger.debug(f"  → URL discovery: {url}")
         else:
@@ -454,10 +456,15 @@ class ProfileManager:
         try:
             creation_flags = 0
             if platform.system() == 'Windows':
-                creation_flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+                # DETACHED_PROCESS (0x00000008) permite que Chrome viva sin consola
+                # CREATE_NEW_PROCESS_GROUP (0x00000200) ignora Ctrl+C del padre
+                creation_flags = 0x00000008 | 0x00000200
                 logger.debug("  → Windows: usando DETACHED_PROCESS")
             
             logger.info("  ⏳ Lanzando proceso de Chrome...")
+            
+            # Usamos PIPE solo para stderr por si falla al arranque inmediato.
+            # stdout/stdin a DEVNULL para evitar bloqueos de buffer.
             process = subprocess.Popen(
                 chrome_args,
                 creationflags=creation_flags,
@@ -467,18 +474,36 @@ class ProfileManager:
                 shell=False
             )
             
-            logger.debug(f"  → PID: {process.pid}")
-            logger.debug("  → Esperando 2s para verificar inicio...")
-            time.sleep(2.0)
+            logger.debug(f"  → PID Inicial: {process.pid}")
+            logger.debug("  → Verificando estado del proceso...")
             
-            if process.poll() is not None:
-                _, stderr_out = process.communicate()
-                err_msg = stderr_out.decode('utf-8', errors='ignore') if stderr_out else f"Exit Code {process.returncode}"
-                logger.error(f"❌ Chrome falló al iniciar: {err_msg}")
-                raise RuntimeError(f"Chrome failed to start: {err_msg}")
+            # --- FIX CRÍTICO: Lógica de detección de éxito ---
+            pid_final = process.pid
+            
+            try:
+                # Esperamos hasta 2 segundos para ver si crashea
+                exit_code = process.wait(timeout=2.0)
+                
+                # Si el proceso termina, verificamos el código
+                if exit_code == 0:
+                    # Exit Code 0 = ÉXITO (Chrome delegó a un proceso padre existente)
+                    logger.info("  ✓ Chrome delegated to main process (Exit Code 0)")
+                else:
+                    # Exit Code != 0 = ERROR REAL
+                    _, stderr_out = process.communicate()
+                    err_msg = stderr_out.decode('utf-8', errors='ignore') if stderr_out else f"Exit Code {exit_code}"
+                    logger.error(f"❌ Chrome falló al iniciar: {err_msg}")
+                    raise RuntimeError(f"Chrome failed to start: {err_msg}")
+                    
+            except subprocess.TimeoutExpired:
+                # Si salta TimeoutExpired, significa que el proceso SIGUE CORRIENDO.
+                # Esto es lo ideal para una instancia nueva.
+                logger.info("  ✓ Chrome process is running stable")
+            
+            # --------------------------------------------------
             
             duration = time.time() - start_time
-            logger.info(f"✅ Perfil lanzado exitosamente en {duration:.2f}s (PID: {process.pid})")
+            logger.info(f"✅ Perfil lanzado exitosamente en {duration:.2f}s")
             
             return {
                 "status": "success",
@@ -487,12 +512,13 @@ class ProfileManager:
                     "status": "launched",
                     "profile_id": full_id,
                     "alias": profile.get('alias'),
-                    "pid": process.pid,
+                    "pid": pid_final,
                     "url": url,
                     "extension_loaded": True,
                     "mode": mode
                 }
             }
+            
         except Exception as e:
             duration = time.time() - start_time
             logger.error(f"❌ Fallo al lanzar perfil después de {duration:.2f}s: {e}", exc_info=True)

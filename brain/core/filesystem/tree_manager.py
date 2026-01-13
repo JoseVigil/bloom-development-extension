@@ -48,46 +48,50 @@ class TreeManager:
         Generate tree structure and write to file.
         
         Returns:
-            Dictionary with metadata about the generation process:
-            {
-                "project_hash": str (if use_hash),
-                "timestamp": str,
-                "statistics": {
-                    "total_files": int,
-                    "total_directories": int
-                },
-                "output_written": bool,
-                "warnings": List[str]  # NEW: Warnings about missing paths
-            }
+            Dictionary with metadata about the generation process
         """
         
         resolved_paths = self._resolve_paths(targets)
         file_hashes = {} if use_hash else None
         dir_hashes = {} if use_hash else None
         final_output = ""
-        warnings = []  # NEW: Track warnings
+        warnings = []
 
         root_name = os.path.basename(self.root)
-        final_output += f"{root_name}/\n"
-
-        # Build tree structure
-        for i, p in enumerate(resolved_paths):
-            # NEW: Validate path exists before processing
-            if not os.path.exists(p):
-                warning_msg = f"⚠️  Path not found: {os.path.relpath(p, self.root)}"
-                warnings.append(warning_msg)
-                # Still show it in the tree with a warning marker
-                is_last = (i == len(resolved_paths) - 1)
-                connector = "└── " if is_last else "├── "
-                final_output += connector + os.path.basename(p) + " [NOT FOUND]\n"
-                continue
-            
-            is_last = (i == len(resolved_paths) - 1)
+        
+        # FIX: Solo agregar root_name si NO estamos procesando el root completo
+        # Si resolved_paths contiene solo self.root, no duplicar
+        if len(resolved_paths) == 1 and os.path.normpath(resolved_paths[0]) == os.path.normpath(self.root):
+            # Procesando todo el root, el _build_tree ya agregará el nombre
+            final_output += f"{root_name}/\n"
             final_output += self._build_tree(
-                p, prefix="", is_last=is_last, 
-                use_hash=use_hash, file_hashes=file_hashes, 
-                base_path=self.root
+                self.root, 
+                prefix="", 
+                is_last=True,
+                use_hash=use_hash, 
+                file_hashes=file_hashes,
+                base_path=self.root,
+                skip_name=True  # NEW: Skip printing the name again
             )
+        else:
+            # Procesando targets específicos, mostrar root y luego targets
+            final_output += f"{root_name}/\n"
+            
+            for i, p in enumerate(resolved_paths):
+                if not os.path.exists(p):
+                    warning_msg = f"⚠️  Path not found: {os.path.relpath(p, self.root)}"
+                    warnings.append(warning_msg)
+                    is_last = (i == len(resolved_paths) - 1)
+                    connector = "└── " if is_last else "├── "
+                    final_output += connector + os.path.basename(p) + " [NOT FOUND]\n"
+                    continue
+                
+                is_last = (i == len(resolved_paths) - 1)
+                final_output += self._build_tree(
+                    p, prefix="", is_last=is_last, 
+                    use_hash=use_hash, file_hashes=file_hashes, 
+                    base_path=self.root
+                )
 
         # Calculate hashes and add header
         project_hash = None
@@ -103,7 +107,6 @@ class TreeManager:
             
             final_output = header + final_output
             
-            # Add directory hashes footer
             if dir_hashes:
                 final_output += "\n" + "=" * 70 + "\n"
                 final_output += "DIRECTORY HASHES:\n"
@@ -137,13 +140,12 @@ class TreeManager:
                     "total_files": len(file_hashes),
                     "total_directories": len(dir_hashes)
                 },
-                "warnings": warnings  # NEW: Include warnings in JSON
+                "warnings": warnings
             }
             
             with open(json_file, "w", encoding="utf-8") as f:
                 json.dump(json_data, f, indent=2, ensure_ascii=False)
 
-        # Return metadata (pure data)
         return {
             "project_hash": project_hash,
             "timestamp": datetime.now().isoformat(),
@@ -152,7 +154,7 @@ class TreeManager:
                 "total_directories": len(dir_hashes) if dir_hashes else 0
             },
             "output_written": True,
-            "warnings": warnings  # NEW: Return warnings
+            "warnings": warnings
         }
 
     # --- INTERNAL METHODS ---
@@ -204,13 +206,13 @@ class TreeManager:
         is_last: bool = True, 
         use_hash: bool = False, 
         file_hashes: Optional[Dict[str, str]] = None, 
-        base_path: str = ""
+        base_path: str = "",
+        skip_name: bool = False  # NEW: Skip printing directory name
     ) -> str:
         """
         Recursively build tree structure string.
         Returns the tree representation as a string.
         """
-        # NEW: Early validation
         if not os.path.exists(path):
             name = os.path.basename(path.rstrip(os.sep))
             connector = "└── " if is_last else "├── "
@@ -227,34 +229,37 @@ class TreeManager:
         else:
             rel_path = path
 
-        tree_str = prefix + connector + name
+        tree_str = ""
         
-        if os.path.isdir(path):
-            tree_str += "/"
-            
-            # 1. Standard Exclusions (Exact name match)
-            if name in self.EXCLUDED_DIRS:
-                tree_str += f" {self.EXCLUDED_DIRS[name]}\n"
-                return tree_str
-            
-            # 2. Intelligent Python Library Detection
-            # Collapse if named 'libs', 'lib', or 'site-packages' with pip fingerprint
-            if name in ('libs', 'lib', 'site-packages'):
-                if self._is_python_dependency_dir(path):
-                    tree_str += " [... python vendored dependencies]\n"
+        # FIX: Solo agregar el nombre si no estamos en modo skip_name
+        if not skip_name:
+            tree_str = prefix + connector + name
+        
+            if os.path.isdir(path):
+                tree_str += "/"
+                
+                # Standard Exclusions
+                if name in self.EXCLUDED_DIRS:
+                    tree_str += f" {self.EXCLUDED_DIRS[name]}\n"
                     return tree_str
+                
+                # Python Library Detection
+                if name in ('libs', 'lib', 'site-packages'):
+                    if self._is_python_dependency_dir(path):
+                        tree_str += " [... python vendored dependencies]\n"
+                        return tree_str
 
-            if use_hash and file_hashes is not None:
-                tree_str += " [DIR]"
-        else:
-            if use_hash and file_hashes is not None:
-                file_hash = self._compute_md5(path)
-                if file_hash:
-                    file_hashes[rel_path] = file_hash
-                    padding = max(0, 50 - len(prefix) - len(connector) - len(name))
-                    tree_str += " " + "." * padding + " " + file_hash[:16]
-        
-        tree_str += "\n"
+                if use_hash and file_hashes is not None:
+                    tree_str += " [DIR]"
+            else:
+                if use_hash and file_hashes is not None:
+                    file_hash = self._compute_md5(path)
+                    if file_hash:
+                        file_hashes[rel_path] = file_hash
+                        padding = max(0, 50 - len(prefix) - len(connector) - len(name))
+                        tree_str += " " + "." * padding + " " + file_hash[:16]
+            
+            tree_str += "\n"
 
         if not os.path.isdir(path):
             return tree_str
@@ -263,11 +268,15 @@ class TreeManager:
         try:
             entries = sorted(os.listdir(path))
         except Exception as e:
-            # NEW: Show error if directory can't be listed
-            tree_str += prefix + ("    " if is_last else "│   ") + f"[Error listing directory: {e}]\n"
+            if not skip_name:
+                tree_str += prefix + ("    " if is_last else "│   ") + f"[Error listing directory: {e}]\n"
             return tree_str
 
-        new_prefix = prefix + ("    " if is_last else "│   ")
+        # FIX: Cuando skip_name=True, no agregar prefijo adicional
+        if skip_name:
+            new_prefix = prefix
+        else:
+            new_prefix = prefix + ("    " if is_last else "│   ")
 
         # Recursively process entries
         for i, entry in enumerate(entries):
