@@ -19,11 +19,13 @@ bloom-development-extension/
     ├── entitlements.plist
     ├── forge.config.js
     ├── install/
+    │   ├── diagnose-service.js
     │   ├── extension-installer.js
     │   ├── installer.js
     │   ├── launcher-creator.js
     │   ├── native-host-installer.js
     │   ├── runtime-installer.js
+    │   ├── service-diagnostics.js
     │   ├── service-installer.js
     │   └── shortcut-installer.js
     ├── installHelpers.js

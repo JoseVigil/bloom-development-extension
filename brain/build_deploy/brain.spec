@@ -170,6 +170,8 @@ hiddenimports = [
     'brain.core.nucleus_inspector',
     'brain.core.nucleus_manager',
     'brain.core.profile',
+    'brain.core.profile.discovery_generator',
+    'brain.core.profile.landing_generator',
     'brain.core.profile.logic',
     'brain.core.profile.logic.chrome_launcher',
     'brain.core.profile.logic.profile_store',

@@ -1,5 +1,12 @@
 COMPILE & RUN:
 
+git clone
+cd brain
+pip install google-generativeai -t libs/google-generativeai
+python prepare_runtime_libs.py
+cd installer/electron-app/install
+node diagnose-service.js
+
 brain
 .\build.ps1 (powershell admin)
 brain system version --increase --desc "Versioning and info"

@@ -3,10 +3,25 @@ Brain CLI - Auto-discovery entry point.
 Compatible con PyInstaller frozen executables.
 """
 import sys
+import io
 import os
 import multiprocessing
 from pathlib import Path
 
+# 🔧 FIX CRÍTICO: Windows Service stdout/stderr cerrados
+if sys.platform == 'win32':
+    # Primero verificar si están cerrados
+    if sys.stdout is None or (hasattr(sys.stdout, 'closed') and sys.stdout.closed):
+        sys.stdout = open(os.devnull, 'w', encoding='utf-8')
+    elif hasattr(sys.stdout, 'buffer'):
+        # Solo aplicar UTF-8 wrapper si tiene buffer (terminal normal)
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    
+    if sys.stderr is None or (hasattr(sys.stderr, 'closed') and sys.stderr.closed):
+        sys.stderr = open(os.devnull, 'w', encoding='utf-8')
+    elif hasattr(sys.stderr, 'buffer'):
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+        
 # ============================================================================
 # PASO 1: CONFIGURAR PATHS (ANTES DE CUALQUIER IMPORT)
 # ============================================================================
