@@ -210,11 +210,13 @@ bloom-development-extension/
 │   │   ├── entitlements.plist
 │   │   ├── forge.config.js
 │   │   ├── install/
+│   │   │   ├── diagnose-service.js
 │   │   │   ├── extension-installer.js
 │   │   │   ├── installer.js
 │   │   │   ├── launcher-creator.js
 │   │   │   ├── native-host-installer.js
 │   │   │   ├── runtime-installer.js
+│   │   │   ├── service-diagnostics.js
 │   │   │   ├── service-installer.js
 │   │   │   └── shortcut-installer.js
 │   │   ├── installHelpers.js
@@ -292,7 +294,6 @@ bloom-development-extension/
 │   │       │   └── nssm.exe
 │   │       └── win64/
 │   │           └── nssm.exe
-│   ├── node_modules/ [... dependencies]
 │   ├── package-lock.json
 │   ├── package.json
 │   ├── resources/
@@ -405,7 +406,6 @@ bloom-development-extension/
 │   ├── build_deploy/
 │   │   ├── __init__.py
 │   │   ├── brain.spec
-│   │   ├── brain.spec.bck
 │   │   ├── build_main.py
 │   │   ├── bump_version.py
 │   │   ├── commits/
@@ -619,6 +619,17 @@ bloom-development-extension/
 │   │   ├── profile/
 │   │   │   ├── __init__.py
 │   │   │   ├── __pycache__/ [... cache]
+│   │   │   ├── discovery_generator.py
+│   │   │   ├── html/
+│   │   │   │   ├── discovery/
+│   │   │   │   │   ├── index.html
+│   │   │   │   │   ├── script.js
+│   │   │   │   │   └── styles.css
+│   │   │   │   └── landing/
+│   │   │   │       ├── inex.html
+│   │   │   │       ├── script.js
+│   │   │   │       └── styles.css
+│   │   │   ├── landing_generator.py
 │   │   │   ├── logic/
 │   │   │   │   ├── __init__.py
 │   │   │   │   ├── __pycache__/ [... cache]

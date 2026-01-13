@@ -71,44 +71,28 @@ class PathResolver:
     
     @property
     def extension_path(self) -> Path:
-        """bin/extension/ directory."""
-        env_path = os.environ.get("BLOOM_EXTENSION_PATH")
-        if env_path:
-            logger.info(f"📦 Using extension from environment: {env_path}")
-            return Path(env_path)
-        
-        if getattr(sys, 'frozen', False):
-            ext_path = self.bin_dir / "extension"
-            logger.debug(f"🔍 Looking for extension manifest at: {ext_path}")
-            
-            if not (ext_path / "manifest.json").exists():
-                logger.error(f"❌ Extension manifest.json NOT FOUND at {ext_path}")
-                logger.debug(f"Executable location: {sys.executable}")
-                raise FileNotFoundError(
-                    f"Extension manifest.json NOT FOUND\n"
-                    f"Expected: {ext_path}\n"
-                    f"Executable: {sys.executable}"
-                )
-            
-            logger.info(f"✅ Extension found: {ext_path}")
-            return ext_path
-        
-        # Development
-        try:
-            current_file = Path(__file__).resolve()
-            repo_root = current_file.parent.parent.parent.parent
-            dev_path = repo_root / "chrome-extension" / "src"
-            
-            logger.debug(f"🔍 Development mode - checking: {dev_path}")
-            
-            if (dev_path / "manifest.json").exists():
-                logger.info(f"✅ Development extension found: {dev_path}")
-                return dev_path
-        except Exception as e:
-            logger.warning(f"⚠️ Failed to resolve development extension path: {e}")
-        
-        logger.error("❌ Extension manifest.json NOT FOUND in any location")
-        raise FileNotFoundError("Extension manifest.json NOT FOUND")
+        """
+        Ruta real de la extensión maestra.
+        Basado en tu ejecutable: .../bin/brain/brain.exe
+        Subimos dos niveles para llegar a .../bin/ y entramos a 'extension'
+        """
+        # sys.executable es: C:\Users\josev\AppData\Local\BloomNucleus\bin\brain\brain.exe
+        target = Path(sys.executable).resolve().parent.parent / "extension"
+
+        if (target / "manifest.json").exists():
+            return target
+
+        # Si no está ahí, fallback a la base resuelta (que es .../bin según el log)
+        fallback = self.base_dir / "extension"
+        if (fallback / "manifest.json").exists():
+            return fallback
+
+        raise FileNotFoundError(f"❌ CRÍTICO: manifest.json no encontrado en {target}")
+
+    @property
+    def extension_id(self) -> str:
+        """ID fijo de la extensión para Synapse v2.0"""
+        return "hpblclepliicmihaplldignhjdggnkdh"
     
     @property
     def native_manifest(self) -> Path:

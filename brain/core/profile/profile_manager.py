@@ -17,9 +17,14 @@ from datetime import datetime
 from brain.core.profile.path_resolver import PathResolver
 from brain.shared.logger import get_logger
 
+# Imports de lógica (Subcarpeta logic)
+from .logic.profile_store import ProfileStore
+from .logic.chrome_launcher import ChromeLauncher
+from .logic.synapse_handler import SynapseHandler
+
+# Imports de web (Subcarpeta web)
 from .web.discovery_generator import generate_discovery_page
 from .web.landing_generator import generate_profile_landing
-
 
 # Crear logger para este módulo
 logger = get_logger(__name__)
@@ -31,6 +36,7 @@ class ProfileManager:
     def __init__(self):
         logger.info("🚀 Inicializando ProfileManager")
         self.paths = PathResolver()
+        self.chrome_launcher = ChromeLauncher()
         logger.debug(f"  → profiles_json: {self.paths.profiles_json}")
         logger.debug(f"  → profiles_dir: {self.paths.profiles_dir}")
         
@@ -418,7 +424,7 @@ class ProfileManager:
         
         # Rutas
         try:
-            chrome_path = self._find_chrome_executable()
+            chrome_path = self.chrome_launcher.chrome_path
             logger.debug(f"  → Chrome: {chrome_path}")
         except FileNotFoundError as e:
             logger.error(f"❌ Chrome no encontrado: {e}", exc_info=True)

@@ -7,7 +7,6 @@ bloom-development-extension/
     ├── build_deploy/
     │   ├── __init__.py
     │   ├── brain.spec
-    │   ├── brain.spec.bck
     │   ├── build_main.py
     │   ├── bump_version.py
     │   ├── commits/
@@ -221,6 +220,17 @@ bloom-development-extension/
     │   ├── profile/
     │   │   ├── __init__.py
     │   │   ├── __pycache__/ [... cache]
+    │   │   ├── discovery_generator.py
+    │   │   ├── html/
+    │   │   │   ├── discovery/
+    │   │   │   │   ├── index.html
+    │   │   │   │   ├── script.js
+    │   │   │   │   └── styles.css
+    │   │   │   └── landing/
+    │   │   │       ├── inex.html
+    │   │   │       ├── script.js
+    │   │   │       └── styles.css
+    │   │   ├── landing_generator.py
     │   │   ├── logic/
     │   │   │   ├── __init__.py
     │   │   │   ├── __pycache__/ [... cache]
