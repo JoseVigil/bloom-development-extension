@@ -735,7 +735,8 @@ Brain CLI - Modular system for Bloom (Executable)
 │    brain [GLOBAL_OPTIONS] filesystem tree <TARGETS> [OPTIONS]                                    │
 │                                                                                                  │
 │    Argumentos:                                                                                   │
-│      <TARGETS>            Specific directories or files to include. (Optional)                   │
+│      <TARGETS>            Specific directories or files to include (supports absolute paths).    │
+│  (Optional)                                                                                      │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      -o                   Output file path (Path) [default: tree.txt]                            │

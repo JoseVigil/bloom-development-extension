@@ -37,13 +37,14 @@ bloom-development-extension/
     │   ├── entitlements.plist
     │   ├── forge.config.js
     │   ├── install/
-    │   │   ├── diagnose-service.js
+    │   │   ├── diagnose/
+    │   │   │   ├── diagnose-service.js
+    │   │   │   └── service-diagnostics.js
     │   │   ├── extension-installer.js
     │   │   ├── installer.js
     │   │   ├── launcher-creator.js
     │   │   ├── native-host-installer.js
     │   │   ├── runtime-installer.js
-    │   │   ├── service-diagnostics.js
     │   │   ├── service-installer.js
     │   │   └── shortcut-installer.js
     │   ├── installHelpers.js
@@ -121,6 +122,7 @@ bloom-development-extension/
     │       │   └── nssm.exe
     │       └── win64/
     │           └── nssm.exe
+    ├── node_modules/ [... dependencies]
     ├── package-lock.json
     ├── package.json
     ├── resources/

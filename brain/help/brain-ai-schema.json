@@ -270,7 +270,7 @@
             },
             "targets": {
               "type": "string",
-              "description": "Specific directories or files to include."
+              "description": "Specific directories or files to include (supports absolute paths)."
             }
           },
           "required": [

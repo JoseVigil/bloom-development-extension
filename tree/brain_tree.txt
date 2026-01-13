@@ -189,7 +189,8 @@ bloom-development-extension/
     │   │   ├── __pycache__/ [... cache]
     │   │   ├── code_compressor.py
     │   │   ├── files_compressor.py
-    │   │   └── files_extractor.py
+    │   │   ├── files_extractor.py
+    │   │   └── tree_manager.py
     │   ├── git/
     │   │   ├── __init__.py
     │   │   ├── __pycache__/ [... cache]
@@ -279,7 +280,6 @@ bloom-development-extension/
     │   │   ├── __init__.py
     │   │   ├── __pycache__/ [... cache]
     │   │   └── info_manager.py
-    │   ├── tree_manager.py
     │   └── twitter/
     │       └── auth_manager.py
     ├── entry.py
