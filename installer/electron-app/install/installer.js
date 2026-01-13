@@ -1,16 +1,14 @@
-// installer.js - SECUENCIA CORREGIDA Y FUNCIONAL
+// installer.js - REFACTORED: Electron as Simple File Copier
 // ============================================================================
-// ORDEN SAGRADO DE INSTALACIÓN (CORREGIDO):
-// 1. Limpieza (servicios + procesos)
-// 2. Crear directorios
-// 3. Copiar extensión (para detectar manifest.json)
-// 4. Calcular Extension ID (desde la key del manifest)
-// 5. Instalar runtime (Python engine)
-// 6. Copiar binarios (brain.exe, bloom-host.exe)
-// 7. Crear JSON del host (con el Extension ID correcto)
-// 8. Registrar en Windows Registry (HKLM - global)
-// 9. Instalar y arrancar servicio
-// 10. Crear perfil y configuración final
+// SIMPLIFIED INSTALLATION ORDER:
+// 1. Cleanup (services + processes)
+// 2. Create directories
+// 3. Copy extension template to bin/extension/
+// 4. Install runtime (Python engine)
+// 5. Copy binaries (brain.exe to bin/brain/, bloom-host.exe to bin/native/)
+// 6. Install and start Windows service
+// 7. HANDOFF TO BRAIN: Execute `brain profile create MasterWorker --json`
+// 8. HANDOFF TO BRAIN: Execute `brain profile launch MasterWorker --discovery`
 // ============================================================================
 
 const path = require('path');
@@ -18,27 +16,22 @@ const fs = require('fs-extra');
 const { paths } = require('../config/paths');
 const { isElevated, relaunchAsAdmin } = require('../core/admin-utils');
 const { BrowserWindow, app } = require('electron');
-const { execFile, execSync } = require('child_process'); 
-const crypto = require('crypto');
+const { execFile, spawn } = require('child_process');
 
-// Importadores
+// Importers
 const { 
   cleanupOldServices, 
   installWindowsService, 
   startService, 
   killAllBloomProcesses 
 } = require('./service-installer');
-const { 
-  installRuntime, 
-  initializeBrainProfile 
-} = require('./runtime-installer');
-const { SERVICE_NAME } = require('../config/constants');
-const { installExtension, calculateExtensionIdFromManifest } = require('./extension-installer');
+const { installRuntime } = require('./runtime-installer');
+const { installExtension } = require('./extension-installer');
 
 const APP_VERSION = app ? app.getVersion() : process.env.npm_package_version || '1.0.0';
 
 // ============================================================================
-// HELPER: Emitir progreso
+// PROGRESS TRACKING
 // ============================================================================
 function emitProgress(mainWindow, stepKey, detail = '') {
   const step = INSTALLATION_STEPS.find(s => s.key === stepKey);
@@ -59,197 +52,174 @@ function emitProgress(mainWindow, stepKey, detail = '') {
 }
 
 // ============================================================================
-// Mapa de pasos
+// INSTALLATION STEPS
 // ============================================================================
 const INSTALLATION_STEPS = [
-  { key: 'cleanup', percentage: 0, message: '🧹 Limpiando instalación anterior...' },
-  { key: 'directories', percentage: 10, message: '📁 Creando estructura de directorios...' },
-  { key: 'extension', percentage: 25, message: '🧩 Desplegando extensión Chrome...' },
-  { key: 'extension-id', percentage: 35, message: '🔑 Calculando Extension ID...' },
-  { key: 'brain-runtime', percentage: 45, message: '⚙️ Instalando motor Brain (Python Runtime)...' },
-  { key: 'binaries', percentage: 60, message: '🔧 Copiando binarios (Brain Service + Host)...' },
-  { key: 'bridge', percentage: 75, message: '🔗 Configurando Native Messaging Bridge...' },
-  { key: 'service', percentage: 85, message: '🚀 Instalando y arrancando servicio...' },
-  { key: 'profile', percentage: 95, message: '👤 Creando perfil Master Worker...' },
-  { key: 'complete', percentage: 100, message: '✅ ¡Instalación completada exitosamente!' }
+  { key: 'cleanup', percentage: 0, message: '🧹 Cleaning previous installation...' },
+  { key: 'directories', percentage: 10, message: '📁 Creating directory structure...' },
+  { key: 'extension-template', percentage: 25, message: '🧩 Copying extension template...' },
+  { key: 'brain-runtime', percentage: 40, message: '⚙️ Installing Brain runtime (Python)...' },
+  { key: 'binaries', percentage: 55, message: '🔧 Deploying binaries...' },
+  { key: 'service', percentage: 70, message: '🚀 Installing Windows service...' },
+  { key: 'brain-handoff', percentage: 85, message: '🤝 Handing off to Brain for profile setup...' },
+  { key: 'validation', percentage: 95, message: '✅ Validating installation...' },
+  { key: 'complete', percentage: 100, message: '✅ Installation completed successfully!' }
 ];
 
 // ============================================================================
 // STEP FUNCTIONS
 // ============================================================================
 
+/**
+ * Create base directory structure
+ * New structure:
+ * - bin/brain/        (brain.exe + _internal)
+ * - bin/native/       (bloom-host.exe)
+ * - bin/extension/    (extension template - copied per profile by Brain)
+ * - config/           (profiles.json managed by Brain)
+ * - profiles/[UUID]/  (created by Brain)
+ * - logs/             (general logs)
+ */
 async function createDirectories() {
   const dirs = [
     paths.bloomBase,
     paths.engineDir,
     paths.runtimeDir,
-    paths.nativeDir,
-    paths.extensionDir,
-    paths.configDir,
     paths.binDir,
+    path.join(paths.binDir, 'brain'),
+    path.join(paths.binDir, 'native'),
+    path.join(paths.binDir, 'extension'),
+    paths.configDir,
+    paths.profilesDir,
     paths.logsDir
   ];
-  for (const d of dirs) await fs.ensureDir(d);
-  console.log('✅ Directories created');
+  
+  for (const d of dirs) {
+    await fs.ensureDir(d);
+  }
+  
+  console.log('✅ Directory structure created');
 }
 
+/**
+ * Clean native directory preserving structure
+ */
 async function cleanNativeDir() {
-  console.log('\n🧹 CLEANING NATIVE DIRECTORY (preservando extensión)');
+  console.log('\n🧹 CLEANING NATIVE DIRECTORY');
   try {
-    if (await fs.pathExists(paths.nativeDir)) {
-      // Solo limpiar archivos específicos, NO la carpeta completa
-      const files = await fs.readdir(paths.nativeDir);
+    const nativeDir = path.join(paths.binDir, 'native');
+    if (await fs.pathExists(nativeDir)) {
+      const files = await fs.readdir(nativeDir);
       for (const file of files) {
         const ext = path.extname(file).toLowerCase();
         if (['.exe', '.json', '.dll', '.log'].includes(ext)) {
-          await fs.remove(path.join(paths.nativeDir, file));
+          await fs.remove(path.join(nativeDir, file));
         }
       }
     } else {
-      await fs.ensureDir(paths.nativeDir);
+      await fs.ensureDir(nativeDir);
     }
-    console.log('✅ Native directory cleaned (extensión preservada)');
+    console.log('✅ Native directory cleaned');
   } catch (e) {
     console.warn('⚠️ Could not clean native dir completely:', e.message);
   }
 }
 
 /**
- * PASO 1: Copiar extensión (estructura plana)
+ * Copy extension as TEMPLATE to bin/extension/
+ * Brain will copy this per-profile to profiles/[UUID]/extension/
  */
-async function deployExtension() {
-  console.log('\n🧩 DEPLOYING CHROME EXTENSION');
-  return await installExtension();
+async function deployExtensionTemplate() {
+  console.log('\n🧩 DEPLOYING EXTENSION TEMPLATE');
+  
+  const templateDir = path.join(paths.binDir, 'extension');
+  
+  // Clean template directory
+  if (await fs.pathExists(templateDir)) {
+    await fs.emptyDir(templateDir);
+  }
+  
+  // Copy extension source to template location
+  await installExtension();
+  
+  console.log('✅ Extension template deployed to:', templateDir);
+  return { success: true };
 }
 
 /**
- * PASO 2: Calcular Extension ID desde el manifest
- */
-async function extractExtensionId() {
-  console.log('\n🔑 CALCULATING EXTENSION ID');
-  const extensionId = await calculateExtensionIdFromManifest(paths.extensionDir);
-  console.log('🔑 Calculated Extension ID:', extensionId);
-  return extensionId;
-}
-
-/**
- * PASO 3: Copiar binarios (brain.exe, bloom-host.exe)
+ * Copy binaries to new unified structure
+ * - brain.exe → bin/brain/brain.exe (with _internal folder)
+ * - bloom-host.exe → bin/native/bloom-host.exe
  */
 async function deployBinaries() {
   console.log('\n🔧 DEPLOYING BINARIES');
-  const { installNativeHost } = require('./native-host-installer');
-  await installNativeHost();
-  console.log('✅ Binaries deployed');
-}
-
-/**
- * PASO 4: Crear el manifest JSON del Native Host + Registry HKLM
- */
-async function createHostManifestInHKLM(extensionId) {
-  console.log('\n📄 CREATING NATIVE HOST MANIFEST (HKLM)');
   
-  // 1. Crear el JSON con el ID correcto
-  const manifestContent = {
-    name: "com.bloom.nucleus.bridge",
-    description: "Bloom Nucleus Native Messaging Host",
-    path: paths.hostBinary.replace(/\//g, '\\'),
-    type: "stdio",
-    allowed_origins: [
-      `chrome-extension://${extensionId}/`
-    ],
-    "args": [
-      "synapse",  "host"
-    ]
-  };
+  const brainDest = path.join(paths.binDir, 'brain');
+  const nativeDest = path.join(paths.binDir, 'native');
   
-  const manifestPath = path.join(paths.nativeDir, 'com.bloom.nucleus.bridge.json');
+  // 1. Copy Brain (entire folder including _internal)
+  console.log('📦 Copying Brain service...');
+  console.log(`   Source: ${paths.brainSource}`);
+  console.log(`   Dest:   ${brainDest}`);
   
-  // 2. Guardar JSON
-  await fs.writeJson(manifestPath, manifestContent, { spaces: 2 });
-  console.log('✅ Manifest JSON creado:', manifestPath);
-  
-  // 3. Registrar en HKLM (global para todos los usuarios)
-  const { spawnSync } = require('child_process');
-  const hostName = 'com.bloom.nucleus.bridge';
-  const registryKey = `HKLM\\SOFTWARE\\Google\\Chrome\\NativeMessagingHosts\\${hostName}`;
-  const manifestPathWindows = manifestPath.replace(/\//g, '\\');
-  
-  console.log('\n📝 REGISTRANDO EN HKLM (Global)');
-  console.log(`   Clave: ${registryKey}`);
-  console.log(`   Manifest: ${manifestPathWindows}`);
-  console.log(`   Extension ID: ${extensionId}`);
-  
-  try {
-    // Usar spawnSync para evitar problemas de escaping
-    const result = spawnSync('reg', [
-      'add', registryKey,
-      '/ve', '/t', 'REG_SZ',
-      '/d', manifestPathWindows,
-      '/f'
-    ], { 
-      stdio: 'inherit', 
-      windowsHide: true 
-    });
-    
-    if (result.error) throw result.error;
-    
-    // Verificar que se escribió
-    const verifyResult = spawnSync('reg', [
-      'query', registryKey, '/ve'
-    ], { 
-      encoding: 'utf8',
-      windowsHide: true 
-    });
-    
-    const output = verifyResult.stdout || '';
-    
-    if (output.includes(manifestPathWindows)) {
-      console.log('✅ Registry HKLM actualizada y verificada');
-    } else {
-      throw new Error('Verificación falló: Manifest no encontrado en HKLM');
-    }
-    
-  } catch (error) {
-    console.error('❌ Error escribiendo en Registry HKLM:', error.message);
-    
-    // Fallback: intentar con HKCU
-    console.log('\n⚠️ Fallback: Intentando HKCU del usuario actual...');
-    const hkcuKey = `HKCU\\Software\\Google\\Chrome\\NativeMessagingHosts\\${hostName}`;
-    
-    try {
-      const fallbackResult = spawnSync('reg', [
-        'add', hkcuKey,
-        '/ve', '/t', 'REG_SZ',
-        '/d', manifestPathWindows,
-        '/f'
-      ], { 
-        stdio: 'inherit', 
-        windowsHide: true 
-      });
-      
-      if (fallbackResult.error) throw fallbackResult.error;
-      console.log('✅ Registry HKCU actualizada (fallback)');
-    } catch (fallbackError) {
-      throw new Error(`No se pudo escribir en Registry: ${fallbackError.message}`);
-    }
+  if (!await fs.pathExists(paths.brainSource)) {
+    throw new Error(`Brain source not found at: ${paths.brainSource}\n💡 Run 'python scripts/build_brain.py'`);
   }
   
-  return {
-    success: true,
-    extensionId,
-    manifestPath: manifestPathWindows,
-    registryKey
-  };
+  await fs.copy(paths.brainSource, brainDest, { overwrite: true });
+  
+  const brainExePath = path.join(brainDest, 'brain.exe');
+  if (!await fs.pathExists(brainExePath)) {
+    throw new Error(`brain.exe not found after copy: ${brainExePath}`);
+  }
+  console.log('  ✅ Brain service deployed');
+  
+  // 2. Copy Native Host
+  console.log('📦 Copying Native Host...');
+  console.log(`   Source: ${paths.nativeSource}`);
+  console.log(`   Dest:   ${nativeDest}`);
+  
+  if (!await fs.pathExists(paths.nativeSource)) {
+    throw new Error(`Native source not found at: ${paths.nativeSource}`);
+  }
+  
+  const hostDestPath = path.join(nativeDest, 'bloom-host.exe');
+  await fs.copy(paths.nativeSource, hostDestPath, { overwrite: true });
+  
+  if (!await fs.pathExists(hostDestPath)) {
+    throw new Error(`bloom-host.exe not found after copy: ${hostDestPath}`);
+  }
+  console.log('  ✅ Native host deployed');
+  
+  // 3. Copy NSSM for service management
+  console.log('📦 Copying NSSM...');
+  const nssmSource = paths.nssmExe;
+  const nssmDest = path.join(nativeDest, 'nssm.exe');
+  
+  if (!await fs.pathExists(nssmSource)) {
+    throw new Error(`NSSM not found at: ${nssmSource}`);
+  }
+  
+  await fs.copy(nssmSource, nssmDest, { overwrite: true });
+  console.log('  ✅ NSSM deployed');
+  
+  console.log('✅ All binaries deployed');
 }
 
 /**
- * PASO 5: Crear perfil maestro usando brain.exe
+ * BRAIN HANDOFF: Execute `brain profile create MasterWorker --json`
+ * Brain will:
+ * - Create profiles/[UUID]/ directory
+ * - Copy extension template to profiles/[UUID]/extension/
+ * - Create synapse config in profiles/[UUID]/synapse/com.bloom.synapse.[UUID].json
+ * - Update config/profiles.json with path and net_log_path
+ * - Register bridge in Windows Registry (HKCU or HKLM)
  */
-async function initializeMasterProfile() {
-  console.log('\n👤 CREATING MASTER PROFILE');
+async function createProfileViaBrain() {
+  console.log('\n🤝 HANDING OFF TO BRAIN: Creating Master Profile');
   
   return new Promise((resolve, reject) => {
-    const brainExe = paths.brainExe;
+    const brainExe = path.join(paths.binDir, 'brain', 'brain.exe');
     
     if (!fs.existsSync(brainExe)) {
       return reject(new Error(`Brain executable not found at: ${brainExe}`));
@@ -259,177 +229,291 @@ async function initializeMasterProfile() {
     
     console.log(`Executing: "${brainExe}" ${args.join(' ')}`);
 
-    execFile(brainExe, args, {
+    const child = spawn(brainExe, args, {
       cwd: path.dirname(brainExe),
-      windowsHide: true,
+      windowsHide: false,
       env: { 
-        ...process.env, 
-        // 🚨 AJUSTE CRÍTICO: Aseguramos que el CLI use la misma ruta que el runtime-installer
-        LOCALAPPDATA: process.env.LOCALAPPDATA, 
-        BLOOM_EXTENSION_PATH: paths.extensionDir,
+        ...process.env,
+        LOCALAPPDATA: process.env.LOCALAPPDATA,
+        BLOOM_EXTENSION_TEMPLATE: path.join(paths.binDir, 'extension'),
         PYTHONIOENCODING: 'utf-8',
         PYTHONUTF8: '1',
-        PYTHONLEGACYWINDOWSSTDIO: '0'
-      } 
-    }, (error, stdout, stderr) => {
-      
-      const output = stdout.trim();
-      const errOutput = stderr.trim();
+        PYTHONLEGACYWINDOWSSTDIO: '0',
+        PYTHONUNBUFFERED: '1'
+      },
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
 
-      if (error) {
-        console.error('Brain CLI Error Output:', errOutput);
-        if (!output) {
-          return reject(new Error(`Failed to create profile: ${errOutput || error.message}`));
-        }
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout.on('data', (data) => {
+      stdout += data.toString();
+    });
+
+    child.stderr.on('data', (data) => {
+      stderr += data.toString();
+    });
+
+    child.on('close', (code) => {
+      if (code !== 0 && !stdout) {
+        return reject(new Error(`Brain CLI failed: ${stderr}`));
       }
 
       try {
-        const jsonStart = output.indexOf('{');
+        const jsonStart = stdout.indexOf('{');
         if (jsonStart === -1) {
-          throw new Error(`Output does not contain JSON: ${output}`);
+          throw new Error(`No JSON in output: ${stdout}`);
         }
         
-        const jsonStr = output.substring(jsonStart, output.lastIndexOf('}') + 1);
+        const jsonStr = stdout.substring(jsonStart, stdout.lastIndexOf('}') + 1);
         const response = JSON.parse(jsonStr);
         
-        const profileId = response.data?.id || response.id || response.data?.uuid;
+        const profileData = response.data || response;
+        const profileId = profileData.id || profileData.uuid;
         
         if (!profileId) {
-          throw new Error('Profile ID missing in JSON response');
+          throw new Error('Profile ID missing');
         }
         
-        console.log(`✅ Master Profile Created: ${profileId}`);
-        resolve(profileId);
+        console.log(`✅ Profile Created: ${profileId}`);
+        
+        resolve({
+          profileId,
+          alias: profileData.alias,
+          path: profileData.path,
+          netLogPath: profileData.net_log_path
+        });
         
       } catch (parseError) {
-        console.error("Parse Error. Raw Output:", output);
-        // Mantenemos tu robusto fallback por si el perfil ya existe
-        if (output.includes('MasterWorker') || output.includes('already exists')) {
-          console.log("⚠️ Fallback: Usando alias como ID ante error de parseo.");
-          return resolve("MasterWorker");
+        console.error("❌ Parse Error:", stdout);
+        
+        if (stdout.includes('MasterWorker') || stdout.includes('already exists')) {
+          return resolve({ profileId: "MasterWorker", fallback: true });
         }
-        reject(new Error(`Failed to parse brain output: ${parseError.message}`));
+        
+        reject(new Error(`Parse failed: ${parseError.message}`));
       }
     });
   });
 }
 
+/**
+ * BRAIN HANDOFF: Execute `brain profile launch MasterWorker --discovery`
+ * This validates the entire setup:
+ * - Launches Chrome with network logging enabled
+ * - Performs discovery/handshake with extension
+ * - Validates Native Messaging bridge
+ */
+async function validateInstallationViaBrain(profileId) {
+  console.log('\n✅ VALIDATION: Launching profile for discovery');
+  
+  return new Promise((resolve, reject) => {
+    const brainExe = path.join(paths.binDir, 'brain', 'brain.exe');
+    
+    if (!fs.existsSync(brainExe)) {
+      return reject(new Error(`Brain executable not found at: ${brainExe}`));
+    }
+
+    const args = ['profile', 'launch', profileId, '--discovery'];
+    
+    console.log(`Executing: "${brainExe}" ${args.join(' ')}`);
+
+    const child = spawn(brainExe, args, {
+      cwd: path.dirname(brainExe),
+      windowsHide: false, // Show Chrome for validation
+      env: { 
+        ...process.env,
+        LOCALAPPDATA: process.env.LOCALAPPDATA,
+        PYTHONIOENCODING: 'utf-8',
+        PYTHONUTF8: '1',
+        PYTHONLEGACYWINDOWSSTDIO: '0'
+      },
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout.on('data', (data) => {
+      stdout += data.toString();
+      console.log('[Brain]', data.toString().trim());
+    });
+
+    child.stderr.on('data', (data) => {
+      stderr += data.toString();
+      console.error('[Brain Error]', data.toString().trim());
+    });
+
+    child.on('close', (code) => {
+      if (code !== 0) {
+        console.error(`❌ Validation failed with code ${code}`);
+        console.error('Stderr:', stderr);
+        return reject(new Error(`Validation failed: ${stderr || 'Unknown error'}`));
+      }
+
+      console.log('✅ Profile launched successfully');
+      console.log('ℹ️ Chrome should be running with the extension loaded');
+      console.log('ℹ️ Check logs for handshake confirmation');
+      
+      resolve({
+        success: true,
+        stdout,
+        stderr
+      });
+    });
+
+    child.on('error', (error) => {
+      reject(new Error(`Failed to launch validation: ${error.message}`));
+    });
+  });
+}
+
 // ============================================================================
-// INSTALACIÓN COMPLETA (SECUENCIA CORREGIDA)
+// FULL INSTALLATION SEQUENCE
 // ============================================================================
 async function runFullInstallation(mainWindow = null) {
+  // Check admin privileges
   if (process.platform === 'win32' && !(await isElevated())) {
     console.log('⚠️ Admin privileges required.');
     relaunchAsAdmin();
     return { success: false, relaunching: true, message: 'Relaunching as Admin...' };
   }
 
-  console.log(`\n=== STARTING BRAIN DEPLOYMENT (Secuencia Corregida) ===\n`);
+  console.log(`\n=== STARTING SIMPLIFIED BRAIN DEPLOYMENT ===\n`);
 
   try {
     // ========================================================================
-    // PASO 0: LIMPIEZA AGRESIVA (CORREGIDO)
+    // STEP 1: CLEANUP
     // ========================================================================
-    emitProgress(mainWindow, 'cleanup', 'Deteniendo servicios y matando procesos');
-    await cleanupOldServices();  // ✅ Función correcta
-    await killAllBloomProcesses();  // ✅ Matar procesos huérfanos
-    await cleanNativeDir();  // ✅ Limpiar native/ sin tocar extension/
+    emitProgress(mainWindow, 'cleanup', 'Stopping services and killing processes');
+    await cleanupOldServices();
+    await killAllBloomProcesses();
+    await cleanNativeDir();
     
     // ========================================================================
-    // PASO 1: CREAR DIRECTORIOS
+    // STEP 2: CREATE DIRECTORY STRUCTURE
     // ========================================================================
-    emitProgress(mainWindow, 'directories', 'Preparando carpetas en AppData');
+    emitProgress(mainWindow, 'directories', 'Creating unified directory structure');
     await createDirectories();
 
     // ========================================================================
-    // PASO 2: DESPLEGAR EXTENSIÓN E ID (PRIMERO)
+    // STEP 3: DEPLOY EXTENSION TEMPLATE
     // ========================================================================
-    emitProgress(mainWindow, 'extension', 'Desplegando extensión Chrome');
-    await deployExtension();
-    
-    emitProgress(mainWindow, 'extension-id', 'Calculando ID de identidad');
-    const extensionId = await extractExtensionId();
-    console.log(`🔑 Extension ID: ${extensionId}`);
+    emitProgress(mainWindow, 'extension-template', 'Copying extension template');
+    await deployExtensionTemplate();
     
     // ========================================================================
-    // PASO 3: INSTALAR RUNTIME (EL MOTOR) 🚀
+    // STEP 4: INSTALL PYTHON RUNTIME
     // ========================================================================
-    emitProgress(mainWindow, 'brain-runtime', 'Instalando motor Brain (Python Engine)');
+    emitProgress(mainWindow, 'brain-runtime', 'Installing Python runtime');
     await installRuntime();
     
     // ========================================================================
-    // PASO 4: BINARIOS (brain.exe + bloom-host.exe)
+    // STEP 5: DEPLOY BINARIES
     // ========================================================================
-    emitProgress(mainWindow, 'binaries', 'Instalando Brain Service y Host');
+    emitProgress(mainWindow, 'binaries', 'Deploying Brain and Native Host');
     await deployBinaries();
     
     // ========================================================================
-    // PASO 5: NATIVE MESSAGING BRIDGE (CON Extension ID correcto)
+    // STEP 6: INSTALL AND START SERVICE
     // ========================================================================
-    emitProgress(mainWindow, 'bridge', 'Registrando Native Messaging en HKLM');
-    await createHostManifestInHKLM(extensionId);
-    
-    // ========================================================================
-    // PASO 6: SERVICIO (DESPUÉS del bridge)
-    // ========================================================================
-    emitProgress(mainWindow, 'service', 'Instalando y arrancando multiplexor');
+    emitProgress(mainWindow, 'service', 'Installing Windows service');
     await installWindowsService();
     const started = await startService();
-    if (!started) throw new Error("No se pudo iniciar el multiplexor (Brain Service)");
+    if (!started) {
+      throw new Error("Failed to start Brain service");
+    }
     
     // ========================================================================
-    // PASO 7: CREAR PERFIL MAESTRO
+    // STEP 7: BRAIN HANDOFF - PROFILE CREATION
     // ========================================================================
-    emitProgress(mainWindow, 'profile', 'Configurando perfil Master Worker');
-    const profileId = await initializeBrainProfile();
-    console.log('✅ Master Profile ID:', profileId);
+    emitProgress(mainWindow, 'brain-handoff', 'Brain creating profile and configuring network');
+    const profileInfo = await createProfileViaBrain();
+    console.log('✅ Profile created:', profileInfo);
     
     // ========================================================================
-    // PASO 8: GUARDAR CONFIGURACIÓN FINAL
+    // STEP 8: VALIDATION VIA BRAIN
     // ========================================================================
-    console.log('💾 Saving final config...');
+    emitProgress(mainWindow, 'validation', 'Validating installation via profile launch');
+    
+    // Note: This will launch Chrome for validation
+    // In production, you might want to skip this or make it optional
+    try {
+      await validateInstallationViaBrain(profileInfo.profileId);
+      console.log('✅ Installation validated successfully');
+    } catch (validationError) {
+      console.warn('⚠️ Validation warning:', validationError.message);
+      console.log('ℹ️ Installation complete, but validation had issues');
+    }
+    
+    // ========================================================================
+    // STEP 9: SAVE MINIMAL CONFIG
+    // ========================================================================
+    console.log('💾 Saving minimal installer config...');
     const configPath = paths.configFile;
     const finalConfig = {
-      extensionId: extensionId,
-      profileId: profileId,
-      masterProfileId: profileId,
-      extensionPath: paths.extensionDir,
-      brainPath: paths.brainExe,
-      pythonPath: paths.pythonExe,
-      pythonMode: 'isolated',
       version: APP_VERSION,
-      installed_at: new Date().toISOString()
+      installed_at: new Date().toISOString(),
+      installer_mode: 'simplified',
+      masterProfileId: profileInfo.profileId,
+      note: 'Profiles and network configuration managed by Brain CLI'
     };
     await fs.writeJson(configPath, finalConfig, { spaces: 2 });
 
     // ========================================================================
-    // FINALIZACIÓN
+    // COMPLETION
     // ========================================================================
-    emitProgress(mainWindow, 'complete', 'Instalación terminada exitosamente');
+    emitProgress(mainWindow, 'complete', 'Installation completed successfully');
     
-    const { createLauncherShortcuts } = require('./launcher-creator');
-    const launcherResult = await createLauncherShortcuts();
+    // Create launcher shortcuts
+    try {
+      const { createLauncherShortcuts } = require('./launcher-creator');
+      const launcherResult = await createLauncherShortcuts();
+      console.log('✅ Launcher shortcuts created:', launcherResult.success);
+    } catch (launcherError) {
+      console.warn('⚠️ Could not create launcher shortcuts:', launcherError.message);
+    }
 
     console.log('\n=== DEPLOYMENT COMPLETED SUCCESSFULLY ===\n');
+    console.log('📁 Installation structure:');
+    console.log(`   Base: ${paths.bloomBase}`);
+    console.log(`   Brain: ${path.join(paths.binDir, 'brain', 'brain.exe')}`);
+    console.log(`   Native Host: ${path.join(paths.binDir, 'native', 'bloom-host.exe')}`);
+    console.log(`   Extension Template: ${path.join(paths.binDir, 'extension')}`);
+    console.log(`   Profiles: ${paths.profilesDir}`);
+    console.log(`   Config: ${paths.configDir}`);
+    console.log('\n💡 Use "brain profile list" to see profile details');
+    console.log('💡 Use "brain profile launch MasterWorker" to start working');
 
     return {
       success: true,
-      extensionId: extensionId,
-      profileId: profileId,
-      launcherCreated: launcherResult.success,
+      profileId: profileInfo.profileId,
+      profilePath: profileInfo.path,
       version: APP_VERSION
     };
 
   } catch (error) {
     console.error('\n❌ FATAL ERROR IN INSTALLATION:', error);
-    // Intentar limpiar si algo falló
+    
+    // Cleanup on failure
     await cleanupOldServices().catch(() => {});
-    return { success: false, error: error.message };
+    
+    return { 
+      success: false, 
+      error: error.message,
+      stack: error.stack 
+    };
   }
 }
 
 module.exports = {
   runFullInstallation,
   createDirectories,
-  cleanNativeDir
+  cleanNativeDir,
+  createProfileViaBrain,
+  validateInstallationViaBrain
 };

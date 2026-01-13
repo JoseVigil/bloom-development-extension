@@ -1,5 +1,6 @@
 COMPILE & RUN:
 
+brain libs
 git clone
 cd brain
 pip install google-generativeai -t libs/google-generativeai
@@ -7,9 +8,14 @@ python prepare_runtime_libs.py
 cd installer/electron-app/install
 node diagnose-service.js
 
-brain
+brain build
+C:\repos\bloom-videos\bloom-development-extension
 .\build.ps1 (powershell admin)
 brain system version --increase --desc "Versioning and info"
+
+cd installer/electron-app
+npm install
+npm run dev
 
 Plugin
 /c/repos/bloom-videos/bloom-development-extension
@@ -29,5 +35,17 @@ DEV Web server port 5173
 /c/repos/bloom-videos/bloom-development-extension/webview/app
 npm run build
 npm run dev
+
+brain filesystem tree src installer webview brain contracts package.json tsconfig.json -o tree/plugin_tree.txt
+
+brain filesystem tree installer -o tree/installer_tree.txt
+
+brain filesystem tree brain -o tree/brain_tree.txt
+|
+brain filesystem tree webview -o tree/webview_tree.txt
+
+brain filesystem tree installer/electron-app -o tree/electron_tree.txt
+
+brain filesystem tree installer/chrome-extension -o tree/chrome_extension_tree.txt
 
 

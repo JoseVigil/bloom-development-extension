@@ -30,6 +30,7 @@ Brain CLI - Modular system for Bloom (Executable)
 ╰─────────────────────────── Estas opciones deben ir después de 'brain' ───────────────────────────╯
 
 ╭─────────────────────────────────────────── Categories ───────────────────────────────────────────╮
+│   chrome        Chrome profile debugging and network log analysis              1 cmd             │
 │   context       AI context generation and management                           1 cmd             │
 │   extension     Chrome extension lifecycle management                         4 cmds             │
 │   filesystem    File operations and directory analysis                        3 cmds             │
@@ -46,14 +47,14 @@ Brain CLI - Modular system for Bloom (Executable)
 │   system        Runtime and system introspection                              3 cmds             │
 │   twitter       Twitter/X integration and social data analysis                 1 cmd             │
 │                                                                           ──────────             │
-│                                                                              80 cmds             │
+│                                                                              81 cmds             │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 
 ╭───────────────────────────────────────────── HEALTH ─────────────────────────────────────────────╮
 │                                                                                                  │
 │  DEV                                                                                             │
 │                                                                                                  │
-│  DEV CHECK - Verify development environment and service status (Vite, API, WebSocket)            │
+│  DEV CHECK - Check development environment and service status.                                   │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] health dev-check [OPTIONS]                                             │
 │                                                                                                  │
@@ -75,7 +76,7 @@ Brain CLI - Modular system for Bloom (Executable)
 │                                                                                                  │
 │  NATIVE                                                                                          │
 │                                                                                                  │
-│  NATIVE PING - Ping native host (bloom-host.exe) via TCP using binary framing protocol           │
+│  NATIVE PING - Ping the native host to verify it's alive and responding.                         │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] health native-ping [OPTIONS]                                           │
 │                                                                                                  │
@@ -111,15 +112,15 @@ Brain CLI - Modular system for Bloom (Executable)
 
 ╭───────────────────────────────────────────── SYSTEM ─────────────────────────────────────────────╮
 │                                                                                                  │
-│  INFO - Display system information, version, and executable location                             │
+│  INFO - Display comprehensive system information.                                                │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] system info                                                            │
 │                                                                                                  │
-│  PATH - Display absolute path to Brain CLI executable                                            │
+│  PATH - Display the absolute path to the brain executable.                                       │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] system path                                                            │
 │                                                                                                  │
-│  VERSION - Display or increment Brain CLI version with semantic changelog                        │
+│  VERSION - Display or increment the version number.                                              │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] system version [OPTIONS]                                               │
 │                                                                                                  │
@@ -135,7 +136,7 @@ Brain CLI - Modular system for Bloom (Executable)
 │                                                                                                  │
 │  GENERAL                                                                                         │
 │                                                                                                  │
-│  CREATE - Initialize a new Bloom Nucleus project structure                                       │
+│  CREATE - Initialize a new Bloom Nucleus V2.0 project structure.                                 │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] nucleus create [OPTIONS]                                               │
 │                                                                                                  │
@@ -147,7 +148,7 @@ Brain CLI - Modular system for Bloom (Executable)
 │      --url                Organization URL (str) [default: ]                                     │
 │      -f                   Force overwrite existing directory (bool) [default: False]             │
 │                                                                                                  │
-│  DELETE - Delete a complete nucleus                                                              │
+│  DELETE - Delete a complete nucleus including all its data.                                      │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] nucleus delete [OPTIONS]                                               │
 │                                                                                                  │
@@ -155,21 +156,21 @@ Brain CLI - Modular system for Bloom (Executable)
 │      -p <VALUE>           Path to the Nucleus root directory to delete (Path)                    │
 │      -f                   Skip confirmation prompt (bool) [default: False]                       │
 │                                                                                                  │
-│  GET - Get complete information about a specific nucleus                                         │
+│  GET - Retrieve complete details of a nucleus.                                                   │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] nucleus get [OPTIONS]                                                  │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      -p <VALUE>           Path to the Nucleus root directory (Path)                              │
 │                                                                                                  │
-│  LINK - Link an existing folder as a Nucleus project                                             │
+│  LINK - Link an existing folder as a Nucleus project.                                            │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] nucleus link <PATH>                                                    │
 │                                                                                                  │
 │    Argumentos:                                                                                   │
 │      <PATH>               Path to existing project (Path)                                        │
 │                                                                                                  │
-│  LIST - List all available nuclei in a parent directory                                          │
+│  LIST - List all Nucleus projects found in a parent directory.                                   │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] nucleus list [OPTIONS]                                                 │
 │                                                                                                  │
@@ -177,14 +178,14 @@ Brain CLI - Modular system for Bloom (Executable)
 │      -d                   Parent directory to scan for nuclei (default: current directory)       │
 │  (Optional)                                                                                      │
 │                                                                                                  │
-│  STATUS - Check if a directory is a valid Nucleus project                                        │
+│  STATUS - Check if a directory is a valid Nucleus project.                                       │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] nucleus status [OPTIONS]                                               │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      -p                   Nucleus path (Optional)                                                │
 │                                                                                                  │
-│  SYNC - Synchronize projects (git pull) and rebuild nucleus cache                                │
+│  SYNC - Synchronize projects and rebuild nucleus cache.                                          │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] nucleus sync [OPTIONS]                                                 │
 │                                                                                                  │
@@ -195,7 +196,7 @@ Brain CLI - Modular system for Bloom (Executable)
 │                                                                                                  │
 │  CREATE                                                                                          │
 │                                                                                                  │
-│  CREATE EXP INTENT - Create a new exploration intent in the nucleus                              │
+│  CREATE EXP INTENT - Create a new exploration intent in the nucleus.                             │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] nucleus create-exp-intent [OPTIONS]                                    │
 │                                                                                                  │
@@ -208,7 +209,7 @@ Brain CLI - Modular system for Bloom (Executable)
 │                                                                                                  │
 │  EXP                                                                                             │
 │                                                                                                  │
-│  EXP DISCOVERY TURN - Add a discovery turn to an exploration intent                              │
+│  EXP DISCOVERY TURN - Add a discovery turn to an exploration intent.                             │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] nucleus exp-discovery-turn [OPTIONS]                                   │
 │                                                                                                  │
@@ -218,7 +219,7 @@ Brain CLI - Modular system for Bloom (Executable)
 │      --notes              Turn notes/observations (Optional)                                     │
 │      --analysis           Analysis summary for this turn (Optional)                              │
 │                                                                                                  │
-│  EXP EXPORT FINDINGS - Export findings from an exploration intent                                │
+│  EXP EXPORT FINDINGS - Export findings from an exploration intent.                               │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] nucleus exp-export-findings [OPTIONS]                                  │
 │                                                                                                  │
@@ -230,7 +231,7 @@ Brain CLI - Modular system for Bloom (Executable)
 │                                                                                                  │
 │  LIST                                                                                            │
 │                                                                                                  │
-│  LIST PROJECTS - List all projects linked to the nucleus                                         │
+│  LIST PROJECTS - List all projects linked to the nucleus with their details.                     │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] nucleus list-projects [OPTIONS]                                        │
 │                                                                                                  │
@@ -241,7 +242,7 @@ Brain CLI - Modular system for Bloom (Executable)
 │                                                                                                  │
 │  ONBOARDING                                                                                      │
 │                                                                                                  │
-│  ONBOARDING COMPLETE - Mark an onboarding step or entire onboarding as completed                 │
+│  ONBOARDING COMPLETE - Mark an onboarding step or entire onboarding as completed.                │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] nucleus onboarding-complete [OPTIONS]                                  │
 │                                                                                                  │
@@ -250,7 +251,7 @@ Brain CLI - Modular system for Bloom (Executable)
 │      -a                   Mark entire onboarding as completed (bool) [default: False]            │
 │      -p                   Nucleus root path (default: current dir) (Optional)                    │
 │                                                                                                  │
-│  ONBOARDING STATUS - Get the current onboarding status from nucleus configuration                │
+│  ONBOARDING STATUS - Get the current onboarding status from nucleus configuration.               │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] nucleus onboarding-status [OPTIONS]                                    │
 │                                                                                                  │
@@ -259,7 +260,7 @@ Brain CLI - Modular system for Bloom (Executable)
 │                                                                                                  │
 │  PROJECT                                                                                         │
 │                                                                                                  │
-│  PROJECT INFO - Display detailed info about a specific project in the nucleus                    │
+│  PROJECT INFO - Display detailed information about a specific project in the nucleus.            │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] nucleus project-info <PROJECT_NAME> [OPTIONS]                          │
 │                                                                                                  │
@@ -275,7 +276,7 @@ Brain CLI - Modular system for Bloom (Executable)
 │                                                                                                  │
 │  GENERAL                                                                                         │
 │                                                                                                  │
-│  ADD - Vincula un proyecto local existente a un Nucleus                                          │
+│  ADD - Vincula un proyecto local existente a un Nucleus.                                         │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] project add <PROJECT_PATH> [OPTIONS]                                   │
 │                                                                                                  │
@@ -289,7 +290,7 @@ Brain CLI - Modular system for Bloom (Executable)
 │      --description        Descripción del proyecto (Optional)                                    │
 │      --repo-url           URL del repositorio GitHub (Optional)                                  │
 │                                                                                                  │
-│  DETECT - Scan directory and detect project types automatically                                  │
+│  DETECT - Scan directory and detect project types automatically.                                 │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] project detect <PARENT_PATH> [OPTIONS]                                 │
 │                                                                                                  │
@@ -301,20 +302,16 @@ Brain CLI - Modular system for Bloom (Executable)
 │      -s                   Filter projects by strategy type (Optional)                            │
 │      -c                   Filter by minimum confidence level (high, medium, low) (Optional)      │
 │                                                                                                  │
-│  LOAD - Inspect and load project metadata from a path                                            │
+│  LOAD - Validates and loads project information.                                                 │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] project load [OPTIONS]                                                 │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      -p                   Path to the project root (Path) [default: .]                           │
 │                                                                                                  │
-│  NUCLEUS - Manage Nucleus projects (create, link, status)                                        │
-│                                                                                                  │
-│    brain [GLOBAL_OPTIONS] project nucleus                                                        │
-│                                                                                                  │
 │  CLONE                                                                                           │
 │                                                                                                  │
-│  CLONE AND ADD - Clone a Git repository and automatically link it to the current Nucleus         │
+│  CLONE AND ADD - Clone a Git repository and automatically link it to the current Nucleus.        │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] project clone-and-add <REPO_URL> [OPTIONS]                             │
 │                                                                                                  │
@@ -337,7 +334,7 @@ Brain CLI - Modular system for Bloom (Executable)
 │                                                                                                  │
 │  ACCOUNTS                                                                                        │
 │                                                                                                  │
-│  ACCOUNTS REGISTER - Registra una cuenta (Google, OpenAI, etc) en un perfil                      │
+│  ACCOUNTS REGISTER - Registra una nueva cuenta en un perfil.                                     │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] profile accounts-register <PROFILE_ID> <PROVIDER> <EMAIL>              │
 │                                                                                                  │
@@ -346,7 +343,7 @@ Brain CLI - Modular system for Bloom (Executable)
 │      <PROVIDER>           Proveedor (google, openai, anthropic, etc) (str)                       │
 │      <EMAIL>              Email o identificador de la cuenta (str)                               │
 │                                                                                                  │
-│  ACCOUNTS REMOVE - Remueve una cuenta registrada de un perfil                                    │
+│  ACCOUNTS REMOVE - Remueve una cuenta registrada de un perfil.                                   │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] profile accounts-remove <PROFILE_ID> <PROVIDER>                        │
 │                                                                                                  │
@@ -356,14 +353,14 @@ Brain CLI - Modular system for Bloom (Executable)
 │                                                                                                  │
 │  GENERAL                                                                                         │
 │                                                                                                  │
-│  CREATE - Crea un nuevo perfil de Chrome aislado                                                 │
+│  CREATE - Crea un nuevo perfil con el alias especificado.                                        │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] profile create <ALIAS>                                                 │
 │                                                                                                  │
 │    Argumentos:                                                                                   │
 │      <ALIAS>              Nombre descriptivo del perfil (str)                                    │
 │                                                                                                  │
-│  DESTROY - Elimina un perfil y todos sus datos                                                   │
+│  DESTROY - Elimina un perfil y sus datos. Requiere confirmación a menos que se use --force.      │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] profile destroy <PROFILE_ID> [OPTIONS]                                 │
 │                                                                                                  │
@@ -373,7 +370,7 @@ Brain CLI - Modular system for Bloom (Executable)
 │    Opciones:                                                                                     │
 │      -f                   Forzar sin confirmación (bool) [default: False]                        │
 │                                                                                                  │
-│  LAUNCH - Lanza Chrome con un perfil de Worker                                                   │
+│  LAUNCH - Lanza Chrome con el perfil especificado y la extensión Bloom.                          │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] profile launch <PROFILE_ID> [OPTIONS]                                  │
 │                                                                                                  │
@@ -385,7 +382,7 @@ Brain CLI - Modular system for Bloom (Executable)
 │      --cockpit            Modo cockpit (landing page) (bool) [default: False]                    │
 │      --discovery          Modo de validación de conexión (bool) [default: False]                 │
 │                                                                                                  │
-│  LINK - Vincula una cuenta de email a un perfil de Chrome                                        │
+│  LINK - Vincula una cuenta de email a un perfil (DEPRECATED - usar accounts-register).           │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] profile link <PROFILE_ID> <EMAIL>                                      │
 │                                                                                                  │
@@ -393,11 +390,11 @@ Brain CLI - Modular system for Bloom (Executable)
 │      <PROFILE_ID>         ID del perfil (str)                                                    │
 │      <EMAIL>              Email de la cuenta a vincular (str)                                    │
 │                                                                                                  │
-│  LIST - Lista todos los perfiles de Chrome Workers                                               │
+│  LIST - MOSTRAR AL USUARIO (CLI).                                                                │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] profile list                                                           │
 │                                                                                                  │
-│  UNLINK - Desvincula la cuenta asociada a un perfil                                              │
+│  UNLINK - Desvincula la cuenta asociada a un perfil (DEPRECATED - usar accounts-remove).         │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] profile unlink <PROFILE_ID>                                            │
 │                                                                                                  │
@@ -408,11 +405,7 @@ Brain CLI - Modular system for Bloom (Executable)
 
 ╭─────────────────────────────────────────── EXTENSION ────────────────────────────────────────────╮
 │                                                                                                  │
-│  BACKUPS - Manage Chrome extension version backups                                               │
-│                                                                                                  │
-│    brain [GLOBAL_OPTIONS] extension backups                                                      │
-│                                                                                                  │
-│  INSTALL - Install Chrome extension from source to permanent location                            │
+│  INSTALL - Install Chrome extension to permanent location.                                       │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] extension install [OPTIONS]                                            │
 │                                                                                                  │
@@ -420,14 +413,14 @@ Brain CLI - Modular system for Bloom (Executable)
 │      -s                   Source directory (auto-detects if not provided) (Optional)             │
 │      -f                   Force reinstall even if same version exists (bool) [default: False]    │
 │                                                                                                  │
-│  UPDATE - Update Chrome extension to latest version                                              │
+│  UPDATE - Update Chrome extension to the latest version.                                         │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] extension update [OPTIONS]                                             │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      -s                   Source directory (auto-detects if not provided) (Optional)             │
 │                                                                                                  │
-│  VERIFY - Verify Chrome extension installation integrity                                         │
+│  VERIFY - Verify that the Chrome extension is correctly installed.                               │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] extension verify                                                       │
 │                                                                                                  │
@@ -435,22 +428,34 @@ Brain CLI - Modular system for Bloom (Executable)
 
 ╭──────────────────────────────────────────── SYNAPSE ─────────────────────────────────────────────╮
 │                                                                                                  │
-│  BRIDGE - Bridge de comunicación nativa con Chrome Extension                                     │
+│  CLOSE - Envía señal de terminación al navegador.                                                │
 │                                                                                                  │
-│    brain [GLOBAL_OPTIONS] synapse bridge                                                         │
+│    brain [GLOBAL_OPTIONS] synapse close                                                          │
+│                                                                                                  │
+│  HOST - Inicia el modo Host (Listener Loop).                                                     │
+│                                                                                                  │
+│    brain [GLOBAL_OPTIONS] synapse host                                                           │
 │                                                                                                  │
 ╰───────────────────── Chrome Native Messaging Bridge and protocol management ─────────────────────╯
 
 ╭──────────────────────────────────────────── SERVICE ─────────────────────────────────────────────╮
 │                                                                                                  │
-│  SERVICE - Manage the Brain TCP multiplexer service                                              │
+│  START - Start the Brain TCP multiplexer service.                                                │
 │                                                                                                  │
-│    brain [GLOBAL_OPTIONS] service service [OPTIONS]                                              │
+│    brain [GLOBAL_OPTIONS] service start [OPTIONS]                                                │
 │                                                                                                  │
 │    Opciones:                                                                                     │
 │      -p                   TCP port to bind (int) [default: 5678]                                 │
 │      -h                   Host address to bind (str) [default: 127.0.0.1]                        │
 │      -d                   Run as background daemon (bool) [default: False]                       │
+│                                                                                                  │
+│  STATUS - Check the current status of the Brain service.                                         │
+│                                                                                                  │
+│    brain [GLOBAL_OPTIONS] service status                                                         │
+│                                                                                                  │
+│  STOP - Stop the running Brain service.                                                          │
+│                                                                                                  │
+│    brain [GLOBAL_OPTIONS] service stop                                                           │
 │                                                                                                  │
 ╰─────────────────────── Background connection multiplexer and task runner ────────────────────────╯
 
@@ -464,7 +469,7 @@ Brain CLI - Modular system for Bloom (Executable)
 
 ╭──────────────────────────────────────────── CONTEXT ─────────────────────────────────────────────╮
 │                                                                                                  │
-│  GENERATE - Generate the Bloom Context for the project                                           │
+│  GENERATE - Generate the Bloom Context for the project.                                          │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] context generate [OPTIONS]                                             │
 │                                                                                                  │
@@ -479,7 +484,7 @@ Brain CLI - Modular system for Bloom (Executable)
 │                                                                                                  │
 │  ADD                                                                                             │
 │                                                                                                  │
-│  ADD TURN - Add a conversation turn to intent chat                                               │
+│  ADD TURN - Add a conversation turn to an intent's chat.                                         │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] intent add-turn [OPTIONS]                                              │
 │                                                                                                  │
@@ -492,7 +497,7 @@ Brain CLI - Modular system for Bloom (Executable)
 │                                                                                                  │
 │  BUILD                                                                                           │
 │                                                                                                  │
-│  BUILD PAYLOAD - Build optimized AI payload from context plan                                    │
+│  BUILD PAYLOAD - Build optimized AI payload from context plan.                                   │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] intent build-payload [OPTIONS]                                         │
 │                                                                                                  │
@@ -502,7 +507,7 @@ Brain CLI - Modular system for Bloom (Executable)
 │                                                                                                  │
 │  GENERAL                                                                                         │
 │                                                                                                  │
-│  CREATE - Create a new development or documentation intent in the current project                │
+│  CREATE - Create a new development or documentation intent.                                      │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] intent create [OPTIONS]                                                │
 │                                                                                                  │
@@ -515,7 +520,7 @@ Brain CLI - Modular system for Bloom (Executable)
 │      -p                   Path to the Nucleus (Bloom project root). Auto-detected if not         │
 │  provided. (Optional)                                                                            │
 │                                                                                                  │
-│  DELETE - Delete an intent completely                                                            │
+│  DELETE - Delete an intent and all its data.                                                     │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] intent delete [OPTIONS]                                                │
 │                                                                                                  │
@@ -526,7 +531,7 @@ Brain CLI - Modular system for Bloom (Executable)
 │  False]                                                                                          │
 │      -p                   Path to Bloom project (Optional)                                       │
 │                                                                                                  │
-│  DOWNLOAD - Download AI response and save to .response/ directory                                │
+│  DOWNLOAD - Download AI response from Native Host or file.                                       │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] intent download [OPTIONS]                                              │
 │                                                                                                  │
@@ -540,7 +545,7 @@ Brain CLI - Modular system for Bloom (Executable)
 │      --timeout            Socket timeout in seconds (int) [default: 300]                         │
 │      --nucleus-path       Path to Bloom project (auto-detected if omitted) (Optional)            │
 │                                                                                                  │
-│  FINALIZE - Finalize intent and apply changes                                                    │
+│  FINALIZE - Finalize an intent, applying changes to the codebase.                                │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] intent finalize [OPTIONS]                                              │
 │                                                                                                  │
@@ -549,7 +554,7 @@ Brain CLI - Modular system for Bloom (Executable)
 │      -f                   Intent folder name (Optional)                                          │
 │      -p                   Path to Bloom project (Optional)                                       │
 │                                                                                                  │
-│  GET - Get complete information about a specific intent                                          │
+│  GET - Get complete details of an intent.                                                        │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] intent get [OPTIONS]                                                   │
 │                                                                                                  │
@@ -558,7 +563,7 @@ Brain CLI - Modular system for Bloom (Executable)
 │      -f                   Intent folder name (Optional)                                          │
 │      -p                   Path to Bloom project (Optional)                                       │
 │                                                                                                  │
-│  HYDRATE - Populate intent with code context and briefing                                        │
+│  HYDRATE - Hydrate an intent by processing source files and briefing.                            │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] intent hydrate [OPTIONS]                                               │
 │                                                                                                  │
@@ -570,7 +575,7 @@ Brain CLI - Modular system for Bloom (Executable)
 │      -F                   Files to include in context (comma-separated) (Optional)               │
 │      -p                   Path to Bloom project root (Optional)                                  │
 │                                                                                                  │
-│  LIST - List all intents in a Bloom project                                                      │
+│  LIST - List all intents in the project.                                                         │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] intent list [OPTIONS]                                                  │
 │                                                                                                  │
@@ -578,7 +583,7 @@ Brain CLI - Modular system for Bloom (Executable)
 │      -p                   Path to Bloom project (auto-detected if not provided) (Optional)       │
 │      -t                   Filter by intent type: 'dev' or 'doc' (Optional)                       │
 │                                                                                                  │
-│  LOCK - Lock an intent to mark it as in-use (determinism)                                        │
+│  LOCK - Lock an intent for exclusive use.                                                        │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] intent lock [OPTIONS]                                                  │
 │                                                                                                  │
@@ -587,7 +592,7 @@ Brain CLI - Modular system for Bloom (Executable)
 │      -f                   Intent folder name (Optional)                                          │
 │      -p                   Path to Bloom project (Optional)                                       │
 │                                                                                                  │
-│  MERGE - Merge staged files into codebase with backup                                            │
+│  MERGE - Merge staged files from .staging/ into the real codebase.                               │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] intent merge [OPTIONS]                                                 │
 │                                                                                                  │
@@ -601,7 +606,7 @@ Brain CLI - Modular system for Bloom (Executable)
 │      --no-backup          Skip backup creation (DANGEROUS) (bool) [default: False]               │
 │      -p                   Path to Bloom project (auto-detected if not provided) (Optional)       │
 │                                                                                                  │
-│  PARSE - Parse and validate .raw_output.json against Bloom protocol                              │
+│  PARSE - Parse and validate .raw_output.json from an AI response.                                │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] intent parse [OPTIONS]                                                 │
 │                                                                                                  │
@@ -614,7 +619,7 @@ Brain CLI - Modular system for Bloom (Executable)
 │      --output-report      Generate .parse_report.json (bool) [default: True]                     │
 │      -n                   Path to nucleus root (default: current directory) (Optional)           │
 │                                                                                                  │
-│  PLAN - Generate AI context plan with intelligent file prioritization                            │
+│  PLAN - Generate context plan for an intent using Gemini Router.                                 │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] intent plan [OPTIONS]                                                  │
 │                                                                                                  │
@@ -623,7 +628,7 @@ Brain CLI - Modular system for Bloom (Executable)
 │      --description <VALUE> Intent description (str)                                              │
 │      --type               Intent type: dev, doc, or seed (str) [default: dev]                    │
 │                                                                                                  │
-│  RECOVER - Recover interrupted intents from lock state                                           │
+│  RECOVER - Recover interrupted intents using lock state recovery data.                           │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] intent recover [OPTIONS]                                               │
 │                                                                                                  │
@@ -634,7 +639,7 @@ Brain CLI - Modular system for Bloom (Executable)
 │      --force-unlock       Force unlock without attempting recovery (bool) [default: False]       │
 │      -p                   Path to Bloom project (auto-detected if not provided) (Optional)       │
 │                                                                                                  │
-│  STAGE - Prepare files in .staging/ directory for merge                                          │
+│  STAGE - Prepare files in .staging/ directory for merge.                                         │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] intent stage [OPTIONS]                                                 │
 │                                                                                                  │
@@ -648,7 +653,7 @@ Brain CLI - Modular system for Bloom (Executable)
 │      --overwrite          Overwrite existing .staging/ directory (bool) [default: True]          │
 │      -p                   Path to Bloom project (auto-detected if not provided) (Optional)       │
 │                                                                                                  │
-│  SUBMIT - Submit an intent payload to AI provider through native host bridge                     │
+│  SUBMIT - Submit an intent payload to an AI provider through the native host bridge.             │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] intent submit [OPTIONS]                                                │
 │                                                                                                  │
@@ -663,7 +668,7 @@ Brain CLI - Modular system for Bloom (Executable)
 │      --port               Native host TCP port (int) [default: 5678]                             │
 │      --timeout            Connection timeout in seconds (int) [default: 30]                      │
 │                                                                                                  │
-│  UNLOCK - Unlock an intent to free it for use                                                    │
+│  UNLOCK - Unlock an intent to free it for use.                                                   │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] intent unlock [OPTIONS]                                                │
 │                                                                                                  │
@@ -673,7 +678,7 @@ Brain CLI - Modular system for Bloom (Executable)
 │      --force              Force unlock even if locked by another host (bool) [default: False]    │
 │      -p                   Path to Bloom project (Optional)                                       │
 │                                                                                                  │
-│  UPDATE - Update an existing intent's name, files, or metadata                                   │
+│  UPDATE - Update an existing intent's properties.                                                │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] intent update [OPTIONS]                                                │
 │                                                                                                  │
@@ -687,7 +692,7 @@ Brain CLI - Modular system for Bloom (Executable)
 │      -p                   Path to the Nucleus (Bloom project root). Auto-detected if not         │
 │  provided. (Optional)                                                                            │
 │                                                                                                  │
-│  VALIDATE - Validate staging files using Gemini analysis                                         │
+│  VALIDATE - Validate staging files using Gemini analysis.                                        │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] intent validate [OPTIONS]                                              │
 │                                                                                                  │
@@ -705,7 +710,7 @@ Brain CLI - Modular system for Bloom (Executable)
 
 ╭─────────────────────────────────────────── FILESYSTEM ───────────────────────────────────────────╮
 │                                                                                                  │
-│  COMPRESS - Compress files into optimized JSON for AI consumption                                │
+│  COMPRESS - Compress files into optimized JSON format for AI consumption.                        │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] filesystem compress <PATHS> [OPTIONS]                                  │
 │                                                                                                  │
@@ -718,7 +723,7 @@ Brain CLI - Modular system for Bloom (Executable)
 │      -e                   Patterns to exclude (can be used multiple times) (List) [default: []]  │
 │      --no-comments        Remove comments during compression (bool) [default: False]             │
 │                                                                                                  │
-│  EXTRACT - Extract files from compressed JSON format                                             │
+│  EXTRACT - Extract files from compressed JSON format.                                            │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] filesystem extract <JSON_FILE> [OPTIONS]                               │
 │                                                                                                  │
@@ -730,7 +735,7 @@ Brain CLI - Modular system for Bloom (Executable)
 │      --verify-hashes/--no-verify-hashes Verify MD5 hashes during extraction (bool) [default:     │
 │  True]                                                                                           │
 │                                                                                                  │
-│  TREE - Generate visual tree structure with optional MD5 hashing and JSON export                 │
+│  TREE - Generate a visual directory tree structure with intelligent exclusions.                  │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] filesystem tree <TARGETS> [OPTIONS]                                    │
 │                                                                                                  │
@@ -747,13 +752,26 @@ Brain CLI - Modular system for Bloom (Executable)
 
 ╭───────────────────────────────────────────── GITHUB ─────────────────────────────────────────────╮
 │                                                                                                  │
+│  AUTENTICACIÓN                                                                                   │
+│                                                                                                  │
+│  AUTH LOGIN - Store GitHub authentication token.                                                 │
+│                                                                                                  │
+│    brain [GLOBAL_OPTIONS] github auth-login [OPTIONS]                                            │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -t <VALUE>           GitHub Personal Access Token (str)                                     │
+│                                                                                                  │
+│  AUTH LOGOUT - Remove stored GitHub token.                                                       │
+│                                                                                                  │
+│    brain [GLOBAL_OPTIONS] github auth-logout                                                     │
+│                                                                                                  │
+│  AUTH STATUS - Check GitHub authentication status.                                               │
+│                                                                                                  │
+│    brain [GLOBAL_OPTIONS] github auth-status                                                     │
+│                                                                                                  │
 │  GENERAL                                                                                         │
 │                                                                                                  │
-│  AUTH - Manage GitHub authentication                                                             │
-│                                                                                                  │
-│    brain [GLOBAL_OPTIONS] github auth                                                            │
-│                                                                                                  │
-│  CLONE - Clone GitHub repository                                                                 │
+│  CLONE - Clone GitHub repository to local directory.                                             │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] github clone <REPO> [OPTIONS]                                          │
 │                                                                                                  │
@@ -764,40 +782,15 @@ Brain CLI - Modular system for Bloom (Executable)
 │      -p                   Target directory (defaults to repo name in current dir) (Optional)     │
 │      --progress/--no-progress Show clone progress (bool) [default: True]                         │
 │                                                                                                  │
-│  ORGS - List GitHub organizations                                                                │
-│                                                                                                  │
-│    brain [GLOBAL_OPTIONS] github orgs                                                            │
-│                                                                                                  │
-│  REPOS - Manage GitHub repositories                                                              │
-│                                                                                                  │
-│    brain [GLOBAL_OPTIONS] github repos                                                           │
-│                                                                                                  │
-│  AUTENTICACIÓN                                                                                   │
-│                                                                                                  │
-│  AUTH LOGIN - Store GitHub authentication token                                                  │
-│                                                                                                  │
-│    brain [GLOBAL_OPTIONS] github auth-login [OPTIONS]                                            │
-│                                                                                                  │
-│    Opciones:                                                                                     │
-│      -t <VALUE>           GitHub Personal Access Token (str)                                     │
-│                                                                                                  │
-│  AUTH LOGOUT - Remove stored GitHub token                                                        │
-│                                                                                                  │
-│    brain [GLOBAL_OPTIONS] github auth-logout                                                     │
-│                                                                                                  │
-│  AUTH STATUS - Check GitHub authentication status                                                │
-│                                                                                                  │
-│    brain [GLOBAL_OPTIONS] github auth-status                                                     │
-│                                                                                                  │
 │  ORGANIZACIONES                                                                                  │
 │                                                                                                  │
-│  ORGS LIST - List GitHub organizations                                                           │
+│  ORGS LIST - List GitHub organizations.                                                          │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] github orgs-list                                                       │
 │                                                                                                  │
 │  REPOSITORIOS                                                                                    │
 │                                                                                                  │
-│  REPOS LIST - List GitHub repositories                                                           │
+│  REPOS LIST - List GitHub repositories.                                                          │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] github repos-list [OPTIONS]                                            │
 │                                                                                                  │
@@ -810,7 +803,7 @@ Brain CLI - Modular system for Bloom (Executable)
 │                                                                                                  │
 │  KEYS                                                                                            │
 │                                                                                                  │
-│  KEYS ADD - Add new Gemini API key                                                               │
+│  KEYS ADD - Add new Gemini API key with profile.                                                 │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] gemini keys-add [OPTIONS]                                              │
 │                                                                                                  │
@@ -819,22 +812,22 @@ Brain CLI - Modular system for Bloom (Executable)
 │      -k <VALUE>           Gemini API key (str)                                                   │
 │      --priority           Priority: 1=preferred, 0=normal, -1=backup (int) [default: 0]          │
 │                                                                                                  │
-│  KEYS DELETE - Delete Gemini API key                                                             │
+│  KEYS DELETE - Delete a Gemini API key.                                                          │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] gemini keys-delete <PROFILE>                                           │
 │                                                                                                  │
 │    Argumentos:                                                                                   │
 │      <PROFILE>            Profile name to delete (str)                                           │
 │                                                                                                  │
-│  KEYS LIST - List all Gemini API keys                                                            │
+│  KEYS LIST - List all Gemini API keys with status.                                               │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] gemini keys-list                                                       │
 │                                                                                                  │
-│  KEYS STATS - Show Gemini keys statistics                                                        │
+│  KEYS STATS - Show global Gemini keys statistics.                                                │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] gemini keys-stats                                                      │
 │                                                                                                  │
-│  KEYS VALIDATE - Validate Gemini API key                                                         │
+│  KEYS VALIDATE - Validate a Gemini API key by testing connection.                                │
 │                                                                                                  │
 │    brain [GLOBAL_OPTIONS] gemini keys-validate <PROFILE>                                         │
 │                                                                                                  │
@@ -845,9 +838,38 @@ Brain CLI - Modular system for Bloom (Executable)
 
 ╭──────────────────────────────────────────── TWITTER ─────────────────────────────────────────────╮
 │                                                                                                  │
-│  TWITTER - Manage Twitter/X authentication and data                                              │
 │                                                                                                  │
-│    brain [GLOBAL_OPTIONS] twitter twitter                                                        │
 │                                                                                                  │
 ╰───────────────────────── Twitter/X integration and social data analysis ─────────────────────────╯
+
+╭───────────────────────────────────────────── CHROME ─────────────────────────────────────────────╮
+│                                                                                                  │
+│  READ                                                                                            │
+│                                                                                                  │
+│  READ LOG - Read and filter Chrome debug logs for a specific profile.                            │
+│                                                                                                  │
+│    brain [GLOBAL_OPTIONS] chrome read-log <PROFILE_ID> [OPTIONS]                                 │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PROFILE_ID>         Chrome profile UUID (str)                                              │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -k                   Keyword to search for (str) [default: bloom]                           │
+│      -b                   Lines of context before match (int) [default: 5]                       │
+│      -a                   Lines of context after match (int) [default: 5]                        │
+│                                                                                                  │
+│  READ NET LOG - Analyze Chrome network logs with intelligent filtering.                          │
+│                                                                                                  │
+│    brain [GLOBAL_OPTIONS] chrome read-net-log <PROFILE_ID> [OPTIONS]                             │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PROFILE_ID>         Chrome profile UUID (str)                                              │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      --filter-ai          Filter for AI service requests only (bool) [default: False]            │
+│      -e                   Exclude URL patterns (Optional)                                        │
+│      --include-quic       Include QUIC protocol events (bool) [default: False]                   │
+│      --show-headers       Show HTTP headers in output (bool) [default: False]                    │
+│                                                                                                  │
+╰─────────────────────── Chrome profile debugging and network log analysis ────────────────────────╯
 

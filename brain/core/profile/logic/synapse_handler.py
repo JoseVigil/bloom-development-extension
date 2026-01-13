@@ -22,10 +22,8 @@ class SynapseHandler:
         
         self.base_dir = base_dir
         self.extension_id = extension_id
-        self.synapse_dir = base_dir / "bin" / "native" / "synapse"
         self.host_exe = base_dir / "bin" / "native" / "bloom-host.exe"
         
-        logger.debug(f"  Synapse dir: {self.synapse_dir}")
         logger.debug(f"  Host executable: {self.host_exe}")
         
         if not self.host_exe.exists():
@@ -36,6 +34,7 @@ class SynapseHandler:
     def provision_bridge(self, profile_id: str) -> str:
         """
         Provisions a unique Synapse bridge for a profile.
+        Creates manifest in profiles/[UUID]/synapse/ and registers in HKCU.
         
         Args:
             profile_id: Full UUID of the profile
@@ -50,15 +49,16 @@ class SynapseHandler:
         logger.debug(f"  Full profile ID: {profile_id}")
         logger.debug(f"  Bridge name: {bridge_name}")
         
-        # Ensure synapse directory exists
-        if not self.synapse_dir.exists():
-            logger.info(f"📁 Creating synapse directory: {self.synapse_dir}")
-            self.synapse_dir.mkdir(parents=True, exist_ok=True)
+        # NUEVO: Synapse dir dentro del perfil
+        synapse_dir = self.base_dir / "profiles" / profile_id / "synapse"
+        if not synapse_dir.exists():
+            logger.info(f"📁 Creating synapse directory: {synapse_dir}")
+            synapse_dir.mkdir(parents=True, exist_ok=True)
         
         try:
             # 1. Create native manifest JSON
             logger.debug("📝 Creating native manifest...")
-            manifest_path = self._create_native_manifest(bridge_name, profile_id)
+            manifest_path = self._create_native_manifest(bridge_name, profile_id, synapse_dir)
             logger.info(f"  ✅ Manifest created: {manifest_path}")
             
             # 2. Register in Windows Registry
@@ -76,9 +76,9 @@ class SynapseHandler:
             logger.error(f"❌ Failed to provision bridge: {e}", exc_info=True)
             raise
     
-    def _create_native_manifest(self, bridge_name: str, profile_id: str) -> Path:
+    def _create_native_manifest(self, bridge_name: str, profile_id: str, synapse_dir: Path) -> Path:
         """Creates the native messaging host JSON manifest."""
-        manifest_path = self.synapse_dir / f"{bridge_name}.json"
+        manifest_path = synapse_dir / f"{bridge_name}.json"
         
         logger.debug(f"Creating manifest at: {manifest_path}")
         
@@ -181,8 +181,9 @@ class SynapseHandler:
         logger.info(f"🗑️ Cleaning up bridge for profile: {short_id}...")
         logger.debug(f"  Bridge name: {bridge_name}")
         
-        # Remove manifest file
-        manifest_path = self.synapse_dir / f"{bridge_name}.json"
+        # Remove manifest file from profile's synapse directory
+        synapse_dir = self.base_dir / "profiles" / profile_id / "synapse"
+        manifest_path = synapse_dir / f"{bridge_name}.json"
         
         if manifest_path.exists():
             try:

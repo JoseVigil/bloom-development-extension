@@ -1,18 +1,8 @@
 BloomNucleus/
 ├── bin/
-│   ├── BloomLauncher.exe
-│   ├── bin/
-│   │   └── native/
-│   │       └── synapse/
-│   │           └── com.bloom.synapse.6042668e.json
 │   ├── brain/
 │   │   ├── _internal/ [... dependencies]
 │   │   └── brain.exe
-│   ├── chrome_100_percent.pak
-│   ├── chrome_200_percent.pak
-│   ├── config/
-│   │   └── profiles.json
-│   ├── d3dcompiler_47.dll
 │   ├── extension/
 │   │   ├── 128x128.png
 │   │   ├── background.js
@@ -20,957 +10,17 @@ BloomNucleus/
 │   │   ├── icon128.png
 │   │   ├── icon16.png
 │   │   └── manifest.json
-│   ├── ffmpeg.dll
-│   ├── icudtl.dat
-│   ├── libEGL.dll
-│   ├── libGLESv2.dll
-│   ├── locales/
-│   │   ├── af.pak
-│   │   ├── am.pak
-│   │   ├── ar.pak
-│   │   ├── bg.pak
-│   │   ├── bn.pak
-│   │   ├── ca.pak
-│   │   ├── cs.pak
-│   │   ├── da.pak
-│   │   ├── de.pak
-│   │   ├── el.pak
-│   │   ├── en-GB.pak
-│   │   ├── en-US.pak
-│   │   ├── es-419.pak
-│   │   ├── es.pak
-│   │   ├── et.pak
-│   │   ├── fa.pak
-│   │   ├── fi.pak
-│   │   ├── fil.pak
-│   │   ├── fr.pak
-│   │   ├── gu.pak
-│   │   ├── he.pak
-│   │   ├── hi.pak
-│   │   ├── hr.pak
-│   │   ├── hu.pak
-│   │   ├── id.pak
-│   │   ├── it.pak
-│   │   ├── ja.pak
-│   │   ├── kn.pak
-│   │   ├── ko.pak
-│   │   ├── lt.pak
-│   │   ├── lv.pak
-│   │   ├── ml.pak
-│   │   ├── mr.pak
-│   │   ├── ms.pak
-│   │   ├── nb.pak
-│   │   ├── nl.pak
-│   │   ├── pl.pak
-│   │   ├── pt-BR.pak
-│   │   ├── pt-PT.pak
-│   │   ├── ro.pak
-│   │   ├── ru.pak
-│   │   ├── sk.pak
-│   │   ├── sl.pak
-│   │   ├── sr.pak
-│   │   ├── sv.pak
-│   │   ├── sw.pak
-│   │   ├── ta.pak
-│   │   ├── te.pak
-│   │   ├── th.pak
-│   │   ├── tr.pak
-│   │   ├── uk.pak
-│   │   ├── ur.pak
-│   │   ├── vi.pak
-│   │   ├── zh-CN.pak
-│   │   └── zh-TW.pak
-│   ├── native/
-│   │   ├── bloom-host.exe
-│   │   ├── brain/
-│   │   │   ├── _internal/ [... dependencies]
-│   │   │   └── brain.exe
-│   │   ├── com.bloom.nucleus.bridge.json
-│   │   ├── libwinpthread-1.dll
-│   │   ├── nssm.exe
-│   │   ├── profiles/
-│   │   │   └── 053fc072-c32c-425f-9da5-ec8fd23d66d6/
-│   │   │       └── landing/
-│   │   │           ├── index.html
-│   │   │           ├── manifest.json
-│   │   │           ├── script.js
-│   │   │           └── styles.css
-│   │   └── profiles.json
-│   ├── profiles/
-│   │   └── 6042668e-7ee0-4cea-8ec6-65b8ffe8e614/
-│   │       ├── ActorSafetyLists/
-│   │       ├── AmountExtractionHeuristicRegexes/
-│   │       ├── AutofillStates/
-│   │       ├── BrowserMetrics/
-│   │       │   ├── BrowserMetrics-6965B3C3-5470.pma
-│   │       │   └── BrowserMetrics-6965B3C4-5238.pma
-│   │       ├── CertificateRevocation/
-│   │       ├── CookieReadinessList/
-│   │       ├── Crashpad/
-│   │       │   ├── attachments/
-│   │       │   ├── metadata
-│   │       │   ├── reports/
-│   │       │   └── settings.dat
-│   │       ├── CrashpadMetrics-active.pma
-│   │       ├── Crowd Deny/
-│   │       ├── Default/
-│   │       │   ├── Account Web Data
-│   │       │   ├── Account Web Data-journal
-│   │       │   ├── Affiliation Database
-│   │       │   ├── Affiliation Database-journal
-│   │       │   ├── AutofillAiModelCache/
-│   │       │   │   ├── LOCK
-│   │       │   │   └── LOG
-│   │       │   ├── AutofillStrikeDatabase/
-│   │       │   │   ├── LOCK
-│   │       │   │   └── LOG
-│   │       │   ├── BookmarkMergedSurfaceOrdering
-│   │       │   ├── BrowsingTopicsSiteData
-│   │       │   ├── BrowsingTopicsSiteData-journal
-│   │       │   ├── BrowsingTopicsState
-│   │       │   ├── BudgetDatabase/
-│   │       │   │   ├── LOCK
-│   │       │   │   └── LOG
-│   │       │   ├── Cache/
-│   │       │   │   ├── Cache_Data/
-│   │       │   │   │   ├── data_0
-│   │       │   │   │   ├── data_1
-│   │       │   │   │   ├── data_2
-│   │       │   │   │   ├── data_3
-│   │       │   │   │   ├── f_000001
-│   │       │   │   │   ├── f_000002
-│   │       │   │   │   ├── f_000003
-│   │       │   │   │   ├── f_000004
-│   │       │   │   │   ├── f_000005
-│   │       │   │   │   ├── f_000006
-│   │       │   │   │   └── index
-│   │       │   │   └── No_Vary_Search/
-│   │       │   │       ├── journal.baj
-│   │       │   │       └── snapshot.baf
-│   │       │   ├── ClientCertificates/
-│   │       │   │   ├── LOCK
-│   │       │   │   └── LOG
-│   │       │   ├── Code Cache/
-│   │       │   │   ├── js/
-│   │       │   │   │   ├── 019e84aa5b0cc939_0
-│   │       │   │   │   ├── 14b64aa8a588e872_0
-│   │       │   │   │   ├── 206a7ee3b9788491_0
-│   │       │   │   │   ├── 24b7a8a86d1ecb70_0
-│   │       │   │   │   ├── 4e5a7926f9aaf581_0
-│   │       │   │   │   ├── b6cf7f51a929799b_0
-│   │       │   │   │   ├── ba678a2fbd8c358c_0
-│   │       │   │   │   ├── bd051b2252b94eda_0
-│   │       │   │   │   ├── index
-│   │       │   │   │   └── index-dir/
-│   │       │   │   │       └── the-real-index
-│   │       │   │   └── wasm/
-│   │       │   │       ├── index
-│   │       │   │       └── index-dir/
-│   │       │   │           └── the-real-index
-│   │       │   ├── DIPS
-│   │       │   ├── DawnGraphiteCache/
-│   │       │   │   ├── data_0
-│   │       │   │   ├── data_1
-│   │       │   │   ├── data_2
-│   │       │   │   ├── data_3
-│   │       │   │   └── index
-│   │       │   ├── DawnWebGPUCache/
-│   │       │   │   ├── data_0
-│   │       │   │   ├── data_1
-│   │       │   │   ├── data_2
-│   │       │   │   ├── data_3
-│   │       │   │   └── index
-│   │       │   ├── Download Service/
-│   │       │   │   ├── EntryDB/
-│   │       │   │   │   ├── LOCK
-│   │       │   │   │   └── LOG
-│   │       │   │   └── Files/
-│   │       │   ├── Extension Rules/
-│   │       │   │   ├── 000003.log
-│   │       │   │   ├── CURRENT
-│   │       │   │   ├── LOCK
-│   │       │   │   ├── LOG
-│   │       │   │   └── MANIFEST-000001
-│   │       │   ├── Extension Scripts/
-│   │       │   │   ├── 000003.log
-│   │       │   │   ├── CURRENT
-│   │       │   │   ├── LOCK
-│   │       │   │   ├── LOG
-│   │       │   │   └── MANIFEST-000001
-│   │       │   ├── Extension State/
-│   │       │   │   ├── 000003.log
-│   │       │   │   ├── CURRENT
-│   │       │   │   ├── LOCK
-│   │       │   │   ├── LOG
-│   │       │   │   └── MANIFEST-000001
-│   │       │   ├── Extensions/
-│   │       │   │   ├── ghbmnnjooekpmoecnnnilnnbdlolhkhi/
-│   │       │   │   │   └── 1.100.1_0/
-│   │       │   │   │       ├── 128.png
-│   │       │   │   │       ├── _locales/
-│   │       │   │   │       │   ├── af/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── am/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── ar/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── as/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── az/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── be/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── bg/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── bn/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── ca/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── cs/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── cy/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── da/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── de/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── el/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── en/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── en_CA/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── en_GB/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── en_US/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── es/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── es_419/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── et/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── eu/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── fa/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── fi/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── fil/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── fr/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── fr_CA/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── gl/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── gu/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── hi/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── hr/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── hu/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── hy/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── id/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── is/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── it/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── iw/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── ja/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── ka/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── kk/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── km/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── kn/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── ko/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── lo/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── lt/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── lv/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── mk/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── ml/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── mn/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── mr/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── ms/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── my/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── ne/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── nl/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── no/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── or/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── pa/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── pl/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── pt_BR/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── pt_PT/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── ro/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── ru/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── si/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── sk/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── sl/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── sq/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── sr/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── sv/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── sw/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── ta/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── te/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── th/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── tr/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── uk/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── ur/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── uz/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── vi/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── zh_CN/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── zh_HK/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   ├── zh_TW/
-│   │       │   │   │       │   │   └── messages.json
-│   │       │   │   │       │   └── zu/
-│   │       │   │   │       │       └── messages.json
-│   │       │   │   │       ├── _metadata/
-│   │       │   │   │       │   ├── computed_hashes.json
-│   │       │   │   │       │   └── verified_contents.json
-│   │       │   │   │       ├── dasherSettingSchema.json
-│   │       │   │   │       ├── manifest.json
-│   │       │   │   │       ├── offscreendocument.html
-│   │       │   │   │       ├── offscreendocument_main.js
-│   │       │   │   │       ├── page_embed_script.js
-│   │       │   │   │       └── service_worker_bin_prod.js
-│   │       │   │   └── nmmhkkegccagdldgiimedpiccmgmieda/
-│   │       │   │       └── 1.0.0.6_0/
-│   │       │   │           ├── _locales/
-│   │       │   │           │   ├── bg/
-│   │       │   │           │   │   └── messages.json
-│   │       │   │           │   ├── ca/
-│   │       │   │           │   │   └── messages.json
-│   │       │   │           │   ├── cs/
-│   │       │   │           │   │   └── messages.json
-│   │       │   │           │   ├── da/
-│   │       │   │           │   │   └── messages.json
-│   │       │   │           │   ├── de/
-│   │       │   │           │   │   └── messages.json
-│   │       │   │           │   ├── el/
-│   │       │   │           │   │   └── messages.json
-│   │       │   │           │   ├── en/
-│   │       │   │           │   │   └── messages.json
-│   │       │   │           │   ├── en_GB/
-│   │       │   │           │   │   └── messages.json
-│   │       │   │           │   ├── es/
-│   │       │   │           │   │   └── messages.json
-│   │       │   │           │   ├── es_419/
-│   │       │   │           │   │   └── messages.json
-│   │       │   │           │   ├── et/
-│   │       │   │           │   │   └── messages.json
-│   │       │   │           │   ├── fi/
-│   │       │   │           │   │   └── messages.json
-│   │       │   │           │   ├── fil/
-│   │       │   │           │   │   └── messages.json
-│   │       │   │           │   ├── fr/
-│   │       │   │           │   │   └── messages.json
-│   │       │   │           │   ├── hi/
-│   │       │   │           │   │   └── messages.json
-│   │       │   │           │   ├── hr/
-│   │       │   │           │   │   └── messages.json
-│   │       │   │           │   ├── hu/
-│   │       │   │           │   │   └── messages.json
-│   │       │   │           │   ├── id/
-│   │       │   │           │   │   └── messages.json
-│   │       │   │           │   ├── it/
-│   │       │   │           │   │   └── messages.json
-│   │       │   │           │   ├── ja/
-│   │       │   │           │   │   └── messages.json
-│   │       │   │           │   ├── ko/
-│   │       │   │           │   │   └── messages.json
-│   │       │   │           │   ├── lt/
-│   │       │   │           │   │   └── messages.json
-│   │       │   │           │   ├── lv/
-│   │       │   │           │   │   └── messages.json
-│   │       │   │           │   ├── nb/
-│   │       │   │           │   │   └── messages.json
-│   │       │   │           │   ├── nl/
-│   │       │   │           │   │   └── messages.json
-│   │       │   │           │   ├── pl/
-│   │       │   │           │   │   └── messages.json
-│   │       │   │           │   ├── pt_BR/
-│   │       │   │           │   │   └── messages.json
-│   │       │   │           │   ├── pt_PT/
-│   │       │   │           │   │   └── messages.json
-│   │       │   │           │   ├── ro/
-│   │       │   │           │   │   └── messages.json
-│   │       │   │           │   ├── ru/
-│   │       │   │           │   │   └── messages.json
-│   │       │   │           │   ├── sk/
-│   │       │   │           │   │   └── messages.json
-│   │       │   │           │   ├── sl/
-│   │       │   │           │   │   └── messages.json
-│   │       │   │           │   ├── sr/
-│   │       │   │           │   │   └── messages.json
-│   │       │   │           │   ├── sv/
-│   │       │   │           │   │   └── messages.json
-│   │       │   │           │   ├── th/
-│   │       │   │           │   │   └── messages.json
-│   │       │   │           │   ├── tr/
-│   │       │   │           │   │   └── messages.json
-│   │       │   │           │   ├── uk/
-│   │       │   │           │   │   └── messages.json
-│   │       │   │           │   ├── vi/
-│   │       │   │           │   │   └── messages.json
-│   │       │   │           │   ├── zh_CN/
-│   │       │   │           │   │   └── messages.json
-│   │       │   │           │   └── zh_TW/
-│   │       │   │           │       └── messages.json
-│   │       │   │           ├── _metadata/
-│   │       │   │           │   ├── computed_hashes.json
-│   │       │   │           │   └── verified_contents.json
-│   │       │   │           ├── craw_background.js
-│   │       │   │           ├── craw_window.js
-│   │       │   │           ├── css/
-│   │       │   │           │   └── craw_window.css
-│   │       │   │           ├── html/
-│   │       │   │           │   └── craw_window.html
-│   │       │   │           ├── images/
-│   │       │   │           │   ├── flapper.gif
-│   │       │   │           │   ├── icon_128.png
-│   │       │   │           │   ├── icon_16.png
-│   │       │   │           │   ├── topbar_floating_button.png
-│   │       │   │           │   ├── topbar_floating_button_close.png
-│   │       │   │           │   ├── topbar_floating_button_hover.png
-│   │       │   │           │   ├── topbar_floating_button_maximize.png
-│   │       │   │           │   └── topbar_floating_button_pressed.png
-│   │       │   │           └── manifest.json
-│   │       │   ├── Favicons
-│   │       │   ├── Favicons-journal
-│   │       │   ├── Feature Engagement Tracker/
-│   │       │   │   ├── AvailabilityDB/
-│   │       │   │   │   ├── LOCK
-│   │       │   │   │   └── LOG
-│   │       │   │   └── EventDB/
-│   │       │   │       ├── LOCK
-│   │       │   │       └── LOG
-│   │       │   ├── GCM Store/
-│   │       │   │   ├── 000003.log
-│   │       │   │   ├── CURRENT
-│   │       │   │   ├── Encryption/
-│   │       │   │   │   ├── 000003.log
-│   │       │   │   │   ├── CURRENT
-│   │       │   │   │   ├── LOCK
-│   │       │   │   │   ├── LOG
-│   │       │   │   │   └── MANIFEST-000001
-│   │       │   │   ├── LOCK
-│   │       │   │   ├── LOG
-│   │       │   │   └── MANIFEST-000001
-│   │       │   ├── GPUCache/
-│   │       │   │   ├── data_0
-│   │       │   │   ├── data_1
-│   │       │   │   ├── data_2
-│   │       │   │   ├── data_3
-│   │       │   │   └── index
-│   │       │   ├── History
-│   │       │   ├── History-journal
-│   │       │   ├── LOCK
-│   │       │   ├── LOG
-│   │       │   ├── Local Extension Settings/
-│   │       │   │   └── ghbmnnjooekpmoecnnnilnnbdlolhkhi/
-│   │       │   │       ├── 000003.log
-│   │       │   │       ├── CURRENT
-│   │       │   │       ├── LOCK
-│   │       │   │       ├── LOG
-│   │       │   │       └── MANIFEST-000001
-│   │       │   ├── Local Storage/
-│   │       │   │   └── leveldb/
-│   │       │   │       ├── 000003.log
-│   │       │   │       ├── CURRENT
-│   │       │   │       ├── LOCK
-│   │       │   │       ├── LOG
-│   │       │   │       └── MANIFEST-000001
-│   │       │   ├── Login Data
-│   │       │   ├── Login Data For Account
-│   │       │   ├── Login Data For Account-journal
-│   │       │   ├── Login Data-journal
-│   │       │   ├── Network/
-│   │       │   │   ├── Cookies
-│   │       │   │   ├── Cookies-journal
-│   │       │   │   ├── Network Persistent State
-│   │       │   │   ├── NetworkDataMigrated
-│   │       │   │   ├── Reporting and NEL
-│   │       │   │   ├── Reporting and NEL-journal
-│   │       │   │   ├── TransportSecurity
-│   │       │   │   ├── Trust Tokens
-│   │       │   │   └── Trust Tokens-journal
-│   │       │   ├── Network Action Predictor
-│   │       │   ├── Network Action Predictor-journal
-│   │       │   ├── PersistentOriginTrials/
-│   │       │   │   ├── LOCK
-│   │       │   │   └── LOG
-│   │       │   ├── Preferences
-│   │       │   ├── PreferredApps
-│   │       │   ├── README
-│   │       │   ├── Safe Browsing Network/
-│   │       │   │   ├── NetworkDataMigrated
-│   │       │   │   ├── Safe Browsing Cookies
-│   │       │   │   └── Safe Browsing Cookies-journal
-│   │       │   ├── Secure Preferences
-│   │       │   ├── Segmentation Platform/
-│   │       │   │   ├── SegmentInfoDB/
-│   │       │   │   │   ├── LOCK
-│   │       │   │   │   └── LOG
-│   │       │   │   ├── SignalDB/
-│   │       │   │   │   ├── LOCK
-│   │       │   │   │   └── LOG
-│   │       │   │   └── SignalStorageConfigDB/
-│   │       │   │       ├── LOCK
-│   │       │   │       └── LOG
-│   │       │   ├── ServerCertificate
-│   │       │   ├── ServerCertificate-journal
-│   │       │   ├── Service Worker/
-│   │       │   │   ├── Database/
-│   │       │   │   │   ├── 000003.log
-│   │       │   │   │   ├── CURRENT
-│   │       │   │   │   ├── LOCK
-│   │       │   │   │   ├── LOG
-│   │       │   │   │   └── MANIFEST-000001
-│   │       │   │   └── ScriptCache/
-│   │       │   │       ├── 2cc80dabc69f58b6_0
-│   │       │   │       ├── 4cb013792b196a35_0
-│   │       │   │       ├── 4cb013792b196a35_1
-│   │       │   │       ├── f1cdccba37924bda_0
-│   │       │   │       ├── f1cdccba37924bda_1
-│   │       │   │       ├── index
-│   │       │   │       └── index-dir/
-│   │       │   │           └── the-real-index
-│   │       │   ├── Session Storage/
-│   │       │   │   ├── 000003.log
-│   │       │   │   ├── CURRENT
-│   │       │   │   ├── LOCK
-│   │       │   │   ├── LOG
-│   │       │   │   └── MANIFEST-000001
-│   │       │   ├── Sessions/
-│   │       │   │   └── Session_13412746438956948
-│   │       │   ├── Shared Dictionary/
-│   │       │   │   ├── cache/
-│   │       │   │   │   ├── index
-│   │       │   │   │   └── index-dir/
-│   │       │   │   │       └── the-real-index
-│   │       │   │   ├── db
-│   │       │   │   └── db-journal
-│   │       │   ├── SharedStorage
-│   │       │   ├── Shortcuts
-│   │       │   ├── Shortcuts-journal
-│   │       │   ├── Site Characteristics Database/
-│   │       │   │   ├── 000003.log
-│   │       │   │   ├── CURRENT
-│   │       │   │   ├── LOCK
-│   │       │   │   ├── LOG
-│   │       │   │   └── MANIFEST-000001
-│   │       │   ├── Storage/
-│   │       │   │   └── ext/
-│   │       │   │       └── nmmhkkegccagdldgiimedpiccmgmieda/
-│   │       │   │           └── def/
-│   │       │   │               ├── Cache/
-│   │       │   │               │   ├── Cache_Data/
-│   │       │   │               │   └── No_Vary_Search/
-│   │       │   │               ├── Code Cache/
-│   │       │   │               │   ├── js/
-│   │       │   │               │   │   ├── 5dea14b9816ec6d9_0
-│   │       │   │               │   │   ├── index
-│   │       │   │               │   │   └── index-dir/
-│   │       │   │               │   │       └── the-real-index
-│   │       │   │               │   └── wasm/
-│   │       │   │               │       ├── index
-│   │       │   │               │       └── index-dir/
-│   │       │   │               │           └── the-real-index
-│   │       │   │               ├── DawnGraphiteCache/
-│   │       │   │               │   ├── data_0
-│   │       │   │               │   ├── data_1
-│   │       │   │               │   ├── data_2
-│   │       │   │               │   ├── data_3
-│   │       │   │               │   └── index
-│   │       │   │               ├── DawnWebGPUCache/
-│   │       │   │               │   ├── data_0
-│   │       │   │               │   ├── data_1
-│   │       │   │               │   ├── data_2
-│   │       │   │               │   ├── data_3
-│   │       │   │               │   └── index
-│   │       │   │               ├── GPUCache/
-│   │       │   │               │   ├── data_0
-│   │       │   │               │   ├── data_1
-│   │       │   │               │   ├── data_2
-│   │       │   │               │   ├── data_3
-│   │       │   │               │   └── index
-│   │       │   │               ├── Local Storage/
-│   │       │   │               │   └── leveldb/
-│   │       │   │               │       ├── 000003.log
-│   │       │   │               │       ├── CURRENT
-│   │       │   │               │       ├── LOCK
-│   │       │   │               │       ├── LOG
-│   │       │   │               │       └── MANIFEST-000001
-│   │       │   │               ├── Network/
-│   │       │   │               │   ├── Network Persistent State
-│   │       │   │               │   ├── NetworkDataMigrated
-│   │       │   │               │   ├── Trust Tokens
-│   │       │   │               │   └── Trust Tokens-journal
-│   │       │   │               ├── Session Storage/
-│   │       │   │               │   ├── 000003.log
-│   │       │   │               │   ├── CURRENT
-│   │       │   │               │   ├── LOCK
-│   │       │   │               │   ├── LOG
-│   │       │   │               │   └── MANIFEST-000001
-│   │       │   │               └── Shared Dictionary/
-│   │       │   │                   ├── cache/
-│   │       │   │                   │   ├── index
-│   │       │   │                   │   └── index-dir/
-│   │       │   │                   │       └── the-real-index
-│   │       │   │                   ├── db
-│   │       │   │                   └── db-journal
-│   │       │   ├── Sync Data/
-│   │       │   │   └── LevelDB/
-│   │       │   │       ├── 000003.log
-│   │       │   │       ├── CURRENT
-│   │       │   │       ├── LOCK
-│   │       │   │       ├── LOG
-│   │       │   │       └── MANIFEST-000001
-│   │       │   ├── Top Sites
-│   │       │   ├── Top Sites-journal
-│   │       │   ├── Web Applications/
-│   │       │   │   ├── Manifest Resources/
-│   │       │   │   │   ├── aghbiahbpaijignceidepookljebhfak/
-│   │       │   │   │   │   ├── Icons/
-│   │       │   │   │   │   │   ├── 128.png
-│   │       │   │   │   │   │   ├── 192.png
-│   │       │   │   │   │   │   ├── 256.png
-│   │       │   │   │   │   │   ├── 32.png
-│   │       │   │   │   │   │   ├── 48.png
-│   │       │   │   │   │   │   ├── 64.png
-│   │       │   │   │   │   │   └── 96.png
-│   │       │   │   │   │   ├── Icons Maskable/
-│   │       │   │   │   │   ├── Icons Monochrome/
-│   │       │   │   │   │   └── Trusted Icons/
-│   │       │   │   │   │       ├── Icons/
-│   │       │   │   │   │       │   └── 192.png
-│   │       │   │   │   │       ├── Icons Maskable/
-│   │       │   │   │   │       └── Icons Monochrome/
-│   │       │   │   │   ├── agimnkijcaahngcdmfeangaknmldooml/
-│   │       │   │   │   │   ├── Icons/
-│   │       │   │   │   │   │   ├── 128.png
-│   │       │   │   │   │   │   ├── 192.png
-│   │       │   │   │   │   │   ├── 256.png
-│   │       │   │   │   │   │   ├── 32.png
-│   │       │   │   │   │   │   ├── 48.png
-│   │       │   │   │   │   │   ├── 64.png
-│   │       │   │   │   │   │   └── 96.png
-│   │       │   │   │   │   ├── Icons Maskable/
-│   │       │   │   │   │   ├── Icons Monochrome/
-│   │       │   │   │   │   └── Trusted Icons/
-│   │       │   │   │   │       ├── Icons/
-│   │       │   │   │   │       │   └── 192.png
-│   │       │   │   │   │       ├── Icons Maskable/
-│   │       │   │   │   │       └── Icons Monochrome/
-│   │       │   │   │   ├── fhihpiojkbmbpdjeoajapmgkhlnakfjf/
-│   │       │   │   │   │   ├── Icons/
-│   │       │   │   │   │   │   ├── 128.png
-│   │       │   │   │   │   │   ├── 192.png
-│   │       │   │   │   │   │   ├── 256.png
-│   │       │   │   │   │   │   ├── 32.png
-│   │       │   │   │   │   │   ├── 48.png
-│   │       │   │   │   │   │   ├── 64.png
-│   │       │   │   │   │   │   └── 96.png
-│   │       │   │   │   │   ├── Icons Maskable/
-│   │       │   │   │   │   ├── Icons Monochrome/
-│   │       │   │   │   │   └── Trusted Icons/
-│   │       │   │   │   │       ├── Icons/
-│   │       │   │   │   │       │   └── 192.png
-│   │       │   │   │   │       ├── Icons Maskable/
-│   │       │   │   │   │       └── Icons Monochrome/
-│   │       │   │   │   ├── fmgjjmmmlfnkbppncabfkddbjimcfncm/
-│   │       │   │   │   │   ├── Icons/
-│   │       │   │   │   │   │   ├── 128.png
-│   │       │   │   │   │   │   ├── 192.png
-│   │       │   │   │   │   │   ├── 256.png
-│   │       │   │   │   │   │   ├── 32.png
-│   │       │   │   │   │   │   ├── 48.png
-│   │       │   │   │   │   │   ├── 64.png
-│   │       │   │   │   │   │   └── 96.png
-│   │       │   │   │   │   ├── Icons Maskable/
-│   │       │   │   │   │   ├── Icons Monochrome/
-│   │       │   │   │   │   └── Trusted Icons/
-│   │       │   │   │   │       ├── Icons/
-│   │       │   │   │   │       │   └── 192.png
-│   │       │   │   │   │       ├── Icons Maskable/
-│   │       │   │   │   │       └── Icons Monochrome/
-│   │       │   │   │   ├── kefjledonklijopmnomlcbpllchaibag/
-│   │       │   │   │   │   ├── Icons/
-│   │       │   │   │   │   │   ├── 128.png
-│   │       │   │   │   │   │   ├── 192.png
-│   │       │   │   │   │   │   ├── 256.png
-│   │       │   │   │   │   │   ├── 32.png
-│   │       │   │   │   │   │   ├── 48.png
-│   │       │   │   │   │   │   ├── 64.png
-│   │       │   │   │   │   │   └── 96.png
-│   │       │   │   │   │   ├── Icons Maskable/
-│   │       │   │   │   │   ├── Icons Monochrome/
-│   │       │   │   │   │   └── Trusted Icons/
-│   │       │   │   │   │       ├── Icons/
-│   │       │   │   │   │       │   └── 192.png
-│   │       │   │   │   │       ├── Icons Maskable/
-│   │       │   │   │   │       └── Icons Monochrome/
-│   │       │   │   │   ├── mdpkiolbdkhdjpekfbkbmhigcaggjagi/
-│   │       │   │   │   │   ├── Icons/
-│   │       │   │   │   │   │   ├── 128.png
-│   │       │   │   │   │   │   ├── 192.png
-│   │       │   │   │   │   │   ├── 256.png
-│   │       │   │   │   │   │   ├── 32.png
-│   │       │   │   │   │   │   ├── 48.png
-│   │       │   │   │   │   │   ├── 64.png
-│   │       │   │   │   │   │   └── 96.png
-│   │       │   │   │   │   ├── Icons Maskable/
-│   │       │   │   │   │   ├── Icons Monochrome/
-│   │       │   │   │   │   └── Trusted Icons/
-│   │       │   │   │   │       ├── Icons/
-│   │       │   │   │   │       │   └── 192.png
-│   │       │   │   │   │       ├── Icons Maskable/
-│   │       │   │   │   │       └── Icons Monochrome/
-│   │       │   │   │   └── mpnpojknpmmopombnjdcgaaiekajbnjb/
-│   │       │   │   │       ├── Icons/
-│   │       │   │   │       │   ├── 128.png
-│   │       │   │   │       │   ├── 192.png
-│   │       │   │   │       │   ├── 256.png
-│   │       │   │   │       │   ├── 32.png
-│   │       │   │   │       │   ├── 48.png
-│   │       │   │   │       │   ├── 64.png
-│   │       │   │   │       │   └── 96.png
-│   │       │   │   │       ├── Icons Maskable/
-│   │       │   │   │       ├── Icons Monochrome/
-│   │       │   │   │       └── Trusted Icons/
-│   │       │   │   │           ├── Icons/
-│   │       │   │   │           │   └── 192.png
-│   │       │   │   │           ├── Icons Maskable/
-│   │       │   │   │           └── Icons Monochrome/
-│   │       │   │   └── Temp/
-│   │       │   ├── Web Data
-│   │       │   ├── Web Data-journal
-│   │       │   ├── WebStorage/
-│   │       │   │   ├── QuotaManager
-│   │       │   │   └── QuotaManager-journal
-│   │       │   ├── blob_storage/
-│   │       │   │   └── 59e02e6d-cb37-4344-9406-98dbe0da2a0d/
-│   │       │   ├── chrome_cart_db/
-│   │       │   │   ├── LOCK
-│   │       │   │   └── LOG
-│   │       │   ├── commerce_subscription_db/
-│   │       │   │   ├── LOCK
-│   │       │   │   └── LOG
-│   │       │   ├── discount_infos_db/
-│   │       │   │   ├── LOCK
-│   │       │   │   └── LOG
-│   │       │   ├── discounts_db/
-│   │       │   │   ├── LOCK
-│   │       │   │   └── LOG
-│   │       │   ├── heavy_ad_intervention_opt_out.db
-│   │       │   ├── heavy_ad_intervention_opt_out.db-journal
-│   │       │   ├── optimization_guide_hint_cache_store/
-│   │       │   │   ├── LOCK
-│   │       │   │   └── LOG
-│   │       │   ├── parcel_tracking_db/
-│   │       │   │   ├── LOCK
-│   │       │   │   └── LOG
-│   │       │   ├── shared_proto_db/
-│   │       │   │   ├── 000003.log
-│   │       │   │   ├── CURRENT
-│   │       │   │   ├── LOCK
-│   │       │   │   ├── LOG
-│   │       │   │   ├── MANIFEST-000001
-│   │       │   │   └── metadata/
-│   │       │   │       ├── 000003.log
-│   │       │   │       ├── CURRENT
-│   │       │   │       ├── LOCK
-│   │       │   │       ├── LOG
-│   │       │   │       └── MANIFEST-000001
-│   │       │   └── trusted_vault.pb
-│   │       ├── FileTypePolicies/
-│   │       ├── FirstPartySetsPreloaded/
-│   │       ├── GrShaderCache/
-│   │       │   ├── data_0
-│   │       │   ├── data_1
-│   │       │   ├── data_2
-│   │       │   ├── data_3
-│   │       │   └── index
-│   │       ├── GraphiteDawnCache/
-│   │       │   ├── data_0
-│   │       │   ├── data_1
-│   │       │   ├── data_2
-│   │       │   ├── data_3
-│   │       │   └── index
-│   │       ├── Last Browser
-│   │       ├── Last Version
-│   │       ├── Local State
-│   │       ├── MEIPreload/
-│   │       ├── MediaFoundationWidevineCdm/
-│   │       │   └── x64/
-│   │       ├── OnDeviceHeadSuggestModel/
-│   │       ├── OpenCookieDatabase/
-│   │       ├── OptimizationHints/
-│   │       ├── OriginTrials/
-│   │       ├── PKIMetadata/
-│   │       ├── PrivacySandboxAttestationsPreloaded/
-│   │       ├── ProbabilisticRevealTokenRegistry/
-│   │       ├── RecoveryImproved/
-│   │       ├── SSLErrorAssistant/
-│   │       ├── Safe Browsing/
-│   │       ├── SafetyTips/
-│   │       ├── ShaderCache/
-│   │       │   ├── data_0
-│   │       │   ├── data_1
-│   │       │   ├── data_2
-│   │       │   ├── data_3
-│   │       │   └── index
-│   │       ├── Subresource Filter/
-│   │       │   └── Unindexed Rules/
-│   │       ├── TpcdMetadata/
-│   │       ├── TrustTokenKeyCommitments/
-│   │       ├── Variations
-│   │       ├── WasmTtsEngine/
-│   │       ├── WidevineCdm/
-│   │       ├── ZxcvbnData/
-│   │       ├── chrome_debug.log
-│   │       ├── component_crx_cache/
-│   │       │   └── metadata.json
-│   │       ├── discovery/
-│   │       │   ├── config.js
-│   │       │   ├── index.html
-│   │       │   ├── script.js
-│   │       │   └── styles.css
-│   │       ├── extension/
-│   │       │   ├── 128x128.png
-│   │       │   ├── background.js
-│   │       │   ├── content.js
-│   │       │   ├── icon128.png
-│   │       │   ├── icon16.png
-│   │       │   ├── manifest.json
-│   │       │   └── synapse.config.js
-│   │       ├── extensions_crx_cache/
-│   │       │   └── metadata.json
-│   │       ├── first_party_sets.db
-│   │       ├── first_party_sets.db-journal
-│   │       ├── hyphen-data/
-│   │       ├── landing/
-│   │       │   ├── manifest.json
-│   │       │   ├── script.js
-│   │       │   └── styles.css
-│   │       ├── optimization_guide_model_store/
-│   │       │   ├── 13/
-│   │       │   │   └── E6DC4029A1E4B4C1/
-│   │       │   │       └── 8EDE0DE98BEE3612/
-│   │       │   │           ├── model-info.pb
-│   │       │   │           └── model.tflite
-│   │       │   ├── 15/
-│   │       │   │   └── E6DC4029A1E4B4C1/
-│   │       │   │       └── 3BC396711380041C/
-│   │       │   │           ├── VERSION.txt
-│   │       │   │           ├── model-info.pb
-│   │       │   │           ├── model.tflite
-│   │       │   │           └── override_list.pb.gz
-│   │       │   ├── 2/
-│   │       │   │   └── E6DC4029A1E4B4C1/
-│   │       │   │       └── 5FBC88A86D559859/
-│   │       │   │           ├── model-info.pb
-│   │       │   │           └── model.tflite
-│   │       │   ├── 20/
-│   │       │   │   └── E6DC4029A1E4B4C1/
-│   │       │   │       └── 0C2E0196A2B5AF32/
-│   │       │   │           ├── model-info.pb
-│   │       │   │           └── model.tflite
-│   │       │   ├── 24/
-│   │       │   │   └── E6DC4029A1E4B4C1/
-│   │       │   │       └── DBAAE9CBC386F06D/
-│   │       │   │           ├── enus_denylist_encoded_241007.txt
-│   │       │   │           ├── model-info.pb
-│   │       │   │           ├── model.tflite
-│   │       │   │           └── vocab_en-us.txt
-│   │       │   ├── 25/
-│   │       │   │   └── E6DC4029A1E4B4C1/
-│   │       │   │       └── 9D7947CCBEE2AD00/
-│   │       │   │           ├── model-info.pb
-│   │       │   │           ├── model.tflite
-│   │       │   │           └── visual_model_desktop.tflite
-│   │       │   ├── 26/
-│   │       │   │   └── E6DC4029A1E4B4C1/
-│   │       │   │       └── A23AB32F807E3A73/
-│   │       │   │           ├── model-info.pb
-│   │       │   │           └── model.tflite
-│   │       │   ├── 45/
-│   │       │   │   └── E6DC4029A1E4B4C1/
-│   │       │   │       └── 3AD398C080AAB29E/
-│   │       │   │           ├── model-info.pb
-│   │       │   │           └── model.tflite
-│   │       │   └── 9/
-│   │       │       └── E6DC4029A1E4B4C1/
-│   │       │           └── F3F044BF251ACF97/
-│   │       │               ├── model-info.pb
-│   │       │               └── model.tflite
-│   │       └── segmentation_platform/
-│   │           ├── ukm_db
-│   │           └── ukm_db-wal
-│   ├── resources/
-│   │   ├── launcher-main.js
-│   │   └── package.json
-│   ├── resources.pak
-│   ├── snapshot_blob.bin
-│   ├── v8_context_snapshot.bin
-│   ├── vk_swiftshader.dll
-│   └── vulkan-1.dll
+│   └── native/
+│       ├── bloom-host.exe
+│       ├── nssm.exe
+│       └── synapse/
+│           └── com.bloom.synapse.fa01c634.json
 ├── config/
-│   └── nucleus.json
+│   ├── nucleus.json
+│   └── profiles.json
 ├── engine/
 │   └── runtime/
 │       ├── LICENSE.txt
-│       ├── Lib/
-│       │   └── site-packages/
-│       │       └── brain/
-│       │           ├── _internal/ [... dependencies]
-│       │           └── brain.exe
 │       ├── _asyncio.pyd
 │       ├── _bz2.pyd
 │       ├── _ctypes.pyd
@@ -1004,8 +54,876 @@ BloomNucleus/
 │       ├── vcruntime140.dll
 │       ├── vcruntime140_1.dll
 │       └── winsound.pyd
-└── logs/
-    ├── brain_core_20260112.log
-    ├── brain_core_20260113.log
-    ├── brain_error.log
-    └── brain_service.log
+├── logs/
+│   ├── brain_core_20260113.log
+│   ├── brain_error.log
+│   ├── brain_service.log
+│   └── profiles/
+│       └── fa01c634-f5fa-401d-8fe9-14912e5fdb8f/
+│           ├── chrome_bloom_log_20260113.log
+│           └── chrome_net.log
+└── profiles/
+    └── fa01c634-f5fa-401d-8fe9-14912e5fdb8f/
+        ├── ActorSafetyLists/
+        ├── AmountExtractionHeuristicRegexes/
+        ├── AutofillStates/
+        ├── BrowserMetrics/
+        │   └── BrowserMetrics-6966AD96-328C.pma
+        ├── BrowserMetrics-spare.pma
+        ├── CertificateRevocation/
+        ├── CookieReadinessList/
+        ├── Crashpad/
+        │   ├── attachments/
+        │   ├── metadata
+        │   ├── reports/
+        │   └── settings.dat
+        ├── CrashpadMetrics-active.pma
+        ├── Crowd Deny/
+        ├── Default/
+        │   ├── Account Web Data
+        │   ├── Account Web Data-journal
+        │   ├── Affiliation Database
+        │   ├── Affiliation Database-journal
+        │   ├── AutofillAiModelCache/
+        │   │   ├── LOCK
+        │   │   └── LOG
+        │   ├── AutofillStrikeDatabase/
+        │   │   ├── LOCK
+        │   │   └── LOG
+        │   ├── BookmarkMergedSurfaceOrdering
+        │   ├── BrowsingTopicsSiteData
+        │   ├── BrowsingTopicsSiteData-journal
+        │   ├── BrowsingTopicsState
+        │   ├── BudgetDatabase/
+        │   │   ├── LOCK
+        │   │   └── LOG
+        │   ├── Cache/
+        │   │   ├── Cache_Data/
+        │   │   │   ├── data_0
+        │   │   │   ├── data_1
+        │   │   │   ├── data_2
+        │   │   │   ├── data_3
+        │   │   │   ├── f_000002
+        │   │   │   ├── f_000003
+        │   │   │   ├── f_000004
+        │   │   │   ├── f_000005
+        │   │   │   ├── f_000006
+        │   │   │   ├── f_000007
+        │   │   │   └── index
+        │   │   └── No_Vary_Search/
+        │   │       ├── journal.baj
+        │   │       └── snapshot.baf
+        │   ├── ClientCertificates/
+        │   │   ├── LOCK
+        │   │   └── LOG
+        │   ├── Code Cache/
+        │   │   ├── js/
+        │   │   │   ├── 24b7a8a86d1ecb70_0
+        │   │   │   ├── 2912f53cb6ffe1b3_0
+        │   │   │   ├── 3c0f3ba421a5f81f_0
+        │   │   │   ├── 58c14d83a584f559_0
+        │   │   │   ├── a8b18da328eb035e_0
+        │   │   │   ├── ba678a2fbd8c358c_0
+        │   │   │   ├── bd051b2252b94eda_0
+        │   │   │   ├── dbdb5d27aa53f035_0
+        │   │   │   ├── index
+        │   │   │   └── index-dir/
+        │   │   │       └── the-real-index
+        │   │   └── wasm/
+        │   │       ├── index
+        │   │       └── index-dir/
+        │   │           └── the-real-index
+        │   ├── DIPS
+        │   ├── DIPS-wal
+        │   ├── DawnGraphiteCache/
+        │   │   ├── data_0
+        │   │   ├── data_1
+        │   │   ├── data_2
+        │   │   ├── data_3
+        │   │   └── index
+        │   ├── DawnWebGPUCache/
+        │   │   ├── data_0
+        │   │   ├── data_1
+        │   │   ├── data_2
+        │   │   ├── data_3
+        │   │   └── index
+        │   ├── Download Service/
+        │   │   ├── EntryDB/
+        │   │   │   ├── LOCK
+        │   │   │   └── LOG
+        │   │   └── Files/
+        │   ├── Extension Rules/
+        │   │   ├── 000003.log
+        │   │   ├── CURRENT
+        │   │   ├── LOCK
+        │   │   ├── LOG
+        │   │   └── MANIFEST-000001
+        │   ├── Extension Scripts/
+        │   │   ├── 000003.log
+        │   │   ├── CURRENT
+        │   │   ├── LOCK
+        │   │   ├── LOG
+        │   │   └── MANIFEST-000001
+        │   ├── Extension State/
+        │   │   ├── 000003.log
+        │   │   ├── CURRENT
+        │   │   ├── LOCK
+        │   │   ├── LOG
+        │   │   └── MANIFEST-000001
+        │   ├── Extensions/
+        │   │   ├── ghbmnnjooekpmoecnnnilnnbdlolhkhi/
+        │   │   │   └── 1.100.1_0/
+        │   │   │       ├── 128.png
+        │   │   │       ├── _locales/
+        │   │   │       │   ├── af/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── am/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── ar/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── as/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── az/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── be/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── bg/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── bn/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── ca/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── cs/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── cy/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── da/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── de/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── el/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── en/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── en_CA/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── en_GB/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── en_US/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── es/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── es_419/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── et/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── eu/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── fa/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── fi/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── fil/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── fr/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── fr_CA/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── gl/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── gu/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── hi/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── hr/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── hu/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── hy/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── id/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── is/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── it/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── iw/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── ja/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── ka/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── kk/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── km/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── kn/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── ko/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── lo/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── lt/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── lv/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── mk/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── ml/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── mn/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── mr/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── ms/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── my/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── ne/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── nl/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── no/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── or/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── pa/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── pl/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── pt_BR/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── pt_PT/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── ro/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── ru/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── si/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── sk/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── sl/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── sq/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── sr/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── sv/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── sw/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── ta/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── te/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── th/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── tr/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── uk/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── ur/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── uz/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── vi/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── zh_CN/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── zh_HK/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   ├── zh_TW/
+        │   │   │       │   │   └── messages.json
+        │   │   │       │   └── zu/
+        │   │   │       │       └── messages.json
+        │   │   │       ├── _metadata/
+        │   │   │       │   ├── computed_hashes.json
+        │   │   │       │   └── verified_contents.json
+        │   │   │       ├── dasherSettingSchema.json
+        │   │   │       ├── manifest.json
+        │   │   │       ├── offscreendocument.html
+        │   │   │       ├── offscreendocument_main.js
+        │   │   │       ├── page_embed_script.js
+        │   │   │       └── service_worker_bin_prod.js
+        │   │   └── nmmhkkegccagdldgiimedpiccmgmieda/
+        │   │       └── 1.0.0.6_0/
+        │   │           ├── _locales/
+        │   │           │   ├── bg/
+        │   │           │   │   └── messages.json
+        │   │           │   ├── ca/
+        │   │           │   │   └── messages.json
+        │   │           │   ├── cs/
+        │   │           │   │   └── messages.json
+        │   │           │   ├── da/
+        │   │           │   │   └── messages.json
+        │   │           │   ├── de/
+        │   │           │   │   └── messages.json
+        │   │           │   ├── el/
+        │   │           │   │   └── messages.json
+        │   │           │   ├── en/
+        │   │           │   │   └── messages.json
+        │   │           │   ├── en_GB/
+        │   │           │   │   └── messages.json
+        │   │           │   ├── es/
+        │   │           │   │   └── messages.json
+        │   │           │   ├── es_419/
+        │   │           │   │   └── messages.json
+        │   │           │   ├── et/
+        │   │           │   │   └── messages.json
+        │   │           │   ├── fi/
+        │   │           │   │   └── messages.json
+        │   │           │   ├── fil/
+        │   │           │   │   └── messages.json
+        │   │           │   ├── fr/
+        │   │           │   │   └── messages.json
+        │   │           │   ├── hi/
+        │   │           │   │   └── messages.json
+        │   │           │   ├── hr/
+        │   │           │   │   └── messages.json
+        │   │           │   ├── hu/
+        │   │           │   │   └── messages.json
+        │   │           │   ├── id/
+        │   │           │   │   └── messages.json
+        │   │           │   ├── it/
+        │   │           │   │   └── messages.json
+        │   │           │   ├── ja/
+        │   │           │   │   └── messages.json
+        │   │           │   ├── ko/
+        │   │           │   │   └── messages.json
+        │   │           │   ├── lt/
+        │   │           │   │   └── messages.json
+        │   │           │   ├── lv/
+        │   │           │   │   └── messages.json
+        │   │           │   ├── nb/
+        │   │           │   │   └── messages.json
+        │   │           │   ├── nl/
+        │   │           │   │   └── messages.json
+        │   │           │   ├── pl/
+        │   │           │   │   └── messages.json
+        │   │           │   ├── pt_BR/
+        │   │           │   │   └── messages.json
+        │   │           │   ├── pt_PT/
+        │   │           │   │   └── messages.json
+        │   │           │   ├── ro/
+        │   │           │   │   └── messages.json
+        │   │           │   ├── ru/
+        │   │           │   │   └── messages.json
+        │   │           │   ├── sk/
+        │   │           │   │   └── messages.json
+        │   │           │   ├── sl/
+        │   │           │   │   └── messages.json
+        │   │           │   ├── sr/
+        │   │           │   │   └── messages.json
+        │   │           │   ├── sv/
+        │   │           │   │   └── messages.json
+        │   │           │   ├── th/
+        │   │           │   │   └── messages.json
+        │   │           │   ├── tr/
+        │   │           │   │   └── messages.json
+        │   │           │   ├── uk/
+        │   │           │   │   └── messages.json
+        │   │           │   ├── vi/
+        │   │           │   │   └── messages.json
+        │   │           │   ├── zh_CN/
+        │   │           │   │   └── messages.json
+        │   │           │   └── zh_TW/
+        │   │           │       └── messages.json
+        │   │           ├── _metadata/
+        │   │           │   ├── computed_hashes.json
+        │   │           │   └── verified_contents.json
+        │   │           ├── craw_background.js
+        │   │           ├── craw_window.js
+        │   │           ├── css/
+        │   │           │   └── craw_window.css
+        │   │           ├── html/
+        │   │           │   └── craw_window.html
+        │   │           ├── images/
+        │   │           │   ├── flapper.gif
+        │   │           │   ├── icon_128.png
+        │   │           │   ├── icon_16.png
+        │   │           │   ├── topbar_floating_button.png
+        │   │           │   ├── topbar_floating_button_close.png
+        │   │           │   ├── topbar_floating_button_hover.png
+        │   │           │   ├── topbar_floating_button_maximize.png
+        │   │           │   └── topbar_floating_button_pressed.png
+        │   │           └── manifest.json
+        │   ├── Favicons
+        │   ├── Favicons-journal
+        │   ├── Feature Engagement Tracker/
+        │   │   ├── AvailabilityDB/
+        │   │   │   ├── LOCK
+        │   │   │   └── LOG
+        │   │   └── EventDB/
+        │   │       ├── LOCK
+        │   │       └── LOG
+        │   ├── GCM Store/
+        │   │   ├── 000003.log
+        │   │   ├── CURRENT
+        │   │   ├── Encryption/
+        │   │   │   ├── 000003.log
+        │   │   │   ├── CURRENT
+        │   │   │   ├── LOCK
+        │   │   │   ├── LOG
+        │   │   │   └── MANIFEST-000001
+        │   │   ├── LOCK
+        │   │   ├── LOG
+        │   │   └── MANIFEST-000001
+        │   ├── GPUCache/
+        │   │   ├── data_0
+        │   │   ├── data_1
+        │   │   ├── data_2
+        │   │   ├── data_3
+        │   │   └── index
+        │   ├── History
+        │   ├── History-journal
+        │   ├── LOCK
+        │   ├── LOG
+        │   ├── Local Extension Settings/
+        │   │   └── ghbmnnjooekpmoecnnnilnnbdlolhkhi/
+        │   │       ├── 000003.log
+        │   │       ├── CURRENT
+        │   │       ├── LOCK
+        │   │       ├── LOG
+        │   │       └── MANIFEST-000001
+        │   ├── Local Storage/
+        │   │   └── leveldb/
+        │   │       ├── 000003.log
+        │   │       ├── CURRENT
+        │   │       ├── LOCK
+        │   │       ├── LOG
+        │   │       └── MANIFEST-000001
+        │   ├── Login Data
+        │   ├── Login Data For Account
+        │   ├── Login Data For Account-journal
+        │   ├── Login Data-journal
+        │   ├── Network/
+        │   │   ├── Cookies
+        │   │   ├── Cookies-journal
+        │   │   ├── Network Persistent State
+        │   │   ├── NetworkDataMigrated
+        │   │   ├── Reporting and NEL
+        │   │   ├── Reporting and NEL-journal
+        │   │   ├── TransportSecurity
+        │   │   ├── Trust Tokens
+        │   │   └── Trust Tokens-journal
+        │   ├── Network Action Predictor
+        │   ├── Network Action Predictor-journal
+        │   ├── PersistentOriginTrials/
+        │   │   ├── LOCK
+        │   │   └── LOG
+        │   ├── Preferences
+        │   ├── PreferredApps
+        │   ├── README
+        │   ├── Safe Browsing Network/
+        │   │   ├── NetworkDataMigrated
+        │   │   ├── Safe Browsing Cookies
+        │   │   └── Safe Browsing Cookies-journal
+        │   ├── Secure Preferences
+        │   ├── Segmentation Platform/
+        │   │   ├── SegmentInfoDB/
+        │   │   │   ├── LOCK
+        │   │   │   └── LOG
+        │   │   ├── SignalDB/
+        │   │   │   ├── LOCK
+        │   │   │   └── LOG
+        │   │   └── SignalStorageConfigDB/
+        │   │       ├── LOCK
+        │   │       └── LOG
+        │   ├── ServerCertificate
+        │   ├── ServerCertificate-journal
+        │   ├── Service Worker/
+        │   │   ├── Database/
+        │   │   │   ├── 000003.log
+        │   │   │   ├── CURRENT
+        │   │   │   ├── LOCK
+        │   │   │   ├── LOG
+        │   │   │   └── MANIFEST-000001
+        │   │   └── ScriptCache/
+        │   │       ├── 2cc80dabc69f58b6_0
+        │   │       ├── 4cb013792b196a35_0
+        │   │       ├── 4cb013792b196a35_1
+        │   │       ├── f1cdccba37924bda_0
+        │   │       ├── f1cdccba37924bda_1
+        │   │       ├── index
+        │   │       └── index-dir/
+        │   │           └── the-real-index
+        │   ├── Session Storage/
+        │   │   ├── 000003.log
+        │   │   ├── CURRENT
+        │   │   ├── LOCK
+        │   │   ├── LOG
+        │   │   └── MANIFEST-000001
+        │   ├── Sessions/
+        │   │   └── Session_13412810393213812
+        │   ├── Shared Dictionary/
+        │   │   ├── cache/
+        │   │   │   ├── index
+        │   │   │   └── index-dir/
+        │   │   │       └── the-real-index
+        │   │   ├── db
+        │   │   └── db-journal
+        │   ├── SharedStorage
+        │   ├── SharedStorage-wal
+        │   ├── Shortcuts
+        │   ├── Shortcuts-journal
+        │   ├── Site Characteristics Database/
+        │   │   ├── 000003.log
+        │   │   ├── CURRENT
+        │   │   ├── LOCK
+        │   │   ├── LOG
+        │   │   └── MANIFEST-000001
+        │   ├── Storage/
+        │   │   └── ext/
+        │   │       └── nmmhkkegccagdldgiimedpiccmgmieda/
+        │   │           └── def/
+        │   │               ├── Cache/
+        │   │               │   ├── Cache_Data/
+        │   │               │   └── No_Vary_Search/
+        │   │               ├── Code Cache/
+        │   │               │   ├── js/
+        │   │               │   │   ├── 5dea14b9816ec6d9_0
+        │   │               │   │   ├── index
+        │   │               │   │   └── index-dir/
+        │   │               │   │       └── the-real-index
+        │   │               │   └── wasm/
+        │   │               │       ├── index
+        │   │               │       └── index-dir/
+        │   │               │           └── the-real-index
+        │   │               ├── DawnGraphiteCache/
+        │   │               │   ├── data_0
+        │   │               │   ├── data_1
+        │   │               │   ├── data_2
+        │   │               │   ├── data_3
+        │   │               │   └── index
+        │   │               ├── DawnWebGPUCache/
+        │   │               │   ├── data_0
+        │   │               │   ├── data_1
+        │   │               │   ├── data_2
+        │   │               │   ├── data_3
+        │   │               │   └── index
+        │   │               ├── GPUCache/
+        │   │               │   ├── data_0
+        │   │               │   ├── data_1
+        │   │               │   ├── data_2
+        │   │               │   ├── data_3
+        │   │               │   └── index
+        │   │               ├── Local Storage/
+        │   │               │   └── leveldb/
+        │   │               │       ├── 000003.log
+        │   │               │       ├── CURRENT
+        │   │               │       ├── LOCK
+        │   │               │       ├── LOG
+        │   │               │       └── MANIFEST-000001
+        │   │               ├── Network/
+        │   │               │   ├── Network Persistent State
+        │   │               │   ├── NetworkDataMigrated
+        │   │               │   ├── Trust Tokens
+        │   │               │   └── Trust Tokens-journal
+        │   │               ├── Session Storage/
+        │   │               │   ├── 000003.log
+        │   │               │   ├── CURRENT
+        │   │               │   ├── LOCK
+        │   │               │   ├── LOG
+        │   │               │   └── MANIFEST-000001
+        │   │               ├── Shared Dictionary/
+        │   │               │   ├── cache/
+        │   │               │   │   ├── index
+        │   │               │   │   └── index-dir/
+        │   │               │   │       └── the-real-index
+        │   │               │   ├── db
+        │   │               │   └── db-journal
+        │   │               ├── SharedStorage
+        │   │               └── SharedStorage-wal
+        │   ├── Sync Data/
+        │   │   └── LevelDB/
+        │   │       ├── 000003.log
+        │   │       ├── CURRENT
+        │   │       ├── LOCK
+        │   │       ├── LOG
+        │   │       └── MANIFEST-000001
+        │   ├── Top Sites
+        │   ├── Top Sites-journal
+        │   ├── Web Applications/
+        │   │   ├── Manifest Resources/
+        │   │   │   ├── aghbiahbpaijignceidepookljebhfak/
+        │   │   │   │   ├── Icons/
+        │   │   │   │   │   ├── 128.png
+        │   │   │   │   │   ├── 192.png
+        │   │   │   │   │   ├── 256.png
+        │   │   │   │   │   ├── 32.png
+        │   │   │   │   │   ├── 48.png
+        │   │   │   │   │   ├── 64.png
+        │   │   │   │   │   └── 96.png
+        │   │   │   │   ├── Icons Maskable/
+        │   │   │   │   ├── Icons Monochrome/
+        │   │   │   │   └── Trusted Icons/
+        │   │   │   │       ├── Icons/
+        │   │   │   │       │   └── 192.png
+        │   │   │   │       ├── Icons Maskable/
+        │   │   │   │       └── Icons Monochrome/
+        │   │   │   ├── agimnkijcaahngcdmfeangaknmldooml/
+        │   │   │   │   ├── Icons/
+        │   │   │   │   │   ├── 128.png
+        │   │   │   │   │   ├── 192.png
+        │   │   │   │   │   ├── 256.png
+        │   │   │   │   │   ├── 32.png
+        │   │   │   │   │   ├── 48.png
+        │   │   │   │   │   ├── 64.png
+        │   │   │   │   │   └── 96.png
+        │   │   │   │   ├── Icons Maskable/
+        │   │   │   │   ├── Icons Monochrome/
+        │   │   │   │   └── Trusted Icons/
+        │   │   │   │       ├── Icons/
+        │   │   │   │       │   └── 192.png
+        │   │   │   │       ├── Icons Maskable/
+        │   │   │   │       └── Icons Monochrome/
+        │   │   │   ├── fhihpiojkbmbpdjeoajapmgkhlnakfjf/
+        │   │   │   │   ├── Icons/
+        │   │   │   │   │   ├── 128.png
+        │   │   │   │   │   ├── 192.png
+        │   │   │   │   │   ├── 256.png
+        │   │   │   │   │   ├── 32.png
+        │   │   │   │   │   ├── 48.png
+        │   │   │   │   │   ├── 64.png
+        │   │   │   │   │   └── 96.png
+        │   │   │   │   ├── Icons Maskable/
+        │   │   │   │   ├── Icons Monochrome/
+        │   │   │   │   └── Trusted Icons/
+        │   │   │   │       ├── Icons/
+        │   │   │   │       │   └── 192.png
+        │   │   │   │       ├── Icons Maskable/
+        │   │   │   │       └── Icons Monochrome/
+        │   │   │   ├── fmgjjmmmlfnkbppncabfkddbjimcfncm/
+        │   │   │   │   ├── Icons/
+        │   │   │   │   │   ├── 128.png
+        │   │   │   │   │   ├── 192.png
+        │   │   │   │   │   ├── 256.png
+        │   │   │   │   │   ├── 32.png
+        │   │   │   │   │   ├── 48.png
+        │   │   │   │   │   ├── 64.png
+        │   │   │   │   │   └── 96.png
+        │   │   │   │   ├── Icons Maskable/
+        │   │   │   │   ├── Icons Monochrome/
+        │   │   │   │   └── Trusted Icons/
+        │   │   │   │       ├── Icons/
+        │   │   │   │       │   └── 192.png
+        │   │   │   │       ├── Icons Maskable/
+        │   │   │   │       └── Icons Monochrome/
+        │   │   │   ├── kefjledonklijopmnomlcbpllchaibag/
+        │   │   │   │   ├── Icons/
+        │   │   │   │   │   ├── 128.png
+        │   │   │   │   │   ├── 192.png
+        │   │   │   │   │   ├── 256.png
+        │   │   │   │   │   ├── 32.png
+        │   │   │   │   │   ├── 48.png
+        │   │   │   │   │   ├── 64.png
+        │   │   │   │   │   └── 96.png
+        │   │   │   │   ├── Icons Maskable/
+        │   │   │   │   ├── Icons Monochrome/
+        │   │   │   │   └── Trusted Icons/
+        │   │   │   │       ├── Icons/
+        │   │   │   │       │   └── 192.png
+        │   │   │   │       ├── Icons Maskable/
+        │   │   │   │       └── Icons Monochrome/
+        │   │   │   ├── mdpkiolbdkhdjpekfbkbmhigcaggjagi/
+        │   │   │   │   ├── Icons/
+        │   │   │   │   │   ├── 128.png
+        │   │   │   │   │   ├── 192.png
+        │   │   │   │   │   ├── 256.png
+        │   │   │   │   │   ├── 32.png
+        │   │   │   │   │   ├── 48.png
+        │   │   │   │   │   ├── 64.png
+        │   │   │   │   │   └── 96.png
+        │   │   │   │   ├── Icons Maskable/
+        │   │   │   │   ├── Icons Monochrome/
+        │   │   │   │   └── Trusted Icons/
+        │   │   │   │       ├── Icons/
+        │   │   │   │       │   └── 192.png
+        │   │   │   │       ├── Icons Maskable/
+        │   │   │   │       └── Icons Monochrome/
+        │   │   │   └── mpnpojknpmmopombnjdcgaaiekajbnjb/
+        │   │   │       ├── Icons/
+        │   │   │       │   ├── 128.png
+        │   │   │       │   ├── 192.png
+        │   │   │       │   ├── 256.png
+        │   │   │       │   ├── 32.png
+        │   │   │       │   ├── 48.png
+        │   │   │       │   ├── 64.png
+        │   │   │       │   └── 96.png
+        │   │   │       ├── Icons Maskable/
+        │   │   │       ├── Icons Monochrome/
+        │   │   │       └── Trusted Icons/
+        │   │   │           ├── Icons/
+        │   │   │           │   └── 192.png
+        │   │   │           ├── Icons Maskable/
+        │   │   │           └── Icons Monochrome/
+        │   │   └── Temp/
+        │   ├── Web Data
+        │   ├── Web Data-journal
+        │   ├── WebStorage/
+        │   │   ├── QuotaManager
+        │   │   └── QuotaManager-journal
+        │   ├── blob_storage/
+        │   │   └── efcbcd07-ce98-4b83-9969-9f9ca7a991d5/
+        │   ├── chrome_cart_db/
+        │   │   ├── LOCK
+        │   │   └── LOG
+        │   ├── commerce_subscription_db/
+        │   │   ├── LOCK
+        │   │   └── LOG
+        │   ├── discount_infos_db/
+        │   │   ├── LOCK
+        │   │   └── LOG
+        │   ├── discounts_db/
+        │   │   ├── LOCK
+        │   │   └── LOG
+        │   ├── heavy_ad_intervention_opt_out.db
+        │   ├── heavy_ad_intervention_opt_out.db-journal
+        │   ├── optimization_guide_hint_cache_store/
+        │   │   ├── LOCK
+        │   │   └── LOG
+        │   ├── parcel_tracking_db/
+        │   │   ├── LOCK
+        │   │   └── LOG
+        │   ├── passkey_enclave_state
+        │   ├── shared_proto_db/
+        │   │   ├── 000003.log
+        │   │   ├── CURRENT
+        │   │   ├── LOCK
+        │   │   ├── LOG
+        │   │   ├── MANIFEST-000001
+        │   │   └── metadata/
+        │   │       ├── 000003.log
+        │   │       ├── CURRENT
+        │   │       ├── LOCK
+        │   │       ├── LOG
+        │   │       └── MANIFEST-000001
+        │   └── trusted_vault.pb
+        ├── DeferredBrowserMetrics/
+        ├── FileTypePolicies/
+        ├── FirstPartySetsPreloaded/
+        ├── GrShaderCache/
+        │   ├── data_0
+        │   ├── data_1
+        │   ├── data_2
+        │   ├── data_3
+        │   └── index
+        ├── GraphiteDawnCache/
+        │   ├── data_0
+        │   ├── data_1
+        │   ├── data_2
+        │   ├── data_3
+        │   └── index
+        ├── Last Browser
+        ├── Last Version
+        ├── Local State
+        ├── MEIPreload/
+        ├── MediaFoundationWidevineCdm/
+        │   └── x64/
+        ├── OnDeviceHeadSuggestModel/
+        ├── OpenCookieDatabase/
+        ├── OptimizationHints/
+        ├── OriginTrials/
+        ├── PKIMetadata/
+        ├── PrivacySandboxAttestationsPreloaded/
+        ├── ProbabilisticRevealTokenRegistry/
+        ├── RecoveryImproved/
+        ├── SSLErrorAssistant/
+        ├── Safe Browsing/
+        ├── SafetyTips/
+        ├── ShaderCache/
+        │   ├── data_0
+        │   ├── data_1
+        │   ├── data_2
+        │   ├── data_3
+        │   └── index
+        ├── Subresource Filter/
+        │   └── Unindexed Rules/
+        ├── TpcdMetadata/
+        ├── TrustTokenKeyCommitments/
+        ├── Variations
+        ├── WasmTtsEngine/
+        ├── WidevineCdm/
+        ├── ZxcvbnData/
+        ├── c931c95e-ee03-40e0-a607-8f3eeed45a6a.tmp
+        ├── chrome_debug.log
+        ├── component_crx_cache/
+        │   └── metadata.json
+        ├── discovery/
+        │   ├── config.js
+        │   ├── index.html
+        │   ├── script.js
+        │   └── styles.css
+        ├── extension/
+        │   ├── 128x128.png
+        │   ├── background.js
+        │   ├── content.js
+        │   ├── icon128.png
+        │   ├── icon16.png
+        │   ├── manifest.json
+        │   └── synapse.config.js
+        ├── extensions_crx_cache/
+        │   └── metadata.json
+        ├── first_party_sets.db
+        ├── first_party_sets.db-journal
+        ├── hyphen-data/
+        ├── landing/
+        │   ├── manifest.json
+        │   ├── script.js
+        │   └── styles.css
+        ├── lockfile
+        ├── optimization_guide_model_store/
+        │   ├── 13/
+        │   │   └── E6DC4029A1E4B4C1/
+        │   │       └── 33BF290ABAA1199F/
+        │   │           ├── model-info.pb
+        │   │           └── model.tflite
+        │   ├── 15/
+        │   │   └── E6DC4029A1E4B4C1/
+        │   │       └── C5ACFB95BA6EBBAC/
+        │   │           ├── VERSION.txt
+        │   │           ├── model-info.pb
+        │   │           ├── model.tflite
+        │   │           └── override_list.pb.gz
+        │   ├── 2/
+        │   │   └── E6DC4029A1E4B4C1/
+        │   │       └── 152753B25DB9569B/
+        │   │           ├── model-info.pb
+        │   │           └── model.tflite
+        │   ├── 20/
+        │   │   └── E6DC4029A1E4B4C1/
+        │   │       └── 25163D5A2E127E81/
+        │   │           ├── model-info.pb
+        │   │           └── model.tflite
+        │   ├── 24/
+        │   │   └── E6DC4029A1E4B4C1/
+        │   │       └── E459EA3A589EA988/
+        │   │           ├── enus_denylist_encoded_241007.txt
+        │   │           ├── model-info.pb
+        │   │           ├── model.tflite
+        │   │           └── vocab_en-us.txt
+        │   ├── 25/
+        │   │   └── E6DC4029A1E4B4C1/
+        │   │       └── 0ED2596C07AA04ED/
+        │   │           ├── model-info.pb
+        │   │           ├── model.tflite
+        │   │           └── visual_model_desktop.tflite
+        │   ├── 26/
+        │   │   └── E6DC4029A1E4B4C1/
+        │   │       └── DA59BD8A80DCE1C9/
+        │   │           ├── model-info.pb
+        │   │           └── model.tflite
+        │   ├── 45/
+        │   │   └── E6DC4029A1E4B4C1/
+        │   │       └── 2B9DF73F0AE71FD6/
+        │   │           ├── model-info.pb
+        │   │           └── model.tflite
+        │   └── 9/
+        │       └── E6DC4029A1E4B4C1/
+        │           └── 4C4E5FE0986FF019/
+        │               ├── model-info.pb
+        │               └── model.tflite
+        └── segmentation_platform/
+            ├── ukm_db
+            └── ukm_db-wal

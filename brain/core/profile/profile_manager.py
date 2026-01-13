@@ -19,7 +19,7 @@ from brain.shared.logger import get_logger
 
 # Imports de lógica (Subcarpeta logic)
 from .logic.profile_store import ProfileStore
-from .logic.chrome_launcher import ChromeLauncher
+from .logic.chrome_resolver import ChromeResolver
 from .logic.synapse_handler import SynapseHandler
 
 # Imports de web (Subcarpeta web)
@@ -36,7 +36,7 @@ class ProfileManager:
     def __init__(self):
         logger.info("🚀 Inicializando ProfileManager")
         self.paths = PathResolver()
-        self.chrome_launcher = ChromeLauncher()
+        self.chrome_launcher = ChromeResolver()
         logger.debug(f"  → profiles_json: {self.paths.profiles_json}")
         logger.debug(f"  → profiles_dir: {self.paths.profiles_dir}")
         
@@ -214,7 +214,9 @@ class ProfileManager:
             "alias": alias,
             "bridge_name": bridge_name,
             "created_at": datetime.now().isoformat(),
-            "linked_account": None
+            "linked_account": None,
+            "path": str(profile_path),  
+            "net_log_path": str(self.paths.base_dir / "logs" / "profiles" / profile_id / "chrome_net.log")  # ← NUEVO
         }
         profiles.append(data)
         self._save_profiles(profiles)
@@ -354,10 +356,10 @@ class ProfileManager:
         except Exception as e:
             logger.error(f"❌ Error en discovery: {e}", exc_info=True)
         
-        # 4. Generar Landing
+        # 4. Generar Landing (CRÍTICO - FALTABA ESTO)
         logger.info("  📄 Generando landing page...")
         try:
-            self._generate_landing(profile_path, profile)
+            self._generate_landing(profile_path, profile)  # ← AÑADIR ESTA LLAMADA
         except Exception as e:
             logger.error(f"❌ Error en landing: {e}", exc_info=True)
         
@@ -402,10 +404,15 @@ class ProfileManager:
             raise ValueError(f"Profile not found: {profile_id}")
         
         full_id = profile['id']
-        profile_path = self.paths.profiles_dir / full_id
-        
+        profile_path = self.paths.profiles_dir / full_id      
+
         logger.info(f"  → Perfil: {profile.get('alias')} ({full_id[:8]})")
         logger.info(f"  → Path: {profile_path}")
+
+        net_log_path = self.paths.base_dir / "logs" / "profiles" / full_id / "chrome_net.log"
+        net_log_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        logger.debug(f"  → Net log path: {net_log_path}")
         
         # Provisioning
         logger.info("  🔄 Sincronizando recursos...")
@@ -447,9 +454,15 @@ class ProfileManager:
             "--no-default-browser-check",
             "--no-service-autorun",
             "--password-store=basic",
-            "--restore-last-session"
+            "--disable-features=IsolateOrigins,site-per-process", # Máquinas con poca RAM
+            "--disable-search-engine-choice-screen" # Google Motor de Busqueda por defecto evita molestar usuario
         ]
-        
+
+        # Solo si activamos el modo debug profundo
+        if os.environ.get("BLOOM_DEBUG_NET") == "true" or self.verbose_network:
+            chrome_args.append(f"--log-net-log={str(net_log_path)}")
+            chrome_args.append("--net-log-capture-mode=Everything")
+
         logger.debug(f"  → Argumentos: {len(chrome_args)} args")
         
         # Lanzar proceso

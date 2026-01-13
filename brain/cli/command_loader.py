@@ -20,6 +20,15 @@ def load_all_commands_explicit() -> CommandRegistry:
     registry = CommandRegistry()
     
     # =================================================================
+    # CHROME
+    # =================================================================
+    try:
+        from brain.commands.chrome.chrome import ChromeCommand
+        registry.register(ChromeCommand())
+    except ImportError as e:
+        print(f"Warning: Could not load ChromeCommand: {e}")
+    
+    # =================================================================
     # CONTEXT
     # =================================================================
     try:
@@ -585,6 +594,7 @@ def get_hiddenimports_list():
         Lista de strings con los import paths
     """
     return [
+        'brain.commands.chrome.chrome',
         'brain.commands.context.generate',
         'brain.commands.extension.backups',
         'brain.commands.extension.install',

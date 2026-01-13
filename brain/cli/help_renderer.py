@@ -18,7 +18,6 @@ from brain.cli.registry import CommandRegistry
 
 
 class JSONEncoder(json.JSONEncoder):
-    """Custom JSON encoder to handle non-serializable types."""
     def default(self, obj):
         if isinstance(obj, Path):
             return str(obj)
@@ -30,12 +29,10 @@ class JSONEncoder(json.JSONEncoder):
 
 
 def is_frozen_executable():
-    """Detecta si estamos corriendo como ejecutable empaquetado."""
     return getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS')
 
 
 def get_executable_name():
-    """Retorna el nombre del ejecutable según el contexto."""
     if is_frozen_executable():
         return "brain"
     else:
@@ -51,7 +48,6 @@ class HelpStructure:
 
 @dataclass
 class CommandParameter:
-    """Represents a command parameter with its metadata."""
     flag: str
     is_required: bool
     help_text: str
@@ -60,8 +56,16 @@ class CommandParameter:
     default_value: Optional[Any] = None
 
 
+@dataclass
+class DiscoveredCommand:
+    name: str
+    callback: Any
+    description: str
+    source_class: BaseCommand
+    category: CommandCategory
+
+
 def _python_type_to_json_schema(py_type: Any) -> Dict[str, Any]:
-    """Convert Python type hints to JSON Schema types."""
     type_mapping = {
         str: {"type": "string"},
         int: {"type": "integer"},
@@ -70,24 +74,42 @@ def _python_type_to_json_schema(py_type: Any) -> Dict[str, Any]:
         list: {"type": "array"},
         dict: {"type": "object"},
     }
-    
-    # Handle Optional types
     origin = getattr(py_type, '__origin__', None)
     if origin is type(None):
         return {"type": "null"}
-    
-    # Get base type
     base_type = py_type if origin is None else origin
-    
     return type_mapping.get(base_type, {"type": "string"})
 
 
+def _discover_commands_from_class(cmd: BaseCommand, category: CommandCategory) -> List[DiscoveredCommand]:
+    temp_app = typer.Typer()
+    cmd.register(temp_app)
+    discovered = []
+    if not temp_app.registered_commands:
+        return discovered
+    for registered_cmd in temp_app.registered_commands:
+        cmd_name = registered_cmd.name
+        callback = registered_cmd.callback
+        description = ""
+        if callback and callback.__doc__:
+            description = callback.__doc__.strip().split('\n')[0]
+        if not description:
+            meta = cmd.metadata()
+            description = meta.description
+        discovered.append(DiscoveredCommand(
+            name=cmd_name,
+            callback=callback,
+            description=description,
+            source_class=cmd,
+            category=category
+        ))
+    return discovered
+
+
 def _extract_structure(registry: CommandRegistry) -> HelpStructure:
-    """Extract command structure from registry."""
     categories = set()
     commands_by_category = defaultdict(list)
     root_commands = []
-    
     for cmd in registry.get_all_commands():
         meta = cmd.metadata()
         if meta.is_root:
@@ -95,7 +117,6 @@ def _extract_structure(registry: CommandRegistry) -> HelpStructure:
         else:
             categories.add(meta.category)
             commands_by_category[meta.category].append(cmd)
-    
     return HelpStructure(
         categories=sorted(categories, key=lambda c: c.category_name),
         commands_by_category=dict(commands_by_category),
@@ -104,21 +125,16 @@ def _extract_structure(registry: CommandRegistry) -> HelpStructure:
 
 
 def _extract_params_with_help(callback) -> List[CommandParameter]:
-    """Extract parameters with enhanced type information."""
     if not callback:
         return []
-    
     params = []
     sig = inspect.signature(callback)
     type_hints = get_type_hints(callback) if callback else {}
-    
     for name, param in sig.parameters.items():
         if name == "ctx":
             continue
-        
         default = param.default
         type_hint = type_hints.get(name)
-        
         if isinstance(default, OptionInfo):
             flag = None
             if hasattr(default, "param_decls") and default.param_decls:
@@ -127,11 +143,8 @@ def _extract_params_with_help(callback) -> List[CommandParameter]:
                 flag = short_flags[0] if short_flags else (long_flags[0] if long_flags else default.param_decls[0])
             else:
                 flag = f"--{name.replace('_', '-')}"
-            
             help_text = default.help or ""
             is_required = default.default == ...
-            
-            # Convert default value to JSON-serializable type
             default_val = None
             if not is_required and default.default is not None:
                 if isinstance(default.default, (str, int, float, bool)):
@@ -140,10 +153,8 @@ def _extract_params_with_help(callback) -> List[CommandParameter]:
                     default_val = str(default.default)
                 else:
                     default_val = str(default.default)
-            
             if is_required:
                 flag = f"{flag} <VALUE>"
-            
             params.append(CommandParameter(
                 flag=flag,
                 is_required=is_required,
@@ -155,7 +166,6 @@ def _extract_params_with_help(callback) -> List[CommandParameter]:
         elif param.default == inspect.Parameter.empty or isinstance(default, ArgumentInfo):
             arg_name = f"<{name.upper()}>"
             help_text = default.help if isinstance(default, ArgumentInfo) and hasattr(default, 'help') else ""
-            
             params.append(CommandParameter(
                 flag=arg_name,
                 is_required=True,
@@ -164,56 +174,42 @@ def _extract_params_with_help(callback) -> List[CommandParameter]:
                 type_hint=str(type_hint.__name__) if type_hint else None,
                 default_value=None
             ))
-    
     return params
 
 
-def _detect_subsections(category: CommandCategory, commands: List[BaseCommand]) -> Dict[str, List[BaseCommand]]:
-    """Detect subsections based on command name prefixes."""
-    if not commands:
+def _detect_subsections(category: CommandCategory, discovered_commands: List[DiscoveredCommand]) -> Dict[str, List[DiscoveredCommand]]:
+    if not discovered_commands:
         return {'': []}
-    
     subsections = defaultdict(list)
     section_titles = {
-        'auth': 'AUTENTICACIÓN',
-        'repos': 'REPOSITORIOS',
-        'orgs': 'ORGANIZACIONES',
-        'build': 'BUILD',
-        'keys': 'KEYS',
-        'accounts': 'ACCOUNTS',
+        'auth': 'AUTENTICACIÓN', 'repos': 'REPOSITORIOS', 'orgs': 'ORGANIZACIONES',
+        'build': 'BUILD', 'keys': 'KEYS', 'accounts': 'ACCOUNTS', 'read': 'READ',
+        'exp': 'EXP', 'add': 'ADD', 'list': 'LIST', 'create': 'CREATE',
+        'onboarding': 'ONBOARDING', 'project': 'PROJECT',
     }
-    
-    for cmd in commands:
-        name = cmd.metadata().name
+    for dcmd in discovered_commands:
+        name = dcmd.name
         if '-' in name:
             prefix = name.split('-')[0]
             section_name = section_titles.get(prefix, prefix.upper())
-            subsections[section_name].append(cmd)
+            subsections[section_name].append(dcmd)
         else:
-            subsections['_main'].append(cmd)
-    
+            subsections['_main'].append(dcmd)
     if len(subsections) == 1 and '_main' in subsections:
         return {'': subsections['_main']}
-    
     result = {}
     for section_name, section_commands in subsections.items():
         if section_name == '_main' and section_commands:
             result['GENERAL'] = section_commands
         elif section_commands:
             result[section_name] = section_commands
-    
     return result
 
 
-def _infer_command_intent(cmd: BaseCommand, category: CommandCategory) -> List[str]:
-    """Infer semantic intents from command metadata."""
-    meta = cmd.metadata()
-    name = meta.name.lower()
-    desc = meta.description.lower()
-    
+def _infer_command_intent(dcmd: DiscoveredCommand) -> List[str]:
+    name = dcmd.name.lower()
+    desc = dcmd.description.lower()
     intents = []
-    
-    # Intent patterns
     if 'create' in name or 'new' in name or 'init' in name:
         intents.append('create_resource')
     if 'delete' in name or 'remove' in name or 'destroy' in name:
@@ -228,403 +224,138 @@ def _infer_command_intent(cmd: BaseCommand, category: CommandCategory) -> List[s
         intents.append('authentication')
     if 'build' in name or 'compile' in name:
         intents.append('build_artifact')
-    
     return intents or ['general_operation']
 
 
-def _build_openai_function_schema(cmd: BaseCommand, category: CommandCategory, params: List[CommandParameter]) -> Dict[str, Any]:
-    """Build OpenAI-compatible function calling schema."""
-    meta = cmd.metadata()
-    
-    # Build parameters schema
+def _build_openai_function_schema(dcmd: DiscoveredCommand, params: List[CommandParameter]) -> Dict[str, Any]:
     properties = {}
     required = []
-    
     for param in params:
-        param_name = param.flag.strip('<>').lower().replace(' ', '_')
-        
-        schema = {
-            "type": "string",  # Default
-            "description": param.help_text or f"Parameter {param_name}"
-        }
-        
-        # Enhance with type hints
+        param_name = param.flag.strip('<>').lower().replace(' ', '_').replace('-', '_')
+        schema = {"type": "string", "description": param.help_text or f"Parameter {param_name}"}
         if param.type_hint:
-            type_map = {
-                'str': 'string',
-                'int': 'integer',
-                'float': 'number',
-                'bool': 'boolean',
-                'list': 'array',
-                'dict': 'object'
-            }
+            type_map = {'str': 'string', 'int': 'integer', 'float': 'number', 'bool': 'boolean', 'list': 'array', 'dict': 'object'}
             schema["type"] = type_map.get(param.type_hint, "string")
-        
-        # Add default value
         if param.default_value is not None:
             schema["default"] = param.default_value
-        
         properties[param_name] = schema
-        
         if param.is_required:
             required.append(param_name)
-    
     exe_name = get_executable_name()
-    full_command = f"{category.category_name} {meta.name}"
-    
+    full_command = f"{dcmd.category.category_name} {dcmd.name}"
+    function_name = f"brain_{dcmd.category.category_name}_{dcmd.name}".replace('-', '_')
     return {
         "type": "function",
         "function": {
-            "name": f"brain_{category.category_name}_{meta.name}".replace('-', '_'),
-            "description": f"{meta.description}. Execute via: {exe_name} {full_command}",
-            "parameters": {
-                "type": "object",
-                "properties": properties,
-                "required": required
-            },
+            "name": function_name,
+            "description": f"{dcmd.description}. Execute via: {exe_name} {full_command}",
+            "parameters": {"type": "object", "properties": properties, "required": required},
             "metadata": {
-                "category": category.category_name,
-                "command": meta.name,
+                "category": dcmd.category.category_name,
+                "command": dcmd.name,
                 "full_syntax": f"{exe_name} [--json] [--verbose] {full_command}",
-                "intents": _infer_command_intent(cmd, category),
-                "is_idempotent": 'list' in meta.name or 'get' in meta.name or 'show' in meta.name,
-                "is_destructive": 'delete' in meta.name or 'remove' in meta.name,
-                "estimated_duration": "fast" if 'ping' in meta.name or 'status' in meta.name else "medium"
+                "intents": _infer_command_intent(dcmd),
+                "is_idempotent": 'list' in dcmd.name or 'get' in dcmd.name or 'show' in dcmd.name,
+                "is_destructive": 'delete' in dcmd.name or 'remove' in dcmd.name,
+                "estimated_duration": "fast" if 'ping' in dcmd.name or 'status' in dcmd.name else "medium"
             }
         }
     }
 
 
 def _build_ai_native_json(registry: CommandRegistry) -> Dict[str, Any]:
-    """Build comprehensive AI-native JSON structure."""
     structure = _extract_structure(registry)
     exe_name = get_executable_name()
     is_exe = is_frozen_executable()
-    
-    # OpenAI function calling compatible tools
     tools = []
-    
-    # Semantic intent mappings
     intent_mappings = defaultdict(list)
-    
-    # Command dependency graph
     dependency_graph = {}
-    
-    # Process all commands
     for category in structure.categories:
         commands = structure.commands_by_category.get(category, [])
-        
         for cmd in commands:
-            meta = cmd.metadata()
-            
-            # Extract parameters
-            temp_app = typer.Typer()
-            cmd.register(temp_app)
-            params = []
-            if temp_app.registered_commands:
-                registered = temp_app.registered_commands[0]
-                params = _extract_params_with_help(registered.callback)
-            
-            # Build OpenAI function schema
-            function_schema = _build_openai_function_schema(cmd, category, params)
-            tools.append(function_schema)
-            
-            # Map intents
-            intents = _infer_command_intent(cmd, category)
-            for intent in intents:
-                intent_mappings[intent].append(f"{category.category_name} {meta.name}")
-            
-            # Build dependency hints (example logic)
-            if 'create' in meta.name and category.category_name == 'nucleus':
-                dependency_graph[f"{category.category_name} {meta.name}"] = {
-                    "suggests": ["github auth-login"],
-                    "requires": []
-                }
-    
-    # Build comprehensive schema
+            discovered_commands = _discover_commands_from_class(cmd, category)
+            for dcmd in discovered_commands:
+                params = _extract_params_with_help(dcmd.callback)
+                function_schema = _build_openai_function_schema(dcmd, params)
+                tools.append(function_schema)
+                intents = _infer_command_intent(dcmd)
+                for intent in intents:
+                    intent_mappings[intent].append(f"{category.category_name} {dcmd.name}")
+                if 'create' in dcmd.name and category.category_name == 'nucleus':
+                    dependency_graph[f"{category.category_name} {dcmd.name}"] = {"suggests": ["github auth-login"], "requires": []}
     ai_schema = {
         "$schema": "http://json-schema.org/draft-07/schema#",
         "title": "Brain CLI - AI-Native Tool Definitions",
         "version": "2.0.0",
         "description": "Complete function calling schema for AI agents to interact with Brain CLI",
-        "metadata": {
-            "cli_name": "Brain CLI",
-            "executable": exe_name,
-            "mode": "executable" if is_exe else "development",
-            "supports_json_output": True,
-            "supports_streaming": False,
-            "max_parallel_commands": 5
-        },
-        
-        # OpenAI-compatible tools array
+        "metadata": {"cli_name": "Brain CLI", "executable": exe_name, "mode": "executable" if is_exe else "development", "supports_json_output": True, "supports_streaming": False, "max_parallel_commands": 5},
         "tools": tools,
-        
-        # Semantic layer
-        "semantic_layer": {
-            "intent_mappings": dict(intent_mappings),
-            "dependency_graph": dependency_graph,
-            "command_categories": [
-                {
-                    "name": cat.category_name,
-                    "description": cat.category_description,
-                    "command_count": len(structure.commands_by_category.get(cat, []))
-                }
-                for cat in structure.categories
-            ]
-        },
-        
-        # Execution policies
-        "execution_policies": {
-            "global_options": {
-                "--json": {
-                    "position": "before_category",
-                    "description": "Enable JSON output for machine parsing",
-                    "affects_all_commands": True
-                },
-                "--verbose": {
-                    "position": "before_category",
-                    "description": "Enable detailed logging",
-                    "affects_all_commands": True
-                }
-            },
-            "safety_rails": {
-                "require_confirmation": [
-                    cmd["function"]["name"] 
-                    for cmd in tools 
-                    if cmd["function"]["metadata"]["is_destructive"]
-                ],
-                "idempotent_commands": [
-                    cmd["function"]["name"] 
-                    for cmd in tools 
-                    if cmd["function"]["metadata"]["is_idempotent"]
-                ]
-            }
-        },
-        
-        # Usage examples for few-shot prompting
-        "usage_examples": [
-            {
-                "user_intent": "Check if the system is healthy",
-                "commands": [
-                    {"tool": "brain_health_native_ping", "params": {}},
-                    {"tool": "brain_health_onboarding_status", "params": {}}
-                ],
-                "explanation": "Run health checks to verify system connectivity"
-            },
-            {
-                "user_intent": "Create a new Nucleus project",
-                "commands": [
-                    {"tool": "brain_github_auth_login", "params": {}},
-                    {"tool": "brain_nucleus_create", "params": {"name": "my-project"}}
-                ],
-                "explanation": "First authenticate with GitHub, then create the project"
-            }
-        ],
-        
-        # Error recovery patterns
-        "error_recovery": {
-            "common_patterns": [
-                {
-                    "error_signature": "authentication.*failed",
-                    "suggested_commands": ["brain_github_auth_login"],
-                    "description": "Re-authenticate with GitHub"
-                },
-                {
-                    "error_signature": "connection.*timeout",
-                    "suggested_commands": ["brain_health_native_ping"],
-                    "description": "Verify network connectivity"
-                }
-            ]
-        },
-        
-        # Agent protocol
-        "agent_protocol": {
-            "version": "1.0",
-            "capabilities": {
-                "can_chain_commands": True,
-                "supports_rollback": False,
-                "supports_dry_run": True,
-                "supports_parallel_execution": False
-            },
-            "communication": {
-                "input_format": "natural_language | structured_json",
-                "output_format": "json",
-                "progress_updates": "synchronous"
-            }
-        }
+        "semantic_layer": {"intent_mappings": dict(intent_mappings), "dependency_graph": dependency_graph, "command_categories": [{"name": cat.category_name, "description": cat.category_description, "command_count": len(structure.commands_by_category.get(cat, []))} for cat in structure.categories]},
+        "execution_policies": {"global_options": {"--json": {"position": "before_category", "description": "Enable JSON output for machine parsing", "affects_all_commands": True}, "--verbose": {"position": "before_category", "description": "Enable detailed logging", "affects_all_commands": True}}, "safety_rails": {"require_confirmation": [cmd["function"]["name"] for cmd in tools if cmd["function"]["metadata"]["is_destructive"]], "idempotent_commands": [cmd["function"]["name"] for cmd in tools if cmd["function"]["metadata"]["is_idempotent"]]}},
+        "usage_examples": [{"user_intent": "Check if the system is healthy", "commands": [{"tool": "brain_health_native_ping", "params": {}}, {"tool": "brain_health_onboarding_status", "params": {}}], "explanation": "Run health checks to verify system connectivity"}],
+        "error_recovery": {"common_patterns": [{"error_signature": "authentication.*failed", "suggested_commands": ["brain_github_auth_login"], "description": "Re-authenticate with GitHub"}]},
+        "agent_protocol": {"version": "1.0", "capabilities": {"can_chain_commands": True, "supports_rollback": False, "supports_dry_run": True, "supports_parallel_execution": False}, "communication": {"input_format": "natural_language | structured_json", "output_format": "json", "progress_updates": "synchronous"}}
     }
-    
     return ai_schema
 
 
 def _build_json_structure(registry: CommandRegistry) -> Dict[str, Any]:
-    """Build legacy JSON structure for backwards compatibility."""
     structure = _extract_structure(registry)
     exe_name = get_executable_name()
     is_exe = is_frozen_executable()
-    
     json_output = {
-        "cli_info": {
-            "name": "Brain CLI",
-            "version": "1.0.0",
-            "description": "Modular system for Bloom",
-            "executable": exe_name,
-            "mode": "executable" if is_exe else "development"
-        },
-        "global_options": [
-            {
-                "flag": "--json",
-                "description": "Salida en formato JSON (debe ir ANTES del comando)",
-                "position": "before_category"
-            },
-            {
-                "flag": "--verbose",
-                "description": "Habilitar logging detallado (debe ir ANTES del comando)",
-                "position": "before_category"
-            },
-            {
-                "flag": "--help",
-                "description": "Mostrar este mensaje de ayuda",
-                "position": "anywhere"
-            }
-        ],
-        "usage": {
-            "syntax": f"{exe_name} [OPTIONS] <category> <command> [COMMAND_OPTIONS]",
-            "examples": [
-                {
-                    "description": "Comando básico",
-                    "command": f"{exe_name} health native-ping"
-                },
-                {
-                    "description": "Con flags globales",
-                    "command": f"{exe_name} --json nucleus list"
-                },
-                {
-                    "description": "Con verbose",
-                    "command": f"{exe_name} --verbose profile create 'My Profile'"
-                }
-            ],
-            "notes": [
-                "Los flags globales (--json, --verbose) van ANTES de <category>"
-            ]
-        },
-        "categories": [],
-        "root_commands": []
+        "cli_info": {"name": "Brain CLI", "version": "1.0.0", "description": "Modular system for Bloom", "executable": exe_name, "mode": "executable" if is_exe else "development"},
+        "global_options": [{"flag": "--json", "description": "Salida en formato JSON (debe ir ANTES del comando)", "position": "before_category"}, {"flag": "--verbose", "description": "Habilitar logging detallado (debe ir ANTES del comando)", "position": "before_category"}, {"flag": "--help", "description": "Mostrar este mensaje de ayuda", "position": "anywhere"}],
+        "usage": {"syntax": f"{exe_name} [OPTIONS] <category> <command> [COMMAND_OPTIONS]", "examples": [{"description": "Comando básico", "command": f"{exe_name} health native-ping"}, {"description": "Con flags globales", "command": f"{exe_name} --json nucleus list"}, {"description": "Con verbose", "command": f"{exe_name} --verbose profile create 'My Profile'"}], "notes": ["Los flags globales (--json, --verbose) van ANTES de <category>"]},
+        "categories": [], "root_commands": []
     }
-    
-    # Add categories
     for category in structure.categories:
         commands = structure.commands_by_category.get(category, [])
-        subsections = _detect_subsections(category, commands)
-        
-        category_data = {
-            "name": category.category_name,
-            "description": category.category_description,
-            "command_count": len(commands),
-            "subsections": []
-        }
-        
+        all_discovered = []
+        for cmd in commands:
+            all_discovered.extend(_discover_commands_from_class(cmd, category))
+        subsections = _detect_subsections(category, all_discovered)
+        category_data = {"name": category.category_name, "description": category.category_description, "command_count": len(all_discovered), "subsections": []}
         for subsection_name, subsection_commands in subsections.items():
-            subsection_data = {
-                "name": subsection_name if subsection_name else None,
-                "commands": []
-            }
-            
-            for cmd in sorted(subsection_commands, key=lambda c: c.metadata().name):
-                meta = cmd.metadata()
-                
-                temp_app = typer.Typer()
-                cmd.register(temp_app)
-                params = []
-                if temp_app.registered_commands:
-                    registered = temp_app.registered_commands[0]
-                    params = _extract_params_with_help(registered.callback)
-                
+            subsection_data = {"name": subsection_name if subsection_name else None, "commands": []}
+            for dcmd in sorted(subsection_commands, key=lambda c: c.name):
+                params = _extract_params_with_help(dcmd.callback)
                 arguments = [p for p in params if p.is_argument]
                 options = [p for p in params if not p.is_argument]
-                
-                syntax_parts = [exe_name, "[GLOBAL_OPTIONS]", category.category_name, meta.name]
+                syntax_parts = [exe_name, "[GLOBAL_OPTIONS]", category.category_name, dcmd.name]
                 for arg in arguments:
                     syntax_parts.append(arg.flag)
                 if options:
                     syntax_parts.append("[OPTIONS]")
-                
-                command_data = {
-                    "name": meta.name,
-                    "display_name": meta.name.upper().replace('-', ' '),
-                    "description": meta.description,
-                    "syntax": " ".join(syntax_parts),
-                    "arguments": [
-                        {
-                            "name": arg.flag,
-                            "required": arg.is_required,
-                            "help": arg.help_text,
-                            "type": arg.type_hint
-                        }
-                        for arg in arguments
-                    ],
-                    "options": [
-                        {
-                            "flag": opt.flag,
-                            "required": opt.is_required,
-                            "help": opt.help_text,
-                            "type": opt.type_hint,
-                            "default": opt.default_value
-                        }
-                        for opt in options
-                    ]
-                }
-                
+                command_data = {"name": dcmd.name, "display_name": dcmd.name.upper().replace('-', ' '), "description": dcmd.description, "syntax": " ".join(syntax_parts), "arguments": [{"name": arg.flag, "required": arg.is_required, "help": arg.help_text, "type": arg.type_hint} for arg in arguments], "options": [{"flag": opt.flag, "required": opt.is_required, "help": opt.help_text, "type": opt.type_hint, "default": opt.default_value} for opt in options]}
                 subsection_data["commands"].append(command_data)
-            
             category_data["subsections"].append(subsection_data)
-        
         json_output["categories"].append(category_data)
-    
     return json_output
 
 
-def _render_command_detail(cmd: BaseCommand, category: CommandCategory) -> List[Text]:
-    """Render a command with full detailed formatting."""
-    meta = cmd.metadata()
-    
-    temp_app = typer.Typer()
-    cmd.register(temp_app)
-    
-    params = []
-    if temp_app.registered_commands:
-        registered = temp_app.registered_commands[0]
-        params = _extract_params_with_help(registered.callback)
-    
+def _render_discovered_command_detail(dcmd: DiscoveredCommand, params: List[CommandParameter]) -> List[Text]:
     lines = []
-    
-    cmd_display_name = meta.name.upper().replace('-', ' ')
-    lines.append(Text(f"{cmd_display_name} - {meta.description}", style="bold white"))
+    cmd_display_name = dcmd.name.upper().replace('-', ' ')
+    lines.append(Text(f"{cmd_display_name} - {dcmd.description}", style="bold white"))
     lines.append(Text())
-    
     exe_name = get_executable_name()
-    syntax_parts = [exe_name, "[GLOBAL_OPTIONS]", category.category_name, meta.name]
-    
+    syntax_parts = [exe_name, "[GLOBAL_OPTIONS]", dcmd.category.category_name, dcmd.name]
     arguments = [p for p in params if p.is_argument]
     options = [p for p in params if not p.is_argument]
-    
     for arg in arguments:
         syntax_parts.append(arg.flag)
-    
     if options:
         syntax_parts.append("[OPTIONS]")
-    
     syntax = " ".join(syntax_parts)
     lines.append(Text(f"  {syntax}", style="green"))
     lines.append(Text())
-    
     if arguments:
         lines.append(Text("  Argumentos:", style="bold cyan"))
         for arg in arguments:
             type_info = f" ({arg.type_hint})" if arg.type_hint else ""
             lines.append(Text(f"    {arg.flag:20} {arg.help_text}{type_info}", style="white"))
         lines.append(Text())
-    
     if options:
         lines.append(Text("  Opciones:", style="bold cyan"))
         for opt in options:
@@ -632,50 +363,37 @@ def _render_command_detail(cmd: BaseCommand, category: CommandCategory) -> List[
             default_info = f" [default: {opt.default_value}]" if opt.default_value is not None else ""
             lines.append(Text(f"    {opt.flag:20} {opt.help_text}{type_info}{default_info}", style="white"))
         lines.append(Text())
-    
     return lines
 
 
 def _render_category_panel(console: Console, category: CommandCategory, commands: List[BaseCommand]):
-    """Render a complete panel for a single category."""
-    commands = sorted(commands, key=lambda c: c.metadata().name)
-    subsections = _detect_subsections(category, commands)
-    
+    all_discovered = []
+    for cmd in commands:
+        discovered = _discover_commands_from_class(cmd, category)
+        all_discovered.extend(discovered)
+    all_discovered = sorted(all_discovered, key=lambda c: c.name)
+    subsections = _detect_subsections(category, all_discovered)
     content_lines = []
-    
     for section_name, section_commands in subsections.items():
         if section_name and section_name != '_main':
             content_lines.append(Text(f"{section_name}", style="bold yellow"))
             content_lines.append(Text())
-        
-        for cmd in sorted(section_commands, key=lambda c: c.metadata().name):
-            command_lines = _render_command_detail(cmd, category)
+        for dcmd in sorted(section_commands, key=lambda c: c.name):
+            params = _extract_params_with_help(dcmd.callback)
+            command_lines = _render_discovered_command_detail(dcmd, params)
             content_lines.extend(command_lines)
-    
     while content_lines and str(content_lines[-1]).strip() == "":
         content_lines.pop()
-    
     content = Text("\n").join(content_lines)
-    
     title = f"[bold]{category.category_name.upper()}[/bold]"
     subtitle = category.category_description
-    
-    console.print(Panel(
-        content,
-        title=title,
-        subtitle=subtitle,
-        border_style="cyan",
-        padding=(1, 2)
-    ))
+    console.print(Panel(content, title=title, subtitle=subtitle, border_style="cyan", padding=(1, 2)))
 
 
 def _render_usage(console: Console):
-    """Render usage section."""
     content_lines = []
-    
     exe_name = get_executable_name()
     is_exe = is_frozen_executable()
-    
     if is_exe:
         content_lines.append(Text("Brain CLI - Ejecutable standalone", style="bold white"))
         content_lines.append(Text())
@@ -712,204 +430,125 @@ def _render_usage(console: Console):
         content_lines.append(Text())
         content_lines.append(Text("  # Modo MODULE (alternativo)", style="dim"))
         content_lines.append(Text("  python -m brain --json nucleus list", style="white"))
-    
     content = Text("\n").join(content_lines)
-    
     title = "[bold]Uso / Usage[/bold]" if is_exe else "[bold]Uso / Usage - Dual Mode Support[/bold]"
-    
-    console.print(Panel(
-        content,
-        title=title,
-        border_style="yellow",
-        padding=(1, 2),
-        width=95
-    ))
+    console.print(Panel(content, title=title, border_style="yellow", padding=(1, 2), width=95))
 
 
 def _render_options(console: Console):
-    """Render global CLI options."""
     table = Table(show_header=False, box=None, padding=(0, 2))
     table.add_column(style="cyan", no_wrap=True)
     table.add_column()
-    
     table.add_row("--json", "Salida en formato JSON (debe ir ANTES del comando)")
     table.add_row("--verbose", "Habilitar logging detallado (debe ir ANTES del comando)")
     table.add_row("--help", "Mostrar este mensaje de ayuda")
-    
     exe_name = get_executable_name()
     subtitle = f"[dim]Estas opciones deben ir después de '{exe_name}'[/dim]"
-    
-    console.print(Panel(
-        table, 
-        title="[bold]Opciones Globales / Global Options[/bold]",
-        subtitle=subtitle,
-        border_style="green"
-    ))
+    console.print(Panel(table, title="[bold]Opciones Globales / Global Options[/bold]", subtitle=subtitle, border_style="green"))
 
 
 def _render_root_commands(console: Console, root_commands: List[BaseCommand]):
-    """Render root-level commands if any exist."""
     if not root_commands:
         return
-    
     content_lines = []
     exe_name = get_executable_name()
-    
     for cmd in sorted(root_commands, key=lambda c: c.metadata().name):
-        meta = cmd.metadata()
-        temp_app = typer.Typer()
-        cmd.register(temp_app)
-        
-        params = []
-        if temp_app.registered_commands:
-            registered = temp_app.registered_commands[0]
-            params = _extract_params_with_help(registered.callback)
-        
-        cmd_display_name = meta.name.upper().replace('-', ' ')
-        content_lines.append(Text(f"{cmd_display_name} - {meta.description}", style="bold white"))
-        content_lines.append(Text())
-        
-        syntax_parts = [exe_name, "[GLOBAL_OPTIONS]", meta.name]
-        
-        arguments = [p for p in params if p.is_argument]
-        options = [p for p in params if not p.is_argument]
-        
-        for arg in arguments:
-            syntax_parts.append(arg.flag)
-        
-        if options:
-            syntax_parts.append("[OPTIONS]")
-        
-        syntax = " ".join(syntax_parts)
-        content_lines.append(Text(f"  {syntax}", style="green"))
-        content_lines.append(Text())
-        
-        if arguments:
-            content_lines.append(Text("  Argumentos:", style="bold cyan"))
+        discovered = _discover_commands_from_class(cmd, CommandCategory.SYSTEM)
+        for dcmd in discovered:
+            params = _extract_params_with_help(dcmd.callback)
+            cmd_display_name = dcmd.name.upper().replace('-', ' ')
+            content_lines.append(Text(f"{cmd_display_name} - {dcmd.description}", style="bold white"))
+            content_lines.append(Text())
+            syntax_parts = [exe_name, "[GLOBAL_OPTIONS]", dcmd.name]
+            arguments = [p for p in params if p.is_argument]
+            options = [p for p in params if not p.is_argument]
             for arg in arguments:
-                content_lines.append(Text(f"    {arg.flag:20} {arg.help_text}", style="white"))
+                syntax_parts.append(arg.flag)
+            if options:
+                syntax_parts.append("[OPTIONS]")
+            syntax = " ".join(syntax_parts)
+            content_lines.append(Text(f"  {syntax}", style="green"))
             content_lines.append(Text())
-        
-        if options:
-            content_lines.append(Text("  Opciones:", style="bold cyan"))
-            for opt in options:
-                content_lines.append(Text(f"    {opt.flag:20} {opt.help_text}", style="white"))
-            content_lines.append(Text())
-    
+            if arguments:
+                content_lines.append(Text("  Argumentos:", style="bold cyan"))
+                for arg in arguments:
+                    content_lines.append(Text(f"    {arg.flag:20} {arg.help_text}", style="white"))
+                content_lines.append(Text())
+            if options:
+                content_lines.append(Text("  Opciones:", style="bold cyan"))
+                for opt in options:
+                    content_lines.append(Text(f"    {opt.flag:20} {opt.help_text}", style="white"))
+                content_lines.append(Text())
     while content_lines and str(content_lines[-1]).strip() == "":
         content_lines.pop()
-    
     content = Text("\n").join(content_lines)
-    console.print(Panel(
-        content,
-        title="[bold]Quick Access[/bold]",
-        border_style="magenta",
-        padding=(1, 2)
-    ))
+    console.print(Panel(content, title="[bold]Quick Access[/bold]", border_style="magenta", padding=(1, 2)))
 
 
 def _render_categories(console: Console, categories: List[CommandCategory], structure: HelpStructure):
-    """Render categories table with command counts."""
     table = Table(show_header=False, box=None, padding=(0, 2))
     table.add_column(style="green", no_wrap=True)
     table.add_column(style="dim")
     table.add_column(style="cyan", justify="right")
-    
     total_commands = 0
-    
     for cat in categories:
         count = len(structure.commands_by_category.get(cat, []))
         total_commands += count
-        
-        table.add_row(
-            cat.category_name,
-            cat.category_description,
-            f"{count} cmd{'s' if count != 1 else ''}"
-        )
-    
+        table.add_row(cat.category_name, cat.category_description, f"{count} cmd{'s' if count != 1 else ''}")
     table.add_row("", "", f"{'─' * 10}")
     table.add_row("", "", f"{total_commands} cmds", style="bold cyan")
-    
     console.print(Panel(table, title="[bold]Categories[/bold]", border_style="green"))
 
 
 def render_help(registry: CommandRegistry, json_mode: bool = False, ai_native: bool = False):
-    """
-    Main help rendering function with multiple output modes.
-    
-    Args:
-        registry: Command registry
-        json_mode: Output legacy JSON format
-        ai_native: Output AI-native JSON Schema with function calling support
-    """
-    
-    # AI-Native mode: Output OpenAI function calling compatible schema
     if ai_native or (json_mode and "--ai" in sys.argv):
         ai_schema = _build_ai_native_json(registry)
         print(json.dumps(ai_schema, indent=2, ensure_ascii=False, cls=JSONEncoder))
         return
-    
-    # Legacy JSON mode: Output basic JSON structure
     if json_mode:
         json_data = _build_json_structure(registry)
         print(json.dumps(json_data, indent=2, ensure_ascii=False, cls=JSONEncoder))
         return
-    
-    # Rich terminal output
     is_file_output = not sys.stdout.isatty()
-    
     if is_file_output:
-        console = Console(
-            width=100,
-            file=sys.stdout,
-            force_terminal=False,
-            legacy_windows=False,
-            no_color=True
-        )
+        console = Console(width=100, file=sys.stdout, force_terminal=False, legacy_windows=False, no_color=True)
     else:
         console = Console(width=95)
-    
     exe_type = "Executable" if is_frozen_executable() else "Development Mode"
     console.print(f"\n[bold yellow]Brain CLI[/bold yellow] - Modular system for Bloom [dim]({exe_type})[/dim]\n")
-    
     structure = _extract_structure(registry)
-    
     _render_usage(console)
     console.print()
-    
     _render_options(console)
     console.print()
     _render_categories(console, structure.categories, structure)
     console.print()
-    
     if structure.root_commands:
         _render_root_commands(console, structure.root_commands)
         console.print()
-    
     priority_order = [
-        CommandCategory.HEALTH,
-        CommandCategory.SYSTEM,
-        CommandCategory.NUCLEUS,
-        CommandCategory.PROJECT,
-        CommandCategory.PROFILE,
-        CommandCategory.EXTENSION,
-        CommandCategory.SYNAPSE,
-        CommandCategory.SERVICE,
-        CommandCategory.RUNTIME,
-        CommandCategory.CONTEXT,
-        CommandCategory.INTENT,
-        CommandCategory.FILESYSTEM,
-        CommandCategory.GITHUB,
-        CommandCategory.GEMINI,
-        CommandCategory.TWITTER,
+        CommandCategory.HEALTH,        # Estado, diagnósticos
+        CommandCategory.SYSTEM,        # Sistema, introspección, entorno
+        CommandCategory.NUCLEUS,       # Core: proyectos Nucleus
+        CommandCategory.PROJECT,       # Creación/scaffolding de proyectos
+        CommandCategory.PROFILE,       # Perfiles de Chrome y AI accounts
+        CommandCategory.EXTENSION,     # Chrome extensions y lifecycle
+        CommandCategory.SYNAPSE,       # Native messaging bridge
+        CommandCategory.SERVICE,       # Multiplexer, workers, background tasks
+        CommandCategory.RUNTIME,       # Ejecución no interactiva del sistema
+        CommandCategory.CONTEXT,       # Generación y manejo de contexto IA
+        CommandCategory.INTENT,        # Ejecución de intents
+        CommandCategory.FILESYSTEM,    # Analizador filesystem y operaciones
+        CommandCategory.GITHUB,        # Integración con GitHub
+        CommandCategory.GEMINI,        # Gestión de claves y operaciones Gemini
+        CommandCategory.TWITTER,       # Integración con X/Twitter
+        CommandCategory.CHROME,        # Debugging, network logs (auxiliar)
     ]
-    
     for category in priority_order:
         if category in structure.commands_by_category:
             commands = structure.commands_by_category[category]
             _render_category_panel(console, category, commands)
             console.print()
-    
     for category in structure.commands_by_category:
         if category not in priority_order:
             _render_category_panel(console, category, structure.commands_by_category[category])
