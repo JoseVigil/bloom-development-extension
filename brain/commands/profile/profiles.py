@@ -216,29 +216,33 @@ class ProfilesLaunchCommand(BaseCommand):
                 logger.debug("Inicializando ProfileManager...")
                 pm = ProfileManager()
                 
-                # Determinar modo de lanzamiento
+                # Determinar modo y construir URL correspondiente
                 if discovery:
                     mode = "discovery"
                     mode_label = "🔍 Discovery Check"
-                elif cockpit or not url:
+                    target_url = pm.get_discovery_url(profile_id)
+                elif cockpit:
                     mode = "normal"
                     mode_label = "🏠 Cockpit"
-                else:
+                    target_url = pm.get_landing_url(profile_id)
+                elif url:
                     mode = "normal"
                     mode_label = "Custom URL"
-                
+                    target_url = url
+                else:
+                    # Default: cockpit (landing)
+                    mode = "normal"
+                    mode_label = "🏠 Cockpit"
+                    target_url = pm.get_landing_url(profile_id)
+
                 if gc.verbose:
                     typer.echo(f"🚀 Lanzando perfil en modo: {mode_label}", err=True)
-                
+
                 logger.info(f"Lanzando perfil {profile_id[:8]}... en modo: {mode}")
-                
-                # Lanzar el perfil
-                result = pm.launch_profile(profile_id, mode=mode)
-                
-                logger.info(f"✅ Chrome lanzado exitosamente")
-                
-                gc.output(result, self._render_launch)
-                logger.info("✅ Comando profile launch completado exitosamente")
+                logger.debug(f"Target URL: {target_url}")
+
+                # Lanzar el perfil con la URL correcta
+                result = pm.launch_profile(profile_id, url=target_url, mode=mode)
                 
             except Exception as e:
                 logger.error(f"❌ Error al lanzar perfil {profile_id[:8]}...: {str(e)}", exc_info=True)

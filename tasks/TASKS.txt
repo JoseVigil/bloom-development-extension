@@ -280,3 +280,6 @@ uitool chrome
 https://aistudio.google.com/prompts/1p9qRSyBNfjoik8t-pL7DyTuNPyKFO7Ov
 roamingpads host-extension vs 9222 - humanizar automatizacion
 https://aistudio.google.com/prompts/1sDxdxod4IB7gISHGIBEuYvpILegEPmPs
+
+roamingpads chrommium 
+https://aistudio.google.com/prompts/1zYc3GZzpUUlLiEHokUeYw1UId2tE2vcS

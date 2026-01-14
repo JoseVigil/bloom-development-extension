@@ -1,3 +1,7 @@
+param(
+    [switch]$Clean
+)
+
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
@@ -122,7 +126,12 @@ Write-Host "   -> Caché limpiado" -ForegroundColor Green
 # PASO 2: COMPILAR (Delegar a Python)
 # ---------------------------------------------------------
 Write-Host "2. Ejecutando build.py..." -ForegroundColor Yellow
-python build.py
+
+if ($Clean) {
+    python build.py --clean
+} else {
+    python build.py
+}
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR CRITICO: El build de Python fallo." -ForegroundColor Red
@@ -135,7 +144,7 @@ Write-Host "   -> Compilacion exitosa." -ForegroundColor Green
 # PASO 3: DEPLOY - CORREGIDO (Copiar a bin\brain)
 # ---------------------------------------------------------
 $SourceDir = "dist\brain"
-$DestDir = "$env:LOCALAPPDATA\BloomNucleus\bin\brain"  # ✅ AHORA APUNTA A bin\brain
+$DestDir = "$env:LOCALAPPDATA\BloomNucleus\bin\brain"
 
 Write-Host "3. Desplegando a: $DestDir" -ForegroundColor Yellow
 
@@ -155,27 +164,23 @@ if (Test-Path -Path $DestDir) {
         $cleanAttempts++
         
         try {
-            # Intentar eliminar recursivamente SOLO bin\brain\
             Remove-Item -Path $DestDir -Force -Recurse -ErrorAction Stop
             $cleanSuccess = $true
             Write-Host "   -> Destino limpiado exitosamente" -ForegroundColor Gray
         }
         catch {
-            # Capturar el archivo problemático
             $errorMessage = $_.Exception.Message
             
             if ($errorMessage -match "'([^']+)'") {
                 $lockedFile = $matches[1]
                 Write-Host "   -> Archivo bloqueado: $lockedFile" -ForegroundColor Yellow
                 
-                # Intentar desbloquear con handle.exe
                 if (Unlock-FileWithHandle -FilePath $lockedFile) {
                     Write-Host "   -> Archivo desbloqueado, reintentando..." -ForegroundColor Gray
                     Start-Sleep -Seconds 1
                     continue
                 }
                 
-                # Si no funciona, intentar renombrar el directorio
                 if ($cleanAttempts -eq 2) {
                     Write-Host "   -> Intentando mover directorio en lugar de eliminar..." -ForegroundColor Yellow
                     $backupDir = "$DestDir.old_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
@@ -208,7 +213,6 @@ if (Test-Path -Path $DestDir) {
                 Write-Host "   3. Reinicia el PC si nada funciona" -ForegroundColor White
                 Write-Host "" -ForegroundColor Red
                 
-                # Intentar mostrar qué procesos podrían estar usando el archivo
                 $possibleProcesses = Get-Process | Where-Object { 
                     $_.Path -and $_.Path -like "*BloomNucleus*" 
                 }
@@ -228,10 +232,8 @@ if (Test-Path -Path $DestDir) {
     }
 }
 
-# Crear directorio destino
 New-Item -ItemType Directory -Force -Path $DestDir | Out-Null
 
-# Copiar con reintentos
 Write-Host "   -> Copiando archivos..." -ForegroundColor Gray
 
 $copyAttempts = 0
@@ -281,16 +283,13 @@ Write-Host "5. Actualizando Variables de Entorno..." -ForegroundColor Yellow
 $OldPath = "$env:LOCALAPPDATA\BloomNucleus\bin"
 $NewPath = "$env:LOCALAPPDATA\BloomNucleus\bin\brain"
 
-# --- A. ACTUALIZAR REGISTRO (Para futuras terminales) ---
 $RegistryPath = [Environment]::GetEnvironmentVariable("Path", "User")
 
-# 1. Limpiar ruta vieja en registro
 if ($RegistryPath -like "*$OldPath*" -and $RegistryPath -notlike "*$OldPath\brain*") {
     $RegistryPath = $RegistryPath.Replace(";$OldPath", "").Replace($OldPath, "")
     Write-Host "   -> Ruta obsoleta eliminada del Registro" -ForegroundColor Gray
 }
 
-# 2. Agregar nueva ruta al registro
 if ($RegistryPath -notlike "*$NewPath*") {
     [Environment]::SetEnvironmentVariable("Path", "$RegistryPath;$NewPath", "User")
     Write-Host "   [OK] Registro de Windows actualizado." -ForegroundColor Green
@@ -298,7 +297,6 @@ if ($RegistryPath -notlike "*$NewPath*") {
     Write-Host "   [OK] El Registro ya estaba correcto." -ForegroundColor Gray
 }
 
-# --- B. ACTUALIZAR SESIÓN ACTUAL ---
 if ($env:Path -notlike "*$NewPath*") {
     $env:Path += ";$NewPath"
     Write-Host "   [OK] Sesión actual actualizada (Ya puedes escribir 'brain')" -ForegroundColor Green

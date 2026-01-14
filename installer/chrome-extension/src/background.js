@@ -29,6 +29,21 @@ if (!HOST_NAME) {
 // 1. GESTIÓN DE CONEXIÓN
 // ============================================================================
 
+// Al principio del archivo
+function connectWithRetry() {
+  if (!HOST_NAME) {
+    console.error("Esperando configuración...");
+    setTimeout(connectWithRetry, 1000);
+    return;
+  }
+  console.log("Intentando conexión nativa...");
+  try {
+    connectToNativeHost();
+  } catch (e) {
+    setTimeout(connectWithRetry, 2000);
+  }
+}
+
 function connectToNativeHost() {
   // 1. Evitar conexiones duplicadas (Tu línea actual)
   if (nativePort) return;
@@ -283,5 +298,10 @@ function sendToBrain(message) {
   }
 }
 
-// Init
-connectToNativeHost();
+// Reemplazá tu connectToNativeHost() inicial por esto:
+chrome.runtime.onInstalled.addListener(() => {
+  connectWithRetry();
+});
+
+// Forzar despertar
+connectWithRetry();

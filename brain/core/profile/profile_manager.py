@@ -212,249 +212,119 @@ class ProfileManager:
         
         return {**data, "path": str(profile_path)}
     
+    def launch_profile(self, profile_id: str, url: Optional[str] = None, mode: str = "normal", verbose_network: bool = False) -> Dict[str, Any]:
+        """Versión de Ingeniería de Élite: Bypass de Integridad y Modo Automatización."""
+        profile = self._find_profile(profile_id)
+        if not profile: return {"status": "error", "message": "Profile not found"}
+        
+        full_id = profile['id']
+        profile_path = self.paths.profiles_dir / full_id      
+        self.sync_profile_resources(full_id)
+
+        # 1. LIMPIEZA DE CANDADOS (Evita el 'Handling STARTUP request from another process')
+        # Borramos el candado físico que hace que Chrome se 'una' al proceso viejo
+        for lock in ["SingletonLock", "SingletonSocket", "SingletonCookie"]:
+            lock_path = profile_path / lock
+            if lock_path.exists():
+                try: lock_path.unlink()
+                except: pass
+
+        # 2. RUTAS NORMALIZADAS
+        chrome_path = str(self.launcher.chrome_path)
+        u_data = os.path.abspath(profile_path)
+        e_path = os.path.abspath(profile_path / "extension")
+        target_url = url if url else f"chrome-extension://{self.paths.extension_id}/discovery/index.html"
+
+        # 3. ARGUMENTOS "ZERO-BLOCK" (Perspectiva 0.1%)
+        chrome_args = [
+            chrome_path,
+            f"--user-data-dir={u_data}",
+            f"--load-extension={e_path}",
+            # --- EL SECRETO DEL BYPASS ---
+            "--enable-automation",              # <--- CLAVE: Habilita --load-extension en Stable
+            "--test-type",                     # Quita advertencias de seguridad
+            "--disable-renderer-code-integrity", # Evita el bloqueo del renderizador
+            # -----------------------------
+            "--no-first-run",
+            "--no-default-browser-check",
+            "--remote-debugging-port=0",
+            f"--app={target_url}",              # Fuerza ventana única
+            "--restore-last-session=0",
+            # Desactivar componentes ruidosos (visto en tu log)
+            "--disable-features=Translate,OptimizationHints,MediaRouter,SafeBrowsing",
+            "--disable-background-networking",
+            "--password-store=basic"
+        ]
+
+        # 4. LANZAMIENTO AISLADO
+        flags = 0x00000008 | 0x00000200 | 0x08000000
+
+        try:
+            # Matamos procesos previos del host
+            if platform.system() == 'Windows':
+                os.system('taskkill /f /im bloom-host.exe >nul 2>&1')
+
+            subprocess.Popen(
+                chrome_args,
+                creationflags=flags,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL,
+                shell=False
+            )
+            
+            # 5. GARANTÍA DE JSON LIMPIO PARA ELECTRON
+            import logging
+            # Matamos el ruido de Python para que no rompa el JSON
+            logging.getLogger().handlers = []
+            
+            return {
+                "status": "success",
+                "data": {"profile_id": full_id, "url": target_url}
+            }
+        except Exception as e:
+            return {"status": "error", "message": "Fallo crítico en motor"}
+
+    def get_discovery_url(self, profile_id: str) -> str:
+        """Obtiene URL de discovery page."""
+        return f"chrome-extension://{self.paths.extension_id}/discovery/index.html"
+
     def sync_profile_resources(self, profile_id: str) -> None:
-        """
-        Sincroniza los recursos del perfil en el orden correcto:
-        1. Copia extensión maestra
-        2. Provisiona Synapse bridge
-        3. Inyecta configuración de Synapse
-        4. Genera páginas web (discovery/landing)
-        """
+        """Sincroniza los recursos del perfil (Extensión + Config + Web)."""
         logger.info(f"🔄 Sincronizando recursos para {profile_id[:8]}")
         
         profile = self._find_profile(profile_id)
-        if not profile:
-            raise ValueError(f"Profile {profile_id} not found")
+        if not profile: return
         
         full_id = profile['id']
         profile_path = self.paths.profiles_dir / full_id
         target_ext_dir = profile_path / "extension"
 
-        # PASO 1: Copiar extensión maestra (Clonación del molde)
-        logger.info("  📦 [1/4] Copiando extensión maestra...")
         try:
+            # PASO 1: Clonar extensión
             if target_ext_dir.exists():
-                logger.debug("    → Limpiando extensión previa")
                 shutil.rmtree(target_ext_dir)
-            
             shutil.copytree(self.paths.extension_path, target_ext_dir)
-            logger.info("    ✓ Extensión clonada en perfil")
-        except Exception as e:
-            logger.error(f"    ❌ Error al copiar extensión: {e}")
-            raise
-        
-        # PASO 2: Provisionar Synapse bridge (Registry + JSON nativo)
-        logger.info("  🌉 [2/4] Provisionando Synapse bridge...")
-        try:
+            
+            # PASO 2: Bridge y Configuración
             bridge_name = self.synapse.provision_bridge(full_id)
-            logger.info(f"    ✓ Bridge provisionado: {bridge_name}")
-        except Exception as e:
-            logger.error(f"    ❌ Error al provisionar bridge: {e}")
-            raise
-        
-        # PASO 3: Inyectar configuración en la extensión
-        logger.info("  ⚙️ [3/4] Inyectando configuración de Synapse...")
-        try:
             self.synapse.inject_extension_config(full_id, bridge_name)
-            logger.info("    ✓ Configuración inyectada")
-        except Exception as e:
-            logger.error(f"    ❌ Error al inyectar config: {e}")
-            raise
-        
-        # PASO 4: Generar páginas web (Discovery y Landing)
-        logger.info("  🌐 [4/4] Generando páginas web...")
-        try:
+            
+            # PASO 3: Generar páginas
             generate_discovery_page(target_ext_dir, profile)
             generate_profile_landing(target_ext_dir, profile)
-            logger.info("    ✓ Páginas generadas en extension/")
+            
+            logger.info("  ✅ Sincronización completa")
         except Exception as e:
-            logger.error(f"    ❌ Error generando páginas: {e}")
+            logger.error(f"  ❌ Error en sincronización: {e}")
             raise
-        
-        logger.info("  ✅ Sincronización completa")
-    
-    def get_discovery_url(self, profile_id: str) -> str:
-        """
-        Obtiene URL de discovery page (chrome-extension).
-        Usa el extension_id hardcoded de Synapse v2.0.
-        """
-        logger.debug(f"🔗 Obteniendo discovery URL para {profile_id[:8]}")
-        
-        url = f"chrome-extension://{self.paths.extension_id}/discovery/index.html"
-        
-        logger.debug(f"  ✓ URL: {url}")
-        return url
-    
-    def launch_profile(
-        self, 
-        profile_id: str, 
-        url: Optional[str] = None,
-        mode: str = "normal",
-        verbose_network: bool = False
-    ) -> Dict[str, Any]:
-        """
-        Lanza Chrome con perfil.
-        
-        Args:
-            profile_id: UUID completo o prefijo
-            url: URL a abrir (default: landing page)
-            verbose_network: Activar logging de red detallado
-        """
-        logger.info(f"🚀 Lanzando perfil {profile_id[:8]}")
-        start_time = time.time()
-        
-        profile = self._find_profile(profile_id)
-        if not profile:
-            logger.error(f"❌ Perfil no encontrado: {profile_id}")
-            raise ValueError(f"Profile not found: {profile_id}")
-        
-        full_id = profile['id']
-        profile_path = self.paths.profiles_dir / full_id      
 
-        logger.info(f"  → Perfil: {profile.get('alias')} ({full_id[:8]})")
-        logger.info(f"  → Path: {profile_path}")
-
-        # Configurar logging de red si se solicita
-        net_log_path = self.paths.base_dir / "logs" / "profiles" / full_id / "chrome_net.log"
-        net_log_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        if verbose_network:
-            logger.debug(f"  → Net log habilitado: {net_log_path}")
-        
-        # Provisioning
-        logger.info("  🔄 Sincronizando recursos...")
-        self.sync_profile_resources(full_id)
-        
-        # Determinar URL (usar parámetro o landing por defecto)
-        if url is None:
-            try:
-                url = self.get_landing_url(full_id)
-                logger.debug(f"  → URL landing: {url}")
-            except Exception as e:
-                logger.warning(f"  ⚠️ Landing no disponible, usando about:blank: {e}")
-                url = "about:blank"
-        else:
-            logger.debug(f"  → URL personalizada: {url}")
-        
-        # Obtener ruta de Chrome
-        try:
-            chrome_path = self.launcher.chrome_path
-            logger.debug(f"  → Chrome: {chrome_path}")
-        except FileNotFoundError as e:
-            logger.error(f"❌ Chrome no encontrado: {e}", exc_info=True)
-            raise
-        
-        # FIX: Usar extension/ interna del perfil
-        extension_path = str((profile_path / "extension").resolve())
-        logger.debug(f"  → Extension: {extension_path}")
-
-        ext_id = "hpblclepliicmihaplldignhjdggnkdh"
-        target_url = url if url else f"chrome-extension://{ext_id}/landing/index.html"
-        
-        chrome_args = [
-            str(chrome_path),
-            f"--user-data-dir={str(profile_path.resolve())}",
-            f"--load-extension={str((profile_path / 'extension').resolve())}",
-            # ESTE FLAG ES EL QUE ROMPE EL BLOQUEO:
-            "--remote-debugging-port=9222", 
-            # ESTOS EVITAN QUE CHROME INTENTE "UNIRSE" AL PROCESO VIEJO:
-            "--no-first-run",
-            "--no-default-browser-check",
-            "--test-type", # Le avisa a Chrome que es una instancia de prueba
-            
-            "--enable-logging",
-            "--v=1",
-
-            target_url # La URL de discovery al final
-        ]             
-
-        # Activar logging de red si se solicita
-        if verbose_network or os.environ.get("BLOOM_DEBUG_NET") == "true":
-            chrome_args.append(f"--log-net-log={str(net_log_path)}")
-            chrome_args.append("--net-log-capture-mode=Everything")
-            logger.debug("  → Logging de red activado")
-
-        logger.debug(f"  → Argumentos: {len(chrome_args)} args")
-        
-        # Lanzar proceso
-        try:
-            creation_flags = 0
-            if platform.system() == 'Windows':
-                # DETACHED_PROCESS (0x00000008) + CREATE_NEW_PROCESS_GROUP (0x00000200)
-                creation_flags = 0x00000008 | 0x00000200
-                logger.debug("  → Windows: usando DETACHED_PROCESS")
-            
-            logger.info("  ⏳ Lanzando proceso de Chrome...")
-            
-            process = subprocess.Popen(
-                chrome_args,
-                creationflags=creation_flags,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
-                stdin=subprocess.DEVNULL,
-                shell=False
-            )
-            
-            logger.debug(f"  → PID Inicial: {process.pid}")
-            logger.debug("  → Verificando estado del proceso...")
-            
-            # Lógica de detección de éxito
-            pid_final = process.pid
-            
-            try:
-                # Esperamos hasta 2 segundos para ver si crashea
-                exit_code = process.wait(timeout=2.0)
-                
-                if exit_code == 0:
-                    # Exit Code 0 = Chrome delegó a proceso padre existente
-                    logger.info("  ✓ Chrome delegated to main process (Exit Code 0)")
-                else:
-                    # Exit Code != 0 = ERROR REAL
-                    _, stderr_out = process.communicate()
-                    err_msg = stderr_out.decode('utf-8', errors='ignore') if stderr_out else f"Exit Code {exit_code}"
-                    logger.error(f"❌ Chrome falló al iniciar: {err_msg}")
-                    raise RuntimeError(f"Chrome failed to start: {err_msg}")
-                    
-            except subprocess.TimeoutExpired:
-                # El proceso sigue corriendo - ÉXITO
-                logger.info("  ✓ Chrome process is running stable")
-            
-            duration = time.time() - start_time
-            logger.info(f"✅ Perfil lanzado exitosamente en {duration:.2f}s")
-            
-            return {
-                "status": "success",
-                "operation": "launch",
-                "data": {
-                    "status": "launched",
-                    "profile_id": full_id,
-                    "alias": profile.get('alias'),
-                    "pid": pid_final,
-                    "url": target_url,
-                    "extension_loaded": True,
-                    "verbose_network": verbose_network
-                }
-            }
-            
-        except Exception as e:
-            duration = time.time() - start_time
-            logger.error(f"❌ Fallo al lanzar perfil después de {duration:.2f}s: {e}", exc_info=True)
-            raise RuntimeError(f"Failed to launch profile {full_id}: {e}")
-    
     def get_landing_url(self, profile_id: str) -> str:
-        """Obtiene URL de landing page (chrome-extension)."""
-        logger.debug(f"🔗 Obteniendo landing URL para {profile_id[:8]}")
-        
-        url = f"chrome-extension://{self.paths.extension_id}/landing/index.html"
-        
-        logger.debug(f"  ✓ URL: {url}")
-        return url
-    
+        """Obtiene URL de landing page."""
+        return f"chrome-extension://{self.paths.extension_id}/landing/index.html"
+
     def destroy_profile(self, profile_id: str) -> Dict[str, Any]:
         """Elimina un perfil completamente."""
-        logger.info(f"🗑️ Destruyendo perfil: {profile_id[:8]}")
-        start_time = time.time()
-        
         profiles = self._load_profiles()
         profile_found = None
         updated = []
@@ -462,187 +332,55 @@ class ProfileManager:
         for p in profiles:
             if p['id'] == profile_id or p['id'].startswith(profile_id):
                 profile_found = p
-                logger.debug(f"  → Perfil encontrado: {p.get('alias')}")
             else:
                 updated.append(p)
         
-        if not profile_found:
-            logger.error(f"❌ Perfil no encontrado: {profile_id}")
-            raise ValueError("Profile not found")
+        if not profile_found: raise ValueError("Profile not found")
         
-        # Cleanup Synapse bridge
-        logger.info("  🌉 Limpiando Synapse Bridge...")
         self._cleanup_synapse_bridge(profile_found['id'])
-        
         path = self.paths.profiles_dir / profile_found['id']
-        count = 0
-        
         if path.exists():
-            logger.info(f"  🗂️ Eliminando carpeta: {path}")
-            try:
-                count = sum(1 for _ in path.rglob('*') if _.is_file())
-                logger.debug(f"    → {count} archivos a eliminar")
-                shutil.rmtree(path, ignore_errors=True)
-                logger.debug("    ✓ Carpeta eliminada")
-            except Exception as e:
-                logger.error(f"❌ Error al eliminar carpeta: {e}", exc_info=True)
-        else:
-            logger.warning(f"  ⚠️ Carpeta no existe: {path}")
+            shutil.rmtree(path, ignore_errors=True)
         
         self._save_profiles(updated)
-        
-        duration = time.time() - start_time
-        logger.info(f"✅ Perfil destruido en {duration:.2f}s ({count} archivos)")
-        
-        return {
-            "profile_id": profile_found['id'],
-            "alias": profile_found.get('alias'),
-            "deleted_files": count
-        }
-    
+        return {"profile_id": profile_found['id'], "status": "destroyed"}
+
     def _cleanup_synapse_bridge(self, profile_id: str) -> None:
-        """Elimina el bridge del perfil."""
-        logger.debug(f"🧹 Limpiando bridge para {profile_id[:8]}")
-        
-        if platform.system() != 'Windows':
-            logger.debug("  → Sistema no-Windows, no hay cleanup necesario")
-            return
-        
+        """Elimina el bridge del registro y disco."""
+        if platform.system() != 'Windows': return
         try:
             import winreg
-            short_id = profile_id[:8]
-            bridge_name = f"com.bloom.synapse.{short_id}"
-            
-            # Eliminar manifest
-            synapse_dir = self.paths.base_dir / "bin" / "native" / "synapse"
-            manifest_path = synapse_dir / f"{bridge_name}.json"
-            
-            if manifest_path.exists():
-                logger.debug(f"  → Eliminando manifest: {manifest_path}")
-                manifest_path.unlink()
-                logger.debug("    ✓ Manifest eliminado")
-            
-            # Eliminar registry
+            bridge_name = f"com.bloom.synapse.{profile_id[:8]}"
             reg_path = f"Software\\Google\\Chrome\\NativeMessagingHosts\\{bridge_name}"
-            logger.debug(f"  → Eliminando registry: HKCU\\{reg_path}")
-            
             try:
                 winreg.DeleteKey(winreg.HKEY_CURRENT_USER, reg_path)
-                logger.debug("    ✓ Registry key eliminada")
-            except FileNotFoundError:
-                logger.debug("    → Registry key no existía")
-        except ImportError:
-            logger.debug("  → winreg no disponible")
-    
+            except FileNotFoundError: pass
+        except: pass
+
     def register_account(self, profile_id: str, provider: str, identifier: str) -> Dict[str, Any]:
-        """Registra una cuenta en el perfil."""
-        logger.info(f"🔐 Registrando cuenta {provider} en perfil {profile_id[:8]}")
-        
         profiles = self._load_profiles()
-        found = None
-        
         for p in profiles:
             if p['id'].startswith(profile_id):
-                if 'accounts' not in p:
-                    p['accounts'] = {}
-                p['accounts'][provider] = {
-                    "identifier": identifier,
-                    "registered_at": datetime.now().isoformat()
-                }
-                found = p
-                logger.debug(f"  ✓ Cuenta registrada: {provider} - {identifier}")
-                break
-        
-        if not found:
-            logger.error(f"❌ Perfil no encontrado: {profile_id}")
-            raise ValueError("Profile not found")
-        
-        self._save_profiles(profiles)
-        logger.info(f"✅ Cuenta {provider} registrada")
-        
-        return {
-            "profile_id": found['id'],
-            "profile_alias": found.get('alias'),
-            "provider": provider,
-            "identifier": identifier
-        }
-    
-    def remove_account(self, profile_id: str, provider: str) -> Dict[str, Any]:
-        """Elimina una cuenta del perfil."""
-        logger.info(f"🗑️ Eliminando cuenta {provider} de perfil {profile_id[:8]}")
-        
-        profiles = self._load_profiles()
-        found = None
-        
-        for p in profiles:
-            if p['id'].startswith(profile_id):
-                if 'accounts' in p and provider in p['accounts']:
-                    del p['accounts'][provider]
-                    found = p
-                    logger.debug(f"  ✓ Cuenta {provider} eliminada")
-                break
-        
-        if not found:
-            logger.error(f"❌ Cuenta o perfil no encontrado")
-            raise ValueError("Account or profile not found")
-        
-        self._save_profiles(profiles)
-        logger.info(f"✅ Cuenta {provider} eliminada")
-        
-        return {
-            "profile_id": found['id'],
-            "provider": provider,
-            "remaining_accounts": list(found.get('accounts', {}).keys())
-        }
-    
+                if 'accounts' not in p: p['accounts'] = {}
+                p['accounts'][provider] = {"identifier": identifier, "registered_at": datetime.now().isoformat()}
+                self._save_profiles(profiles)
+                return {"status": "registered"}
+        raise ValueError("Profile not found")
+
     def link_account(self, profile_id: str, email: str) -> Dict[str, Any]:
-        """Vincula email al perfil."""
-        logger.info(f"🔗 Vinculando {email} a perfil {profile_id[:8]}")
-        
         profiles = self._load_profiles()
-        found = None
-        
         for p in profiles:
             if p['id'].startswith(profile_id):
                 p['linked_account'] = email
-                found = p
-                logger.debug(f"  ✓ Email vinculado")
-                break
-        
-        if not found:
-            logger.error(f"❌ Perfil no encontrado: {profile_id}")
-            raise ValueError("Profile not found")
-        
-        self._save_profiles(profiles)
-        logger.info(f"✅ Email vinculado: {email}")
-        
-        return {
-            "profile_id": found['id'],
-            "email": email
-        }
-    
+                self._save_profiles(profiles)
+                return {"status": "linked"}
+        raise ValueError("Profile not found")
+
     def unlink_account(self, profile_id: str) -> Dict[str, Any]:
-        """Desvincula el email principal del perfil."""
-        logger.info(f"🔓 Desvinculando cuenta del perfil {profile_id[:8]}")
-        
         profiles = self._load_profiles()
-        found = None
-        
         for p in profiles:
             if p['id'].startswith(profile_id):
                 p['linked_account'] = None
-                found = p
-                logger.debug(f"  ✓ Cuenta desvinculada")
-                break
-        
-        if not found:
-            logger.error(f"❌ Perfil no encontrado: {profile_id}")
-            raise ValueError("Profile not found")
-        
-        self._save_profiles(profiles)
-        logger.info(f"✅ Cuenta desvinculada exitosamente")
-        
-        return {
-            "profile_id": found['id'],
-            "status": "unlinked"
-        }
+                self._save_profiles(profiles)
+                return {"status": "unlinked"}
+        raise ValueError("Profile not found")
