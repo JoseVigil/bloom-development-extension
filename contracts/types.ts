@@ -126,6 +126,30 @@ export interface OnboardingState {
   };
 }
 
+export type OnboardingStep = 'welcome' | 'twitter' | 'gemini' | 'nucleus' | 'projects';
+
+export interface TwitterAuthStatus {
+  authenticated: boolean;
+  username: string | null;
+}
+
+export interface OnboardingStatusDetails {
+  github: { authenticated: boolean; username?: string };
+  twitter: TwitterAuthStatus; 
+  gemini: { configured: boolean; key_count: number };
+  nucleus: { exists: boolean; nucleus_count: number };
+  projects: { added: boolean; count: number };
+}
+
+export interface OnboardingStatus {
+  ready: boolean;
+  current_step: OnboardingStep | 'completed';
+  completed: boolean;
+  completion_percentage: number;
+  details: OnboardingStatusDetails;
+  timestamp: string;
+}
+
 // ============================================================================
 // INTENT TYPES
 // ============================================================================

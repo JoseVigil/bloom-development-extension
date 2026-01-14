@@ -6,21 +6,35 @@ Manages per-profile Native Messaging Host configuration.
 import json
 import platform
 from pathlib import Path
-from typing import Optional
 from brain.shared.logger import get_logger
 
 logger = get_logger(__name__)
 
 
 class SynapseHandler:
-    """Handles Synapse bridge configuration for profiles."""
+    r"""
+    Handles Synapse bridge configuration for profiles.
+    
+    Each profile gets:
+    - A unique bridge name: com.bloom.synapse.[short_id]
+    - A manifest JSON in: profiles/[UUID]/synapse/com.bloom.synapse.[short_id].json
+    - A registry entry pointing to that manifest (Windows only)
+    - An injected config in: profiles/[UUID]/extension/synapse.config.js
+    """
     
     def __init__(self, base_dir: Path, extension_id: str):
+        """
+        Initialize the Synapse handler.
+        
+        Args:
+            base_dir: Base directory for all profiles and binaries
+            extension_id: Chrome extension ID for allowed_origins
+        """
         logger.info("🔧 Initializing SynapseHandler...")
         logger.debug(f"  Base dir: {base_dir}")
         logger.debug(f"  Extension ID: {extension_id}")
         
-        self.base_dir = base_dir
+        self.base_dir = Path(base_dir) if not isinstance(base_dir, Path) else base_dir
         self.extension_id = extension_id
         self.host_exe = base_dir / "bin" / "native" / "bloom-host.exe"
         
@@ -32,15 +46,22 @@ class SynapseHandler:
             logger.debug("✅ Host executable exists")
     
     def provision_bridge(self, profile_id: str) -> str:
-        """
+        r"""
         Provisions a unique Synapse bridge for a profile.
-        Creates manifest in profiles/[UUID]/synapse/ and registers in HKCU.
+        
+        Creates:
+        1. Manifest JSON in: profiles/[UUID]/synapse/com.bloom.synapse.[short_id].json
+        2. Registry entry in: HKCU\Software\Google\Chrome\NativeMessagingHosts\com.bloom.synapse.[short_id]
         
         Args:
             profile_id: Full UUID of the profile
             
         Returns:
             bridge_name: e.g., 'com.bloom.synapse.abc12345'
+            
+        Raises:
+            RuntimeError: If registry registration fails (Windows only)
+            OSError: If manifest creation fails
         """
         short_id = profile_id[:8]
         bridge_name = f"com.bloom.synapse.{short_id}"
@@ -49,7 +70,8 @@ class SynapseHandler:
         logger.debug(f"  Full profile ID: {profile_id}")
         logger.debug(f"  Bridge name: {bridge_name}")
         
-        # NUEVO: Synapse dir dentro del perfil
+        # Create synapse directory inside the profile
+        base_dir = Path(self.base_dir) if not isinstance(self.base_dir, Path) else self.base_dir
         synapse_dir = self.base_dir / "profiles" / profile_id / "synapse"
         if not synapse_dir.exists():
             logger.info(f"📁 Creating synapse directory: {synapse_dir}")
@@ -77,7 +99,20 @@ class SynapseHandler:
             raise
     
     def _create_native_manifest(self, bridge_name: str, profile_id: str, synapse_dir: Path) -> Path:
-        """Creates the native messaging host JSON manifest."""
+        """
+        Creates the native messaging host JSON manifest.
+        
+        Args:
+            bridge_name: The bridge name (e.g., 'com.bloom.synapse.abc12345')
+            profile_id: Full UUID of the profile
+            synapse_dir: Directory where manifest will be saved
+            
+        Returns:
+            Path to the created manifest file
+            
+        Raises:
+            OSError: If file cannot be written
+        """
         manifest_path = synapse_dir / f"{bridge_name}.json"
         
         logger.debug(f"Creating manifest at: {manifest_path}")
@@ -107,7 +142,19 @@ class SynapseHandler:
             raise
     
     def _register_in_registry(self, bridge_name: str, manifest_path: Path) -> None:
-        """Registers the bridge in Windows Registry (HKCU)."""
+        r"""
+        Registers the bridge in Windows Registry (HKCU).
+        
+        Creates key: HKCU\Software\Google\Chrome\NativeMessagingHosts\[bridge_name]
+        Points to: The manifest JSON path in the profile's synapse directory
+        
+        Args:
+            bridge_name: The bridge name (e.g., 'com.bloom.synapse.abc12345')
+            manifest_path: Path to the manifest JSON file
+            
+        Raises:
+            RuntimeError: If registry operation fails
+        """
         try:
             import winreg
             logger.debug("  winreg module imported successfully")
@@ -136,12 +183,18 @@ class SynapseHandler:
             raise RuntimeError(f"Failed to register bridge in Windows Registry: {e}")
     
     def inject_extension_config(self, profile_id: str, bridge_name: str) -> None:
-        """
+        r"""
         Writes synapse.config.js to the profile's extension directory.
+        
+        Creates file: profiles/[UUID]/extension/synapse.config.js
+        Format: self.SYNAPSE_CONFIG = { bridge_name: '[bridge_name]' };
         
         Args:
             profile_id: Full UUID of the profile
-            bridge_name: The bridge name to inject
+            bridge_name: The bridge name to inject (e.g., 'com.bloom.synapse.abc12345')
+            
+        Raises:
+            OSError: If file cannot be written
         """
         logger.info(f"💉 Injecting extension config for profile: {profile_id[:8]}...")
         logger.debug(f"  Bridge name: {bridge_name}")
@@ -158,8 +211,6 @@ class SynapseHandler:
                 extension_dir.mkdir(parents=True, exist_ok=True)
             
             content = f"self.SYNAPSE_CONFIG = {{ bridge_name: '{bridge_name}' }};"
-            logger.debug(f"  Config content: {content}")
-            
             config_path.write_text(content, encoding='utf-8')
             
             logger.info(f"  ✅ Config injected: {config_path}")
@@ -169,8 +220,12 @@ class SynapseHandler:
             raise
     
     def cleanup_bridge(self, profile_id: str) -> None:
-        """
+        r"""
         Removes bridge configuration for a profile.
+        
+        Deletes:
+        1. Manifest JSON from: profiles/[UUID]/synapse/com.bloom.synapse.[short_id].json
+        2. Registry entry from: HKCU\Software\Google\Chrome\NativeMessagingHosts\com.bloom.synapse.[short_id]
         
         Args:
             profile_id: Full UUID of the profile

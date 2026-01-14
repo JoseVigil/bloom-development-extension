@@ -1,2538 +1,2538 @@
-{
-  "cli_info": {
-    "name": "Brain CLI",
-    "version": "1.0.0",
-    "description": "Modular system for Bloom",
-    "executable": "brain",
-    "mode": "executable"
-  },
-  "global_options": [
-    {
-      "flag": "--json",
-      "description": "Salida en formato JSON (debe ir ANTES del comando)",
-      "position": "before_category"
-    },
-    {
-      "flag": "--verbose",
-      "description": "Habilitar logging detallado (debe ir ANTES del comando)",
-      "position": "before_category"
-    },
-    {
-      "flag": "--help",
-      "description": "Mostrar este mensaje de ayuda",
-      "position": "anywhere"
-    }
-  ],
-  "usage": {
-    "syntax": "brain [OPTIONS] <category> <command> [COMMAND_OPTIONS]",
-    "examples": [
-      {
-        "description": "Comando básico",
-        "command": "brain health native-ping"
-      },
-      {
-        "description": "Con flags globales",
-        "command": "brain --json nucleus list"
-      },
-      {
-        "description": "Con verbose",
-        "command": "brain --verbose profile create 'My Profile'"
-      }
-    ],
-    "notes": [
-      "Los flags globales (--json, --verbose) van ANTES de <category>"
-    ]
-  },
-  "categories": [
-    {
-      "name": "chrome",
-      "description": "Chrome profile debugging and network log analysis",
-      "command_count": 2,
-      "subsections": [
-        {
-          "name": "READ",
-          "commands": [
-            {
-              "name": "read-log",
-              "display_name": "READ LOG",
-              "description": "Read and filter Chrome debug logs for a specific profile.",
-              "syntax": "brain [GLOBAL_OPTIONS] chrome read-log <PROFILE_ID> [OPTIONS]",
-              "arguments": [
-                {
-                  "name": "<PROFILE_ID>",
-                  "required": true,
-                  "help": "Chrome profile UUID",
-                  "type": "str"
-                }
-              ],
-              "options": [
-                {
-                  "flag": "-k",
-                  "required": false,
-                  "help": "Keyword to search for",
-                  "type": "str",
-                  "default": "bloom"
-                },
-                {
-                  "flag": "-b",
-                  "required": false,
-                  "help": "Lines of context before match",
-                  "type": "int",
-                  "default": 5
-                },
-                {
-                  "flag": "-a",
-                  "required": false,
-                  "help": "Lines of context after match",
-                  "type": "int",
-                  "default": 5
-                }
-              ]
-            },
-            {
-              "name": "read-net-log",
-              "display_name": "READ NET LOG",
-              "description": "Analyze Chrome network logs with intelligent filtering.",
-              "syntax": "brain [GLOBAL_OPTIONS] chrome read-net-log <PROFILE_ID> [OPTIONS]",
-              "arguments": [
-                {
-                  "name": "<PROFILE_ID>",
-                  "required": true,
-                  "help": "Chrome profile UUID",
-                  "type": "str"
-                }
-              ],
-              "options": [
-                {
-                  "flag": "--filter-ai",
-                  "required": false,
-                  "help": "Filter for AI service requests only",
-                  "type": "bool",
-                  "default": false
-                },
-                {
-                  "flag": "-e",
-                  "required": false,
-                  "help": "Exclude URL patterns",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "--include-quic",
-                  "required": false,
-                  "help": "Include QUIC protocol events",
-                  "type": "bool",
-                  "default": false
-                },
-                {
-                  "flag": "--show-headers",
-                  "required": false,
-                  "help": "Show HTTP headers in output",
-                  "type": "bool",
-                  "default": false
-                }
-              ]
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "name": "context",
-      "description": "AI context generation and management",
-      "command_count": 1,
-      "subsections": [
-        {
-          "name": null,
-          "commands": [
-            {
-              "name": "generate",
-              "display_name": "GENERATE",
-              "description": "Generate the Bloom Context for the project.",
-              "syntax": "brain [GLOBAL_OPTIONS] context generate [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "-p",
-                  "required": false,
-                  "help": "Root path of the project",
-                  "type": "Path",
-                  "default": "."
-                },
-                {
-                  "flag": "-o",
-                  "required": false,
-                  "help": "Output folder name",
-                  "type": "str",
-                  "default": ".bloom"
-                },
-                {
-                  "flag": "-s",
-                  "required": false,
-                  "help": "Force specific strategy",
-                  "type": "Optional",
-                  "default": null
-                }
-              ]
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "name": "extension",
-      "description": "Chrome extension lifecycle management",
-      "command_count": 3,
-      "subsections": [
-        {
-          "name": null,
-          "commands": [
-            {
-              "name": "install",
-              "display_name": "INSTALL",
-              "description": "Install Chrome extension to permanent location.",
-              "syntax": "brain [GLOBAL_OPTIONS] extension install [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "-s",
-                  "required": false,
-                  "help": "Source directory (auto-detects if not provided)",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "-f",
-                  "required": false,
-                  "help": "Force reinstall even if same version exists",
-                  "type": "bool",
-                  "default": false
-                }
-              ]
-            },
-            {
-              "name": "update",
-              "display_name": "UPDATE",
-              "description": "Update Chrome extension to the latest version.",
-              "syntax": "brain [GLOBAL_OPTIONS] extension update [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "-s",
-                  "required": false,
-                  "help": "Source directory (auto-detects if not provided)",
-                  "type": "Optional",
-                  "default": null
-                }
-              ]
-            },
-            {
-              "name": "verify",
-              "display_name": "VERIFY",
-              "description": "Verify that the Chrome extension is correctly installed.",
-              "syntax": "brain [GLOBAL_OPTIONS] extension verify",
-              "arguments": [],
-              "options": []
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "name": "filesystem",
-      "description": "File operations and directory analysis",
-      "command_count": 3,
-      "subsections": [
-        {
-          "name": null,
-          "commands": [
-            {
-              "name": "compress",
-              "display_name": "COMPRESS",
-              "description": "Compress files into optimized JSON format for AI consumption.",
-              "syntax": "brain [GLOBAL_OPTIONS] filesystem compress <PATHS> [OPTIONS]",
-              "arguments": [
-                {
-                  "name": "<PATHS>",
-                  "required": true,
-                  "help": "Paths to compress (files or directories)",
-                  "type": "List"
-                }
-              ],
-              "options": [
-                {
-                  "flag": "-m",
-                  "required": false,
-                  "help": "Compression mode: 'codebase' or 'docbase'",
-                  "type": "str",
-                  "default": "codebase"
-                },
-                {
-                  "flag": "-o",
-                  "required": false,
-                  "help": "Output directory (default: current directory)",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "-e",
-                  "required": false,
-                  "help": "Patterns to exclude (can be used multiple times)",
-                  "type": "List",
-                  "default": "[]"
-                },
-                {
-                  "flag": "--no-comments",
-                  "required": false,
-                  "help": "Remove comments during compression",
-                  "type": "bool",
-                  "default": false
-                }
-              ]
-            },
-            {
-              "name": "extract",
-              "display_name": "EXTRACT",
-              "description": "Extract files from compressed JSON format.",
-              "syntax": "brain [GLOBAL_OPTIONS] filesystem extract <JSON_FILE> [OPTIONS]",
-              "arguments": [
-                {
-                  "name": "<JSON_FILE>",
-                  "required": true,
-                  "help": "Compressed JSON file to extract",
-                  "type": "str"
-                }
-              ],
-              "options": [
-                {
-                  "flag": "-o",
-                  "required": false,
-                  "help": "Output directory (default: extracted_<mode>)",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "--verify-hashes/--no-verify-hashes",
-                  "required": false,
-                  "help": "Verify MD5 hashes during extraction",
-                  "type": "bool",
-                  "default": true
-                }
-              ]
-            },
-            {
-              "name": "tree",
-              "display_name": "TREE",
-              "description": "Generate a visual directory tree structure with intelligent exclusions.",
-              "syntax": "brain [GLOBAL_OPTIONS] filesystem tree <TARGETS> [OPTIONS]",
-              "arguments": [
-                {
-                  "name": "<TARGETS>",
-                  "required": true,
-                  "help": "Specific directories or files to include (supports absolute paths).",
-                  "type": "Optional"
-                }
-              ],
-              "options": [
-                {
-                  "flag": "-o",
-                  "required": false,
-                  "help": "Output file path",
-                  "type": "Path",
-                  "default": "tree.txt"
-                },
-                {
-                  "flag": "--hash",
-                  "required": false,
-                  "help": "Include MD5 hashes",
-                  "type": "bool",
-                  "default": false
-                },
-                {
-                  "flag": "--export-json",
-                  "required": false,
-                  "help": "Export JSON to disk",
-                  "type": "bool",
-                  "default": false
-                }
-              ]
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "name": "gemini",
-      "description": "Gemini AI key management and operations",
-      "command_count": 5,
-      "subsections": [
-        {
-          "name": "KEYS",
-          "commands": [
-            {
-              "name": "keys-add",
-              "display_name": "KEYS ADD",
-              "description": "Add new Gemini API key with profile.",
-              "syntax": "brain [GLOBAL_OPTIONS] gemini keys-add [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "-p <VALUE>",
-                  "required": true,
-                  "help": "Profile name (e.g., 'Personal Chrome')",
-                  "type": "str",
-                  "default": null
-                },
-                {
-                  "flag": "-k <VALUE>",
-                  "required": true,
-                  "help": "Gemini API key",
-                  "type": "str",
-                  "default": null
-                },
-                {
-                  "flag": "--priority",
-                  "required": false,
-                  "help": "Priority: 1=preferred, 0=normal, -1=backup",
-                  "type": "int",
-                  "default": 0
-                }
-              ]
-            },
-            {
-              "name": "keys-delete",
-              "display_name": "KEYS DELETE",
-              "description": "Delete a Gemini API key.",
-              "syntax": "brain [GLOBAL_OPTIONS] gemini keys-delete <PROFILE>",
-              "arguments": [
-                {
-                  "name": "<PROFILE>",
-                  "required": true,
-                  "help": "Profile name to delete",
-                  "type": "str"
-                }
-              ],
-              "options": []
-            },
-            {
-              "name": "keys-list",
-              "display_name": "KEYS LIST",
-              "description": "List all Gemini API keys with status.",
-              "syntax": "brain [GLOBAL_OPTIONS] gemini keys-list",
-              "arguments": [],
-              "options": []
-            },
-            {
-              "name": "keys-stats",
-              "display_name": "KEYS STATS",
-              "description": "Show global Gemini keys statistics.",
-              "syntax": "brain [GLOBAL_OPTIONS] gemini keys-stats",
-              "arguments": [],
-              "options": []
-            },
-            {
-              "name": "keys-validate",
-              "display_name": "KEYS VALIDATE",
-              "description": "Validate a Gemini API key by testing connection.",
-              "syntax": "brain [GLOBAL_OPTIONS] gemini keys-validate <PROFILE>",
-              "arguments": [
-                {
-                  "name": "<PROFILE>",
-                  "required": true,
-                  "help": "Profile name to validate",
-                  "type": "str"
-                }
-              ],
-              "options": []
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "name": "github",
-      "description": "GitHub integration and repository management",
-      "command_count": 6,
-      "subsections": [
-        {
-          "name": "AUTENTICACIÓN",
-          "commands": [
-            {
-              "name": "auth-login",
-              "display_name": "AUTH LOGIN",
-              "description": "Store GitHub authentication token.",
-              "syntax": "brain [GLOBAL_OPTIONS] github auth-login [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "-t <VALUE>",
-                  "required": true,
-                  "help": "GitHub Personal Access Token",
-                  "type": "str",
-                  "default": null
-                }
-              ]
-            },
-            {
-              "name": "auth-logout",
-              "display_name": "AUTH LOGOUT",
-              "description": "Remove stored GitHub token.",
-              "syntax": "brain [GLOBAL_OPTIONS] github auth-logout",
-              "arguments": [],
-              "options": []
-            },
-            {
-              "name": "auth-status",
-              "display_name": "AUTH STATUS",
-              "description": "Check GitHub authentication status.",
-              "syntax": "brain [GLOBAL_OPTIONS] github auth-status",
-              "arguments": [],
-              "options": []
-            }
-          ]
-        },
-        {
-          "name": "GENERAL",
-          "commands": [
-            {
-              "name": "clone",
-              "display_name": "CLONE",
-              "description": "Clone GitHub repository to local directory.",
-              "syntax": "brain [GLOBAL_OPTIONS] github clone <REPO> [OPTIONS]",
-              "arguments": [
-                {
-                  "name": "<REPO>",
-                  "required": true,
-                  "help": "Repository (owner/repo or full URL)",
-                  "type": "str"
-                }
-              ],
-              "options": [
-                {
-                  "flag": "-p",
-                  "required": false,
-                  "help": "Target directory (defaults to repo name in current dir)",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "--progress/--no-progress",
-                  "required": false,
-                  "help": "Show clone progress",
-                  "type": "bool",
-                  "default": true
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "name": "ORGANIZACIONES",
-          "commands": [
-            {
-              "name": "orgs-list",
-              "display_name": "ORGS LIST",
-              "description": "List GitHub organizations.",
-              "syntax": "brain [GLOBAL_OPTIONS] github orgs-list",
-              "arguments": [],
-              "options": []
-            }
-          ]
-        },
-        {
-          "name": "REPOSITORIOS",
-          "commands": [
-            {
-              "name": "repos-list",
-              "display_name": "REPOS LIST",
-              "description": "List GitHub repositories.",
-              "syntax": "brain [GLOBAL_OPTIONS] github repos-list [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "--org",
-                  "required": false,
-                  "help": "Organization name",
-                  "type": "Optional",
-                  "default": null
-                }
-              ]
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "name": "health",
-      "description": "System health checks and diagnostics",
-      "command_count": 5,
-      "subsections": [
-        {
-          "name": "DEV",
-          "commands": [
-            {
-              "name": "dev-check",
-              "display_name": "DEV CHECK",
-              "description": "Check development environment and service status.",
-              "syntax": "brain [GLOBAL_OPTIONS] health dev-check [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "-t",
-                  "required": false,
-                  "help": "Connection timeout per port check in seconds",
-                  "type": "float",
-                  "default": 2.0
-                },
-                {
-                  "flag": "--json",
-                  "required": false,
-                  "help": "Output raw JSON",
-                  "type": "bool",
-                  "default": false
-                },
-                {
-                  "flag": "-v",
-                  "required": false,
-                  "help": "Detailed logging of each port check",
-                  "type": "bool",
-                  "default": false
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "name": "FULL",
-          "commands": [
-            {
-              "name": "full-stack",
-              "display_name": "FULL STACK",
-              "description": "Verify complete stack health (host, API, extension, Brain, onboarding)",
-              "syntax": "brain [GLOBAL_OPTIONS] health full-stack [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "-t",
-                  "required": false,
-                  "help": "Timeout per check in seconds",
-                  "type": "Optional",
-                  "default": 5
-                },
-                {
-                  "flag": "--json",
-                  "required": false,
-                  "help": "Output raw JSON",
-                  "type": "bool",
-                  "default": false
-                },
-                {
-                  "flag": "-v",
-                  "required": false,
-                  "help": "Detailed logging",
-                  "type": "bool",
-                  "default": false
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "name": "NATIVE",
-          "commands": [
-            {
-              "name": "native-ping",
-              "display_name": "NATIVE PING",
-              "description": "Ping the native host to verify it's alive and responding.",
-              "syntax": "brain [GLOBAL_OPTIONS] health native-ping [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "-t",
-                  "required": false,
-                  "help": "Timeout in milliseconds for ping response",
-                  "type": "int",
-                  "default": 500
-                },
-                {
-                  "flag": "-p",
-                  "required": false,
-                  "help": "Specific TCP port to test (auto-detect if not provided)",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "--check-ws/--no-check-ws",
-                  "required": false,
-                  "help": "Also verify WebSocket port status",
-                  "type": "bool",
-                  "default": true
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "name": "ONBOARDING",
-          "commands": [
-            {
-              "name": "onboarding-status",
-              "display_name": "ONBOARDING STATUS",
-              "description": "Check onboarding completion status (GitHub, Gemini, Nucleus, Projects)",
-              "syntax": "brain [GLOBAL_OPTIONS] health onboarding-status [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "-r",
-                  "required": false,
-                  "help": "Force re-check, ignore cache",
-                  "type": "bool",
-                  "default": false
-                },
-                {
-                  "flag": "--json",
-                  "required": false,
-                  "help": "Output raw JSON",
-                  "type": "bool",
-                  "default": false
-                },
-                {
-                  "flag": "-v",
-                  "required": false,
-                  "help": "Detailed logging of each check",
-                  "type": "bool",
-                  "default": false
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "name": "WEBSOCKET",
-          "commands": [
-            {
-              "name": "websocket-status",
-              "display_name": "WEBSOCKET STATUS",
-              "description": "Verify WebSocket server status on localhost:4124",
-              "syntax": "brain [GLOBAL_OPTIONS] health websocket-status [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "-t",
-                  "required": false,
-                  "help": "Connection timeout in seconds",
-                  "type": "Optional",
-                  "default": 5
-                },
-                {
-                  "flag": "--test-sub",
-                  "required": false,
-                  "help": "Test event subscription capability",
-                  "type": "bool",
-                  "default": false
-                },
-                {
-                  "flag": "--json",
-                  "required": false,
-                  "help": "Output raw JSON",
-                  "type": "bool",
-                  "default": false
-                },
-                {
-                  "flag": "-v",
-                  "required": false,
-                  "help": "Detailed connection logging",
-                  "type": "bool",
-                  "default": false
-                }
-              ]
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "name": "intent",
-      "description": "Intent execution system and context planning",
-      "command_count": 19,
-      "subsections": [
-        {
-          "name": "ADD",
-          "commands": [
-            {
-              "name": "add-turn",
-              "display_name": "ADD TURN",
-              "description": "Add a conversation turn to an intent's chat.",
-              "syntax": "brain [GLOBAL_OPTIONS] intent add-turn [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "-i",
-                  "required": false,
-                  "help": "Intent UUID",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "-f",
-                  "required": false,
-                  "help": "Intent folder name",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "-a",
-                  "required": false,
-                  "help": "Who is speaking: 'user' or 'ai'",
-                  "type": "str",
-                  "default": "user"
-                },
-                {
-                  "flag": "-c <VALUE>",
-                  "required": true,
-                  "help": "Content of the message",
-                  "type": "str",
-                  "default": null
-                },
-                {
-                  "flag": "-p",
-                  "required": false,
-                  "help": "Path to Bloom project",
-                  "type": "Optional",
-                  "default": null
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "name": "BUILD",
-          "commands": [
-            {
-              "name": "build-payload",
-              "display_name": "BUILD PAYLOAD",
-              "description": "Build optimized AI payload from context plan.",
-              "syntax": "brain [GLOBAL_OPTIONS] intent build-payload [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "--plan <VALUE>",
-                  "required": true,
-                  "help": "Path to context_plan.json",
-                  "type": "str",
-                  "default": null
-                },
-                {
-                  "flag": "--output",
-                  "required": false,
-                  "help": "Output path for payload (default: same dir as plan)",
-                  "type": "Optional",
-                  "default": null
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "name": "GENERAL",
-          "commands": [
-            {
-              "name": "create",
-              "display_name": "CREATE",
-              "description": "Create a new development or documentation intent.",
-              "syntax": "brain [GLOBAL_OPTIONS] intent create [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "-t <VALUE>",
-                  "required": true,
-                  "help": "Intent type: 'dev' for development or 'doc' for documentation",
-                  "type": "str",
-                  "default": null
-                },
-                {
-                  "flag": "-n <VALUE>",
-                  "required": true,
-                  "help": "Human-readable name for the intent (e.g., 'Fix login authentication flow')",
-                  "type": "str",
-                  "default": null
-                },
-                {
-                  "flag": "-f",
-                  "required": false,
-                  "help": "Initial files to include in the intent context (can be repeated or comma-separated)",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "-p",
-                  "required": false,
-                  "help": "Path to the Nucleus (Bloom project root). Auto-detected if not provided.",
-                  "type": "Optional",
-                  "default": null
-                }
-              ]
-            },
-            {
-              "name": "delete",
-              "display_name": "DELETE",
-              "description": "Delete an intent and all its data.",
-              "syntax": "brain [GLOBAL_OPTIONS] intent delete [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "-i",
-                  "required": false,
-                  "help": "Intent UUID",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "-f",
-                  "required": false,
-                  "help": "Intent folder name",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "--force",
-                  "required": false,
-                  "help": "Skip confirmation and force delete even if locked",
-                  "type": "bool",
-                  "default": false
-                },
-                {
-                  "flag": "-p",
-                  "required": false,
-                  "help": "Path to Bloom project",
-                  "type": "Optional",
-                  "default": null
-                }
-              ]
-            },
-            {
-              "name": "download",
-              "display_name": "DOWNLOAD",
-              "description": "Download AI response from Native Host or file.",
-              "syntax": "brain [GLOBAL_OPTIONS] intent download [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "-i",
-                  "required": false,
-                  "help": "Intent UUID to download response for",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "--folder",
-                  "required": false,
-                  "help": "Intent folder name (alternative to intent-id)",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "--socket-mode",
-                  "required": false,
-                  "help": "Listen on TCP socket for Host connection",
-                  "type": "bool",
-                  "default": false
-                },
-                {
-                  "flag": "--input-file",
-                  "required": false,
-                  "help": "Read response from file (for testing)",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "--host",
-                  "required": false,
-                  "help": "Host IP to listen on",
-                  "type": "str",
-                  "default": "127.0.0.1"
-                },
-                {
-                  "flag": "--port",
-                  "required": false,
-                  "help": "Port to listen on (different from Host's 5678)",
-                  "type": "int",
-                  "default": 5679
-                },
-                {
-                  "flag": "--timeout",
-                  "required": false,
-                  "help": "Socket timeout in seconds",
-                  "type": "int",
-                  "default": 300
-                },
-                {
-                  "flag": "--nucleus-path",
-                  "required": false,
-                  "help": "Path to Bloom project (auto-detected if omitted)",
-                  "type": "Optional",
-                  "default": null
-                }
-              ]
-            },
-            {
-              "name": "finalize",
-              "display_name": "FINALIZE",
-              "description": "Finalize an intent, applying changes to the codebase.",
-              "syntax": "brain [GLOBAL_OPTIONS] intent finalize [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "-i",
-                  "required": false,
-                  "help": "Intent UUID",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "-f",
-                  "required": false,
-                  "help": "Intent folder name",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "-p",
-                  "required": false,
-                  "help": "Path to Bloom project",
-                  "type": "Optional",
-                  "default": null
-                }
-              ]
-            },
-            {
-              "name": "get",
-              "display_name": "GET",
-              "description": "Get complete details of an intent.",
-              "syntax": "brain [GLOBAL_OPTIONS] intent get [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "-i",
-                  "required": false,
-                  "help": "Intent UUID",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "-f",
-                  "required": false,
-                  "help": "Intent folder name",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "-p",
-                  "required": false,
-                  "help": "Path to Bloom project",
-                  "type": "Optional",
-                  "default": null
-                }
-              ]
-            },
-            {
-              "name": "hydrate",
-              "display_name": "HYDRATE",
-              "description": "Hydrate an intent by processing source files and briefing.",
-              "syntax": "brain [GLOBAL_OPTIONS] intent hydrate [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "-i",
-                  "required": false,
-                  "help": "Intent UUID",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "-f",
-                  "required": false,
-                  "help": "Intent folder name",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "-b",
-                  "required": false,
-                  "help": "Briefing text (instruction)",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "-B",
-                  "required": false,
-                  "help": "Path to text file containing briefing",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "-F",
-                  "required": false,
-                  "help": "Files to include in context (comma-separated)",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "-p",
-                  "required": false,
-                  "help": "Path to Bloom project root",
-                  "type": "Optional",
-                  "default": null
-                }
-              ]
-            },
-            {
-              "name": "list",
-              "display_name": "LIST",
-              "description": "List all intents in the project.",
-              "syntax": "brain [GLOBAL_OPTIONS] intent list [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "-p",
-                  "required": false,
-                  "help": "Path to Bloom project (auto-detected if not provided)",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "-t",
-                  "required": false,
-                  "help": "Filter by intent type: 'dev' or 'doc'",
-                  "type": "Optional",
-                  "default": null
-                }
-              ]
-            },
-            {
-              "name": "lock",
-              "display_name": "LOCK",
-              "description": "Lock an intent for exclusive use.",
-              "syntax": "brain [GLOBAL_OPTIONS] intent lock [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "-i",
-                  "required": false,
-                  "help": "Intent UUID",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "-f",
-                  "required": false,
-                  "help": "Intent folder name",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "-p",
-                  "required": false,
-                  "help": "Path to Bloom project",
-                  "type": "Optional",
-                  "default": null
-                }
-              ]
-            },
-            {
-              "name": "merge",
-              "display_name": "MERGE",
-              "description": "Merge staged files from .staging/ into the real codebase.",
-              "syntax": "brain [GLOBAL_OPTIONS] intent merge [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "-i",
-                  "required": false,
-                  "help": "Intent UUID to merge files for",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "-f",
-                  "required": false,
-                  "help": "Intent folder name (e.g., .fix-login-a1b2c3d4)",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "-s",
-                  "required": false,
-                  "help": "Pipeline stage (briefing, execution, refinement_X). Auto-detect if not provided.",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "--force",
-                  "required": false,
-                  "help": "Skip approval check and merge anyway",
-                  "type": "bool",
-                  "default": false
-                },
-                {
-                  "flag": "--dry-run",
-                  "required": false,
-                  "help": "Show what would be merged without applying",
-                  "type": "bool",
-                  "default": false
-                },
-                {
-                  "flag": "--no-backup",
-                  "required": false,
-                  "help": "Skip backup creation (DANGEROUS)",
-                  "type": "bool",
-                  "default": false
-                },
-                {
-                  "flag": "-p",
-                  "required": false,
-                  "help": "Path to Bloom project (auto-detected if not provided)",
-                  "type": "Optional",
-                  "default": null
-                }
-              ]
-            },
-            {
-              "name": "parse",
-              "display_name": "PARSE",
-              "description": "Parse and validate .raw_output.json from an AI response.",
-              "syntax": "brain [GLOBAL_OPTIONS] intent parse [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "-i <VALUE>",
-                  "required": true,
-                  "help": "Intent UUID to parse",
-                  "type": "str",
-                  "default": null
-                },
-                {
-                  "flag": "-s",
-                  "required": false,
-                  "help": "Pipeline stage (briefing, execution, refinement_X). Auto-detect if not provided.",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "--strict",
-                  "required": false,
-                  "help": "Fail on any protocol violation (no fallback parser)",
-                  "type": "bool",
-                  "default": false
-                },
-                {
-                  "flag": "--output-report",
-                  "required": false,
-                  "help": "Generate .parse_report.json",
-                  "type": "bool",
-                  "default": true
-                },
-                {
-                  "flag": "-n",
-                  "required": false,
-                  "help": "Path to nucleus root (default: current directory)",
-                  "type": "Optional",
-                  "default": null
-                }
-              ]
-            },
-            {
-              "name": "plan",
-              "display_name": "PLAN",
-              "description": "Generate context plan for an intent using Gemini Router.",
-              "syntax": "brain [GLOBAL_OPTIONS] intent plan [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "--intent-dir <VALUE>",
-                  "required": true,
-                  "help": "Intent directory path",
-                  "type": "str",
-                  "default": null
-                },
-                {
-                  "flag": "--description <VALUE>",
-                  "required": true,
-                  "help": "Intent description",
-                  "type": "str",
-                  "default": null
-                },
-                {
-                  "flag": "--type",
-                  "required": false,
-                  "help": "Intent type: dev, doc, or seed",
-                  "type": "str",
-                  "default": "dev"
-                }
-              ]
-            },
-            {
-              "name": "recover",
-              "display_name": "RECOVER",
-              "description": "Recover interrupted intents using lock state recovery data.",
-              "syntax": "brain [GLOBAL_OPTIONS] intent recover [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "-i",
-                  "required": false,
-                  "help": "Intent UUID to recover",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "-f",
-                  "required": false,
-                  "help": "Intent folder name (e.g., .fix-login-abc123)",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "--auto-detect",
-                  "required": false,
-                  "help": "Find and recover all interrupted intents",
-                  "type": "bool",
-                  "default": false
-                },
-                {
-                  "flag": "--force-unlock",
-                  "required": false,
-                  "help": "Force unlock without attempting recovery",
-                  "type": "bool",
-                  "default": false
-                },
-                {
-                  "flag": "-p",
-                  "required": false,
-                  "help": "Path to Bloom project (auto-detected if not provided)",
-                  "type": "Optional",
-                  "default": null
-                }
-              ]
-            },
-            {
-              "name": "stage",
-              "display_name": "STAGE",
-              "description": "Prepare files in .staging/ directory for merge.",
-              "syntax": "brain [GLOBAL_OPTIONS] intent stage [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "-i",
-                  "required": false,
-                  "help": "Intent UUID to stage files for",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "-f",
-                  "required": false,
-                  "help": "Intent folder name (e.g., .fix-login-a1b2c3d4)",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "-s",
-                  "required": false,
-                  "help": "Pipeline stage (briefing, execution, refinement_X). Auto-detect if not provided.",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "--dry-run",
-                  "required": false,
-                  "help": "Show what would be staged without writing files",
-                  "type": "bool",
-                  "default": false
-                },
-                {
-                  "flag": "--overwrite",
-                  "required": false,
-                  "help": "Overwrite existing .staging/ directory",
-                  "type": "bool",
-                  "default": true
-                },
-                {
-                  "flag": "-p",
-                  "required": false,
-                  "help": "Path to Bloom project (auto-detected if not provided)",
-                  "type": "Optional",
-                  "default": null
-                }
-              ]
-            },
-            {
-              "name": "submit",
-              "display_name": "SUBMIT",
-              "description": "Submit an intent payload to an AI provider through the native host bridge.",
-              "syntax": "brain [GLOBAL_OPTIONS] intent submit [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "-i",
-                  "required": false,
-                  "help": "UUID of the intent to submit",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "-f",
-                  "required": false,
-                  "help": "Folder name of the intent (e.g., .fix-login-a1b2c3d4)",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "--provider",
-                  "required": false,
-                  "help": "AI provider to use: 'claude', 'gemini', etc.",
-                  "type": "str",
-                  "default": "claude"
-                },
-                {
-                  "flag": "-p",
-                  "required": false,
-                  "help": "Path to the Nucleus (Bloom project root). Auto-detected if not provided.",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "--profile-path",
-                  "required": false,
-                  "help": "Chrome profile path for the AI provider (optional)",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "--host",
-                  "required": false,
-                  "help": "Native host IP address",
-                  "type": "str",
-                  "default": "127.0.0.1"
-                },
-                {
-                  "flag": "--port",
-                  "required": false,
-                  "help": "Native host TCP port",
-                  "type": "int",
-                  "default": 5678
-                },
-                {
-                  "flag": "--timeout",
-                  "required": false,
-                  "help": "Connection timeout in seconds",
-                  "type": "int",
-                  "default": 30
-                }
-              ]
-            },
-            {
-              "name": "unlock",
-              "display_name": "UNLOCK",
-              "description": "Unlock an intent to free it for use.",
-              "syntax": "brain [GLOBAL_OPTIONS] intent unlock [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "-i",
-                  "required": false,
-                  "help": "Intent UUID",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "-f",
-                  "required": false,
-                  "help": "Intent folder name",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "--force",
-                  "required": false,
-                  "help": "Force unlock even if locked by another host",
-                  "type": "bool",
-                  "default": false
-                },
-                {
-                  "flag": "-p",
-                  "required": false,
-                  "help": "Path to Bloom project",
-                  "type": "Optional",
-                  "default": null
-                }
-              ]
-            },
-            {
-              "name": "update",
-              "display_name": "UPDATE",
-              "description": "Update an existing intent's properties.",
-              "syntax": "brain [GLOBAL_OPTIONS] intent update [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "-i",
-                  "required": false,
-                  "help": "UUID of the intent to update",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "-f",
-                  "required": false,
-                  "help": "Folder name of the intent (e.g., .fix-login-a1b2c3d4)",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "-n",
-                  "required": false,
-                  "help": "New name for the intent (triggers folder rename)",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "--files",
-                  "required": false,
-                  "help": "Replace all initial files with this new list",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "--add-files",
-                  "required": false,
-                  "help": "Add files to the existing initial_files list",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "--remove-files",
-                  "required": false,
-                  "help": "Remove files from the initial_files list",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "-p",
-                  "required": false,
-                  "help": "Path to the Nucleus (Bloom project root). Auto-detected if not provided.",
-                  "type": "Optional",
-                  "default": null
-                }
-              ]
-            },
-            {
-              "name": "validate",
-              "display_name": "VALIDATE",
-              "description": "Validate staging files using Gemini analysis.",
-              "syntax": "brain [GLOBAL_OPTIONS] intent validate [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "-i",
-                  "required": false,
-                  "help": "Intent UUID",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "-f",
-                  "required": false,
-                  "help": "Intent folder name (e.g., .fix-login-abc123)",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "-s",
-                  "required": false,
-                  "help": "Pipeline stage (briefing, execution, refinement_X)",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "--auto-approve",
-                  "required": false,
-                  "help": "Skip manual review and approve automatically",
-                  "type": "bool",
-                  "default": false
-                },
-                {
-                  "flag": "--gemini-model",
-                  "required": false,
-                  "help": "Gemini model to use for analysis",
-                  "type": "str",
-                  "default": "gemini-2.0-flash-exp"
-                },
-                {
-                  "flag": "--skip-gemini",
-                  "required": false,
-                  "help": "Skip Gemini analysis (only basic validation)",
-                  "type": "bool",
-                  "default": false
-                },
-                {
-                  "flag": "-p",
-                  "required": false,
-                  "help": "Path to Bloom project (auto-detected if omitted)",
-                  "type": "Optional",
-                  "default": null
-                }
-              ]
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "name": "nucleus",
-      "description": "Nucleus project management and lifecycle",
-      "command_count": 14,
-      "subsections": [
-        {
-          "name": "GENERAL",
-          "commands": [
-            {
-              "name": "create",
-              "display_name": "CREATE",
-              "description": "Initialize a new Bloom Nucleus V2.0 project structure.",
-              "syntax": "brain [GLOBAL_OPTIONS] nucleus create [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "-o <VALUE>",
-                  "required": true,
-                  "help": "Organization name",
-                  "type": "str",
-                  "default": null
-                },
-                {
-                  "flag": "-p",
-                  "required": false,
-                  "help": "Target path (default: current dir)",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "--output",
-                  "required": false,
-                  "help": "Output directory name (legacy, kept for compatibility)",
-                  "type": "str",
-                  "default": ".bloom"
-                },
-                {
-                  "flag": "--url",
-                  "required": false,
-                  "help": "Organization URL",
-                  "type": "str",
-                  "default": ""
-                },
-                {
-                  "flag": "-f",
-                  "required": false,
-                  "help": "Force overwrite existing directory",
-                  "type": "bool",
-                  "default": false
-                }
-              ]
-            },
-            {
-              "name": "delete",
-              "display_name": "DELETE",
-              "description": "Delete a complete nucleus including all its data.",
-              "syntax": "brain [GLOBAL_OPTIONS] nucleus delete [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "-p <VALUE>",
-                  "required": true,
-                  "help": "Path to the Nucleus root directory to delete",
-                  "type": "Path",
-                  "default": null
-                },
-                {
-                  "flag": "-f",
-                  "required": false,
-                  "help": "Skip confirmation prompt",
-                  "type": "bool",
-                  "default": false
-                }
-              ]
-            },
-            {
-              "name": "get",
-              "display_name": "GET",
-              "description": "Retrieve complete details of a nucleus.",
-              "syntax": "brain [GLOBAL_OPTIONS] nucleus get [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "-p <VALUE>",
-                  "required": true,
-                  "help": "Path to the Nucleus root directory",
-                  "type": "Path",
-                  "default": null
-                }
-              ]
-            },
-            {
-              "name": "link",
-              "display_name": "LINK",
-              "description": "Link an existing folder as a Nucleus project.",
-              "syntax": "brain [GLOBAL_OPTIONS] nucleus link <PATH>",
-              "arguments": [
-                {
-                  "name": "<PATH>",
-                  "required": true,
-                  "help": "Path to existing project",
-                  "type": "Path"
-                }
-              ],
-              "options": []
-            },
-            {
-              "name": "list",
-              "display_name": "LIST",
-              "description": "List all Nucleus projects found in a parent directory.",
-              "syntax": "brain [GLOBAL_OPTIONS] nucleus list [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "-d",
-                  "required": false,
-                  "help": "Parent directory to scan for nuclei (default: current directory)",
-                  "type": "Optional",
-                  "default": null
-                }
-              ]
-            },
-            {
-              "name": "status",
-              "display_name": "STATUS",
-              "description": "Check if a directory is a valid Nucleus project.",
-              "syntax": "brain [GLOBAL_OPTIONS] nucleus status [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "-p",
-                  "required": false,
-                  "help": "Nucleus path",
-                  "type": "Optional",
-                  "default": null
-                }
-              ]
-            },
-            {
-              "name": "sync",
-              "display_name": "SYNC",
-              "description": "Synchronize projects and rebuild nucleus cache.",
-              "syntax": "brain [GLOBAL_OPTIONS] nucleus sync [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "-p",
-                  "required": false,
-                  "help": "Nucleus path (default: current dir)",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "--skip-git",
-                  "required": false,
-                  "help": "Skip git pull operations",
-                  "type": "bool",
-                  "default": false
-                },
-                {
-                  "flag": "-v",
-                  "required": false,
-                  "help": "Show detailed progress",
-                  "type": "bool",
-                  "default": false
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "name": "CREATE",
-          "commands": [
-            {
-              "name": "create-exp-intent",
-              "display_name": "CREATE EXP INTENT",
-              "description": "Create a new exploration intent in the nucleus.",
-              "syntax": "brain [GLOBAL_OPTIONS] nucleus create-exp-intent [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "-n <VALUE>",
-                  "required": true,
-                  "help": "Intent name (will be slugified)",
-                  "type": "str",
-                  "default": null
-                },
-                {
-                  "flag": "-p",
-                  "required": false,
-                  "help": "Nucleus path (default: current dir)",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "--inquiry",
-                  "required": false,
-                  "help": "Initial inquiry question",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "-d",
-                  "required": false,
-                  "help": "Intent description",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "--projects",
-                  "required": false,
-                  "help": "Comma-separated project names to include",
-                  "type": "Optional",
-                  "default": null
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "name": "EXP",
-          "commands": [
-            {
-              "name": "exp-discovery-turn",
-              "display_name": "EXP DISCOVERY TURN",
-              "description": "Add a discovery turn to an exploration intent.",
-              "syntax": "brain [GLOBAL_OPTIONS] nucleus exp-discovery-turn [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "-i <VALUE>",
-                  "required": true,
-                  "help": "Intent ID or slug",
-                  "type": "str",
-                  "default": null
-                },
-                {
-                  "flag": "-p",
-                  "required": false,
-                  "help": "Nucleus path (default: current dir)",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "--notes",
-                  "required": false,
-                  "help": "Turn notes/observations",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "--analysis",
-                  "required": false,
-                  "help": "Analysis summary for this turn",
-                  "type": "Optional",
-                  "default": null
-                }
-              ]
-            },
-            {
-              "name": "exp-export-findings",
-              "display_name": "EXP EXPORT FINDINGS",
-              "description": "Export findings from an exploration intent.",
-              "syntax": "brain [GLOBAL_OPTIONS] nucleus exp-export-findings [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "-i <VALUE>",
-                  "required": true,
-                  "help": "Intent ID or slug",
-                  "type": "str",
-                  "default": null
-                },
-                {
-                  "flag": "-p",
-                  "required": false,
-                  "help": "Nucleus path (default: current dir)",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "-f",
-                  "required": false,
-                  "help": "Export format (markdown, json)",
-                  "type": "str",
-                  "default": "markdown"
-                },
-                {
-                  "flag": "--include-raw",
-                  "required": false,
-                  "help": "Include raw turn data",
-                  "type": "bool",
-                  "default": false
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "name": "LIST",
-          "commands": [
-            {
-              "name": "list-projects",
-              "display_name": "LIST PROJECTS",
-              "description": "List all projects linked to the nucleus with their details.",
-              "syntax": "brain [GLOBAL_OPTIONS] nucleus list-projects [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "-p",
-                  "required": false,
-                  "help": "Nucleus root path (default: current directory)",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "-s",
-                  "required": false,
-                  "help": "Filter by project strategy (python, typescript, go, etc.)",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "--active-only",
-                  "required": false,
-                  "help": "Show only active projects",
-                  "type": "bool",
-                  "default": false
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "name": "ONBOARDING",
-          "commands": [
-            {
-              "name": "onboarding-complete",
-              "display_name": "ONBOARDING COMPLETE",
-              "description": "Mark an onboarding step or entire onboarding as completed.",
-              "syntax": "brain [GLOBAL_OPTIONS] nucleus onboarding-complete [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "-s",
-                  "required": false,
-                  "help": "Step name to mark as completed",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "-a",
-                  "required": false,
-                  "help": "Mark entire onboarding as completed",
-                  "type": "bool",
-                  "default": false
-                },
-                {
-                  "flag": "-p",
-                  "required": false,
-                  "help": "Nucleus root path (default: current dir)",
-                  "type": "Optional",
-                  "default": null
-                }
-              ]
-            },
-            {
-              "name": "onboarding-status",
-              "display_name": "ONBOARDING STATUS",
-              "description": "Get the current onboarding status from nucleus configuration.",
-              "syntax": "brain [GLOBAL_OPTIONS] nucleus onboarding-status [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "-p",
-                  "required": false,
-                  "help": "Nucleus root path (default: current dir)",
-                  "type": "Optional",
-                  "default": null
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "name": "PROJECT",
-          "commands": [
-            {
-              "name": "project-info",
-              "display_name": "PROJECT INFO",
-              "description": "Display detailed information about a specific project in the nucleus.",
-              "syntax": "brain [GLOBAL_OPTIONS] nucleus project-info <PROJECT_NAME> [OPTIONS]",
-              "arguments": [
-                {
-                  "name": "<PROJECT_NAME>",
-                  "required": true,
-                  "help": "Name of the project to inspect",
-                  "type": "str"
-                }
-              ],
-              "options": [
-                {
-                  "flag": "-p",
-                  "required": false,
-                  "help": "Nucleus root path (default: current directory)",
-                  "type": "Optional",
-                  "default": null
-                }
-              ]
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "name": "profile",
-      "description": "Chrome profile and AI account management",
-      "command_count": 8,
-      "subsections": [
-        {
-          "name": "GENERAL",
-          "commands": [
-            {
-              "name": "create",
-              "display_name": "CREATE",
-              "description": "Crea un nuevo perfil con el alias especificado.",
-              "syntax": "brain [GLOBAL_OPTIONS] profile create <ALIAS>",
-              "arguments": [
-                {
-                  "name": "<ALIAS>",
-                  "required": true,
-                  "help": "Nombre descriptivo del perfil",
-                  "type": "str"
-                }
-              ],
-              "options": []
-            },
-            {
-              "name": "destroy",
-              "display_name": "DESTROY",
-              "description": "Elimina un perfil y sus datos. Requiere confirmación a menos que se use --force.",
-              "syntax": "brain [GLOBAL_OPTIONS] profile destroy <PROFILE_ID> [OPTIONS]",
-              "arguments": [
-                {
-                  "name": "<PROFILE_ID>",
-                  "required": true,
-                  "help": "ID del perfil a eliminar",
-                  "type": "str"
-                }
-              ],
-              "options": [
-                {
-                  "flag": "-f",
-                  "required": false,
-                  "help": "Forzar sin confirmación",
-                  "type": "bool",
-                  "default": false
-                }
-              ]
-            },
-            {
-              "name": "launch",
-              "display_name": "LAUNCH",
-              "description": "Lanza Chrome con el perfil especificado y la extensión Bloom.",
-              "syntax": "brain [GLOBAL_OPTIONS] profile launch <PROFILE_ID> [OPTIONS]",
-              "arguments": [
-                {
-                  "name": "<PROFILE_ID>",
-                  "required": true,
-                  "help": "ID del perfil a lanzar",
-                  "type": "str"
-                }
-              ],
-              "options": [
-                {
-                  "flag": "--url",
-                  "required": false,
-                  "help": "URL inicial explícita",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "--cockpit",
-                  "required": false,
-                  "help": "Modo cockpit (landing page)",
-                  "type": "bool",
-                  "default": false
-                },
-                {
-                  "flag": "--discovery",
-                  "required": false,
-                  "help": "Modo de validación de conexión",
-                  "type": "bool",
-                  "default": false
-                }
-              ]
-            },
-            {
-              "name": "link",
-              "display_name": "LINK",
-              "description": "Vincula una cuenta de email a un perfil (DEPRECATED - usar accounts-register).",
-              "syntax": "brain [GLOBAL_OPTIONS] profile link <PROFILE_ID> <EMAIL>",
-              "arguments": [
-                {
-                  "name": "<PROFILE_ID>",
-                  "required": true,
-                  "help": "ID del perfil",
-                  "type": "str"
-                },
-                {
-                  "name": "<EMAIL>",
-                  "required": true,
-                  "help": "Email de la cuenta a vincular",
-                  "type": "str"
-                }
-              ],
-              "options": []
-            },
-            {
-              "name": "list",
-              "display_name": "LIST",
-              "description": "MOSTRAR AL USUARIO (CLI).",
-              "syntax": "brain [GLOBAL_OPTIONS] profile list",
-              "arguments": [],
-              "options": []
-            },
-            {
-              "name": "unlink",
-              "display_name": "UNLINK",
-              "description": "Desvincula la cuenta asociada a un perfil (DEPRECATED - usar accounts-remove).",
-              "syntax": "brain [GLOBAL_OPTIONS] profile unlink <PROFILE_ID>",
-              "arguments": [
-                {
-                  "name": "<PROFILE_ID>",
-                  "required": true,
-                  "help": "ID del perfil",
-                  "type": "str"
-                }
-              ],
-              "options": []
-            }
-          ]
-        },
-        {
-          "name": "ACCOUNTS",
-          "commands": [
-            {
-              "name": "accounts-register",
-              "display_name": "ACCOUNTS REGISTER",
-              "description": "Registra una nueva cuenta en un perfil.",
-              "syntax": "brain [GLOBAL_OPTIONS] profile accounts-register <PROFILE_ID> <PROVIDER> <EMAIL>",
-              "arguments": [
-                {
-                  "name": "<PROFILE_ID>",
-                  "required": true,
-                  "help": "ID del perfil",
-                  "type": "str"
-                },
-                {
-                  "name": "<PROVIDER>",
-                  "required": true,
-                  "help": "Proveedor (google, openai, anthropic, etc)",
-                  "type": "str"
-                },
-                {
-                  "name": "<EMAIL>",
-                  "required": true,
-                  "help": "Email o identificador de la cuenta",
-                  "type": "str"
-                }
-              ],
-              "options": []
-            },
-            {
-              "name": "accounts-remove",
-              "display_name": "ACCOUNTS REMOVE",
-              "description": "Remueve una cuenta registrada de un perfil.",
-              "syntax": "brain [GLOBAL_OPTIONS] profile accounts-remove <PROFILE_ID> <PROVIDER>",
-              "arguments": [
-                {
-                  "name": "<PROFILE_ID>",
-                  "required": true,
-                  "help": "ID del perfil",
-                  "type": "str"
-                },
-                {
-                  "name": "<PROVIDER>",
-                  "required": true,
-                  "help": "Proveedor a remover",
-                  "type": "str"
-                }
-              ],
-              "options": []
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "name": "project",
-      "description": "Project lifecycle and scaffolding",
-      "command_count": 4,
-      "subsections": [
-        {
-          "name": "GENERAL",
-          "commands": [
-            {
-              "name": "add",
-              "display_name": "ADD",
-              "description": "Vincula un proyecto local existente a un Nucleus.",
-              "syntax": "brain [GLOBAL_OPTIONS] project add <PROJECT_PATH> [OPTIONS]",
-              "arguments": [
-                {
-                  "name": "<PROJECT_PATH>",
-                  "required": true,
-                  "help": "Ruta al proyecto a vincular",
-                  "type": "str"
-                }
-              ],
-              "options": [
-                {
-                  "flag": "-n <VALUE>",
-                  "required": true,
-                  "help": "Ruta al Nucleus destino",
-                  "type": "str",
-                  "default": null
-                },
-                {
-                  "flag": "--name",
-                  "required": false,
-                  "help": "Nombre custom del proyecto (default: nombre de carpeta)",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "--strategy",
-                  "required": false,
-                  "help": "Forzar estrategia específica (default: auto-detect)",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "--description",
-                  "required": false,
-                  "help": "Descripción del proyecto",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "--repo-url",
-                  "required": false,
-                  "help": "URL del repositorio GitHub",
-                  "type": "Optional",
-                  "default": null
-                }
-              ]
-            },
-            {
-              "name": "detect",
-              "display_name": "DETECT",
-              "description": "Scan directory and detect project types automatically.",
-              "syntax": "brain [GLOBAL_OPTIONS] project detect <PARENT_PATH> [OPTIONS]",
-              "arguments": [
-                {
-                  "name": "<PARENT_PATH>",
-                  "required": true,
-                  "help": "Parent directory to scan for projects",
-                  "type": "str"
-                }
-              ],
-              "options": [
-                {
-                  "flag": "-d",
-                  "required": false,
-                  "help": "Maximum depth for recursive scanning",
-                  "type": "int",
-                  "default": 3
-                },
-                {
-                  "flag": "-s",
-                  "required": false,
-                  "help": "Filter projects by strategy type",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "-c",
-                  "required": false,
-                  "help": "Filter by minimum confidence level (high, medium, low)",
-                  "type": "Optional",
-                  "default": null
-                }
-              ]
-            },
-            {
-              "name": "load",
-              "display_name": "LOAD",
-              "description": "Validates and loads project information. ",
-              "syntax": "brain [GLOBAL_OPTIONS] project load [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "-p",
-                  "required": false,
-                  "help": "Path to the project root",
-                  "type": "Path",
-                  "default": "."
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "name": "CLONE",
-          "commands": [
-            {
-              "name": "clone-and-add",
-              "display_name": "CLONE AND ADD",
-              "description": "Clone a Git repository and automatically link it to the current Nucleus.",
-              "syntax": "brain [GLOBAL_OPTIONS] project clone-and-add <REPO_URL> [OPTIONS]",
-              "arguments": [
-                {
-                  "name": "<REPO_URL>",
-                  "required": true,
-                  "help": "Git repository URL (HTTPS or SSH)",
-                  "type": "str"
-                }
-              ],
-              "options": [
-                {
-                  "flag": "-d",
-                  "required": false,
-                  "help": "Absolute path where to clone the repository. If not provided, clones to Nucleus root using repo name.",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "-n",
-                  "required": false,
-                  "help": "Path to the Nucleus project. Auto-detected from current directory if not provided.",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "--name",
-                  "required": false,
-                  "help": "Custom name for the project (default: repository name)",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "--strategy",
-                  "required": false,
-                  "help": "Force specific technology strategy (e.g., python, typescript, android)",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "--description",
-                  "required": false,
-                  "help": "Project description",
-                  "type": "Optional",
-                  "default": null
-                }
-              ]
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "name": "runtime",
-      "description": "Non-interactive system runtime operations",
-      "command_count": 1,
-      "subsections": [
-        {
-          "name": null,
-          "commands": [
-            {
-              "name": "run",
-              "display_name": "RUN",
-              "description": "Start Brain core runtime",
-              "syntax": "brain [GLOBAL_OPTIONS] runtime run",
-              "arguments": [],
-              "options": []
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "name": "service",
-      "description": "Background connection multiplexer and task runner",
-      "command_count": 3,
-      "subsections": [
-        {
-          "name": null,
-          "commands": [
-            {
-              "name": "start",
-              "display_name": "START",
-              "description": "Start the Brain TCP multiplexer service.",
-              "syntax": "brain [GLOBAL_OPTIONS] service start [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "-p",
-                  "required": false,
-                  "help": "TCP port to bind",
-                  "type": "int",
-                  "default": 5678
-                },
-                {
-                  "flag": "-h",
-                  "required": false,
-                  "help": "Host address to bind",
-                  "type": "str",
-                  "default": "127.0.0.1"
-                },
-                {
-                  "flag": "-d",
-                  "required": false,
-                  "help": "Run as background daemon",
-                  "type": "bool",
-                  "default": false
-                }
-              ]
-            },
-            {
-              "name": "status",
-              "display_name": "STATUS",
-              "description": "Check the current status of the Brain service.",
-              "syntax": "brain [GLOBAL_OPTIONS] service status",
-              "arguments": [],
-              "options": []
-            },
-            {
-              "name": "stop",
-              "display_name": "STOP",
-              "description": "Stop the running Brain service.",
-              "syntax": "brain [GLOBAL_OPTIONS] service stop",
-              "arguments": [],
-              "options": []
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "name": "synapse",
-      "description": "Chrome Native Messaging Bridge and protocol management",
-      "command_count": 2,
-      "subsections": [
-        {
-          "name": null,
-          "commands": [
-            {
-              "name": "close",
-              "display_name": "CLOSE",
-              "description": "Envía señal de terminación al navegador.",
-              "syntax": "brain [GLOBAL_OPTIONS] synapse close",
-              "arguments": [],
-              "options": []
-            },
-            {
-              "name": "host",
-              "display_name": "HOST",
-              "description": "Inicia el modo Host (Listener Loop).",
-              "syntax": "brain [GLOBAL_OPTIONS] synapse host",
-              "arguments": [],
-              "options": []
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "name": "system",
-      "description": "Runtime and system introspection",
-      "command_count": 3,
-      "subsections": [
-        {
-          "name": null,
-          "commands": [
-            {
-              "name": "info",
-              "display_name": "INFO",
-              "description": "Display comprehensive system information.",
-              "syntax": "brain [GLOBAL_OPTIONS] system info",
-              "arguments": [],
-              "options": []
-            },
-            {
-              "name": "path",
-              "display_name": "PATH",
-              "description": "Display the absolute path to the brain executable.",
-              "syntax": "brain [GLOBAL_OPTIONS] system path",
-              "arguments": [],
-              "options": []
-            },
-            {
-              "name": "version",
-              "display_name": "VERSION",
-              "description": "Display or increment the version number.",
-              "syntax": "brain [GLOBAL_OPTIONS] system version [OPTIONS]",
-              "arguments": [],
-              "options": [
-                {
-                  "flag": "--added",
-                  "required": false,
-                  "help": "Feature or capability added (can be used multiple times)",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "--changed",
-                  "required": false,
-                  "help": "Feature or behavior changed (can be used multiple times)",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "--details",
-                  "required": false,
-                  "help": "Implementation detail or technical note (can be used multiple times)",
-                  "type": "Optional",
-                  "default": null
-                }
-              ]
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "name": "twitter",
-      "description": "Twitter/X integration and social data analysis",
-      "command_count": 0,
-      "subsections": [
-        {
-          "name": null,
-          "commands": []
-        }
-      ]
-    }
-  ],
-  "root_commands": []
+{
+  "cli_info": {
+    "name": "Brain CLI",
+    "version": "1.0.0",
+    "description": "Modular system for Bloom",
+    "executable": "brain",
+    "mode": "executable"
+  },
+  "global_options": [
+    {
+      "flag": "--json",
+      "description": "Salida en formato JSON (debe ir ANTES del comando)",
+      "position": "before_category"
+    },
+    {
+      "flag": "--verbose",
+      "description": "Habilitar logging detallado (debe ir ANTES del comando)",
+      "position": "before_category"
+    },
+    {
+      "flag": "--help",
+      "description": "Mostrar este mensaje de ayuda",
+      "position": "anywhere"
+    }
+  ],
+  "usage": {
+    "syntax": "brain [OPTIONS] <category> <command> [COMMAND_OPTIONS]",
+    "examples": [
+      {
+        "description": "Comando b�sico",
+        "command": "brain health native-ping"
+      },
+      {
+        "description": "Con flags globales",
+        "command": "brain --json nucleus list"
+      },
+      {
+        "description": "Con verbose",
+        "command": "brain --verbose profile create 'My Profile'"
+      }
+    ],
+    "notes": [
+      "Los flags globales (--json, --verbose) van ANTES de <category>"
+    ]
+  },
+  "categories": [
+    {
+      "name": "chrome",
+      "description": "Chrome profile debugging and network log analysis",
+      "command_count": 2,
+      "subsections": [
+        {
+          "name": "READ",
+          "commands": [
+            {
+              "name": "read-log",
+              "display_name": "READ LOG",
+              "description": "Read and filter Chrome debug logs for a specific profile.",
+              "syntax": "brain [GLOBAL_OPTIONS] chrome read-log <PROFILE_ID> [OPTIONS]",
+              "arguments": [
+                {
+                  "name": "<PROFILE_ID>",
+                  "required": true,
+                  "help": "Chrome profile UUID",
+                  "type": "str"
+                }
+              ],
+              "options": [
+                {
+                  "flag": "-k",
+                  "required": false,
+                  "help": "Keyword to search for",
+                  "type": "str",
+                  "default": "bloom"
+                },
+                {
+                  "flag": "-b",
+                  "required": false,
+                  "help": "Lines of context before match",
+                  "type": "int",
+                  "default": 5
+                },
+                {
+                  "flag": "-a",
+                  "required": false,
+                  "help": "Lines of context after match",
+                  "type": "int",
+                  "default": 5
+                }
+              ]
+            },
+            {
+              "name": "read-net-log",
+              "display_name": "READ NET LOG",
+              "description": "Analyze Chrome network logs with intelligent filtering.",
+              "syntax": "brain [GLOBAL_OPTIONS] chrome read-net-log <PROFILE_ID> [OPTIONS]",
+              "arguments": [
+                {
+                  "name": "<PROFILE_ID>",
+                  "required": true,
+                  "help": "Chrome profile UUID",
+                  "type": "str"
+                }
+              ],
+              "options": [
+                {
+                  "flag": "--filter-ai",
+                  "required": false,
+                  "help": "Filter for AI service requests only",
+                  "type": "bool",
+                  "default": false
+                },
+                {
+                  "flag": "-e",
+                  "required": false,
+                  "help": "Exclude URL patterns",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "--include-quic",
+                  "required": false,
+                  "help": "Include QUIC protocol events",
+                  "type": "bool",
+                  "default": false
+                },
+                {
+                  "flag": "--show-headers",
+                  "required": false,
+                  "help": "Show HTTP headers in output",
+                  "type": "bool",
+                  "default": false
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "context",
+      "description": "AI context generation and management",
+      "command_count": 1,
+      "subsections": [
+        {
+          "name": null,
+          "commands": [
+            {
+              "name": "generate",
+              "display_name": "GENERATE",
+              "description": "Generate the Bloom Context for the project.",
+              "syntax": "brain [GLOBAL_OPTIONS] context generate [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "-p",
+                  "required": false,
+                  "help": "Root path of the project",
+                  "type": "Path",
+                  "default": "."
+                },
+                {
+                  "flag": "-o",
+                  "required": false,
+                  "help": "Output folder name",
+                  "type": "str",
+                  "default": ".bloom"
+                },
+                {
+                  "flag": "-s",
+                  "required": false,
+                  "help": "Force specific strategy",
+                  "type": "Optional",
+                  "default": null
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "extension",
+      "description": "Chrome extension lifecycle management",
+      "command_count": 3,
+      "subsections": [
+        {
+          "name": null,
+          "commands": [
+            {
+              "name": "install",
+              "display_name": "INSTALL",
+              "description": "Install Chrome extension to permanent location.",
+              "syntax": "brain [GLOBAL_OPTIONS] extension install [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "-s",
+                  "required": false,
+                  "help": "Source directory (auto-detects if not provided)",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "-f",
+                  "required": false,
+                  "help": "Force reinstall even if same version exists",
+                  "type": "bool",
+                  "default": false
+                }
+              ]
+            },
+            {
+              "name": "update",
+              "display_name": "UPDATE",
+              "description": "Update Chrome extension to the latest version.",
+              "syntax": "brain [GLOBAL_OPTIONS] extension update [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "-s",
+                  "required": false,
+                  "help": "Source directory (auto-detects if not provided)",
+                  "type": "Optional",
+                  "default": null
+                }
+              ]
+            },
+            {
+              "name": "verify",
+              "display_name": "VERIFY",
+              "description": "Verify that the Chrome extension is correctly installed.",
+              "syntax": "brain [GLOBAL_OPTIONS] extension verify",
+              "arguments": [],
+              "options": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "filesystem",
+      "description": "File operations and directory analysis",
+      "command_count": 3,
+      "subsections": [
+        {
+          "name": null,
+          "commands": [
+            {
+              "name": "compress",
+              "display_name": "COMPRESS",
+              "description": "Compress files into optimized JSON format for AI consumption.",
+              "syntax": "brain [GLOBAL_OPTIONS] filesystem compress <PATHS> [OPTIONS]",
+              "arguments": [
+                {
+                  "name": "<PATHS>",
+                  "required": true,
+                  "help": "Paths to compress (files or directories)",
+                  "type": "List"
+                }
+              ],
+              "options": [
+                {
+                  "flag": "-m",
+                  "required": false,
+                  "help": "Compression mode: 'codebase' or 'docbase'",
+                  "type": "str",
+                  "default": "codebase"
+                },
+                {
+                  "flag": "-o",
+                  "required": false,
+                  "help": "Output directory (default: current directory)",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "-e",
+                  "required": false,
+                  "help": "Patterns to exclude (can be used multiple times)",
+                  "type": "List",
+                  "default": "[]"
+                },
+                {
+                  "flag": "--no-comments",
+                  "required": false,
+                  "help": "Remove comments during compression",
+                  "type": "bool",
+                  "default": false
+                }
+              ]
+            },
+            {
+              "name": "extract",
+              "display_name": "EXTRACT",
+              "description": "Extract files from compressed JSON format.",
+              "syntax": "brain [GLOBAL_OPTIONS] filesystem extract <JSON_FILE> [OPTIONS]",
+              "arguments": [
+                {
+                  "name": "<JSON_FILE>",
+                  "required": true,
+                  "help": "Compressed JSON file to extract",
+                  "type": "str"
+                }
+              ],
+              "options": [
+                {
+                  "flag": "-o",
+                  "required": false,
+                  "help": "Output directory (default: extracted_<mode>)",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "--verify-hashes/--no-verify-hashes",
+                  "required": false,
+                  "help": "Verify MD5 hashes during extraction",
+                  "type": "bool",
+                  "default": true
+                }
+              ]
+            },
+            {
+              "name": "tree",
+              "display_name": "TREE",
+              "description": "Generate a visual directory tree structure with intelligent exclusions.",
+              "syntax": "brain [GLOBAL_OPTIONS] filesystem tree <TARGETS> [OPTIONS]",
+              "arguments": [
+                {
+                  "name": "<TARGETS>",
+                  "required": true,
+                  "help": "Specific directories or files to include (supports absolute paths).",
+                  "type": "Optional"
+                }
+              ],
+              "options": [
+                {
+                  "flag": "-o",
+                  "required": false,
+                  "help": "Output file path",
+                  "type": "Path",
+                  "default": "tree.txt"
+                },
+                {
+                  "flag": "--hash",
+                  "required": false,
+                  "help": "Include MD5 hashes",
+                  "type": "bool",
+                  "default": false
+                },
+                {
+                  "flag": "--export-json",
+                  "required": false,
+                  "help": "Export JSON to disk",
+                  "type": "bool",
+                  "default": false
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "gemini",
+      "description": "Gemini AI key management and operations",
+      "command_count": 5,
+      "subsections": [
+        {
+          "name": "KEYS",
+          "commands": [
+            {
+              "name": "keys-add",
+              "display_name": "KEYS ADD",
+              "description": "Add new Gemini API key with profile.",
+              "syntax": "brain [GLOBAL_OPTIONS] gemini keys-add [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "-p <VALUE>",
+                  "required": true,
+                  "help": "Profile name (e.g., 'Personal Chrome')",
+                  "type": "str",
+                  "default": null
+                },
+                {
+                  "flag": "-k <VALUE>",
+                  "required": true,
+                  "help": "Gemini API key",
+                  "type": "str",
+                  "default": null
+                },
+                {
+                  "flag": "--priority",
+                  "required": false,
+                  "help": "Priority: 1=preferred, 0=normal, -1=backup",
+                  "type": "int",
+                  "default": 0
+                }
+              ]
+            },
+            {
+              "name": "keys-delete",
+              "display_name": "KEYS DELETE",
+              "description": "Delete a Gemini API key.",
+              "syntax": "brain [GLOBAL_OPTIONS] gemini keys-delete <PROFILE>",
+              "arguments": [
+                {
+                  "name": "<PROFILE>",
+                  "required": true,
+                  "help": "Profile name to delete",
+                  "type": "str"
+                }
+              ],
+              "options": []
+            },
+            {
+              "name": "keys-list",
+              "display_name": "KEYS LIST",
+              "description": "List all Gemini API keys with status.",
+              "syntax": "brain [GLOBAL_OPTIONS] gemini keys-list",
+              "arguments": [],
+              "options": []
+            },
+            {
+              "name": "keys-stats",
+              "display_name": "KEYS STATS",
+              "description": "Show global Gemini keys statistics.",
+              "syntax": "brain [GLOBAL_OPTIONS] gemini keys-stats",
+              "arguments": [],
+              "options": []
+            },
+            {
+              "name": "keys-validate",
+              "display_name": "KEYS VALIDATE",
+              "description": "Validate a Gemini API key by testing connection.",
+              "syntax": "brain [GLOBAL_OPTIONS] gemini keys-validate <PROFILE>",
+              "arguments": [
+                {
+                  "name": "<PROFILE>",
+                  "required": true,
+                  "help": "Profile name to validate",
+                  "type": "str"
+                }
+              ],
+              "options": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "github",
+      "description": "GitHub integration and repository management",
+      "command_count": 6,
+      "subsections": [
+        {
+          "name": "AUTENTICACI�N",
+          "commands": [
+            {
+              "name": "auth-login",
+              "display_name": "AUTH LOGIN",
+              "description": "Store GitHub authentication token.",
+              "syntax": "brain [GLOBAL_OPTIONS] github auth-login [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "-t <VALUE>",
+                  "required": true,
+                  "help": "GitHub Personal Access Token",
+                  "type": "str",
+                  "default": null
+                }
+              ]
+            },
+            {
+              "name": "auth-logout",
+              "display_name": "AUTH LOGOUT",
+              "description": "Remove stored GitHub token.",
+              "syntax": "brain [GLOBAL_OPTIONS] github auth-logout",
+              "arguments": [],
+              "options": []
+            },
+            {
+              "name": "auth-status",
+              "display_name": "AUTH STATUS",
+              "description": "Check GitHub authentication status.",
+              "syntax": "brain [GLOBAL_OPTIONS] github auth-status",
+              "arguments": [],
+              "options": []
+            }
+          ]
+        },
+        {
+          "name": "GENERAL",
+          "commands": [
+            {
+              "name": "clone",
+              "display_name": "CLONE",
+              "description": "Clone GitHub repository to local directory.",
+              "syntax": "brain [GLOBAL_OPTIONS] github clone <REPO> [OPTIONS]",
+              "arguments": [
+                {
+                  "name": "<REPO>",
+                  "required": true,
+                  "help": "Repository (owner/repo or full URL)",
+                  "type": "str"
+                }
+              ],
+              "options": [
+                {
+                  "flag": "-p",
+                  "required": false,
+                  "help": "Target directory (defaults to repo name in current dir)",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "--progress/--no-progress",
+                  "required": false,
+                  "help": "Show clone progress",
+                  "type": "bool",
+                  "default": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "ORGANIZACIONES",
+          "commands": [
+            {
+              "name": "orgs-list",
+              "display_name": "ORGS LIST",
+              "description": "List GitHub organizations.",
+              "syntax": "brain [GLOBAL_OPTIONS] github orgs-list",
+              "arguments": [],
+              "options": []
+            }
+          ]
+        },
+        {
+          "name": "REPOSITORIOS",
+          "commands": [
+            {
+              "name": "repos-list",
+              "display_name": "REPOS LIST",
+              "description": "List GitHub repositories.",
+              "syntax": "brain [GLOBAL_OPTIONS] github repos-list [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "--org",
+                  "required": false,
+                  "help": "Organization name",
+                  "type": "Optional",
+                  "default": null
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "health",
+      "description": "System health checks and diagnostics",
+      "command_count": 5,
+      "subsections": [
+        {
+          "name": "DEV",
+          "commands": [
+            {
+              "name": "dev-check",
+              "display_name": "DEV CHECK",
+              "description": "Check development environment and service status.",
+              "syntax": "brain [GLOBAL_OPTIONS] health dev-check [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "-t",
+                  "required": false,
+                  "help": "Connection timeout per port check in seconds",
+                  "type": "float",
+                  "default": 2.0
+                },
+                {
+                  "flag": "--json",
+                  "required": false,
+                  "help": "Output raw JSON",
+                  "type": "bool",
+                  "default": false
+                },
+                {
+                  "flag": "-v",
+                  "required": false,
+                  "help": "Detailed logging of each port check",
+                  "type": "bool",
+                  "default": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "FULL",
+          "commands": [
+            {
+              "name": "full-stack",
+              "display_name": "FULL STACK",
+              "description": "Verify complete stack health (host, API, extension, Brain, onboarding)",
+              "syntax": "brain [GLOBAL_OPTIONS] health full-stack [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "-t",
+                  "required": false,
+                  "help": "Timeout per check in seconds",
+                  "type": "Optional",
+                  "default": 5
+                },
+                {
+                  "flag": "--json",
+                  "required": false,
+                  "help": "Output raw JSON",
+                  "type": "bool",
+                  "default": false
+                },
+                {
+                  "flag": "-v",
+                  "required": false,
+                  "help": "Detailed logging",
+                  "type": "bool",
+                  "default": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "NATIVE",
+          "commands": [
+            {
+              "name": "native-ping",
+              "display_name": "NATIVE PING",
+              "description": "Ping the native host to verify it's alive and responding.",
+              "syntax": "brain [GLOBAL_OPTIONS] health native-ping [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "-t",
+                  "required": false,
+                  "help": "Timeout in milliseconds for ping response",
+                  "type": "int",
+                  "default": 500
+                },
+                {
+                  "flag": "-p",
+                  "required": false,
+                  "help": "Specific TCP port to test (auto-detect if not provided)",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "--check-ws/--no-check-ws",
+                  "required": false,
+                  "help": "Also verify WebSocket port status",
+                  "type": "bool",
+                  "default": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "ONBOARDING",
+          "commands": [
+            {
+              "name": "onboarding-status",
+              "display_name": "ONBOARDING STATUS",
+              "description": "Check onboarding completion status (GitHub, Gemini, Nucleus, Projects)",
+              "syntax": "brain [GLOBAL_OPTIONS] health onboarding-status [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "-r",
+                  "required": false,
+                  "help": "Force re-check, ignore cache",
+                  "type": "bool",
+                  "default": false
+                },
+                {
+                  "flag": "--json",
+                  "required": false,
+                  "help": "Output raw JSON",
+                  "type": "bool",
+                  "default": false
+                },
+                {
+                  "flag": "-v",
+                  "required": false,
+                  "help": "Detailed logging of each check",
+                  "type": "bool",
+                  "default": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "WEBSOCKET",
+          "commands": [
+            {
+              "name": "websocket-status",
+              "display_name": "WEBSOCKET STATUS",
+              "description": "Verify WebSocket server status on localhost:4124",
+              "syntax": "brain [GLOBAL_OPTIONS] health websocket-status [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "-t",
+                  "required": false,
+                  "help": "Connection timeout in seconds",
+                  "type": "Optional",
+                  "default": 5
+                },
+                {
+                  "flag": "--test-sub",
+                  "required": false,
+                  "help": "Test event subscription capability",
+                  "type": "bool",
+                  "default": false
+                },
+                {
+                  "flag": "--json",
+                  "required": false,
+                  "help": "Output raw JSON",
+                  "type": "bool",
+                  "default": false
+                },
+                {
+                  "flag": "-v",
+                  "required": false,
+                  "help": "Detailed connection logging",
+                  "type": "bool",
+                  "default": false
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "intent",
+      "description": "Intent execution system and context planning",
+      "command_count": 19,
+      "subsections": [
+        {
+          "name": "ADD",
+          "commands": [
+            {
+              "name": "add-turn",
+              "display_name": "ADD TURN",
+              "description": "Add a conversation turn to an intent's chat.",
+              "syntax": "brain [GLOBAL_OPTIONS] intent add-turn [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "-i",
+                  "required": false,
+                  "help": "Intent UUID",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "-f",
+                  "required": false,
+                  "help": "Intent folder name",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "-a",
+                  "required": false,
+                  "help": "Who is speaking: 'user' or 'ai'",
+                  "type": "str",
+                  "default": "user"
+                },
+                {
+                  "flag": "-c <VALUE>",
+                  "required": true,
+                  "help": "Content of the message",
+                  "type": "str",
+                  "default": null
+                },
+                {
+                  "flag": "-p",
+                  "required": false,
+                  "help": "Path to Bloom project",
+                  "type": "Optional",
+                  "default": null
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "BUILD",
+          "commands": [
+            {
+              "name": "build-payload",
+              "display_name": "BUILD PAYLOAD",
+              "description": "Build optimized AI payload from context plan.",
+              "syntax": "brain [GLOBAL_OPTIONS] intent build-payload [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "--plan <VALUE>",
+                  "required": true,
+                  "help": "Path to context_plan.json",
+                  "type": "str",
+                  "default": null
+                },
+                {
+                  "flag": "--output",
+                  "required": false,
+                  "help": "Output path for payload (default: same dir as plan)",
+                  "type": "Optional",
+                  "default": null
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "GENERAL",
+          "commands": [
+            {
+              "name": "create",
+              "display_name": "CREATE",
+              "description": "Create a new development or documentation intent.",
+              "syntax": "brain [GLOBAL_OPTIONS] intent create [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "-t <VALUE>",
+                  "required": true,
+                  "help": "Intent type: 'dev' for development or 'doc' for documentation",
+                  "type": "str",
+                  "default": null
+                },
+                {
+                  "flag": "-n <VALUE>",
+                  "required": true,
+                  "help": "Human-readable name for the intent (e.g., 'Fix login authentication flow')",
+                  "type": "str",
+                  "default": null
+                },
+                {
+                  "flag": "-f",
+                  "required": false,
+                  "help": "Initial files to include in the intent context (can be repeated or comma-separated)",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "-p",
+                  "required": false,
+                  "help": "Path to the Nucleus (Bloom project root). Auto-detected if not provided.",
+                  "type": "Optional",
+                  "default": null
+                }
+              ]
+            },
+            {
+              "name": "delete",
+              "display_name": "DELETE",
+              "description": "Delete an intent and all its data.",
+              "syntax": "brain [GLOBAL_OPTIONS] intent delete [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "-i",
+                  "required": false,
+                  "help": "Intent UUID",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "-f",
+                  "required": false,
+                  "help": "Intent folder name",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "--force",
+                  "required": false,
+                  "help": "Skip confirmation and force delete even if locked",
+                  "type": "bool",
+                  "default": false
+                },
+                {
+                  "flag": "-p",
+                  "required": false,
+                  "help": "Path to Bloom project",
+                  "type": "Optional",
+                  "default": null
+                }
+              ]
+            },
+            {
+              "name": "download",
+              "display_name": "DOWNLOAD",
+              "description": "Download AI response from Native Host or file.",
+              "syntax": "brain [GLOBAL_OPTIONS] intent download [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "-i",
+                  "required": false,
+                  "help": "Intent UUID to download response for",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "--folder",
+                  "required": false,
+                  "help": "Intent folder name (alternative to intent-id)",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "--socket-mode",
+                  "required": false,
+                  "help": "Listen on TCP socket for Host connection",
+                  "type": "bool",
+                  "default": false
+                },
+                {
+                  "flag": "--input-file",
+                  "required": false,
+                  "help": "Read response from file (for testing)",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "--host",
+                  "required": false,
+                  "help": "Host IP to listen on",
+                  "type": "str",
+                  "default": "127.0.0.1"
+                },
+                {
+                  "flag": "--port",
+                  "required": false,
+                  "help": "Port to listen on (different from Host's 5678)",
+                  "type": "int",
+                  "default": 5679
+                },
+                {
+                  "flag": "--timeout",
+                  "required": false,
+                  "help": "Socket timeout in seconds",
+                  "type": "int",
+                  "default": 300
+                },
+                {
+                  "flag": "--nucleus-path",
+                  "required": false,
+                  "help": "Path to Bloom project (auto-detected if omitted)",
+                  "type": "Optional",
+                  "default": null
+                }
+              ]
+            },
+            {
+              "name": "finalize",
+              "display_name": "FINALIZE",
+              "description": "Finalize an intent, applying changes to the codebase.",
+              "syntax": "brain [GLOBAL_OPTIONS] intent finalize [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "-i",
+                  "required": false,
+                  "help": "Intent UUID",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "-f",
+                  "required": false,
+                  "help": "Intent folder name",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "-p",
+                  "required": false,
+                  "help": "Path to Bloom project",
+                  "type": "Optional",
+                  "default": null
+                }
+              ]
+            },
+            {
+              "name": "get",
+              "display_name": "GET",
+              "description": "Get complete details of an intent.",
+              "syntax": "brain [GLOBAL_OPTIONS] intent get [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "-i",
+                  "required": false,
+                  "help": "Intent UUID",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "-f",
+                  "required": false,
+                  "help": "Intent folder name",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "-p",
+                  "required": false,
+                  "help": "Path to Bloom project",
+                  "type": "Optional",
+                  "default": null
+                }
+              ]
+            },
+            {
+              "name": "hydrate",
+              "display_name": "HYDRATE",
+              "description": "Hydrate an intent by processing source files and briefing.",
+              "syntax": "brain [GLOBAL_OPTIONS] intent hydrate [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "-i",
+                  "required": false,
+                  "help": "Intent UUID",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "-f",
+                  "required": false,
+                  "help": "Intent folder name",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "-b",
+                  "required": false,
+                  "help": "Briefing text (instruction)",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "-B",
+                  "required": false,
+                  "help": "Path to text file containing briefing",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "-F",
+                  "required": false,
+                  "help": "Files to include in context (comma-separated)",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "-p",
+                  "required": false,
+                  "help": "Path to Bloom project root",
+                  "type": "Optional",
+                  "default": null
+                }
+              ]
+            },
+            {
+              "name": "list",
+              "display_name": "LIST",
+              "description": "List all intents in the project.",
+              "syntax": "brain [GLOBAL_OPTIONS] intent list [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "-p",
+                  "required": false,
+                  "help": "Path to Bloom project (auto-detected if not provided)",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "-t",
+                  "required": false,
+                  "help": "Filter by intent type: 'dev' or 'doc'",
+                  "type": "Optional",
+                  "default": null
+                }
+              ]
+            },
+            {
+              "name": "lock",
+              "display_name": "LOCK",
+              "description": "Lock an intent for exclusive use.",
+              "syntax": "brain [GLOBAL_OPTIONS] intent lock [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "-i",
+                  "required": false,
+                  "help": "Intent UUID",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "-f",
+                  "required": false,
+                  "help": "Intent folder name",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "-p",
+                  "required": false,
+                  "help": "Path to Bloom project",
+                  "type": "Optional",
+                  "default": null
+                }
+              ]
+            },
+            {
+              "name": "merge",
+              "display_name": "MERGE",
+              "description": "Merge staged files from .staging/ into the real codebase.",
+              "syntax": "brain [GLOBAL_OPTIONS] intent merge [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "-i",
+                  "required": false,
+                  "help": "Intent UUID to merge files for",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "-f",
+                  "required": false,
+                  "help": "Intent folder name (e.g., .fix-login-a1b2c3d4)",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "-s",
+                  "required": false,
+                  "help": "Pipeline stage (briefing, execution, refinement_X). Auto-detect if not provided.",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "--force",
+                  "required": false,
+                  "help": "Skip approval check and merge anyway",
+                  "type": "bool",
+                  "default": false
+                },
+                {
+                  "flag": "--dry-run",
+                  "required": false,
+                  "help": "Show what would be merged without applying",
+                  "type": "bool",
+                  "default": false
+                },
+                {
+                  "flag": "--no-backup",
+                  "required": false,
+                  "help": "Skip backup creation (DANGEROUS)",
+                  "type": "bool",
+                  "default": false
+                },
+                {
+                  "flag": "-p",
+                  "required": false,
+                  "help": "Path to Bloom project (auto-detected if not provided)",
+                  "type": "Optional",
+                  "default": null
+                }
+              ]
+            },
+            {
+              "name": "parse",
+              "display_name": "PARSE",
+              "description": "Parse and validate .raw_output.json from an AI response.",
+              "syntax": "brain [GLOBAL_OPTIONS] intent parse [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "-i <VALUE>",
+                  "required": true,
+                  "help": "Intent UUID to parse",
+                  "type": "str",
+                  "default": null
+                },
+                {
+                  "flag": "-s",
+                  "required": false,
+                  "help": "Pipeline stage (briefing, execution, refinement_X). Auto-detect if not provided.",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "--strict",
+                  "required": false,
+                  "help": "Fail on any protocol violation (no fallback parser)",
+                  "type": "bool",
+                  "default": false
+                },
+                {
+                  "flag": "--output-report",
+                  "required": false,
+                  "help": "Generate .parse_report.json",
+                  "type": "bool",
+                  "default": true
+                },
+                {
+                  "flag": "-n",
+                  "required": false,
+                  "help": "Path to nucleus root (default: current directory)",
+                  "type": "Optional",
+                  "default": null
+                }
+              ]
+            },
+            {
+              "name": "plan",
+              "display_name": "PLAN",
+              "description": "Generate context plan for an intent using Gemini Router.",
+              "syntax": "brain [GLOBAL_OPTIONS] intent plan [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "--intent-dir <VALUE>",
+                  "required": true,
+                  "help": "Intent directory path",
+                  "type": "str",
+                  "default": null
+                },
+                {
+                  "flag": "--description <VALUE>",
+                  "required": true,
+                  "help": "Intent description",
+                  "type": "str",
+                  "default": null
+                },
+                {
+                  "flag": "--type",
+                  "required": false,
+                  "help": "Intent type: dev, doc, or seed",
+                  "type": "str",
+                  "default": "dev"
+                }
+              ]
+            },
+            {
+              "name": "recover",
+              "display_name": "RECOVER",
+              "description": "Recover interrupted intents using lock state recovery data.",
+              "syntax": "brain [GLOBAL_OPTIONS] intent recover [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "-i",
+                  "required": false,
+                  "help": "Intent UUID to recover",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "-f",
+                  "required": false,
+                  "help": "Intent folder name (e.g., .fix-login-abc123)",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "--auto-detect",
+                  "required": false,
+                  "help": "Find and recover all interrupted intents",
+                  "type": "bool",
+                  "default": false
+                },
+                {
+                  "flag": "--force-unlock",
+                  "required": false,
+                  "help": "Force unlock without attempting recovery",
+                  "type": "bool",
+                  "default": false
+                },
+                {
+                  "flag": "-p",
+                  "required": false,
+                  "help": "Path to Bloom project (auto-detected if not provided)",
+                  "type": "Optional",
+                  "default": null
+                }
+              ]
+            },
+            {
+              "name": "stage",
+              "display_name": "STAGE",
+              "description": "Prepare files in .staging/ directory for merge.",
+              "syntax": "brain [GLOBAL_OPTIONS] intent stage [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "-i",
+                  "required": false,
+                  "help": "Intent UUID to stage files for",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "-f",
+                  "required": false,
+                  "help": "Intent folder name (e.g., .fix-login-a1b2c3d4)",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "-s",
+                  "required": false,
+                  "help": "Pipeline stage (briefing, execution, refinement_X). Auto-detect if not provided.",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "--dry-run",
+                  "required": false,
+                  "help": "Show what would be staged without writing files",
+                  "type": "bool",
+                  "default": false
+                },
+                {
+                  "flag": "--overwrite",
+                  "required": false,
+                  "help": "Overwrite existing .staging/ directory",
+                  "type": "bool",
+                  "default": true
+                },
+                {
+                  "flag": "-p",
+                  "required": false,
+                  "help": "Path to Bloom project (auto-detected if not provided)",
+                  "type": "Optional",
+                  "default": null
+                }
+              ]
+            },
+            {
+              "name": "submit",
+              "display_name": "SUBMIT",
+              "description": "Submit an intent payload to an AI provider through the native host bridge.",
+              "syntax": "brain [GLOBAL_OPTIONS] intent submit [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "-i",
+                  "required": false,
+                  "help": "UUID of the intent to submit",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "-f",
+                  "required": false,
+                  "help": "Folder name of the intent (e.g., .fix-login-a1b2c3d4)",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "--provider",
+                  "required": false,
+                  "help": "AI provider to use: 'claude', 'gemini', etc.",
+                  "type": "str",
+                  "default": "claude"
+                },
+                {
+                  "flag": "-p",
+                  "required": false,
+                  "help": "Path to the Nucleus (Bloom project root). Auto-detected if not provided.",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "--profile-path",
+                  "required": false,
+                  "help": "Chrome profile path for the AI provider (optional)",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "--host",
+                  "required": false,
+                  "help": "Native host IP address",
+                  "type": "str",
+                  "default": "127.0.0.1"
+                },
+                {
+                  "flag": "--port",
+                  "required": false,
+                  "help": "Native host TCP port",
+                  "type": "int",
+                  "default": 5678
+                },
+                {
+                  "flag": "--timeout",
+                  "required": false,
+                  "help": "Connection timeout in seconds",
+                  "type": "int",
+                  "default": 30
+                }
+              ]
+            },
+            {
+              "name": "unlock",
+              "display_name": "UNLOCK",
+              "description": "Unlock an intent to free it for use.",
+              "syntax": "brain [GLOBAL_OPTIONS] intent unlock [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "-i",
+                  "required": false,
+                  "help": "Intent UUID",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "-f",
+                  "required": false,
+                  "help": "Intent folder name",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "--force",
+                  "required": false,
+                  "help": "Force unlock even if locked by another host",
+                  "type": "bool",
+                  "default": false
+                },
+                {
+                  "flag": "-p",
+                  "required": false,
+                  "help": "Path to Bloom project",
+                  "type": "Optional",
+                  "default": null
+                }
+              ]
+            },
+            {
+              "name": "update",
+              "display_name": "UPDATE",
+              "description": "Update an existing intent's properties.",
+              "syntax": "brain [GLOBAL_OPTIONS] intent update [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "-i",
+                  "required": false,
+                  "help": "UUID of the intent to update",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "-f",
+                  "required": false,
+                  "help": "Folder name of the intent (e.g., .fix-login-a1b2c3d4)",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "-n",
+                  "required": false,
+                  "help": "New name for the intent (triggers folder rename)",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "--files",
+                  "required": false,
+                  "help": "Replace all initial files with this new list",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "--add-files",
+                  "required": false,
+                  "help": "Add files to the existing initial_files list",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "--remove-files",
+                  "required": false,
+                  "help": "Remove files from the initial_files list",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "-p",
+                  "required": false,
+                  "help": "Path to the Nucleus (Bloom project root). Auto-detected if not provided.",
+                  "type": "Optional",
+                  "default": null
+                }
+              ]
+            },
+            {
+              "name": "validate",
+              "display_name": "VALIDATE",
+              "description": "Validate staging files using Gemini analysis.",
+              "syntax": "brain [GLOBAL_OPTIONS] intent validate [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "-i",
+                  "required": false,
+                  "help": "Intent UUID",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "-f",
+                  "required": false,
+                  "help": "Intent folder name (e.g., .fix-login-abc123)",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "-s",
+                  "required": false,
+                  "help": "Pipeline stage (briefing, execution, refinement_X)",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "--auto-approve",
+                  "required": false,
+                  "help": "Skip manual review and approve automatically",
+                  "type": "bool",
+                  "default": false
+                },
+                {
+                  "flag": "--gemini-model",
+                  "required": false,
+                  "help": "Gemini model to use for analysis",
+                  "type": "str",
+                  "default": "gemini-2.0-flash-exp"
+                },
+                {
+                  "flag": "--skip-gemini",
+                  "required": false,
+                  "help": "Skip Gemini analysis (only basic validation)",
+                  "type": "bool",
+                  "default": false
+                },
+                {
+                  "flag": "-p",
+                  "required": false,
+                  "help": "Path to Bloom project (auto-detected if omitted)",
+                  "type": "Optional",
+                  "default": null
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "nucleus",
+      "description": "Nucleus project management and lifecycle",
+      "command_count": 14,
+      "subsections": [
+        {
+          "name": "GENERAL",
+          "commands": [
+            {
+              "name": "create",
+              "display_name": "CREATE",
+              "description": "Initialize a new Bloom Nucleus V2.0 project structure.",
+              "syntax": "brain [GLOBAL_OPTIONS] nucleus create [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "-o <VALUE>",
+                  "required": true,
+                  "help": "Organization name",
+                  "type": "str",
+                  "default": null
+                },
+                {
+                  "flag": "-p",
+                  "required": false,
+                  "help": "Target path (default: current dir)",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "--output",
+                  "required": false,
+                  "help": "Output directory name (legacy, kept for compatibility)",
+                  "type": "str",
+                  "default": ".bloom"
+                },
+                {
+                  "flag": "--url",
+                  "required": false,
+                  "help": "Organization URL",
+                  "type": "str",
+                  "default": ""
+                },
+                {
+                  "flag": "-f",
+                  "required": false,
+                  "help": "Force overwrite existing directory",
+                  "type": "bool",
+                  "default": false
+                }
+              ]
+            },
+            {
+              "name": "delete",
+              "display_name": "DELETE",
+              "description": "Delete a complete nucleus including all its data.",
+              "syntax": "brain [GLOBAL_OPTIONS] nucleus delete [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "-p <VALUE>",
+                  "required": true,
+                  "help": "Path to the Nucleus root directory to delete",
+                  "type": "Path",
+                  "default": null
+                },
+                {
+                  "flag": "-f",
+                  "required": false,
+                  "help": "Skip confirmation prompt",
+                  "type": "bool",
+                  "default": false
+                }
+              ]
+            },
+            {
+              "name": "get",
+              "display_name": "GET",
+              "description": "Retrieve complete details of a nucleus.",
+              "syntax": "brain [GLOBAL_OPTIONS] nucleus get [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "-p <VALUE>",
+                  "required": true,
+                  "help": "Path to the Nucleus root directory",
+                  "type": "Path",
+                  "default": null
+                }
+              ]
+            },
+            {
+              "name": "link",
+              "display_name": "LINK",
+              "description": "Link an existing folder as a Nucleus project.",
+              "syntax": "brain [GLOBAL_OPTIONS] nucleus link <PATH>",
+              "arguments": [
+                {
+                  "name": "<PATH>",
+                  "required": true,
+                  "help": "Path to existing project",
+                  "type": "Path"
+                }
+              ],
+              "options": []
+            },
+            {
+              "name": "list",
+              "display_name": "LIST",
+              "description": "List all Nucleus projects found in a parent directory.",
+              "syntax": "brain [GLOBAL_OPTIONS] nucleus list [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "-d",
+                  "required": false,
+                  "help": "Parent directory to scan for nuclei (default: current directory)",
+                  "type": "Optional",
+                  "default": null
+                }
+              ]
+            },
+            {
+              "name": "status",
+              "display_name": "STATUS",
+              "description": "Check if a directory is a valid Nucleus project.",
+              "syntax": "brain [GLOBAL_OPTIONS] nucleus status [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "-p",
+                  "required": false,
+                  "help": "Nucleus path",
+                  "type": "Optional",
+                  "default": null
+                }
+              ]
+            },
+            {
+              "name": "sync",
+              "display_name": "SYNC",
+              "description": "Synchronize projects and rebuild nucleus cache.",
+              "syntax": "brain [GLOBAL_OPTIONS] nucleus sync [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "-p",
+                  "required": false,
+                  "help": "Nucleus path (default: current dir)",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "--skip-git",
+                  "required": false,
+                  "help": "Skip git pull operations",
+                  "type": "bool",
+                  "default": false
+                },
+                {
+                  "flag": "-v",
+                  "required": false,
+                  "help": "Show detailed progress",
+                  "type": "bool",
+                  "default": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "CREATE",
+          "commands": [
+            {
+              "name": "create-exp-intent",
+              "display_name": "CREATE EXP INTENT",
+              "description": "Create a new exploration intent in the nucleus.",
+              "syntax": "brain [GLOBAL_OPTIONS] nucleus create-exp-intent [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "-n <VALUE>",
+                  "required": true,
+                  "help": "Intent name (will be slugified)",
+                  "type": "str",
+                  "default": null
+                },
+                {
+                  "flag": "-p",
+                  "required": false,
+                  "help": "Nucleus path (default: current dir)",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "--inquiry",
+                  "required": false,
+                  "help": "Initial inquiry question",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "-d",
+                  "required": false,
+                  "help": "Intent description",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "--projects",
+                  "required": false,
+                  "help": "Comma-separated project names to include",
+                  "type": "Optional",
+                  "default": null
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "EXP",
+          "commands": [
+            {
+              "name": "exp-discovery-turn",
+              "display_name": "EXP DISCOVERY TURN",
+              "description": "Add a discovery turn to an exploration intent.",
+              "syntax": "brain [GLOBAL_OPTIONS] nucleus exp-discovery-turn [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "-i <VALUE>",
+                  "required": true,
+                  "help": "Intent ID or slug",
+                  "type": "str",
+                  "default": null
+                },
+                {
+                  "flag": "-p",
+                  "required": false,
+                  "help": "Nucleus path (default: current dir)",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "--notes",
+                  "required": false,
+                  "help": "Turn notes/observations",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "--analysis",
+                  "required": false,
+                  "help": "Analysis summary for this turn",
+                  "type": "Optional",
+                  "default": null
+                }
+              ]
+            },
+            {
+              "name": "exp-export-findings",
+              "display_name": "EXP EXPORT FINDINGS",
+              "description": "Export findings from an exploration intent.",
+              "syntax": "brain [GLOBAL_OPTIONS] nucleus exp-export-findings [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "-i <VALUE>",
+                  "required": true,
+                  "help": "Intent ID or slug",
+                  "type": "str",
+                  "default": null
+                },
+                {
+                  "flag": "-p",
+                  "required": false,
+                  "help": "Nucleus path (default: current dir)",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "-f",
+                  "required": false,
+                  "help": "Export format (markdown, json)",
+                  "type": "str",
+                  "default": "markdown"
+                },
+                {
+                  "flag": "--include-raw",
+                  "required": false,
+                  "help": "Include raw turn data",
+                  "type": "bool",
+                  "default": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "LIST",
+          "commands": [
+            {
+              "name": "list-projects",
+              "display_name": "LIST PROJECTS",
+              "description": "List all projects linked to the nucleus with their details.",
+              "syntax": "brain [GLOBAL_OPTIONS] nucleus list-projects [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "-p",
+                  "required": false,
+                  "help": "Nucleus root path (default: current directory)",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "-s",
+                  "required": false,
+                  "help": "Filter by project strategy (python, typescript, go, etc.)",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "--active-only",
+                  "required": false,
+                  "help": "Show only active projects",
+                  "type": "bool",
+                  "default": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "ONBOARDING",
+          "commands": [
+            {
+              "name": "onboarding-complete",
+              "display_name": "ONBOARDING COMPLETE",
+              "description": "Mark an onboarding step or entire onboarding as completed.",
+              "syntax": "brain [GLOBAL_OPTIONS] nucleus onboarding-complete [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "-s",
+                  "required": false,
+                  "help": "Step name to mark as completed",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "-a",
+                  "required": false,
+                  "help": "Mark entire onboarding as completed",
+                  "type": "bool",
+                  "default": false
+                },
+                {
+                  "flag": "-p",
+                  "required": false,
+                  "help": "Nucleus root path (default: current dir)",
+                  "type": "Optional",
+                  "default": null
+                }
+              ]
+            },
+            {
+              "name": "onboarding-status",
+              "display_name": "ONBOARDING STATUS",
+              "description": "Get the current onboarding status from nucleus configuration.",
+              "syntax": "brain [GLOBAL_OPTIONS] nucleus onboarding-status [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "-p",
+                  "required": false,
+                  "help": "Nucleus root path (default: current dir)",
+                  "type": "Optional",
+                  "default": null
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "PROJECT",
+          "commands": [
+            {
+              "name": "project-info",
+              "display_name": "PROJECT INFO",
+              "description": "Display detailed information about a specific project in the nucleus.",
+              "syntax": "brain [GLOBAL_OPTIONS] nucleus project-info <PROJECT_NAME> [OPTIONS]",
+              "arguments": [
+                {
+                  "name": "<PROJECT_NAME>",
+                  "required": true,
+                  "help": "Name of the project to inspect",
+                  "type": "str"
+                }
+              ],
+              "options": [
+                {
+                  "flag": "-p",
+                  "required": false,
+                  "help": "Nucleus root path (default: current directory)",
+                  "type": "Optional",
+                  "default": null
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "profile",
+      "description": "Chrome profile and AI account management",
+      "command_count": 8,
+      "subsections": [
+        {
+          "name": "GENERAL",
+          "commands": [
+            {
+              "name": "create",
+              "display_name": "CREATE",
+              "description": "Crea un nuevo perfil con el alias especificado.",
+              "syntax": "brain [GLOBAL_OPTIONS] profile create <ALIAS>",
+              "arguments": [
+                {
+                  "name": "<ALIAS>",
+                  "required": true,
+                  "help": "Nombre descriptivo del perfil",
+                  "type": "str"
+                }
+              ],
+              "options": []
+            },
+            {
+              "name": "destroy",
+              "display_name": "DESTROY",
+              "description": "Elimina un perfil y sus datos. Requiere confirmaci�n a menos que se use --force.",
+              "syntax": "brain [GLOBAL_OPTIONS] profile destroy <PROFILE_ID> [OPTIONS]",
+              "arguments": [
+                {
+                  "name": "<PROFILE_ID>",
+                  "required": true,
+                  "help": "ID del perfil a eliminar",
+                  "type": "str"
+                }
+              ],
+              "options": [
+                {
+                  "flag": "-f",
+                  "required": false,
+                  "help": "Forzar sin confirmaci�n",
+                  "type": "bool",
+                  "default": false
+                }
+              ]
+            },
+            {
+              "name": "launch",
+              "display_name": "LAUNCH",
+              "description": "Lanza Chrome con el perfil especificado y la extensi�n Bloom.",
+              "syntax": "brain [GLOBAL_OPTIONS] profile launch <PROFILE_ID> [OPTIONS]",
+              "arguments": [
+                {
+                  "name": "<PROFILE_ID>",
+                  "required": true,
+                  "help": "ID del perfil a lanzar",
+                  "type": "str"
+                }
+              ],
+              "options": [
+                {
+                  "flag": "--url",
+                  "required": false,
+                  "help": "URL inicial expl�cita",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "--cockpit",
+                  "required": false,
+                  "help": "Modo cockpit (landing page)",
+                  "type": "bool",
+                  "default": false
+                },
+                {
+                  "flag": "--discovery",
+                  "required": false,
+                  "help": "Modo de validaci�n de conexi�n",
+                  "type": "bool",
+                  "default": false
+                }
+              ]
+            },
+            {
+              "name": "link",
+              "display_name": "LINK",
+              "description": "Vincula una cuenta de email a un perfil (DEPRECATED - usar accounts-register).",
+              "syntax": "brain [GLOBAL_OPTIONS] profile link <PROFILE_ID> <EMAIL>",
+              "arguments": [
+                {
+                  "name": "<PROFILE_ID>",
+                  "required": true,
+                  "help": "ID del perfil",
+                  "type": "str"
+                },
+                {
+                  "name": "<EMAIL>",
+                  "required": true,
+                  "help": "Email de la cuenta a vincular",
+                  "type": "str"
+                }
+              ],
+              "options": []
+            },
+            {
+              "name": "list",
+              "display_name": "LIST",
+              "description": "MOSTRAR AL USUARIO (CLI).",
+              "syntax": "brain [GLOBAL_OPTIONS] profile list",
+              "arguments": [],
+              "options": []
+            },
+            {
+              "name": "unlink",
+              "display_name": "UNLINK",
+              "description": "Desvincula la cuenta asociada a un perfil (DEPRECATED - usar accounts-remove).",
+              "syntax": "brain [GLOBAL_OPTIONS] profile unlink <PROFILE_ID>",
+              "arguments": [
+                {
+                  "name": "<PROFILE_ID>",
+                  "required": true,
+                  "help": "ID del perfil",
+                  "type": "str"
+                }
+              ],
+              "options": []
+            }
+          ]
+        },
+        {
+          "name": "ACCOUNTS",
+          "commands": [
+            {
+              "name": "accounts-register",
+              "display_name": "ACCOUNTS REGISTER",
+              "description": "Registra una nueva cuenta en un perfil.",
+              "syntax": "brain [GLOBAL_OPTIONS] profile accounts-register <PROFILE_ID> <PROVIDER> <EMAIL>",
+              "arguments": [
+                {
+                  "name": "<PROFILE_ID>",
+                  "required": true,
+                  "help": "ID del perfil",
+                  "type": "str"
+                },
+                {
+                  "name": "<PROVIDER>",
+                  "required": true,
+                  "help": "Proveedor (google, openai, anthropic, etc)",
+                  "type": "str"
+                },
+                {
+                  "name": "<EMAIL>",
+                  "required": true,
+                  "help": "Email o identificador de la cuenta",
+                  "type": "str"
+                }
+              ],
+              "options": []
+            },
+            {
+              "name": "accounts-remove",
+              "display_name": "ACCOUNTS REMOVE",
+              "description": "Remueve una cuenta registrada de un perfil.",
+              "syntax": "brain [GLOBAL_OPTIONS] profile accounts-remove <PROFILE_ID> <PROVIDER>",
+              "arguments": [
+                {
+                  "name": "<PROFILE_ID>",
+                  "required": true,
+                  "help": "ID del perfil",
+                  "type": "str"
+                },
+                {
+                  "name": "<PROVIDER>",
+                  "required": true,
+                  "help": "Proveedor a remover",
+                  "type": "str"
+                }
+              ],
+              "options": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "project",
+      "description": "Project lifecycle and scaffolding",
+      "command_count": 4,
+      "subsections": [
+        {
+          "name": "GENERAL",
+          "commands": [
+            {
+              "name": "add",
+              "display_name": "ADD",
+              "description": "Vincula un proyecto local existente a un Nucleus.",
+              "syntax": "brain [GLOBAL_OPTIONS] project add <PROJECT_PATH> [OPTIONS]",
+              "arguments": [
+                {
+                  "name": "<PROJECT_PATH>",
+                  "required": true,
+                  "help": "Ruta al proyecto a vincular",
+                  "type": "str"
+                }
+              ],
+              "options": [
+                {
+                  "flag": "-n <VALUE>",
+                  "required": true,
+                  "help": "Ruta al Nucleus destino",
+                  "type": "str",
+                  "default": null
+                },
+                {
+                  "flag": "--name",
+                  "required": false,
+                  "help": "Nombre custom del proyecto (default: nombre de carpeta)",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "--strategy",
+                  "required": false,
+                  "help": "Forzar estrategia espec�fica (default: auto-detect)",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "--description",
+                  "required": false,
+                  "help": "Descripci�n del proyecto",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "--repo-url",
+                  "required": false,
+                  "help": "URL del repositorio GitHub",
+                  "type": "Optional",
+                  "default": null
+                }
+              ]
+            },
+            {
+              "name": "detect",
+              "display_name": "DETECT",
+              "description": "Scan directory and detect project types automatically.",
+              "syntax": "brain [GLOBAL_OPTIONS] project detect <PARENT_PATH> [OPTIONS]",
+              "arguments": [
+                {
+                  "name": "<PARENT_PATH>",
+                  "required": true,
+                  "help": "Parent directory to scan for projects",
+                  "type": "str"
+                }
+              ],
+              "options": [
+                {
+                  "flag": "-d",
+                  "required": false,
+                  "help": "Maximum depth for recursive scanning",
+                  "type": "int",
+                  "default": 3
+                },
+                {
+                  "flag": "-s",
+                  "required": false,
+                  "help": "Filter projects by strategy type",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "-c",
+                  "required": false,
+                  "help": "Filter by minimum confidence level (high, medium, low)",
+                  "type": "Optional",
+                  "default": null
+                }
+              ]
+            },
+            {
+              "name": "load",
+              "display_name": "LOAD",
+              "description": "Validates and loads project information. ",
+              "syntax": "brain [GLOBAL_OPTIONS] project load [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "-p",
+                  "required": false,
+                  "help": "Path to the project root",
+                  "type": "Path",
+                  "default": "."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "CLONE",
+          "commands": [
+            {
+              "name": "clone-and-add",
+              "display_name": "CLONE AND ADD",
+              "description": "Clone a Git repository and automatically link it to the current Nucleus.",
+              "syntax": "brain [GLOBAL_OPTIONS] project clone-and-add <REPO_URL> [OPTIONS]",
+              "arguments": [
+                {
+                  "name": "<REPO_URL>",
+                  "required": true,
+                  "help": "Git repository URL (HTTPS or SSH)",
+                  "type": "str"
+                }
+              ],
+              "options": [
+                {
+                  "flag": "-d",
+                  "required": false,
+                  "help": "Absolute path where to clone the repository. If not provided, clones to Nucleus root using repo name.",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "-n",
+                  "required": false,
+                  "help": "Path to the Nucleus project. Auto-detected from current directory if not provided.",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "--name",
+                  "required": false,
+                  "help": "Custom name for the project (default: repository name)",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "--strategy",
+                  "required": false,
+                  "help": "Force specific technology strategy (e.g., python, typescript, android)",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "--description",
+                  "required": false,
+                  "help": "Project description",
+                  "type": "Optional",
+                  "default": null
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "runtime",
+      "description": "Non-interactive system runtime operations",
+      "command_count": 1,
+      "subsections": [
+        {
+          "name": null,
+          "commands": [
+            {
+              "name": "run",
+              "display_name": "RUN",
+              "description": "Start Brain core runtime",
+              "syntax": "brain [GLOBAL_OPTIONS] runtime run",
+              "arguments": [],
+              "options": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "service",
+      "description": "Background connection multiplexer and task runner",
+      "command_count": 3,
+      "subsections": [
+        {
+          "name": null,
+          "commands": [
+            {
+              "name": "start",
+              "display_name": "START",
+              "description": "Start the Brain TCP multiplexer service.",
+              "syntax": "brain [GLOBAL_OPTIONS] service start [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "-p",
+                  "required": false,
+                  "help": "TCP port to bind",
+                  "type": "int",
+                  "default": 5678
+                },
+                {
+                  "flag": "-h",
+                  "required": false,
+                  "help": "Host address to bind",
+                  "type": "str",
+                  "default": "127.0.0.1"
+                },
+                {
+                  "flag": "-d",
+                  "required": false,
+                  "help": "Run as background daemon",
+                  "type": "bool",
+                  "default": false
+                }
+              ]
+            },
+            {
+              "name": "status",
+              "display_name": "STATUS",
+              "description": "Check the current status of the Brain service.",
+              "syntax": "brain [GLOBAL_OPTIONS] service status",
+              "arguments": [],
+              "options": []
+            },
+            {
+              "name": "stop",
+              "display_name": "STOP",
+              "description": "Stop the running Brain service.",
+              "syntax": "brain [GLOBAL_OPTIONS] service stop",
+              "arguments": [],
+              "options": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "synapse",
+      "description": "Chrome Native Messaging Bridge and protocol management",
+      "command_count": 2,
+      "subsections": [
+        {
+          "name": null,
+          "commands": [
+            {
+              "name": "close",
+              "display_name": "CLOSE",
+              "description": "Env�a se�al de terminaci�n al navegador.",
+              "syntax": "brain [GLOBAL_OPTIONS] synapse close",
+              "arguments": [],
+              "options": []
+            },
+            {
+              "name": "host",
+              "display_name": "HOST",
+              "description": "Inicia el modo Host (Listener Loop).",
+              "syntax": "brain [GLOBAL_OPTIONS] synapse host",
+              "arguments": [],
+              "options": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "system",
+      "description": "Runtime and system introspection",
+      "command_count": 3,
+      "subsections": [
+        {
+          "name": null,
+          "commands": [
+            {
+              "name": "info",
+              "display_name": "INFO",
+              "description": "Display comprehensive system information.",
+              "syntax": "brain [GLOBAL_OPTIONS] system info",
+              "arguments": [],
+              "options": []
+            },
+            {
+              "name": "path",
+              "display_name": "PATH",
+              "description": "Display the absolute path to the brain executable.",
+              "syntax": "brain [GLOBAL_OPTIONS] system path",
+              "arguments": [],
+              "options": []
+            },
+            {
+              "name": "version",
+              "display_name": "VERSION",
+              "description": "Display or increment the version number.",
+              "syntax": "brain [GLOBAL_OPTIONS] system version [OPTIONS]",
+              "arguments": [],
+              "options": [
+                {
+                  "flag": "--added",
+                  "required": false,
+                  "help": "Feature or capability added (can be used multiple times)",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "--changed",
+                  "required": false,
+                  "help": "Feature or behavior changed (can be used multiple times)",
+                  "type": "Optional",
+                  "default": null
+                },
+                {
+                  "flag": "--details",
+                  "required": false,
+                  "help": "Implementation detail or technical note (can be used multiple times)",
+                  "type": "Optional",
+                  "default": null
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "twitter",
+      "description": "Twitter/X integration and social data analysis",
+      "command_count": 0,
+      "subsections": [
+        {
+          "name": null,
+          "commands": []
+        }
+      ]
+    }
+  ],
+  "root_commands": []
 }

@@ -203,14 +203,12 @@ class ProfilesLaunchCommand(BaseCommand):
         ):
             """Lanza Chrome con el perfil especificado y la extensión Bloom."""
             logger.info(f"🚀 Iniciando comando profile launch")
-            logger.debug(f"Profile ID: {profile_id[:8]}..., URL: {url}, Cockpit: {cockpit}, Discovery: {discovery}")
+            logger.debug(f"Profile ID: {profile_id[:8]}..., Discovery: {discovery}, Cockpit: {cockpit}")
             
             gc = ctx.obj
             if gc is None:
                 from brain.shared.context import GlobalContext
                 gc = GlobalContext()
-            
-            logger.debug(f"Modo JSON: {gc.json_mode}, Verbose: {gc.verbose}")
             
             try:
                 from brain.core.profile.profile_manager import ProfileManager
@@ -218,71 +216,26 @@ class ProfilesLaunchCommand(BaseCommand):
                 logger.debug("Inicializando ProfileManager...")
                 pm = ProfileManager()
                 
-                # URL Priority Logic
-                target_url = None
-                mode_label = "Standard"
-
-                if url:
-                    # 1. Explicit URL (Highest Priority)
-                    target_url = url
-                    mode_label = "Custom URL"
-                    logger.info(f"Modo seleccionado: Custom URL ({url})")
-                    
-                elif discovery:
-                    # 2. Discovery Mode (Installation/Debug)
-                    if gc.verbose:
-                        typer.echo(f"🔍 Generando entorno de discovery...", err=True)
-                    logger.info("Modo seleccionado: Discovery")
-                    logger.debug("Generando URL de discovery...")
-                    target_url = pm.get_discovery_url(profile_id)
+                # Determinar modo de lanzamiento
+                if discovery:
+                    mode = "discovery"
                     mode_label = "🔍 Discovery Check"
-                    logger.debug(f"URL de discovery generada: {target_url[:50]}...")
-                    
-                elif cockpit:
-                    # 3. Cockpit Mode (Dashboard)
-                    logger.info("Modo seleccionado: Cockpit")
-                    try:
-                        logger.debug("Obteniendo landing URL...")
-                        target_url = pm.get_landing_url(profile_id)
-                        mode_label = "🏠 Cockpit"
-                        logger.debug(f"Landing URL obtenida: {target_url[:50]}...")
-                    except Exception as e:
-                        logger.warning(f"No se pudo obtener landing URL, usando about:blank: {e}")
-                        target_url = "about:blank"
-                        mode_label = "🏠 Cockpit (Blank)"
-                
+                elif cockpit or not url:
+                    mode = "normal"
+                    mode_label = "🏠 Cockpit"
                 else:
-                    # 4. Default: Cockpit if available, else blank
-                    logger.info("Modo seleccionado: Default (intentando Cockpit)")
-                    try:
-                        logger.debug("Intentando obtener landing URL...")
-                        target_url = pm.get_landing_url(profile_id)
-                        mode_label = "🏠 Cockpit (Default)"
-                        logger.debug(f"Landing URL obtenida: {target_url[:50]}...")
-                    except Exception as e:
-                        logger.warning(f"No se pudo obtener landing URL, usando about:blank: {e}")
-                        target_url = "about:blank"
-                        mode_label = "Standard (Blank)"
-
+                    mode = "normal"
+                    mode_label = "Custom URL"
+                
                 if gc.verbose:
-                    typer.echo(f"🚀 Lanzando perfil {profile_id} en modo: {mode_label}", err=True)
+                    typer.echo(f"🚀 Lanzando perfil en modo: {mode_label}", err=True)
                 
-                logger.info(f"Lanzando perfil {profile_id[:8]}... en modo: {mode_label}")
-                logger.debug(f"Target URL: {target_url}")
+                logger.info(f"Lanzando perfil {profile_id[:8]}... en modo: {mode}")
                 
-                launch_data = pm.launch_profile(profile_id, target_url)
+                # Lanzar el perfil
+                result = pm.launch_profile(profile_id, mode=mode)
                 
-                logger.info(f"✅ Chrome lanzado exitosamente (PID: {launch_data.get('pid')})")
-                logger.debug(f"Extensión cargada: {launch_data.get('extension_loaded')}")
-                
-                result = {
-                    "status": "success",
-                    "operation": "launch",
-                    "data": {
-                        **launch_data,
-                        "mode": mode_label
-                    }
-                }
+                logger.info(f"✅ Chrome lanzado exitosamente")
                 
                 gc.output(result, self._render_launch)
                 logger.info("✅ Comando profile launch completado exitosamente")

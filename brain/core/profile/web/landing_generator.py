@@ -10,15 +10,15 @@ from typing import Dict, Any
 from datetime import datetime
 
 
-def generate_profile_landing(profile_path: Path, profile_data: Dict[str, Any]) -> None:
+def generate_profile_landing(target_ext_dir: Path, profile_data: Dict[str, Any]) -> None:
     """
-    Generates landing page for profile.
+    Generates landing page INSIDE the extension directory.
     
     Args:
-        profile_path: Path to profile directory
+        target_ext_dir: Path to profiles/[UUID]/extension/
         profile_data: Dict with {id, alias, created_at, linked_account}
     """
-    landing_dir = profile_path / "landing"
+    landing_dir = target_ext_dir / "landing"
     landing_dir.mkdir(parents=True, exist_ok=True)
     
     from brain.core.profile.path_resolver import PathResolver

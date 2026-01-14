@@ -2,7 +2,7 @@
 // ============================================================================
 // SIMPLIFIED RESPONSIBILITY: Copy binaries to unified structure
 // - Copy brain.exe + _internal to bin/brain/
-// - Copy bloom-host.exe to bin/native/
+// - Copy bloom-host.exe + DLLs to bin/native/
 // - Copy nssm.exe to bin/native/
 // 
 // NO LONGER DOES:
@@ -118,38 +118,64 @@ async function deployBrain() {
 }
 
 /**
- * Copies Native Host (bloom-host.exe) to bin/native/
+ * Copies Native Host (bloom-host.exe + DLLs) to bin/native/
  * This is the single binary that all profiles will use for Native Messaging
  */
 async function deployNativeHost() {
-  console.log('\n🔗 DEPLOYING NATIVE HOST');
+  console.log('\n🔗 DEPLOYING NATIVE HOST + DLLs');
   
-  const source = paths.nativeSource;
-  const destination = path.join(paths.nativeDir, 'bloom-host.exe');
+  // Get source directory (parent of bloom-host.exe)
+  const sourceDir = path.dirname(paths.nativeSource);
+  const destination = paths.nativeDir;
   
-  console.log(`📂 Source: ${source}`);
-  console.log(`📂 Destination: ${destination}`);
+  console.log(`📂 Source Dir: ${sourceDir}`);
+  console.log(`📂 Destination Dir: ${destination}`);
   
-  // Validate source exists
-  if (!await fs.pathExists(source)) {
-    throw new Error(`Native host source not found at: ${source}`);
+  // Validate source directory exists
+  if (!await fs.pathExists(sourceDir)) {
+    throw new Error(`Native host source directory not found at: ${sourceDir}`);
   }
   
-  // Copy with retry (might be locked by previous installation)
-  await copyWithRetry(source, destination, 'bloom-host.exe', 3);
+  // Ensure destination directory exists
+  await fs.ensureDir(destination);
   
-  // Verify
-  if (!await fs.pathExists(destination)) {
-    throw new Error(`bloom-host.exe not found after copy: ${destination}`);
+  // Read all files in source directory
+  const sourceFiles = await fs.readdir(sourceDir);
+  
+  // Copy .exe and .dll files
+  let copiedFiles = [];
+  for (const file of sourceFiles) {
+    const ext = path.extname(file).toLowerCase();
+    if (['.exe', '.dll'].includes(ext)) {
+      const sourcePath = path.join(sourceDir, file);
+      const destPath = path.join(destination, file);
+      
+      try {
+        await copyWithRetry(sourcePath, destPath, file, 3);
+        copiedFiles.push(file);
+      } catch (err) {
+        console.error(`  ❌ Failed to copy ${file}: ${err.message}`);
+        throw err;
+      }
+    }
   }
   
-  console.log('✅ Native host deployed successfully');
-  console.log(`   Executable: ${destination}`);
-  console.log('ℹ️ This binary will be shared by all profiles');
+  console.log(`✅ Native host deployed successfully (${copiedFiles.length} files)`);
+  console.log(`   Files copied: ${copiedFiles.join(', ')}`);
+  
+  // Verify bloom-host.exe exists
+  const hostExePath = path.join(destination, 'bloom-host.exe');
+  if (!await fs.pathExists(hostExePath)) {
+    throw new Error(`bloom-host.exe not found after copy: ${hostExePath}`);
+  }
+  
+  console.log(`   Main executable: ${hostExePath}`);
+  console.log('ℹ️ These binaries will be shared by all profiles');
   
   return {
     success: true,
-    hostBinary: destination
+    hostBinary: hostExePath,
+    filesDeployed: copiedFiles
   };
 }
 
@@ -209,6 +235,7 @@ async function installNativeHost() {
     console.log('\n📁 Deployment Summary:');
     console.log(`   🧠 Brain: ${brainResult.brainExe}`);
     console.log(`   🔗 Native Host: ${hostResult.hostBinary}`);
+    console.log(`   📝 DLLs deployed: ${hostResult.filesDeployed.length}`);
     console.log(`   ⚙️ NSSM: ${nssmResult.nssmExe}`);
     console.log('\nℹ️ Next steps:');
     console.log('   1. Install Windows Service (service-installer.js)');
@@ -257,6 +284,14 @@ async function verifyBinaries() {
     }
   }
   
+  // Additional check: Verify DLLs in native directory
+  const nativeDir = paths.nativeDir;
+  const nativeFiles = await fs.readdir(nativeDir);
+  const dllFiles = nativeFiles.filter(f => path.extname(f).toLowerCase() === '.dll');
+  
+  console.log(`\n📝 DLLs found in native directory: ${dllFiles.length}`);
+  dllFiles.forEach(dll => console.log(`   - ${dll}`));
+  
   if (!allValid) {
     throw new Error('Binary verification failed - some files are missing');
   }
@@ -265,7 +300,8 @@ async function verifyBinaries() {
   
   return {
     success: true,
-    checks: results
+    checks: results,
+    dllsFound: dllFiles
   };
 }
 
@@ -300,6 +336,15 @@ async function getBinaryInfo() {
         value.size = null;
       }
     }
+  }
+  
+  // Get list of DLLs in native directory
+  try {
+    const nativeFiles = await fs.readdir(paths.nativeDir);
+    const dllFiles = nativeFiles.filter(f => path.extname(f).toLowerCase() === '.dll');
+    info.dlls = dllFiles;
+  } catch (e) {
+    info.dlls = [];
   }
   
   return info;

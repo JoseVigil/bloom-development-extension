@@ -219,6 +219,8 @@ datas.extend([
     # No olvides la lógica interna y web (si no PyInstaller los ignorará)
     (str(core_profile_src / 'logic' / '__init__.py'), 'brain/core/profile/logic'),
     (str(core_profile_src / 'logic' / 'profile_store.py'), 'brain/core/profile/logic'),
+    (str(core_profile_src / 'logic' / 'chrome_resolver.py'), 'brain/core/profile/logic'),
+    (str(core_profile_src / 'logic' / 'synapse_handler.py'), 'brain/core/profile/logic'),
     (str(core_profile_src / 'web' / '__init__.py'), 'brain/core/profile/web'),
     (str(core_profile_src / 'web' / 'discovery_generator.py'), 'brain/core/profile/web'),
     (str(core_profile_src / 'web' / 'landing_generator.py'), 'brain/core/profile/web'),

@@ -1,352 +1,256 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Brain CLI - Build Script (Simplificado)
-Wrapper que ejecuta los scripts de brain/build_deploy/
-
-Uso:
-    python build.py              # Compilación completa
-    python build.py --clean      # Limpieza + compilación
-    python build.py --skip-gen   # Solo compilar (sin regenerar loader)
+Brain CLI - Build Script con Logging
+Genera 'build.log' con todo el detalle de la ejecución.
 """
 import os
 import sys
 import subprocess
 from pathlib import Path
 import io
+import time
+from datetime import datetime
+
+# Archivo de Log
+LOG_FILE = Path("build.log")
 
 # ========================================
-# FORZAR UTF-8 EN TODO WINDOWS
+# SISTEMA DE LOGGING
 # ========================================
+def setup_log():
+    """Inicia un nuevo archivo de log."""
+    with open(LOG_FILE, "w", encoding="utf-8") as f:
+        f.write(f"=== BRAIN BUILD LOG ===\n")
+        f.write(f"Fecha: {datetime.now()}\n")
+        f.write(f"Sistema: {sys.platform}\n")
+        f.write("="*40 + "\n\n")
+
+def log(msg, level="INFO", to_console=True):
+    """
+    Escribe en el log y opcionalmente en consola.
+    Maneja errores de encoding en consola de Windows.
+    """
+    timestamp = datetime.now().strftime("%H:%M:%S")
+    file_msg = f"[{timestamp}] [{level}] {msg}"
+    
+    # 1. Escribir en archivo (UTF-8 seguro)
+    try:
+        with open(LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(file_msg + "\n")
+    except Exception as e:
+        print(f"!!! Error escribiendo log: {e}")
+
+    # 2. Escribir en consola (Saneado)
+    if to_console:
+        console_msg = msg
+        if level == "ERROR":
+            console_msg = f"❌ {msg}"
+        elif level == "WARN":
+            console_msg = f"⚠️  {msg}"
+        elif level == "SUCCESS":
+            console_msg = f"✅ {msg}"
+            
+        try:
+            print(console_msg)
+        except UnicodeEncodeError:
+            # Si falla el emoji, imprimimos versión ASCII
+            print(console_msg.encode('ascii', 'replace').decode('ascii'))
+
+# ========================================
+# CONFIGURACIÓN DE ENTORNO
+# ========================================
+ENV_VARS = os.environ.copy()
+ENV_VARS['PYTHONIOENCODING'] = 'utf-8'
+ENV_VARS['PYTHONUTF8'] = '1'
+ENV_VARS['TERM'] = 'xterm-256color' 
+
 if sys.platform == "win32":
-    # 1. Forzar consola a UTF-8
-    if hasattr(sys.stdout, 'buffer'):
-        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
-    
-    # 2. Variables de entorno para subprocesos
-    os.environ['PYTHONIOENCODING'] = 'utf-8'
-    os.environ['PYTHONUTF8'] = '1'
-    
-    # 3. Forzar codepage de consola (solo si es posible)
+    # Intentar forzar UTF-8 en consola
     try:
         import ctypes
         kernel32 = ctypes.windll.kernel32
         kernel32.SetConsoleCP(65001)
         kernel32.SetConsoleOutputCP(65001)
     except:
-        pass  # Si falla, continuamos con las otras configuraciones
+        pass
+    
+    # Wrapper para stdout
+    if hasattr(sys.stdout, 'buffer'):
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
+def safe_subprocess_run(cmd, timeout=None, cwd=None, desc=""):
+    """Ejecuta comando y loguea todo."""
+    log(f"Ejecutando: {' '.join(cmd)}", level="DEBUG", to_console=False)
+    
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            env=ENV_VARS,
+            timeout=timeout,
+            cwd=cwd
+        )
+        
+        stdout = result.stdout.decode('utf-8', errors='replace').strip()
+        stderr = result.stderr.decode('utf-8', errors='replace').strip()
+        
+        if stdout:
+            log(f"STDOUT:\n{stdout}", level="DEBUG", to_console=False)
+        
+        if result.returncode != 0:
+            log(f"Fallo en '{desc}' (Código {result.returncode})", level="ERROR", to_console=False)
+            if stderr:
+                log(f"STDERR:\n{stderr}", level="ERROR", to_console=False)
+            return result.returncode, stdout, stderr
+            
+        return 0, stdout, stderr
+        
+    except subprocess.TimeoutExpired:
+        log(f"Timeout en '{desc}'", level="ERROR")
+        return -1, "", "Timeout"
+    except Exception as e:
+        log(f"Excepción en '{desc}': {e}", level="ERROR")
+        return -1, "", str(e)
 
 def generate_help_files(brain_exe):
-    """
-    Genera todos los archivos de ayuda en brain/help/
-    
-    Archivos generados:
-    - help.txt: Ayuda estándar (rich terminal UI)
-    - brain-legacy.json: Formato JSON legacy para documentación
-    - brain-ai-schema.json: OpenAI Function Calling Schema
-    - brain-ai-full.json: Schema AI completo
-    """
     help_dir = Path("brain/help")
     help_dir.mkdir(parents=True, exist_ok=True)
     
-    print("\n[INFO] Generando archivos de ayuda...")
+    log("\nGenerando archivos de ayuda...", level="INFO")
     
     help_commands = [
-        {
-            "args": ["--help"],
-            "file": "help.txt",
-            "desc": "Terminal UI (rich)"
-        },
-        {
-            "args": ["--json", "--help"],
-            "file": "brain-legacy.json",
-            "desc": "JSON Legacy"
-        },
-        {
-            "args": ["--ai", "--help"],
-            "file": "brain-ai-schema.json",
-            "desc": "AI Schema (OpenAI)"
-        },
-        {
-            "args": ["--ai", "--help", "--full"],
-            "file": "brain-ai-full.json",
-            "desc": "AI Full Schema",
-            "optional": True
-        }
+        {"args": ["--help"], "file": "help.txt", "desc": "Terminal UI"},
+        {"args": ["--json", "--help"], "file": "brain-legacy.json", "desc": "JSON Legacy"},
+        {"args": ["--ai", "--help"], "file": "brain-ai-schema.json", "desc": "AI Schema"},
+        {"args": ["--ai", "--help", "--full"], "file": "brain-ai-full.json", "desc": "AI Full", "optional": True}
     ]
     
-    generated = []
-    failed = []
+    success_count = 0
     
     for cmd_info in help_commands:
         file_path = help_dir / cmd_info["file"]
         cmd = [str(brain_exe)] + cmd_info["args"]
         
-        try:
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                encoding='utf-8',
-                errors='replace',
-                timeout=10
-            )
+        code, out, err = safe_subprocess_run(cmd, timeout=15, desc=f"Help: {cmd_info['file']}")
+        
+        output = out or err
+        
+        if output and code == 0:
+            file_path.write_text(output, encoding='utf-8', errors='replace')
+            log(f"   {cmd_info['file']:<25} ({cmd_info['desc']})", level="SUCCESS")
+            success_count += 1
+        elif cmd_info.get("optional"):
+            log(f"   {cmd_info['file']:<25} (Opcional - Skip)", level="WARN")
+        else:
+            log(f"   {cmd_info['file']:<25} (Fallo)", level="ERROR")
             
-            # Usar stdout si está disponible, sino stderr
-            output = result.stdout if result.stdout.strip() else result.stderr
-            
-            if output.strip():
-                file_path.write_text(output, encoding='utf-8')
-                generated.append(cmd_info["file"])
-                print(f"   ✓ {cmd_info['file']:<25} ({cmd_info['desc']})")
-            elif cmd_info.get("optional"):
-                print(f"   ⊘ {cmd_info['file']:<25} (no disponible)")
-            else:
-                failed.append(cmd_info["file"])
-                print(f"   ✗ {cmd_info['file']:<25} (sin output)")
-                
-        except subprocess.TimeoutExpired:
-            if not cmd_info.get("optional"):
-                failed.append(cmd_info["file"])
-            print(f"   ✗ {cmd_info['file']:<25} (timeout)")
-        except Exception as e:
-            if not cmd_info.get("optional"):
-                failed.append(cmd_info["file"])
-            print(f"   ✗ {cmd_info['file']:<25} ({str(e)[:30]})")
-    
-    if generated:
-        print(f"\n[OK] Generados {len(generated)} archivo(s) en: {help_dir}/")
-    
-    if failed:
-        print(f"[WARN] No se pudieron generar: {', '.join(failed)}")
-    
-    return len(failed) == 0
-
+    return success_count > 0
 
 def generate_tree_files(brain_exe):
-    """
-    Genera árboles de directorios usando brain filesystem tree
-    
-    Archivos generados en tree/:
-    - plugin_tree.txt: Árbol completo del plugin
-    - installer_tree.txt: Árbol del instalador
-    - brain_tree.txt: Árbol del CLI Brain
-    - electron_tree.txt: Árbol de la app Electron
-    - webview_tree.txt: Árbol del webview
-    - chrome_extension_tree.txt: Árbol de la extensión Chrome
-    """
     tree_dir = Path("tree")
     tree_dir.mkdir(parents=True, exist_ok=True)
     
-    print("\n[INFO] Generando árboles de directorios...")
+    log("\nGenerando árboles de directorios...", level="INFO")
     
     tree_commands = [
-        {
-            "args": ["filesystem", "tree", "src", "installer", "webview", "brain", 
-                     "contracts", "package.json", "tsconfig.json", "-o", "tree/plugin_tree.txt"],
-            "file": "plugin_tree.txt",
-            "desc": "Plugin completo"
-        },
-        {
-            "args": ["filesystem", "tree", "installer", "-o", "tree/installer_tree.txt"],
-            "file": "installer_tree.txt",
-            "desc": "Instalador"
-        },
-        {
-            "args": ["filesystem", "tree", "brain", "-o", "tree/brain_tree.txt"],
-            "file": "brain_tree.txt",
-            "desc": "Brain CLI"
-        },
-        {
-            "args": ["filesystem", "tree", "installer/electron-app", "-o", "tree/electron_tree.txt"],
-            "file": "electron_tree.txt",
-            "desc": "Electron App"
-        },
-        {
-            "args": ["filesystem", "tree", "webview", "-o", "tree/webview_tree.txt"],
-            "file": "webview_tree.txt",
-            "desc": "Webview"
-        },
-        {
-            "args": ["filesystem", "tree", "installer/chrome-extension", "-o", "tree/chrome_extension_tree.txt"],
-            "file": "chrome_extension_tree.txt",
-            "desc": "Chrome Extension"
-        }
+        {"args": ["filesystem", "tree", "src", "installer", "brain", "-o", "tree/plugin_tree.txt"], "file": "plugin_tree.txt"},
+        {"args": ["filesystem", "tree", "installer", "-o", "tree/installer_tree.txt"], "file": "installer_tree.txt"},
+        {"args": ["filesystem", "tree", "brain", "-o", "tree/brain_tree.txt"], "file": "brain_tree.txt"},
+        {"args": ["filesystem", "tree", "installer/electron-app", "-o", "tree/electron_tree.txt"], "file": "electron_tree.txt"},
+        {"args": ["filesystem", "tree", "webview", "-o", "tree/webview_tree.txt"], "file": "webview_tree.txt"},
+        {"args": ["filesystem", "tree", "installer/chrome-extension", "-o", "tree/chrome_extension_tree.txt"], "file": "chrome_extension_tree.txt"}
     ]
     
-    generated = []
-    failed = []
+    success_count = 0
     
     for cmd_info in tree_commands:
-        file_path = tree_dir / cmd_info["file"]
+        target_file = Path(cmd_info["args"][-1])
         cmd = [str(brain_exe)] + cmd_info["args"]
         
-        try:
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                encoding='utf-8',
-                errors='replace',
-                timeout=30  # Trees pueden tardar más
-            )
-            
-            if result.returncode == 0:
-                # Verificar que el archivo se haya creado
-                if file_path.exists() and file_path.stat().st_size > 0:
-                    generated.append(cmd_info["file"])
-                    print(f"   ✓ {cmd_info['file']:<30} ({cmd_info['desc']})")
-                else:
-                    failed.append(cmd_info["file"])
-                    print(f"   ✗ {cmd_info['file']:<30} (archivo vacío o no creado)")
+        code, out, err = safe_subprocess_run(cmd, timeout=45, desc=f"Tree: {cmd_info['file']}")
+        
+        if code == 0:
+            if target_file.exists() and target_file.stat().st_size > 0:
+                log(f"   {cmd_info['file']:<30}", level="SUCCESS")
+                success_count += 1
             else:
-                failed.append(cmd_info["file"])
-                error_msg = result.stderr[:50] if result.stderr else "error desconocido"
-                print(f"   ✗ {cmd_info['file']:<30} ({error_msg})")
-                
-        except subprocess.TimeoutExpired:
-            failed.append(cmd_info["file"])
-            print(f"   ✗ {cmd_info['file']:<30} (timeout)")
-        except Exception as e:
-            failed.append(cmd_info["file"])
-            print(f"   ✗ {cmd_info['file']:<30} ({str(e)[:30]})")
-    
-    if generated:
-        print(f"\n[OK] Generados {len(generated)} árbol(es) en: {tree_dir}/")
-    
-    if failed:
-        print(f"[WARN] No se pudieron generar: {', '.join(failed)}")
-    
-    return len(failed) == 0
+                log(f"   {cmd_info['file']:<30} (Archivo vacío)", level="ERROR")
+        else:
+            # Mensaje corto para consola
+            log(f"   {cmd_info['file']:<30} (Falló - Ver Log)", level="ERROR")
 
+    return success_count == len(tree_commands)
 
-def run_build_silent(cmd):
-    """
-    Ejecuta el build mostrando solo mensajes importantes.
-    Filtra el ruido visual del output.
-    """
-    result = subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True,
-        encoding='utf-8',
-        errors='replace'
-    )
-    
-    # Combinar stdout y stderr
-    full_output = result.stdout + result.stderr
-    
-    # Palabras clave que indican mensajes importantes
-    important_keywords = [
-        "[ERROR]",
-        "[CRITICAL]",
-        "[WARN]",
-        "ERROR:",
-        "WARNING:",
-        "Failed",
-        "Success",
-        "✓",
-        "✗",
-        "Compilando",
-        "Generando",
-        "Copiando"
-    ]
-    
-    # Palabras clave que indican ruido (help, usage, etc)
-    noise_keywords = [
-        "usage:",
-        "positional arguments:",
-        "optional arguments:",
-        "options:",
-        "show this help",
-        "  -h, --help",
-        "  --version"
-    ]
-    
-    lines = full_output.split('\n')
-    
-    for line in lines:
-        line_lower = line.lower()
-        
-        # Saltar líneas de ruido
-        if any(keyword.lower() in line_lower for keyword in noise_keywords):
-            continue
-        
-        # Mostrar líneas importantes o no vacías
-        if line.strip() and (
-            any(keyword.lower() in line_lower for keyword in important_keywords)
-            or len(line.strip()) < 100  # Líneas cortas probablemente son importantes
-        ):
-            print(line)
-    
-    return result.returncode
-
-
-def main():
-    """Ejecuta el script de build desde brain/build_deploy/"""
-    
-    # Verificar que estamos en el directorio correcto
-    if not Path("brain").exists():
-        print("[ERROR] Debe ejecutar este script desde la raíz del proyecto")
-        print("        (debe existir la carpeta 'brain/')")
-        sys.exit(1)
-    
-    # Ruta al script real
-    build_script = Path("brain/build_deploy/build_main.py")
-    
-    if not build_script.exists():
-        print(f"[ERROR] No existe: {build_script}")
-        print("\nAsegúrate de tener la siguiente estructura:")
-        print("  brain/")
-        print("  └── build_deploy/")
-        print("      └── build_main.py")
-        sys.exit(1)
-    
-    # Pasar todos los argumentos al script real
+def run_build_process(build_script):
     cmd = [sys.executable, str(build_script)] + sys.argv[1:]
     
-    print("[BUILD] Compilando Brain CLI...")
-    exit_code = run_build_silent(cmd)
+    log("Iniciando PyInstaller...", level="INFO")
     
-    if exit_code != 0:
-        print(f"\n[ERROR] Build falló con código: {exit_code}")
-        sys.exit(exit_code)
+    process = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        env=ENV_VARS
+    )
     
-    print("[BUILD] Compilación exitosa\n")
-    
-    # Buscar el ejecutable compilado
-    possible_paths = [
-        Path("dist/brain/brain.exe"),
-        Path("dist/brain"),
-        Path("build/brain/brain.exe"),
-        Path("build/brain")
-    ]
-    
-    brain_exe = None
-    for path in possible_paths:
-        if path.exists():
-            brain_exe = path
+    while True:
+        line_bytes = process.stdout.readline()
+        if not line_bytes and process.poll() is not None:
             break
+        if line_bytes:
+            line = line_bytes.decode('utf-8', errors='replace').rstrip()
+            # Escribimos al log file todo, pero a consola filtramos ruido
+            log(line, level="BUILD", to_console=True)
+            
+    return process.poll()
+
+def main():
+    setup_log()
+    log("Iniciando proceso de Build", level="INFO")
     
-    if not brain_exe:
-        print("\n[WARN] No se encontró el ejecutable compilado")
-        print("       Búsqueda en: dist/brain/, build/brain/")
+    if not Path("brain").exists():
+        log("Ejecutar desde la raíz del proyecto.", level="ERROR")
         sys.exit(1)
     
-    # Generar archivos de ayuda
-    help_success = generate_help_files(brain_exe)
-    if not help_success:
-        print("\n[WARN] Algunos archivos de ayuda no se generaron correctamente")
+    build_script = Path("brain/build_deploy/build_main.py")
+    if not build_script.exists():
+        log(f"No existe: {build_script}", level="ERROR")
+        sys.exit(1)
     
-    # Generar árboles de directorios
-    tree_success = generate_tree_files(brain_exe)
-    if not tree_success:
-        print("\n[WARN] Algunos árboles no se generaron correctamente")
+    # 1. EJECUTAR EL BUILD
+    exit_code = run_build_process(build_script)
     
-    sys.exit(exit_code)
-
+    if exit_code != 0:
+        log(f"Build falló con código: {exit_code}", level="ERROR")
+        log(f"Revisa 'build.log' para detalles.", level="INFO")
+        sys.exit(exit_code)
+    
+    # 2. LOCALIZAR BINARIO
+    brain_exe = None
+    possible_paths = [
+        Path("installer/native/bin/win32/brain/brain.exe"),
+        Path("dist/brain/brain.exe")
+    ]
+    
+    for p in possible_paths:
+        if p.exists():
+            brain_exe = p
+            break
+            
+    if not brain_exe:
+        log("No se encontró el ejecutable compilado.", level="ERROR")
+        sys.exit(1)
+        
+    log(f"Usando binario: {brain_exe}", level="INFO")
+    
+    # 3. GENERAR DOCS
+    generate_help_files(brain_exe)
+    generate_tree_files(brain_exe)
+    
+    log("Proceso finalizado.", level="SUCCESS")
+    log(f"Detalles guardados en: {LOG_FILE.absolute()}", level="INFO")
 
 if __name__ == "__main__":
     main()

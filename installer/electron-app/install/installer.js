@@ -5,7 +5,7 @@
 // 2. Create directories
 // 3. Copy extension template to bin/extension/
 // 4. Install runtime (Python engine)
-// 5. Copy binaries (brain.exe to bin/brain/, bloom-host.exe to bin/native/)
+// 5. Copy binaries (brain.exe to bin/brain/, bloom-host.exe + DLLs to bin/native/)
 // 6. Install and start Windows service
 // 7. HANDOFF TO BRAIN: Execute `brain profile create MasterWorker --json`
 // 8. HANDOFF TO BRAIN: Execute `brain profile launch MasterWorker --discovery`
@@ -74,7 +74,7 @@ const INSTALLATION_STEPS = [
  * Create base directory structure
  * New structure:
  * - bin/brain/        (brain.exe + _internal)
- * - bin/native/       (bloom-host.exe)
+ * - bin/native/       (bloom-host.exe + DLLs)
  * - bin/extension/    (extension template - copied per profile by Brain)
  * - config/           (profiles.json managed by Brain)
  * - profiles/[UUID]/  (created by Brain)
@@ -149,7 +149,7 @@ async function deployExtensionTemplate() {
 /**
  * Copy binaries to new unified structure
  * - brain.exe → bin/brain/brain.exe (with _internal folder)
- * - bloom-host.exe → bin/native/bloom-host.exe
+ * - bloom-host.exe + DLLs → bin/native/
  */
 async function deployBinaries() {
   console.log('\n🔧 DEPLOYING BINARIES');
@@ -174,22 +174,42 @@ async function deployBinaries() {
   }
   console.log('  ✅ Brain service deployed');
   
-  // 2. Copy Native Host
-  console.log('📦 Copying Native Host...');
-  console.log(`   Source: ${paths.nativeSource}`);
-  console.log(`   Dest:   ${nativeDest}`);
+  // 2. Copy Native Host + DLLs
+  console.log('📦 Copying Native Host + DLLs...');
   
-  if (!await fs.pathExists(paths.nativeSource)) {
-    throw new Error(`Native source not found at: ${paths.nativeSource}`);
+  // Get the directory containing bloom-host.exe
+  const nativeSourceDir = path.dirname(paths.nativeSource);
+  console.log(`   Source Dir: ${nativeSourceDir}`);
+  console.log(`   Dest Dir:   ${nativeDest}`);
+  
+  if (!await fs.pathExists(nativeSourceDir)) {
+    throw new Error(`Native source directory not found at: ${nativeSourceDir}`);
   }
   
-  const hostDestPath = path.join(nativeDest, 'bloom-host.exe');
-  await fs.copy(paths.nativeSource, hostDestPath, { overwrite: true });
+  // Read all files in source directory
+  const sourceFiles = await fs.readdir(nativeSourceDir);
   
+  // Copy .exe and .dll files
+  let copiedFiles = [];
+  for (const file of sourceFiles) {
+    const ext = path.extname(file).toLowerCase();
+    if (['.exe', '.dll'].includes(ext)) {
+      const sourcePath = path.join(nativeSourceDir, file);
+      const destPath = path.join(nativeDest, file);
+      
+      await fs.copy(sourcePath, destPath, { overwrite: true });
+      copiedFiles.push(file);
+      console.log(`  ✅ Copied: ${file}`);
+    }
+  }
+  
+  console.log(`  ✅ Native host deployed (${copiedFiles.length} files)`);
+  
+  // Verify bloom-host.exe exists
+  const hostDestPath = path.join(nativeDest, 'bloom-host.exe');
   if (!await fs.pathExists(hostDestPath)) {
     throw new Error(`bloom-host.exe not found after copy: ${hostDestPath}`);
   }
-  console.log('  ✅ Native host deployed');
   
   // 3. Copy NSSM for service management
   console.log('📦 Copying NSSM...');

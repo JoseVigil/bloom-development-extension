@@ -8,6 +8,8 @@ python prepare_runtime_libs.py
 cd installer/electron-app/install
 node diagnose-service.js
 
+#Agragar librerias python en brain.specs despues de pip install local.
+
 brain build
 C:\repos\bloom-videos\bloom-development-extension
 .\build.ps1 (powershell admin)
@@ -36,6 +38,7 @@ DEV Web server port 5173
 npm run build
 npm run dev
 
+tree commands
 brain filesystem tree src installer webview brain contracts package.json tsconfig.json -o tree/plugin_tree.txt
 
 brain filesystem tree installer -o tree/installer_tree.txt
@@ -47,5 +50,7 @@ brain filesystem tree webview -o tree/webview_tree.txt
 brain filesystem tree installer/electron-app -o tree/electron_tree.txt
 
 brain filesystem tree installer/chrome-extension -o tree/chrome_extension_tree.txt
+
+brain filesystem tree C:\Users\josev\AppData\Local\BloomNucleus -o tree/appdata_tree.txt
 
 

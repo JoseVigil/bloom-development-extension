@@ -331,6 +331,21 @@ export class BrainApiAdapter {
   }
 
   // ============================================================================
+  // TWITTER OPERATIONS
+  // ============================================================================
+
+  static async twitterAuthStatus(): Promise<BrainResult<TwitterAuthStatus>> {
+    return BrainExecutor.execute(['--json', 'twitter', 'auth-status'], {});
+  }
+
+  static async twitterAuthLogin(token: string, username: string): Promise<BrainResult<void>> {
+    return BrainExecutor.execute(['--json', 'twitter', 'auth-login'], {
+      '--token': token,
+      '--username': username
+    });
+  }
+
+  // ============================================================================
   // GEMINI OPERATIONS
   // ============================================================================
 

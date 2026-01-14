@@ -118,6 +118,7 @@ def build():
         # Utilidades
         '--hidden-import=colorama',
         '--hidden-import=shellingham',
+        '--hidden-import=dotenv',
         
         # Logging
         '--hidden-import=logging',

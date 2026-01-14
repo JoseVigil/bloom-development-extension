@@ -107,13 +107,6 @@ bloom-development-extension/
     │   │       │   ├── _internal/ [... dependencies]
     │   │       │   └── brain.exe
     │   │       ├── libwinpthread-1.dll
-    │   │       ├── profiles/
-    │   │       │   └── 053fc072-c32c-425f-9da5-ec8fd23d66d6/
-    │   │       │       └── landing/
-    │   │       │           ├── index.html
-    │   │       │           ├── manifest.json
-    │   │       │           ├── script.js
-    │   │       │           └── styles.css
     │   │       └── profiles.json
     │   ├── host/
     │   │   └── com.bloom.nucleus.bridge.json

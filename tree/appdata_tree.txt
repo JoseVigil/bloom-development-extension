@@ -12,9 +12,8 @@ BloomNucleus/
 │   │   └── manifest.json
 │   └── native/
 │       ├── bloom-host.exe
-│       ├── nssm.exe
-│       └── synapse/
-│           └── com.bloom.synapse.fa01c634.json
+│       ├── libwinpthread-1.dll
+│       └── nssm.exe
 ├── config/
 │   ├── nucleus.json
 │   └── profiles.json
@@ -55,21 +54,19 @@ BloomNucleus/
 │       ├── vcruntime140_1.dll
 │       └── winsound.pyd
 ├── logs/
-│   ├── brain_core_20260113.log
+│   ├── brain_core_20260114.log
 │   ├── brain_error.log
 │   ├── brain_service.log
 │   └── profiles/
-│       └── fa01c634-f5fa-401d-8fe9-14912e5fdb8f/
-│           ├── chrome_bloom_log_20260113.log
-│           └── chrome_net.log
+│       └── ce8d9b8c-3b9e-43f0-9e17-e138c365d89e/
 └── profiles/
-    └── fa01c634-f5fa-401d-8fe9-14912e5fdb8f/
+    └── ce8d9b8c-3b9e-43f0-9e17-e138c365d89e/
         ├── ActorSafetyLists/
         ├── AmountExtractionHeuristicRegexes/
         ├── AutofillStates/
         ├── BrowserMetrics/
-        │   └── BrowserMetrics-6966AD96-328C.pma
-        ├── BrowserMetrics-spare.pma
+        │   ├── BrowserMetrics-6967B349-31C0.pma
+        │   └── BrowserMetrics-6967B349-513C.pma
         ├── CertificateRevocation/
         ├── CookieReadinessList/
         ├── Crashpad/
@@ -103,12 +100,6 @@ BloomNucleus/
         │   │   │   ├── data_1
         │   │   │   ├── data_2
         │   │   │   ├── data_3
-        │   │   │   ├── f_000002
-        │   │   │   ├── f_000003
-        │   │   │   ├── f_000004
-        │   │   │   ├── f_000005
-        │   │   │   ├── f_000006
-        │   │   │   ├── f_000007
         │   │   │   └── index
         │   │   └── No_Vary_Search/
         │   │       ├── journal.baj
@@ -118,14 +109,7 @@ BloomNucleus/
         │   │   └── LOG
         │   ├── Code Cache/
         │   │   ├── js/
-        │   │   │   ├── 24b7a8a86d1ecb70_0
-        │   │   │   ├── 2912f53cb6ffe1b3_0
-        │   │   │   ├── 3c0f3ba421a5f81f_0
-        │   │   │   ├── 58c14d83a584f559_0
-        │   │   │   ├── a8b18da328eb035e_0
         │   │   │   ├── ba678a2fbd8c358c_0
-        │   │   │   ├── bd051b2252b94eda_0
-        │   │   │   ├── dbdb5d27aa53f035_0
         │   │   │   ├── index
         │   │   │   └── index-dir/
         │   │   │       └── the-real-index
@@ -134,7 +118,6 @@ BloomNucleus/
         │   │       └── index-dir/
         │   │           └── the-real-index
         │   ├── DIPS
-        │   ├── DIPS-wal
         │   ├── DawnGraphiteCache/
         │   │   ├── data_0
         │   │   ├── data_1
@@ -555,7 +538,8 @@ BloomNucleus/
         │   │   ├── LOG
         │   │   └── MANIFEST-000001
         │   ├── Sessions/
-        │   │   └── Session_13412810393213812
+        │   │   ├── Session_13412877388553627
+        │   │   └── Tabs_13412877439830145
         │   ├── Shared Dictionary/
         │   │   ├── cache/
         │   │   │   ├── index
@@ -564,7 +548,6 @@ BloomNucleus/
         │   │   ├── db
         │   │   └── db-journal
         │   ├── SharedStorage
-        │   ├── SharedStorage-wal
         │   ├── Shortcuts
         │   ├── Shortcuts-journal
         │   ├── Site Characteristics Database/
@@ -626,15 +609,13 @@ BloomNucleus/
         │   │               │   ├── LOCK
         │   │               │   ├── LOG
         │   │               │   └── MANIFEST-000001
-        │   │               ├── Shared Dictionary/
-        │   │               │   ├── cache/
-        │   │               │   │   ├── index
-        │   │               │   │   └── index-dir/
-        │   │               │   │       └── the-real-index
-        │   │               │   ├── db
-        │   │               │   └── db-journal
-        │   │               ├── SharedStorage
-        │   │               └── SharedStorage-wal
+        │   │               └── Shared Dictionary/
+        │   │                   ├── cache/
+        │   │                   │   ├── index
+        │   │                   │   └── index-dir/
+        │   │                   │       └── the-real-index
+        │   │                   ├── db
+        │   │                   └── db-journal
         │   ├── Sync Data/
         │   │   └── LevelDB/
         │   │       ├── 000003.log
@@ -765,7 +746,7 @@ BloomNucleus/
         │   │   ├── QuotaManager
         │   │   └── QuotaManager-journal
         │   ├── blob_storage/
-        │   │   └── efcbcd07-ce98-4b83-9969-9f9ca7a991d5/
+        │   │   └── f57f0c2d-9caf-4b0a-8f34-b1c96099856a/
         │   ├── chrome_cart_db/
         │   │   ├── LOCK
         │   │   └── LOG
@@ -786,7 +767,6 @@ BloomNucleus/
         │   ├── parcel_tracking_db/
         │   │   ├── LOCK
         │   │   └── LOG
-        │   ├── passkey_enclave_state
         │   ├── shared_proto_db/
         │   │   ├── 000003.log
         │   │   ├── CURRENT
@@ -846,21 +826,26 @@ BloomNucleus/
         ├── WasmTtsEngine/
         ├── WidevineCdm/
         ├── ZxcvbnData/
-        ├── c931c95e-ee03-40e0-a607-8f3eeed45a6a.tmp
+        ├── b473b2cc-67d2-4452-8d6c-d6f580f263d5.tmp
         ├── chrome_debug.log
+        ├── chrome_debug.log.txt
         ├── component_crx_cache/
         │   └── metadata.json
-        ├── discovery/
-        │   ├── config.js
-        │   ├── index.html
-        │   ├── script.js
-        │   └── styles.css
         ├── extension/
         │   ├── 128x128.png
         │   ├── background.js
         │   ├── content.js
+        │   ├── discovery/
+        │   │   ├── config.js
+        │   │   ├── index.html
+        │   │   ├── script.js
+        │   │   └── styles.css
         │   ├── icon128.png
         │   ├── icon16.png
+        │   ├── landing/
+        │   │   ├── manifest.json
+        │   │   ├── script.js
+        │   │   └── styles.css
         │   ├── manifest.json
         │   └── synapse.config.js
         ├── extensions_crx_cache/
@@ -868,62 +853,59 @@ BloomNucleus/
         ├── first_party_sets.db
         ├── first_party_sets.db-journal
         ├── hyphen-data/
-        ├── landing/
-        │   ├── manifest.json
-        │   ├── script.js
-        │   └── styles.css
-        ├── lockfile
         ├── optimization_guide_model_store/
         │   ├── 13/
         │   │   └── E6DC4029A1E4B4C1/
-        │   │       └── 33BF290ABAA1199F/
+        │   │       └── 0C32A790EF8F1C4F/
         │   │           ├── model-info.pb
         │   │           └── model.tflite
         │   ├── 15/
         │   │   └── E6DC4029A1E4B4C1/
-        │   │       └── C5ACFB95BA6EBBAC/
+        │   │       └── EF30058C80731165/
         │   │           ├── VERSION.txt
         │   │           ├── model-info.pb
         │   │           ├── model.tflite
         │   │           └── override_list.pb.gz
         │   ├── 2/
         │   │   └── E6DC4029A1E4B4C1/
-        │   │       └── 152753B25DB9569B/
+        │   │       └── 19D3B5CC7320B9E7/
         │   │           ├── model-info.pb
         │   │           └── model.tflite
         │   ├── 20/
         │   │   └── E6DC4029A1E4B4C1/
-        │   │       └── 25163D5A2E127E81/
+        │   │       └── 98B6C64BDC7DCB02/
         │   │           ├── model-info.pb
         │   │           └── model.tflite
         │   ├── 24/
         │   │   └── E6DC4029A1E4B4C1/
-        │   │       └── E459EA3A589EA988/
+        │   │       └── 5D95039D8312CAF7/
         │   │           ├── enus_denylist_encoded_241007.txt
         │   │           ├── model-info.pb
         │   │           ├── model.tflite
         │   │           └── vocab_en-us.txt
         │   ├── 25/
         │   │   └── E6DC4029A1E4B4C1/
-        │   │       └── 0ED2596C07AA04ED/
+        │   │       └── 6B33B58EA16F7CB0/
         │   │           ├── model-info.pb
         │   │           ├── model.tflite
         │   │           └── visual_model_desktop.tflite
         │   ├── 26/
         │   │   └── E6DC4029A1E4B4C1/
-        │   │       └── DA59BD8A80DCE1C9/
+        │   │       └── B0AB561503507B7C/
         │   │           ├── model-info.pb
         │   │           └── model.tflite
         │   ├── 45/
         │   │   └── E6DC4029A1E4B4C1/
-        │   │       └── 2B9DF73F0AE71FD6/
+        │   │       └── 4254A3C59A872988/
         │   │           ├── model-info.pb
         │   │           └── model.tflite
         │   └── 9/
         │       └── E6DC4029A1E4B4C1/
-        │           └── 4C4E5FE0986FF019/
+        │           └── C680DED2A9C0B084/
         │               ├── model-info.pb
         │               └── model.tflite
-        └── segmentation_platform/
-            ├── ukm_db
-            └── ukm_db-wal
+        ├── segmentation_platform/
+        │   ├── ukm_db
+        │   └── ukm_db-wal
+        └── synapse/
+            └── com.bloom.synapse.ce8d9b8c.json
