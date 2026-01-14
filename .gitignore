@@ -103,3 +103,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Chrome Installer
+installer/chrome/chrome-win.zip  
