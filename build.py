@@ -45,16 +45,15 @@ def log(msg, level="INFO", to_console=True):
     if to_console:
         console_msg = msg
         if level == "ERROR":
-            console_msg = f"❌ {msg}"
+            console_msg = f"X {msg}"
         elif level == "WARN":
-            console_msg = f"⚠️  {msg}"
+            console_msg = f"! {msg}"
         elif level == "SUCCESS":
-            console_msg = f"✅ {msg}"
+            console_msg = f"OK {msg}"
             
         try:
             print(console_msg)
         except UnicodeEncodeError:
-            # Si falla el emoji, imprimimos versión ASCII
             print(console_msg.encode('ascii', 'replace').decode('ascii'))
 
 # ========================================
@@ -66,7 +65,6 @@ ENV_VARS['PYTHONUTF8'] = '1'
 ENV_VARS['TERM'] = 'xterm-256color' 
 
 if sys.platform == "win32":
-    # Intentar forzar UTF-8 en consola
     try:
         import ctypes
         kernel32 = ctypes.windll.kernel32
@@ -75,7 +73,6 @@ if sys.platform == "win32":
     except:
         pass
     
-    # Wrapper para stdout
     if hasattr(sys.stdout, 'buffer'):
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
         sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
@@ -90,11 +87,13 @@ def safe_subprocess_run(cmd, timeout=None, cwd=None, desc=""):
             capture_output=True,
             env=ENV_VARS,
             timeout=timeout,
-            cwd=cwd
+            cwd=cwd,
+            encoding='utf-8',
+            errors='replace'
         )
         
-        stdout = result.stdout.decode('utf-8', errors='replace').strip()
-        stderr = result.stderr.decode('utf-8', errors='replace').strip()
+        stdout = result.stdout.strip() if result.stdout else ""
+        stderr = result.stderr.strip() if result.stderr else ""
         
         if stdout:
             log(f"STDOUT:\n{stdout}", level="DEBUG", to_console=False)
@@ -178,7 +177,6 @@ def generate_tree_files(brain_exe):
             else:
                 log(f"   {cmd_info['file']:<30} (Archivo vacío)", level="ERROR")
         else:
-            # Mensaje corto para consola
             log(f"   {cmd_info['file']:<30} (Falló - Ver Log)", level="ERROR")
 
     return success_count == len(tree_commands)
@@ -192,16 +190,17 @@ def run_build_process(build_script):
         cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
-        env=ENV_VARS
+        env=ENV_VARS,
+        encoding='utf-8',
+        errors='replace'
     )
     
     while True:
-        line_bytes = process.stdout.readline()
-        if not line_bytes and process.poll() is not None:
+        line = process.stdout.readline()
+        if not line and process.poll() is not None:
             break
-        if line_bytes:
-            line = line_bytes.decode('utf-8', errors='replace').rstrip()
-            # Escribimos al log file todo, pero a consola filtramos ruido
+        if line:
+            line = line.rstrip()
             log(line, level="BUILD", to_console=True)
             
     return process.poll()

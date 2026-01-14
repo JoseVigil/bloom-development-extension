@@ -12,7 +12,7 @@ node diagnose-service.js
 
 brain build
 C:\repos\bloom-videos\bloom-development-extension
-.\build.ps1 (powershell admin)
+.\build.ps1 -Clean (powershell admin)
 brain system version --increase --desc "Versioning and info"
 
 cd installer/electron-app

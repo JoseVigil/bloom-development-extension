@@ -1,58 +1,58 @@
-Brain CLI - Modular system for Bloom (Executable)
-
-+---------------------------------------- Uso / Usage ----------------------------------------+
-|                                                                                             |
-|  Brain CLI - Ejecutable standalone                                                          |
-|                                                                                             |
-|  Uso:                                                                                       |
-|    brain [OPTIONS] <category> <command>                                                     |
-|                                                                                             |
-|  Ejemplos:                                                                                  |
-|                                                                                             |
-|    # Comando b�sico                                                                         |
-|    brain health native-ping                                                                 |
-|                                                                                             |
-|    # Con flags globales                                                                     |
-|    brain --json nucleus list                                                                |
-|                                                                                             |
-|    # Con verbose                                                                            |
-|    brain --verbose profile create 'My Profile'                                              |
-|                                                                                             |
-|  [!] Los flags globales (--json, --verbose) van ANTES de <category>                         |
-|                                                                                             |
-+---------------------------------------------------------------------------------------------+
-
-+------------------------------- Opciones Globales / Global Options -------------------------------+
-|   --json       Salida en formato JSON (debe ir ANTES del comando)                                |
-|   --verbose    Habilitar logging detallado (debe ir ANTES del comando)                           |
-|   --help       Mostrar este mensaje de ayuda                                                     |
-+--------------------------- Estas opciones deben ir despu�s de 'brain' ---------------------------+
-
-                                                                               
- Usage: brain.exe [OPTIONS] COMMAND [ARGS]...                                  
-                                                                               
- Brain - Modular CLI system for Bloom                                          
-                                                                               
-+- Options -------------------------------------------------------------------+
-| --json             Enable JSON output                                       |
-| --verbose          Enable detailed logging                                  |
-| --help             Show this message and exit.                              |
-+-----------------------------------------------------------------------------+
-+- Commands ------------------------------------------------------------------+
-| chrome       Chrome profile debugging and network log analysis              |
-| context      AI context generation and management                           |
-| extension    Chrome extension lifecycle management                          |
-| filesystem   File operations and directory analysis                         |
-| gemini       Gemini AI key management and operations                        |
-| github       GitHub integration and repository management                   |
-| health       System health checks and diagnostics                           |
-| intent       Intent execution system and context planning                   |
-| nucleus      Nucleus project management and lifecycle                       |
-| system       Runtime and system introspection                               |
-| profile      Chrome profile and AI account management                       |
-| project      Project lifecycle and scaffolding                              |
-| runtime      Non-interactive system runtime operations                      |
-| service      Background connection multiplexer and task runner              |
-| synapse      Chrome Native Messaging Bridge and protocol management         |
-| twitter      Twitter/X integration and social data analysis                 |
+Brain CLI - Modular system for Bloom (Executable)
+
++---------------------------------------- Uso / Usage ----------------------------------------+
+|                                                                                             |
+|  Brain CLI - Ejecutable standalone                                                          |
+|                                                                                             |
+|  Uso:                                                                                       |
+|    brain [OPTIONS] <category> <command>                                                     |
+|                                                                                             |
+|  Ejemplos:                                                                                  |
+|                                                                                             |
+|    # Comando b�sico                                                                         |
+|    brain health native-ping                                                                 |
+|                                                                                             |
+|    # Con flags globales                                                                     |
+|    brain --json nucleus list                                                                |
+|                                                                                             |
+|    # Con verbose                                                                            |
+|    brain --verbose profile create 'My Profile'                                              |
+|                                                                                             |
+|  [!] Los flags globales (--json, --verbose) van ANTES de <category>                         |
+|                                                                                             |
++---------------------------------------------------------------------------------------------+
+
++------------------------------- Opciones Globales / Global Options -------------------------------+
+|   --json       Salida en formato JSON (debe ir ANTES del comando)                                |
+|   --verbose    Habilitar logging detallado (debe ir ANTES del comando)                           |
+|   --help       Mostrar este mensaje de ayuda                                                     |
++--------------------------- Estas opciones deben ir despu�s de 'brain' ---------------------------+
+
+                                                                               
+ Usage: brain.exe [OPTIONS] COMMAND [ARGS]...                                  
+                                                                               
+ Brain - Modular CLI system for Bloom                                          
+                                                                               
++- Options -------------------------------------------------------------------+
+| --json             Enable JSON output                                       |
+| --verbose          Enable detailed logging                                  |
+| --help             Show this message and exit.                              |
++-----------------------------------------------------------------------------+
++- Commands ------------------------------------------------------------------+
+| chrome       Chrome profile debugging and network log analysis              |
+| context      AI context generation and management                           |
+| extension    Chrome extension lifecycle management                          |
+| filesystem   File operations and directory analysis                         |
+| gemini       Gemini AI key management and operations                        |
+| github       GitHub integration and repository management                   |
+| health       System health checks and diagnostics                           |
+| intent       Intent execution system and context planning                   |
+| nucleus      Nucleus project management and lifecycle                       |
+| system       Runtime and system introspection                               |
+| profile      Chrome profile and AI account management                       |
+| project      Project lifecycle and scaffolding                              |
+| runtime      Non-interactive system runtime operations                      |
+| service      Background connection multiplexer and task runner              |
+| synapse      Chrome Native Messaging Bridge and protocol management         |
+| twitter      Twitter/X integration and social data analysis                 |
 +-----------------------------------------------------------------------------+
