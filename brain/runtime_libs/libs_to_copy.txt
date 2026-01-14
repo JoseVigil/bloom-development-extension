@@ -1,7 +1,0 @@
-typer
-google-generativeai
-pydantic
-aiofiles
-watchdog
-colorama
-websockets

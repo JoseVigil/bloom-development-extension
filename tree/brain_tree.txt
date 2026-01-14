@@ -1,5 +1,6 @@
 bloom-development-extension/
 └── brain/
+    ├── .env
     ├── VERSION
     ├── __init__.py
     ├── __main__.py
@@ -227,15 +228,6 @@ bloom-development-extension/
     │   ├── profile/
     │   │   ├── __init__.py
     │   │   ├── __pycache__/ [... cache]
-    │   │   ├── html/
-    │   │   │   ├── discovery/
-    │   │   │   │   ├── index.html
-    │   │   │   │   ├── script.js
-    │   │   │   │   └── styles.css
-    │   │   │   └── landing/
-    │   │   │       ├── inex.html
-    │   │   │       ├── script.js
-    │   │   │       └── styles.css
     │   │   ├── logic/
     │   │   │   ├── __init__.py
     │   │   │   ├── __pycache__/ [... cache]
@@ -293,10 +285,8 @@ bloom-development-extension/
     │   ├── brain-legacy.json
     │   └── help.txt
     ├── libs/ [... python vendored dependencies]
-    ├── prepare_runtime_libs.py
     ├── pyproject.toml
     ├── requirements.txt
-    ├── runtime_libs/ [... dependencies]
     └── shared/
         ├── __init__.py
         ├── __pycache__/ [... cache]

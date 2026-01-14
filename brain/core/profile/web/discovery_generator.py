@@ -10,15 +10,15 @@ from typing import Dict, Any
 from datetime import datetime
 
 
-def generate_discovery_page(profile_path: Path, profile_data: Dict[str, Any]) -> None:
+def generate_discovery_page(target_ext_dir: Path, profile_data: Dict[str, Any]) -> None:
     """
-    Generates discovery/validation page for profile.
+    Generates discovery page INSIDE the extension directory.
     
     Args:
-        profile_path: Path to profile directory
+        target_ext_dir: Path to profiles/[UUID]/extension/
         profile_data: Dict with profile metadata
     """
-    discovery_dir = profile_path / "discovery"
+    discovery_dir = target_ext_dir / "discovery"
     discovery_dir.mkdir(parents=True, exist_ok=True)
     
     # Generate dynamic configuration
@@ -37,10 +37,10 @@ def _write_config_js(discovery_dir: Path, profile_data: Dict[str, Any]) -> None:
     paths = PathResolver()
     
     config_dict = {
-        "extension_id": paths.extension_id,
+        "extension_id": "hpblclepliicmihaplldignhjdggnkdh",
         "profile_id": profile_data.get('id'),
         "profile_alias": profile_data.get('alias'),
-        "bridge_name": profile_data.get('bridge_name', 'com.bloom.synapse.unknown'),
+        "bridge_name": f"com.bloom.synapse.{profile_data.get('id')[:8]}",
         "timestamp": datetime.now().isoformat()
     }
     

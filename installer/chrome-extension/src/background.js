@@ -266,5 +266,22 @@ async function routeToTab(target, message) {
   }
 }
 
+// ============================================================================
+// 7. SEND TO BRAIN
+// ============================================================================
+
+
+function sendToBrain(message) {
+  if (nativePort) {
+    try {
+      nativePort.postMessage(message);
+    } catch (e) {
+      console.error("❌ [Synapse] Error enviando al host nativo:", e);
+    }
+  } else {
+    console.warn("⚠️ [Synapse] No hay conexión activa con el host nativo.");
+  }
+}
+
 // Init
 connectToNativeHost();
