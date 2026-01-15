@@ -291,38 +291,36 @@ void tcp_client_loop() {
 // MAIN
 // ============================================================================
 int main(int argc, char* argv[]) {
-    #ifdef _WIN32
-        _setmode(_fileno(stdin), _O_BINARY);
-        _setmode(_fileno(stdout), _O_BINARY);
-    #endif
+    std::string full_cmd = "";
 
-    // CAPTURA DE IDENTIDAD RIGUROSA
-    for (int i = 1; i < argc; i++) {
-        std::string arg = argv[i];
-        if (arg == "--profile-id" && (i + 1) < argc) {
-            g_profile_id = argv[i + 1]; // Toma el valor que sigue al flag
-            break;
-        }
-    }
+#ifdef _WIN32
+    // Windows: Forzar binario y capturar línea cruda
+    _setmode(_fileno(stdin), _O_BINARY);
+    _setmode(_fileno(stdout), _O_BINARY);
+    full_cmd = GetCommandLineA();
+#else
+    // Mac/Linux: Reconstruir desde argv
+    for (int i = 0; i < argc; i++) full_cmd += std::string(argv[i]) + " ";
+#endif
 
-    // Si por alguna razón no está el flag, busca un string de 36 caracteres (Largo de UUID)
-    if (g_profile_id.empty()) {
-        for (int i = 1; i < argc; i++) {
-            std::string arg = argv[i];
-            if (arg.length() == 36 && arg.find("-") != std::string::npos) {
-                g_profile_id = arg;
+    // BUSCADOR DE UUID (Funciona en ambos)
+    bool found = false;
+    if (full_cmd.length() >= 36) {
+        for (size_t i = 0; i <= full_cmd.length() - 36; i++) {
+            if (full_cmd[i+8] == '-' && full_cmd[i+13] == '-' &&
+                full_cmd[i+18] == '-' && full_cmd[i+23] == '-') {
+                g_profile_id = full_cmd.substr(i, 36);
+                found = true;
                 break;
             }
         }
     }
 
-    if (g_profile_id.empty()) g_profile_id = "unknown_worker";
+    if (!found) g_profile_id = "unknown_worker";
 
-    g_logger.info("=== Bloom Host Starting ===");
-    g_logger.info("✅ ID Capturado Correctamente: " + g_profile_id);
+    g_logger.info("✅ ID Capturado: " + g_profile_id);
 
     std::thread t(tcp_client_loop);
-
     while (!shutdown_requested.load()) {
         uint32_t len = 0;
         if (!std::cin.read((char*)&len, 4)) break;
