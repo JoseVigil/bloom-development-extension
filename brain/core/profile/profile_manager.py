@@ -34,16 +34,11 @@ class ProfileManager:
         logger.info("🚀 Inicializando ProfileManager")
         self.paths = PathResolver()
         
-        # Inicialización de sub-módulos con sus argumentos correctos
-        self.store = ProfileStore(
-            profiles_json=self.paths.profiles_json, 
-            profiles_dir=self.paths.profiles_dir
-        )
-        self.synapse = SynapseHandler(
-            base_dir=self.paths.base_dir, 
-            extension_id=self.paths.extension_id
-        )
-        self.launcher = ChromeResolver()
+        # Pasamos bin_dir para que el resolver encuentre chrome-win o chrome-mac
+        self.launcher = ChromeResolver(bin_dir=self.paths.bin_dir)
+        
+        self.store = ProfileStore(self.paths.profiles_json, self.paths.profiles_dir)
+        self.synapse = SynapseHandler(self.paths.base_dir, self.paths.extension_id)
 
         self.verbose_network = False 
         
@@ -213,59 +208,107 @@ class ProfileManager:
         return {**data, "path": str(profile_path)}
     
     def launch_profile(self, profile_id: str, url: Optional[str] = None, mode: str = "normal", verbose_network: bool = False) -> Dict[str, Any]:
-        """Versión de Ingeniería de Élite: Bypass de Integridad y Modo Automatización."""
+        """Dispatcher: Selecciona la estrategia de lanzamiento según el .env"""
+        strategy = os.environ.get("BLOOM_BROWSER_STRATEGY", "internal").lower()
+        
+        # 1. Preparación común de recursos
         profile = self._find_profile(profile_id)
         if not profile: return {"status": "error", "message": "Profile not found"}
-        
         full_id = profile['id']
-        profile_path = self.paths.profiles_dir / full_id      
+        self.sync_profile_resources(full_id)
+        
+        logger.info(f"🚀 Lanzando perfil {full_id[:8]} usando estrategia: {strategy}")
+
+        # 2. Despacho a método específico
+        if strategy == "internal":
+            return self._launch_internal_chromium(profile, url)
+        else:
+            return self._launch_system_chrome(profile, url)
+
+    def _launch_internal_chromium(self, profile: Dict, url: Optional[str]) -> Dict[str, Any]:
+        full_id = profile['id']
+        profile_path = Path(self.paths.profiles_dir) / full_id
+        
+        # Sincronización
         self.sync_profile_resources(full_id)
 
-        # 1. LIMPIEZA DE CANDADOS (Evita el 'Handling STARTUP request from another process')
-        # Borramos el candado físico que hace que Chrome se 'una' al proceso viejo
-        for lock in ["SingletonLock", "SingletonSocket", "SingletonCookie"]:
-            lock_path = profile_path / lock
-            if lock_path.exists():
-                try: lock_path.unlink()
-                except: pass
-
-        # 2. RUTAS NORMALIZADAS
+        # RUTA NORMALIZADA (Sin comillas, barras dobles de Windows)
         chrome_path = str(self.launcher.chrome_path)
-        u_data = os.path.abspath(profile_path)
-        e_path = os.path.abspath(profile_path / "extension")
-        target_url = url if url else f"chrome-extension://{self.paths.extension_id}/discovery/index.html"
+        u_data = os.path.abspath(profile_path).replace("/", "\\")
+        e_path = os.path.abspath(profile_path / "extension").replace("/", "\\")
+        target_url = url if url else self.get_discovery_url(full_id)
 
-        # 3. ARGUMENTOS "ZERO-BLOCK" (Perspectiva 0.1%)
         chrome_args = [
             chrome_path,
             f"--user-data-dir={u_data}",
             f"--load-extension={e_path}",
-            # --- EL SECRETO DEL BYPASS ---
-            "--enable-automation",              # <--- CLAVE: Habilita --load-extension en Stable
-            "--test-type",                     # Quita advertencias de seguridad
-            "--disable-renderer-code-integrity", # Evita el bloqueo del renderizador
-            # -----------------------------
-            "--no-first-run",
-            "--no-default-browser-check",
-            "--remote-debugging-port=0",
-            f"--app={target_url}",              # Fuerza ventana única
-            "--restore-last-session=0",
-            # Desactivar componentes ruidosos (visto en tu log)
-            "--disable-features=Translate,OptimizationHints,MediaRouter,SafeBrowsing",
-            "--disable-background-networking",
-            "--password-store=basic"
+            f"--app={target_url}",
+            "--test-type",
+            "--no-sandbox",
+            "--disable-web-security",
+            "--remote-debugging-port=9222",
+            "--no-first-run"
         ]
 
-        # 4. LANZAMIENTO AISLADO
-        flags = 0x00000008 | 0x00000200 | 0x08000000
+        # KILL PREVENTIVO (Nivel 0.1%)
+        # Si no matamos el chrome.exe portable, el Singleton de Chromium 
+        # nos va a mandar siempre a la ventana genérica.
+        if platform.system() == 'Windows':
+            os.system('taskkill /f /im chrome.exe >nul 2>&1')
+            os.system('taskkill /f /im bloom-host.exe >nul 2>&1')
 
         try:
-            # Matamos procesos previos del host
-            if platform.system() == 'Windows':
-                os.system('taskkill /f /im bloom-host.exe >nul 2>&1')
-
             subprocess.Popen(
                 chrome_args,
+                creationflags=0x00000008 | 0x00000200 | 0x08000000,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL
+            )
+            
+            # Matamos el logger para Electron
+            import logging
+            logging.disable(logging.CRITICAL)
+            
+            print(json.dumps({"status": "success", "data": {"profile_id": full_id}}))
+            os._exit(0) # Muerte atómica de Python
+        except Exception as e:
+            os._exit(1)
+
+    def _launch_system_chrome(self, profile: Dict, url: Optional[str]) -> Dict[str, Any]:
+        """ESTRATEGIA CHROME SYSTEM: Compatible, limitado por Google Stable."""
+        full_id = profile['id']
+        profile_path = Path(self.paths.profiles_dir) / full_id
+        target_url = url if url else self.get_discovery_url(full_id)
+        
+        u_data = os.path.abspath(profile_path)
+        e_path = os.path.abspath(profile_path / "extension")
+
+        chrome_args = [
+            self.launcher.chrome_path, # Resolverá a Program Files
+            f"--user-data-dir={u_data}",
+            #f"--load-extension={e_path}",
+            f"--app={target_url}",
+            "--enable-automation",      # Única forma de que Stable cargue la ext
+            "--test-type",
+            "--no-first-run",
+            "--remote-debugging-port=0" # Puerto dinámico para evitar delegación
+        ]
+
+        return self._execute_popen(chrome_args, full_id)
+
+    def _execute_popen(self, args: list, profile_id: str) -> Dict[str, Any]:
+        """Maneja el Popen y silencia los logs para Electron."""
+        # 1. Kill preventivo del host nativo (Windows)
+        if platform.system() == 'Windows':
+            os.system('taskkill /f /im bloom-host.exe >nul 2>&1')
+
+        # 2. Flags de aislamiento OS
+        flags = 0x00000008 | 0x00000200 | 0x08000000 if platform.system() == 'Windows' else 0
+
+        try:
+            subprocess.Popen(
+                args,
                 creationflags=flags,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
@@ -273,17 +316,22 @@ class ProfileManager:
                 shell=False
             )
             
-            # 5. GARANTÍA DE JSON LIMPIO PARA ELECTRON
+            # --- EL SECRETO PARA ELECTRON ---
             import logging
-            # Matamos el ruido de Python para que no rompa el JSON
-            logging.getLogger().handlers = []
+            # Borramos todos los handlers que imprimen en consola para que el JSON sea puro
+            for handler in logging.getLogger().handlers[:]:
+                logging.getLogger().removeHandler(handler)
+            logging.getLogger().addHandler(logging.NullHandler())
             
             return {
                 "status": "success",
-                "data": {"profile_id": full_id, "url": target_url}
+                "data": {
+                    "profile_id": profile_id,
+                    "engine": "active"
+                }
             }
         except Exception as e:
-            return {"status": "error", "message": "Fallo crítico en motor"}
+            return {"status": "error", "message": f"Popen failed: {str(e)}"}
 
     def get_discovery_url(self, profile_id: str) -> str:
         """Obtiene URL de discovery page."""

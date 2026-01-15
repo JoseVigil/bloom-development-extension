@@ -15,7 +15,7 @@ logger = get_logger(__name__)
 class ChromeCommand(BaseCommand):
     """
     Chrome profile and debugging tools.
-    Groups read-log and read-net-log subcommands.
+    Groups read-log, read-net-log, and chrome-mining subcommands.
     """
     
     def metadata(self) -> CommandMetadata:
@@ -28,7 +28,8 @@ class ChromeCommand(BaseCommand):
                 "brain chrome read-log abc-123-def-456",
                 "brain chrome read-net-log abc-123-def-456 --filter-ai",
                 "brain chrome read-log abc-123-def-456 --keyword extension",
-                "brain chrome read-net-log abc-123-def-456 --json"
+                "brain chrome read-net-log abc-123-def-456 --json",
+                "brain chrome mining-log abc-123-def-456"
             ]
         )
     
@@ -152,6 +153,62 @@ class ChromeCommand(BaseCommand):
             except Exception as e:
                 logger.error(f"❌ Error analyzing network log: {e}", exc_info=True)
                 self._handle_error(gc, f"Error analyzing network log: {e}")
+        
+        # ==================== SUBCOMMAND: mining-log ====================
+        @app.command(name="mining-log")
+        def mining_log(
+            ctx: typer.Context,
+            profile_id: str = typer.Argument(..., help="Chrome profile UUID"),
+            keyword: str = typer.Option("bloom", "--keyword", "-k", help="Keyword to search for"),
+            before: int = typer.Option(5, "--before", "-b", help="Lines of context before match"),
+            after: int = typer.Option(5, "--after", "-a", help="Lines of context after match")
+        ):
+            """
+            Read and filter engine_mining.log for a specific profile.
+            
+            Processes the engine_mining.log file and extracts bloom-related entries.
+            Input: BloomNucleus/logs/profiles/[UUID]/engine_mining.log
+            Output: BloomNucleus/logs/profiles/[UUID]/engine_mining.txt
+            """
+            gc = ctx.obj
+            if gc is None:
+                from brain.shared.context import GlobalContext
+                gc = GlobalContext()
+            
+            try:
+                from brain.core.chrome.mining_log_reader import MiningLogReader
+                
+                logger.info(f"⛏️ Reading engine mining log for profile: {profile_id}")
+                
+                if gc.verbose:
+                    typer.echo(f"🔍 Profile: {profile_id}", err=True)
+                    typer.echo(f"🔑 Keyword: '{keyword}'", err=True)
+                    typer.echo(f"📊 Context: {before} lines before, {after} lines after", err=True)
+                
+                reader = MiningLogReader()
+                result = reader.read_and_filter(
+                    profile_id=profile_id,
+                    keyword=keyword,
+                    before_lines=before,
+                    after_lines=after
+                )
+                
+                logger.info(f"✅ Mining log processed: {result['matches_found']} matches found")
+                
+                data = {
+                    "status": "success",
+                    "operation": "chrome_mining_log",
+                    "data": result
+                }
+                
+                gc.output(data, self._render_mining_log_success)
+                
+            except FileNotFoundError as e:
+                logger.error(f"❌ Engine mining log file not found: {e}")
+                self._handle_error(gc, f"Engine mining log file not found: {e}")
+            except Exception as e:
+                logger.error(f"❌ Error reading mining log: {e}", exc_info=True)
+                self._handle_error(gc, f"Error reading mining log: {e}")
     
     # ==================== RENDER METHODS ====================
     
@@ -170,10 +227,10 @@ class ChromeCommand(BaseCommand):
         if matches > 0:
             typer.echo(f"\n✅ Found {matches} match{'es' if matches != 1 else ''}")
         else:
-            typer.echo(f"\n⚠️  No matches found for keyword '{result.get('keyword')}'")
+            typer.echo(f"\n⚠️ No matches found for keyword '{result.get('keyword')}'")
         
         typer.echo(f"\n📦 Total lines processed: {result.get('total_lines', 0)}")
-        typer.echo(f"✏️  Output lines: {result.get('output_lines', 0)}")
+        typer.echo(f"✏️ Output lines: {result.get('output_lines', 0)}")
     
     def _render_net_log_success(self, data: dict):
         """Human-readable output for read-net-log success."""
@@ -204,6 +261,26 @@ class ChromeCommand(BaseCommand):
                 typer.echo(f"   {method} -> {url[:80]}...")
         
         typer.echo(f"\n✅ Analysis complete")
+    
+    def _render_mining_log_success(self, data: dict):
+        """Human-readable output for mining-log success."""
+        result = data.get("data", {})
+        
+        typer.echo("\n⛏️ Engine Mining Log Analysis Results")
+        typer.echo("=" * 70)
+        typer.echo(f"\n🔍 Profile ID: {result.get('profile_id')}")
+        typer.echo(f"🔑 Keyword: '{result.get('keyword')}'")
+        typer.echo(f"\n📄 Source: {result.get('source_file')}")
+        typer.echo(f"💾 Output: {result.get('output_file')}")
+        
+        matches = result.get('matches_found', 0)
+        if matches > 0:
+            typer.echo(f"\n✅ Found {matches} match{'es' if matches != 1 else ''}")
+        else:
+            typer.echo(f"\n⚠️ No matches found for keyword '{result.get('keyword')}'")
+        
+        typer.echo(f"\n📦 Total lines processed: {result.get('total_lines', 0)}")
+        typer.echo(f"✏️ Output lines: {result.get('output_lines', 0)}")
     
     def _handle_error(self, gc, message: str):
         """Unified error handling."""

@@ -109,6 +109,51 @@
     {
       "type": "function",
       "function": {
+        "name": "brain_chrome_mining_log",
+        "description": "Read and filter engine_mining.log for a specific profile.. Execute via: brain chrome mining-log",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "profile_id": {
+              "type": "string",
+              "description": "Chrome profile UUID"
+            },
+            "_k": {
+              "type": "string",
+              "description": "Keyword to search for",
+              "default": "bloom"
+            },
+            "_b": {
+              "type": "integer",
+              "description": "Lines of context before match",
+              "default": 5
+            },
+            "_a": {
+              "type": "integer",
+              "description": "Lines of context after match",
+              "default": 5
+            }
+          },
+          "required": [
+            "profile_id"
+          ]
+        },
+        "metadata": {
+          "category": "chrome",
+          "command": "mining-log",
+          "full_syntax": "brain [--json] [--verbose] chrome mining-log",
+          "intents": [
+            "general_operation"
+          ],
+          "is_idempotent": false,
+          "is_destructive": false,
+          "estimated_duration": "medium"
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
         "name": "brain_context_generate",
         "description": "Generate the Bloom Context for the project.. Execute via: brain context generate",
         "parameters": {
@@ -2918,6 +2963,7 @@
       "general_operation": [
         "chrome read-log",
         "chrome read-net-log",
+        "chrome mining-log",
         "context generate",
         "extension install",
         "filesystem compress",

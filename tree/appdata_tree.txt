@@ -3,6 +3,272 @@ BloomNucleus/
 │   ├── brain/
 │   │   ├── _internal/ [... dependencies]
 │   │   └── brain.exe
+│   ├── chrome-win/
+│   │   ├── 146.0.7635.0.manifest
+│   │   ├── D3DCompiler_47.dll
+│   │   ├── First Run
+│   │   ├── IwaKeyDistribution/
+│   │   │   ├── iwa-key-distribution.pb
+│   │   │   └── manifest.json
+│   │   ├── MEIPreload/
+│   │   │   ├── manifest.json
+│   │   │   └── preloaded_data.pb
+│   │   ├── PrivacySandboxAttestationsPreloaded/
+│   │   │   ├── manifest.json
+│   │   │   └── privacy-sandbox-attestations.dat
+│   │   ├── chrome.dll
+│   │   ├── chrome.exe
+│   │   ├── chrome_100_percent.pak
+│   │   ├── chrome_200_percent.pak
+│   │   ├── chrome_elf.dll
+│   │   ├── chrome_proxy.exe
+│   │   ├── chrome_pwa_launcher.exe
+│   │   ├── chrome_wer.dll
+│   │   ├── dxcompiler.dll
+│   │   ├── dxil.dll
+│   │   ├── elevated_tracing_service.exe
+│   │   ├── elevation_service.exe
+│   │   ├── eventlog_provider.dll
+│   │   ├── icudtl.dat
+│   │   ├── interactive_ui_tests.exe
+│   │   ├── libEGL.dll
+│   │   ├── libGLESv2.dll
+│   │   ├── locales/
+│   │   │   ├── af.pak
+│   │   │   ├── af_FEMININE.pak
+│   │   │   ├── af_MASCULINE.pak
+│   │   │   ├── af_NEUTER.pak
+│   │   │   ├── am.pak
+│   │   │   ├── am_FEMININE.pak
+│   │   │   ├── am_MASCULINE.pak
+│   │   │   ├── am_NEUTER.pak
+│   │   │   ├── ar-XB.pak
+│   │   │   ├── ar-XB_FEMININE.pak
+│   │   │   ├── ar-XB_MASCULINE.pak
+│   │   │   ├── ar-XB_NEUTER.pak
+│   │   │   ├── ar.pak
+│   │   │   ├── ar_FEMININE.pak
+│   │   │   ├── ar_MASCULINE.pak
+│   │   │   ├── ar_NEUTER.pak
+│   │   │   ├── bg.pak
+│   │   │   ├── bg_FEMININE.pak
+│   │   │   ├── bg_MASCULINE.pak
+│   │   │   ├── bg_NEUTER.pak
+│   │   │   ├── bn.pak
+│   │   │   ├── bn_FEMININE.pak
+│   │   │   ├── bn_MASCULINE.pak
+│   │   │   ├── bn_NEUTER.pak
+│   │   │   ├── ca.pak
+│   │   │   ├── ca_FEMININE.pak
+│   │   │   ├── ca_MASCULINE.pak
+│   │   │   ├── ca_NEUTER.pak
+│   │   │   ├── cs.pak
+│   │   │   ├── cs_FEMININE.pak
+│   │   │   ├── cs_MASCULINE.pak
+│   │   │   ├── cs_NEUTER.pak
+│   │   │   ├── da.pak
+│   │   │   ├── da_FEMININE.pak
+│   │   │   ├── da_MASCULINE.pak
+│   │   │   ├── da_NEUTER.pak
+│   │   │   ├── de.pak
+│   │   │   ├── de_FEMININE.pak
+│   │   │   ├── de_MASCULINE.pak
+│   │   │   ├── de_NEUTER.pak
+│   │   │   ├── el.pak
+│   │   │   ├── el_FEMININE.pak
+│   │   │   ├── el_MASCULINE.pak
+│   │   │   ├── el_NEUTER.pak
+│   │   │   ├── en-GB.pak
+│   │   │   ├── en-GB_FEMININE.pak
+│   │   │   ├── en-GB_MASCULINE.pak
+│   │   │   ├── en-GB_NEUTER.pak
+│   │   │   ├── en-US.pak
+│   │   │   ├── en-US_FEMININE.pak
+│   │   │   ├── en-US_MASCULINE.pak
+│   │   │   ├── en-US_NEUTER.pak
+│   │   │   ├── en-XA.pak
+│   │   │   ├── en-XA_FEMININE.pak
+│   │   │   ├── en-XA_MASCULINE.pak
+│   │   │   ├── en-XA_NEUTER.pak
+│   │   │   ├── es-419.pak
+│   │   │   ├── es-419_FEMININE.pak
+│   │   │   ├── es-419_MASCULINE.pak
+│   │   │   ├── es-419_NEUTER.pak
+│   │   │   ├── es.pak
+│   │   │   ├── es_FEMININE.pak
+│   │   │   ├── es_MASCULINE.pak
+│   │   │   ├── es_NEUTER.pak
+│   │   │   ├── et.pak
+│   │   │   ├── et_FEMININE.pak
+│   │   │   ├── et_MASCULINE.pak
+│   │   │   ├── et_NEUTER.pak
+│   │   │   ├── fa.pak
+│   │   │   ├── fa_FEMININE.pak
+│   │   │   ├── fa_MASCULINE.pak
+│   │   │   ├── fa_NEUTER.pak
+│   │   │   ├── fi.pak
+│   │   │   ├── fi_FEMININE.pak
+│   │   │   ├── fi_MASCULINE.pak
+│   │   │   ├── fi_NEUTER.pak
+│   │   │   ├── fil.pak
+│   │   │   ├── fil_FEMININE.pak
+│   │   │   ├── fil_MASCULINE.pak
+│   │   │   ├── fil_NEUTER.pak
+│   │   │   ├── fr.pak
+│   │   │   ├── fr_FEMININE.pak
+│   │   │   ├── fr_MASCULINE.pak
+│   │   │   ├── fr_NEUTER.pak
+│   │   │   ├── gu.pak
+│   │   │   ├── gu_FEMININE.pak
+│   │   │   ├── gu_MASCULINE.pak
+│   │   │   ├── gu_NEUTER.pak
+│   │   │   ├── he.pak
+│   │   │   ├── he_FEMININE.pak
+│   │   │   ├── he_MASCULINE.pak
+│   │   │   ├── he_NEUTER.pak
+│   │   │   ├── hi.pak
+│   │   │   ├── hi_FEMININE.pak
+│   │   │   ├── hi_MASCULINE.pak
+│   │   │   ├── hi_NEUTER.pak
+│   │   │   ├── hr.pak
+│   │   │   ├── hr_FEMININE.pak
+│   │   │   ├── hr_MASCULINE.pak
+│   │   │   ├── hr_NEUTER.pak
+│   │   │   ├── hu.pak
+│   │   │   ├── hu_FEMININE.pak
+│   │   │   ├── hu_MASCULINE.pak
+│   │   │   ├── hu_NEUTER.pak
+│   │   │   ├── id.pak
+│   │   │   ├── id_FEMININE.pak
+│   │   │   ├── id_MASCULINE.pak
+│   │   │   ├── id_NEUTER.pak
+│   │   │   ├── it.pak
+│   │   │   ├── it_FEMININE.pak
+│   │   │   ├── it_MASCULINE.pak
+│   │   │   ├── it_NEUTER.pak
+│   │   │   ├── ja.pak
+│   │   │   ├── ja_FEMININE.pak
+│   │   │   ├── ja_MASCULINE.pak
+│   │   │   ├── ja_NEUTER.pak
+│   │   │   ├── kn.pak
+│   │   │   ├── kn_FEMININE.pak
+│   │   │   ├── kn_MASCULINE.pak
+│   │   │   ├── kn_NEUTER.pak
+│   │   │   ├── ko.pak
+│   │   │   ├── ko_FEMININE.pak
+│   │   │   ├── ko_MASCULINE.pak
+│   │   │   ├── ko_NEUTER.pak
+│   │   │   ├── lt.pak
+│   │   │   ├── lt_FEMININE.pak
+│   │   │   ├── lt_MASCULINE.pak
+│   │   │   ├── lt_NEUTER.pak
+│   │   │   ├── lv.pak
+│   │   │   ├── lv_FEMININE.pak
+│   │   │   ├── lv_MASCULINE.pak
+│   │   │   ├── lv_NEUTER.pak
+│   │   │   ├── ml.pak
+│   │   │   ├── ml_FEMININE.pak
+│   │   │   ├── ml_MASCULINE.pak
+│   │   │   ├── ml_NEUTER.pak
+│   │   │   ├── mr.pak
+│   │   │   ├── mr_FEMININE.pak
+│   │   │   ├── mr_MASCULINE.pak
+│   │   │   ├── mr_NEUTER.pak
+│   │   │   ├── ms.pak
+│   │   │   ├── ms_FEMININE.pak
+│   │   │   ├── ms_MASCULINE.pak
+│   │   │   ├── ms_NEUTER.pak
+│   │   │   ├── nb.pak
+│   │   │   ├── nb_FEMININE.pak
+│   │   │   ├── nb_MASCULINE.pak
+│   │   │   ├── nb_NEUTER.pak
+│   │   │   ├── nl.pak
+│   │   │   ├── nl_FEMININE.pak
+│   │   │   ├── nl_MASCULINE.pak
+│   │   │   ├── nl_NEUTER.pak
+│   │   │   ├── pl.pak
+│   │   │   ├── pl_FEMININE.pak
+│   │   │   ├── pl_MASCULINE.pak
+│   │   │   ├── pl_NEUTER.pak
+│   │   │   ├── pt-BR.pak
+│   │   │   ├── pt-BR_FEMININE.pak
+│   │   │   ├── pt-BR_MASCULINE.pak
+│   │   │   ├── pt-BR_NEUTER.pak
+│   │   │   ├── pt-PT.pak
+│   │   │   ├── pt-PT_FEMININE.pak
+│   │   │   ├── pt-PT_MASCULINE.pak
+│   │   │   ├── pt-PT_NEUTER.pak
+│   │   │   ├── ro.pak
+│   │   │   ├── ro_FEMININE.pak
+│   │   │   ├── ro_MASCULINE.pak
+│   │   │   ├── ro_NEUTER.pak
+│   │   │   ├── ru.pak
+│   │   │   ├── ru_FEMININE.pak
+│   │   │   ├── ru_MASCULINE.pak
+│   │   │   ├── ru_NEUTER.pak
+│   │   │   ├── sk.pak
+│   │   │   ├── sk_FEMININE.pak
+│   │   │   ├── sk_MASCULINE.pak
+│   │   │   ├── sk_NEUTER.pak
+│   │   │   ├── sl.pak
+│   │   │   ├── sl_FEMININE.pak
+│   │   │   ├── sl_MASCULINE.pak
+│   │   │   ├── sl_NEUTER.pak
+│   │   │   ├── sr.pak
+│   │   │   ├── sr_FEMININE.pak
+│   │   │   ├── sr_MASCULINE.pak
+│   │   │   ├── sr_NEUTER.pak
+│   │   │   ├── sv.pak
+│   │   │   ├── sv_FEMININE.pak
+│   │   │   ├── sv_MASCULINE.pak
+│   │   │   ├── sv_NEUTER.pak
+│   │   │   ├── sw.pak
+│   │   │   ├── sw_FEMININE.pak
+│   │   │   ├── sw_MASCULINE.pak
+│   │   │   ├── sw_NEUTER.pak
+│   │   │   ├── ta.pak
+│   │   │   ├── ta_FEMININE.pak
+│   │   │   ├── ta_MASCULINE.pak
+│   │   │   ├── ta_NEUTER.pak
+│   │   │   ├── te.pak
+│   │   │   ├── te_FEMININE.pak
+│   │   │   ├── te_MASCULINE.pak
+│   │   │   ├── te_NEUTER.pak
+│   │   │   ├── th.pak
+│   │   │   ├── th_FEMININE.pak
+│   │   │   ├── th_MASCULINE.pak
+│   │   │   ├── th_NEUTER.pak
+│   │   │   ├── tr.pak
+│   │   │   ├── tr_FEMININE.pak
+│   │   │   ├── tr_MASCULINE.pak
+│   │   │   ├── tr_NEUTER.pak
+│   │   │   ├── uk.pak
+│   │   │   ├── uk_FEMININE.pak
+│   │   │   ├── uk_MASCULINE.pak
+│   │   │   ├── uk_NEUTER.pak
+│   │   │   ├── ur.pak
+│   │   │   ├── ur_FEMININE.pak
+│   │   │   ├── ur_MASCULINE.pak
+│   │   │   ├── ur_NEUTER.pak
+│   │   │   ├── vi.pak
+│   │   │   ├── vi_FEMININE.pak
+│   │   │   ├── vi_MASCULINE.pak
+│   │   │   ├── vi_NEUTER.pak
+│   │   │   ├── zh-CN.pak
+│   │   │   ├── zh-CN_FEMININE.pak
+│   │   │   ├── zh-CN_MASCULINE.pak
+│   │   │   ├── zh-CN_NEUTER.pak
+│   │   │   ├── zh-TW.pak
+│   │   │   ├── zh-TW_FEMININE.pak
+│   │   │   ├── zh-TW_MASCULINE.pak
+│   │   │   └── zh-TW_NEUTER.pak
+│   │   ├── notification_helper.exe
+│   │   ├── resources.pak
+│   │   ├── setup.exe
+│   │   ├── v8_context_snapshot.bin
+│   │   ├── vk_swiftshader.dll
+│   │   ├── vk_swiftshader_icd.json
+│   │   └── vulkan-1.dll
 │   ├── extension/
 │   │   ├── 128x128.png
 │   │   ├── background.js
@@ -54,42 +320,24 @@ BloomNucleus/
 │       ├── vcruntime140_1.dll
 │       └── winsound.pyd
 ├── logs/
-│   ├── brain_core_20260114.log
-│   ├── brain_core_20260114.log.txt
+│   ├── brain_core_20260115.log
 │   ├── brain_error.log
 │   ├── brain_service.log
+│   ├── host_client.log
 │   └── profiles/
-│       └── d6f25e14-0d33-40bf-8f97-fcb64d0196e9/
-│           └── chrome_bloom_log_20260114.log.txt
+│       └── 6e7ca8da-354a-4f24-99b0-b3f18d064a60/
+│           ├── engine_mining.log
+│           └── network_mining.json
 └── profiles/
-    └── d6f25e14-0d33-40bf-8f97-fcb64d0196e9/
+    └── 6e7ca8da-354a-4f24-99b0-b3f18d064a60/
         ├── ActorSafetyLists/
         ├── AmountExtractionHeuristicRegexes/
-        ├── AutofillStates/
-        ├── BrowserMetrics/
-        │   ├── BrowserMetrics-6967E646-45D0.pma
-        │   ├── BrowserMetrics-6967E7FF-3BB0.pma
-        │   ├── BrowserMetrics-6967E7FF-414C.pma
-        │   ├── BrowserMetrics-6967E9B6-3C70.pma
-        │   ├── BrowserMetrics-6967E9B6-470C.pma
-        │   ├── BrowserMetrics-6967EB03-3D74.pma
-        │   ├── BrowserMetrics-6967EB03-485C.pma
-        │   ├── BrowserMetrics-6967EC77-4530.pma
-        │   ├── BrowserMetrics-6967EC77-CC4.pma
-        │   ├── BrowserMetrics-6967ECFF-17A8.pma
-        │   ├── BrowserMetrics-6967ECFF-50AC.pma
-        │   ├── BrowserMetrics-6967EDA9-1A14.pma
-        │   ├── BrowserMetrics-6967EDA9-563C.pma
-        │   ├── BrowserMetrics-6967EEAF-5560.pma
-        │   └── BrowserMetrics-6967EEB0-25F4.pma
+        ├── BrowserMetrics-spare.pma
         ├── CertificateRevocation/
-        ├── CookieReadinessList/
         ├── Crashpad/
         │   ├── attachments/
-        │   ├── metadata
         │   ├── reports/
         │   └── settings.dat
-        ├── CrashpadMetrics-active.pma
         ├── Crowd Deny/
         ├── Default/
         │   ├── Account Web Data
@@ -98,45 +346,44 @@ BloomNucleus/
         │   ├── Affiliation Database-journal
         │   ├── AutofillAiModelCache/
         │   │   ├── LOCK
-        │   │   ├── LOG
-        │   │   └── LOG.old
+        │   │   └── LOG
         │   ├── AutofillStrikeDatabase/
         │   │   ├── LOCK
-        │   │   ├── LOG
-        │   │   └── LOG.old
+        │   │   └── LOG
         │   ├── BookmarkMergedSurfaceOrdering
         │   ├── BrowsingTopicsSiteData
         │   ├── BrowsingTopicsSiteData-journal
         │   ├── BrowsingTopicsState
         │   ├── BudgetDatabase/
         │   │   ├── LOCK
-        │   │   ├── LOG
-        │   │   └── LOG.old
+        │   │   └── LOG
         │   ├── Cache/
         │   │   ├── Cache_Data/
-        │   │   │   ├── data_0
-        │   │   │   ├── data_1
-        │   │   │   ├── data_2
-        │   │   │   ├── data_3
-        │   │   │   └── index
+        │   │   │   ├── index
+        │   │   │   ├── sqldb0
+        │   │   │   ├── sqldb0-wal
+        │   │   │   ├── sqldb1
+        │   │   │   ├── sqldb1-wal
+        │   │   │   ├── sqldb2
+        │   │   │   └── sqldb2-wal
         │   │   └── No_Vary_Search/
         │   │       ├── journal.baj
         │   │       └── snapshot.baf
         │   ├── ClientCertificates/
         │   │   ├── LOCK
-        │   │   ├── LOG
-        │   │   └── LOG.old
+        │   │   └── LOG
         │   ├── Code Cache/
-        │   │   ├── js/
-        │   │   │   ├── ba678a2fbd8c358c_0
-        │   │   │   ├── index
-        │   │   │   └── index-dir/
-        │   │   │       └── the-real-index
-        │   │   └── wasm/
-        │   │       ├── index
-        │   │       └── index-dir/
-        │   │           └── the-real-index
+        │   │   └── pc/
+        │   │       ├── 05_@;2t2fb2=a6@=`6`2`25[.9092[9660;65-[99164=57144=815`2.db
+        │   │       └── 05_@;2t2fb2=a6@=`6`2`25[.9092[9660;65-[99164=57144=815`2.journal
+        │   ├── Collaboration/
+        │   │   ├── MessageDB
+        │   │   └── MessageDB-journal
         │   ├── DIPS
+        │   ├── DIPS-wal
+        │   ├── DataSharing/
+        │   │   ├── DataSharingDB
+        │   │   └── DataSharingDB-journal
         │   ├── DawnGraphiteCache/
         │   │   ├── data_0
         │   │   ├── data_1
@@ -149,60 +396,38 @@ BloomNucleus/
         │   │   ├── data_2
         │   │   ├── data_3
         │   │   └── index
-        │   ├── Download Service/
-        │   │   ├── EntryDB/
-        │   │   │   ├── LOCK
-        │   │   │   ├── LOG
-        │   │   │   └── LOG.old
-        │   │   └── Files/
-        │   ├── Extension Cookies
-        │   ├── Extension Cookies-journal
         │   ├── Extension Rules/
         │   │   ├── 000003.log
         │   │   ├── CURRENT
         │   │   ├── LOCK
         │   │   ├── LOG
-        │   │   ├── LOG.old
         │   │   └── MANIFEST-000001
         │   ├── Extension Scripts/
         │   │   ├── 000003.log
         │   │   ├── CURRENT
         │   │   ├── LOCK
         │   │   ├── LOG
-        │   │   ├── LOG.old
         │   │   └── MANIFEST-000001
         │   ├── Extension State/
         │   │   ├── 000003.log
         │   │   ├── CURRENT
         │   │   ├── LOCK
         │   │   ├── LOG
-        │   │   ├── LOG.old
         │   │   └── MANIFEST-000001
-        │   ├── Extensions/
         │   ├── Favicons
         │   ├── Favicons-journal
         │   ├── Feature Engagement Tracker/
         │   │   ├── AvailabilityDB/
         │   │   │   ├── LOCK
-        │   │   │   ├── LOG
-        │   │   │   └── LOG.old
+        │   │   │   └── LOG
         │   │   └── EventDB/
         │   │       ├── LOCK
-        │   │       ├── LOG
-        │   │       └── LOG.old
+        │   │       └── LOG
         │   ├── GCM Store/
         │   │   ├── 000003.log
         │   │   ├── CURRENT
-        │   │   ├── Encryption/
-        │   │   │   ├── 000003.log
-        │   │   │   ├── CURRENT
-        │   │   │   ├── LOCK
-        │   │   │   ├── LOG
-        │   │   │   ├── LOG.old
-        │   │   │   └── MANIFEST-000001
         │   │   ├── LOCK
         │   │   ├── LOG
-        │   │   ├── LOG.old
         │   │   └── MANIFEST-000001
         │   ├── GPUCache/
         │   │   ├── data_0
@@ -212,18 +437,14 @@ BloomNucleus/
         │   │   └── index
         │   ├── History
         │   ├── History-journal
-        │   ├── InterestGroups
         │   ├── LOCK
         │   ├── LOG
-        │   ├── LOG.old
-        │   ├── Local Extension Settings/
         │   ├── Local Storage/
         │   │   └── leveldb/
         │   │       ├── 000003.log
         │   │       ├── CURRENT
         │   │       ├── LOCK
         │   │       ├── LOG
-        │   │       ├── LOG.old
         │   │       └── MANIFEST-000001
         │   ├── Login Data
         │   ├── Login Data For Account
@@ -238,19 +459,16 @@ BloomNucleus/
         │   │   ├── NetworkDataMigrated
         │   │   ├── Reporting and NEL
         │   │   ├── Reporting and NEL-journal
-        │   │   ├── TransportSecurity
+        │   │   ├── SCT Auditing Pending Reports
         │   │   ├── Trust Tokens
         │   │   └── Trust Tokens-journal
         │   ├── Network Action Predictor
         │   ├── Network Action Predictor-journal
         │   ├── PersistentOriginTrials/
         │   │   ├── LOCK
-        │   │   ├── LOG
-        │   │   └── LOG.old
+        │   │   └── LOG
         │   ├── Preferences
         │   ├── PreferredApps
-        │   ├── PrivateAggregation
-        │   ├── PrivateAggregation-journal
         │   ├── README
         │   ├── Safe Browsing Network/
         │   │   ├── NetworkDataMigrated
@@ -260,16 +478,13 @@ BloomNucleus/
         │   ├── Segmentation Platform/
         │   │   ├── SegmentInfoDB/
         │   │   │   ├── LOCK
-        │   │   │   ├── LOG
-        │   │   │   └── LOG.old
+        │   │   │   └── LOG
         │   │   ├── SignalDB/
         │   │   │   ├── LOCK
-        │   │   │   ├── LOG
-        │   │   │   └── LOG.old
+        │   │   │   └── LOG
         │   │   └── SignalStorageConfigDB/
         │   │       ├── LOCK
-        │   │       ├── LOG
-        │   │       └── LOG.old
+        │   │       └── LOG
         │   ├── ServerCertificate
         │   ├── ServerCertificate-journal
         │   ├── Service Worker/
@@ -278,12 +493,11 @@ BloomNucleus/
         │   │   │   ├── CURRENT
         │   │   │   ├── LOCK
         │   │   │   ├── LOG
-        │   │   │   ├── LOG.old
         │   │   │   └── MANIFEST-000001
         │   │   └── ScriptCache/
         │   │       ├── 2cc80dabc69f58b6_0
+        │   │       ├── 2cc80dabc69f58b6_1
         │   │       ├── 4cb013792b196a35_0
-        │   │       ├── 4cb013792b196a35_1
         │   │       ├── index
         │   │       └── index-dir/
         │   │           └── the-real-index
@@ -292,15 +506,11 @@ BloomNucleus/
         │   │   ├── CURRENT
         │   │   ├── LOCK
         │   │   ├── LOG
-        │   │   ├── LOG.old
         │   │   └── MANIFEST-000001
         │   ├── Sessions/
-        │   │   ├── Apps_13412892026392429
-        │   │   ├── Apps_13412892162515550
-        │   │   ├── Session_13412892331821824
-        │   │   ├── Session_13412892595369274
-        │   │   ├── Tabs_13412892331996668
-        │   │   └── Tabs_13412892595669073
+        │   │   ├── Apps_13412920309648801
+        │   │   ├── Session_13412920444535062
+        │   │   └── Tabs_13412920450369055
         │   ├── Shared Dictionary/
         │   │   ├── cache/
         │   │   │   ├── index
@@ -309,6 +519,7 @@ BloomNucleus/
         │   │   ├── db
         │   │   └── db-journal
         │   ├── SharedStorage
+        │   ├── SharedStorage-wal
         │   ├── Shortcuts
         │   ├── Shortcuts-journal
         │   ├── Site Characteristics Database/
@@ -316,254 +527,101 @@ BloomNucleus/
         │   │   ├── CURRENT
         │   │   ├── LOCK
         │   │   ├── LOG
-        │   │   ├── LOG.old
         │   │   └── MANIFEST-000001
-        │   ├── Storage/
-        │   │   └── ext/
-        │   ├── Sync App Settings/
         │   ├── Sync Data/
         │   │   └── LevelDB/
         │   │       ├── 000003.log
         │   │       ├── CURRENT
         │   │       ├── LOCK
         │   │       ├── LOG
-        │   │       ├── LOG.old
         │   │       └── MANIFEST-000001
-        │   ├── Sync Extension Settings/
         │   ├── Top Sites
         │   ├── Top Sites-journal
-        │   ├── Web Applications/
-        │   │   ├── Manifest Resources/
-        │   │   │   ├── aghbiahbpaijignceidepookljebhfak/
-        │   │   │   │   ├── Icons/
-        │   │   │   │   │   ├── 128.png
-        │   │   │   │   │   ├── 192.png
-        │   │   │   │   │   ├── 256.png
-        │   │   │   │   │   ├── 32.png
-        │   │   │   │   │   ├── 48.png
-        │   │   │   │   │   ├── 64.png
-        │   │   │   │   │   └── 96.png
-        │   │   │   │   ├── Icons Maskable/
-        │   │   │   │   ├── Icons Monochrome/
-        │   │   │   │   └── Trusted Icons/
-        │   │   │   │       ├── Icons/
-        │   │   │   │       │   └── 192.png
-        │   │   │   │       ├── Icons Maskable/
-        │   │   │   │       └── Icons Monochrome/
-        │   │   │   ├── agimnkijcaahngcdmfeangaknmldooml/
-        │   │   │   │   ├── Icons/
-        │   │   │   │   │   ├── 128.png
-        │   │   │   │   │   ├── 192.png
-        │   │   │   │   │   ├── 256.png
-        │   │   │   │   │   ├── 32.png
-        │   │   │   │   │   ├── 48.png
-        │   │   │   │   │   ├── 64.png
-        │   │   │   │   │   └── 96.png
-        │   │   │   │   ├── Icons Maskable/
-        │   │   │   │   ├── Icons Monochrome/
-        │   │   │   │   └── Trusted Icons/
-        │   │   │   │       ├── Icons/
-        │   │   │   │       │   └── 192.png
-        │   │   │   │       ├── Icons Maskable/
-        │   │   │   │       └── Icons Monochrome/
-        │   │   │   ├── fhihpiojkbmbpdjeoajapmgkhlnakfjf/
-        │   │   │   │   ├── Icons/
-        │   │   │   │   │   ├── 128.png
-        │   │   │   │   │   ├── 192.png
-        │   │   │   │   │   ├── 256.png
-        │   │   │   │   │   ├── 32.png
-        │   │   │   │   │   ├── 48.png
-        │   │   │   │   │   ├── 64.png
-        │   │   │   │   │   └── 96.png
-        │   │   │   │   ├── Icons Maskable/
-        │   │   │   │   ├── Icons Monochrome/
-        │   │   │   │   └── Trusted Icons/
-        │   │   │   │       ├── Icons/
-        │   │   │   │       │   └── 192.png
-        │   │   │   │       ├── Icons Maskable/
-        │   │   │   │       └── Icons Monochrome/
-        │   │   │   ├── fmgjjmmmlfnkbppncabfkddbjimcfncm/
-        │   │   │   │   ├── Icons/
-        │   │   │   │   │   ├── 128.png
-        │   │   │   │   │   ├── 192.png
-        │   │   │   │   │   ├── 256.png
-        │   │   │   │   │   ├── 32.png
-        │   │   │   │   │   ├── 48.png
-        │   │   │   │   │   ├── 64.png
-        │   │   │   │   │   └── 96.png
-        │   │   │   │   ├── Icons Maskable/
-        │   │   │   │   ├── Icons Monochrome/
-        │   │   │   │   └── Trusted Icons/
-        │   │   │   │       ├── Icons/
-        │   │   │   │       │   └── 192.png
-        │   │   │   │       ├── Icons Maskable/
-        │   │   │   │       └── Icons Monochrome/
-        │   │   │   ├── kefjledonklijopmnomlcbpllchaibag/
-        │   │   │   │   ├── Icons/
-        │   │   │   │   │   ├── 128.png
-        │   │   │   │   │   ├── 192.png
-        │   │   │   │   │   ├── 256.png
-        │   │   │   │   │   ├── 32.png
-        │   │   │   │   │   ├── 48.png
-        │   │   │   │   │   ├── 64.png
-        │   │   │   │   │   └── 96.png
-        │   │   │   │   ├── Icons Maskable/
-        │   │   │   │   ├── Icons Monochrome/
-        │   │   │   │   └── Trusted Icons/
-        │   │   │   │       ├── Icons/
-        │   │   │   │       │   └── 192.png
-        │   │   │   │       ├── Icons Maskable/
-        │   │   │   │       └── Icons Monochrome/
-        │   │   │   ├── mdpkiolbdkhdjpekfbkbmhigcaggjagi/
-        │   │   │   │   ├── Icons/
-        │   │   │   │   │   ├── 128.png
-        │   │   │   │   │   ├── 16.png
-        │   │   │   │   │   ├── 24.png
-        │   │   │   │   │   ├── 256.png
-        │   │   │   │   │   ├── 32.png
-        │   │   │   │   │   ├── 48.png
-        │   │   │   │   │   ├── 64.png
-        │   │   │   │   │   └── 96.png
-        │   │   │   │   ├── Icons Maskable/
-        │   │   │   │   ├── Icons Monochrome/
-        │   │   │   │   └── Trusted Icons/
-        │   │   │   │       ├── Icons/
-        │   │   │   │       │   ├── 128.png
-        │   │   │   │       │   ├── 16.png
-        │   │   │   │       │   ├── 24.png
-        │   │   │   │       │   ├── 256.png
-        │   │   │   │       │   ├── 32.png
-        │   │   │   │       │   ├── 48.png
-        │   │   │   │       │   ├── 64.png
-        │   │   │   │       │   └── 96.png
-        │   │   │   │       ├── Icons Maskable/
-        │   │   │   │       └── Icons Monochrome/
-        │   │   │   └── mpnpojknpmmopombnjdcgaaiekajbnjb/
-        │   │   │       ├── Icons/
-        │   │   │       │   ├── 128.png
-        │   │   │       │   ├── 192.png
-        │   │   │       │   ├── 256.png
-        │   │   │       │   ├── 32.png
-        │   │   │       │   ├── 48.png
-        │   │   │       │   ├── 64.png
-        │   │   │       │   └── 96.png
-        │   │   │       ├── Icons Maskable/
-        │   │   │       ├── Icons Monochrome/
-        │   │   │       └── Trusted Icons/
-        │   │   │           ├── Icons/
-        │   │   │           │   └── 192.png
-        │   │   │           ├── Icons Maskable/
-        │   │   │           └── Icons Monochrome/
-        │   │   └── Temp/
         │   ├── Web Data
         │   ├── Web Data-journal
         │   ├── WebStorage/
         │   │   ├── QuotaManager
         │   │   └── QuotaManager-journal
         │   ├── blob_storage/
-        │   │   └── 8cbf1052-441e-45ad-9eae-00f026c00131/
+        │   │   └── c759c054-4be1-49e0-86a0-da6bcb37d9f2/
         │   ├── chrome_cart_db/
         │   │   ├── LOCK
-        │   │   ├── LOG
-        │   │   └── LOG.old
+        │   │   └── LOG
         │   ├── commerce_subscription_db/
         │   │   ├── LOCK
-        │   │   ├── LOG
-        │   │   └── LOG.old
+        │   │   └── LOG
         │   ├── discount_infos_db/
         │   │   ├── LOCK
-        │   │   ├── LOG
-        │   │   └── LOG.old
+        │   │   └── LOG
         │   ├── discounts_db/
         │   │   ├── LOCK
-        │   │   ├── LOG
-        │   │   └── LOG.old
+        │   │   └── LOG
         │   ├── heavy_ad_intervention_opt_out.db
         │   ├── heavy_ad_intervention_opt_out.db-journal
         │   ├── optimization_guide_hint_cache_store/
         │   │   ├── LOCK
-        │   │   ├── LOG
-        │   │   └── LOG.old
+        │   │   └── LOG
         │   ├── parcel_tracking_db/
         │   │   ├── LOCK
-        │   │   ├── LOG
-        │   │   └── LOG.old
-        │   ├── passkey_enclave_state
+        │   │   └── LOG
+        │   ├── power_bookmarks/
+        │   │   ├── PowerBookmarks.db
+        │   │   └── PowerBookmarks.db-journal
         │   ├── shared_proto_db/
         │   │   ├── 000003.log
         │   │   ├── CURRENT
         │   │   ├── LOCK
         │   │   ├── LOG
-        │   │   ├── LOG.old
         │   │   ├── MANIFEST-000001
         │   │   └── metadata/
         │   │       ├── 000003.log
         │   │       ├── CURRENT
         │   │       ├── LOCK
         │   │       ├── LOG
-        │   │       ├── LOG.old
         │   │       └── MANIFEST-000001
         │   └── trusted_vault.pb
-        ├── DeferredBrowserMetrics/
-        ├── DevToolsActivePort
         ├── FileTypePolicies/
         ├── FirstPartySetsPreloaded/
+        ├── GPUPersistentCache/
+        │   └── DawnGraphiteCache/
+        │       └── AD277SZPBPK7F6SGJV5FTCFBB7NJ7QPK/
+        │           ├── cache.db
+        │           ├── cache.db-wal
+        │           └── cache.journal
         ├── GrShaderCache/
         │   ├── data_0
         │   ├── data_1
         │   ├── data_2
         │   ├── data_3
         │   └── index
-        ├── GraphiteDawnCache/
-        │   ├── data_0
-        │   ├── data_1
-        │   ├── data_2
-        │   ├── data_3
-        │   └── index
+        ├── HistorySearch/
+        │   └── 6.7431.9692/
+        │       ├── _metadata/
+        │       │   └── verified_contents.json
+        │       ├── history_search_strings_farmhashed.binarypb
+        │       └── manifest.json
         ├── Last Browser
         ├── Last Version
         ├── Local State
         ├── MEIPreload/
-        ├── MediaFoundationWidevineCdm/
-        │   └── x64/
         ├── OnDeviceHeadSuggestModel/
-        ├── OpenCookieDatabase/
+        │   └── 20251024.824731831.14/
+        │       ├── _metadata/
+        │       │   └── verified_contents.json
+        │       ├── cr_en-us_500000_index.bin
+        │       └── manifest.json
         ├── OptimizationHints/
+        │   └── 605/
+        │       ├── _metadata/
+        │       │   └── verified_contents.json
+        │       ├── manifest.json
+        │       └── optimization-hints.pb
         ├── OriginTrials/
         ├── PKIMetadata/
+        ├── PlusAddressBlocklist/
         ├── PrivacySandboxAttestationsPreloaded/
-        ├── ProbabilisticRevealTokenRegistry/
-        ├── RecoveryImproved/
         ├── SSLErrorAssistant/
         ├── Safe Browsing/
-        │   ├── ChromeExtMalware.store
-        │   ├── ChromeExtMalware.store.32_13412889822129792
-        │   ├── UrlBilling.store
-        │   ├── UrlBilling.store.4_13412889822143071
-        │   ├── UrlBilling.store.4_13412890120463329
-        │   ├── UrlCsdAllowlist.store
-        │   ├── UrlCsdAllowlist.store.32_13412889822149269
-        │   ├── UrlCsdAllowlist.store.4_13412889822149061
-        │   ├── UrlCsdDownloadAllowlist.store
-        │   ├── UrlCsdDownloadAllowlist.store.32_13412889822145265
-        │   ├── UrlHighConfidenceAllowlist.store
-        │   ├── UrlHighConfidenceAllowlist.store.32_13412889822108065
-        │   ├── UrlMalBin.store
-        │   ├── UrlMalBin.store.4_13412889822126030
-        │   ├── UrlMalBin.store.4_13412890120460375
-        │   ├── UrlMalware.store
-        │   ├── UrlMalware.store.4_13412889822113714
-        │   ├── UrlMalware.store.4_13412890120450362
-        │   ├── UrlSoceng.store
-        │   ├── UrlSoceng.store.4_13412889821799977
-        │   ├── UrlSoceng.store.4_13412890120065295
-        │   ├── UrlSubresourceFilter.store
-        │   ├── UrlSubresourceFilter.store.4_13412889822155608
-        │   ├── UrlSuspiciousSite.store
-        │   ├── UrlSuspiciousSite.store.4_13412889822123707
-        │   ├── UrlUws.store
-        │   ├── UrlUws.store.4_13412889822118882
-        │   └── UrlUws.store.4_13412890120453772
         ├── SafetyTips/
         ├── ShaderCache/
         │   ├── data_0
@@ -572,14 +630,34 @@ BloomNucleus/
         │   ├── data_3
         │   └── index
         ├── Subresource Filter/
+        │   ├── Indexed Rules/
+        │   │   └── 37/
+        │   │       └── 9.64.0/
+        │   │           └── Ruleset Data
         │   └── Unindexed Rules/
+        │       └── 9.64.0/
+        │           ├── Filtering Rules
+        │           ├── LICENSE.txt
+        │           ├── _metadata/
+        │           │   └── verified_contents.json
+        │           └── manifest.json
         ├── TpcdMetadata/
         ├── TrustTokenKeyCommitments/
+        │   └── 2025.9.29.1/
+        │       ├── LICENSE
+        │       ├── _metadata/
+        │       │   └── verified_contents.json
+        │       ├── keys.json
+        │       └── manifest.json
         ├── Variations
         ├── WasmTtsEngine/
-        ├── WidevineCdm/
         ├── ZxcvbnData/
         ├── component_crx_cache/
+        │   ├── 23759e3f6d0119a00038b963cec9fb7abafd7b65a35a7e83c7697511db59e6e7
+        │   ├── 3602cd3312cb5b496e48b0f9405f4387dfd274766f5b2ac59a7b376b4d9bbe66
+        │   ├── 6f9945bb965ce4aef3427164fc19faf47a46b069dd2c9f1f931858445e1652a0
+        │   ├── caf22da361a099ee7f504cfd6018872cff61e16946d0a5a57fb07c529bfa8072
+        │   ├── ed43e732234cc8b79a137be0a0aab8f72b37ae6ca51caf1292986edbf618c1d1
         │   └── metadata.json
         ├── extension/
         │   ├── 128x128.png
@@ -603,59 +681,9 @@ BloomNucleus/
         ├── first_party_sets.db
         ├── first_party_sets.db-journal
         ├── hyphen-data/
-        ├── optimization_guide_model_store/
-        │   ├── 13/
-        │   │   └── E6DC4029A1E4B4C1/
-        │   │       └── AF25C28EAD7B8290/
-        │   │           ├── model-info.pb
-        │   │           └── model.tflite
-        │   ├── 15/
-        │   │   └── E6DC4029A1E4B4C1/
-        │   │       └── D056CB9E731EBDC6/
-        │   │           ├── VERSION.txt
-        │   │           ├── model-info.pb
-        │   │           ├── model.tflite
-        │   │           └── override_list.pb.gz
-        │   ├── 2/
-        │   │   └── E6DC4029A1E4B4C1/
-        │   │       └── 305BEF0D8F5D33FC/
-        │   │           ├── model-info.pb
-        │   │           └── model.tflite
-        │   ├── 20/
-        │   │   └── E6DC4029A1E4B4C1/
-        │   │       └── 76B7F0398226710D/
-        │   │           ├── model-info.pb
-        │   │           └── model.tflite
-        │   ├── 24/
-        │   │   └── E6DC4029A1E4B4C1/
-        │   │       └── 1758012C26A262AE/
-        │   │           ├── enus_denylist_encoded_241007.txt
-        │   │           ├── model-info.pb
-        │   │           ├── model.tflite
-        │   │           └── vocab_en-us.txt
-        │   ├── 25/
-        │   │   └── E6DC4029A1E4B4C1/
-        │   │       └── 77D0A92587EED956/
-        │   │           ├── model-info.pb
-        │   │           ├── model.tflite
-        │   │           └── visual_model_desktop.tflite
-        │   ├── 26/
-        │   │   └── E6DC4029A1E4B4C1/
-        │   │       └── 5ED327A61A170A55/
-        │   │           ├── model-info.pb
-        │   │           └── model.tflite
-        │   ├── 45/
-        │   │   └── E6DC4029A1E4B4C1/
-        │   │       └── 31D20BFF6DFB5C4C/
-        │   │           ├── model-info.pb
-        │   │           └── model.tflite
-        │   └── 9/
-        │       └── E6DC4029A1E4B4C1/
-        │           └── ECB9ED43E6D56F8A/
-        │               ├── model-info.pb
-        │               └── model.tflite
+        ├── lockfile
         ├── segmentation_platform/
         │   ├── ukm_db
         │   └── ukm_db-wal
         └── synapse/
-            └── com.bloom.synapse.d6f25e14.json
+            └── com.bloom.synapse.6e7ca8da.json
