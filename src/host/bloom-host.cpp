@@ -334,34 +334,82 @@ void tcp_client_loop() {
 
 int main(int argc, char* argv[]) {
 #ifdef _WIN32
+    // 1. Inicialización de Entorno Windows
     WSADATA wsa;
     if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) return 1;
     _setmode(_fileno(stdin), _O_BINARY);
     _setmode(_fileno(stdout), _O_BINARY);
 #endif
+
+    // 2. CAPTURA INTELIGENTE DEL PROFILE ID
+    // Buscamos en todos los argumentos que nos manda Chrome
     for (int i = 1; i < argc; i++) {
-        if (std::string(argv[i]) == "--profile-id" && i + 1 < argc) {
+        std::string arg = argv[i];
+
+        // Caso A: El flag y el valor están separados ("--profile-id", "UUID")
+        if (arg == "--profile-id" && i + 1 < argc) {
             g_profile_id = argv[i + 1];
+            break;
+        }
+        // Caso B: Están juntos por un igual ("--profile-id=UUID")
+        if (arg.find("--profile-id=") == 0) {
+            g_profile_id = arg.substr(13);
+            break;
         }
     }
+
+    // FALLBACK: Si sigue vacío, buscamos cualquier argumento largo (los UUID tienen 36 caracteres)
+    if (g_profile_id.empty()) {
+        for (int i = 1; i < argc; i++) {
+            std::string arg = argv[i];
+            // Si tiene longitud de UUID y no es la URL de la extensión
+            if (arg.length() >= 32 && arg.find("://") == std::string::npos) {
+                g_profile_id = arg;
+                break;
+            }
+        }
+    }
+
+    // 3. LOG DE ARRANQUE (Aparecerá en host_client.log)
     g_logger.info("=== Bloom Host v" + VERSION + " Starting ===");
+    g_logger.info("Detected Profile ID: " + (g_profile_id.empty() ? "UNKNOWN" : g_profile_id));
+    
+    // Logueamos los argumentos crudos para diagnosticar si vuelve a fallar
+    std::string full_cmd = "";
+    for(int i=0; i<argc; i++) full_cmd += std::string(argv[i]) + " ";
+    g_logger.info("Full Command Line: " + full_cmd);
+
+    // 4. INICIO DE THREAD DE COMUNICACIÓN CON BRAIN (PYTHON)
     std::thread client_thread(tcp_client_loop);
+
+    // 5. LOOP PRINCIPAL DE LECTURA (Desde Chrome)
     while (!shutdown_requested.load()) {
         uint32_t msg_len = 0;
-        if (!std::cin.read((char*)&msg_len, 4)) {
+        // Leemos los primeros 4 bytes (tamaño del mensaje)
+        if (!std::cin.read(reinterpret_cast<char*>(&msg_len), 4)) {
             if (std::cin.eof()) break;
             continue;
         }
+
         if (msg_len == 0 || msg_len > MAX_MESSAGE_SIZE) continue;
+
+        // Leemos el cuerpo del mensaje JSON
         std::vector<char> buffer(msg_len);
         if (!std::cin.read(buffer.data(), msg_len)) break;
+
+        // Procesamos el mensaje
         handle_chrome_message(std::string(buffer.begin(), buffer.end()));
     }
-    g_logger.info("Shutting down...");
+
+    // 6. CIERRE ORDENADO
+    g_logger.info("Shutting down host process...");
     shutdown_requested.store(true);
+
     socket_t sock = service_socket.load();
     if (sock != INVALID_SOCK) close_socket(sock);
+
     if (client_thread.joinable()) client_thread.join();
+
 #ifdef _WIN32
     WSACleanup();
 #endif
