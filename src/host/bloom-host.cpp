@@ -256,27 +256,30 @@ void write_to_service(const std::string& s) {
 // PROCESAMIENTO DE MENSAJES
 // ============================================================================
 void handle_chrome_message(const std::string& msg_str) {
+    // LOG TOTAL: Capturamos el mensaje crudo que entra desde Chrome
+    g_logger.info(">>> INCOMING FROM CHROME: " + msg_str);
+
     try {
         auto msg = json::parse(msg_str);
 
+        // Procesamiento de Chunks (Grandes volúmenes de datos)
         if (msg.contains("bloom_chunk")) {
             std::string assembled;
             auto res = g_chunked_buffer.process_chunk(msg, assembled);
             if (res == ChunkedMessageBuffer::COMPLETE_VALID) {
-                g_logger.info("Message assembled (Large). Forwarding to Service.");
+                g_logger.info("Assembled Chunked Message. Size: " + std::to_string(assembled.size()));
                 write_to_service(assembled);
-            } else if (res == ChunkedMessageBuffer::COMPLETE_INVALID_CHECKSUM) {
-                g_logger.error("Chunk Error: Checksum mismatch");
             }
             return;
         }
 
+        // Handshake de la Extensión
         if (msg.value("type", "") == "SYSTEM_HELLO") {
-            g_logger.info("Extension Handshake Received");
+            g_logger.info("Handshake Request Detected");
             
             if (g_profile_id.empty()) {
                 g_profile_id = extract_profile_id_from_cmdline();
-                g_logger.info("Profile ID detected: " + (g_profile_id.empty() ? "unknown" : g_profile_id));
+                g_logger.info("Profile ID resolved to: " + g_profile_id);
             }
 
             json ready = {
@@ -289,15 +292,22 @@ void handle_chrome_message(const std::string& msg_str) {
                     {"profile_id", g_profile_id}
                 }}
             };
-            write_message_to_chrome(ready.dump());
+            
+            std::string response = ready.dump();
+            g_logger.info("<<< RESPONDING TO EXTENSION: " + response);
+            write_message_to_chrome(response);
+            
+            // Avisamos al Brain que la extensión está lista
             write_to_service(msg_str);
             return;
         }
 
+        // Si no es un comando especial, lo mandamos al Brain tal cual
+        g_logger.info("Forwarding message to Brain Service...");
         write_to_service(msg_str);
 
     } catch (const std::exception& e) {
-        g_logger.error("Chrome Message Parse Error: " + std::string(e.what()));
+        g_logger.error("JSON Parse Error from Chrome: " + std::string(e.what()) + " | Data: " + msg_str);
     }
 }
 
