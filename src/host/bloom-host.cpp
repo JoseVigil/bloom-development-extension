@@ -247,7 +247,7 @@ void tcp_client_loop() {
     while (!shutdown_requested.load()) {
         socket_t sock = socket(AF_INET, SOCK_STREAM, 0);
         if (sock == INVALID_SOCK) { std::this_thread::sleep_for(std::chrono::milliseconds(2000)); continue; }
-        
+
         sockaddr_in addr{};
         addr.sin_family = AF_INET;
         addr.sin_port = htons(SERVICE_PORT);
@@ -291,32 +291,35 @@ void tcp_client_loop() {
 // MAIN
 // ============================================================================
 int main(int argc, char* argv[]) {
-#ifdef _WIN32
-    WSADATA wsa; WSAStartup(MAKEWORD(2, 2), &wsa);
-    _setmode(_fileno(stdin), _O_BINARY);
-    _setmode(_fileno(stdout), _O_BINARY);
-    _setmode(_fileno(stderr), _O_BINARY);
-#endif
+    #ifdef _WIN32
+        _setmode(_fileno(stdin), _O_BINARY);
+        _setmode(_fileno(stdout), _O_BINARY);
+    #endif
 
-for (int i = 1; i < argc; i++) {
-    std::string arg = argv[i];
-    // Un UUID tiene 36 caracteres. Buscamos un string que no sea una ruta (sin backslash) 
-    // y que tenga el largo correcto o contenga guiones de UUID.
-    if (arg.find("-") != std::string::npos && arg.find("\\") == std::string::npos && arg.find("/") == std::string::npos) {
-        g_profile_id = arg;
-        g_logger.info("✅ ID Capturado Correctamente: " + g_profile_id);
-        break;
+    // CAPTURA DE IDENTIDAD RIGUROSA
+    for (int i = 1; i < argc; i++) {
+        std::string arg = argv[i];
+        if (arg == "--profile-id" && (i + 1) < argc) {
+            g_profile_id = argv[i + 1]; // Toma el valor que sigue al flag
+            break;
+        }
     }
-}
 
-if (g_profile_id.empty()) {
-    g_logger.error("❌ Fallo crítico: No se encontró UUID en argv. Usando fallback.");
-    g_profile_id = "orphan_worker";
-}
+    // Si por alguna razón no está el flag, busca un string de 36 caracteres (Largo de UUID)
+    if (g_profile_id.empty()) {
+        for (int i = 1; i < argc; i++) {
+            std::string arg = argv[i];
+            if (arg.length() == 36 && arg.find("-") != std::string::npos) {
+                g_profile_id = arg;
+                break;
+            }
+        }
+    }
 
+    if (g_profile_id.empty()) g_profile_id = "unknown_worker";
 
     g_logger.info("=== Bloom Host Starting ===");
-    g_logger.info("Detected Profile ID: " + (g_profile_id.empty() ? "UNKNOWN" : g_profile_id));
+    g_logger.info("✅ ID Capturado Correctamente: " + g_profile_id);
 
     std::thread t(tcp_client_loop);
 
