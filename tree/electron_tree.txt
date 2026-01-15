@@ -19,6 +19,7 @@ bloom-development-extension/
     ├── entitlements.plist
     ├── forge.config.js
     ├── install/
+    │   ├── chromium-installer.js
     │   ├── diagnose/
     │   │   ├── diagnose-service.js
     │   │   └── service-diagnostics.js

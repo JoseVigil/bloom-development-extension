@@ -47,7 +47,7 @@
     {
       "name": "chrome",
       "description": "Chrome profile debugging and network log analysis",
-      "command_count": 2,
+      "command_count": 3,
       "subsections": [
         {
           "name": "READ",
@@ -130,6 +130,48 @@
                   "help": "Show HTTP headers in output",
                   "type": "bool",
                   "default": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "MINING",
+          "commands": [
+            {
+              "name": "mining-log",
+              "display_name": "MINING LOG",
+              "description": "Read and filter engine_mining.log for a specific profile.",
+              "syntax": "brain [GLOBAL_OPTIONS] chrome mining-log <PROFILE_ID> [OPTIONS]",
+              "arguments": [
+                {
+                  "name": "<PROFILE_ID>",
+                  "required": true,
+                  "help": "Chrome profile UUID",
+                  "type": "str"
+                }
+              ],
+              "options": [
+                {
+                  "flag": "-k",
+                  "required": false,
+                  "help": "Keyword to search for",
+                  "type": "str",
+                  "default": "bloom"
+                },
+                {
+                  "flag": "-b",
+                  "required": false,
+                  "help": "Lines of context before match",
+                  "type": "int",
+                  "default": 5
+                },
+                {
+                  "flag": "-a",
+                  "required": false,
+                  "help": "Lines of context after match",
+                  "type": "int",
+                  "default": 5
                 }
               ]
             }

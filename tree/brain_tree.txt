@@ -156,6 +156,7 @@ bloom-development-extension/
     │   │   ├── __init__.py
     │   │   ├── __pycache__/ [... cache]
     │   │   ├── log_reader.py
+    │   │   ├── mining_log_reader.py
     │   │   └── net_log_analyzer.py
     │   ├── context/
     │   │   ├── __init__.py

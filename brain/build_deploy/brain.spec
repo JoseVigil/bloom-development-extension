@@ -121,6 +121,7 @@ hiddenimports = [
     'brain.core.bloom_project_inspector',
     'brain.core.chrome',
     'brain.core.chrome.log_reader',
+    'brain.core.chrome.mining_log_reader',
     'brain.core.chrome.net_log_analyzer',
     'brain.core.context',
     'brain.core.context.detector',

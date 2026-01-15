@@ -283,3 +283,6 @@ https://aistudio.google.com/prompts/1sDxdxod4IB7gISHGIBEuYvpILegEPmPs
 
 roamingpads chrommium 
 https://aistudio.google.com/prompts/1zYc3GZzpUUlLiEHokUeYw1UId2tE2vcS
+
+jose gmail personalizacion chrommium
+https://aistudio.google.com/prompts/1bXtnDVWne0zaS4HSiFWaZrXC1rI_VKFk

@@ -1,103 +1,90 @@
 // ============================================================================
-// BLOOM NUCLEUS: SYNAPSE ROUTER v2.1
-// Router puro con capacidades de gestión de Ventanas y Discovery.
+// BLOOM NUCLEUS: SYNAPSE ROUTER v2.2 (Chromium Optimized)
+// Router de comunicación entre Brain (Python) y el Navegador.
 // ============================================================================
-
-const HEARTBEAT_INTERVAL = 15000;
-const RECONNECT_BASE_DELAY = 2000;
 
 let nativePort = null;
-let heartbeatTimer = null;
-let reconnectAttempts = 0;
+let isConnecting = false;
+let configRetryCount = 0;
 
-// 1. Cargar la configuración generada por Python
-try {
-  // Python escribirá este archivo en la carpeta de la extensión del perfil
-  importScripts('synapse.config.js');
-} catch (e) {
-  console.error("❌ [Synapse] No se encontró synapse.config.js. El bridge no funcionará.");
-}
-
-// 2. Obtener el nombre del host de forma segura
-const HOST_NAME = self.SYNAPSE_CONFIG?.bridge_name;
-
-if (!HOST_NAME) {
-  console.error("❌ [Synapse] HOST_NAME no definido. Abortando conexión nativa.");
-}
-
-// ============================================================================
-// 1. GESTIÓN DE CONEXIÓN
-// ============================================================================
-
-// Al principio del archivo
-function connectWithRetry() {
-  if (!HOST_NAME) {
-    console.error("Esperando configuración...");
-    setTimeout(connectWithRetry, 1000);
-    return;
-  }
-  console.log("Intentando conexión nativa...");
+/**
+ * 1. CARGA DE CONFIGURACIÓN DINÁMICA
+ * Intenta cargar el archivo generado por el Profile Manager.
+ */
+function loadSynapseConfig() {
   try {
-    connectToNativeHost();
+    importScripts('synapse.config.js');
+    console.log("⚙️ [Synapse] Configuración cargada desde synapse.config.js");
   } catch (e) {
-    setTimeout(connectWithRetry, 2000);
+    console.warn("⚠️ [Synapse] Esperando a que Python genere synapse.config.js...");
   }
 }
 
-function connectToNativeHost() {
-  // 1. Evitar conexiones duplicadas (Tu línea actual)
-  if (nativePort) return;
-
-  // 2. Validar que Python inyectó el nombre del bridge correctamente
-  if (!HOST_NAME) {
-    console.error("❌ [Synapse] Abortando: HOST_NAME no está definido en synapse.config.js");
-    // Opcional: reintentar en 2 segundos por si el archivo tardó en cargar
-    setTimeout(connectToNativeHost, 2000); 
+/**
+ * 2. MÁQUINA DE ESTADOS DE CONEXIÓN
+ * Asegura que solo exista un puente nativo activo y que la config esté lista.
+ */
+async function initializeSynapse() {
+  if (nativePort || isConnecting) return;
+  
+  // Paso A: Verificar si la configuración ya cargó
+  if (!self.SYNAPSE_CONFIG || !self.SYNAPSE_CONFIG.bridge_name) {
+    configRetryCount++;
+    loadSynapseConfig();
+    // Reintento exponencial (máximo cada 2 segundos)
+    const delay = Math.min(100 * configRetryCount, 2000);
+    setTimeout(initializeSynapse, delay);
     return;
   }
 
-  console.log(`🔌 [Synapse] Connecting to ${HOST_NAME}...`);
+  const HOST_NAME = self.SYNAPSE_CONFIG.bridge_name;
+  isConnecting = true;
+
+  console.log(`🔌 [Synapse] Conectando al bridge: ${HOST_NAME}...`);
 
   try {
     nativePort = chrome.runtime.connectNative(HOST_NAME);
     
+    // Listeners del túnel nativo
     nativePort.onMessage.addListener(routeFromBrain);
-    nativePort.onDisconnect.addListener(handleDisconnect);
+    nativePort.onDisconnect.addListener(handleHostDisconnect);
     
+    // Handshake inicial
     sendSystemHello();
     startHeartbeat();
-    reconnectAttempts = 0;
     
-    console.log("✅ [Synapse] Connected to profile-specific host");
+    isConnecting = false;
+    console.log("✅ [Synapse] Túnel nativo establecido.");
   } catch (error) {
-    console.error(`❌ [Synapse] Connection failed to ${HOST_NAME}:`, error);
-    scheduleReconnect();
+    console.error(`❌ [Synapse] Error al conectar con ${HOST_NAME}:`, error);
+    isConnecting = false;
+    setTimeout(initializeSynapse, 3000);
   }
 }
 
-function handleDisconnect() {
+function handleHostDisconnect() {
   const error = chrome.runtime.lastError;
-  console.warn("⚠️ [Synapse] Disconnected:", error?.message || "Unknown");
+  console.warn("⚠️ [Synapse] Túnel cerrado:", error?.message || "Sin errores");
   nativePort = null;
+  isConnecting = false;
   stopHeartbeat();
-  scheduleReconnect();
-}
-
-function scheduleReconnect() {
-  const delay = Math.min(RECONNECT_BASE_DELAY * Math.pow(2, reconnectAttempts), 30000);
-  reconnectAttempts++;
-  setTimeout(connectToNativeHost, delay);
+  // Reintento de reconexión
+  setTimeout(initializeSynapse, 2000);
 }
 
 // ============================================================================
-// 2. HEARTBEAT & HANDSHAKE
+// 3. HEARTBEAT & SISTEMA
 // ============================================================================
+
+let heartbeatTimer = null;
 
 function startHeartbeat() {
   stopHeartbeat();
   heartbeatTimer = setInterval(() => {
-    if (nativePort) nativePort.postMessage({ type: "HEARTBEAT", timestamp: Date.now() });
-  }, HEARTBEAT_INTERVAL);
+    if (nativePort) {
+      nativePort.postMessage({ type: "HEARTBEAT", timestamp: Date.now() });
+    }
+  }, 15000);
 }
 
 function stopHeartbeat() {
@@ -113,17 +100,18 @@ function sendSystemHello() {
     payload: {
       extension_id: chrome.runtime.id,
       version: manifest.version,
-      capabilities: ["DOM_ACTUATE", "WINDOW_CONTROL", "DISCOVERY"]
+      capabilities: ["DOM_ACTUATE", "WINDOW_CONTROL", "DATA_MINING"]
     }
   });
 }
 
 // ============================================================================
-// 3. ROUTING: BRAIN → TAB (Downstream)
+// 4. ROUTING: BRAIN → TAB (Downstream)
 // ============================================================================
 
 async function routeFromBrain(message) {
-  const { type, target, command, payload } = message;
+  if (!message) return;
+  const { type, target, command, payload, id } = message;
   
   // Ignorar ACKs de sistema
   if (type === "HEARTBEAT_ACK" || type === "SYSTEM_ACK") return;
@@ -132,176 +120,126 @@ async function routeFromBrain(message) {
 
   try {
     let result;
-
     switch (command) {
-      // --- COMANDOS NATIVOS DE VENTANA (Synapse v2.1) ---
-      
       case "WINDOW_CLOSE":
-        // Cierra la ventana actual (o todo el perfil si es la última)
         result = await handleWindowClose();
         break;
-
       case "WINDOW_NAVIGATE":
         result = await handleNavigate(payload);
         break;
-
       case "CLOSE_PROFILE":
-        // Cierre agresivo de todo el perfil
         result = await closeProfile(payload);
         break;
-
-      // --- COMANDOS DE DOM (Pasan al content.js) ---
       default:
-        result = await routeToTab(target, { command, payload });
+        // Por defecto, enviar a la pestaña activa (Content Script)
+        result = await routeToTab(target, { command, payload, id });
     }
 
-    if (message.id) sendToBrain({ id: message.id, status: "ok", result });
+    if (id) sendToBrain({ id, status: "ok", result });
 
   } catch (error) {
-    console.error(`❌ Error en comando [${command}]:`, error);
-    if (message.id) sendToBrain({ id: message.id, status: "error", error: error.message });
+    console.error(`❌ [Synapse] Error procesando comando [${command}]:`, error);
+    if (id) sendToBrain({ id, status: "error", error: error.message });
   }
 }
 
 // ============================================================================
-// 4. ROUTING: TAB → BRAIN (Upstream & Discovery)
+// 5. ROUTING: TAB → BRAIN (Upstream & Discovery)
 // ============================================================================
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const { command, source } = message;
 
-  // A. DISCOVERY PAGE HANDLER (Synapse v2.1)
-  // La página de discovery manda un ping simple para ver si la extensión vive.
+  // Manejo de la página de Discovery
   if (command === "ping" && source === "discovery_page") {
-    console.log("📡 [Discovery] Ping received from page");
     sendResponse({ status: "pong", version: chrome.runtime.getManifest().version });
-    return false; // Sync response
+    return false;
   }
 
-  // B. DISCOVERY COMPLETE
-  // La página de discovery avisa que terminó la validación
   if (command === "discovery_complete") {
-    console.log("✅ [Discovery] Validation complete");
-    sendToBrain({
-      type: "DISCOVERY_COMPLETE", // Evento para el Brain
-      payload: message
-    });
+    console.log("✅ [Discovery] Validación completada por el usuario.");
+    sendToBrain({ type: "DISCOVERY_COMPLETE", payload: message });
     sendResponse({ received: true });
     return false;
   }
 
-  // C. GENERIC FORWARDING (Tab -> Brain)
+  // Forwarding genérico de Content Scripts hacia Python
   const enrichedMessage = {
     ...message,
     source: { tab_id: sender.tab?.id, url: sender.tab?.url }
   };
   
-  console.log(`📤 [Tab → Brain] ${message.event || message.command}`);
   sendToBrain(enrichedMessage);
-  
   sendResponse({ received: true });
   return false;
 });
 
 // ============================================================================
-// 5. IMPLEMENTACIÓN DE COMANDOS DE VENTANA
+// 6. IMPLEMENTACIÓN DE COMANDOS
 // ============================================================================
 
 async function handleWindowClose() {
   const win = await chrome.windows.getCurrent();
   await chrome.windows.remove(win.id);
-  return { closed: true, window_id: win.id };
+  return { closed: true };
+}
+
+async function handleNavigate(payload) {
+  const { url } = payload;
+  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (tabs[0]) {
+    await chrome.tabs.update(tabs[0].id, { url });
+    return { navigated: true };
+  }
+  return { navigated: false, reason: "no_active_tab" };
 }
 
 async function closeProfile(payload = {}) {
-  const { delay = 500 } = payload;
-  
-  // Notificar a tabs para cleanup
-  const tabs = await chrome.tabs.query({});
-  for (const tab of tabs) {
-    try {
-      chrome.tabs.sendMessage(tab.id, { command: "PROFILE_CLOSING" });
-    } catch (e) {}
-  }
-
-  // Pequeño delay para que los mensajes salgan
-  await new Promise(r => setTimeout(r, delay));
-
-  // Cerrar todas las ventanas = Matar proceso de Chrome
   const windows = await chrome.windows.getAll();
   for (const win of windows) {
     await chrome.windows.remove(win.id);
   }
-  return { status: "profile_terminated" };
+  return { status: "terminating" };
 }
-
-async function handleNavigate(payload) {
-  const { tab_id, url } = payload;
-  if (!tab_id && !payload.target) {
-     // Si no hay ID, usar active tab
-     const tabs = await chrome.tabs.query({active: true, currentWindow: true});
-     if(tabs[0]) await chrome.tabs.update(tabs[0].id, { url });
-  } else {
-     await chrome.tabs.update(tab_id, { url });
-  }
-  return { navigated: true };
-}
-
-// ============================================================================
-// 6. HELPERS (Con Blindaje)
-// ============================================================================
 
 async function routeToTab(target, message) {
   let tabId = target;
-  
   if (target === "active" || !target) {
     const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-    
-    if (!tabs.length) {
-      console.warn("⚠️ [Router] No active tab found to route message:", message);
-      // No lanzamos error, solo avisamos que no se pudo entregar
-      return { status: "skipped", reason: "no_active_tab" };
-    }
+    if (!tabs.length) return { status: "skipped", reason: "no_active_tab" };
     tabId = tabs[0].id;
   }
   
   try {
-    // Intentamos enviar el mensaje
     return await chrome.tabs.sendMessage(tabId, message);
   } catch (error) {
-    // Si el content script no está listo, Chrome lanza "Receiving end does not exist"
     if (error.message.includes("Receiving end does not exist")) {
-      console.warn(`⚠️ [Router] Tab ${tabId} not ready yet (Content Script missing). Message queued/dropped.`);
-      // Retornamos un estado "pending" en lugar de crashear
       return { status: "pending", reason: "content_script_not_ready" };
     }
-    
-    // Otros errores sí los re-lanzamos
     throw error;
   }
 }
-
-// ============================================================================
-// 7. SEND TO BRAIN
-// ============================================================================
-
 
 function sendToBrain(message) {
   if (nativePort) {
     try {
       nativePort.postMessage(message);
     } catch (e) {
-      console.error("❌ [Synapse] Error enviando al host nativo:", e);
+      console.error("❌ [Synapse] Error de envío al Host:", e);
     }
-  } else {
-    console.warn("⚠️ [Synapse] No hay conexión activa con el host nativo.");
   }
 }
 
-// Reemplazá tu connectToNativeHost() inicial por esto:
-chrome.runtime.onInstalled.addListener(() => {
-  connectWithRetry();
-});
+// ============================================================================
+// 7. INICIO DE SECUENCIA
+// ============================================================================
 
-// Forzar despertar
-connectWithRetry();
+// Carga inicial
+loadSynapseConfig();
+
+// Iniciar bridge
+initializeSynapse();
+
+// Asegurar reconexión en eventos de ciclo de vida
+chrome.runtime.onInstalled.addListener(initializeSynapse);
+chrome.runtime.onStartup.addListener(initializeSynapse);

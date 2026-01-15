@@ -176,6 +176,9 @@ bloom-development-extension/
 ├── installer/
 │   ├── .DS_Store
 │   ├── README.md
+│   ├── chrome/
+│   │   ├── chrome-mac.zip
+│   │   └── chrome-win.zip
 │   ├── chrome-extension/
 │   │   ├── crx/
 │   │   │   ├── id.json
@@ -211,6 +214,7 @@ bloom-development-extension/
 │   │   ├── entitlements.plist
 │   │   ├── forge.config.js
 │   │   ├── install/
+│   │   │   ├── chromium-installer.js
 │   │   │   ├── diagnose/
 │   │   │   │   ├── diagnose-service.js
 │   │   │   │   └── service-diagnostics.js
@@ -496,6 +500,7 @@ bloom-development-extension/
     │   │   ├── __init__.py
     │   │   ├── __pycache__/ [... cache]
     │   │   ├── log_reader.py
+    │   │   ├── mining_log_reader.py
     │   │   └── net_log_analyzer.py
     │   ├── context/
     │   │   ├── __init__.py

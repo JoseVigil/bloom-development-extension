@@ -54,6 +54,12 @@ const getResourcePath = (resourceName) => {
       return path.join(installerRoot, 'native', 'nssm', 'win64', 'nssm.exe');
     case 'extension':
       return path.join(installerRoot, 'chrome-extension', 'src');
+    case 'chrome-win':
+      return path.join(installerRoot, 'chrome', 'chrome-win.zip');
+    case 'chrome-mac':
+      return path.join(installerRoot, 'chrome', 'chrome-mac.zip');
+    case 'chrome-linux':
+      return path.join(installerRoot, 'chrome', 'chrome-linux.zip');
     case 'assets':
       return path.join(installerRoot, 'electron-app', 'assets');
     default:
