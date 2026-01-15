@@ -298,14 +298,23 @@ int main(int argc, char* argv[]) {
     _setmode(_fileno(stderr), _O_BINARY);
 #endif
 
-    for (int i = 0; i < argc; i++) {
-        std::string arg = argv[i];
-        if (arg.length() >= 36 && arg.find("-") != std::string::npos) {
-            g_profile_id = arg;
-            break;
-        }
-    } 
-   
+for (int i = 1; i < argc; i++) {
+    std::string arg = argv[i];
+    // Un UUID tiene 36 caracteres. Buscamos un string que no sea una ruta (sin backslash) 
+    // y que tenga el largo correcto o contenga guiones de UUID.
+    if (arg.find("-") != std::string::npos && arg.find("\\") == std::string::npos && arg.find("/") == std::string::npos) {
+        g_profile_id = arg;
+        g_logger.info("✅ ID Capturado Correctamente: " + g_profile_id);
+        break;
+    }
+}
+
+if (g_profile_id.empty()) {
+    g_logger.error("❌ Fallo crítico: No se encontró UUID en argv. Usando fallback.");
+    g_profile_id = "orphan_worker";
+}
+
+
     g_logger.info("=== Bloom Host Starting ===");
     g_logger.info("Detected Profile ID: " + (g_profile_id.empty() ? "UNKNOWN" : g_profile_id));
 
