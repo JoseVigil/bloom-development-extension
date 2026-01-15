@@ -223,15 +223,15 @@ void handle_chrome_message(const std::string& msg_str) {
             return;
         }
         if (msg.value("type", "") == "SYSTEM_HELLO") {
-            json ready = {
-                {"type", "SYSTEM_ACK"},         
-                {"command", "system_ready"},
-                {"payload", {                   
-                    {"status", "connected"},
-                    {"host_version", VERSION},
-                    {"profile_id", g_profile_id}
-                }}
-            };
+	    json ready = {
+    		{"type", "SYSTEM_ACK"},
+    		{"command", "system_ready"},
+    		{"payload", {
+        		{"status", "connected"},
+        		{"host_version", VERSION},
+        		{"profile_id", g_profile_id.empty() ? "active_worker" : g_profile_id}
+    		}}
+	    };
             write_message_to_chrome(ready.dump());
             write_to_service(msg_str);
             return;
