@@ -295,16 +295,17 @@ int main(int argc, char* argv[]) {
     WSADATA wsa; WSAStartup(MAKEWORD(2, 2), &wsa);
     _setmode(_fileno(stdin), _O_BINARY);
     _setmode(_fileno(stdout), _O_BINARY);
+    _setmode(_fileno(stderr), _O_BINARY);
 #endif
 
     for (int i = 0; i < argc; i++) {
         std::string arg = argv[i];
-        // Si el argumento tiene el largo de un UUID (36) y tiene guiones, es nuestro ID
-        if (arg.length() >= 36 && arg.find("-") != std::string::npos && arg.find("://") == std::string::npos) {
+        if (arg.length() >= 36 && arg.find("-") != std::string::npos) {
             g_profile_id = arg;
+            break;
         }
-    }
-
+    } 
+   
     g_logger.info("=== Bloom Host Starting ===");
     g_logger.info("Detected Profile ID: " + (g_profile_id.empty() ? "UNKNOWN" : g_profile_id));
 
