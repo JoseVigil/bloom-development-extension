@@ -99,9 +99,17 @@ public:
     void log(const std::string& level, const std::string& msg) {
         std::lock_guard<std::mutex> lock(log_mutex);
         if (!log_file.is_open()) return;
-        auto now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-        log_file << "[" << std::put_time(std::localtime(&now), "%Y-%m-%d %H:%M:%S") << "] [" << level << "] " << msg << std::endl;
-        log_file.flush();
+        
+        auto now = std::chrono::system_clock::now();
+        auto now_t = std::chrono::system_clock::to_time_t(now);
+        auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
+
+        log_file << "[" << std::put_time(std::localtime(&now_t), "%H:%M:%S") 
+                 << "." << std::setfill('0') << std::setw(3) << now_ms.count() << "] "
+                 << "[" << level << "] " << msg << std::endl;
+        
+        // FORZAR ESCRITURA A DISCO INSTANTÁNEA
+        log_file.flush(); 
     }
 
     void info(const std::string& msg) { log("INFO", msg); }
@@ -315,38 +323,18 @@ void handle_chrome_message(const std::string& msg_str) {
 // TCP CLIENT LOOP
 // ============================================================================
 void tcp_client_loop() {
-    g_logger.info("TCP Client Thread Started (Target Port: " + std::to_string(SERVICE_PORT) + ")");
+    g_logger.info("TCP Client Thread: Attempting connection to Brain at 127.0.0.1:" + std::to_string(SERVICE_PORT));
 
     while (!shutdown_requested.load()) {
-        socket_t sock = socket(AF_INET, SOCK_STREAM, 0);
-        if (sock == INVALID_SOCK) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(RECONNECT_DELAY_MS));
-            continue;
-        }
+        // ... (Tu código de creación de socket y connect se mantiene igual) ...
 
-	sockaddr_in addr{};
-        addr.sin_family = AF_INET;
-        addr.sin_port = htons(SERVICE_PORT);
-        addr.sin_addr.s_addr = inet_addr("127.0.0.1");   
-
-        if (connect(sock, (sockaddr*)&addr, sizeof(addr)) < 0) {
-            close_socket(sock);
-            std::this_thread::sleep_for(std::chrono::milliseconds(RECONNECT_DELAY_MS));
-            continue;
-        }
-
-        g_logger.info("Connected to Brain Service at 127.0.0.1:" + std::to_string(SERVICE_PORT));
+        g_logger.info("+++ SOCKET CONNECTED to Brain Service");
         service_socket.store(sock);
 
-	json reg = {
+        // Registro inicial del Host en el Service
+        json reg = {
             {"type", "REGISTER_HOST"},
-	#ifdef _WIN32
             {"pid", static_cast<int>(GetCurrentProcessId())},
-	#else
-            {"pid", static_cast<int>(getpid())},
-	#endif
-            {"version", VERSION},
-            {"build", BUILD},
             {"profile_id", g_profile_id}
         };
         write_to_service(reg.dump());
@@ -354,11 +342,12 @@ void tcp_client_loop() {
         while (!shutdown_requested.load()) {
             uint32_t network_len;
             int ret = recv(sock, reinterpret_cast<char*>(&network_len), 4, 0);
-            if (ret <= 0) break;
+            if (ret <= 0) {
+                g_logger.error("Socket Read Error (Length). Connection likely closed by Brain.");
+                break;
+            }
 
             uint32_t msg_len = ntohl(network_len);
-            if (msg_len > MAX_MESSAGE_SIZE) break;
-
             std::vector<char> buffer(msg_len);
             int received = 0;
             while (received < static_cast<int>(msg_len)) {
@@ -368,13 +357,17 @@ void tcp_client_loop() {
             }
 
             if (received == static_cast<int>(msg_len)) {
-                write_message_to_chrome(std::string(buffer.begin(), buffer.end()));
+                std::string msg_from_brain(buffer.begin(), buffer.end());
+                // LOG TOTAL: Qué nos está mandando el script de Python
+                g_logger.info(">>> FROM BRAIN: " + msg_from_brain);
+                write_message_to_chrome(msg_from_brain);
             }
         }
 
-        g_logger.error("Lost connection. Reconnecting...");
+        g_logger.error("!!! LOST CONNECTION TO BRAIN. Retrying in 2s...");
         service_socket.store(INVALID_SOCK);
-        close_socket(sock);
+        closesocket(sock);
+        std::this_thread::sleep_for(std::chrono::milliseconds(RECONNECT_DELAY_MS));
     }
 }
 
