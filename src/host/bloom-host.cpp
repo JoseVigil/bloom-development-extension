@@ -297,14 +297,16 @@ int main(int argc, char* argv[]) {
     _setmode(_fileno(stdout), _O_BINARY);
 #endif
 
-    for (int i = 1; i < argc; i++) {
+    for (int i = 0; i < argc; i++) {
         std::string arg = argv[i];
-        if (arg == "--profile-id" && i + 1 < argc) g_profile_id = argv[i + 1];
-        else if (arg.find("--profile-id=") == 0) g_profile_id = arg.substr(13);
+        // Si el argumento tiene el largo de un UUID (36) y tiene guiones, es nuestro ID
+        if (arg.length() >= 36 && arg.find("-") != std::string::npos && arg.find("://") == std::string::npos) {
+            g_profile_id = arg;
+        }
     }
 
-    g_logger.info("=== Bloom Host v" + VERSION + " Starting ===");
-    g_logger.info("Detected Profile: " + g_profile_id);
+    g_logger.info("=== Bloom Host Starting ===");
+    g_logger.info("Detected Profile ID: " + (g_profile_id.empty() ? "UNKNOWN" : g_profile_id));
 
     std::thread t(tcp_client_loop);
 
