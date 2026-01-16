@@ -254,6 +254,36 @@ public:
 
 ChunkedMessageBuffer g_chunked_buffer;
 
+bool try_extract_profile_id_from_raw(const std::string& msg_str) {
+    size_t pos = msg_str.find("\"profile_id\"");
+    if (pos == std::string::npos) return false;
+    
+    size_t start = msg_str.find("\"", pos + 13);
+    if (start == std::string::npos) return false;
+    start++;
+    
+    size_t end = msg_str.find("\"", start);
+    if (end == std::string::npos) return false;
+    
+    std::string candidate = msg_str.substr(start, end - start);
+    
+    if (candidate.length() == 36 && 
+        candidate[8] == '-' && candidate[13] == '-' &&
+        candidate[18] == '-' && candidate[23] == '-') {
+        
+        std::lock_guard<std::mutex> lock(g_profile_id_mutex);
+        if (!identity_resolved.load()) {
+            g_profile_id = candidate;
+            identity_resolved.store(true);
+            g_logger.log_native("INFO", "LATE_BINDING_SUCCESS(RAW) ProfileID=" + candidate);
+            g_identity_cv.notify_all();
+            return true;
+        }
+    }
+    
+    return false;
+}
+
 bool try_extract_profile_id(const json& msg) {
     std::vector<std::string> paths = {
         "/profile_id",
@@ -275,7 +305,7 @@ bool try_extract_profile_id(const json& msg) {
                     if (!identity_resolved.load()) {
                         g_profile_id = candidate;
                         identity_resolved.store(true);
-                        g_logger.log_native("INFO", "LATE_BINDING_SUCCESS ProfileID=" + candidate);
+                        g_logger.log_native("INFO", "LATE_BINDING_SUCCESS(JSON) ProfileID=" + candidate);
                         g_identity_cv.notify_all();
                         return true;
                     }
@@ -322,64 +352,82 @@ void flush_pending_messages() {
 }
 
 void handle_chrome_message(const std::string& msg_str) {
+    try_extract_profile_id_from_raw(msg_str);
+    
+    json msg;
     try {
-        auto msg = json::parse(msg_str);
-        
-        if (msg.contains("bloom_chunk")) {
-            std::string assembled;
-            auto res = g_chunked_buffer.process_chunk(msg, assembled);
-            if (res == ChunkedMessageBuffer::COMPLETE_VALID) {
-                handle_chrome_message(assembled);
-            }
-            return;
-        }
-        
-        try_extract_profile_id(msg);
-        
-        if (msg.value("type", "") == "LOG") {
-            std::string level = msg.value("level", "INFO");
-            std::string message = msg.value("message", "");
-            std::string timestamp = msg.value("timestamp", "");
-            
-            g_logger.log_browser(level, message, timestamp);
-            return;
-        }
-        
-        if (msg.value("type", "") == "SYSTEM_HELLO") {
-            std::string final_id;
-            {
-                std::lock_guard<std::mutex> lock(g_profile_id_mutex);
-                final_id = identity_resolved.load() ? g_profile_id : "unknown_worker";
-            }
-            
-            json ready = {
-                {"type", "SYSTEM_ACK"},
-                {"command", "system_ready"},
-                {"payload", {
-                    {"status", "connected"},
-                    {"host_version", VERSION},
-                    {"profile_id", final_id},
-                    {"identity_method", identity_resolved.load() ? "late_binding" : "fallback"}
-                }}
-            };
-            
-            write_message_to_chrome(ready.dump());
-            return;
-        }
-        
-        if (service_socket.load() != INVALID_SOCK && identity_resolved.load()) {
-            write_to_service(msg_str);
-        } else {
-            std::lock_guard<std::mutex> lock(g_pending_mutex);
-            if (g_pending_messages.size() < MAX_QUEUED_MESSAGES) {
-                g_pending_messages.push(msg_str);
-            } else {
-                g_logger.log_native("ERROR", "QUEUE_OVERFLOW Message dropped");
-            }
-        }
-        
+        msg = json::parse(msg_str);
     } catch (const std::exception& e) {
         g_logger.log_native("ERROR", "JSON_PARSE_ERROR: " + std::string(e.what()));
+        return;
+    }
+    
+    if (msg.contains("bloom_chunk")) {
+        std::string assembled;
+        auto res = g_chunked_buffer.process_chunk(msg, assembled);
+        if (res == ChunkedMessageBuffer::COMPLETE_VALID) {
+            handle_chrome_message(assembled);
+        }
+        return;
+    }
+    
+    try_extract_profile_id(msg);
+    
+    std::string msg_type = "unknown";
+    if (msg.contains("type") && msg["type"].is_string()) {
+        msg_type = msg["type"].get<std::string>();
+    }
+    
+    if (msg_type == "LOG") {
+        std::string level = "INFO";
+        std::string message = "";
+        std::string timestamp = "";
+        
+        if (msg.contains("level") && msg["level"].is_string()) {
+            level = msg["level"].get<std::string>();
+        }
+        if (msg.contains("message") && msg["message"].is_string()) {
+            message = msg["message"].get<std::string>();
+        }
+        if (msg.contains("timestamp") && msg["timestamp"].is_string()) {
+            timestamp = msg["timestamp"].get<std::string>();
+        }
+        
+        g_logger.log_browser(level, message, timestamp);
+        return;
+    }
+    
+    if (msg_type == "SYSTEM_HELLO") {
+        std::string final_id;
+        {
+            std::lock_guard<std::mutex> lock(g_profile_id_mutex);
+            final_id = identity_resolved.load() ? g_profile_id : "unknown_worker";
+        }
+        
+        json ready = {
+            {"type", "SYSTEM_ACK"},
+            {"command", "system_ready"},
+            {"payload", {
+                {"status", "connected"},
+                {"host_version", VERSION},
+                {"profile_id", final_id},
+                {"identity_method", identity_resolved.load() ? "late_binding" : "fallback"}
+            }}
+        };
+        
+        write_message_to_chrome(ready.dump());
+        return;
+    }
+    
+    if (service_socket.load() != INVALID_SOCK && identity_resolved.load()) {
+        write_to_service(msg_str);
+    } else {
+        std::lock_guard<std::mutex> lock(g_pending_mutex);
+        if (g_pending_messages.size() < MAX_QUEUED_MESSAGES) {
+            g_pending_messages.push(msg_str);
+        } else {
+            g_logger.log_native("ERROR", "QUEUE_OVERFLOW Message dropped");
+        }
     }
 }
 
