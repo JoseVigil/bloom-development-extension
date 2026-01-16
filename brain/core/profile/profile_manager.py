@@ -226,57 +226,60 @@ class ProfileManager:
             return self._launch_system_chrome(profile, url)
 
     def _launch_internal_chromium(self, profile: Dict, url: Optional[str]) -> Dict[str, Any]:
-        full_id = profile['id']
-        profile_path = Path(self.paths.profiles_dir) / full_id
+        import sys, os, logging, subprocess, time
         
-        # Sincronización
+        full_id = profile['id']
+        profile_path = Path(self.paths.profiles_dir) / full_id      
         self.sync_profile_resources(full_id)
 
-        # RUTA NORMALIZADA (Sin comillas, barras dobles de Windows)
+        # 1. RUTAS BLINDADAS
         chrome_path = str(self.launcher.chrome_path)
-        u_data = os.path.abspath(profile_path).replace("/", "\\")
-        e_path = os.path.abspath(profile_path / "extension").replace("/", "\\")
+        u_data = os.path.abspath(profile_path)
+        e_path = os.path.abspath(profile_path / "extension")
         target_url = url if url else self.get_discovery_url(full_id)
 
+        # 2. ARGUMENTOS: --user-data-dir DEBE SER EL PRIMERO
         chrome_args = [
             chrome_path,
             f"--user-data-dir={u_data}",
             f"--load-extension={e_path}",
             f"--app={target_url}",
+            "--no-first-run",
+            "--no-default-browser-check",
             "--test-type",
-            "--no-sandbox",
-            "--disable-web-security",
-            "--remote-debugging-port=9222",
-            "--no-first-run"
+            "--remote-debugging-port=0"
         ]
 
-        # KILL PREVENTIVO (Nivel 0.1%)
-        # Si no matamos el chrome.exe portable, el Singleton de Chromium 
-        # nos va a mandar siempre a la ventana genérica.
-        if platform.system() == 'Windows':
-            os.system('taskkill /f /im chrome.exe >nul 2>&1')
-            os.system('taskkill /f /im bloom-host.exe >nul 2>&1')
-
         try:
+            # 3. LANZAMIENTO DESACOPLADO
             subprocess.Popen(
                 chrome_args,
-                creationflags=0x00000008 | 0x00000200 | 0x08000000,
+                creationflags=0x00000008 | 0x00000200, 
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-                stdin=subprocess.DEVNULL
+                stdin=subprocess.DEVNULL,
+                shell=False
             )
-            
-            # Matamos el logger para Electron
-            import logging
+
+            # 4. SALIDA LIMPIA PARA ELECTRON (Evita JSON Parse Error)
             logging.disable(logging.CRITICAL)
+            sys.stdout = sys.__stdout__
             
-            print(json.dumps({"status": "success", "data": {"profile_id": full_id}}))
-            os._exit(0) # Muerte atómica de Python
-        except Exception as e:
+            # Electron espera esto para avanzar
+            print(json.dumps({
+                "status": "success",
+                "data": {"profile_id": full_id, "url": target_url}
+            }))
+            sys.stdout.flush()
+            
+            # MATAMOS PYTHON PARA LIBERAR STDOUT
+            time.sleep(0.2)
+            os._exit(0) 
+        except:
             os._exit(1)
 
     def _launch_system_chrome(self, profile: Dict, url: Optional[str]) -> Dict[str, Any]:
-        """ESTRATEGIA CHROME SYSTEM: Compatible, limitado por Google Stable."""
+        """ESTRATEGIA CHROME SYSTEM: Lanzamiento de instancia única garantizado."""        
         full_id = profile['id']
         profile_path = Path(self.paths.profiles_dir) / full_id
         target_url = url if url else self.get_discovery_url(full_id)
@@ -284,18 +287,77 @@ class ProfileManager:
         u_data = os.path.abspath(profile_path)
         e_path = os.path.abspath(profile_path / "extension")
 
+        # AGREGAR ESTO:
+        lock_file = os.path.join(u_data, "SingletonLock")
+        if os.path.exists(lock_file):
+            try: 
+                os.remove(lock_file)
+                logger.debug(f"🗑️  Lock removido: {full_id}")
+            except: 
+                pass
+
         chrome_args = [
-            self.launcher.chrome_path, # Resolverá a Program Files
+            str(self.launcher.chrome_path),
             f"--user-data-dir={u_data}",
-            #f"--load-extension={e_path}",
+            f"--load-extension={e_path}",
             f"--app={target_url}",
-            "--enable-automation",      # Única forma de que Stable cargue la ext
-            "--test-type",
             "--no-first-run",
-            "--remote-debugging-port=0" # Puerto dinámico para evitar delegación
+            "--no-default-browser-check",
+            # QUITAR: "--no-instance-limit",  ← COMENTÁ O BORRÁ ESTA LÍNEA
+            f"--remote-debugging-port=0",
+            "--disable-features=RendererCodeIntegrity",
+            "--test-type"
         ]
 
         return self._execute_popen(chrome_args, full_id)
+
+
+    def _execute_popen(self, args: list, profile_id: str) -> Dict[str, Any]:
+        """
+        Ejecuta el proceso de Chrome y retorna info de control.
+        
+        IMPORTANTE: Este método NO debe hacer retry automático.
+        Si Chromium falla al arrancar, debe retornar error al caller.
+        """
+        try:
+            # CRÍTICO: shell=False para evitar escape de argumentos
+            process = subprocess.Popen(
+                args,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                shell=False,
+                # En Windows, evitar ventana de consola
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+            )
+            
+            # Esperar 2 segundos para verificar que no crasheó inmediatamente
+            import time
+            time.sleep(2)
+            
+            if process.poll() is not None:
+                # El proceso ya terminó = error de lanzamiento
+                stderr = process.stderr.read().decode('utf-8', errors='ignore')
+                return {
+                    "status": "error",
+                    "error": f"Chrome crashed on startup: {stderr[:200]}"
+                }
+            
+            print(f"✅ Chrome launched successfully (PID: {process.pid})")
+            
+            return {
+                "status": "success",
+                "data": {
+                    "profile_id": profile_id,
+                    "pid": process.pid,
+                    "url": args[-1].split('=')[-1]  # Extrae la URL del --app=
+                }
+            }
+            
+        except Exception as e:
+            return {
+                "status": "error",
+                "error": f"Failed to launch Chrome: {str(e)}"
+            }
 
     def _execute_popen(self, args: list, profile_id: str) -> Dict[str, Any]:
         """Maneja el Popen y silencia los logs para Electron."""

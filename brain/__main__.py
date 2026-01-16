@@ -7,6 +7,7 @@ import io
 import os
 import multiprocessing
 from pathlib import Path
+from brain.core.profile.profile_manager import ProfileManager
 
 # ============================================================================
 # FIX CRÍTICO 0: NULL WRITER ROBUSTO (Para Servicios)
@@ -147,6 +148,10 @@ def main():
     """Main entry point with auto-discovery."""
     import time
     start_time = time.time()
+
+    # Limpiar locks
+    pm = ProfileManager()
+    pm.launcher.cleanup_profile_locks(pm.paths.profiles_dir)
     
     # CRÍTICO para Windows + PyInstaller
     multiprocessing.freeze_support()

@@ -5,7 +5,8 @@ const os = require('os');
 const { exec } = require('child_process');
 const { paths } = require('../config/paths');
 
-async function createLauncherShortcuts() {
+async function createLauncherShortcuts(options = {}) {
+  const { chromiumPath, profileId } = options;
   try {
     console.log('🚀 Creating Bloom Launcher with complete dependencies...');
 
