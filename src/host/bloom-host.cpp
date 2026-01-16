@@ -76,10 +76,12 @@ std::condition_variable g_identity_cv;
 std::queue<std::string> g_pending_messages;
 std::mutex g_pending_mutex;
 
-class ForensicLogger {
+class SynapseLogManager {
 private:
-    std::ofstream log_file;
-    std::mutex log_mutex;
+    std::ofstream native_log;
+    std::ofstream browser_log;
+    std::mutex native_mutex;
+    std::mutex browser_mutex;
     
     std::string get_timestamp_ms() {
         auto now = std::chrono::system_clock::now();
@@ -93,18 +95,7 @@ private:
         return ss.str();
     }
     
-    std::string bytes_to_hex(const void* data, size_t len) {
-        std::stringstream ss;
-        const uint8_t* bytes = static_cast<const uint8_t*>(data);
-        for (size_t i = 0; i < std::min(len, size_t(64)); i++) {
-            ss << std::hex << std::setw(2) << std::setfill('0') << (int)bytes[i] << " ";
-        }
-        if (len > 64) ss << "... (+" << (len - 64) << " bytes)";
-        return ss.str();
-    }
-
-public:
-    ForensicLogger() {
+    std::string get_log_directory() {
 #ifdef _WIN32
         char path[MAX_PATH];
         if (SHGetFolderPathA(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, path) >= 0) {
@@ -112,73 +103,66 @@ public:
             _mkdir(base.c_str());
             std::string logs = base + "\\logs";
             _mkdir(logs.c_str());
-            log_file.open(logs + "\\host_forensic.log", std::ios::app);
+            return logs;
         }
+        return "";
 #else
         std::string base = "/tmp/bloom-nucleus";
         mkdir(base.c_str(), 0755);
         std::string logs = base + "/logs";
         mkdir(logs.c_str(), 0755);
-        log_file.open(logs + "/host_forensic.log", std::ios::app);
+        return logs;
 #endif
-        if (log_file.is_open()) {
-            log_file << "\n========== NEW SESSION " << get_timestamp_ms() 
-                     << " PID:" << get_pid_internal() << " ==========\n";
-            log_file.flush();
-        }
     }
 
-    void log_raw(const std::string& level, const std::string& context, 
-                 const std::string& msg, const void* raw_data = nullptr, size_t raw_len = 0) {
-        std::lock_guard<std::mutex> lock(log_mutex);
-        if (!log_file.is_open()) return;
-        
-        log_file << "[" << get_timestamp_ms() << "] [" << level << "] [" << context << "] " 
-                 << msg;
-        
-        if (raw_data && raw_len > 0) {
-            log_file << " | RAW_BYTES: " << bytes_to_hex(raw_data, raw_len);
+public:
+    SynapseLogManager() {
+        std::string log_dir = get_log_directory();
+        if (!log_dir.empty()) {
+#ifdef _WIN32
+            native_log.open(log_dir + "\\synapse_native.log", std::ios::app);
+            browser_log.open(log_dir + "\\synapse_browser.log", std::ios::app);
+#else
+            native_log.open(log_dir + "/synapse_native.log", std::ios::app);
+            browser_log.open(log_dir + "/synapse_browser.log", std::ios::app);
+#endif
+            
+            if (native_log.is_open()) {
+                native_log << "\n========== NATIVE SESSION " << get_timestamp_ms() 
+                          << " PID:" << get_pid_internal() << " ==========\n";
+                native_log.flush();
+            }
+            
+            if (browser_log.is_open()) {
+                browser_log << "\n========== BROWSER SESSION " << get_timestamp_ms() 
+                           << " PID:" << get_pid_internal() << " ==========\n";
+                browser_log.flush();
+            }
         }
+    }
+    
+    void log_native(const std::string& level, const std::string& message) {
+        std::lock_guard<std::mutex> lock(native_mutex);
+        if (!native_log.is_open()) return;
         
-        log_file << std::endl;
-        log_file.flush();
+        native_log << "[" << get_timestamp_ms() << "] [" << level << "] [NATIVE] " 
+                   << message << std::endl;
+        native_log.flush();
     }
     
-    void stdin_read(uint32_t length_prefix, const std::string& payload) {
-        log_raw("STDIN", "PIPE_READ", 
-                "Length=" + std::to_string(length_prefix) + " Payload=" + payload,
-                &length_prefix, 4);
-    }
-    
-    void stdout_write(const std::string& payload) {
-        uint32_t len = static_cast<uint32_t>(payload.size());
-        log_raw("STDOUT", "PIPE_WRITE", 
-                "Length=" + std::to_string(len) + " Payload=" + payload,
-                &len, 4);
-    }
-    
-    void tcp_send(const std::string& payload) {
-        log_raw("TCP_OUT", "SERVICE_SEND", payload);
-    }
-    
-    void tcp_recv(const std::string& payload) {
-        log_raw("TCP_IN", "SERVICE_RECV", payload);
-    }
-    
-    void state_change(const std::string& event, const std::string& details) {
-        log_raw("STATE", event, details);
-    }
-    
-    void identity_event(const std::string& event, const std::string& profile_id) {
-        log_raw("IDENTITY", event, "ProfileID=" + profile_id);
-    }
-    
-    void queue_event(const std::string& event, size_t queue_size) {
-        log_raw("QUEUE", event, "Size=" + std::to_string(queue_size));
+    void log_browser(const std::string& level, const std::string& message, 
+                     const std::string& timestamp = "") {
+        std::lock_guard<std::mutex> lock(browser_mutex);
+        if (!browser_log.is_open()) return;
+        
+        std::string ts = timestamp.empty() ? get_timestamp_ms() : timestamp;
+        browser_log << "[" << ts << "] [" << level << "] [BROWSER] " 
+                    << message << std::endl;
+        browser_log.flush();
     }
 };
 
-ForensicLogger g_logger;
+SynapseLogManager g_logger;
 
 class ChunkedMessageBuffer {
 private:
@@ -237,8 +221,8 @@ public:
             ipm.expected_size = chunk.value("total_size_bytes", 0);
             ipm.buffer.reserve(ipm.expected_size);
             active_buffers[msg_id] = std::move(ipm);
-            g_logger.state_change("CHUNK_HEADER", "MsgID=" + msg_id + 
-                                  " Chunks=" + std::to_string(ipm.total_chunks));
+            g_logger.log_native("DEBUG", "CHUNK_HEADER MsgID=" + msg_id + 
+                               " Chunks=" + std::to_string(ipm.total_chunks));
             return INCOMPLETE;
         }
         
@@ -255,12 +239,12 @@ public:
         if (type == "footer") {
             std::string computed = calculate_sha256(it->second.buffer);
             if (computed != chunk.value("checksum_verify", "")) {
-                g_logger.state_change("CHUNK_CHECKSUM_FAIL", "MsgID=" + msg_id);
+                g_logger.log_native("ERROR", "CHUNK_CHECKSUM_FAIL MsgID=" + msg_id);
                 return COMPLETE_INVALID_CHECKSUM;
             }
             out_complete_msg = std::string(it->second.buffer.begin(), it->second.buffer.end());
             active_buffers.erase(it);
-            g_logger.state_change("CHUNK_COMPLETE", "MsgID=" + msg_id);
+            g_logger.log_native("DEBUG", "CHUNK_COMPLETE MsgID=" + msg_id);
             return COMPLETE_VALID;
         }
         
@@ -291,7 +275,7 @@ bool try_extract_profile_id(const json& msg) {
                     if (!identity_resolved.load()) {
                         g_profile_id = candidate;
                         identity_resolved.store(true);
-                        g_logger.identity_event("LATE_BINDING_SUCCESS", candidate);
+                        g_logger.log_native("INFO", "LATE_BINDING_SUCCESS ProfileID=" + candidate);
                         g_identity_cv.notify_all();
                         return true;
                     }
@@ -306,8 +290,6 @@ void write_message_to_chrome(const std::string& s) {
     std::lock_guard<std::mutex> lock(stdout_mutex);
     uint32_t len = static_cast<uint32_t>(s.size());
     
-    g_logger.stdout_write(s);
-    
     std::cout.write(reinterpret_cast<const char*>(&len), 4);
     std::cout.write(s.c_str(), len);
     std::cout.flush();
@@ -319,8 +301,6 @@ void write_to_service(const std::string& s) {
         uint32_t len = static_cast<uint32_t>(s.size());
         uint32_t net_len = htonl(len);
         
-        g_logger.tcp_send(s);
-        
         send(sock, (const char*)&net_len, 4, 0);
         send(sock, s.c_str(), len, 0);
     }
@@ -329,7 +309,8 @@ void write_to_service(const std::string& s) {
 void flush_pending_messages() {
     std::lock_guard<std::mutex> lock(g_pending_mutex);
     
-    g_logger.queue_event("FLUSH_START", g_pending_messages.size());
+    size_t count = g_pending_messages.size();
+    g_logger.log_native("INFO", "FLUSH_START Count=" + std::to_string(count));
     
     while (!g_pending_messages.empty()) {
         std::string msg = g_pending_messages.front();
@@ -337,7 +318,7 @@ void flush_pending_messages() {
         write_to_service(msg);
     }
     
-    g_logger.queue_event("FLUSH_COMPLETE", 0);
+    g_logger.log_native("INFO", "FLUSH_COMPLETE");
 }
 
 void handle_chrome_message(const std::string& msg_str) {
@@ -354,6 +335,15 @@ void handle_chrome_message(const std::string& msg_str) {
         }
         
         try_extract_profile_id(msg);
+        
+        if (msg.value("type", "") == "LOG") {
+            std::string level = msg.value("level", "INFO");
+            std::string message = msg.value("message", "");
+            std::string timestamp = msg.value("timestamp", "");
+            
+            g_logger.log_browser(level, message, timestamp);
+            return;
+        }
         
         if (msg.value("type", "") == "SYSTEM_HELLO") {
             std::string final_id;
@@ -383,34 +373,33 @@ void handle_chrome_message(const std::string& msg_str) {
             std::lock_guard<std::mutex> lock(g_pending_mutex);
             if (g_pending_messages.size() < MAX_QUEUED_MESSAGES) {
                 g_pending_messages.push(msg_str);
-                g_logger.queue_event("ENQUEUE", g_pending_messages.size());
             } else {
-                g_logger.state_change("QUEUE_OVERFLOW", "Message dropped");
+                g_logger.log_native("ERROR", "QUEUE_OVERFLOW Message dropped");
             }
         }
         
     } catch (const std::exception& e) {
-        g_logger.state_change("JSON_PARSE_ERROR", e.what());
+        g_logger.log_native("ERROR", "JSON_PARSE_ERROR: " + std::string(e.what()));
     }
 }
 
 void tcp_client_loop() {
     std::unique_lock<std::mutex> id_lock(g_profile_id_mutex);
-    g_logger.state_change("TCP_THREAD_START", "Waiting for identity...");
+    g_logger.log_native("INFO", "TCP_THREAD_START Waiting for identity");
     
     g_identity_cv.wait(id_lock, []{ 
         return identity_resolved.load() || shutdown_requested.load(); 
     });
     
     if (shutdown_requested.load()) {
-        g_logger.state_change("TCP_THREAD_ABORT", "Shutdown before identity");
+        g_logger.log_native("WARN", "TCP_THREAD_ABORT Shutdown before identity");
         return;
     }
     
     std::string worker_id = g_profile_id;
     id_lock.unlock();
     
-    g_logger.identity_event("TCP_IDENTITY_ACQUIRED", worker_id);
+    g_logger.log_native("INFO", "TCP_IDENTITY_ACQUIRED ProfileID=" + worker_id);
     
     while (!shutdown_requested.load()) {
         socket_t sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -424,12 +413,12 @@ void tcp_client_loop() {
         addr.sin_port = htons(SERVICE_PORT);
         addr.sin_addr.s_addr = inet_addr("127.0.0.1");
 
-        g_logger.state_change("TCP_CONNECTING", "Port=" + std::to_string(SERVICE_PORT));
+        g_logger.log_native("INFO", "TCP_CONNECTING Port=" + std::to_string(SERVICE_PORT));
 
         if (connect(sock, (sockaddr*)&addr, sizeof(addr)) < 0) {
             close_socket(sock);
-            g_logger.state_change("TCP_CONNECT_FAILED", "Retry in " + 
-                                  std::to_string(RECONNECT_DELAY_MS) + "ms");
+            g_logger.log_native("WARN", "TCP_CONNECT_FAILED Retry in " + 
+                               std::to_string(RECONNECT_DELAY_MS) + "ms");
             std::this_thread::sleep_for(std::chrono::milliseconds(RECONNECT_DELAY_MS));
             continue;
         }
@@ -444,7 +433,7 @@ void tcp_client_loop() {
         setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 #endif
         
-        g_logger.state_change("TCP_CONNECTED", "Socket=" + std::to_string(sock));
+        g_logger.log_native("INFO", "TCP_CONNECTED Socket=" + std::to_string(sock));
         service_socket.store(sock);
 
         json reg = {
@@ -455,7 +444,7 @@ void tcp_client_loop() {
             {"build", BUILD}
         };
         
-        g_logger.state_change("TCP_REGISTERING", "ProfileID=" + worker_id);
+        g_logger.log_native("INFO", "TCP_REGISTERING ProfileID=" + worker_id);
         write_to_service(reg.dump());
 
         flush_pending_messages();
@@ -466,7 +455,7 @@ void tcp_client_loop() {
             
             if (received <= 0) {
                 if (shutdown_requested.load()) {
-                    g_logger.state_change("TCP_GRACEFUL_SHUTDOWN", "Requested by main thread");
+                    g_logger.log_native("INFO", "TCP_GRACEFUL_SHUTDOWN Requested by main thread");
                     break;
                 }
 #ifdef _WIN32
@@ -474,13 +463,13 @@ void tcp_client_loop() {
 #else
                 if (errno == EAGAIN || errno == EWOULDBLOCK) continue;
 #endif
-                g_logger.state_change("TCP_RECV_FAILED", "Error=" + std::to_string(received));
+                g_logger.log_native("ERROR", "TCP_RECV_FAILED Error=" + std::to_string(received));
                 break;
             }
             
             uint32_t len = ntohl(net_len);
             if (len == 0 || len > MAX_MESSAGE_SIZE) {
-                g_logger.state_change("TCP_INVALID_LENGTH", "Length=" + std::to_string(len));
+                g_logger.log_native("ERROR", "TCP_INVALID_LENGTH Length=" + std::to_string(len));
                 break;
             }
             
@@ -494,14 +483,13 @@ void tcp_client_loop() {
             
             if (rec == (int)len) {
                 std::string b_msg(buf.begin(), buf.end());
-                g_logger.tcp_recv(b_msg);
                 write_message_to_chrome(b_msg);
             }
         }
         
         service_socket.store(INVALID_SOCK);
         close_socket(sock);
-        g_logger.state_change("TCP_DISCONNECTED", "Reconnecting...");
+        g_logger.log_native("WARN", "TCP_DISCONNECTED Reconnecting");
     }
 }
 
@@ -513,46 +501,45 @@ int main(int argc, char* argv[]) {
     _setmode(_fileno(stdout), _O_BINARY);
 #endif
 
-    g_logger.state_change("STARTUP", "Awaiting profile_id from extension");
+    g_logger.log_native("INFO", "STARTUP Awaiting profile_id from extension");
 
     std::thread tcp_thread(tcp_client_loop);
 
-    g_logger.state_change("STDIN_LOOP_START", "Reading Native Messaging pipe");
+    g_logger.log_native("INFO", "STDIN_LOOP_START Reading Native Messaging pipe");
     
     while (!shutdown_requested.load()) {
         uint32_t len = 0;
         
         if (!std::cin.read(reinterpret_cast<char*>(&len), 4)) {
-            g_logger.state_change("STDIN_EOF", "Pipe closed by Chrome");
+            g_logger.log_native("INFO", "STDIN_EOF Pipe closed by Chrome");
             break;
         }
         
         if (len == 0 || len > MAX_MESSAGE_SIZE) {
-            g_logger.state_change("STDIN_INVALID_LENGTH", "Length=" + std::to_string(len));
+            g_logger.log_native("ERROR", "STDIN_INVALID_LENGTH Length=" + std::to_string(len));
             continue;
         }
         
         std::vector<char> buf(len);
         if (!std::cin.read(buf.data(), len)) {
-            g_logger.state_change("STDIN_READ_INCOMPLETE", "Expected=" + 
-                                  std::to_string(len));
+            g_logger.log_native("ERROR", "STDIN_READ_INCOMPLETE Expected=" + 
+                               std::to_string(len));
             break;
         }
         
         std::string msg_str(buf.begin(), buf.end());
-        g_logger.stdin_read(len, msg_str);
         handle_chrome_message(msg_str);
     }
 
     shutdown_requested.store(true);
     g_identity_cv.notify_all();
-    g_logger.state_change("SHUTDOWN", "Closing threads");
+    g_logger.log_native("INFO", "SHUTDOWN Closing threads");
     
     socket_t sock = service_socket.load();
     if (sock != INVALID_SOCK) {
         service_socket.store(INVALID_SOCK);
         close_socket(sock);
-        g_logger.state_change("SHUTDOWN", "Socket closed forcefully");
+        g_logger.log_native("INFO", "SHUTDOWN Socket closed forcefully");
     }
     
     if (tcp_thread.joinable()) tcp_thread.join();
@@ -561,6 +548,6 @@ int main(int argc, char* argv[]) {
     WSACleanup();
 #endif
 
-    g_logger.state_change("EXIT", "Process terminated");
+    g_logger.log_native("INFO", "EXIT Process terminated");
     return 0;
 }
