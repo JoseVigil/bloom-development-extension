@@ -73,13 +73,9 @@ std::string g_profile_id = "";
 std::mutex g_profile_id_mutex;
 std::condition_variable g_identity_cv;
 
-// Cola de mensajes pre-registro
 std::queue<std::string> g_pending_messages;
 std::mutex g_pending_mutex;
 
-// ============================================================================
-// FORENSIC LOGGER (Escritura Síncrona con Flush Forzado)
-// ============================================================================
 class ForensicLogger {
 private:
     std::ofstream log_file;
@@ -145,10 +141,7 @@ public:
         }
         
         log_file << std::endl;
-        log_file.flush(); // CRÍTICO: Escritura física inmediata
-        
-        // El flush() ya fuerza escritura al buffer del OS
-        // fsync() requeriría FILE* en lugar de ofstream
+        log_file.flush();
     }
     
     void stdin_read(uint32_t length_prefix, const std::string& payload) {
@@ -187,9 +180,6 @@ public:
 
 ForensicLogger g_logger;
 
-// ============================================================================
-// CHUNKED MESSAGE BUFFER
-// ============================================================================
 class ChunkedMessageBuffer {
 private:
     struct InProgressMessage {
@@ -280,9 +270,6 @@ public:
 
 ChunkedMessageBuffer g_chunked_buffer;
 
-// ============================================================================
-// IDENTITY EXTRACTION (Late Binding Core)
-// ============================================================================
 bool try_extract_profile_id(const json& msg) {
     std::vector<std::string> paths = {
         "/profile_id",
@@ -296,13 +283,12 @@ bool try_extract_profile_id(const json& msg) {
             auto ptr = msg.at(json::json_pointer(path));
             if (ptr.is_string()) {
                 std::string candidate = ptr.get<std::string>();
-                // Validar formato UUID (8-4-4-4-12)
                 if (candidate.length() == 36 && 
                     candidate[8] == '-' && candidate[13] == '-' &&
                     candidate[18] == '-' && candidate[23] == '-') {
                     
                     std::lock_guard<std::mutex> lock(g_profile_id_mutex);
-                    if (g_profile_id.empty() || g_profile_id == "unknown_worker") {
+                    if (!identity_resolved.load()) {
                         g_profile_id = candidate;
                         identity_resolved.store(true);
                         g_logger.identity_event("LATE_BINDING_SUCCESS", candidate);
@@ -316,9 +302,6 @@ bool try_extract_profile_id(const json& msg) {
     return false;
 }
 
-// ============================================================================
-// CHROME COMMUNICATION
-// ============================================================================
 void write_message_to_chrome(const std::string& s) {
     std::lock_guard<std::mutex> lock(stdout_mutex);
     uint32_t len = static_cast<uint32_t>(s.size());
@@ -330,9 +313,6 @@ void write_message_to_chrome(const std::string& s) {
     std::cout.flush();
 }
 
-// ============================================================================
-// TCP SERVICE COMMUNICATION
-// ============================================================================
 void write_to_service(const std::string& s) {
     socket_t sock = service_socket.load();
     if (sock != INVALID_SOCK) {
@@ -360,37 +340,27 @@ void flush_pending_messages() {
     g_logger.queue_event("FLUSH_COMPLETE", 0);
 }
 
-// ============================================================================
-// CHROME MESSAGE HANDLER
-// ============================================================================
 void handle_chrome_message(const std::string& msg_str) {
     try {
         auto msg = json::parse(msg_str);
         
-        // Procesar chunks
         if (msg.contains("bloom_chunk")) {
             std::string assembled;
             auto res = g_chunked_buffer.process_chunk(msg, assembled);
             if (res == ChunkedMessageBuffer::COMPLETE_VALID) {
-                handle_chrome_message(assembled); // Recursivo
+                handle_chrome_message(assembled);
             }
             return;
         }
         
-        // CRÍTICO: Intentar extraer identidad de CUALQUIER mensaje
         try_extract_profile_id(msg);
         
-        // Manejo especial de SYSTEM_HELLO
         if (msg.value("type", "") == "SYSTEM_HELLO") {
-            // Esperar a tener identidad (timeout 5s)
-            std::unique_lock<std::mutex> lock(g_profile_id_mutex);
-            if (!identity_resolved.load()) {
-                g_logger.state_change("WAITING_IDENTITY", "Timeout=5000ms");
-                g_identity_cv.wait_for(lock, std::chrono::milliseconds(5000), 
-                                       []{ return identity_resolved.load(); });
+            std::string final_id;
+            {
+                std::lock_guard<std::mutex> lock(g_profile_id_mutex);
+                final_id = identity_resolved.load() ? g_profile_id : "unknown_worker";
             }
-            
-            std::string final_id = g_profile_id.empty() ? "unknown_worker" : g_profile_id;
             
             json ready = {
                 {"type", "SYSTEM_ACK"},
@@ -404,19 +374,9 @@ void handle_chrome_message(const std::string& msg_str) {
             };
             
             write_message_to_chrome(ready.dump());
-            
-            // Enviar al servicio si está conectado
-            if (service_socket.load() != INVALID_SOCK) {
-                write_to_service(msg_str);
-            } else {
-                std::lock_guard<std::mutex> qlock(g_pending_mutex);
-                g_pending_messages.push(msg_str);
-                g_logger.queue_event("ENQUEUE", g_pending_messages.size());
-            }
             return;
         }
         
-        // Mensajes normales: enviar o encolar
         if (service_socket.load() != INVALID_SOCK && identity_resolved.load()) {
             write_to_service(msg_str);
         } else {
@@ -434,10 +394,24 @@ void handle_chrome_message(const std::string& msg_str) {
     }
 }
 
-// ============================================================================
-// TCP CLIENT LOOP (Con Registro Tardío)
-// ============================================================================
 void tcp_client_loop() {
+    std::unique_lock<std::mutex> id_lock(g_profile_id_mutex);
+    g_logger.state_change("TCP_THREAD_START", "Waiting for identity...");
+    
+    g_identity_cv.wait(id_lock, []{ 
+        return identity_resolved.load() || shutdown_requested.load(); 
+    });
+    
+    if (shutdown_requested.load()) {
+        g_logger.state_change("TCP_THREAD_ABORT", "Shutdown before identity");
+        return;
+    }
+    
+    std::string worker_id = g_profile_id;
+    id_lock.unlock();
+    
+    g_logger.identity_event("TCP_IDENTITY_ACQUIRED", worker_id);
+    
     while (!shutdown_requested.load()) {
         socket_t sock = socket(AF_INET, SOCK_STREAM, 0);
         if (sock == INVALID_SOCK) {
@@ -460,9 +434,8 @@ void tcp_client_loop() {
             continue;
         }
 
-        // Configurar timeout de socket para permitir shutdown graceful
 #ifdef _WIN32
-        DWORD timeout = 1000; // 1 segundo
+        DWORD timeout = 1000;
         setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout));
 #else
         struct timeval tv;
@@ -474,39 +447,23 @@ void tcp_client_loop() {
         g_logger.state_change("TCP_CONNECTED", "Socket=" + std::to_string(sock));
         service_socket.store(sock);
 
-        // ESPERAR IDENTIDAD antes de registrar (timeout 10s)
-        {
-            std::unique_lock<std::mutex> lock(g_profile_id_mutex);
-            if (!identity_resolved.load()) {
-                g_logger.state_change("WAITING_IDENTITY_FOR_REGISTER", "Timeout=10000ms");
-                g_identity_cv.wait_for(lock, std::chrono::milliseconds(10000), 
-                                       []{ return identity_resolved.load(); });
-            }
-        }
-
-        std::string final_id = g_profile_id;
-        if (final_id.empty()) final_id = "unknown_worker";
-
         json reg = {
             {"type", "REGISTER_HOST"},
             {"pid", (int)get_pid_internal()},
-            {"profile_id", final_id},
+            {"profile_id", worker_id},
             {"version", VERSION},
             {"build", BUILD}
         };
         
-        g_logger.state_change("TCP_REGISTERING", "ProfileID=" + final_id);
+        g_logger.state_change("TCP_REGISTERING", "ProfileID=" + worker_id);
         write_to_service(reg.dump());
 
-        // Vaciar cola de mensajes pendientes
         flush_pending_messages();
 
-        // Loop de recepción con checks de shutdown
         while (!shutdown_requested.load()) {
             uint32_t net_len;
             int received = recv(sock, (char*)&net_len, 4, 0);
             
-            // Timeout o error
             if (received <= 0) {
                 if (shutdown_requested.load()) {
                     g_logger.state_change("TCP_GRACEFUL_SHUTDOWN", "Requested by main thread");
@@ -548,9 +505,6 @@ void tcp_client_loop() {
     }
 }
 
-// ============================================================================
-// MAIN
-// ============================================================================
 int main(int argc, char* argv[]) {
 #ifdef _WIN32
     WSADATA wsa;
@@ -559,41 +513,10 @@ int main(int argc, char* argv[]) {
     _setmode(_fileno(stdout), _O_BINARY);
 #endif
 
-    // 1. Intentar captura temprana
-    std::string full_cmd = "";
-#ifdef _WIN32
-    full_cmd = GetCommandLineA();
-#else
-    for (int i = 0; i < argc; i++) full_cmd += std::string(argv[i]) + " ";
-#endif
+    g_logger.state_change("STARTUP", "Awaiting profile_id from extension");
 
-    g_logger.state_change("STARTUP", "CMD=" + full_cmd);
-
-    // 2. Búsqueda de UUID en línea de comandos
-    bool found = false;
-    if (full_cmd.length() >= 36) {
-        for (size_t i = 0; i <= full_cmd.length() - 36; i++) {
-            if (full_cmd[i+8] == '-' && full_cmd[i+13] == '-' &&
-                full_cmd[i+18] == '-' && full_cmd[i+23] == '-') {
-                g_profile_id = full_cmd.substr(i, 36);
-                found = true;
-                identity_resolved.store(true); // <--- Marcamos como resuelto
-                g_logger.identity_event("CMDLINE_EXTRACTION", g_profile_id);
-                break;
-            }
-        }
-    }
-
-    if (!found) {
-        g_profile_id = "unknown_worker";
-        identity_resolved.store(false); // <--- IMPORTANTE: Falso para que el hilo TCP espere
-        g_logger.identity_event("CMDLINE_FAILED", "Waiting for Late Binding via JSON");
-    }
-
-    // 3. Iniciar thread TCP (El hilo debe tener un 'wait' en g_identity_cv al inicio de su loop)
     std::thread tcp_thread(tcp_client_loop);
 
-    // 4. Loop principal (stdin)
     g_logger.state_change("STDIN_LOOP_START", "Reading Native Messaging pipe");
     
     while (!shutdown_requested.load()) {
@@ -611,39 +534,18 @@ int main(int argc, char* argv[]) {
         
         std::vector<char> buf(len);
         if (!std::cin.read(buf.data(), len)) {
-            g_logger.state_change("STDIN_READ_INCOMPLETE", "Expected=" + std::to_string(len));
+            g_logger.state_change("STDIN_READ_INCOMPLETE", "Expected=" + 
+                                  std::to_string(len));
             break;
         }
         
         std::string msg_str(buf.begin(), buf.end());
-        
-        // --- LÓGICA DE VINCULACIÓN TARDÍA ---
-        // Si aún no tenemos ID, lo buscamos en el JSON que acaba de llegar
-        if (!identity_resolved.load()) {
-            // Buscamos el patrón "profile_id":"UUID" en el mensaje crudo
-            size_t id_pos = msg_str.find("\"profile_id\":\"");
-            if (id_pos != std::string::npos) {
-                std::string potential_id = msg_str.substr(id_pos + 14, 36);
-                if (potential_id.find("-") != std::string::npos) {
-                    g_profile_id = potential_id;
-                    identity_resolved.store(true);
-                    g_logger.identity_event("LATE_BINDING_SUCCESS", g_profile_id);
-                    
-                    // DESPERTAR AL HILO TCP: Ya sabemos quiénes somos
-                    g_identity_cv.notify_all(); 
-                }
-            }
-        }
-        // ------------------------------------
-
         g_logger.stdin_read(len, msg_str);
         handle_chrome_message(msg_str);
     }
 
-    // 5. Shutdown ordenado
     shutdown_requested.store(true);
-    g_identity_cv.notify_all(); // Despertar threads por si seguían esperando identidad
-    
+    g_identity_cv.notify_all();
     g_logger.state_change("SHUTDOWN", "Closing threads");
     
     socket_t sock = service_socket.load();
@@ -661,4 +563,4 @@ int main(int argc, char* argv[]) {
 
     g_logger.state_change("EXIT", "Process terminated");
     return 0;
-} 
+}
