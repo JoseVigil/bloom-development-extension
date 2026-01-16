@@ -661,4 +661,4 @@ int main(int argc, char* argv[]) {
 
     g_logger.state_change("EXIT", "Process terminated");
     return 0;
-}
+} 
