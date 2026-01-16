@@ -460,6 +460,17 @@ void tcp_client_loop() {
             continue;
         }
 
+        // Configurar timeout de socket para permitir shutdown graceful
+#ifdef _WIN32
+        DWORD timeout = 1000; // 1 segundo
+        setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout));
+#else
+        struct timeval tv;
+        tv.tv_sec = 1;
+        tv.tv_usec = 0;
+        setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+#endif
+        
         g_logger.state_change("TCP_CONNECTED", "Socket=" + std::to_string(sock));
         service_socket.store(sock);
 
@@ -490,11 +501,22 @@ void tcp_client_loop() {
         // Vaciar cola de mensajes pendientes
         flush_pending_messages();
 
-        // Loop de recepción
+        // Loop de recepción con checks de shutdown
         while (!shutdown_requested.load()) {
             uint32_t net_len;
             int received = recv(sock, (char*)&net_len, 4, 0);
+            
+            // Timeout o error
             if (received <= 0) {
+                if (shutdown_requested.load()) {
+                    g_logger.state_change("TCP_GRACEFUL_SHUTDOWN", "Requested by main thread");
+                    break;
+                }
+#ifdef _WIN32
+                if (WSAGetLastError() == WSAETIMEDOUT) continue;
+#else
+                if (errno == EAGAIN || errno == EWOULDBLOCK) continue;
+#endif
                 g_logger.state_change("TCP_RECV_FAILED", "Error=" + std::to_string(received));
                 break;
             }
@@ -599,7 +621,16 @@ int main(int argc, char* argv[]) {
     }
 
     shutdown_requested.store(true);
+    g_identity_cv.notify_all(); // Despertar threads bloqueados en wait
     g_logger.state_change("SHUTDOWN", "Closing threads");
+    
+    // Cerrar socket para forzar salida del recv()
+    socket_t sock = service_socket.load();
+    if (sock != INVALID_SOCK) {
+        service_socket.store(INVALID_SOCK);
+        close_socket(sock);
+        g_logger.state_change("SHUTDOWN", "Socket closed forcefully");
+    }
     
     if (tcp_thread.joinable()) tcp_thread.join();
 
