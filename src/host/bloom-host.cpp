@@ -559,7 +559,7 @@ int main(int argc, char* argv[]) {
     _setmode(_fileno(stdout), _O_BINARY);
 #endif
 
-    // Intentar captura temprana (probablemente falle en Portable)
+    // 1. Intentar captura temprana
     std::string full_cmd = "";
 #ifdef _WIN32
     full_cmd = GetCommandLineA();
@@ -569,7 +569,7 @@ int main(int argc, char* argv[]) {
 
     g_logger.state_change("STARTUP", "CMD=" + full_cmd);
 
-    // Búsqueda de UUID en línea de comandos (fallback)
+    // 2. Búsqueda de UUID en línea de comandos
     bool found = false;
     if (full_cmd.length() >= 36) {
         for (size_t i = 0; i <= full_cmd.length() - 36; i++) {
@@ -577,7 +577,7 @@ int main(int argc, char* argv[]) {
                 full_cmd[i+18] == '-' && full_cmd[i+23] == '-') {
                 g_profile_id = full_cmd.substr(i, 36);
                 found = true;
-                identity_resolved.store(true);
+                identity_resolved.store(true); // <--- Marcamos como resuelto
                 g_logger.identity_event("CMDLINE_EXTRACTION", g_profile_id);
                 break;
             }
@@ -586,13 +586,14 @@ int main(int argc, char* argv[]) {
 
     if (!found) {
         g_profile_id = "unknown_worker";
-        g_logger.identity_event("CMDLINE_FAILED", "Waiting for Late Binding");
+        identity_resolved.store(false); // <--- IMPORTANTE: Falso para que el hilo TCP espere
+        g_logger.identity_event("CMDLINE_FAILED", "Waiting for Late Binding via JSON");
     }
 
-    // Iniciar thread TCP
+    // 3. Iniciar thread TCP (El hilo debe tener un 'wait' en g_identity_cv al inicio de su loop)
     std::thread tcp_thread(tcp_client_loop);
 
-    // Loop principal (stdin)
+    // 4. Loop principal (stdin)
     g_logger.state_change("STDIN_LOOP_START", "Reading Native Messaging pipe");
     
     while (!shutdown_requested.load()) {
@@ -610,21 +611,41 @@ int main(int argc, char* argv[]) {
         
         std::vector<char> buf(len);
         if (!std::cin.read(buf.data(), len)) {
-            g_logger.state_change("STDIN_READ_INCOMPLETE", "Expected=" + 
-                                  std::to_string(len));
+            g_logger.state_change("STDIN_READ_INCOMPLETE", "Expected=" + std::to_string(len));
             break;
         }
         
         std::string msg_str(buf.begin(), buf.end());
+        
+        // --- LÓGICA DE VINCULACIÓN TARDÍA ---
+        // Si aún no tenemos ID, lo buscamos en el JSON que acaba de llegar
+        if (!identity_resolved.load()) {
+            // Buscamos el patrón "profile_id":"UUID" en el mensaje crudo
+            size_t id_pos = msg_str.find("\"profile_id\":\"");
+            if (id_pos != std::string::npos) {
+                std::string potential_id = msg_str.substr(id_pos + 14, 36);
+                if (potential_id.find("-") != std::string::npos) {
+                    g_profile_id = potential_id;
+                    identity_resolved.store(true);
+                    g_logger.identity_event("LATE_BINDING_SUCCESS", g_profile_id);
+                    
+                    // DESPERTAR AL HILO TCP: Ya sabemos quiénes somos
+                    g_identity_cv.notify_all(); 
+                }
+            }
+        }
+        // ------------------------------------
+
         g_logger.stdin_read(len, msg_str);
         handle_chrome_message(msg_str);
     }
 
+    // 5. Shutdown ordenado
     shutdown_requested.store(true);
-    g_identity_cv.notify_all(); // Despertar threads bloqueados en wait
+    g_identity_cv.notify_all(); // Despertar threads por si seguían esperando identidad
+    
     g_logger.state_change("SHUTDOWN", "Closing threads");
     
-    // Cerrar socket para forzar salida del recv()
     socket_t sock = service_socket.load();
     if (sock != INVALID_SOCK) {
         service_socket.store(INVALID_SOCK);
