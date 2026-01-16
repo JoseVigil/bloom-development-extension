@@ -53,3 +53,22 @@ class ChromeResolver:
         for p in paths:
             if os.path.exists(p): return p
         return None
+
+    def cleanup_profile_locks(self, profiles_dir: Path):
+        """Limpia locks huérfanos al inicio del sistema."""
+        logger.info("🧹 Limpiando locks de perfiles...")
+        
+        cleaned = 0
+        for profile_dir in Path(profiles_dir).iterdir():
+            if profile_dir.is_dir():
+                lock = profile_dir / "SingletonLock"
+                if lock.exists():
+                    try:
+                        lock.unlink()
+                        cleaned += 1
+                        logger.debug(f"  ✓ {profile_dir.name}")
+                    except:
+                        pass
+        
+        if cleaned > 0:
+            logger.info(f"✅ {cleaned} locks eliminados")

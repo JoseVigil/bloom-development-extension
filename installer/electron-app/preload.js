@@ -134,7 +134,9 @@ if (process.env.NODE_ENV === 'development') {
     error: (...args) => console.error('[Renderer]', ...args),
     warn: (...args) => console.warn('[Renderer]', ...args),
     info: (...args) => console.info('[Renderer]', ...args),
+    checkBrainServiceStatus: () => ipcRenderer.invoke('check-brain-service-status'),
   });
+  
 }
 
 // ============================================================================

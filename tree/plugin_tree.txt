@@ -274,11 +274,15 @@ bloom-development-extension/
 │   │   ├── .DS_Store
 │   │   ├── bin/
 │   │   │   ├── .DS_Store
+│   │   │   ├── bin/
+│   │   │   ├── config/
+│   │   │   │   └── profiles.json
 │   │   │   ├── darwin/
 │   │   │   │   └── x64/
 │   │   │   │       └── bloom-host
 │   │   │   ├── linux/
 │   │   │   │   └── bloom-host
+│   │   │   ├── profiles/
 │   │   │   └── win32/
 │   │   │       ├── bloom-host.exe
 │   │   │       ├── brain/

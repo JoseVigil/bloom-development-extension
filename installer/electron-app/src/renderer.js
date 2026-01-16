@@ -126,14 +126,15 @@ class InstallationManager {
           ? `<p style="color: #4299e1;">• ${data.detail}</p>`
           : '';
       }
-    });
+    }); // ✅ Cierre del callback
 
     try {
       // 1. INSTALAR (el backend emite eventos)
       const result = await this.api.installService();
       
       if (!result.success) {
-        throw new Error(result.error);
+        const errorMsg = result.error?.message || result.error || 'Installation failed';
+        throw new Error(errorMsg);
       }
 
       this.extensionId = result.extensionId;
@@ -174,113 +175,109 @@ class InstallationManager {
   }
 
   async startHeartbeatMonitoring(maxSeconds = 60) {
-    console.log("💓 [Heartbeat] Iniciando...");
+  console.log("💓 [Heartbeat] Iniciando...");
+  
+  const statusEl = document.getElementById('heartbeat-counter');
+  const dotEl = document.getElementById('heartbeat-dot');
+  const detailsEl = document.getElementById('connection-details');
+  const extIdEl = document.getElementById('heartbeat-extension-id');
+  const profIdEl = document.getElementById('heartbeat-profile-id');
+  
+  // PASO 1: Delay inicial (Chrome iniciando)
+  await this.sleep(3000);
+  
+  // PASO 2: Chrome iniciado
+  if (statusEl) statusEl.textContent = '✓ Chrome iniciado correctamente';
+  await this.sleep(1500);
+  
+  // PASO 3: Cargando extensión
+  if (statusEl) statusEl.textContent = '⏳ Cargando extensión de Chrome...';
+  await this.sleep(2000);
+  
+  // PASO 4: Extensión cargada
+  if (statusEl) statusEl.textContent = '✓ Extensión cargada exitosamente';
+  await this.sleep(1500);
+  
+  // PASO 5: Conectando con host
+  if (statusEl) statusEl.textContent = '🔌 Estableciendo conexión con el host...';
+  await this.sleep(2000);
+  
+  // PASO 6: Polling REAL de heartbeat TCP
+  let attempts = 0;
+  const interval = setInterval(async () => {
+    attempts++;
     
-    const statusEl = document.getElementById('heartbeat-counter');
-    const dotEl = document.getElementById('heartbeat-dot');
-    const detailsEl = document.getElementById('connection-details');
-    const extIdEl = document.getElementById('heartbeat-extension-id');
-    const profIdEl = document.getElementById('heartbeat-profile-id');
-    
-    // PASO 1: Delay inicial (Chrome iniciando)
-    await this.sleep(3000);
-    
-    // PASO 2: Chrome iniciado
-    if (statusEl) statusEl.textContent = '✓ Chrome iniciado correctamente';
-    await this.sleep(1500);
-    
-    // PASO 3: Cargando extensión
-    if (statusEl) statusEl.textContent = '⏳ Cargando extensión de Chrome...';
-    await this.sleep(2000);
-    
-    // PASO 4: Extensión cargada
-    if (statusEl) statusEl.textContent = '✓ Extensión cargada exitosamente';
-    await this.sleep(1500);
-    
-    // PASO 5: Conectando con host
-    if (statusEl) statusEl.textContent = '🔌 Estableciendo conexión con el host...';
-    await this.sleep(2000);
-    
-    // PASO 6: Polling REAL de heartbeat TCP
-    let attempts = 0;
-    const interval = setInterval(async () => {
-      attempts++;
+    try {
+      // ✅ ÚNICO CAMBIO: Consultar Brain Service en vez de extension
+      const status = await this.api.checkBrainServiceStatus();
       
-      try {
-        // ✅ REFACTORED: Usa la nueva API TCP
-        const status = await this.api.checkExtensionHeartbeat();
-        
-        // ✅ TCP heartbeat retorna: { chromeConnected, latency, protocol, port }
-        if (status && status.chromeConnected) {
-          clearInterval(interval);
-          console.log("✅ [Heartbeat] ¡CONECTADO via TCP!");
-          console.log(`   Latencia: ${status.latency}ms`);
-          console.log(`   Protocolo: ${status.protocol}`);
-          
-          // Cambiar dot a verde
-          if (dotEl) {
-            dotEl.classList.remove('red');
-            dotEl.classList.add('green');
-          }
-          
-          // Cambiar ripples a verde
-          document.querySelectorAll('.ripple').forEach(ripple => {
-            ripple.style.borderColor = '#48bb78';
-          });
-          
-          // Mensaje de éxito
-          if (statusEl) statusEl.textContent = '✓ Host conectado exitosamente';
-          await this.sleep(1500);
-          
-          // Mostrar detalles
-          if (detailsEl) {
-            if (extIdEl) extIdEl.textContent = this.extensionId;
-            if (profIdEl) profIdEl.textContent = this.profileId;
-            detailsEl.style.display = 'block';
-          }
-          
-          if (statusEl) {
-            statusEl.textContent = '🎉 Sistema completamente conectado';
-            statusEl.style.color = '#48bb78';
-            statusEl.style.fontWeight = '600';
-          }
-          
-          // Pausa final
-          await this.sleep(3000);
-          
-          // Transición a Success
-          this.ui.showScreen('connection-success-screen');
-          
-          // Habilitar botón de onboarding
-          const onboardingBtn = document.getElementById('start-onboarding-btn');
-          if (onboardingBtn) onboardingBtn.disabled = false;
-          
-          return;
-        }
-      } catch (error) {
-        console.warn("⚠️ [Heartbeat] Check falló:", error.message);
-      }
-      
-      // Timeout
-      if (attempts >= maxSeconds) {
+      // ✅ Verificar si hay profiles registrados
+      if (status && status.registeredProfiles > 0) {
         clearInterval(interval);
+        console.log("✅ [Heartbeat] ¡Host registrado en Brain Service!");
+        console.log(`   Profiles registrados: ${status.registeredProfiles}`);
+        
+        // Cambiar dot a verde
+        if (dotEl) {
+          dotEl.classList.remove('red');
+          dotEl.classList.add('green');
+        }
+        
+        // Cambiar ripples a verde
+        document.querySelectorAll('.ripple').forEach(ripple => {
+          ripple.style.borderColor = '#48bb78';
+        });
+        
+        // Mensaje de éxito
+        if (statusEl) statusEl.textContent = '✓ Host conectado exitosamente';
+        await this.sleep(1500);
+        
+        // Mostrar detalles
+        if (detailsEl) {
+          if (extIdEl) extIdEl.textContent = this.extensionId;
+          if (profIdEl) profIdEl.textContent = this.profileId;
+          detailsEl.style.display = 'block';
+        }
         
         if (statusEl) {
-          statusEl.innerHTML = '<strong style="color:#e53e3e;">❌ No se detectó conexión</strong><br>' +
-            '<small>Verifica que Chrome abrió correctamente.</small>';
+          statusEl.textContent = '🎉 Sistema completamente conectado';
+          statusEl.style.color = '#48bb78';
+          statusEl.style.fontWeight = '600';
         }
         
-        const retryBtn = document.getElementById('retry-heartbeat-btn');
-        if (retryBtn) retryBtn.style.display = 'block';
+        // Pausa final
+        await this.sleep(3000);
+        
+        // Transición a Success
+        this.ui.showScreen('connection-success-screen');
+        
+        // Habilitar botón de onboarding
+        const onboardingBtn = document.getElementById('start-onboarding-btn');
+        if (onboardingBtn) onboardingBtn.disabled = false;
+        
+        return;
+      }
+    } catch (error) {
+      console.warn("⚠️ [Heartbeat] Check falló:", error.message);
+    }
+    
+    // Timeout
+    if (attempts >= maxSeconds) {
+      clearInterval(interval);
+      
+      if (statusEl) {
+        statusEl.innerHTML = '<strong style="color:#e53e3e;">❌ No se detectó conexión</strong><br>' +
+          '<small>Verifica que Chrome abrió correctamente.</small>';
       }
       
-    }, 1000);
-  }
+      const retryBtn = document.getElementById('retry-heartbeat-btn');
+      if (retryBtn) retryBtn.style.display = 'block';
+    }
+    
+  }, 1000);
+} // ✅ Cierre de setInterval
 
-  sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-}
+} // ✅ Cierre de startHeartbeatMonitoring
 
 // ========================================================================
 // 3. HEARTBEAT MANAGER (Adaptado para TCP)

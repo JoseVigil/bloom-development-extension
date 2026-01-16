@@ -155,6 +155,11 @@ https://claude.ai/chat/d57a8f33-8565-4d67-9c28-bb07f02a6cbc
 roamingpads Bloom Control de Dios ❤️
 https://aistudio.google.com/prompts/1zYc3GZzpUUlLiEHokUeYw1UId2tE2vcS
 
+roamingpads Interpelar a Bloom Control de Dios
+https://aistudio.google.com/prompts/1zYc3GZzpUUlLiEHokUeYw1UId2tE2vcS
+Respuesta chatgpt:
+https://chatgpt.com/c/69698eaa-75e4-832b-99b2-a32a0be3fbe5
+
 roamingpads Blom Profile Implementation - Inicio Control de Dios
 https://aistudio.google.com/prompts/1SWXKJUbpzdQhsiDVhXdCFqEzYbvj11aB
 
@@ -286,3 +291,6 @@ https://aistudio.google.com/prompts/1zYc3GZzpUUlLiEHokUeYw1UId2tE2vcS
 
 jose gmail personalizacion chrommium
 https://aistudio.google.com/prompts/1bXtnDVWne0zaS4HSiFWaZrXC1rI_VKFk
+
+josegmail Integración Synway Asterisk
+https://chatgpt.com/c/692f3a0a-b120-832f-adae-4992db41c648 

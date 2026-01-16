@@ -611,18 +611,6 @@ function registerInstallHandlers() {
     }
   });
   
-  // Preflight checks
-  ipcMain.handle('preflight-checks', async () => {
-    const checks = {
-      brainExists: fs.existsSync(BRAIN_EXE),
-      bloomBaseExists: fs.existsSync(BLOOM_BASE),
-      platform: os.platform(),
-      adminRights: false // TODO: Implementar verificación real si es necesario
-    };
-    
-    return checks;
-  });
-  
   // Check requirements
   ipcMain.handle('install:check-requirements', async () => {
     return {
@@ -643,6 +631,49 @@ function registerInstallHandlers() {
       return { success: false, error: error.message };
     }
   });
+
+  // ✅ Handler check-brain-service-status (segundo extension:heartbeat eliminado)
+  ipcMain.handle('check-brain-service-status', async () => {
+    try {
+      const brainPath = getBrainExecutablePath();
+      const { execSync } = require('child_process');
+      
+      const result = execSync(`"${brainPath}" --json service status`, {
+        encoding: 'utf8',
+        timeout: 3000,
+        windowsHide: true,
+        cwd: getBrainWorkingDirectory()
+      });
+      
+      const json = JSON.parse(result);
+      
+      return {
+        running: json.data?.running || false,
+        registeredProfiles: json.data?.registered_profiles || 0,
+        activeClients: json.data?.active_clients || 0
+      };
+    } catch (error) {
+      console.warn('⚠️ Failed to check Brain Service status:', error.message);
+      return { 
+        running: false, 
+        registeredProfiles: 0,
+        activeClients: 0
+      };
+    }
+  });
+  
+  // Preflight checks
+  ipcMain.handle('preflight-checks', async () => {
+    const checks = {
+      brainExists: fs.existsSync(BRAIN_EXE),
+      bloomBaseExists: fs.existsSync(BLOOM_BASE),
+      platform: os.platform(),
+      adminRights: false // TODO: Implementar verificación real si es necesario
+    };
+    
+    return checks;
+  });
+
 }
 // ============================================================================
 // 🆕 IPC HANDLERS - REPAIR TOOLS

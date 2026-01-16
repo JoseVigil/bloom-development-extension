@@ -2,8 +2,15 @@ import asyncio
 import os
 import sys
 import json
+import logging
 from pathlib import Path
 from typing import Dict, Any, Optional
+from datetime import datetime
+from brain.shared.logger import get_logger
+
+# Logger con nivel DEBUG
+logger = get_logger("brain.service")
+logger.setLevel(logging.DEBUG)
 
 class ServerManager:
     def __init__(self, host: str = "127.0.0.1", port: int = 5678):
@@ -14,23 +21,46 @@ class ServerManager:
         self.base_dir.mkdir(parents=True, exist_ok=True)
         self.pid_file = self.base_dir / "service.pid"
         
-        # ROUTING REGISTRY: Mapeo writer -> client_info
+        # FORENSIC: Archivo de tráfico TCP
+        self.traffic_log = self.base_dir / "tcp_traffic.log"
+        
+        # ROUTING REGISTRY
         self.clients = {}
-        # PROFILE REGISTRY: Mapeo profile_id -> writer
         self.profile_registry = {}
+        
+        # FORENSIC: Contadores
+        self.connection_counter = 0
+        self.message_counter = 0
+        
+        logger.info(f"🚀 Brain Service inicializado en {host}:{port}")
+        logger.debug(f"📁 Base dir: {self.base_dir}")
+
+    def _log_traffic(self, direction: str, addr: tuple, data: str):
+        """Log forensic de todo el tráfico TCP"""
+        timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+        try:
+            with open(self.traffic_log, 'a', encoding='utf-8') as f:
+                f.write(f"[{timestamp}] {direction} {addr[0]}:{addr[1]} | {data}\n")
+        except Exception as e:
+            logger.error(f"Failed to write traffic log: {e}")
 
     def _get_pid(self):
-        try: return int(self.pid_file.read_text().strip())
-        except: return None
+        try: 
+            return int(self.pid_file.read_text().strip())
+        except: 
+            return None
 
     def _is_running(self):
         pid = self._get_pid()
         if not pid: return False
-        try: os.kill(pid, 0); return True
-        except: return False
+        try: 
+            os.kill(pid, 0)
+            return True
+        except: 
+            return False
 
     def get_status(self):
-        return {
+        status = {
             "status": "success", 
             "data": {
                 "running": self._is_running(), 
@@ -38,145 +68,197 @@ class ServerManager:
                 "registered_profiles": len(self.profile_registry)
             }
         }
+        logger.debug(f"📊 Status: {status['data']}")
+        return status
 
     async def _handle_client(self, reader, writer):
-        addr = writer.get_extra_info('peername')
+        """FORENSIC VERSION - Logs every step"""
+        self.connection_counter += 1
+        conn_id = self.connection_counter
         
-        # Inicializar registro de cliente sin profile_id (pendiente de handshake)
+        addr = writer.get_extra_info('peername')
+        logger.info(f"🔌 [{conn_id}] NEW CONNECTION from {addr}")
+        
         self.clients[writer] = {
             "addr": addr, 
             "profile_id": None,
-            "type": None  # 'host' o 'cli'
+            "type": None,
+            "conn_id": conn_id
         }
+        
+        self._log_traffic("CONNECT", addr, f"Connection #{conn_id}")
         
         try:
             while True:
+                logger.debug(f"📥 [{conn_id}] Waiting for header...")
                 header = await reader.readexactly(4)
+                
                 length = int.from_bytes(header, byteorder='big')
+                logger.debug(f"📦 [{conn_id}] Header: {header.hex()} → length={length}")
+                
+                if length > 10000:
+                    logger.warning(f"⚠️ [{conn_id}] Message too large: {length}")
+                    break
+                
+                logger.debug(f"📥 [{conn_id}] Reading {length} bytes...")
                 data = await reader.readexactly(length)
-                msg_str = data.decode('utf-8')
+                
+                try:
+                    msg_str = data.decode('utf-8')
+                    logger.debug(f"📨 [{conn_id}] Payload: {msg_str[:200]}")
+                except:
+                    logger.error(f"❌ [{conn_id}] UTF-8 decode failed")
+                    continue
+                
+                self._log_traffic("RECV", addr, msg_str)
                 
                 try:
                     msg = json.loads(msg_str)
-                except json.JSONDecodeError:
+                    self.message_counter += 1
+                    logger.info(f"✅ [{conn_id}] Message #{self.message_counter} parsed")
+                except json.JSONDecodeError as e:
+                    logger.warning(f"⚠️ [{conn_id}] Invalid JSON: {e}")
                     continue
                 
-                # HANDSHAKE: Registrar conexion con profile_id
-                if msg.get('type') == 'REGISTER_HOST':
+                msg_type = msg.get('type', 'UNKNOWN')
+                logger.info(f"📥 [{conn_id}] TYPE: {msg_type}")
+
+                # REGISTER_HOST
+                if msg_type == 'REGISTER_HOST':
                     profile_id = msg.get('profile_id')
+                    pid = msg.get('pid')
+                    
+                    logger.info(f"🔐 [{conn_id}] REGISTER_HOST:")
+                    logger.info(f"   Profile: {profile_id}")
+                    logger.info(f"   PID: {pid}")
+                    
                     if profile_id:
                         self.clients[writer]['profile_id'] = profile_id
                         self.clients[writer]['type'] = 'host'
                         self.profile_registry[profile_id] = writer
-                        print(f"[Routing] Host registrado: {profile_id} desde {addr}")
+                        
+                        logger.info(f"✅ [{conn_id}] Host registered")
+                        logger.info(f"   Total profiles: {len(self.profile_registry)}")
+                        
+                        self._log_traffic("REGISTER", addr, f"Host {profile_id[:8]}")
                     continue
                 
-                # REGISTRO DE CLI (para comandos directos)
-                if msg.get('type') == 'REGISTER_CLI':
+                # REGISTER_CLI
+                if msg_type == 'REGISTER_CLI':
                     self.clients[writer]['type'] = 'cli'
-                    print(f"[Routing] CLI conectado desde {addr}")
-                    # Responder con lista de perfiles activos
+                    logger.info(f"💻 [{conn_id}] CLI registered")
+                    
                     response = {
                         "type": "REGISTRY_STATUS",
                         "active_profiles": list(self.profile_registry.keys())
                     }
-                    response_str = json.dumps(response)
-                    response_bytes = response_str.encode('utf-8')
-                    response_len = len(response_bytes).to_bytes(4, byteorder='big')
-                    writer.write(response_len + response_bytes)
-                    await writer.drain()
+                    await self._send_to_writer(writer, response)
                     continue
                 
-                # ROUTING ESPECIFICO
+                # ROUTING
                 target_profile = msg.get('target_profile')
-                request_id = msg.get('request_id')  # Para respuestas sincronas
+                request_id = msg.get('request_id')
                 
                 if target_profile:
-                    # Ruteo directo a un perfil especifico
+                    logger.debug(f"🎯 [{conn_id}] Routing to {target_profile[:8]}...")
                     target_writer = self.profile_registry.get(target_profile)
+                    
                     if target_writer and target_writer in self.clients:
                         try:
                             target_writer.write(header + data)
                             await target_writer.drain()
-                            print(f"[Routing] Mensaje enviado a perfil: {target_profile}")
+                            logger.info(f"📨 [{conn_id}] Routed to {target_profile[:8]}")
                             
-                            # ACK SINCRONO: Responder al CLI si tiene request_id
                             if request_id and self.clients[writer]['type'] == 'cli':
-                                ack = {
-                                    "request_id": request_id,
-                                    "status": "routed",
-                                    "target": target_profile
-                                }
-                                ack_str = json.dumps(ack)
-                                ack_bytes = ack_str.encode('utf-8')
-                                ack_len = len(ack_bytes).to_bytes(4, byteorder='big')
-                                writer.write(ack_len + ack_bytes)
-                                await writer.drain()
-                                print(f"[Routing] ACK enviado al CLI para request_id: {request_id}")
+                                ack = {"request_id": request_id, "status": "routed", "target": target_profile}
+                                await self._send_to_writer(writer, ack)
                         except Exception as e:
-                            # Limpiar conexion muerta
-                            print(f"[Routing] Error enviando a {target_profile}: {e}")
-                            if target_writer in self.clients:
-                                del self.clients[target_writer]
-                            if target_profile in self.profile_registry:
-                                del self.profile_registry[target_profile]
+                            logger.error(f"❌ [{conn_id}] Routing failed: {e}")
+                            self._cleanup_client(target_writer)
                     else:
-                        # Perfil no encontrado, notificar al emisor
-                        error_msg = {
-                            "status": "error",
-                            "message": f"Profile {target_profile} not connected",
-                            "request_id": request_id
-                        }
-                        error_str = json.dumps(error_msg)
-                        error_bytes = error_str.encode('utf-8')
-                        error_len = len(error_bytes).to_bytes(4, byteorder='big')
-                        writer.write(error_len + error_bytes)
-                        await writer.drain()
-                        print(f"[Routing] Error notificado: Perfil {target_profile} no encontrado")
+                        logger.warning(f"⚠️ [{conn_id}] Target offline: {target_profile[:8]}")
+                        if request_id:
+                            error_msg = {"status": "error", "message": "Profile not connected", "request_id": request_id}
+                            await self._send_to_writer(writer, error_msg)
                 else:
-                    # BROADCAST CONTROLADO: Solo a hosts sin target especifico
-                    # Esto permite comandos globales como "list profiles"
+                    # BROADCAST
+                    logger.debug(f"📢 [{conn_id}] Broadcasting...")
+                    count = 0
                     for client_writer, client_info in list(self.clients.items()):
                         if client_writer != writer and client_info['type'] == 'host':
                             try:
                                 client_writer.write(header + data)
                                 await client_writer.drain()
+                                count += 1
                             except:
-                                profile_id = client_info.get('profile_id')
-                                if profile_id and profile_id in self.profile_registry:
-                                    del self.profile_registry[profile_id]
-                                if client_writer in self.clients:
-                                    del self.clients[client_writer]
+                                self._cleanup_client(client_writer)
+                    logger.info(f"📢 [{conn_id}] Broadcast to {count} hosts")
         
         except asyncio.IncompleteReadError:
-            pass
+            logger.info(f"ℹ️ [{conn_id}] Connection closed by client")
         except Exception as e:
-            print(f"[Routing] Error en cliente {addr}: {e}")
+            logger.error(f"💥 [{conn_id}] Error: {e}", exc_info=True)
         finally:
-            # Limpieza al desconectar
-            profile_id = self.clients.get(writer, {}).get('profile_id')
-            if profile_id and profile_id in self.profile_registry:
-                del self.profile_registry[profile_id]
-                print(f"[Routing] Perfil desregistrado: {profile_id}")
-            
-            if writer in self.clients:
-                del self.clients[writer]
-            
+            logger.info(f"🔌 [{conn_id}] Cleanup")
+            self._cleanup_client(writer)
+
+    async def _send_to_writer(self, writer, message_dict):
+        try:
+            resp_str = json.dumps(message_dict)
+            resp_bytes = resp_str.encode('utf-8')
+            header = len(resp_bytes).to_bytes(4, byteorder='big')
+            writer.write(header + resp_bytes)
+            await writer.drain()
+            logger.debug(f"📤 Sent: {resp_str[:100]}")
+        except Exception as e:
+            logger.error(f"❌ Send failed: {e}")
+
+    def _cleanup_client(self, writer):
+        info = self.clients.pop(writer, None)
+        if info:
+            p_id = info.get('profile_id')
+            if p_id and p_id in self.profile_registry:
+                del self.profile_registry[p_id]
+                logger.info(f"📌 Profile unregistered: {p_id[:8]}")
+        try:
             writer.close()
+        except:
+            pass
 
     def start_blocking(self):
-        if self._is_running(): return
+        if self._is_running(): 
+            logger.warning("⚠️ Service already running")
+            return
+        
+        logger.info("=" * 60)
+        logger.info("🚀 BRAIN SERVICE STARTUP")
+        logger.info(f"   Host: {self.host}:{self.port}")
+        logger.info(f"   PID: {os.getpid()}")
+        logger.info("=" * 60)
+        
         if sys.platform == 'win32':
             asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+        
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
+        
         self.pid_file.write_text(str(os.getpid()))
-        server = loop.run_until_complete(asyncio.start_server(self._handle_client, self.host, self.port))
-        print(f"Brain Service activo en {self.host}:{self.port}")
-        print(f"Modo: Routing Inteligente (Hub-and-Spoke)")
-        try: 
+        
+        try:
+            server = loop.run_until_complete(
+                asyncio.start_server(self._handle_client, self.host, self.port)
+            )
+            logger.info(f"✨ Listening on {self.host}:{self.port}")
+            
+            if self.traffic_log.exists():
+                self.traffic_log.unlink()
+            
             loop.run_forever()
-        except KeyboardInterrupt: 
-            pass
-        finally: 
+            
+        except KeyboardInterrupt:
+            logger.info("🛑 Stopped by user")
+        except Exception as e:
+            logger.critical(f"💥 FATAL: {e}", exc_info=True)
+        finally:
             self.pid_file.unlink(missing_ok=True)
+            logger.info("--- SHUTDOWN ---")
