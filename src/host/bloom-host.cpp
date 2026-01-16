@@ -11,6 +11,8 @@
 #include <sstream>
 #include <iomanip>
 #include <map>
+#include <queue>
+#include <condition_variable>
 
 #if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
     #ifndef _WIN32
@@ -22,11 +24,11 @@
     #include <winsock2.h>
     #include <ws2tcpip.h>
     #include <windows.h>
-    #include <shlobj.h>   // Para SHGetFolderPathA
-    #include <direct.h>   // Para _mkdir
-    #include <io.h>       // Para _setmode
+    #include <shlobj.h>
+    #include <direct.h>
+    #include <io.h>
     #include <fcntl.h>
-    #include <process.h>  // Para _getpid
+    #include <process.h>
 
     #ifndef MAX_PATH
         #define MAX_PATH 260
@@ -55,65 +57,138 @@
 
 using json = nlohmann::json;
 
-const std::string VERSION = "1.4.5";
-const int BUILD = 14;
+const std::string VERSION = "2.0.0";
+const int BUILD = 20;
 const int SERVICE_PORT = 5678;
 const size_t MAX_ACTIVE_BUFFERS = 15;
-const size_t MAX_MESSAGE_SIZE = 50 * 1024 * 1024; 
+const size_t MAX_MESSAGE_SIZE = 50 * 1024 * 1024;
 const int RECONNECT_DELAY_MS = 2000;
+const size_t MAX_QUEUED_MESSAGES = 100;
 
 std::atomic<socket_t> service_socket{INVALID_SOCK};
 std::mutex stdout_mutex;
 std::atomic<bool> shutdown_requested{false};
+std::atomic<bool> identity_resolved{false};
 std::string g_profile_id = "";
+std::mutex g_profile_id_mutex;
+std::condition_variable g_identity_cv;
+
+// Cola de mensajes pre-registro
+std::queue<std::string> g_pending_messages;
+std::mutex g_pending_mutex;
 
 // ============================================================================
-// LOGGER
+// FORENSIC LOGGER (Escritura Síncrona con Flush Forzado)
 // ============================================================================
-class Logger {
+class ForensicLogger {
 private:
     std::ofstream log_file;
     std::mutex log_mutex;
+    
+    std::string get_timestamp_ms() {
+        auto now = std::chrono::system_clock::now();
+        auto now_t = std::chrono::system_clock::to_time_t(now);
+        auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            now.time_since_epoch()) % 1000;
+        
+        std::stringstream ss;
+        ss << std::put_time(std::localtime(&now_t), "%Y-%m-%d %H:%M:%S")
+           << "." << std::setfill('0') << std::setw(3) << now_ms.count();
+        return ss.str();
+    }
+    
+    std::string bytes_to_hex(const void* data, size_t len) {
+        std::stringstream ss;
+        const uint8_t* bytes = static_cast<const uint8_t*>(data);
+        for (size_t i = 0; i < std::min(len, size_t(64)); i++) {
+            ss << std::hex << std::setw(2) << std::setfill('0') << (int)bytes[i] << " ";
+        }
+        if (len > 64) ss << "... (+" << (len - 64) << " bytes)";
+        return ss.str();
+    }
+
 public:
-    Logger() {
+    ForensicLogger() {
 #ifdef _WIN32
         char path[MAX_PATH];
-        // Usamos la API de Windows para encontrar Local AppData
         if (SHGetFolderPathA(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, path) >= 0) {
             std::string base = std::string(path) + "\\BloomNucleus";
             _mkdir(base.c_str());
             std::string logs = base + "\\logs";
             _mkdir(logs.c_str());
-            log_file.open(logs + "\\host_client.log", std::ios::app);
+            log_file.open(logs + "\\host_forensic.log", std::ios::app);
         }
 #else
         std::string base = "/tmp/bloom-nucleus";
         mkdir(base.c_str(), 0755);
         std::string logs = base + "/logs";
         mkdir(logs.c_str(), 0755);
-        log_file.open(logs + "/host_client.log", std::ios::app);
+        log_file.open(logs + "/host_forensic.log", std::ios::app);
 #endif
+        if (log_file.is_open()) {
+            log_file << "\n========== NEW SESSION " << get_timestamp_ms() 
+                     << " PID:" << get_pid_internal() << " ==========\n";
+            log_file.flush();
+        }
     }
 
-    void log(const std::string& level, const std::string& msg) {
+    void log_raw(const std::string& level, const std::string& context, 
+                 const std::string& msg, const void* raw_data = nullptr, size_t raw_len = 0) {
         std::lock_guard<std::mutex> lock(log_mutex);
         if (!log_file.is_open()) return;
-        auto now = std::chrono::system_clock::now();
-        auto now_t = std::chrono::system_clock::to_time_t(now);
-        auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
-        log_file << "[" << std::put_time(std::localtime(&now_t), "%Y-%m-%d %H:%M:%S") 
-                 << "." << std::setfill('0') << std::setw(3) << now_ms.count() << "] "
-                 << "[" << level << "] " << msg << std::endl;
-        log_file.flush();
+        
+        log_file << "[" << get_timestamp_ms() << "] [" << level << "] [" << context << "] " 
+                 << msg;
+        
+        if (raw_data && raw_len > 0) {
+            log_file << " | RAW_BYTES: " << bytes_to_hex(raw_data, raw_len);
+        }
+        
+        log_file << std::endl;
+        log_file.flush(); // CRÍTICO: Escritura física inmediata
+        
+        // El flush() ya fuerza escritura al buffer del OS
+        // fsync() requeriría FILE* en lugar de ofstream
     }
-    void info(const std::string& msg) { log("INFO", msg); }
-    void error(const std::string& msg) { log("ERROR", msg); }
+    
+    void stdin_read(uint32_t length_prefix, const std::string& payload) {
+        log_raw("STDIN", "PIPE_READ", 
+                "Length=" + std::to_string(length_prefix) + " Payload=" + payload,
+                &length_prefix, 4);
+    }
+    
+    void stdout_write(const std::string& payload) {
+        uint32_t len = static_cast<uint32_t>(payload.size());
+        log_raw("STDOUT", "PIPE_WRITE", 
+                "Length=" + std::to_string(len) + " Payload=" + payload,
+                &len, 4);
+    }
+    
+    void tcp_send(const std::string& payload) {
+        log_raw("TCP_OUT", "SERVICE_SEND", payload);
+    }
+    
+    void tcp_recv(const std::string& payload) {
+        log_raw("TCP_IN", "SERVICE_RECV", payload);
+    }
+    
+    void state_change(const std::string& event, const std::string& details) {
+        log_raw("STATE", event, details);
+    }
+    
+    void identity_event(const std::string& event, const std::string& profile_id) {
+        log_raw("IDENTITY", event, "ProfileID=" + profile_id);
+    }
+    
+    void queue_event(const std::string& event, size_t queue_size) {
+        log_raw("QUEUE", event, "Size=" + std::to_string(queue_size));
+    }
 };
 
-Logger g_logger;
+ForensicLogger g_logger;
 
 // ============================================================================
-// CHUNKED MESSAGE BUFFER (Restaurado Completo)
+// CHUNKED MESSAGE BUFFER
 // ============================================================================
 class ChunkedMessageBuffer {
 private:
@@ -127,7 +202,8 @@ private:
     std::mutex buffer_mutex;
 
     std::vector<uint8_t> base64_decode(const std::string& encoded) {
-        static const std::string base64_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        static const std::string base64_chars = 
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
         std::vector<uint8_t> decoded;
         int val = 0, valb = -8;
         for (unsigned char c : encoded) {
@@ -155,12 +231,15 @@ private:
 
 public:
     enum ChunkResult { INCOMPLETE, COMPLETE_VALID, COMPLETE_INVALID_CHECKSUM, CHUNK_ERROR };
+    
     ChunkResult process_chunk(const json& msg, std::string& out_complete_msg) {
         std::lock_guard<std::mutex> lock(buffer_mutex);
         if (!msg.contains("bloom_chunk")) return CHUNK_ERROR;
+        
         const auto& chunk = msg["bloom_chunk"];
         std::string type = chunk.value("type", "");
         std::string msg_id = chunk.value("message_id", "");
+        
         if (type == "header") {
             InProgressMessage ipm;
             ipm.total_chunks = chunk.value("total_chunks", 0);
@@ -168,23 +247,33 @@ public:
             ipm.expected_size = chunk.value("total_size_bytes", 0);
             ipm.buffer.reserve(ipm.expected_size);
             active_buffers[msg_id] = std::move(ipm);
+            g_logger.state_change("CHUNK_HEADER", "MsgID=" + msg_id + 
+                                  " Chunks=" + std::to_string(ipm.total_chunks));
             return INCOMPLETE;
         }
+        
         auto it = active_buffers.find(msg_id);
         if (it == active_buffers.end()) return CHUNK_ERROR;
+        
         if (type == "data") {
             std::vector<uint8_t> decoded = base64_decode(chunk.value("data", ""));
             it->second.buffer.insert(it->second.buffer.end(), decoded.begin(), decoded.end());
             it->second.received_chunks++;
             return INCOMPLETE;
         }
+        
         if (type == "footer") {
             std::string computed = calculate_sha256(it->second.buffer);
-            if (computed != chunk.value("checksum_verify", "")) return COMPLETE_INVALID_CHECKSUM;
+            if (computed != chunk.value("checksum_verify", "")) {
+                g_logger.state_change("CHUNK_CHECKSUM_FAIL", "MsgID=" + msg_id);
+                return COMPLETE_INVALID_CHECKSUM;
+            }
             out_complete_msg = std::string(it->second.buffer.begin(), it->second.buffer.end());
             active_buffers.erase(it);
+            g_logger.state_change("CHUNK_COMPLETE", "MsgID=" + msg_id);
             return COMPLETE_VALID;
         }
+        
         return CHUNK_ERROR;
     }
 };
@@ -192,83 +281,230 @@ public:
 ChunkedMessageBuffer g_chunked_buffer;
 
 // ============================================================================
-// HELPERS
+// IDENTITY EXTRACTION (Late Binding Core)
+// ============================================================================
+bool try_extract_profile_id(const json& msg) {
+    std::vector<std::string> paths = {
+        "/profile_id",
+        "/payload/profile_id",
+        "/data/profile_id",
+        "/metadata/profile_id"
+    };
+    
+    for (const auto& path : paths) {
+        try {
+            auto ptr = msg.at(json::json_pointer(path));
+            if (ptr.is_string()) {
+                std::string candidate = ptr.get<std::string>();
+                // Validar formato UUID (8-4-4-4-12)
+                if (candidate.length() == 36 && 
+                    candidate[8] == '-' && candidate[13] == '-' &&
+                    candidate[18] == '-' && candidate[23] == '-') {
+                    
+                    std::lock_guard<std::mutex> lock(g_profile_id_mutex);
+                    if (g_profile_id.empty() || g_profile_id == "unknown_worker") {
+                        g_profile_id = candidate;
+                        identity_resolved.store(true);
+                        g_logger.identity_event("LATE_BINDING_SUCCESS", candidate);
+                        g_identity_cv.notify_all();
+                        return true;
+                    }
+                }
+            }
+        } catch (...) { continue; }
+    }
+    return false;
+}
+
+// ============================================================================
+// CHROME COMMUNICATION
 // ============================================================================
 void write_message_to_chrome(const std::string& s) {
     std::lock_guard<std::mutex> lock(stdout_mutex);
     uint32_t len = static_cast<uint32_t>(s.size());
+    
+    g_logger.stdout_write(s);
+    
     std::cout.write(reinterpret_cast<const char*>(&len), 4);
     std::cout.write(s.c_str(), len);
     std::cout.flush();
 }
 
+// ============================================================================
+// TCP SERVICE COMMUNICATION
+// ============================================================================
 void write_to_service(const std::string& s) {
     socket_t sock = service_socket.load();
     if (sock != INVALID_SOCK) {
         uint32_t len = static_cast<uint32_t>(s.size());
         uint32_t net_len = htonl(len);
+        
+        g_logger.tcp_send(s);
+        
         send(sock, (const char*)&net_len, 4, 0);
         send(sock, s.c_str(), len, 0);
     }
 }
 
-void handle_chrome_message(const std::string& msg_str) {
-    g_logger.info(">>> FROM CHROME: " + msg_str);
-    try {
-        auto msg = json::parse(msg_str);
-        if (msg.contains("bloom_chunk")) {
-            std::string assembled;
-            auto res = g_chunked_buffer.process_chunk(msg, assembled);
-            if (res == ChunkedMessageBuffer::COMPLETE_VALID) write_to_service(assembled);
-            return;
-        }
-        if (msg.value("type", "") == "SYSTEM_HELLO") {
-	    json ready = {
-    		{"type", "SYSTEM_ACK"},
-    		{"command", "system_ready"},
-    		{"payload", {
-        		{"status", "connected"},
-        		{"host_version", VERSION},
-        		{"profile_id", g_profile_id.empty() ? "active_worker" : g_profile_id}
-    		}}
-	    };
-            write_message_to_chrome(ready.dump());
-            write_to_service(msg_str);
-            return;
-        }
-        write_to_service(msg_str);
-    } catch (...) { g_logger.error("JSON Error processing Chrome message"); }
+void flush_pending_messages() {
+    std::lock_guard<std::mutex> lock(g_pending_mutex);
+    
+    g_logger.queue_event("FLUSH_START", g_pending_messages.size());
+    
+    while (!g_pending_messages.empty()) {
+        std::string msg = g_pending_messages.front();
+        g_pending_messages.pop();
+        write_to_service(msg);
+    }
+    
+    g_logger.queue_event("FLUSH_COMPLETE", 0);
 }
 
 // ============================================================================
-// TCP CLIENT
+// CHROME MESSAGE HANDLER
+// ============================================================================
+void handle_chrome_message(const std::string& msg_str) {
+    try {
+        auto msg = json::parse(msg_str);
+        
+        // Procesar chunks
+        if (msg.contains("bloom_chunk")) {
+            std::string assembled;
+            auto res = g_chunked_buffer.process_chunk(msg, assembled);
+            if (res == ChunkedMessageBuffer::COMPLETE_VALID) {
+                handle_chrome_message(assembled); // Recursivo
+            }
+            return;
+        }
+        
+        // CRÍTICO: Intentar extraer identidad de CUALQUIER mensaje
+        try_extract_profile_id(msg);
+        
+        // Manejo especial de SYSTEM_HELLO
+        if (msg.value("type", "") == "SYSTEM_HELLO") {
+            // Esperar a tener identidad (timeout 5s)
+            std::unique_lock<std::mutex> lock(g_profile_id_mutex);
+            if (!identity_resolved.load()) {
+                g_logger.state_change("WAITING_IDENTITY", "Timeout=5000ms");
+                g_identity_cv.wait_for(lock, std::chrono::milliseconds(5000), 
+                                       []{ return identity_resolved.load(); });
+            }
+            
+            std::string final_id = g_profile_id.empty() ? "unknown_worker" : g_profile_id;
+            
+            json ready = {
+                {"type", "SYSTEM_ACK"},
+                {"command", "system_ready"},
+                {"payload", {
+                    {"status", "connected"},
+                    {"host_version", VERSION},
+                    {"profile_id", final_id},
+                    {"identity_method", identity_resolved.load() ? "late_binding" : "fallback"}
+                }}
+            };
+            
+            write_message_to_chrome(ready.dump());
+            
+            // Enviar al servicio si está conectado
+            if (service_socket.load() != INVALID_SOCK) {
+                write_to_service(msg_str);
+            } else {
+                std::lock_guard<std::mutex> qlock(g_pending_mutex);
+                g_pending_messages.push(msg_str);
+                g_logger.queue_event("ENQUEUE", g_pending_messages.size());
+            }
+            return;
+        }
+        
+        // Mensajes normales: enviar o encolar
+        if (service_socket.load() != INVALID_SOCK && identity_resolved.load()) {
+            write_to_service(msg_str);
+        } else {
+            std::lock_guard<std::mutex> lock(g_pending_mutex);
+            if (g_pending_messages.size() < MAX_QUEUED_MESSAGES) {
+                g_pending_messages.push(msg_str);
+                g_logger.queue_event("ENQUEUE", g_pending_messages.size());
+            } else {
+                g_logger.state_change("QUEUE_OVERFLOW", "Message dropped");
+            }
+        }
+        
+    } catch (const std::exception& e) {
+        g_logger.state_change("JSON_PARSE_ERROR", e.what());
+    }
+}
+
+// ============================================================================
+// TCP CLIENT LOOP (Con Registro Tardío)
 // ============================================================================
 void tcp_client_loop() {
     while (!shutdown_requested.load()) {
         socket_t sock = socket(AF_INET, SOCK_STREAM, 0);
-        if (sock == INVALID_SOCK) { std::this_thread::sleep_for(std::chrono::milliseconds(2000)); continue; }
+        if (sock == INVALID_SOCK) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(RECONNECT_DELAY_MS));
+            continue;
+        }
 
         sockaddr_in addr{};
         addr.sin_family = AF_INET;
         addr.sin_port = htons(SERVICE_PORT);
         addr.sin_addr.s_addr = inet_addr("127.0.0.1");
 
+        g_logger.state_change("TCP_CONNECTING", "Port=" + std::to_string(SERVICE_PORT));
+
         if (connect(sock, (sockaddr*)&addr, sizeof(addr)) < 0) {
             close_socket(sock);
-            std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+            g_logger.state_change("TCP_CONNECT_FAILED", "Retry in " + 
+                                  std::to_string(RECONNECT_DELAY_MS) + "ms");
+            std::this_thread::sleep_for(std::chrono::milliseconds(RECONNECT_DELAY_MS));
             continue;
         }
 
-        g_logger.info("+++ CONNECTED TO BRAIN SERVICE");
+        g_logger.state_change("TCP_CONNECTED", "Socket=" + std::to_string(sock));
         service_socket.store(sock);
 
-        json reg = {{"type", "REGISTER_HOST"}, {"pid", (int)get_pid_internal()}, {"profile_id", g_profile_id}};
+        // ESPERAR IDENTIDAD antes de registrar (timeout 10s)
+        {
+            std::unique_lock<std::mutex> lock(g_profile_id_mutex);
+            if (!identity_resolved.load()) {
+                g_logger.state_change("WAITING_IDENTITY_FOR_REGISTER", "Timeout=10000ms");
+                g_identity_cv.wait_for(lock, std::chrono::milliseconds(10000), 
+                                       []{ return identity_resolved.load(); });
+            }
+        }
+
+        std::string final_id = g_profile_id;
+        if (final_id.empty()) final_id = "unknown_worker";
+
+        json reg = {
+            {"type", "REGISTER_HOST"},
+            {"pid", (int)get_pid_internal()},
+            {"profile_id", final_id},
+            {"version", VERSION},
+            {"build", BUILD}
+        };
+        
+        g_logger.state_change("TCP_REGISTERING", "ProfileID=" + final_id);
         write_to_service(reg.dump());
 
+        // Vaciar cola de mensajes pendientes
+        flush_pending_messages();
+
+        // Loop de recepción
         while (!shutdown_requested.load()) {
             uint32_t net_len;
-            if (recv(sock, (char*)&net_len, 4, 0) <= 0) break;
+            int received = recv(sock, (char*)&net_len, 4, 0);
+            if (received <= 0) {
+                g_logger.state_change("TCP_RECV_FAILED", "Error=" + std::to_string(received));
+                break;
+            }
+            
             uint32_t len = ntohl(net_len);
+            if (len == 0 || len > MAX_MESSAGE_SIZE) {
+                g_logger.state_change("TCP_INVALID_LENGTH", "Length=" + std::to_string(len));
+                break;
+            }
+            
             std::vector<char> buf(len);
             int rec = 0;
             while (rec < (int)len) {
@@ -276,14 +512,17 @@ void tcp_client_loop() {
                 if (r <= 0) break;
                 rec += r;
             }
+            
             if (rec == (int)len) {
                 std::string b_msg(buf.begin(), buf.end());
-                g_logger.info("<<< FROM BRAIN: " + b_msg);
+                g_logger.tcp_recv(b_msg);
                 write_message_to_chrome(b_msg);
             }
         }
+        
         service_socket.store(INVALID_SOCK);
         close_socket(sock);
+        g_logger.state_change("TCP_DISCONNECTED", "Reconnecting...");
     }
 }
 
@@ -291,19 +530,24 @@ void tcp_client_loop() {
 // MAIN
 // ============================================================================
 int main(int argc, char* argv[]) {
-    std::string full_cmd = "";
-
 #ifdef _WIN32
-    // Windows: Forzar binario y capturar línea cruda
+    WSADATA wsa;
+    WSAStartup(MAKEWORD(2, 2), &wsa);
     _setmode(_fileno(stdin), _O_BINARY);
     _setmode(_fileno(stdout), _O_BINARY);
+#endif
+
+    // Intentar captura temprana (probablemente falle en Portable)
+    std::string full_cmd = "";
+#ifdef _WIN32
     full_cmd = GetCommandLineA();
 #else
-    // Mac/Linux: Reconstruir desde argv
     for (int i = 0; i < argc; i++) full_cmd += std::string(argv[i]) + " ";
 #endif
 
-    // BUSCADOR DE UUID (Funciona en ambos)
+    g_logger.state_change("STARTUP", "CMD=" + full_cmd);
+
+    // Búsqueda de UUID en línea de comandos (fallback)
     bool found = false;
     if (full_cmd.length() >= 36) {
         for (size_t i = 0; i <= full_cmd.length() - 36; i++) {
@@ -311,29 +555,58 @@ int main(int argc, char* argv[]) {
                 full_cmd[i+18] == '-' && full_cmd[i+23] == '-') {
                 g_profile_id = full_cmd.substr(i, 36);
                 found = true;
+                identity_resolved.store(true);
+                g_logger.identity_event("CMDLINE_EXTRACTION", g_profile_id);
                 break;
             }
         }
     }
 
-    if (!found) g_profile_id = "unknown_worker";
+    if (!found) {
+        g_profile_id = "unknown_worker";
+        g_logger.identity_event("CMDLINE_FAILED", "Waiting for Late Binding");
+    }
 
-    g_logger.info("✅ ID Capturado: " + g_profile_id);
+    // Iniciar thread TCP
+    std::thread tcp_thread(tcp_client_loop);
 
-    std::thread t(tcp_client_loop);
+    // Loop principal (stdin)
+    g_logger.state_change("STDIN_LOOP_START", "Reading Native Messaging pipe");
+    
     while (!shutdown_requested.load()) {
         uint32_t len = 0;
-        if (!std::cin.read((char*)&len, 4)) break;
-        if (len == 0 || len > MAX_MESSAGE_SIZE) continue;
+        
+        if (!std::cin.read(reinterpret_cast<char*>(&len), 4)) {
+            g_logger.state_change("STDIN_EOF", "Pipe closed by Chrome");
+            break;
+        }
+        
+        if (len == 0 || len > MAX_MESSAGE_SIZE) {
+            g_logger.state_change("STDIN_INVALID_LENGTH", "Length=" + std::to_string(len));
+            continue;
+        }
+        
         std::vector<char> buf(len);
-        if (!std::cin.read(buf.data(), len)) break;
-        handle_chrome_message(std::string(buf.begin(), buf.end()));
+        if (!std::cin.read(buf.data(), len)) {
+            g_logger.state_change("STDIN_READ_INCOMPLETE", "Expected=" + 
+                                  std::to_string(len));
+            break;
+        }
+        
+        std::string msg_str(buf.begin(), buf.end());
+        g_logger.stdin_read(len, msg_str);
+        handle_chrome_message(msg_str);
     }
 
     shutdown_requested.store(true);
-    if (t.joinable()) t.join();
+    g_logger.state_change("SHUTDOWN", "Closing threads");
+    
+    if (tcp_thread.joinable()) tcp_thread.join();
+
 #ifdef _WIN32
     WSACleanup();
 #endif
+
+    g_logger.state_change("EXIT", "Process terminated");
     return 0;
 }
