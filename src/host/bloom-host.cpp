@@ -373,9 +373,13 @@ void handle_chrome_message(const std::string& msg_str) {
     
     try_extract_profile_id(msg);
     
-    std::string msg_type = "unknown";
-    if (msg.contains("type") && msg["type"].is_string()) {
-        msg_type = msg["type"].get<std::string>();
+    std::string msg_type = (msg.contains("type") && msg["type"].is_string()) 
+        ? msg["type"].get<std::string>() 
+        : "unknown_technical";
+    
+    if (msg_type == "unknown_technical") {
+        g_logger.log_native("WARN", "MESSAGE_TYPE_INVALID Ignoring message");
+        return;
     }
     
     if (msg_type == "LOG") {
