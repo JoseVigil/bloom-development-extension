@@ -110,6 +110,7 @@ bloom-development-extension/
     │   │   ├── linux/
     │   │   │   └── bloom-host
     │   │   ├── logs/
+    │   │   │   └── sentinel_2026-01-17.log
     │   │   ├── profiles/
     │   │   └── win32/
     │   │       ├── bloom-host.exe
@@ -179,16 +180,25 @@ bloom-development-extension/
     │   └── validate.js
     └── sentinel/
         ├── blueprint.json
+        ├── build.bat
         ├── docs/
+        │   ├── Sentinel - Fase 2 Discovery - Health Modular.md
+        │   ├── Sentinel Base.md
         │   └── research/
         │       ├── CHROMIUM PATH FIX - Arquitectura de Rutas.md
         │       ├── SENTINEL v1.2 - Estructura de Archivos.md
         │       └── SENTINEL v1.2 Deployment & Testing Guide.md
         ├── go.mod
         ├── internal/
-        │   └── core/
-        │       ├── config.go
-        │       ├── core.go
-        │       ├── logger.go
-        │       └── paths.go
+        │   ├── core/
+        │   │   ├── config.go
+        │   │   ├── core.go
+        │   │   ├── logger.go
+        │   │   └── paths.go
+        │   ├── discovery/
+        │   │   └── discovery.go
+        │   ├── health/
+        │   │   └── health.go
+        │   └── persistence/
+        │       └── persistence.go
         └── main.go
