@@ -1,0 +1,35 @@
+{
+  "engine": {
+    "strategy": "internal_chromium",
+    "flags": {
+      "security": [
+        "--no-sandbox",
+        "--disable-web-security",
+        "--test-type",
+        "--allow-running-insecure-content"
+      ],
+      "isolation": [
+        "--disable-features=IsolateOrigins,site-per-process",
+        "--disable-site-isolation-trials"
+      ],
+      "ux": [
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--disable-sync",
+        "--disable-background-networking",
+        "--disable-default-apps",
+        "--disable-extensions-except",
+        "--no-service-autorun"
+      ],
+      "network": [
+        "--remote-debugging-port=0",
+        "--disable-background-timer-throttling",
+        "--disable-renderer-backgrounding"
+      ]
+    }
+  },
+  "navigation": {
+    "discovery_url": "chrome-extension://hpblclepliicmihaplldignhjdggnkdh/discovery/index.html",
+    "landing_url": "chrome-extension://hpblclepliicmihaplldignhjdggnkdh/landing/index.html"
+  }
+}
