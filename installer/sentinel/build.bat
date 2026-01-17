@@ -2,51 +2,40 @@
 setlocal
 
 echo ============================================
-echo Building Sentinel Base
+echo Building Sentinel Base (Safe Mode)
 echo ============================================
-echo.
 
+:: Forzamos arquitectura 386
 set GOOS=windows
 set GOARCH=386
 set CGO_ENABLED=0
 
+:: LIMITACIÓN DE RECURSOS PARA EVITAR "OUT OF MEMORY"
+set GOMEMLIMIT=512MiB
+
 set OUTPUT_DIR=..\native\bin\win32
 set OUTPUT_FILE=%OUTPUT_DIR%\sentinel.exe
 
-if not exist "%OUTPUT_DIR%" (
-    echo Creating output directory: %OUTPUT_DIR%
-    mkdir "%OUTPUT_DIR%"
-)
+if not exist "%OUTPUT_DIR%" mkdir "%OUTPUT_DIR%"
 
 echo Compiling sentinel.exe...
-go build -o "%OUTPUT_FILE%" -ldflags="-s -w" main.go
+:: -p 1: Compila un paquete a la vez (usa poca RAM)
+:: -ldflags: Quita símbolos pesados para achicar el EXE
+go build -p 1 -ldflags="-s -w" -o "%OUTPUT_FILE%" .
 
 if %ERRORLEVEL% NEQ 0 (
     echo.
-    echo ✗ Compilation failed
+    echo ✗ Compilation failed. Si el error es de import, revisa el archivo mencionado.
     exit /b 1
 )
 
 echo ✓ Compilation successful: %OUTPUT_FILE%
-echo.
 
-if not exist "%OUTPUT_DIR%\blueprint.json" (
-    if exist "blueprint.json" (
-        echo Copying blueprint.json...
-        copy /Y "blueprint.json" "%OUTPUT_DIR%\blueprint.json" >nul
-        echo ✓ blueprint.json copied
-    ) else (
-        echo ⚠ Warning: blueprint.json not found in source directory
-    )
-) else (
-    echo ✓ blueprint.json already exists in output directory
+if exist "blueprint.json" (
+    copy /Y "blueprint.json" "%OUTPUT_DIR%\blueprint.json" >nul
+    echo ✓ blueprint.json updated
 )
 
-echo.
 echo ============================================
-echo Build completed successfully
-echo ============================================
-echo Output: %OUTPUT_FILE%
-echo.
-
+echo Build completed.
 endlocal

@@ -1,9 +1,13 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"sentinel/internal/core"
+	"sentinel/internal/discovery"
+	"sentinel/internal/health"
+	"sentinel/internal/persistence"
 )
 
 func main() {
@@ -14,23 +18,42 @@ func main() {
 	}
 	defer c.Close()
 
-	c.Logger.Success("Sentinel Base Inicializada con éxito")
-	fmt.Println()
-	
-	fmt.Print(c.Paths.String())
-	fmt.Println()
-	
-	c.Logger.Success("Todas las rutas validadas correctamente")
-	
-	c.Logger.Info("Versión: %s", c.Config.Version)
-	c.Logger.Info("Perfiles cargados: %d", len(c.Config.Profiles))
-	
-	for i, profile := range c.Config.Profiles {
-		status := "deshabilitado"
-		if profile.Enabled {
-			status = "habilitado"
-		}
-		c.Logger.Info("  [%d] %s (%s) - prioridad: %d", 
-			i+1, profile.Name, status, profile.Priority)
+	if len(os.Args) > 1 && os.Args[1] == "health" {
+		runHealthCommand(c)
+		return
 	}
+
+	c.Logger.Success("Sentinel Base Inicializada con éxito")
+	fmt.Println(c.Paths.String())
+	c.Logger.Info("Versión: %s", c.Config.Version)
+}
+
+func runHealthCommand(c *core.Core) {
+	c.Logger.Info("Iniciando escaneo del sistema...")
+	
+	// 1. Discovery
+	systemMap, err := discovery.DiscoverSystem(c.Paths.BinDir)
+	if err != nil {
+		c.Logger.Error("Error en Discovery: %v", err)
+		os.Exit(1)
+	}
+	
+	c.Logger.Success("✓ brain.exe: %s", systemMap.BrainPath)
+	c.Logger.Success("✓ chrome.exe: %s", systemMap.ChromePath)
+
+	// 2. Health Scan
+	report, err := health.CheckHealth(systemMap)
+	if err != nil {
+		c.Logger.Error("Error en Health: %v", err)
+		os.Exit(1)
+	}
+
+	// 3. Persistence
+	persistence.SaveNucleusState(c.Paths.AppDataDir, report)
+	c.Logger.Success("✓ Estado guardado en nucleus.json")
+
+	// 4. Output
+	jsonOutput, _ := json.MarshalIndent(report, "", "  ")
+	fmt.Println("\nReporte completo:")
+	fmt.Println(string(jsonOutput))
 }
