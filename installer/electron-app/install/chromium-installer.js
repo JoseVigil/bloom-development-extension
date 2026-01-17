@@ -209,11 +209,24 @@ async function runSmokeTest(exePath) {
   const { promisify } = require('util');
   const execFileAsync = promisify(execFile);
   
+  // Creamos una ruta temporal para el test para que no intente usar el perfil del sistema
+  const tempProfile = path.join(os.tmpdir(), `bloom_smoke_${Date.now()}`);
+  
   try {
-    const { stdout, stderr } = await execFileAsync(exePath, ['--version'], {
+    // AÑADIMOS LOS ARGUMENTOS DE SILENCIO AQUÍ
+    const { stdout, stderr } = await execFileAsync(exePath, [
+      '--version',
+      `--user-data-dir=${tempProfile}`, // Evita el error de "Preferences"
+      '--no-first-run',                // Salta el wizard
+      '--no-default-browser-check',     // Salta el aviso de navegador predeterminado
+      '--headless'                      // No abre ventana (más seguro para un test)
+    ], {
       timeout: 10000,
       windowsHide: true
     });
+    
+    // Limpiamos el perfil temporal después del test
+    await fs.remove(tempProfile).catch(() => {});
     
     const version = stdout.trim() || stderr.trim();
     console.log(`✅ Chromium version: ${version}`);
@@ -221,6 +234,8 @@ async function runSmokeTest(exePath) {
     return { success: true, version };
   } catch (error) {
     console.warn('⚠️ Smoke test failed (non-fatal):', error.message);
+    // Intentar limpiar por si acaso
+    await fs.remove(tempProfile).catch(() => {});
     return { success: false, error: error.message };
   }
 }
