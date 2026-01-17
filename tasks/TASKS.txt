@@ -90,7 +90,7 @@ https://claude.ai/chat/86a07eb7-eb25-40a7-9532-22e1c9c54bcb
 deploy btips
 https://chat.deepseek.com/a/chat/s/f23555be-5e15-4ac9-879a-207f5cfcc238
 
-btips gemini gemini research
+btips gemini-go research
 https://grok.com/c/b85a0aa1-8596-420e-bc20-515bde50d14b?rid=1f7a6c0a-b05c-4b26-984d-c008a23440f6
 
 roamtouch ImageMagick
@@ -292,5 +292,10 @@ https://aistudio.google.com/prompts/1zYc3GZzpUUlLiEHokUeYw1UId2tE2vcS
 jose gmail personalizacion chrommium
 https://aistudio.google.com/prompts/1bXtnDVWne0zaS4HSiFWaZrXC1rI_VKFk
 
-josegmail Integración Synway Asterisk
+josegmail Integración Synway Asterisk - Ubuntu
 https://chatgpt.com/c/692f3a0a-b120-832f-adae-4992db41c648 
+jose gmail Integracion Asterisk Laravel
+https://chatgpt.com/c/696a30fd-c8ec-8326-a2cf-d602544ad602
+
+roamingpads go versioning 
+https://grok.com/c/b25c93fc-fa5d-4f5f-804d-ae85bc8441b0?rid=585a3d21-d814-4a80-a221-ce5f29c08316

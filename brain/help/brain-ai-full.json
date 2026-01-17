@@ -2280,7 +2280,7 @@
       "type": "function",
       "function": {
         "name": "brain_profile_link",
-        "description": "Vincula una cuenta de email a un perfil (DEPRECATED - usar accounts-register).. Execute via: brain profile link",
+        "description": "Vincula un email a un perfil.. Execute via: brain profile link",
         "parameters": {
           "type": "object",
           "properties": {
@@ -2290,7 +2290,7 @@
             },
             "email": {
               "type": "string",
-              "description": "Email de la cuenta a vincular"
+              "description": "Email a vincular"
             }
           },
           "required": [
@@ -2315,7 +2315,7 @@
       "type": "function",
       "function": {
         "name": "brain_profile_unlink",
-        "description": "Desvincula la cuenta asociada a un perfil (DEPRECATED - usar accounts-remove).. Execute via: brain profile unlink",
+        "description": "Desvincula la cuenta de un perfil.. Execute via: brain profile unlink",
         "parameters": {
           "type": "object",
           "properties": {
@@ -2450,18 +2450,13 @@
       "type": "function",
       "function": {
         "name": "brain_profile_destroy",
-        "description": "Elimina un perfil y sus datos. Requiere confirmaci�n a menos que se use --force.. Execute via: brain profile destroy",
+        "description": "Elimina un perfil y todos sus datos.. Execute via: brain profile destroy",
         "parameters": {
           "type": "object",
           "properties": {
             "profile_id": {
               "type": "string",
               "description": "ID del perfil a eliminar"
-            },
-            "_f": {
-              "type": "boolean",
-              "description": "Forzar sin confirmaci�n",
-              "default": false
             }
           },
           "required": [
@@ -2485,7 +2480,7 @@
       "type": "function",
       "function": {
         "name": "brain_profile_launch",
-        "description": "Lanza Chrome con el perfil especificado y la extensi�n Bloom.. Execute via: brain profile launch",
+        "description": "Lanza Chrome con el perfil especificado.. Execute via: brain profile launch",
         "parameters": {
           "type": "object",
           "properties": {
@@ -2506,6 +2501,10 @@
               "type": "boolean",
               "description": "Modo de validaci�n de conexi�n",
               "default": false
+            },
+            "_s": {
+              "type": "string",
+              "description": "Archivo JSON con especificaci�n completa de lanzamiento"
             }
           },
           "required": [

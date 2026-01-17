@@ -110,6 +110,7 @@ bloom-development-extension/
     │   │   │       └── bloom-host
     │   │   ├── linux/
     │   │   │   └── bloom-host
+    │   │   ├── logs/
     │   │   ├── profiles/
     │   │   └── win32/
     │   │       ├── bloom-host.exe
@@ -186,5 +187,4 @@ bloom-development-extension/
         ├── logger_hub.go
         ├── main.go
         ├── paths.go
-        ├── process_manager.go
-        └── sentinel.exe
+        └── process_manager.go

@@ -2070,8 +2070,8 @@
             {
               "name": "destroy",
               "display_name": "DESTROY",
-              "description": "Elimina un perfil y sus datos. Requiere confirmaci�n a menos que se use --force.",
-              "syntax": "brain [GLOBAL_OPTIONS] profile destroy <PROFILE_ID> [OPTIONS]",
+              "description": "Elimina un perfil y todos sus datos.",
+              "syntax": "brain [GLOBAL_OPTIONS] profile destroy <PROFILE_ID>",
               "arguments": [
                 {
                   "name": "<PROFILE_ID>",
@@ -2080,20 +2080,12 @@
                   "type": "str"
                 }
               ],
-              "options": [
-                {
-                  "flag": "-f",
-                  "required": false,
-                  "help": "Forzar sin confirmaci�n",
-                  "type": "bool",
-                  "default": false
-                }
-              ]
+              "options": []
             },
             {
               "name": "launch",
               "display_name": "LAUNCH",
-              "description": "Lanza Chrome con el perfil especificado y la extensi�n Bloom.",
+              "description": "Lanza Chrome con el perfil especificado.",
               "syntax": "brain [GLOBAL_OPTIONS] profile launch <PROFILE_ID> [OPTIONS]",
               "arguments": [
                 {
@@ -2124,13 +2116,20 @@
                   "help": "Modo de validaci�n de conexi�n",
                   "type": "bool",
                   "default": false
+                },
+                {
+                  "flag": "-s",
+                  "required": false,
+                  "help": "Archivo JSON con especificaci�n completa de lanzamiento",
+                  "type": "Optional",
+                  "default": null
                 }
               ]
             },
             {
               "name": "link",
               "display_name": "LINK",
-              "description": "Vincula una cuenta de email a un perfil (DEPRECATED - usar accounts-register).",
+              "description": "Vincula un email a un perfil.",
               "syntax": "brain [GLOBAL_OPTIONS] profile link <PROFILE_ID> <EMAIL>",
               "arguments": [
                 {
@@ -2142,7 +2141,7 @@
                 {
                   "name": "<EMAIL>",
                   "required": true,
-                  "help": "Email de la cuenta a vincular",
+                  "help": "Email a vincular",
                   "type": "str"
                 }
               ],
@@ -2159,7 +2158,7 @@
             {
               "name": "unlink",
               "display_name": "UNLINK",
-              "description": "Desvincula la cuenta asociada a un perfil (DEPRECATED - usar accounts-remove).",
+              "description": "Desvincula la cuenta de un perfil.",
               "syntax": "brain [GLOBAL_OPTIONS] profile unlink <PROFILE_ID>",
               "arguments": [
                 {

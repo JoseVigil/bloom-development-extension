@@ -1,6 +1,7 @@
 """
 Profile Manager - Orchestrator Facade.
-Versión refactorizada con flags de Chromium definitivos para eliminar ERR_BLOCKED_BY_CLIENT.
+Versión refactorizada con soporte unificado para lanzamiento spec-driven.
+Permite que Sentinel (Go) controle completamente el lanzamiento de navegadores.
 """
 
 import json
@@ -199,86 +200,149 @@ class ProfileManager:
         profiles.append(data)
         self._save_profiles(profiles)
         
-        # Landing se genera en sync_profile_resources, no aquí
-        logger.debug("Landing se generará en el primer launch")
+        # Sync resources
+        logger.info("🔄 Sincronizando recursos iniciales...")
+        self.sync_profile_resources(profile_id)
         
-        duration = time.time() - start_time
-        logger.info(f"✅ Perfil '{alias}' creado en {duration:.2f}s")
-        
-        return {**data, "path": str(profile_path)}
+        elapsed = time.time() - start_time
+        logger.info(f"✅ Perfil creado en {elapsed:.2f}s")
+        return data
     
-    def launch_profile(self, profile_id: str, url: Optional[str] = None, mode: str = "normal", verbose_network: bool = False) -> Dict[str, Any]:
-        """Dispatcher: Selecciona la estrategia de lanzamiento según el .env"""
-        strategy = os.environ.get("BLOOM_BROWSER_STRATEGY", "internal").lower()
+    def launch_profile(
+        self, 
+        profile_id: str, 
+        url: Optional[str] = None,
+        spec_data: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Lanza un perfil de Chrome/Chromium.
         
-        # 1. Preparación común de recursos
+        Args:
+            profile_id: ID del perfil a lanzar
+            url: URL opcional para abrir (ignorado si se usa spec_data)
+            spec_data: Diccionario con especificación completa de lanzamiento
+        
+        Returns:
+            Diccionario con el resultado del lanzamiento
+        """
+        logger.info(f"🚀 Iniciando lanzamiento de perfil: {profile_id[:8]}...")
+        
+        # 1. Buscar perfil
         profile = self._find_profile(profile_id)
-        if not profile: return {"status": "error", "message": "Profile not found"}
+        if not profile:
+            raise ValueError(f"Perfil no encontrado: {profile_id}")
+        
         full_id = profile['id']
+        
+        # 2. SIEMPRE sincronizar recursos antes de lanzar
+        logger.info("🔄 Sincronizando recursos del perfil...")
         self.sync_profile_resources(full_id)
         
-        logger.info(f"🚀 Lanzando perfil {full_id[:8]} usando estrategia: {strategy}")
-
-        # 2. Despacho a método específico
-        if strategy == "internal":
-            return self._launch_internal_chromium(profile, url)
+        # 3. Decidir modo de lanzamiento
+        if spec_data:
+            logger.info("📋 Modo SPEC-DRIVEN detectado")
+            return self._launch_with_spec(profile, spec_data)
         else:
-            return self._launch_system_chrome(profile, url)
-
-    def _launch_internal_chromium(self, profile: Dict, url: Optional[str]) -> Dict[str, Any]:
+            logger.info("🔧 Modo LEGACY detectado (estrategias predefinidas)")
+            return self._launch_legacy(profile, url)
+    
+    def _launch_with_spec(self, profile: Dict[str, Any], spec: Dict[str, Any]) -> Dict[str, Any]:
         """
-        ESTRATEGIA INTERNAL CHROMIUM: Lanzamiento con flags definitivos.
+        Lanza el navegador usando una especificación JSON completa.
+        Este es el modo preferido para automatización (Sentinel/Go).
         
-        FIX CRÍTICO: Orden de flags y bypass de Site Isolation.
+        El spec debe contener:
+        - executable_path: Ruta al binario del navegador
+        - user_data_dir: Ruta al directorio del perfil
+        - extension_path: Ruta a la extensión
+        - url: URL de destino
+        - flags: Lista de argumentos adicionales
         """
-        import sys, os, logging, subprocess, time
+        logger.info("🎯 Ejecutando lanzamiento spec-driven")
+        
+        # Validar campos requeridos
+        required_fields = ['executable_path', 'user_data_dir', 'extension_path', 'url', 'flags']
+        missing_fields = [f for f in required_fields if f not in spec]
+        
+        if missing_fields:
+            raise ValueError(f"Spec incompleto. Faltan campos: {', '.join(missing_fields)}")
+        
+        # Validar que el ejecutable existe
+        exec_path = Path(spec['executable_path'])
+        if not exec_path.exists():
+            raise FileNotFoundError(f"Ejecutable no encontrado: {exec_path}")
+        
+        # Construir argumentos del navegador
+        chrome_args = [
+            str(exec_path),
+            f"--user-data-dir={spec['user_data_dir']}",
+            f"--load-extension={spec['extension_path']}",
+            f"--app={spec['url']}",
+            *spec['flags']  # Flags adicionales desde el spec
+        ]
+        
+        logger.debug(f"📝 Comando construido desde spec:")
+        logger.debug(f"   Ejecutable: {exec_path}")
+        logger.debug(f"   User Data: {spec['user_data_dir']}")
+        logger.debug(f"   Extension: {spec['extension_path']}")
+        logger.debug(f"   URL: {spec['url']}")
+        logger.debug(f"   Flags: {len(spec['flags'])} argumentos")
+        
+        # Ejecutar con las mismas garantías de aislamiento
+        return self._execute_browser(chrome_args, profile['id'])
+    
+    def _launch_legacy(self, profile: Dict[str, Any], url: Optional[str]) -> Dict[str, Any]:
+        """
+        Modo legacy: usa las estrategias predefinidas según el navegador disponible.
+        """
+        logger.info("🔧 Usando estrategia legacy")
+        
+        # Detectar navegador disponible
+        if self.launcher.chromium_path and self.launcher.chromium_path.exists():
+            logger.info("   → Estrategia: Chromium Portable")
+            return self._launch_internal_chromium(profile, url)
+        elif self.launcher.chrome_path and self.launcher.chrome_path.exists():
+            logger.info("   → Estrategia: Chrome del Sistema")
+            return self._launch_system_chrome(profile, url)
+        else:
+            raise RuntimeError("No se encontró ningún navegador (Chromium ni Chrome)")
+    
+    def _launch_internal_chromium(self, profile: Dict, url: Optional[str]) -> Dict[str, Any]:
+        """ESTRATEGIA CHROMIUM PORTABLE: Lanzamiento limpio con Electron."""
+        import sys
+        import logging
         
         full_id = profile['id']
-        profile_path = Path(self.paths.profiles_dir) / full_id      
-        self.sync_profile_resources(full_id)
-
-        # 1. RUTAS BLINDADAS
-        chrome_path = str(self.launcher.chrome_path)
+        profile_path = Path(self.paths.profiles_dir) / full_id
+        target_url = url if url else self.get_discovery_url(full_id)
+        
+        # 1. CONFIGURACIÓN DE RUTAS
         u_data = os.path.abspath(profile_path)
         e_path = os.path.abspath(profile_path / "extension")
-        target_url = url if url else self.get_discovery_url(full_id)
-        net_log = os.path.join(u_data, "network_mining.json")
-        debug_log = os.path.join(u_data, "engine_mining.log")
-
-        # ========================================================================
-        # FIX CRÍTICO: FLAGS DEFINITIVOS PARA ELIMINAR ERR_BLOCKED_BY_CLIENT
-        # ========================================================================
-        # ORDEN IMPORTANTE:
-        # 1. --user-data-dir DEBE SER PRIMERO (aislamiento de perfil)
-        # 2. --no-sandbox (bypass de restricciones de seguridad)
-        # 3. --disable-features (desactivar Site Isolation)
-        # 4. --disable-web-security (permitir acceso cross-origin)
-        # 5. --load-extension (cargar extensión)
-        # 6. --app (URL de inicio)
         
+        # Crear directorio de logs
+        logs_dir = self.paths.base_dir / "logs" / "profiles" / full_id
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        debug_log = str(logs_dir / "chrome_debug.log")
+        net_log = str(logs_dir / "chrome_net.log")
+
+        # 2. ARGUMENTOS CHROMIUM
         chrome_args = [
-            chrome_path,
+            str(self.launcher.chromium_path),
             f"--user-data-dir={u_data}",
-            
-            # BYPASS DE SEGURIDAD (crítico para extension access)
-            "--no-sandbox",
-            "--test-type",
-            "--disable-web-security",
-            
-            # DESACTIVAR SITE ISOLATION (crítico para chrome-extension://)
-            "--disable-features=IsolateOrigins,site-per-process",
-            
-            # EXTENSIÓN Y URL
             f"--load-extension={e_path}",
             f"--app={target_url}",
-            
-            # CONFIGURACIÓN DE CHROMIUM
             "--no-first-run",
             "--no-default-browser-check",
-            "--remote-debugging-port=0",
-            "--disable-sync",
-            
-            # LOGGING (opcional, solo si verbose)
+            "--disable-features=RendererCodeIntegrity",
+            "--disable-blink-features=AutomationControlled",
+            "--disable-web-security",
+            "--disable-site-isolation-trials",
+            "--disable-features=IsolateOrigins,site-per-process",
+            "--allow-running-insecure-content",
+            "--disable-popup-blocking",
+            f"--remote-debugging-port=0",
+            "--test-type",
             f"--log-file={debug_log}",
             f"--log-net-log={net_log}", 
             "--enable-logging",
@@ -343,16 +407,25 @@ class ProfileManager:
             "--test-type"
         ]
 
-        return self._execute_popen(chrome_args, full_id)
+        return self._execute_browser(chrome_args, full_id)
 
-    def _execute_popen(self, args: list, profile_id: str) -> Dict[str, Any]:
-        """Maneja el Popen y silencia los logs para Electron."""
+    def _execute_browser(self, args: list, profile_id: str) -> Dict[str, Any]:
+        """
+        Ejecuta el navegador con flags de aislamiento apropiados.
+        Mantiene compatibilidad con IPC de Electron.
+        """
+        logger.debug(f"🚀 Ejecutando navegador con {len(args)} argumentos")
+        
         # 1. Kill preventivo del host nativo (Windows)
         if platform.system() == 'Windows':
             os.system('taskkill /f /im bloom-host.exe >nul 2>&1')
 
-        # 2. Flags de aislamiento OS
-        flags = 0x00000008 | 0x00000200 | 0x08000000 if platform.system() == 'Windows' else 0
+        # 2. Flags de aislamiento según OS
+        if platform.system() == 'Windows':
+            # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW
+            flags = 0x00000008 | 0x00000200 | 0x08000000
+        else:
+            flags = 0
 
         try:
             subprocess.Popen(
@@ -364,12 +437,13 @@ class ProfileManager:
                 shell=False
             )
             
-            # --- EL SECRETO PARA ELECTRON ---
+            # Silenciar logging para mantener IPC limpio
             import logging
-            # Borramos todos los handlers que imprimen en consola para que el JSON sea puro
             for handler in logging.getLogger().handlers[:]:
                 logging.getLogger().removeHandler(handler)
             logging.getLogger().addHandler(logging.NullHandler())
+            
+            logger.info(f"✅ Navegador lanzado exitosamente: {profile_id[:8]}")
             
             return {
                 "status": "success",
@@ -379,7 +453,8 @@ class ProfileManager:
                 }
             }
         except Exception as e:
-            return {"status": "error", "message": f"Popen failed: {str(e)}"}
+            logger.error(f"❌ Error al lanzar navegador: {e}")
+            return {"status": "error", "message": f"Browser launch failed: {str(e)}"}
 
     def get_discovery_url(self, profile_id: str) -> str:
         """Obtiene URL de discovery page."""

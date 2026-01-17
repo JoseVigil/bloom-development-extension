@@ -1,9 +1,12 @@
 """
 Comandos para gestión de perfiles de Chrome (Workers).
 Organiza los comandos de creación, listado, lanzamiento y destrucción de perfiles.
+Versión refactorizada con soporte para spec-driven launch.
 """
 
 import typer
+import json
+from pathlib import Path
 from typing import Optional
 from brain.cli.base import BaseCommand, CommandMetadata
 from brain.cli.categories import CommandCategory
@@ -183,12 +186,13 @@ class ProfilesLaunchCommand(BaseCommand):
         return CommandMetadata(
             name="launch",
             category=CommandCategory.PROFILE,
-            version="1.1.0",
-            description="Lanza Chrome con un perfil de Worker",
+            version="2.0.0",
+            description="Lanza Chrome con un perfil de Worker (soporta spec-driven mode)",
             examples=[
                 "brain profile launch <id>",
                 "brain profile launch <id> --discovery",
-                "brain profile launch <id> --cockpit"
+                "brain profile launch <id> --cockpit",
+                "brain profile launch <id> --spec /path/to/spec.json"
             ]
         )
 
@@ -199,11 +203,20 @@ class ProfilesLaunchCommand(BaseCommand):
             profile_id: str = typer.Argument(..., help="ID del perfil a lanzar"),
             url: Optional[str] = typer.Option(None, "--url", help="URL inicial explícita"),
             cockpit: bool = typer.Option(False, "--cockpit", help="Modo cockpit (landing page)"),
-            discovery: bool = typer.Option(False, "--discovery", help="Modo de validación de conexión")
+            discovery: bool = typer.Option(False, "--discovery", help="Modo de validación de conexión"),
+            spec: Optional[str] = typer.Option(None, "--spec", "-s", help="Archivo JSON con especificación completa de lanzamiento")
         ):
-            """Lanza Chrome con el perfil especificado y la extensión Bloom."""
+            """
+            Lanza Chrome con el perfil especificado.
+            
+            Soporta dos modos:
+            1. LEGACY: Usa estrategias predefinidas (--discovery, --cockpit, --url)
+            2. SPEC-DRIVEN: Usa un archivo JSON con configuración completa (--spec)
+            
+            El modo SPEC-DRIVEN tiene prioridad sobre cualquier otro parámetro.
+            """
             logger.info(f"🚀 Iniciando comando profile launch")
-            logger.debug(f"Profile ID: {profile_id[:8]}..., Discovery: {discovery}, Cockpit: {cockpit}")
+            logger.debug(f"Profile ID: {profile_id[:8]}..., Spec: {spec}")
             
             gc = ctx.obj
             if gc is None:
@@ -216,51 +229,93 @@ class ProfilesLaunchCommand(BaseCommand):
                 logger.debug("Inicializando ProfileManager...")
                 pm = ProfileManager()
                 
-                # Determinar modo y construir URL correspondiente
-                if discovery:
-                    mode = "discovery"
-                    mode_label = "🔍 Discovery Check"
-                    target_url = pm.get_discovery_url(profile_id)
-                elif cockpit:
-                    mode = "normal"
-                    mode_label = "🏠 Cockpit"
-                    target_url = pm.get_landing_url(profile_id)
-                elif url:
-                    mode = "normal"
-                    mode_label = "Custom URL"
-                    target_url = url
+                # MODO SPEC-DRIVEN (prioridad máxima)
+                if spec:
+                    logger.info("📋 Modo SPEC-DRIVEN activado")
+                    
+                    # Validar que el archivo existe
+                    spec_path = Path(spec)
+                    if not spec_path.exists():
+                        raise FileNotFoundError(f"Archivo spec no encontrado: {spec}")
+                    
+                    # Cargar y validar JSON
+                    try:
+                        with open(spec_path, 'r', encoding='utf-8') as f:
+                            spec_data = json.load(f)
+                        logger.debug(f"Spec cargado exitosamente: {spec_path}")
+                    except json.JSONDecodeError as e:
+                        raise ValueError(f"JSON inválido en spec: {e}")
+                    
+                    if gc.verbose:
+                        typer.echo(f"📋 Lanzando con spec: {spec_path}", err=True)
+                    
+                    # Lanzar con spec
+                    logger.info(f"Lanzando perfil {profile_id[:8]} con spec...")
+                    result_data = pm.launch_profile(
+                        profile_id=profile_id,
+                        spec_data=spec_data
+                    )
+                    
                 else:
-                    # Default: cockpit (landing)
-                    mode = "normal"
-                    mode_label = "🏠 Cockpit"
-                    target_url = pm.get_landing_url(profile_id)
+                    # MODO LEGACY (estrategias predefinidas)
+                    logger.info("🔧 Modo LEGACY activado")
+                    
+                    # Determinar modo y construir URL correspondiente
+                    if discovery:
+                        mode_label = "🔍 Discovery Check"
+                        target_url = pm.get_discovery_url(profile_id)
+                    elif cockpit:
+                        mode_label = "🏠 Cockpit"
+                        target_url = pm.get_landing_url(profile_id)
+                    elif url:
+                        mode_label = "Custom URL"
+                        target_url = url
+                    else:
+                        # Default: cockpit (landing)
+                        mode_label = "🏠 Cockpit"
+                        target_url = pm.get_landing_url(profile_id)
 
-                if gc.verbose:
-                    typer.echo(f"🚀 Lanzando perfil en modo: {mode_label}", err=True)
+                    if gc.verbose:
+                        typer.echo(f"🚀 Lanzando perfil en modo: {mode_label}", err=True)
 
-                logger.info(f"Lanzando perfil {profile_id[:8]}... en modo: {mode}")
-                logger.debug(f"Target URL: {target_url}")
-
-                # Lanzar el perfil con la URL correcta
-                result = pm.launch_profile(profile_id, url=target_url, mode=mode)
+                    logger.info(f"Lanzando perfil {profile_id[:8]} en modo legacy...")
+                    logger.debug(f"Target URL: {target_url}")
+                    
+                    result_data = pm.launch_profile(
+                        profile_id=profile_id,
+                        url=target_url
+                    )
                 
+                logger.info(f"✅ Perfil lanzado exitosamente")
+                logger.debug(f"Resultado: {result_data}")
+                
+                result = {
+                    "status": "success",
+                    "operation": "launch",
+                    "data": result_data
+                }
+                
+                gc.output(result, self._render_launch)
+                logger.info("✅ Comando profile launch completado exitosamente")
+                
+            except FileNotFoundError as e:
+                logger.error(f"❌ Archivo no encontrado: {str(e)}", exc_info=True)
+                self._handle_error(gc, str(e))
+            except ValueError as e:
+                logger.error(f"❌ Error de validación: {str(e)}", exc_info=True)
+                self._handle_error(gc, str(e))
             except Exception as e:
                 logger.error(f"❌ Error al lanzar perfil {profile_id[:8]}...: {str(e)}", exc_info=True)
                 self._handle_error(gc, f"Error al lanzar perfil: {str(e)}")
 
     def _render_launch(self, data: dict) -> None:
         """Renderiza la confirmación de lanzamiento."""
-        # Extraemos el payload
-        payload = data.get("data", {})
+        launch_data = data.get('data', {}).get('data', {})
+        profile_id = launch_data.get('profile_id', 'N/A')
         
-        typer.echo(f"\n🚀 Chrome lanzado exitosamente")
-        typer.echo(f"   Perfil: {payload.get('alias', 'N/A')}")
-        typer.echo(f"   Modo:   {payload.get('mode', 'Standard')}")
-        typer.echo(f"   PID:    {payload.get('pid')}")
-        
-        if payload.get('extension_loaded'):
-            typer.echo("   ✅ Extensión Bloom inyectada")
-        typer.echo()
+        typer.echo(f"\n✅ Perfil lanzado exitosamente")
+        typer.echo(f"   ID:     {profile_id}")
+        typer.echo(f"   Estado: {launch_data.get('engine', 'unknown')}\n")
 
     def _handle_error(self, gc, message: str):
         """Manejo unificado de errores."""
@@ -273,17 +328,17 @@ class ProfilesLaunchCommand(BaseCommand):
 
 
 class ProfilesDestroyCommand(BaseCommand):
-    """Elimina un perfil y sus datos del disco."""
+    """Elimina un perfil de Chrome Worker."""
     
     def metadata(self) -> CommandMetadata:
         return CommandMetadata(
             name="destroy",
             category=CommandCategory.PROFILE,
             version="1.0.0",
-            description="Elimina un perfil y todos sus datos",
+            description="Elimina completamente un perfil de Worker",
             examples=[
-                "brain profile destroy <profile-id>",
-                "brain profile destroy <profile-id> --force"
+                "brain profile destroy <id>",
+                "brain profile destroy <id> --json"
             ]
         )
 
@@ -291,12 +346,11 @@ class ProfilesDestroyCommand(BaseCommand):
         @app.command(name="destroy")
         def destroy_profile(
             ctx: typer.Context,
-            profile_id: str = typer.Argument(..., help="ID del perfil a eliminar"),
-            force: bool = typer.Option(False, "--force", "-f", help="Forzar sin confirmación")
+            profile_id: str = typer.Argument(..., help="ID del perfil a eliminar")
         ):
-            """Elimina un perfil y sus datos. Requiere confirmación a menos que se use --force."""
-            logger.info(f"🗑️  Iniciando comando profile destroy")
-            logger.debug(f"Profile ID: {profile_id[:8]}..., Force: {force}")
+            """Elimina un perfil y todos sus datos."""
+            logger.info(f"🗑️ Iniciando comando profile destroy")
+            logger.debug(f"Profile ID: {profile_id[:8]}...")
             
             gc = ctx.obj
             if gc is None:
@@ -308,29 +362,15 @@ class ProfilesDestroyCommand(BaseCommand):
             try:
                 from brain.core.profile.profile_manager import ProfileManager
                 
+                if gc.verbose:
+                    typer.echo(f"🗑️ Eliminando perfil {profile_id[:8]}...", err=True)
+                
                 logger.debug("Inicializando ProfileManager...")
                 pm = ProfileManager()
                 
-                if not force and not gc.json_mode:
-                    if gc.verbose:
-                        typer.echo(f"⚠️  Preparando eliminación de perfil {profile_id}...", err=True)
-                    
-                    logger.debug("Solicitando confirmación al usuario...")
-                    confirm = typer.confirm(
-                        f"⚠️  ¿Eliminar perfil {profile_id}? Esta acción es IRREVERSIBLE"
-                    )
-                    if not confirm:
-                        logger.info("❌ Operación cancelada por el usuario")
-                        typer.echo("❌ Operación cancelada por el usuario")
-                        raise typer.Exit(0)
-                    logger.debug("Confirmación recibida, procediendo con eliminación")
-                
-                if gc.verbose:
-                    typer.echo(f"🗑️  Eliminando perfil...", err=True)
-                
                 logger.info(f"Eliminando perfil {profile_id[:8]}...")
                 destroy_data = pm.destroy_profile(profile_id)
-                logger.info(f"✅ Perfil eliminado: {destroy_data.get('deleted_files', 0)} archivos eliminados")
+                logger.info(f"✅ Perfil eliminado exitosamente")
                 logger.debug(f"Datos de eliminación: {destroy_data}")
                 
                 result = {
@@ -342,18 +382,15 @@ class ProfilesDestroyCommand(BaseCommand):
                 gc.output(result, self._render_destroy)
                 logger.info("✅ Comando profile destroy completado exitosamente")
                 
-            except typer.Exit:
-                raise
             except Exception as e:
                 logger.error(f"❌ Error al eliminar perfil {profile_id[:8]}...: {str(e)}", exc_info=True)
                 self._handle_error(gc, f"Error al eliminar perfil: {str(e)}")
 
     def _render_destroy(self, data: dict) -> None:
         """Renderiza la confirmación de eliminación."""
-        typer.echo(f"\n🗑️  Perfil eliminado correctamente")
-        typer.echo(f"   ID:       {data.get('profile_id')}")
-        typer.echo(f"   Alias:    {data.get('alias', 'N/A')}")
-        typer.echo(f"   Archivos: {data.get('deleted_files', 0)} eliminados\n")
+        profile_id = data.get('data', {}).get('profile_id', 'N/A')
+        typer.echo(f"\n🗑️ Perfil eliminado exitosamente")
+        typer.echo(f"   ID: {profile_id}\n")
 
     def _handle_error(self, gc, message: str):
         """Manejo unificado de errores."""
@@ -366,28 +403,28 @@ class ProfilesDestroyCommand(BaseCommand):
 
 
 class ProfilesLinkCommand(BaseCommand):
-    """Vincula una cuenta de email a un perfil de Chrome (DEPRECATED - usar accounts-register)."""
+    """Vincula una cuenta a un perfil de Chrome."""
     
     def metadata(self) -> CommandMetadata:
         return CommandMetadata(
             name="link",
             category=CommandCategory.PROFILE,
             version="1.0.0",
-            description="Vincula una cuenta de email a un perfil de Chrome",
+            description="Vincula una cuenta de email a un perfil",
             examples=[
-                "brain profile link <profile-id> <email>"
+                "brain profile link <profile-id> user@example.com",
+                "brain profile link <profile-id> admin@company.com --json"
             ]
         )
 
     def register(self, app: typer.Typer) -> None:
         @app.command(name="link")
-        def link_profile(
+        def link_account(
             ctx: typer.Context,
             profile_id: str = typer.Argument(..., help="ID del perfil"),
-            email: str = typer.Argument(..., help="Email de la cuenta a vincular")
+            email: str = typer.Argument(..., help="Email a vincular")
         ):
-            """Vincula una cuenta de email a un perfil (DEPRECATED - usar accounts-register)."""
-            logger.warning(f"🔗 Comando DEPRECATED 'link' usado. Recomendar usar 'accounts-register'")
+            """Vincula un email a un perfil."""
             logger.info(f"🔗 Iniciando comando profile link")
             logger.debug(f"Profile ID: {profile_id[:8]}..., Email: {email}")
             
@@ -407,7 +444,7 @@ class ProfilesLinkCommand(BaseCommand):
                 logger.debug("Inicializando ProfileManager...")
                 pm = ProfileManager()
                 
-                logger.info(f"Vinculando cuenta {email} al perfil {profile_id[:8]}...")
+                logger.info(f"Vinculando {email} al perfil {profile_id[:8]}...")
                 link_data = pm.link_account(profile_id, email)
                 logger.info(f"✅ Cuenta vinculada exitosamente")
                 logger.debug(f"Datos de vinculación: {link_data}")
@@ -422,14 +459,13 @@ class ProfilesLinkCommand(BaseCommand):
                 logger.info("✅ Comando profile link completado exitosamente")
                 
             except Exception as e:
-                logger.error(f"❌ Error al vincular cuenta {email} al perfil {profile_id[:8]}...: {str(e)}", exc_info=True)
+                logger.error(f"❌ Error al vincular cuenta al perfil {profile_id[:8]}...: {str(e)}", exc_info=True)
                 self._handle_error(gc, f"Error al vincular cuenta: {str(e)}")
 
     def _render_link(self, data: dict) -> None:
         """Renderiza la confirmación de vinculación."""
         typer.echo(f"\n🔗 Cuenta vinculada exitosamente")
-        typer.echo(f"   Perfil: {data.get('profile_id')[:8]}...")
-        typer.echo(f"   Email:  {data.get('email')}\n")
+        typer.echo(f"   Email: {data.get('email')}\n")
 
     def _handle_error(self, gc, message: str):
         """Manejo unificado de errores."""
@@ -442,27 +478,27 @@ class ProfilesLinkCommand(BaseCommand):
 
 
 class ProfilesUnlinkCommand(BaseCommand):
-    """Desvincula la cuenta asociada a un perfil (DEPRECATED - usar accounts-remove)."""
+    """Desvincula la cuenta de un perfil de Chrome."""
     
     def metadata(self) -> CommandMetadata:
         return CommandMetadata(
             name="unlink",
             category=CommandCategory.PROFILE,
             version="1.0.0",
-            description="Desvincula la cuenta asociada a un perfil",
+            description="Desvincula la cuenta de email de un perfil",
             examples=[
-                "brain profile unlink <profile-id>"
+                "brain profile unlink <profile-id>",
+                "brain profile unlink <profile-id> --json"
             ]
         )
 
     def register(self, app: typer.Typer) -> None:
         @app.command(name="unlink")
-        def unlink_profile(
+        def unlink_account(
             ctx: typer.Context,
             profile_id: str = typer.Argument(..., help="ID del perfil")
         ):
-            """Desvincula la cuenta asociada a un perfil (DEPRECATED - usar accounts-remove)."""
-            logger.warning(f"🔓 Comando DEPRECATED 'unlink' usado. Recomendar usar 'accounts-remove'")
+            """Desvincula la cuenta de un perfil."""
             logger.info(f"🔓 Iniciando comando profile unlink")
             logger.debug(f"Profile ID: {profile_id[:8]}...")
             
