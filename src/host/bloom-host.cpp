@@ -352,16 +352,20 @@ void flush_pending_messages() {
 }
 
 void handle_chrome_message(const std::string& msg_str) {
+    // PASO 1: Intentar extraer profile_id del string RAW
     try_extract_profile_id_from_raw(msg_str);
     
+    // PASO 2: Parse JSON con tolerancia a errores
     json msg;
     try {
         msg = json::parse(msg_str);
     } catch (const std::exception& e) {
         g_logger.log_native("ERROR", "JSON_PARSE_ERROR: " + std::string(e.what()));
+        g_logger.log_native("DEBUG", "RAW_MSG: " + msg_str.substr(0, 200));
         return;
     }
     
+    // PASO 3: Procesar chunks si es un mensaje fragmentado
     if (msg.contains("bloom_chunk")) {
         std::string assembled;
         auto res = g_chunked_buffer.process_chunk(msg, assembled);
@@ -371,17 +375,45 @@ void handle_chrome_message(const std::string& msg_str) {
         return;
     }
     
+    // PASO 4: Intentar extraer profile_id del JSON parseado
     try_extract_profile_id(msg);
     
-    std::string msg_type = (msg.contains("type") && msg["type"].is_string()) 
-        ? msg["type"].get<std::string>() 
-        : "unknown_technical";
+    // ========================================================================
+    // FIX CRÍTICO: VALIDACIÓN TOLERANTE A TIPOS
+    // ========================================================================
+    // Chromium puede enviar mensajes con "type" como número (channel probes)
+    // No debemos crashear, simplemente ignorar esos mensajes
     
+    std::string msg_type = "unknown_technical";
+    
+    if (msg.contains("type")) {
+        // GUARDA 1: Verificar que "type" sea string
+        if (msg["type"].is_string()) {
+            msg_type = msg["type"].get<std::string>();
+        } else if (msg["type"].is_number()) {
+            // Chromium envía números como type en mensajes de infraestructura
+            g_logger.log_native("DEBUG", "CHROMIUM_TECHNICAL_MESSAGE Type=" + 
+                               std::to_string(msg["type"].get<int>()));
+            return; // Ignorar silenciosamente
+        } else {
+            // Tipo no reconocido
+            g_logger.log_native("WARN", "MESSAGE_TYPE_UNKNOWN TypeClass=" + 
+                               std::string(msg["type"].type_name()));
+            return;
+        }
+    }
+    
+    // GUARDA 2: Si no pudimos extraer un tipo válido, ignorar
     if (msg_type == "unknown_technical") {
-        g_logger.log_native("WARN", "MESSAGE_TYPE_INVALID Ignoring message");
+        g_logger.log_native("DEBUG", "MESSAGE_NO_VALID_TYPE Ignoring");
         return;
     }
     
+    // ========================================================================
+    // MANEJO DE MENSAJES ESPECIALES
+    // ========================================================================
+    
+    // MENSAJE: LOG (routing a browser log)
     if (msg_type == "LOG") {
         std::string level = "INFO";
         std::string message = "";
@@ -401,6 +433,7 @@ void handle_chrome_message(const std::string& msg_str) {
         return;
     }
     
+    // MENSAJE: SYSTEM_HELLO (handshake inicial)
     if (msg_type == "SYSTEM_HELLO") {
         std::string final_id;
         {
@@ -420,17 +453,27 @@ void handle_chrome_message(const std::string& msg_str) {
         };
         
         write_message_to_chrome(ready.dump());
+        g_logger.log_native("INFO", "SYSTEM_ACK_SENT ProfileID=" + final_id);
         return;
     }
     
+    // ========================================================================
+    // ENRUTAMIENTO AL SERVICIO TCP
+    // ========================================================================
+    
     if (service_socket.load() != INVALID_SOCK && identity_resolved.load()) {
+        // Conexión TCP establecida e identidad resuelta → enviar inmediatamente
         write_to_service(msg_str);
+        g_logger.log_native("DEBUG", "MSG_FORWARDED_TO_SERVICE Type=" + msg_type);
     } else {
+        // Aún no hay conexión o identidad → encolar
         std::lock_guard<std::mutex> lock(g_pending_mutex);
         if (g_pending_messages.size() < MAX_QUEUED_MESSAGES) {
             g_pending_messages.push(msg_str);
+            g_logger.log_native("DEBUG", "MSG_QUEUED Type=" + msg_type + 
+                               " QueueSize=" + std::to_string(g_pending_messages.size()));
         } else {
-            g_logger.log_native("ERROR", "QUEUE_OVERFLOW Message dropped");
+            g_logger.log_native("ERROR", "QUEUE_OVERFLOW Message dropped Type=" + msg_type);
         }
     }
 }
