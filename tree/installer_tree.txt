@@ -50,6 +50,7 @@ bloom-development-extension/
     │   │   ├── native-host-installer.js
     │   │   ├── runtime-installer.js
     │   │   ├── service-installer.js
+    │   │   ├── service-manager.js
     │   │   └── shortcut-installer.js
     │   ├── installHelpers.js
     │   ├── installer-config.json
@@ -89,6 +90,7 @@ bloom-development-extension/
     │   │   │   ├── index_launch copy.html
     │   │   │   ├── index_launch.html
     │   │   │   └── renderer_launch.js
+    │   │   ├── logger.js
     │   │   ├── renderer.js
     │   │   ├── styles.css
     │   │   └── ui_manager.js

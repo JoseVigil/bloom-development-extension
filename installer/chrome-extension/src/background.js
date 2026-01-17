@@ -1,67 +1,219 @@
 // ============================================================================
-// BLOOM NUCLEUS: SYNAPSE ROUTER v2.2 (Chromium Optimized)
-// Router de comunicación entre Brain (Python) y el Navegador.
+// BLOOM NUCLEUS: SYNAPSE ROUTER v2.4 (Config-Aware Bootstrap)
+// FIX QUIRÚRGICO: Validación robusta de config antes de conectar
 // ============================================================================
 
 let nativePort = null;
-try { importScripts('synapse.config.js'); } catch (e) {}
-let isConnecting = false;
-let configRetryCount = 0;
+let heartbeatTimer = null;
+let configCheckTimer = null;
 
-  // ============================================================================
-  // 1. CARGA DE CONFIGURACIÓN Y CONEXIÓN
-  // ============================================================================
+// ============================================================================
+// PROXY LOGGING → HOST
+// ============================================================================
 
-  function loadSynapseConfig() {
+function logToHost(level, message) {
+  if (nativePort) {
+    nativePort.postMessage({
+      type: "LOG",
+      level,
+      message,
+      timestamp: Date.now()
+    });
+  }
+}
+
+// ============================================================================
+// CONFIG LOADING WITH RETRY
+// ============================================================================
+
+async function ensureConfig(maxRetries = 20) {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
       importScripts('synapse.config.js');
-      console.log("⚙️ [Synapse] Configuración cargada.");
+      
+      if (self.SYNAPSE_CONFIG?.profileId && self.SYNAPSE_CONFIG?.bridge_name) {
+        console.log(`✅ [Synapse] Config loaded: profile=${self.SYNAPSE_CONFIG.profileId.substring(0, 8)}, bridge=${self.SYNAPSE_CONFIG.bridge_name}`);
+        logToHost("info", `Config loaded on attempt ${attempt + 1}`);
+        return true;
+      }
     } catch (e) {
-      console.warn("⚠️ [Synapse] Esperando synapse.config.js...");
+      // Config file doesn't exist yet
     }
+    
+    console.log(`⏳ [Synapse] Waiting for config (attempt ${attempt + 1}/${maxRetries})...`);
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+  
+  console.error("❌ [Synapse] Config timeout after 10 seconds");
+  return false;
+}
+
+// ============================================================================
+// INITIALIZATION & HANDSHAKE
+// ============================================================================
+
+async function initializeSynapse() {
+  if (nativePort) {
+    logToHost("debug", "Init skipped: port already exists");
+    return;
   }
 
-  async function initializeSynapse() {
-    if (nativePort || !self.SYNAPSE_CONFIG) return;
-    try {
-      nativePort = chrome.runtime.connectNative(self.SYNAPSE_CONFIG.bridge_name);
-      nativePort.onMessage.addListener(async (msg) => {
-        // Reintento de envío a la web (evita el "receiving end does not exist")
-        let delivered = false;
-        for (let i = 0; i < 5 && !delivered; i++) {
-          const tabs = await chrome.tabs.query({});
-          const target = tabs.find(t => t.url && t.url.includes("discovery/index.html"));
-          if (target) {
-            try {
-              await chrome.tabs.sendMessage(target.id, { command: "system_ready", payload: msg.payload || msg });
-              delivered = true;
-            } catch (e) { await new Promise(r => setTimeout(r, 500)); }
-          }
-        }
-      });
-      nativePort.onDisconnect.addListener(() => {
-        nativePort = null;
-        setTimeout(initializeSynapse, 2000);
-      });
-      nativePort.postMessage({ type: "SYSTEM_HELLO" });
-    } catch (e) { setTimeout(initializeSynapse, 2000); }
+  // ========================================================================
+  // FIX CRÍTICO: VALIDAR CONFIG ANTES DE CONECTAR
+  // ========================================================================
+  const configReady = await ensureConfig();
+  
+  if (!configReady) {
+    console.error("❌ [Synapse] Cannot initialize without valid config");
+    logToHost("error", "Config timeout - retrying in 5s");
+    setTimeout(initializeSynapse, 5000);
+    return;
   }
+
+  // GUARDA 1: Verificar que SYNAPSE_CONFIG existe
+  if (!self.SYNAPSE_CONFIG) {
+    console.error("❌ [Synapse] SYNAPSE_CONFIG is undefined");
+    logToHost("error", "SYNAPSE_CONFIG undefined - retrying in 5s");
+    setTimeout(initializeSynapse, 5000);
+    return;
+  }
+
+  // GUARDA 2: Verificar que profileId existe
+  if (!self.SYNAPSE_CONFIG.profileId) {
+    console.error("❌ [Synapse] Missing profileId in config");
+    logToHost("error", "Missing profileId - retrying in 5s");
+    setTimeout(initializeSynapse, 5000);
+    return;
+  }
+
+  // GUARDA 3: Verificar que bridge_name existe
+  if (!self.SYNAPSE_CONFIG.bridge_name) {
+    console.error("❌ [Synapse] Missing bridge_name in config");
+    logToHost("error", "Missing bridge_name - retrying in 5s");
+    setTimeout(initializeSynapse, 5000);
+    return;
+  }
+
+  // ========================================================================
+  // CONEXIÓN SEGURA CON CONFIG VALIDADO
+  // ========================================================================
+  try {
+    const { profileId, bridge_name } = self.SYNAPSE_CONFIG;
+    
+    console.log(`🔌 [Synapse] Connecting to bridge: ${bridge_name}`);
+    
+    nativePort = chrome.runtime.connectNative(bridge_name);
+    
+    console.log(`✅ [Synapse] Bridge connected: ${bridge_name}`);
+    logToHost("info", `Bridge connected: ${bridge_name}`);
+
+    // IDENTITY-FIRST: Profile ID en el primer paquete
+    const helloPacket = {
+      type: "SYSTEM_HELLO",
+      payload: {
+        profile_id: profileId,
+        extension_id: chrome.runtime.id,
+        version: chrome.runtime.getManifest().version,
+        capabilities: ["DOM_ACTUATE", "WINDOW_CONTROL", "DATA_MINING"]
+      }
+    };
+
+    nativePort.postMessage(helloPacket);
+    
+    console.log(`📤 [Synapse] SYSTEM_HELLO sent with profile_id: ${profileId.substring(0, 8)}...`);
+    logToHost("info", `SYSTEM_HELLO sent with profile_id: ${profileId}`);
+
+    nativePort.onMessage.addListener(handleHostMessage);
+    nativePort.onDisconnect.addListener(handleHostDisconnect);
+
+    startHeartbeat();
+
+  } catch (e) {
+    console.error("❌ [Synapse] Init failed:", e.message);
+    logToHost("error", `Init failed: ${e.message}`);
+    nativePort = null;
+    setTimeout(initializeSynapse, 2000);
+  }
+}
+
+// ============================================================================
+// HOST → BROWSER
+// ============================================================================
+
+async function handleHostMessage(msg) {
+  if (!msg) return;
+
+  const { type, command, payload, id } = msg;
+
+  if (type === "HEARTBEAT_ACK") return;
+
+  // Handshake exitoso
+  if (type === "SYSTEM_ACK" || command === "system_ready") {
+    console.log("✅ [Synapse] Handshake confirmed by host");
+    logToHost("success", "Handshake confirmed. Notifying Discovery...");
+    
+    const tabs = await chrome.tabs.query({});
+    const target = tabs.find(t => t.url?.includes("discovery/index.html"));
+    
+    if (target) {
+      try {
+        await chrome.tabs.sendMessage(target.id, {
+          command: "system_ready",
+          payload: payload || {}
+        });
+        console.log("✅ [Synapse] Discovery page notified");
+        logToHost("success", "Discovery notified");
+      } catch (e) {
+        console.warn("⚠️ [Synapse] Discovery notification failed:", e.message);
+        logToHost("warn", `Discovery notification failed: ${e.message}`);
+      }
+    }
+    return;
+  }
+
+  // Comando ejecutable
+  console.log(`🔥 [Brain → Tab] Executing: ${command || type}`);
+  logToHost("info", `Executing: ${command || type}`);
+
+  try {
+    let result;
+
+    switch (command) {
+      case "WINDOW_NAVIGATE":
+        result = await handleNavigate(payload);
+        break;
+      case "WINDOW_CLOSE":
+        result = await handleWindowClose();
+        break;
+      case "CLOSE_PROFILE":
+        result = await closeProfile();
+        break;
+      default:
+        result = await routeToTab(msg.target, { command, payload, id });
+    }
+
+    if (id) sendToBrain({ id, status: "ok", result });
+
+  } catch (error) {
+    console.error(`❌ [Synapse] Command [${command}] failed:`, error);
+    logToHost("error", `Command [${command}] failed: ${error.message}`);
+    if (id) sendToBrain({ id, status: "error", error: error.message });
+  }
+}
 
 function handleHostDisconnect() {
   const error = chrome.runtime.lastError;
-  console.warn("⚠️ [Synapse] Túnel cerrado:", error?.message || "Sin errores");
+  console.warn("⚠️ [Synapse] Tunnel closed:", error?.message || "Unknown");
+  logToHost("warn", `Tunnel closed: ${error?.message || "Unknown"}`);
+  
   nativePort = null;
-  isConnecting = false;
   stopHeartbeat();
-  // Reintento de reconexión
   setTimeout(initializeSynapse, 2000);
 }
 
 // ============================================================================
-// 3. HEARTBEAT & SISTEMA
+// HEARTBEAT
 // ============================================================================
-
-let heartbeatTimer = null;
 
 function startHeartbeat() {
   stopHeartbeat();
@@ -77,126 +229,49 @@ function stopHeartbeat() {
   heartbeatTimer = null;
 }
 
-function sendSystemHello() {
-  if (!nativePort) return;
-  const manifest = chrome.runtime.getManifest();
-  nativePort.postMessage({
-    type: "SYSTEM_HELLO",
-    payload: {
-      extension_id: chrome.runtime.id,
-      version: manifest.version,
-      capabilities: ["DOM_ACTUATE", "WINDOW_CONTROL", "DATA_MINING"]
-    }
-  });
-}
-
 // ============================================================================
-// 4. ROUTING: BRAIN → TAB (Downstream)
-// ============================================================================
-
-async function routeFromBrain(message) {
-  if (!message) return;
-  const { type, command, payload, id } = message;
-  
-  // 1. IGNORAR RUIDO TÉCNICO
-  if (type === "HEARTBEAT_ACK") return;
-
-  // 2. HANDSHAKE (Lo que pone el Discovery en VERDE)
-  if (type === "SYSTEM_ACK" || command === "system_ready") {
-    console.log("✅ [Synapse] Handshake exitoso recibido. Notificando a la web...");
-    const tabs = await chrome.tabs.query({});
-    for (const tab of tabs) {
-      if (tab.url && tab.url.includes("discovery/index.html")) {
-        chrome.tabs.sendMessage(tab.id, { 
-          command: "system_ready", 
-          payload: payload 
-        });
-      }
-    }
-    return;
-  }
-
-  // 3. COMANDOS DE ACCIÓN (Lo que hace que el bot trabaje)
-  console.log(`📥 [Brain → Tab] Ejecutando: ${command || type}`, payload);
-
-  try {
-    let result;
-    switch (command) {
-      case "WINDOW_NAVIGATE":
-        // payload debe ser { url: "..." }
-        result = await handleNavigate(payload);
-        break;
-
-      case "WINDOW_CLOSE":
-        result = await handleWindowClose();
-        break;
-
-      case "CLOSE_PROFILE":
-        result = await closeProfile();
-        break;
-
-      default:
-        // Si no es un comando de ventana, va al DOM (Content Script)
-        // message.target puede ser un tab_id o "active"
-        result = await routeToTab(message.target, { command, payload, id });
-    }
-
-    // Responder al Brain (Python) que la tarea se hizo
-    if (id) {
-      sendToBrain({ id, status: "ok", result });
-    }
-
-  } catch (error) {
-    console.error(`❌ [Synapse] Error en comando [${command}]:`, error);
-    if (id) {
-      sendToBrain({ id, status: "error", error: error.message });
-    }
-  }
-}
-
-// ============================================================================
-// 5. ROUTING: TAB → BRAIN (Upstream & Discovery)
+// BROWSER → HOST (Unified Listener)
 // ============================================================================
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  const { command, source } = message;
+  const { command, source, type } = message;
 
-  // Manejo de la página de Discovery
+  // Discovery ping
   if (command === "ping" && source === "discovery_page") {
-    sendResponse({ status: "pong", version: chrome.runtime.getManifest().version });
+    sendResponse({ 
+      status: "pong", 
+      version: chrome.runtime.getManifest().version,
+      hasConfig: !!self.SYNAPSE_CONFIG?.profileId
+    });
     return false;
   }
 
-  if (command === "discovery_complete") {
-    console.log("✅ [Discovery] Validación completada por el usuario.");
-    sendToBrain({ type: "DISCOVERY_COMPLETE", payload: message });
+  // Discovery complete (delayed send)
+  if (command === "discovery_complete" || type === "DISCOVERY_COMPLETE") {
+    console.log("⏳ [Discovery] Validation complete. Waiting 500ms for TCP stability...");
+    logToHost("info", "Discovery validation complete. Waiting 500ms for TCP stability...");
+    setTimeout(() => {
+      sendToBrain(message);
+      console.log("🚀 [Discovery] DISCOVERY_COMPLETE forwarded to host");
+      logToHost("info", "DISCOVERY_COMPLETE forwarded to host");
+    }, 500);
     sendResponse({ received: true });
     return false;
   }
 
-  // Forwarding genérico de Content Scripts hacia Python
-  const enrichedMessage = {
+  // Generic forwarding
+  const enriched = {
     ...message,
     source: { tab_id: sender.tab?.id, url: sender.tab?.url }
   };
-  
-  sendToBrain(enrichedMessage);
+
+  sendToBrain(enriched);
   sendResponse({ received: true });
   return false;
 });
 
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (msg.type === "DISCOVERY_COMPLETE") {
-    console.log("⏳ Esperando 500ms para asegurar túnel TCP...");
-    setTimeout(() => {
-      nativePort.postMessage(msg); // Ahora sí, al C++
-      console.log("🚀 DISCOVERY_COMPLETE enviado al Host");
-    }, 500);
-  }
-});
-
 // ============================================================================
-// 6. IMPLEMENTACIÓN DE COMANDOS
+// COMMAND HANDLERS
 // ============================================================================
 
 async function handleWindowClose() {
@@ -215,7 +290,7 @@ async function handleNavigate(payload) {
   return { navigated: false, reason: "no_active_tab" };
 }
 
-async function closeProfile(payload = {}) {
+async function closeProfile() {
   const windows = await chrome.windows.getAll();
   for (const win of windows) {
     await chrome.windows.remove(win.id);
@@ -230,7 +305,7 @@ async function routeToTab(target, message) {
     if (!tabs.length) return { status: "skipped", reason: "no_active_tab" };
     tabId = tabs[0].id;
   }
-  
+
   try {
     return await chrome.tabs.sendMessage(tabId, message);
   } catch (error) {
@@ -246,21 +321,26 @@ function sendToBrain(message) {
     try {
       nativePort.postMessage(message);
     } catch (e) {
-      console.error("❌ [Synapse] Error de envío al Host:", e);
+      console.error("❌ [Synapse] Send to host failed:", e);
+      logToHost("error", `Send to host failed: ${e.message}`);
     }
   }
 }
 
 // ============================================================================
-// 7. INICIO DE SECUENCIA
+// BOOT SEQUENCE
 // ============================================================================
 
-// Carga inicial
-loadSynapseConfig();
+console.log("🚀 [Synapse] Service Worker starting...");
 
-// Iniciar bridge
 initializeSynapse();
 
-// Asegurar reconexión en eventos de ciclo de vida
-chrome.runtime.onInstalled.addListener(initializeSynapse);
-chrome.runtime.onStartup.addListener(initializeSynapse);
+chrome.runtime.onInstalled.addListener(() => {
+  console.log("🔄 [Synapse] Extension installed/updated");
+  initializeSynapse();
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  console.log("🔄 [Synapse] Browser startup");
+  initializeSynapse();
+});

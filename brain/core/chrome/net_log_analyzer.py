@@ -72,8 +72,8 @@ class NetLogAnalyzer:
             raise ValueError("profile_id cannot be empty")
         
         # Construct source file path (assuming net-log is saved as netlog.json)
-        source_file = Path(self.paths.base_dir) / "profiles" / profile_id / "netlog.json"
-        
+        source_file = Path(self.paths.base_dir) / "profiles" / profile_id / "network_mining.json"
+
         logger.debug(f"Source file: {source_file}")
         
         if not source_file.exists():
@@ -81,10 +81,10 @@ class NetLogAnalyzer:
             raise FileNotFoundError(f"Chrome network log not found: {source_file}")
         
         # Construct output directory and file
-        timestamp = datetime.now().strftime("%Y%m%d")
         output_dir = Path(self.paths.base_dir) / "logs" / "profiles" / profile_id
         output_dir.mkdir(parents=True, exist_ok=True)
-        
+
+        timestamp = datetime.now().strftime("%Y%m%d")
         output_file = output_dir / f"chrome_bloom_net_log_{timestamp}.log"
         
         logger.info(f"Analyzing network log: {source_file}")

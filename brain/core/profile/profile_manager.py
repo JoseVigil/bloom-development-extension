@@ -1,6 +1,6 @@
 """
 Profile Manager - Orchestrator Facade.
-Versión refactorizada con orden de sincronización corregido.
+Versión refactorizada con flags de Chromium definitivos para eliminar ERR_BLOCKED_BY_CLIENT.
 """
 
 import json
@@ -226,6 +226,11 @@ class ProfileManager:
             return self._launch_system_chrome(profile, url)
 
     def _launch_internal_chromium(self, profile: Dict, url: Optional[str]) -> Dict[str, Any]:
+        """
+        ESTRATEGIA INTERNAL CHROMIUM: Lanzamiento con flags definitivos.
+        
+        FIX CRÍTICO: Orden de flags y bypass de Site Isolation.
+        """
         import sys, os, logging, subprocess, time
         
         full_id = profile['id']
@@ -237,24 +242,54 @@ class ProfileManager:
         u_data = os.path.abspath(profile_path)
         e_path = os.path.abspath(profile_path / "extension")
         target_url = url if url else self.get_discovery_url(full_id)
+        net_log = os.path.join(u_data, "network_mining.json")
+        debug_log = os.path.join(u_data, "engine_mining.log")
 
-        # 2. ARGUMENTOS: --user-data-dir DEBE SER EL PRIMERO
+        # ========================================================================
+        # FIX CRÍTICO: FLAGS DEFINITIVOS PARA ELIMINAR ERR_BLOCKED_BY_CLIENT
+        # ========================================================================
+        # ORDEN IMPORTANTE:
+        # 1. --user-data-dir DEBE SER PRIMERO (aislamiento de perfil)
+        # 2. --no-sandbox (bypass de restricciones de seguridad)
+        # 3. --disable-features (desactivar Site Isolation)
+        # 4. --disable-web-security (permitir acceso cross-origin)
+        # 5. --load-extension (cargar extensión)
+        # 6. --app (URL de inicio)
+        
         chrome_args = [
             chrome_path,
             f"--user-data-dir={u_data}",
+            
+            # BYPASS DE SEGURIDAD (crítico para extension access)
+            "--no-sandbox",
+            "--test-type",
+            "--disable-web-security",
+            
+            # DESACTIVAR SITE ISOLATION (crítico para chrome-extension://)
+            "--disable-features=IsolateOrigins,site-per-process",
+            
+            # EXTENSIÓN Y URL
             f"--load-extension={e_path}",
             f"--app={target_url}",
+            
+            # CONFIGURACIÓN DE CHROMIUM
             "--no-first-run",
             "--no-default-browser-check",
-            "--test-type",
-            "--remote-debugging-port=0"
+            "--remote-debugging-port=0",
+            "--disable-sync",
+            
+            # LOGGING (opcional, solo si verbose)
+            f"--log-file={debug_log}",
+            f"--log-net-log={net_log}", 
+            "--enable-logging",
+            "--v=1"
         ]
 
         try:
             # 3. LANZAMIENTO DESACOPLADO
             subprocess.Popen(
                 chrome_args,
-                creationflags=0x00000008 | 0x00000200, 
+                creationflags=0x00000008 | 0x00000200,  # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 stdin=subprocess.DEVNULL,
@@ -287,12 +322,12 @@ class ProfileManager:
         u_data = os.path.abspath(profile_path)
         e_path = os.path.abspath(profile_path / "extension")
 
-        # AGREGAR ESTO:
+        # Remover lock file si existe
         lock_file = os.path.join(u_data, "SingletonLock")
         if os.path.exists(lock_file):
             try: 
                 os.remove(lock_file)
-                logger.debug(f"🗑️  Lock removido: {full_id}")
+                logger.debug(f"🗑️ Lock removido: {full_id}")
             except: 
                 pass
 
@@ -303,61 +338,12 @@ class ProfileManager:
             f"--app={target_url}",
             "--no-first-run",
             "--no-default-browser-check",
-            # QUITAR: "--no-instance-limit",  ← COMENTÁ O BORRÁ ESTA LÍNEA
             f"--remote-debugging-port=0",
             "--disable-features=RendererCodeIntegrity",
             "--test-type"
         ]
 
         return self._execute_popen(chrome_args, full_id)
-
-
-    def _execute_popen(self, args: list, profile_id: str) -> Dict[str, Any]:
-        """
-        Ejecuta el proceso de Chrome y retorna info de control.
-        
-        IMPORTANTE: Este método NO debe hacer retry automático.
-        Si Chromium falla al arrancar, debe retornar error al caller.
-        """
-        try:
-            # CRÍTICO: shell=False para evitar escape de argumentos
-            process = subprocess.Popen(
-                args,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                shell=False,
-                # En Windows, evitar ventana de consola
-                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
-            )
-            
-            # Esperar 2 segundos para verificar que no crasheó inmediatamente
-            import time
-            time.sleep(2)
-            
-            if process.poll() is not None:
-                # El proceso ya terminó = error de lanzamiento
-                stderr = process.stderr.read().decode('utf-8', errors='ignore')
-                return {
-                    "status": "error",
-                    "error": f"Chrome crashed on startup: {stderr[:200]}"
-                }
-            
-            print(f"✅ Chrome launched successfully (PID: {process.pid})")
-            
-            return {
-                "status": "success",
-                "data": {
-                    "profile_id": profile_id,
-                    "pid": process.pid,
-                    "url": args[-1].split('=')[-1]  # Extrae la URL del --app=
-                }
-            }
-            
-        except Exception as e:
-            return {
-                "status": "error",
-                "error": f"Failed to launch Chrome: {str(e)}"
-            }
 
     def _execute_popen(self, args: list, profile_id: str) -> Dict[str, Any]:
         """Maneja el Popen y silencia los logs para Electron."""

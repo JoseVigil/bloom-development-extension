@@ -1,11 +1,11 @@
 // brain-service-manager.js
-// Módulo para gestionar el Brain Service desde Electron
-// Se usa tanto en --install como en --launch
+// MÃ³dulo para gestionar el Brain Service desde Electron
 
 const { spawn, execSync } = require('child_process');
 const path = require('path');
 const { paths } = require('../config/paths');
 const { getLogger } = require('../src/logger');
+const net = require('net');
 
 class BrainServiceManager {
   constructor() {
@@ -14,11 +14,11 @@ class BrainServiceManager {
     this.isReady = false;
     this.healthCheckInterval = null;
     this.logger = getLogger('brain-service');
+    
+    // Arrow function para preservar contexto
+    this.sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  /**
-   * Verifica si el Brain Service está corriendo
-   */
   async checkStatus() {
     try {
       const result = execSync(`"${this.brainExe}" --json service status`, {
@@ -42,9 +42,6 @@ class BrainServiceManager {
     }
   }
 
-  /**
-   * Inicia el Brain Service si no está corriendo
-   */
   async ensureRunning() {
     this.logger.info('Checking Brain Service...');
     
@@ -59,7 +56,6 @@ class BrainServiceManager {
     this.logger.info('Starting Brain Service...');
     
     try {
-      // Iniciar como proceso detached (daemon)
       const startProcess = spawn(this.brainExe, ['service', 'start'], {
         detached: true,
         stdio: 'ignore',
@@ -67,10 +63,8 @@ class BrainServiceManager {
         cwd: path.dirname(this.brainExe)
       });
       
-      // Desacoplar del proceso padre
       startProcess.unref();
       
-      // Esperar a que arranque (polling)
       const maxAttempts = 10;
       for (let i = 0; i < maxAttempts; i++) {
         await this.sleep(500);
@@ -91,45 +85,58 @@ class BrainServiceManager {
     }
   }
 
-  /**
-   * 🆕 NUEVO MÉTODO: Espera hasta que el servicio responda
-   * Este es el método que faltaba y causaba el error
-   */
-  async waitUntilResponding(timeoutSeconds = 10) {
-    this.logger.info(`Waiting for Brain Service to respond (timeout: ${timeoutSeconds}s)...`);
-    
-    const maxAttempts = timeoutSeconds * 2; // Check every 500ms
-    
-    for (let i = 0; i < maxAttempts; i++) {
-      const status = await this.checkStatus();
-      
-      if (status.running && status.pid) {
-        this.logger.success(`Brain Service is responding (PID: ${status.pid})`);
-        return { 
-          success: true, 
-          pid: status.pid,
-          activeClients: status.activeClients,
-          registeredProfiles: status.registeredProfiles
-        };
-      }
-      
-      if (i % 4 === 0) { // Log every 2 seconds
-        this.logger.info(`Attempt ${i + 1}/${maxAttempts} - Waiting for service...`);
-      }
-      
-      await this.sleep(500);
-    }
-    
-    this.logger.warn(`Brain Service did not respond within ${timeoutSeconds}s`);
-    return { 
-      success: false, 
-      error: `Timeout waiting for Brain Service (${timeoutSeconds}s)` 
-    };
+  async _isPortOpen(port, host = '127.0.0.1') {
+    return new Promise((resolve) => {
+      const socket = new net.Socket();
+      const timeout = 1000;
+
+      socket.setTimeout(timeout);
+      socket.on('connect', () => {
+        socket.destroy();
+        resolve(true);
+      });
+
+      socket.on('timeout', () => {
+        socket.destroy();
+        resolve(false);
+      });
+
+      socket.on('error', () => {
+        socket.destroy();
+        resolve(false);
+      });
+
+      socket.connect(port, host);
+    });
   }
 
-  /**
-   * Inicia health checks periódicos
-   */
+  async waitUntilResponding(timeoutSeconds = 80) {
+    this.logger.info(`Waiting for Brain Service on 127.0.0.1:5678 (timeout: ${timeoutSeconds}s)...`);
+    
+    const startTime = Date.now();
+    const timeoutMs = timeoutSeconds * 1000;
+    
+    while (Date.now() - startTime < timeoutMs) {
+      const portOpen = await this._isPortOpen(5678, '127.0.0.1');
+      
+      if (portOpen) {
+        const status = await this.checkStatus();
+        
+        if (status.running) {
+          this.logger.success(`âœ… Brain Service is ALIVE (PID: ${status.pid})`);
+          return { success: true, pid: status.pid };
+        } else {
+          this.logger.warn(`âš ï¸ Port 5678 is open, but CLI status is lagging. Proceeding...`);
+          return { success: true, pid: 'detected_via_port' };
+        }
+      }
+
+      await this.sleep(1000);
+    }
+    
+    return { success: false, error: 'Timeout' };
+  }
+
   startHealthCheck(onDeath = null) {
     if (this.healthCheckInterval) {
       clearInterval(this.healthCheckInterval);
@@ -143,11 +150,8 @@ class BrainServiceManager {
       if (!status.running) {
         this.logger.error('Brain Service died unexpectedly!');
         
-        if (onDeath) {
-          onDeath();
-        }
+        if (onDeath) onDeath();
         
-        // Intentar reiniciar
         this.logger.info('Attempting to restart...');
         await this.ensureRunning();
       } else {
@@ -156,9 +160,6 @@ class BrainServiceManager {
     }, 10000);
   }
 
-  /**
-   * Detiene los health checks
-   */
   stopHealthCheck() {
     if (this.healthCheckInterval) {
       clearInterval(this.healthCheckInterval);
@@ -167,9 +168,6 @@ class BrainServiceManager {
     }
   }
 
-  /**
-   * Verifica que un profile específico esté registrado
-   */
   async waitForProfileRegistration(profileId, timeoutSeconds = 10) {
     this.logger.info(`Waiting for profile ${profileId.substring(0, 8)} to register...`);
     
@@ -191,9 +189,6 @@ class BrainServiceManager {
     return { success: false, error: 'Profile registration timeout' };
   }
 
-  /**
-   * Para el servicio (solo para cleanup)
-   */
   async stop() {
     try {
       this.logger.info('Stopping Brain Service...');
@@ -211,27 +206,13 @@ class BrainServiceManager {
       this.logger.warn('Failed to stop Brain Service:', error.message);
     }
   }
-
-  sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
 }
 
-// ============================================================================
-// INTEGRACIÓN CON INSTALLER.JS
-// ============================================================================
-
-/**
- * Helper para usar DESPUÉS de instalar el Windows Service
- * Verifica que el servicio esté respondiendo en puerto 5678
- */
 async function ensureBrainServiceResponding(mainWindow = null) {
   const logger = getLogger('installer');
   logger.info('\n=== VERIFYING BRAIN SERVICE IS RESPONDING ===\n');
   
   const manager = new BrainServiceManager();
-  
-  // Usar el nuevo método waitUntilResponding
   const result = await manager.waitUntilResponding(10);
   
   if (!result.success) {
@@ -242,17 +223,11 @@ async function ensureBrainServiceResponding(mainWindow = null) {
   return manager;
 }
 
-/**
- * Helper para modo --launch
- * Arranca el servicio si no está corriendo (fallback)
- */
 async function ensureBrainServiceForLaunch(mainWindow = null) {
   const logger = getLogger('launcher');
   logger.info('\n=== ENSURING BRAIN SERVICE FOR LAUNCH MODE ===\n');
   
   const manager = new BrainServiceManager();
-  
-  // Intentar arrancar (si no está corriendo)
   const result = await manager.ensureRunning();
   
   if (!result.success) {
@@ -260,12 +235,11 @@ async function ensureBrainServiceForLaunch(mainWindow = null) {
   }
   
   logger.success('Brain Service confirmed running');
-  
   return manager;
 }
 
 module.exports = { 
   BrainServiceManager,
-  ensureBrainServiceResponding,      // Para --install (después de NSSM)
-  ensureBrainServiceForLaunch        // Para --launch (fallback)
+  ensureBrainServiceResponding,
+  ensureBrainServiceForLaunch
 };

@@ -51,8 +51,8 @@ class MiningLogReader:
             raise ValueError("profile_id cannot be empty")
         
         # Construct source file path for engine_mining.log
-        logs_dir = Path(self.paths.base_dir) / "logs" / "profiles" / profile_id
-        source_file = logs_dir / "engine_mining.log"
+        profile_dir = Path(self.paths.base_dir) / "profiles" / profile_id
+        source_file = profile_dir / "engine_mining.log"
         
         logger.debug(f"Source file: {source_file}")
         
@@ -61,7 +61,9 @@ class MiningLogReader:
             raise FileNotFoundError(f"Engine mining log not found: {source_file}")
         
         # Output file in the same directory
-        output_file = logs_dir / "engine_mining.txt"
+        logs_dir = Path(self.paths.base_dir) / "logs" / "profiles" / profile_id
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        output_file = logs_dir / "engine_mining.log"
         
         logger.info(f"Processing mining log file: {source_file}")
         logger.info(f"Output will be saved to: {output_file}")

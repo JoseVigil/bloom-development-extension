@@ -3,7 +3,7 @@
 // INSTALLATION ORDER:
 // 1. Cleanup (services + processes)
 // 2. Create directories
-// 3. Install Chromium (NEW) ← CRITICAL DEPENDENCY
+// 3. Install Chromium (NEW) â† CRITICAL DEPENDENCY
 // 4. Copy extension template to bin/extension/
 // 5. Install runtime (Python engine)
 // 6. Copy binaries (brain.exe, bloom-host.exe)
@@ -20,7 +20,7 @@ const { BrowserWindow, app } = require('electron');
 const { execFile, spawn } = require('child_process');
 const { getLogger } = require('../src/logger');
 
-// Logger para instalación
+// Logger para instalaciÃ³n
 const logger = getLogger('installer');
 
 // Importers
@@ -33,7 +33,7 @@ const {
 } = require('./service-installer');
 const { installRuntime } = require('./runtime-installer');
 const { installExtension } = require('./extension-installer');
-const { installChromium } = require('./chromium-installer'); // 🆕 NEW IMPORT
+const { installChromium } = require('./chromium-installer'); // ðŸ†• NEW IMPORT
 const { 
   BrainServiceManager,
   ensureBrainServiceResponding,
@@ -67,16 +67,16 @@ function emitProgress(mainWindow, stepKey, detail = '') {
 // INSTALLATION STEPS (UPDATED WITH CHROMIUM)
 // ============================================================================
 const INSTALLATION_STEPS = [
-  { key: 'cleanup', percentage: 0, message: '🧹 Cleaning previous installation...' },
-  { key: 'directories', percentage: 8, message: '📁 Creating directory structure...' },
-  { key: 'chromium', percentage: 20, message: '🌐 Installing Chromium browser...' }, // 🆕 NEW STEP
-  { key: 'extension-template', percentage: 35, message: '🧩 Copying extension template...' },
-  { key: 'brain-runtime', percentage: 50, message: '⚙️ Installing Brain runtime (Python)...' },
-  { key: 'binaries', percentage: 65, message: '🔧 Deploying binaries...' },
-  { key: 'service', percentage: 78, message: '🚀 Installing Windows service...' },
-  { key: 'brain-handoff', percentage: 88, message: '🤝 Handing off to Brain for profile setup...' },
-  { key: 'validation', percentage: 95, message: '✅ Validating installation...' },
-  { key: 'complete', percentage: 100, message: '✅ Installation completed successfully!' }
+  { key: 'cleanup', percentage: 0, message: 'ðŸ§¹ Cleaning previous installation...' },
+  { key: 'directories', percentage: 8, message: 'ðŸ“ Creating directory structure...' },
+  { key: 'chromium', percentage: 20, message: 'ðŸŒ Installing Chromium browser...' }, // ðŸ†• NEW STEP
+  { key: 'extension-template', percentage: 35, message: 'ðŸ§© Copying extension template...' },
+  { key: 'brain-runtime', percentage: 50, message: 'âš™ï¸ Installing Brain runtime (Python)...' },
+  { key: 'binaries', percentage: 65, message: 'ðŸ”§ Deploying binaries...' },
+  { key: 'service', percentage: 78, message: 'ðŸš€ Installing Windows service...' },
+  { key: 'brain-handoff', percentage: 88, message: 'ðŸ¤ Handing off to Brain for profile setup...' },
+  { key: 'validation', percentage: 95, message: 'âœ… Validating installation...' },
+  { key: 'complete', percentage: 100, message: 'âœ… Installation completed successfully!' }
 ];
 
 // ============================================================================
@@ -104,14 +104,14 @@ async function createDirectories() {
     await fs.ensureDir(d);
   }
   
-  console.log('✅ Directory structure created');
+  console.log('âœ… Directory structure created');
 }
 
 /**
  * Clean native directory preserving structure
  */
 async function cleanNativeDir() {
-  console.log('\n🧹 CLEANING NATIVE DIRECTORY');
+  console.log('\nðŸ§¹ CLEANING NATIVE DIRECTORY');
   try {
     const nativeDir = path.join(paths.binDir, 'native');
     if (await fs.pathExists(nativeDir)) {
@@ -125,9 +125,9 @@ async function cleanNativeDir() {
     } else {
       await fs.ensureDir(nativeDir);
     }
-    console.log('✅ Native directory cleaned');
+    console.log('âœ… Native directory cleaned');
   } catch (e) {
-    console.warn('⚠️ Could not clean native dir completely:', e.message);
+    console.warn('âš ï¸ Could not clean native dir completely:', e.message);
   }
 }
 
@@ -135,7 +135,7 @@ async function cleanNativeDir() {
  * Copy extension as TEMPLATE to bin/extension/
  */
 async function deployExtensionTemplate() {
-  console.log('\n🧩 DEPLOYING EXTENSION TEMPLATE');
+  console.log('\nðŸ§© DEPLOYING EXTENSION TEMPLATE');
   
   const templateDir = path.join(paths.binDir, 'extension');
   
@@ -145,7 +145,7 @@ async function deployExtensionTemplate() {
   
   await installExtension();
   
-  console.log('✅ Extension template deployed to:', templateDir);
+  console.log('âœ… Extension template deployed to:', templateDir);
   return { success: true };
 }
 
@@ -153,18 +153,18 @@ async function deployExtensionTemplate() {
  * Copy binaries to unified structure
  */
 async function deployBinaries() {
-  console.log('\n🔧 DEPLOYING BINARIES');
+  console.log('\nðŸ”§ DEPLOYING BINARIES');
   
   const brainDest = path.join(paths.binDir, 'brain');
   const nativeDest = path.join(paths.binDir, 'native');
   
   // 1. Copy Brain
-  console.log('📦 Copying Brain service...');
+  console.log('ðŸ“¦ Copying Brain service...');
   console.log(`   Source: ${paths.brainSource}`);
   console.log(`   Dest:   ${brainDest}`);
   
   if (!await fs.pathExists(paths.brainSource)) {
-    throw new Error(`Brain source not found at: ${paths.brainSource}\n💡 Run 'python scripts/build_brain.py'`);
+    throw new Error(`Brain source not found at: ${paths.brainSource}\nðŸ’¡ Run 'python scripts/build_brain.py'`);
   }
   
   await fs.copy(paths.brainSource, brainDest, { overwrite: true });
@@ -173,10 +173,10 @@ async function deployBinaries() {
   if (!await fs.pathExists(brainExePath)) {
     throw new Error(`brain.exe not found after copy: ${brainExePath}`);
   }
-  console.log('  ✅ Brain service deployed');
+  console.log('  âœ… Brain service deployed');
   
   // 2. Copy Native Host + DLLs
-  console.log('📦 Copying Native Host + DLLs...');
+  console.log('ðŸ“¦ Copying Native Host + DLLs...');
   
   const nativeSourceDir = path.dirname(paths.nativeSource);
   console.log(`   Source Dir: ${nativeSourceDir}`);
@@ -197,11 +197,11 @@ async function deployBinaries() {
       
       await fs.copy(sourcePath, destPath, { overwrite: true });
       copiedFiles.push(file);
-      console.log(`  ✅ Copied: ${file}`);
+      console.log(`  âœ… Copied: ${file}`);
     }
   }
   
-  console.log(`  ✅ Native host deployed (${copiedFiles.length} files)`);
+  console.log(`  âœ… Native host deployed (${copiedFiles.length} files)`);
   
   const hostDestPath = path.join(nativeDest, 'bloom-host.exe');
   if (!await fs.pathExists(hostDestPath)) {
@@ -209,7 +209,7 @@ async function deployBinaries() {
   }
   
   // 3. Copy NSSM
-  console.log('📦 Copying NSSM...');
+  console.log('ðŸ“¦ Copying NSSM...');
   const nssmSource = paths.nssmExe;
   const nssmDest = path.join(nativeDest, 'nssm.exe');
   
@@ -218,16 +218,16 @@ async function deployBinaries() {
   }
   
   await fs.copy(nssmSource, nssmDest, { overwrite: true });
-  console.log('  ✅ NSSM deployed');
+  console.log('  âœ… NSSM deployed');
   
-  console.log('✅ All binaries deployed');
+  console.log('âœ… All binaries deployed');
 }
 
 /**
  * BRAIN HANDOFF: Create profile
  */
 async function createProfileViaBrain() {
-  console.log('\n🤝 HANDING OFF TO BRAIN: Creating Master Profile');
+  console.log('\nðŸ¤ HANDING OFF TO BRAIN: Creating Master Profile');
   
   return new Promise((resolve, reject) => {
     const brainExe = path.join(paths.binDir, 'brain', 'brain.exe');
@@ -290,7 +290,7 @@ async function createProfileViaBrain() {
           throw new Error('Profile ID missing');
         }
         
-        console.log(`✅ Profile Created: ${profileId}`);
+        console.log(`âœ… Profile Created: ${profileId}`);
         
         resolve({
           profileId,
@@ -300,7 +300,7 @@ async function createProfileViaBrain() {
         });
         
       } catch (parseError) {
-        console.error("❌ Parse Error:", stdout);
+        console.error("âŒ Parse Error:", stdout);
         
         if (stdout.includes('MasterWorker') || stdout.includes('already exists')) {
           return resolve({ profileId: "MasterWorker", fallback: true });
@@ -316,7 +316,7 @@ async function createProfileViaBrain() {
  * BRAIN HANDOFF: Validate installation via profile launch
  */
 async function validateInstallationViaBrain(profileId) {
-  console.log('\n✅ VALIDATION: Launching profile for discovery');
+  console.log('\nâœ… VALIDATION: Launching profile for discovery');
   
   return new Promise((resolve, reject) => {
     const brainExe = path.join(paths.binDir, 'brain', 'brain.exe');
@@ -357,14 +357,14 @@ async function validateInstallationViaBrain(profileId) {
 
     child.on('close', (code) => {
       if (code !== 0) {
-        console.error(`❌ Validation failed with code ${code}`);
+        console.error(`âŒ Validation failed with code ${code}`);
         console.error('Stderr:', stderr);
         return reject(new Error(`Validation failed: ${stderr || 'Unknown error'}`));
       }
 
-      console.log('✅ Profile launched successfully');
-      console.log('ℹ️ Chrome should be running with the extension loaded');
-      console.log('ℹ️ Check logs for handshake confirmation');
+      console.log('âœ… Profile launched successfully');
+      console.log('â„¹ï¸ Chrome should be running with the extension loaded');
+      console.log('â„¹ï¸ Check logs for handshake confirmation');
       
       resolve({
         success: true,
@@ -405,7 +405,7 @@ async function runFullInstallation(mainWindow = null) {
     await cleanupOldServices();
     await killAllBloomProcesses();
 
-    // 🆕 NUEVO: Liberar puerto 5678 si está ocupado
+    // ðŸ†• NUEVO: Liberar puerto 5678 si estÃ¡ ocupado
     logger.info('Verificando puerto 5678...');
     const { exec } = require('child_process');
 
@@ -416,7 +416,7 @@ async function runFullInstallation(mainWindow = null) {
     });
 
     if (portCheck && portCheck.includes('LISTENING')) {
-      logger.warn('⚠️ Puerto 5678 está ocupado');
+      logger.warn('âš ï¸ Puerto 5678 estÃ¡ ocupado');
       logger.info('Intentando liberar puerto...');
       
       // Extraer PID del proceso que usa el puerto
@@ -442,7 +442,7 @@ async function runFullInstallation(mainWindow = null) {
         }
       }
       
-      // Verificar que se liberó
+      // Verificar que se liberÃ³
       const recheckPort = await new Promise((resolve) => {
         exec('netstat -ano | findstr :5678', (error, stdout) => {
           resolve(stdout);
@@ -450,17 +450,17 @@ async function runFullInstallation(mainWindow = null) {
       });
       
       if (!recheckPort || !recheckPort.includes('LISTENING')) {
-        logger.success('✅ Puerto 5678 liberado');
+        logger.success('âœ… Puerto 5678 liberado');
       } else {
-        logger.error('❌ No se pudo liberar el puerto 5678');
+        logger.error('âŒ No se pudo liberar el puerto 5678');
         throw new Error(
-          'Puerto 5678 todavía ocupado. ' +
-          'Ejecutá manualmente: netstat -ano | findstr :5678 ' +
-          'y matá el proceso con: taskkill /F /PID [PID]'
+          'Puerto 5678 todavÃ­a ocupado. ' +
+          'EjecutÃ¡ manualmente: netstat -ano | findstr :5678 ' +
+          'y matÃ¡ el proceso con: taskkill /F /PID [PID]'
         );
       }
     } else {
-      logger.success('✅ Puerto 5678 disponible');
+      logger.success('âœ… Puerto 5678 disponible');
     }
 
     await cleanNativeDir();
@@ -487,7 +487,7 @@ async function runFullInstallation(mainWindow = null) {
     }
     logger.success('Chromium installed successfully');
     
-    console.log('✅ Chromium installed successfully at:', chromiumResult.chromiumPath);
+    console.log('âœ… Chromium installed successfully at:', chromiumResult.chromiumPath);
     
     // ========================================================================
     // STEP 4: DEPLOY EXTENSION TEMPLATE
@@ -529,8 +529,8 @@ async function runFullInstallation(mainWindow = null) {
     emitProgress(mainWindow, 'service', 'Esperando que Brain Service responda (esto puede tomar 1-2 min)');
 
     logger.step('STEP 7.5: Verificando que Brain Service responda');
-    logger.info('⏳ Brain Service necesita tiempo para inicializar Python + FastAPI...');
-    logger.info('⏳ Primera ejecución puede tomar 60-90 segundos');
+    logger.info('â³ Brain Service necesita tiempo para inicializar Python + FastAPI...');
+    logger.info('â³ Primera ejecuciÃ³n puede tomar 60-90 segundos');
 
     const brainManager = new BrainServiceManager();
 
@@ -545,9 +545,21 @@ async function runFullInstallation(mainWindow = null) {
     const verifyResult = await brainManager.waitUntilResponding(80); // 80 segundos
 
     if (!verifyResult.success) {
-      logger.error('❌ Brain Service no responde después de 90 segundos totales');
+
+      logger.info('âš ï¸ El servicio no responde. Intentando arranque forzado del motor...');
+      // Intentar lanzar el comando directamente para debug o recuperaciÃ³n
+      const emergencyStart = spawn(path.join(paths.binDir, 'brain', 'brain.exe'), ['service', 'start'], {
+          detached: true,
+          stdio: 'ignore'
+      });
+      emergencyStart.unref();
+      
+      // Esperar 5 segundos adicionales
+      await new Promise(resolve => setTimeout(resolve, 5000));
+
+      logger.error('âŒ Brain Service no responde despuÃ©s de 90 segundos totales y arranque forzado del motor');
       logger.error('');
-      logger.error('🔍 Diagnóstico:');
+      logger.error('ðŸ” DiagnÃ³stico:');
       
       // Verificar estado del servicio Windows
       const { exec } = require('child_process');
@@ -569,26 +581,26 @@ async function runFullInstallation(mainWindow = null) {
       });
       
       logger.info('Estado del puerto 5678:');
-      console.log(portStatus || '❌ Puerto no está en LISTENING');
+      console.log(portStatus || 'âŒ Puerto no estÃ¡ en LISTENING');
       
       // Verificar logs de Brain
       const brainLogPath = path.join(paths.logsDir, 'brain-service.log');
-      logger.info(`📋 Revisar logs en: ${brainLogPath}`);
+      logger.info(`ðŸ“‹ Revisar logs en: ${brainLogPath}`);
       
       // Verificar logs de NSSM
       const nssmLogPath = path.join(paths.logsDir, 'nssm-service.log');
-      logger.info(`📋 Revisar logs NSSM en: ${nssmLogPath}`);
+      logger.info(`ðŸ“‹ Revisar logs NSSM en: ${nssmLogPath}`);
       
       throw new Error(
-        'Brain Service no arranca automáticamente. ' +
-        'El servicio se instaló correctamente pero no responde. ' +
-        'Intentá arrancarlo manualmente: sc start BloomBrainService'
+        'Brain Service no arranca automÃ¡ticamente. ' +
+        'El servicio se instalÃ³ correctamente pero no responde. ' +
+        'IntentÃ¡ arrancarlo manualmente: sc start BloomBrainService'
       );
     } else {
-      logger.success(`✅ Brain Service verificado respondiendo (PID: ${verifyResult.pid})`);
-      logger.info('✅ Puerto 5678 LISTENING');
-      logger.info('✅ Listo para crear perfiles');
-      console.log(`\n✅ Brain Service respondiendo correctamente en puerto 5678 (PID: ${verifyResult.pid})\n`);
+      logger.success(`âœ… Brain Service verificado respondiendo (PID: ${verifyResult.pid})`);
+      logger.info('âœ… Puerto 5678 LISTENING');
+      logger.info('âœ… Listo para crear perfiles');
+      console.log(`\nâœ… Brain Service respondiendo correctamente en puerto 5678 (PID: ${verifyResult.pid})\n`);
     }
     
     // ========================================================================
@@ -597,7 +609,7 @@ async function runFullInstallation(mainWindow = null) {
     emitProgress(mainWindow, 'brain-handoff', 'Brain creating profile and configuring network');
     
     const profileInfo = await createProfileViaBrain();
-    console.log('✅ Profile created:', profileInfo);
+    console.log('âœ… Profile created:', profileInfo);
     console.log(`   Profile ID: ${profileInfo.profileId}`);
     console.log(`   Profile Path: ${profileInfo.path}`);
     
@@ -608,15 +620,15 @@ async function runFullInstallation(mainWindow = null) {
     logger.step('STEP 9: Validating installation via Brain');
 
     try {
-      // Lanzar Chrome con el perfil para validación
+      // Lanzar Chrome con el perfil para validaciÃ³n
       await validateInstallationViaBrain(profileInfo.profileId);
       logger.success('Installation validated successfully');
-      console.log('✅ Installation validated successfully');
+      console.log('âœ… Installation validated successfully');
       console.log('   Chrome launched with profile');
       console.log('   Extension should be loaded');
       
       // OPCIONAL: Esperar que el host se registre en Brain Service
-      console.log('⏳ Waiting for host to register in Brain Service...');
+      console.log('â³ Waiting for host to register in Brain Service...');
       const regResult = await brainManager.waitForProfileRegistration(
         profileInfo.profileId,
         15  // 15 segundos timeout
@@ -625,13 +637,13 @@ async function runFullInstallation(mainWindow = null) {
       if (regResult.success) {
         logger.success(`Host registered in Brain Service successfully`);
         logger.info(`Total registered profiles: ${regResult.count}`);
-        console.log(`✅ Host registered in Brain Service successfully`);
+        console.log(`âœ… Host registered in Brain Service successfully`);
         console.log(`   Total registered profiles: ${regResult.count}`);
       } else {
         logger.warn('Host registration timeout');
         logger.warn('Chrome may still be starting up');
         logger.warn('This is not critical - installation can proceed');
-        console.warn('⚠️ Host registration timeout');
+        console.warn('âš ï¸ Host registration timeout');
         console.warn('   Chrome may still be starting up');
         console.warn('   This is not critical - installation can proceed');
       }
@@ -642,8 +654,8 @@ async function runFullInstallation(mainWindow = null) {
       logger.info('This can happen if Chrome takes longer to start');
       logger.info('The installation is likely still successful');
       
-      console.warn('⚠️ Validation warning:', validationError.message);
-      console.log('ℹ️ Installation complete, but validation had issues');
+      console.warn('âš ï¸ Validation warning:', validationError.message);
+      console.log('â„¹ï¸ Installation complete, but validation had issues');
       console.log('   This can happen if Chrome takes longer to start');
       console.log('   The installation is likely still successful');
     }
@@ -651,7 +663,7 @@ async function runFullInstallation(mainWindow = null) {
     // ========================================================================
     // STEP 10: SAVE CONFIG
     // ========================================================================
-    console.log('💾 Saving installer config...');
+    console.log('ðŸ’¾ Saving installer config...');
     const configPath = paths.configFile;
     const finalConfig = {
       version: APP_VERSION,
@@ -679,7 +691,7 @@ async function runFullInstallation(mainWindow = null) {
         chromiumPath: chromiumResult.chromiumPath,
         profileId: profileInfo.profileId
       });
-      console.log('✅ Launcher shortcuts created:', launcherResult.success);
+      console.log('âœ… Launcher shortcuts created:', launcherResult.success);
     } catch (launcherError) {
       logger.warn('Could not create launcher shortcuts:', launcherError.message);
     }
@@ -713,7 +725,7 @@ async function runFullInstallation(mainWindow = null) {
     try {
       await cleanupOldServices();
     } catch (cleanupError) {
-      console.error('⚠️ Cleanup also failed:', cleanupError.message);
+      console.error('âš ï¸ Cleanup also failed:', cleanupError.message);
     }
     
     return { 
@@ -728,7 +740,7 @@ async function runFullInstallation(mainWindow = null) {
 // HELPER: CREATE PROFILE VIA BRAIN CLI (UNCHANGED)
 // ============================================================================
 async function createProfileViaBrain() {
-  console.log('\n🤝 HANDING OFF TO BRAIN: Creating Master Profile');
+  console.log('\nðŸ¤ HANDING OFF TO BRAIN: Creating Master Profile');
   
   return new Promise((resolve, reject) => {
     const brainExe = path.join(paths.binDir, 'brain', 'brain.exe');
@@ -791,7 +803,7 @@ async function createProfileViaBrain() {
           throw new Error('Profile ID missing');
         }
         
-        console.log(`✅ Profile Created: ${profileId}`);
+        console.log(`âœ… Profile Created: ${profileId}`);
         
         resolve({
           profileId,
@@ -801,7 +813,7 @@ async function createProfileViaBrain() {
         });
         
       } catch (parseError) {
-        console.error("❌ Parse Error:", stdout);
+        console.error("âŒ Parse Error:", stdout);
         
         if (stdout.includes('MasterWorker') || stdout.includes('already exists')) {
           return resolve({ profileId: "MasterWorker", fallback: true });
@@ -832,7 +844,7 @@ async function validateInstallationViaBrain(profileId) {
     const args = ['profile', 'launch', profileId, '--discovery'];
     
     logger.info(`Executing: "${brainExe}" ${args.join(' ')}`);
-    console.log(`\n🚀 Executing: "${brainExe}" ${args.join(' ')}\n`);
+    console.log(`\nðŸš€ Executing: "${brainExe}" ${args.join(' ')}\n`);
 
     const child = spawn(brainExe, args, {
       cwd: path.dirname(brainExe),
@@ -854,14 +866,14 @@ async function validateInstallationViaBrain(profileId) {
       const output = data.toString().trim();
       stdout += data.toString();
       logger.info(`[Brain Output] ${output}`);
-      console.log('📤 [Brain]', output);
+      console.log('ðŸ“¤ [Brain]', output);
     });
 
     child.stderr.on('data', (data) => {
       const error = data.toString().trim();
       stderr += data.toString();
       logger.warn(`[Brain Error] ${error}`);
-      console.error('⚠️ [Brain Error]', error);
+      console.error('âš ï¸ [Brain Error]', error);
     });
 
     child.on('close', (code) => {
@@ -870,7 +882,7 @@ async function validateInstallationViaBrain(profileId) {
       if (code !== 0) {
         logger.error(`Validation failed with code ${code}`);
         logger.error(`Stderr: ${stderr}`);
-        console.error(`❌ Validation failed with code ${code}`);
+        console.error(`âŒ Validation failed with code ${code}`);
         console.error('Stderr:', stderr);
         return reject(new Error(`Validation failed: ${stderr || 'Unknown error'}`));
       }
@@ -879,9 +891,9 @@ async function validateInstallationViaBrain(profileId) {
       logger.info('Chrome should be running with the extension loaded');
       logger.info('Check logs for handshake confirmation');
       
-      console.log('✅ Profile launched successfully');
-      console.log('ℹ️ Chrome should be running with the extension loaded');
-      console.log('ℹ️ Check logs for handshake confirmation');
+      console.log('âœ… Profile launched successfully');
+      console.log('â„¹ï¸ Chrome should be running with the extension loaded');
+      console.log('â„¹ï¸ Check logs for handshake confirmation');
       
       resolve({
         success: true,
@@ -892,7 +904,7 @@ async function validateInstallationViaBrain(profileId) {
 
     child.on('error', (error) => {
       logger.error(`Failed to spawn Brain process: ${error.message}`);
-      console.error('❌ Failed to spawn:', error.message);
+      console.error('âŒ Failed to spawn:', error.message);
       reject(new Error(`Failed to launch validation: ${error.message}`));
     });
   });

@@ -6,6 +6,7 @@ FIXES CRÍTICOS:
 - Logging defensivo antes de que el logger principal arranque
 - Catch-all de excepciones para evitar crashes silenciosos
 - Validación de puerto disponible
+- GUARDAS DEFENSIVAS en _render_stop para evitar NoneType subscriptable
 """
 
 import typer
@@ -266,25 +267,62 @@ class ServiceCommand(BaseCommand):
     def _render_daemon_start(self, data: dict):
         """Output humano para inicio en modo daemon."""
         typer.echo(f"✅ Service started in background")
-        typer.echo(f"   PID: {data['data'].get('pid', 'unknown')}")
-        typer.echo(f"   Port: {data['data'].get('port', 5678)}")
-        typer.echo(f"   Log: {data['data'].get('log_file', 'N/A')}")
+        typer.echo(f"   PID: {data.get('data', {}).get('pid', 'unknown')}")
+        typer.echo(f"   Port: {data.get('data', {}).get('port', 5678)}")
+        typer.echo(f"   Log: {data.get('data', {}).get('log_file', 'N/A')}")
     
     def _render_stop(self, data: dict):
-        """Output humano para detención del servicio."""
-        reason = data['data'].get('reason', 'unknown')
+        """
+        Output humano para detención del servicio.
+        
+        FIX CRÍTICO: GUARDAS DEFENSIVAS contra NoneType
+        """
+        # GUARDA 1: Validar que data no sea None
+        if data is None:
+            typer.echo("⚠️  Service stopped (no status data available)")
+            return
+        
+        # GUARDA 2: Validar que 'data' key exista
+        if 'data' not in data:
+            typer.echo("⚠️  Service stopped (incomplete status data)")
+            return
+        
+        # GUARDA 3: Extraer data_dict de forma segura
+        data_dict = data.get('data', {})
+        
+        # GUARDA 4: Validar que data_dict no sea None
+        if data_dict is None:
+            data_dict = {}
+        
+        # Ahora sí, extracción segura
+        reason = data_dict.get('reason', 'unknown')
         typer.echo(f"✅ Service stopped ({reason})")
         
-        stats = data['data'].get('stats', {})
-        if stats:
+        # GUARDA 5: Stats puede no existir
+        stats = data_dict.get('stats')
+        if stats and isinstance(stats, dict):
             typer.echo(f"\n📊 Session Statistics:")
             typer.echo(f"   Total connections: {stats.get('total_connections', 0)}")
             typer.echo(f"   Messages processed: {stats.get('messages_processed', 0)}")
             typer.echo(f"   Uptime: {stats.get('uptime', 'N/A')}")
     
     def _render_status(self, data: dict):
-        """Output humano para estado del servicio."""
-        status_data = data['data']
+        """
+        Output humano para estado del servicio.
+        
+        FIX CRÍTICO: GUARDAS DEFENSIVAS contra NoneType
+        """
+        # GUARDA 1: Validar data
+        if data is None or 'data' not in data:
+            typer.echo("⚠️  Cannot determine service status")
+            return
+        
+        status_data = data.get('data', {})
+        
+        # GUARDA 2: Validar status_data
+        if status_data is None:
+            status_data = {}
+        
         running = status_data.get('running', False)
         
         if running:

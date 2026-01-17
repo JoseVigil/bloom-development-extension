@@ -504,52 +504,74 @@ def render_help(registry: CommandRegistry, json_mode: bool = False, ai_native: b
     if ai_native or (json_mode and "--ai" in sys.argv):
         ai_schema = _build_ai_native_json(registry)
         print(json.dumps(ai_schema, indent=2, ensure_ascii=False, cls=JSONEncoder))
+        sys.stdout.flush()
         return
+    
     if json_mode:
         json_data = _build_json_structure(registry)
         print(json.dumps(json_data, indent=2, ensure_ascii=False, cls=JSONEncoder))
+        sys.stdout.flush()
         return
+    
     is_file_output = not sys.stdout.isatty()
+    
+    # SOLUCIÓN: Cuando hay redirección, usa Rich con record=True y captura TODO
     if is_file_output:
-        console = Console(width=100, file=sys.stdout, force_terminal=False, legacy_windows=False, no_color=True)
+        # Crear console que graba todo en memoria
+        console = Console(record=True, width=100, force_terminal=False, legacy_windows=False)
     else:
         console = Console(width=95)
+    
     exe_type = "Executable" if is_frozen_executable() else "Development Mode"
     console.print(f"\n[bold yellow]Brain CLI[/bold yellow] - Modular system for Bloom [dim]({exe_type})[/dim]\n")
+    
     structure = _extract_structure(registry)
+    
     _render_usage(console)
     console.print()
     _render_options(console)
     console.print()
     _render_categories(console, structure.categories, structure)
     console.print()
+    
     if structure.root_commands:
         _render_root_commands(console, structure.root_commands)
         console.print()
+    
     priority_order = [
-        CommandCategory.HEALTH,        # Estado, diagnósticos
-        CommandCategory.SYSTEM,        # Sistema, introspección, entorno
-        CommandCategory.NUCLEUS,       # Core: proyectos Nucleus
-        CommandCategory.PROJECT,       # Creación/scaffolding de proyectos
-        CommandCategory.PROFILE,       # Perfiles de Chrome y AI accounts
-        CommandCategory.EXTENSION,     # Chrome extensions y lifecycle
-        CommandCategory.SYNAPSE,       # Native messaging bridge
-        CommandCategory.SERVICE,       # Multiplexer, workers, background tasks
-        CommandCategory.RUNTIME,       # Ejecución no interactiva del sistema
-        CommandCategory.CONTEXT,       # Generación y manejo de contexto IA
-        CommandCategory.INTENT,        # Ejecución de intents
-        CommandCategory.FILESYSTEM,    # Analizador filesystem y operaciones
-        CommandCategory.GITHUB,        # Integración con GitHub
-        CommandCategory.GEMINI,        # Gestión de claves y operaciones Gemini
-        CommandCategory.TWITTER,       # Integración con X/Twitter
-        CommandCategory.CHROME,        # Debugging, network logs (auxiliar)
+        CommandCategory.HEALTH,
+        CommandCategory.SYSTEM,
+        CommandCategory.NUCLEUS,
+        CommandCategory.PROJECT,
+        CommandCategory.PROFILE,
+        CommandCategory.EXTENSION,
+        CommandCategory.SYNAPSE,
+        CommandCategory.SERVICE,
+        CommandCategory.RUNTIME,
+        CommandCategory.CONTEXT,
+        CommandCategory.INTENT,
+        CommandCategory.FILESYSTEM,
+        CommandCategory.GITHUB,
+        CommandCategory.GEMINI,
+        CommandCategory.TWITTER,
+        CommandCategory.CHROME,
     ]
+    
     for category in priority_order:
         if category in structure.commands_by_category:
             commands = structure.commands_by_category[category]
             _render_category_panel(console, category, commands)
             console.print()
+    
     for category in structure.commands_by_category:
         if category not in priority_order:
             _render_category_panel(console, category, structure.commands_by_category[category])
             console.print()
+    
+    # CRÍTICO: Si estamos redirigiendo, extraer y escribir TODO el contenido
+    if is_file_output:
+        # Exportar TODO el texto sin formato
+        full_output = console.export_text()
+        # Escribir directamente sin Rich
+        sys.stdout.write(full_output)
+        sys.stdout.flush()
