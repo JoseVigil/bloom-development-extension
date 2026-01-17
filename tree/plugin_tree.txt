@@ -1,5 +1,10 @@
 bloom-development-extension/
 ├── src/
+│   ├── UNKNOWN.egg-info/
+│   │   ├── PKG-INFO
+│   │   ├── SOURCES.txt
+│   │   ├── dependency_links.txt
+│   │   └── top_level.txt
 │   ├── ai/
 │   │   ├── AiAccountChecker.ts
 │   │   ├── adapters/
@@ -284,14 +289,17 @@ bloom-development-extension/
 │   │   │   │       └── bloom-host
 │   │   │   ├── linux/
 │   │   │   │   └── bloom-host
+│   │   │   ├── logs/
 │   │   │   ├── profiles/
 │   │   │   └── win32/
 │   │   │       ├── bloom-host.exe
+│   │   │       ├── blueprint.json
 │   │   │       ├── brain/
 │   │   │       │   ├── _internal/ [... dependencies]
 │   │   │       │   └── brain.exe
 │   │   │       ├── libwinpthread-1.dll
-│   │   │       └── profiles.json
+│   │   │       ├── profiles.json
+│   │   │       └── sentinel.exe
 │   │   ├── host/
 │   │   │   └── com.bloom.nucleus.bridge.json
 │   │   └── nssm/
@@ -339,16 +347,26 @@ bloom-development-extension/
 │   │       ├── vcruntime140.dll
 │   │       ├── vcruntime140_1.dll
 │   │       └── winsound.pyd
-│   └── scripts/
-│       ├── build-extension.js
-│       ├── check-health.js
-│       ├── get_extension_key_from_pem_store_key_manfest.js
-│       ├── god-mode.js
-│       ├── python-runtime.config.json
-│       ├── run-elevated.ps1
-│       ├── setup-dev.js
-│       ├── setup_runtime.js
-│       └── validate.js
+│   ├── scripts/
+│   │   ├── build-extension.js
+│   │   ├── check-health.js
+│   │   ├── get_extension_key_from_pem_store_key_manfest.js
+│   │   ├── god-mode.js
+│   │   ├── python-runtime.config.json
+│   │   ├── run-elevated.ps1
+│   │   ├── setup-dev.js
+│   │   ├── setup_runtime.js
+│   │   └── validate.js
+│   └── sentinel/
+│       ├── README.md
+│       ├── blueprint.json
+│       ├── build.bat
+│       ├── config.go
+│       ├── go.mod
+│       ├── logger_hub.go
+│       ├── main.go
+│       ├── paths.go
+│       └── process_manager.go
 └── brain/
     ├── .env
     ├── VERSION

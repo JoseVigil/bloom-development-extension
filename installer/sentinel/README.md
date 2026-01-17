@@ -13,6 +13,16 @@
 - Gestión completa del ciclo de vida de procesos
 - Cancelación en cascada: si Sentinel muere, todos sus hijos mueren
 - Limpieza quirúrgica automática (no más procesos zombie)
+- Auto-limpieza de archivos spec temporales
+
+### 2. **Spec-Driven Launch (v1.2)**
+- Genera archivos JSON de especificación para cada lanzamiento
+- Delega ejecución a `brain.exe` con `--spec [archivo.json]`
+- Resuelve rutas dinámicas automáticamente:
+  - `user_data_dir`: `%LOCALAPPDATA%/BloomNucleus/profiles/[UUID]`
+  - `extension_path`: `[user_data_dir]/extension`
+  - `executable_path`: Desde `blueprint.json`
+- Garantiza que `sync_profile_resources` de Python se ejecute correctamente
 
 ### 2. **Dynamic Configuration Injection**
 - Sin recompilación: cambios en `blueprint.json` se aplican inmediatamente
@@ -140,10 +150,27 @@ El archivo `blueprint.json` controla el comportamiento completo de Sentinel:
       "network": ["--remote-debugging-port=0"]
     }
   },
+  "chromium": {
+    "executable_path": "chrome-win/chrome.exe"
+  },
   "navigation": {
     "discovery_url": "chrome-extension://...",
     "landing_url": "chrome-extension://..."
   }
+}
+```
+
+### Spec File Generado (temp_spec_[UUID].json)
+
+Sentinel genera automáticamente:
+
+```json
+{
+  "executable_path": "chrome-win/chrome.exe",
+  "user_data_dir": "C:/Users/[user]/AppData/Local/BloomNucleus/profiles/[UUID]",
+  "extension_path": "C:/Users/[user]/AppData/Local/BloomNucleus/profiles/[UUID]/extension",
+  "url": "chrome-extension://hpblclepliicmihaplldignhjdggnkdh/discovery/index.html",
+  "flags": ["--no-sandbox", "--disable-web-security", ...]
 }
 ```
 
@@ -152,7 +179,7 @@ El archivo `blueprint.json` controla el comportamiento completo de Sentinel:
 2. Reinicia Sentinel
 3. **No requiere recompilación**
 
-## 🔄 Secuencia de Lanzamiento
+## 🔄 Secuencia de Lanzamiento (Spec-Driven)
 
 ```
 [Electron] → JSON-RPC → [Sentinel]
@@ -161,19 +188,26 @@ El archivo `blueprint.json` controla el comportamiento completo de Sentinel:
                        - Port 5678 libre?
                        - Limpiar locks
                            ↓
-                    2. Build Launch Spec
+                    2. Generate Launch Spec
                        - Leer blueprint.json
-                       - Resolver rutas
+                       - Resolver rutas dinámicas
+                       - Crear temp_spec_[UUID].json
                            ↓
                     3. Start Brain Service
                        - brain.exe service start
                        - Esperar handshake :5678
                            ↓
-                    4. Launch Chromium
-                       - brain.exe profile launch
+                    4. Spec-Driven Launch
+                       - brain.exe profile launch [UUID] --spec [archivo.json]
+                       - Python ejecuta sync_profile_resources
+                       - Python lanza Chromium con spec
                        - Monitor PID
                            ↓
                     [SUCCESS] → Response → [Electron]
+                    
+                    [On Shutdown]
+                       - Kill processes
+                       - Delete temp_spec_*.json
 ```
 
 ## 🛡️ Manejo de Errores
@@ -236,6 +270,22 @@ Sentinel registra cada flag inyectado:
 ...
 ```
 
+### Spec Generation Logs
+```
+[SPEC] Generated launch spec: C:/Users/.../logs/temp_spec_abc123.json
+[SPEC] Executable: chrome-win/chrome.exe
+[SPEC] User data: C:/Users/.../BloomNucleus/profiles/abc123
+[SPEC] Extension: C:/Users/.../BloomNucleus/profiles/abc123/extension
+[SPEC] URL: chrome-extension://hpblclepliicmihaplldignhjdggnkdh/discovery/index.html
+[SPEC] Flags: 14 items
+```
+
+### Launch Command
+```
+[CHROMIUM] Launching profile: abc123 (spec-driven)
+[CHROMIUM] Launched with PID: 12345 (spec: C:/.../temp_spec_abc123.json)
+```
+
 ## 🔐 Seguridad
 
 - **No hardcoded secrets**: Todas las configuraciones en blueprint.json
@@ -264,12 +314,14 @@ lsof -ti:5678 | xargs kill -9
 
 ## 📝 TODOs / Roadmap
 
-### Fase A (Actual - MVP)
+### Fase A (Completado ✓)
 - [x] Process supervisor con context cancellation
 - [x] Blueprint parser
 - [x] JSON-RPC dispatcher
 - [x] Preflight checks
 - [x] Log aggregator
+- [x] Spec-driven launch (v1.2)
+- [x] Auto-cleanup de archivos temporales
 
 ### Fase B (Siguiente)
 - [ ] Implementar `killPortOwner` específico por OS
