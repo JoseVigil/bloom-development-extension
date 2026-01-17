@@ -13,7 +13,9 @@
     "minimizeToTray": true,
     "checkInterval": 5000,
     "maxRestarts": 3,
-    "restartDelay": 2000
+    "restartDelay": 2000,
+    "extensionPath": "C:\\repos\\bloom-videos\\bloom-development-extension",
+    "testWorkspace": "C:\\repos\\bloom-videos\\bloom-development-extension"
   },
   "monitoring": {
     "enabled": true,
