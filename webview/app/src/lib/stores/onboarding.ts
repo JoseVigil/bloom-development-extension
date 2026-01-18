@@ -3,7 +3,8 @@
 import { writable, derived, get } from 'svelte/store';
 import { goto } from '$app/navigation';
 import { checkApiHealth, getOnboardingStatus } from '$lib/api';
-import type { OnboardingStatus, OnboardingStep } from '../../../contracts/types';
+import type { OnboardingStatus, OnboardingStep } from '$contracts/types';
+
 
 /**
  * Interfaz que combina los datos de la API con el estado de la UI
@@ -55,7 +56,7 @@ function createOnboardingStore() {
     timestamp: new Date().toISOString(),
     details: {
       github: { authenticated: false },
-      twitter: { authenticated: false, username: null },
+      twitter: { authenticated: false},
       gemini: { configured: false, key_count: 0 },
       nucleus: { exists: false, nucleus_count: 0 },
       projects: { added: false, count: 0 }
@@ -96,25 +97,23 @@ function createOnboardingStore() {
       update(state => {
         const newState = {
           ...state,
-          ...status, // Inyecta: ready, current_step, completed, completion_percentage, details, timestamp
+          ...status,
           apiAvailable: true,
           loading: false,
-          error: null
-        };
-        
-        // Sobrescribimos el paso basándonos en nuestra lógica de negocio local (incluyendo Twitter)
-        newState.current_step = determineCurrentStep(newState);
+          error: null,
+          current_step: determineCurrentStep({ ...state, ...status } as OnboardingState)
+        } as OnboardingState;
         
         saveToStorage(newState);
 
-        // Si se acaba de completar, redirigimos
         if (newState.completed && window.location.pathname === '/onboarding') {
           console.log('✅ [Onboarding] Completed, redirecting...');
           setTimeout(() => goto('/home'), 500);
         }
         
         return newState;
-      });
+    });
+
     } catch (error) {
       console.error('❌ [Onboarding] Refresh error:', error);
       update(state => ({ 

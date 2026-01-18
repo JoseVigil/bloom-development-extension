@@ -11,6 +11,7 @@ import (
 	"sentinel/internal/discovery"
 	"sentinel/internal/health"
 	"sentinel/internal/persistence"
+	"sentinel/internal/ignition"
 	"syscall"
 )
 
@@ -29,6 +30,21 @@ func main() {
 			return
 		case "dev-start":
 			runDevStartCommand(c)
+			return
+		case "launch":
+			// Uso: sentinel.exe launch [ID_PERFIL] [--discovery o --cockpit]
+			if len(os.Args) < 3 {
+				c.Logger.Error("Uso: sentinel launch [profile_id] [--discovery|--cockpit]")
+				os.Exit(1)
+			}
+			
+			profileID := os.Args[2]
+			mode := "--cockpit" // Default
+			if len(os.Args) > 3 {
+				mode = os.Args[3]
+			}
+			
+			runLaunchCommand(c, profileID, mode)
 			return
 		}
 	}
@@ -120,4 +136,33 @@ func runDevStartCommand(c *core.Core) {
 	boot.CleanPorts([]int{5173, 3001, 5678})
 	
 	c.Logger.Success("✓ Sistema limpio. Hasta la próxima.")
+}
+
+func runLaunchCommand(c *core.Core, profileID string, mode string) {
+	c.Logger.Info("🔥 Sentinel Ignition v2.0")
+	
+	// 1. Instanciar el módulo
+	ig := ignition.New(c)
+	
+	// 2. Activar el Reaper (Kill Switch) 
+	// Si Electron cierra el pipe o presionas Ctrl+C, esto limpia todo.
+	ig.SetupReaper()
+
+	// 3. Ejecutar la secuencia de lanzamiento
+	// Este método bloquea la ejecución hasta que lee "LATE_BINDING_SUCCESS"
+	// o falla por timeout/error.
+	err := ig.Launch(profileID, mode)
+	
+	if err != nil {
+		c.Logger.Error("❌ Error de Ignición: %v", err)
+		ig.KillAll() // Limpieza de emergencia
+		os.Exit(1)
+	}
+
+	// 4. Mantener el proceso vivo
+	// Una vez que Ignition confirma el éxito, no queremos que Sentinel se cierre,
+	// porque las goroutines de Telemetry (tail -f) deben seguir enviando logs a Electron.
+	c.Logger.Success("📡 Telemetría activa. El flujo de datos está abierto.")
+	
+	select {} // Bloqueo infinito hasta que el Reaper actúe
 }

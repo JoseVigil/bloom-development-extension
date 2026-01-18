@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"os/exec"
 	"sentinel/internal/discovery"
 	"sync"
@@ -31,19 +32,23 @@ func CheckHealth(sm *discovery.SystemMap) (*HealthReport, error) {
 		SystemMap: sm,
 	}
 
-	// 1. Validar Ejecutable de Brain
-	if _, err := exec.Command(sm.BrainPath, "--version").Output(); err == nil {
+	// 1. Validar Ejecutable de Brain de forma estática
+	if info, err := os.Stat(sm.BrainPath); err == nil && !info.IsDir() {
 		report.ExecutablesValid = true
 	}
 
 	// 2. Escaneo de Red Concurrente (3 Servicios)
+	// Usamos 127.0.0.1 para evitar el lag de resolución de DNS de 'localhost' en Windows
 	var wg sync.WaitGroup
 	sc := make(chan ServiceStatus, 3)
 
 	wg.Add(3)
-	go func() { defer wg.Done(); sc <- checkTCP(5678, "Brain TCP Service") }()
-	go func() { defer wg.Done(); sc <- checkHTTP(3001, "Chrome Extension Backend") }()
-	go func() { defer wg.Done(); sc <- checkTCP(5173, "Svelte Dev Server") }()
+	// Brain: Servicio de datos (TCP)
+	go func() { defer wg.Done(); sc <- checkPort(5678, "Brain TCP Service", "TCP") }()
+	// Extension: API Rest (HTTP)
+	go func() { defer wg.Done(); sc <- checkPort(3001, "Chrome Extension Backend", "HTTP") }()
+	// Svelte: Servidor de Desarrollo (TCP es suficiente para detectar que Vite despertó)
+	go func() { defer wg.Done(); sc <- checkPort(5173, "Svelte Dev Server", "TCP") }()
 
 	go func() { wg.Wait(); close(sc) }()
 	for s := range sc {
@@ -66,21 +71,24 @@ func CheckHealth(sm *discovery.SystemMap) (*HealthReport, error) {
 	return report, nil
 }
 
-func checkTCP(port int, name string) ServiceStatus {
-	conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 1*time.Second)
+func checkPort(port int, name, proto string) ServiceStatus {
+	// Forzamos 127.0.0.1 para coincidir con el flag --host de Vite
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	
+	if proto == "HTTP" {
+		client := http.Client{Timeout: 3 * time.Second} // Aumentamos a 3s para SvelteKit
+		resp, err := client.Get(fmt.Sprintf("http://%s/health", addr))
+		if err == nil && resp.StatusCode == 200 {
+			return ServiceStatus{Name: name, Available: true, Details: "HTTP 200 OK"}
+		}
+		return ServiceStatus{Name: name, Available: false, Details: "Inalcanzable (API no responde)"}
+	}
+
+	// Chequeo TCP genérico (rápido y fiable para servicios vivos)
+	conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
 	if err != nil {
-		return ServiceStatus{Name: name, Available: false, Details: "Servicio inactivo o puerto cerrado"}
+		return ServiceStatus{Name: name, Available: false, Details: "Puerto cerrado o servicio inactivo"}
 	}
 	conn.Close()
-	return ServiceStatus{Name: name, Available: true, Details: "OK"}
-}
-
-func checkHTTP(port int, name string) ServiceStatus {
-	client := http.Client{Timeout: 1 * time.Second}
-	resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/health", port))
-	if err != nil || resp.StatusCode != 200 {
-		return ServiceStatus{Name: name, Available: false, Details: "Endpoint /health no responde"}
-	}
-	defer resp.Body.Close()
-	return ServiceStatus{Name: name, Available: true, Details: "HTTP 200 OK"}
+	return ServiceStatus{Name: name, Available: true, Details: "Servicio activo (Puerto abierto)"}
 }

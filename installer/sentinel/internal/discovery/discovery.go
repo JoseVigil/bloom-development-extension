@@ -22,7 +22,7 @@ func DiscoverSystem(binDir string) (*SystemMap, error) {
 	sm.BrainPath = filepath.Join(localAppData, "BloomNucleus", "bin", "brain", "brain.exe")
 	sm.ChromePath = filepath.Join(localAppData, "BloomNucleus", "bin", "chrome-win", "chrome.exe")
 
-	// 2. Scanner Proactivo de VSCode (Restaurado)
+	// 2. Scanner Proactivo de VSCode
 	userProfile := os.Getenv("USERPROFILE")
 	extensionsDir := filepath.Join(userProfile, ".vscode", "extensions")
 	
