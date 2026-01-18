@@ -1,14 +1,61 @@
 package boot
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 )
 
-func LaunchExtensionHost(codePath, extPath, workspacePath string) error {
-	if extPath == "" {
-		return fmt.Errorf("la ruta de la extension (extensionPath) no esta definida en el blueprint")
+// SyncVScodeSettings inyecta las rutas reales en el settings.json del repo de dev
+func SyncVScodeSettings(repoRoot, brainPath, pythonPath string) error {
+	dotVscode := filepath.Join(repoRoot, ".vscode")
+	if err := os.MkdirAll(dotVscode, 0755); err != nil {
+		return err
 	}
+
+	settingsPath := filepath.Join(dotVscode, "settings.json")
+	settings := make(map[string]interface{})
+
+	// Leer settings existentes si hay
+	if data, err := os.ReadFile(settingsPath); err == nil {
+		json.Unmarshal(data, &settings)
+	}
+
+	// Inyectar rutas detectadas por Sentinel
+	settings["bloom.brain.executable"] = brainPath
+	settings["bloom.pythonPath"] = pythonPath
+	// Forzamos a la extensión a usar el ejecutable directamente si existe
+	settings["bloom.useInternalRuntime"] = true 
+
+	data, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(settingsPath, data, 0644)
+}
+
+func LaunchExtensionHost(codePath, extPath, workspacePath, runtimePath string) (*exec.Cmd, error) {
+	if extPath == "" {
+		return nil, fmt.Errorf("extensionPath no definido")
+	}
+
+	pythonExe := filepath.Join(runtimePath, "python.exe")
+	if runtime.GOOS != "windows" {
+		pythonExe = filepath.Join(runtimePath, "bin", "python3")
+	}
+
+	newEnv := os.Environ()
+	pathKey := "PATH"
+	if runtime.GOOS == "windows" {
+		pathKey = "Path"
+	}
+
+	newEnv = append(newEnv, fmt.Sprintf("%s=%s%c%s", pathKey, runtimePath, os.PathListSeparator, os.Getenv(pathKey)))
+	newEnv = append(newEnv, "BLOOM_PYTHON_PATH="+pythonExe)
 
 	args := []string{"--extensionDevelopmentPath=" + extPath}
 	if workspacePath != "" {
@@ -16,10 +63,11 @@ func LaunchExtensionHost(codePath, extPath, workspacePath string) error {
 	}
 
 	cmd := exec.Command(codePath, args...)
-	
-	// Usamos Start en lugar de Run para que Sentinel no se quede bloqueado
+	cmd.Env = newEnv
+
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("error al iniciar VSCode: %w", err)
+		return nil, err
 	}
-	return nil
+
+	return cmd, nil
 }

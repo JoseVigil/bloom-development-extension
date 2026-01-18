@@ -17,14 +17,6 @@ type NucleusState struct {
 func SaveNucleusState(appDataDir string, report *health.HealthReport) error {
 	configDir := filepath.Join(appDataDir, "config")
 	os.MkdirAll(configDir, 0755)
-
-	state := NucleusState{
-		LastScan:            report.Timestamp,
-		Paths:               report.SystemMap,
-		Services:            report.Services,
-		OnboardingCompleted: report.OnboardingCompleted,
-	}
-
-	data, _ := json.MarshalIndent(state, "", "  ")
+	data, _ := json.MarshalIndent(report, "", "  ")
 	return os.WriteFile(filepath.Join(configDir, "nucleus.json"), data, 0644)
 }

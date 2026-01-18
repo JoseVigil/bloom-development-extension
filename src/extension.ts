@@ -21,7 +21,7 @@ export async function activate(context: vscode.ExtensionContext) {
     try {
         // 0. CRITICAL: Initialize BrainExecutor FIRST
         logger.info('[0/7] Initializing Brain CLI...');
-        BrainExecutor.initialize(context.extensionPath);
+        await BrainExecutor.initialize();
         logger.info('✅ Brain CLI initialized');
 
         // 1. Inicializar contexto global (UserManager singleton)

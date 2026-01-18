@@ -12,6 +12,7 @@ import type {
   GitHubRepository,
   GitHubOrganization
 } from '../../../contracts/types';
+import { TwitterAuthStatus } from '../../../contracts/types'; 
 
 /**
  * BrainApiAdapter - Unified adapter for all Brain CLI operations

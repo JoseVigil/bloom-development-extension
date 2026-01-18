@@ -2,7 +2,7 @@ import * as http from 'http';
 import * as crypto from 'crypto';
 import { BrainApiAdapter } from '../api/adapters/BrainApiAdapter';
 // Importa 'open' o usa shell de electron para abrir la URL ya que profile launch no funciona
-import { shell } from 'electron'; 
+import * as vscode from 'vscode';
 
 export class TwitterOAuthServer {
   private server: http.Server | null = null;
@@ -22,7 +22,7 @@ export class TwitterOAuthServer {
     const config = this.getOAuthConfig();
     const url = `https://twitter.com/i/oauth2/authorize?response_type=code&client_id=${config.clientId}&redirect_uri=${encodeURIComponent(config.callback)}&scope=tweet.read%20users.read%20offline.access&state=state&code_challenge=${codeChallenge}&code_challenge_method=S256`;
     
-    await shell.openExternal(url);
+    await vscode.env.openExternal(vscode.Uri.parse(url));
   }
   
   // Lógica de intercambio de token similar a GitHub...
