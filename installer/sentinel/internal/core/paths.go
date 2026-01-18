@@ -20,7 +20,6 @@ func InitPaths() (*Paths, error) {
 	}
 	binDir := filepath.Dir(exe)
 
-	// Ruta absoluta a AppData/Local/BloomNucleus
 	localAppData := os.Getenv("LOCALAPPDATA")
 	if localAppData == "" {
 		localAppData = filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Local")
@@ -34,12 +33,9 @@ func InitPaths() (*Paths, error) {
 		LogsDir:     filepath.Join(appDataDir, "logs"),
 	}
 
-	// Forzar creación de directorios
 	dirs := []string{paths.AppDataDir, paths.ProfilesDir, paths.LogsDir}
 	for _, dir := range dirs {
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			return nil, err
-		}
+		os.MkdirAll(dir, 0755)
 	}
 
 	return paths, nil

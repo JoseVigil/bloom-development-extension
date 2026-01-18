@@ -129,8 +129,9 @@ export interface OnboardingState {
 export type OnboardingStep = 'welcome' | 'twitter' | 'gemini' | 'nucleus' | 'projects';
 
 export interface TwitterAuthStatus {
-  authenticated: boolean;
-  username: string | null;
+    authenticated: boolean;
+    username?: string;
+    error?: string;
 }
 
 export interface OnboardingStatusDetails {
