@@ -399,6 +399,40 @@ export async function githubStatus(): Promise<any> {
 }
 
 // ============================================================================
+// INTENT API
+// ============================================================================
+
+export async function listIntents(nucleusPath?: string): Promise<any> {
+  const params = nucleusPath ? `?nucleus=${encodeURIComponent(nucleusPath)}` : '';
+  return apiGet(`/intents${params}`);
+}
+
+export async function getIntent(id: string, nucleusPath?: string): Promise<any> {
+  const params = nucleusPath ? `?nucleus=${encodeURIComponent(nucleusPath)}` : '';
+  return apiGet(`/intents/${id}${params}`);
+}
+
+export async function createIntent(data: any): Promise<any> {
+  return apiPost('/intents', data);
+}
+
+export async function finalizeIntent(id: string, nucleusPath?: string): Promise<any> {
+  const params = nucleusPath ? `?nucleus=${encodeURIComponent(nucleusPath)}` : '';
+  return apiPost(`/intents/${id}/finalize${params}`);
+}
+
+// ============================================================================
+// BTIP TYPES
+// ============================================================================
+
+export interface BTIPNode {
+  name: string;
+  path: string;
+  type: 'file' | 'directory';
+  children?: BTIPNode[];
+}
+
+// ============================================================================
 // EXPORTS
 // ============================================================================
 

@@ -1,5 +1,5 @@
 import { writable } from 'svelte/store';
-import type { BTIPNode } from '../api';
+import type { BTIPNode } from '$lib/api';
 
 interface NavigationState {
   tree: BTIPNode[];
