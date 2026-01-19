@@ -285,6 +285,7 @@ bloom-development-extension/
     │   ├── brain-ai-full.json
     │   ├── brain-ai-schema.json
     │   ├── brain-legacy.json
+    │   ├── help-full.txt
     │   └── help.txt
     ├── libs/ [... python vendored dependencies]
     ├── pyproject.toml

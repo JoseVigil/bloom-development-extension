@@ -58,14 +58,17 @@ class GlobalContext:
         Emite mensajes de log respetando el modo de salida.
         
         CRÍTICO: En modo JSON, NUNCA usar stdout para logs.
+        FIX: En modo JSON, solo emitir a stderr si verbose=True (incluso para errors/warnings)
         
         Args:
             message: Mensaje a loggear
             level: Nivel de log (info, warning, error, debug)
         """
         if self.json_mode:
-            # En modo JSON, todos los logs van a stderr
-            # (el logger ya está configurado para esto, pero por si acaso)
+            # ========================================================================
+            # FIX CRÍTICO: En modo JSON, SOLO emitir si verbose=True
+            # Esto garantiza que stderr esté limpio para parsing en Sentinel
+            # ========================================================================
             if self.verbose:
                 sys.stderr.write(f"[{level.upper()}] {message}\n")
                 sys.stderr.flush()
