@@ -43,7 +43,16 @@ class ProfileStore:
         try:
             logger.debug(f"📖 Loading profiles from {self.profiles_json}")
             with open(self.profiles_json, 'r', encoding='utf-8') as f:
-                profiles = json.load(f)
+                data = json.load(f)
+            
+            # ✅ Adaptarse a ambas estructuras
+            if isinstance(data, dict) and 'profiles' in data:
+                profiles = data['profiles']
+            elif isinstance(data, list):
+                profiles = data
+            else:
+                logger.warning("⚠️ Unknown profiles.json structure, returning empty")
+                profiles = []
             
             logger.debug(f"✅ Loaded {len(profiles)} profile(s)")
             return profiles
@@ -57,14 +66,17 @@ class ProfileStore:
         except Exception as e:
             logger.error(f"❌ Unexpected error loading profiles: {e}", exc_info=True)
             return []
-    
+
     def save(self, profiles: List[Dict[str, Any]]) -> None:
         """Saves profiles to JSON file."""
         try:
             logger.debug(f"💾 Saving {len(profiles)} profile(s) to {self.profiles_json}")
             
+            # ✅ Mantener estructura anidada como fuente de verdad
+            data = {"profiles": profiles}
+            
             with open(self.profiles_json, 'w', encoding='utf-8') as f:
-                json.dump(profiles, f, indent=2, ensure_ascii=False)
+                json.dump(data, f, indent=2, ensure_ascii=False)
             
             logger.debug("✅ Profiles saved successfully")
             

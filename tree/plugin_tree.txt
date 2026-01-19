@@ -299,7 +299,8 @@ bloom-development-extension/
 │   │   │       │   └── brain.exe
 │   │   │       ├── libwinpthread-1.dll
 │   │   │       ├── profiles.json
-│   │   │       └── sentinel.exe
+│   │   │       ├── sentinel.exe
+│   │   │       └── sentinel.exe~
 │   │   ├── host/
 │   │   │   └── com.bloom.nucleus.bridge.json
 │   │   └── nssm/
