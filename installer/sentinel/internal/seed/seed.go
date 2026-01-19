@@ -23,89 +23,85 @@ type ProfileEntry struct {
 	LogsDir  string `json:"logs_dir"`
 }
 
+type ProfilesRegistry struct {
+	Profiles []ProfileEntry `json:"profiles"`
+}
+
 func HandleSeed(c *core.Core, alias string, isMaster bool) (string, error) {
-	// 1. Validaciones de Integridad
-	profiles := loadProfilesRegistry(c)
-	for _, p := range profiles {
+	// 1. Validaciones iniciales de Alias
+	registry := loadProfilesRegistry(c)
+	for _, p := range registry.Profiles {
 		if p.Alias == alias {
 			return "", fmt.Errorf("alias_duplicado: %s", alias)
 		}
 	}
 
-	if isMaster {
-		status := startup.LoadCurrentStatus(c)
-		if status.MasterProfile != "" {
-			path := filepath.Join(c.Paths.ProfilesDir, status.MasterProfile)
-			if info, err := os.Stat(path); err == nil && info.IsDir() {
-				return "", fmt.Errorf("master_activo_detectado: %s", status.MasterProfile)
-			}
-		}
-	}
-
-	// 2. Ejecutar Brain con limpieza de salida
+	// 2. Ejecución de Brain
 	sm, _ := discovery.DiscoverSystem(c.Paths.BinDir)
 	cmd := exec.Command(sm.BrainPath, "--json", "profile", "create", alias)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("brain_execution_error: %v", err)
+		return "", fmt.Errorf("brain_error: %v", err)
 	}
 
-	// Limpiamos la salida por si Brain escupe logs antes del JSON
-	rawOut := out.String()
-	jsonStart := strings.Index(rawOut, "{")
-	if jsonStart == -1 {
-		return "", fmt.Errorf("brain_invalid_json_output: %s", rawOut)
+	// Extracción quirúrgica del JSON
+	rawOut := strings.TrimSpace(out.String())
+	jsonStart := strings.LastIndex(rawOut, "{")
+	jsonEnd := strings.LastIndex(rawOut, "}")
+	if jsonStart == -1 || jsonEnd == -1 {
+		return "", fmt.Errorf("formato_invalido: %s", rawOut)
 	}
 
 	var brainRes struct{ UUID string `json:"uuid"` }
-	if err := json.Unmarshal([]byte(rawOut[jsonStart:]), &brainRes); err != nil {
-		return "", fmt.Errorf("parse_error: %v", err)
+	if err := json.Unmarshal([]byte(rawOut[jsonStart:jsonEnd+1]), &brainRes); err != nil {
+		return "", err
 	}
 	uuid := brainRes.UUID
 
-	if uuid == "" {
-		return "", fmt.Errorf("brain_empty_uuid_returned")
-	}
-
-	// 3. Generar Spec e Inventario
+	// 3. Infraestructura de Archivos
 	configDir := filepath.Join(c.Paths.AppDataDir, "config", "profile", uuid)
 	specPath := filepath.Join(configDir, "ignition_spec.json")
-	os.MkdirAll(configDir, 0755)
+	_ = os.MkdirAll(configDir, 0755)
 
-	if err := writeIgnitionSpec(c, sm, uuid, specPath); err != nil {
-		return "", err
-	}
+	_ = writeIgnitionSpec(c, sm, uuid, specPath)
 
-	if err := updateProfilesInventory(c, uuid, alias, isMaster, specPath); err != nil {
-		return "", err
-	}
+	// 4. ACTUALIZACIÓN INTELIGENTE (UPSERT) DE INVENTARIO
+	updateProfilesInventory(c, uuid, alias, isMaster, specPath)
 
-	// 4. Impacto en Nucleus (Master Authority)
+	// 5. Sincronización de Autoridad en Nucleus
 	if isMaster {
 		status := startup.LoadCurrentStatus(c)
 		status.MasterProfile = uuid
 		status.Timestamp = time.Now().Format(time.RFC3339)
-		startup.SaveSystemStatus(c, status)
+		_ = startup.SaveSystemStatus(c, status)
 	}
 
 	return uuid, nil
 }
 
-func loadProfilesRegistry(c *core.Core) []ProfileEntry {
+func loadProfilesRegistry(c *core.Core) ProfilesRegistry {
 	path := filepath.Join(c.Paths.AppDataDir, "config", "profiles.json")
 	data, err := os.ReadFile(path)
-	if err != nil { return []ProfileEntry{} }
-	var p []ProfileEntry
-	json.Unmarshal(data, &p)
-	return p
+	if err != nil { return ProfilesRegistry{Profiles: []ProfileEntry{}} }
+	
+	var registry ProfilesRegistry
+	trimmed := strings.TrimSpace(string(data))
+	if strings.HasPrefix(trimmed, "[") {
+		var list []ProfileEntry
+		json.Unmarshal(data, &list)
+		registry.Profiles = list
+	} else {
+		json.Unmarshal(data, &registry)
+	}
+	return registry
 }
 
 func writeIgnitionSpec(c *core.Core, sm *discovery.SystemMap, uuid string, specPath string) error {
 	spec := map[string]interface{}{
 		"paths": map[string]string{
 			"user_data": filepath.Join(c.Paths.ProfilesDir, uuid),
-			"extension": filepath.Join(c.Paths.BinDir, "extension"),
+			"extension": filepath.Join(c.Paths.AppDataDir, "bin", "extension"),
 			"logs_base": filepath.Join(c.Paths.LogsDir, "profiles", uuid),
 		},
 		"engine": map[string]string{
@@ -119,17 +115,37 @@ func writeIgnitionSpec(c *core.Core, sm *discovery.SystemMap, uuid string, specP
 	return os.WriteFile(specPath, data, 0644)
 }
 
-func updateProfilesInventory(c *core.Core, uuid string, alias string, isMaster bool, specPath string) error {
-	profiles := loadProfilesRegistry(c)
-	if isMaster {
-		for i := range profiles { profiles[i].Master = false }
-	}
-	profiles = append(profiles, ProfileEntry{
-		ID: uuid, Alias: alias, Master: isMaster,
-		Path: filepath.Join(c.Paths.ProfilesDir, uuid),
+// updateProfilesInventory implementa lógica de UPSERT para evitar duplicados
+func updateProfilesInventory(c *core.Core, uuid string, alias string, isMaster bool, specPath string) {
+	registry := loadProfilesRegistry(c)
+	
+	// Datos de la nueva entrada
+	newEntry := ProfileEntry{
+		ID:       uuid,
+		Alias:    alias,
+		Master:   isMaster,
+		Path:     filepath.Join(c.Paths.ProfilesDir, uuid),
 		SpecPath: specPath,
-		LogsDir: filepath.Join(c.Paths.LogsDir, "profiles", uuid),
-	})
-	data, _ := json.MarshalIndent(profiles, "", "  ")
-	return os.WriteFile(filepath.Join(c.Paths.AppDataDir, "config", "profiles.json"), data, 0644)
+		LogsDir:  filepath.Join(c.Paths.LogsDir, "profiles", uuid),
+	}
+
+	found := false
+	for i, p := range registry.Profiles {
+		// 1. Si el nuevo es master, todos los existentes pierden la corona
+		if isMaster {
+			registry.Profiles[i].Master = false
+		}
+		// 2. Si el ID ya existe, actualizamos la entrada en lugar de añadir
+		if p.ID == uuid {
+			registry.Profiles[i] = newEntry
+			found = true
+		}
+	}
+
+	if !found {
+		registry.Profiles = append(registry.Profiles, newEntry)
+	}
+
+	data, _ := json.MarshalIndent(registry, "", "  ")
+	_ = os.WriteFile(filepath.Join(c.Paths.AppDataDir, "config", "profiles.json"), data, 0644)
 }

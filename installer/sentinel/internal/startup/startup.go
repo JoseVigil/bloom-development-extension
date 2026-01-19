@@ -39,112 +39,65 @@ type SystemStatus struct {
 }
 
 func Initialize(c *core.Core) error {
-	// 1. Identidad Criptográfica
 	extID, err := CalculateExtensionID(c.Config.Provisioning.GoldenKey)
-	if err != nil {
-		return fmt.Errorf("error identity: %w", err)
-	}
+	if err != nil { return fmt.Errorf("error identity: %w", err) }
 	c.Config.Provisioning.ExtensionID = extID
 
-	// 2. Sincronizar Extension Manifest
-	if err := SyncExtensionManifest(c, extID); err != nil {
-		c.Logger.Warning("Sync manifest falló: %v", err)
-	}
-
-	// 3. Cargar estado
 	status := LoadCurrentStatus(c)
 	status.Timestamp = time.Now().Format(time.RFC3339)
-	
-	if status.SystemMap == nil {
-		status.SystemMap = make(map[string]string)
-	}
+	if status.SystemMap == nil { status.SystemMap = make(map[string]string) }
 
-	// 4. Discovery & Blueprint Mapping
 	sm, _ := discovery.DiscoverSystem(c.Paths.BinDir)
 	status.SystemMap["brain_exe"] = sm.BrainPath
 	status.SystemMap["chrome_exe"] = sm.ChromePath
 	status.SystemMap["extension_id"] = extID
 	status.SystemMap["browser_engine"] = c.Config.Settings.BrowserEngine
-	status.SystemMap["extension_path"] = c.Config.Settings.ExtensionPath
-	status.SystemMap["test_workspace"] = c.Config.Settings.TestWorkspace
-	status.SystemMap["vscode_plugin"] = detectVSCodePlugin()
+	status.SystemMap["extension_source_path"] = c.Config.Settings.ExtensionPath
+	status.SystemMap["vscode_plugin"] = detectVSCodePlugin(c.Config.Settings.ExtensionPath)
 
-	// 5. Manifiesto Dual
 	if sm.BrainPath != "" {
 		summary, err := ProcessBrainManifest(c, sm.BrainPath)
-		if err == nil {
-			status.BrainManifest = summary
-		}
+		if err == nil { status.BrainManifest = summary }
 	}
 
-	// 6. Integridad de Master
 	if status.MasterProfile != "" {
 		if !profileExistsInRegistry(c, status.MasterProfile) {
 			status.MasterProfile = "" 
 		}
 	}
 
-	status.ExecutablesValid = validateFiles(sm.BrainPath, sm.ChromePath)
+	status.ExecutablesValid = (sm.BrainPath != "" && sm.ChromePath != "")
 	return SaveSystemStatus(c, status)
 }
 
-// FetchBrainManifest es PÚBLICA para que health.go pueda usarla
-func FetchBrainManifest(brainPath string) (interface{}, error) {
-	cmd := exec.Command(brainPath, "--json", "--help")
-	output, err := cmd.Output()
-	if err != nil {
-		return nil, err
+func UpdateActiveStatus(c *core.Core, updates map[string]string) {
+	status := LoadCurrentStatus(c)
+	if status.SystemMap == nil { status.SystemMap = make(map[string]string) }
+	for k, v := range updates {
+		status.SystemMap[k] = v
 	}
-	var manifest interface{}
-	if err := json.Unmarshal(output, &manifest); err != nil {
-		return nil, err
-	}
-	return manifest, nil
+	status.Timestamp = time.Now().Format(time.RFC3339)
+	_ = SaveSystemStatus(c, status)
 }
 
-// ProcessBrainManifest genera el archivo completo y el resumen para nucleus.json
-func ProcessBrainManifest(c *core.Core, brainPath string) (*ManifestSummary, error) {
-	cmd := exec.Command(brainPath, "--json", "--help")
-	output, err := cmd.Output()
-	if err != nil {
-		return nil, err
-	}
-
-	manifestFile := filepath.Join(c.Paths.AppDataDir, "config", "brain_manifest.json")
-	os.WriteFile(manifestFile, output, 0644)
-
-	var full map[string]interface{}
-	json.Unmarshal(output, &full)
-
-	summary := &ManifestSummary{
-		ManifestPath: manifestFile,
-		Usage:        "brain [OPTIONS] <category> <command>",
-		Categories:   []string{},
-	}
-
-	if categories, ok := full["categories"].([]interface{}); ok {
-		summary.TotalCommands = 0
-		for _, cat := range categories {
-			if cMap, ok := cat.(map[string]interface{}); ok {
-				summary.Categories = append(summary.Categories, cMap["name"].(string))
-				if count, ok := cMap["command_count"].(float64); ok {
-					summary.TotalCommands += int(count)
-				}
-			}
+func detectVSCodePlugin(sourcePath string) string {
+	pkgPath := filepath.Join(sourcePath, "package.json")
+	if data, err := os.ReadFile(pkgPath); err == nil {
+		var pkg struct{ Version string `json:"version"` }
+		if err := json.Unmarshal(data, &pkg); err == nil && pkg.Version != "" {
+			return pkg.Version + " (development source)"
 		}
 	}
-	return summary, nil
-}
-
-func SyncExtensionManifest(c *core.Core, extID string) error {
-	path := filepath.Join(c.Paths.BinDir, "extension", "manifest.json")
-	data, err := os.ReadFile(path)
-	if err != nil { return err }
-	var manifest map[string]interface{}
-	json.Unmarshal(data, &manifest)
-	manifest["key"] = c.Config.Provisioning.GoldenKey
-	updated, _ := json.MarshalIndent(manifest, "", "  ")
-	return os.WriteFile(path, updated, 0644)
+	home, _ := os.UserHomeDir()
+	extDir := filepath.Join(home, ".vscode", "extensions")
+	files, _ := os.ReadDir(extDir)
+	for _, f := range files {
+		if strings.Contains(strings.ToLower(f.Name()), "bloom-nucleus-bridge") {
+			parts := strings.Split(f.Name(), "-")
+			return parts[len(parts)-1] + " (installed)"
+		}
+	}
+	return "not_detected"
 }
 
 func CalculateExtensionID(pubKey string) (string, error) {
@@ -162,13 +115,6 @@ func CalculateExtensionID(pubKey string) (string, error) {
 	return encodedID, nil
 }
 
-func validateFiles(brain, chrome string) bool {
-	if brain == "" || chrome == "" { return false }
-	_, errB := os.Stat(brain)
-	_, errC := os.Stat(chrome)
-	return errB == nil && errC == nil
-}
-
 func SaveSystemStatus(c *core.Core, status SystemStatus) error {
 	path := filepath.Join(c.Paths.AppDataDir, "config", "nucleus.json")
 	os.MkdirAll(filepath.Dir(path), 0755)
@@ -179,37 +125,56 @@ func SaveSystemStatus(c *core.Core, status SystemStatus) error {
 func LoadCurrentStatus(c *core.Core) SystemStatus {
 	path := filepath.Join(c.Paths.AppDataDir, "config", "nucleus.json")
 	data, err := os.ReadFile(path)
-	if err != nil {
-		return SystemStatus{SystemMap: make(map[string]string)}
-	}
+	if err != nil { return SystemStatus{SystemMap: make(map[string]string)} }
 	var s SystemStatus
 	json.Unmarshal(data, &s)
 	if s.SystemMap == nil { s.SystemMap = make(map[string]string) }
 	return s
 }
 
-func detectVSCodePlugin() string {
-	home, _ := os.UserHomeDir()
-	extensionsDir := filepath.Join(home, ".vscode", "extensions")
-	files, err := os.ReadDir(extensionsDir)
-	if err != nil { return "not_found" }
-	for _, f := range files {
-		if strings.Contains(strings.ToLower(f.Name()), "bloom-nucleus-bridge") {
-			parts := strings.Split(f.Name(), "-")
-			return parts[len(parts)-1]
+func ProcessBrainManifest(c *core.Core, brainPath string) (*ManifestSummary, error) {
+	cmd := exec.Command(brainPath, "--json", "--help")
+	output, err := cmd.Output()
+	if err != nil { return nil, err }
+	manifestFile := filepath.Join(c.Paths.AppDataDir, "config", "brain_manifest.json")
+	_ = os.WriteFile(manifestFile, output, 0644)
+	var full map[string]interface{}
+	json.Unmarshal(output, &full)
+	summary := &ManifestSummary{
+		ManifestPath: manifestFile,
+		Usage:        "brain [OPTIONS] <category> <command>",
+		Categories:   []string{},
+	}
+	if cats, ok := full["categories"].([]interface{}); ok {
+		for _, cat := range cats {
+			if m, ok := cat.(map[string]interface{}); ok {
+				summary.Categories = append(summary.Categories, m["name"].(string))
+				if count, ok := m["command_count"].(float64); ok {
+					summary.TotalCommands += int(count)
+				}
+			}
 		}
 	}
-	return "not_detected"
+	return summary, nil
 }
 
 func profileExistsInRegistry(c *core.Core, uuid string) bool {
 	registryPath := filepath.Join(c.Paths.AppDataDir, "config", "profiles.json")
 	data, err := os.ReadFile(registryPath)
 	if err != nil { return false }
-	var profiles []map[string]interface{}
-	json.Unmarshal(data, &profiles)
-	for _, p := range profiles {
+	var reg struct{ Profiles []map[string]interface{} `json:"profiles"` }
+	json.Unmarshal(data, &reg)
+	for _, p := range reg.Profiles {
 		if p["id"] == uuid { return true }
 	}
 	return false
+}
+
+func FetchBrainManifest(brainPath string) (interface{}, error) {
+	cmd := exec.Command(brainPath, "--json", "--help")
+	output, err := cmd.Output()
+	if err != nil { return nil, err }
+	var manifest interface{}
+	json.Unmarshal(output, &manifest)
+	return manifest, nil
 }
