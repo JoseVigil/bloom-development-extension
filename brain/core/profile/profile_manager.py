@@ -14,9 +14,6 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
-# IMPORTANTE: Usar el logger dedicado de profiles
-from brain.shared.logger import get_logger
-
 # Imports de lógica (Subcarpeta logic)
 from brain.core.profile.logic import ProfileStore, ChromeResolver, SynapseHandler
 from .path_resolver import PathResolver
@@ -25,15 +22,10 @@ from .path_resolver import PathResolver
 from .web.discovery_generator import generate_discovery_page
 from .web.landing_generator import generate_profile_landing
 
-# Crear logger dedicado para ProfileManager
+from brain.shared.logger import get_logger
 logger = get_logger("brain.profile.manager")
-# TEMPORAL - DEBUG
-print(f"LOGGER CREADO: {logger}")
-print(f"HANDLERS: {logger.handlers}")
-if logger.handlers:
-    for h in logger.handlers:
-        if hasattr(h, 'baseFilename'):
-            print(f"ARCHIVO LOG: {h.baseFilename}")
+
+
 
 class ProfileManager:
     """Chrome Worker profile manager."""

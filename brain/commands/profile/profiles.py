@@ -9,13 +9,8 @@ from pathlib import Path
 from typing import Optional
 from brain.cli.base import BaseCommand, CommandMetadata
 from brain.cli.categories import CommandCategory
-
-# IMPORTANTE: Usar el logger dedicado de profiles
 from brain.shared.logger import get_logger
-
-# Logger dedicado para CLI de profiles
 logger = get_logger("brain.profile.cli")
-
 
 class ProfilesListCommand(BaseCommand):
     """Lista todos los perfiles de Workers existentes."""

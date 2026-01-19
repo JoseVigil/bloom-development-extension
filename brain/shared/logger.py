@@ -1,6 +1,7 @@
 """
 Brain Global Logger - Sistema de logging centralizado y robusto.
 Configuración: Disco (DEBUG/Todo) | Consola (ERROR/Silencioso).
+Soporta namespaces especializados con archivos dedicados.
 """
 import logging
 import os
@@ -9,13 +10,25 @@ import traceback
 from pathlib import Path
 from logging.handlers import RotatingFileHandler
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict
 
 class BrainLogger:
     """Singleton para gestionar el logging global de Brain."""
     
     _instance: Optional['BrainLogger'] = None
     _initialized: bool = False
+    _specialized_handlers: Dict[str, RotatingFileHandler] = {}
+    
+    # Configuración de namespaces especializados
+    SPECIALIZED_NAMESPACES = {
+        'brain.profile': {
+            'file_prefix': 'brain_profile',
+            'level': logging.DEBUG,
+            'propagate': True,  # También va a brain_core.log
+        }
+        # Puedes agregar más aquí en el futuro:
+        # 'brain.worker': {'file_prefix': 'brain_worker', ...},
+    }
     
     def __new__(cls):
         if cls._instance is None:
@@ -63,34 +76,36 @@ class BrainLogger:
                 backupCount=5,
                 encoding='utf-8'
             )
-            file_handler.setLevel(logging.DEBUG)  # Registra TODO
+            file_handler.setLevel(logging.DEBUG)
             file_handler.setFormatter(log_format)
             
             # 4. Handler para CONSOLA (INTERFAZ LIMPIA)
             console_handler = logging.StreamHandler(sys.stdout)
             
-            # Si no es verbose, solo mostramos errores en pantalla
             if verbose:
                 console_handler.setLevel(logging.DEBUG)
                 console_format = logging.Formatter('%(levelname)-8s | %(name)-20s | %(message)s')
             else:
-                console_handler.setLevel(logging.ERROR)  # Silencio casi total en terminal
+                console_handler.setLevel(logging.ERROR)
                 console_format = logging.Formatter('%(levelname)-8s | %(message)s')
             
             console_handler.setFormatter(console_format)
             
             # 5. Configurar Logger Raíz
             root = logging.getLogger()
-            root.setLevel(logging.DEBUG) # Root debe ser DEBUG para enviar datos al archivo
+            root.setLevel(logging.DEBUG)
             
             root.handlers.clear()
             root.addHandler(file_handler)
             root.addHandler(console_handler)
             
-            # 6. Capturar excepciones no manejadas
+            # 6. Configurar namespaces especializados
+            self._setup_specialized_namespaces(timestamp, log_format)
+            
+            # 7. Capturar excepciones no manejadas
             sys.excepthook = self._exception_handler
             
-            # 7. Registrar inicio en el archivo (no se verá en consola)
+            # 8. Registrar inicio
             BrainLogger._initialized = True
             self._log_system_info()
             
@@ -99,6 +114,50 @@ class BrainLogger:
         except Exception as e:
             sys.stderr.write(f"❌ ERROR CRÍTICO: No se pudo inicializar el logger: {e}\n")
             traceback.print_exc()
+    
+    def _setup_specialized_namespaces(self, timestamp: str, log_format: logging.Formatter):
+        """
+        Configura handlers dedicados para namespaces especializados.
+        
+        Cada namespace en SPECIALIZED_NAMESPACES obtiene:
+        - Su propio archivo de log
+        - Configuración de nivel personalizada
+        - Propagación opcional al logger raíz
+        """
+        for namespace, config in self.SPECIALIZED_NAMESPACES.items():
+            try:
+                # Crear archivo dedicado
+                file_prefix = config['file_prefix']
+                specialized_file = self.log_dir / f"{file_prefix}_{timestamp}.log"
+                
+                # Handler dedicado
+                specialized_handler = RotatingFileHandler(
+                    str(specialized_file),
+                    maxBytes=20*1024*1024,  # 20MB
+                    backupCount=10,
+                    encoding='utf-8'
+                )
+                specialized_handler.setLevel(config['level'])
+                specialized_handler.setFormatter(log_format)
+                
+                # Configurar el logger del namespace
+                namespace_logger = logging.getLogger(namespace)
+                namespace_logger.addHandler(specialized_handler)
+                namespace_logger.setLevel(config['level'])
+                namespace_logger.propagate = config['propagate']
+                
+                # Guardar referencia
+                self._specialized_handlers[namespace] = specialized_handler
+                
+                # Log de confirmación
+                namespace_logger.info("=" * 80)
+                namespace_logger.info(f"SPECIALIZED LOGGER INITIALIZED: {namespace}")
+                namespace_logger.info(f"Log File: {specialized_file}")
+                namespace_logger.info(f"Propagate to root: {config['propagate']}")
+                namespace_logger.info("=" * 80)
+                
+            except Exception as e:
+                sys.stderr.write(f"WARNING: No se pudo inicializar logger especializado '{namespace}': {e}\n")
     
     def _get_log_directory(self) -> Path:
         """Determina el directorio de logs según el sistema operativo."""
@@ -127,6 +186,7 @@ class BrainLogger:
         logger.info(f"Frozen: {self.is_frozen}")
         logger.info(f"CWD: {os.getcwd()}")
         logger.info(f"Log Directory: {self.log_dir}")
+        logger.info(f"Specialized Namespaces: {list(self.SPECIALIZED_NAMESPACES.keys())}")
         logger.info("=" * 80)
     
     def _exception_handler(self, exc_type, exc_value, exc_traceback):
@@ -141,6 +201,12 @@ class BrainLogger:
     
     @classmethod
     def get_logger(cls, name: str) -> logging.Logger:
+        """
+        Obtiene un logger para el módulo especificado.
+        
+        Si el nombre pertenece a un namespace especializado,
+        el logger ya tendrá configurado su handler dedicado.
+        """
         return logging.getLogger(name)
 
 def setup_global_logging(verbose: bool = False, log_name: str = "brain_core"):
