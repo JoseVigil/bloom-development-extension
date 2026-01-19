@@ -1,11 +1,11 @@
 """
 Profile Manager - Orchestrator Facade.
 Versión refactorizada con logger dedicado para aislamiento total.
+Lógica de launch delegada a ProfileLauncher para mejor troubleshooting.
 """
 import sys
 import json
 import shutil
-import subprocess
 import os
 import uuid
 import platform
@@ -22,9 +22,11 @@ from .path_resolver import PathResolver
 from .web.discovery_generator import generate_discovery_page
 from .web.landing_generator import generate_profile_landing
 
+# Import del launcher aislado
+from .profile_launcher import ProfileLauncher
+
 from brain.shared.logger import get_logger
 logger = get_logger("brain.profile.manager")
-
 
 
 class ProfileManager:
@@ -39,6 +41,9 @@ class ProfileManager:
         
         self.store = ProfileStore(self.paths.profiles_json, self.paths.profiles_dir)
         self.synapse = SynapseHandler(self.paths.base_dir, self.paths.extension_id)
+        
+        # ✅ NUEVO: Inicializar ProfileLauncher (lógica de launch aislada)
+        self.profile_launcher = ProfileLauncher(self.paths, self.launcher)
 
         self.verbose_network = False 
         
@@ -206,7 +211,7 @@ class ProfileManager:
         self._save_profiles(profiles)
         
         # Sync resources
-        logger.info("📄 Sincronizando recursos iniciales...")
+        logger.info("🔄 Sincronizando recursos iniciales...")
         self.sync_profile_resources(profile_id)
         
         elapsed = time.time() - start_time
@@ -221,6 +226,7 @@ class ProfileManager:
     ) -> Dict[str, Any]:
         """
         Lanza un perfil de Chrome/Chromium.
+        Delega la lógica de lanzamiento a ProfileLauncher.
         
         Args:
             profile_id: ID del perfil a lanzar
@@ -242,306 +248,22 @@ class ProfileManager:
         logger.debug(f"  → Perfil encontrado: {profile.get('alias')} ({full_id[:8]})")
         
         # 2. SIEMPRE sincronizar recursos antes de lanzar
-        logger.info("📄 Sincronizando recursos del perfil...")
+        logger.info("🔄 Sincronizando recursos del perfil...")
         self.sync_profile_resources(full_id)
         
-        # 3. Decidir modo de lanzamiento
-        if spec_data:
-            logger.info("📋 Modo SPEC-DRIVEN detectado")
-            return self._launch_with_spec(profile, spec_data)
-        else:
-            logger.info("🔧 Modo LEGACY detectado (estrategias predefinidas)")
-            return self._launch_legacy(profile, url)
-    
-    def _launch_with_spec(self, profile: Dict[str, Any], spec: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Lanza el navegador usando una especificación JSON completa.
-        """
-        logger.info("🎯 Ejecutando lanzamiento spec-driven v2.1")
-        
-        # Extracción de datos del spec
-        paths_config = spec.get('paths', {})
-        exe = paths_config.get('executable')
-        u_data = paths_config.get('user_data')
-        ext = paths_config.get('extension')
-        logs_base = paths_config.get('logs_base')
-        url = spec.get('target_url')
-        
-        logger.debug(f"📋 Spec recibido:")
-        logger.debug(f"   Executable: {exe}")
-        logger.debug(f"   User Data: {u_data}")
-        logger.debug(f"   Extension: {ext}")
-        logger.debug(f"   Target URL: {url}")
-        
-        # Validación básica
-        if not all([exe, u_data, ext, url]):
-            logger.error("✗ Spec incompleto: faltan campos requeridos")
-            raise ValueError("Spec incompleto: faltan campos requeridos en 'paths' o 'target_url'")
-        
-        # Resolución de rutas
-        exec_path = self.paths.base_dir / exe if not os.path.isabs(exe) else Path(exe)
-        user_data_path = self.paths.base_dir / u_data if not os.path.isabs(u_data) else Path(u_data)
-        extension_path = self.paths.base_dir / ext if not os.path.isabs(ext) else Path(ext)
-        
-        logger.debug(f"🔧 Rutas resueltas:")
-        logger.debug(f"   Executable: {exec_path}")
-        logger.debug(f"   User Data: {user_data_path}")
-        logger.debug(f"   Extension: {extension_path}")
-        
-        # Generación de logs granulares
-        debug_log = None
-        net_log = None
-        launch_id = None
-        
-        if logs_base:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            short_uuid = str(uuid.uuid4())[:8]
-            launch_id = f"{timestamp}_{short_uuid}"
-            
-            logs_dir = self.paths.base_dir / logs_base if not os.path.isabs(logs_base) else Path(logs_base)
-            logs_dir.mkdir(parents=True, exist_ok=True)
-            
-            debug_log = logs_dir / f"{launch_id}_chrome_debug.log"
-            net_log = logs_dir / f"{launch_id}_chrome_net.log"
-            
-            logger.info(f"📝 Launch ID: {launch_id}")
-            logger.debug(f"   Debug Log: {debug_log}")
-            logger.debug(f"   Net Log: {net_log}")
-        
-        # Construcción de Chrome args
-        chrome_args = [
-            str(exec_path),
-            f"--user-data-dir={user_data_path}",
-            f"--load-extension={extension_path}",
-            f"--app={url}",
-        ]
-        
-        if debug_log:
-            chrome_args.append(f"--log-file={debug_log}")
-        if net_log:
-            chrome_args.append(f"--log-net-log={net_log}")
-        
-        chrome_args.extend(spec.get('engine_flags', []))
-        chrome_args.extend(spec.get('custom_flags', []))
-        
-        logger.debug(f"🔧 Chrome args construidos ({len(chrome_args)} argumentos)")
-        
-        # Ejecución
-        result = self._execute_browser(chrome_args, profile['id'])
-        
-        # Enriquecer resultado
-        if result.get('status') == 'success' and logs_base:
-            result['data']['launch']['launch_id'] = launch_id
-            result['data']['logs'] = {
-                'debug': str(debug_log) if debug_log else None,
-                'network': str(net_log) if net_log else None
-            }
-        
-        logger.info("✅ Lanzamiento spec-driven completado")
-        return result
-    
-    def _launch_legacy(self, profile: Dict[str, Any], url: Optional[str]) -> Dict[str, Any]:
-        """Modo legacy: usa las estrategias predefinidas según el navegador disponible."""
-        logger.info("🔧 Usando estrategia legacy")
-        
-        if self.launcher.chromium_path and self.launcher.chromium_path.exists():
-            logger.info("   → Estrategia: Chromium Portable")
-            return self._launch_internal_chromium(profile, url)
-        elif self.launcher.chrome_path and self.launcher.chrome_path.exists():
-            logger.info("   → Estrategia: Chrome del Sistema")
-            return self._launch_system_chrome(profile, url)
-        else:
-            logger.error("✗ No se encontró ningún navegador")
-            raise RuntimeError("No se encontró ningún navegador (Chromium ni Chrome)")
-    
-    def _launch_internal_chromium(self, profile: Dict, url: Optional[str]) -> Dict[str, Any]:
-        """ESTRATEGIA CHROMIUM PORTABLE: Lanzamiento limpio con Electron."""
-        logger.info("🚀 Lanzando con Chromium portable")
-        
-        full_id = profile['id']
-        profile_path = Path(self.paths.profiles_dir) / full_id
-        target_url = url if url else self.get_discovery_url(full_id)
-        
-        logger.debug(f"  → Profile Path: {profile_path}")
-        logger.debug(f"  → Target URL: {target_url}")
-        
-        # Configuración de rutas
-        u_data = os.path.abspath(profile_path)
-        e_path = os.path.abspath(profile_path / "extension")
-        
-        # Crear directorio de logs
-        logs_dir = self.paths.base_dir / "logs" / "profiles" / full_id
-        logs_dir.mkdir(parents=True, exist_ok=True)
-        debug_log = str(logs_dir / "chrome_debug.log")
-        net_log = str(logs_dir / "chrome_net.log")
-        
-        logger.debug(f"  → Debug Log: {debug_log}")
-        logger.debug(f"  → Net Log: {net_log}")
-
-        # Argumentos Chromium
-        chrome_args = [
-            str(self.launcher.chromium_path),
-            f"--user-data-dir={u_data}",
-            f"--load-extension={e_path}",
-            f"--app={target_url}",
-            "--no-first-run",
-            "--no-default-browser-check",
-            "--disable-features=RendererCodeIntegrity",
-            "--disable-blink-features=AutomationControlled",
-            "--disable-web-security",
-            "--disable-site-isolation-trials",
-            "--disable-features=IsolateOrigins,site-per-process",
-            "--allow-running-insecure-content",
-            "--disable-popup-blocking",
-            f"--remote-debugging-port=0",
-            "--test-type",
-            f"--log-file={debug_log}",
-            f"--log-net-log={net_log}", 
-            "--enable-logging",
-            "--v=1"
-        ]
-
-        try:
-            # Silencio total de logs
-            import logging
-            logging.disable(logging.CRITICAL)
-
-            logger.info("🚀 Iniciando proceso Chromium...")
-            proc = subprocess.Popen(
-                chrome_args,
-                creationflags=0x00000008 | 0x00000200 | 0x01000000,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                stdin=subprocess.DEVNULL,
-                shell=False
-            )
-
-            browser_pid = proc.pid
-            logger.info(f"✅ Chromium lanzado con PID: {browser_pid}")
-            
-            # Entrega del contrato a Sentinel
-            sys.stdout = sys.__stdout__ 
-            
-            output = {
-                "status": "success", 
-                "pid": browser_pid, 
-                "profile_id": full_id
-            }
-            
-            print(json.dumps(output))
-            sys.stdout.flush()
-
-            time.sleep(0.5) 
-            os._exit(0)
-            
-        except Exception as e:
-            logger.error(f"✗ Error al lanzar Chromium: {str(e)}", exc_info=True)
-            print(json.dumps({"status": "error", "message": str(e)}))
-            sys.stdout.flush()
-            os._exit(1)
-
-    def _launch_system_chrome(self, profile: Dict, url: Optional[str]) -> Dict[str, Any]:
-        """ESTRATEGIA CHROME SYSTEM: Lanzamiento de instancia única garantizado."""
-        logger.info("🚀 Lanzando con Chrome del sistema")
-        
-        full_id = profile['id']
-        profile_path = Path(self.paths.profiles_dir) / full_id
-        target_url = url if url else self.get_discovery_url(full_id)
-        
-        logger.debug(f"  → Profile Path: {profile_path}")
-        logger.debug(f"  → Target URL: {target_url}")
-        
-        u_data = os.path.abspath(profile_path)
-        e_path = os.path.abspath(profile_path / "extension")
-
-        # Remover lock file si existe
-        lock_file = os.path.join(u_data, "SingletonLock")
-        if os.path.exists(lock_file):
-            try: 
-                os.remove(lock_file)
-                logger.debug(f"🗑️ Lock removido: {full_id}")
-            except: 
-                pass
-
-        chrome_args = [
-            str(self.launcher.chrome_path),
-            f"--user-data-dir={u_data}",
-            f"--load-extension={e_path}",
-            f"--app={target_url}",
-            "--no-first-run",
-            "--no-default-browser-check",
-            f"--remote-debugging-port=0",
-            "--disable-features=RendererCodeIntegrity",
-            "--test-type"
-        ]
-
-        logger.info("🚀 Ejecutando Chrome del sistema...")
-        return self._execute_browser(chrome_args, full_id)
-
-    def _execute_browser(self, args: list, profile_id: str) -> Dict[str, Any]:
-        """Ejecuta el navegador con flags de aislamiento apropiados."""
-        logger.debug(f"🚀 Ejecutando navegador con {len(args)} argumentos")
-        logger.debug(f"  → Primer argumento (exe): {args[0]}")
-        
-        # Kill preventivo del host nativo (Windows)
-        if platform.system() == 'Windows':
-            logger.debug("🔪 Matando procesos bloom-host.exe previos")
-            os.system('taskkill /f /im bloom-host.exe >nul 2>&1')
-
-        # Flags de aislamiento según OS
-        if platform.system() == 'Windows':
-            flags = 0x00000008 | 0x00000200 | 0x08000000
-        else:
-            flags = 0
-
-        try:
-            import logging
-            logging.disable(logging.CRITICAL)
-            
-            logger.info("🚀 Iniciando proceso del navegador...")
-            proc = subprocess.Popen(
-                args,
-                creationflags=flags if platform.system() == 'Windows' else 0,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                stdin=subprocess.DEVNULL,
-                close_fds=True
-            )
-
-            result = {
-                "status": "success",
-                "data": {
-                    "profile_id": profile_id,
-                    "launch": {
-                        "pid": proc.pid,
-                        "launch_id": datetime.now().strftime("%Y%m%d_%H%M%S")
-                    }
-                }
-            }
-            
-            logger.info(f"✅ Navegador lanzado con PID: {proc.pid}")
-            
-            sys.stdout.write(json.dumps(result) + "\n")
-            sys.stdout.flush()
-            
-            time.sleep(0.5)
-            os._exit(0)
-
-        except Exception as e:
-            logger.error(f"✗ Error fatal al ejecutar navegador: {str(e)}", exc_info=True)
-            sys.stderr.write(f"FATAL_EXCEPTION: {str(e)}\n")
-            sys.stderr.flush()
-            os._exit(1)
+        # 3. Delegar a ProfileLauncher
+        logger.info("🎯 Delegando lanzamiento a ProfileLauncher...")
+        return self.profile_launcher.launch(profile, url, spec_data)
 
     def get_discovery_url(self, profile_id: str) -> str:
         """Obtiene URL de discovery page."""
         url = f"chrome-extension://{self.paths.extension_id}/discovery/index.html"
-        logger.debug(f"📍 Discovery URL generada: {url}")
+        logger.debug(f"🔍 Discovery URL generada: {url}")
         return url
 
     def sync_profile_resources(self, profile_id: str) -> None:
         """Sincroniza los recursos del perfil (Extensión + Config + Web)."""
-        logger.info(f"📄 Sincronizando recursos para {profile_id[:8]}")
+        logger.info(f"🔄 Sincronizando recursos para {profile_id[:8]}")
         
         profile = self._find_profile(profile_id)
         if not profile:
@@ -580,7 +302,7 @@ class ProfileManager:
     def get_landing_url(self, profile_id: str) -> str:
         """Obtiene URL de landing page."""
         url = f"chrome-extension://{self.paths.extension_id}/landing/index.html"
-        logger.debug(f"📍 Landing URL generada: {url}")
+        logger.debug(f"🏠 Landing URL generada: {url}")
         return url
 
     def destroy_profile(self, profile_id: str) -> Dict[str, Any]:

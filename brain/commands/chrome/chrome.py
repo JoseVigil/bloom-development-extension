@@ -26,10 +26,11 @@ class ChromeCommand(BaseCommand):
             description="Chrome profile management and log analysis tools",
             examples=[
                 "brain chrome read-log abc-123-def-456",
+                "brain chrome read-log abc-123-def-456 --launch-id session-001",
                 "brain chrome read-net-log abc-123-def-456 --filter-ai",
-                "brain chrome read-log abc-123-def-456 --keyword extension",
-                "brain chrome read-net-log abc-123-def-456 --json",
-                "brain chrome mining-log abc-123-def-456"
+                "brain chrome read-net-log abc-123-def-456 --launch-id session-001",
+                "brain chrome mining-log abc-123-def-456",
+                "brain chrome mining-log abc-123-def-456 --launch-id session-001"
             ]
         )
     
@@ -41,15 +42,19 @@ class ChromeCommand(BaseCommand):
         def read_log(
             ctx: typer.Context,
             profile_id: str = typer.Argument(..., help="Chrome profile UUID"),
-            keyword: str = typer.Option("bloom", "--keyword", "-k", help="Keyword to search for"),
             before: int = typer.Option(5, "--before", "-b", help="Lines of context before match"),
-            after: int = typer.Option(5, "--after", "-a", help="Lines of context after match")
+            after: int = typer.Option(5, "--after", "-a", help="Lines of context after match"),
+            launch_id: Optional[str] = typer.Option(None, "--launch-id", "-l", help="Launch ID for separate output file")
         ):
             """
-            Read and filter Chrome debug logs for a specific profile.
+            Auditor de integridad del motor Chromium para diagnosticar fallos de sistema y bloqueos de seguridad.
             
-            Searches for keyword occurrences and extracts context lines.
-            Output is saved to BloomNucleus/logs/profiles/[UUID]/chrome_bloom_log_YYYYMMDD.log
+            Detects critical Chromium errors: Sandbox failures, Permission errors, Client blocks, 
+            Singleton conflicts, Native Messaging issues, and Fatal crashes.
+            
+            Input: BloomNucleus/profiles/[UUID]/engine_mining.log
+            Output: BloomNucleus/logs/profiles/[UUID]/[LAUNCH_ID]_engine_read.log
+            Without --launch-id: default_engine_read.log
             """
             gc = ctx.obj
             if gc is None:
@@ -59,26 +64,27 @@ class ChromeCommand(BaseCommand):
             try:
                 from brain.core.chrome.log_reader import ChromeLogReader
                 
-                logger.info(f"📖 Reading Chrome log for profile: {profile_id}")
+                logger.info(f"🔍 Running engine audit for profile: {profile_id}")
                 
                 if gc.verbose:
                     typer.echo(f"🔍 Profile: {profile_id}", err=True)
-                    typer.echo(f"🔑 Keyword: '{keyword}'", err=True)
                     typer.echo(f"📊 Context: {before} lines before, {after} lines after", err=True)
+                    if launch_id:
+                        typer.echo(f"🚀 Launch ID: {launch_id}", err=True)
                 
                 reader = ChromeLogReader()
                 result = reader.read_and_filter(
                     profile_id=profile_id,
-                    keyword=keyword,
                     before_lines=before,
-                    after_lines=after
+                    after_lines=after,
+                    launch_id=launch_id
                 )
                 
-                logger.info(f"✅ Log processed: {result['matches_found']} matches found")
+                logger.info(f"✅ Engine audit complete: {result['matches_found']} errors detected")
                 
                 data = {
                     "status": "success",
-                    "operation": "chrome_read_log",
+                    "operation": "chrome_engine_audit",
                     "data": result
                 }
                 
@@ -99,7 +105,8 @@ class ChromeCommand(BaseCommand):
             filter_ai: bool = typer.Option(False, "--filter-ai", help="Filter for AI service requests only"),
             exclude: Optional[List[str]] = typer.Option(None, "--exclude", "-e", help="Exclude URL patterns"),
             include_quic: bool = typer.Option(False, "--include-quic", help="Include QUIC protocol events"),
-            show_headers: bool = typer.Option(False, "--show-headers", help="Show HTTP headers in output")
+            show_headers: bool = typer.Option(False, "--show-headers", help="Show HTTP headers in output"),
+            launch_id: Optional[str] = typer.Option(None, "--launch-id", "-l", help="Launch ID for separate output file")
         ):
             """
             Analyze Chrome network logs with intelligent filtering.
@@ -110,7 +117,8 @@ class ChromeCommand(BaseCommand):
             - QUIC packets (optional)
             - AI service-specific traffic (with --filter-ai)
             
-            Output is saved to BloomNucleus/logs/profiles/[UUID]/chrome_bloom_net_log_YYYYMMDD.log
+            Output: BloomNucleus/logs/profiles/[UUID]/chrome_bloom_net_log_YYYYMMDD.log
+            With --launch-id: BloomNucleus/logs/profiles/[UUID]/[LAUNCH_ID]_engine_network.log
             """
             gc = ctx.obj
             if gc is None:
@@ -127,6 +135,8 @@ class ChromeCommand(BaseCommand):
                     typer.echo(f"🤖 AI filter: {filter_ai}", err=True)
                     typer.echo(f"🚫 Exclude: {exclude or 'None'}", err=True)
                     typer.echo(f"📦 Include QUIC: {include_quic}", err=True)
+                    if launch_id:
+                        typer.echo(f"🚀 Launch ID: {launch_id}", err=True)
                 
                 analyzer = NetLogAnalyzer()
                 result = analyzer.analyze(
@@ -134,7 +144,8 @@ class ChromeCommand(BaseCommand):
                     filter_ai=filter_ai,
                     exclude_patterns=exclude or [],
                     include_quic=include_quic,
-                    show_headers=show_headers
+                    show_headers=show_headers,
+                    launch_id=launch_id
                 )
                 
                 logger.info(f"✅ Network log analyzed: {result['events_processed']} events")
@@ -161,14 +172,16 @@ class ChromeCommand(BaseCommand):
             profile_id: str = typer.Argument(..., help="Chrome profile UUID"),
             keyword: str = typer.Option("bloom", "--keyword", "-k", help="Keyword to search for"),
             before: int = typer.Option(5, "--before", "-b", help="Lines of context before match"),
-            after: int = typer.Option(5, "--after", "-a", help="Lines of context after match")
+            after: int = typer.Option(5, "--after", "-a", help="Lines of context after match"),
+            launch_id: Optional[str] = typer.Option(None, "--launch-id", "-l", help="Launch ID for separate output file")
         ):
             """
             Read and filter engine_mining.log for a specific profile.
             
             Processes the engine_mining.log file and extracts bloom-related entries.
-            Input: BloomNucleus/logs/profiles/[UUID]/engine_mining.log
-            Output: BloomNucleus/logs/profiles/[UUID]/engine_mining.txt
+            Input: BloomNucleus/profiles/[UUID]/engine_mining.log
+            Output: BloomNucleus/logs/profiles/[UUID]/engine_mining.log
+            With --launch-id: BloomNucleus/logs/profiles/[UUID]/[LAUNCH_ID]_engine_mining.log
             """
             gc = ctx.obj
             if gc is None:
@@ -184,13 +197,16 @@ class ChromeCommand(BaseCommand):
                     typer.echo(f"🔍 Profile: {profile_id}", err=True)
                     typer.echo(f"🔑 Keyword: '{keyword}'", err=True)
                     typer.echo(f"📊 Context: {before} lines before, {after} lines after", err=True)
+                    if launch_id:
+                        typer.echo(f"🚀 Launch ID: {launch_id}", err=True)
                 
                 reader = MiningLogReader()
                 result = reader.read_and_filter(
                     profile_id=profile_id,
                     keyword=keyword,
                     before_lines=before,
-                    after_lines=after
+                    after_lines=after,
+                    launch_id=launch_id
                 )
                 
                 logger.info(f"✅ Mining log processed: {result['matches_found']} matches found")
@@ -216,21 +232,29 @@ class ChromeCommand(BaseCommand):
         """Human-readable output for read-log success."""
         result = data.get("data", {})
         
-        typer.echo("\n📊 Chrome Log Analysis Results")
+        typer.echo("\n🔍 Chromium Engine Audit Results")
         typer.echo("=" * 70)
         typer.echo(f"\n🔍 Profile ID: {result.get('profile_id')}")
-        typer.echo(f"🔑 Keyword: '{result.get('keyword')}'")
+        if result.get('launch_id'):
+            typer.echo(f"🚀 Launch ID: {result.get('launch_id')}")
         typer.echo(f"\n📄 Source: {result.get('source_file')}")
         typer.echo(f"💾 Output: {result.get('output_file')}")
         
         matches = result.get('matches_found', 0)
         if matches > 0:
-            typer.echo(f"\n✅ Found {matches} match{'es' if matches != 1 else ''}")
+            typer.echo(f"\n⚠️  Detected {matches} critical error{'s' if matches != 1 else ''}")
+            
+            # Show error distribution
+            error_types = result.get('error_types', {})
+            if error_types:
+                typer.echo(f"\n📊 Error Distribution:")
+                for error_type, count in sorted(error_types.items(), key=lambda x: x[1], reverse=True):
+                    typer.echo(f"   • {error_type}: {count}")
         else:
-            typer.echo(f"\n⚠️ No matches found for keyword '{result.get('keyword')}'")
+            typer.echo(f"\n✅ No critical errors detected - Engine is healthy")
         
-        typer.echo(f"\n📦 Total lines processed: {result.get('total_lines', 0)}")
-        typer.echo(f"✏️ Output lines: {result.get('output_lines', 0)}")
+        typer.echo(f"\n📦 Total lines scanned: {result.get('total_lines', 0)}")
+        typer.echo(f"✏️  Output lines: {result.get('output_lines', 0)}")
     
     def _render_net_log_success(self, data: dict):
         """Human-readable output for read-net-log success."""
@@ -239,6 +263,8 @@ class ChromeCommand(BaseCommand):
         typer.echo("\n🌐 Chrome Network Log Analysis")
         typer.echo("=" * 70)
         typer.echo(f"\n🔍 Profile ID: {result.get('profile_id')}")
+        if result.get('launch_id'):
+            typer.echo(f"🚀 Launch ID: {result.get('launch_id')}")
         typer.echo(f"\n📄 Source: {result.get('source_file')}")
         typer.echo(f"💾 Output: {result.get('output_file')}")
         
@@ -269,6 +295,8 @@ class ChromeCommand(BaseCommand):
         typer.echo("\n⛏️ Engine Mining Log Analysis Results")
         typer.echo("=" * 70)
         typer.echo(f"\n🔍 Profile ID: {result.get('profile_id')}")
+        if result.get('launch_id'):
+            typer.echo(f"🚀 Launch ID: {result.get('launch_id')}")
         typer.echo(f"🔑 Keyword: '{result.get('keyword')}'")
         typer.echo(f"\n📄 Source: {result.get('source_file')}")
         typer.echo(f"💾 Output: {result.get('output_file')}")

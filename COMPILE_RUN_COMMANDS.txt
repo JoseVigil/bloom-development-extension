@@ -15,6 +15,8 @@ C:\repos\bloom-videos\bloom-development-extension
 .\build.ps1 -Clean (powershell admin)
 brain system version --increase --desc "Versioning and info"
 
+taskkill /F /IM chrome.exe /T
+
 cd installer/electron-app
 npm install
 npm run dev
@@ -38,6 +40,12 @@ DEV Web server port 5173
 npm run build
 npm run dev
 
+Sentinel 
+.\build.bat
+.\sentinel.exe dev-start
+.\sentinel.exe health
+
+
 tree commands
 brain filesystem tree src installer webview brain contracts package.json tsconfig.json -o tree/plugin_tree.txt
 
@@ -53,4 +61,18 @@ brain filesystem tree installer/chrome-extension -o tree/chrome_extension_tree.t
 
 brain filesystem tree C:\Users\josev\AppData\Local\BloomNucleus -o tree/appdata_tree.txt
 
+Asterisk
+sudo asterisk -rvvv
 
+
+Servidores
+API REST: PluginApiServer.ts → Puerto 48215
+WebSocket: WebSocketManager.ts → Puerto 4124
+
+Webview (Frontend)
+Ubicación: webview/app/
+Dev Server: Puerto 5173 (Vite)
+Conecta a: API 48215 + WS 4124
+
+Borrar todas las keys 
+Get-ChildItem "HKCU:\Software\Google\Chrome\NativeMessagingHosts" | Where-Object { $_.PSChildName -like "com.bloom.synapse*" } | Remove-Item -Recurse -Force -Verbose

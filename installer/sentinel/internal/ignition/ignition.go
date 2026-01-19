@@ -20,17 +20,22 @@ type ProfileFlags struct {
 }
 
 type PathsConfig struct {
-	Executable string `json:"executable"`
 	UserData   string `json:"user_data"`
 	Extension  string `json:"extension"`
 	LogsBase   string `json:"logs_base"`
 }
 
+type EngineConfig struct {
+	Type       string `json:"type"`
+	Executable string `json:"executable"`
+}
+
 type IgnitionSpec struct {
-	Paths       PathsConfig `json:"paths"`
-	TargetURL   string      `json:"target_url"`
-	EngineFlags []string    `json:"engine_flags"`
-	CustomFlags []string    `json:"custom_flags"`
+	Paths       PathsConfig  `json:"paths"`
+	Engine      EngineConfig `json:"engine"` 
+	TargetURL   string       `json:"target_url"`
+	EngineFlags []string     `json:"engine_flags"`
+	CustomFlags []string     `json:"custom_flags"`
 }
 
 type LaunchResponse struct {
@@ -64,46 +69,74 @@ func New(c *core.Core) *Ignition {
 
 // Launch orquesta la secuencia crítica
 func (ig *Ignition) Launch(profileID string, mode string) error {
-	ig.Core.Logger.Info("[IGNITION] 🚀 Iniciando secuencia para: %s", profileID[:8])
+	ig.Core.Logger.Info("[IGNITION] 🚀 Iniciando secuencia (Static Spec Mode).")
 	
-	// 1. Pre-flight y limpieza de logs
-	ig.preFlight(profileID)
-	if err := ig.Telemetry.Setup(); err != nil {
-		return fmt.Errorf("error en setup de telemetría: %v", err)
+	// 1. Localizar el Spec pre-existente (Creado por Electron/Create)
+	// Ruta: AppData/Local/BloomNucleus/config/profile/{ID}/ignition_spec.json
+	ig.SpecPath = filepath.Join(ig.Core.Paths.AppDataDir, "config", "profile", profileID, "ignition_spec.json")
+
+	// Validar que el archivo existe antes de seguir
+	if _, err := os.Stat(ig.SpecPath); os.IsNotExist(err) {
+		return fmt.Errorf("error crítico: El Spec no existe en %s. Electron falló en la creación", ig.SpecPath)
 	}
 
-	// 2. Generar Spec
-	if err := ig.generateSpec(profileID, mode); err != nil {
+	// 2. Pre-flight y Limpieza de Telemetría
+	ig.preFlight(profileID)
+	ig.Telemetry.Setup()
+
+	// 3. !!! EL PASO CLAVE: INYECTAR EN LA RUTA QUE DICE EL SPEC !!!
+	// Leemos el Spec para saber dónde Electron puso la extensión
+	if err := ig.prepareExtension(profileID); err != nil {
 		return err
 	}
 
-	// 3. Levantar Brain Service
+	// 4. Levantar Brain Service
 	if err := ig.startBrainService(); err != nil {
 		return err
 	}
 
-	// 4. Lanzar Brain CLI y capturar PID (Handoff)
+	// 5. Lanzar (Pasando la ruta del Spec estático a Python)
 	launchID, err := ig.execute(profileID)
 	if err != nil {
 		return err
 	}
 
-	// 5. Inyectar configuración de extensión
-	ig.forceExtensionConfig(profileID)
-
-	// 6. Telemetría y validación de Handshake
+	// 6. Tailing y Handshake
 	ig.Telemetry.StartTailing(profileID, launchID)
 
 	ig.Core.Logger.Info("[IGNITION] Esperando validación LATE_BINDING_SUCCESS...")
 	select {
 	case <-ig.Telemetry.SuccessChan:
-		ig.Core.Logger.Success("[IGNITION] 🔥 Handshake confirmado.")
+		ig.Core.Logger.Success("[IGNITION] 🔥 Handshake confirmado. ÉXITO.")
 		return nil
-	case errStr := <-ig.Telemetry.ErrorChan:
-		return fmt.Errorf("fallo: %s", errStr)
-	case <-time.After(15 * time.Second): // Timeout según instrucción
-		return fmt.Errorf("timeout: no se detectó LATE_BINDING_SUCCESS en 15s")
+	case <-time.After(20 * time.Second):
+		return fmt.Errorf("timeout: La extensión no respondió. Revisa logs en AppData/logs/profiles/%s", profileID)
 	}
+}
+
+// prepareExtension lee el Spec para inyectar el config en el lugar correcto
+func (ig *Ignition) prepareExtension(profileID string) error {
+	// Leemos el JSON que Electron nos dejó
+	data, err := os.ReadFile(ig.SpecPath)
+	if err != nil { return err }
+
+	var spec IgnitionSpec
+	json.Unmarshal(data, &spec)
+
+	// La ruta de la extensión ahora viene del Spec estático
+	// Nota: Python y Go deben resolver esto contra la misma base (AppData)
+	appData := ig.Core.Paths.AppDataDir
+	extDir := filepath.Join(appData, spec.Paths.Extension)
+	
+	os.MkdirAll(extDir, 0755)
+	
+	// Inyectar synapse.config.js
+	configPath := filepath.Join(extDir, "synapse.config.js")
+	bridgeName := fmt.Sprintf("com.bloom.synapse.%s", profileID[:8])
+	content := fmt.Sprintf("self.SYNAPSE_CONFIG = { profileId: '%s', bridge_name: '%s' };", profileID, bridgeName)
+	
+	ig.Core.Logger.Info("[IGNITION] Inyectando config en: %s", extDir)
+	return os.WriteFile(configPath, []byte(content), 0644)
 }
 
 func (ig *Ignition) execute(profileID string) (string, error) {
@@ -225,7 +258,7 @@ func (ig *Ignition) loadProfileFlags(profileID string) ProfileFlags {
 	flagsPath := filepath.Join(synapseDir, "profile_flags.json")
 
 	defaults := ProfileFlags{
-		EngineFlags: []string{"--no-sandbox", "--test-type", "--disable-web-security", "--disable-features=IsolateOrigins,site-per-process", "--remote-debugging-port=0", "--no-first-run", "--enable-logging", "--v=1"},
+		EngineFlags: []string{"--no-sandbox", "--test-type", "--disable-web-security", "--disable-features=IsolateOrigins,site-per-process", "--remote-debugging-port=0", "--no-first-run", "--enable-logging", "--v=1", "--disable-blink-features=AutomationControlled"},
 		CustomFlags: []string{},
 	}
 
@@ -254,12 +287,20 @@ func (ig *Ignition) generateSpec(profileID string, mode string) error {
 		targetURL = fmt.Sprintf("chrome-extension://%s/discovery/index.html", extID)
 	}
 
+	// 1. Definir Motor y Ruta (Aquí puedes luego conectar tu .env)
+	engineType := "chromium" 
+	exePath := "bin/chrome-win/chrome.exe"
+
+	// 2. Construir el Spec Prístino
 	spec := IgnitionSpec{
 		Paths: PathsConfig{
-			Executable: "bin/chrome-win/chrome.exe",
-			UserData:   fmt.Sprintf("profiles/%s", profileID),
-			Extension:  fmt.Sprintf("profiles/%s/extension", profileID),
-			LogsBase:   fmt.Sprintf("logs/profiles/%s", profileID),
+			UserData:  fmt.Sprintf("profiles/%s", profileID),
+			Extension: fmt.Sprintf("profiles/%s/extension", profileID),
+			LogsBase:  fmt.Sprintf("logs/profiles/%s", profileID),
+		},
+		Engine: EngineConfig{
+			Type:       engineType,
+			Executable: exePath,
 		},
 		TargetURL:   targetURL,
 		EngineFlags: config.EngineFlags,
@@ -267,5 +308,6 @@ func (ig *Ignition) generateSpec(profileID string, mode string) error {
 	}
 
 	data, _ := json.MarshalIndent(spec, "", "  ")
+	ig.Core.Logger.Info("[IGNITION] Spec generado: Motor=%s, URL=%s", engineType, targetURL[:20]+"...")
 	return os.WriteFile(ig.SpecPath, data, 0644)
 }
