@@ -1,30 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Brain CLI - Build Script con Logging
-Genera 'build.log' con todo el detalle de la ejecución.
+Brain CLI - Generador de Árboles de Directorios
 """
-import os
 import sys
 import subprocess
 from pathlib import Path
-import io
-import time
 from datetime import datetime
-
-# Archivo de Log
-LOG_FILE = Path("build.log")
 
 # ========================================
 # SISTEMA DE LOGGING
 # ========================================
-def setup_log():
-    """Inicia un nuevo archivo de log."""
-    with open(LOG_FILE, "w", encoding="utf-8") as f:
-        f.write(f"=== BRAIN BUILD LOG ===\n")
-        f.write(f"Fecha: {datetime.now()}\n")
-        f.write(f"Sistema: {sys.platform}\n")
-        f.write("="*40 + "\n\n")
+LOG_FILE = Path("build.log")
 
 def log(msg, level="INFO", to_console=True):
     """
@@ -59,6 +46,9 @@ def log(msg, level="INFO", to_console=True):
 # ========================================
 # CONFIGURACIÓN DE ENTORNO
 # ========================================
+import os
+import io
+
 ENV_VARS = os.environ.copy()
 ENV_VARS['PYTHONIOENCODING'] = 'utf-8'
 ENV_VARS['PYTHONUTF8'] = '1'
@@ -114,7 +104,10 @@ def safe_subprocess_run(cmd, timeout=None, cwd=None, desc=""):
         return -1, "", str(e)
 
 def generate_tree_files(brain_exe):
-    tree_dir = Path("tree")
+    """Genera árboles de directorios usando el ejecutable brain."""
+    # Determinar la ruta raíz del proyecto (2 niveles arriba desde scripts/python/)
+    project_root = Path(__file__).parent.parent.parent
+    tree_dir = project_root / "tree"
     tree_dir.mkdir(parents=True, exist_ok=True)
     
     log("\nGenerando árboles de directorios...", level="INFO")
@@ -131,8 +124,12 @@ def generate_tree_files(brain_exe):
     success_count = 0
     
     for cmd_info in tree_commands:
-        target_file = Path(cmd_info["args"][-1])
+        target_file = project_root / cmd_info["args"][-1]
         cmd = [str(brain_exe)] + cmd_info["args"]
+        
+        # Mostrar comando en consola
+        cmd_str = " ".join(cmd)
+        log(f"   Ejecutando: {cmd_str}", level="INFO")
         
         code, out, err = safe_subprocess_run(cmd, timeout=45, desc=f"Tree: {cmd_info['file']}")
         
@@ -147,96 +144,25 @@ def generate_tree_files(brain_exe):
 
     return success_count == len(tree_commands)
 
-def run_build_process(build_script):
-    cmd = [sys.executable, str(build_script)] + sys.argv[1:]
-    
-    log("Iniciando PyInstaller...", level="INFO")
-    
-    process = subprocess.Popen(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        env=ENV_VARS,
-        encoding='utf-8',
-        errors='replace'
-    )
-    
-    while True:
-        line = process.stdout.readline()
-        if not line and process.poll() is not None:
-            break
-        if line:
-            line = line.rstrip()
-            log(line, level="BUILD", to_console=True)
-            
-    return process.poll()
-
 def main():
-    setup_log()
-    log("Iniciando proceso de Build", level="INFO")
-    
-    if not Path("brain").exists():
-        log("Ejecutar desde la raíz del proyecto.", level="ERROR")
+    if len(sys.argv) < 2:
+        log("Uso: generate_tree_files.py <ruta_al_ejecutable_brain>", level="ERROR")
         sys.exit(1)
     
-    build_script = Path("brain/build_deploy/build_main.py")
-    if not build_script.exists():
-        log(f"No existe: {build_script}", level="ERROR")
+    brain_exe = Path(sys.argv[1])
+    
+    if not brain_exe.exists():
+        log(f"No se encontró el ejecutable: {brain_exe}", level="ERROR")
         sys.exit(1)
     
-    # 1. EJECUTAR EL BUILD
-    exit_code = run_build_process(build_script)
+    success = generate_tree_files(brain_exe)
     
-    if exit_code != 0:
-        log(f"Build falló con código: {exit_code}", level="ERROR")
-        log(f"Revisa 'build.log' para detalles.", level="INFO")
-        sys.exit(exit_code)
-    
-    # 2. LOCALIZAR BINARIO
-    brain_exe = None
-    possible_paths = [
-        Path("installer/native/bin/win32/brain/brain.exe"),
-        Path("dist/brain/brain.exe")
-    ]
-    
-    for p in possible_paths:
-        if p.exists():
-            brain_exe = p
-            break
-            
-    if not brain_exe:
-        log("No se encontró el ejecutable compilado.", level="ERROR")
+    if not success:
+        log("Fallaron algunos árboles de directorios", level="ERROR")
         sys.exit(1)
-        
-    log(f"Usando binario: {brain_exe}", level="INFO")
     
-    # 3. GENERAR DOCS
-    help_script = Path("scripts/python/generate_help_files.py")
-    if help_script.exists():
-        code, _, _ = safe_subprocess_run(
-            [sys.executable, str(help_script), str(brain_exe)],
-            timeout=60,
-            desc="Generación de archivos de ayuda"
-        )
-        if code != 0:
-            log("Falló la generación de archivos de ayuda", level="WARN")
-    else:
-        log(f"No se encontró el script: {help_script}", level="WARN")
-    
-    tree_script = Path("scripts/python/generate_tree_files.py")
-    if tree_script.exists():
-        code, _, _ = safe_subprocess_run(
-            [sys.executable, str(tree_script), str(brain_exe)],
-            timeout=120,
-            desc="Generación de árboles de directorios"
-        )
-        if code != 0:
-            log("Falló la generación de árboles de directorios", level="WARN")
-    else:
-        log(f"No se encontró el script: {tree_script}", level="WARN")
-    
-    log("Proceso finalizado.", level="SUCCESS")
-    log(f"Detalles guardados en: {LOG_FILE.absolute()}", level="INFO")
+    log("Árboles de directorios generados exitosamente", level="SUCCESS")
+    sys.exit(0)
 
 if __name__ == "__main__":
     main()

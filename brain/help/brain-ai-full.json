@@ -1,3225 +1,2026 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Brain CLI - AI-Native Tool Definitions",
-  "version": "2.0.0",
-  "description": "Complete function calling schema for AI agents to interact with Brain CLI",
-  "metadata": {
-    "cli_name": "Brain CLI",
-    "executable": "brain",
-    "mode": "executable",
-    "supports_json_output": true,
-    "supports_streaming": false,
-    "max_parallel_commands": 5
-  },
-  "tools": [
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_chrome_read_log",
-        "description": "Auditor de integridad del motor Chromium para diagnosticar fallos de sistema y bloqueos de seguridad.. Execute via: brain chrome read-log",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "profile_id": {
-              "type": "string",
-              "description": "Chrome profile UUID"
-            },
-            "_b": {
-              "type": "integer",
-              "description": "Lines of context before match",
-              "default": 5
-            },
-            "_a": {
-              "type": "integer",
-              "description": "Lines of context after match",
-              "default": 5
-            },
-            "_l": {
-              "type": "string",
-              "description": "Launch ID for separate output file"
-            }
-          },
-          "required": [
-            "profile_id"
-          ]
-        },
-        "metadata": {
-          "category": "chrome",
-          "command": "read-log",
-          "full_syntax": "brain [--json] [--verbose] chrome read-log",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_chrome_read_net_log",
-        "description": "Analyze Chrome network logs with intelligent filtering.. Execute via: brain chrome read-net-log",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "profile_id": {
-              "type": "string",
-              "description": "Chrome profile UUID"
-            },
-            "__filter_ai": {
-              "type": "boolean",
-              "description": "Filter for AI service requests only",
-              "default": false
-            },
-            "_e": {
-              "type": "string",
-              "description": "Exclude URL patterns"
-            },
-            "__include_quic": {
-              "type": "boolean",
-              "description": "Include QUIC protocol events",
-              "default": false
-            },
-            "__show_headers": {
-              "type": "boolean",
-              "description": "Show HTTP headers in output",
-              "default": false
-            },
-            "_l": {
-              "type": "string",
-              "description": "Launch ID for separate output file"
-            }
-          },
-          "required": [
-            "profile_id"
-          ]
-        },
-        "metadata": {
-          "category": "chrome",
-          "command": "read-net-log",
-          "full_syntax": "brain [--json] [--verbose] chrome read-net-log",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_chrome_mining_log",
-        "description": "Read and filter engine_mining.log for a specific profile.. Execute via: brain chrome mining-log",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "profile_id": {
-              "type": "string",
-              "description": "Chrome profile UUID"
-            },
-            "_k": {
-              "type": "string",
-              "description": "Keyword to search for",
-              "default": "bloom"
-            },
-            "_b": {
-              "type": "integer",
-              "description": "Lines of context before match",
-              "default": 5
-            },
-            "_a": {
-              "type": "integer",
-              "description": "Lines of context after match",
-              "default": 5
-            },
-            "_l": {
-              "type": "string",
-              "description": "Launch ID for separate output file"
-            }
-          },
-          "required": [
-            "profile_id"
-          ]
-        },
-        "metadata": {
-          "category": "chrome",
-          "command": "mining-log",
-          "full_syntax": "brain [--json] [--verbose] chrome mining-log",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_context_generate",
-        "description": "Generate the Bloom Context for the project.. Execute via: brain context generate",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "_p": {
-              "type": "string",
-              "description": "Root path of the project",
-              "default": "."
-            },
-            "_o": {
-              "type": "string",
-              "description": "Output folder name",
-              "default": ".bloom"
-            },
-            "_s": {
-              "type": "string",
-              "description": "Force specific strategy"
-            }
-          },
-          "required": []
-        },
-        "metadata": {
-          "category": "context",
-          "command": "generate",
-          "full_syntax": "brain [--json] [--verbose] context generate",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_extension_install",
-        "description": "Install Chrome extension to permanent location.. Execute via: brain extension install",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "_s": {
-              "type": "string",
-              "description": "Source directory (auto-detects if not provided)"
-            },
-            "_f": {
-              "type": "boolean",
-              "description": "Force reinstall even if same version exists",
-              "default": false
-            }
-          },
-          "required": []
-        },
-        "metadata": {
-          "category": "extension",
-          "command": "install",
-          "full_syntax": "brain [--json] [--verbose] extension install",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_extension_update",
-        "description": "Update Chrome extension to the latest version.. Execute via: brain extension update",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "_s": {
-              "type": "string",
-              "description": "Source directory (auto-detects if not provided)"
-            }
-          },
-          "required": []
-        },
-        "metadata": {
-          "category": "extension",
-          "command": "update",
-          "full_syntax": "brain [--json] [--verbose] extension update",
-          "intents": [
-            "update_resource"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_extension_verify",
-        "description": "Verify that the Chrome extension is correctly installed.. Execute via: brain extension verify",
-        "parameters": {
-          "type": "object",
-          "properties": {},
-          "required": []
-        },
-        "metadata": {
-          "category": "extension",
-          "command": "verify",
-          "full_syntax": "brain [--json] [--verbose] extension verify",
-          "intents": [
-            "health_check"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_filesystem_compress",
-        "description": "Compress files into optimized JSON format for AI consumption.. Execute via: brain filesystem compress",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "paths": {
-              "type": "string",
-              "description": "Paths to compress (files or directories)"
-            },
-            "_m": {
-              "type": "string",
-              "description": "Compression mode: 'codebase' or 'docbase'",
-              "default": "codebase"
-            },
-            "_o": {
-              "type": "string",
-              "description": "Output directory (default: current directory)"
-            },
-            "_e": {
-              "type": "string",
-              "description": "Patterns to exclude (can be used multiple times)",
-              "default": "[]"
-            },
-            "__no_comments": {
-              "type": "boolean",
-              "description": "Remove comments during compression",
-              "default": false
-            }
-          },
-          "required": [
-            "paths"
-          ]
-        },
-        "metadata": {
-          "category": "filesystem",
-          "command": "compress",
-          "full_syntax": "brain [--json] [--verbose] filesystem compress",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_filesystem_extract",
-        "description": "Extract files from compressed JSON format.. Execute via: brain filesystem extract",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "json_file": {
-              "type": "string",
-              "description": "Compressed JSON file to extract"
-            },
-            "_o": {
-              "type": "string",
-              "description": "Output directory (default: extracted_<mode>)"
-            },
-            "__verify_hashes/__no_verify_hashes": {
-              "type": "boolean",
-              "description": "Verify MD5 hashes during extraction",
-              "default": true
-            }
-          },
-          "required": [
-            "json_file"
-          ]
-        },
-        "metadata": {
-          "category": "filesystem",
-          "command": "extract",
-          "full_syntax": "brain [--json] [--verbose] filesystem extract",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_filesystem_tree",
-        "description": "Generate a visual directory tree structure with intelligent exclusions.. Execute via: brain filesystem tree",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "_o": {
-              "type": "string",
-              "description": "Output file path",
-              "default": "tree.txt"
-            },
-            "__hash": {
-              "type": "boolean",
-              "description": "Include MD5 hashes",
-              "default": false
-            },
-            "__export_json": {
-              "type": "boolean",
-              "description": "Export JSON to disk",
-              "default": false
-            },
-            "targets": {
-              "type": "string",
-              "description": "Specific directories or files to include (supports absolute paths)."
-            }
-          },
-          "required": [
-            "targets"
-          ]
-        },
-        "metadata": {
-          "category": "filesystem",
-          "command": "tree",
-          "full_syntax": "brain [--json] [--verbose] filesystem tree",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_gemini_keys_add",
-        "description": "Add new Gemini API key with profile.. Execute via: brain gemini keys-add",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "_p_<value": {
-              "type": "string",
-              "description": "Profile name (e.g., 'Personal Chrome')"
-            },
-            "_k_<value": {
-              "type": "string",
-              "description": "Gemini API key"
-            },
-            "__priority": {
-              "type": "integer",
-              "description": "Priority: 1=preferred, 0=normal, -1=backup",
-              "default": 0
-            }
-          },
-          "required": [
-            "_p_<value",
-            "_k_<value"
-          ]
-        },
-        "metadata": {
-          "category": "gemini",
-          "command": "keys-add",
-          "full_syntax": "brain [--json] [--verbose] gemini keys-add",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_gemini_keys_delete",
-        "description": "Delete a Gemini API key.. Execute via: brain gemini keys-delete",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "profile": {
-              "type": "string",
-              "description": "Profile name to delete"
-            }
-          },
-          "required": [
-            "profile"
-          ]
-        },
-        "metadata": {
-          "category": "gemini",
-          "command": "keys-delete",
-          "full_syntax": "brain [--json] [--verbose] gemini keys-delete",
-          "intents": [
-            "delete_resource"
-          ],
-          "is_idempotent": false,
-          "is_destructive": true,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_gemini_keys_list",
-        "description": "List all Gemini API keys with status.. Execute via: brain gemini keys-list",
-        "parameters": {
-          "type": "object",
-          "properties": {},
-          "required": []
-        },
-        "metadata": {
-          "category": "gemini",
-          "command": "keys-list",
-          "full_syntax": "brain [--json] [--verbose] gemini keys-list",
-          "intents": [
-            "read_resource"
-          ],
-          "is_idempotent": true,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_gemini_keys_stats",
-        "description": "Show global Gemini keys statistics.. Execute via: brain gemini keys-stats",
-        "parameters": {
-          "type": "object",
-          "properties": {},
-          "required": []
-        },
-        "metadata": {
-          "category": "gemini",
-          "command": "keys-stats",
-          "full_syntax": "brain [--json] [--verbose] gemini keys-stats",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_gemini_keys_validate",
-        "description": "Validate a Gemini API key by testing connection.. Execute via: brain gemini keys-validate",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "profile": {
-              "type": "string",
-              "description": "Profile name to validate"
-            }
-          },
-          "required": [
-            "profile"
-          ]
-        },
-        "metadata": {
-          "category": "gemini",
-          "command": "keys-validate",
-          "full_syntax": "brain [--json] [--verbose] gemini keys-validate",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_github_auth_login",
-        "description": "Store GitHub authentication token.. Execute via: brain github auth-login",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "_t_<value": {
-              "type": "string",
-              "description": "GitHub Personal Access Token"
-            }
-          },
-          "required": [
-            "_t_<value"
-          ]
-        },
-        "metadata": {
-          "category": "github",
-          "command": "auth-login",
-          "full_syntax": "brain [--json] [--verbose] github auth-login",
-          "intents": [
-            "authentication"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_github_auth_logout",
-        "description": "Remove stored GitHub token.. Execute via: brain github auth-logout",
-        "parameters": {
-          "type": "object",
-          "properties": {},
-          "required": []
-        },
-        "metadata": {
-          "category": "github",
-          "command": "auth-logout",
-          "full_syntax": "brain [--json] [--verbose] github auth-logout",
-          "intents": [
-            "authentication"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_github_auth_status",
-        "description": "Check GitHub authentication status.. Execute via: brain github auth-status",
-        "parameters": {
-          "type": "object",
-          "properties": {},
-          "required": []
-        },
-        "metadata": {
-          "category": "github",
-          "command": "auth-status",
-          "full_syntax": "brain [--json] [--verbose] github auth-status",
-          "intents": [
-            "health_check",
-            "authentication"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "fast"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_github_clone",
-        "description": "Clone GitHub repository to local directory.. Execute via: brain github clone",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "repo": {
-              "type": "string",
-              "description": "Repository (owner/repo or full URL)"
-            },
-            "_p": {
-              "type": "string",
-              "description": "Target directory (defaults to repo name in current dir)"
-            },
-            "__progress/__no_progress": {
-              "type": "boolean",
-              "description": "Show clone progress",
-              "default": true
-            }
-          },
-          "required": [
-            "repo"
-          ]
-        },
-        "metadata": {
-          "category": "github",
-          "command": "clone",
-          "full_syntax": "brain [--json] [--verbose] github clone",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_github_orgs_list",
-        "description": "List GitHub organizations.. Execute via: brain github orgs-list",
-        "parameters": {
-          "type": "object",
-          "properties": {},
-          "required": []
-        },
-        "metadata": {
-          "category": "github",
-          "command": "orgs-list",
-          "full_syntax": "brain [--json] [--verbose] github orgs-list",
-          "intents": [
-            "read_resource"
-          ],
-          "is_idempotent": true,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_github_repos_list",
-        "description": "List GitHub repositories.. Execute via: brain github repos-list",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "__org": {
-              "type": "string",
-              "description": "Organization name"
-            }
-          },
-          "required": []
-        },
-        "metadata": {
-          "category": "github",
-          "command": "repos-list",
-          "full_syntax": "brain [--json] [--verbose] github repos-list",
-          "intents": [
-            "read_resource"
-          ],
-          "is_idempotent": true,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_health_dev_check",
-        "description": "Check development environment and service status.. Execute via: brain health dev-check",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "_t": {
-              "type": "number",
-              "description": "Connection timeout per port check in seconds",
-              "default": 2.0
-            },
-            "__json": {
-              "type": "boolean",
-              "description": "Output raw JSON",
-              "default": false
-            },
-            "_v": {
-              "type": "boolean",
-              "description": "Detailed logging of each port check",
-              "default": false
-            }
-          },
-          "required": []
-        },
-        "metadata": {
-          "category": "health",
-          "command": "dev-check",
-          "full_syntax": "brain [--json] [--verbose] health dev-check",
-          "intents": [
-            "health_check"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_health_full_stack",
-        "description": "Verify complete stack health (host, API, extension, Brain, onboarding). Execute via: brain health full-stack",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "_t": {
-              "type": "string",
-              "description": "Timeout per check in seconds",
-              "default": 5
-            },
-            "__json": {
-              "type": "boolean",
-              "description": "Output raw JSON",
-              "default": false
-            },
-            "_v": {
-              "type": "boolean",
-              "description": "Detailed logging",
-              "default": false
-            }
-          },
-          "required": []
-        },
-        "metadata": {
-          "category": "health",
-          "command": "full-stack",
-          "full_syntax": "brain [--json] [--verbose] health full-stack",
-          "intents": [
-            "health_check"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_health_native_ping",
-        "description": "Ping the native host to verify it's alive and responding.. Execute via: brain health native-ping",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "_t": {
-              "type": "integer",
-              "description": "Timeout in milliseconds for ping response",
-              "default": 500
-            },
-            "_p": {
-              "type": "string",
-              "description": "Specific TCP port to test (auto-detect if not provided)"
-            },
-            "__check_ws/__no_check_ws": {
-              "type": "boolean",
-              "description": "Also verify WebSocket port status",
-              "default": true
-            }
-          },
-          "required": []
-        },
-        "metadata": {
-          "category": "health",
-          "command": "native-ping",
-          "full_syntax": "brain [--json] [--verbose] health native-ping",
-          "intents": [
-            "health_check"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "fast"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_health_onboarding_status",
-        "description": "Check onboarding completion status (GitHub, Gemini, Nucleus, Projects). Execute via: brain health onboarding-status",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "_r": {
-              "type": "boolean",
-              "description": "Force re-check, ignore cache",
-              "default": false
-            },
-            "__json": {
-              "type": "boolean",
-              "description": "Output raw JSON",
-              "default": false
-            },
-            "_v": {
-              "type": "boolean",
-              "description": "Detailed logging of each check",
-              "default": false
-            }
-          },
-          "required": []
-        },
-        "metadata": {
-          "category": "health",
-          "command": "onboarding-status",
-          "full_syntax": "brain [--json] [--verbose] health onboarding-status",
-          "intents": [
-            "health_check"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "fast"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_health_websocket_status",
-        "description": "Verify WebSocket server status on localhost:4124. Execute via: brain health websocket-status",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "_t": {
-              "type": "string",
-              "description": "Connection timeout in seconds",
-              "default": 5
-            },
-            "__test_sub": {
-              "type": "boolean",
-              "description": "Test event subscription capability",
-              "default": false
-            },
-            "__json": {
-              "type": "boolean",
-              "description": "Output raw JSON",
-              "default": false
-            },
-            "_v": {
-              "type": "boolean",
-              "description": "Detailed connection logging",
-              "default": false
-            }
-          },
-          "required": []
-        },
-        "metadata": {
-          "category": "health",
-          "command": "websocket-status",
-          "full_syntax": "brain [--json] [--verbose] health websocket-status",
-          "intents": [
-            "health_check"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "fast"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_intent_add_turn",
-        "description": "Add a conversation turn to an intent's chat.. Execute via: brain intent add-turn",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "_i": {
-              "type": "string",
-              "description": "Intent UUID"
-            },
-            "_f": {
-              "type": "string",
-              "description": "Intent folder name"
-            },
-            "_a": {
-              "type": "string",
-              "description": "Who is speaking: 'user' or 'ai'",
-              "default": "user"
-            },
-            "_c_<value": {
-              "type": "string",
-              "description": "Content of the message"
-            },
-            "_p": {
-              "type": "string",
-              "description": "Path to Bloom project"
-            }
-          },
-          "required": [
-            "_c_<value"
-          ]
-        },
-        "metadata": {
-          "category": "intent",
-          "command": "add-turn",
-          "full_syntax": "brain [--json] [--verbose] intent add-turn",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_intent_build_payload",
-        "description": "Build optimized AI payload from context plan.. Execute via: brain intent build-payload",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "__plan_<value": {
-              "type": "string",
-              "description": "Path to context_plan.json"
-            },
-            "__output": {
-              "type": "string",
-              "description": "Output path for payload (default: same dir as plan)"
-            }
-          },
-          "required": [
-            "__plan_<value"
-          ]
-        },
-        "metadata": {
-          "category": "intent",
-          "command": "build-payload",
-          "full_syntax": "brain [--json] [--verbose] intent build-payload",
-          "intents": [
-            "build_artifact"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_intent_create",
-        "description": "Create a new development or documentation intent.. Execute via: brain intent create",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "_t_<value": {
-              "type": "string",
-              "description": "Intent type: 'dev' for development or 'doc' for documentation"
-            },
-            "_n_<value": {
-              "type": "string",
-              "description": "Human-readable name for the intent (e.g., 'Fix login authentication flow')"
-            },
-            "_f": {
-              "type": "string",
-              "description": "Initial files to include in the intent context (can be repeated or comma-separated)"
-            },
-            "_p": {
-              "type": "string",
-              "description": "Path to the Nucleus (Bloom project root). Auto-detected if not provided."
-            }
-          },
-          "required": [
-            "_t_<value",
-            "_n_<value"
-          ]
-        },
-        "metadata": {
-          "category": "intent",
-          "command": "create",
-          "full_syntax": "brain [--json] [--verbose] intent create",
-          "intents": [
-            "create_resource"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_intent_delete",
-        "description": "Delete an intent and all its data.. Execute via: brain intent delete",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "_i": {
-              "type": "string",
-              "description": "Intent UUID"
-            },
-            "_f": {
-              "type": "string",
-              "description": "Intent folder name"
-            },
-            "__force": {
-              "type": "boolean",
-              "description": "Skip confirmation and force delete even if locked",
-              "default": false
-            },
-            "_p": {
-              "type": "string",
-              "description": "Path to Bloom project"
-            }
-          },
-          "required": []
-        },
-        "metadata": {
-          "category": "intent",
-          "command": "delete",
-          "full_syntax": "brain [--json] [--verbose] intent delete",
-          "intents": [
-            "delete_resource"
-          ],
-          "is_idempotent": false,
-          "is_destructive": true,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_intent_download",
-        "description": "Download AI response from Native Host or file.. Execute via: brain intent download",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "_i": {
-              "type": "string",
-              "description": "Intent UUID to download response for"
-            },
-            "__folder": {
-              "type": "string",
-              "description": "Intent folder name (alternative to intent-id)"
-            },
-            "__socket_mode": {
-              "type": "boolean",
-              "description": "Listen on TCP socket for Host connection",
-              "default": false
-            },
-            "__input_file": {
-              "type": "string",
-              "description": "Read response from file (for testing)"
-            },
-            "__host": {
-              "type": "string",
-              "description": "Host IP to listen on",
-              "default": "127.0.0.1"
-            },
-            "__port": {
-              "type": "integer",
-              "description": "Port to listen on (different from Host's 5678)",
-              "default": 5679
-            },
-            "__timeout": {
-              "type": "integer",
-              "description": "Socket timeout in seconds",
-              "default": 300
-            },
-            "__nucleus_path": {
-              "type": "string",
-              "description": "Path to Bloom project (auto-detected if omitted)"
-            }
-          },
-          "required": []
-        },
-        "metadata": {
-          "category": "intent",
-          "command": "download",
-          "full_syntax": "brain [--json] [--verbose] intent download",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_intent_finalize",
-        "description": "Finalize an intent, applying changes to the codebase.. Execute via: brain intent finalize",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "_i": {
-              "type": "string",
-              "description": "Intent UUID"
-            },
-            "_f": {
-              "type": "string",
-              "description": "Intent folder name"
-            },
-            "_p": {
-              "type": "string",
-              "description": "Path to Bloom project"
-            }
-          },
-          "required": []
-        },
-        "metadata": {
-          "category": "intent",
-          "command": "finalize",
-          "full_syntax": "brain [--json] [--verbose] intent finalize",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_intent_get",
-        "description": "Get complete details of an intent.. Execute via: brain intent get",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "_i": {
-              "type": "string",
-              "description": "Intent UUID"
-            },
-            "_f": {
-              "type": "string",
-              "description": "Intent folder name"
-            },
-            "_p": {
-              "type": "string",
-              "description": "Path to Bloom project"
-            }
-          },
-          "required": []
-        },
-        "metadata": {
-          "category": "intent",
-          "command": "get",
-          "full_syntax": "brain [--json] [--verbose] intent get",
-          "intents": [
-            "read_resource"
-          ],
-          "is_idempotent": true,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_intent_hydrate",
-        "description": "Hydrate an intent by processing source files and briefing.. Execute via: brain intent hydrate",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "_i": {
-              "type": "string",
-              "description": "Intent UUID"
-            },
-            "_f": {
-              "type": "string",
-              "description": "Files to include in context (comma-separated)"
-            },
-            "_b": {
-              "type": "string",
-              "description": "Path to text file containing briefing"
-            },
-            "_p": {
-              "type": "string",
-              "description": "Path to Bloom project root"
-            }
-          },
-          "required": []
-        },
-        "metadata": {
-          "category": "intent",
-          "command": "hydrate",
-          "full_syntax": "brain [--json] [--verbose] intent hydrate",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_intent_list",
-        "description": "List all intents in the project.. Execute via: brain intent list",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "_p": {
-              "type": "string",
-              "description": "Path to Bloom project (auto-detected if not provided)"
-            },
-            "_t": {
-              "type": "string",
-              "description": "Filter by intent type: 'dev' or 'doc'"
-            }
-          },
-          "required": []
-        },
-        "metadata": {
-          "category": "intent",
-          "command": "list",
-          "full_syntax": "brain [--json] [--verbose] intent list",
-          "intents": [
-            "read_resource"
-          ],
-          "is_idempotent": true,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_intent_lock",
-        "description": "Lock an intent for exclusive use.. Execute via: brain intent lock",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "_i": {
-              "type": "string",
-              "description": "Intent UUID"
-            },
-            "_f": {
-              "type": "string",
-              "description": "Intent folder name"
-            },
-            "_p": {
-              "type": "string",
-              "description": "Path to Bloom project"
-            }
-          },
-          "required": []
-        },
-        "metadata": {
-          "category": "intent",
-          "command": "lock",
-          "full_syntax": "brain [--json] [--verbose] intent lock",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_intent_merge",
-        "description": "Merge staged files from .staging/ into the real codebase.. Execute via: brain intent merge",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "_i": {
-              "type": "string",
-              "description": "Intent UUID to merge files for"
-            },
-            "_f": {
-              "type": "string",
-              "description": "Intent folder name (e.g., .fix-login-a1b2c3d4)"
-            },
-            "_s": {
-              "type": "string",
-              "description": "Pipeline stage (briefing, execution, refinement_X). Auto-detect if not provided."
-            },
-            "__force": {
-              "type": "boolean",
-              "description": "Skip approval check and merge anyway",
-              "default": false
-            },
-            "__dry_run": {
-              "type": "boolean",
-              "description": "Show what would be merged without applying",
-              "default": false
-            },
-            "__no_backup": {
-              "type": "boolean",
-              "description": "Skip backup creation (DANGEROUS)",
-              "default": false
-            },
-            "_p": {
-              "type": "string",
-              "description": "Path to Bloom project (auto-detected if not provided)"
-            }
-          },
-          "required": []
-        },
-        "metadata": {
-          "category": "intent",
-          "command": "merge",
-          "full_syntax": "brain [--json] [--verbose] intent merge",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_intent_parse",
-        "description": "Parse and validate .raw_output.json from an AI response.. Execute via: brain intent parse",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "_i_<value": {
-              "type": "string",
-              "description": "Intent UUID to parse"
-            },
-            "_s": {
-              "type": "string",
-              "description": "Pipeline stage (briefing, execution, refinement_X). Auto-detect if not provided."
-            },
-            "__strict": {
-              "type": "boolean",
-              "description": "Fail on any protocol violation (no fallback parser)",
-              "default": false
-            },
-            "__output_report": {
-              "type": "boolean",
-              "description": "Generate .parse_report.json",
-              "default": true
-            },
-            "_n": {
-              "type": "string",
-              "description": "Path to nucleus root (default: current directory)"
-            }
-          },
-          "required": [
-            "_i_<value"
-          ]
-        },
-        "metadata": {
-          "category": "intent",
-          "command": "parse",
-          "full_syntax": "brain [--json] [--verbose] intent parse",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_intent_plan",
-        "description": "Generate context plan for an intent using Gemini Router.. Execute via: brain intent plan",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "__intent_dir_<value": {
-              "type": "string",
-              "description": "Intent directory path"
-            },
-            "__description_<value": {
-              "type": "string",
-              "description": "Intent description"
-            },
-            "__type": {
-              "type": "string",
-              "description": "Intent type: dev, doc, or seed",
-              "default": "dev"
-            }
-          },
-          "required": [
-            "__intent_dir_<value",
-            "__description_<value"
-          ]
-        },
-        "metadata": {
-          "category": "intent",
-          "command": "plan",
-          "full_syntax": "brain [--json] [--verbose] intent plan",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_intent_recover",
-        "description": "Recover interrupted intents using lock state recovery data.. Execute via: brain intent recover",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "_i": {
-              "type": "string",
-              "description": "Intent UUID to recover"
-            },
-            "_f": {
-              "type": "string",
-              "description": "Intent folder name (e.g., .fix-login-abc123)"
-            },
-            "__auto_detect": {
-              "type": "boolean",
-              "description": "Find and recover all interrupted intents",
-              "default": false
-            },
-            "__force_unlock": {
-              "type": "boolean",
-              "description": "Force unlock without attempting recovery",
-              "default": false
-            },
-            "_p": {
-              "type": "string",
-              "description": "Path to Bloom project (auto-detected if not provided)"
-            }
-          },
-          "required": []
-        },
-        "metadata": {
-          "category": "intent",
-          "command": "recover",
-          "full_syntax": "brain [--json] [--verbose] intent recover",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_intent_stage",
-        "description": "Prepare files in .staging/ directory for merge.. Execute via: brain intent stage",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "_i": {
-              "type": "string",
-              "description": "Intent UUID to stage files for"
-            },
-            "_f": {
-              "type": "string",
-              "description": "Intent folder name (e.g., .fix-login-a1b2c3d4)"
-            },
-            "_s": {
-              "type": "string",
-              "description": "Pipeline stage (briefing, execution, refinement_X). Auto-detect if not provided."
-            },
-            "__dry_run": {
-              "type": "boolean",
-              "description": "Show what would be staged without writing files",
-              "default": false
-            },
-            "__overwrite": {
-              "type": "boolean",
-              "description": "Overwrite existing .staging/ directory",
-              "default": true
-            },
-            "_p": {
-              "type": "string",
-              "description": "Path to Bloom project (auto-detected if not provided)"
-            }
-          },
-          "required": []
-        },
-        "metadata": {
-          "category": "intent",
-          "command": "stage",
-          "full_syntax": "brain [--json] [--verbose] intent stage",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_intent_submit",
-        "description": "Submit an intent payload to an AI provider through the native host bridge.. Execute via: brain intent submit",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "_i": {
-              "type": "string",
-              "description": "UUID of the intent to submit"
-            },
-            "_f": {
-              "type": "string",
-              "description": "Folder name of the intent (e.g., .fix-login-a1b2c3d4)"
-            },
-            "__provider": {
-              "type": "string",
-              "description": "AI provider to use: 'claude', 'gemini', etc.",
-              "default": "claude"
-            },
-            "_p": {
-              "type": "string",
-              "description": "Path to the Nucleus (Bloom project root). Auto-detected if not provided."
-            },
-            "__profile_path": {
-              "type": "string",
-              "description": "Chrome profile path for the AI provider (optional)"
-            },
-            "__host": {
-              "type": "string",
-              "description": "Native host IP address",
-              "default": "127.0.0.1"
-            },
-            "__port": {
-              "type": "integer",
-              "description": "Native host TCP port",
-              "default": 5678
-            },
-            "__timeout": {
-              "type": "integer",
-              "description": "Connection timeout in seconds",
-              "default": 30
-            }
-          },
-          "required": []
-        },
-        "metadata": {
-          "category": "intent",
-          "command": "submit",
-          "full_syntax": "brain [--json] [--verbose] intent submit",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_intent_unlock",
-        "description": "Unlock an intent to free it for use.. Execute via: brain intent unlock",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "_i": {
-              "type": "string",
-              "description": "Intent UUID"
-            },
-            "_f": {
-              "type": "string",
-              "description": "Intent folder name"
-            },
-            "__force": {
-              "type": "boolean",
-              "description": "Force unlock even if locked by another host",
-              "default": false
-            },
-            "_p": {
-              "type": "string",
-              "description": "Path to Bloom project"
-            }
-          },
-          "required": []
-        },
-        "metadata": {
-          "category": "intent",
-          "command": "unlock",
-          "full_syntax": "brain [--json] [--verbose] intent unlock",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_intent_update",
-        "description": "Update an existing intent's properties.. Execute via: brain intent update",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "_i": {
-              "type": "string",
-              "description": "UUID of the intent to update"
-            },
-            "_f": {
-              "type": "string",
-              "description": "Folder name of the intent (e.g., .fix-login-a1b2c3d4)"
-            },
-            "_n": {
-              "type": "string",
-              "description": "New name for the intent (triggers folder rename)"
-            },
-            "__files": {
-              "type": "string",
-              "description": "Replace all initial files with this new list"
-            },
-            "__add_files": {
-              "type": "string",
-              "description": "Add files to the existing initial_files list"
-            },
-            "__remove_files": {
-              "type": "string",
-              "description": "Remove files from the initial_files list"
-            },
-            "_p": {
-              "type": "string",
-              "description": "Path to the Nucleus (Bloom project root). Auto-detected if not provided."
-            }
-          },
-          "required": []
-        },
-        "metadata": {
-          "category": "intent",
-          "command": "update",
-          "full_syntax": "brain [--json] [--verbose] intent update",
-          "intents": [
-            "update_resource"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_intent_validate",
-        "description": "Validate staging files using Gemini analysis.. Execute via: brain intent validate",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "_i": {
-              "type": "string",
-              "description": "Intent UUID"
-            },
-            "_f": {
-              "type": "string",
-              "description": "Intent folder name (e.g., .fix-login-abc123)"
-            },
-            "_s": {
-              "type": "string",
-              "description": "Pipeline stage (briefing, execution, refinement_X)"
-            },
-            "__auto_approve": {
-              "type": "boolean",
-              "description": "Skip manual review and approve automatically",
-              "default": false
-            },
-            "__gemini_model": {
-              "type": "string",
-              "description": "Gemini model to use for analysis",
-              "default": "gemini-2.0-flash-exp"
-            },
-            "__skip_gemini": {
-              "type": "boolean",
-              "description": "Skip Gemini analysis (only basic validation)",
-              "default": false
-            },
-            "_p": {
-              "type": "string",
-              "description": "Path to Bloom project (auto-detected if omitted)"
-            }
-          },
-          "required": []
-        },
-        "metadata": {
-          "category": "intent",
-          "command": "validate",
-          "full_syntax": "brain [--json] [--verbose] intent validate",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_nucleus_create",
-        "description": "Initialize a new Bloom Nucleus V2.0 project structure.. Execute via: brain nucleus create",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "_o_<value": {
-              "type": "string",
-              "description": "Organization name"
-            },
-            "_p": {
-              "type": "string",
-              "description": "Target path (default: current dir)"
-            },
-            "__output": {
-              "type": "string",
-              "description": "Output directory name (legacy, kept for compatibility)",
-              "default": ".bloom"
-            },
-            "__url": {
-              "type": "string",
-              "description": "Organization URL",
-              "default": ""
-            },
-            "_f": {
-              "type": "boolean",
-              "description": "Force overwrite existing directory",
-              "default": false
-            }
-          },
-          "required": [
-            "_o_<value"
-          ]
-        },
-        "metadata": {
-          "category": "nucleus",
-          "command": "create",
-          "full_syntax": "brain [--json] [--verbose] nucleus create",
-          "intents": [
-            "create_resource"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_nucleus_create_exp_intent",
-        "description": "Create a new exploration intent in the nucleus.. Execute via: brain nucleus create-exp-intent",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "_n_<value": {
-              "type": "string",
-              "description": "Intent name (will be slugified)"
-            },
-            "_p": {
-              "type": "string",
-              "description": "Nucleus path (default: current dir)"
-            },
-            "__inquiry": {
-              "type": "string",
-              "description": "Initial inquiry question"
-            },
-            "_d": {
-              "type": "string",
-              "description": "Intent description"
-            },
-            "__projects": {
-              "type": "string",
-              "description": "Comma-separated project names to include"
-            }
-          },
-          "required": [
-            "_n_<value"
-          ]
-        },
-        "metadata": {
-          "category": "nucleus",
-          "command": "create-exp-intent",
-          "full_syntax": "brain [--json] [--verbose] nucleus create-exp-intent",
-          "intents": [
-            "create_resource"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_nucleus_delete",
-        "description": "Delete a complete nucleus including all its data.. Execute via: brain nucleus delete",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "_p_<value": {
-              "type": "string",
-              "description": "Path to the Nucleus root directory to delete"
-            },
-            "_f": {
-              "type": "boolean",
-              "description": "Skip confirmation prompt",
-              "default": false
-            }
-          },
-          "required": [
-            "_p_<value"
-          ]
-        },
-        "metadata": {
-          "category": "nucleus",
-          "command": "delete",
-          "full_syntax": "brain [--json] [--verbose] nucleus delete",
-          "intents": [
-            "delete_resource"
-          ],
-          "is_idempotent": false,
-          "is_destructive": true,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_nucleus_exp_discovery_turn",
-        "description": "Add a discovery turn to an exploration intent.. Execute via: brain nucleus exp-discovery-turn",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "_i_<value": {
-              "type": "string",
-              "description": "Intent ID or slug"
-            },
-            "_p": {
-              "type": "string",
-              "description": "Nucleus path (default: current dir)"
-            },
-            "__notes": {
-              "type": "string",
-              "description": "Turn notes/observations"
-            },
-            "__analysis": {
-              "type": "string",
-              "description": "Analysis summary for this turn"
-            }
-          },
-          "required": [
-            "_i_<value"
-          ]
-        },
-        "metadata": {
-          "category": "nucleus",
-          "command": "exp-discovery-turn",
-          "full_syntax": "brain [--json] [--verbose] nucleus exp-discovery-turn",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_nucleus_exp_export_findings",
-        "description": "Export findings from an exploration intent.. Execute via: brain nucleus exp-export-findings",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "_i_<value": {
-              "type": "string",
-              "description": "Intent ID or slug"
-            },
-            "_p": {
-              "type": "string",
-              "description": "Nucleus path (default: current dir)"
-            },
-            "_f": {
-              "type": "string",
-              "description": "Export format (markdown, json)",
-              "default": "markdown"
-            },
-            "__include_raw": {
-              "type": "boolean",
-              "description": "Include raw turn data",
-              "default": false
-            }
-          },
-          "required": [
-            "_i_<value"
-          ]
-        },
-        "metadata": {
-          "category": "nucleus",
-          "command": "exp-export-findings",
-          "full_syntax": "brain [--json] [--verbose] nucleus exp-export-findings",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_nucleus_get",
-        "description": "Retrieve complete details of a nucleus.. Execute via: brain nucleus get",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "_p_<value": {
-              "type": "string",
-              "description": "Path to the Nucleus root directory"
-            }
-          },
-          "required": [
-            "_p_<value"
-          ]
-        },
-        "metadata": {
-          "category": "nucleus",
-          "command": "get",
-          "full_syntax": "brain [--json] [--verbose] nucleus get",
-          "intents": [
-            "read_resource"
-          ],
-          "is_idempotent": true,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_nucleus_link",
-        "description": "Link an existing folder as a Nucleus project.. Execute via: brain nucleus link",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "path": {
-              "type": "string",
-              "description": "Path to existing project"
-            }
-          },
-          "required": [
-            "path"
-          ]
-        },
-        "metadata": {
-          "category": "nucleus",
-          "command": "link",
-          "full_syntax": "brain [--json] [--verbose] nucleus link",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_nucleus_list",
-        "description": "List all Nucleus projects found in a parent directory.. Execute via: brain nucleus list",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "_d": {
-              "type": "string",
-              "description": "Parent directory to scan for nuclei (default: current directory)"
-            }
-          },
-          "required": []
-        },
-        "metadata": {
-          "category": "nucleus",
-          "command": "list",
-          "full_syntax": "brain [--json] [--verbose] nucleus list",
-          "intents": [
-            "read_resource"
-          ],
-          "is_idempotent": true,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_nucleus_list_projects",
-        "description": "List all projects linked to the nucleus with their details.. Execute via: brain nucleus list-projects",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "_p": {
-              "type": "string",
-              "description": "Nucleus root path (default: current directory)"
-            },
-            "_s": {
-              "type": "string",
-              "description": "Filter by project strategy (python, typescript, go, etc.)"
-            },
-            "__active_only": {
-              "type": "boolean",
-              "description": "Show only active projects",
-              "default": false
-            }
-          },
-          "required": []
-        },
-        "metadata": {
-          "category": "nucleus",
-          "command": "list-projects",
-          "full_syntax": "brain [--json] [--verbose] nucleus list-projects",
-          "intents": [
-            "read_resource"
-          ],
-          "is_idempotent": true,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_nucleus_onboarding_complete",
-        "description": "Mark an onboarding step or entire onboarding as completed.. Execute via: brain nucleus onboarding-complete",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "_s": {
-              "type": "string",
-              "description": "Step name to mark as completed"
-            },
-            "_a": {
-              "type": "boolean",
-              "description": "Mark entire onboarding as completed",
-              "default": false
-            },
-            "_p": {
-              "type": "string",
-              "description": "Nucleus root path (default: current dir)"
-            }
-          },
-          "required": []
-        },
-        "metadata": {
-          "category": "nucleus",
-          "command": "onboarding-complete",
-          "full_syntax": "brain [--json] [--verbose] nucleus onboarding-complete",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_nucleus_onboarding_status",
-        "description": "Get the current onboarding status from nucleus configuration.. Execute via: brain nucleus onboarding-status",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "_p": {
-              "type": "string",
-              "description": "Nucleus root path (default: current dir)"
-            }
-          },
-          "required": []
-        },
-        "metadata": {
-          "category": "nucleus",
-          "command": "onboarding-status",
-          "full_syntax": "brain [--json] [--verbose] nucleus onboarding-status",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "fast"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_nucleus_project_info",
-        "description": "Display detailed information about a specific project in the nucleus.. Execute via: brain nucleus project-info",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "project_name": {
-              "type": "string",
-              "description": "Name of the project to inspect"
-            },
-            "_p": {
-              "type": "string",
-              "description": "Nucleus root path (default: current directory)"
-            }
-          },
-          "required": [
-            "project_name"
-          ]
-        },
-        "metadata": {
-          "category": "nucleus",
-          "command": "project-info",
-          "full_syntax": "brain [--json] [--verbose] nucleus project-info",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_nucleus_status",
-        "description": "Check if a directory is a valid Nucleus project.. Execute via: brain nucleus status",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "_p": {
-              "type": "string",
-              "description": "Nucleus path"
-            }
-          },
-          "required": []
-        },
-        "metadata": {
-          "category": "nucleus",
-          "command": "status",
-          "full_syntax": "brain [--json] [--verbose] nucleus status",
-          "intents": [
-            "health_check"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "fast"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_nucleus_sync",
-        "description": "Synchronize projects and rebuild nucleus cache.. Execute via: brain nucleus sync",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "_p": {
-              "type": "string",
-              "description": "Nucleus path (default: current dir)"
-            },
-            "__skip_git": {
-              "type": "boolean",
-              "description": "Skip git pull operations",
-              "default": false
-            },
-            "_v": {
-              "type": "boolean",
-              "description": "Show detailed progress",
-              "default": false
-            }
-          },
-          "required": []
-        },
-        "metadata": {
-          "category": "nucleus",
-          "command": "sync",
-          "full_syntax": "brain [--json] [--verbose] nucleus sync",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_profile_link",
-        "description": "Vincula un email a un perfil.. Execute via: brain profile link",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "profile_id": {
-              "type": "string",
-              "description": "ID del perfil"
-            },
-            "email": {
-              "type": "string",
-              "description": "Email a vincular"
-            }
-          },
-          "required": [
-            "profile_id",
-            "email"
-          ]
-        },
-        "metadata": {
-          "category": "profile",
-          "command": "link",
-          "full_syntax": "brain [--json] [--verbose] profile link",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_profile_unlink",
-        "description": "Desvincula la cuenta de un perfil.. Execute via: brain profile unlink",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "profile_id": {
-              "type": "string",
-              "description": "ID del perfil"
-            }
-          },
-          "required": [
-            "profile_id"
-          ]
-        },
-        "metadata": {
-          "category": "profile",
-          "command": "unlink",
-          "full_syntax": "brain [--json] [--verbose] profile unlink",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_profile_accounts_register",
-        "description": "Registra una nueva cuenta en un perfil.. Execute via: brain profile accounts-register",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "profile_id": {
-              "type": "string",
-              "description": "ID del perfil"
-            },
-            "provider": {
-              "type": "string",
-              "description": "Proveedor (google, openai, anthropic, etc)"
-            },
-            "email": {
-              "type": "string",
-              "description": "Email o identificador de la cuenta"
-            }
-          },
-          "required": [
-            "profile_id",
-            "provider",
-            "email"
-          ]
-        },
-        "metadata": {
-          "category": "profile",
-          "command": "accounts-register",
-          "full_syntax": "brain [--json] [--verbose] profile accounts-register",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_profile_accounts_remove",
-        "description": "Remueve una cuenta registrada de un perfil.. Execute via: brain profile accounts-remove",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "profile_id": {
-              "type": "string",
-              "description": "ID del perfil"
-            },
-            "provider": {
-              "type": "string",
-              "description": "Proveedor a remover"
-            }
-          },
-          "required": [
-            "profile_id",
-            "provider"
-          ]
-        },
-        "metadata": {
-          "category": "profile",
-          "command": "accounts-remove",
-          "full_syntax": "brain [--json] [--verbose] profile accounts-remove",
-          "intents": [
-            "delete_resource"
-          ],
-          "is_idempotent": false,
-          "is_destructive": true,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_profile_create",
-        "description": "Crea un nuevo perfil con el alias especificado.. Execute via: brain profile create",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "alias": {
-              "type": "string",
-              "description": "Nombre descriptivo del perfil"
-            }
-          },
-          "required": [
-            "alias"
-          ]
-        },
-        "metadata": {
-          "category": "profile",
-          "command": "create",
-          "full_syntax": "brain [--json] [--verbose] profile create",
-          "intents": [
-            "create_resource"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_profile_destroy",
-        "description": "Elimina un perfil y todos sus datos.. Execute via: brain profile destroy",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "profile_id": {
-              "type": "string",
-              "description": "ID del perfil a eliminar"
-            }
-          },
-          "required": [
-            "profile_id"
-          ]
-        },
-        "metadata": {
-          "category": "profile",
-          "command": "destroy",
-          "full_syntax": "brain [--json] [--verbose] profile destroy",
-          "intents": [
-            "delete_resource"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_profile_launch",
-        "description": "Lanza Chrome con el perfil especificado usando spec-driven mode.. Execute via: brain profile launch",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "profile_id": {
-              "type": "string",
-              "description": "ID del perfil a lanzar"
-            },
-            "_s_<value": {
-              "type": "string",
-              "description": "Archivo JSON con especificaci�n completa de lanzamiento (REQUERIDO)"
-            }
-          },
-          "required": [
-            "profile_id",
-            "_s_<value"
-          ]
-        },
-        "metadata": {
-          "category": "profile",
-          "command": "launch",
-          "full_syntax": "brain [--json] [--verbose] profile launch",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_profile_list",
-        "description": "MOSTRAR AL USUARIO (CLI).. Execute via: brain profile list",
-        "parameters": {
-          "type": "object",
-          "properties": {},
-          "required": []
-        },
-        "metadata": {
-          "category": "profile",
-          "command": "list",
-          "full_syntax": "brain [--json] [--verbose] profile list",
-          "intents": [
-            "read_resource"
-          ],
-          "is_idempotent": true,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_project_add",
-        "description": "Vincula un proyecto local existente a un Nucleus.. Execute via: brain project add",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "project_path": {
-              "type": "string",
-              "description": "Ruta al proyecto a vincular"
-            },
-            "_n_<value": {
-              "type": "string",
-              "description": "Ruta al Nucleus destino"
-            },
-            "__name": {
-              "type": "string",
-              "description": "Nombre custom del proyecto (default: nombre de carpeta)"
-            },
-            "__strategy": {
-              "type": "string",
-              "description": "Forzar estrategia espec�fica (default: auto-detect)"
-            },
-            "__description": {
-              "type": "string",
-              "description": "Descripci�n del proyecto"
-            },
-            "__repo_url": {
-              "type": "string",
-              "description": "URL del repositorio GitHub"
-            }
-          },
-          "required": [
-            "project_path",
-            "_n_<value"
-          ]
-        },
-        "metadata": {
-          "category": "project",
-          "command": "add",
-          "full_syntax": "brain [--json] [--verbose] project add",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_project_clone_and_add",
-        "description": "Clone a Git repository and automatically link it to the current Nucleus.. Execute via: brain project clone-and-add",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "repo_url": {
-              "type": "string",
-              "description": "Git repository URL (HTTPS or SSH)"
-            },
-            "_d": {
-              "type": "string",
-              "description": "Absolute path where to clone the repository. If not provided, clones to Nucleus root using repo name."
-            },
-            "_n": {
-              "type": "string",
-              "description": "Path to the Nucleus project. Auto-detected from current directory if not provided."
-            },
-            "__name": {
-              "type": "string",
-              "description": "Custom name for the project (default: repository name)"
-            },
-            "__strategy": {
-              "type": "string",
-              "description": "Force specific technology strategy (e.g., python, typescript, android)"
-            },
-            "__description": {
-              "type": "string",
-              "description": "Project description"
-            }
-          },
-          "required": [
-            "repo_url"
-          ]
-        },
-        "metadata": {
-          "category": "project",
-          "command": "clone-and-add",
-          "full_syntax": "brain [--json] [--verbose] project clone-and-add",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_project_detect",
-        "description": "Scan directory and detect project types automatically.. Execute via: brain project detect",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "parent_path": {
-              "type": "string",
-              "description": "Parent directory to scan for projects"
-            },
-            "_d": {
-              "type": "integer",
-              "description": "Maximum depth for recursive scanning",
-              "default": 3
-            },
-            "_s": {
-              "type": "string",
-              "description": "Filter projects by strategy type"
-            },
-            "_c": {
-              "type": "string",
-              "description": "Filter by minimum confidence level (high, medium, low)"
-            }
-          },
-          "required": [
-            "parent_path"
-          ]
-        },
-        "metadata": {
-          "category": "project",
-          "command": "detect",
-          "full_syntax": "brain [--json] [--verbose] project detect",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_project_load",
-        "description": "Validates and loads project information. . Execute via: brain project load",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "_p": {
-              "type": "string",
-              "description": "Path to the project root",
-              "default": "."
-            }
-          },
-          "required": []
-        },
-        "metadata": {
-          "category": "project",
-          "command": "load",
-          "full_syntax": "brain [--json] [--verbose] project load",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_runtime_run",
-        "description": "Start Brain core runtime. Execute via: brain runtime run",
-        "parameters": {
-          "type": "object",
-          "properties": {},
-          "required": []
-        },
-        "metadata": {
-          "category": "runtime",
-          "command": "run",
-          "full_syntax": "brain [--json] [--verbose] runtime run",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_service_start",
-        "description": "Start the Brain TCP multiplexer service.. Execute via: brain service start",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "_p": {
-              "type": "integer",
-              "description": "TCP port to bind",
-              "default": 5678
-            },
-            "_h": {
-              "type": "string",
-              "description": "Host address to bind",
-              "default": "127.0.0.1"
-            },
-            "_d": {
-              "type": "boolean",
-              "description": "Run as background daemon",
-              "default": false
-            }
-          },
-          "required": []
-        },
-        "metadata": {
-          "category": "service",
-          "command": "start",
-          "full_syntax": "brain [--json] [--verbose] service start",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_service_status",
-        "description": "Check the current status of the Brain service.. Execute via: brain service status",
-        "parameters": {
-          "type": "object",
-          "properties": {},
-          "required": []
-        },
-        "metadata": {
-          "category": "service",
-          "command": "status",
-          "full_syntax": "brain [--json] [--verbose] service status",
-          "intents": [
-            "health_check"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "fast"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_service_stop",
-        "description": "Stop the running Brain service.. Execute via: brain service stop",
-        "parameters": {
-          "type": "object",
-          "properties": {},
-          "required": []
-        },
-        "metadata": {
-          "category": "service",
-          "command": "stop",
-          "full_syntax": "brain [--json] [--verbose] service stop",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_synapse_host",
-        "description": "Inicia el modo Host (Listener Loop).. Execute via: brain synapse host",
-        "parameters": {
-          "type": "object",
-          "properties": {},
-          "required": []
-        },
-        "metadata": {
-          "category": "synapse",
-          "command": "host",
-          "full_syntax": "brain [--json] [--verbose] synapse host",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_synapse_close",
-        "description": "Env�a se�al de terminaci�n al navegador.. Execute via: brain synapse close",
-        "parameters": {
-          "type": "object",
-          "properties": {},
-          "required": []
-        },
-        "metadata": {
-          "category": "synapse",
-          "command": "close",
-          "full_syntax": "brain [--json] [--verbose] synapse close",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_system_info",
-        "description": "Display comprehensive system information.. Execute via: brain system info",
-        "parameters": {
-          "type": "object",
-          "properties": {},
-          "required": []
-        },
-        "metadata": {
-          "category": "system",
-          "command": "info",
-          "full_syntax": "brain [--json] [--verbose] system info",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_system_path",
-        "description": "Display the absolute path to the brain executable.. Execute via: brain system path",
-        "parameters": {
-          "type": "object",
-          "properties": {},
-          "required": []
-        },
-        "metadata": {
-          "category": "system",
-          "command": "path",
-          "full_syntax": "brain [--json] [--verbose] system path",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "brain_system_version",
-        "description": "Display or increment the version number.. Execute via: brain system version",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "__added": {
-              "type": "string",
-              "description": "Feature or capability added (can be used multiple times)"
-            },
-            "__changed": {
-              "type": "string",
-              "description": "Feature or behavior changed (can be used multiple times)"
-            },
-            "__details": {
-              "type": "string",
-              "description": "Implementation detail or technical note (can be used multiple times)"
-            }
-          },
-          "required": []
-        },
-        "metadata": {
-          "category": "system",
-          "command": "version",
-          "full_syntax": "brain [--json] [--verbose] system version",
-          "intents": [
-            "general_operation"
-          ],
-          "is_idempotent": false,
-          "is_destructive": false,
-          "estimated_duration": "medium"
-        }
+  "schema_version": "1.0.0",
+  "executable": "brain",
+  "total_commands": 82,
+  "commands": [
+    {
+      "name": "chrome.read-log",
+      "description": "Auditor de integridad del motor Chromium para diagnosticar fallos de sistema y bloqueos de seguridad.",
+      "category": "chrome",
+      "syntax": "brain chrome read-log",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "description": "Chrome profile UUID",
+            "type": "string"
+          },
+          "_b": {
+            "description": "Lines of context before match",
+            "type": "string",
+            "default": 5
+          },
+          "_a": {
+            "description": "Lines of context after match",
+            "type": "string",
+            "default": 5
+          },
+          "_l": {
+            "description": "Launch ID for separate output file",
+            "type": "string"
+          }
+        },
+        "required": [
+          "profile_id"
+        ]
+      }
+    },
+    {
+      "name": "chrome.read-net-log",
+      "description": "Analyze Chrome network logs with intelligent filtering.",
+      "category": "chrome",
+      "syntax": "brain chrome read-net-log",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "description": "Chrome profile UUID",
+            "type": "string"
+          },
+          "filter_ai": {
+            "description": "Filter for AI service requests only",
+            "type": "string",
+            "default": false
+          },
+          "_e": {
+            "description": "Exclude URL patterns",
+            "type": "string"
+          },
+          "include_quic": {
+            "description": "Include QUIC protocol events",
+            "type": "string",
+            "default": false
+          },
+          "show_headers": {
+            "description": "Show HTTP headers in output",
+            "type": "string",
+            "default": false
+          },
+          "_l": {
+            "description": "Launch ID for separate output file",
+            "type": "string"
+          }
+        },
+        "required": [
+          "profile_id"
+        ]
+      }
+    },
+    {
+      "name": "chrome.mining-log",
+      "description": "Read and filter engine_mining.log for a specific profile.",
+      "category": "chrome",
+      "syntax": "brain chrome mining-log",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "description": "Chrome profile UUID",
+            "type": "string"
+          },
+          "_k": {
+            "description": "Keyword to search for",
+            "type": "string",
+            "default": "bloom"
+          },
+          "_b": {
+            "description": "Lines of context before match",
+            "type": "string",
+            "default": 5
+          },
+          "_a": {
+            "description": "Lines of context after match",
+            "type": "string",
+            "default": 5
+          },
+          "_l": {
+            "description": "Launch ID for separate output file",
+            "type": "string"
+          }
+        },
+        "required": [
+          "profile_id"
+        ]
+      }
+    },
+    {
+      "name": "context.generate",
+      "description": "Generate the Bloom Context for the project.",
+      "category": "context",
+      "syntax": "brain context generate",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "_p": {
+            "description": "Root path of the project",
+            "type": "string",
+            "default": "."
+          },
+          "_o": {
+            "description": "Output folder name",
+            "type": "string",
+            "default": ".bloom"
+          },
+          "_s": {
+            "description": "Force specific strategy",
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "extension.install",
+      "description": "Install Chrome extension to permanent location.",
+      "category": "extension",
+      "syntax": "brain extension install",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "_s": {
+            "description": "Source directory (auto-detects if not provided)",
+            "type": "string"
+          },
+          "_f": {
+            "description": "Force reinstall even if same version exists",
+            "type": "string",
+            "default": false
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "extension.update",
+      "description": "Update Chrome extension to the latest version.",
+      "category": "extension",
+      "syntax": "brain extension update",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "_s": {
+            "description": "Source directory (auto-detects if not provided)",
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "extension.verify",
+      "description": "Verify that the Chrome extension is correctly installed.",
+      "category": "extension",
+      "syntax": "brain extension verify",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "filesystem.compress",
+      "description": "Compress files into optimized JSON format for AI consumption.",
+      "category": "filesystem",
+      "syntax": "brain filesystem compress",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "paths": {
+            "description": "Paths to compress (files or directories)",
+            "type": "string"
+          },
+          "_m": {
+            "description": "Compression mode: 'codebase' or 'docbase'",
+            "type": "string",
+            "default": "codebase"
+          },
+          "_o": {
+            "description": "Output directory (default: current directory)",
+            "type": "string"
+          },
+          "_e": {
+            "description": "Patterns to exclude (can be used multiple times)",
+            "type": "string",
+            "default": "[]"
+          },
+          "no_comments": {
+            "description": "Remove comments during compression",
+            "type": "string",
+            "default": false
+          }
+        },
+        "required": [
+          "paths"
+        ]
+      }
+    },
+    {
+      "name": "filesystem.extract",
+      "description": "Extract files from compressed JSON format.",
+      "category": "filesystem",
+      "syntax": "brain filesystem extract",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "json_file": {
+            "description": "Compressed JSON file to extract",
+            "type": "string"
+          },
+          "_o": {
+            "description": "Output directory (default: extracted_<mode>)",
+            "type": "string"
+          },
+          "verify_hashes/no_verify_hashes": {
+            "description": "Verify MD5 hashes during extraction",
+            "type": "string",
+            "default": true
+          }
+        },
+        "required": [
+          "json_file"
+        ]
+      }
+    },
+    {
+      "name": "filesystem.tree",
+      "description": "Generate a visual directory tree structure with intelligent exclusions.",
+      "category": "filesystem",
+      "syntax": "brain filesystem tree",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "_o": {
+            "description": "Output file path",
+            "type": "string",
+            "default": "tree.txt"
+          },
+          "hash": {
+            "description": "Include MD5 hashes",
+            "type": "string",
+            "default": false
+          },
+          "export_json": {
+            "description": "Export JSON to disk",
+            "type": "string",
+            "default": false
+          },
+          "targets": {
+            "description": "Specific directories or files to include (supports absolute paths).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "targets"
+        ]
+      }
+    },
+    {
+      "name": "gemini.keys-add",
+      "description": "Add new Gemini API key with profile.",
+      "category": "gemini",
+      "syntax": "brain gemini keys-add",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "_p": {
+            "description": "Profile name (e.g., 'Personal Chrome')",
+            "type": "string"
+          },
+          "_k": {
+            "description": "Gemini API key",
+            "type": "string"
+          },
+          "priority": {
+            "description": "Priority: 1=preferred, 0=normal, -1=backup",
+            "type": "string",
+            "default": 0
+          }
+        },
+        "required": [
+          "_p",
+          "_k"
+        ]
+      }
+    },
+    {
+      "name": "gemini.keys-delete",
+      "description": "Delete a Gemini API key.",
+      "category": "gemini",
+      "syntax": "brain gemini keys-delete",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "profile": {
+            "description": "Profile name to delete",
+            "type": "string"
+          }
+        },
+        "required": [
+          "profile"
+        ]
+      }
+    },
+    {
+      "name": "gemini.keys-list",
+      "description": "List all Gemini API keys with status.",
+      "category": "gemini",
+      "syntax": "brain gemini keys-list",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "gemini.keys-stats",
+      "description": "Show global Gemini keys statistics.",
+      "category": "gemini",
+      "syntax": "brain gemini keys-stats",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "gemini.keys-validate",
+      "description": "Validate a Gemini API key by testing connection.",
+      "category": "gemini",
+      "syntax": "brain gemini keys-validate",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "profile": {
+            "description": "Profile name to validate",
+            "type": "string"
+          }
+        },
+        "required": [
+          "profile"
+        ]
+      }
+    },
+    {
+      "name": "github.auth-login",
+      "description": "Store GitHub authentication token.",
+      "category": "github",
+      "syntax": "brain github auth-login",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "_t": {
+            "description": "GitHub Personal Access Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "_t"
+        ]
+      }
+    },
+    {
+      "name": "github.auth-logout",
+      "description": "Remove stored GitHub token.",
+      "category": "github",
+      "syntax": "brain github auth-logout",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "github.auth-status",
+      "description": "Check GitHub authentication status.",
+      "category": "github",
+      "syntax": "brain github auth-status",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "github.clone",
+      "description": "Clone GitHub repository to local directory.",
+      "category": "github",
+      "syntax": "brain github clone",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "repo": {
+            "description": "Repository (owner/repo or full URL)",
+            "type": "string"
+          },
+          "_p": {
+            "description": "Target directory (defaults to repo name in current dir)",
+            "type": "string"
+          },
+          "progress/no_progress": {
+            "description": "Show clone progress",
+            "type": "string",
+            "default": true
+          }
+        },
+        "required": [
+          "repo"
+        ]
+      }
+    },
+    {
+      "name": "github.orgs-list",
+      "description": "List GitHub organizations.",
+      "category": "github",
+      "syntax": "brain github orgs-list",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "github.repos-list",
+      "description": "List GitHub repositories.",
+      "category": "github",
+      "syntax": "brain github repos-list",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "org": {
+            "description": "Organization name",
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "health.dev-check",
+      "description": "Check development environment and service status.",
+      "category": "health",
+      "syntax": "brain health dev-check",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "_t": {
+            "description": "Connection timeout per port check in seconds",
+            "type": "string",
+            "default": 2.0
+          },
+          "json": {
+            "description": "Output raw JSON",
+            "type": "string",
+            "default": false
+          },
+          "_v": {
+            "description": "Detailed logging of each port check",
+            "type": "string",
+            "default": false
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "health.full-stack",
+      "description": "Verify complete stack health (host, API, extension, Brain, onboarding)",
+      "category": "health",
+      "syntax": "brain health full-stack",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "_t": {
+            "description": "Timeout per check in seconds",
+            "type": "string",
+            "default": 5
+          },
+          "json": {
+            "description": "Output raw JSON",
+            "type": "string",
+            "default": false
+          },
+          "_v": {
+            "description": "Detailed logging",
+            "type": "string",
+            "default": false
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "health.native-ping",
+      "description": "Ping the native host to verify it's alive and responding.",
+      "category": "health",
+      "syntax": "brain health native-ping",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "_t": {
+            "description": "Timeout in milliseconds for ping response",
+            "type": "string",
+            "default": 500
+          },
+          "_p": {
+            "description": "Specific TCP port to test (auto-detect if not provided)",
+            "type": "string"
+          },
+          "check_ws/no_check_ws": {
+            "description": "Also verify WebSocket port status",
+            "type": "string",
+            "default": true
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "health.onboarding-status",
+      "description": "Check onboarding completion status (GitHub, Gemini, Nucleus, Projects)",
+      "category": "health",
+      "syntax": "brain health onboarding-status",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "_r": {
+            "description": "Force re-check, ignore cache",
+            "type": "string",
+            "default": false
+          },
+          "json": {
+            "description": "Output raw JSON",
+            "type": "string",
+            "default": false
+          },
+          "_v": {
+            "description": "Detailed logging of each check",
+            "type": "string",
+            "default": false
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "health.websocket-status",
+      "description": "Verify WebSocket server status on localhost:4124",
+      "category": "health",
+      "syntax": "brain health websocket-status",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "_t": {
+            "description": "Connection timeout in seconds",
+            "type": "string",
+            "default": 5
+          },
+          "test_sub": {
+            "description": "Test event subscription capability",
+            "type": "string",
+            "default": false
+          },
+          "json": {
+            "description": "Output raw JSON",
+            "type": "string",
+            "default": false
+          },
+          "_v": {
+            "description": "Detailed connection logging",
+            "type": "string",
+            "default": false
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "intent.add-turn",
+      "description": "Add a conversation turn to an intent's chat.",
+      "category": "intent",
+      "syntax": "brain intent add-turn",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "_i": {
+            "description": "Intent UUID",
+            "type": "string"
+          },
+          "_f": {
+            "description": "Intent folder name",
+            "type": "string"
+          },
+          "_a": {
+            "description": "Who is speaking: 'user' or 'ai'",
+            "type": "string",
+            "default": "user"
+          },
+          "_c": {
+            "description": "Content of the message",
+            "type": "string"
+          },
+          "_p": {
+            "description": "Path to Bloom project",
+            "type": "string"
+          }
+        },
+        "required": [
+          "_c"
+        ]
+      }
+    },
+    {
+      "name": "intent.build-payload",
+      "description": "Build optimized AI payload from context plan.",
+      "category": "intent",
+      "syntax": "brain intent build-payload",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "plan": {
+            "description": "Path to context_plan.json",
+            "type": "string"
+          },
+          "output": {
+            "description": "Output path for payload (default: same dir as plan)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "plan"
+        ]
+      }
+    },
+    {
+      "name": "intent.create",
+      "description": "Create a new development or documentation intent.",
+      "category": "intent",
+      "syntax": "brain intent create",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "_t": {
+            "description": "Intent type: 'dev' for development or 'doc' for documentation",
+            "type": "string"
+          },
+          "_n": {
+            "description": "Human-readable name for the intent (e.g., 'Fix login authentication flow')",
+            "type": "string"
+          },
+          "_f": {
+            "description": "Initial files to include in the intent context (can be repeated or comma-separated)",
+            "type": "string"
+          },
+          "_p": {
+            "description": "Path to the Nucleus (Bloom project root). Auto-detected if not provided.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "_t",
+          "_n"
+        ]
+      }
+    },
+    {
+      "name": "intent.delete",
+      "description": "Delete an intent and all its data.",
+      "category": "intent",
+      "syntax": "brain intent delete",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "_i": {
+            "description": "Intent UUID",
+            "type": "string"
+          },
+          "_f": {
+            "description": "Intent folder name",
+            "type": "string"
+          },
+          "force": {
+            "description": "Skip confirmation and force delete even if locked",
+            "type": "string",
+            "default": false
+          },
+          "_p": {
+            "description": "Path to Bloom project",
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "intent.download",
+      "description": "Download AI response from Native Host or file.",
+      "category": "intent",
+      "syntax": "brain intent download",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "_i": {
+            "description": "Intent UUID to download response for",
+            "type": "string"
+          },
+          "folder": {
+            "description": "Intent folder name (alternative to intent-id)",
+            "type": "string"
+          },
+          "socket_mode": {
+            "description": "Listen on TCP socket for Host connection",
+            "type": "string",
+            "default": false
+          },
+          "input_file": {
+            "description": "Read response from file (for testing)",
+            "type": "string"
+          },
+          "host": {
+            "description": "Host IP to listen on",
+            "type": "string",
+            "default": "127.0.0.1"
+          },
+          "port": {
+            "description": "Port to listen on (different from Host's 5678)",
+            "type": "string",
+            "default": 5679
+          },
+          "timeout": {
+            "description": "Socket timeout in seconds",
+            "type": "string",
+            "default": 300
+          },
+          "nucleus_path": {
+            "description": "Path to Bloom project (auto-detected if omitted)",
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "intent.finalize",
+      "description": "Finalize an intent, applying changes to the codebase.",
+      "category": "intent",
+      "syntax": "brain intent finalize",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "_i": {
+            "description": "Intent UUID",
+            "type": "string"
+          },
+          "_f": {
+            "description": "Intent folder name",
+            "type": "string"
+          },
+          "_p": {
+            "description": "Path to Bloom project",
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "intent.get",
+      "description": "Get complete details of an intent.",
+      "category": "intent",
+      "syntax": "brain intent get",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "_i": {
+            "description": "Intent UUID",
+            "type": "string"
+          },
+          "_f": {
+            "description": "Intent folder name",
+            "type": "string"
+          },
+          "_p": {
+            "description": "Path to Bloom project",
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "intent.hydrate",
+      "description": "Hydrate an intent by processing source files and briefing.",
+      "category": "intent",
+      "syntax": "brain intent hydrate",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "_i": {
+            "description": "Intent UUID",
+            "type": "string"
+          },
+          "_f": {
+            "description": "Intent folder name",
+            "type": "string"
+          },
+          "_b": {
+            "description": "Briefing text (instruction)",
+            "type": "string"
+          },
+          "_B": {
+            "description": "Path to text file containing briefing",
+            "type": "string"
+          },
+          "_F": {
+            "description": "Files to include in context (comma-separated)",
+            "type": "string"
+          },
+          "_p": {
+            "description": "Path to Bloom project root",
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "intent.list",
+      "description": "List all intents in the project.",
+      "category": "intent",
+      "syntax": "brain intent list",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "_p": {
+            "description": "Path to Bloom project (auto-detected if not provided)",
+            "type": "string"
+          },
+          "_t": {
+            "description": "Filter by intent type: 'dev' or 'doc'",
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "intent.lock",
+      "description": "Lock an intent for exclusive use.",
+      "category": "intent",
+      "syntax": "brain intent lock",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "_i": {
+            "description": "Intent UUID",
+            "type": "string"
+          },
+          "_f": {
+            "description": "Intent folder name",
+            "type": "string"
+          },
+          "_p": {
+            "description": "Path to Bloom project",
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "intent.merge",
+      "description": "Merge staged files from .staging/ into the real codebase.",
+      "category": "intent",
+      "syntax": "brain intent merge",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "_i": {
+            "description": "Intent UUID to merge files for",
+            "type": "string"
+          },
+          "_f": {
+            "description": "Intent folder name (e.g., .fix-login-a1b2c3d4)",
+            "type": "string"
+          },
+          "_s": {
+            "description": "Pipeline stage (briefing, execution, refinement_X). Auto-detect if not provided.",
+            "type": "string"
+          },
+          "force": {
+            "description": "Skip approval check and merge anyway",
+            "type": "string",
+            "default": false
+          },
+          "dry_run": {
+            "description": "Show what would be merged without applying",
+            "type": "string",
+            "default": false
+          },
+          "no_backup": {
+            "description": "Skip backup creation (DANGEROUS)",
+            "type": "string",
+            "default": false
+          },
+          "_p": {
+            "description": "Path to Bloom project (auto-detected if not provided)",
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "intent.parse",
+      "description": "Parse and validate .raw_output.json from an AI response.",
+      "category": "intent",
+      "syntax": "brain intent parse",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "_i": {
+            "description": "Intent UUID to parse",
+            "type": "string"
+          },
+          "_s": {
+            "description": "Pipeline stage (briefing, execution, refinement_X). Auto-detect if not provided.",
+            "type": "string"
+          },
+          "strict": {
+            "description": "Fail on any protocol violation (no fallback parser)",
+            "type": "string",
+            "default": false
+          },
+          "output_report": {
+            "description": "Generate .parse_report.json",
+            "type": "string",
+            "default": true
+          },
+          "_n": {
+            "description": "Path to nucleus root (default: current directory)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "_i"
+        ]
+      }
+    },
+    {
+      "name": "intent.plan",
+      "description": "Generate context plan for an intent using Gemini Router.",
+      "category": "intent",
+      "syntax": "brain intent plan",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "intent_dir": {
+            "description": "Intent directory path",
+            "type": "string"
+          },
+          "description": {
+            "description": "Intent description",
+            "type": "string"
+          },
+          "type": {
+            "description": "Intent type: dev, doc, or seed",
+            "type": "string",
+            "default": "dev"
+          }
+        },
+        "required": [
+          "intent_dir",
+          "description"
+        ]
+      }
+    },
+    {
+      "name": "intent.recover",
+      "description": "Recover interrupted intents using lock state recovery data.",
+      "category": "intent",
+      "syntax": "brain intent recover",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "_i": {
+            "description": "Intent UUID to recover",
+            "type": "string"
+          },
+          "_f": {
+            "description": "Intent folder name (e.g., .fix-login-abc123)",
+            "type": "string"
+          },
+          "auto_detect": {
+            "description": "Find and recover all interrupted intents",
+            "type": "string",
+            "default": false
+          },
+          "force_unlock": {
+            "description": "Force unlock without attempting recovery",
+            "type": "string",
+            "default": false
+          },
+          "_p": {
+            "description": "Path to Bloom project (auto-detected if not provided)",
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "intent.stage",
+      "description": "Prepare files in .staging/ directory for merge.",
+      "category": "intent",
+      "syntax": "brain intent stage",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "_i": {
+            "description": "Intent UUID to stage files for",
+            "type": "string"
+          },
+          "_f": {
+            "description": "Intent folder name (e.g., .fix-login-a1b2c3d4)",
+            "type": "string"
+          },
+          "_s": {
+            "description": "Pipeline stage (briefing, execution, refinement_X). Auto-detect if not provided.",
+            "type": "string"
+          },
+          "dry_run": {
+            "description": "Show what would be staged without writing files",
+            "type": "string",
+            "default": false
+          },
+          "overwrite": {
+            "description": "Overwrite existing .staging/ directory",
+            "type": "string",
+            "default": true
+          },
+          "_p": {
+            "description": "Path to Bloom project (auto-detected if not provided)",
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "intent.submit",
+      "description": "Submit an intent payload to an AI provider through the native host bridge.",
+      "category": "intent",
+      "syntax": "brain intent submit",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "_i": {
+            "description": "UUID of the intent to submit",
+            "type": "string"
+          },
+          "_f": {
+            "description": "Folder name of the intent (e.g., .fix-login-a1b2c3d4)",
+            "type": "string"
+          },
+          "provider": {
+            "description": "AI provider to use: 'claude', 'gemini', etc.",
+            "type": "string",
+            "default": "claude"
+          },
+          "_p": {
+            "description": "Path to the Nucleus (Bloom project root). Auto-detected if not provided.",
+            "type": "string"
+          },
+          "profile_path": {
+            "description": "Chrome profile path for the AI provider (optional)",
+            "type": "string"
+          },
+          "host": {
+            "description": "Native host IP address",
+            "type": "string",
+            "default": "127.0.0.1"
+          },
+          "port": {
+            "description": "Native host TCP port",
+            "type": "string",
+            "default": 5678
+          },
+          "timeout": {
+            "description": "Connection timeout in seconds",
+            "type": "string",
+            "default": 30
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "intent.unlock",
+      "description": "Unlock an intent to free it for use.",
+      "category": "intent",
+      "syntax": "brain intent unlock",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "_i": {
+            "description": "Intent UUID",
+            "type": "string"
+          },
+          "_f": {
+            "description": "Intent folder name",
+            "type": "string"
+          },
+          "force": {
+            "description": "Force unlock even if locked by another host",
+            "type": "string",
+            "default": false
+          },
+          "_p": {
+            "description": "Path to Bloom project",
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "intent.update",
+      "description": "Update an existing intent's properties.",
+      "category": "intent",
+      "syntax": "brain intent update",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "_i": {
+            "description": "UUID of the intent to update",
+            "type": "string"
+          },
+          "_f": {
+            "description": "Folder name of the intent (e.g., .fix-login-a1b2c3d4)",
+            "type": "string"
+          },
+          "_n": {
+            "description": "New name for the intent (triggers folder rename)",
+            "type": "string"
+          },
+          "files": {
+            "description": "Replace all initial files with this new list",
+            "type": "string"
+          },
+          "add_files": {
+            "description": "Add files to the existing initial_files list",
+            "type": "string"
+          },
+          "remove_files": {
+            "description": "Remove files from the initial_files list",
+            "type": "string"
+          },
+          "_p": {
+            "description": "Path to the Nucleus (Bloom project root). Auto-detected if not provided.",
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "intent.validate",
+      "description": "Validate staging files using Gemini analysis.",
+      "category": "intent",
+      "syntax": "brain intent validate",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "_i": {
+            "description": "Intent UUID",
+            "type": "string"
+          },
+          "_f": {
+            "description": "Intent folder name (e.g., .fix-login-abc123)",
+            "type": "string"
+          },
+          "_s": {
+            "description": "Pipeline stage (briefing, execution, refinement_X)",
+            "type": "string"
+          },
+          "auto_approve": {
+            "description": "Skip manual review and approve automatically",
+            "type": "string",
+            "default": false
+          },
+          "gemini_model": {
+            "description": "Gemini model to use for analysis",
+            "type": "string",
+            "default": "gemini-2.0-flash-exp"
+          },
+          "skip_gemini": {
+            "description": "Skip Gemini analysis (only basic validation)",
+            "type": "string",
+            "default": false
+          },
+          "_p": {
+            "description": "Path to Bloom project (auto-detected if omitted)",
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "nucleus.create",
+      "description": "Initialize a new Bloom Nucleus V2.0 project structure.",
+      "category": "nucleus",
+      "syntax": "brain nucleus create",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "_o": {
+            "description": "Organization name",
+            "type": "string"
+          },
+          "_p": {
+            "description": "Target path (default: current dir)",
+            "type": "string"
+          },
+          "output": {
+            "description": "Output directory name (legacy, kept for compatibility)",
+            "type": "string",
+            "default": ".bloom"
+          },
+          "url": {
+            "description": "Organization URL",
+            "type": "string",
+            "default": ""
+          },
+          "_f": {
+            "description": "Force overwrite existing directory",
+            "type": "string",
+            "default": false
+          }
+        },
+        "required": [
+          "_o"
+        ]
+      }
+    },
+    {
+      "name": "nucleus.create-exp-intent",
+      "description": "Create a new exploration intent in the nucleus.",
+      "category": "nucleus",
+      "syntax": "brain nucleus create-exp-intent",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "_n": {
+            "description": "Intent name (will be slugified)",
+            "type": "string"
+          },
+          "_p": {
+            "description": "Nucleus path (default: current dir)",
+            "type": "string"
+          },
+          "inquiry": {
+            "description": "Initial inquiry question",
+            "type": "string"
+          },
+          "_d": {
+            "description": "Intent description",
+            "type": "string"
+          },
+          "projects": {
+            "description": "Comma-separated project names to include",
+            "type": "string"
+          }
+        },
+        "required": [
+          "_n"
+        ]
+      }
+    },
+    {
+      "name": "nucleus.delete",
+      "description": "Delete a complete nucleus including all its data.",
+      "category": "nucleus",
+      "syntax": "brain nucleus delete",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "_p": {
+            "description": "Path to the Nucleus root directory to delete",
+            "type": "string"
+          },
+          "_f": {
+            "description": "Skip confirmation prompt",
+            "type": "string",
+            "default": false
+          }
+        },
+        "required": [
+          "_p"
+        ]
+      }
+    },
+    {
+      "name": "nucleus.exp-discovery-turn",
+      "description": "Add a discovery turn to an exploration intent.",
+      "category": "nucleus",
+      "syntax": "brain nucleus exp-discovery-turn",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "_i": {
+            "description": "Intent ID or slug",
+            "type": "string"
+          },
+          "_p": {
+            "description": "Nucleus path (default: current dir)",
+            "type": "string"
+          },
+          "notes": {
+            "description": "Turn notes/observations",
+            "type": "string"
+          },
+          "analysis": {
+            "description": "Analysis summary for this turn",
+            "type": "string"
+          }
+        },
+        "required": [
+          "_i"
+        ]
+      }
+    },
+    {
+      "name": "nucleus.exp-export-findings",
+      "description": "Export findings from an exploration intent.",
+      "category": "nucleus",
+      "syntax": "brain nucleus exp-export-findings",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "_i": {
+            "description": "Intent ID or slug",
+            "type": "string"
+          },
+          "_p": {
+            "description": "Nucleus path (default: current dir)",
+            "type": "string"
+          },
+          "_f": {
+            "description": "Export format (markdown, json)",
+            "type": "string",
+            "default": "markdown"
+          },
+          "include_raw": {
+            "description": "Include raw turn data",
+            "type": "string",
+            "default": false
+          }
+        },
+        "required": [
+          "_i"
+        ]
+      }
+    },
+    {
+      "name": "nucleus.get",
+      "description": "Retrieve complete details of a nucleus.",
+      "category": "nucleus",
+      "syntax": "brain nucleus get",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "_p": {
+            "description": "Path to the Nucleus root directory",
+            "type": "string"
+          }
+        },
+        "required": [
+          "_p"
+        ]
+      }
+    },
+    {
+      "name": "nucleus.link",
+      "description": "Link an existing folder as a Nucleus project.",
+      "category": "nucleus",
+      "syntax": "brain nucleus link",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "description": "Path to existing project",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ]
+      }
+    },
+    {
+      "name": "nucleus.list",
+      "description": "List all Nucleus projects found in a parent directory.",
+      "category": "nucleus",
+      "syntax": "brain nucleus list",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "_d": {
+            "description": "Parent directory to scan for nuclei (default: current directory)",
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "nucleus.list-projects",
+      "description": "List all projects linked to the nucleus with their details.",
+      "category": "nucleus",
+      "syntax": "brain nucleus list-projects",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "_p": {
+            "description": "Nucleus root path (default: current directory)",
+            "type": "string"
+          },
+          "_s": {
+            "description": "Filter by project strategy (python, typescript, go, etc.)",
+            "type": "string"
+          },
+          "active_only": {
+            "description": "Show only active projects",
+            "type": "string",
+            "default": false
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "nucleus.onboarding-complete",
+      "description": "Mark an onboarding step or entire onboarding as completed.",
+      "category": "nucleus",
+      "syntax": "brain nucleus onboarding-complete",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "_s": {
+            "description": "Step name to mark as completed",
+            "type": "string"
+          },
+          "_a": {
+            "description": "Mark entire onboarding as completed",
+            "type": "string",
+            "default": false
+          },
+          "_p": {
+            "description": "Nucleus root path (default: current dir)",
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "nucleus.onboarding-status",
+      "description": "Get the current onboarding status from nucleus configuration.",
+      "category": "nucleus",
+      "syntax": "brain nucleus onboarding-status",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "_p": {
+            "description": "Nucleus root path (default: current dir)",
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "nucleus.project-info",
+      "description": "Display detailed information about a specific project in the nucleus.",
+      "category": "nucleus",
+      "syntax": "brain nucleus project-info",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_name": {
+            "description": "Name of the project to inspect",
+            "type": "string"
+          },
+          "_p": {
+            "description": "Nucleus root path (default: current directory)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_name"
+        ]
+      }
+    },
+    {
+      "name": "nucleus.status",
+      "description": "Check if a directory is a valid Nucleus project.",
+      "category": "nucleus",
+      "syntax": "brain nucleus status",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "_p": {
+            "description": "Nucleus path",
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "nucleus.sync",
+      "description": "Synchronize projects and rebuild nucleus cache.",
+      "category": "nucleus",
+      "syntax": "brain nucleus sync",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "_p": {
+            "description": "Nucleus path (default: current dir)",
+            "type": "string"
+          },
+          "skip_git": {
+            "description": "Skip git pull operations",
+            "type": "string",
+            "default": false
+          },
+          "_v": {
+            "description": "Show detailed progress",
+            "type": "string",
+            "default": false
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "profile.link",
+      "description": "Vincula un email a un perfil.",
+      "category": "profile",
+      "syntax": "brain profile link",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "description": "ID del perfil",
+            "type": "string"
+          },
+          "email": {
+            "description": "Email a vincular",
+            "type": "string"
+          }
+        },
+        "required": [
+          "profile_id",
+          "email"
+        ]
+      }
+    },
+    {
+      "name": "profile.unlink",
+      "description": "Desvincula la cuenta de un perfil.",
+      "category": "profile",
+      "syntax": "brain profile unlink",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "description": "ID del perfil",
+            "type": "string"
+          }
+        },
+        "required": [
+          "profile_id"
+        ]
+      }
+    },
+    {
+      "name": "profile.accounts-register",
+      "description": "Registra una nueva cuenta en un perfil.",
+      "category": "profile",
+      "syntax": "brain profile accounts-register",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "description": "ID del perfil",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Proveedor (google, openai, anthropic, etc)",
+            "type": "string"
+          },
+          "email": {
+            "description": "Email o identificador de la cuenta",
+            "type": "string"
+          }
+        },
+        "required": [
+          "profile_id",
+          "provider",
+          "email"
+        ]
+      }
+    },
+    {
+      "name": "profile.accounts-remove",
+      "description": "Remueve una cuenta registrada de un perfil.",
+      "category": "profile",
+      "syntax": "brain profile accounts-remove",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "description": "ID del perfil",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Proveedor a remover",
+            "type": "string"
+          }
+        },
+        "required": [
+          "profile_id",
+          "provider"
+        ]
+      }
+    },
+    {
+      "name": "profile.create",
+      "description": "Crea un nuevo perfil con el alias especificado.",
+      "category": "profile",
+      "syntax": "brain profile create",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "alias": {
+            "description": "Nombre descriptivo del perfil",
+            "type": "string"
+          }
+        },
+        "required": [
+          "alias"
+        ]
+      }
+    },
+    {
+      "name": "profile.destroy",
+      "description": "Elimina un perfil y todos sus datos.",
+      "category": "profile",
+      "syntax": "brain profile destroy",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "description": "ID del perfil a eliminar",
+            "type": "string"
+          }
+        },
+        "required": [
+          "profile_id"
+        ]
+      }
+    },
+    {
+      "name": "profile.launch",
+      "description": "Lanza Chrome con el perfil especificado usando spec-driven mode.",
+      "category": "profile",
+      "syntax": "brain profile launch",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "description": "ID del perfil a lanzar",
+            "type": "string"
+          },
+          "_s": {
+            "description": "Archivo JSON con especificación completa de lanzamiento (REQUERIDO)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "profile_id",
+          "_s"
+        ]
+      }
+    },
+    {
+      "name": "profile.list",
+      "description": "MOSTRAR AL USUARIO (CLI).",
+      "category": "profile",
+      "syntax": "brain profile list",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "project.add",
+      "description": "Vincula un proyecto local existente a un Nucleus.",
+      "category": "project",
+      "syntax": "brain project add",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_path": {
+            "description": "Ruta al proyecto a vincular",
+            "type": "string"
+          },
+          "_n": {
+            "description": "Ruta al Nucleus destino",
+            "type": "string"
+          },
+          "name": {
+            "description": "Nombre custom del proyecto (default: nombre de carpeta)",
+            "type": "string"
+          },
+          "strategy": {
+            "description": "Forzar estrategia específica (default: auto-detect)",
+            "type": "string"
+          },
+          "description": {
+            "description": "Descripción del proyecto",
+            "type": "string"
+          },
+          "repo_url": {
+            "description": "URL del repositorio GitHub",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_path",
+          "_n"
+        ]
+      }
+    },
+    {
+      "name": "project.clone-and-add",
+      "description": "Clone a Git repository and automatically link it to the current Nucleus.",
+      "category": "project",
+      "syntax": "brain project clone-and-add",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "repo_url": {
+            "description": "Git repository URL (HTTPS or SSH)",
+            "type": "string"
+          },
+          "_d": {
+            "description": "Absolute path where to clone the repository. If not provided, clones to Nucleus root using repo name.",
+            "type": "string"
+          },
+          "_n": {
+            "description": "Path to the Nucleus project. Auto-detected from current directory if not provided.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Custom name for the project (default: repository name)",
+            "type": "string"
+          },
+          "strategy": {
+            "description": "Force specific technology strategy (e.g., python, typescript, android)",
+            "type": "string"
+          },
+          "description": {
+            "description": "Project description",
+            "type": "string"
+          }
+        },
+        "required": [
+          "repo_url"
+        ]
+      }
+    },
+    {
+      "name": "project.detect",
+      "description": "Scan directory and detect project types automatically.",
+      "category": "project",
+      "syntax": "brain project detect",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "parent_path": {
+            "description": "Parent directory to scan for projects",
+            "type": "string"
+          },
+          "_d": {
+            "description": "Maximum depth for recursive scanning",
+            "type": "string",
+            "default": 3
+          },
+          "_s": {
+            "description": "Filter projects by strategy type",
+            "type": "string"
+          },
+          "_c": {
+            "description": "Filter by minimum confidence level (high, medium, low)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "parent_path"
+        ]
+      }
+    },
+    {
+      "name": "project.load",
+      "description": "Validates and loads project information. ",
+      "category": "project",
+      "syntax": "brain project load",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "_p": {
+            "description": "Path to the project root",
+            "type": "string",
+            "default": "."
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "runtime.run",
+      "description": "Start Brain core runtime",
+      "category": "runtime",
+      "syntax": "brain runtime run",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "service.start",
+      "description": "Start the Brain TCP multiplexer service.",
+      "category": "service",
+      "syntax": "brain service start",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "_p": {
+            "description": "TCP port to bind",
+            "type": "string",
+            "default": 5678
+          },
+          "_h": {
+            "description": "Host address to bind",
+            "type": "string",
+            "default": "127.0.0.1"
+          },
+          "_d": {
+            "description": "Run as background daemon",
+            "type": "string",
+            "default": false
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "service.status",
+      "description": "Check the current status of the Brain service.",
+      "category": "service",
+      "syntax": "brain service status",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "service.stop",
+      "description": "Stop the running Brain service.",
+      "category": "service",
+      "syntax": "brain service stop",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "synapse.host",
+      "description": "Inicia el modo Host (Listener Loop).",
+      "category": "synapse",
+      "syntax": "brain synapse host",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "synapse.close",
+      "description": "Envía señal de terminación al navegador.",
+      "category": "synapse",
+      "syntax": "brain synapse close",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "system.info",
+      "description": "Display comprehensive system information.",
+      "category": "system",
+      "syntax": "brain system info",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "system.path",
+      "description": "Display the absolute path to the brain executable.",
+      "category": "system",
+      "syntax": "brain system path",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "system.version",
+      "description": "Display or increment the version number.",
+      "category": "system",
+      "syntax": "brain system version",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "added": {
+            "description": "Feature or capability added (can be used multiple times)",
+            "type": "string"
+          },
+          "changed": {
+            "description": "Feature or behavior changed (can be used multiple times)",
+            "type": "string"
+          },
+          "details": {
+            "description": "Implementation detail or technical note (can be used multiple times)",
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "twitter.auth-status",
+      "description": "Check Twitter/X authentication status.",
+      "category": "twitter",
+      "syntax": "brain twitter auth-status",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "twitter.auth-login",
+      "description": "Authenticate with Twitter/X using API credentials.",
+      "category": "twitter",
+      "syntax": "brain twitter auth-login",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "_t": {
+            "description": "Twitter API token",
+            "type": "string"
+          },
+          "_u": {
+            "description": "Twitter username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "_t",
+          "_u"
+        ]
       }
     }
-  ],
-  "semantic_layer": {
-    "intent_mappings": {
-      "general_operation": [
-        "chrome read-log",
-        "chrome read-net-log",
-        "chrome mining-log",
-        "context generate",
-        "extension install",
-        "filesystem compress",
-        "filesystem extract",
-        "filesystem tree",
-        "gemini keys-add",
-        "gemini keys-stats",
-        "gemini keys-validate",
-        "github clone",
-        "intent add-turn",
-        "intent download",
-        "intent finalize",
-        "intent hydrate",
-        "intent lock",
-        "intent merge",
-        "intent parse",
-        "intent plan",
-        "intent recover",
-        "intent stage",
-        "intent submit",
-        "intent unlock",
-        "intent validate",
-        "nucleus exp-discovery-turn",
-        "nucleus exp-export-findings",
-        "nucleus link",
-        "nucleus onboarding-complete",
-        "nucleus onboarding-status",
-        "nucleus project-info",
-        "nucleus sync",
-        "profile link",
-        "profile unlink",
-        "profile accounts-register",
-        "profile launch",
-        "project add",
-        "project clone-and-add",
-        "project detect",
-        "project load",
-        "runtime run",
-        "service start",
-        "service stop",
-        "synapse host",
-        "synapse close",
-        "system info",
-        "system path",
-        "system version"
-      ],
-      "update_resource": [
-        "extension update",
-        "intent update"
-      ],
-      "health_check": [
-        "extension verify",
-        "github auth-status",
-        "health dev-check",
-        "health full-stack",
-        "health native-ping",
-        "health onboarding-status",
-        "health websocket-status",
-        "nucleus status",
-        "service status"
-      ],
-      "delete_resource": [
-        "gemini keys-delete",
-        "intent delete",
-        "nucleus delete",
-        "profile accounts-remove",
-        "profile destroy"
-      ],
-      "read_resource": [
-        "gemini keys-list",
-        "github orgs-list",
-        "github repos-list",
-        "intent get",
-        "intent list",
-        "nucleus get",
-        "nucleus list",
-        "nucleus list-projects",
-        "profile list"
-      ],
-      "authentication": [
-        "github auth-login",
-        "github auth-logout",
-        "github auth-status"
-      ],
-      "build_artifact": [
-        "intent build-payload"
-      ],
-      "create_resource": [
-        "intent create",
-        "nucleus create",
-        "nucleus create-exp-intent",
-        "profile create"
-      ]
-    },
-    "dependency_graph": {
-      "nucleus create": {
-        "suggests": [
-          "github auth-login"
-        ],
-        "requires": []
-      },
-      "nucleus create-exp-intent": {
-        "suggests": [
-          "github auth-login"
-        ],
-        "requires": []
-      }
-    },
-    "command_categories": [
-      {
-        "name": "chrome",
-        "description": "Chrome profile debugging and network log analysis",
-        "command_count": 1
-      },
-      {
-        "name": "context",
-        "description": "AI context generation and management",
-        "command_count": 1
-      },
-      {
-        "name": "extension",
-        "description": "Chrome extension lifecycle management",
-        "command_count": 4
-      },
-      {
-        "name": "filesystem",
-        "description": "File operations and directory analysis",
-        "command_count": 3
-      },
-      {
-        "name": "gemini",
-        "description": "Gemini AI key management and operations",
-        "command_count": 5
-      },
-      {
-        "name": "github",
-        "description": "GitHub integration and repository management",
-        "command_count": 9
-      },
-      {
-        "name": "health",
-        "description": "System health checks and diagnostics",
-        "command_count": 5
-      },
-      {
-        "name": "intent",
-        "description": "Intent execution system and context planning",
-        "command_count": 19
-      },
-      {
-        "name": "nucleus",
-        "description": "Nucleus project management and lifecycle",
-        "command_count": 14
-      },
-      {
-        "name": "profile",
-        "description": "Chrome profile and AI account management",
-        "command_count": 8
-      },
-      {
-        "name": "project",
-        "description": "Project lifecycle and scaffolding",
-        "command_count": 5
-      },
-      {
-        "name": "runtime",
-        "description": "Non-interactive system runtime operations",
-        "command_count": 1
-      },
-      {
-        "name": "service",
-        "description": "Background connection multiplexer and task runner",
-        "command_count": 1
-      },
-      {
-        "name": "synapse",
-        "description": "Chrome Native Messaging Bridge and protocol management",
-        "command_count": 1
-      },
-      {
-        "name": "system",
-        "description": "Runtime and system introspection",
-        "command_count": 3
-      },
-      {
-        "name": "twitter",
-        "description": "Twitter/X integration and social data analysis",
-        "command_count": 1
-      }
-    ]
-  },
-  "execution_policies": {
-    "global_options": {
-      "--json": {
-        "position": "before_category",
-        "description": "Enable JSON output for machine parsing",
-        "affects_all_commands": true
-      },
-      "--verbose": {
-        "position": "before_category",
-        "description": "Enable detailed logging",
-        "affects_all_commands": true
-      }
-    },
-    "safety_rails": {
-      "require_confirmation": [
-        "brain_gemini_keys_delete",
-        "brain_intent_delete",
-        "brain_nucleus_delete",
-        "brain_profile_accounts_remove"
-      ],
-      "idempotent_commands": [
-        "brain_gemini_keys_list",
-        "brain_github_orgs_list",
-        "brain_github_repos_list",
-        "brain_intent_get",
-        "brain_intent_list",
-        "brain_nucleus_get",
-        "brain_nucleus_list",
-        "brain_nucleus_list_projects",
-        "brain_profile_list"
-      ]
-    }
-  },
-  "usage_examples": [
-    {
-      "user_intent": "Check if the system is healthy",
-      "commands": [
-        {
-          "tool": "brain_health_native_ping",
-          "params": {}
-        },
-        {
-          "tool": "brain_health_onboarding_status",
-          "params": {}
-        }
-      ],
-      "explanation": "Run health checks to verify system connectivity"
-    }
-  ],
-  "error_recovery": {
-    "common_patterns": [
-      {
-        "error_signature": "authentication.*failed",
-        "suggested_commands": [
-          "brain_github_auth_login"
-        ],
-        "description": "Re-authenticate with GitHub"
-      }
-    ]
-  },
-  "agent_protocol": {
-    "version": "1.0",
-    "capabilities": {
-      "can_chain_commands": true,
-      "supports_rollback": false,
-      "supports_dry_run": true,
-      "supports_parallel_execution": false
-    },
-    "communication": {
-      "input_format": "natural_language | structured_json",
-      "output_format": "json",
-      "progress_updates": "synchronous"
-    }
-  }
+  ]
 }

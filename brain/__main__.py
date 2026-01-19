@@ -1,10 +1,12 @@
 """
 Brain CLI - Auto-discovery entry point.
 Compatible con PyInstaller frozen executables y Windows Services.
+REFACTORED: Silent Entry para modo JSON (Stream Integrity).
 """
 import sys
 import io
 import os
+import logging
 import multiprocessing
 from pathlib import Path
 from brain.core.profile.profile_manager import ProfileManager
@@ -82,28 +84,43 @@ if site_packages_str not in sys.path:
     sys.path.insert(0, site_packages_str)
 
 # ============================================================================
-# PASO 3: INICIALIZAR LOGGER
+# PASO 3: DETECTAR FLAGS GLOBALES (ANTES DE TYPER)
 # ============================================================================
-from brain.shared.logger import setup_global_logging, get_logger
-
-# Detectar flags globales manualmente antes de Typer
 verbose_mode = "--verbose" in sys.argv
 json_mode = "--json" in sys.argv
 
-setup_global_logging(verbose=verbose_mode)
-logger = get_logger("brain.main")
-logger.info("🧠 Brain CLI iniciando...")
+# ============================================================================
+# PASO 4: CONFIGURACIÓN GLOBAL DE LOGGING (SILENT ENTRY PARA JSON)
+# ============================================================================
+from brain.shared.logger import setup_global_logging, get_logger
+
+if json_mode:
+    # MODO JSON: Logging completamente silenciado en stdout
+    # Solo archivo de log activo, consola deshabilitada
+    setup_global_logging(verbose=False, json_mode=True)
+    logger = get_logger("brain.main")
+    # No hacer logger.info() aquí para evitar contaminar stderr innecesariamente
+else:
+    # MODO NORMAL: Logging según verbose flag
+    setup_global_logging(verbose=verbose_mode, json_mode=False)
+    logger = get_logger("brain.main")
+    logger.info("🧠 Brain CLI iniciando...")
 
 # ============================================================================
-# PASO 4: IMPORTS PRINCIPALES
+# PASO 5: IMPORTS PRINCIPALES
 # ============================================================================
 try:
     import typer
     from brain.shared.context import GlobalContext
-    logger.debug("✓ Imports principales completados")
+    if not json_mode:
+        logger.debug("✓ Imports principales completados")
 except Exception as e:
     logger.critical(f"❌ Error en imports principales: {e}", exc_info=True)
-    # No usar sys.exit(1) directo si no hay consola, pero aquí no hay opción
+    if json_mode:
+        import json
+        sys.stdout.write(json.dumps({"status": "error", "message": f"Import error: {e}"}))
+        sys.stdout.write('\n')
+        sys.stdout.flush()
     sys.exit(1)
 
 app = typer.Typer(
@@ -115,12 +132,13 @@ app = typer.Typer(
 @app.callback()
 def main_config(
     ctx: typer.Context,
-    json_mode: bool = typer.Option(False, "--json", help="Enable JSON output"),
+    json_output: bool = typer.Option(False, "--json", help="Enable JSON output"),
     verbose: bool = typer.Option(False, "--verbose", help="Enable detailed logging")
 ):
     """Brain CLI - The brain of the Bloom extension."""
-    ctx.obj = GlobalContext(json_mode=json_mode, verbose=verbose, root_path=".")
-    logger.debug(f"GlobalContext configurado: json={json_mode}, verbose={verbose}")
+    ctx.obj = GlobalContext(json_mode=json_output, verbose=verbose, root_path=".")
+    if not json_output:
+        logger.debug(f"GlobalContext configurado: json={json_output}, verbose={verbose}")
 
 def is_frozen():
     """Detecta si estamos corriendo como ejecutable empaquetado."""
@@ -129,14 +147,17 @@ def is_frozen():
 
 def load_commands():
     """Carga comandos - Compatible con modo frozen y desarrollo."""
-    logger.info("📦 Cargando comandos...")
+    if not json_mode:
+        logger.info("📦 Cargando comandos...")
     try:
         if is_frozen():
-            logger.info("Usando cargador explícito (modo frozen)")
+            if not json_mode:
+                logger.info("Usando cargador explícito (modo frozen)")
             from brain.cli.command_loader import load_all_commands_explicit
             registry = load_all_commands_explicit()
         else:
-            logger.info("Usando auto-discovery (modo desarrollo)")
+            if not json_mode:
+                logger.info("Usando auto-discovery (modo desarrollo)")
             from brain.commands import discover_commands
             registry = discover_commands()
         return registry
@@ -150,32 +171,49 @@ def main():
     start_time = time.time()
 
     # Limpiar locks
-    pm = ProfileManager()
-    pm.launcher.cleanup_profile_locks(pm.paths.profiles_dir)
+    try:
+        pm = ProfileManager()
+        pm.launcher.cleanup_profile_locks(pm.paths.profiles_dir)
+    except Exception as e:
+        if not json_mode:
+            logger.warning(f"⚠️ No se pudieron limpiar locks de perfiles: {e}")
     
     # CRÍTICO para Windows + PyInstaller
     multiprocessing.freeze_support()
     
-    # Intercept --help
+    # ========================================================================
+    # INTERCEPT --help (ANTES DE TYPER)
+    # ========================================================================
     if "--help" in sys.argv:
-        # Solo intentar renderizar help si tenemos consola
         try:
-            # (Tu lógica de help existente)
             ai_native = "--ai" in sys.argv or "--ai-native" in sys.argv
+            full_help = "--full" in sys.argv
+            
+            # CRÍTICO: Remover flags custom ANTES de que Typer los vea
+            # Esto evita "No such option: --full"
+            sys.argv = [arg for arg in sys.argv if arg not in ["--full", "--ai", "--ai-native"]]
+            
+            # Solo renderizar help custom si es help global (no de subcomandos)
             if len([arg for arg in sys.argv if not arg.startswith('-')]) == 1:
                 from brain.cli.help_renderer import render_help
                 registry = load_commands()
-                render_help(registry, json_mode=json_mode, ai_native=ai_native)
+                render_help(registry, json_mode=json_mode, ai_native=ai_native, full_help=full_help)
                 sys.exit(0)
-        except Exception:
-            # Si falla renderizar help (ej: sin consola), dejar que Typer maneje el fallback
+        except Exception as e:
+            # Si falla renderizar help custom, dejar que Typer maneje el fallback
+            if not json_mode:
+                logger.warning(f"⚠️ Error en help renderer, usando fallback de Typer: {e}")
+                import traceback
+                traceback.print_exc()
             pass
     
     try:
         registry = load_commands()
         sub_apps = {}
         
-        # Registro dinámico
+        # ====================================================================
+        # REGISTRO DINÁMICO DE COMANDOS
+        # ====================================================================
         for command in registry.get_all_commands():
             meta = command.metadata()
             try:
@@ -183,6 +221,7 @@ def main():
                     command.register(app)
                     continue
                 
+                # Crear sub-app por categoría si no existe
                 if meta.category not in sub_apps:
                     sub_apps[meta.category] = typer.Typer(
                         help=meta.category.description,
@@ -190,24 +229,44 @@ def main():
                     )
                     app.add_typer(sub_apps[meta.category], name=meta.category.name)
                 
+                # Registrar comando en su categoría
                 command.register(sub_apps[meta.category])
+                
             except Exception as e:
                 logger.error(f"❌ Error registro {meta.name}: {e}")
         
-        # Ejecutar
-        logger.info("▶️  Ejecutando comando...")
+        # ====================================================================
+        # EJECUTAR COMANDO
+        # ====================================================================
+        if not json_mode:
+            logger.info("▶️ Ejecutando comando...")
         app()
         
-    except SystemExit:
-        raise # Salida normal de Typer
+    except SystemExit as e:
+        # Salida normal de Typer
+        raise
         
     except Exception as e:
         logger.critical(f"❌ ERROR CRÍTICO: {e}", exc_info=True)
-        # Intentar escribir error a stderr si existe
-        try:
-            sys.stderr.write(f"FATAL: {e}\n")
-        except:
-            pass
+        
+        if json_mode:
+            # En modo JSON, devolver error estructurado a stdout
+            import json
+            error_response = {
+                "status": "error",
+                "message": str(e),
+                "type": type(e).__name__
+            }
+            sys.stdout.write(json.dumps(error_response))
+            sys.stdout.write('\n')
+            sys.stdout.flush()
+        else:
+            # En modo normal, escribir a stderr
+            try:
+                sys.stderr.write(f"FATAL: {e}\n")
+            except:
+                pass
+        
         sys.exit(1)
 
 if __name__ == "__main__":

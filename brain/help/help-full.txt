@@ -1,0 +1,1756 @@
+Brain CLI - Modular system for Bloom (Executable)
+
+╭──────────────────────────────────────── Uso / Usage ────────────────────────────────────────╮
+│                                                                                             │
+│  Brain CLI - Ejecutable standalone                                                          │
+│                                                                                             │
+│  Uso:                                                                                       │
+│    brain [OPTIONS] <category> <command>                                                     │
+│                                                                                             │
+│  Ejemplos:                                                                                  │
+│                                                                                             │
+│    # Comando básico                                                                         │
+│    brain health native-ping                                                                 │
+│                                                                                             │
+│    # Con flags globales                                                                     │
+│    brain --json nucleus list                                                                │
+│                                                                                             │
+│    # Con verbose                                                                            │
+│    brain --verbose profile create 'My Profile'                                              │
+│                                                                                             │
+│  [!] Los flags globales (--json, --verbose) van ANTES de <category>                         │
+│                                                                                             │
+╰─────────────────────────────────────────────────────────────────────────────────────────────╯
+
+╭─────────────────────────────── Opciones Globales / Global Options ───────────────────────────────╮
+│   --json       Salida en formato JSON (debe ir ANTES del comando)                                │
+│   --verbose    Habilitar logging detallado (debe ir ANTES del comando)                           │
+│   --help       Mostrar este mensaje de ayuda                                                     │
+╰─────────────────────────── Estas opciones deben ir después de 'brain' ───────────────────────────╯
+
+╭─────────────────────────────────────────── Categories ───────────────────────────────────────────╮
+│   chrome        Chrome profile debugging and network log analysis              1 cmd             │
+│   context       AI context generation and management                           1 cmd             │
+│   extension     Chrome extension lifecycle management                         4 cmds             │
+│   filesystem    File operations and directory analysis                        3 cmds             │
+│   gemini        Gemini AI key management and operations                       5 cmds             │
+│   github        GitHub integration and repository management                  9 cmds             │
+│   health        System health checks and diagnostics                          5 cmds             │
+│   intent        Intent execution system and context planning                 19 cmds             │
+│   nucleus       Nucleus project management and lifecycle                     14 cmds             │
+│   profile       Chrome profile and AI account management                      8 cmds             │
+│   project       Project lifecycle and scaffolding                             5 cmds             │
+│   runtime       Non-interactive system runtime operations                      1 cmd             │
+│   service       Background connection multiplexer and task runner              1 cmd             │
+│   synapse       Chrome Native Messaging Bridge and protocol management         1 cmd             │
+│   system        Runtime and system introspection                              3 cmds             │
+│   twitter       Twitter/X integration and social data analysis                 1 cmd             │
+│                                                                           ──────────             │
+│                                                                              81 cmds             │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+╭───────────────────────────────────────────── HEALTH ─────────────────────────────────────────────╮
+│                                                                                                  │
+│  dev-check                                                                                       │
+│    Check development environment and service status.                                             │
+│    brain health dev-check [OPTIONS]                                                              │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -t                   Connection timeout per port check in seconds [default: 2.0]            │
+│      --json               Output raw JSON [default: False]                                       │
+│      -v                   Detailed logging of each port check [default: False]                   │
+│                                                                                                  │
+│  full-stack                                                                                      │
+│    Verify complete stack health (host, API, extension, Brain, onboarding)                        │
+│    brain health full-stack [OPTIONS]                                                             │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -t                   Timeout per check in seconds [default: 5]                              │
+│      --json               Output raw JSON [default: False]                                       │
+│      -v                   Detailed logging [default: False]                                      │
+│                                                                                                  │
+│  native-ping                                                                                     │
+│    Ping the native host to verify it's alive and responding.                                     │
+│    brain health native-ping [OPTIONS]                                                            │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -t                   Timeout in milliseconds for ping response [default: 500]               │
+│      -p                   Specific TCP port to test (auto-detect if not provided)                │
+│      --check-ws/--no-check-ws Also verify WebSocket port status [default: True]                  │
+│                                                                                                  │
+│  websocket-status                                                                                │
+│    Verify WebSocket server status on localhost:4124                                              │
+│    brain health websocket-status [OPTIONS]                                                       │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -t                   Connection timeout in seconds [default: 5]                             │
+│      --test-sub           Test event subscription capability [default: False]                    │
+│      --json               Output raw JSON [default: False]                                       │
+│      -v                   Detailed connection logging [default: False]                           │
+│                                                                                                  │
+│  ── ONBOARDING ──                                                                                │
+│                                                                                                  │
+│  onboarding-status                                                                               │
+│    Check onboarding completion status (GitHub, Gemini, Nucleus, Projects)                        │
+│    brain health onboarding-status [OPTIONS]                                                      │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -r                   Force re-check, ignore cache [default: False]                          │
+│      --json               Output raw JSON [default: False]                                       │
+│      -v                   Detailed logging of each check [default: False]                        │
+│                                                                                                  │
+╰────────────────────────────── System health checks and diagnostics ──────────────────────────────╯
+
+╭───────────────────────────────────────────── SYSTEM ─────────────────────────────────────────────╮
+│                                                                                                  │
+│  info                                                                                            │
+│    Display comprehensive system information.                                                     │
+│    brain system info                                                                             │
+│                                                                                                  │
+│  path                                                                                            │
+│    Display the absolute path to the brain executable.                                            │
+│    brain system path                                                                             │
+│                                                                                                  │
+│  version                                                                                         │
+│    Display or increment the version number.                                                      │
+│    brain system version [OPTIONS]                                                                │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      --added              Feature or capability added (can be used multiple times)               │
+│      --changed            Feature or behavior changed (can be used multiple times)               │
+│      --details            Implementation detail or technical note (can be used multiple times)   │
+│                                                                                                  │
+╰──────────────────────────────── Runtime and system introspection ────────────────────────────────╯
+
+╭──────────────────────────────────────────── NUCLEUS ─────────────────────────────────────────────╮
+│                                                                                                  │
+│  ── CREATE ──                                                                                    │
+│                                                                                                  │
+│  create                                                                                          │
+│    Initialize a new Bloom Nucleus V2.0 project structure.                                        │
+│    brain nucleus create [OPTIONS]                                                                │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -o <VALUE>           Organization name                                                      │
+│      -p                   Target path (default: current dir)                                     │
+│      --output             Output directory name (legacy, kept for compatibility) [default:       │
+│  .bloom]                                                                                         │
+│      --url                Organization URL [default: ]                                           │
+│      -f                   Force overwrite existing directory [default: False]                    │
+│                                                                                                  │
+│  ── EXP ──                                                                                       │
+│                                                                                                  │
+│  create-exp-intent                                                                               │
+│    Create a new exploration intent in the nucleus.                                               │
+│    brain nucleus create-exp-intent [OPTIONS]                                                     │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -n <VALUE>           Intent name (will be slugified)                                        │
+│      -p                   Nucleus path (default: current dir)                                    │
+│      --inquiry            Initial inquiry question                                               │
+│      -d                   Intent description                                                     │
+│      --projects           Comma-separated project names to include                               │
+│                                                                                                  │
+│  exp-discovery-turn                                                                              │
+│    Add a discovery turn to an exploration intent.                                                │
+│    brain nucleus exp-discovery-turn [OPTIONS]                                                    │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i <VALUE>           Intent ID or slug                                                      │
+│      -p                   Nucleus path (default: current dir)                                    │
+│      --notes              Turn notes/observations                                                │
+│      --analysis           Analysis summary for this turn                                         │
+│                                                                                                  │
+│  exp-export-findings                                                                             │
+│    Export findings from an exploration intent.                                                   │
+│    brain nucleus exp-export-findings [OPTIONS]                                                   │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i <VALUE>           Intent ID or slug                                                      │
+│      -p                   Nucleus path (default: current dir)                                    │
+│      -f                   Export format (markdown, json) [default: markdown]                     │
+│      --include-raw        Include raw turn data [default: False]                                 │
+│                                                                                                  │
+│  delete                                                                                          │
+│    Delete a complete nucleus including all its data.                                             │
+│    brain nucleus delete [OPTIONS]                                                                │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -p <VALUE>           Path to the Nucleus root directory to delete                           │
+│      -f                   Skip confirmation prompt [default: False]                              │
+│                                                                                                  │
+│  get                                                                                             │
+│    Retrieve complete details of a nucleus.                                                       │
+│    brain nucleus get [OPTIONS]                                                                   │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -p <VALUE>           Path to the Nucleus root directory                                     │
+│                                                                                                  │
+│  link                                                                                            │
+│    Link an existing folder as a Nucleus project.                                                 │
+│    brain nucleus link <PATH>                                                                     │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PATH>               Path to existing project                                               │
+│                                                                                                  │
+│  status                                                                                          │
+│    Check if a directory is a valid Nucleus project.                                              │
+│    brain nucleus status [OPTIONS]                                                                │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -p                   Nucleus path                                                           │
+│                                                                                                  │
+│  sync                                                                                            │
+│    Synchronize projects and rebuild nucleus cache.                                               │
+│    brain nucleus sync [OPTIONS]                                                                  │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -p                   Nucleus path (default: current dir)                                    │
+│      --skip-git           Skip git pull operations [default: False]                              │
+│      -v                   Show detailed progress [default: False]                                │
+│                                                                                                  │
+│  ── LIST ──                                                                                      │
+│                                                                                                  │
+│  list                                                                                            │
+│    List all Nucleus projects found in a parent directory.                                        │
+│    brain nucleus list [OPTIONS]                                                                  │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -d                   Parent directory to scan for nuclei (default: current directory)       │
+│                                                                                                  │
+│  list-projects                                                                                   │
+│    List all projects linked to the nucleus with their details.                                   │
+│    brain nucleus list-projects [OPTIONS]                                                         │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -p                   Nucleus root path (default: current directory)                         │
+│      -s                   Filter by project strategy (python, typescript, go, etc.)              │
+│      --active-only        Show only active projects [default: False]                             │
+│                                                                                                  │
+│  ── ONBOARDING ──                                                                                │
+│                                                                                                  │
+│  onboarding-complete                                                                             │
+│    Mark an onboarding step or entire onboarding as completed.                                    │
+│    brain nucleus onboarding-complete [OPTIONS]                                                   │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -s                   Step name to mark as completed                                         │
+│      -a                   Mark entire onboarding as completed [default: False]                   │
+│      -p                   Nucleus root path (default: current dir)                               │
+│                                                                                                  │
+│  onboarding-status                                                                               │
+│    Get the current onboarding status from nucleus configuration.                                 │
+│    brain nucleus onboarding-status [OPTIONS]                                                     │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -p                   Nucleus root path (default: current dir)                               │
+│                                                                                                  │
+│  ── PROJECT ──                                                                                   │
+│                                                                                                  │
+│  project-info                                                                                    │
+│    Display detailed information about a specific project in the nucleus.                         │
+│    brain nucleus project-info <PROJECT_NAME> [OPTIONS]                                           │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PROJECT_NAME>       Name of the project to inspect                                         │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -p                   Nucleus root path (default: current directory)                         │
+│                                                                                                  │
+╰──────────────────────────── Nucleus project management and lifecycle ────────────────────────────╯
+
+╭──────────────────────────────────────────── PROJECT ─────────────────────────────────────────────╮
+│                                                                                                  │
+│  ── ADD ──                                                                                       │
+│                                                                                                  │
+│  add                                                                                             │
+│    Vincula un proyecto local existente a un Nucleus.                                             │
+│    brain project add <PROJECT_PATH> [OPTIONS]                                                    │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PROJECT_PATH>       Ruta al proyecto a vincular                                            │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -n <VALUE>           Ruta al Nucleus destino                                                │
+│      --name               Nombre custom del proyecto (default: nombre de carpeta)                │
+│      --strategy           Forzar estrategia específica (default: auto-detect)                    │
+│      --description        Descripción del proyecto                                               │
+│      --repo-url           URL del repositorio GitHub                                             │
+│                                                                                                  │
+│  clone-and-add                                                                                   │
+│    Clone a Git repository and automatically link it to the current Nucleus.                      │
+│    brain project clone-and-add <REPO_URL> [OPTIONS]                                              │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <REPO_URL>           Git repository URL (HTTPS or SSH)                                      │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -d                   Absolute path where to clone the repository. If not provided, clones   │
+│  to Nucleus root using repo name.                                                                │
+│      -n                   Path to the Nucleus project. Auto-detected from current directory if   │
+│  not provided.                                                                                   │
+│      --name               Custom name for the project (default: repository name)                 │
+│      --strategy           Force specific technology strategy (e.g., python, typescript,          │
+│  android)                                                                                        │
+│      --description        Project description                                                    │
+│                                                                                                  │
+│  detect                                                                                          │
+│    Scan directory and detect project types automatically.                                        │
+│    brain project detect <PARENT_PATH> [OPTIONS]                                                  │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PARENT_PATH>        Parent directory to scan for projects                                  │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -d                   Maximum depth for recursive scanning [default: 3]                      │
+│      -s                   Filter projects by strategy type                                       │
+│      -c                   Filter by minimum confidence level (high, medium, low)                 │
+│                                                                                                  │
+│  load                                                                                            │
+│    Validates and loads project information.                                                      │
+│    brain project load [OPTIONS]                                                                  │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -p                   Path to the project root [default: .]                                  │
+│                                                                                                  │
+╰─────────────────────────────── Project lifecycle and scaffolding ────────────────────────────────╯
+
+╭──────────────────────────────────────────── PROFILE ─────────────────────────────────────────────╮
+│                                                                                                  │
+│  destroy                                                                                         │
+│    Elimina un perfil y todos sus datos.                                                          │
+│    brain profile destroy <PROFILE_ID>                                                            │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PROFILE_ID>         ID del perfil a eliminar                                               │
+│                                                                                                  │
+│  launch                                                                                          │
+│    Lanza Chrome con el perfil especificado usando spec-driven mode.                              │
+│    brain profile launch <PROFILE_ID> [OPTIONS]                                                   │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PROFILE_ID>         ID del perfil a lanzar                                                 │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -s <VALUE>           Archivo JSON con especificación completa de lanzamiento (REQUERIDO)    │
+│                                                                                                  │
+│  link                                                                                            │
+│    Vincula un email a un perfil.                                                                 │
+│    brain profile link <PROFILE_ID> <EMAIL>                                                       │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PROFILE_ID>         ID del perfil                                                          │
+│      <EMAIL>              Email a vincular                                                       │
+│                                                                                                  │
+│  unlink                                                                                          │
+│    Desvincula la cuenta de un perfil.                                                            │
+│    brain profile unlink <PROFILE_ID>                                                             │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PROFILE_ID>         ID del perfil                                                          │
+│                                                                                                  │
+│  ── ACCOUNTS ──                                                                                  │
+│                                                                                                  │
+│  accounts-register                                                                               │
+│    Registra una nueva cuenta en un perfil.                                                       │
+│    brain profile accounts-register <PROFILE_ID> <PROVIDER> <EMAIL>                               │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PROFILE_ID>         ID del perfil                                                          │
+│      <PROVIDER>           Proveedor (google, openai, anthropic, etc)                             │
+│      <EMAIL>              Email o identificador de la cuenta                                     │
+│                                                                                                  │
+│  accounts-remove                                                                                 │
+│    Remueve una cuenta registrada de un perfil.                                                   │
+│    brain profile accounts-remove <PROFILE_ID> <PROVIDER>                                         │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PROFILE_ID>         ID del perfil                                                          │
+│      <PROVIDER>           Proveedor a remover                                                    │
+│                                                                                                  │
+│  ── CREATE ──                                                                                    │
+│                                                                                                  │
+│  create                                                                                          │
+│    Crea un nuevo perfil con el alias especificado.                                               │
+│    brain profile create <ALIAS>                                                                  │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <ALIAS>              Nombre descriptivo del perfil                                          │
+│                                                                                                  │
+│  ── LIST ──                                                                                      │
+│                                                                                                  │
+│  list                                                                                            │
+│    MOSTRAR AL USUARIO (CLI).                                                                     │
+│    brain profile list                                                                            │
+│                                                                                                  │
+╰──────────────────────────── Chrome profile and AI account management ────────────────────────────╯
+
+╭─────────────────────────────────────────── EXTENSION ────────────────────────────────────────────╮
+│                                                                                                  │
+│  install                                                                                         │
+│    Install Chrome extension to permanent location.                                               │
+│    brain extension install [OPTIONS]                                                             │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -s                   Source directory (auto-detects if not provided)                        │
+│      -f                   Force reinstall even if same version exists [default: False]           │
+│                                                                                                  │
+│  update                                                                                          │
+│    Update Chrome extension to the latest version.                                                │
+│    brain extension update [OPTIONS]                                                              │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -s                   Source directory (auto-detects if not provided)                        │
+│                                                                                                  │
+│  verify                                                                                          │
+│    Verify that the Chrome extension is correctly installed.                                      │
+│    brain extension verify                                                                        │
+│                                                                                                  │
+╰───────────────────────────── Chrome extension lifecycle management ──────────────────────────────╯
+
+╭──────────────────────────────────────────── SYNAPSE ─────────────────────────────────────────────╮
+│                                                                                                  │
+│  close                                                                                           │
+│    Envía señal de terminación al navegador.                                                      │
+│    brain synapse close                                                                           │
+│                                                                                                  │
+│  host                                                                                            │
+│    Inicia el modo Host (Listener Loop).                                                          │
+│    brain synapse host                                                                            │
+│                                                                                                  │
+╰───────────────────── Chrome Native Messaging Bridge and protocol management ─────────────────────╯
+
+╭──────────────────────────────────────────── SERVICE ─────────────────────────────────────────────╮
+│                                                                                                  │
+│  start                                                                                           │
+│    Start the Brain TCP multiplexer service.                                                      │
+│    brain service start [OPTIONS]                                                                 │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -p                   TCP port to bind [default: 5678]                                       │
+│      -h                   Host address to bind [default: 127.0.0.1]                              │
+│      -d                   Run as background daemon [default: False]                              │
+│                                                                                                  │
+│  status                                                                                          │
+│    Check the current status of the Brain service.                                                │
+│    brain service status                                                                          │
+│                                                                                                  │
+│  stop                                                                                            │
+│    Stop the running Brain service.                                                               │
+│    brain service stop                                                                            │
+│                                                                                                  │
+╰─────────────────────── Background connection multiplexer and task runner ────────────────────────╯
+
+╭──────────────────────────────────────────── RUNTIME ─────────────────────────────────────────────╮
+│                                                                                                  │
+│  run                                                                                             │
+│    Start Brain core runtime                                                                      │
+│    brain runtime run                                                                             │
+│                                                                                                  │
+╰─────────────────────────── Non-interactive system runtime operations ────────────────────────────╯
+
+╭──────────────────────────────────────────── CONTEXT ─────────────────────────────────────────────╮
+│                                                                                                  │
+│  generate                                                                                        │
+│    Generate the Bloom Context for the project.                                                   │
+│    brain context generate [OPTIONS]                                                              │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -p                   Root path of the project [default: .]                                  │
+│      -o                   Output folder name [default: .bloom]                                   │
+│      -s                   Force specific strategy                                                │
+│                                                                                                  │
+╰────────────────────────────── AI context generation and management ──────────────────────────────╯
+
+╭───────────────────────────────────────────── INTENT ─────────────────────────────────────────────╮
+│                                                                                                  │
+│  ── ADD ──                                                                                       │
+│                                                                                                  │
+│  add-turn                                                                                        │
+│    Add a conversation turn to an intent's chat.                                                  │
+│    brain intent add-turn [OPTIONS]                                                               │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i                   Intent UUID                                                            │
+│      -f                   Intent folder name                                                     │
+│      -a                   Who is speaking: 'user' or 'ai' [default: user]                        │
+│      -c <VALUE>           Content of the message                                                 │
+│      -p                   Path to Bloom project                                                  │
+│                                                                                                  │
+│  ── BUILD ──                                                                                     │
+│                                                                                                  │
+│  build-payload                                                                                   │
+│    Build optimized AI payload from context plan.                                                 │
+│    brain intent build-payload [OPTIONS]                                                          │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      --plan <VALUE>       Path to context_plan.json                                              │
+│      --output             Output path for payload (default: same dir as plan)                    │
+│                                                                                                  │
+│  ── CREATE ──                                                                                    │
+│                                                                                                  │
+│  create                                                                                          │
+│    Create a new development or documentation intent.                                             │
+│    brain intent create [OPTIONS]                                                                 │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -t <VALUE>           Intent type: 'dev' for development or 'doc' for documentation          │
+│      -n <VALUE>           Human-readable name for the intent (e.g., 'Fix login authentication    │
+│  flow')                                                                                          │
+│      -f                   Initial files to include in the intent context (can be repeated or     │
+│  comma-separated)                                                                                │
+│      -p                   Path to the Nucleus (Bloom project root). Auto-detected if not         │
+│  provided.                                                                                       │
+│                                                                                                  │
+│  delete                                                                                          │
+│    Delete an intent and all its data.                                                            │
+│    brain intent delete [OPTIONS]                                                                 │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i                   Intent UUID                                                            │
+│      -f                   Intent folder name                                                     │
+│      --force              Skip confirmation and force delete even if locked [default: False]     │
+│      -p                   Path to Bloom project                                                  │
+│                                                                                                  │
+│  download                                                                                        │
+│    Download AI response from Native Host or file.                                                │
+│    brain intent download [OPTIONS]                                                               │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i                   Intent UUID to download response for                                   │
+│      --folder             Intent folder name (alternative to intent-id)                          │
+│      --socket-mode        Listen on TCP socket for Host connection [default: False]              │
+│      --input-file         Read response from file (for testing)                                  │
+│      --host               Host IP to listen on [default: 127.0.0.1]                              │
+│      --port               Port to listen on (different from Host's 5678) [default: 5679]         │
+│      --timeout            Socket timeout in seconds [default: 300]                               │
+│      --nucleus-path       Path to Bloom project (auto-detected if omitted)                       │
+│                                                                                                  │
+│  finalize                                                                                        │
+│    Finalize an intent, applying changes to the codebase.                                         │
+│    brain intent finalize [OPTIONS]                                                               │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i                   Intent UUID                                                            │
+│      -f                   Intent folder name                                                     │
+│      -p                   Path to Bloom project                                                  │
+│                                                                                                  │
+│  get                                                                                             │
+│    Get complete details of an intent.                                                            │
+│    brain intent get [OPTIONS]                                                                    │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i                   Intent UUID                                                            │
+│      -f                   Intent folder name                                                     │
+│      -p                   Path to Bloom project                                                  │
+│                                                                                                  │
+│  hydrate                                                                                         │
+│    Hydrate an intent by processing source files and briefing.                                    │
+│    brain intent hydrate [OPTIONS]                                                                │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i                   Intent UUID                                                            │
+│      -f                   Intent folder name                                                     │
+│      -b                   Briefing text (instruction)                                            │
+│      -B                   Path to text file containing briefing                                  │
+│      -F                   Files to include in context (comma-separated)                          │
+│      -p                   Path to Bloom project root                                             │
+│                                                                                                  │
+│  lock                                                                                            │
+│    Lock an intent for exclusive use.                                                             │
+│    brain intent lock [OPTIONS]                                                                   │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i                   Intent UUID                                                            │
+│      -f                   Intent folder name                                                     │
+│      -p                   Path to Bloom project                                                  │
+│                                                                                                  │
+│  merge                                                                                           │
+│    Merge staged files from .staging/ into the real codebase.                                     │
+│    brain intent merge [OPTIONS]                                                                  │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i                   Intent UUID to merge files for                                         │
+│      -f                   Intent folder name (e.g., .fix-login-a1b2c3d4)                         │
+│      -s                   Pipeline stage (briefing, execution, refinement_X). Auto-detect if     │
+│  not provided.                                                                                   │
+│      --force              Skip approval check and merge anyway [default: False]                  │
+│      --dry-run            Show what would be merged without applying [default: False]            │
+│      --no-backup          Skip backup creation (DANGEROUS) [default: False]                      │
+│      -p                   Path to Bloom project (auto-detected if not provided)                  │
+│                                                                                                  │
+│  parse                                                                                           │
+│    Parse and validate .raw_output.json from an AI response.                                      │
+│    brain intent parse [OPTIONS]                                                                  │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i <VALUE>           Intent UUID to parse                                                   │
+│      -s                   Pipeline stage (briefing, execution, refinement_X). Auto-detect if     │
+│  not provided.                                                                                   │
+│      --strict             Fail on any protocol violation (no fallback parser) [default: False]   │
+│      --output-report      Generate .parse_report.json [default: True]                            │
+│      -n                   Path to nucleus root (default: current directory)                      │
+│                                                                                                  │
+│  plan                                                                                            │
+│    Generate context plan for an intent using Gemini Router.                                      │
+│    brain intent plan [OPTIONS]                                                                   │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      --intent-dir <VALUE> Intent directory path                                                  │
+│      --description <VALUE> Intent description                                                    │
+│      --type               Intent type: dev, doc, or seed [default: dev]                          │
+│                                                                                                  │
+│  recover                                                                                         │
+│    Recover interrupted intents using lock state recovery data.                                   │
+│    brain intent recover [OPTIONS]                                                                │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i                   Intent UUID to recover                                                 │
+│      -f                   Intent folder name (e.g., .fix-login-abc123)                           │
+│      --auto-detect        Find and recover all interrupted intents [default: False]              │
+│      --force-unlock       Force unlock without attempting recovery [default: False]              │
+│      -p                   Path to Bloom project (auto-detected if not provided)                  │
+│                                                                                                  │
+│  stage                                                                                           │
+│    Prepare files in .staging/ directory for merge.                                               │
+│    brain intent stage [OPTIONS]                                                                  │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i                   Intent UUID to stage files for                                         │
+│      -f                   Intent folder name (e.g., .fix-login-a1b2c3d4)                         │
+│      -s                   Pipeline stage (briefing, execution, refinement_X). Auto-detect if     │
+│  not provided.                                                                                   │
+│      --dry-run            Show what would be staged without writing files [default: False]       │
+│      --overwrite          Overwrite existing .staging/ directory [default: True]                 │
+│      -p                   Path to Bloom project (auto-detected if not provided)                  │
+│                                                                                                  │
+│  submit                                                                                          │
+│    Submit an intent payload to an AI provider through the native host bridge.                    │
+│    brain intent submit [OPTIONS]                                                                 │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i                   UUID of the intent to submit                                           │
+│      -f                   Folder name of the intent (e.g., .fix-login-a1b2c3d4)                  │
+│      --provider           AI provider to use: 'claude', 'gemini', etc. [default: claude]         │
+│      -p                   Path to the Nucleus (Bloom project root). Auto-detected if not         │
+│  provided.                                                                                       │
+│      --profile-path       Chrome profile path for the AI provider (optional)                     │
+│      --host               Native host IP address [default: 127.0.0.1]                            │
+│      --port               Native host TCP port [default: 5678]                                   │
+│      --timeout            Connection timeout in seconds [default: 30]                            │
+│                                                                                                  │
+│  unlock                                                                                          │
+│    Unlock an intent to free it for use.                                                          │
+│    brain intent unlock [OPTIONS]                                                                 │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i                   Intent UUID                                                            │
+│      -f                   Intent folder name                                                     │
+│      --force              Force unlock even if locked by another host [default: False]           │
+│      -p                   Path to Bloom project                                                  │
+│                                                                                                  │
+│  update                                                                                          │
+│    Update an existing intent's properties.                                                       │
+│    brain intent update [OPTIONS]                                                                 │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i                   UUID of the intent to update                                           │
+│      -f                   Folder name of the intent (e.g., .fix-login-a1b2c3d4)                  │
+│      -n                   New name for the intent (triggers folder rename)                       │
+│      --files              Replace all initial files with this new list                           │
+│      --add-files          Add files to the existing initial_files list                           │
+│      --remove-files       Remove files from the initial_files list                               │
+│      -p                   Path to the Nucleus (Bloom project root). Auto-detected if not         │
+│  provided.                                                                                       │
+│                                                                                                  │
+│  validate                                                                                        │
+│    Validate staging files using Gemini analysis.                                                 │
+│    brain intent validate [OPTIONS]                                                               │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i                   Intent UUID                                                            │
+│      -f                   Intent folder name (e.g., .fix-login-abc123)                           │
+│      -s                   Pipeline stage (briefing, execution, refinement_X)                     │
+│      --auto-approve       Skip manual review and approve automatically [default: False]          │
+│      --gemini-model       Gemini model to use for analysis [default: gemini-2.0-flash-exp]       │
+│      --skip-gemini        Skip Gemini analysis (only basic validation) [default: False]          │
+│      -p                   Path to Bloom project (auto-detected if omitted)                       │
+│                                                                                                  │
+│  ── LIST ──                                                                                      │
+│                                                                                                  │
+│  list                                                                                            │
+│    List all intents in the project.                                                              │
+│    brain intent list [OPTIONS]                                                                   │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -p                   Path to Bloom project (auto-detected if not provided)                  │
+│      -t                   Filter by intent type: 'dev' or 'doc'                                  │
+│                                                                                                  │
+╰────────────────────────── Intent execution system and context planning ──────────────────────────╯
+
+╭─────────────────────────────────────────── FILESYSTEM ───────────────────────────────────────────╮
+│                                                                                                  │
+│  compress                                                                                        │
+│    Compress files into optimized JSON format for AI consumption.                                 │
+│    brain filesystem compress <PATHS> [OPTIONS]                                                   │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PATHS>              Paths to compress (files or directories)                               │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -m                   Compression mode: 'codebase' or 'docbase' [default: codebase]          │
+│      -o                   Output directory (default: current directory)                          │
+│      -e                   Patterns to exclude (can be used multiple times) [default: []]         │
+│      --no-comments        Remove comments during compression [default: False]                    │
+│                                                                                                  │
+│  extract                                                                                         │
+│    Extract files from compressed JSON format.                                                    │
+│    brain filesystem extract <JSON_FILE> [OPTIONS]                                                │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <JSON_FILE>          Compressed JSON file to extract                                        │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -o                   Output directory (default: extracted_<mode>)                           │
+│      --verify-hashes/--no-verify-hashes Verify MD5 hashes during extraction [default: True]      │
+│                                                                                                  │
+│  tree                                                                                            │
+│    Generate a visual directory tree structure with intelligent exclusions.                       │
+│    brain filesystem tree <TARGETS> [OPTIONS]                                                     │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <TARGETS>            Specific directories or files to include (supports absolute paths).    │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -o                   Output file path [default: tree.txt]                                   │
+│      --hash               Include MD5 hashes [default: False]                                    │
+│      --export-json        Export JSON to disk [default: False]                                   │
+│                                                                                                  │
+╰───────────────────────────── File operations and directory analysis ─────────────────────────────╯
+
+╭───────────────────────────────────────────── GITHUB ─────────────────────────────────────────────╮
+│                                                                                                  │
+│  ── AUTENTICACIÓN ──                                                                             │
+│                                                                                                  │
+│  auth-login                                                                                      │
+│    Store GitHub authentication token.                                                            │
+│    brain github auth-login [OPTIONS]                                                             │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -t <VALUE>           GitHub Personal Access Token                                           │
+│                                                                                                  │
+│  auth-logout                                                                                     │
+│    Remove stored GitHub token.                                                                   │
+│    brain github auth-logout                                                                      │
+│                                                                                                  │
+│  auth-status                                                                                     │
+│    Check GitHub authentication status.                                                           │
+│    brain github auth-status                                                                      │
+│                                                                                                  │
+│  clone                                                                                           │
+│    Clone GitHub repository to local directory.                                                   │
+│    brain github clone <REPO> [OPTIONS]                                                           │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <REPO>               Repository (owner/repo or full URL)                                    │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -p                   Target directory (defaults to repo name in current dir)                │
+│      --progress/--no-progress Show clone progress [default: True]                                │
+│                                                                                                  │
+│  ── ORGANIZACIONES ──                                                                            │
+│                                                                                                  │
+│  orgs-list                                                                                       │
+│    List GitHub organizations.                                                                    │
+│    brain github orgs-list                                                                        │
+│                                                                                                  │
+│  ── REPOSITORIOS ──                                                                              │
+│                                                                                                  │
+│  repos-list                                                                                      │
+│    List GitHub repositories.                                                                     │
+│    brain github repos-list [OPTIONS]                                                             │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      --org                Organization name                                                      │
+│                                                                                                  │
+╰────────────────────────── GitHub integration and repository management ──────────────────────────╯
+
+╭───────────────────────────────────────────── GEMINI ─────────────────────────────────────────────╮
+│                                                                                                  │
+│  ── KEYS ──                                                                                      │
+│                                                                                                  │
+│  keys-add                                                                                        │
+│    Add new Gemini API key with profile.                                                          │
+│    brain gemini keys-add [OPTIONS]                                                               │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -p <VALUE>           Profile name (e.g., 'Personal Chrome')                                 │
+│      -k <VALUE>           Gemini API key                                                         │
+│      --priority           Priority: 1=preferred, 0=normal, -1=backup [default: 0]                │
+│                                                                                                  │
+│  keys-delete                                                                                     │
+│    Delete a Gemini API key.                                                                      │
+│    brain gemini keys-delete <PROFILE>                                                            │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PROFILE>            Profile name to delete                                                 │
+│                                                                                                  │
+│  keys-list                                                                                       │
+│    List all Gemini API keys with status.                                                         │
+│    brain gemini keys-list                                                                        │
+│                                                                                                  │
+│  keys-stats                                                                                      │
+│    Show global Gemini keys statistics.                                                           │
+│    brain gemini keys-stats                                                                       │
+│                                                                                                  │
+│  keys-validate                                                                                   │
+│    Validate a Gemini API key by testing connection.                                              │
+│    brain gemini keys-validate <PROFILE>                                                          │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PROFILE>            Profile name to validate                                               │
+│                                                                                                  │
+╰──────────────────────────── Gemini AI key management and operations ─────────────────────────────╯
+
+╭──────────────────────────────────────────── TWITTER ─────────────────────────────────────────────╮
+│                                                                                                  │
+│  ── AUTENTICACIÓN ──                                                                             │
+│                                                                                                  │
+│  auth-login                                                                                      │
+│    Authenticate with Twitter/X using API credentials.                                            │
+│    brain twitter auth-login [OPTIONS]                                                            │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -t <VALUE>           Twitter API token                                                      │
+│      -u <VALUE>           Twitter username                                                       │
+│                                                                                                  │
+│  auth-status                                                                                     │
+│    Check Twitter/X authentication status.                                                        │
+│    brain twitter auth-status                                                                     │
+│                                                                                                  │
+╰───────────────────────── Twitter/X integration and social data analysis ─────────────────────────╯
+
+╭───────────────────────────────────────────── CHROME ─────────────────────────────────────────────╮
+│                                                                                                  │
+│  ── READ ──                                                                                      │
+│                                                                                                  │
+│  read-log                                                                                        │
+│    Auditor de integridad del motor Chromium para diagnosticar fallos de sistema y bloqueos de    │
+│  seguridad.                                                                                      │
+│    brain chrome read-log <PROFILE_ID> [OPTIONS]                                                  │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PROFILE_ID>         Chrome profile UUID                                                    │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -b                   Lines of context before match [default: 5]                             │
+│      -a                   Lines of context after match [default: 5]                              │
+│      -l                   Launch ID for separate output file                                     │
+│                                                                                                  │
+│  read-net-log                                                                                    │
+│    Analyze Chrome network logs with intelligent filtering.                                       │
+│    brain chrome read-net-log <PROFILE_ID> [OPTIONS]                                              │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PROFILE_ID>         Chrome profile UUID                                                    │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      --filter-ai          Filter for AI service requests only [default: False]                   │
+│      -e                   Exclude URL patterns                                                   │
+│      --include-quic       Include QUIC protocol events [default: False]                          │
+│      --show-headers       Show HTTP headers in output [default: False]                           │
+│      -l                   Launch ID for separate output file                                     │
+│                                                                                                  │
+│  mining-log                                                                                      │
+│    Read and filter engine_mining.log for a specific profile.                                     │
+│    brain chrome mining-log <PROFILE_ID> [OPTIONS]                                                │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PROFILE_ID>         Chrome profile UUID                                                    │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -k                   Keyword to search for [default: bloom]                                 │
+│      -b                   Lines of context before match [default: 5]                             │
+│      -a                   Lines of context after match [default: 5]                              │
+│      -l                   Launch ID for separate output file                                     │
+│                                                                                                  │
+╰─────────────────────── Chrome profile debugging and network log analysis ────────────────────────╯
+
+
+Brain CLI - Modular system for Bloom (Executable)
+
+╭──────────────────────────────────────── Uso / Usage ────────────────────────────────────────╮
+│                                                                                             │
+│  Brain CLI - Ejecutable standalone                                                          │
+│                                                                                             │
+│  Uso:                                                                                       │
+│    brain [OPTIONS] <category> <command>                                                     │
+│                                                                                             │
+│  Ejemplos:                                                                                  │
+│                                                                                             │
+│    # Comando básico                                                                         │
+│    brain health native-ping                                                                 │
+│                                                                                             │
+│    # Con flags globales                                                                     │
+│    brain --json nucleus list                                                                │
+│                                                                                             │
+│    # Con verbose                                                                            │
+│    brain --verbose profile create 'My Profile'                                              │
+│                                                                                             │
+│  [!] Los flags globales (--json, --verbose) van ANTES de <category>                         │
+│                                                                                             │
+╰─────────────────────────────────────────────────────────────────────────────────────────────╯
+
+╭─────────────────────────────── Opciones Globales / Global Options ───────────────────────────────╮
+│   --json       Salida en formato JSON (debe ir ANTES del comando)                                │
+│   --verbose    Habilitar logging detallado (debe ir ANTES del comando)                           │
+│   --help       Mostrar este mensaje de ayuda                                                     │
+╰─────────────────────────── Estas opciones deben ir después de 'brain' ───────────────────────────╯
+
+╭─────────────────────────────────────────── Categories ───────────────────────────────────────────╮
+│   chrome        Chrome profile debugging and network log analysis              1 cmd             │
+│   context       AI context generation and management                           1 cmd             │
+│   extension     Chrome extension lifecycle management                         4 cmds             │
+│   filesystem    File operations and directory analysis                        3 cmds             │
+│   gemini        Gemini AI key management and operations                       5 cmds             │
+│   github        GitHub integration and repository management                  9 cmds             │
+│   health        System health checks and diagnostics                          5 cmds             │
+│   intent        Intent execution system and context planning                 19 cmds             │
+│   nucleus       Nucleus project management and lifecycle                     14 cmds             │
+│   profile       Chrome profile and AI account management                      8 cmds             │
+│   project       Project lifecycle and scaffolding                             5 cmds             │
+│   runtime       Non-interactive system runtime operations                      1 cmd             │
+│   service       Background connection multiplexer and task runner              1 cmd             │
+│   synapse       Chrome Native Messaging Bridge and protocol management         1 cmd             │
+│   system        Runtime and system introspection                              3 cmds             │
+│   twitter       Twitter/X integration and social data analysis                 1 cmd             │
+│                                                                           ──────────             │
+│                                                                              81 cmds             │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+╭───────────────────────────────────────────── HEALTH ─────────────────────────────────────────────╮
+│                                                                                                  │
+│  dev-check                                                                                       │
+│    Check development environment and service status.                                             │
+│    brain health dev-check [OPTIONS]                                                              │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -t                   Connection timeout per port check in seconds [default: 2.0]            │
+│      --json               Output raw JSON [default: False]                                       │
+│      -v                   Detailed logging of each port check [default: False]                   │
+│                                                                                                  │
+│  full-stack                                                                                      │
+│    Verify complete stack health (host, API, extension, Brain, onboarding)                        │
+│    brain health full-stack [OPTIONS]                                                             │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -t                   Timeout per check in seconds [default: 5]                              │
+│      --json               Output raw JSON [default: False]                                       │
+│      -v                   Detailed logging [default: False]                                      │
+│                                                                                                  │
+│  native-ping                                                                                     │
+│    Ping the native host to verify it's alive and responding.                                     │
+│    brain health native-ping [OPTIONS]                                                            │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -t                   Timeout in milliseconds for ping response [default: 500]               │
+│      -p                   Specific TCP port to test (auto-detect if not provided)                │
+│      --check-ws/--no-check-ws Also verify WebSocket port status [default: True]                  │
+│                                                                                                  │
+│  websocket-status                                                                                │
+│    Verify WebSocket server status on localhost:4124                                              │
+│    brain health websocket-status [OPTIONS]                                                       │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -t                   Connection timeout in seconds [default: 5]                             │
+│      --test-sub           Test event subscription capability [default: False]                    │
+│      --json               Output raw JSON [default: False]                                       │
+│      -v                   Detailed connection logging [default: False]                           │
+│                                                                                                  │
+│  ── ONBOARDING ──                                                                                │
+│                                                                                                  │
+│  onboarding-status                                                                               │
+│    Check onboarding completion status (GitHub, Gemini, Nucleus, Projects)                        │
+│    brain health onboarding-status [OPTIONS]                                                      │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -r                   Force re-check, ignore cache [default: False]                          │
+│      --json               Output raw JSON [default: False]                                       │
+│      -v                   Detailed logging of each check [default: False]                        │
+│                                                                                                  │
+╰────────────────────────────── System health checks and diagnostics ──────────────────────────────╯
+
+╭───────────────────────────────────────────── SYSTEM ─────────────────────────────────────────────╮
+│                                                                                                  │
+│  info                                                                                            │
+│    Display comprehensive system information.                                                     │
+│    brain system info                                                                             │
+│                                                                                                  │
+│  path                                                                                            │
+│    Display the absolute path to the brain executable.                                            │
+│    brain system path                                                                             │
+│                                                                                                  │
+│  version                                                                                         │
+│    Display or increment the version number.                                                      │
+│    brain system version [OPTIONS]                                                                │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      --added              Feature or capability added (can be used multiple times)               │
+│      --changed            Feature or behavior changed (can be used multiple times)               │
+│      --details            Implementation detail or technical note (can be used multiple times)   │
+│                                                                                                  │
+╰──────────────────────────────── Runtime and system introspection ────────────────────────────────╯
+
+╭──────────────────────────────────────────── NUCLEUS ─────────────────────────────────────────────╮
+│                                                                                                  │
+│  ── CREATE ──                                                                                    │
+│                                                                                                  │
+│  create                                                                                          │
+│    Initialize a new Bloom Nucleus V2.0 project structure.                                        │
+│    brain nucleus create [OPTIONS]                                                                │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -o <VALUE>           Organization name                                                      │
+│      -p                   Target path (default: current dir)                                     │
+│      --output             Output directory name (legacy, kept for compatibility) [default:       │
+│  .bloom]                                                                                         │
+│      --url                Organization URL [default: ]                                           │
+│      -f                   Force overwrite existing directory [default: False]                    │
+│                                                                                                  │
+│  ── EXP ──                                                                                       │
+│                                                                                                  │
+│  create-exp-intent                                                                               │
+│    Create a new exploration intent in the nucleus.                                               │
+│    brain nucleus create-exp-intent [OPTIONS]                                                     │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -n <VALUE>           Intent name (will be slugified)                                        │
+│      -p                   Nucleus path (default: current dir)                                    │
+│      --inquiry            Initial inquiry question                                               │
+│      -d                   Intent description                                                     │
+│      --projects           Comma-separated project names to include                               │
+│                                                                                                  │
+│  exp-discovery-turn                                                                              │
+│    Add a discovery turn to an exploration intent.                                                │
+│    brain nucleus exp-discovery-turn [OPTIONS]                                                    │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i <VALUE>           Intent ID or slug                                                      │
+│      -p                   Nucleus path (default: current dir)                                    │
+│      --notes              Turn notes/observations                                                │
+│      --analysis           Analysis summary for this turn                                         │
+│                                                                                                  │
+│  exp-export-findings                                                                             │
+│    Export findings from an exploration intent.                                                   │
+│    brain nucleus exp-export-findings [OPTIONS]                                                   │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i <VALUE>           Intent ID or slug                                                      │
+│      -p                   Nucleus path (default: current dir)                                    │
+│      -f                   Export format (markdown, json) [default: markdown]                     │
+│      --include-raw        Include raw turn data [default: False]                                 │
+│                                                                                                  │
+│  delete                                                                                          │
+│    Delete a complete nucleus including all its data.                                             │
+│    brain nucleus delete [OPTIONS]                                                                │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -p <VALUE>           Path to the Nucleus root directory to delete                           │
+│      -f                   Skip confirmation prompt [default: False]                              │
+│                                                                                                  │
+│  get                                                                                             │
+│    Retrieve complete details of a nucleus.                                                       │
+│    brain nucleus get [OPTIONS]                                                                   │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -p <VALUE>           Path to the Nucleus root directory                                     │
+│                                                                                                  │
+│  link                                                                                            │
+│    Link an existing folder as a Nucleus project.                                                 │
+│    brain nucleus link <PATH>                                                                     │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PATH>               Path to existing project                                               │
+│                                                                                                  │
+│  status                                                                                          │
+│    Check if a directory is a valid Nucleus project.                                              │
+│    brain nucleus status [OPTIONS]                                                                │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -p                   Nucleus path                                                           │
+│                                                                                                  │
+│  sync                                                                                            │
+│    Synchronize projects and rebuild nucleus cache.                                               │
+│    brain nucleus sync [OPTIONS]                                                                  │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -p                   Nucleus path (default: current dir)                                    │
+│      --skip-git           Skip git pull operations [default: False]                              │
+│      -v                   Show detailed progress [default: False]                                │
+│                                                                                                  │
+│  ── LIST ──                                                                                      │
+│                                                                                                  │
+│  list                                                                                            │
+│    List all Nucleus projects found in a parent directory.                                        │
+│    brain nucleus list [OPTIONS]                                                                  │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -d                   Parent directory to scan for nuclei (default: current directory)       │
+│                                                                                                  │
+│  list-projects                                                                                   │
+│    List all projects linked to the nucleus with their details.                                   │
+│    brain nucleus list-projects [OPTIONS]                                                         │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -p                   Nucleus root path (default: current directory)                         │
+│      -s                   Filter by project strategy (python, typescript, go, etc.)              │
+│      --active-only        Show only active projects [default: False]                             │
+│                                                                                                  │
+│  ── ONBOARDING ──                                                                                │
+│                                                                                                  │
+│  onboarding-complete                                                                             │
+│    Mark an onboarding step or entire onboarding as completed.                                    │
+│    brain nucleus onboarding-complete [OPTIONS]                                                   │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -s                   Step name to mark as completed                                         │
+│      -a                   Mark entire onboarding as completed [default: False]                   │
+│      -p                   Nucleus root path (default: current dir)                               │
+│                                                                                                  │
+│  onboarding-status                                                                               │
+│    Get the current onboarding status from nucleus configuration.                                 │
+│    brain nucleus onboarding-status [OPTIONS]                                                     │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -p                   Nucleus root path (default: current dir)                               │
+│                                                                                                  │
+│  ── PROJECT ──                                                                                   │
+│                                                                                                  │
+│  project-info                                                                                    │
+│    Display detailed information about a specific project in the nucleus.                         │
+│    brain nucleus project-info <PROJECT_NAME> [OPTIONS]                                           │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PROJECT_NAME>       Name of the project to inspect                                         │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -p                   Nucleus root path (default: current directory)                         │
+│                                                                                                  │
+╰──────────────────────────── Nucleus project management and lifecycle ────────────────────────────╯
+
+╭──────────────────────────────────────────── PROJECT ─────────────────────────────────────────────╮
+│                                                                                                  │
+│  ── ADD ──                                                                                       │
+│                                                                                                  │
+│  add                                                                                             │
+│    Vincula un proyecto local existente a un Nucleus.                                             │
+│    brain project add <PROJECT_PATH> [OPTIONS]                                                    │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PROJECT_PATH>       Ruta al proyecto a vincular                                            │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -n <VALUE>           Ruta al Nucleus destino                                                │
+│      --name               Nombre custom del proyecto (default: nombre de carpeta)                │
+│      --strategy           Forzar estrategia específica (default: auto-detect)                    │
+│      --description        Descripción del proyecto                                               │
+│      --repo-url           URL del repositorio GitHub                                             │
+│                                                                                                  │
+│  clone-and-add                                                                                   │
+│    Clone a Git repository and automatically link it to the current Nucleus.                      │
+│    brain project clone-and-add <REPO_URL> [OPTIONS]                                              │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <REPO_URL>           Git repository URL (HTTPS or SSH)                                      │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -d                   Absolute path where to clone the repository. If not provided, clones   │
+│  to Nucleus root using repo name.                                                                │
+│      -n                   Path to the Nucleus project. Auto-detected from current directory if   │
+│  not provided.                                                                                   │
+│      --name               Custom name for the project (default: repository name)                 │
+│      --strategy           Force specific technology strategy (e.g., python, typescript,          │
+│  android)                                                                                        │
+│      --description        Project description                                                    │
+│                                                                                                  │
+│  detect                                                                                          │
+│    Scan directory and detect project types automatically.                                        │
+│    brain project detect <PARENT_PATH> [OPTIONS]                                                  │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PARENT_PATH>        Parent directory to scan for projects                                  │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -d                   Maximum depth for recursive scanning [default: 3]                      │
+│      -s                   Filter projects by strategy type                                       │
+│      -c                   Filter by minimum confidence level (high, medium, low)                 │
+│                                                                                                  │
+│  load                                                                                            │
+│    Validates and loads project information.                                                      │
+│    brain project load [OPTIONS]                                                                  │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -p                   Path to the project root [default: .]                                  │
+│                                                                                                  │
+╰─────────────────────────────── Project lifecycle and scaffolding ────────────────────────────────╯
+
+╭──────────────────────────────────────────── PROFILE ─────────────────────────────────────────────╮
+│                                                                                                  │
+│  destroy                                                                                         │
+│    Elimina un perfil y todos sus datos.                                                          │
+│    brain profile destroy <PROFILE_ID>                                                            │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PROFILE_ID>         ID del perfil a eliminar                                               │
+│                                                                                                  │
+│  launch                                                                                          │
+│    Lanza Chrome con el perfil especificado usando spec-driven mode.                              │
+│    brain profile launch <PROFILE_ID> [OPTIONS]                                                   │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PROFILE_ID>         ID del perfil a lanzar                                                 │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -s <VALUE>           Archivo JSON con especificación completa de lanzamiento (REQUERIDO)    │
+│                                                                                                  │
+│  link                                                                                            │
+│    Vincula un email a un perfil.                                                                 │
+│    brain profile link <PROFILE_ID> <EMAIL>                                                       │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PROFILE_ID>         ID del perfil                                                          │
+│      <EMAIL>              Email a vincular                                                       │
+│                                                                                                  │
+│  unlink                                                                                          │
+│    Desvincula la cuenta de un perfil.                                                            │
+│    brain profile unlink <PROFILE_ID>                                                             │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PROFILE_ID>         ID del perfil                                                          │
+│                                                                                                  │
+│  ── ACCOUNTS ──                                                                                  │
+│                                                                                                  │
+│  accounts-register                                                                               │
+│    Registra una nueva cuenta en un perfil.                                                       │
+│    brain profile accounts-register <PROFILE_ID> <PROVIDER> <EMAIL>                               │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PROFILE_ID>         ID del perfil                                                          │
+│      <PROVIDER>           Proveedor (google, openai, anthropic, etc)                             │
+│      <EMAIL>              Email o identificador de la cuenta                                     │
+│                                                                                                  │
+│  accounts-remove                                                                                 │
+│    Remueve una cuenta registrada de un perfil.                                                   │
+│    brain profile accounts-remove <PROFILE_ID> <PROVIDER>                                         │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PROFILE_ID>         ID del perfil                                                          │
+│      <PROVIDER>           Proveedor a remover                                                    │
+│                                                                                                  │
+│  ── CREATE ──                                                                                    │
+│                                                                                                  │
+│  create                                                                                          │
+│    Crea un nuevo perfil con el alias especificado.                                               │
+│    brain profile create <ALIAS>                                                                  │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <ALIAS>              Nombre descriptivo del perfil                                          │
+│                                                                                                  │
+│  ── LIST ──                                                                                      │
+│                                                                                                  │
+│  list                                                                                            │
+│    MOSTRAR AL USUARIO (CLI).                                                                     │
+│    brain profile list                                                                            │
+│                                                                                                  │
+╰──────────────────────────── Chrome profile and AI account management ────────────────────────────╯
+
+╭─────────────────────────────────────────── EXTENSION ────────────────────────────────────────────╮
+│                                                                                                  │
+│  install                                                                                         │
+│    Install Chrome extension to permanent location.                                               │
+│    brain extension install [OPTIONS]                                                             │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -s                   Source directory (auto-detects if not provided)                        │
+│      -f                   Force reinstall even if same version exists [default: False]           │
+│                                                                                                  │
+│  update                                                                                          │
+│    Update Chrome extension to the latest version.                                                │
+│    brain extension update [OPTIONS]                                                              │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -s                   Source directory (auto-detects if not provided)                        │
+│                                                                                                  │
+│  verify                                                                                          │
+│    Verify that the Chrome extension is correctly installed.                                      │
+│    brain extension verify                                                                        │
+│                                                                                                  │
+╰───────────────────────────── Chrome extension lifecycle management ──────────────────────────────╯
+
+╭──────────────────────────────────────────── SYNAPSE ─────────────────────────────────────────────╮
+│                                                                                                  │
+│  close                                                                                           │
+│    Envía señal de terminación al navegador.                                                      │
+│    brain synapse close                                                                           │
+│                                                                                                  │
+│  host                                                                                            │
+│    Inicia el modo Host (Listener Loop).                                                          │
+│    brain synapse host                                                                            │
+│                                                                                                  │
+╰───────────────────── Chrome Native Messaging Bridge and protocol management ─────────────────────╯
+
+╭──────────────────────────────────────────── SERVICE ─────────────────────────────────────────────╮
+│                                                                                                  │
+│  start                                                                                           │
+│    Start the Brain TCP multiplexer service.                                                      │
+│    brain service start [OPTIONS]                                                                 │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -p                   TCP port to bind [default: 5678]                                       │
+│      -h                   Host address to bind [default: 127.0.0.1]                              │
+│      -d                   Run as background daemon [default: False]                              │
+│                                                                                                  │
+│  status                                                                                          │
+│    Check the current status of the Brain service.                                                │
+│    brain service status                                                                          │
+│                                                                                                  │
+│  stop                                                                                            │
+│    Stop the running Brain service.                                                               │
+│    brain service stop                                                                            │
+│                                                                                                  │
+╰─────────────────────── Background connection multiplexer and task runner ────────────────────────╯
+
+╭──────────────────────────────────────────── RUNTIME ─────────────────────────────────────────────╮
+│                                                                                                  │
+│  run                                                                                             │
+│    Start Brain core runtime                                                                      │
+│    brain runtime run                                                                             │
+│                                                                                                  │
+╰─────────────────────────── Non-interactive system runtime operations ────────────────────────────╯
+
+╭──────────────────────────────────────────── CONTEXT ─────────────────────────────────────────────╮
+│                                                                                                  │
+│  generate                                                                                        │
+│    Generate the Bloom Context for the project.                                                   │
+│    brain context generate [OPTIONS]                                                              │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -p                   Root path of the project [default: .]                                  │
+│      -o                   Output folder name [default: .bloom]                                   │
+│      -s                   Force specific strategy                                                │
+│                                                                                                  │
+╰────────────────────────────── AI context generation and management ──────────────────────────────╯
+
+╭───────────────────────────────────────────── INTENT ─────────────────────────────────────────────╮
+│                                                                                                  │
+│  ── ADD ──                                                                                       │
+│                                                                                                  │
+│  add-turn                                                                                        │
+│    Add a conversation turn to an intent's chat.                                                  │
+│    brain intent add-turn [OPTIONS]                                                               │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i                   Intent UUID                                                            │
+│      -f                   Intent folder name                                                     │
+│      -a                   Who is speaking: 'user' or 'ai' [default: user]                        │
+│      -c <VALUE>           Content of the message                                                 │
+│      -p                   Path to Bloom project                                                  │
+│                                                                                                  │
+│  ── BUILD ──                                                                                     │
+│                                                                                                  │
+│  build-payload                                                                                   │
+│    Build optimized AI payload from context plan.                                                 │
+│    brain intent build-payload [OPTIONS]                                                          │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      --plan <VALUE>       Path to context_plan.json                                              │
+│      --output             Output path for payload (default: same dir as plan)                    │
+│                                                                                                  │
+│  ── CREATE ──                                                                                    │
+│                                                                                                  │
+│  create                                                                                          │
+│    Create a new development or documentation intent.                                             │
+│    brain intent create [OPTIONS]                                                                 │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -t <VALUE>           Intent type: 'dev' for development or 'doc' for documentation          │
+│      -n <VALUE>           Human-readable name for the intent (e.g., 'Fix login authentication    │
+│  flow')                                                                                          │
+│      -f                   Initial files to include in the intent context (can be repeated or     │
+│  comma-separated)                                                                                │
+│      -p                   Path to the Nucleus (Bloom project root). Auto-detected if not         │
+│  provided.                                                                                       │
+│                                                                                                  │
+│  delete                                                                                          │
+│    Delete an intent and all its data.                                                            │
+│    brain intent delete [OPTIONS]                                                                 │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i                   Intent UUID                                                            │
+│      -f                   Intent folder name                                                     │
+│      --force              Skip confirmation and force delete even if locked [default: False]     │
+│      -p                   Path to Bloom project                                                  │
+│                                                                                                  │
+│  download                                                                                        │
+│    Download AI response from Native Host or file.                                                │
+│    brain intent download [OPTIONS]                                                               │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i                   Intent UUID to download response for                                   │
+│      --folder             Intent folder name (alternative to intent-id)                          │
+│      --socket-mode        Listen on TCP socket for Host connection [default: False]              │
+│      --input-file         Read response from file (for testing)                                  │
+│      --host               Host IP to listen on [default: 127.0.0.1]                              │
+│      --port               Port to listen on (different from Host's 5678) [default: 5679]         │
+│      --timeout            Socket timeout in seconds [default: 300]                               │
+│      --nucleus-path       Path to Bloom project (auto-detected if omitted)                       │
+│                                                                                                  │
+│  finalize                                                                                        │
+│    Finalize an intent, applying changes to the codebase.                                         │
+│    brain intent finalize [OPTIONS]                                                               │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i                   Intent UUID                                                            │
+│      -f                   Intent folder name                                                     │
+│      -p                   Path to Bloom project                                                  │
+│                                                                                                  │
+│  get                                                                                             │
+│    Get complete details of an intent.                                                            │
+│    brain intent get [OPTIONS]                                                                    │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i                   Intent UUID                                                            │
+│      -f                   Intent folder name                                                     │
+│      -p                   Path to Bloom project                                                  │
+│                                                                                                  │
+│  hydrate                                                                                         │
+│    Hydrate an intent by processing source files and briefing.                                    │
+│    brain intent hydrate [OPTIONS]                                                                │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i                   Intent UUID                                                            │
+│      -f                   Intent folder name                                                     │
+│      -b                   Briefing text (instruction)                                            │
+│      -B                   Path to text file containing briefing                                  │
+│      -F                   Files to include in context (comma-separated)                          │
+│      -p                   Path to Bloom project root                                             │
+│                                                                                                  │
+│  lock                                                                                            │
+│    Lock an intent for exclusive use.                                                             │
+│    brain intent lock [OPTIONS]                                                                   │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i                   Intent UUID                                                            │
+│      -f                   Intent folder name                                                     │
+│      -p                   Path to Bloom project                                                  │
+│                                                                                                  │
+│  merge                                                                                           │
+│    Merge staged files from .staging/ into the real codebase.                                     │
+│    brain intent merge [OPTIONS]                                                                  │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i                   Intent UUID to merge files for                                         │
+│      -f                   Intent folder name (e.g., .fix-login-a1b2c3d4)                         │
+│      -s                   Pipeline stage (briefing, execution, refinement_X). Auto-detect if     │
+│  not provided.                                                                                   │
+│      --force              Skip approval check and merge anyway [default: False]                  │
+│      --dry-run            Show what would be merged without applying [default: False]            │
+│      --no-backup          Skip backup creation (DANGEROUS) [default: False]                      │
+│      -p                   Path to Bloom project (auto-detected if not provided)                  │
+│                                                                                                  │
+│  parse                                                                                           │
+│    Parse and validate .raw_output.json from an AI response.                                      │
+│    brain intent parse [OPTIONS]                                                                  │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i <VALUE>           Intent UUID to parse                                                   │
+│      -s                   Pipeline stage (briefing, execution, refinement_X). Auto-detect if     │
+│  not provided.                                                                                   │
+│      --strict             Fail on any protocol violation (no fallback parser) [default: False]   │
+│      --output-report      Generate .parse_report.json [default: True]                            │
+│      -n                   Path to nucleus root (default: current directory)                      │
+│                                                                                                  │
+│  plan                                                                                            │
+│    Generate context plan for an intent using Gemini Router.                                      │
+│    brain intent plan [OPTIONS]                                                                   │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      --intent-dir <VALUE> Intent directory path                                                  │
+│      --description <VALUE> Intent description                                                    │
+│      --type               Intent type: dev, doc, or seed [default: dev]                          │
+│                                                                                                  │
+│  recover                                                                                         │
+│    Recover interrupted intents using lock state recovery data.                                   │
+│    brain intent recover [OPTIONS]                                                                │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i                   Intent UUID to recover                                                 │
+│      -f                   Intent folder name (e.g., .fix-login-abc123)                           │
+│      --auto-detect        Find and recover all interrupted intents [default: False]              │
+│      --force-unlock       Force unlock without attempting recovery [default: False]              │
+│      -p                   Path to Bloom project (auto-detected if not provided)                  │
+│                                                                                                  │
+│  stage                                                                                           │
+│    Prepare files in .staging/ directory for merge.                                               │
+│    brain intent stage [OPTIONS]                                                                  │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i                   Intent UUID to stage files for                                         │
+│      -f                   Intent folder name (e.g., .fix-login-a1b2c3d4)                         │
+│      -s                   Pipeline stage (briefing, execution, refinement_X). Auto-detect if     │
+│  not provided.                                                                                   │
+│      --dry-run            Show what would be staged without writing files [default: False]       │
+│      --overwrite          Overwrite existing .staging/ directory [default: True]                 │
+│      -p                   Path to Bloom project (auto-detected if not provided)                  │
+│                                                                                                  │
+│  submit                                                                                          │
+│    Submit an intent payload to an AI provider through the native host bridge.                    │
+│    brain intent submit [OPTIONS]                                                                 │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i                   UUID of the intent to submit                                           │
+│      -f                   Folder name of the intent (e.g., .fix-login-a1b2c3d4)                  │
+│      --provider           AI provider to use: 'claude', 'gemini', etc. [default: claude]         │
+│      -p                   Path to the Nucleus (Bloom project root). Auto-detected if not         │
+│  provided.                                                                                       │
+│      --profile-path       Chrome profile path for the AI provider (optional)                     │
+│      --host               Native host IP address [default: 127.0.0.1]                            │
+│      --port               Native host TCP port [default: 5678]                                   │
+│      --timeout            Connection timeout in seconds [default: 30]                            │
+│                                                                                                  │
+│  unlock                                                                                          │
+│    Unlock an intent to free it for use.                                                          │
+│    brain intent unlock [OPTIONS]                                                                 │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i                   Intent UUID                                                            │
+│      -f                   Intent folder name                                                     │
+│      --force              Force unlock even if locked by another host [default: False]           │
+│      -p                   Path to Bloom project                                                  │
+│                                                                                                  │
+│  update                                                                                          │
+│    Update an existing intent's properties.                                                       │
+│    brain intent update [OPTIONS]                                                                 │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i                   UUID of the intent to update                                           │
+│      -f                   Folder name of the intent (e.g., .fix-login-a1b2c3d4)                  │
+│      -n                   New name for the intent (triggers folder rename)                       │
+│      --files              Replace all initial files with this new list                           │
+│      --add-files          Add files to the existing initial_files list                           │
+│      --remove-files       Remove files from the initial_files list                               │
+│      -p                   Path to the Nucleus (Bloom project root). Auto-detected if not         │
+│  provided.                                                                                       │
+│                                                                                                  │
+│  validate                                                                                        │
+│    Validate staging files using Gemini analysis.                                                 │
+│    brain intent validate [OPTIONS]                                                               │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -i                   Intent UUID                                                            │
+│      -f                   Intent folder name (e.g., .fix-login-abc123)                           │
+│      -s                   Pipeline stage (briefing, execution, refinement_X)                     │
+│      --auto-approve       Skip manual review and approve automatically [default: False]          │
+│      --gemini-model       Gemini model to use for analysis [default: gemini-2.0-flash-exp]       │
+│      --skip-gemini        Skip Gemini analysis (only basic validation) [default: False]          │
+│      -p                   Path to Bloom project (auto-detected if omitted)                       │
+│                                                                                                  │
+│  ── LIST ──                                                                                      │
+│                                                                                                  │
+│  list                                                                                            │
+│    List all intents in the project.                                                              │
+│    brain intent list [OPTIONS]                                                                   │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -p                   Path to Bloom project (auto-detected if not provided)                  │
+│      -t                   Filter by intent type: 'dev' or 'doc'                                  │
+│                                                                                                  │
+╰────────────────────────── Intent execution system and context planning ──────────────────────────╯
+
+╭─────────────────────────────────────────── FILESYSTEM ───────────────────────────────────────────╮
+│                                                                                                  │
+│  compress                                                                                        │
+│    Compress files into optimized JSON format for AI consumption.                                 │
+│    brain filesystem compress <PATHS> [OPTIONS]                                                   │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PATHS>              Paths to compress (files or directories)                               │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -m                   Compression mode: 'codebase' or 'docbase' [default: codebase]          │
+│      -o                   Output directory (default: current directory)                          │
+│      -e                   Patterns to exclude (can be used multiple times) [default: []]         │
+│      --no-comments        Remove comments during compression [default: False]                    │
+│                                                                                                  │
+│  extract                                                                                         │
+│    Extract files from compressed JSON format.                                                    │
+│    brain filesystem extract <JSON_FILE> [OPTIONS]                                                │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <JSON_FILE>          Compressed JSON file to extract                                        │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -o                   Output directory (default: extracted_<mode>)                           │
+│      --verify-hashes/--no-verify-hashes Verify MD5 hashes during extraction [default: True]      │
+│                                                                                                  │
+│  tree                                                                                            │
+│    Generate a visual directory tree structure with intelligent exclusions.                       │
+│    brain filesystem tree <TARGETS> [OPTIONS]                                                     │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <TARGETS>            Specific directories or files to include (supports absolute paths).    │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -o                   Output file path [default: tree.txt]                                   │
+│      --hash               Include MD5 hashes [default: False]                                    │
+│      --export-json        Export JSON to disk [default: False]                                   │
+│                                                                                                  │
+╰───────────────────────────── File operations and directory analysis ─────────────────────────────╯
+
+╭───────────────────────────────────────────── GITHUB ─────────────────────────────────────────────╮
+│                                                                                                  │
+│  ── AUTENTICACIÓN ──                                                                             │
+│                                                                                                  │
+│  auth-login                                                                                      │
+│    Store GitHub authentication token.                                                            │
+│    brain github auth-login [OPTIONS]                                                             │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -t <VALUE>           GitHub Personal Access Token                                           │
+│                                                                                                  │
+│  auth-logout                                                                                     │
+│    Remove stored GitHub token.                                                                   │
+│    brain github auth-logout                                                                      │
+│                                                                                                  │
+│  auth-status                                                                                     │
+│    Check GitHub authentication status.                                                           │
+│    brain github auth-status                                                                      │
+│                                                                                                  │
+│  clone                                                                                           │
+│    Clone GitHub repository to local directory.                                                   │
+│    brain github clone <REPO> [OPTIONS]                                                           │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <REPO>               Repository (owner/repo or full URL)                                    │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -p                   Target directory (defaults to repo name in current dir)                │
+│      --progress/--no-progress Show clone progress [default: True]                                │
+│                                                                                                  │
+│  ── ORGANIZACIONES ──                                                                            │
+│                                                                                                  │
+│  orgs-list                                                                                       │
+│    List GitHub organizations.                                                                    │
+│    brain github orgs-list                                                                        │
+│                                                                                                  │
+│  ── REPOSITORIOS ──                                                                              │
+│                                                                                                  │
+│  repos-list                                                                                      │
+│    List GitHub repositories.                                                                     │
+│    brain github repos-list [OPTIONS]                                                             │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      --org                Organization name                                                      │
+│                                                                                                  │
+╰────────────────────────── GitHub integration and repository management ──────────────────────────╯
+
+╭───────────────────────────────────────────── GEMINI ─────────────────────────────────────────────╮
+│                                                                                                  │
+│  ── KEYS ──                                                                                      │
+│                                                                                                  │
+│  keys-add                                                                                        │
+│    Add new Gemini API key with profile.                                                          │
+│    brain gemini keys-add [OPTIONS]                                                               │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -p <VALUE>           Profile name (e.g., 'Personal Chrome')                                 │
+│      -k <VALUE>           Gemini API key                                                         │
+│      --priority           Priority: 1=preferred, 0=normal, -1=backup [default: 0]                │
+│                                                                                                  │
+│  keys-delete                                                                                     │
+│    Delete a Gemini API key.                                                                      │
+│    brain gemini keys-delete <PROFILE>                                                            │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PROFILE>            Profile name to delete                                                 │
+│                                                                                                  │
+│  keys-list                                                                                       │
+│    List all Gemini API keys with status.                                                         │
+│    brain gemini keys-list                                                                        │
+│                                                                                                  │
+│  keys-stats                                                                                      │
+│    Show global Gemini keys statistics.                                                           │
+│    brain gemini keys-stats                                                                       │
+│                                                                                                  │
+│  keys-validate                                                                                   │
+│    Validate a Gemini API key by testing connection.                                              │
+│    brain gemini keys-validate <PROFILE>                                                          │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PROFILE>            Profile name to validate                                               │
+│                                                                                                  │
+╰──────────────────────────── Gemini AI key management and operations ─────────────────────────────╯
+
+╭──────────────────────────────────────────── TWITTER ─────────────────────────────────────────────╮
+│                                                                                                  │
+│  ── AUTENTICACIÓN ──                                                                             │
+│                                                                                                  │
+│  auth-login                                                                                      │
+│    Authenticate with Twitter/X using API credentials.                                            │
+│    brain twitter auth-login [OPTIONS]                                                            │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -t <VALUE>           Twitter API token                                                      │
+│      -u <VALUE>           Twitter username                                                       │
+│                                                                                                  │
+│  auth-status                                                                                     │
+│    Check Twitter/X authentication status.                                                        │
+│    brain twitter auth-status                                                                     │
+│                                                                                                  │
+╰───────────────────────── Twitter/X integration and social data analysis ─────────────────────────╯
+
+╭───────────────────────────────────────────── CHROME ─────────────────────────────────────────────╮
+│                                                                                                  │
+│  ── READ ──                                                                                      │
+│                                                                                                  │
+│  read-log                                                                                        │
+│    Auditor de integridad del motor Chromium para diagnosticar fallos de sistema y bloqueos de    │
+│  seguridad.                                                                                      │
+│    brain chrome read-log <PROFILE_ID> [OPTIONS]                                                  │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PROFILE_ID>         Chrome profile UUID                                                    │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -b                   Lines of context before match [default: 5]                             │
+│      -a                   Lines of context after match [default: 5]                              │
+│      -l                   Launch ID for separate output file                                     │
+│                                                                                                  │
+│  read-net-log                                                                                    │
+│    Analyze Chrome network logs with intelligent filtering.                                       │
+│    brain chrome read-net-log <PROFILE_ID> [OPTIONS]                                              │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PROFILE_ID>         Chrome profile UUID                                                    │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      --filter-ai          Filter for AI service requests only [default: False]                   │
+│      -e                   Exclude URL patterns                                                   │
+│      --include-quic       Include QUIC protocol events [default: False]                          │
+│      --show-headers       Show HTTP headers in output [default: False]                           │
+│      -l                   Launch ID for separate output file                                     │
+│                                                                                                  │
+│  mining-log                                                                                      │
+│    Read and filter engine_mining.log for a specific profile.                                     │
+│    brain chrome mining-log <PROFILE_ID> [OPTIONS]                                                │
+│                                                                                                  │
+│    Argumentos:                                                                                   │
+│      <PROFILE_ID>         Chrome profile UUID                                                    │
+│                                                                                                  │
+│    Opciones:                                                                                     │
+│      -k                   Keyword to search for [default: bloom]                                 │
+│      -b                   Lines of context before match [default: 5]                             │
+│      -a                   Lines of context after match [default: 5]                              │
+│      -l                   Launch ID for separate output file                                     │
+│                                                                                                  │
+╰─────────────────────── Chrome profile debugging and network log analysis ────────────────────────╯
