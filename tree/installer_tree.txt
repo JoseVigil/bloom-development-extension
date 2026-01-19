@@ -183,7 +183,6 @@ bloom-development-extension/
         ├── blueprint.json
         ├── build.bat
         ├── codebase/
-        │   └── go_files_2026-01-19_09-17-53.txt
         ├── docs/
         │   ├── Sentinel - Fase 2 Discovery - Health Modular.md
         │   ├── Sentinel Base.md

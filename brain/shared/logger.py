@@ -2,6 +2,7 @@
 Brain Global Logger - Sistema de logging centralizado y robusto.
 Configuración: Disco (DEBUG/Todo) | Consola (ERROR/Silencioso).
 Soporta namespaces especializados con archivos dedicados.
+REFACTORED: Soporte para json_mode (fuerza stderr en console handler).
 """
 import logging
 import os
@@ -43,13 +44,18 @@ class BrainLogger:
         self.log_file: Optional[Path] = None
         self.is_frozen = getattr(sys, 'frozen', False)
         
-    def setup(self, verbose: bool = False, log_name: str = "brain_core"):
+    def setup(self, verbose: bool = False, log_name: str = "brain_core", json_mode: bool = False):
         """
         Inicializa el sistema de logging global.
         
         Configuración de Niveles:
         - Archivo: DEBUG (Captura cada detalle técnico)
         - Consola: ERROR (Silencio total para el usuario, salvo fallos o --verbose)
+        
+        Args:
+            verbose: Habilitar logging detallado en consola
+            log_name: Nombre base del archivo de log
+            json_mode: Si True, desactiva completamente el console handler
         """
         if BrainLogger._initialized:
             return
@@ -79,25 +85,27 @@ class BrainLogger:
             file_handler.setLevel(logging.DEBUG)
             file_handler.setFormatter(log_format)
             
-            # 4. Handler para CONSOLA (INTERFAZ LIMPIA)
-            console_handler = logging.StreamHandler(sys.stdout)
-            
-            if verbose:
-                console_handler.setLevel(logging.DEBUG)
-                console_format = logging.Formatter('%(levelname)-8s | %(name)-20s | %(message)s')
-            else:
-                console_handler.setLevel(logging.ERROR)
-                console_format = logging.Formatter('%(levelname)-8s | %(message)s')
-            
-            console_handler.setFormatter(console_format)
-            
-            # 5. Configurar Logger Raíz
+            # 4. Configurar Logger Raíz
             root = logging.getLogger()
             root.setLevel(logging.DEBUG)
-            
             root.handlers.clear()
             root.addHandler(file_handler)
-            root.addHandler(console_handler)
+            
+            # 5. Handler para CONSOLA (INTERFAZ LIMPIA)
+            # CRÍTICO: En modo JSON, NO agregar console handler para evitar contaminación
+            if not json_mode:
+                # CRÍTICO: Console handler SIEMPRE escribe a stderr (nunca stdout)
+                console_handler = logging.StreamHandler(sys.stderr)
+                
+                if verbose:
+                    console_handler.setLevel(logging.DEBUG)
+                    console_format = logging.Formatter('%(levelname)-8s | %(name)-20s | %(message)s')
+                else:
+                    console_handler.setLevel(logging.ERROR)
+                    console_format = logging.Formatter('%(levelname)-8s | %(message)s')
+                
+                console_handler.setFormatter(console_format)
+                root.addHandler(console_handler)
             
             # 6. Configurar namespaces especializados
             self._setup_specialized_namespaces(timestamp, log_format)
@@ -107,9 +115,10 @@ class BrainLogger:
             
             # 8. Registrar inicio
             BrainLogger._initialized = True
-            self._log_system_info()
+            self._log_system_info(json_mode)
             
-            logging.debug(f"Logger inicializado. Terminal Level: {'DEBUG' if verbose else 'ERROR'}")
+            if not json_mode:
+                logging.debug(f"Logger inicializado. Terminal Level: {'DEBUG' if verbose else 'ERROR'}")
             
         except Exception as e:
             sys.stderr.write(f"❌ ERROR CRÍTICO: No se pudo inicializar el logger: {e}\n")
@@ -149,7 +158,7 @@ class BrainLogger:
                 # Guardar referencia
                 self._specialized_handlers[namespace] = specialized_handler
                 
-                # Log de confirmación
+                # Log de confirmación (solo va al archivo, no contamina consola)
                 namespace_logger.info("=" * 80)
                 namespace_logger.info(f"SPECIALIZED LOGGER INITIALIZED: {namespace}")
                 namespace_logger.info(f"Log File: {specialized_file}")
@@ -174,7 +183,7 @@ class BrainLogger:
                 return Path(xdg_data) / "BloomNucleus" / "logs"
             return Path.home() / ".local" / "share" / "BloomNucleus" / "logs"
     
-    def _log_system_info(self):
+    def _log_system_info(self, json_mode: bool = False):
         """Registra información del sistema (Solo va al archivo de log)."""
         logger = logging.getLogger("brain.system")
         logger.info("=" * 80)
@@ -186,6 +195,7 @@ class BrainLogger:
         logger.info(f"Frozen: {self.is_frozen}")
         logger.info(f"CWD: {os.getcwd()}")
         logger.info(f"Log Directory: {self.log_dir}")
+        logger.info(f"JSON Mode: {json_mode}")
         logger.info(f"Specialized Namespaces: {list(self.SPECIALIZED_NAMESPACES.keys())}")
         logger.info("=" * 80)
     
@@ -209,10 +219,10 @@ class BrainLogger:
         """
         return logging.getLogger(name)
 
-def setup_global_logging(verbose: bool = False, log_name: str = "brain_core"):
+def setup_global_logging(verbose: bool = False, log_name: str = "brain_core", json_mode: bool = False):
     """Inicializa el sistema de logging global."""
     brain_logger = BrainLogger()
-    brain_logger.setup(verbose=verbose, log_name=log_name)
+    brain_logger.setup(verbose=verbose, log_name=log_name, json_mode=json_mode)
 
 def get_logger(name: str) -> logging.Logger:
     """Obtiene un logger para el módulo especificado."""
