@@ -49,7 +49,8 @@ class NetLogAnalyzer:
         filter_ai: bool = False,
         exclude_patterns: Optional[List[str]] = None,
         include_quic: bool = False,
-        show_headers: bool = False
+        show_headers: bool = False,
+        launch_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Analyze Chrome network log with intelligent filtering.
@@ -60,6 +61,7 @@ class NetLogAnalyzer:
             exclude_patterns: Additional URL patterns to exclude
             include_quic: If True, include QUIC packet events
             show_headers: If True, extract HTTP/2 headers
+            launch_id: Optional launch ID to create separate output file
             
         Returns:
             Dictionary with analysis results and metadata
@@ -84,8 +86,12 @@ class NetLogAnalyzer:
         output_dir = Path(self.paths.base_dir) / "logs" / "profiles" / profile_id
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        timestamp = datetime.now().strftime("%Y%m%d")
-        output_file = output_dir / f"chrome_bloom_net_log_{timestamp}.log"
+        # Use launch_id as prefix if provided
+        if launch_id:
+            output_file = output_dir / f"{launch_id}_engine_network.log"
+        else:
+            timestamp = datetime.now().strftime("%Y%m%d")
+            output_file = output_dir / f"chrome_bloom_net_log_{timestamp}.log"
         
         logger.info(f"Analyzing network log: {source_file}")
         logger.info(f"Output will be saved to: {output_file}")
@@ -128,6 +134,8 @@ class NetLogAnalyzer:
         with open(output_file, 'w', encoding='utf-8') as f_out:
             f_out.write(f"Chrome Network Log Analysis\n")
             f_out.write(f"Profile: {profile_id}\n")
+            if launch_id:
+                f_out.write(f"Launch ID: {launch_id}\n")
             f_out.write(f"Timestamp: {datetime.now().isoformat()}\n")
             f_out.write(f"Filter AI: {filter_ai}\n")
             f_out.write(f"Include QUIC: {include_quic}\n")
@@ -196,10 +204,11 @@ class NetLogAnalyzer:
             if filter_ai:
                 f_out.write(f"AI service requests: {stats['ai_requests']}\n")
         
-        logger.info(f"âœ… Analysis complete: {stats['url_requests']} URL requests processed")
+        logger.info(f"✅ Analysis complete: {stats['url_requests']} URL requests processed")
         
         return {
             "profile_id": profile_id,
+            "launch_id": launch_id,
             "source_file": str(source_file),
             "output_file": str(output_file),
             "filter_ai": filter_ai,

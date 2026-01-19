@@ -55,7 +55,7 @@
             {
               "name": "read-log",
               "display_name": "READ LOG",
-              "description": "Read and filter Chrome debug logs for a specific profile.",
+              "description": "Auditor de integridad del motor Chromium para diagnosticar fallos de sistema y bloqueos de seguridad.",
               "syntax": "brain [GLOBAL_OPTIONS] chrome read-log <PROFILE_ID> [OPTIONS]",
               "arguments": [
                 {
@@ -66,13 +66,6 @@
                 }
               ],
               "options": [
-                {
-                  "flag": "-k",
-                  "required": false,
-                  "help": "Keyword to search for",
-                  "type": "str",
-                  "default": "bloom"
-                },
                 {
                   "flag": "-b",
                   "required": false,
@@ -86,6 +79,13 @@
                   "help": "Lines of context after match",
                   "type": "int",
                   "default": 5
+                },
+                {
+                  "flag": "-l",
+                  "required": false,
+                  "help": "Launch ID for separate output file",
+                  "type": "Optional",
+                  "default": null
                 }
               ]
             },
@@ -130,6 +130,13 @@
                   "help": "Show HTTP headers in output",
                   "type": "bool",
                   "default": false
+                },
+                {
+                  "flag": "-l",
+                  "required": false,
+                  "help": "Launch ID for separate output file",
+                  "type": "Optional",
+                  "default": null
                 }
               ]
             }
@@ -172,6 +179,13 @@
                   "help": "Lines of context after match",
                   "type": "int",
                   "default": 5
+                },
+                {
+                  "flag": "-l",
+                  "required": false,
+                  "help": "Launch ID for separate output file",
+                  "type": "Optional",
+                  "default": null
                 }
               ]
             }
@@ -2085,7 +2099,7 @@
             {
               "name": "launch",
               "display_name": "LAUNCH",
-              "description": "Lanza Chrome con el perfil especificado.",
+              "description": "Lanza Chrome con el perfil especificado usando spec-driven mode.",
               "syntax": "brain [GLOBAL_OPTIONS] profile launch <PROFILE_ID> [OPTIONS]",
               "arguments": [
                 {
@@ -2097,31 +2111,10 @@
               ],
               "options": [
                 {
-                  "flag": "--url",
-                  "required": false,
-                  "help": "URL inicial expl�cita",
-                  "type": "Optional",
-                  "default": null
-                },
-                {
-                  "flag": "--cockpit",
-                  "required": false,
-                  "help": "Modo cockpit (landing page)",
-                  "type": "bool",
-                  "default": false
-                },
-                {
-                  "flag": "--discovery",
-                  "required": false,
-                  "help": "Modo de validaci�n de conexi�n",
-                  "type": "bool",
-                  "default": false
-                },
-                {
-                  "flag": "-s",
-                  "required": false,
-                  "help": "Archivo JSON con especificaci�n completa de lanzamiento",
-                  "type": "Optional",
+                  "flag": "-s <VALUE>",
+                  "required": true,
+                  "help": "Archivo JSON con especificaci�n completa de lanzamiento (REQUERIDO)",
+                  "type": "str",
                   "default": null
                 }
               ]

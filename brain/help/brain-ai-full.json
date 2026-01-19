@@ -16,18 +16,13 @@
       "type": "function",
       "function": {
         "name": "brain_chrome_read_log",
-        "description": "Read and filter Chrome debug logs for a specific profile.. Execute via: brain chrome read-log",
+        "description": "Auditor de integridad del motor Chromium para diagnosticar fallos de sistema y bloqueos de seguridad.. Execute via: brain chrome read-log",
         "parameters": {
           "type": "object",
           "properties": {
             "profile_id": {
               "type": "string",
               "description": "Chrome profile UUID"
-            },
-            "_k": {
-              "type": "string",
-              "description": "Keyword to search for",
-              "default": "bloom"
             },
             "_b": {
               "type": "integer",
@@ -38,6 +33,10 @@
               "type": "integer",
               "description": "Lines of context after match",
               "default": 5
+            },
+            "_l": {
+              "type": "string",
+              "description": "Launch ID for separate output file"
             }
           },
           "required": [
@@ -87,6 +86,10 @@
               "type": "boolean",
               "description": "Show HTTP headers in output",
               "default": false
+            },
+            "_l": {
+              "type": "string",
+              "description": "Launch ID for separate output file"
             }
           },
           "required": [
@@ -132,6 +135,10 @@
               "type": "integer",
               "description": "Lines of context after match",
               "default": 5
+            },
+            "_l": {
+              "type": "string",
+              "description": "Launch ID for separate output file"
             }
           },
           "required": [
@@ -2480,7 +2487,7 @@
       "type": "function",
       "function": {
         "name": "brain_profile_launch",
-        "description": "Lanza Chrome con el perfil especificado.. Execute via: brain profile launch",
+        "description": "Lanza Chrome con el perfil especificado usando spec-driven mode.. Execute via: brain profile launch",
         "parameters": {
           "type": "object",
           "properties": {
@@ -2488,27 +2495,14 @@
               "type": "string",
               "description": "ID del perfil a lanzar"
             },
-            "__url": {
+            "_s_<value": {
               "type": "string",
-              "description": "URL inicial expl�cita"
-            },
-            "__cockpit": {
-              "type": "boolean",
-              "description": "Modo cockpit (landing page)",
-              "default": false
-            },
-            "__discovery": {
-              "type": "boolean",
-              "description": "Modo de validaci�n de conexi�n",
-              "default": false
-            },
-            "_s": {
-              "type": "string",
-              "description": "Archivo JSON con especificaci�n completa de lanzamiento"
+              "description": "Archivo JSON con especificaci�n completa de lanzamiento (REQUERIDO)"
             }
           },
           "required": [
-            "profile_id"
+            "profile_id",
+            "_s_<value"
           ]
         },
         "metadata": {

@@ -1,6 +1,7 @@
 """
 Comandos para gestión de perfiles de Chrome (Workers).
 Versión refactorizada con logger dedicado para perfiles.
+Launch mode actualizado: Solo acepta --spec (v2.0+).
 """
 
 import typer
@@ -169,7 +170,7 @@ class ProfilesCreateCommand(BaseCommand):
         
         profile_id = profile.get('id')
         launch_id = (profile_id[:8] + '...') if isinstance(profile_id, str) and profile_id else 'N/A'
-        typer.echo(f"\n💡 Lanza con: brain profile launch {launch_id}\n")
+        typer.echo(f"\n💡 Lanza con: brain profile launch {launch_id} --spec <spec.json>\n")
 
     def _handle_error(self, gc, message: str):
         """Manejo unificado de errores."""
@@ -182,19 +183,17 @@ class ProfilesCreateCommand(BaseCommand):
 
 
 class ProfilesLaunchCommand(BaseCommand):
-    """Lanza Chrome con un perfil específico."""
+    """Lanza Chrome con un perfil específico (solo spec-driven mode)."""
     
     def metadata(self) -> CommandMetadata:
         return CommandMetadata(
             name="launch",
             category=CommandCategory.PROFILE,
             version="2.0.0",
-            description="Lanza Chrome con un perfil de Worker (soporta spec-driven mode)",
+            description="Lanza Chrome con un perfil de Worker (spec-driven mode REQUERIDO)",
             examples=[
-                "brain profile launch <id>",
-                "brain profile launch <id> --discovery",
-                "brain profile launch <id> --cockpit",
-                "brain profile launch <id> --spec /path/to/spec.json"
+                "brain profile launch <id> --spec /path/to/spec.json",
+                "brain profile launch abc12345 --spec ignition_spec.json"
             ]
         )
 
@@ -203,12 +202,9 @@ class ProfilesLaunchCommand(BaseCommand):
         def launch_profile(
             ctx: typer.Context,
             profile_id: str = typer.Argument(..., help="ID del perfil a lanzar"),
-            url: Optional[str] = typer.Option(None, "--url", help="URL inicial explícita"),
-            cockpit: bool = typer.Option(False, "--cockpit", help="Modo cockpit (landing page)"),
-            discovery: bool = typer.Option(False, "--discovery", help="Modo de validación de conexión"),
-            spec: Optional[str] = typer.Option(None, "--spec", "-s", help="Archivo JSON con especificación completa de lanzamiento")
+            spec: str = typer.Option(..., "--spec", "-s", help="Archivo JSON con especificación completa de lanzamiento (REQUERIDO)")
         ):
-            """Lanza Chrome con el perfil especificado."""
+            """Lanza Chrome con el perfil especificado usando spec-driven mode."""
             logger.info(f"🚀 Comando: profile launch - ID: {profile_id[:8]}")
             
             gc = ctx.obj
@@ -219,70 +215,51 @@ class ProfilesLaunchCommand(BaseCommand):
             logger.debug(f"  → Modo JSON: {gc.json_mode}")
             logger.debug(f"  → Verbose: {gc.verbose}")
             logger.debug(f"  → Spec: {spec}")
-            logger.debug(f"  → URL: {url}")
-            logger.debug(f"  → Cockpit: {cockpit}")
-            logger.debug(f"  → Discovery: {discovery}")
+            
+            # Validación temprana del spec
+            if not spec:
+                logger.error("✗ Flag --spec es obligatorio")
+                error_msg = (
+                    "❌ Launch requiere el flag --spec (spec-driven mode)\n\n"
+                    "Convention mode deprecated desde v2.0\n\n"
+                    "Uso correcto:\n"
+                    "  brain profile launch <id> --spec /path/to/spec.json\n\n"
+                    "Ejemplo:\n"
+                    "  brain profile launch abc12345 --spec ignition_spec.json\n"
+                )
+                self._handle_error(gc, error_msg)
+            
+            spec_path = Path(spec)
+            if not spec_path.exists():
+                logger.error(f"✗ Archivo spec no encontrado: {spec}")
+                self._handle_error(gc, f"Archivo spec no encontrado: {spec}")
+            
+            try:
+                # Cargar spec JSON
+                with open(spec_path, 'r', encoding='utf-8') as f:
+                    spec_data = json.load(f)
+                logger.debug("✓ Spec cargado exitosamente")
+            except json.JSONDecodeError as e:
+                logger.error(f"✗ JSON inválido en spec: {e}")
+                self._handle_error(gc, f"JSON inválido en spec: {e}")
+            except Exception as e:
+                logger.error(f"✗ Error al leer spec: {e}")
+                self._handle_error(gc, f"Error al leer spec: {e}")
             
             try:
                 from brain.core.profile.profile_manager import ProfileManager
                 
+                if gc.verbose:
+                    typer.echo(f"📋 Lanzando con spec: {spec_path}", err=True)
+                
                 logger.debug("Inicializando ProfileManager...")
                 pm = ProfileManager()
                 
-                # MODO SPEC-DRIVEN (prioridad máxima)
-                if spec:
-                    logger.info(f"📋 Modo SPEC-DRIVEN activado: {spec}")
-                    
-                    spec_path = Path(spec)
-                    if not spec_path.exists():
-                        logger.error(f"✗ Archivo spec no encontrado: {spec}")
-                        raise FileNotFoundError(f"Archivo spec no encontrado: {spec}")
-                    
-                    try:
-                        with open(spec_path, 'r', encoding='utf-8') as f:
-                            spec_data = json.load(f)
-                        logger.debug("✓ Spec cargado exitosamente")
-                    except json.JSONDecodeError as e:
-                        logger.error(f"✗ JSON inválido en spec: {e}")
-                        raise ValueError(f"JSON inválido en spec: {e}")
-                    
-                    if gc.verbose:
-                        typer.echo(f"📋 Lanzando con spec: {spec_path}", err=True)
-                    
-                    logger.info(f"Lanzando perfil {profile_id[:8]} con spec...")
-                    result_data = pm.launch_profile(
-                        profile_id=profile_id,
-                        spec_data=spec_data
-                    )
-                    
-                else:
-                    # MODO LEGACY (estrategias predefinidas)
-                    logger.info("🔧 Modo LEGACY activado")
-                    
-                    if discovery:
-                        mode_label = "🔍 Discovery Check"
-                        target_url = pm.get_discovery_url(profile_id)
-                    elif cockpit:
-                        mode_label = "🏠 Cockpit"
-                        target_url = pm.get_landing_url(profile_id)
-                    elif url:
-                        mode_label = "Custom URL"
-                        target_url = url
-                    else:
-                        mode_label = "🏠 Cockpit"
-                        target_url = pm.get_landing_url(profile_id)
-
-                    logger.debug(f"  → Modo: {mode_label}")
-                    logger.debug(f"  → Target URL: {target_url}")
-
-                    if gc.verbose:
-                        typer.echo(f"🚀 Lanzando perfil en modo: {mode_label}", err=True)
-
-                    logger.info(f"Lanzando perfil {profile_id[:8]} en modo legacy...")
-                    result_data = pm.launch_profile(
-                        profile_id=profile_id,
-                        url=target_url
-                    )
+                logger.info(f"Lanzando perfil {profile_id[:8]} con spec...")
+                result_data = pm.launch_profile(
+                    profile_id=profile_id,
+                    spec_data=spec_data
+                )
                 
                 logger.info(f"✅ Perfil lanzado exitosamente")
                 

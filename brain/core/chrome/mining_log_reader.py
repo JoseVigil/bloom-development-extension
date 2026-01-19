@@ -6,7 +6,7 @@ Processes engine_mining.log files with bloom filtering.
 from pathlib import Path
 from collections import deque
 from datetime import datetime
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from brain.shared.logger import get_logger
 
 logger = get_logger(__name__)
@@ -29,7 +29,8 @@ class MiningLogReader:
         profile_id: str,
         keyword: str = "bloom",
         before_lines: int = 5,
-        after_lines: int = 5
+        after_lines: int = 5,
+        launch_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Read engine_mining.log and filter by keyword with context.
@@ -39,6 +40,7 @@ class MiningLogReader:
             keyword: Search keyword (case-insensitive)
             before_lines: Number of context lines before match
             after_lines: Number of context lines after match
+            launch_id: Optional launch ID to create separate output file
             
         Returns:
             Dictionary with results and metadata
@@ -63,7 +65,12 @@ class MiningLogReader:
         # Output file in the same directory
         logs_dir = Path(self.paths.base_dir) / "logs" / "profiles" / profile_id
         logs_dir.mkdir(parents=True, exist_ok=True)
-        output_file = logs_dir / "engine_mining.log"
+        
+        # Use launch_id as suffix if provided
+        if launch_id:
+            output_file = logs_dir / f"{launch_id}_engine_mining.log"
+        else:
+            output_file = logs_dir / "engine_mining.log"
         
         logger.info(f"Processing mining log file: {source_file}")
         logger.info(f"Output will be saved to: {output_file}")
@@ -122,6 +129,7 @@ class MiningLogReader:
         
         return {
             "profile_id": profile_id,
+            "launch_id": launch_id,
             "keyword": keyword,
             "source_file": str(source_file),
             "output_file": str(output_file),
