@@ -692,5 +692,4 @@ bloom-development-extension/
         ├── environment.py
         ├── github_types.py
         ├── logger.py
-        ├── profile_logger.py
         └── runtime_resolver.py
