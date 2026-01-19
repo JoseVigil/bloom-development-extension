@@ -266,7 +266,6 @@ bloom-development-extension/
 │   │   │   ├── index.html
 │   │   │   ├── installation_manager.js
 │   │   │   ├── launch/
-│   │   │   │   ├── index_launch copy.html
 │   │   │   │   ├── index_launch.html
 │   │   │   │   └── renderer_launch.js
 │   │   │   ├── logger.js
@@ -290,6 +289,7 @@ bloom-development-extension/
 │   │   │   ├── linux/
 │   │   │   │   └── bloom-host
 │   │   │   ├── logs/
+│   │   │   │   └── sentinel_2026-01-17.log
 │   │   │   ├── profiles/
 │   │   │   └── win32/
 │   │   │       ├── bloom-host.exe
@@ -299,7 +299,8 @@ bloom-development-extension/
 │   │   │       │   └── brain.exe
 │   │   │       ├── libwinpthread-1.dll
 │   │   │       ├── profiles.json
-│   │   │       └── sentinel.exe
+│   │   │       ├── sentinel.exe
+│   │   │       └── sentinel.exe~
 │   │   ├── host/
 │   │   │   └── com.bloom.nucleus.bridge.json
 │   │   └── nssm/
@@ -358,15 +359,42 @@ bloom-development-extension/
 │   │   ├── setup_runtime.js
 │   │   └── validate.js
 │   └── sentinel/
-│       ├── README.md
 │       ├── blueprint.json
 │       ├── build.bat
-│       ├── config.go
+│       ├── codebase/
+│       │   └── go_files_2026-01-18_18-37-05.txt
+│       ├── docs/
+│       │   ├── Sentinel - Fase 2 Discovery - Health Modular.md
+│       │   ├── Sentinel Base.md
+│       │   └── research/
+│       │       ├── CHROMIUM PATH FIX - Arquitectura de Rutas.md
+│       │       ├── SENTINEL v1.2 - Estructura de Archivos.md
+│       │       └── SENTINEL v1.2 Deployment & Testing Guide.md
+│       ├── extract_go_files.py
 │       ├── go.mod
-│       ├── logger_hub.go
-│       ├── main.go
-│       ├── paths.go
-│       └── process_manager.go
+│       ├── go.sum
+│       ├── internal/
+│       │   ├── boot/
+│       │   │   ├── npm.go
+│       │   │   ├── reaper.go
+│       │   │   └── vscode.go
+│       │   ├── core/
+│       │   │   ├── config.go
+│       │   │   ├── core.go
+│       │   │   ├── logger.go
+│       │   │   └── paths.go
+│       │   ├── discovery/
+│       │   │   ├── discovery.go
+│       │   │   └── vscode.go
+│       │   ├── health/
+│       │   │   └── health.go
+│       │   ├── ignition/
+│       │   │   ├── ignition.go
+│       │   │   ├── reaper.go
+│       │   │   └── telemetry.go
+│       │   └── persistence/
+│       │       └── persistence.go
+│       └── main.go
 └── brain/
     ├── .env
     ├── VERSION
@@ -664,4 +692,5 @@ bloom-development-extension/
         ├── environment.py
         ├── github_types.py
         ├── logger.py
+        ├── profile_logger.py
         └── runtime_resolver.py

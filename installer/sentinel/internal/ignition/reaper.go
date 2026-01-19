@@ -1,6 +1,7 @@
 package ignition
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -11,41 +12,33 @@ func (ig *Ignition) SetupReaper() {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
-	// Manejo de Ctrl+C o señales del sistema
 	go func() {
 		<-sigs
-		ig.Core.Logger.Warning("\n[REAPER] Señal de cierre recibida. Ejecutando limpieza coordinada...")
 		ig.KillAll()
 		os.Exit(0)
 	}()
 
-	// Monitorizar stdin (si Electron cierra el proceso padre)
 	go func() {
-		// Leemos un byte. Si Read devuelve error o termina, el pipe se cerró.
 		b := make([]byte, 1)
-		_, err := os.Stdin.Read(b)
-		if err != nil {
-			ig.Core.Logger.Warning("[REAPER] Stdin cerrado. Aniquilando procesos...")
-			ig.KillAll()
-			os.Exit(0)
-		}
+		os.Stdin.Read(b)
+		ig.KillAll()
+		os.Exit(0)
 	}()
 }
 
 func (ig *Ignition) KillAll() {
-	// 1. Matar Chromium
-	exec.Command("taskkill", "/F", "/IM", "chrome.exe", "/T").Run()
-	
-	// 2. Matar Brain Service
-	exec.Command("taskkill", "/F", "/IM", "brain.exe", "/T").Run()
-	
-	// 3. Matar Hosts Nativos
-	exec.Command("taskkill", "/F", "/IM", "bloom-host.exe", "/T").Run()
-	
-	// 4. Limpiar Spec temporal si existe
-	if ig.SpecPath != "" {
-		os.Remove(ig.SpecPath)
+	ig.Core.Logger.Warning("[REAPER] Ejecutando purga de sesión %s", ig.Session.LaunchID)
+
+	// 1. Matar el Browser PID detectado por el JSON de Python
+	if ig.Session.BrowserPID > 0 {
+		ig.Core.Logger.Info("[REAPER] Terminando Browser (PID %d)...", ig.Session.BrowserPID)
+		exec.Command("taskkill", "/F", "/PID", fmt.Sprintf("%d", ig.Session.BrowserPID), "/T").Run()
 	}
-	
-	ig.Core.Logger.Success("[REAPER] Sistema purgado con éxito.")
+
+	// 2. Matar el Service PID (Brain.exe)
+	if ig.Session.ServicePID > 0 {
+		exec.Command("taskkill", "/F", "/PID", fmt.Sprintf("%d", ig.Session.ServicePID), "/T").Run()
+	}
+
+	ig.Core.Logger.Success("[REAPER] Limpieza quirúrgica completada.")
 }

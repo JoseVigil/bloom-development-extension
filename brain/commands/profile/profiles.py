@@ -1,7 +1,6 @@
 """
 Comandos para gestión de perfiles de Chrome (Workers).
-Organiza los comandos de creación, listado, lanzamiento y destrucción de perfiles.
-Versión refactorizada con soporte para spec-driven launch.
+Versión refactorizada con logger dedicado para perfiles.
 """
 
 import typer
@@ -10,10 +9,12 @@ from pathlib import Path
 from typing import Optional
 from brain.cli.base import BaseCommand, CommandMetadata
 from brain.cli.categories import CommandCategory
+
+# IMPORTANTE: Usar el logger dedicado de profiles
 from brain.shared.logger import get_logger
 
-# Logger para este módulo
-logger = get_logger(__name__)
+# Logger dedicado para CLI de profiles
+logger = get_logger("brain.profile.cli")
 
 
 class ProfilesListCommand(BaseCommand):
@@ -35,35 +36,41 @@ class ProfilesListCommand(BaseCommand):
         @app.command(name="list")
         def list_profiles(ctx: typer.Context):
             """MOSTRAR AL USUARIO (CLI)."""
+            logger.info("📋 Comando: profile list")
+            
             gc = ctx.obj
             if gc is None:
                 from brain.shared.context import GlobalContext
                 gc = GlobalContext()
             
+            logger.debug(f"  → Modo JSON: {gc.json_mode}")
+            logger.debug(f"  → Verbose: {gc.verbose}")
+            
             try:
-                # 1. Importar el manager
                 from brain.core.profile.profile_manager import ProfileManager
                 
-                # 2. Llamar a la lógica (el método que acabamos de limpiar)
+                logger.debug("Inicializando ProfileManager...")
                 pm = ProfileManager()
-                data = pm.list_profiles() 
                 
-                # 3. Preparar el resultado para la salida
+                logger.info("Obteniendo lista de perfiles...")
+                data = pm.list_profiles() 
+                logger.info(f"✅ Lista obtenida: {len(data)} perfiles")
+                
                 result = {
                     "status": "success",
                     "operation": "list",
                     "data": {"profiles": data, "count": len(data)}
                 }
                 
-                # 4. Imprimir (Humano o JSON)
                 gc.output(result, self._render_list)
+                logger.info("✅ Comando profile list completado")
                 
             except Exception as e:
+                logger.error(f"✗ Error al listar perfiles: {str(e)}", exc_info=True)
                 self._handle_error(gc, f"Error al listar perfiles: {e}")
 
     def _render_list(self, data: dict) -> None:
         """Renderiza la lista de perfiles en formato humano."""
-        # Extraemos el contenido de 'data' que es lo que envió el comando
         payload = data.get("data", {})
         profiles = payload.get("profiles", [])
         count = payload.get("count", 0)
@@ -95,7 +102,7 @@ class ProfilesListCommand(BaseCommand):
             import json
             typer.echo(json.dumps({"status": "error", "message": message}))
         else:
-            typer.echo(f"❌ {message}", err=True)
+            typer.echo(f"✗ {message}", err=True)
         raise typer.Exit(code=1)
 
 
@@ -121,14 +128,15 @@ class ProfilesCreateCommand(BaseCommand):
             alias: str = typer.Argument(..., help="Nombre descriptivo del perfil")
         ):
             """Crea un nuevo perfil con el alias especificado."""
-            logger.info(f"🔨 Iniciando comando profile create con alias: '{alias}'")
+            logger.info(f"🔨 Comando: profile create - Alias: '{alias}'")
             
             gc = ctx.obj
             if gc is None:
                 from brain.shared.context import GlobalContext
                 gc = GlobalContext()
             
-            logger.debug(f"Modo JSON: {gc.json_mode}, Verbose: {gc.verbose}")
+            logger.debug(f"  → Modo JSON: {gc.json_mode}")
+            logger.debug(f"  → Verbose: {gc.verbose}")
             
             try:
                 from brain.core.profile.profile_manager import ProfileManager
@@ -141,8 +149,7 @@ class ProfilesCreateCommand(BaseCommand):
                 
                 logger.info(f"Creando perfil con alias '{alias}'...")
                 profile_data = pm.create_profile(alias)
-                logger.info(f"✅ Perfil creado: ID={profile_data.get('id', 'N/A')[:8]}...")
-                logger.debug(f"Datos del perfil: {profile_data}")
+                logger.info(f"✅ Perfil creado: ID={profile_data.get('id', 'N/A')[:8]}")
                 
                 result = {
                     "status": "success",
@@ -151,10 +158,10 @@ class ProfilesCreateCommand(BaseCommand):
                 }
                 
                 gc.output(result, self._render_create)
-                logger.info("✅ Comando profile create completado exitosamente")
+                logger.info("✅ Comando profile create completado")
                 
             except Exception as e:
-                logger.error(f"❌ Error al crear perfil '{alias}': {str(e)}", exc_info=True)
+                logger.error(f"✗ Error al crear perfil '{alias}': {str(e)}", exc_info=True)
                 self._handle_error(gc, f"Error al crear perfil: {str(e)}")
 
     def _render_create(self, data: dict) -> None:
@@ -175,7 +182,7 @@ class ProfilesCreateCommand(BaseCommand):
             import json
             typer.echo(json.dumps({"status": "error", "message": message}))
         else:
-            typer.echo(f"❌ {message}", err=True)
+            typer.echo(f"✗ {message}", err=True)
         raise typer.Exit(code=1)
 
 
@@ -206,22 +213,20 @@ class ProfilesLaunchCommand(BaseCommand):
             discovery: bool = typer.Option(False, "--discovery", help="Modo de validación de conexión"),
             spec: Optional[str] = typer.Option(None, "--spec", "-s", help="Archivo JSON con especificación completa de lanzamiento")
         ):
-            """
-            Lanza Chrome con el perfil especificado.
-            
-            Soporta dos modos:
-            1. LEGACY: Usa estrategias predefinidas (--discovery, --cockpit, --url)
-            2. SPEC-DRIVEN: Usa un archivo JSON con configuración completa (--spec)
-            
-            El modo SPEC-DRIVEN tiene prioridad sobre cualquier otro parámetro.
-            """
-            logger.info(f"🚀 Iniciando comando profile launch")
-            logger.debug(f"Profile ID: {profile_id[:8]}..., Spec: {spec}")
+            """Lanza Chrome con el perfil especificado."""
+            logger.info(f"🚀 Comando: profile launch - ID: {profile_id[:8]}")
             
             gc = ctx.obj
             if gc is None:
                 from brain.shared.context import GlobalContext
                 gc = GlobalContext()
+            
+            logger.debug(f"  → Modo JSON: {gc.json_mode}")
+            logger.debug(f"  → Verbose: {gc.verbose}")
+            logger.debug(f"  → Spec: {spec}")
+            logger.debug(f"  → URL: {url}")
+            logger.debug(f"  → Cockpit: {cockpit}")
+            logger.debug(f"  → Discovery: {discovery}")
             
             try:
                 from brain.core.profile.profile_manager import ProfileManager
@@ -231,25 +236,24 @@ class ProfilesLaunchCommand(BaseCommand):
                 
                 # MODO SPEC-DRIVEN (prioridad máxima)
                 if spec:
-                    logger.info("📋 Modo SPEC-DRIVEN activado")
+                    logger.info(f"📋 Modo SPEC-DRIVEN activado: {spec}")
                     
-                    # Validar que el archivo existe
                     spec_path = Path(spec)
                     if not spec_path.exists():
+                        logger.error(f"✗ Archivo spec no encontrado: {spec}")
                         raise FileNotFoundError(f"Archivo spec no encontrado: {spec}")
                     
-                    # Cargar y validar JSON
                     try:
                         with open(spec_path, 'r', encoding='utf-8') as f:
                             spec_data = json.load(f)
-                        logger.debug(f"Spec cargado exitosamente: {spec_path}")
+                        logger.debug("✓ Spec cargado exitosamente")
                     except json.JSONDecodeError as e:
+                        logger.error(f"✗ JSON inválido en spec: {e}")
                         raise ValueError(f"JSON inválido en spec: {e}")
                     
                     if gc.verbose:
                         typer.echo(f"📋 Lanzando con spec: {spec_path}", err=True)
                     
-                    # Lanzar con spec
                     logger.info(f"Lanzando perfil {profile_id[:8]} con spec...")
                     result_data = pm.launch_profile(
                         profile_id=profile_id,
@@ -260,7 +264,6 @@ class ProfilesLaunchCommand(BaseCommand):
                     # MODO LEGACY (estrategias predefinidas)
                     logger.info("🔧 Modo LEGACY activado")
                     
-                    # Determinar modo y construir URL correspondiente
                     if discovery:
                         mode_label = "🔍 Discovery Check"
                         target_url = pm.get_discovery_url(profile_id)
@@ -271,23 +274,22 @@ class ProfilesLaunchCommand(BaseCommand):
                         mode_label = "Custom URL"
                         target_url = url
                     else:
-                        # Default: cockpit (landing)
                         mode_label = "🏠 Cockpit"
                         target_url = pm.get_landing_url(profile_id)
+
+                    logger.debug(f"  → Modo: {mode_label}")
+                    logger.debug(f"  → Target URL: {target_url}")
 
                     if gc.verbose:
                         typer.echo(f"🚀 Lanzando perfil en modo: {mode_label}", err=True)
 
                     logger.info(f"Lanzando perfil {profile_id[:8]} en modo legacy...")
-                    logger.debug(f"Target URL: {target_url}")
-                    
                     result_data = pm.launch_profile(
                         profile_id=profile_id,
                         url=target_url
                     )
                 
                 logger.info(f"✅ Perfil lanzado exitosamente")
-                logger.debug(f"Resultado: {result_data}")
                 
                 result = {
                     "status": "success",
@@ -296,16 +298,16 @@ class ProfilesLaunchCommand(BaseCommand):
                 }
                 
                 gc.output(result, self._render_launch)
-                logger.info("✅ Comando profile launch completado exitosamente")
+                logger.info("✅ Comando profile launch completado")
                 
             except FileNotFoundError as e:
-                logger.error(f"❌ Archivo no encontrado: {str(e)}", exc_info=True)
+                logger.error(f"✗ Archivo no encontrado: {str(e)}")
                 self._handle_error(gc, str(e))
             except ValueError as e:
-                logger.error(f"❌ Error de validación: {str(e)}", exc_info=True)
+                logger.error(f"✗ Error de validación: {str(e)}")
                 self._handle_error(gc, str(e))
             except Exception as e:
-                logger.error(f"❌ Error al lanzar perfil {profile_id[:8]}...: {str(e)}", exc_info=True)
+                logger.error(f"✗ Error al lanzar perfil: {str(e)}", exc_info=True)
                 self._handle_error(gc, f"Error al lanzar perfil: {str(e)}")
 
     def _render_launch(self, data: dict) -> None:
@@ -323,7 +325,7 @@ class ProfilesLaunchCommand(BaseCommand):
             import json
             typer.echo(json.dumps({"status": "error", "message": message}))
         else:
-            typer.echo(f"❌ {message}", err=True)
+            typer.echo(f"✗ {message}", err=True)
         raise typer.Exit(code=1)
 
 
@@ -349,15 +351,15 @@ class ProfilesDestroyCommand(BaseCommand):
             profile_id: str = typer.Argument(..., help="ID del perfil a eliminar")
         ):
             """Elimina un perfil y todos sus datos."""
-            logger.info(f"🗑️ Iniciando comando profile destroy")
-            logger.debug(f"Profile ID: {profile_id[:8]}...")
+            logger.info(f"🗑️ Comando: profile destroy - ID: {profile_id[:8]}")
             
             gc = ctx.obj
             if gc is None:
                 from brain.shared.context import GlobalContext
                 gc = GlobalContext()
             
-            logger.debug(f"Modo JSON: {gc.json_mode}, Verbose: {gc.verbose}")
+            logger.debug(f"  → Modo JSON: {gc.json_mode}")
+            logger.debug(f"  → Verbose: {gc.verbose}")
             
             try:
                 from brain.core.profile.profile_manager import ProfileManager
@@ -371,7 +373,6 @@ class ProfilesDestroyCommand(BaseCommand):
                 logger.info(f"Eliminando perfil {profile_id[:8]}...")
                 destroy_data = pm.destroy_profile(profile_id)
                 logger.info(f"✅ Perfil eliminado exitosamente")
-                logger.debug(f"Datos de eliminación: {destroy_data}")
                 
                 result = {
                     "status": "success",
@@ -380,10 +381,10 @@ class ProfilesDestroyCommand(BaseCommand):
                 }
                 
                 gc.output(result, self._render_destroy)
-                logger.info("✅ Comando profile destroy completado exitosamente")
+                logger.info("✅ Comando profile destroy completado")
                 
             except Exception as e:
-                logger.error(f"❌ Error al eliminar perfil {profile_id[:8]}...: {str(e)}", exc_info=True)
+                logger.error(f"✗ Error al eliminar perfil: {str(e)}", exc_info=True)
                 self._handle_error(gc, f"Error al eliminar perfil: {str(e)}")
 
     def _render_destroy(self, data: dict) -> None:
@@ -398,7 +399,7 @@ class ProfilesDestroyCommand(BaseCommand):
             import json
             typer.echo(json.dumps({"status": "error", "message": message}))
         else:
-            typer.echo(f"❌ {message}", err=True)
+            typer.echo(f"✗ {message}", err=True)
         raise typer.Exit(code=1)
 
 
@@ -425,15 +426,15 @@ class ProfilesLinkCommand(BaseCommand):
             email: str = typer.Argument(..., help="Email a vincular")
         ):
             """Vincula un email a un perfil."""
-            logger.info(f"🔗 Iniciando comando profile link")
-            logger.debug(f"Profile ID: {profile_id[:8]}..., Email: {email}")
+            logger.info(f"🔗 Comando: profile link - ID: {profile_id[:8]}, Email: {email}")
             
             gc = ctx.obj
             if gc is None:
                 from brain.shared.context import GlobalContext
                 gc = GlobalContext()
             
-            logger.debug(f"Modo JSON: {gc.json_mode}, Verbose: {gc.verbose}")
+            logger.debug(f"  → Modo JSON: {gc.json_mode}")
+            logger.debug(f"  → Verbose: {gc.verbose}")
             
             try:
                 from brain.core.profile.profile_manager import ProfileManager
@@ -447,7 +448,6 @@ class ProfilesLinkCommand(BaseCommand):
                 logger.info(f"Vinculando {email} al perfil {profile_id[:8]}...")
                 link_data = pm.link_account(profile_id, email)
                 logger.info(f"✅ Cuenta vinculada exitosamente")
-                logger.debug(f"Datos de vinculación: {link_data}")
                 
                 result = {
                     "status": "success",
@@ -456,10 +456,10 @@ class ProfilesLinkCommand(BaseCommand):
                 }
                 
                 gc.output(result, self._render_link)
-                logger.info("✅ Comando profile link completado exitosamente")
+                logger.info("✅ Comando profile link completado")
                 
             except Exception as e:
-                logger.error(f"❌ Error al vincular cuenta al perfil {profile_id[:8]}...: {str(e)}", exc_info=True)
+                logger.error(f"✗ Error al vincular cuenta: {str(e)}", exc_info=True)
                 self._handle_error(gc, f"Error al vincular cuenta: {str(e)}")
 
     def _render_link(self, data: dict) -> None:
@@ -473,7 +473,7 @@ class ProfilesLinkCommand(BaseCommand):
             import json
             typer.echo(json.dumps({"status": "error", "message": message}))
         else:
-            typer.echo(f"❌ {message}", err=True)
+            typer.echo(f"✗ {message}", err=True)
         raise typer.Exit(code=1)
 
 
@@ -499,15 +499,15 @@ class ProfilesUnlinkCommand(BaseCommand):
             profile_id: str = typer.Argument(..., help="ID del perfil")
         ):
             """Desvincula la cuenta de un perfil."""
-            logger.info(f"🔓 Iniciando comando profile unlink")
-            logger.debug(f"Profile ID: {profile_id[:8]}...")
+            logger.info(f"🔓 Comando: profile unlink - ID: {profile_id[:8]}")
             
             gc = ctx.obj
             if gc is None:
                 from brain.shared.context import GlobalContext
                 gc = GlobalContext()
             
-            logger.debug(f"Modo JSON: {gc.json_mode}, Verbose: {gc.verbose}")
+            logger.debug(f"  → Modo JSON: {gc.json_mode}")
+            logger.debug(f"  → Verbose: {gc.verbose}")
             
             try:
                 from brain.core.profile.profile_manager import ProfileManager
@@ -521,7 +521,6 @@ class ProfilesUnlinkCommand(BaseCommand):
                 logger.info(f"Desvinculando cuenta del perfil {profile_id[:8]}...")
                 unlink_data = pm.unlink_account(profile_id)
                 logger.info(f"✅ Cuenta desvinculada exitosamente")
-                logger.debug(f"Datos de desvinculación: {unlink_data}")
                 
                 result = {
                     "status": "success",
@@ -530,10 +529,10 @@ class ProfilesUnlinkCommand(BaseCommand):
                 }
                 
                 gc.output(result, self._render_unlink)
-                logger.info("✅ Comando profile unlink completado exitosamente")
+                logger.info("✅ Comando profile unlink completado")
                 
             except Exception as e:
-                logger.error(f"❌ Error al desvincular cuenta del perfil {profile_id[:8]}...: {str(e)}", exc_info=True)
+                logger.error(f"✗ Error al desvincular cuenta: {str(e)}", exc_info=True)
                 self._handle_error(gc, f"Error al desvincular cuenta: {str(e)}")
 
     def _render_unlink(self, data: dict) -> None:
@@ -547,7 +546,7 @@ class ProfilesUnlinkCommand(BaseCommand):
             import json
             typer.echo(json.dumps({"status": "error", "message": message}))
         else:
-            typer.echo(f"❌ {message}", err=True)
+            typer.echo(f"✗ {message}", err=True)
         raise typer.Exit(code=1)
 
 
@@ -576,21 +575,21 @@ class ProfilesAccountsRegisterCommand(BaseCommand):
             email: str = typer.Argument(..., help="Email o identificador de la cuenta")
         ):
             """Registra una nueva cuenta en un perfil."""
-            logger.info(f"🔗 Iniciando comando profile accounts-register")
-            logger.debug(f"Profile ID: {profile_id[:8]}..., Provider: {provider}, Email: {email}")
+            logger.info(f"📝 Comando: profile accounts-register - ID: {profile_id[:8]}, Provider: {provider}, Email: {email}")
             
             gc = ctx.obj
             if gc is None:
                 from brain.shared.context import GlobalContext
                 gc = GlobalContext()
             
-            logger.debug(f"Modo JSON: {gc.json_mode}, Verbose: {gc.verbose}")
+            logger.debug(f"  → Modo JSON: {gc.json_mode}")
+            logger.debug(f"  → Verbose: {gc.verbose}")
             
             try:
                 from brain.core.profile.profile_manager import ProfileManager
                 
                 if gc.verbose:
-                    typer.echo(f"🔗 Registrando {provider} ({email}) en {profile_id}...", err=True)
+                    typer.echo(f"📝 Registrando {provider} ({email}) en {profile_id}...", err=True)
                 
                 logger.debug("Inicializando ProfileManager...")
                 pm = ProfileManager()
@@ -598,7 +597,6 @@ class ProfilesAccountsRegisterCommand(BaseCommand):
                 logger.info(f"Registrando cuenta {provider}/{email} en perfil {profile_id[:8]}...")
                 result_data = pm.register_account(profile_id, provider, email)
                 logger.info(f"✅ Cuenta registrada exitosamente")
-                logger.debug(f"Datos de registro: {result_data}")
                 
                 result = {
                     "status": "success",
@@ -607,15 +605,15 @@ class ProfilesAccountsRegisterCommand(BaseCommand):
                 }
                 
                 gc.output(result, self._render_register)
-                logger.info("✅ Comando profile accounts-register completado exitosamente")
+                logger.info("✅ Comando profile accounts-register completado")
                 
             except Exception as e:
-                logger.error(f"❌ Error al registrar cuenta {provider}/{email} en perfil {profile_id[:8]}...: {str(e)}", exc_info=True)
+                logger.error(f"✗ Error al registrar cuenta: {str(e)}", exc_info=True)
                 self._handle_error(gc, f"Error al registrar cuenta: {str(e)}")
 
     def _render_register(self, data: dict) -> None:
         """Renderiza la confirmación de registro."""
-        typer.echo(f"\n🔗 Cuenta registrada exitosamente")
+        typer.echo(f"\n📝 Cuenta registrada exitosamente")
         typer.echo(f"   Perfil:   {data.get('profile_alias')} ({data.get('profile_id')[:8]}...)")
         typer.echo(f"   Provider: {data.get('provider')}")
         typer.echo(f"   Cuenta:   {data.get('identifier')}\n")
@@ -626,7 +624,7 @@ class ProfilesAccountsRegisterCommand(BaseCommand):
             import json
             typer.echo(json.dumps({"status": "error", "message": message}))
         else:
-            typer.echo(f"❌ {message}", err=True)
+            typer.echo(f"✗ {message}", err=True)
         raise typer.Exit(code=1)
 
 
@@ -653,21 +651,21 @@ class ProfilesAccountsRemoveCommand(BaseCommand):
             provider: str = typer.Argument(..., help="Proveedor a remover")
         ):
             """Remueve una cuenta registrada de un perfil."""
-            logger.info(f"🔓 Iniciando comando profile accounts-remove")
-            logger.debug(f"Profile ID: {profile_id[:8]}..., Provider: {provider}")
+            logger.info(f"🗑️ Comando: profile accounts-remove - ID: {profile_id[:8]}, Provider: {provider}")
             
             gc = ctx.obj
             if gc is None:
                 from brain.shared.context import GlobalContext
                 gc = GlobalContext()
             
-            logger.debug(f"Modo JSON: {gc.json_mode}, Verbose: {gc.verbose}")
+            logger.debug(f"  → Modo JSON: {gc.json_mode}")
+            logger.debug(f"  → Verbose: {gc.verbose}")
             
             try:
                 from brain.core.profile.profile_manager import ProfileManager
                 
                 if gc.verbose:
-                    typer.echo(f"🔓 Removiendo {provider} de {profile_id}...", err=True)
+                    typer.echo(f"🗑️ Removiendo {provider} de {profile_id}...", err=True)
                 
                 logger.debug("Inicializando ProfileManager...")
                 pm = ProfileManager()
@@ -675,7 +673,6 @@ class ProfilesAccountsRemoveCommand(BaseCommand):
                 logger.info(f"Removiendo cuenta {provider} del perfil {profile_id[:8]}...")
                 result_data = pm.remove_account(profile_id, provider)
                 logger.info(f"✅ Cuenta removida exitosamente, {len(result_data.get('remaining_accounts', []))} cuentas restantes")
-                logger.debug(f"Datos de remoción: {result_data}")
                 
                 result = {
                     "status": "success",
@@ -684,15 +681,15 @@ class ProfilesAccountsRemoveCommand(BaseCommand):
                 }
                 
                 gc.output(result, self._render_remove)
-                logger.info("✅ Comando profile accounts-remove completado exitosamente")
+                logger.info("✅ Comando profile accounts-remove completado")
                 
             except Exception as e:
-                logger.error(f"❌ Error al remover cuenta {provider} del perfil {profile_id[:8]}...: {str(e)}", exc_info=True)
+                logger.error(f"✗ Error al remover cuenta: {str(e)}", exc_info=True)
                 self._handle_error(gc, f"Error al remover cuenta: {str(e)}")
 
     def _render_remove(self, data: dict) -> None:
         """Renderiza la confirmación de remoción."""
-        typer.echo(f"\n🔓 Cuenta removida exitosamente")
+        typer.echo(f"\n🗑️ Cuenta removida exitosamente")
         typer.echo(f"   Perfil:   {data.get('profile_id')[:8]}...")
         typer.echo(f"   Provider: {data.get('provider')}")
         typer.echo(f"   Cuentas restantes: {len(data.get('remaining_accounts', []))}\n")
@@ -703,5 +700,5 @@ class ProfilesAccountsRemoveCommand(BaseCommand):
             import json
             typer.echo(json.dumps({"status": "error", "message": message}))
         else:
-            typer.echo(f"❌ {message}", err=True)
+            typer.echo(f"✗ {message}", err=True)
         raise typer.Exit(code=1)

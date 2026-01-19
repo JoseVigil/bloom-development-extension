@@ -1,6 +1,8 @@
 bloom-development-extension/
 └── webview/
     └── app/
+        ├── .svelte-kit/ [... svelte build]
+        ├── node_modules/ [... dependencies]
         ├── package-lock.json
         ├── package.json
         ├── src/
@@ -10,6 +12,7 @@ bloom-development-extension/
         │   │   ├── components/
         │   │   │   ├── BriefingEditor.svelte
         │   │   │   ├── ChatBTIP.svelte
+        │   │   │   ├── CopilotChat.svelte
         │   │   │   ├── FileTree.svelte
         │   │   │   ├── GeminiTokenForm.svelte
         │   │   │   ├── GithubAuthButton.svelte
