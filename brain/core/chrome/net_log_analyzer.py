@@ -1,6 +1,7 @@
 """
 Chrome network log analyzer - Pure business logic.
 Parses and filters Chrome's --log-net-log JSON output.
+NOW WITH AUTO-REPAIR FOR TRUNCATED JSON (Chromium's "live" logs).
 """
 
 import json
@@ -16,6 +17,8 @@ class NetLogAnalyzer:
     """
     Analyzes Chrome network logs with AI-focused filtering.
     Parses JSON net-log format and extracts relevant events.
+    
+    Handles truncated JSON from live Chromium sessions automatically.
     """
     
     # AI service domains for intelligent filtering
@@ -42,6 +45,70 @@ class NetLogAnalyzer:
         from brain.core.profile.path_resolver import PathResolver
         self.paths = PathResolver()
         logger.debug(f"Initialized NetLogAnalyzer with base_dir: {self.paths.base_dir}")
+    
+    def _repair_truncated_json(self, raw_data: str) -> str:
+        """
+        Repair truncated JSON from live Chromium sessions.
+        
+        Chromium never closes the net-log JSON while the browser is running,
+        so we need to artificially close it to make it parseable.
+        
+        Args:
+            raw_data: Raw JSON string (potentially truncated)
+            
+        Returns:
+            Repaired JSON string with proper closing brackets
+        """
+        if not raw_data:
+            return raw_data
+        
+        data = raw_data.strip()
+        
+        # Check if JSON is already properly closed
+        if data.endswith("]}"):
+            logger.debug("JSON already properly closed")
+            return data
+        
+        logger.warning("Detected truncated JSON (live Chromium session) - applying auto-repair")
+        
+        # Strategy: progressively close missing structures
+        # The net-log structure is: {"constants":{...}, "events":[...]}
+        
+        # Count opening/closing braces and brackets to determine what's missing
+        open_braces = data.count('{')
+        close_braces = data.count('}')
+        open_brackets = data.count('[')
+        close_brackets = data.count(']')
+        
+        logger.debug(f"Brace analysis: {{ {open_braces}, }} {close_braces}, [ {open_brackets}, ] {close_brackets}")
+        
+        # Most common case: truncated in the middle of events array
+        # We need to close: current event object, events array, root object
+        
+        # If last char is comma, remove it (incomplete entry)
+        if data.endswith(','):
+            data = data[:-1]
+            logger.debug("Removed trailing comma")
+        
+        # Close any open event object
+        if not data.endswith('}'):
+            missing_braces = open_braces - close_braces
+            data += '}' * missing_braces
+            logger.debug(f"Added {missing_braces} closing brace(s)")
+        
+        # Close events array
+        if not data.endswith(']'):
+            missing_brackets = open_brackets - close_brackets
+            data += ']' * missing_brackets
+            logger.debug(f"Added {missing_brackets} closing bracket(s)")
+        
+        # Close root object
+        if not data.endswith('}'):
+            data += '}'
+            logger.debug("Added final closing brace")
+        
+        logger.info("✅ JSON auto-repair completed successfully")
+        return data
     
     def analyze(
         self,
@@ -73,8 +140,31 @@ class NetLogAnalyzer:
         if not profile_id or not profile_id.strip():
             raise ValueError("profile_id cannot be empty")
         
-        # Construct source file path (assuming net-log is saved as netlog.json)
-        source_file = Path(self.paths.base_dir) / "profiles" / profile_id / "network_mining.json"
+        # Load profiles.json to get net_log path
+        profiles_json = Path(self.paths.base_dir) / "config" / "profiles.json"
+        
+        if not profiles_json.exists():
+            raise FileNotFoundError(f"profiles.json not found: {profiles_json}")
+        
+        with open(profiles_json, 'r', encoding='utf-8') as f:
+            profiles_data = json.load(f)
+        
+        # Find profile
+        profile = None
+        for p in profiles_data.get('profiles', []):
+            if p['id'] == profile_id:
+                profile = p
+                break
+        
+        if not profile:
+            raise ValueError(f"Profile {profile_id} not found in profiles.json")
+        
+        # Get net_log path
+        net_log_path = profile.get('log_files', {}).get('net_log')
+        if not net_log_path:
+            raise ValueError(f"net_log not found for profile {profile_id}")
+        
+        source_file = Path(net_log_path)
 
         logger.debug(f"Source file: {source_file}")
         
@@ -96,13 +186,27 @@ class NetLogAnalyzer:
         logger.info(f"Analyzing network log: {source_file}")
         logger.info(f"Output will be saved to: {output_file}")
         
-        # Parse JSON
+        # Parse JSON with auto-repair for truncated files
         try:
             with open(source_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
+                raw_data = f.read()
+            
+            if not raw_data.strip():
+                raise ValueError("Network log file is empty")
+            
+            # Apply auto-repair for truncated JSON (live Chromium sessions)
+            repaired_data = self._repair_truncated_json(raw_data)
+            
+            # Parse the repaired JSON
+            data = json.loads(repaired_data)
+            
         except json.JSONDecodeError as e:
-            logger.error(f"Invalid JSON in network log: {e}")
+            logger.error(f"Invalid JSON in network log even after repair: {e}")
+            logger.error(f"Error at line {e.lineno}, column {e.colno}")
             raise ValueError(f"Invalid JSON format: {e}")
+        except Exception as e:
+            logger.error(f"Failed to read/parse network log: {e}")
+            raise
         
         # Extract constants for event type mapping
         constants = data.get('constants', {})
@@ -217,7 +321,8 @@ class NetLogAnalyzer:
             "statistics": stats,
             "filtered_requests": filtered_requests,
             "events_processed": len(events),
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
+            "json_repaired": not raw_data.strip().endswith("]}")
         }
     
     def _should_exclude(self, url: str, exclude_patterns: Set[str]) -> bool:
