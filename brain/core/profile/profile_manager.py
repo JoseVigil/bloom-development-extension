@@ -161,11 +161,13 @@ class ProfileManager:
             # 1. Cargar perfiles desde el JSON
             profiles = self._load_profiles()
             
-            # 2. Verificar existencia en disco
+            # 2. Verificar existencia en disco y agregar metadata
             for p in profiles:
                 p['path'] = str(self.paths.profiles_dir / p['id'])
                 p['exists'] = Path(p['path']).exists()
-                logger.debug(f"  → Perfil: {p.get('alias')} | Existe: {p['exists']}")
+                if 'master' not in p:
+                    p['master'] = False
+                logger.debug(f"  → Perfil: {p.get('alias')} | Existe: {p['exists']} | Master: {p.get('master', False)}")
             
             logger.info(f"✅ Lista generada: {len(profiles)} perfiles")
             return profiles
