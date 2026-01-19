@@ -120,8 +120,7 @@ bloom-development-extension/
     │   │       │   └── brain.exe
     │   │       ├── libwinpthread-1.dll
     │   │       ├── profiles.json
-    │   │       ├── sentinel.exe
-    │   │       └── sentinel.exe~
+    │   │       └── sentinel.exe
     │   ├── host/
     │   │   └── com.bloom.nucleus.bridge.json
     │   └── nssm/
@@ -183,6 +182,7 @@ bloom-development-extension/
         ├── blueprint.json
         ├── build.bat
         ├── codebase/
+        │   └── go_files_2026-01-19_13-34-38.txt
         ├── docs/
         │   ├── Sentinel - Fase 2 Discovery - Health Modular.md
         │   ├── Sentinel Base.md

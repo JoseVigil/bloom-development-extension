@@ -1,3 +1,6 @@
+internal\seed\seed.go
+
+```go
 package seed
 
 import (
@@ -28,7 +31,7 @@ type ProfilesRegistry struct {
 }
 
 func HandleSeed(c *core.Core, alias string, isMaster bool) (string, error) {
-	// 1. Validaciones iniciales de Alias
+	// 1. Validaciones
 	registry := loadProfilesRegistry(c)
 	for _, p := range registry.Profiles {
 		if p.Alias == alias {
@@ -36,7 +39,17 @@ func HandleSeed(c *core.Core, alias string, isMaster bool) (string, error) {
 		}
 	}
 
-	// 2. Ejecución de Brain
+	if isMaster {
+		status := startup.LoadCurrentStatus(c)
+		if status.MasterProfile != "" {
+			path := filepath.Join(c.Paths.ProfilesDir, status.MasterProfile)
+			if info, err := os.Stat(path); err == nil && info.IsDir() {
+				return "", fmt.Errorf("master_activo: %s", status.MasterProfile)
+			}
+		}
+	}
+
+	// 2. Ejecutar Brain con búsqueda de JSON desde el final
 	sm, _ := discovery.DiscoverSystem(c.Paths.BinDir)
 	cmd := exec.Command(sm.BrainPath, "--json", "profile", "create", alias)
 	var out bytes.Buffer
@@ -45,31 +58,29 @@ func HandleSeed(c *core.Core, alias string, isMaster bool) (string, error) {
 		return "", fmt.Errorf("brain_error: %v", err)
 	}
 
-	// Extracción quirúrgica del JSON
-	rawOut := strings.TrimSpace(out.String())
-	jsonStart := strings.LastIndex(rawOut, "{")
-	jsonEnd := strings.LastIndex(rawOut, "}")
-	if jsonStart == -1 || jsonEnd == -1 {
-		return "", fmt.Errorf("formato_invalido: %s", rawOut)
+	rawOut := out.String()
+	jsonStart := strings.LastIndex(rawOut, "{") // ✅ Ignora logs previos
+	if jsonStart == -1 {
+		return "", fmt.Errorf("brain_no_json_output: %s", rawOut)
 	}
 
 	var brainRes struct{ UUID string `json:"uuid"` }
-	if err := json.Unmarshal([]byte(rawOut[jsonStart:jsonEnd+1]), &brainRes); err != nil {
-		return "", err
+	if err := json.Unmarshal([]byte(rawOut[jsonStart:]), &brainRes); err != nil {
+		return "", fmt.Errorf("parse_error: %v", err)
 	}
 	uuid := brainRes.UUID
 
-	// 3. Infraestructura de Archivos
+	if uuid == "" { return "", fmt.Errorf("uuid_vacio") }
+
+	// 3. Escribir Infraestructura
 	configDir := filepath.Join(c.Paths.AppDataDir, "config", "profile", uuid)
 	specPath := filepath.Join(configDir, "ignition_spec.json")
-	_ = os.MkdirAll(configDir, 0755)
+	os.MkdirAll(configDir, 0755)
 
 	_ = writeIgnitionSpec(c, sm, uuid, specPath)
+	_ = updateProfilesInventory(c, uuid, alias, isMaster, specPath)
 
-	// 4. ACTUALIZACIÓN INTELIGENTE (UPSERT) DE INVENTARIO
-	updateProfilesInventory(c, uuid, alias, isMaster, specPath)
-
-	// 5. Sincronización de Autoridad en Nucleus
+	// 4. Sincronizar Master en nucleus.json
 	if isMaster {
 		status := startup.LoadCurrentStatus(c)
 		status.MasterProfile = uuid
@@ -86,8 +97,7 @@ func loadProfilesRegistry(c *core.Core) ProfilesRegistry {
 	if err != nil { return ProfilesRegistry{Profiles: []ProfileEntry{}} }
 	
 	var registry ProfilesRegistry
-	trimmed := strings.TrimSpace(string(data))
-	if strings.HasPrefix(trimmed, "[") {
+	if strings.HasPrefix(strings.TrimSpace(string(data)), "[") {
 		var list []ProfileEntry
 		json.Unmarshal(data, &list)
 		registry.Profiles = list
@@ -115,37 +125,21 @@ func writeIgnitionSpec(c *core.Core, sm *discovery.SystemMap, uuid string, specP
 	return os.WriteFile(specPath, data, 0644)
 }
 
-// updateProfilesInventory implementa lógica de UPSERT para evitar duplicados
-func updateProfilesInventory(c *core.Core, uuid string, alias string, isMaster bool, specPath string) {
+func updateProfilesInventory(c *core.Core, uuid string, alias string, isMaster bool, specPath string) error {
 	registry := loadProfilesRegistry(c)
-	
-	// Datos de la nueva entrada
-	newEntry := ProfileEntry{
-		ID:       uuid,
-		Alias:    alias,
-		Master:   isMaster,
-		Path:     filepath.Join(c.Paths.ProfilesDir, uuid),
+	if isMaster {
+		for i := range registry.Profiles { registry.Profiles[i].Master = false }
+	}
+	registry.Profiles = append(registry.Profiles, ProfileEntry{
+		ID: uuid, Alias: alias, Master: isMaster,
+		Path: filepath.Join(c.Paths.ProfilesDir, uuid),
 		SpecPath: specPath,
-		LogsDir:  filepath.Join(c.Paths.LogsDir, "profiles", uuid),
-	}
-
-	found := false
-	for i, p := range registry.Profiles {
-		// 1. Si el nuevo es master, todos los existentes pierden la corona
-		if isMaster {
-			registry.Profiles[i].Master = false
-		}
-		// 2. Si el ID ya existe, actualizamos la entrada en lugar de añadir
-		if p.ID == uuid {
-			registry.Profiles[i] = newEntry
-			found = true
-		}
-	}
-
-	if !found {
-		registry.Profiles = append(registry.Profiles, newEntry)
-	}
-
+		LogsDir: filepath.Join(c.Paths.LogsDir, "profiles", uuid),
+	})
 	data, _ := json.MarshalIndent(registry, "", "  ")
-	_ = os.WriteFile(filepath.Join(c.Paths.AppDataDir, "config", "profiles.json"), data, 0644)
+	return os.WriteFile(filepath.Join(c.Paths.AppDataDir, "config", "profiles.json"), data, 0644)
 }
+```
+
+--------------------------------------------------------------------------------
+

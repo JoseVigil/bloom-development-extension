@@ -137,7 +137,7 @@ class ProfilesCreateCommand(BaseCommand):
             try:
                 from brain.core.profile.profile_manager import ProfileManager
                 
-                if gc.verbose:
+                if gc.verbose and not gc.json_mode:
                     typer.echo(f"🔨 Creando perfil '{alias}'...", err=True)
                 
                 logger.debug("Inicializando ProfileManager...")
@@ -147,14 +147,25 @@ class ProfilesCreateCommand(BaseCommand):
                 profile_data = pm.create_profile(alias)
                 logger.info(f"✅ Perfil creado: ID={profile_data.get('id', 'N/A')[:8]}")
                 
-                result = {
-                    "status": "success",
-                    "operation": "create",
-                    "data": profile_data
-                }
-                
-                gc.output(result, self._render_create)
-                logger.info("✅ Comando profile create completado")
+                # En modo JSON, devolver formato plano esperado por Sentinel
+                if gc.json_mode:
+                    result = {
+                        "uuid": profile_data.get('id'),
+                        "status": "success"
+                    }
+                    # Usar dumps directamente para control total
+                    import json
+                    output = json.dumps(result, ensure_ascii=False)
+                    typer.echo(output)
+                    logger.info("✅ Comando profile create completado (JSON)")
+                else:
+                    result = {
+                        "status": "success",
+                        "operation": "create",
+                        "data": profile_data
+                    }
+                    gc.output(result, self._render_create)
+                    logger.info("✅ Comando profile create completado")
                 
             except Exception as e:
                 logger.error(f"✗ Error al crear perfil '{alias}': {str(e)}", exc_info=True)
@@ -220,7 +231,7 @@ class ProfilesLaunchCommand(BaseCommand):
             if not spec:
                 logger.error("✗ Flag --spec es obligatorio")
                 error_msg = (
-                    "❌ Launch requiere el flag --spec (spec-driven mode)\n\n"
+                    "⌘ Launch requiere el flag --spec (spec-driven mode)\n\n"
                     "Convention mode deprecated desde v2.0\n\n"
                     "Uso correcto:\n"
                     "  brain profile launch <id> --spec /path/to/spec.json\n\n"
