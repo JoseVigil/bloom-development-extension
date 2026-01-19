@@ -3,6 +3,7 @@ Chrome mining log reader - Pure business logic.
 Processes engine_mining.log files with bloom filtering.
 """
 
+import json
 from pathlib import Path
 from collections import deque
 from datetime import datetime
@@ -52,9 +53,31 @@ class MiningLogReader:
         if not profile_id or not profile_id.strip():
             raise ValueError("profile_id cannot be empty")
         
-        # Construct source file path for engine_mining.log
-        profile_dir = Path(self.paths.base_dir) / "profiles" / profile_id
-        source_file = profile_dir / "engine_mining.log"
+        # Load profiles.json to get debug_log path
+        profiles_json = Path(self.paths.base_dir) / "config" / "profiles.json"
+        
+        if not profiles_json.exists():
+            raise FileNotFoundError(f"profiles.json not found: {profiles_json}")
+        
+        with open(profiles_json, 'r', encoding='utf-8') as f:
+            profiles_data = json.load(f)
+        
+        # Find profile
+        profile = None
+        for p in profiles_data.get('profiles', []):
+            if p['id'] == profile_id:
+                profile = p
+                break
+        
+        if not profile:
+            raise ValueError(f"Profile {profile_id} not found in profiles.json")
+        
+        # Get debug_log path
+        debug_log_path = profile.get('log_files', {}).get('debug_log')
+        if not debug_log_path:
+            raise ValueError(f"debug_log not found for profile {profile_id}")
+        
+        source_file = Path(debug_log_path)
         
         logger.debug(f"Source file: {source_file}")
         
