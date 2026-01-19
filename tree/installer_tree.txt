@@ -120,7 +120,8 @@ bloom-development-extension/
     │   │       │   └── brain.exe
     │   │       ├── libwinpthread-1.dll
     │   │       ├── profiles.json
-    │   │       └── sentinel.exe
+    │   │       ├── sentinel.exe
+    │   │       └── sentinel.exe~
     │   ├── host/
     │   │   └── com.bloom.nucleus.bridge.json
     │   └── nssm/
@@ -181,6 +182,8 @@ bloom-development-extension/
     └── sentinel/
         ├── blueprint.json
         ├── build.bat
+        ├── codebase/
+        │   └── go_files_2026-01-18_18-37-05.txt
         ├── docs/
         │   ├── Sentinel - Fase 2 Discovery - Health Modular.md
         │   ├── Sentinel Base.md
@@ -188,17 +191,28 @@ bloom-development-extension/
         │       ├── CHROMIUM PATH FIX - Arquitectura de Rutas.md
         │       ├── SENTINEL v1.2 - Estructura de Archivos.md
         │       └── SENTINEL v1.2 Deployment & Testing Guide.md
+        ├── extract_go_files.py
         ├── go.mod
+        ├── go.sum
         ├── internal/
+        │   ├── boot/
+        │   │   ├── npm.go
+        │   │   ├── reaper.go
+        │   │   └── vscode.go
         │   ├── core/
         │   │   ├── config.go
         │   │   ├── core.go
         │   │   ├── logger.go
         │   │   └── paths.go
         │   ├── discovery/
-        │   │   └── discovery.go
+        │   │   ├── discovery.go
+        │   │   └── vscode.go
         │   ├── health/
         │   │   └── health.go
+        │   ├── ignition/
+        │   │   ├── ignition.go
+        │   │   ├── reaper.go
+        │   │   └── telemetry.go
         │   └── persistence/
         │       └── persistence.go
         └── main.go

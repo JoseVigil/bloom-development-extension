@@ -26,7 +26,7 @@ function logToHost(level, message) {
 // CONFIG LOADING WITH RETRY
 // ============================================================================
 
-async function ensureConfig(maxRetries = 20) {
+async function ensureConfig(maxRetries = 40) {
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
       importScripts('synapse.config.js');

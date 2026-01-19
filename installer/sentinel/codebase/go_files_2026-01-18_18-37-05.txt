@@ -1,0 +1,649 @@
+internal\ignition\ignition.go
+
+```go
+package ignition
+
+import (
+	"encoding/json"
+	"fmt"
+	"net"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"sentinel/internal/core"
+	"strings"
+	"time"
+)
+
+// Estructuras de Configuración
+type ProfileFlags struct {
+	EngineFlags []string `json:"engine_flags"`
+	CustomFlags []string `json:"custom_flags"`
+}
+
+type PathsConfig struct {
+	Executable string `json:"executable"`
+	UserData   string `json:"user_data"`
+	Extension  string `json:"extension"`
+	LogsBase   string `json:"logs_base"`
+}
+
+type IgnitionSpec struct {
+	Paths       PathsConfig `json:"paths"`
+	TargetURL   string      `json:"target_url"`
+	EngineFlags []string    `json:"engine_flags"`
+	CustomFlags []string    `json:"custom_flags"`
+}
+
+type LaunchResponse struct {
+	Status string `json:"status"`
+	Data   struct {
+		ProfileID string `json:"profile_id"`
+		Launch    struct {
+			LaunchID string `json:"launch_id"`
+			PID      int    `json:"pid"`
+		} `json:"launch"`
+	} `json:"data"`
+}
+
+type Ignition struct {
+	Core      *core.Core
+	Telemetry *TelemetryHub
+	SpecPath  string
+	Session   struct {
+		ServicePID int
+		BrowserPID int
+		LaunchID   string
+	}
+}
+
+func New(c *core.Core) *Ignition {
+	return &Ignition{
+		Core:      c,
+		Telemetry: NewTelemetryHub(c),
+	}
+}
+
+// Launch orquesta la secuencia crítica
+func (ig *Ignition) Launch(profileID string, mode string) error {
+	ig.Core.Logger.Info("[IGNITION] 🚀 Iniciando secuencia para: %s", profileID[:8])
+	ig.preFlight(profileID)
+	ig.Telemetry.Setup()
+
+	// 1. Generar Spec
+	if err := ig.generateSpec(profileID, mode); err != nil {
+		return err
+	}
+
+	// 2. Levantar Brain
+	if err := ig.startBrainService(); err != nil {
+		return err
+	}
+
+	// 3. Lanzar (Python sincroniza y borra nuestro config)
+	launchID, err := ig.execute(profileID)
+	if err != nil {
+		return err
+	}
+
+	// 4. --- SOBERANÍA TOTAL ---
+	// Escribimos el config AHORA. Chrome ya abrió pero background.js está 
+    // en sus 40 reintentos. Va a encontrar este archivo.
+	ig.forceExtensionConfig(profileID)
+
+	// 5. Telemetría
+	ig.Telemetry.StartTailing(profileID, launchID)
+
+	ig.Core.Logger.Info("[IGNITION] Esperando validación LATE_BINDING_SUCCESS...")
+	select {
+	case <-ig.Telemetry.SuccessChan:
+		ig.Core.Logger.Success("[IGNITION] 🔥 Handshake confirmado.")
+		return nil
+	case errStr := <-ig.Telemetry.ErrorChan:
+		return fmt.Errorf("fallo: %s", errStr)
+	case <-time.After(45 * time.Second):
+		return fmt.Errorf("timeout: background.js no pudo iniciar el host")
+	}
+}
+
+func (ig *Ignition) forceExtensionConfig(profileID string) error {
+	extDir := filepath.Join(ig.Core.Paths.AppDataDir, "profiles", profileID, "extension")
+	os.MkdirAll(extDir, 0755)
+	
+	configPath := filepath.Join(extDir, "synapse.config.js")
+	bridgeName := fmt.Sprintf("com.bloom.synapse.%s", profileID[:8])
+	
+	// FIX: Agregamos profileId que es lo que background.js chequea en ensureConfig
+	content := fmt.Sprintf("self.SYNAPSE_CONFIG = { profileId: '%s', bridge_name: '%s' };", profileID, bridgeName)
+	
+	ig.Core.Logger.Info("[IGNITION] Configuración de extensión inyectada.")
+	return os.WriteFile(configPath, []byte(content), 0644)
+}
+
+func (ig *Ignition) execute(profileID string) (string, error) {
+	ig.Core.Logger.Info("[IGNITION] Disparando Brain CLI...")
+	cmd := exec.Command("brain.exe", "--json", "profile", "launch", profileID, "--spec", ig.SpecPath)
+	cmd.Env = append(os.Environ(), "PYTHONIOENCODING=utf-8") // FIX UNICODE
+	
+	out, _ := cmd.CombinedOutput()
+	outputStr := string(out)
+
+	// Buscamos el JSON real (Bisturí)
+	start := strings.Index(outputStr, "{")
+	end := strings.LastIndex(outputStr, "}")
+	if start == -1 { return "", fmt.Errorf("no JSON en output: %s", outputStr) }
+	
+	var resp LaunchResponse
+	json.Unmarshal([]byte(outputStr[start:end+1]), &resp)
+
+	ig.Session.BrowserPID = resp.Data.Launch.PID
+	ig.Session.LaunchID = resp.Data.Launch.LaunchID
+	
+	if ig.Session.BrowserPID == 0 {
+		return "", fmt.Errorf("Python no entregó PID. Verifica logs de brain")
+	}
+
+	return ig.Session.LaunchID, nil
+}
+
+func (ig *Ignition) preFlight(profileID string) {
+	ig.Core.Logger.Info("[IGNITION] Pre-flight: Liberando recursos...")
+	ig.freePortQuirurgico(5678)
+	
+	lock := filepath.Join(ig.Core.Paths.AppDataDir, "profiles", profileID, "SingletonLock")
+	os.Remove(lock)
+}
+
+func (ig *Ignition) freePortQuirurgico(port int) {
+	cmd := exec.Command("cmd", "/C", fmt.Sprintf("netstat -ano | findstr :%d", port))
+	out, _ := cmd.Output()
+	lines := strings.Split(string(out), "\r\n")
+	for _, line := range lines {
+		fields := strings.Fields(line)
+		if len(fields) < 5 { continue }
+		pidStr := fields[4]
+		if pidStr != "0" && pidStr != "" {
+			ig.Core.Logger.Warning("[IGNITION] Limpiando puerto %d (PID: %s)", port, pidStr)
+			exec.Command("taskkill", "/F", "/PID", pidStr, "/T").Run()
+		}
+	}
+	time.Sleep(1 * time.Second)
+}
+
+func (ig *Ignition) startBrainService() error {
+	cmd := exec.Command("brain.exe", "service", "start")
+	cmd.Env = append(os.Environ(), "PYTHONIOENCODING=utf-8")
+	
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("no se pudo iniciar brain service: %v", err)
+	}
+	ig.Session.ServicePID = cmd.Process.Pid
+	
+	for i := 0; i < 20; i++ {
+		conn, _ := net.DialTimeout("tcp", "127.0.0.1:5678", 500*time.Millisecond)
+		if conn != nil {
+			conn.Close()
+			return nil
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	return fmt.Errorf("timeout: brain service no responde")
+}
+
+func (ig *Ignition) loadProfileFlags(profileID string) ProfileFlags {
+	synapseDir := filepath.Join(ig.Core.Paths.AppDataDir, "profiles", profileID, "synapse")
+	flagsPath := filepath.Join(synapseDir, "profile_flags.json")
+
+	defaults := ProfileFlags{
+		EngineFlags: []string{"--no-sandbox", "--test-type", "--disable-web-security", "--disable-features=IsolateOrigins,site-per-process", "--remote-debugging-port=0", "--no-first-run", "--enable-logging", "--v=1"},
+		CustomFlags: []string{},
+	}
+
+	if _, err := os.Stat(flagsPath); os.IsNotExist(err) {
+		data, _ := json.MarshalIndent(defaults, "", "  ")
+		os.WriteFile(flagsPath, data, 0644)
+		return defaults
+	}
+
+	data, _ := os.ReadFile(flagsPath)
+	var config ProfileFlags
+	json.Unmarshal(data, &config)
+	return config
+}
+
+func (ig *Ignition) generateSpec(profileID string, mode string) error {
+	synapseDir := filepath.Join(ig.Core.Paths.AppDataDir, "profiles", profileID, "synapse")
+	os.MkdirAll(synapseDir, 0755)
+	ig.SpecPath = filepath.Join(synapseDir, "ignition_spec.json")
+
+	// Cargar flags desde el JSON del perfil
+	config := ig.loadProfileFlags(profileID)
+
+	extID := "hpblclepliicmihaplldignhjdggnkdh"
+	
+	// Decidir URL según el modo
+	targetURL := fmt.Sprintf("chrome-extension://%s/landing/index.html", extID)
+	if mode == "--discovery" {
+		targetURL = fmt.Sprintf("chrome-extension://%s/discovery/index.html", extID)
+	}
+
+	spec := IgnitionSpec{
+		Paths: PathsConfig{
+			Executable: "bin/chrome-win/chrome.exe",
+			UserData:   fmt.Sprintf("profiles/%s", profileID),
+			Extension:  fmt.Sprintf("profiles/%s/extension", profileID),
+			LogsBase:   fmt.Sprintf("logs/profiles/%s", profileID),
+		},
+		TargetURL:   targetURL,
+		EngineFlags: config.EngineFlags,
+		CustomFlags: config.CustomFlags,
+	}
+
+	data, _ := json.MarshalIndent(spec, "", "  ")
+	ig.Core.Logger.Info("[IGNITION] Spec JSON generado correctamente.")
+	return os.WriteFile(ig.SpecPath, data, 0644)
+}
+```
+
+--------------------------------------------------------------------------------
+
+internal\ignition\telemetry.go
+
+```go
+package ignition
+
+import (
+	"bufio"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"sentinel/internal/core" // Se usa th.Core.Logger
+	"strings"
+	"time"
+)
+
+// TelemetryHub orquesta el log tailing y el mining
+type TelemetryHub struct {
+	Core        *core.Core
+	NativeLog   string
+	SuccessChan chan bool
+	ErrorChan   chan string
+}
+
+// NewTelemetryHub es el constructor que necesita Ignition
+func NewTelemetryHub(c *core.Core) *TelemetryHub {
+	logDir := filepath.Join(os.Getenv("LOCALAPPDATA"), "BloomNucleus", "logs")
+	return &TelemetryHub{
+		Core:        c,
+		NativeLog:   filepath.Join(logDir, "synapse_native.log"),
+		SuccessChan: make(chan bool, 1),
+		ErrorChan:   make(chan string, 1),
+	}
+}
+
+// Setup limpia el entorno de logs antes de empezar
+func (th *TelemetryHub) Setup() error {
+	th.Core.Logger.Info("[TELEMETRY] Ejecutando higiene de logs profunda...")
+
+	// 1. Limpiar Log Nativo
+	os.Remove(th.NativeLog)
+	
+	// 2. Limpiar Logs de Chrome del perfil
+	// Sacamos el profileID de alguna manera o limpiamos la carpeta base de logs
+	logBase := filepath.Join(os.Getenv("LOCALAPPDATA"), "BloomNucleus", "logs", "profiles")
+	os.RemoveAll(logBase) // BORRÓN Y CUENTA NUEVA
+	os.MkdirAll(logBase, 0755)
+
+	th.Core.Logger.Success("[TELEMETRY] Zona de logs despejada.")
+	return nil
+}
+
+// StartTailing inicia los hilos de monitoreo
+func (th *TelemetryHub) StartTailing(profileID string, launchID string) {
+	// 1. Log Nativo (Handshake C++)
+	go th.tailFile(th.NativeLog, "[NATIVE]", false)
+
+	// 2. Mining Log (El archivo filtrado que genera 'brain chrome mining-log')
+	// Python lo deja en: logs/profiles/{uuid}/engine_mining.log
+	miningLog := filepath.Join(os.Getenv("LOCALAPPDATA"), "BloomNucleus", "logs", "profiles", profileID, "engine_mining.log")
+	
+	// Usamos th.tailFile para monitorear este log filtrado
+	go th.tailFile(miningLog, "[BROWSER]", false) 
+
+	// 3. Log de Brain
+	today := time.Now().Format("20060102")
+	brainLog := filepath.Join(os.Getenv("LOCALAPPDATA"), "BloomNucleus", "logs", fmt.Sprintf("brain_core_%s.log", today))
+	go th.tailFile(brainLog, "[BRAIN]", false)
+}
+
+func (th *TelemetryHub) tailFile(path string, prefix string, filter bool) {
+	// Reintento si el archivo no existe aún (esperando a Chrome)
+	for i := 0; i < 10; i++ {
+		if _, err := os.Stat(path); err == nil {
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	file, err := os.Open(path)
+	if err != nil {
+		return
+	}
+	defer file.Close()
+
+	// Si es el log de Brain, saltar al final para ver solo lo nuevo
+	if prefix == "[BRAIN]" {
+		file.Seek(0, io.SeekEnd)
+	}
+
+	reader := bufio.NewReader(file)
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			if err == io.EOF {
+				time.Sleep(200 * time.Millisecond)
+				continue
+			}
+			break
+		}
+
+		cleanLine := strings.TrimSpace(line)
+		if cleanLine == "" {
+			continue
+		}
+
+		// Lógica de MINING
+		if filter {
+			isRelevant := strings.Contains(cleanLine, "Synapse") ||
+				strings.Contains(cleanLine, "Bloom") ||
+				strings.Contains(cleanLine, "CONSOLE") ||
+				strings.Contains(cleanLine, "ERROR")
+			if !isRelevant {
+				continue
+			}
+		}
+
+		// USO DE th.Core (Para evitar el error de "imported and not used")
+		th.Core.Logger.Info("%s %s", prefix, cleanLine)
+
+		// Sensores de estado
+		if strings.Contains(cleanLine, "LATE_BINDING_SUCCESS") {
+			th.SuccessChan <- true
+		}
+		if strings.Contains(cleanLine, "Config timeout") {
+			th.ErrorChan <- "Handshake falló: Timeout de configuración en la extensión."
+		}
+	}
+}
+```
+
+--------------------------------------------------------------------------------
+
+internal\core\paths.go
+
+```go
+package core
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+type Paths struct {
+	BinDir      string
+	AppDataDir  string
+	ProfilesDir string
+	LogsDir     string
+}
+
+func InitPaths() (*Paths, error) {
+	exe, err := os.Executable()
+	if err != nil {
+		return nil, err
+	}
+	binDir := filepath.Dir(exe)
+
+	localAppData := os.Getenv("LOCALAPPDATA")
+	if localAppData == "" {
+		localAppData = filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Local")
+	}
+	appDataDir := filepath.Join(localAppData, "BloomNucleus")
+
+	paths := &Paths{
+		BinDir:      binDir,
+		AppDataDir:  appDataDir,
+		ProfilesDir: filepath.Join(appDataDir, "profiles"),
+		LogsDir:     filepath.Join(appDataDir, "logs"),
+	}
+
+	dirs := []string{paths.AppDataDir, paths.ProfilesDir, paths.LogsDir}
+	for _, dir := range dirs {
+		os.MkdirAll(dir, 0755)
+	}
+
+	return paths, nil
+}
+
+func (p *Paths) String() string {
+	var sb strings.Builder
+	sb.WriteString("Rutas del Sistema:\n")
+	sb.WriteString("  BinDir:      " + p.BinDir + "\n")
+	sb.WriteString("  AppDataDir:  " + p.AppDataDir + "\n")
+	sb.WriteString("  ProfilesDir: " + p.ProfilesDir + "\n")
+	sb.WriteString("  LogsDir:     " + p.LogsDir + "\n")
+	return sb.String()
+}
+```
+
+--------------------------------------------------------------------------------
+
+main.go
+
+```go
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"sentinel/internal/boot"
+	"sentinel/internal/core"
+	"sentinel/internal/discovery"
+	"sentinel/internal/health"
+	"sentinel/internal/persistence"
+	"sentinel/internal/ignition"
+	"syscall"
+)
+
+func main() {
+	c, err := core.Initialize()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "✗ Error fatal: %v\n", err)
+		os.Exit(1)
+	}
+	defer c.Close()
+
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "health":
+			runHealthCommand(c)
+			return
+		case "dev-start":
+			runDevStartCommand(c)
+			return
+		case "launch":
+			// Uso: sentinel.exe launch [ID_PERFIL] [--discovery o --cockpit]
+			if len(os.Args) < 3 {
+				c.Logger.Error("Uso: sentinel launch [profile_id] [--discovery|--cockpit]")
+				os.Exit(1)
+			}
+			
+			profileID := os.Args[2]
+			mode := "--cockpit" // Default
+			if len(os.Args) > 3 {
+				mode = os.Args[3]
+			}
+			
+			runLaunchCommand(c, profileID, mode)
+			return
+		}
+	}
+
+	c.Logger.Success("Sentinel Base Inicializada con éxito")
+	fmt.Println()
+	fmt.Print(c.Paths.String())
+	fmt.Println()
+	c.Logger.Info("Versión: %s", c.Config.Version)
+}
+
+func runHealthCommand(c *core.Core) {
+	c.Logger.Info("Iniciando escaneo del sistema...")
+	systemMap, err := discovery.DiscoverSystem(c.Paths.BinDir)
+	if err != nil {
+		c.Logger.Error("Error en Discovery: %v", err)
+		os.Exit(1)
+	}
+	
+	report, err := health.CheckHealth(systemMap)
+	if err != nil {
+		c.Logger.Error("Error en Health Scan: %v", err)
+		os.Exit(1)
+	}
+	
+	persistence.SaveNucleusState(c.Paths.AppDataDir, report)
+	
+	jsonOutput, _ := json.MarshalIndent(report, "", "  ")
+	fmt.Println(string(jsonOutput))
+}
+
+func runDevStartCommand(c *core.Core) {
+	c.Logger.Info("🚀 Iniciando Entorno de Desarrollo Integrado...")
+
+	// 1. Discovery VSCode
+	codePath, err := discovery.FindVSCodeBinary()
+	if err != nil {
+		c.Logger.Error("Error localizando VSCode: %v", err)
+		os.Exit(1)
+	}
+
+	extPath := c.Config.Settings.ExtensionPath
+	wsPath := c.Config.Settings.TestWorkspace
+	runtimePath := filepath.Join(c.Paths.AppDataDir, "resources", "runtime")
+
+	// 2. Lanzar Svelte
+	svelteCmd, err := boot.LaunchSvelte(extPath)
+	var sveltePid int
+	if err != nil {
+		c.Logger.Warning("No se pudo iniciar Svelte: %v", err)
+	} else {
+		sveltePid = svelteCmd.Process.Pid
+		c.Logger.Success("✓ Servidor Svelte iniciado (PID: %d)", sveltePid)
+	}
+
+	// 3. Lanzar VSCode
+	vsCmd, err := boot.LaunchExtensionHost(codePath, extPath, wsPath, runtimePath)
+	var vsPid int
+	if err != nil {
+		c.Logger.Error("Error lanzando VSCode: %v", err)
+		// Si VSCode falla, limpiamos Svelte antes de salir
+		if sveltePid > 0 { boot.KillProcessTree(sveltePid) }
+		os.Exit(1)
+	}
+	vsPid = vsCmd.Process.Pid
+	c.Logger.Success("✓ VSCode Extension Host activo (PID: %d)", vsPid)
+
+	// 4. Manejo de Señales (Ctrl+C)
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+
+	c.Logger.Info(">>> Entorno de desarrollo LISTO.")
+	c.Logger.Info(">>> Presiona Ctrl+C para CERRAR VSCode y Svelte automáticamente.")
+
+	<-sigs 
+
+	fmt.Println()
+	c.Logger.Info("Aniquilando entorno de desarrollo...")
+	
+	// 1. Cerramos la ventana de VS Code primero (el impacto visual)
+	boot.KillProcessTree(vsPid)
+	c.Logger.Success("✓ Ventana de desarrollo cerrada.")
+
+	// 2. Cerramos Svelte
+	boot.KillProcessTree(sveltePid)
+	c.Logger.Success("✓ Servidor Svelte finalizado.")
+	
+	// 3. Limpieza final de puertos para asegurar
+	boot.CleanPorts([]int{5173, 3001, 5678})
+	
+	c.Logger.Success("✓ Sistema limpio. Hasta la próxima.")
+}
+
+func runLaunchCommand(c *core.Core, profileID string, mode string) {
+	c.Logger.Info("🔥 Sentinel Ignition v2.0")
+	
+	// 1. Instanciar el módulo
+	ig := ignition.New(c)
+	
+	// 2. Activar el Reaper (Kill Switch) 
+	// Si Electron cierra el pipe o presionas Ctrl+C, esto limpia todo.
+	ig.SetupReaper()
+
+	// 3. Ejecutar la secuencia de lanzamiento
+	// Este método bloquea la ejecución hasta que lee "LATE_BINDING_SUCCESS"
+	// o falla por timeout/error.
+	err := ig.Launch(profileID, mode)
+	
+	if err != nil {
+		c.Logger.Error("❌ Error de Ignición: %v", err)
+		ig.KillAll() // Limpieza de emergencia
+		os.Exit(1)
+	}
+
+	// 4. Mantener el proceso vivo
+	// Una vez que Ignition confirma el éxito, no queremos que Sentinel se cierre,
+	// porque las goroutines de Telemetry (tail -f) deben seguir enviando logs a Electron.
+	c.Logger.Success("📡 Telemetría activa. El flujo de datos está abierto.")
+	
+	select {} // Bloqueo infinito hasta que el Reaper actúe
+}
+```
+
+--------------------------------------------------------------------------------
+
+blueprint.json
+
+```json
+{
+  "version": "1.0.0",
+  "profiles": [
+    {
+      "name": "Default Profile",
+      "path": "./profiles/default",
+      "enabled": true,
+      "priority": 1
+    }
+  ],
+  "settings": {
+    "autoStart": false,
+    "minimizeToTray": true,
+    "checkInterval": 5000,
+    "maxRestarts": 3,
+    "restartDelay": 2000,
+    "extensionPath": "C:\\repos\\bloom-videos\\bloom-development-extension",
+    "testWorkspace": "C:\\repos\\bloom-videos\\bloom-development-extension"
+  },
+  "monitoring": {
+    "enabled": true,
+    "logLevel": "info",
+    "maxLogSize": 10485760,
+    "maxLogFiles": 5
+  }
+}
+```
+
+--------------------------------------------------------------------------------
+
