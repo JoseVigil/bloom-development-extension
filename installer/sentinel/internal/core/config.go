@@ -22,6 +22,7 @@ type Settings struct {
 	RestartDelay    int    `json:"restartDelay"`
 	ExtensionPath   string `json:"extensionPath"`
 	TestWorkspace   string `json:"testWorkspace"` 
+	BrowserEngine  string `json:"BrowserEngine"`
 }
 
 type Monitoring struct {
@@ -31,11 +32,17 @@ type Monitoring struct {
 	MaxLogFiles int    `json:"maxLogFiles"`
 }
 
+type Provisioning struct {
+	GoldenKey   string `json:"golden_key"`
+	ExtensionID string `json:"extension_id,omitempty"`
+}
+
 type Config struct {
 	Version    string     `json:"version"`
 	Profiles   []Profile  `json:"profiles"`
 	Settings   Settings   `json:"settings"`
 	Monitoring Monitoring `json:"monitoring"`
+	Provisioning Provisioning `json:"provisioning"`
 }
 
 func LoadConfig(binDir string) (*Config, error) {

@@ -1,5 +1,9 @@
 {
   "version": "1.0.0",
+   "provisioning": {
+    "golden_key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvpLkwKzeLGXF3Me4LckWSMQO6ktiL7gbLC3E8d3jpKfZLTL+lhCOXULTygRUi4vSvWQyy0KrI1eVTUYPrvA6s3pYGhn7GFfmCDXA6JvZjANc+4pq3hcxdVZdMa02E4f1UsIJm17qKBlk5Z6Jv1wD1LtXi2yk+lI/NcAq0XsQSTBDVElDp4/t8QpxRRHGm1WuaoN7DCu7Tmmzq1ztMC434+nmnjqkfMrxG6uC/iC+z+qDLUvolC1eWNPnMFbi2NG+KiZo/ZXEnTpc17OOo3VewOt2/ogTdHp8kpcK1OwXM9d+RUdls9DEUB5QdyWX7uUDsGKISsSawb+j5NiQbgACcQIDAQAB",
+    "extension_id": "" 
+  },
   "profiles": [
     {
       "name": "Default Profile",

@@ -7,88 +7,102 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"sentinel/internal/core"
 	"sentinel/internal/discovery"
+	"sentinel/internal/startup"
 	"sync"
 	"time"
 )
 
-type ServiceStatus struct {
-	Name      string `json:"name"`
-	Available bool   `json:"available"`
-	Details   string `json:"details"`
-}
-
-type HealthReport struct {
-	Timestamp           string               `json:"timestamp"`
-	SystemMap           *discovery.SystemMap `json:"system_map"`
-	ExecutablesValid    bool                 `json:"executables_valid"`
-	Services            []ServiceStatus      `json:"services"`
-	OnboardingCompleted bool                 `json:"onboarding_completed"`
-}
-
-func CheckHealth(sm *discovery.SystemMap) (*HealthReport, error) {
-	report := &HealthReport{
+func CheckHealth(c *core.Core, sm *discovery.SystemMap) (*startup.SystemStatus, error) {
+	// 1. Inicializar el status
+	status := &startup.SystemStatus{
 		Timestamp: time.Now().Format(time.RFC3339),
-		SystemMap: sm,
+		SystemMap: map[string]string{
+			"brain_exe":    sm.BrainPath,
+			"chrome_exe":   sm.ChromePath,
+			"extension_id": c.Config.Provisioning.ExtensionID,
+		},
 	}
 
-	// 1. Validar Ejecutable de Brain de forma estática
-	if info, err := os.Stat(sm.BrainPath); err == nil && !info.IsDir() {
-		report.ExecutablesValid = true
-	}
+	// 2. Validar Ejecutables físicamente
+	_, errB := os.Stat(sm.BrainPath)
+	_, errC := os.Stat(sm.ChromePath)
+	status.ExecutablesValid = (errB == nil && errC == nil)
 
-	// 2. Escaneo de Red Concurrente (3 Servicios)
-	// Usamos 127.0.0.1 para evitar el lag de resolución de DNS de 'localhost' en Windows
+	// 3. Escaneo de Red Concurrente
 	var wg sync.WaitGroup
-	sc := make(chan ServiceStatus, 3)
+	sc := make(chan startup.ServiceStatus, 4)
 
 	wg.Add(3)
-	// Brain: Servicio de datos (TCP)
-	go func() { defer wg.Done(); sc <- checkPort(5678, "Brain TCP Service", "TCP") }()
-	// Extension: API Rest (HTTP)
-	go func() { defer wg.Done(); sc <- checkPort(3001, "Chrome Extension Backend", "HTTP") }()
-	// Svelte: Servidor de Desarrollo (TCP es suficiente para detectar que Vite despertó)
-	go func() { defer wg.Done(); sc <- checkPort(5173, "Svelte Dev Server", "TCP") }()
+	go func() { defer wg.Done(); sc <- checkPort(5678, "Core Bridge", "TCP") }()
+	go func() { defer wg.Done(); sc <- checkPort(3001, "Extension API", "HTTP") }()
+	go func() { defer wg.Done(); sc <- checkPort(5173, "Svelte Dev", "TCP") }()
 
-	go func() { wg.Wait(); close(sc) }()
+	// 4. Chequeo de Integridad de Protocolo (Usando la función exportada)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		active := false
+		if status.ExecutablesValid {
+			_, err := startup.FetchBrainManifest(sm.BrainPath) // ✅ Aquí se usa la función exportada
+			if err == nil {
+				active = true
+			}
+		}
+		sc <- startup.ServiceStatus{Name: "Brain JSON Protocol", Active: active}
+	}()
+
+	go func() {
+		wg.Wait()
+		close(sc)
+	}()
+
 	for s := range sc {
-		report.Services = append(report.Services, s)
+		status.Services = append(status.Services, s)
 	}
 
-	// 3. Check Lógico: Onboarding (Llamada real a brain.exe)
-	if report.ExecutablesValid {
+	// 5. Check de Onboarding
+	if status.ExecutablesValid {
 		cmd := exec.Command(sm.BrainPath, "--json", "health", "onboarding-status")
 		if out, err := cmd.Output(); err == nil {
 			var resp struct {
 				Onboarding struct{ Completed bool } `json:"onboarding"`
 			}
 			if err := json.Unmarshal(out, &resp); err == nil {
-				report.OnboardingCompleted = resp.Onboarding.Completed
+				status.OnboardingCompleted = resp.Onboarding.Completed
 			}
 		}
 	}
 
-	return report, nil
+	// 6. PERSISTENCIA
+	err := startup.SaveSystemStatus(c, *status)
+	if err != nil {
+		c.Logger.Error("No se pudo actualizar nucleus.json: %v", err)
+	}
+
+	return status, nil
 }
 
-func checkPort(port int, name, proto string) ServiceStatus {
-	// Forzamos 127.0.0.1 para coincidir con el flag --host de Vite
+func checkPort(port int, name, proto string) startup.ServiceStatus {
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
-	
+	active := false
+
 	if proto == "HTTP" {
-		client := http.Client{Timeout: 3 * time.Second} // Aumentamos a 3s para SvelteKit
+		client := http.Client{Timeout: 2 * time.Second}
 		resp, err := client.Get(fmt.Sprintf("http://%s/health", addr))
-		if err == nil && resp.StatusCode == 200 {
-			return ServiceStatus{Name: name, Available: true, Details: "HTTP 200 OK"}
+		active = (err == nil && resp.StatusCode == 200)
+	} else {
+		conn, err := net.DialTimeout("tcp", addr, 1*time.Second)
+		if err == nil {
+			active = true
+			conn.Close()
 		}
-		return ServiceStatus{Name: name, Available: false, Details: "Inalcanzable (API no responde)"}
 	}
 
-	// Chequeo TCP genérico (rápido y fiable para servicios vivos)
-	conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
-	if err != nil {
-		return ServiceStatus{Name: name, Available: false, Details: "Puerto cerrado o servicio inactivo"}
+	return startup.ServiceStatus{
+		Name:   name,
+		Port:   port,
+		Active: active,
 	}
-	conn.Close()
-	return ServiceStatus{Name: name, Available: true, Details: "Servicio activo (Puerto abierto)"}
 }
