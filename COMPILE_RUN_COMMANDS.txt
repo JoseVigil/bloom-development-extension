@@ -44,7 +44,7 @@ Sentinel
 .\build.bat
 .\sentinel.exe dev-start
 .\sentinel.exe health
-
+.\sentinel.exe seed "MasterWorker" true
 
 tree commands
 brain filesystem tree src installer webview brain contracts package.json tsconfig.json -o tree/plugin_tree.txt
