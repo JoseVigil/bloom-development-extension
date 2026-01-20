@@ -72,6 +72,20 @@
     #progress-info {
       color: #999;
       font-size: 14px;
+      margin-bottom: 15px;
+    }
+    
+    .info-section {
+      margin-top: 20px;
+      padding: 15px;
+      background: #f8f9fa;
+      border-radius: 8px;
+      font-size: 14px;
+      color: #495057;
+    }
+    
+    .info-section p {
+      margin: 5px 0;
     }
     
     #auto-close-notice {
@@ -120,6 +134,12 @@
       Intento: <span id="attempt-count">0</span>
     </div>
     
+    <div class="info-section">
+      <p id="profile-id">Profile: -</p>
+      <p id="profile-alias"></p>
+      <p id="timestamp">Estado: Esperando conexión</p>
+    </div>
+    
     <div id="auto-close-notice">
       ✓ Conexión establecida exitosamente
     </div>
@@ -128,9 +148,6 @@
       <strong id="error-message">Error</strong>
       <pre id="error-details"></pre>
     </div>
-    
-    <p id="profile-id"></p>
-    <p id="timestamp"></p>
   </div>
   
   <script src="../synapse.config.js"></script>
