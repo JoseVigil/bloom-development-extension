@@ -217,8 +217,10 @@ https://aistudio.google.com/prompts/15mSEy6x6FyGy4m6dUJXMrRdluTfhwxyR
 britps twitter public building onboarding
 https://chatgpt.com/c/695f9a73-bde0-832d-838e-212d3fe792fd
 V1
-britps oboardin implementation
+britps onboardin implementation
 https://aistudio.google.com/prompts/1xFXju8sp4kJg7SuhWGD31qmvYZkx2KmF
+V2
+roamingpads onboarding sentinel 
 
 roammtouch checksum md5 archivos
 https://grok.com/c/d700caa9-bc8d-4340-b004-d9db5b08bd84?rid=4c1017f2-a70f-4129-ab67-c5101f7cec3f
@@ -299,3 +301,27 @@ https://chatgpt.com/c/696a30fd-c8ec-8326-a2cf-d602544ad602
 
 roamingpads go versioning 
 https://grok.com/c/b25c93fc-fa5d-4f5f-804d-ae85bc8441b0?rid=585a3d21-d814-4a80-a221-ce5f29c08316
+
+eric sentinel install
+https://aistudio.google.com/prompts/1T0FG49qbzVG24q_QGGgOjjbGXIg2MMlc
+eric sentinel launch
+https://aistudio.google.com/prompts/1T0FG49qbzVG24q_QGGgOjjbGXIg2MMlc
+
+notimation sentinel go development
+https://claude.ai/chat/cf919661-e37d-4dd2-a61d-dba600fdf021
+
+btips SENTINEL v1.2: Deployment & Testing Guide
+https://claude.ai/chat/3e52c15b-413e-41c5-90bf-d4b7eba1f466
+
+btisp go libraries / search engine y git
+https://chatgpt.com/c/696c29df-51d0-8331-88a7-4241a4ad8dd4
+
+notimation gmail launch with specs profile manager
+https://claude.ai/chat/143ca176-9753-45c8-8083-b4381b2f9dd9
+
+roamingpads flujo completo hearbeat
+https://grok.com/c/71769657-4e96-43fd-92fe-45752f569aa2?rid=f0368f50-9c71-42e0-8470-86ac4e0bdc78
+
+
+uitool sentinel guardian
+https://aistudio.google.com/prompts/1eEs9b_t5ULYzGM1RXfzoqP-SaiK4RBxZ
