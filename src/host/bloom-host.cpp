@@ -331,33 +331,62 @@ bool try_extract_profile_id_from_raw(const std::string& msg_str) {
     return false;
 }
 
-if (!candidate_profile.empty()) {
-    std::lock_guard<std::mutex> lock(g_profile_id_mutex);
-    if (!identity_resolved.load()) {
-        g_profile_id = candidate_profile;
-        g_launch_id = candidate_launch.empty() ? "unknown" : candidate_launch;
-        identity_resolved.store(true);
-        
-        // ✅ AGREGAR LOGS DE DEBUG A STDERR
-        std::cerr << "[DEBUG] Identity resolved: profile=" << g_profile_id 
-                  << " launch=" << g_launch_id << std::endl;
-        
-        g_logger.initialize_with_profile_id(candidate_profile);
-        
-        std::cerr << "[DEBUG] After init_profile_id" << std::endl;
-        
-        g_logger.initialize_with_launch_id(g_launch_id);
-        
-        std::cerr << "[DEBUG] After init_launch_id" << std::endl;
-        
-        g_logger.log_native("INFO", "LATE_BINDING_SUCCESS ProfileID=" + 
-            candidate_profile + " LaunchID=" + g_launch_id);
-            
-        std::cerr << "[DEBUG] After first log attempt" << std::endl;
-        
-        g_identity_cv.notify_all();
-        return true;
+bool try_extract_identity(const json& msg) {
+    std::vector<std::string> profile_paths = {"/payload/profile_id", "/profile_id"};
+    std::vector<std::string> launch_paths = {"/payload/launch_id", "/launch_id"};
+    
+    std::string candidate_profile;
+    std::string candidate_launch;
+    
+    for (const auto& path : profile_paths) {
+        try {
+            auto ptr = msg.at(json::json_pointer(path));
+            if (ptr.is_string()) {
+                candidate_profile = ptr.get<std::string>();
+                break;
+            }
+        } catch (...) { continue; }
     }
+    
+    for (const auto& path : launch_paths) {
+        try {
+            auto ptr = msg.at(json::json_pointer(path));
+            if (ptr.is_string()) {
+                candidate_launch = ptr.get<std::string>();
+                break;
+            }
+        } catch (...) { continue; }
+    }
+    
+    if (!candidate_profile.empty()) {
+        std::lock_guard<std::mutex> lock(g_profile_id_mutex);
+        if (!identity_resolved.load()) {
+            g_profile_id = candidate_profile;
+            g_launch_id = candidate_launch.empty() ? "unknown" : candidate_launch;
+            identity_resolved.store(true);
+            
+            // ✅ AGREGAR LOGS DE DEBUG A STDERR
+            std::cerr << "[DEBUG] Identity resolved: profile=" << g_profile_id 
+                    << " launch=" << g_launch_id << std::endl;
+            
+            g_logger.initialize_with_profile_id(candidate_profile);
+            
+            std::cerr << "[DEBUG] After init_profile_id" << std::endl;
+            
+            g_logger.initialize_with_launch_id(g_launch_id);
+            
+            std::cerr << "[DEBUG] After init_launch_id" << std::endl;
+            
+            g_logger.log_native("INFO", "LATE_BINDING_SUCCESS ProfileID=" + 
+                candidate_profile + " LaunchID=" + g_launch_id);
+                
+            std::cerr << "[DEBUG] After first log attempt" << std::endl;
+            
+            g_identity_cv.notify_all();
+            return true;
+        }
+    }
+    return false;
 }
 
 void write_message_to_chrome(const std::string& s) {
