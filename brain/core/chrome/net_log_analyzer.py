@@ -1,73 +1,82 @@
 """
-Chrome debug log reader - Engine Auditor (Synapse v2.0).
-Auditoría de integridad del motor Chromium para diagnosticar fallos de sistema y bloqueos de seguridad.
+Chrome network log analyzer - Pure business logic.
+Parses and filters Chrome's --log-net-log JSON output.
 """
 
-import re
 import json
 from pathlib import Path
-from collections import deque
 from datetime import datetime
-from typing import Dict, Any, Optional, List, Pattern
+from typing import Dict, Any, List, Optional, Set
+
+# ✅ Solo importar logger, evitar importaciones circulares
 from brain.shared.logger import get_logger
 
 logger = get_logger(__name__)
 
 
-class ChromeLogReader:
+class NetLogAnalyzer:
     """
-    Reads and filters Chrome debug logs with Chromium error pattern detection.
-    Focused on system-level failures and security blocks.
+    Analyzes Chrome network logs with AI-focused filtering.
+    Parses JSON net-log format and extracts relevant events.
     """
     
-    # Lista Maestra de Fallos de Chromium
-    CHROMIUM_ERROR_PATTERNS: List[Pattern] = [
-        re.compile(r'Access is denied', re.IGNORECASE),
-        re.compile(r'0x5', re.IGNORECASE),  # Windows permission error code
-        re.compile(r'ERR_BLOCKED_BY_CLIENT', re.IGNORECASE),
-        re.compile(r'Sandbox', re.IGNORECASE),
-        re.compile(r'sandbox_win\.cc', re.IGNORECASE),
-        re.compile(r'SingletonLock', re.IGNORECASE),
-        re.compile(r'SingletonCookie', re.IGNORECASE),
-        re.compile(r'Failed to move file', re.IGNORECASE),
-        re.compile(r'Native Messaging host', re.IGNORECASE),
-        re.compile(r'\bFATAL\b', re.IGNORECASE),
-        re.compile(r'\bCRITICAL\b', re.IGNORECASE),
-    ]
+    # AI service domains for intelligent filtering
+    AI_DOMAINS = {
+        'openai.com', 'api.openai.com', 'chat.openai.com',
+        'anthropic.com', 'api.anthropic.com', 'claude.ai',
+        'gemini.google.com', 'generativelanguage.googleapis.com',
+        'cohere.ai', 'api.cohere.ai',
+        'huggingface.co', 'api-inference.huggingface.co',
+        'mistral.ai', 'api.mistral.ai',
+        'perplexity.ai', 'api.perplexity.ai'
+    }
+    
+    # Common tracking/analytics domains to exclude by default
+    NOISE_PATTERNS = {
+        'google-analytics', 'googletagmanager', 'doubleclick',
+        'facebook.com/tr', 'connect.facebook.net',
+        'analytics.', 'tracking.', 'telemetry.',
+        'ads.', 'adservice.', 'pixel.'
+    }
     
     def __init__(self):
-        """Initialize log reader with path resolver."""
+        """Initialize network log analyzer."""
+        # ✅ Lazy import - Solo importar cuando se instancia la clase
         from brain.core.profile.path_resolver import PathResolver
         self.paths = PathResolver()
-        logger.debug(f"Initialized ChromeLogReader (Engine Auditor) with base_dir: {self.paths.base_dir}")
+        logger.debug(f"Initialized NetLogAnalyzer with base_dir: {self.paths.base_dir}")
     
-    def read_and_filter(
+    def analyze(
         self,
         profile_id: str,
-        before_lines: int = 5,
-        after_lines: int = 5,
+        filter_ai: bool = False,
+        exclude_patterns: Optional[List[str]] = None,
+        include_quic: bool = False,
+        show_headers: bool = False,
         launch_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Audit Chrome engine log for Chromium errors with context.
+        Analyze Chrome network log with intelligent filtering.
         
         Args:
             profile_id: Chrome profile UUID
-            before_lines: Number of context lines before match
-            after_lines: Number of context lines after match
+            filter_ai: If True, only show AI service requests
+            exclude_patterns: Additional URL patterns to exclude
+            include_quic: If True, include QUIC packet events
+            show_headers: If True, extract HTTP/2 headers
             launch_id: Optional launch ID to create separate output file
             
         Returns:
-            Dictionary with results and metadata
+            Dictionary with analysis results and metadata
             
         Raises:
             FileNotFoundError: If source log file doesn't exist
-            ValueError: If profile_id is empty
+            ValueError: If profile_id is empty or JSON is invalid
         """
         if not profile_id or not profile_id.strip():
             raise ValueError("profile_id cannot be empty")
         
-        # Load profiles.json to get debug_log path
+        # Load profiles.json to get net_log path
         profiles_json = Path(self.paths.base_dir) / "config" / "profiles.json"
         
         if not profiles_json.exists():
@@ -86,162 +95,163 @@ class ChromeLogReader:
         if not profile:
             raise ValueError(f"Profile {profile_id} not found in profiles.json")
         
-        # Get debug_log path
-        debug_log_path = profile.get('log_files', {}).get('debug_log')
-        if not debug_log_path:
-            raise ValueError(f"debug_log not found for profile {profile_id}")
+        # Get net_log path
+        net_log_path = profile.get('log_files', {}).get('net_log')
+        if not net_log_path:
+            raise ValueError(f"net_log not found for profile {profile_id}")
         
-        source_file = Path(debug_log_path)
-        
+        source_file = Path(net_log_path)
+
         logger.debug(f"Source file: {source_file}")
         
         if not source_file.exists():
-            logger.error(f"Source file not found: {source_file}")
-            raise FileNotFoundError(f"Chrome debug log not found: {source_file}")
+            logger.error(f"Network log file not found: {source_file}")
+            raise FileNotFoundError(f"Chrome network log not found: {source_file}")
         
         # Construct output directory and file
-        logs_dir = Path(self.paths.base_dir) / "logs" / "profiles" / profile_id
-        logs_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Use launch_id or default naming
+        output_dir = Path(self.paths.base_dir) / "logs" / "profiles" / profile_id
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Use launch_id as prefix if provided
         if launch_id:
-            output_file = logs_dir / f"{launch_id}_engine_read.log"
+            output_file = output_dir / f"{launch_id}_engine_network.log"
         else:
-            output_file = logs_dir / "default_engine_read.log"
+            timestamp = datetime.now().strftime("%Y%m%d")
+            output_file = output_dir / f"chrome_bloom_net_log_{timestamp}.log"
         
-        logger.info(f"[INFO] Generando auditoría de motor para sesión {launch_id or 'default'}")
-        logger.info(f"Processing engine log file: {source_file}")
+        logger.info(f"Analyzing network log: {source_file}")
         logger.info(f"Output will be saved to: {output_file}")
         
-        # Process log file
-        matches_found = 0
-        total_lines = 0
-        output_lines = 0
-        error_types = {}
+        # Parse JSON
+        try:
+            with open(source_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON in network log: {e}")
+            raise ValueError(f"Invalid JSON format: {e}")
         
-        buffer = deque(maxlen=before_lines)
-        after_count = 0
+        # Extract constants for event type mapping
+        constants = data.get('constants', {})
+        event_types = {v: k for k, v in constants.get('eventType', {}).items()}
+        source_types = {v: k for k, v in constants.get('sourceType', {}).items()}
         
-        with open(source_file, "r", errors="ignore") as f_in, \
-             open(output_file, "w", encoding="utf-8") as f_out:
-            
-            # Write header
-            f_out.write("=" * 80 + "\n")
-            f_out.write("CHROMIUM ENGINE AUDIT REPORT\n")
-            f_out.write("=" * 80 + "\n")
+        logger.debug(f"Event types available: {len(event_types)}")
+        logger.debug(f"Source types available: {len(source_types)}")
+        
+        # Process events
+        events = data.get('events', [])
+        logger.info(f"Total events in log: {len(events)}")
+        
+        # Prepare exclusion patterns
+        exclude_set = set(exclude_patterns or [])
+        exclude_set.update(self.NOISE_PATTERNS)
+        
+        # Statistics
+        stats = {
+            'total_events': len(events),
+            'url_requests': 0,
+            'http2_sessions': 0,
+            'quic_packets': 0,
+            'ai_requests': 0
+        }
+        
+        filtered_requests = []
+        
+        with open(output_file, 'w', encoding='utf-8') as f_out:
+            f_out.write(f"Chrome Network Log Analysis\n")
             f_out.write(f"Profile: {profile_id}\n")
             if launch_id:
                 f_out.write(f"Launch ID: {launch_id}\n")
             f_out.write(f"Timestamp: {datetime.now().isoformat()}\n")
-            f_out.write(f"Source: {source_file}\n")
+            f_out.write(f"Filter AI: {filter_ai}\n")
+            f_out.write(f"Include QUIC: {include_quic}\n")
             f_out.write("=" * 80 + "\n\n")
             
-            for line in f_in:
-                total_lines += 1
+            for event in events:
+                event_type = event_types.get(event.get('type'), 'UNKNOWN')
+                source_type = source_types.get(event.get('source', {}).get('type'), 'UNKNOWN')
                 
-                # If in "after" mode, write and decrement counter
-                if after_count > 0:
-                    f_out.write(line)
-                    output_lines += 1
-                    after_count -= 1
-                    continue
+                # Process URL requests
+                if event_type == "URL_REQUEST_START_JOB":
+                    stats['url_requests'] += 1
+                    
+                    params = event.get('params', {})
+                    url = params.get('url', 'N/A')
+                    method = params.get('method', 'GET')
+                    
+                    # Check exclusions
+                    if self._should_exclude(url, exclude_set):
+                        logger.debug(f"Excluded URL: {url}")
+                        continue
+                    
+                    # Check AI filter
+                    if filter_ai and not self._is_ai_service(url):
+                        continue
+                    
+                    if filter_ai:
+                        stats['ai_requests'] += 1
+                    
+                    # Write to output
+                    f_out.write(f"[URL REQUEST] {method} -> {url}\n")
+                    
+                    filtered_requests.append({
+                        'method': method,
+                        'url': url,
+                        'timestamp': event.get('time', 'N/A')
+                    })
                 
-                # Check for Chromium error patterns
-                matched_pattern = self._check_error_patterns(line)
+                # Process HTTP/2 headers
+                elif event_type == "HTTP2_SESSION_RECV_HEADERS" and show_headers:
+                    stats['http2_sessions'] += 1
+                    
+                    params = event.get('params', {})
+                    headers = params.get('headers', [])
+                    
+                    f_out.write(f"[HTTP/2 HEADERS]\n")
+                    for header in headers:
+                        f_out.write(f"  {header}\n")
+                    f_out.write("\n")
                 
-                if matched_pattern:
-                    matches_found += 1
+                # Process QUIC packets
+                elif event_type == "QUIC_SESSION_PACKET_SENT" and include_quic:
+                    stats['quic_packets'] += 1
                     
-                    # Track error type
-                    error_types[matched_pattern] = error_types.get(matched_pattern, 0) + 1
-                    
-                    # Write context header
-                    f_out.write(f"----- ERROR #{matches_found}: {matched_pattern} -----\n")
-                    output_lines += 1
-                    
-                    # Write buffered "before" lines
-                    for buffered_line in buffer:
-                        f_out.write(buffered_line)
-                        output_lines += 1
-                    
-                    # Write matching line (highlighted)
-                    f_out.write(f">>> {line}")
-                    output_lines += 1
-                    
-                    # Set after counter
-                    after_count = after_lines
-                    
-                    # Write footer
-                    f_out.write("-" * 80 + "\n\n")
-                    output_lines += 1
-                    
-                    logger.debug(f"Match #{matches_found} ({matched_pattern}) found at line {total_lines}")
-                
-                # Always add to buffer
-                buffer.append(line)
+                    params = event.get('params', {})
+                    f_out.write(f"[QUIC PACKET] Size: {params.get('size', 'N/A')} bytes\n")
             
             # Write summary
             f_out.write("\n" + "=" * 80 + "\n")
-            f_out.write("AUDIT SUMMARY\n")
+            f_out.write("SUMMARY\n")
             f_out.write("=" * 80 + "\n")
-            f_out.write(f"Total errors detected: {matches_found}\n")
-            f_out.write(f"Total lines scanned: {total_lines}\n\n")
-            
-            if error_types:
-                f_out.write("Error Distribution:\n")
-                for error_type, count in sorted(error_types.items(), key=lambda x: x[1], reverse=True):
-                    f_out.write(f"  - {error_type}: {count}\n")
-            
-            f_out.write("=" * 80 + "\n")
+            f_out.write(f"Total events processed: {stats['total_events']}\n")
+            f_out.write(f"URL requests: {stats['url_requests']}\n")
+            f_out.write(f"HTTP/2 sessions: {stats['http2_sessions']}\n")
+            f_out.write(f"QUIC packets: {stats['quic_packets']}\n")
+            if filter_ai:
+                f_out.write(f"AI service requests: {stats['ai_requests']}\n")
         
-        logger.info(f"✅ Engine audit complete: {matches_found} errors detected")
+        logger.info(f"✅ Analysis complete: {stats['url_requests']} URL requests processed")
         
         return {
             "profile_id": profile_id,
             "launch_id": launch_id,
             "source_file": str(source_file),
             "output_file": str(output_file),
-            "matches_found": matches_found,
-            "total_lines": total_lines,
-            "output_lines": output_lines,
-            "error_types": error_types,
-            "before_context": before_lines,
-            "after_context": after_lines,
+            "filter_ai": filter_ai,
+            "include_quic": include_quic,
+            "show_headers": show_headers,
+            "statistics": stats,
+            "filtered_requests": filtered_requests,
+            "events_processed": len(events),
             "timestamp": datetime.now().isoformat()
         }
     
-    def _check_error_patterns(self, line: str) -> Optional[str]:
-        """
-        Check if line matches any Chromium error pattern.
-        
-        Returns:
-            Name of matched pattern or None
-        """
-        for pattern in self.CHROMIUM_ERROR_PATTERNS:
-            if pattern.search(line):
-                # Return a readable pattern name
-                pattern_str = pattern.pattern
-                if 'Access is denied' in pattern_str:
-                    return 'ACCESS_DENIED'
-                elif '0x5' in pattern_str:
-                    return 'PERMISSION_ERROR_0x5'
-                elif 'ERR_BLOCKED_BY_CLIENT' in pattern_str:
-                    return 'BLOCKED_BY_CLIENT'
-                elif 'sandbox_win' in pattern_str:
-                    return 'SANDBOX_WIN_ERROR'
-                elif 'Sandbox' in pattern_str:
-                    return 'SANDBOX_ERROR'
-                elif 'SingletonLock' in pattern_str:
-                    return 'SINGLETON_LOCK'
-                elif 'SingletonCookie' in pattern_str:
-                    return 'SINGLETON_COOKIE'
-                elif 'Failed to move file' in pattern_str:
-                    return 'FILE_MOVE_FAILED'
-                elif 'Native Messaging host' in pattern_str:
-                    return 'NATIVE_MESSAGING_ERROR'
-                elif 'FATAL' in pattern_str:
-                    return 'FATAL_ERROR'
-                elif 'CRITICAL' in pattern_str:
-                    return 'CRITICAL_ERROR'
-        
-        return None
+    def _should_exclude(self, url: str, exclude_patterns: Set[str]) -> bool:
+        """Check if URL matches any exclusion pattern."""
+        url_lower = url.lower()
+        return any(pattern in url_lower for pattern in exclude_patterns)
+    
+    def _is_ai_service(self, url: str) -> bool:
+        """Check if URL belongs to a known AI service."""
+        url_lower = url.lower()
+        return any(domain in url_lower for domain in self.AI_DOMAINS)
