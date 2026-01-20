@@ -106,10 +106,17 @@ bloom-development-extension/
 │   ├── host/
 │   │   ├── HostExecutor.ts
 │   │   ├── bloom-host.cpp
+│   │   ├── bloom-host.cpp.save
 │   │   ├── build.sh
+│   │   ├── chunked_buffer.cpp
+│   │   ├── chunked_buffer.h
 │   │   ├── nlohmann/
 │   │   │   └── json.hpp
-│   │   └── setup-openssl-mingw.sh
+│   │   ├── platform_utils.cpp
+│   │   ├── platform_utils.h
+│   │   ├── setup-openssl-mingw.sh
+│   │   ├── synapse_logger.cpp
+│   │   └── synapse_logger.h
 │   ├── initialization/
 │   │   ├── commandRegistry.ts
 │   │   ├── contextInitializer.ts
@@ -188,6 +195,14 @@ bloom-development-extension/
 │   │   ├── crx/
 │   │   │   ├── id.json
 │   │   │   └── key.pem
+│   │   ├── extension/
+│   │   │   ├── background.js
+│   │   │   ├── content.js
+│   │   │   ├── discovery/
+│   │   │   │   ├── index.html
+│   │   │   │   └── script.js
+│   │   │   ├── manifest.json
+│   │   │   └── synapse.config.js
 │   │   ├── pem/
 │   │   │   ├── key_generation_extesion.crx
 │   │   │   └── key_generation_extesion.pem
@@ -299,7 +314,8 @@ bloom-development-extension/
 │   │   │       │   └── brain.exe
 │   │   │       ├── libwinpthread-1.dll
 │   │   │       ├── profiles.json
-│   │   │       └── sentinel.exe
+│   │   │       ├── sentinel.exe
+│   │   │       └── sentinel.exe~
 │   │   ├── host/
 │   │   │   └── com.bloom.nucleus.bridge.json
 │   │   └── nssm/
@@ -361,6 +377,7 @@ bloom-development-extension/
 │       ├── blueprint.json
 │       ├── build.bat
 │       ├── codebase/
+│       │   └── go_files_2026-01-20_16-41-40.txt
 │       ├── docs/
 │       │   ├── Sentinel - Fase 2 Discovery - Health Modular.md
 │       │   ├── Sentinel Base.md
@@ -385,6 +402,7 @@ bloom-development-extension/
 │       │   │   ├── discovery.go
 │       │   │   └── vscode.go
 │       │   ├── health/
+│       │   │   ├── guardian.go
 │       │   │   └── health.go
 │       │   ├── ignition/
 │       │   │   ├── ignition.go

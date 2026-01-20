@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sentinel/internal/core"
+	"sentinel/internal/health"
 	"strings"
 	"time"
 )
@@ -36,7 +37,7 @@ type LaunchResponse struct {
 	Status string `json:"status"`
 	Data   struct {
 		ProfileID string `json:"profile_id"`
-		Launch    struct {
+		Launch struct {
 			LaunchID string `json:"launch_id"`
 			PID      int    `json:"pid"`
 		} `json:"launch"`
@@ -50,6 +51,7 @@ type LaunchResponse struct {
 type Ignition struct {
 	Core      *core.Core
 	Telemetry *TelemetryHub
+	Guardians map[string]*health.GuardianInstance
 	SpecPath  string
 	Session   struct {
 		ServicePID int
@@ -62,10 +64,13 @@ func New(c *core.Core) *Ignition {
 	return &Ignition{
 		Core:      c,
 		Telemetry: NewTelemetryHub(c),
+		Guardians: make(map[string]*health.GuardianInstance),
 	}
 }
 
 // --- MÉTODOS DE CICLO DE VIDA ---
+
+// internal/ignition/ignition.go
 
 func (ig *Ignition) Launch(profileID string, mode string) error {
 	ig.Core.Logger.Info("[IGNITION] 🚀 Iniciando secuencia (Static Spec Mode).")
@@ -78,61 +83,107 @@ func (ig *Ignition) Launch(profileID string, mode string) error {
 
 	ig.SpecPath = profileData["spec_path"].(string)
 
-	// 2. GENERAR EL ID DE LANZAMIENTO LÓGICO
-	// Formato: 00X_shortuuid_shorttimestamp
+	// 2. Generar el ID lógico
 	launchID := ig.generateLogicalLaunchID(profileID)
 	ig.Session.LaunchID = launchID
 
-	// 3. Pre-flight y Limpieza
+	// 3. Limpieza y preparación de Telemetría
 	ig.preFlight(profileID)
 	ig.Telemetry.Setup()
 
-	// 4. PREPARACIÓN MULTI-ARCHIVO (Inyección de ID en Spec, JS y Manifest)
+	// 4. ESCRIBIR ARCHIVOS (Aquí es donde se popula el ignition_spec.json)
 	if err := ig.prepareSessionFiles(profileID, launchID, profileData); err != nil {
 		return err
 	}
 
-	// ============================================================
-	// ⚡ FIX CRÍTICO: RESPIRO DE SINCRONIZACIÓN
-	// Le damos tiempo al SO para persistir los archivos y a Chrome 
-	// para que no use versiones en caché del manifiesto JSON.
-	// ============================================================
 	ig.Core.Logger.Info("[IGNITION] Sincronizando archivos con el sistema...")
 	time.Sleep(800 * time.Millisecond) 
-	// ============================================================
 
-	// 5. Brain Service
+	// 5. Iniciar el Servicio Base
 	if err := ig.startBrainService(); err != nil {
 		return err
 	}
 
-	// 6. Lanzamiento
+	// 6. Lanzamiento del Navegador (Ejecuta brain.exe profile launch)
 	finalID, err := ig.execute(profileID)
 	if err != nil {
 		return err
 	}
 
-	// 7. Telemetría
-	ig.Telemetry.StartTailing(profileID, finalID)
+	// ============================================================
+	// 🛡️ ACTIVACIÓN DEL GUARDIAN (Inmediata)
+	// ============================================================
+	guardian, err := health.NewGuardian(
+		ig.Core, 
+		profileID, 
+		launchID, 
+		ig.Session.ServicePID, 
+	)
+	if err == nil {
+		ig.Guardians[profileID] = guardian
+		guardian.Start() // El log guardian_{launchID}.log se crea AQUÍ
+		ig.Core.Logger.Info("[IGNITION] 🛡️ Guardian desplegado.")
+	} else {
+		ig.Core.Logger.Error("[IGNITION] No se pudo crear el Guardian: %v", err)
+	}
+
+	// ============================================================
+	// 📡 ACTIVACIÓN DE TELEMETRÍA (Fase 1: Handshake)
+	// ============================================================
+	ig.Telemetry.StartHandshakeMonitor(profileID, launchID)
 
 	ig.Core.Logger.Info("[IGNITION] Esperando validación LATE_BINDING_SUCCESS...")
+
 	select {
 	case <-ig.Telemetry.SuccessChan:
-		ig.Core.Logger.Success("[IGNITION] 🔥 Handshake confirmado. ÉXITO.")
+		ig.Core.Logger.Success("[IGNITION] 🔥 Handshake confirmado.")
+		
+		// Activar minería post-handshake
+		ig.Telemetry.StartGranularTelemetry(profileID, launchID)
+		
 		ig.startPostLaunchAnalysis(profileID, finalID)
 		return nil
+
 	case <-time.After(20 * time.Second):
-		return fmt.Errorf("timeout: La extensión no respondió")
+		return fmt.Errorf("timeout: La extensión no respondió (ID Esperado: %s)", launchID)
 	}
 }
 
-// --- ALGORITMO DE GENERACIÓN DE ID ---
+// --- MÉTODOS DE APOYO ---
+
+func (ig *Ignition) startBrainService() error {
+	cmd := exec.Command("brain.exe", "service", "start")
+	cmd.Env = append(os.Environ(), "PYTHONIOENCODING=utf-8")
+	
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("fallo al lanzar brain.exe: %v", err)
+	}
+
+	// GUARDAR EL PID PARA EL GUARDIAN
+	ig.Session.ServicePID = cmd.Process.Pid
+
+	// Esperar a que el puerto esté listo
+	for i := 0; i < 15; i++ {
+		conn, _ := net.DialTimeout("tcp", "127.0.0.1:5678", 500*time.Millisecond)
+		if conn != nil {
+			conn.Close()
+			return nil
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	return fmt.Errorf("timeout: brain.exe no abrió el puerto 5678")
+}
+
+// ... (El resto de tus métodos generateLogicalLaunchID, prepareSessionFiles, execute, etc., se mantienen igual)
 
 func (ig *Ignition) generateLogicalLaunchID(profileID string) string {
+	// 1. Usamos la parte corta del ID del perfil (ej: 14c11dbf)
 	shortUUID := profileID[:8]
+	
+	// 2. Timestamp con precisión de SEGUNDOS para el nombre del log
 	timestamp := time.Now().Format("150405") // HHMMSS
 
-	// 1. Leer profiles.json para manejar el contador
+	// 3. Leer y actualizar el contador en profiles.json
 	profilesPath := filepath.Join(ig.Core.Paths.AppDataDir, "config", "profiles.json")
 	data, _ := os.ReadFile(profilesPath)
 
@@ -144,7 +195,6 @@ func (ig *Ignition) generateLogicalLaunchID(profileID string) string {
 	counter := 1
 	for i, p := range root.Profiles {
 		if p["id"] == profileID {
-			// Si existe un launch_count, incrementarlo
 			if val, ok := p["launch_count"].(float64); ok {
 				counter = int(val) + 1
 			}
@@ -153,14 +203,14 @@ func (ig *Ignition) generateLogicalLaunchID(profileID string) string {
 		}
 	}
 
-	// Guardar el nuevo contador
+	// Guardar el nuevo contador inmediatamente
 	updatedData, _ := json.MarshalIndent(root, "", "  ")
 	_ = os.WriteFile(profilesPath, updatedData, 0644)
 
+	// RESULTADO: 015_14c11dbf_154121 (Contador_Perfil_Hora)
+	// Al tener el contador y la hora, es imposible que se mezclen logs.
 	return fmt.Sprintf("%03d_%s_%s", counter, shortUUID, timestamp)
 }
-
-// --- PREPARACIÓN DE ARCHIVOS DE SESIÓN ---
 
 func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profileData map[string]interface{}) error {
 	// 1. ACTUALIZAR IGNITION_SPEC.JSON
@@ -168,7 +218,6 @@ func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profi
 	if err != nil {
 		return fmt.Errorf("no se pudo leer el spec: %v", err)
 	}
-
 	var spec IgnitionSpec
 	json.Unmarshal(specData, &spec)
 	spec.LaunchID = launchID
@@ -182,42 +231,41 @@ func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profi
 	if !filepath.IsAbs(extDir) {
 		extDir = filepath.Join(ig.Core.Paths.AppDataDir, extDir)
 	}
-
 	configPath := filepath.Join(extDir, "synapse.config.js")
-	alias := profileData["alias"].(string)
-	extID := "hpblclepliicmihaplldignhjdggnkdh" // Estándar de la extensión
-
 	jsContent := fmt.Sprintf(`self.SYNAPSE_CONFIG = { 
     profileId: '%s', 
     bridge_name: 'com.bloom.synapse.%s',
     launchId: "%s",
     profile_alias: "%s",
-    extension_id: "%s"
-};`, profileID, shortID, launchID, alias, extID)
-
+    extension_id: "hpblclepliicmihaplldignhjdggnkdh"
+};`, profileID, shortID, launchID, profileData["alias"].(string))
 	_ = os.WriteFile(configPath, []byte(jsContent), 0644)
 
-	// 3. ACTUALIZAR COM.BLOOM.SYNAPSE.{SHORTID}.JSON (Manifiesto de Host)
+	// 3. [CRÍTICO] ACTUALIZAR MANIFIESTO DEL HOST (com.bloom.synapse.{shortid}.json)
 	manifestName := fmt.Sprintf("com.bloom.synapse.%s.json", shortID)
+	// Asegúrate de que esta ruta sea la misma donde Chrome busca el manifiesto
 	manifestPath := filepath.Join(ig.Core.Paths.AppDataDir, "profiles", profileID, "synapse", manifestName)
 
-	if mData, err := os.ReadFile(manifestPath); err == nil {
-		var manifest map[string]interface{}
-		json.Unmarshal(mData, &manifest)
-
-		// Actualizar argumentos
-		args := []string{"--profile-id", profileID, "--launch-id", launchID}
-		manifest["args"] = args
-
-		updatedManifest, _ := json.MarshalIndent(manifest, "", "  ")
-		_ = os.WriteFile(manifestPath, updatedManifest, 0644)
+	mData, err := os.ReadFile(manifestPath)
+	if err != nil {
+		// Si el archivo no está, el Host C++ usará valores viejos. ¡Error fatal!
+		return fmt.Errorf("MANIFIESTO NO ENCONTRADO en %s: %v", manifestPath, err)
 	}
 
-	ig.Core.Logger.Info("[IGNITION] Sesión preparada: Archivos de configuración sincronizados.")
+	var manifest map[string]interface{}
+	json.Unmarshal(mData, &manifest)
+	
+	// Sincronizamos los argumentos para que el Bridge C++ use el ID 016
+	manifest["args"] = []string{"--profile-id", profileID, "--launch-id", launchID}
+
+	updatedManifest, _ := json.MarshalIndent(manifest, "", "  ")
+	if err := os.WriteFile(manifestPath, updatedManifest, 0644); err != nil {
+		return fmt.Errorf("error escribiendo manifiesto: %v", err)
+	}
+
+	ig.Core.Logger.Info("[IGNITION] 🆔 Identidad [%s] inyectada en Spec, JS y Manifiesto.", launchID)
 	return nil
 }
-
-// --- MÉTODOS DE APOYO ---
 
 func (ig *Ignition) execute(profileID string) (string, error) {
 	cmd := exec.Command("brain.exe", "profile", "launch", profileID, "--spec", ig.SpecPath)
@@ -238,7 +286,7 @@ func (ig *Ignition) execute(profileID string) (string, error) {
 				if err := json.Unmarshal([]byte(line[idx:]), &resp); err == nil {
 					if resp.Status == "success" {
 						ig.Session.BrowserPID = resp.Data.Launch.PID
-						_ = ig.updateProfilesConfig(profileID, resp.Data.LogFiles.DebugLog, resp.Data.LogFiles.NetLog)
+						_ = ig.updateProfilesConfig(profileID, resp.Data.Launch.LaunchID, resp.Data.LogFiles.DebugLog, resp.Data.LogFiles.NetLog)
 						resChan <- resp.Data.Launch.LaunchID
 						return
 					}
@@ -275,20 +323,29 @@ func (ig *Ignition) getProfileData(profileID string) (map[string]interface{}, er
 	return nil, fmt.Errorf("perfil no encontrado en el registro")
 }
 
-func (ig *Ignition) updateProfilesConfig(profileID string, debugLog string, netLog string) error {
+func (ig *Ignition) updateProfilesConfig(profileID string, finalID string, debugLog string, netLog string) error {
 	profilesPath := filepath.Join(ig.Core.Paths.AppDataDir, "config", "profiles.json")
+	
+	// 1. Leer el archivo
 	data, err := os.ReadFile(profilesPath)
 	if err != nil {
 		return err
 	}
 
+	// 2. Definir 'root' (Aquí es donde nace la variable)
 	var root struct {
 		Profiles []map[string]interface{} `json:"profiles"`
 	}
-	json.Unmarshal(data, &root)
+	if err := json.Unmarshal(data, &root); err != nil {
+		return err
+	}
 
+	// 3. El arreglo actualizado con todos los IDs
 	for i, p := range root.Profiles {
 		if p["id"] == profileID {
+			root.Profiles[i]["last_physical_id"] = finalID        
+			root.Profiles[i]["last_logical_id"]  = ig.Session.LaunchID 
+			root.Profiles[i]["logs_dir"] = filepath.Join(ig.Core.Paths.LogsDir, "profiles", profileID)
 			root.Profiles[i]["log_files"] = map[string]string{
 				"debug_log": debugLog,
 				"net_log":   netLog,
@@ -296,11 +353,12 @@ func (ig *Ignition) updateProfilesConfig(profileID string, debugLog string, netL
 			break
 		}
 	}
-	newData, _ := json.MarshalIndent(root, "", "  ")
-	return os.WriteFile(profilesPath, newData, 0644)
+
+	// 4. Guardar cambios
+	updatedData, _ := json.MarshalIndent(root, "", "  ")
+	return os.WriteFile(profilesPath, updatedData, 0644)
 }
 
-// startPostLaunchAnalysis, preFlight, freePortQuirurgico y startBrainService se mantienen igual que en la versión anterior...
 func (ig *Ignition) startPostLaunchAnalysis(profileID string, launchID string) {
 	go func() {
 		time.Sleep(2 * time.Second)
@@ -343,21 +401,4 @@ func (ig *Ignition) freePortQuirurgico(port int) {
 		}
 	}
 	time.Sleep(1 * time.Second)
-}
-
-func (ig *Ignition) startBrainService() error {
-	cmd := exec.Command("brain.exe", "service", "start")
-	cmd.Env = append(os.Environ(), "PYTHONIOENCODING=utf-8")
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-	for i := 0; i < 15; i++ {
-		conn, _ := net.DialTimeout("tcp", "127.0.0.1:5678", 500*time.Millisecond)
-		if conn != nil {
-			conn.Close()
-			return nil
-		}
-		time.Sleep(500 * time.Millisecond)
-	}
-	return fmt.Errorf("timeout iniciando brain service")
 }

@@ -3,6 +3,14 @@ bloom-development-extension/
     ├── crx/
     │   ├── id.json
     │   └── key.pem
+    ├── extension/
+    │   ├── background.js
+    │   ├── content.js
+    │   ├── discovery/
+    │   │   ├── index.html
+    │   │   └── script.js
+    │   ├── manifest.json
+    │   └── synapse.config.js
     ├── pem/
     │   ├── key_generation_extesion.crx
     │   └── key_generation_extesion.pem

@@ -163,8 +163,10 @@ class ProfileLauncher:
         chrome_args = [
             str(exec_path),
             f"--user-data-dir={user_data_path}",
+            "--profile-directory=Default",
             f"--load-extension={extension_path}",
-            f"--app={url}",
+            f"--app={url}",            
+            "--app-id=bloom-synapse"
         ]
         
         # Logs opcionales
@@ -185,96 +187,121 @@ class ProfileLauncher:
         return self._execute_handoff(chrome_args, profile['id'], log_files, launch_id)
     
     def _execute_handoff(
-        self, 
-        args: list, 
-        profile_id: str, 
-        log_files: Dict[str, str],
-        launch_id: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """
-        Handoff estándar a Sentinel (Go).
-        Implementa el contrato Python -> Go v2.0.
-        
-        Estándar de Lanzamiento Atómico:
-        1. Silencio total en stdout (evita contaminar pipe de Go)
-        2. Lanzamiento desacoplado (proceso hijo independiente)
-        3. Contrato JSON (única salida permitida en stdout)
-        4. Entrega y cierre quirúrgico (os._exit para evitar cleanup)
-        
-        CRÍTICO: NO MODIFICAR sin coordinar con Sentinel.
-        
-        Args:
-            args: Argumentos para el proceso Chrome
-            profile_id: ID del perfil a lanzar
-            log_files: Diccionario con rutas de archivos de log
-            launch_id: ID único del lanzamiento
-        """
-        logger.info(f"🚀 Iniciando handoff a Sentinel")
-        logger.debug(f"  → Args count: {len(args)}")
-        logger.debug(f"  → Executable: {args[0]}")
-        
-        # Kill preventivo de bloom-host (Windows only)
-        if platform.system() == 'Windows':
-            logger.debug("🔪 Matando procesos bloom-host.exe previos")
-            os.system('taskkill /f /im bloom-host.exe >nul 2>&1')
-        
-        try:
-            # 1. SILENCIO TOTAL EN STDOUT
-            # Deshabilita todos los logs que puedan contaminar stdout
-            import logging
-            logging.disable(logging.CRITICAL)
-            
-            # 2. LANZAMIENTO DESACOPLADO
-            # Flags para Windows: DETACHED_PROCESS (0x08) + CREATE_NEW_PROCESS_GROUP (0x200)
-            # Flags para Unix: 0 (comportamiento por defecto es suficiente)
-            flags = 0x00000008 | 0x00000200 if platform.system() == 'Windows' else 0
-            
-            logger.info("🚀 Spawning proceso desacoplado...")
-            proc = subprocess.Popen(
-                args,
-                creationflags=flags,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                stdin=subprocess.DEVNULL,
-                close_fds=True,
-                shell=False
+    self, 
+    args: list, 
+    profile_id: str, 
+    log_files: Dict[str, str],
+    launch_id: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Handoff estándar a Sentinel (Go).
+    Implementa el contrato Python -> Go v2.0.
+    """
+
+    logger.info(f"🚀 Iniciando handoff a Sentinel")
+    logger.debug(f"  → Args count: {len(args)}")
+    logger.debug(f"  → Executable: {args[0]}")
+
+    # ==========================================================
+    # FIX DEFINITIVO — LOCK ATÓMICO A NIVEL SO
+    # ==========================================================
+
+    # Extraer --user-data-dir
+    user_data_arg = next(
+        (a for a in args if a.startswith("--user-data-dir=")),
+        None
+    )
+
+    if not user_data_arg:
+        raise RuntimeError("No se encontró --user-data-dir en args")
+
+    user_data_path = Path(user_data_arg.split("=", 1)[1])
+    lock_file = user_data_path / ".chrome_app.lock"
+
+    try:
+        # CREACIÓN ATÓMICA: solo UN proceso puede pasar
+        fd = os.open(
+            lock_file,
+            os.O_CREAT | os.O_EXCL | os.O_WRONLY
+        )
+        with os.fdopen(fd, "w") as f:
+            f.write(
+                f"pid={os.getpid()}\n"
+                f"time={datetime.now().isoformat()}\n"
             )
-            
-            # 3. CONTRATO JSON (Única salida permitida en stdout)
-            # Generación del launch_id si no se proveyó
-            if not launch_id:
-                launch_id = datetime.now().strftime("%Y%m%d_%H%M%S")
-            
-            result = {
-                "status": "success",
-                "data": {
-                    "profile_id": profile_id,
-                    "launch": {
-                        "pid": proc.pid,
-                        "launch_id": launch_id
-                    },
-                    "log_files": log_files 
-                }
+
+        logger.debug("🔒 Lock de app creado correctamente")
+
+    except FileExistsError:
+        logger.warning("🚫 Launch abortado: la app ya está en ejecución")
+        return {
+            "status": "already_running",
+            "data": {
+                "profile_id": profile_id,
+                "reason": "atomic_lock_present"
             }
-            
-            logger.info(f"✅ Proceso lanzado exitosamente")
-            logger.debug(f"  → PID: {proc.pid}")
-            logger.debug(f"  → Profile ID: {profile_id[:8]}")
-            logger.debug(f"  → Log files: {len(log_files)} archivos")
-            
-            # 4. ENTREGA Y CIERRE QUIRÚRGICO
-            sys.stdout.write(json.dumps(result) + "\n")
-            sys.stdout.flush()
-            
-            # Margen para que el buffer del SO entregue el dato a Go
-            time.sleep(0.5)
-            
-            # Muerte inmediata: evita que Python espere al navegador
-            # os._exit(0) en vez de sys.exit() para saltear cleanup handlers
-            os._exit(0)
-            
-        except Exception as e:
-            logger.error(f"✗ Error fatal en handoff: {str(e)}", exc_info=True)
-            sys.stderr.write(f"FATAL_ERROR: {str(e)}\n")
-            sys.stderr.flush()
-            os._exit(1)
+        }
+
+    # ==========================================================
+    # Kill preventivo de bloom-host (Windows only)
+    # ==========================================================
+    if platform.system() == 'Windows':
+        logger.debug("🔪 Matando procesos bloom-host.exe previos")
+        os.system('taskkill /f /im bloom-host.exe >nul 2>&1')
+
+    try:
+        # ======================================================
+        # 1. SILENCIO TOTAL EN STDOUT
+        # ======================================================
+        import logging
+        logging.disable(logging.CRITICAL)
+
+        # ======================================================
+        # 2. LANZAMIENTO DESACOPLADO
+        # ======================================================
+        flags = 0x00000008 | 0x00000200 if platform.system() == 'Windows' else 0
+
+        logger.info("🚀 Spawning proceso desacoplado...")
+        proc = subprocess.Popen(
+            args,
+            creationflags=flags,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+            close_fds=True,
+            shell=False
+        )
+
+        # ======================================================
+        # 3. CONTRATO JSON
+        # ======================================================
+        if not launch_id:
+            launch_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        result = {
+            "status": "success",
+            "data": {
+                "profile_id": profile_id,
+                "launch": {
+                    "pid": proc.pid,
+                    "launch_id": launch_id
+                },
+                "log_files": log_files
+            }
+        }
+
+        # ======================================================
+        # 4. ENTREGA Y CIERRE QUIRÚRGICO
+        # ======================================================
+        sys.stdout.write(json.dumps(result) + "\n")
+        sys.stdout.flush()
+
+        time.sleep(0.5)
+        os._exit(0)
+
+    except Exception as e:
+        logger.error(f"✗ Error fatal en handoff: {str(e)}", exc_info=True)
+        sys.stderr.write(f"FATAL_ERROR: {str(e)}\n")
+        sys.stderr.flush()
+        os._exit(1)
+
