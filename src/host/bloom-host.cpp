@@ -25,6 +25,7 @@ const int SERVICE_PORT = 5678;
 const size_t MAX_MESSAGE_SIZE = 50 * 1024 * 1024;
 const int RECONNECT_DELAY_MS = 2000;
 const size_t MAX_QUEUED_MESSAGES = 100;
+const int MAX_IDENTITY_WAIT_MS = 10000; // 10 segundos máximo de espera
 
 // ============================================================================
 // ESTADO GLOBAL
@@ -71,7 +72,7 @@ void write_to_service(const std::string& s) {
 }
 
 // ============================================================================
-// EXTRACCIÓN DE IDENTIDAD (LATE BINDING)
+// EXTRACCIÓN DE IDENTIDAD (LATE BINDING) - FIXED VERSION
 // ============================================================================
 
 bool try_extract_profile_id_from_raw(const std::string& msg_str) {
@@ -92,13 +93,11 @@ bool try_extract_profile_id_from_raw(const std::string& msg_str) {
         candidate[18] == '-' && candidate[23] == '-') {
         
         std::lock_guard<std::mutex> lock(g_identity_mutex);
-        if (!identity_resolved.load()) {
+        if (g_profile_id.empty()) {
             g_profile_id = candidate;
             g_logger.initialize_with_profile_id(candidate);
             
             std::cerr << "[IDENTITY_EXTRACT_RAW] profile=" << candidate << std::endl;
-            
-            // NO marcar como resuelto todavía - esperamos launch_id
             return true;
         }
     }
@@ -133,33 +132,60 @@ bool try_extract_identity(const json& msg) {
         } catch (...) { continue; }
     }
     
-    // ✅ VALIDACIÓN CRÍTICA: Solo marcar como resuelto si tenemos AMBOS
+    // ✅ FIXED: Atomic update con validación completa
     if (!candidate_profile.empty() && !candidate_launch.empty()) {
         std::lock_guard<std::mutex> lock(g_identity_mutex);
-        if (!identity_resolved.load()) {
+        
+        // Solo actualizar si no están ya seteados
+        if (g_profile_id.empty()) {
             g_profile_id = candidate_profile;
-            g_launch_id = candidate_launch;
-            
-            std::cerr << "[IDENTITY_EXTRACT] profile=" << candidate_profile 
-                      << " launch=" << candidate_launch << std::endl;
-            
             g_logger.initialize_with_profile_id(candidate_profile);
+        }
+        
+        if (g_launch_id.empty()) {
+            g_launch_id = candidate_launch;
             g_logger.initialize_with_launch_id(candidate_launch);
-            
-            // ✅ AHORA SÍ: Marcar como resuelto
-            identity_resolved.store(true);
-            g_identity_cv.notify_all();
+        }
+        
+        // ✅ CRITICAL FIX: Solo marcar como resuelto si AMBOS están presentes
+        bool both_valid = !g_profile_id.empty() && !g_launch_id.empty();
+        
+        if (both_valid && !identity_resolved.load()) {
+            std::cerr << "[IDENTITY_EXTRACT] profile=" << g_profile_id 
+                      << " launch=" << g_launch_id << std::endl;
             
             if (g_logger.is_ready()) {
                 g_logger.log_native("INFO", "LATE_BINDING_SUCCESS ProfileID=" + 
-                    candidate_profile + " LaunchID=" + candidate_launch);
+                    g_profile_id + " LaunchID=" + g_launch_id);
             }
+            
+            identity_resolved.store(true);
+            g_identity_cv.notify_all();
             
             return true;
         }
     }
     
     return false;
+}
+
+// ============================================================================
+// HELPER: Obtener identidad de forma segura
+// ============================================================================
+
+struct IdentitySnapshot {
+    std::string profile_id;
+    std::string launch_id;
+    bool valid;
+};
+
+IdentitySnapshot get_identity_safe() {
+    std::lock_guard<std::mutex> lock(g_identity_mutex);
+    return {
+        g_profile_id,
+        g_launch_id,
+        !g_profile_id.empty() && !g_launch_id.empty()
+    };
 }
 
 // ============================================================================
@@ -186,10 +212,8 @@ void flush_pending_messages() {
 }
 
 void handle_chrome_message(const std::string& msg_str) {
-    // PASO 1: Intentar extraer profile_id del string RAW
     try_extract_profile_id_from_raw(msg_str);
     
-    // PASO 2: Parse JSON con tolerancia a errores
     json msg;
     try {
         msg = json::parse(msg_str);
@@ -200,7 +224,6 @@ void handle_chrome_message(const std::string& msg_str) {
         return;
     }
     
-    // PASO 3: Procesar chunks si es un mensaje fragmentado
     if (msg.contains("bloom_chunk")) {
         std::string assembled;
         auto res = g_chunked_buffer.process_chunk(msg, assembled);
@@ -210,18 +233,15 @@ void handle_chrome_message(const std::string& msg_str) {
         return;
     }
     
-    // PASO 4: Intentar extraer identidad completa del JSON
     try_extract_identity(msg);
     
-    // PASO 5: Validar tipo de mensaje
     std::string msg_type = "unknown_technical";
     
     if (msg.contains("type")) {
         if (msg["type"].is_string()) {
             msg_type = msg["type"].get<std::string>();
         } else if (msg["type"].is_number()) {
-            // Chromium envía números como type en mensajes técnicos
-            return; // Ignorar silenciosamente
+            return;
         } else {
             if (g_logger.is_ready()) {
                 g_logger.log_native("WARN", "MESSAGE_TYPE_UNKNOWN");
@@ -234,7 +254,6 @@ void handle_chrome_message(const std::string& msg_str) {
         return;
     }
     
-    // PASO 6: Manejo de mensajes especiales
     if (msg_type == "LOG") {
         std::string level = msg.value("level", "INFO");
         std::string message = msg.value("message", "");
@@ -247,11 +266,7 @@ void handle_chrome_message(const std::string& msg_str) {
     }
     
     if (msg_type == "SYSTEM_HELLO") {
-        std::string final_id;
-        {
-            std::lock_guard<std::mutex> lock(g_identity_mutex);
-            final_id = identity_resolved.load() ? g_profile_id : "unknown_worker";
-        }
+        auto snapshot = get_identity_safe();
         
         json ready = {
             {"type", "SYSTEM_ACK"},
@@ -259,20 +274,19 @@ void handle_chrome_message(const std::string& msg_str) {
             {"payload", {
                 {"status", "connected"},
                 {"host_version", VERSION},
-                {"profile_id", final_id},
-                {"identity_method", identity_resolved.load() ? "late_binding" : "fallback"}
+                {"profile_id", snapshot.valid ? snapshot.profile_id : "unknown_worker"},
+                {"identity_method", snapshot.valid ? "late_binding" : "fallback"}
             }}
         };
         
         write_message_to_chrome(ready.dump());
         
         if (g_logger.is_ready()) {
-            g_logger.log_native("INFO", "SYSTEM_ACK_SENT ProfileID=" + final_id);
+            g_logger.log_native("INFO", "SYSTEM_ACK_SENT ProfileID=" + snapshot.profile_id);
         }
         return;
     }
     
-    // PASO 7: Enrutamiento al servicio TCP
     if (service_socket.load() != INVALID_SOCK && identity_resolved.load()) {
         write_to_service(msg_str);
         if (g_logger.is_ready()) {
@@ -287,57 +301,66 @@ void handle_chrome_message(const std::string& msg_str) {
 }
 
 // ============================================================================
-// CLIENTE TCP
+// CLIENTE TCP - FIXED VERSION
 // ============================================================================
 
 void tcp_client_loop() {
+    std::cerr << "[TCP_THREAD] Starting - waiting for identity..." << std::endl;
+    
+    // ✅ FIXED: Wait con timeout para evitar deadlocks
     std::unique_lock<std::mutex> id_lock(g_identity_mutex);
     
-    std::cerr << "[TCP_THREAD] Waiting for identity resolution..." << std::endl;
-    
-    g_identity_cv.wait(id_lock, []{ 
-        return identity_resolved.load() || shutdown_requested.load(); 
-    });
+    bool wait_result = g_identity_cv.wait_for(
+        id_lock, 
+        std::chrono::milliseconds(MAX_IDENTITY_WAIT_MS),
+        []{ return identity_resolved.load() || shutdown_requested.load(); }
+    );
     
     if (shutdown_requested.load()) {
         std::cerr << "[TCP_THREAD] Abort - shutdown requested" << std::endl;
         return;
     }
     
-    std::string worker_id = g_profile_id;
-    std::string launch_id = g_launch_id;
-    id_lock.unlock();
-
-    // ✅ VALIDACIÓN CRÍTICA: Verificar que launch_id no esté vacío
-    if (launch_id.empty() || launch_id == "unknown") {
-        std::cerr << "[TCP_THREAD] CRITICAL - launch_id is empty!" << std::endl;
+    if (!wait_result) {
+        std::cerr << "[TCP_THREAD] TIMEOUT - identity not resolved after " 
+                  << MAX_IDENTITY_WAIT_MS << "ms" << std::endl;
         
         if (g_logger.is_ready()) {
-            g_logger.log_native("CRITICAL", "TCP_ABORT launch_id empty. ProfileID=" + worker_id);
+            g_logger.log_native("CRITICAL", "TCP_IDENTITY_TIMEOUT");
         }
-        
-        // Esperar 2 segundos por si acaso llega tarde
-        std::this_thread::sleep_for(std::chrono::milliseconds(2000));
-        
-        id_lock.lock();
-        launch_id = g_launch_id;
-        id_lock.unlock();
-        
-        if (launch_id.empty() || launch_id == "unknown") {
-            std::cerr << "[TCP_THREAD] FATAL - launch_id still empty after retry" << std::endl;
-            return; // ⛔ ABORTAR - no conectar sin launch_id
-        }
+        return;
     }
-
+    
+    // ✅ FIXED: Captura atómica de la identidad
+    IdentitySnapshot snapshot = {g_profile_id, g_launch_id, true};
+    id_lock.unlock();
+    
+    // ✅ FIXED: Validación defensiva post-captura
+    if (snapshot.profile_id.empty() || snapshot.launch_id.empty()) {
+        std::cerr << "[TCP_THREAD] CRITICAL - Captured empty identity!" << std::endl;
+        std::cerr << "  ProfileID: '" << snapshot.profile_id << "'" << std::endl;
+        std::cerr << "  LaunchID: '" << snapshot.launch_id << "'" << std::endl;
+        
+        if (g_logger.is_ready()) {
+            g_logger.log_native("CRITICAL", "TCP_ABORT Empty identity captured. PID=" + 
+                               snapshot.profile_id + " LID=" + snapshot.launch_id);
+        }
+        
+        return; // ⛔ ABORT - no conectar con identidad inválida
+    }
+    
+    std::cerr << "[TCP_THREAD] Identity validated:" << std::endl;
+    std::cerr << "  ProfileID: " << snapshot.profile_id << std::endl;
+    std::cerr << "  LaunchID:  " << snapshot.launch_id << std::endl;
+    
     if (g_logger.is_ready()) {
         g_logger.log_native("INFO", "TCP_IDENTITY_VALIDATED ProfileID=" + 
-                           worker_id + " LaunchID=" + launch_id);
+                           snapshot.profile_id + " LaunchID=" + snapshot.launch_id);
     }
     
-    std::cerr << "[TCP_THREAD] Identity validated: " << worker_id 
-              << " / " << launch_id << std::endl;
-    
     // Bucle de reconexión
+    int reconnect_attempts = 0;
+    
     while (!shutdown_requested.load()) {
         socket_t sock = socket(AF_INET, SOCK_STREAM, 0);
         if (sock == INVALID_SOCK) {
@@ -351,7 +374,8 @@ void tcp_client_loop() {
         addr.sin_addr.s_addr = inet_addr("127.0.0.1");
 
         if (g_logger.is_ready()) {
-            g_logger.log_native("INFO", "TCP_CONNECTING Port=" + std::to_string(SERVICE_PORT));
+            g_logger.log_native("INFO", "TCP_CONNECTING Port=" + std::to_string(SERVICE_PORT) +
+                               " Attempt=" + std::to_string(++reconnect_attempts));
         }
 
         if (connect(sock, (sockaddr*)&addr, sizeof(addr)) < 0) {
@@ -380,26 +404,39 @@ void tcp_client_loop() {
         
         service_socket.store(sock);
 
-        // ✅ REGISTRO CON VALIDACIÓN DE CAMPOS
+        // ✅ FIXED: Construir payload con validación explícita
         json reg = {
             {"type", "REGISTER_HOST"},
             {"pid", PlatformUtils::get_current_pid()},
-            {"profile_id", worker_id},
-            {"launch_id", launch_id},
+            {"profile_id", snapshot.profile_id},
+            {"launch_id", snapshot.launch_id},
             {"version", VERSION},
             {"build", BUILD}
         };
         
         std::string reg_payload = reg.dump();
         
-        // ✅ LOG DE DIAGNÓSTICO
-        std::cerr << "[TCP_REGISTER] Payload: " << reg_payload << std::endl;
+        // ✅ DIAGNÓSTICO: Log completo del payload
+        std::cerr << "[TCP_REGISTER] Sending payload:" << std::endl;
+        std::cerr << "  Raw JSON: " << reg_payload << std::endl;
+        std::cerr << "  Length: " << reg_payload.size() << " bytes" << std::endl;
         
         if (g_logger.is_ready()) {
             g_logger.log_native("INFO", "TCP_REGISTERING Payload=" + reg_payload);
         }
         
+        // ✅ CRITICAL: Verificar antes de enviar
+        if (reg_payload.find("\"launch_id\":\"\"") != std::string::npos) {
+            std::cerr << "[TCP_REGISTER] ⚠️ WARNING: Empty launch_id in payload!" << std::endl;
+            
+            if (g_logger.is_ready()) {
+                g_logger.log_native("CRITICAL", "TCP_PAYLOAD_CORRUPTION Empty launch_id detected!");
+            }
+        }
+        
         write_to_service(reg_payload);
+        
+        reconnect_attempts = 0; // Reset counter on successful connection
 
         flush_pending_messages();
 
@@ -460,14 +497,13 @@ int main(int argc, char* argv[]) {
     PlatformUtils::initialize_networking();
     PlatformUtils::setup_binary_io();
     
-    // ✅ INTENTAR CAPTURAR ARGS DE CLI (puede fallar por bug de Chrome)
     std::string cli_profile_id = PlatformUtils::get_cli_argument(argc, argv, "--profile-id");
     std::string cli_launch_id = PlatformUtils::get_cli_argument(argc, argv, "--launch-id");
     
-    std::cerr << "[HOST] Startup - CLI args: profile=" << cli_profile_id 
-              << " launch=" << cli_launch_id << std::endl;
+    std::cerr << "[HOST] Startup - Build " << BUILD << std::endl;
+    std::cerr << "[HOST] CLI args: profile='" << cli_profile_id 
+              << "' launch='" << cli_launch_id << "'" << std::endl;
     
-    // Si llegaron por CLI, usarlos inmediatamente
     if (!cli_profile_id.empty() && !cli_launch_id.empty()) {
         std::lock_guard<std::mutex> lock(g_identity_mutex);
         g_profile_id = cli_profile_id;
@@ -479,14 +515,13 @@ int main(int argc, char* argv[]) {
         identity_resolved.store(true);
         g_identity_cv.notify_all();
         
-        std::cerr << "[HOST] Identity from CLI arguments" << std::endl;
+        std::cerr << "[HOST] Identity from CLI arguments ✓" << std::endl;
     } else {
         std::cerr << "[HOST] CLI args missing - waiting for SYSTEM_HELLO" << std::endl;
     }
 
     std::thread tcp_thread(tcp_client_loop);
 
-    // Bucle principal stdin
     while (!shutdown_requested.load()) {
         uint32_t len = 0;
         
