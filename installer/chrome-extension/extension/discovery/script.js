@@ -1,5 +1,5 @@
 // ============================================================================
-// BLOOM DISCOVERY PAGE - CONNECTION VALIDATOR
+// BLOOM DISCOVERY PAGE - STORAGE BUS PATTERN
 // ============================================================================
 
 const CONFIG = {
@@ -10,7 +10,6 @@ const CONFIG = {
 
 class DiscoveryValidator {
   constructor() {
-    // ✅ FIX: Lee SYNAPSE_CONFIG directamente desde el scope global
     this.extensionId = self.SYNAPSE_CONFIG?.extension_id;
     this.attemptCount = 0;
     this.isConnected = false;
@@ -40,35 +39,157 @@ class DiscoveryValidator {
     }
     
     this.updateStatus('searching');
-    this.listenForMessages();
+    this.setupStorageListener();
+    this.checkInitialStatus();
     this.startPinging();
   }
   
+  // ============================================================================
+  // STORAGE BUS LISTENER - Canal principal de comunicación
+  // ============================================================================
+  
+  setupStorageListener() {
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+      if (areaName === 'local' && changes.synapseStatus) {
+        const status = changes.synapseStatus.newValue;
+        
+        console.log('[Discovery] Storage update received:', status);
+        
+        if (!status) return;
+        
+        // Procesar según el comando
+        if (status.command === 'system_ready') {
+          this.handleSystemReady(status.payload);
+        } else if (status.command === 'connection_update') {
+          this.handleConnectionUpdate(status.payload);
+        }
+      }
+    });
+    
+    console.log('[Discovery] Storage listener registered');
+  }
+  
+  // Leer estado inicial al cargar
+  checkInitialStatus() {
+    chrome.storage.local.get('synapseStatus', (result) => {
+      if (chrome.runtime.lastError) {
+        console.error('[Discovery] Error reading initial status:', chrome.runtime.lastError);
+        return;
+      }
+      
+      if (result.synapseStatus) {
+        console.log('[Discovery] Initial status from storage:', result.synapseStatus);
+        
+        if (result.synapseStatus.command === 'system_ready') {
+          this.handleSystemReady(result.synapseStatus.payload);
+        } else if (result.synapseStatus.command === 'connection_update') {
+          this.handleConnectionUpdate(result.synapseStatus.payload);
+        }
+      } else {
+        console.log('[Discovery] No initial status in storage');
+      }
+    });
+  }
+  
+  // ============================================================================
+  // HANDLERS
+  // ============================================================================
+  
+  handleSystemReady(payload) {
+    if (this.isConnected) return;
+    
+    console.log('[Discovery] ✓ SYSTEM_READY received:', payload);
+    
+    this.isConnected = true;
+    clearInterval(this.pingInterval);
+    
+    this.updateStatus('connected');
+    this.statusMessage.textContent = '✅ Extensión conectada';
+    this.autoCloseNotice.style.display = 'block';
+    
+    // Mostrar información del perfil
+    if (payload.profile_id) {
+      document.getElementById('profile-id').textContent = `Profile: ${payload.profile_id}`;
+    }
+    
+    if (payload.profile_alias) {
+      const aliasEl = document.getElementById('profile-alias');
+      if (aliasEl) {
+        aliasEl.textContent = `Alias: ${payload.profile_alias}`;
+      }
+    }
+    
+    document.getElementById('timestamp').textContent = `Conectado: ${new Date().toLocaleTimeString()}`;
+    
+    // Guardar en sessionStorage
+    if (payload.profile_id) {
+      sessionStorage.setItem('profileId', payload.profile_id);
+    }
+    if (payload.launch_id) {
+      sessionStorage.setItem('launchId', payload.launch_id);
+    }
+    
+    // Notificar al host
+    this.notifyHost(payload);
+  }
+  
+  handleConnectionUpdate(payload) {
+    console.log('[Discovery] Connection update:', payload);
+    
+    const state = payload.connection_state;
+    
+    if (state === 'CONNECTED' && payload.handshake_confirmed) {
+      // Si llegó handshake confirmado, tratarlo como system_ready
+      this.handleSystemReady(payload);
+      return;
+    }
+    
+    // Actualizar UI según el estado
+    const statusMessages = {
+      'INITIALIZING': '🔄 Inicializando...',
+      'CONNECTING': '🔄 Conectando al host...',
+      'CONNECTED': '✓ Conectado',
+      'DISCONNECTED': '✗ Desconectado',
+      'CONFIG_ERROR': '⚠ Error de configuración'
+    };
+    
+    if (statusMessages[state]) {
+      this.statusMessage.textContent = statusMessages[state];
+    }
+    
+    // Si se desconectó después de estar conectado, mostrar error
+    if (state === 'DISCONNECTED' && this.isConnected) {
+      this.showError('Conexión perdida', {
+        reason: payload.reason || 'Unknown',
+        last_state: state
+      });
+    }
+  }
+  
+  // ============================================================================
+  // LEGACY MESSAGE LISTENER (Fallback)
+  // ============================================================================
+  
   listenForMessages() {
     if (!chrome.runtime || !chrome.runtime.onMessage) {
-      console.warn('[Bloom Discovery] Cannot listen for messages: runtime not available');
+      console.warn('[Discovery] Cannot listen for messages: runtime not available');
       return;
     }
     
     try {
       chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-        console.log('[Bloom Discovery] Message received:', message);
+        console.log('[Discovery] Direct message received:', message);
         
         const { command, payload } = message;
         
         if (command === "system_ready") {
-          console.log('[Bloom Discovery] ✓ SYSTEM_READY received from Service Worker');
-          
-          if (!this.isConnected) {
-            this.onConnectionSuccess(payload || { status: 'pong' });
-          }
-          
+          this.handleSystemReady(payload || { status: 'pong' });
           sendResponse({ received: true });
           return true;
         }
         
         if (command === 'profile_closing' || message.action === 'profile_closing') {
-          console.log('[Bloom Discovery] Profile closing, preparing shutdown...');
+          console.log('[Discovery] Profile closing, preparing shutdown...');
           sendResponse({ status: 'acknowledged' });
           this.cleanup();
           return true;
@@ -77,11 +198,15 @@ class DiscoveryValidator {
         return false;
       });
       
-      console.log('[Bloom Discovery] Message listener registered');
+      console.log('[Discovery] Message listener registered (fallback)');
     } catch (error) {
-      console.error('[Bloom Discovery] Error setting up message listener:', error);
+      console.error('[Discovery] Error setting up message listener:', error);
     }
   }
+  
+  // ============================================================================
+  // PING MECHANISM (Fallback para verificar estado)
+  // ============================================================================
   
   startPinging() {
     this.pingInterval = setInterval(() => {
@@ -101,18 +226,8 @@ class DiscoveryValidator {
   }
   
   sendPing() {
-    if (typeof chrome === 'undefined') {
+    if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.sendMessage) {
       console.log(`[Attempt ${this.attemptCount}] Waiting for chrome API...`);
-      return;
-    }
-    
-    if (!chrome.runtime) {
-      console.log(`[Attempt ${this.attemptCount}] Waiting for chrome.runtime...`);
-      return;
-    }
-    
-    if (typeof chrome.runtime.sendMessage !== 'function') {
-      console.log(`[Attempt ${this.attemptCount}] Waiting for chrome.runtime.sendMessage...`);
       return;
     }
     
@@ -132,7 +247,7 @@ class DiscoveryValidator {
         },
         (response) => {
           if (!chrome.runtime) {
-            console.warn('[Ping Response] Runtime desapareció durante el callback');
+            console.warn('[Ping Response] Runtime disappeared during callback');
             return;
           }
           
@@ -155,8 +270,9 @@ class DiscoveryValidator {
             return;
           }
           
+          // Si el ping confirma handshake, marcar como conectado
           if (response.handshake_confirmed === true || response.status === 'pong') {
-            this.onConnectionSuccess(response);
+            this.handleSystemReady(response);
           } else {
             console.log(`[Attempt ${this.attemptCount}] Not ready yet:`, response);
           }
@@ -164,36 +280,16 @@ class DiscoveryValidator {
       );
     } catch (error) {
       console.log(`[Attempt ${this.attemptCount}] Exception during ping:`, error.message);
-      
-      if (error.message.includes('Extension context invalidated')) {
-        console.log('[Discovery] Extension was reloaded, waiting for reconnection...');
-      }
     }
   }
   
-  onConnectionSuccess(response) {
-    if (this.isConnected) return;
-    
-    console.log('[Bloom Discovery] ✅ Connection successful!', response);
-    
-    this.isConnected = true;
-    clearInterval(this.pingInterval);
-    
-    this.updateStatus('connected');
-    this.statusMessage.textContent = '✅ Extensión conectada';
-    this.autoCloseNotice.style.display = 'block';
-    
-    if (response.profile_id) {
-      document.getElementById('profile-id').textContent = `Profile: ${response.profile_id}`;
-    }
-    document.getElementById('timestamp').textContent = `Conectado: ${new Date().toLocaleTimeString()}`;
-    
-    this.notifyHost(response);
-  }
+  // ============================================================================
+  // HOST NOTIFICATION
+  // ============================================================================
   
   notifyHost(pingResponse) {
     if (!chrome.runtime || !chrome.runtime.sendMessage) {
-      console.error('[Bloom Discovery] Cannot notify host: runtime not available');
+      console.error('[Discovery] Cannot notify host: runtime not available');
       return;
     }
     
@@ -213,16 +309,20 @@ class DiscoveryValidator {
         },
         (response) => {
           if (chrome.runtime && chrome.runtime.lastError) {
-            console.error('[Bloom Discovery] Error notifying host:', chrome.runtime.lastError);
+            console.error('[Discovery] Error notifying host:', chrome.runtime.lastError);
             return;
           }
-          console.log('[Bloom Discovery] Host notified:', response);
+          console.log('[Discovery] Host notified:', response);
         }
       );
     } catch (error) {
-      console.error('[Bloom Discovery] Exception notifying host:', error);
+      console.error('[Discovery] Exception notifying host:', error);
     }
   }
+  
+  // ============================================================================
+  // UTILITIES
+  // ============================================================================
   
   cleanup() {
     if (this.pingInterval) {
@@ -230,11 +330,11 @@ class DiscoveryValidator {
       this.pingInterval = null;
     }
     
-    console.log('[Bloom Discovery] Cleanup complete');
+    console.log('[Discovery] Cleanup complete');
   }
   
   timeout() {
-    console.error('[Bloom Discovery] Timeout reached after', CONFIG.MAX_ATTEMPTS, 'attempts');
+    console.error('[Discovery] Timeout reached after', CONFIG.MAX_ATTEMPTS, 'attempts');
     clearInterval(this.pingInterval);
     
     this.showError(
