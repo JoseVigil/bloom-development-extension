@@ -1,6 +1,5 @@
 #include "platform_utils.h"
 #include <iostream>
-#include <string>
 
 #ifdef _WIN32
     #include <fcntl.h>
@@ -10,11 +9,9 @@
     #include <unistd.h>
 #endif
 
-// ============================================================================
-// IMPLEMENTACIÓN EXPLÍCITA FUERA DEL NAMESPACE
-// ============================================================================
+namespace PlatformUtils {
 
-bool PlatformUtils::initialize_networking() {
+bool initialize_networking() {
 #ifdef _WIN32
     WSADATA wsa;
     return WSAStartup(MAKEWORD(2, 2), &wsa) == 0;
@@ -23,20 +20,20 @@ bool PlatformUtils::initialize_networking() {
 #endif
 }
 
-void PlatformUtils::cleanup_networking() {
+void cleanup_networking() {
 #ifdef _WIN32
     WSACleanup();
 #endif
 }
 
-void PlatformUtils::setup_binary_io() {
+void setup_binary_io() {
 #ifdef _WIN32
     _setmode(_fileno(stdin), _O_BINARY);
     _setmode(_fileno(stdout), _O_BINARY);
 #endif
 }
 
-int PlatformUtils::get_current_pid() {
+int get_current_pid() {
 #ifdef _WIN32
     return _getpid();
 #else
@@ -44,7 +41,7 @@ int PlatformUtils::get_current_pid() {
 #endif
 }
 
-std::string PlatformUtils::get_cli_argument(int argc, char* argv[], const std::string& flag) {
+std::string get_cli_argument(int argc, char* argv[], const std::string& flag) {
     for (int i = 1; i < argc - 1; ++i) {
         if (std::string(argv[i]) == flag) {
             return std::string(argv[i + 1]);
@@ -52,3 +49,5 @@ std::string PlatformUtils::get_cli_argument(int argc, char* argv[], const std::s
     }
     return "";
 }
+
+} // namespace PlatformUtils
