@@ -62,12 +62,13 @@ class ChromeCommand(BaseCommand):
                 gc = GlobalContext()
             
             try:
+                # ✅ LAZY IMPORT - Solo importa cuando se ejecuta este comando
                 from brain.core.chrome.log_reader import ChromeLogReader
                 
                 logger.info(f"🔍 Running engine audit for profile: {profile_id}")
                 
                 if gc.verbose:
-                    typer.echo(f"🔍 Profile: {profile_id}", err=True)
+                    typer.echo(f"📁 Profile: {profile_id}", err=True)
                     typer.echo(f"📊 Context: {before} lines before, {after} lines after", err=True)
                     if launch_id:
                         typer.echo(f"🚀 Launch ID: {launch_id}", err=True)
@@ -126,12 +127,13 @@ class ChromeCommand(BaseCommand):
                 gc = GlobalContext()
             
             try:
+                # ✅ LAZY IMPORT - Solo importa cuando se ejecuta este comando
                 from brain.core.chrome.net_log_analyzer import NetLogAnalyzer
                 
                 logger.info(f"🌐 Analyzing Chrome network log for profile: {profile_id}")
                 
                 if gc.verbose:
-                    typer.echo(f"🔍 Profile: {profile_id}", err=True)
+                    typer.echo(f"📁 Profile: {profile_id}", err=True)
                     typer.echo(f"🤖 AI filter: {filter_ai}", err=True)
                     typer.echo(f"🚫 Exclude: {exclude or 'None'}", err=True)
                     typer.echo(f"📦 Include QUIC: {include_quic}", err=True)
@@ -189,12 +191,13 @@ class ChromeCommand(BaseCommand):
                 gc = GlobalContext()
             
             try:
+                # ✅ LAZY IMPORT - Solo importa cuando se ejecuta este comando
                 from brain.core.chrome.mining_log_reader import MiningLogReader
                 
                 logger.info(f"⛏️ Reading engine mining log for profile: {profile_id}")
                 
                 if gc.verbose:
-                    typer.echo(f"🔍 Profile: {profile_id}", err=True)
+                    typer.echo(f"📁 Profile: {profile_id}", err=True)
                     typer.echo(f"🔑 Keyword: '{keyword}'", err=True)
                     typer.echo(f"📊 Context: {before} lines before, {after} lines after", err=True)
                     if launch_id:
@@ -234,7 +237,7 @@ class ChromeCommand(BaseCommand):
         
         typer.echo("\n🔍 Chromium Engine Audit Results")
         typer.echo("=" * 70)
-        typer.echo(f"\n🔍 Profile ID: {result.get('profile_id')}")
+        typer.echo(f"\n📁 Profile ID: {result.get('profile_id')}")
         if result.get('launch_id'):
             typer.echo(f"🚀 Launch ID: {result.get('launch_id')}")
         typer.echo(f"\n📄 Source: {result.get('source_file')}")
@@ -262,7 +265,7 @@ class ChromeCommand(BaseCommand):
         
         typer.echo("\n🌐 Chrome Network Log Analysis")
         typer.echo("=" * 70)
-        typer.echo(f"\n🔍 Profile ID: {result.get('profile_id')}")
+        typer.echo(f"\n📁 Profile ID: {result.get('profile_id')}")
         if result.get('launch_id'):
             typer.echo(f"🚀 Launch ID: {result.get('launch_id')}")
         typer.echo(f"\n📄 Source: {result.get('source_file')}")
@@ -294,7 +297,7 @@ class ChromeCommand(BaseCommand):
         
         typer.echo("\n⛏️ Engine Mining Log Analysis Results")
         typer.echo("=" * 70)
-        typer.echo(f"\n🔍 Profile ID: {result.get('profile_id')}")
+        typer.echo(f"\n📁 Profile ID: {result.get('profile_id')}")
         if result.get('launch_id'):
             typer.echo(f"🚀 Launch ID: {result.get('launch_id')}")
         typer.echo(f"🔑 Keyword: '{result.get('keyword')}'")

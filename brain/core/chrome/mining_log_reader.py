@@ -8,6 +8,8 @@ from pathlib import Path
 from collections import deque
 from datetime import datetime
 from typing import Dict, Any, Optional
+
+# ✅ Solo importar logger, evitar importaciones circulares
 from brain.shared.logger import get_logger
 
 logger = get_logger(__name__)
@@ -21,6 +23,7 @@ class MiningLogReader:
     
     def __init__(self):
         """Initialize mining log reader with path resolver."""
+        # ✅ Lazy import - Solo importar cuando se instancia la clase
         from brain.core.profile.path_resolver import PathResolver
         self.paths = PathResolver()
         logger.debug(f"Initialized MiningLogReader with base_dir: {self.paths.base_dir}")

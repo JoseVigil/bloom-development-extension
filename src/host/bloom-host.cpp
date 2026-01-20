@@ -137,6 +137,13 @@ private:
 public:
     SynapseLogManager() : initialized(false) {}
 
+// ============================================================================
+// CAMBIOS CLAVE PARA LOGGING:
+// 1. Logs van a BloomNucleus/logs/{profile_id}/ (sin subcarpeta "profiles")
+// 2. Logger inicializa con launch_id ANTES de loguear
+// 3. Logs tempranos se escriben a stderr hasta que el logger esté listo
+// ============================================================================
+
 void initialize_with_profile_id(const std::string& profile_id) {
     if (initialized) return;
     
@@ -144,13 +151,13 @@ void initialize_with_profile_id(const std::string& profile_id) {
     if (base_dir.empty()) return;
     
 #ifdef _WIN32
-    std::string profile_dir = base_dir + "\\profiles\\" + profile_id;  // 👈 AGREGÁ "\\profiles\\"
+    std::string profile_dir = base_dir + "\\" + profile_id;  // ✅ SIN "profiles"
     create_directory_recursive(profile_dir);
     log_directory = profile_dir;
 #else
-    std::string profile_dir = base_dir + "/profiles/" + profile_id;    // 👈 AGREGÁ "/profiles/"
+    std::string profile_dir = base_dir + "/" + profile_id;    // ✅ SIN "profiles"
     create_directory_recursive(profile_dir);
-    log_directory = profile_dir;
+    log_directory = profile_id;
 #endif
     
     initialized = true;
@@ -643,6 +650,10 @@ void tcp_client_loop() {
     }
 }
 
+// ============================================================================
+// MAIN FUNCTION - ORDEN CORRECTO DE INICIALIZACIÓN
+// ============================================================================
+
 int main(int argc, char* argv[]) {
 #ifdef _WIN32
     WSADATA wsa;
@@ -651,29 +662,33 @@ int main(int argc, char* argv[]) {
     _setmode(_fileno(stdout), _O_BINARY);
 #endif
 
-    g_logger.log_native("INFO", "STARTUP Awaiting profile_id from extension");
+    // ⚠️ NO loguear aquí - logger aún no inicializado
+    std::cerr << "[HOST] Startup - waiting for SYSTEM_HELLO from extension" << std::endl;
 
     std::thread tcp_thread(tcp_client_loop);
 
-    g_logger.log_native("INFO", "STDIN_LOOP_START Reading Native Messaging pipe");
-    
     while (!shutdown_requested.load()) {
         uint32_t len = 0;
         
         if (!std::cin.read(reinterpret_cast<char*>(&len), 4)) {
-            g_logger.log_native("INFO", "STDIN_EOF Pipe closed by Chrome");
+            if (g_logger.is_ready()) {
+                g_logger.log_native("INFO", "STDIN_EOF Pipe closed by Chrome");
+            }
             break;
         }
         
         if (len == 0 || len > MAX_MESSAGE_SIZE) {
-            g_logger.log_native("ERROR", "STDIN_INVALID_LENGTH Length=" + std::to_string(len));
+            if (g_logger.is_ready()) {
+                g_logger.log_native("ERROR", "STDIN_INVALID_LENGTH Length=" + std::to_string(len));
+            }
             continue;
         }
         
         std::vector<char> buf(len);
         if (!std::cin.read(buf.data(), len)) {
-            g_logger.log_native("ERROR", "STDIN_READ_INCOMPLETE Expected=" + 
-                               std::to_string(len));
+            if (g_logger.is_ready()) {
+                g_logger.log_native("ERROR", "STDIN_READ_INCOMPLETE Expected=" + std::to_string(len));
+            }
             break;
         }
         
@@ -683,13 +698,18 @@ int main(int argc, char* argv[]) {
 
     shutdown_requested.store(true);
     g_identity_cv.notify_all();
-    g_logger.log_native("INFO", "SHUTDOWN Closing threads");
+    
+    if (g_logger.is_ready()) {
+        g_logger.log_native("INFO", "SHUTDOWN Closing threads");
+    }
     
     socket_t sock = service_socket.load();
     if (sock != INVALID_SOCK) {
         service_socket.store(INVALID_SOCK);
         close_socket(sock);
-        g_logger.log_native("INFO", "SHUTDOWN Socket closed forcefully");
+        if (g_logger.is_ready()) {
+            g_logger.log_native("INFO", "SHUTDOWN Socket closed forcefully");
+        }
     }
     
     if (tcp_thread.joinable()) tcp_thread.join();
@@ -698,6 +718,9 @@ int main(int argc, char* argv[]) {
     WSACleanup();
 #endif
 
-    g_logger.log_native("INFO", "EXIT Process terminated");
+    if (g_logger.is_ready()) {
+        g_logger.log_native("INFO", "EXIT Process terminated");
+    }
+    
     return 0;
 }
