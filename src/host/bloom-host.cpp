@@ -136,32 +136,25 @@ private:
 
 public:
     SynapseLogManager() : initialized(false) {}
-
-// ============================================================================
-// CAMBIOS CLAVE PARA LOGGING:
-// 1. Logs van a BloomNucleus/logs/{profile_id}/ (sin subcarpeta "profiles")
-// 2. Logger inicializa con launch_id ANTES de loguear
-// 3. Logs tempranos se escriben a stderr hasta que el logger esté listo
-// ============================================================================
-
-void initialize_with_profile_id(const std::string& profile_id) {
-    if (initialized) return;
     
-    std::string base_dir = get_log_directory();
-    if (base_dir.empty()) return;
-    
+    void initialize_with_profile_id(const std::string& profile_id) {
+        if (initialized) return;
+        
+        std::string base_dir = get_log_directory();
+        if (base_dir.empty()) return;
+        
 #ifdef _WIN32
-    std::string profile_dir = base_dir + "\\" + profile_id;  // ✅ SIN "profiles"
-    create_directory_recursive(profile_dir);
-    log_directory = profile_dir;
+        std::string profile_dir = base_dir + "\\" + profile_id;  // ✅ SIN "\\profiles\\"
+        create_directory_recursive(profile_dir);
+        log_directory = profile_dir;
 #else
-    std::string profile_dir = base_dir + "/" + profile_id;    // ✅ SIN "profiles"
-    create_directory_recursive(profile_dir);
-    log_directory = profile_id;
+        std::string profile_dir = base_dir + "/" + profile_id;
+        create_directory_recursive(profile_dir);
+        log_directory = profile_dir;
 #endif
-    
-    initialized = true;
-}    
+        
+        initialized = true;
+    }
     
     void initialize_with_launch_id(const std::string& launch_id) {
         if (!initialized || log_directory.empty()) return;
@@ -187,6 +180,11 @@ void initialize_with_profile_id(const std::string& profile_id) {
                        << " LAUNCH:" << launch_id << " ==========\n";
             browser_log.flush();
         }
+    }
+    
+    // ✅ NUEVO MÉTODO
+    bool is_ready() const {
+        return initialized && native_log.is_open();
     }
     
     void log_native(const std::string& level, const std::string& message) {
