@@ -136,25 +136,25 @@ private:
 
 public:
     SynapseLogManager() : initialized(false) {}
+
+void initialize_with_profile_id(const std::string& profile_id) {
+    if (initialized) return;
     
-    void initialize_with_profile_id(const std::string& profile_id) {
-        if (initialized) return;
-        
-        std::string base_dir = get_log_directory();
-        if (base_dir.empty()) return;
-        
+    std::string base_dir = get_log_directory();
+    if (base_dir.empty()) return;
+    
 #ifdef _WIN32
-        std::string profile_dir = base_dir + "\\" + profile_id;
-        create_directory_recursive(profile_dir);
-        log_directory = profile_dir;
+    std::string profile_dir = base_dir + "\\profiles\\" + profile_id;  // 👈 AGREGÁ "\\profiles\\"
+    create_directory_recursive(profile_dir);
+    log_directory = profile_dir;
 #else
-        std::string profile_dir = base_dir + "/" + profile_id;
-        create_directory_recursive(profile_dir);
-        log_directory = profile_dir;
+    std::string profile_dir = base_dir + "/profiles/" + profile_id;    // 👈 AGREGÁ "/profiles/"
+    create_directory_recursive(profile_dir);
+    log_directory = profile_dir;
 #endif
-        
-        initialized = true;
-    }
+    
+    initialized = true;
+}    
     
     void initialize_with_launch_id(const std::string& launch_id) {
         if (!initialized || log_directory.empty()) return;
