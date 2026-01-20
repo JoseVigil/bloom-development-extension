@@ -260,8 +260,10 @@ void handle_chrome_message(const std::string& msg_str) {
         std::string timestamp = msg.value("timestamp", "");
         
         if (g_logger.is_ready()) {
-            g_logger.log_browser(level, message, timestamp);
-        }
+            g_logger.log_browser(msg["level"], msg["message"]);
+    	} else {
+            std::cerr << "[HOST] Logger not ready for LOG message" << std::endl;
+    	}
         return;
     }
     
