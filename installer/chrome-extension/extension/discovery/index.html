@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bloom Discovery</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    
+    .container {
+      background: white;
+      border-radius: 20px;
+      padding: 40px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      text-align: center;
+      max-width: 500px;
+      width: 100%;
+    }
+    
+    .heartbeat-wrapper {
+      position: relative;
+      width: 100px;
+      height: 100px;
+      margin: 0 auto 30px;
+    }
+    
+    .status-dot {
+      width: 100px;
+      height: 100px;
+      border-radius: 50%;
+      margin: 0 auto;
+      transition: all 0.3s ease;
+    }
+    
+    .status-dot.searching {
+      background: #6c757d;
+      animation: pulse 1.5s infinite;
+    }
+    
+    .status-dot.connected {
+      background: #28a745;
+      box-shadow: 0 0 20px rgba(40, 167, 69, 0.5);
+    }
+    
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 0.8; }
+      50% { transform: scale(1.1); opacity: 1; }
+    }
+    
+    h1 {
+      color: #333;
+      margin-bottom: 10px;
+      font-size: 28px;
+    }
+    
+    #status-message {
+      color: #666;
+      font-size: 18px;
+      margin-bottom: 20px;
+    }
+    
+    #progress-info {
+      color: #999;
+      font-size: 14px;
+    }
+    
+    #auto-close-notice {
+      display: none;
+      margin-top: 20px;
+      padding: 15px;
+      background: #d4edda;
+      border: 1px solid #c3e6cb;
+      border-radius: 8px;
+      color: #155724;
+    }
+    
+    #error-container {
+      display: none;
+      margin-top: 20px;
+      padding: 20px;
+      background: #f8d7da;
+      border: 1px solid #f5c6cb;
+      border-radius: 8px;
+      color: #721c24;
+    }
+    
+    #error-details {
+      margin-top: 10px;
+      padding: 10px;
+      background: #fff;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 12px;
+      text-align: left;
+      overflow-x: auto;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="heartbeat-wrapper">
+      <div id="status-dot" class="status-dot"></div>
+    </div>
+    
+    <h1>Synapse Discovery</h1>
+    <p id="status-message">Inicializando...</p>
+    
+    <div id="progress-info">
+      Intento: <span id="attempt-count">0</span>
+    </div>
+    
+    <div id="auto-close-notice">
+      ✓ Conexión establecida exitosamente
+    </div>
+    
+    <div id="error-container">
+      <strong id="error-message">Error</strong>
+      <pre id="error-details"></pre>
+    </div>
+    
+    <p id="profile-id"></p>
+    <p id="timestamp"></p>
+  </div>
+  
+  <script src="../synapse.config.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
