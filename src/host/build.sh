@@ -6,15 +6,47 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-echo -e "${YELLOW}⚙ Building Bloom Host${NC}"
+echo -e "${YELLOW}⚙️ Building Bloom Host (Modular Architecture)${NC}"
 
 # Detectar directorio del script (src/host/)
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
 
-# Archivos fuente
-SRC_FILE="bloom-host.cpp"
+# ============================================================================
+# ARCHIVOS FUENTE (ARQUITECTURA MODULAR)
+# ============================================================================
+SOURCE_FILES=(
+    "bloom-host.cpp"
+    "synapse_logger.cpp"
+    "chunked_buffer.cpp"
+    "platform_utils.cpp"
+)
+
+HEADER_FILES=(
+    "synapse_logger.h"
+    "chunked_buffer.h"
+    "platform_utils.h"
+)
+
 HEADER_DIR="nlohmann"
+
+# Validar que todos los archivos existen
+echo -e "${YELLOW}📦 Validating source files...${NC}"
+for src in "${SOURCE_FILES[@]}"; do
+    if [ ! -f "$src" ]; then
+        echo -e "${RED}✗ Missing source file: $src${NC}"
+        exit 1
+    fi
+done
+
+for hdr in "${HEADER_FILES[@]}"; do
+    if [ ! -f "$hdr" ]; then
+        echo -e "${RED}✗ Missing header file: $hdr${NC}"
+        exit 1
+    fi
+done
+
+echo -e "${GREEN}✓ All source files present${NC}"
 
 # Destino: installer/native/bin/
 PROJECT_ROOT="$SCRIPT_DIR/../.."
@@ -26,7 +58,7 @@ mkdir -p "$OUT_DIR/win32" \
          "$OUT_DIR/darwin/arm64" \
          "$OUT_DIR/darwin/x64"
 
-# Descargar json.hpp
+# Descargar json.hpp si no existe
 if [ ! -f "$HEADER_DIR/json.hpp" ]; then
     mkdir -p "$HEADER_DIR"
     echo "⬇️ Downloading nlohmann/json.hpp..."
@@ -35,9 +67,12 @@ if [ ! -f "$HEADER_DIR/json.hpp" ]; then
     echo -e "${GREEN}✓ json.hpp downloaded${NC}"
 fi
 
-# Windows
+# ============================================================================
+# WINDOWS BUILD (MinGW Cross-Compilation)
+# ============================================================================
 if command -v x86_64-w64-mingw32-g++ &> /dev/null; then
-    echo -e "${YELLOW}� Compiling for Windows...${NC}"
+    echo ""
+    echo -e "${YELLOW}🪟 Compiling for Windows...${NC}"
     
     # Detectar OpenSSL para MinGW
     OPENSSL_INCLUDE=""
@@ -106,8 +141,13 @@ if command -v x86_64-w64-mingw32-g++ &> /dev/null; then
     
     echo -e "${GREEN}✓ Found OpenSSL: $OPENSSL_INCLUDE${NC}"
     
-    # Compilar con OpenSSL estático
-    x86_64-w64-mingw32-g++ -std=c++20 -O2 -I. -I"$OPENSSL_INCLUDE" "$SRC_FILE" \
+    # ========================================================================
+    # COMPILAR CON MÚLTIPLES ARCHIVOS FUENTE
+    # ========================================================================
+    echo -e "${YELLOW}  Compiling ${#SOURCE_FILES[@]} source files...${NC}"
+    
+    x86_64-w64-mingw32-g++ -std=c++20 -O2 -I. -I"$OPENSSL_INCLUDE" \
+        "${SOURCE_FILES[@]}" \
         -o "$OUT_DIR/win32/bloom-host.exe" \
         -L"$OPENSSL_LIB" \
         "$OPENSSL_LIB/libssl.a" "$OPENSSL_LIB/libcrypto.a" \
@@ -118,7 +158,7 @@ if command -v x86_64-w64-mingw32-g++ &> /dev/null; then
     echo -e "${GREEN}✓ bloom-host.exe created${NC}"
     
     # Detectar y copiar DLLs requeridas desde MinGW
-    echo -e "${YELLOW}� Detecting required DLLs...${NC}"
+    echo -e "${YELLOW}🔍 Detecting required DLLs...${NC}"
     
     # Buscar DLLs en el sistema MinGW
     MINGW_BIN=""
@@ -183,8 +223,13 @@ if command -v x86_64-w64-mingw32-g++ &> /dev/null; then
     fi
 fi
 
-# macOS (SEPARADO POR ARQUITECTURA)
+# ============================================================================
+# MACOS BUILD (ARM64 + x86_64)
+# ============================================================================
 if [[ "$OSTYPE" == "darwin"* ]]; then
+    echo ""
+    echo -e "${YELLOW}🍎 Compiling for macOS...${NC}"
+    
     # Detectar OpenSSL para macOS
     MACOS_OPENSSL_INCLUDE=""
     MACOS_OPENSSL_LIB=""
@@ -199,7 +244,7 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
         # Intel Homebrew
         MACOS_OPENSSL_INCLUDE="/usr/local/opt/openssl@3/include"
         MACOS_OPENSSL_LIB="/usr/local/opt/openssl@3/lib"
-        echo -e "${YELLOW}⚠ Found x86_64 OpenSSL (may not support ARM64 cross-compilation)${NC}"
+        echo -e "${YELLOW}⚠  Found x86_64 OpenSSL (may not support ARM64 cross-compilation)${NC}"
     elif [ -d "/opt/homebrew/opt/openssl@1.1" ]; then
         MACOS_OPENSSL_INCLUDE="/opt/homebrew/opt/openssl@1.1/include"
         MACOS_OPENSSL_LIB="/opt/homebrew/opt/openssl@1.1/lib"
@@ -216,7 +261,7 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     
     # Detectar arquitectura nativa
     NATIVE_ARCH=$(uname -m)
-    echo -e "${YELLOW}� Native architecture: $NATIVE_ARCH${NC}"
+    echo -e "${YELLOW}🔍 Native architecture: $NATIVE_ARCH${NC}"
     
     # Verificar si OpenSSL soporta múltiples arquitecturas
     if lipo -info "$MACOS_OPENSSL_LIB/libssl.dylib" 2>/dev/null | grep -q "arm64.*x86_64\|x86_64.*arm64"; then
@@ -224,23 +269,26 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
         BUILD_ARM64=true
         BUILD_X86_64=true
     elif lipo -info "$MACOS_OPENSSL_LIB/libssl.dylib" 2>/dev/null | grep -q "arm64"; then
-        echo -e "${YELLOW}⚠ OpenSSL only supports ARM64${NC}"
+        echo -e "${YELLOW}⚠  OpenSSL only supports ARM64${NC}"
         BUILD_ARM64=true
         BUILD_X86_64=false
     elif lipo -info "$MACOS_OPENSSL_LIB/libssl.dylib" 2>/dev/null | grep -q "x86_64"; then
-        echo -e "${YELLOW}⚠ OpenSSL only supports x86_64${NC}"
+        echo -e "${YELLOW}⚠  OpenSSL only supports x86_64${NC}"
         BUILD_ARM64=false
         BUILD_X86_64=true
     else
-        echo -e "${YELLOW}⚠ Could not determine OpenSSL architectures, building for native only${NC}"
+        echo -e "${YELLOW}⚠  Could not determine OpenSSL architectures, building for native only${NC}"
         BUILD_ARM64=$([ "$NATIVE_ARCH" = "arm64" ] && echo true || echo false)
         BUILD_X86_64=$([ "$NATIVE_ARCH" = "x86_64" ] && echo true || echo false)
     fi
     
-    # Compilar para ARM64
+    # ========================================================================
+    # COMPILAR PARA ARM64
+    # ========================================================================
     if [ "$BUILD_ARM64" = true ]; then
-        echo -e "${YELLOW}� Compiling for macOS (ARM64)...${NC}"
-        clang++ -arch arm64 -std=c++20 -O2 -I. -I"$MACOS_OPENSSL_INCLUDE" "$SRC_FILE" \
+        echo -e "${YELLOW}  Compiling for macOS (ARM64)...${NC}"
+        clang++ -arch arm64 -std=c++20 -O2 -I. -I"$MACOS_OPENSSL_INCLUDE" \
+            "${SOURCE_FILES[@]}" \
             -o "$OUT_DIR/darwin/arm64/bloom-host" \
             -L"$MACOS_OPENSSL_LIB" -lssl -lcrypto
         chmod +x "$OUT_DIR/darwin/arm64/bloom-host"
@@ -249,10 +297,13 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
         echo -e "${YELLOW}⊘ Skipping ARM64 build (OpenSSL not available for this arch)${NC}"
     fi
 
-    # Compilar para x86_64
+    # ========================================================================
+    # COMPILAR PARA x86_64
+    # ========================================================================
     if [ "$BUILD_X86_64" = true ]; then
-        echo -e "${YELLOW}� Compiling for macOS (x64)...${NC}"
-        clang++ -arch x86_64 -std=c++20 -O2 -I. -I"$MACOS_OPENSSL_INCLUDE" "$SRC_FILE" \
+        echo -e "${YELLOW}  Compiling for macOS (x64)...${NC}"
+        clang++ -arch x86_64 -std=c++20 -O2 -I. -I"$MACOS_OPENSSL_INCLUDE" \
+            "${SOURCE_FILES[@]}" \
             -o "$OUT_DIR/darwin/x64/bloom-host" \
             -L"$MACOS_OPENSSL_LIB" -lssl -lcrypto
         chmod +x "$OUT_DIR/darwin/x64/bloom-host"
@@ -270,21 +321,56 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     fi
 fi
 
-# Linux
+# ============================================================================
+# LINUX BUILD
+# ============================================================================
 if command -v g++ &> /dev/null && [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    echo -e "${YELLOW}� Compiling for Linux...${NC}"
-    g++ -std=c++20 -O2 -I. "$SRC_FILE" \
+    echo ""
+    echo -e "${YELLOW}🐧 Compiling for Linux...${NC}"
+    g++ -std=c++20 -O2 -I. \
+        "${SOURCE_FILES[@]}" \
         -o "$OUT_DIR/linux/bloom-host" \
         -lpthread -lssl -lcrypto -static-libgcc -static-libstdc++
     chmod +x "$OUT_DIR/linux/bloom-host"
     echo -e "${GREEN}✓ bloom-host created${NC}"
 fi
 
+# ============================================================================
+# BUILD SUMMARY
+# ============================================================================
 echo ""
 echo -e "${GREEN}✅ Build complete!${NC}"
-echo "Binaries in: $OUT_DIR/"
 echo ""
-echo -e "${YELLOW}� Windows build contents:${NC}"
-ls -lh "$OUT_DIR/win32/" 2>/dev/null || echo "No Windows build"
+echo -e "${YELLOW}📦 Modular Architecture:${NC}"
+echo "   - ${#SOURCE_FILES[@]} source files compiled"
+echo "   - ${#HEADER_FILES[@]} header files included"
 echo ""
-echo -e "${YELLOW}� Ready for Electron installer${NC}"
+echo -e "${YELLOW}📁 Output directory: $OUT_DIR/${NC}"
+echo ""
+
+# Mostrar contenido de cada plataforma
+if [ -d "$OUT_DIR/win32" ] && [ "$(ls -A $OUT_DIR/win32 2>/dev/null)" ]; then
+    echo -e "${YELLOW}🪟 Windows build:${NC}"
+    ls -lh "$OUT_DIR/win32/"
+    echo ""
+fi
+
+if [ -d "$OUT_DIR/darwin/arm64" ] && [ "$(ls -A $OUT_DIR/darwin/arm64 2>/dev/null)" ]; then
+    echo -e "${YELLOW}🍎 macOS ARM64 build:${NC}"
+    ls -lh "$OUT_DIR/darwin/arm64/"
+    echo ""
+fi
+
+if [ -d "$OUT_DIR/darwin/x64" ] && [ "$(ls -A $OUT_DIR/darwin/x64 2>/dev/null)" ]; then
+    echo -e "${YELLOW}🍎 macOS x86_64 build:${NC}"
+    ls -lh "$OUT_DIR/darwin/x64/"
+    echo ""
+fi
+
+if [ -d "$OUT_DIR/linux" ] && [ "$(ls -A $OUT_DIR/linux 2>/dev/null)" ]; then
+    echo -e "${YELLOW}🐧 Linux build:${NC}"
+    ls -lh "$OUT_DIR/linux/"
+    echo ""
+fi
+
+echo -e "${YELLOW}🚀 Ready for Electron installer${NC}"
