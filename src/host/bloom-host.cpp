@@ -82,6 +82,8 @@ private:
     std::ofstream browser_log;
     std::mutex native_mutex;
     std::mutex browser_mutex;
+    std::string log_directory;
+    bool initialized;
     
     std::string get_timestamp_ms() {
         auto now = std::chrono::system_clock::now();
@@ -95,57 +97,93 @@ private:
         return ss.str();
     }
     
-    std::string get_log_directory() {
+    std::string get_filename_timestamp() {
+        auto now = std::chrono::system_clock::now();
+        auto now_t = std::chrono::system_clock::to_time_t(now);
+        
+        std::stringstream ss;
+        ss << std::put_time(std::localtime(&now_t), "%Y%m%d_%H%M%S");
+        return ss.str();
+    }
+    
+    bool create_directory_recursive(const std::string& path) {
 #ifdef _WIN32
-        char path[MAX_PATH];
-        if (SHGetFolderPathA(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, path) >= 0) {
-            std::string base = std::string(path) + "\\BloomNucleus";
-            _mkdir(base.c_str());
-            std::string logs = base + "\\logs";
-            _mkdir(logs.c_str());
-            return logs;
-        }
-        return "";
+        size_t pos = 0;
+        do {
+            pos = path.find_first_of("\\/", pos + 1);
+            std::string subpath = path.substr(0, pos);
+            _mkdir(subpath.c_str());
+        } while (pos != std::string::npos);
+        return true;
 #else
-        std::string base = "/tmp/bloom-nucleus";
-        mkdir(base.c_str(), 0755);
-        std::string logs = base + "/logs";
-        mkdir(logs.c_str(), 0755);
-        return logs;
+        size_t pos = 0;
+        do {
+            pos = path.find('/', pos + 1);
+            std::string subpath = path.substr(0, pos);
+            mkdir(subpath.c_str(), 0755);
+        } while (pos != std::string::npos);
+        return true;
 #endif
     }
 
 public:
-    SynapseLogManager() {
-        std::string log_dir = get_log_directory();
-        if (!log_dir.empty()) {
+    SynapseLogManager() : initialized(false) {
+        // Logs iniciales irán a una ubicación temporal hasta que tengamos profile_id
+    }
+    
+    void initialize_with_profile_id(const std::string& profile_id) {
+        if (initialized) return;
+        
+        std::string timestamp = get_filename_timestamp();
+        
 #ifdef _WIN32
-            native_log.open(log_dir + "\\synapse_native.log", std::ios::app);
-            browser_log.open(log_dir + "\\synapse_browser.log", std::ios::app);
-#else
-            native_log.open(log_dir + "/synapse_native.log", std::ios::app);
-            browser_log.open(log_dir + "/synapse_browser.log", std::ios::app);
-#endif
+        char path[MAX_PATH];
+        if (SHGetFolderPathA(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, path) >= 0) {
+            std::string base = std::string(path) + "\\BloomNucleus\\logs\\" + 
+                              profile_id + "\\synapse_host";
+            create_directory_recursive(base);
+            log_directory = base;
             
-            if (native_log.is_open()) {
-                native_log << "\n========== NATIVE SESSION " << get_timestamp_ms() 
-                          << " PID:" << get_pid_internal() << " ==========\n";
-                native_log.flush();
-            }
+            std::string native_path = base + "\\synapse_host_" + timestamp + ".log";
+            std::string browser_path = base + "\\synapse_extension_" + timestamp + ".log";
             
-            if (browser_log.is_open()) {
-                browser_log << "\n========== BROWSER SESSION " << get_timestamp_ms() 
-                           << " PID:" << get_pid_internal() << " ==========\n";
-                browser_log.flush();
-            }
+            native_log.open(native_path, std::ios::app);
+            browser_log.open(browser_path, std::ios::app);
         }
+#else
+        std::string base = "/tmp/bloom-nucleus/logs/" + profile_id + "/synapse_host";
+        create_directory_recursive(base);
+        log_directory = base;
+        
+        std::string native_path = base + "/synapse_host_" + timestamp + ".log";
+        std::string browser_path = base + "/synapse_extension_" + timestamp + ".log";
+        
+        native_log.open(native_path, std::ios::app);
+        browser_log.open(browser_path, std::ios::app);
+#endif
+        
+        if (native_log.is_open()) {
+            native_log << "\n========== HOST SESSION " << get_timestamp_ms() 
+                      << " PID:" << get_pid_internal() 
+                      << " PROFILE:" << profile_id << " ==========\n";
+            native_log.flush();
+        }
+        
+        if (browser_log.is_open()) {
+            browser_log << "\n========== EXTENSION SESSION " << get_timestamp_ms() 
+                       << " PID:" << get_pid_internal()
+                       << " PROFILE:" << profile_id << " ==========\n";
+            browser_log.flush();
+        }
+        
+        initialized = true;
     }
     
     void log_native(const std::string& level, const std::string& message) {
         std::lock_guard<std::mutex> lock(native_mutex);
         if (!native_log.is_open()) return;
         
-        native_log << "[" << get_timestamp_ms() << "] [" << level << "] [NATIVE] " 
+        native_log << "[" << get_timestamp_ms() << "] [" << level << "] [HOST] " 
                    << message << std::endl;
         native_log.flush();
     }
@@ -156,9 +194,13 @@ public:
         if (!browser_log.is_open()) return;
         
         std::string ts = timestamp.empty() ? get_timestamp_ms() : timestamp;
-        browser_log << "[" << ts << "] [" << level << "] [BROWSER] " 
+        browser_log << "[" << ts << "] [" << level << "] [EXTENSION] " 
                     << message << std::endl;
         browser_log.flush();
+    }
+    
+    bool is_initialized() const {
+        return initialized;
     }
 };
 
