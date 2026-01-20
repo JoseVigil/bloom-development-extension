@@ -82,64 +82,55 @@ func New(c *core.Core) *Ignition {
 // --- MÉTODOS CRÍTICOS ---
 
 func (ig *Ignition) Launch(profileID string, mode string) error {
-	ig.Core.Logger.Info("[IGNITION] 🚀 Iniciando secuencia para ID: %s", profileID)
+	ig.Core.Logger.Info("[IGNITION] 🚀 Iniciando secuencia (Static Spec Mode).")
+	
+	// 1. Ruta del Spec
+	ig.SpecPath = filepath.Join(ig.Core.Paths.AppDataDir, "config", "profile", profileID, "ignition_spec.json")
 
-	// 1. Intentar resolver la ruta desde profiles.json
-	specPath, err := ig.resolveSpecPath(profileID)
-	if err != nil {
-		ig.Core.Logger.Warning("[IGNITION] El ID %s no está en profiles.json. Verificando ruta física...", profileID)
-		ig.SpecPath = filepath.Join(ig.Core.Paths.AppDataDir, "config", "profile", profileID, "ignition_spec.json")
-	} else {
-		ig.SpecPath = specPath
-	}
+	// 2. GENERAR EL ID DE LANZAMIENTO AQUÍ (Misión cumplida)
+	// Generamos el ID antes que nada para que sea la semilla de toda la sesión
+	launchID := time.Now().Format("20060102_150405")
+	ig.Session.LaunchID = launchID
 
-	ig.Core.Logger.Info("[IGNITION] Buscando Spec en: %s", ig.SpecPath)
-
-	// 2. Validar existencia física del Spec
-	if _, err := os.Stat(ig.SpecPath); os.IsNotExist(err) {
-		return fmt.Errorf("error crítico: El Spec no existe en %s. Verifica el ID", ig.SpecPath)
-	}
-
-	// 3. Preparación
+	// 3. Limpieza y Pre-flight
 	ig.preFlight(profileID)
 	ig.Telemetry.Setup()
 
-	if err := ig.prepareExtension(profileID); err != nil {
+	// 4. INYECTAR CONFIG CON EL ID GENERADO (Antes de lanzar)
+	if err := ig.prepareExtension(profileID, launchID); err != nil {
 		return err
 	}
 
+	// 5. Servicio de Brain
 	if err := ig.startBrainService(); err != nil {
 		return err
 	}
 
-	// 4. Lanzamiento (Python)
-	launchID, err := ig.execute(profileID)
+	// 6. LANZAR PASANDO EL ID (Sincronización total)
+	finalID, err := ig.execute(profileID, launchID)
 	if err != nil {
 		return err
 	}
-	ig.Session.LaunchID = launchID // Guardamos el ID de sesión para el análisis
 
-	// 5. Handshake
-	ig.Telemetry.StartTailing(profileID, launchID)
+	// 7. Handshake y Telemetría
+	ig.Telemetry.StartTailing(profileID, finalID)
 
 	ig.Core.Logger.Info("[IGNITION] Esperando validación LATE_BINDING_SUCCESS...")
 	select {
 	case <-ig.Telemetry.SuccessChan:
 		ig.Core.Logger.Success("[IGNITION] 🔥 Handshake confirmado. ÉXITO.")
-		
-		// --- DISPARO AUTOMÁTICO DE ANÁLISIS ---
-		ig.startPostLaunchAnalysis(profileID, launchID)
-		
+		ig.startPostLaunchAnalysis(profileID, finalID)
 		return nil
 	case <-time.After(20 * time.Second):
 		return fmt.Errorf("timeout: La extensión no respondió")
 	}
 }
 
-func (ig *Ignition) execute(profileID string) (string, error) {
-	ig.Core.Logger.Info("[IGNITION] Ejecutando Brain CLI...")
+func (ig *Ignition) execute(profileID string, launchID string) (string, error) {
+	ig.Core.Logger.Info("[IGNITION] Ejecutando Brain CLI con ID Sincronizado...")
 
-	cmd := exec.Command("brain.exe", "profile", "launch", profileID, "--spec", ig.SpecPath)
+	// Pasamos el --launch-id para que Python no genere uno nuevo y use el nuestro
+	cmd := exec.Command("brain.exe", "profile", "launch", profileID, "--spec", ig.SpecPath, "--launch-id", launchID)
 	cmd.Env = append(os.Environ(), "PYTHONIOENCODING=utf-8")
 
 	stdout, _ := cmd.StdoutPipe()
@@ -162,7 +153,7 @@ func (ig *Ignition) execute(profileID string) (string, error) {
 					if resp.Status == "success" {
 						ig.Session.BrowserPID = resp.Data.Launch.PID
 
-						// ACTUALIZACIÓN DE PROFILES.JSON CON LOS LOGS
+						// ACTUALIZACIÓN DE PROFILES.JSON CON LOS LOGS (Tu lógica original)
 						ig.Core.Logger.Info("[IGNITION] Actualizando logs en profiles.json...")
 						_ = ig.updateProfilesConfig(profileID, resp.Data.LogFiles.DebugLog, resp.Data.LogFiles.NetLog)
 
@@ -193,6 +184,29 @@ func (ig *Ignition) execute(profileID string) (string, error) {
 	case <-time.After(12 * time.Second):
 		return "", fmt.Errorf("timeout esperando respuesta de Python")
 	}
+}
+
+func (ig *Ignition) prepareExtension(profileID string, launchID string) error {
+	data, err := os.ReadFile(ig.SpecPath)
+	if err != nil { return err }
+	var spec IgnitionSpec
+	json.Unmarshal(data, &spec)
+
+	extDir := spec.Paths.Extension
+	if !filepath.IsAbs(extDir) { extDir = filepath.Join(ig.Core.Paths.AppDataDir, extDir) }
+	
+	os.MkdirAll(extDir, 0755)
+	configPath := filepath.Join(extDir, "synapse.config.js")
+	bridgeName := fmt.Sprintf("com.bloom.synapse.%s", profileID[:8])
+	
+	// Agregamos launchId al JS
+	content := fmt.Sprintf(
+		"self.SYNAPSE_CONFIG = { profileId: '%s', bridge_name: '%s', launchId: '%s' };", 
+		profileID, bridgeName, launchID,
+	)
+	
+	ig.Core.Logger.Info("[IGNITION] Configuración inyectada con LaunchID: %s", launchID)
+	return os.WriteFile(configPath, []byte(content), 0644)
 }
 
 // --- MÉTODOS DE ANÁLISIS POST-LANZAMIENTO ---

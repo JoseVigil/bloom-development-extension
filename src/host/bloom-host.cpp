@@ -70,6 +70,7 @@ std::mutex stdout_mutex;
 std::atomic<bool> shutdown_requested{false};
 std::atomic<bool> identity_resolved{false};
 std::string g_profile_id = "";
+std::string g_launch_id = "";
 std::mutex g_profile_id_mutex;
 std::condition_variable g_identity_cv;
 
@@ -82,8 +83,26 @@ private:
     std::ofstream browser_log;
     std::mutex native_mutex;
     std::mutex browser_mutex;
+<<<<<<< HEAD
     std::string log_directory;
     bool initialized;
+=======
+
+    public:
+    void initialize_with_launch_id(const std::string& launch_id) {  // 👈 NUEVO
+        std::string log_dir = get_log_directory();
+        
+        if (!log_dir.empty()) {
+#ifdef _WIN32
+            native_log.open(log_dir + "\\synapse_native_" + launch_id + ".log", std::ios::app);
+            browser_log.open(log_dir + "\\synapse_browser_" + launch_id + ".log", std::ios::app);
+#else
+            native_log.open(log_dir + "/synapse_native_" + launch_id + ".log", std::ios::app);
+            browser_log.open(log_dir + "/synapse_browser_" + launch_id + ".log", std::ios::app);
+#endif
+        }
+    }
+>>>>>>> 5ea715e (Host adding laundId)
     
     std::string get_timestamp_ms() {
         auto now = std::chrono::system_clock::now();
@@ -317,6 +336,7 @@ bool try_extract_profile_id_from_raw(const std::string& msg_str) {
         if (!identity_resolved.load()) {
             g_profile_id = candidate;
             identity_resolved.store(true);
+            g_logger.initialize_with_profile_id(candidate);
             g_logger.log_native("INFO", "LATE_BINDING_SUCCESS(RAW) ProfileID=" + candidate);
             g_identity_cv.notify_all();
             return true;
@@ -326,34 +346,44 @@ bool try_extract_profile_id_from_raw(const std::string& msg_str) {
     return false;
 }
 
-bool try_extract_profile_id(const json& msg) {
-    std::vector<std::string> paths = {
-        "/profile_id",
-        "/payload/profile_id",
-        "/data/profile_id",
-        "/metadata/profile_id"
-    };
+bool try_extract_identity(const json& msg) {
+    std::vector<std::string> profile_paths = {"/payload/profile_id", "/profile_id"};
+    std::vector<std::string> launch_paths = {"/payload/launch_id", "/launch_id"};
     
-    for (const auto& path : paths) {
+    std::string candidate_profile;
+    std::string candidate_launch;
+    
+    for (const auto& path : profile_paths) {
         try {
             auto ptr = msg.at(json::json_pointer(path));
             if (ptr.is_string()) {
-                std::string candidate = ptr.get<std::string>();
-                if (candidate.length() == 36 && 
-                    candidate[8] == '-' && candidate[13] == '-' &&
-                    candidate[18] == '-' && candidate[23] == '-') {
-                    
-                    std::lock_guard<std::mutex> lock(g_profile_id_mutex);
-                    if (!identity_resolved.load()) {
-                        g_profile_id = candidate;
-                        identity_resolved.store(true);
-                        g_logger.log_native("INFO", "LATE_BINDING_SUCCESS(JSON) ProfileID=" + candidate);
-                        g_identity_cv.notify_all();
-                        return true;
-                    }
-                }
+                candidate_profile = ptr.get<std::string>();
+                break;
             }
         } catch (...) { continue; }
+    }
+    
+    for (const auto& path : launch_paths) {
+        try {
+            auto ptr = msg.at(json::json_pointer(path));
+            if (ptr.is_string()) {
+                candidate_launch = ptr.get<std::string>();
+                break;
+            }
+        } catch (...) { continue; }
+    }
+    
+    if (!candidate_profile.empty()) {
+        std::lock_guard<std::mutex> lock(g_profile_id_mutex);
+        if (!identity_resolved.load()) {
+            g_profile_id = candidate_profile;
+            g_launch_id = candidate_launch.empty() ? "unknown" : candidate_launch;
+            identity_resolved.store(true);
+            g_logger.log_native("INFO", "LATE_BINDING_SUCCESS ProfileID=" + 
+                candidate_profile + " LaunchID=" + g_launch_id);
+            g_identity_cv.notify_all();
+            return true;
+        }
     }
     return false;
 }
@@ -418,7 +448,7 @@ void handle_chrome_message(const std::string& msg_str) {
     }
     
     // PASO 4: Intentar extraer profile_id del JSON parseado
-    try_extract_profile_id(msg);
+    try_extract_identity(msg);
     
     // ========================================================================
     // FIX CRÍTICO: VALIDACIÓN TOLERANTE A TIPOS
@@ -534,8 +564,10 @@ void tcp_client_loop() {
     }
     
     std::string worker_id = g_profile_id;
+    std::string launch_id = g_launch_id;
     id_lock.unlock();
-    
+
+    g_logger.initialize_with_profile_id(worker_id);
     g_logger.log_native("INFO", "TCP_IDENTITY_ACQUIRED ProfileID=" + worker_id);
     
     while (!shutdown_requested.load()) {
@@ -577,6 +609,7 @@ void tcp_client_loop() {
             {"type", "REGISTER_HOST"},
             {"pid", (int)get_pid_internal()},
             {"profile_id", worker_id},
+            {"launch_id", launch_id},
             {"version", VERSION},
             {"build", BUILD}
         };

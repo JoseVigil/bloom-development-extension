@@ -2,6 +2,7 @@
 Profile Manager - Orchestrator Facade.
 Versión refactorizada con logger dedicado para aislamiento total.
 Lógica de launch delegada a ProfileLauncher para mejor troubleshooting.
+Sincronización de recursos delegada completamente a Sentinel (Go).
 """
 import sys
 import json
@@ -40,7 +41,7 @@ class ProfileManager:
         self.launcher = ChromeResolver(bin_dir=self.paths.bin_dir)
         
         self.store = ProfileStore(self.paths.profiles_json, self.paths.profiles_dir)
-        self.synapse = SynapseHandler(self.paths.base_dir, self.paths.extension_id)
+        self.synapse = SynapseHandler(self.paths.base_dir, self.paths.get_extension_id())
         
         # ✅ NUEVO: Inicializar ProfileLauncher (lógica de launch aislada)
         self.profile_launcher = ProfileLauncher(self.paths, self.launcher)
@@ -177,7 +178,11 @@ class ProfileManager:
             raise e
     
     def create_profile(self, alias: str) -> Dict[str, Any]:
-        """Crea un nuevo perfil."""
+        """
+        Crea un nuevo perfil.
+        NOTA: La sincronización de recursos (extensión, bridge, páginas) 
+        es responsabilidad de Sentinel (Go).
+        """
         logger.info(f"✨ Creando perfil: {alias}")
         start_time = time.time()
         
@@ -212,12 +217,9 @@ class ProfileManager:
         profiles.append(data)
         self._save_profiles(profiles)
         
-        # Sync resources
-        logger.info("🔄 Sincronizando recursos iniciales...")
-        self.sync_profile_resources(profile_id)
-        
         elapsed = time.time() - start_time
         logger.info(f"✅ Perfil creado en {elapsed:.2f}s")
+        logger.info("⚠️  Sentinel (Go) debe sincronizar recursos antes del primer launch")
         return data
     
     def launch_profile(
@@ -229,6 +231,9 @@ class ProfileManager:
         """
         Lanza un perfil de Chrome/Chromium.
         Delega la lógica de lanzamiento a ProfileLauncher.
+        
+        NOTA: La sincronización de recursos es responsabilidad de Sentinel (Go).
+        Brain solo ejecuta el lanzamiento con la spec provista.
         
         Args:
             profile_id: ID del perfil a lanzar
@@ -249,61 +254,19 @@ class ProfileManager:
         full_id = profile['id']
         logger.debug(f"  → Perfil encontrado: {profile.get('alias')} ({full_id[:8]})")
         
-        # 2. SIEMPRE sincronizar recursos antes de lanzar
-        logger.info("🔄 Sincronizando recursos del perfil...")
-        self.sync_profile_resources(full_id)
-        
-        # 3. Delegar a ProfileLauncher
+        # 2. Delegar a ProfileLauncher
         logger.info("🎯 Delegando lanzamiento a ProfileLauncher...")
         return self.profile_launcher.launch(profile, url, spec_data)
 
     def get_discovery_url(self, profile_id: str) -> str:
         """Obtiene URL de discovery page."""
-        url = f"chrome-extension://{self.paths.extension_id}/discovery/index.html"
+        url = f"chrome-extension://{self.paths.get_extension_id()}/discovery/index.html"
         logger.debug(f"🔍 Discovery URL generada: {url}")
         return url
 
-    def sync_profile_resources(self, profile_id: str) -> None:
-        """Sincroniza los recursos del perfil (Extensión + Config + Web)."""
-        logger.info(f"🔄 Sincronizando recursos para {profile_id[:8]}")
-        
-        profile = self._find_profile(profile_id)
-        if not profile:
-            logger.error(f"✗ Perfil no encontrado para sincronización: {profile_id}")
-            return
-        
-        full_id = profile['id']
-        profile_path = self.paths.profiles_dir / full_id
-        target_ext_dir = profile_path / "extension"
-
-        try:
-            # PASO 1: Clonar extensión
-            logger.debug("  → Clonando extensión...")
-            if target_ext_dir.exists():
-                shutil.rmtree(target_ext_dir)
-            shutil.copytree(self.paths.extension_path, target_ext_dir)
-            logger.debug("  ✓ Extensión clonada")
-            
-            # PASO 2: Bridge y Configuración
-            logger.debug("  → Provisionando bridge...")
-            bridge_name = self.synapse.provision_bridge(full_id)
-            self.synapse.inject_extension_config(full_id, bridge_name)
-            logger.debug(f"  ✓ Bridge configurado: {bridge_name}")
-            
-            # PASO 3: Generar páginas
-            logger.debug("  → Generando páginas web...")
-            generate_discovery_page(target_ext_dir, profile)
-            generate_profile_landing(target_ext_dir, profile)
-            logger.debug("  ✓ Páginas generadas")
-            
-            logger.info("  ✅ Sincronización completa")
-        except Exception as e:
-            logger.error(f"  ✗ Error en sincronización: {e}", exc_info=True)
-            raise
-
     def get_landing_url(self, profile_id: str) -> str:
         """Obtiene URL de landing page."""
-        url = f"chrome-extension://{self.paths.extension_id}/landing/index.html"
+        url = f"chrome-extension://{self.paths.get_extension_id()}/landing/index.html"
         logger.debug(f"🏠 Landing URL generada: {url}")
         return url
 

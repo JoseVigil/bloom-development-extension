@@ -19,7 +19,6 @@ class PathResolver:
     
     _instance = None
     _base_dir: Optional[Path] = None
-    _extension_id: Optional[str] = None
     
     def __new__(cls):
         if cls._instance is None:
@@ -69,34 +68,88 @@ class PathResolver:
         """config/nucleus.json file."""
         return self.config_dir / "nucleus.json"
     
-    @property
-    def extension_path(self) -> Path:
+    def get_master_profile_extension_path(self) -> Path:
         """
-        Ruta real de la extensión maestra.
-        Apunta a bin/extension/
-        """
-        target = self.bin_dir / "extension"
-
-        if (target / "manifest.json").exists():
-            return target
-
-        raise FileNotFoundError(f"❌ CRÍTICO: manifest.json no encontrado en {target}")
-
-    @property
-    def extension_id(self) -> str:
-        """ID fijo de la extensión para Synapse v2.0"""
-        if self._extension_id:
-            return self._extension_id
+        Obtiene la ruta de la extensión del perfil maestro desde profiles.json.
         
-        # Hardcoded para Synapse v2.0
-        self._extension_id = "hpblclepliicmihaplldignhjdggnkdh"
-        logger.info(f"✅ Extension ID (Synapse v2.0): {self._extension_id}")
-        return self._extension_id
+        Returns:
+            Path: Ruta absoluta a la extensión del perfil maestro
+            
+        Raises:
+            FileNotFoundError: Si profiles.json no existe
+            ValueError: Si no hay perfil maestro o no tiene extension_path
+        """
+        if not self.profiles_json.exists():
+            raise FileNotFoundError(f"❌ profiles.json no encontrado: {self.profiles_json}")
+        
+        try:
+            with open(self.profiles_json, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            profiles = data.get('profiles', [])
+            master = next((p for p in profiles if p.get('master')), None)
+            
+            if not master:
+                raise ValueError("❌ No se encontró perfil maestro en profiles.json")
+            
+            ext_path = master.get('extension_path')
+            if not ext_path:
+                raise ValueError(f"❌ Perfil maestro no tiene 'extension_path': {master.get('id')}")
+            
+            resolved_path = Path(ext_path)
+            logger.debug(f"✅ Extension path del perfil maestro: {resolved_path}")
+            return resolved_path
+            
+        except json.JSONDecodeError as e:
+            raise ValueError(f"❌ Error al parsear profiles.json: {e}")
     
-    @property
-    def native_manifest(self) -> Path:
-        """bin/native/com.bloom.nucleus.bridge.json."""
-        return self.bin_dir / "native" / "com.bloom.nucleus.bridge.json"
+    def get_extension_id(self) -> str:
+        """
+        Obtiene el extension_id desde nucleus.json (system_map.extension_id).
+        
+        Returns:
+            str: Extension ID
+            
+        Raises:
+            FileNotFoundError: Si nucleus.json no existe
+            ValueError: Si no se encuentra extension_id en system_map
+        """
+        if not self.nucleus_json.exists():
+            raise FileNotFoundError(f"❌ nucleus.json no encontrado: {self.nucleus_json}")
+        
+        try:
+            with open(self.nucleus_json, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            system_map = data.get('system_map', {})
+            extension_id = system_map.get('extension_id')
+            
+            if not extension_id:
+                raise ValueError("❌ 'extension_id' no encontrado en nucleus.json/system_map")
+            
+            logger.debug(f"✅ Extension ID desde nucleus.json: {extension_id}")
+            return extension_id
+            
+        except json.JSONDecodeError as e:
+            raise ValueError(f"❌ Error al parsear nucleus.json: {e}")
+    
+    def get_native_manifest_path(self) -> Path:
+        """
+        DEPRECATED: Sentinel (Go) se encarga de la gestión del native manifest.
+        
+        Este método retorna la ubicación esperada del native manifest,
+        pero su creación y gestión es responsabilidad de Sentinel durante
+        la creación del perfil.
+        
+        Returns:
+            Path: Ruta esperada del native manifest
+        """
+        path = self.bin_dir / "native" / "com.bloom.nucleus.bridge.json"
+        logger.warning(
+            "⚠️  get_native_manifest_path() es DEPRECATED. "
+            "Sentinel (Go) gestiona el native manifest durante la creación del perfil."
+        )
+        return path
     
     def _resolve_base_directory(self) -> Path:
         is_frozen = getattr(sys, 'frozen', False)

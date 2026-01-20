@@ -135,6 +135,7 @@ class ProfileLauncher:
         debug_log = None
         net_log = None
         launch_id = None
+        log_files = {}
         
         if logs_base:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -147,7 +148,14 @@ class ProfileLauncher:
             debug_log = logs_dir / f"{launch_id}_chrome_debug.log"
             net_log = logs_dir / f"{launch_id}_chrome_net.log"
             
-            logger.info(f"📁 Launch ID: {launch_id}")
+            # Construcción del objeto log_files con rutas absolutas
+            log_files = {
+                "debug_log": str(debug_log.absolute()),
+                "net_log": str(net_log.absolute()),
+                "logs_dir": str(logs_dir.absolute())
+            }
+            
+            logger.info(f"📝 Launch ID: {launch_id}")
             logger.debug(f"   Debug Log: {debug_log}")
             logger.debug(f"   Net Log: {net_log}")
         
@@ -173,10 +181,16 @@ class ProfileLauncher:
         logger.debug(f"   Engine flags: {len(spec.get('engine_flags', []))}")
         logger.debug(f"   Custom flags: {len(spec.get('custom_flags', []))}")
         
-        # Handoff estándar a Sentinel
-        return self._execute_handoff(chrome_args, profile['id'])
+        # Handoff estándar a Sentinel (ahora incluye log_files)
+        return self._execute_handoff(chrome_args, profile['id'], log_files, launch_id)
     
-    def _execute_handoff(self, args: list, profile_id: str) -> Dict[str, Any]:
+    def _execute_handoff(
+        self, 
+        args: list, 
+        profile_id: str, 
+        log_files: Dict[str, str],
+        launch_id: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Handoff estándar a Sentinel (Go).
         Implementa el contrato Python -> Go v2.0.
@@ -188,6 +202,12 @@ class ProfileLauncher:
         4. Entrega y cierre quirúrgico (os._exit para evitar cleanup)
         
         CRÍTICO: NO MODIFICAR sin coordinar con Sentinel.
+        
+        Args:
+            args: Argumentos para el proceso Chrome
+            profile_id: ID del perfil a lanzar
+            log_files: Diccionario con rutas de archivos de log
+            launch_id: ID único del lanzamiento
         """
         logger.info(f"🚀 Iniciando handoff a Sentinel")
         logger.debug(f"  → Args count: {len(args)}")
@@ -221,20 +241,26 @@ class ProfileLauncher:
             )
             
             # 3. CONTRATO JSON (Única salida permitida en stdout)
+            # Generación del launch_id si no se proveyó
+            if not launch_id:
+                launch_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+            
             result = {
                 "status": "success",
                 "data": {
                     "profile_id": profile_id,
                     "launch": {
                         "pid": proc.pid,
-                        "launch_id": datetime.now().strftime("%Y%m%d_%H%M%S")
-                    }
+                        "launch_id": launch_id
+                    },
+                    "log_files": log_files 
                 }
             }
             
             logger.info(f"✅ Proceso lanzado exitosamente")
             logger.debug(f"  → PID: {proc.pid}")
             logger.debug(f"  → Profile ID: {profile_id[:8]}")
+            logger.debug(f"  → Log files: {len(log_files)} archivos")
             
             # 4. ENTREGA Y CIERRE QUIRÚRGICO
             sys.stdout.write(json.dumps(result) + "\n")
