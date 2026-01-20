@@ -9,6 +9,14 @@ bloom-development-extension/
     │   ├── crx/
     │   │   ├── id.json
     │   │   └── key.pem
+    │   ├── extension/
+    │   │   ├── background.js
+    │   │   ├── content.js
+    │   │   ├── discovery/
+    │   │   │   ├── index.html
+    │   │   │   └── script.js
+    │   │   ├── manifest.json
+    │   │   └── synapse.config.js
     │   ├── pem/
     │   │   ├── key_generation_extesion.crx
     │   │   └── key_generation_extesion.pem
@@ -120,7 +128,8 @@ bloom-development-extension/
     │   │       │   └── brain.exe
     │   │       ├── libwinpthread-1.dll
     │   │       ├── profiles.json
-    │   │       └── sentinel.exe
+    │   │       ├── sentinel.exe
+    │   │       └── sentinel.exe~
     │   ├── host/
     │   │   └── com.bloom.nucleus.bridge.json
     │   └── nssm/
@@ -182,6 +191,7 @@ bloom-development-extension/
         ├── blueprint.json
         ├── build.bat
         ├── codebase/
+        │   └── go_files_2026-01-20_16-41-40.txt
         ├── docs/
         │   ├── Sentinel - Fase 2 Discovery - Health Modular.md
         │   ├── Sentinel Base.md
@@ -206,6 +216,7 @@ bloom-development-extension/
         │   │   ├── discovery.go
         │   │   └── vscode.go
         │   ├── health/
+        │   │   ├── guardian.go
         │   │   └── health.go
         │   ├── ignition/
         │   │   ├── ignition.go

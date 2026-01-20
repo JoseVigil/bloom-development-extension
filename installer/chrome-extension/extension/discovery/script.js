@@ -96,8 +96,14 @@ class DiscoveryValidator {
   // ============================================================================
   
   handleSystemReady(payload) {
+    if (this.discoveryCompleted) {
+      console.warn('[Discovery] Duplicate SYSTEM_READY ignored');
+      return;
+    }
     if (this.isConnected) return;
     
+    this.discoveryCompleted = false;
+
     console.log('[Discovery] ✓ SYSTEM_READY received:', payload);
     
     this.isConnected = true;
@@ -384,17 +390,19 @@ class DiscoveryValidator {
 // INITIALIZATION
 // ============================================================================
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+  // =====================================================
+  // 🔓 LIBERAR LOCK DE DISCOVERY (ANTI-DUPLICADOS MV3)
+  // =====================================================
+  try {
+    await chrome.storage.local.remove('discovery_open_lock');
+    console.log('[Discovery] discovery_open_lock liberado');
+  } catch (e) {
+    console.warn('[Discovery] No se pudo liberar discovery_open_lock', e);
+  }
+
   window.BLOOM_VALIDATOR = new DiscoveryValidator();
   window.BLOOM_VALIDATOR.start();
-});
-
-window.addEventListener('beforeunload', (e) => {
-  const validator = window.BLOOM_VALIDATOR;
-  if (validator && !validator.isConnected) {
-    e.preventDefault();
-    e.returnValue = 'La validación aún no ha terminado';
-  }
 });
 
 console.log('[Bloom Discovery] Script loaded');

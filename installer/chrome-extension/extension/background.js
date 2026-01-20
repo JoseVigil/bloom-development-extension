@@ -9,8 +9,10 @@ let reconnectTimer = null;
 let connectionState = 'INITIALIZING';
 let SYNAPSE_CONFIG = null;
 let reconnectAttempts = 0;
+let isInitializing = false;  
 const MAX_RECONNECT_ATTEMPTS = 10;
 const BASE_RECONNECT_DELAY = 2000;
+const DISCOVERY_LOCK_KEY = 'discovery_open_lock';
 
 // ============================================================================
 // UTILIDADES
@@ -194,11 +196,20 @@ async function updateConnectionStatus(newState, extraPayload = {}) {
 // ============================================================================
 
 async function initializeSynapse() {
+  // 🔒 GUARD: Prevenir inicializaciones concurrentes
+  if (isInitializing) {
+    logToHost("warn", "InitializeSynapse ya en ejecución, abortando llamada duplicada");
+    return;
+  }
+
   // Prevenir inicializaciones múltiples simultáneas
   if (nativePort && connectionState === 'CONNECTED') {
     logToHost("debug", "Puente ya conectado, saltando init");
     return;
   }
+
+  // 🔒 MARCAR COMO INICIALIZANDO
+  isInitializing = true;
 
   // Limpiar reconexión pendiente
   if (reconnectTimer) {
@@ -212,6 +223,7 @@ async function initializeSynapse() {
     if (!configLoaded) {
       logToHost("error", "Config no disponible, reintentando en 5s");
       await updateConnectionStatus('CONFIG_ERROR');
+      isInitializing = false;  // ← LIBERAR FLAG
       reconnectTimer = setTimeout(initializeSynapse, 5000);
       return;
     }
@@ -256,6 +268,9 @@ async function initializeSynapse() {
       bridge_name 
     });
 
+    // 🔒 LIBERAR FLAG AL COMPLETAR EXITOSAMENTE
+    isInitializing = false;
+
   } catch (e) {
     logToHost("error", "Fallo en conexión al puente", { 
       error: e.message,
@@ -268,6 +283,9 @@ async function initializeSynapse() {
       error: e.message,
       will_retry: reconnectAttempts < MAX_RECONNECT_ATTEMPTS 
     });
+
+    // 🔒 LIBERAR FLAG ANTES DE RECONEXIÓN
+    isInitializing = false;
 
     // Reconexión con backoff exponencial
     if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
@@ -733,56 +751,43 @@ async function ensureSingleDiscoveryTab() {
   const discoveryUrl = chrome.runtime.getURL('discovery/index.html');
 
   try {
-    // Buscar tabs existentes de discovery
-    const existingTabs = await chrome.tabs.query({ url: discoveryUrl });
-
-    if (existingTabs.length === 0) {
-      // No existe, crear una nueva
-      await chrome.tabs.create({
-        url: discoveryUrl,
-        active: true
-      });
-      logToHost("info", "Discovery tab creada");
-    } else if (existingTabs.length === 1) {
-      // Ya existe una, enfocarla
-      await chrome.tabs.update(existingTabs[0].id, { active: true });
-      await chrome.windows.update(existingTabs[0].windowId, { focused: true });
-      logToHost("info", "Discovery tab existente enfocada");
-    } else {
-      // Múltiples tabs (limpieza de duplicados)
-      logToHost("warn", `${existingTabs.length} discovery tabs encontradas, limpiando duplicados`);
-      
-      // Mantener la primera, cerrar el resto
-      const [keepTab, ...duplicates] = existingTabs;
-      
-      await chrome.tabs.update(keepTab.id, { active: true });
-      await chrome.windows.update(keepTab.windowId, { focused: true });
-      
-      for (const tab of duplicates) {
-        await chrome.tabs.remove(tab.id).catch(e => {
-          logToHost("debug", `No se pudo cerrar tab duplicada ${tab.id}`, { 
-            error: e.message 
-          });
-        });
-      }
-      
-      logToHost("info", `Duplicados limpiados, ${duplicates.length} tabs cerradas`);
+    // 🔒 LOCK ATÓMICO
+    const { discovery_open_lock } = await chrome.storage.local.get('discovery_open_lock');
+    
+    if (discovery_open_lock) {
+      console.log('[Synapse] Discovery lock exists, aborting');
+      return;
     }
 
+    // Buscar tabs
+    const existingTabs = await chrome.tabs.query({ url: discoveryUrl });
+
+    if (existingTabs.length > 0) {
+      console.log('[Synapse] Discovery tab exists');
+      return;
+    }
+
+    // 🔒 ACTIVAR LOCK ANTES DE CREAR
+    await chrome.storage.local.set({ discovery_open_lock: Date.now() });
+
+    await chrome.tabs.create({ url: discoveryUrl, active: true });
+    
   } catch (e) {
-    logToHost("error", "Fallo al gestionar discovery tab", { error: e.message });
+    // Liberar lock en caso de error
+    await chrome.storage.local.remove('discovery_open_lock');
   }
 }
+
 
 // ============================================================================
 // SECUENCIA DE ARRANQUE
 // ============================================================================
 
 // Inicialización inmediata al cargar service worker
-(async () => {
-  logToHost("info", "🚀 Service worker iniciado");
-  await initializeSynapse();
-})();
+//(async () => {
+//  logToHost("info", "🚀 Service worker iniciado");
+//  await initializeSynapse();
+//})();
 
 // === Event: Instalación/Actualización ===
 chrome.runtime.onInstalled.addListener(async (details) => {
@@ -791,13 +796,8 @@ chrome.runtime.onInstalled.addListener(async (details) => {
     previousVersion: details.previousVersion 
   });
 
-  // Abrir discovery SOLO en install/update (no en chrome_update, browser_update, etc)
-  if (details.reason === 'install' || details.reason === 'update') {
-    await ensureSingleDiscoveryTab();
-  }
-
-  // NO llamar initializeSynapse aquí - ya se hizo en el scope global
-  // Evita doble inicialización en startup
+  // ✅ ESTO DEBE ESTAR DESCOMENTADO:
+  await initializeSynapse();
 });
 
 // === Event: Inicio del Navegador ===
@@ -805,7 +805,7 @@ chrome.runtime.onStartup.addListener(async () => {
   logToHost("info", "🌐 Navegador iniciado");
   
   // Asegurar tab única de discovery
-  await ensureSingleDiscoveryTab();
+  //await ensureSingleDiscoveryTab();
   
   // NO inicializar de nuevo - el service worker ya lo hizo
   // Si se necesita reconectar, handleHostDisconnect lo manejará
