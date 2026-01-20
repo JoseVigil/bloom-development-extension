@@ -27,6 +27,12 @@
     #define close_socket close
 #endif
 
+/**
+ * @brief Utilidades específicas de plataforma
+ * 
+ * Namespace que agrupa funciones de inicialización de red,
+ * manejo de I/O binario y parsing de argumentos CLI.
+ */
 namespace PlatformUtils {
     /**
      * @brief Inicializa subsistemas de red según el SO
@@ -58,4 +64,4 @@ namespace PlatformUtils {
      * @return Valor del argumento, o string vacío si no existe
      */
     std::string get_cli_argument(int argc, char* argv[], const std::string& flag);
-}
+}  // namespace PlatformUtils
