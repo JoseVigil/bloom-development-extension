@@ -258,8 +258,10 @@ https://aistudio.google.com/prompts/1YQwHXLh27MAoO221hV5XK6Ff7FLcrps4
 roamtouch help json ai 
 https://claude.ai/chat/216e70ec-52b8-43ef-a140-21a6247ad59a
 
-btips migracion extension a synapse
+btips migracion extension a synapse thin client
 https://claude.ai/chat/28135739-74a9-470c-b22e-03bf19860d61
+nenes V1 migracion
+https://claude.ai/chat/c29cc4fc-6662-404e-b5c6-f3a783225f6c
 
 uitool discovery page install
 https://claude.ai/chat/34e1e381-588d-4418-8af8-b4d511438d8d
@@ -322,6 +324,8 @@ https://claude.ai/chat/143ca176-9753-45c8-8083-b4381b2f9dd9
 roamingpads flujo completo hearbeat
 https://grok.com/c/71769657-4e96-43fd-92fe-45752f569aa2?rid=f0368f50-9c71-42e0-8470-86ac4e0bdc78
 
-
 uitool sentinel guardian
 https://aistudio.google.com/prompts/1eEs9b_t5ULYzGM1RXfzoqP-SaiK4RBxZ
+
+nenes telemetry
+https://aistudio.google.com/prompts/1xD9lKhqx9U45eKPWUKMiozQgTV35cLhb
