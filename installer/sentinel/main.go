@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings" 
+	"sentinel/internal/ui"
 	"sentinel/internal/boot"
 	"sentinel/internal/core"
 	"sentinel/internal/discovery"
@@ -80,6 +82,10 @@ func main() {
 				mode = os.Args[3]
 			}
 			runLaunchCommand(c, profileID, mode)
+			return
+
+		case "cockpit":
+			runCockpit(c)
 			return
 		}
 	}
@@ -405,4 +411,47 @@ func runLaunchCommand(c *core.Core, profileID string, mode string) {
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+// ============================================================================
+// UI COCKPIT
+// ============================================================================
+
+func runCockpit(c *core.Core) {
+	terminal := ui.NewCockpit()
+
+	// LANZAMOS EL MONITOREO EN BACKGROUND
+	// Esto evita el deadlock porque permite que terminal.Run() se ejecute inmediatamente
+	go func() {
+		// Un pequeño delay para asegurar que la UI ya está lista
+		time.Sleep(200 * time.Millisecond)
+
+		// 1. Log estático de BRAIN
+		today := time.Now().Format("20060102")
+		brainLog := filepath.Join(c.Paths.LogsDir, fmt.Sprintf("brain_core_%s.log", today))
+		terminal.WatchFile("BRAIN", brainLog)
+
+		// 2. Escaneo constante de nuevos logs
+		for {
+			filepath.Walk(c.Paths.LogsDir, func(path string, info os.FileInfo, err error) error {
+				if err == nil && !info.IsDir() && strings.HasSuffix(info.Name(), ".log") {
+					// Filtrar solo los que nos interesan para no saturar
+					name := info.Name()
+					if strings.Contains(path, "guardian_") || 
+					   strings.Contains(path, "engine_") || 
+					   strings.Contains(name, "synapse_native") {
+						terminal.WatchFile(name, path)
+					}
+				}
+				return nil
+			})
+			time.Sleep(5 * time.Second)
+		}
+	}()
+
+	// Iniciar la UI (esto bloquea el hilo principal y evita el deadlock)
+	if err := terminal.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error en Sentinel Cockpit: %v\n", err)
+		os.Exit(1)
+	}
 }
