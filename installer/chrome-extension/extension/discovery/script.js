@@ -1,168 +1,369 @@
 // ============================================================================
-// DISCOVERY - THIN UI
+// SYNAPSE DISCOVERY - SCRIPT CON PROTOCOLO (FIXED)
 // ============================================================================
-
-const CONFIG = {
-  MAX_ATTEMPTS: 60,
-  PING_INTERVAL: 1000,
-  CLOSE_DELAY: 20000
-};
 
 class DiscoveryValidator {
   constructor() {
+    // Protocolo (cargado desde window.PROTOCOL)
+    this.protocol = window.PROTOCOL;
+    
+    // Validar que el protocolo existe
+    if (!this.protocol) {
+      console.error('[Discovery] PROTOCOL not loaded!');
+      return;
+    }
+    
+    // Config desde protocolo
+    this.config = this.protocol.config;
+    
+    // Estado interno
     this.extensionId = self.SYNAPSE_CONFIG?.extension_id;
     this.attemptCount = 0;
     this.isConnected = false;
     this.pingInterval = null;
     this.discoveryCompleted = false;
-
-    this.statusDot = document.getElementById('status-dot');
-    this.statusMessage = document.getElementById('status-message');
+    
+    // Referencias DOM (para acciones que no están en protocolo)
     this.attemptCountEl = document.getElementById('attempt-count');
-    this.autoCloseNotice = document.getElementById('auto-close-notice');
-    this.errorContainer = document.getElementById('error-container');
   }
-
+  
+  // ══════════════════════════════════════════════════════════════════════════
+  // LIFECYCLE METHODS
+  // ══════════════════════════════════════════════════════════════════════════
+  
   start() {
     console.log('[Discovery] Starting');
 
-    this.releaseLock();
-
+    // Inicializar el protocolo
+    this.protocol.init();
+    
+    // Fase: INITIALIZATION
+    this.protocol.executePhase('initialization', {
+      validator: this
+    });
+    
+    // Validación crítica
     if (!this.extensionId) {
-      this.showError('Extension ID not available');
+      this.transitionToError('Extension ID not available', {
+        config: self.SYNAPSE_CONFIG,
+        error: 'MISSING_EXTENSION_ID'
+      });
       return;
     }
-
-    this.updateStatus('searching');
+    
+    // Setup listeners
     this.setupStorageListener();
+    
+    // Transición a búsqueda
+    this.transitionToSearching();
+  }
+  
+  transitionToSearching() {
+    // Fase: SEARCHING
+    this.protocol.executePhase('searching', {
+      validator: this,
+      attemptCount: this.attemptCount
+    });
+    
     this.startPinging();
   }
-
+  
+  transitionToSuccess(payload) {
+    if (this.discoveryCompleted) return;
+    if (this.isConnected) return; // ⭐ PROTECCIÓN ADICIONAL
+    
+    // ⭐ SETEAR FLAGS INMEDIATAMENTE ANTES DE PROCESAR
+    this.discoveryCompleted = true;
+    this.isConnected = true;
+    
+    // Fase: SUCCESS
+    this.protocol.executePhase('success', {
+      validator: this,
+      payload: payload
+    });
+    
+    // Acciones post-UI
+    this.stopPinging();
+    this.notifyHost(payload);
+    
+    // Auto-close si está habilitado
+    if (this.protocol.config.autoCloseOnSuccess) {
+      setTimeout(() => {
+        this.cleanup();
+        window.close();
+      }, this.protocol.config.closeDelayMs);
+    }
+  }
+  
+  transitionToError(message, details = {}) {
+    // Fase: ERROR
+    this.protocol.executePhase('error', {
+      validator: this,
+      errorData: {
+        message: message,
+        details: details,
+        timestamp: new Date().toISOString()
+      }
+    });
+    
+    this.stopPinging();
+  }
+  
+  cleanup() {
+    // Fase: CLEANUP
+    this.protocol.executePhase('cleanup', {
+      validator: this
+    });
+    
+    this.stopPinging();
+  }
+  
+  // ══════════════════════════════════════════════════════════════════════════
+  // STORAGE LISTENER (Canal principal de comunicación)
+  // ══════════════════════════════════════════════════════════════════════════
+  
   setupStorageListener() {
+    // Protección contra runtime errors
+    if (!chrome?.storage?.onChanged) {
+      console.error('[Discovery] Chrome storage API not available');
+      return;
+    }
+    
     chrome.storage.onChanged.addListener((changes, area) => {
-      if (area === 'local' && changes.synapseStatus) {
-        const status = changes.synapseStatus.newValue;
-        if (!status) return;
-
-        console.log('[Discovery] Storage:', status.command);
-
-        if (status.command === 'system_ready') {
-          this.handleSystemReady(status.payload);
+      try {
+        if (area === 'local' && changes.synapseStatus) {
+          const status = changes.synapseStatus.newValue;
+          if (!status) return;
+          
+          if (this.config.debugMode) {
+            console.log('[Discovery] Storage update:', status.command);
+          }
+          
+          if (status.command === 'system_ready') {
+            this.handleSystemReady(status.payload);
+          }
         }
+      } catch (error) {
+        console.error('[Discovery] Error in storage listener:', error);
       }
     });
   }
-
+  
+  // ══════════════════════════════════════════════════════════════════════════
+  // PING MECHANISM (Detección de handshake)
+  // ══════════════════════════════════════════════════════════════════════════
+  
   startPinging() {
     this.pingInterval = setInterval(() => {
       this.attemptCount++;
       this.updateAttemptCount();
-
-      if (this.attemptCount > CONFIG.MAX_ATTEMPTS) {
-        this.timeout();
+      
+      // Timeout check
+      if (this.attemptCount > this.config.maxAttempts) {
+        this.transitionToError(
+          this.protocol.getMessage('timeout', { attempts: this.config.maxAttempts }),
+          {
+            attempts: this.attemptCount,
+            maxAttempts: this.config.maxAttempts
+          }
+        );
         return;
       }
-
+      
       this.sendPing();
-    }, CONFIG.PING_INTERVAL);
+      
+    }, this.config.pingIntervalMs);
   }
-
+  
   sendPing() {
-    if (!chrome.runtime?.id) return;
-
-    chrome.runtime.sendMessage(
-      { command: 'check_handshake_status' },
-      (resp) => {
-        if (chrome.runtime.lastError) return;
-        if (resp?.handshake_confirmed) {
-          this.handleSystemReady(resp);
-        }
+    // Protección robusta contra runtime errors
+    if (typeof chrome === 'undefined') {
+      if (this.config.debugMode) {
+        console.log(`[Attempt ${this.attemptCount}] Chrome not available`);
       }
-    );
-  }
-
-  handleSystemReady(payload) {
-    if (this.discoveryCompleted) return;
-
-    this.discoveryCompleted = true;
-    this.isConnected = true;
-    clearInterval(this.pingInterval);
-
-    console.log('[Discovery] ✓ SYSTEM_READY');
-
-    this.updateStatus('connected');
-    this.statusMessage.textContent = '✅ Extensión conectada';
-    this.autoCloseNotice.style.display = 'block';
-
-    if (payload.profile_id) {
-      document.getElementById('profile-id').textContent = `Profile: ${payload.profile_id}`;
+      return;
     }
-    if (payload.profile_alias) {
-      document.getElementById('profile-alias').textContent = `Alias: ${payload.profile_alias}`;
-    }
-
-    document.getElementById('timestamp').textContent = `Conectado: ${new Date().toLocaleTimeString()}`;
-
-    this.notifyHost(payload);
-
-    setTimeout(() => window.close(), CONFIG.CLOSE_DELAY);
-  }
-
-  notifyHost(payload) {
-    chrome.runtime.sendMessage({
-      event: 'DISCOVERY_COMPLETE',
-      payload: {
-        profile_id: self.SYNAPSE_CONFIG?.profileId,
-        profile_alias: self.SYNAPSE_CONFIG?.profile_alias,
-        launch_id: self.SYNAPSE_CONFIG?.launchId,
-        timestamp: Date.now()
+    
+    if (!chrome.runtime) {
+      if (this.config.debugMode) {
+        console.log(`[Attempt ${this.attemptCount}] Runtime not available`);
       }
-    });
-  }
-
-  async releaseLock() {
+      return;
+    }
+    
+    if (!chrome.runtime.id) {
+      if (this.config.debugMode) {
+        console.log(`[Attempt ${this.attemptCount}] Extension context not ready`);
+      }
+      return;
+    }
+    
     try {
-      await chrome.storage.local.remove('discovery_open_lock');
-      console.log('[Discovery] Lock released');
-    } catch (e) {
-      console.warn('[Discovery] Lock release failed:', e);
+      chrome.runtime.sendMessage(
+        { 
+          command: 'check_handshake_status',
+          source: 'discovery_page',
+          timestamp: Date.now()
+        },
+        (response) => {
+          // Protección post-callback
+          if (!chrome.runtime) {
+            return;
+          }
+          
+          // Manejo de errores esperados
+          if (chrome.runtime.lastError) {
+            const errorMsg = chrome.runtime.lastError.message;
+            
+            // Errores esperados (extension no lista)
+            const expectedErrors = [
+              'Receiving end does not exist',
+              'Extension context invalidated',
+              'message port closed'
+            ];
+            
+            const isExpected = expectedErrors.some(err => errorMsg.includes(err));
+            
+            if (!isExpected && this.config.debugMode) {
+              console.warn(`[Attempt ${this.attemptCount}] Unexpected error:`, errorMsg);
+            }
+            
+            return;
+          }
+          
+          // Respuesta vacía
+          if (!response) {
+            if (this.config.debugMode) {
+              console.log(`[Attempt ${this.attemptCount}] Empty response`);
+            }
+            return;
+          }
+          
+          // Handshake confirmado
+          if (response.handshake_confirmed === true || response.status === 'pong') {
+            this.handleSystemReady(response);
+          }
+        }
+      );
+    } catch (error) {
+      if (this.config.debugMode) {
+        console.log(`[Attempt ${this.attemptCount}] Exception:`, error.message);
+      }
     }
   }
-
-  timeout() {
-    console.error('[Discovery] Timeout:', CONFIG.MAX_ATTEMPTS);
-    clearInterval(this.pingInterval);
-    this.showError(`Timeout después de ${CONFIG.MAX_ATTEMPTS} intentos`);
+  
+  stopPinging() {
+    if (this.pingInterval) {
+      clearInterval(this.pingInterval);
+      this.pingInterval = null;
+    }
   }
-
-  updateStatus(status) {
-    this.statusDot.className = `status-dot ${status}`;
-
-    const msgs = {
-      searching: '🔍 Buscando extensión...',
-      connected: '✅ Extensión conectada'
-    };
-
-    this.statusMessage.textContent = msgs[status] || '';
-  }
-
+  
   updateAttemptCount() {
-    this.attemptCountEl.textContent = this.attemptCount;
+    if (this.attemptCountEl) {
+      this.attemptCountEl.textContent = this.attemptCount;
+    }
   }
-
-  showError(msg) {
-    clearInterval(this.pingInterval);
-    this.errorContainer.style.display = 'block';
-    document.getElementById('error-message').textContent = msg;
+  
+  // ══════════════════════════════════════════════════════════════════════════
+  // HANDLERS
+  // ══════════════════════════════════════════════════════════════════════════
+  
+  handleSystemReady(payload) {
+    // ⭐ PROTECCIÓN TRIPLE CONTRA DUPLICADOS
+    if (this.discoveryCompleted) {
+      if (this.config.debugMode) {
+        console.warn('[Discovery] Duplicate SYSTEM_READY ignored (discoveryCompleted)');
+      }
+      return;
+    }
+    
+    if (this.isConnected) {
+      if (this.config.debugMode) {
+        console.warn('[Discovery] Duplicate SYSTEM_READY ignored (isConnected)');
+      }
+      return;
+    }
+    
+    if (this.config.debugMode) {
+      console.log('[Discovery] ✓ SYSTEM_READY received:', payload);
+    }
+    
+    this.transitionToSuccess(payload);
+  }
+  
+  // ══════════════════════════════════════════════════════════════════════════
+  // HOST NOTIFICATION
+  // ══════════════════════════════════════════════════════════════════════════
+  
+  notifyHost(payload) {
+    // Protección contra runtime errors
+    if (!chrome?.runtime?.sendMessage) {
+      console.error('[Discovery] Cannot notify host: runtime not available');
+      return;
+    }
+    
+    try {
+      chrome.runtime.sendMessage(
+        {
+          event: 'DISCOVERY_COMPLETE',
+          command: 'discovery_complete',
+          source: 'discovery_page',
+          payload: {
+            profile_id: self.SYNAPSE_CONFIG?.profileId,
+            profile_alias: self.SYNAPSE_CONFIG?.profile_alias,
+            launch_id: self.SYNAPSE_CONFIG?.launchId,
+            timestamp: Date.now(),
+            ping_response: payload
+          }
+        },
+        (response) => {
+          if (chrome.runtime && chrome.runtime.lastError) {
+            console.error('[Discovery] Error notifying host:', chrome.runtime.lastError);
+            return;
+          }
+          
+          if (this.config.debugMode) {
+            console.log('[Discovery] Host notified:', response);
+          }
+        }
+      );
+    } catch (error) {
+      console.error('[Discovery] Exception notifying host:', error);
+    }
   }
 }
 
 // ============================================================================
-// INIT
+// INITIALIZATION
 // ============================================================================
 
 document.addEventListener('DOMContentLoaded', async () => {
-  await chrome.storage.local.remove('discovery_open_lock');
+  // Validar que el protocolo está cargado
+  if (!window.PROTOCOL) {
+    console.error('[Discovery] PROTOCOL not found! Make sure discoveryProtocol.js is loaded first.');
+    return;
+  }
+
+  // IMPORTANTE: Liberar lock UNA SOLA VEZ antes de iniciar
+  try {
+    if (chrome?.storage?.local) {
+      await chrome.storage.local.remove('discovery_open_lock');
+      console.log('[Discovery] Lock released');
+    }
+  } catch (e) {
+    console.warn('[Discovery] Lock release failed:', e);
+  }
+  
+  // Crear instancia global
   window.BLOOM_VALIDATOR = new DiscoveryValidator();
   window.BLOOM_VALIDATOR.start();
+  
+  // Debug info
+  if (window.PROTOCOL.config.debugMode) {
+    console.log('[Discovery] Initialized with protocol:', window.PROTOCOL.config);
+  }
 });
+
+console.log('[Discovery] 🚀 Script loaded at:', new Date().toISOString());
+console.log('[Discovery] Instance ID:', Math.random().toString(36).substr(2, 9));
