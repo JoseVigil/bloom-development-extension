@@ -27,31 +27,31 @@
       padding: 40px;
       box-shadow: 0 20px 60px rgba(0,0,0,0.3);
       text-align: center;
-      max-width: 500px;
+      max-width: 600px;
       width: 100%;
-      position: relative;
     }
     
-    /* Status Dot */
-    .heartbeat-wrapper {
-      position: relative;
-      width: 100px;
-      height: 100px;
-      margin: 0 auto 30px;
+    .screen {
+      display: none;
+    }
+    
+    .screen.active {
+      display: block;
+      animation: fadeIn 0.3s ease;
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
     }
     
     .status-dot {
       width: 100px;
       height: 100px;
       border-radius: 50%;
-      margin: 0 auto;
+      margin: 0 auto 30px;
       transition: all 0.3s ease;
       background: #ddd;
-    }
-    
-    .status-dot.initializing {
-      background: #ffc107;
-      animation: pulse 1s infinite;
     }
     
     .status-dot.searching {
@@ -62,49 +62,57 @@
     .status-dot.connected {
       background: #28a745;
       box-shadow: 0 0 20px rgba(40, 167, 69, 0.5);
-      animation: none;
     }
     
     .status-dot.error {
       background: #dc3545;
-      animation: none;
     }
     
     @keyframes pulse {
-      0%, 100% { 
-        transform: scale(1); 
-        opacity: 0.8; 
-      }
-      50% { 
-        transform: scale(1.1); 
-        opacity: 1; 
-      }
+      0%, 100% { transform: scale(1); opacity: 0.8; }
+      50% { transform: scale(1.1); opacity: 1; }
     }
     
-    /* Typography */
     h1 {
       color: #333;
-      margin-bottom: 10px;
-      font-size: 28px;
+      margin-bottom: 20px;
+      font-size: 32px;
       font-weight: 600;
     }
     
-    #status-message {
+    p {
       color: #666;
-      font-size: 18px;
-      margin-bottom: 20px;
-      min-height: 27px;
+      font-size: 16px;
+      line-height: 1.6;
+      margin-bottom: 30px;
     }
     
-    /* Progress Info */
-    #progress-info {
+    .btn {
+      background: #667eea;
+      color: white;
+      border: none;
+      padding: 15px 40px;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      margin: 10px;
+    }
+    
+    .btn:hover {
+      background: #5568d3;
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+    }
+    
+    .progress-info {
       color: #999;
       font-size: 14px;
       margin-bottom: 15px;
-      display: block;
     }
     
-    #progress-info.hidden {
+    .progress-info.hidden {
       display: none;
     }
     
@@ -113,7 +121,6 @@
       color: #667eea;
     }
     
-    /* Info Section */
     .info-section {
       margin-top: 20px;
       padding: 15px;
@@ -129,12 +136,7 @@
       word-break: break-word;
     }
     
-    .info-section p:empty {
-      display: none;
-    }
-    
-    /* Auto-close Notice */
-    #auto-close-notice {
+    .auto-close-notice {
       display: none;
       margin-top: 20px;
       padding: 15px;
@@ -145,12 +147,11 @@
       font-size: 14px;
     }
     
-    #auto-close-notice.show {
+    .auto-close-notice.show {
       display: block;
     }
     
-    /* Error Container */
-    #error-container {
+    .error-container {
       display: none;
       margin-top: 20px;
       padding: 20px;
@@ -160,7 +161,7 @@
       color: #721c24;
     }
     
-    #error-container.show {
+    .error-container.show {
       display: block;
     }
     
@@ -184,74 +185,222 @@
       overflow-y: auto;
     }
     
-    #error-details:empty {
-      display: none;
+    .progress-bar {
+      width: 100%;
+      height: 6px;
+      background: #e9ecef;
+      border-radius: 3px;
+      margin-bottom: 30px;
+      overflow: hidden;
     }
     
-    /* Debug Badge */
-    .debug-badge {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      background: #ff9800;
-      color: white;
-      padding: 4px 8px;
-      border-radius: 4px;
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.5px;
-      display: none;
+    .progress-fill {
+      height: 100%;
+      background: #667eea;
+      transition: width 0.3s ease;
     }
     
-    .debug-badge.active {
-      display: block;
+    .step-indicator {
+      color: #999;
+      font-size: 14px;
+      margin-bottom: 20px;
+    }
+    
+    .status-icon {
+      width: 80px;
+      height: 80px;
+      margin: 0 auto 20px;
+      font-size: 60px;
+    }
+    
+    .info-box {
+      background: #f8f9fa;
+      padding: 20px;
+      border-radius: 8px;
+      margin: 20px 0;
+      text-align: left;
+    }
+    
+    .info-box h3 {
+      color: #333;
+      font-size: 16px;
+      margin-bottom: 10px;
+    }
+    
+    .info-box ol {
+      padding-left: 20px;
+      color: #666;
+    }
+    
+    .info-box li {
+      margin: 8px 0;
+      line-height: 1.5;
+    }
+    
+    .info-box p {
+      margin: 5px 0;
+    }
+    
+    .success-checkmark {
+      color: #28a745;
+      font-size: 80px;
+      margin-bottom: 20px;
+    }
+    
+    .spinner {
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #667eea;
+      border-radius: 50%;
+      width: 60px;
+      height: 60px;
+      animation: spin 1s linear infinite;
+      margin: 20px auto;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .register-notice {
+      background: #fff3cd;
+      border: 1px solid #ffeaa7;
+      padding: 15px;
+      border-radius: 8px;
+      margin: 20px 0;
+      color: #856404;
+      font-size: 14px;
     }
   </style>
 </head>
 <body>
   <div class="container">
-    <!-- Debug Badge -->
-    <div class="debug-badge" id="debug-badge">DEBUG MODE</div>
-    
-    <!-- Status Dot -->
-    <div class="heartbeat-wrapper">
-      <div id="status-dot" class="status-dot"></div>
+    <!-- DISCOVERY SCREEN -->
+    <div id="screen-discovery" class="screen active">
+      <div class="status-dot searching" id="discovery-dot"></div>
+      <h1>Synapse Discovery</h1>
+      <p id="discovery-message">🔍 Buscando extensión...</p>
+      
+      <div class="progress-info" id="discovery-progress">
+        Intento: <span id="attempt-count">0</span>
+      </div>
+      
+      <div class="info-section">
+        <p id="profile-id">Profile: -</p>
+        <p id="profile-alias"></p>
+        <p id="timestamp">Estado: Esperando conexión</p>
+      </div>
+
+      <div class="register-notice" id="register-notice" style="display: none;">
+        ⚠️ Después de conectar, se iniciará el proceso de registro de Google y Gemini API
+      </div>
+      
+      <div class="auto-close-notice" id="discovery-auto-close">
+        ✓ Conexión establecida exitosamente<br>
+        <small>Esta ventana se cerrará automáticamente...</small>
+      </div>
+      
+      <div class="error-container" id="discovery-error">
+        <div id="error-message">Error</div>
+        <pre id="error-details"></pre>
+      </div>
     </div>
-    
-    <!-- Title -->
-    <h1>Synapse Discovery</h1>
-    
-    <!-- Status Message -->
-    <p id="status-message">Inicializando...</p>
-    
-    <!-- Progress Info -->
-    <div id="progress-info">
-      Intento: <span id="attempt-count">0</span>
+
+    <!-- STEP 0: WELCOME -->
+    <div id="screen-onboarding-welcome" class="screen">
+      <div class="progress-bar"><div class="progress-fill" style="width: 0%"></div></div>
+      <div class="step-indicator">Paso 1 de 3</div>
+      
+      <div class="status-icon">🌸</div>
+      <h1>Bienvenido a Bloom</h1>
+      <p>
+        Vamos a configurar tu perfil en 2 pasos simples.<br>
+        Necesitarás una cuenta de Google y crear una API Key de Gemini.
+      </p>
+      
+      <button class="btn" id="btn-start-onboarding">Comenzar</button>
     </div>
-    
-    <!-- Profile Info Section -->
-    <div class="info-section">
-      <p id="profile-id">Profile: -</p>
-      <p id="profile-alias"></p>
-      <p id="timestamp">Estado: Esperando conexión</p>
+
+    <!-- STEP 1: GOOGLE LOGIN -->
+    <div id="screen-google-login" class="screen">
+      <div class="progress-bar"><div class="progress-fill" style="width: 33%"></div></div>
+      <div class="step-indicator">Paso 2 de 3</div>
+      
+      <div class="status-icon">🔐</div>
+      <h1>Inicia sesión con Google</h1>
+      <p>
+        Necesitamos que inicies sesión en tu cuenta de Google para continuar.
+      </p>
+      
+      <button class="btn" id="btn-google-login">Iniciar sesión con Google</button>
     </div>
-    
-    <!-- Auto-close Notice -->
-    <div id="auto-close-notice">
-      ✓ Conexión establecida exitosamente<br>
-      <small>Esta ventana se cerrará automáticamente...</small>
+
+    <!-- STEP 1.5: WAITING FOR LOGIN -->
+    <div id="screen-google-waiting" class="screen">
+      <div class="progress-bar"><div class="progress-fill" style="width: 33%"></div></div>
+      <div class="step-indicator">Paso 2 de 3</div>
+      
+      <div class="spinner"></div>
+      <h1>Esperando inicio de sesión...</h1>
+      <p>
+        Completa el inicio de sesión en la pestaña que se abrió.<br>
+        Detectaremos automáticamente cuando hayas iniciado sesión.
+      </p>
     </div>
-    
-    <!-- Error Container -->
-    <div id="error-container">
-      <div id="error-message">Error</div>
-      <pre id="error-details"></pre>
+
+    <!-- STEP 2: GEMINI API -->
+    <div id="screen-gemini-api" class="screen">
+      <div class="progress-bar"><div class="progress-fill" style="width: 66%"></div></div>
+      <div class="step-indicator">Paso 3 de 3</div>
+      
+      <div class="status-icon">🔑</div>
+      <h1>Crea tu Gemini API Key</h1>
+      
+      <div class="info-box">
+        <h3>Instrucciones:</h3>
+        <ol>
+          <li>Haz clic en "Crear API Key" en la nueva pestaña</li>
+          <li>Copia la clave generada</li>
+          <li>La detectaremos automáticamente</li>
+        </ol>
+      </div>
+      
+      <button class="btn" id="btn-open-aistudio">Ir a AI Studio</button>
+    </div>
+
+    <!-- STEP 2.5: WAITING FOR API KEY -->
+    <div id="screen-gemini-waiting" class="screen">
+      <div class="progress-bar"><div class="progress-fill" style="width: 66%"></div></div>
+      <div class="step-indicator">Paso 3 de 3</div>
+      
+      <div class="spinner"></div>
+      <h1>Esperando API Key...</h1>
+      <p>
+        Crea y copia tu API Key en AI Studio.<br>
+        La detectaremos automáticamente cuando la copies.
+      </p>
+    </div>
+
+    <!-- STEP 3: SUCCESS -->
+    <div id="screen-onboarding-success" class="screen">
+      <div class="progress-bar"><div class="progress-fill" style="width: 100%"></div></div>
+      
+      <div class="success-checkmark">✓</div>
+      <h1>¡Configuración completa!</h1>
+      <p>
+        Tu perfil está listo para usar.<br>
+        Esta ventana se cerrará automáticamente.
+      </p>
+      
+      <div class="info-box">
+        <p><strong>Email:</strong> <span id="final-email">-</span></p>
+        <p><strong>API Key:</strong> ✓ Configurada</p>
+      </div>
     </div>
   </div>
-  
-  <!-- Scripts - IMPORTANTE: Orden de carga -->
+
   <script src="../synapse.config.js"></script>
   <script src="discoveryProtocol.js"></script>
-  <script src="script.js"></script>
+  <script src="discovery.js"></script>
 </body>
 </html>

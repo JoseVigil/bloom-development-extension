@@ -3,5 +3,7 @@ self.SYNAPSE_CONFIG = {
     bridge_name: 'com.bloom.synapse.14c11dbf',
     launchId: "017_14c11dbf_085448",
     profile_alias: "MasterWorker",
-    extension_id: "hpblclepliicmihaplldignhjdggnkdh"
+    extension_id: "hpblclepliicmihaplldignhjdggnkdh",
+    register: true,
+    email: "user@example.com"
 };

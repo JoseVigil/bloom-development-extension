@@ -262,6 +262,8 @@ btips migracion extension a synapse thin client
 https://claude.ai/chat/28135739-74a9-470c-b22e-03bf19860d61
 nenes V1 migracion
 https://claude.ai/chat/c29cc4fc-6662-404e-b5c6-f3a783225f6c
+jose gmail V2 Refactorización quirúrgica de extensión Chrome con protocolo Synapse
+https://claude.ai/chat/42972ead-246e-4c16-8463-92c9331344b8
 
 uitool discovery page install
 https://claude.ai/chat/34e1e381-588d-4418-8af8-b4d511438d8d
@@ -329,3 +331,8 @@ https://aistudio.google.com/prompts/1eEs9b_t5ULYzGM1RXfzoqP-SaiK4RBxZ
 
 nenes telemetry
 https://aistudio.google.com/prompts/1xD9lKhqx9U45eKPWUKMiozQgTV35cLhb
+
+uitool discovery con register en google y key gemini
+https://claude.ai/chat/74476bfe-7145-40fc-8f26-e0389d28aadf
+V1 jose gmail Onboarding Google & Gemini: Bloom TODO
+https://aistudio.google.com/prompts/1kTjxI3l5FcBdpSTiUr26hltiYFxniUAP
