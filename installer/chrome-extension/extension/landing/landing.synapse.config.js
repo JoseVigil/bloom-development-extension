@@ -4,6 +4,8 @@ self.SYNAPSE_CONFIG = {
     launchId: "017_14c11dbf_085448",
     profile_alias: "MasterWorker",
     extension_id: "hpblclepliicmihaplldignhjdggnkdh",
-    register: true,
-    email: "user@example.com"
+    total_launches: 42,
+    uptime: 86400,
+    intents_done: 128,
+    last_synch: "2026-01-22T10:30:00Z"
 };

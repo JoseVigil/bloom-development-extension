@@ -13,10 +13,16 @@ bloom-development-extension/
     │   │   ├── background.js
     │   │   ├── content.js
     │   │   ├── discovery/
+    │   │   │   ├── content-aistudio.js
+    │   │   │   ├── discovery.js
+    │   │   │   ├── discovery.synapse.config.js
+    │   │   │   ├── discoveryProtocol.js
     │   │   │   ├── index.html
+    │   │   │   ├── onboarding.js
     │   │   │   └── script.js
-    │   │   ├── manifest.json
-    │   │   └── synapse.config.js
+    │   │   ├── landing/
+    │   │   │   └── landing.synapse.config.js
+    │   │   └── manifest.json
     │   ├── pem/
     │   │   ├── key_generation_extesion.crx
     │   │   └── key_generation_extesion.pem
@@ -191,7 +197,7 @@ bloom-development-extension/
         ├── blueprint.json
         ├── build.bat
         ├── codebase/
-        │   └── go_files_2026-01-20_16-41-40.txt
+        │   └── go_files_2026-01-21_10-17-12.txt
         ├── docs/
         │   ├── Sentinel - Fase 2 Discovery - Health Modular.md
         │   ├── Sentinel Base.md
@@ -226,6 +232,9 @@ bloom-development-extension/
         │   │   └── persistence.go
         │   ├── seed/
         │   │   └── seed.go
-        │   └── startup/
-        │       └── startup.go
+        │   ├── startup/
+        │   │   └── startup.go
+        │   └── ui/
+        │       ├── cockpit.go
+        │       └── refresher.go
         └── main.go
