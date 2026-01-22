@@ -36,7 +36,8 @@ async function loadConfig() {
       importScripts('synapse.config.js');
       if (self.SYNAPSE_CONFIG) {
         config = self.SYNAPSE_CONFIG;
-        console.log('[Synapse] ✓ Config via importScripts');
+        console.log('[Synapse] ✓ Config via importScripts:', config); // ⭐ DEBUG
+        console.log('[Synapse] Register value:', config.register); // ⭐ DEBUG
         return;
       }
     } catch (e) {}
@@ -49,16 +50,21 @@ async function loadConfig() {
       bridge_name: /bridge_name:\s*['"]([^'"]+)['"]/,
       launchId: /launchId:\s*['"]([^'"]+)['"]/,
       profile_alias: /profile_alias:\s*['"]([^'"]+)['"]/,
-      extension_id: /extension_id:\s*['"]([^'"]+)['"]/
+      extension_id: /extension_id:\s*['"]([^'"]+)['"]/,
+      register: /register:\s*(true|false)/,
+      email: /email:\s*['"]([^'"]+)['"]/
     };
 
     config = {};
     for (const [k, rx] of Object.entries(matchers)) {
       const m = text.match(rx);
-      if (m) config[k] = m[1];
+      if (m) {
+        config[k] = k === 'register' ? m[1] === 'true' : m[1];
+      }
     }
 
-    console.log('[Synapse] ✓ Config via fetch');
+    console.log('[Synapse] ✓ Config via fetch:', config); // ⭐ DEBUG
+    console.log('[Synapse] Register value:', config.register); // ⭐ DEBUG
   } catch (e) {
     console.error('[Synapse] ✗ Config load failed:', e);
   }
@@ -194,18 +200,17 @@ function handleHostMessage(msg) {
 function handleSystemAck(msg) {
   console.log('[Synapse] ✓ Handshake confirmed');
 
-  // Extraer información del payload
   const payload = msg.payload || {};
   
-  // ⭐ Log solo si hay información relevante
-  if (payload.host_version || payload.identity_method) {
-    console.log('[Synapse] Host info:', {
-      version: payload.host_version,
-      method: payload.identity_method
-    });
-  }
+  const configToSave = {
+    register: config.register || false,
+    email: config.email || null,
+    profileId: config.profileId,
+    profile_alias: config.profile_alias
+  };
 
-  // Actualizar storage para discovery page
+  console.log('[Synapse] Saving to storage:', configToSave); // ⭐ DEBUG
+
   chrome.storage.local.set({
     synapseStatus: {
       command: 'system_ready',
@@ -218,10 +223,17 @@ function handleSystemAck(msg) {
         identity_method: payload.identity_method,
         timestamp: Date.now()
       }
-    }
+    },
+    synapseConfig: configToSave
+  }, () => {
+    console.log('[Synapse] ✓ Storage saved'); // ⭐ DEBUG
+    
+    // Verificar que se guardó
+    chrome.storage.local.get(['synapseConfig'], (result) => {
+      console.log('[Synapse] Verification - stored config:', result.synapseConfig); // ⭐ DEBUG
+    });
   });
 
-  // Enviar estado de tabs al host
   chrome.tabs.query({}, (tabs) => {
     sendToHost({
       event: "TABS_STATUS",
