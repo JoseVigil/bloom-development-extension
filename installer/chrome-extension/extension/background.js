@@ -249,6 +249,36 @@ function handleHostMessage(msg) {
     return;
   }
 
+  // ============================================================================
+  // NUEVO HANDLER PARA ACTUALIZAR PROFILE DATA (Landing Mode)
+  // ============================================================================
+  if (msg.command === 'UPDATE_PROFILE_DATA') {
+    const payload = msg.payload || {};
+    
+    chrome.storage.local.get('profileData', (result) => {
+      const currentData = result.profileData || {};
+      
+      const updatedData = {
+        ...currentData,
+        stats: {
+          ...(currentData.stats || {}),
+          ...(payload.stats || {})
+        },
+        accounts: payload.accounts || currentData.accounts || [],
+        system: {
+          ...(currentData.system || {}),
+          ...(payload.system || {})
+        }
+      };
+      
+      chrome.storage.local.set({ profileData: updatedData }, () => {
+        console.log('[Synapse] Profile data updated');
+      });
+    });
+    
+    return;
+  }
+
   if (cmd === 'TAB_CLOSE') {
     executeTabClose(msg.target, msg.id);
     return;
@@ -454,6 +484,47 @@ async function forwardToContent(msg) {
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
   const { event, command } = msg;
+
+  // ============================================================================
+  // HANDLERS ADICIONALES PARA LANDING MODE
+  // ============================================================================
+
+  // Handler para comandos ejecutados desde landing
+  if (msg.action === 'executeBrainCommand') {
+    console.log('[Synapse] Brain command received:', msg.command);
+    
+    sendToHost({
+      type: 'BRAIN_COMMAND',
+      command: msg.command,
+      source: 'landing_cockpit',
+      timestamp: Date.now()
+    });
+    
+    sendResp({ 
+      success: true, 
+      message: 'Command sent to host' 
+    });
+    
+    return true;
+  }
+
+  // Handler para ping desde landing
+  if (msg.action === 'ping') {
+    sendResp({ 
+      status: 'pong',
+      connection_state: connectionState 
+    });
+    return true;
+  }
+
+  // Handler para check host desde landing
+  if (msg.action === 'checkHost') {
+    sendResp({ 
+      hostConnected: connectionState === 'CONNECTED',
+      connection_state: connectionState 
+    });
+    return true;
+  }
 
   // ⭐ Handler para cambio de modo
   if (event === 'SET_MODE') {
