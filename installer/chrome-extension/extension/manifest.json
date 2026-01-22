@@ -25,7 +25,8 @@
   ],
   
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.js",
+    "type": "module"  
   },
 
   "action": {
@@ -41,7 +42,7 @@
     },
     {
       "matches": ["*://aistudio.google.com/app/apikey*"],
-      "js": ["content-aistudio.js"],
+      "js": ["discovery/content-aistudio.js"],
       "run_at": "document_idle"
     }
   ],
@@ -50,4 +51,5 @@
     "matches": ["<all_urls>"],
     "resources": ["discovery/*", "synapse.config.js"]
   }]
+
 }
