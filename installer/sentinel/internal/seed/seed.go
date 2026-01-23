@@ -12,6 +12,8 @@ import (
 	"sentinel/internal/startup"
 	"strings"
 	"time"
+
+	"golang.org/x/sys/windows/registry"
 )
 
 type ProfileEntry struct {
@@ -20,8 +22,10 @@ type ProfileEntry struct {
 	Master        bool   `json:"master"`
 	Path          string `json:"path"`
 	SpecPath      string `json:"spec_path"`
+	ConfigDir     string `json:"config_dir"`
 	LogsDir       string `json:"logs_dir"`
-	ExtensionPath string `json:"extension_path"` // Paso 1: Nuevo campo
+	ExtensionPath string `json:"extension_path"`
+	LaunchCount   int    `json:"launch_count"`
 }
 
 type ProfilesRegistry struct {
@@ -29,8 +33,8 @@ type ProfilesRegistry struct {
 }
 
 func HandleSeed(c *core.Core, alias string, isMaster bool) (string, error) {
-	registry := loadProfilesRegistry(c)
-	for _, p := range registry.Profiles {
+	registry_data := loadProfilesRegistry(c)
+	for _, p := range registry_data.Profiles {
 		if p.Alias == alias {
 			return "", fmt.Errorf("alias_duplicado: %s", alias)
 		}
@@ -68,10 +72,23 @@ func HandleSeed(c *core.Core, alias string, isMaster bool) (string, error) {
 	_ = os.MkdirAll(extDir, 0755)
 	_ = os.MkdirAll(logsDir, 0755)
 
-	// Paso 2: Generar Spec con Template de Oro
+	// 1. ESCRIBIR MANIFIESTO NATIVO
+	shortID := uuid[:8]
+	hostName := fmt.Sprintf("com.bloom.synapse.%s", shortID)
+	manifestPath := filepath.Join(configDir, hostName+".json")
+	if err := writeNativeManifest(c, manifestPath, hostName, uuid); err != nil {
+		return "", err
+	}
+
+	// 2. REGISTRO DE WINDOWS (HKCU)
+	if err := registerInWindows(hostName, manifestPath); err != nil {
+		c.Logger.Error("[SEED] No se pudo registrar Native Messaging: %v", err)
+	}
+
+	// 3. GENERAR SPEC CON TEMPLATE DE ORO (AJUSTE CRÍTICO 3)
 	_ = writeIgnitionSpec(c, sm, uuid, profileDir, extDir, logsDir, specPath)
 
-	updateProfilesInventory(c, uuid, alias, isMaster, profileDir, extDir, logsDir, specPath)
+	updateProfilesInventory(c, uuid, alias, isMaster, profileDir, configDir, extDir, logsDir, specPath)
 
 	if isMaster {
 		status := startup.LoadCurrentStatus(c)
@@ -81,6 +98,32 @@ func HandleSeed(c *core.Core, alias string, isMaster bool) (string, error) {
 	}
 
 	return uuid, nil
+}
+
+func writeNativeManifest(c *core.Core, path, hostName, uuid string) error {
+	// AJUSTE CRÍTICO 1: El binario es bloom-host.exe dentro de bin/native/
+	bridgePath := filepath.Join(c.Paths.BinDir, "native", "bloom-host.exe")
+	
+	manifest := map[string]interface{}{
+		"name":        hostName,
+		"description": "Synapse v2 Native Bridge Host",
+		"path":        bridgePath,
+		"type":        "stdio",
+		"allowed_origins": []string{
+			fmt.Sprintf("chrome-extension://%s/", c.Config.Provisioning.ExtensionID),
+		},
+		"args": []string{"--profile-id", uuid},
+	}
+	data, _ := json.MarshalIndent(manifest, "", "  ")
+	return os.WriteFile(path, data, 0644)
+}
+
+func registerInWindows(hostName, manifestPath string) error {
+	keyPath := `Software\Google\Chrome\NativeMessagingHosts\` + hostName
+	k, _, err := registry.CreateKey(registry.CURRENT_USER, keyPath, registry.ALL_ACCESS)
+	if err != nil { return err }
+	defer k.Close()
+	return k.SetStringValue("", manifestPath)
 }
 
 func writeIgnitionSpec(c *core.Core, sm *discovery.SystemMap, uuid, profileDir, extDir, logsDir, specPath string) error {
@@ -93,7 +136,8 @@ func writeIgnitionSpec(c *core.Core, sm *discovery.SystemMap, uuid, profileDir, 
 			"--no-sandbox",
 			"--test-type",
 			"--disable-web-security",
-			"--disable-features=IsolateOrigins,site-per-process,DesktopPWAs",
+			// AJUSTE CRÍTICO 3: Sin espacios en la lista de features
+			"--disable-features=IsolateOrigins,site-per-process",
 			"--allow-running-insecure-content",
 			"--no-first-run",
 			"--no-default-browser-check",
@@ -101,6 +145,7 @@ func writeIgnitionSpec(c *core.Core, sm *discovery.SystemMap, uuid, profileDir, 
 			"--remote-debugging-port=0",
 			"--enable-logging",
 			"--v=1",
+			"--disable-session-crashed-bubble",
 		},
 		"paths": map[string]string{
 			"extension": extDir,
@@ -114,41 +159,48 @@ func writeIgnitionSpec(c *core.Core, sm *discovery.SystemMap, uuid, profileDir, 
 	return os.WriteFile(specPath, data, 0644)
 }
 
-func updateProfilesInventory(c *core.Core, uuid, alias string, isMaster bool, profileDir, extDir, logsDir, specPath string) {
-	registry := loadProfilesRegistry(c)
+func updateProfilesInventory(c *core.Core, uuid, alias string, isMaster bool, profileDir, configDir, extDir, logsDir, specPath string) {
+	registry_data := loadProfilesRegistry(c)
 	newEntry := ProfileEntry{
 		ID:            uuid,
 		Alias:         alias,
 		Master:        isMaster,
 		Path:          profileDir,
+		ConfigDir:     configDir,
 		SpecPath:      specPath,
 		LogsDir:       logsDir,
 		ExtensionPath: extDir,
+		LaunchCount:   0,
 	}
 
-	found := false
-	for i, p := range registry.Profiles {
-		if isMaster { registry.Profiles[i].Master = false }
+	for i, p := range registry_data.Profiles {
+		if isMaster { registry_data.Profiles[i].Master = false }
 		if p.ID == uuid {
-			registry.Profiles[i] = newEntry
-			found = true
+			newEntry.LaunchCount = p.LaunchCount
+			registry_data.Profiles[i] = newEntry
+			saveRegistry(c, registry_data)
+			return
 		}
 	}
-	if !found { registry.Profiles = append(registry.Profiles, newEntry) }
+	registry_data.Profiles = append(registry_data.Profiles, newEntry)
+	saveRegistry(c, registry_data)
+}
 
-	data, _ := json.MarshalIndent(registry, "", "  ")
-	_ = os.WriteFile(filepath.Join(c.Paths.AppDataDir, "config", "profiles.json"), data, 0644)
+func saveRegistry(c *core.Core, reg ProfilesRegistry) {
+	path := filepath.Join(c.Paths.AppDataDir, "config", "profiles.json")
+	data, _ := json.MarshalIndent(reg, "", "  ")
+	_ = os.WriteFile(path, data, 0644)
 }
 
 func loadProfilesRegistry(c *core.Core) ProfilesRegistry {
 	path := filepath.Join(c.Paths.AppDataDir, "config", "profiles.json")
 	data, err := os.ReadFile(path)
 	if err != nil { return ProfilesRegistry{Profiles: []ProfileEntry{}} }
-	var registry ProfilesRegistry
-	if err := json.Unmarshal(data, &registry); err != nil {
+	var registry_data ProfilesRegistry
+	if err := json.Unmarshal(data, &registry_data); err != nil {
 		var list []ProfileEntry
 		json.Unmarshal(data, &list)
-		registry.Profiles = list
+		registry_data.Profiles = list
 	}
-	return registry
+	return registry_data
 }
