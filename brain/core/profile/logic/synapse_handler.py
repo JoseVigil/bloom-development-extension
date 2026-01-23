@@ -1,10 +1,11 @@
 """
-Synapse Bridge Handler - Registry, Native Manifests, and Extension Config.
-Manages per-profile Native Messaging Host configuration.
+Synapse Bridge Handler - Gestión de puentes y extensiones.
+Versión v2.3 - Autoridad delegada a Sentinel (Go).
+Python solo gestiona carpetas y archivos locales del perfil.
 """
 
 import json
-import platform
+import shutil
 from pathlib import Path
 from brain.shared.logger import get_logger
 
@@ -12,261 +13,196 @@ logger = get_logger(__name__)
 
 
 class SynapseHandler:
-    r"""
-    Handles Synapse bridge configuration for profiles.
+    """
+    Gestiona la configuración de extensión Synapse para perfiles.
     
-    Each profile gets:
-    - A unique bridge name: com.bloom.synapse.[short_id]
-    - A manifest JSON in: profiles/[UUID]/synapse/com.bloom.synapse.[short_id].json
-    - A registry entry pointing to that manifest (Windows only)
-    - An injected config in: profiles/[UUID]/extension/synapse.config.js
+    IMPORTANTE: Sentinel (Go) maneja:
+    - Registro de Windows
+    - Manifiestos nativos en carpeta synapse/
+    
+    Python (Brain) solo maneja:
+    - Clonación de la extensión base al perfil
+    - Generación de páginas discovery/landing
+    - Retorno del bridge_name para que Sentinel lo registre
     """
     
     def __init__(self, base_dir: Path, extension_id: str):
         """
-        Initialize the Synapse handler.
-        
         Args:
-            base_dir: Base directory for all profiles and binaries
-            extension_id: Chrome extension ID for allowed_origins
+            base_dir: Directorio base de perfiles y binarios
+            extension_id: ID de la extensión Chrome para allowed_origins
         """
-        logger.info("🔧 Initializing SynapseHandler...")
+        logger.info("🔧 Inicializando SynapseHandler (v2.3 - Sentinel Authority)")
         logger.debug(f"  Base dir: {base_dir}")
         logger.debug(f"  Extension ID: {extension_id}")
         
         self.base_dir = Path(base_dir) if not isinstance(base_dir, Path) else base_dir
         self.extension_id = extension_id
-        self.host_exe = base_dir / "bin" / "native" / "bloom-host.exe"
+        self.extension_template = base_dir / "extension"
         
-        logger.debug(f"  Host executable: {self.host_exe}")
+        logger.debug(f"  Extension template: {self.extension_template}")
         
-        if not self.host_exe.exists():
-            logger.warning(f"⚠️ Host executable not found: {self.host_exe}")
+        if not self.extension_template.exists():
+            logger.warning(f"⚠️ Extension template no encontrada: {self.extension_template}")
         else:
-            logger.debug("✅ Host executable exists")
+            logger.debug("✅ Extension template existe")
     
     def provision_bridge(self, profile_id: str) -> str:
-        r"""
-        Provisions a unique Synapse bridge for a profile.
+        """
+        Provisiona un bridge único para un perfil.
         
-        Creates:
-        1. Manifest JSON in: profiles/[UUID]/synapse/com.bloom.synapse.[short_id].json
-        2. Registry entry in: HKCU\Software\Google\Chrome\NativeMessagingHosts\com.bloom.synapse.[short_id]
+        SCOPE LIMITADO (v2.3):
+        - Retorna el bridge_name (formato: com.bloom.synapse.[short_id])
+        - Asegura que la carpeta del perfil exista
+        - NO escribe manifiestos nativos (responsabilidad de Sentinel)
+        - NO toca el registro de Windows (responsabilidad de Sentinel)
         
         Args:
-            profile_id: Full UUID of the profile
+            profile_id: UUID completo del perfil
             
         Returns:
             bridge_name: e.g., 'com.bloom.synapse.abc12345'
-            
-        Raises:
-            RuntimeError: If registry registration fails (Windows only)
-            OSError: If manifest creation fails
         """
         short_id = profile_id[:8]
         bridge_name = f"com.bloom.synapse.{short_id}"
         
-        logger.info(f"🌉 Provisioning bridge for profile: {short_id}...")
+        logger.info(f"🌉 Provisioning bridge para perfil: {short_id}...")
         logger.debug(f"  Full profile ID: {profile_id}")
         logger.debug(f"  Bridge name: {bridge_name}")
         
-        # Create synapse directory inside the profile
-        base_dir = Path(self.base_dir) if not isinstance(self.base_dir, Path) else self.base_dir
-        synapse_dir = self.base_dir / "profiles" / profile_id / "synapse"
-        if not synapse_dir.exists():
-            logger.info(f"📁 Creating synapse directory: {synapse_dir}")
-            synapse_dir.mkdir(parents=True, exist_ok=True)
+        # Asegurar que la carpeta del perfil existe
+        profile_dir = self.base_dir / "profiles" / profile_id
+        if not profile_dir.exists():
+            logger.info(f"📁 Creando directorio de perfil: {profile_dir}")
+            profile_dir.mkdir(parents=True, exist_ok=True)
         
-        try:
-            # 1. Create native manifest JSON
-            logger.debug("📝 Creating native manifest...")
-            manifest_path = self._create_native_manifest(bridge_name, profile_id, synapse_dir)
-            logger.info(f"  ✅ Manifest created: {manifest_path}")
-            
-            # 2. Register in Windows Registry
-            if platform.system() == "Windows":
-                logger.debug("🪟 Registering in Windows Registry...")
-                self._register_in_registry(bridge_name, manifest_path)
-                logger.info("  ✅ Registry entry created")
-            else:
-                logger.debug(f"  ℹ️ Skipping registry (not Windows, system: {platform.system()})")
-            
-            logger.info(f"✅ Bridge provisioned successfully: {bridge_name}")
-            return bridge_name
-            
-        except Exception as e:
-            logger.error(f"❌ Failed to provision bridge: {e}", exc_info=True)
-            raise
+        logger.info(f"✅ Bridge name generado: {bridge_name}")
+        logger.info("ℹ️  Sentinel (Go) debe registrar el bridge en el OS")
+        
+        return bridge_name
     
-    def _create_native_manifest(self, bridge_name: str, profile_id: str, synapse_dir: Path) -> Path:
+    def sync_profile_resources(self, profile_id: str, bridge_name: str) -> None:
         """
-        Creates the native messaging host JSON manifest.
+        Sincroniza recursos del perfil (extensión y páginas HTML).
+        
+        Realiza:
+        1. Clonación de extension/ a profiles/[UUID]/extension/
+        2. Generación de discovery/index.html
+        3. Generación de landing/index.html
         
         Args:
-            bridge_name: The bridge name (e.g., 'com.bloom.synapse.abc12345')
-            profile_id: Full UUID of the profile
-            synapse_dir: Directory where manifest will be saved
-            
-        Returns:
-            Path to the created manifest file
-            
-        Raises:
-            OSError: If file cannot be written
+            profile_id: UUID completo del perfil
+            bridge_name: Nombre del bridge (para inyección en config)
         """
-        manifest_path = synapse_dir / f"{bridge_name}.json"
+        logger.info(f"🔄 Sincronizando recursos para perfil: {profile_id[:8]}...")
         
-        logger.debug(f"Creating manifest at: {manifest_path}")
+        profile_dir = self.base_dir / "profiles" / profile_id
+        extension_dir = profile_dir / "extension"
         
-        manifest_data = {
-            "name": bridge_name,
-            "description": f"Bloom Synapse Bridge for Profile {profile_id}",
-            "path": str(self.host_exe.resolve()),
-            "type": "stdio",
-            "allowed_origins": [
-                f"chrome-extension://{self.extension_id}/"
-            ],
-            "args": ["--profile-id", profile_id]
-        }
+        # 1. Clonar extensión base
+        logger.debug("📦 Clonando extensión base...")
+        if extension_dir.exists():
+            logger.debug(f"  🗑️ Limpiando extensión anterior: {extension_dir}")
+            shutil.rmtree(extension_dir, ignore_errors=True)
         
-        logger.debug(f"  Manifest data: {json.dumps(manifest_data, indent=2)}")
+        if not self.extension_template.exists():
+            raise FileNotFoundError(f"Extension template no encontrada: {self.extension_template}")
         
-        try:
-            with open(manifest_path, 'w', encoding='utf-8') as f:
-                json.dump(manifest_data, f, indent=2)
-            
-            logger.debug(f"  ✅ Manifest file written successfully")
-            return manifest_path
-            
-        except Exception as e:
-            logger.error(f"  ❌ Failed to write manifest: {e}", exc_info=True)
-            raise
+        shutil.copytree(self.extension_template, extension_dir)
+        logger.info(f"  ✅ Extensión clonada: {extension_dir}")
+        
+        # 2. Inyectar configuración de bridge
+        self._inject_extension_config(profile_id, bridge_name)
+        
+        # 3. Generar páginas HTML
+        self._generate_html_pages(profile_id)
+        
+        logger.info(f"✅ Recursos sincronizados para perfil: {profile_id[:8]}")
     
-    def _register_in_registry(self, bridge_name: str, manifest_path: Path) -> None:
-        r"""
-        Registers the bridge in Windows Registry (HKCU).
+    def _inject_extension_config(self, profile_id: str, bridge_name: str) -> None:
+        """
+        Escribe synapse.config.js en la extensión del perfil.
         
-        Creates key: HKCU\Software\Google\Chrome\NativeMessagingHosts\[bridge_name]
-        Points to: The manifest JSON path in the profile's synapse directory
+        Crea: profiles/[UUID]/extension/synapse.config.js
+        Formato: self.SYNAPSE_CONFIG = { bridge_name: '[bridge_name]' };
         
         Args:
-            bridge_name: The bridge name (e.g., 'com.bloom.synapse.abc12345')
-            manifest_path: Path to the manifest JSON file
-            
-        Raises:
-            RuntimeError: If registry operation fails
+            profile_id: UUID completo del perfil
+            bridge_name: Nombre del bridge a inyectar
         """
-        try:
-            import winreg
-            logger.debug("  winreg module imported successfully")
-        except ImportError as e:
-            logger.warning(f"  ⚠️ winreg not available (not Windows?): {e}")
-            return
-        
-        reg_path = f"Software\\Google\\Chrome\\NativeMessagingHosts\\{bridge_name}"
-        logger.debug(f"  Registry path: HKCU\\{reg_path}")
-        logger.debug(f"  Manifest path: {manifest_path.resolve()}")
-        
-        try:
-            with winreg.CreateKey(winreg.HKEY_CURRENT_USER, reg_path) as key:
-                winreg.SetValueEx(
-                    key, 
-                    "", 
-                    0, 
-                    winreg.REG_SZ, 
-                    str(manifest_path.resolve())
-                )
-            
-            logger.debug("  ✅ Registry key created successfully")
-            
-        except Exception as e:
-            logger.error(f"  ❌ Failed to register in registry: {e}", exc_info=True)
-            raise RuntimeError(f"Failed to register bridge in Windows Registry: {e}")
-    
-    def inject_extension_config(self, profile_id: str, bridge_name: str) -> None:
-        r"""
-        Writes synapse.config.js to the profile's extension directory.
-        
-        Creates file: profiles/[UUID]/extension/synapse.config.js
-        Format: self.SYNAPSE_CONFIG = { bridge_name: '[bridge_name]' };
-        
-        Args:
-            profile_id: Full UUID of the profile
-            bridge_name: The bridge name to inject (e.g., 'com.bloom.synapse.abc12345')
-            
-        Raises:
-            OSError: If file cannot be written
-        """
-        logger.info(f"💉 Injecting extension config for profile: {profile_id[:8]}...")
-        logger.debug(f"  Bridge name: {bridge_name}")
+        logger.debug(f"💉 Inyectando config de extensión para: {profile_id[:8]}...")
         
         extension_dir = self.base_dir / "profiles" / profile_id / "extension"
         config_path = extension_dir / "synapse.config.js"
         
-        logger.debug(f"  Extension dir: {extension_dir}")
-        logger.debug(f"  Config path: {config_path}")
+        if not extension_dir.exists():
+            raise FileNotFoundError(f"Extension dir no existe: {extension_dir}")
         
-        try:
-            if not extension_dir.exists():
-                logger.info(f"  📁 Creating extension directory: {extension_dir}")
-                extension_dir.mkdir(parents=True, exist_ok=True)
-            
-            content = f"self.SYNAPSE_CONFIG = {{ bridge_name: '{bridge_name}' }};"
-            config_path.write_text(content, encoding='utf-8')
-            
-            logger.info(f"  ✅ Config injected: {config_path}")
-            
-        except Exception as e:
-            logger.error(f"  ❌ Failed to inject config: {e}", exc_info=True)
-            raise
+        content = f"self.SYNAPSE_CONFIG = {{ bridge_name: '{bridge_name}' }};"
+        config_path.write_text(content, encoding='utf-8')
+        
+        logger.debug(f"  ✅ Config inyectado: {config_path}")
     
-    def cleanup_bridge(self, profile_id: str) -> None:
-        r"""
-        Removes bridge configuration for a profile.
-        
-        Deletes:
-        1. Manifest JSON from: profiles/[UUID]/synapse/com.bloom.synapse.[short_id].json
-        2. Registry entry from: HKCU\Software\Google\Chrome\NativeMessagingHosts\com.bloom.synapse.[short_id]
+    def _generate_html_pages(self, profile_id: str) -> None:
+        """
+        Genera páginas discovery y landing en la extensión del perfil.
         
         Args:
-            profile_id: Full UUID of the profile
+            profile_id: UUID completo del perfil
+        """
+        logger.debug(f"📄 Generando páginas HTML para: {profile_id[:8]}...")
+        
+        extension_dir = self.base_dir / "profiles" / profile_id / "extension"
+        
+        # Importar generadores (asumiendo que existen en brain.core.profile.web)
+        try:
+            from brain.core.profile.web.discovery_generator import generate_discovery_page
+            from brain.core.profile.web.landing_generator import generate_profile_landing
+            
+            # Discovery page
+            discovery_dir = extension_dir / "discovery"
+            discovery_dir.mkdir(exist_ok=True)
+            discovery_html = discovery_dir / "index.html"
+            discovery_html.write_text(generate_discovery_page(), encoding='utf-8')
+            logger.debug(f"  ✅ Discovery generado: {discovery_html}")
+            
+            # Landing page
+            landing_dir = extension_dir / "landing"
+            landing_dir.mkdir(exist_ok=True)
+            landing_html = landing_dir / "index.html"
+            landing_html.write_text(generate_profile_landing(profile_id), encoding='utf-8')
+            logger.debug(f"  ✅ Landing generado: {landing_html}")
+            
+        except ImportError as e:
+            logger.warning(f"⚠️ No se pudieron importar generadores HTML: {e}")
+            logger.warning("  → Páginas HTML no generadas")
+    
+    def cleanup_bridge(self, profile_id: str) -> None:
+        """
+        Limpia recursos del bridge para un perfil.
+        
+        SCOPE LIMITADO (v2.3):
+        - Solo elimina archivos locales del perfil
+        - NO toca registro de Windows (responsabilidad de Sentinel)
+        - NO elimina manifiestos nativos (responsabilidad de Sentinel)
+        
+        Args:
+            profile_id: UUID completo del perfil
         """
         short_id = profile_id[:8]
-        bridge_name = f"com.bloom.synapse.{short_id}"
+        logger.info(f"🗑️ Limpiando recursos de bridge para: {short_id}...")
         
-        logger.info(f"🗑️ Cleaning up bridge for profile: {short_id}...")
-        logger.debug(f"  Bridge name: {bridge_name}")
-        
-        # Remove manifest file from profile's synapse directory
-        synapse_dir = self.base_dir / "profiles" / profile_id / "synapse"
-        manifest_path = synapse_dir / f"{bridge_name}.json"
-        
-        if manifest_path.exists():
+        # Eliminar carpeta de extensión del perfil
+        extension_dir = self.base_dir / "profiles" / profile_id / "extension"
+        if extension_dir.exists():
             try:
-                logger.debug(f"  Removing manifest: {manifest_path}")
-                manifest_path.unlink()
-                logger.info("  ✅ Manifest file removed")
+                logger.debug(f"  🗑️ Eliminando extensión: {extension_dir}")
+                shutil.rmtree(extension_dir, ignore_errors=True)
+                logger.info("  ✅ Extensión eliminada")
             except Exception as e:
-                logger.error(f"  ❌ Failed to remove manifest: {e}", exc_info=True)
+                logger.error(f"  ❌ Error al eliminar extensión: {e}")
         else:
-            logger.debug(f"  ℹ️ Manifest file doesn't exist: {manifest_path}")
+            logger.debug(f"  ℹ️ Extensión no existe: {extension_dir}")
         
-        # Remove registry entry (Windows only)
-        if platform.system() == "Windows":
-            try:
-                import winreg
-                reg_path = f"Software\\Google\\Chrome\\NativeMessagingHosts\\{bridge_name}"
-                
-                logger.debug(f"  Removing registry key: HKCU\\{reg_path}")
-                winreg.DeleteKey(winreg.HKEY_CURRENT_USER, reg_path)
-                logger.info("  ✅ Registry entry removed")
-                
-            except ImportError:
-                logger.debug("  ℹ️ winreg not available (not Windows)")
-            except FileNotFoundError:
-                logger.debug("  ℹ️ Registry key doesn't exist")
-            except OSError as e:
-                logger.warning(f"  ⚠️ Failed to remove registry key: {e}")
-        else:
-            logger.debug(f"  ℹ️ Skipping registry cleanup (not Windows, system: {platform.system()})")
-        
-        logger.info(f"✅ Bridge cleanup completed for: {short_id}")
+        logger.info(f"✅ Recursos locales limpiados para: {short_id}")
+        logger.info("ℹ️  Sentinel (Go) debe limpiar manifiestos y registro del OS")

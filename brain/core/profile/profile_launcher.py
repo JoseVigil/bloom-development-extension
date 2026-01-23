@@ -2,6 +2,11 @@
 Profile Launcher - Lógica aislada de lanzamiento de perfiles.
 Versión spec-driven pura: Solo acepta especificaciones JSON.
 Convention mode eliminado - deprecated desde v2.0.
+
+CHANGELOG v2.3:
+- Agregado soporte para page_config (discovery/landing)
+- Generación automática de target_url según page_config.type
+- Retrocompatibilidad con specs sin page_config
 """
 import sys
 import json
@@ -77,34 +82,43 @@ class ProfileLauncher:
         - paths.user_data: Manejo de user-data-dir
         - paths.extension: Ruta a extensión
         - paths.logs_base: Directorio de logs
-        - target_url: URL a abrir
+        - target_url: URL a abrir (puede ser "auto")
+        - page_config: Configuración de página (discovery/landing)
         - engine_flags: Flags del motor
         - custom_flags: Flags personalizados
         
         NO hay lógica hardcoded - todo viene del JSON.
         """
-        logger.info("🎯 Ejecutando spec-driven v2.2")
+        logger.info("🎯 Ejecutando spec-driven v2.3 (con page_config)")
         
         # Extracción de configuración
         engine_config = spec.get('engine', {})
         paths_config = spec.get('paths', {})
+        page_config = spec.get('page_config', {})
         
         engine_type = engine_config.get('type')
         exe = engine_config.get('executable')
         u_data = paths_config.get('user_data')
         ext = paths_config.get('extension')
         logs_base = paths_config.get('logs_base')
-        url = spec.get('target_url')
+        target_url_raw = spec.get('target_url')
         
         logger.debug(f"📋 Spec recibido:")
         logger.debug(f"   Engine Type: {engine_type}")
         logger.debug(f"   Executable: {exe}")
         logger.debug(f"   User Data: {u_data}")
         logger.debug(f"   Extension: {ext}")
-        logger.debug(f"   Target URL: {url}")
+        logger.debug(f"   Target URL (raw): {target_url_raw}")
+        logger.debug(f"   Page Config: {page_config}")
+        
+        # ====================================================================
+        # 🆕 NUEVA LÓGICA: Resolución de target_url según page_config
+        # ====================================================================
+        target_url = self._resolve_target_url(target_url_raw, page_config)
+        logger.info(f"🎯 Target URL resuelto: {target_url}")
         
         # Validación de campos requeridos
-        if not all([engine_type, exe, u_data, ext, url]):
+        if not all([engine_type, exe, u_data, ext, target_url]):
             logger.error("✗ Spec incompleto: faltan campos requeridos")
             raise ValueError(
                 "Spec incompleto. Campos requeridos: "
@@ -165,7 +179,7 @@ class ProfileLauncher:
             f"--user-data-dir={user_data_path}",
             "--profile-directory=Default",
             f"--load-extension={extension_path}",
-            f"--app={url}",            
+            f"--app={target_url}",            
             "--app-id=bloom-synapse"
         ]
         
@@ -185,6 +199,82 @@ class ProfileLauncher:
         
         # Handoff estándar a Sentinel (ahora incluye log_files)
         return self._execute_handoff(chrome_args, profile['id'], log_files, launch_id)
+    
+    def _resolve_target_url(
+        self, 
+        target_url_raw: Optional[str], 
+        page_config: Dict[str, Any]
+    ) -> str:
+        """
+        Resuelve target_url según page_config.
+        
+        Lógica:
+        1. Si target_url == "auto" → Generar según page_config.type
+        2. Si no hay page_config → Usar target_url tal cual (retrocompatibilidad)
+        3. Si page_config.type existe → Validar y generar
+        
+        Args:
+            target_url_raw: URL del spec (puede ser "auto", URL completa, o None)
+            page_config: Diccionario con {type: "discovery"|"landing", auto_generate_url: bool}
+        
+        Returns:
+            URL final a usar
+            
+        Raises:
+            ValueError: Si page_config.type es inválido o target_url falta
+        """
+        # Caso 1: No hay page_config → Modo retrocompatible
+        if not page_config:
+            logger.debug("📄 No hay page_config, usando target_url directo (retrocompatibilidad)")
+            if not target_url_raw:
+                raise ValueError("target_url es requerido cuando no hay page_config")
+            return target_url_raw
+        
+        # Caso 2: page_config existe → Validar type
+        page_type = page_config.get('type', 'custom')
+        auto_generate = page_config.get('auto_generate_url', False)
+        
+        logger.debug(f"📄 page_config detectado:")
+        logger.debug(f"   type: {page_type}")
+        logger.debug(f"   auto_generate_url: {auto_generate}")
+        
+        # Validar page_type
+        valid_types = ['discovery', 'landing', 'custom']
+        if page_type not in valid_types:
+            raise ValueError(
+                f"page_config.type inválido: '{page_type}'. "
+                f"Valores permitidos: {valid_types}"
+            )
+        
+        # Caso 3: target_url == "auto" → Generar según page_type
+        if target_url_raw == "auto" or auto_generate:
+            if page_type == 'custom':
+                raise ValueError(
+                    "No se puede usar target_url='auto' con page_config.type='custom'. "
+                    "Especifica 'discovery' o 'landing', o provee target_url manual."
+                )
+            
+            extension_id = self.paths.get_extension_id()
+            
+            if page_type == 'discovery':
+                url = f"chrome-extension://{extension_id}/discovery/index.html"
+                logger.info(f"🔍 Modo DISCOVERY: {url}")
+            elif page_type == 'landing':
+                url = f"chrome-extension://{extension_id}/landing/index.html"
+                logger.info(f"🏠 Modo LANDING: {url}")
+            
+            return url
+        
+        # Caso 4: target_url manual especificado
+        if target_url_raw:
+            logger.info(f"🎯 Modo CUSTOM: Usando target_url manual")
+            return target_url_raw
+        
+        # Caso 5: Ni auto ni manual → Error
+        raise ValueError(
+            "target_url no especificado. Use 'auto' para generación automática "
+            "o provea URL manual."
+        )
     
     def _execute_handoff(
         self, 
