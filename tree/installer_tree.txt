@@ -15,13 +15,19 @@ bloom-development-extension/
     │   │   ├── discovery/
     │   │   │   ├── content-aistudio.js
     │   │   │   ├── discovery.js
-    │   │   │   ├── discovery.synapse.config.js
     │   │   │   ├── discoveryProtocol.js
     │   │   │   ├── index.html
     │   │   │   ├── onboarding.js
     │   │   │   └── script.js
+    │   │   ├── discovery.synapse.config.js
     │   │   ├── landing/
-    │   │   │   └── landing.synapse.config.js
+    │   │   │   ├── data-loader.js
+    │   │   │   ├── index.html
+    │   │   │   ├── landing.js
+    │   │   │   ├── landing.synapse.config.js
+    │   │   │   ├── landingProtocol.js
+    │   │   │   └── styles.css
+    │   │   ├── landing.synapse.config.js
     │   │   └── manifest.json
     │   ├── pem/
     │   │   ├── key_generation_extesion.crx

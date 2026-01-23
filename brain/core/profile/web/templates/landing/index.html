@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bloom - {{PROFILE_ALIAS}} Cockpit</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <!-- LOADING SCREEN -->
+    <div id="screen-loading" class="screen active">
+      <div class="loading-container">
+        <div class="spinner"></div>
+        <p class="loading-message" id="loading-message">🔄 Initializing Cockpit...</p>
+        <div class="status-indicators">
+          <div class="status-item">
+            <div class="status-dot checking" id="status-dot-extension"></div>
+            <span>Extension</span>
+          </div>
+          <div class="status-item">
+            <div class="status-dot checking" id="status-dot-host"></div>
+            <span>Native Host</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DASHBOARD SCREEN -->
+    <div id="screen-dashboard" class="screen">
+      <div class="header">
+        <div class="identity">
+          <div class="avatar" id="profile-avatar">B</div>
+          <div>
+            <h1 id="profile-alias">Loading...</h1>
+            <p class="role" id="profile-role">Worker</p>
+          </div>
+        </div>
+        
+        <div class="status-bar">
+          <div class="status-item">
+            <div class="status-dot checking" id="dashboard-status-extension"></div>
+            <span>Extension</span>
+          </div>
+          <div class="status-item">
+            <div class="status-dot checking" id="dashboard-status-host"></div>
+            <span>Native Host</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="stats-grid" id="stats-grid">
+        <!-- Stats will be injected here -->
+      </div>
+
+      <div class="content-grid">
+        <div class="content-card">
+          <h2>🔗 Linked Accounts</h2>
+          <div class="accounts-list" id="accounts-list">
+            <!-- Accounts will be injected here -->
+          </div>
+        </div>
+
+        <div class="content-card">
+          <h2>⚡ Quick Actions</h2>
+          <div class="actions-grid" id="actions-grid">
+            <!-- Actions will be injected here -->
+          </div>
+        </div>
+      </div>
+
+      <div class="system-info" id="system-info">
+        <!-- System info will be injected here -->
+      </div>
+    </div>
+
+    <!-- ERROR SCREEN -->
+    <div id="screen-error" class="screen">
+      <div class="error-container">
+        <div class="status-icon error-icon">❌</div>
+        <h1>Connection Error</h1>
+        <p class="error-message" id="error-message">Unable to establish connection</p>
+        <pre class="error-details" id="error-details"></pre>
+        <button class="btn" onclick="location.reload()">Retry</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="data-loader.js"></script>
+  <script src="../landing.synapse.config.js"></script>
+  <script src="landingProtocol.js"></script>
+  <script src="landing.js"></script>
+</body>
+</html>

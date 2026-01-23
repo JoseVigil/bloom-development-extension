@@ -199,10 +199,22 @@ bloom-development-extension/
 │   │   │   ├── background.js
 │   │   │   ├── content.js
 │   │   │   ├── discovery/
+│   │   │   │   ├── content-aistudio.js
+│   │   │   │   ├── discovery.js
+│   │   │   │   ├── discoveryProtocol.js
 │   │   │   │   ├── index.html
+│   │   │   │   ├── onboarding.js
 │   │   │   │   └── script.js
-│   │   │   ├── manifest.json
-│   │   │   └── synapse.config.js
+│   │   │   ├── discovery.synapse.config.js
+│   │   │   ├── landing/
+│   │   │   │   ├── data-loader.js
+│   │   │   │   ├── index.html
+│   │   │   │   ├── landing.js
+│   │   │   │   ├── landing.synapse.config.js
+│   │   │   │   ├── landingProtocol.js
+│   │   │   │   └── styles.css
+│   │   │   ├── landing.synapse.config.js
+│   │   │   └── manifest.json
 │   │   ├── pem/
 │   │   │   ├── key_generation_extesion.crx
 │   │   │   └── key_generation_extesion.pem
@@ -377,7 +389,7 @@ bloom-development-extension/
 │       ├── blueprint.json
 │       ├── build.bat
 │       ├── codebase/
-│       │   └── go_files_2026-01-20_16-41-40.txt
+│       │   └── go_files_2026-01-21_10-17-12.txt
 │       ├── docs/
 │       │   ├── Sentinel - Fase 2 Discovery - Health Modular.md
 │       │   ├── Sentinel Base.md
@@ -412,8 +424,11 @@ bloom-development-extension/
 │       │   │   └── persistence.go
 │       │   ├── seed/
 │       │   │   └── seed.go
-│       │   └── startup/
-│       │       └── startup.go
+│       │   ├── startup/
+│       │   │   └── startup.go
+│       │   └── ui/
+│       │       ├── cockpit.go
+│       │       └── refresher.go
 │       └── main.go
 └── brain/
     ├── .env
@@ -671,8 +686,11 @@ bloom-development-extension/
     │   │           └── landing/
     │   │               ├── __init__.py
     │   │               ├── __pycache__/ [... cache]
-    │   │               ├── inex.html
-    │   │               ├── script.js
+    │   │               ├── data-loader.js
+    │   │               ├── index.html
+    │   │               ├── landing.js
+    │   │               ├── landing.synapse.config.js
+    │   │               ├── landingProtocol.js
     │   │               └── styles.css
     │   ├── project/
     │   │   ├── __init__.py

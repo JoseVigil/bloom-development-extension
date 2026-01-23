@@ -255,8 +255,11 @@ bloom-development-extension/
     │   │           └── landing/
     │   │               ├── __init__.py
     │   │               ├── __pycache__/ [... cache]
-    │   │               ├── inex.html
-    │   │               ├── script.js
+    │   │               ├── data-loader.js
+    │   │               ├── index.html
+    │   │               ├── landing.js
+    │   │               ├── landing.synapse.config.js
+    │   │               ├── landingProtocol.js
     │   │               └── styles.css
     │   ├── project/
     │   │   ├── __init__.py
