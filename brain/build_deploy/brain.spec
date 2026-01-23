@@ -206,9 +206,28 @@ hiddenimports = [
 ]
 
 # Datos adicionales que deben incluirse (configs, templates, etc.)
+templates_src = PROJECT_ROOT / 'brain' / 'core' / 'profile' / 'web' / 'templates'
+
 datas = [
     (str(PROJECT_ROOT / 'brain' / 'VERSION'), '.'),
-    (str(PROJECT_ROOT / 'brain' / 'core' / 'profile' / 'web' / 'templates'), 'brain/core/profile/web/templates'),
+    
+    # Templates - Discovery
+    (str(templates_src / 'discovery' / '__init__.py'), 'brain/core/profile/web/templates/discovery'),
+    (str(templates_src / 'discovery' / 'index.html'), 'brain/core/profile/web/templates/discovery'),
+    (str(templates_src / 'discovery' / 'script.js'), 'brain/core/profile/web/templates/discovery'),
+    (str(templates_src / 'discovery' / 'styles.css'), 'brain/core/profile/web/templates/discovery'),
+    
+    # Templates - Landing
+    (str(templates_src / 'landing' / '__init__.py'), 'brain/core/profile/web/templates/landing'),
+    (str(templates_src / 'landing' / 'index.html'), 'brain/core/profile/web/templates/landing'),
+    (str(templates_src / 'landing' / 'data-loader.js'), 'brain/core/profile/web/templates/landing'),
+    (str(templates_src / 'landing' / 'landing.js'), 'brain/core/profile/web/templates/landing'),
+    (str(templates_src / 'landing' / 'landing.synapse.config.js'), 'brain/core/profile/web/templates/landing'),
+    (str(templates_src / 'landing' / 'landingProtocol.js'), 'brain/core/profile/web/templates/landing'),
+    (str(templates_src / 'landing' / 'styles.css'), 'brain/core/profile/web/templates/landing'),
+    
+    # Templates - Base __init__.py
+    (str(templates_src / '__init__.py'), 'brain/core/profile/web/templates'),
 ]
 
 # Forzar la estructura física de core/profile para evitar el bug de colisión de nombres
@@ -217,6 +236,7 @@ core_profile_src = PROJECT_ROOT / 'brain' / 'core' / 'profile'
 datas.extend([
     (str(core_profile_src / '__init__.py'), 'brain/core/profile'),
     (str(core_profile_src / 'profile_manager.py'), 'brain/core/profile'),
+    (str(core_profile_src / 'profile_launcher.py'), 'brain/core/profile'),
     (str(core_profile_src / 'path_resolver.py'), 'brain/core/profile'),
     # No olvides la lógica interna y web (si no PyInstaller los ignorará)
     (str(core_profile_src / 'logic' / '__init__.py'), 'brain/core/profile/logic'),
