@@ -140,8 +140,7 @@ bloom-development-extension/
     │   │       │   └── brain.exe
     │   │       ├── libwinpthread-1.dll
     │   │       ├── profiles.json
-    │   │       ├── sentinel.exe
-    │   │       └── sentinel.exe~
+    │   │       └── sentinel.exe
     │   ├── host/
     │   │   └── com.bloom.nucleus.bridge.json
     │   └── nssm/
@@ -203,7 +202,7 @@ bloom-development-extension/
         ├── blueprint.json
         ├── build.bat
         ├── codebase/
-        │   └── go_files_2026-01-23_11-59-44.txt
+        │   └── go_files_2026-01-24_19-29-47.txt
         ├── docs/
         │   ├── Sentinel - Fase 2 Discovery - Health Modular.md
         │   ├── Sentinel Base.md
@@ -223,7 +222,8 @@ bloom-development-extension/
         │   │   ├── config.go
         │   │   ├── core.go
         │   │   ├── logger.go
-        │   │   └── paths.go
+        │   │   ├── paths.go
+        │   │   └── telemetry.go
         │   ├── discovery/
         │   │   ├── discovery.go
         │   │   └── vscode.go
@@ -242,5 +242,8 @@ bloom-development-extension/
         │   │   └── startup.go
         │   └── ui/
         │       ├── cockpit.go
+        │       ├── dashboard.go
+        │       ├── health_station.go
+        │       ├── log_station.go
         │       └── refresher.go
         └── main.go

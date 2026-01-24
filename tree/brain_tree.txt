@@ -249,7 +249,11 @@ bloom-development-extension/
     │   │           ├── discovery/
     │   │           │   ├── __init__.py
     │   │           │   ├── __pycache__/ [... cache]
+    │   │           │   ├── content-aistudio.js
+    │   │           │   ├── discovery.js
+    │   │           │   ├── discoveryProtocol.js
     │   │           │   ├── index.html
+    │   │           │   ├── onboarding.js
     │   │           │   ├── script.js
     │   │           │   └── styles.css
     │   │           └── landing/

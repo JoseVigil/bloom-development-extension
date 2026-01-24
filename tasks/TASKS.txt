@@ -306,9 +306,9 @@ https://chatgpt.com/c/696a30fd-c8ec-8326-a2cf-d602544ad602
 roamingpads go versioning 
 https://grok.com/c/b25c93fc-fa5d-4f5f-804d-ae85bc8441b0?rid=585a3d21-d814-4a80-a221-ce5f29c08316
 
-eric sentinel install
+elias sentinel install
 https://aistudio.google.com/prompts/1T0FG49qbzVG24q_QGGgOjjbGXIg2MMlc
-eric sentinel launch
+elias sentinel launch
 https://aistudio.google.com/prompts/1T0FG49qbzVG24q_QGGgOjjbGXIg2MMlc
 
 notimation sentinel go development
