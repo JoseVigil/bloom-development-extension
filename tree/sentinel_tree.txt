@@ -1,0 +1,46 @@
+bloom-development-extension/
+└── sentinel/
+    ├── blueprint.json
+    ├── build.bat
+    ├── codebase/
+    │   └── go_files_2026-01-23_18-48-21.txt
+    ├── docs/
+    │   ├── Sentinel - Fase 2 Discovery - Health Modular.md
+    │   ├── Sentinel Base.md
+    ├── extract_go_files.py
+    ├── go.mod
+    ├── go.sum
+    ├── internal/
+    │   ├── boot/
+    │   │   ├── npm.go
+    │   │   ├── reaper.go
+    │   │   └── vscode.go
+    │   ├── core/
+    │   │   ├── config.go
+    │   │   ├── core.go
+    │   │   ├── logger.go
+    │   │   ├── paths.go
+    │   │   └── telemetry.go
+    │   ├── discovery/
+    │   │   ├── discovery.go
+    │   │   └── vscode.go
+    │   ├── health/
+    │   │   ├── guardian.go
+    │   │   └── health.go
+    │   ├── ignition/
+    │   │   ├── ignition.go
+    │   │   ├── reaper.go
+    │   │   └── telemetry.go
+    │   ├── persistence/
+    │   │   └── persistence.go
+    │   ├── seed/
+    │   │   └── seed.go
+    │   ├── startup/
+    │   │   └── startup.go
+    │   └── ui/
+    │       ├── cockpit.go
+    │       ├── dashboard.go
+    │       ├── health_station.go
+    │       ├── log_station.go
+    │       └── refresher.go
+    └── main.go

@@ -1,0 +1,32 @@
+bloom-development-extension/
+└── native/
+    ├── .DS_Store
+    ├── bin/
+    │   ├── .DS_Store
+    │   ├── bin/
+    │   ├── config/
+    │   │   └── profiles.json
+    │   ├── darwin/
+    │   │   └── x64/
+    │   │       └── bloom-host
+    │   ├── linux/
+    │   │   └── bloom-host
+    │   ├── logs/
+    │   │   └── sentinel_2026-01-17.log
+    │   ├── profiles/
+    │   └── win32/
+    │       ├── bloom-host.exe
+    │       ├── blueprint.json
+    │       ├── brain/
+    │       │   ├── _internal/ [... dependencies]
+    │       │   └── brain.exe
+    │       ├── libwinpthread-1.dll
+    │       ├── profiles.json
+    │       └── sentinel.exe
+    ├── host/
+    │   └── com.bloom.nucleus.bridge.json
+    └── nssm/
+        ├── win32/
+        │   └── nssm.exe
+        └── win64/
+            └── nssm.exe

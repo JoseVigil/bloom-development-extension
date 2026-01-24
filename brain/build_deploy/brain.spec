@@ -216,6 +216,10 @@ datas = [
     (str(templates_src / 'discovery' / 'index.html'), 'brain/core/profile/web/templates/discovery'),
     (str(templates_src / 'discovery' / 'script.js'), 'brain/core/profile/web/templates/discovery'),
     (str(templates_src / 'discovery' / 'styles.css'), 'brain/core/profile/web/templates/discovery'),
+    (str(templates_src / 'discovery' / 'content-aistudio.js'), 'brain/core/profile/web/templates/discovery'),
+    (str(templates_src / 'discovery' / 'discovery.js'), 'brain/core/profile/web/templates/discovery'),
+    (str(templates_src / 'discovery' / 'discoveryProtocol.js'), 'brain/core/profile/web/templates/discovery'),
+    (str(templates_src / 'discovery' / 'onboarding.js'), 'brain/core/profile/web/templates/discovery'),
     
     # Templates - Landing
     (str(templates_src / 'landing' / '__init__.py'), 'brain/core/profile/web/templates/landing'),
