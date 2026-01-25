@@ -2,19 +2,30 @@ bloom-development-extension/
 └── sentinel/
     ├── blueprint.json
     ├── build.bat
+    ├── cli/
+    │   └── help_renderer.go
     ├── codebase/
-    │   └── go_files_2026-01-23_18-48-21.txt
     ├── docs/
     │   ├── Sentinel - Fase 2 Discovery - Health Modular.md
     │   ├── Sentinel Base.md
+    │   └── research/
+    │       ├── CHROMIUM PATH FIX - Arquitectura de Rutas.md
+    │       ├── SENTINEL v1.2 - Estructura de Archivos.md
+    │       └── SENTINEL v1.2 Deployment & Testing Guide.md
     ├── extract_go_files.py
     ├── go.mod
     ├── go.sum
+    ├── help/
+    │   ├── sentinel_help.json
+    │   └── sentinel_help.txt
     ├── internal/
     │   ├── boot/
+    │   │   ├── dev.go
     │   │   ├── npm.go
     │   │   ├── reaper.go
     │   │   └── vscode.go
+    │   ├── bridge/
+    │   │   └── bridge.go
     │   ├── core/
     │   │   ├── config.go
     │   │   ├── core.go

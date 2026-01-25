@@ -17,9 +17,10 @@ import (
 
 func init() {
 	core.RegisterCommand("DEVELOPMENT", func(c *core.Core) *cobra.Command {
-		return &cobra.Command{
+		cmd := &cobra.Command{
 			Use:   "dev-start",
 			Short: "Inicia el entorno de desarrollo integrado",
+			Example: `  sentinel dev-start`,
 			Run: func(cmd *cobra.Command, args []string) {
 				c.Logger.Info("🚀 Iniciando Entorno de Desarrollo...")
 				
@@ -57,5 +58,17 @@ func init() {
 				CleanPorts([]int{5173, 3001, 5678})
 			},
 		}
+
+		if cmd.Annotations == nil {
+			cmd.Annotations = make(map[string]string)
+		}
+		cmd.Annotations["requires"] = `  - brain.exe disponible y ejecutable
+  - VSCode instalado y detectado en PATH
+  - Node.js y npm para servidor Svelte (puerto 5173)
+  - Puertos 5173, 3001, 5678 libres
+  - extension_path y test_workspace configurados en sentinel.yaml
+  - Python runtime en resources/runtime/`
+
+		return cmd
 	})
 }
