@@ -1,313 +1,62 @@
-internal\seed\seed.go
-
-```go
-package seed
-
-import (
-	"bytes"
-	"encoding/json"
-	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"sentinel/internal/core"
-	"sentinel/internal/discovery"
-	"sentinel/internal/startup"
-	"strings"
-	"time"
-
-	"golang.org/x/sys/windows/registry"
-)
-
-type ProfileEntry struct {
-	ID            string `json:"id"`
-	Alias         string `json:"alias"`
-	Master        bool   `json:"master"`
-	Path          string `json:"path"`
-	SpecPath      string `json:"spec_path"`
-	ConfigDir     string `json:"config_dir"`
-	LogsDir       string `json:"logs_dir"`
-	ExtensionPath string `json:"extension_path"`
-	LaunchCount   int    `json:"launch_count"`
-}
-
-type ProfilesRegistry struct {
-	Profiles []ProfileEntry `json:"profiles"`
-}
-
-func HandleSeed(c *core.Core, alias string, isMaster bool) (string, error) {
-	registry_data := loadProfilesRegistry(c)
-	for _, p := range registry_data.Profiles {
-		if p.Alias == alias {
-			return "", fmt.Errorf("alias_duplicado: %s", alias)
-		}
-	}
-
-	sm, _ := discovery.DiscoverSystem(c.Paths.BinDir)
-	cmd := exec.Command(sm.BrainPath, "--json", "profile", "create", alias)
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("brain_error: %v", err)
-	}
-
-	rawOut := strings.TrimSpace(out.String())
-	jsonStart := strings.LastIndex(rawOut, "{")
-	jsonEnd := strings.LastIndex(rawOut, "}")
-	if jsonStart == -1 || jsonEnd == -1 {
-		return "", fmt.Errorf("formato_invalido: %s", rawOut)
-	}
-
-	var brainRes struct{ UUID string `json:"uuid"` }
-	if err := json.Unmarshal([]byte(rawOut[jsonStart:jsonEnd+1]), &brainRes); err != nil {
-		return "", err
-	}
-	uuid := brainRes.UUID
-
-	// Rutas Base del Perfil
-	profileDir := filepath.Join(c.Paths.ProfilesDir, uuid)
-	extDir := filepath.Join(profileDir, "extension")
-	logsDir := filepath.Join(c.Paths.LogsDir, "profiles", uuid)
-	configDir := filepath.Join(c.Paths.AppDataDir, "config", "profile", uuid)
-	specPath := filepath.Join(configDir, "ignition_spec.json")
-
-	_ = os.MkdirAll(configDir, 0755)
-	_ = os.MkdirAll(extDir, 0755)
-	_ = os.MkdirAll(logsDir, 0755)
-
-	// 1. ESCRIBIR MANIFIESTO NATIVO
-	shortID := uuid[:8]
-	hostName := fmt.Sprintf("com.bloom.synapse.%s", shortID)
-	manifestPath := filepath.Join(configDir, hostName+".json")
-	if err := writeNativeManifest(c, manifestPath, hostName, uuid); err != nil {
-		return "", err
-	}
-
-	// 2. REGISTRO DE WINDOWS (HKCU)
-	if err := registerInWindows(hostName, manifestPath); err != nil {
-		c.Logger.Error("[SEED] No se pudo registrar Native Messaging: %v", err)
-	}
-
-	// 3. GENERAR SPEC CON TEMPLATE DE ORO (AJUSTE CRÍTICO 3)
-	_ = writeIgnitionSpec(c, sm, uuid, profileDir, extDir, logsDir, specPath)
-
-	updateProfilesInventory(c, uuid, alias, isMaster, profileDir, configDir, extDir, logsDir, specPath)
-
-	if isMaster {
-		status := startup.LoadCurrentStatus(c)
-		status.MasterProfile = uuid
-		status.Timestamp = time.Now().Format(time.RFC3339)
-		_ = startup.SaveSystemStatus(c, status)
-	}
-
-	return uuid, nil
-}
-
-func writeNativeManifest(c *core.Core, path, hostName, uuid string) error {
-	// AJUSTE CRÍTICO 1: El binario es bloom-host.exe dentro de bin/native/
-	bridgePath := filepath.Join(c.Paths.BinDir, "native", "bloom-host.exe")
-	
-	manifest := map[string]interface{}{
-		"name":        hostName,
-		"description": "Synapse v2 Native Bridge Host",
-		"path":        bridgePath,
-		"type":        "stdio",
-		"allowed_origins": []string{
-			fmt.Sprintf("chrome-extension://%s/", c.Config.Provisioning.ExtensionID),
-		},
-		"args": []string{"--profile-id", uuid},
-	}
-	data, _ := json.MarshalIndent(manifest, "", "  ")
-	return os.WriteFile(path, data, 0644)
-}
-
-func registerInWindows(hostName, manifestPath string) error {
-	keyPath := `Software\Google\Chrome\NativeMessagingHosts\` + hostName
-	k, _, err := registry.CreateKey(registry.CURRENT_USER, keyPath, registry.ALL_ACCESS)
-	if err != nil { return err }
-	defer k.Close()
-	return k.SetStringValue("", manifestPath)
-}
-
-func writeIgnitionSpec(c *core.Core, sm *discovery.SystemMap, uuid, profileDir, extDir, logsDir, specPath string) error {
-	spec := map[string]interface{}{
-		"engine": map[string]string{
-			"executable": sm.ChromePath,
-			"type":       "chromium",
-		},
-		"engine_flags": []string{
-			"--no-sandbox",
-			"--test-type",
-			"--disable-web-security",
-			// AJUSTE CRÍTICO 3: Sin espacios en la lista de features
-			"--disable-features=IsolateOrigins,site-per-process",
-			"--allow-running-insecure-content",
-			"--no-first-run",
-			"--no-default-browser-check",
-			"--disable-sync",
-			"--remote-debugging-port=0",
-			"--enable-logging",
-			"--v=1",
-			"--disable-session-crashed-bubble",
-		},
-		"paths": map[string]string{
-			"extension": extDir,
-			"logs_base":  logsDir,
-			"user_data":  profileDir,
-		},
-		"target_url":   fmt.Sprintf("chrome-extension://%s/discovery/index.html", c.Config.Provisioning.ExtensionID),
-		"custom_flags": []string{},
-	}
-	data, _ := json.MarshalIndent(spec, "", "  ")
-	return os.WriteFile(specPath, data, 0644)
-}
-
-func updateProfilesInventory(c *core.Core, uuid, alias string, isMaster bool, profileDir, configDir, extDir, logsDir, specPath string) {
-	registry_data := loadProfilesRegistry(c)
-	newEntry := ProfileEntry{
-		ID:            uuid,
-		Alias:         alias,
-		Master:        isMaster,
-		Path:          profileDir,
-		ConfigDir:     configDir,
-		SpecPath:      specPath,
-		LogsDir:       logsDir,
-		ExtensionPath: extDir,
-		LaunchCount:   0,
-	}
-
-	for i, p := range registry_data.Profiles {
-		if isMaster { registry_data.Profiles[i].Master = false }
-		if p.ID == uuid {
-			newEntry.LaunchCount = p.LaunchCount
-			registry_data.Profiles[i] = newEntry
-			saveRegistry(c, registry_data)
-			return
-		}
-	}
-	registry_data.Profiles = append(registry_data.Profiles, newEntry)
-	saveRegistry(c, registry_data)
-}
-
-func saveRegistry(c *core.Core, reg ProfilesRegistry) {
-	path := filepath.Join(c.Paths.AppDataDir, "config", "profiles.json")
-	data, _ := json.MarshalIndent(reg, "", "  ")
-	_ = os.WriteFile(path, data, 0644)
-}
-
-func loadProfilesRegistry(c *core.Core) ProfilesRegistry {
-	path := filepath.Join(c.Paths.AppDataDir, "config", "profiles.json")
-	data, err := os.ReadFile(path)
-	if err != nil { return ProfilesRegistry{Profiles: []ProfileEntry{}} }
-	var registry_data ProfilesRegistry
-	if err := json.Unmarshal(data, &registry_data); err != nil {
-		var list []ProfileEntry
-		json.Unmarshal(data, &list)
-		registry_data.Profiles = list
-	}
-	return registry_data
-}
-```
-
---------------------------------------------------------------------------------
-
 main.go
 
 ```go
 package main
 
 import (
-	"bufio"
-	"encoding/json"
-	"fmt"
-	"net"
 	"os"
-	"os/exec"
-	"os/signal"
-	"path/filepath"
-	"runtime"
-	"strconv"
-	"sentinel/internal/ui"
-	"sentinel/internal/boot"
 	"sentinel/internal/core"
-	"sentinel/internal/discovery"
-	"sentinel/internal/health"
-	"sentinel/internal/persistence"
-	"sentinel/internal/ignition"
-	"sentinel/internal/startup" 
-	"sentinel/internal/seed"    
-	"syscall"
-	"time"
+	"sentinel/internal/startup"
+	"github.com/spf13/cobra"
+
+	// Estos imports activan el auto-descubrimiento. 
+	// No los borres aunque parezca que no se usan, el "_" es para eso.
+	_ "sentinel/internal/boot"
+	_ "sentinel/internal/bridge"
+	_ "sentinel/internal/health"
+	_ "sentinel/internal/ignition"
+	_ "sentinel/internal/seed"
+	_ "sentinel/internal/ui"
 )
 
-// RPCRequest define la estructura de comandos entrantes desde Electron
-type RPCRequest struct {
-	Method string          `json:"method"`
-	Params json.RawMessage `json:"params"`
-}
-
 func main() {
-	// 1. Inicialización del Core (Config y Paths)
+	// 1. Inicialización del Core
 	c, err := core.Initialize()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "✗ Error fatal de inicialización: %v\n", err)
 		os.Exit(1)
 	}
 	defer c.Close()
 
-	// 2. FASE STARTUP: Identidad, Manifiesto y Estado Inicial
+	// 2. Fase Startup
 	if err := startup.Initialize(c); err != nil {
 		c.Logger.Error("Fallo crítico en fase Startup: %v", err)
 		os.Exit(1)
 	}
 
-	// 3. ENRUTADOR DE COMANDOS CLI
-	if len(os.Args) > 1 {
-		switch os.Args[1] {
-		case "health":
-			runHealthCommand(c)
-			return
-
-		case "seed":
-			if len(os.Args) < 4 {
-				c.Logger.Error("Uso: sentinel seed [alias] [is_master (true|false)]")
-				os.Exit(1)
-			}
-			alias := os.Args[2]
-			isMaster, _ := strconv.ParseBool(os.Args[3])
-			runSeedCommand(c, alias, isMaster)
-			return
-
-		case "bridge":
-			runBridgeMode(c)
-			return
-
-		case "dev-start":
-			runDevStartCommand(c)
-			return
-
-		case "launch":
-			if len(os.Args) < 3 {
-				c.Logger.Error("Uso: sentinel launch [profile_id] [--cockpit|--discovery]")
-				os.Exit(1)
-			}
-			profileID := os.Args[2]
-			mode := "--cockpit"
-			if len(os.Args) > 3 {
-				mode = os.Args[3]
-			}
-			runLaunchCommand(c, profileID, mode)
-			return
-
-		case "cockpit":
-			runCockpit(c)
-			return
-		}
+	// 3. Comando Raíz
+	rootCmd := &cobra.Command{
+		Use:   "sentinel",
+		Short: "Sentinel Base v" + c.Config.Version,
+		Run: func(cmd *cobra.Command, args []string) {
+			c.Logger.Success("Sentinel Base v%s activa y sincronizada.", c.Config.Version)
+		},
 	}
 
-	// Salida por defecto si no hay argumentos
-	c.Logger.Success("Sentinel Base v%s activa y sincronizada.", c.Config.Version)
-	fmt.Println(c.Paths.String())
+	// 4. Integración de comandos registrados en internal/
+	for _, factory := range core.CommandRegistry {
+		rootCmd.AddCommand(factory(c))
+	}
+
+	// 5. Ejecución
+	if err := rootCmd.Execute(); err != nil {
+		os.Exit(1)
+	}
+}
+
+// RPCRequest define la estructura de comandos entrantes desde Electron
+type RPCRequest struct {
+	Method string          `json:"method"`
+	Params json.RawMessage `json:"params"`
 }
 
 // ============================================================================

@@ -9,7 +9,25 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+	"github.com/spf13/cobra"
 )
+
+func init() {
+	core.RegisterCommand("UI", func(c *core.Core) *cobra.Command {
+		var healthMode bool
+		cmd := &cobra.Command{
+			Use:   "cockpit",
+			Short: "Lanza la interfaz de monitoreo integrada",
+			Run: func(cmd *cobra.Command, args []string) {
+				mode := "log"
+				if healthMode { mode = "health" }
+				Launch(c, mode)
+			},
+		}
+		cmd.Flags().BoolVar(&healthMode, "health", false, "Iniciar directamente en modo health")
+		return cmd
+	})
+}
 
 func Launch(c *core.Core, mode string) {
 	telPath := filepath.Join(c.Paths.LogsDir, "telemetry.json")
