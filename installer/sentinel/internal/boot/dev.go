@@ -7,7 +7,6 @@ import (
 	"sentinel/internal/core"
 	"sentinel/internal/discovery"
 	"sentinel/internal/health"
-	"sentinel/internal/persistence"
 	"sentinel/internal/startup"
 	"syscall"
 	"time"
@@ -45,8 +44,7 @@ func init() {
 
 				c.Logger.Info("🔍 Validando estado...")
 				time.Sleep(2 * time.Second)
-				report, _ := health.CheckHealth(c, sm)
-				persistence.SaveNucleusState(c, report)
+				_, _ = health.CheckHealth(c, sm)  // ✅ Ya guarda internamente el estado
 
 				sigs := make(chan os.Signal, 1)
 				signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)

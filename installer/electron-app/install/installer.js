@@ -358,13 +358,39 @@ async function runFullInstallation(mainWindow = null) {
       throw new Error('Failed to start Brain service');
     }
 
+    // 7.5. Crear nucleus.json ANTES de seed (Brain lo requiere)
+    logger.info('Creating minimal nucleus.json for Brain...');
+    const nucleusPath = path.join(paths.configDir, 'nucleus.json');
+    const nucleusConfig = {
+      timestamp: new Date().toISOString(),
+      onboarding_completed: false,
+      executables_valid: true,
+      master_profile: null,  // Se llenará después de seed
+      system_map: {
+        brain_exe: path.join(paths.binDir, 'brain', 'brain.exe'),
+        brain_service: 'running',
+        browser_engine: 'chromium',
+        chrome_exe: chromiumResult.chromiumPath,
+        extension_id: null,  // Se llenará en seed
+        operational_mode: 'production'
+      },
+      services: [
+        { name: 'Core Bridge', port: 5678, active: true },
+        { name: 'Extension API', port: 3001, active: false },
+        { name: 'Svelte Dev', port: 5173, active: false }
+      ]
+    };
+
+    await fs.writeJson(nucleusPath, nucleusConfig, { spaces: 2 });
+    logger.success('nucleus.json created (minimal)');
+
     // 8. Sentinel profile creation
     emitProgress(mainWindow, 'sentinel-handoff');
     const seedResult = await executeSentinelCommand([
+      '--json',
       'seed',
       'MasterWorker',
-      'true',
-      '--json'
+      'true'
     ]);
 
     if (!seedResult?.success) {
@@ -376,38 +402,33 @@ async function runFullInstallation(mainWindow = null) {
       throw new Error('No profile ID returned by Sentinel');
     }
 
+    logger.success(`Profile created: ${profileId}`);
+
+    // Actualizar nucleus.json con profileId
+    nucleusConfig.master_profile = profileId;
+    nucleusConfig.timestamp = new Date().toISOString();
+    await fs.writeJson(nucleusPath, nucleusConfig, { spaces: 2 });
+    logger.success('nucleus.json updated with master_profile');
+
     // 9. Launch & validation
     emitProgress(mainWindow, 'validation', 'Launching profile');
     const launchResult = await executeSentinelCommand([
       '--json',
-      'launch', 
-      profileId, 
+      'launch',
+      profileId,
       '--mode', 'discovery'
     ]);
+
+    if (!launchResult?.success) {
+      logger.warn(`Launch warning: ${launchResult?.error || 'unknown'}`);
+    }
 
     emitProgress(mainWindow, 'validation', 'Final health check');
     const health = await executeSentinelCommand(['--json', 'health']);
 
     logger.info(`Health check: ${health.connected ? `OK (port ${health.port})` : 'not connected yet (may still initialize)'}`);
 
-    // 10. Config
-    const config = {
-      version: APP_VERSION,
-      installed_at: new Date().toISOString(),
-      installer_mode: 'sentinel-delegated',
-      masterProfileId: profileId,
-      chromium: {
-        path: chromiumResult.chromiumPath,
-        version: chromiumResult.version,
-        size: chromiumResult.size
-      },
-      note: 'Managed by Sentinel'
-    };
-
-    const nucleusPath = path.join(paths.configDir, 'nucleus.json');
-    await fs.writeJson(nucleusPath, config, { spaces: 2 });
-
-    // Shortcuts (opcional)
+    // 10. Shortcuts (opcional)
     try {
       const { createLauncherShortcuts } = require('./launcher-creator');
       await createLauncherShortcuts({
