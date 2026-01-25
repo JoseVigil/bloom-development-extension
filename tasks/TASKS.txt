@@ -45,7 +45,6 @@ V6
 gmail notimation electron (Documentación Maestra de Arquitectura de Instalación)
 https://claude.ai/chat/2c14461a-053b-4106-b2dd-e9f6aafe5d22
 
-
 uitool descarga artifacts
 https://claude.ai/chat/866e7c25-82c0-4dcb-baaf-848d5bddf815
 research https://claude.ai/chat/755029e1-ae03-4b2b-80a6-6f7f635abeca
@@ -336,3 +335,12 @@ uitool discovery con register en google y key gemini
 https://claude.ai/chat/74476bfe-7145-40fc-8f26-e0389d28aadf
 V1 jose gmail Onboarding Google & Gemini: Bloom TODO
 https://aistudio.google.com/prompts/1kTjxI3l5FcBdpSTiUr26hltiYFxniUAP
+
+jose gmail sentinel help 
+https://aistudio.google.com/prompts/1AXEgD3Fz4gb7RzVM2MpfvSbu95qLt7AY
+
+jose gmail merge PR local 
+https://chatgpt.com/c/69715848-5d88-832e-8a55-bbc6920d35f7
+
+roamtocuh btips modelo financiero IMPORTANTE
+https://claude.ai/chat/f5bf37ee-f960-4a5a-8d94-0868cac2e331
