@@ -4,7 +4,7 @@ import (
 	"os"
 	"sentinel/cli"
 	"sentinel/internal/core"
-	"sentinel/internal/startup" // <--- Importado
+	"sentinel/internal/startup"
 	"github.com/spf13/cobra"
 
 	// Registro de comandos mediante imports en blanco
@@ -20,13 +20,11 @@ func main() {
 	// 1. Inicialización del Core (Config, Paths, Logger)
 	c, err := core.Initialize()
 	if err != nil {
-		// No usamos Logger aquí porque si falla Initialize, el logger no existe
 		os.Exit(1)
 	}
 	defer c.Close()
 
-	// 2. FASE STARTUP (Aquí se usa el paquete "startup")
-	// Esta línea es la que resuelve el error "imported and not used"
+	// 2. FASE STARTUP
 	if err := startup.Initialize(c); err != nil {
 		c.Logger.Error("Fallo crítico en fase Startup: %v", err)
 		os.Exit(1)
@@ -37,14 +35,15 @@ func main() {
 		Use:   "sentinel",
 		Short: "Sentinel Base v" + c.Config.Version,
 		Run: func(cmd *cobra.Command, args []string) {
-			// Acción por defecto si se ejecuta sin comandos
 			c.Logger.Success("Sentinel Base v%s activa y sincronizada.", c.Config.Version)
 		},
 	}
 
 	// 4. Flags Globales (Persistent Flags)
 	var jsonHelp bool
+	var jsonOutput bool
 	rootCmd.PersistentFlags().BoolVar(&jsonHelp, "json-help", false, "Exporta el help en formato JSON para integración con Electron")
+	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output en formato JSON para integración programática")
 
 	// 5. Configuración del Help Renderer (cli/)
 	rootCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
@@ -69,8 +68,13 @@ func main() {
 	}
 
 	// 7. Intercepción de flags globales antes de la ejecución
-	// Esto permite que 'sentinel --json-help' funcione incluso con args inválidos
 	_ = rootCmd.ParseFlags(os.Args)
+	
+	// Capturamos el valor de --json y lo inyectamos en Core
+	if jsonOutput {
+		c.SetJSONMode(true)
+	}
+	
 	if jsonHelp {
 		cli.RenderHelpJSON(rootCmd)
 		return

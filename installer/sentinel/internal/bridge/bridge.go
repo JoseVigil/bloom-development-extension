@@ -40,11 +40,15 @@ func init() {
 							Master bool
 						}
 						json.Unmarshal(req.Params, &params)
-						uuid, err := seed.HandleSeed(c, params.Alias, params.Master)
+						uuid, path, err := seed.HandleSeed(c, params.Alias, params.Master)
 						if err != nil {
 							sendError("SEED_ERROR", err.Error())
 						} else {
-							sendResponse(map[string]string{"status": "success", "uuid": uuid})
+							sendResponse(map[string]interface{}{
+								"status": "success",
+								"uuid":   uuid,
+								"path":   path,
+							})
 						}
 
 					case "health":

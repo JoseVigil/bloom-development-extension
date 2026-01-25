@@ -362,8 +362,8 @@ async function runFullInstallation(mainWindow = null) {
     emitProgress(mainWindow, 'sentinel-handoff');
     const seedResult = await executeSentinelCommand([
       'seed',
-      '--alias', 'MasterWorker',
-      '--master',
+      'MasterWorker',
+      'true',
       '--json'
     ]);
 
@@ -378,10 +378,15 @@ async function runFullInstallation(mainWindow = null) {
 
     // 9. Launch & validation
     emitProgress(mainWindow, 'validation', 'Launching profile');
-    await executeSentinelCommand(['launch', profileId, '--discovery', '--json']);
+    const launchResult = await executeSentinelCommand([
+      '--json',
+      'launch', 
+      profileId, 
+      '--mode', 'discovery'
+    ]);
 
     emitProgress(mainWindow, 'validation', 'Final health check');
-    const health = await executeSentinelCommand(['health', '--json']);
+    const health = await executeSentinelCommand(['--json', 'health']);
 
     logger.info(`Health check: ${health.connected ? `OK (port ${health.port})` : 'not connected yet (may still initialize)'}`);
 
@@ -399,7 +404,8 @@ async function runFullInstallation(mainWindow = null) {
       note: 'Managed by Sentinel'
     };
 
-    await fs.writeJson(paths.configFile, config, { spaces: 2 });
+    const nucleusPath = path.join(paths.configDir, 'nucleus.json');
+    await fs.writeJson(nucleusPath, config, { spaces: 2 });
 
     // Shortcuts (opcional)
     try {
