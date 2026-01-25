@@ -12,9 +12,9 @@ import (
 	"sentinel/internal/startup"
 	"strings"
 	"time"
-	"strconv" // <--- Faltaba este
+	"strconv"
 
-	"github.com/spf13/cobra" // <--- Faltaba este
+	"github.com/spf13/cobra"
 	"golang.org/x/sys/windows/registry"
 )
 
@@ -25,25 +25,26 @@ func init() {
 			Short: "Registra una nueva identidad de perfil",
 			Args:  cobra.ExactArgs(2),
 			Example: `  sentinel seed profile_001 true
-  sentinel seed burner_temp false`,
+  sentinel --json seed burner_temp false | jq .`,
 			Run: func(cmd *cobra.Command, args []string) {
 				alias := args[0]
 				isMaster, _ := strconv.ParseBool(args[1])
 				
-				uuid, err := HandleSeed(c, alias, isMaster)
+				uuid, profilePath, err := HandleSeed(c, alias, isMaster)
 				if err != nil {
-					res, _ := json.Marshal(map[string]string{"status": "error", "message": err.Error()})
-					fmt.Println(string(res))
+					if c.IsJSON {
+						outputSeedError(err)
+					} else {
+						c.Logger.Error("Seed failed: %v", err)
+					}
 					os.Exit(1)
 				}
 				
-				res, _ := json.Marshal(map[string]interface{}{
-					"status": "success", 
-					"uuid":   uuid, 
-					"alias":  alias,
-					"master": isMaster,
-				})
-				fmt.Println(string(res))
+				if c.IsJSON {
+					outputSeedJSON(uuid, alias, profilePath, isMaster)
+				} else {
+					outputSeedHuman(c, uuid, alias, profilePath, isMaster)
+				}
 			},
 		}
 
@@ -58,6 +59,41 @@ func init() {
 		return cmd
 	})
 }
+
+func outputSeedJSON(uuid, alias, path string, isMaster bool) {
+	result := map[string]interface{}{
+		"success": true,
+		"data": map[string]interface{}{
+			"uuid":      uuid,
+			"alias":     alias,
+			"path":      path,
+			"is_master": isMaster,
+		},
+	}
+	jsonBytes, _ := json.Marshal(result)
+	fmt.Println(string(jsonBytes))
+}
+
+func outputSeedError(err error) {
+	result := map[string]interface{}{
+		"success": false,
+		"error":   err.Error(),
+	}
+	jsonBytes, _ := json.Marshal(result)
+	fmt.Println(string(jsonBytes))
+}
+
+func outputSeedHuman(c *core.Core, uuid, alias, path string, isMaster bool) {
+	res := map[string]interface{}{
+		"status": "success",
+		"uuid":   uuid,
+		"alias":  alias,
+		"master": isMaster,
+	}
+	out, _ := json.MarshalIndent(res, "", "  ")
+	fmt.Println(string(out))
+}
+
 type ProfileEntry struct {
 	ID            string `json:"id"`
 	Alias         string `json:"alias"`
@@ -74,11 +110,11 @@ type ProfilesRegistry struct {
 	Profiles []ProfileEntry `json:"profiles"`
 }
 
-func HandleSeed(c *core.Core, alias string, isMaster bool) (string, error) {
+func HandleSeed(c *core.Core, alias string, isMaster bool) (string, string, error) {
 	registry_data := loadProfilesRegistry(c)
 	for _, p := range registry_data.Profiles {
 		if p.Alias == alias {
-			return "", fmt.Errorf("alias_duplicado: %s", alias)
+			return "", "", fmt.Errorf("alias_duplicado: %s", alias)
 		}
 	}
 
@@ -87,23 +123,22 @@ func HandleSeed(c *core.Core, alias string, isMaster bool) (string, error) {
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("brain_error: %v", err)
+		return "", "", fmt.Errorf("brain_error: %v", err)
 	}
 
 	rawOut := strings.TrimSpace(out.String())
 	jsonStart := strings.LastIndex(rawOut, "{")
 	jsonEnd := strings.LastIndex(rawOut, "}")
 	if jsonStart == -1 || jsonEnd == -1 {
-		return "", fmt.Errorf("formato_invalido: %s", rawOut)
+		return "", "", fmt.Errorf("formato_invalido: %s", rawOut)
 	}
 
 	var brainRes struct{ UUID string `json:"uuid"` }
 	if err := json.Unmarshal([]byte(rawOut[jsonStart:jsonEnd+1]), &brainRes); err != nil {
-		return "", err
+		return "", "", err
 	}
 	uuid := brainRes.UUID
 
-	// Rutas Base del Perfil
 	profileDir := filepath.Join(c.Paths.ProfilesDir, uuid)
 	extDir := filepath.Join(profileDir, "extension")
 	logsDir := filepath.Join(c.Paths.LogsDir, "profiles", uuid)
@@ -114,22 +149,18 @@ func HandleSeed(c *core.Core, alias string, isMaster bool) (string, error) {
 	_ = os.MkdirAll(extDir, 0755)
 	_ = os.MkdirAll(logsDir, 0755)
 
-	// 1. ESCRIBIR MANIFIESTO NATIVO
 	shortID := uuid[:8]
 	hostName := fmt.Sprintf("com.bloom.synapse.%s", shortID)
 	manifestPath := filepath.Join(configDir, hostName+".json")
 	if err := writeNativeManifest(c, manifestPath, hostName, uuid); err != nil {
-		return "", err
+		return "", "", err
 	}
 
-	// 2. REGISTRO DE WINDOWS (HKCU)
 	if err := registerInWindows(hostName, manifestPath); err != nil {
 		c.Logger.Error("[SEED] No se pudo registrar Native Messaging: %v", err)
 	}
 
-	// 3. GENERAR SPEC CON TEMPLATE DE ORO (AJUSTE CRÍTICO 3)
 	_ = writeIgnitionSpec(c, sm, uuid, profileDir, extDir, logsDir, specPath)
-
 	updateProfilesInventory(c, uuid, alias, isMaster, profileDir, configDir, extDir, logsDir, specPath)
 
 	if isMaster {
@@ -139,13 +170,11 @@ func HandleSeed(c *core.Core, alias string, isMaster bool) (string, error) {
 		_ = startup.SaveSystemStatus(c, status)
 	}
 
-	return uuid, nil
+	return uuid, profileDir, nil
 }
 
 func writeNativeManifest(c *core.Core, path, hostName, uuid string) error {
-	// AJUSTE CRÍTICO 1: El binario es bloom-host.exe dentro de bin/native/
 	bridgePath := filepath.Join(c.Paths.BinDir, "native", "bloom-host.exe")
-	
 	manifest := map[string]interface{}{
 		"name":        hostName,
 		"description": "Synapse v2 Native Bridge Host",
@@ -178,7 +207,6 @@ func writeIgnitionSpec(c *core.Core, sm *discovery.SystemMap, uuid, profileDir, 
 			"--no-sandbox",
 			"--test-type",
 			"--disable-web-security",
-			// AJUSTE CRÍTICO 3: Sin espacios en la lista de features
 			"--disable-features=IsolateOrigins,site-per-process",
 			"--allow-running-insecure-content",
 			"--no-first-run",

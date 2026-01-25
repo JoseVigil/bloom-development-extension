@@ -29,6 +29,7 @@ type Core struct {
 	Paths  *Paths
 	Config *Config
 	Logger *Logger
+	IsJSON bool  // Nuevo: indica si el output debe ser JSON
 }
 
 func Initialize() (*Core, error) {
@@ -44,7 +45,20 @@ func Initialize() (*Core, error) {
 		return nil, fmt.Errorf("error al cargar configuración: %w", err)
 	}
 	
-	return &Core{Paths: paths, Config: config, Logger: logger}, nil
+	return &Core{
+		Paths:  paths,
+		Config: config,
+		Logger: logger,
+		IsJSON: false,  // Por defecto: modo humano
+	}, nil
+}
+
+// SetJSONMode configura el modo de salida y reconfigura el logger
+func (c *Core) SetJSONMode(enabled bool) {
+	c.IsJSON = enabled
+	if c.Logger != nil {
+		c.Logger.SetJSONMode(enabled)
+	}
 }
 
 func (c *Core) Close() error {

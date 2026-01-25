@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"sentinel/internal/core"
 	"sentinel/internal/discovery"
@@ -22,18 +24,26 @@ func init() {
 			Use:   "health",
 			Short: "Escaneo de integridad del sistema",
 			Example: `  sentinel health
-  sentinel health | jq '.services[] | select(.active == false)'`,
+  sentinel --json health | jq '.services[] | select(.active == false)'`,
 			Run: func(cmd *cobra.Command, args []string) {
+				// Ejecutar health check
 				c.Logger.Info("🔍 Iniciando escaneo de integridad...")
+				
 				if err := EnsureBrainRunning(c); err != nil {
 					c.Logger.Error("❌ Brain Service: %v", err)
 				} else {
-					c.Logger.Success("✓ Brain Service: Operativo")
+					c.Logger.Success("✅ Brain Service: Operativo")
 				}
+				
 				sm, _ := discovery.DiscoverSystem(c.Paths.BinDir)
 				report, _ := CheckHealth(c, sm)
-				out, _ := json.MarshalIndent(report, "", "  ")
-				fmt.Println(string(out))
+				
+				// Salida según modo
+				if c.IsJSON {
+					outputHealthJSON(c, report)
+				} else {
+					outputHealthHuman(report)
+				}
 			},
 		}
 
@@ -45,6 +55,62 @@ func init() {
 
 		return cmd
 	})
+}
+
+// outputHealthJSON emite el resultado en formato JSON de una sola línea a stdout
+func outputHealthJSON(c *core.Core, status *startup.SystemStatus) {
+	// Mapear a la estructura requerida por Electron
+	servicesMap := make(map[string]map[string]interface{})
+	
+	for _, svc := range status.Services {
+		statusStr := "stopped"
+		if svc.Active {
+			statusStr = "running"
+		}
+		
+		servicesMap[svc.Name] = map[string]interface{}{
+			"status": statusStr,
+			"port":   svc.Port,
+		}
+	}
+	
+	// Determinar si está conectado (al menos un servicio activo)
+	connected := false
+	for _, svc := range status.Services {
+		if svc.Active {
+			connected = true
+			break
+		}
+	}
+	
+	// Contar perfiles registrados desde el archivo
+	profilesCount := 0
+	profilesPath := filepath.Join(c.Paths.AppDataDir, "config", "profiles.json")
+	if data, err := os.ReadFile(profilesPath); err == nil {
+		var reg struct {
+			Profiles []interface{} `json:"profiles"`
+		}
+		if json.Unmarshal(data, &reg) == nil {
+			profilesCount = len(reg.Profiles)
+		}
+	}
+	
+	result := map[string]interface{}{
+		"connected":           connected,
+		"port":                5678,  // Puerto principal de Brain
+		"services":            servicesMap,
+		"profiles_registered": profilesCount,
+	}
+	
+	// Emitir en una sola línea
+	jsonBytes, _ := json.Marshal(result)
+	fmt.Println(string(jsonBytes))
+}
+
+// outputHealthHuman emite el resultado en formato legible para humanos
+func outputHealthHuman(status *startup.SystemStatus) {
+	out, _ := json.MarshalIndent(status, "", "  ")
+	fmt.Println(string(out))
 }
 
 func EnsureBrainRunning(c *core.Core) error {
@@ -83,9 +149,9 @@ func CheckHealth(c *core.Core, sm *discovery.SystemMap) (*startup.SystemStatus, 
 	var wg sync.WaitGroup
 	sc := make(chan startup.ServiceStatus, 3)
 	wg.Add(3)
-	go func() { defer wg.Done(); sc <- checkPort(5678, "Core Bridge", "TCP") }()
+	go func() { defer wg.Done(); sc <- checkPort(5678, "brain", "TCP") }()
 	go func() { defer wg.Done(); sc <- checkPort(3001, "Extension API", "HTTP") }()
-	go func() { defer wg.Done(); sc <- checkPort(5173, "Svelte Dev", "TCP") }()
+	go func() { defer wg.Done(); sc <- checkPort(5173, "svelte", "TCP") }()
 	
 	go func() { wg.Wait(); close(sc) }()
 	status.Services = []startup.ServiceStatus{}

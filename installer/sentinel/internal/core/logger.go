@@ -10,8 +10,9 @@ import (
 )
 
 type Logger struct {
-	file   *os.File
-	logger *log.Logger
+	file      *os.File
+	logger    *log.Logger
+	isJSONMode bool
 }
 
 func InitLogger(logsDir string) (*Logger, error) {
@@ -24,13 +25,30 @@ func InitLogger(logsDir string) (*Logger, error) {
 		return nil, fmt.Errorf("error al crear archivo de log: %w", err)
 	}
 
+	// Por defecto: logs van a stdout + archivo
 	multiWriter := io.MultiWriter(os.Stdout, file)
 	logger := log.New(multiWriter, "", log.Ldate|log.Ltime)
 
 	return &Logger{
-		file:   file,
-		logger: logger,
+		file:       file,
+		logger:     logger,
+		isJSONMode: false,
 	}, nil
+}
+
+// SetJSONMode reconfigura el destino de los logs
+func (l *Logger) SetJSONMode(enabled bool) {
+	l.isJSONMode = enabled
+	
+	if enabled {
+		// En modo JSON: logs van a stderr + archivo (NO stdout)
+		multiWriter := io.MultiWriter(os.Stderr, l.file)
+		l.logger = log.New(multiWriter, "", log.Ldate|log.Ltime)
+	} else {
+		// Modo normal: logs van a stdout + archivo
+		multiWriter := io.MultiWriter(os.Stdout, l.file)
+		l.logger = log.New(multiWriter, "", log.Ldate|log.Ltime)
+	}
 }
 
 func (l *Logger) Info(format string, v ...interface{}) {

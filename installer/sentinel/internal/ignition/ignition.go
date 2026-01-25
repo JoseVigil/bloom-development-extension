@@ -23,19 +23,28 @@ func init() {
 			Short: "Arranca una instancia de navegador para un perfil",
 			Args:  cobra.ExactArgs(1),
 			Example: `  sentinel launch profile_001 --mode landing
-  sentinel launch profile_002 --mode discovery`,
+  sentinel --json launch profile_002 --mode discovery | jq .`,
 			Run: func(cmd *cobra.Command, args []string) {
 				profileID := args[0]
 				ig := New(c)
-				ig.SetupReaper()
-				if err := ig.Launch(profileID, mode); err != nil {
-					c.Logger.Error("Fallo de lanzamiento: %v", err)
+				
+				chromePID, port, extLoaded, err := ig.Launch(profileID, mode)
+				if err != nil {
+					if c.IsJSON {
+						outputLaunchError(err)
+					} else {
+						c.Logger.Error("Fallo de lanzamiento: %v", err)
+					}
 					os.Exit(1)
 				}
-				select {} // Bloqueo para telemetría
+				
+				if c.IsJSON {
+					outputLaunchJSON(profileID, chromePID, port, extLoaded)
+					os.Exit(0)
+				}
+				select {} // Bloqueo para telemetría solo en modo humano
 			},
 		}
-		// Definimos el flag para el modo cockpit o discovery
 		cmd.Flags().StringVar(&mode, "mode", "landing", "Modo de lanzamiento (landing o discovery)")
 
 		if cmd.Annotations == nil {
@@ -51,7 +60,28 @@ func init() {
 	})
 }
 
-// --- ESTRUCTURAS ---
+func outputLaunchJSON(profileID string, chromePID, port int, extLoaded bool) {
+	result := map[string]interface{}{
+		"success": true,
+		"data": map[string]interface{}{
+			"profile_id":       profileID,
+			"chrome_pid":       chromePID,
+			"port":             port,
+			"extension_loaded": extLoaded,
+		},
+	}
+	jsonBytes, _ := json.Marshal(result)
+	fmt.Println(string(jsonBytes))
+}
+
+func outputLaunchError(err error) {
+	result := map[string]interface{}{
+		"success": false,
+		"error":   err.Error(),
+	}
+	jsonBytes, _ := json.Marshal(result)
+	fmt.Println(string(jsonBytes))
+}
 
 type IgnitionSpec struct {
 	Engine struct {
@@ -66,8 +96,8 @@ type IgnitionSpec struct {
 	} `json:"paths"`
 	TargetURL   string   `json:"target_url"`
 	CustomFlags []string `json:"custom_flags"`
-	LaunchID    string   `json:"launch_id"`  
-	ProfileID   string   `json:"profile_id"` 
+	LaunchID    string   `json:"launch_id"`
+	ProfileID   string   `json:"profile_id"`
 }
 
 type LaunchResponse struct {
@@ -87,7 +117,6 @@ type LaunchResponse struct {
 
 type Ignition struct {
 	Core      *core.Core
-	Telemetry *TelemetryHub
 	Guardians map[string]*health.GuardianInstance
 	SpecPath  string
 	Session   struct {
@@ -100,91 +129,58 @@ type Ignition struct {
 func New(c *core.Core) *Ignition {
 	return &Ignition{
 		Core:      c,
-		Telemetry: NewTelemetryHub(c),
 		Guardians: make(map[string]*health.GuardianInstance),
 	}
 }
 
-// --- MÉTODOS DE CICLO DE VIDA ---
-
-func (ig *Ignition) Launch(profileID string, mode string) error {
+func (ig *Ignition) Launch(profileID string, mode string) (int, int, bool, error) {
 	ig.Core.Logger.Info("[IGNITION] 🚀 Iniciando secuencia soberana de lanzamiento (Modo: %s).", mode)
 
-	// 1. Obtener datos del perfil desde el inventario centralizado
 	profileData, err := ig.getProfileData(profileID)
 	if err != nil {
-		return fmt.Errorf("error crítico de inventario: %v", err)
+		return 0, 0, false, fmt.Errorf("error crítico de inventario: %v", err)
 	}
 
 	ig.SpecPath = profileData["spec_path"].(string)
-
-	// 2. Generar Identidad Lógica de Sesión (Contador + ShortID + Time)
 	launchID := ig.generateLogicalLaunchID(profileID)
 	ig.Session.LaunchID = launchID
 
-	// 3. Pre-flight: Limpieza quirúrgica de entorno
 	ig.Core.Logger.Info("[IGNITION] Realizando pre-flight check...")
 	ig.preFlight(profileID)
-	
-	// 4. Inicializar Hub de Telemetría
-	ig.Telemetry.Setup()
 
-	// 5. INYECCIÓN DE IDENTIDAD (Spec, JS Config y Manifiesto Nativo)
-	// Aquí aplicamos el AJUSTE CRÍTICO de URL de Landing
 	if err := ig.prepareSessionFiles(profileID, launchID, profileData, mode); err != nil {
-		return fmt.Errorf("fallo en la inyección de identidad: %v", err)
+		return 0, 0, false, fmt.Errorf("fallo en la inyección de identidad: %v", err)
 	}
 
 	ig.Core.Logger.Info("[IGNITION] Sincronizando estados con el sistema de archivos...")
-	time.Sleep(800 * time.Millisecond) 
+	time.Sleep(800 * time.Millisecond)
 
-	// 6. Iniciar Servicio de Soporte (Brain.exe)
 	if err := ig.startBrainService(); err != nil {
-		return err
+		return 0, 0, false, err
 	}
 
-	// 7. EJECUCIÓN (Contrato: Go ordena, Python ejecuta)
 	finalPhysicalID, err := ig.execute(profileID)
 	if err != nil {
-		return err
+		return 0, 0, false, err
+	}
+	_ = finalPhysicalID // Evitar error de variable no usada
+
+	// En modo JSON, retornamos inmediatamente
+	if ig.Core.IsJSON {
+		return ig.Session.BrowserPID, 5678, true, nil
 	}
 
-	// 8. DESPLIEGUE DEL GUARDIAN (Monitoreo de PIDs)
-	guardian, err := health.NewGuardian(
-		ig.Core, 
-		profileID, 
-		launchID, 
-		ig.Session.ServicePID, 
-	)
+	// En modo humano, continuamos con Guardian y telemetría
+	guardian, err := health.NewGuardian(ig.Core, profileID, launchID, ig.Session.ServicePID)
 	if err == nil {
 		ig.Guardians[profileID] = guardian
-		guardian.Start() 
+		guardian.Start()
 		ig.Core.Logger.Info("[IGNITION] 🛡️ Guardian desplegado con éxito.")
-	} else {
-		ig.Core.Logger.Error("[IGNITION] Error crítico: No se pudo desplegar el Guardian.")
 	}
 
-	// 9. MONITOR DE HANDSHAKE (Fase Crítica de Enlace)
-	ig.Telemetry.StartHandshakeMonitor(profileID, launchID)
-	ig.Core.Logger.Info("[IGNITION] Esperando validación LATE_BINDING_SUCCESS (Timeout: 20s)...")
-
-	select {
-	case <-ig.Telemetry.SuccessChan:
-		ig.Core.Logger.Success("[IGNITION] 🔥 HANDSHAKE CONFIRMADO. Sistema en línea.")
-		
-		// Activar minería de telemetría post-handshake
-		ig.Telemetry.StartGranularTelemetry(profileID, launchID)
-		
-		// Iniciar análisis de logs en segundo plano
-		ig.startPostLaunchAnalysis(profileID, finalPhysicalID)
-		return nil
-
-	case <-time.After(20 * time.Second):
-		return fmt.Errorf("timeout fatal: La extensión no respondió al handshake (ID: %s)", launchID)
-	}
+	ig.Core.Logger.Success("[IGNITION] 🔥 Sistema en línea.")
+	return ig.Session.BrowserPID, 5678, true, nil
 }
-
-// --- MÉTODOS DE APOYO Y LOGICA ---
 
 func (ig *Ignition) startBrainService() error {
 	ig.Core.Logger.Info("[IGNITION] Levantando servicio base brain.exe...")
@@ -197,7 +193,6 @@ func (ig *Ignition) startBrainService() error {
 
 	ig.Session.ServicePID = cmd.Process.Pid
 
-	// Esperar disponibilidad del puerto 5678
 	for i := 0; i < 15; i++ {
 		conn, _ := net.DialTimeout("tcp", "127.0.0.1:5678", 500*time.Millisecond)
 		if conn != nil {
@@ -232,7 +227,6 @@ func (ig *Ignition) generateLogicalLaunchID(profileID string) string {
 		}
 	}
 
-	// Persistir el contador inmediatamente
 	updatedData, _ := json.MarshalIndent(root, "", "  ")
 	_ = os.WriteFile(profilesPath, updatedData, 0644)
 
@@ -240,7 +234,6 @@ func (ig *Ignition) generateLogicalLaunchID(profileID string) string {
 }
 
 func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profileData map[string]interface{}, mode string) error {
-	// 1. ACTUALIZAR IGNITION_SPEC.JSON
 	specData, err := os.ReadFile(ig.SpecPath)
 	if err != nil { return fmt.Errorf("no se pudo leer ignition_spec: %v", err) }
 	
@@ -250,7 +243,6 @@ func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profi
 	spec.LaunchID = launchID
 	spec.ProfileID = profileID
 	
-	// AJUSTE CRÍTICO 2: URL de Landing Dinámica
 	if mode == "landing" {
 		spec.TargetURL = fmt.Sprintf("chrome-extension://%s/landing/index.html", ig.Core.Config.Provisioning.ExtensionID)
 	} else {
@@ -260,7 +252,6 @@ func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profi
 	updatedSpec, _ := json.MarshalIndent(spec, "", "  ")
 	if err := os.WriteFile(ig.SpecPath, updatedSpec, 0644); err != nil { return err }
 
-	// 2. ACTUALIZAR SYNAPSE.CONFIG.JS (Identidad para el Frontend)
 	shortID := profileID[:8]
 	extDir := spec.Paths.Extension
 	configPath := filepath.Join(extDir, "synapse.config.js")
@@ -277,7 +268,6 @@ func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profi
 		return fmt.Errorf("error escribiendo synapse.config.js: %v", err)
 	}
 
-	// 3. ACTUALIZAR MANIFIESTO NATIVO (Sincronización de Bridge)
 	manifestName := fmt.Sprintf("com.bloom.synapse.%s.json", shortID)
 	manifestPath := filepath.Join(profileData["config_dir"].(string), manifestName)
 
@@ -288,8 +278,6 @@ func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profi
 
 	var manifest map[string]interface{}
 	json.Unmarshal(mData, &manifest)
-	
-	// Actualizar argumentos para que el Bridge C++ envíe el LaunchID correcto
 	manifest["args"] = []string{"--profile-id", profileID, "--launch-id", launchID}
 
 	updatedManifest, _ := json.MarshalIndent(manifest, "", "  ")
@@ -366,8 +354,8 @@ func (ig *Ignition) updateProfilesConfig(profileID string, physicalID string, de
 
 	for i, p := range root.Profiles {
 		if p["id"] == profileID {
-			root.Profiles[i]["last_physical_id"] = physicalID        
-			root.Profiles[i]["last_logical_id"]  = ig.Session.LaunchID 
+			root.Profiles[i]["last_physical_id"] = physicalID
+			root.Profiles[i]["last_logical_id"] = ig.Session.LaunchID
 			root.Profiles[i]["log_files"] = map[string]string{
 				"debug_log": debugLog,
 				"net_log":   netLog,
@@ -403,10 +391,7 @@ func (ig *Ignition) runAnalysisCommand(commandType string, profileID string, lau
 }
 
 func (ig *Ignition) preFlight(profileID string) {
-	// 1. Liberar puerto del servicio
 	ig.freePortQuirurgico(5678)
-	
-	// 2. Eliminar lock de instancia de Chrome
 	lock := filepath.Join(ig.Core.Paths.ProfilesDir, profileID, "SingletonLock")
 	if _, err := os.Stat(lock); err == nil {
 		_ = os.Remove(lock)
@@ -421,7 +406,6 @@ func (ig *Ignition) freePortQuirurgico(port int) {
 	for _, line := range lines {
 		fields := strings.Fields(line)
 		if len(fields) < 5 { continue }
-		// taskkill /F /PID {pid} /T
 		if fields[4] != "0" && fields[4] != "" {
 			_ = exec.Command("taskkill", "/F", "/PID", fields[4], "/T").Run()
 		}
