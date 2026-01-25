@@ -22,6 +22,7 @@ type SystemStatus struct {
 	ExecutablesValid     bool             `json:"executables_valid"`
 	OnboardingCompleted  bool             `json:"onboarding_completed"`
 	MasterProfile        string           `json:"master_profile,omitempty"`
+	ExtensionID          string           `json:"extension_id,omitempty"` 
 	SystemMap            map[string]string `json:"system_map"`
 	Services             []ServiceStatus  `json:"services"`
 }
@@ -31,7 +32,6 @@ type SystemStatus struct {
 func Initialize(c *core.Core) error {
 	c.Logger.Info("🚀 Startup: Sincronizando identidad...")
 	
-	// Usamos solo las rutas que sabemos que existen en tu objeto core.Paths
 	configDir := filepath.Join(c.Paths.AppDataDir, "config")
 	
 	dirs := []string{
@@ -45,11 +45,17 @@ func Initialize(c *core.Core) error {
 			return fmt.Errorf("error creando directorio %s: %w", d, err)
 		}
 	}
+	
+	status := LoadCurrentStatus(c)
+	if status.ExtensionID == "" || status.ExtensionID != c.Config.Provisioning.ExtensionID {
+		status.ExtensionID = c.Config.Provisioning.ExtensionID
+		status.Timestamp = time.Now().Format(time.RFC3339)
+		_ = SaveSystemStatus(c, status)
+	}
+	
 	return nil
 }
 
-// UpdateActiveStatus: ESTA ES LA FUNCIÓN QUE PEDÍA EL main.go
-// Actualiza nucleus.json con los descubrimientos de dev-start
 func UpdateActiveStatus(c *core.Core, updates map[string]string) error {
 	status := LoadCurrentStatus(c)
 	if status.SystemMap == nil {
@@ -58,6 +64,10 @@ func UpdateActiveStatus(c *core.Core, updates map[string]string) error {
 	
 	for k, v := range updates {
 		status.SystemMap[k] = v
+	}
+	
+	if status.SystemMap["extension_id"] == "" || status.SystemMap["extension_id"] == "null" {
+		status.SystemMap["extension_id"] = c.Config.Provisioning.ExtensionID
 	}
 	
 	status.Timestamp = time.Now().Format(time.RFC3339)
@@ -76,7 +86,7 @@ func FetchBrainManifest(brainPath string) (interface{}, error) {
 // --- PERSISTENCIA (Sincronizada con health.go y nucleus.json) ---
 
 func LoadCurrentStatus(c *core.Core) SystemStatus {
-	path := filepath.Join(c.Paths.AppDataDir, "nucleus.json")
+	path := filepath.Join(c.Paths.AppDataDir, "config", "nucleus.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return SystemStatus{
@@ -91,7 +101,13 @@ func LoadCurrentStatus(c *core.Core) SystemStatus {
 }
 
 func SaveSystemStatus(c *core.Core, status SystemStatus) error {
-	path := filepath.Join(c.Paths.AppDataDir, "nucleus.json")
+	// Asegurar que existe la carpeta config
+	configDir := filepath.Join(c.Paths.AppDataDir, "config")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		return err
+	}
+	
+	path := filepath.Join(configDir, "nucleus.json")
 	data, err := json.MarshalIndent(status, "", "  ")
 	if err != nil {
 		return err

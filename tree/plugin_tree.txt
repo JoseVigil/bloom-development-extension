@@ -387,8 +387,9 @@ bloom-development-extension/
 │   └── sentinel/
 │       ├── blueprint.json
 │       ├── build.bat
+│       ├── cli/
+│       │   └── help_renderer.go
 │       ├── codebase/
-│       │   └── go_files_2026-01-24_19-29-47.txt
 │       ├── docs/
 │       │   ├── Sentinel - Fase 2 Discovery - Health Modular.md
 │       │   ├── Sentinel Base.md
@@ -399,11 +400,17 @@ bloom-development-extension/
 │       ├── extract_go_files.py
 │       ├── go.mod
 │       ├── go.sum
+│       ├── help/
+│       │   ├── sentinel_help.json
+│       │   └── sentinel_help.txt
 │       ├── internal/
 │       │   ├── boot/
+│       │   │   ├── dev.go
 │       │   │   ├── npm.go
 │       │   │   ├── reaper.go
 │       │   │   └── vscode.go
+│       │   ├── bridge/
+│       │   │   └── bridge.go
 │       │   ├── core/
 │       │   │   ├── config.go
 │       │   │   ├── core.go

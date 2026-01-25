@@ -164,11 +164,12 @@ func HandleSeed(c *core.Core, alias string, isMaster bool) (string, string, erro
 	updateProfilesInventory(c, uuid, alias, isMaster, profileDir, configDir, extDir, logsDir, specPath)
 
 	if isMaster {
-		status := startup.LoadCurrentStatus(c)
-		status.MasterProfile = uuid
-		status.Timestamp = time.Now().Format(time.RFC3339)
-		_ = startup.SaveSystemStatus(c, status)
-	}
+	status := startup.LoadCurrentStatus(c)
+	status.MasterProfile = uuid
+	status.ExtensionID = c.Config.Provisioning.ExtensionID 
+	status.Timestamp = time.Now().Format(time.RFC3339)
+	_ = startup.SaveSystemStatus(c, status)
+}
 
 	return uuid, profileDir, nil
 }

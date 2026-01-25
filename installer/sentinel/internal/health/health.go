@@ -146,16 +146,24 @@ func CheckHealth(c *core.Core, sm *discovery.SystemMap) (*startup.SystemStatus, 
 	status.SystemMap["brain_exe"] = sm.BrainPath
 	status.SystemMap["chrome_exe"] = sm.ChromePath
 	
+	if c.Config.Provisioning.ExtensionID != "" {
+		status.SystemMap["extension_id"] = c.Config.Provisioning.ExtensionID
+		c.Logger.Info("[DEBUG] ExtensionID guardado: '%s'", c.Config.Provisioning.ExtensionID)
+	} else {
+		c.Logger.Warning("[DEBUG] ExtensionID está VACÍO en Config!")
+	}
+	
 	var wg sync.WaitGroup
 	sc := make(chan startup.ServiceStatus, 3)
 	wg.Add(3)
-	go func() { defer wg.Done(); sc <- checkPort(5678, "brain", "TCP") }()
+	go func() { defer wg.Done(); sc <- checkPort(5678, "Core Bridge", "TCP") }()
 	go func() { defer wg.Done(); sc <- checkPort(3001, "Extension API", "HTTP") }()
-	go func() { defer wg.Done(); sc <- checkPort(5173, "svelte", "TCP") }()
+	go func() { defer wg.Done(); sc <- checkPort(5173, "Svelte Dev", "TCP") }()
 	
 	go func() { wg.Wait(); close(sc) }()
 	status.Services = []startup.ServiceStatus{}
 	for s := range sc { status.Services = append(status.Services, s) }
+	
 	_ = startup.SaveSystemStatus(c, *status)
 	return status, nil
 }
