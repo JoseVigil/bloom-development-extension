@@ -2,6 +2,7 @@ package ui
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sentinel/internal/core"
@@ -13,11 +14,12 @@ import (
 )
 
 func init() {
+	// --- COMANDO 1: COCKPIT (La TUI) ---
 	core.RegisterCommand("UI", func(c *core.Core) *cobra.Command {
 		var healthMode bool
 		cmd := &cobra.Command{
 			Use:   "cockpit",
-			Short: "Lanza la interfaz de monitoreo integrada",
+			Short: "Lanza la interfaz de monitoreo integrada (TUI)",
 			Run: func(cmd *cobra.Command, args []string) {
 				mode := "log"
 				if healthMode { mode = "health" }
@@ -26,6 +28,51 @@ func init() {
 		}
 		cmd.Flags().BoolVar(&healthMode, "health", false, "Iniciar directamente en modo health")
 		return cmd
+	})
+
+	// --- COMANDO 2: TELEMETRY (Gestión de Datos) ---
+	core.RegisterCommand("UI", func(c *core.Core) *cobra.Command {
+		telCmd := &cobra.Command{
+			Use:   "telemetry",
+			Short: "Gestión y diagnóstico de streams de telemetría",
+		}
+
+		// Subcomando: STATUS
+		telCmd.AddCommand(&cobra.Command{
+			Use:   "status",
+			Short: "Muestra el estado actual del JSON de telemetría",
+			Run: func(cmd *cobra.Command, args []string) {
+				telPath := filepath.Join(c.Paths.LogsDir, "telemetry.json")
+				data, err := os.ReadFile(telPath)
+				if err != nil {
+					fmt.Printf("Error: No se pudo leer el archivo de telemetría: %v\n", err)
+					return
+				}
+				var tel core.TelemetryData
+				json.Unmarshal(data, &tel)
+				fmt.Printf("Streams Activos: %d\n", len(tel.Streams))
+				for id, info := range tel.Streams {
+					status := "[OFFLINE]"
+					if info.Active { status = "[ACTIVE]" }
+					fmt.Printf(" - %-10s %s (%s)\n", id, info.Label, status)
+				}
+			},
+		})
+
+		// Subcomando: CLEAN
+		telCmd.AddCommand(&cobra.Command{
+			Use:   "clean",
+			Short: "Limpia y resetea el archivo de telemetría",
+			Run: func(cmd *cobra.Command, args []string) {
+				telPath := filepath.Join(c.Paths.LogsDir, "telemetry.json")
+				emptyTel := core.TelemetryData{Streams: make(map[string]core.StreamInfo)}
+				data, _ := json.MarshalIndent(emptyTel, "", "  ")
+				_ = os.WriteFile(telPath, data, 0644)
+				c.Logger.Success("Archivo de telemetría reseteado correctamente.")
+			},
+		})
+
+		return telCmd
 	})
 }
 
