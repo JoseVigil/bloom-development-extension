@@ -113,7 +113,11 @@ if __name__ == '__main__':
         # Obtener argumentos de línea de comandos (omitir el primer argumento que es el nombre del script)
         args = sys.argv[1:]
         
-        if args:
+        # Verificar si se pasó el flag --all o -a
+        if '--all' in args or '-a' in args:
+            print("Flag detectado: Modo 'todos los archivos .go'")
+            extract_go_files()
+        elif args:
             extract_go_files(specific_files=args)
         else:
             extract_go_files()

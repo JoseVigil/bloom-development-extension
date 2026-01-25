@@ -12,7 +12,32 @@ import (
 	"sentinel/internal/health"
 	"strings"
 	"time"
+	"github.com/spf13/cobra"
 )
+
+func init() {
+	core.RegisterCommand("RUNTIME", func(c *core.Core) *cobra.Command {
+		var mode string
+		cmd := &cobra.Command{
+			Use:   "launch [profile_id]",
+			Short: "Arranca una instancia de navegador para un perfil",
+			Args:  cobra.ExactArgs(1),
+			Run: func(cmd *cobra.Command, args []string) {
+				profileID := args[0]
+				ig := New(c)
+				ig.SetupReaper()
+				if err := ig.Launch(profileID, mode); err != nil {
+					c.Logger.Error("Fallo de lanzamiento: %v", err)
+					os.Exit(1)
+				}
+				select {} // Bloqueo para telemetría
+			},
+		}
+		// Definimos el flag para el modo cockpit o discovery
+		cmd.Flags().StringVar(&mode, "mode", "--cockpit", "Modo de lanzamiento (--cockpit o --discovery)")
+		return cmd
+	})
+}
 
 // --- ESTRUCTURAS ---
 

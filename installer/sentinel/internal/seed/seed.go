@@ -12,10 +12,40 @@ import (
 	"sentinel/internal/startup"
 	"strings"
 	"time"
+	"strconv" // <--- Faltaba este
 
+	"github.com/spf13/cobra" // <--- Faltaba este
 	"golang.org/x/sys/windows/registry"
 )
 
+func init() {
+	core.RegisterCommand("IDENTITY", func(c *core.Core) *cobra.Command {
+		return &cobra.Command{
+			Use:   "seed [alias] [is_master]",
+			Short: "Registra una nueva identidad de perfil",
+			Args:  cobra.ExactArgs(2),
+			Run: func(cmd *cobra.Command, args []string) {
+				alias := args[0]
+				isMaster, _ := strconv.ParseBool(args[1])
+				
+				uuid, err := HandleSeed(c, alias, isMaster)
+				if err != nil {
+					res, _ := json.Marshal(map[string]string{"status": "error", "message": err.Error()})
+					fmt.Println(string(res))
+					os.Exit(1)
+				}
+				
+				res, _ := json.Marshal(map[string]interface{}{
+					"status": "success", 
+					"uuid":   uuid, 
+					"alias":  alias,
+					"master": isMaster,
+				})
+				fmt.Println(string(res))
+			},
+		}
+	})
+}
 type ProfileEntry struct {
 	ID            string `json:"id"`
 	Alias         string `json:"alias"`
