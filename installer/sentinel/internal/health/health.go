@@ -18,9 +18,11 @@ import (
 
 func init() {
 	core.RegisterCommand("SYSTEM", func(c *core.Core) *cobra.Command {
-		return &cobra.Command{
+		cmd := &cobra.Command{
 			Use:   "health",
 			Short: "Escaneo de integridad del sistema",
+			Example: `  sentinel health
+  sentinel health | jq '.services[] | select(.active == false)'`,
 			Run: func(cmd *cobra.Command, args []string) {
 				c.Logger.Info("🔍 Iniciando escaneo de integridad...")
 				if err := EnsureBrainRunning(c); err != nil {
@@ -34,6 +36,14 @@ func init() {
 				fmt.Println(string(out))
 			},
 		}
+
+		if cmd.Annotations == nil {
+			cmd.Annotations = make(map[string]string)
+		}
+		cmd.Annotations["requires"] = `  - brain.exe debe estar en PATH o en bin/
+  - Puertos 5678, 3001, 5173 accesibles para verificación`
+
+		return cmd
 	})
 }
 

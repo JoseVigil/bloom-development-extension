@@ -20,6 +20,8 @@ func init() {
 		cmd := &cobra.Command{
 			Use:   "cockpit",
 			Short: "Lanza la interfaz de monitoreo integrada (TUI)",
+			Example: `  sentinel cockpit
+  sentinel cockpit --health`,
 			Run: func(cmd *cobra.Command, args []string) {
 				mode := "log"
 				if healthMode { mode = "health" }
@@ -27,6 +29,14 @@ func init() {
 			},
 		}
 		cmd.Flags().BoolVar(&healthMode, "health", false, "Iniciar directamente en modo health")
+
+		if cmd.Annotations == nil {
+			cmd.Annotations = make(map[string]string)
+		}
+		cmd.Annotations["requires"] = `  - Archivo telemetry.json en logs/ (se crea automáticamente si no existe)
+  - Terminal con soporte para TUI (tview/tcell)
+  - Comandos disponibles en TUI: 'log', 'health', 'q' o 'exit'`
+
 		return cmd
 	})
 
@@ -35,12 +45,15 @@ func init() {
 		telCmd := &cobra.Command{
 			Use:   "telemetry",
 			Short: "Gestión y diagnóstico de streams de telemetría",
+			Example: `  sentinel telemetry status
+  sentinel telemetry clean`,
 		}
 
 		// Subcomando: STATUS
-		telCmd.AddCommand(&cobra.Command{
+		statusCmd := &cobra.Command{
 			Use:   "status",
 			Short: "Muestra el estado actual del JSON de telemetría",
+			Example: `  sentinel telemetry status`,
 			Run: func(cmd *cobra.Command, args []string) {
 				telPath := filepath.Join(c.Paths.LogsDir, "telemetry.json")
 				data, err := os.ReadFile(telPath)
@@ -57,12 +70,13 @@ func init() {
 					fmt.Printf(" - %-10s %s (%s)\n", id, info.Label, status)
 				}
 			},
-		})
+		}
 
 		// Subcomando: CLEAN
-		telCmd.AddCommand(&cobra.Command{
+		cleanCmd := &cobra.Command{
 			Use:   "clean",
 			Short: "Limpia y resetea el archivo de telemetría",
+			Example: `  sentinel telemetry clean`,
 			Run: func(cmd *cobra.Command, args []string) {
 				telPath := filepath.Join(c.Paths.LogsDir, "telemetry.json")
 				emptyTel := core.TelemetryData{Streams: make(map[string]core.StreamInfo)}
@@ -70,7 +84,20 @@ func init() {
 				_ = os.WriteFile(telPath, data, 0644)
 				c.Logger.Success("Archivo de telemetría reseteado correctamente.")
 			},
-		})
+		}
+
+		if statusCmd.Annotations == nil {
+			statusCmd.Annotations = make(map[string]string)
+		}
+		statusCmd.Annotations["requires"] = `  - telemetry.json existente en logs/`
+
+		if cleanCmd.Annotations == nil {
+			cleanCmd.Annotations = make(map[string]string)
+		}
+		cleanCmd.Annotations["requires"] = `  - Permiso de escritura en logs/`
+
+		telCmd.AddCommand(statusCmd)
+		telCmd.AddCommand(cleanCmd)
 
 		return telCmd
 	})

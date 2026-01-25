@@ -20,10 +20,12 @@ import (
 
 func init() {
 	core.RegisterCommand("IDENTITY", func(c *core.Core) *cobra.Command {
-		return &cobra.Command{
+		cmd := &cobra.Command{
 			Use:   "seed [alias] [is_master]",
 			Short: "Registra una nueva identidad de perfil",
 			Args:  cobra.ExactArgs(2),
+			Example: `  sentinel seed profile_001 true
+  sentinel seed burner_temp false`,
 			Run: func(cmd *cobra.Command, args []string) {
 				alias := args[0]
 				isMaster, _ := strconv.ParseBool(args[1])
@@ -44,6 +46,16 @@ func init() {
 				fmt.Println(string(res))
 			},
 		}
+
+		if cmd.Annotations == nil {
+			cmd.Annotations = make(map[string]string)
+		}
+		cmd.Annotations["requires"] = `  - brain.exe debe estar disponible en bin/
+  - Permiso de escritura en HKCU\Software\Google\Chrome\NativeMessagingHosts
+  - bloom-host.exe en bin/native/
+  - Extension ID válido en configuración`
+
+		return cmd
 	})
 }
 type ProfileEntry struct {

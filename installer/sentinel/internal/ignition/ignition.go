@@ -22,6 +22,8 @@ func init() {
 			Use:   "launch [profile_id]",
 			Short: "Arranca una instancia de navegador para un perfil",
 			Args:  cobra.ExactArgs(1),
+			Example: `  sentinel launch profile_001 --mode landing
+  sentinel launch profile_002 --mode discovery`,
 			Run: func(cmd *cobra.Command, args []string) {
 				profileID := args[0]
 				ig := New(c)
@@ -34,7 +36,17 @@ func init() {
 			},
 		}
 		// Definimos el flag para el modo cockpit o discovery
-		cmd.Flags().StringVar(&mode, "mode", "--cockpit", "Modo de lanzamiento (--cockpit o --discovery)")
+		cmd.Flags().StringVar(&mode, "mode", "landing", "Modo de lanzamiento (landing o discovery)")
+
+		if cmd.Annotations == nil {
+			cmd.Annotations = make(map[string]string)
+		}
+		cmd.Annotations["requires"] = `  - El perfil debe existir (usar 'sentinel seed' primero)
+  - brain.exe disponible y ejecutable
+  - Puerto 5678 libre para servicio Brain
+  - Extension ID válido en ignition_spec.json
+  - bloom-host.exe en bin/native/ para Native Messaging`
+
 		return cmd
 	})
 }
