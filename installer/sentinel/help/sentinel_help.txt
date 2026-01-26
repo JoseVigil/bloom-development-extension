@@ -90,11 +90,13 @@
       profile_id            optional
 
     Flags:
+      --config-override          JSON para sobrescribir campos en synapse.config.js
       --mode                     Modo de lanzamiento (landing o discovery) [default: landing]
 
     Example:
         sentinel launch profile_001 --mode landing
         sentinel --json launch profile_002 --mode discovery | jq .
+        sentinel --json launch profile_003 --mode discovery --config-override '{"register":true,"email":"user@example.com"}'
 
     Requirements:
       * El perfil debe existir (usar 'sentinel seed' primero)
