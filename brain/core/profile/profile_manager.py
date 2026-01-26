@@ -166,9 +166,12 @@ class ProfileManager:
             for p in profiles:
                 p['path'] = str(self.paths.profiles_dir / p['id'])
                 p['exists'] = Path(p['path']).exists()
-                if 'master' not in p:
-                    p['master'] = False
-                logger.debug(f"  → Perfil: {p.get('alias')} | Existe: {p['exists']} | Master: {p.get('master', False)}")
+                
+                # ✅ ACTUALIZADO: Garantizar que master_profile siempre exista
+                if 'master_profile' not in p:
+                    p['master_profile'] = False
+                
+                logger.debug(f"  → Perfil: {p.get('alias')} | Existe: {p['exists']} | Master: {p.get('master_profile', False)}")
             
             logger.info(f"✅ Lista generada: {len(profiles)} perfiles")
             return profiles
@@ -177,13 +180,20 @@ class ProfileManager:
             logger.error(f"✗ Error en la lógica de list_profiles: {str(e)}", exc_info=True)
             raise e
     
-    def create_profile(self, alias: str) -> Dict[str, Any]:
+    def create_profile(self, alias: str, is_master: bool = False) -> Dict[str, Any]:
         """
         Crea un nuevo perfil.
         NOTA: La sincronización de recursos (extensión, bridge, páginas) 
         es responsabilidad de Sentinel (Go).
+        
+        Args:
+            alias: Nombre descriptivo del perfil
+            is_master: Si True, marca el perfil como master_profile
+        
+        Returns:
+            Diccionario con los datos del perfil creado
         """
-        logger.info(f"✨ Creando perfil: {alias}")
+        logger.info(f"✨ Creando perfil: {alias} (master={is_master})")
         start_time = time.time()
         
         profiles = self._load_profiles()
@@ -192,6 +202,7 @@ class ProfileManager:
         
         logger.debug(f"  → ID generado: {profile_id}")
         logger.debug(f"  → Path: {profile_path}")
+        logger.debug(f"  → Master: {is_master}")
         
         try:
             profile_path.mkdir(parents=True, exist_ok=True)
@@ -205,21 +216,26 @@ class ProfileManager:
         bridge_name = self.synapse.provision_bridge(profile_id)
         logger.info(f"  ✓ Bridge provisionado: {bridge_name}")
         
+        # Crear datos del perfil con el campo master_profile
         data = {
             "id": profile_id,
             "alias": alias,
             "bridge_name": bridge_name,
             "created_at": datetime.now().isoformat(),
             "linked_account": None,
+            "master_profile": is_master,  # ✅ NUEVO CAMPO
             "path": str(profile_path),
             "net_log_path": str(self.paths.base_dir / "logs" / "profiles" / profile_id / "chrome_net.log")
         }
+        
         profiles.append(data)
         self._save_profiles(profiles)
         
         elapsed = time.time() - start_time
-        logger.info(f"✅ Perfil creado en {elapsed:.2f}s")
+        master_msg = " como MASTER" if is_master else ""
+        logger.info(f"✅ Perfil creado{master_msg} en {elapsed:.2f}s")
         logger.info("⚠️  Sentinel (Go) debe sincronizar recursos antes del primer launch")
+        
         return data
     
     def launch_profile(

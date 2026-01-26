@@ -58,7 +58,7 @@ class Symbols:
     COMMAND = "▸"
     ITEM = "•"
     SEPARATOR = "─"
-    HEAVY_SEP = "━"
+    HEAVY_SEP = "═"
     LEFT_BRACKET = "┫"
     RIGHT_BRACKET = "┣"
     ARROW = "→"
@@ -68,8 +68,26 @@ class Symbols:
 
 
 # ============================================================================
-# JSON ENCODER
+# VISUAL HELPERS - DRY Principle
 # ============================================================================
+def draw_section_header(title: str, style: str = ColorScheme.NEON_CYAN) -> Text:
+    """Creates a modern section header with Unicode decorations"""
+    decoration = f"{Symbols.HEAVY_SEP * 3}{Symbols.LEFT_BRACKET}"
+    return Text(f"{decoration} {title.upper()} {Symbols.RIGHT_BRACKET}{Symbols.HEAVY_SEP * 3}", style=f"bold {style}")
+
+
+def draw_gradient_line(width: int = 80, char: str = None) -> Text:
+    """Creates a visual separator line"""
+    if char is None:
+        char = Symbols.SEPARATOR
+    return Text(char * width, style=ColorScheme.DIM)
+
+
+def create_command_badge(count: int) -> str:
+    """Creates a visual badge for command counts"""
+    return f"* {count} cmd{'s' if count != 1 else ''}" 
+
+
 class JSONEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, Path):
@@ -81,20 +99,17 @@ class JSONEncoder(json.JSONEncoder):
         return super().default(obj)
 
 
-# ============================================================================
-# EXECUTABLE DETECTION
-# ============================================================================
 def is_frozen_executable():
     return getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS')
 
 
 def get_executable_name():
-    return "brain" if is_frozen_executable() else "python brain/__main__.py"
+    if is_frozen_executable():
+        return "brain"
+    else:
+        return "python brain/__main__.py"
 
 
-# ============================================================================
-# DATA STRUCTURES
-# ============================================================================
 @dataclass
 class HelpStructure:
     categories: List[CommandCategory]
@@ -121,28 +136,6 @@ class DiscoveredCommand:
     category: CommandCategory
 
 
-# ============================================================================
-# VISUAL HELPERS - DRY Principle
-# ============================================================================
-def draw_section_header(title: str, style: str = ColorScheme.NEON_CYAN) -> Text:
-    """Creates a modern section header with Unicode decorations"""
-    decoration = f"{Symbols.HEAVY_SEP * 3}{Symbols.LEFT_BRACKET}"
-    return Text(f"{decoration} {title.upper()} {Symbols.RIGHT_BRACKET}{Symbols.HEAVY_SEP * 3}", style=f"bold {style}")
-
-
-def draw_gradient_line(width: int = 80, char: str = Symbols.SEPARATOR) -> Text:
-    """Creates a visual separator line"""
-    return Text(char * width, style=ColorScheme.DIM)
-
-
-def create_command_badge(count: int) -> str:
-    """Creates a visual badge for command counts"""
-    return f"{Symbols.STAR} {count} cmd{'s' if count != 1 else ''}"
-
-
-# ============================================================================
-# TYPE CONVERSION
-# ============================================================================
 def _python_type_to_json_schema(py_type: Any) -> Dict[str, Any]:
     type_mapping = {
         str: {"type": "string"},
@@ -159,28 +152,21 @@ def _python_type_to_json_schema(py_type: Any) -> Dict[str, Any]:
     return type_mapping.get(base_type, {"type": "string"})
 
 
-# ============================================================================
-# COMMAND DISCOVERY
-# ============================================================================
 def _discover_commands_from_class(cmd: BaseCommand, category: CommandCategory) -> List[DiscoveredCommand]:
     temp_app = typer.Typer()
     cmd.register(temp_app)
     discovered = []
-    
     if not temp_app.registered_commands:
         return discovered
-    
     for registered_cmd in temp_app.registered_commands:
         cmd_name = registered_cmd.name
         callback = registered_cmd.callback
         description = ""
-        
         if callback and callback.__doc__:
             description = callback.__doc__.strip().split('\n')[0]
         if not description:
             meta = cmd.metadata()
             description = meta.description
-        
         discovered.append(DiscoveredCommand(
             name=cmd_name,
             callback=callback,
@@ -188,7 +174,6 @@ def _discover_commands_from_class(cmd: BaseCommand, category: CommandCategory) -
             source_class=cmd,
             category=category
         ))
-    
     return discovered
 
 
@@ -196,7 +181,6 @@ def _extract_structure(registry: CommandRegistry) -> HelpStructure:
     categories = set()
     commands_by_category = defaultdict(list)
     root_commands = []
-    
     for cmd in registry.get_all_commands():
         meta = cmd.metadata()
         if meta.is_root:
@@ -204,63 +188,11 @@ def _extract_structure(registry: CommandRegistry) -> HelpStructure:
         else:
             categories.add(meta.category)
             commands_by_category[meta.category].append(cmd)
-    
     return HelpStructure(
         categories=sorted(categories, key=lambda c: c.category_name),
         commands_by_category=dict(commands_by_category),
         root_commands=root_commands
     )
-
-
-# ============================================================================
-# PARAMETER EXTRACTION
-# ============================================================================
-def _extract_params_with_help(callback) -> List[CommandParameter]:
-    if not callback:
-        return []
-    
-    params = []
-    sig = inspect.signature(callback)
-    type_hints = get_type_hints(callback) if callback else {}
-    
-    for name, param in sig.parameters.items():
-        if name == "ctx":
-            continue
-        
-        default = param.default
-        type_hint = type_hints.get(name)
-        
-        if isinstance(default, OptionInfo):
-            flag = _extract_option_flag(name, default)
-            help_text = default.help or ""
-            is_required = default.default == ...
-            default_val = _extract_default_value(default, is_required)
-            
-            if is_required:
-                flag = f"{flag} <VALUE>"
-            
-            params.append(CommandParameter(
-                flag=flag,
-                is_required=is_required,
-                help_text=help_text,
-                is_argument=False,
-                type_hint=str(type_hint.__name__) if type_hint else None,
-                default_value=default_val
-            ))
-        elif param.default == inspect.Parameter.empty or isinstance(default, ArgumentInfo):
-            arg_name = f"<{name.upper()}>"
-            help_text = default.help if isinstance(default, ArgumentInfo) and hasattr(default, 'help') else ""
-            
-            params.append(CommandParameter(
-                flag=arg_name,
-                is_required=True,
-                help_text=help_text,
-                is_argument=True,
-                type_hint=str(type_hint.__name__) if type_hint else None,
-                default_value=None
-            ))
-    
-    return params
 
 
 def _extract_option_flag(name: str, default: OptionInfo) -> str:
@@ -285,19 +217,67 @@ def _extract_default_value(default: OptionInfo, is_required: bool) -> Optional[A
         return str(default.default)
 
 
-# ============================================================================
-# SUBSECTION DETECTION
-# ============================================================================
+def _extract_params_with_help(callback) -> List[CommandParameter]:
+    if not callback:
+        return []
+    params = []
+    sig = inspect.signature(callback)
+    type_hints = get_type_hints(callback) if callback else {}
+    for name, param in sig.parameters.items():
+        if name == "ctx":
+            continue
+        default = param.default
+        type_hint = type_hints.get(name)
+        if isinstance(default, OptionInfo):
+            flag = _extract_option_flag(name, default)
+            help_text = default.help or ""
+            is_required = default.default == ...
+            default_val = _extract_default_value(default, is_required)
+            if is_required:
+                flag = f"{flag} <VALUE>"
+            params.append(CommandParameter(
+                flag=flag,
+                is_required=is_required,
+                help_text=help_text,
+                is_argument=False,
+                type_hint=str(type_hint.__name__) if type_hint else None,
+                default_value=default_val
+            ))
+        elif param.default == inspect.Parameter.empty or isinstance(default, ArgumentInfo):
+            arg_name = f"<{name.upper()}>"
+            help_text = default.help if isinstance(default, ArgumentInfo) and hasattr(default, 'help') else ""
+            params.append(CommandParameter(
+                flag=arg_name,
+                is_required=True,
+                help_text=help_text,
+                is_argument=True,
+                type_hint=str(type_hint.__name__) if type_hint else None,
+                default_value=None
+            ))
+    return params
+
+
 def _detect_subsections(category: CommandCategory, discovered_commands: List[DiscoveredCommand]) -> Dict[str, List[DiscoveredCommand]]:
     if not discovered_commands:
         return {'': []}
     
     subsections = defaultdict(list)
+    
+    # Títulos profesionales con contexto de categoría
     section_titles = {
-        'auth': 'AUTENTICACIÓN', 'repos': 'REPOSITORIOS', 'orgs': 'ORGANIZACIONES',
-        'build': 'BUILD', 'keys': 'KEYS', 'accounts': 'ACCOUNTS', 'read': 'READ',
-        'exp': 'EXP', 'add': 'ADD', 'list': 'LIST', 'create': 'CREATE',
-        'onboarding': 'ONBOARDING', 'project': 'PROJECT',
+        'auth': 'Authentication & Authorization',
+        'repos': 'Repository Management',
+        'orgs': 'Organization Management',
+        'build': 'Build & Compilation',
+        'keys': 'API Key Management',
+        'accounts': 'Account Operations',
+        'read': 'Log Analysis & Debugging',
+        'exp': 'Exploration & Discovery',
+        'add': 'Adding & Linking',
+        'list': 'Listing & Inspection',
+        'create': 'Creation & Initialization',
+        'onboarding': 'Onboarding & Setup',
+        'project': 'Project Operations',
     }
     
     for dcmd in discovered_commands:
@@ -314,9 +294,6 @@ def _detect_subsections(category: CommandCategory, discovered_commands: List[Dis
     return dict(subsections)
 
 
-# ============================================================================
-# JSON BUILDERS
-# ============================================================================
 def _build_json_structure(registry: CommandRegistry) -> Dict[str, Any]:
     structure = _extract_structure(registry)
     result = {
@@ -325,16 +302,13 @@ def _build_json_structure(registry: CommandRegistry) -> Dict[str, Any]:
         "categories": [],
         "root_commands": []
     }
-    
     for cat in structure.categories:
         cmds_in_cat = structure.commands_by_category.get(cat, [])
         discovered_all = []
         for cmd_obj in cmds_in_cat:
             discovered_all.extend(_discover_commands_from_class(cmd_obj, cat))
-        
         subsections = _detect_subsections(cat, discovered_all)
         commands_json = []
-        
         for section_title, section_cmds in subsections.items():
             for dcmd in sorted(section_cmds, key=lambda c: c.name):
                 params = _extract_params_with_help(dcmd.callback)
@@ -354,14 +328,12 @@ def _build_json_structure(registry: CommandRegistry) -> Dict[str, Any]:
                         for p in params
                     ]
                 })
-        
         result["categories"].append({
             "name": cat.category_name,
             "description": cat.category_description,
             "command_count": len(commands_json),
             "commands": commands_json
         })
-    
     for root_cmd in structure.root_commands:
         discovered = _discover_commands_from_class(root_cmd, CommandCategory.SYSTEM)
         for dcmd in discovered:
@@ -381,7 +353,6 @@ def _build_json_structure(registry: CommandRegistry) -> Dict[str, Any]:
                     for p in params
                 ]
             })
-    
     return result
 
 
@@ -389,7 +360,6 @@ def _build_ai_native_json(registry: CommandRegistry) -> Dict[str, Any]:
     structure = _extract_structure(registry)
     commands = []
     exe_name = get_executable_name()
-    
     for cat in structure.categories:
         cmds_in_cat = structure.commands_by_category.get(cat, [])
         for cmd_obj in cmds_in_cat:
@@ -398,7 +368,6 @@ def _build_ai_native_json(registry: CommandRegistry) -> Dict[str, Any]:
                 params_info = _extract_params_with_help(dcmd.callback)
                 properties = {}
                 required = []
-                
                 for p in params_info:
                     if p.is_argument:
                         param_name = p.flag.strip('<>').lower()
@@ -418,7 +387,6 @@ def _build_ai_native_json(registry: CommandRegistry) -> Dict[str, Any]:
                             properties[param_name]["default"] = p.default_value
                         if p.is_required:
                             required.append(param_name)
-                
                 cmd_syntax = f"{exe_name} {cat.category_name} {dcmd.name}"
                 commands.append({
                     "name": f"{cat.category_name}.{dcmd.name}",
@@ -431,14 +399,12 @@ def _build_ai_native_json(registry: CommandRegistry) -> Dict[str, Any]:
                         "required": required
                     }
                 })
-    
     for root_cmd in structure.root_commands:
         discovered = _discover_commands_from_class(root_cmd, CommandCategory.SYSTEM)
         for dcmd in discovered:
             params_info = _extract_params_with_help(dcmd.callback)
             properties = {}
             required = []
-            
             for p in params_info:
                 if p.is_argument:
                     param_name = p.flag.strip('<>').lower()
@@ -458,7 +424,6 @@ def _build_ai_native_json(registry: CommandRegistry) -> Dict[str, Any]:
                         properties[param_name]["default"] = p.default_value
                     if p.is_required:
                         required.append(param_name)
-            
             commands.append({
                 "name": dcmd.name,
                 "description": dcmd.description,
@@ -470,7 +435,6 @@ def _build_ai_native_json(registry: CommandRegistry) -> Dict[str, Any]:
                     "required": required
                 }
             })
-    
     return {
         "schema_version": "1.0.0",
         "executable": exe_name,
@@ -479,9 +443,6 @@ def _build_ai_native_json(registry: CommandRegistry) -> Dict[str, Any]:
     }
 
 
-# ============================================================================
-# MODERN RENDERERS
-# ============================================================================
 def _render_header(console: Console):
     """Renders minimalist centered header"""
     exe_type = "Executable" if is_frozen_executable() else "Dev Mode"
@@ -506,18 +467,15 @@ def _render_usage(console: Console):
     content_lines = []
     exe_name = get_executable_name()
     
-    # Header
     content_lines.append(draw_section_header("USAGE", ColorScheme.NEON_GREEN))
     content_lines.append(Text())
     
-    # Generic syntax
     content_lines.append(Text(f"  {exe_name} ", style=ColorScheme.SILVER) + 
                         Text("[GLOBAL_OPTIONS] ", style=ColorScheme.GOLD) +
                         Text("<category> <command> ", style=f"bold {ColorScheme.NEON_CYAN}") +
                         Text("[OPTIONS] [ARGS]", style=ColorScheme.LAVENDER))
     content_lines.append(Text())
     
-    # Global options note
     note = Text()
     note.append(f"  {Symbols.ITEM} ", style=ColorScheme.GOLD)
     note.append("Global options (", style=ColorScheme.DIM)
@@ -530,7 +488,6 @@ def _render_usage(console: Console):
     
     content_lines.append(Text())
     
-    # Quick help hints
     content_lines.append(Text(f"  {Symbols.ARROW} ", style=ColorScheme.ELECTRIC_BLUE) +
                         Text("View all commands: ", style=ColorScheme.DIM) +
                         Text(f"{exe_name} --help --full", style=f"bold {ColorScheme.NEON_CYAN}"))
@@ -543,7 +500,7 @@ def _render_usage(console: Console):
     console.print(content)
 
 
-def _render_global_options(console: Console):
+def _render_options(console: Console):
     """Renders global options with modern styling"""
     content_lines = []
     
@@ -567,7 +524,7 @@ def _render_global_options(console: Console):
     console.print(content)
 
 
-def _render_categories_overview(console: Console, structure: HelpStructure):
+def _render_categories(console: Console, categories: List[CommandCategory], structure: HelpStructure):
     """Renders categories with modern badges and visual hierarchy"""
     content_lines = []
     
@@ -576,10 +533,16 @@ def _render_categories_overview(console: Console, structure: HelpStructure):
     
     total_commands = 0
     
-    for cat in structure.categories:
+    # Calcular ancho máximo de descripción para alinear badges
+    max_desc_len = 0
+    for cat in categories:
+        desc_len = len(cat.category_description)
+        if desc_len > max_desc_len:
+            max_desc_len = desc_len
+    
+    for cat in categories:
         commands = structure.commands_by_category.get(cat, [])
         
-        # Count actual commands
         count = 0
         for cmd_obj in commands:
             discovered = _discover_commands_from_class(cmd_obj, cat)
@@ -589,12 +552,16 @@ def _render_categories_overview(console: Console, structure: HelpStructure):
         
         line = Text()
         line.append(f"  {Symbols.COMMAND} ", style=ColorScheme.NEON_CYAN)
-        line.append(f"{cat.category_name:15}", style=f"bold {ColorScheme.WHITE}")
-        line.append(f"{cat.category_description:45}", style=ColorScheme.SILVER)
-        line.append(f"  {create_command_badge(count)}", style=ColorScheme.GOLD)
+        line.append(f"{cat.category_name:15}", style=f"bold {ColorScheme.NEON_CYAN}")  # CYAN para nombres
+        
+        # Padding para alinear badges
+        desc = cat.category_description
+        padding_needed = max_desc_len - len(desc) + 3
+        line.append(desc, style=ColorScheme.SILVER)
+        line.append(" " * padding_needed)
+        line.append(f"{count} cmd{'s' if count != 1 else ''}", style=ColorScheme.GOLD)
         content_lines.append(line)
     
-    # Total separator
     content_lines.append(Text())
     content_lines.append(Text(f"  {Symbols.SEPARATOR * 70}", style=ColorScheme.DIM))
     
@@ -626,7 +593,6 @@ def _render_root_commands(console: Console, root_commands: List[BaseCommand]):
         for dcmd in discovered:
             params = _extract_params_with_help(dcmd.callback)
             
-            # Command name and description
             line = Text()
             line.append(f"  {Symbols.COMMAND} ", style=ColorScheme.CORAL)
             line.append(dcmd.name.upper().replace('-', ' '), style=f"bold {ColorScheme.WHITE}")
@@ -635,7 +601,6 @@ def _render_root_commands(console: Console, root_commands: List[BaseCommand]):
             content_lines.append(Text(f"    {dcmd.description}", style=ColorScheme.SILVER))
             content_lines.append(Text())
             
-            # Syntax
             syntax_parts = [exe_name, "[GLOBAL_OPTIONS]", dcmd.name]
             arguments = [p for p in params if p.is_argument]
             options = [p for p in params if not p.is_argument]
@@ -649,14 +614,12 @@ def _render_root_commands(console: Console, root_commands: List[BaseCommand]):
             content_lines.append(Text(f"    {syntax}", style=ColorScheme.NEON_GREEN))
             content_lines.append(Text())
             
-            # Arguments
             if arguments:
                 content_lines.append(Text(f"    {Symbols.BOX} Arguments:", style=f"bold {ColorScheme.NEON_CYAN}"))
                 for arg in arguments:
                     content_lines.append(Text(f"      {arg.flag:20} {arg.help_text}", style=ColorScheme.SILVER))
                 content_lines.append(Text())
             
-            # Options
             if options:
                 content_lines.append(Text(f"    {Symbols.BOX} Options:", style=f"bold {ColorScheme.NEON_CYAN}"))
                 for opt in options:
@@ -680,38 +643,51 @@ def _render_category_panel(console: Console, category: CommandCategory, commands
     content_lines = []
     exe_name = get_executable_name()
     
-    # Category header
+    # Salto de línea antes
+    content_lines.append(Text())
+    
+    # Category header CENTRADO con = como separadores (MAGENTA)
+    header_text = category.category_name.upper()
+    total_width = 120
+    header_content = f"[ {header_text} ]"
+    padding = (total_width - len(header_content)) // 2
+    left_sep = "=" * padding
+    right_sep = "=" * (total_width - padding - len(header_content))
+    
     header = Text()
-    header.append(f"{Symbols.HEAVY_SEP * 3}{Symbols.LEFT_BRACKET} ", style=ColorScheme.NEON_CYAN)
-    header.append(category.category_name.upper(), style=f"bold {ColorScheme.WHITE}")
-    header.append(f" {Symbols.RIGHT_BRACKET}{Symbols.HEAVY_SEP * 3}", style=ColorScheme.NEON_CYAN)
+    header.append(left_sep, style=ColorScheme.NEON_MAGENTA)
+    header.append(f"[ {header_text} ]", style=f"bold {ColorScheme.NEON_MAGENTA}")
+    header.append(right_sep, style=ColorScheme.NEON_MAGENTA)
     content_lines.append(header)
     
-    content_lines.append(Text(f"  {category.category_description}", style=ColorScheme.SILVER))
+    # Descripción centrada en MAGENTA
+    desc_padding = (total_width - len(category.category_description)) // 2
+    content_lines.append(Text())
+    content_lines.append(Text(" " * desc_padding + category.category_description, style=ColorScheme.NEON_MAGENTA))
+    content_lines.append(Text())
     content_lines.append(Text())
     
     for section_title, section_cmds in subsections.items():
         if section_title:
+            # Subsección en BLANCO
             subsec_header = Text()
-            subsec_header.append(f"  {Symbols.SEPARATOR * 2} ", style=ColorScheme.GOLD)
-            subsec_header.append(section_title, style=f"bold {ColorScheme.GOLD}")
-            subsec_header.append(f" {Symbols.SEPARATOR * 2}", style=ColorScheme.GOLD)
+            subsec_header.append(f"  {Symbols.BOX} ", style=ColorScheme.WHITE)
+            subsec_header.append(section_title.upper(), style=f"bold {ColorScheme.WHITE}")
             content_lines.append(subsec_header)
+            content_lines.append(Text(f"  {Symbols.SEPARATOR * (len(section_title) + 4)}", style=ColorScheme.DIM))
             content_lines.append(Text())
         
         for dcmd in sorted(section_cmds, key=lambda c: c.name):
             params = _extract_params_with_help(dcmd.callback)
             
-            # Command name
+            # Nombre del comando en GOLD (amarillo)
             cmd_line = Text()
-            cmd_line.append(f"  {Symbols.COMMAND} ", style=ColorScheme.NEON_CYAN)
-            cmd_line.append(dcmd.name, style=f"bold {ColorScheme.WHITE}")
+            cmd_line.append(f"  {Symbols.COMMAND} ", style=ColorScheme.GOLD)
+            cmd_line.append(dcmd.name, style=f"bold {ColorScheme.GOLD}")
             content_lines.append(cmd_line)
             
-            # Description
             content_lines.append(Text(f"    {dcmd.description}", style=ColorScheme.SILVER))
             
-            # Syntax
             syntax_parts = [exe_name, category.category_name, dcmd.name]
             arguments = [p for p in params if p.is_argument]
             options = [p for p in params if not p.is_argument]
@@ -725,7 +701,6 @@ def _render_category_panel(console: Console, category: CommandCategory, commands
             content_lines.append(Text(f"    {syntax}", style=ColorScheme.NEON_GREEN))
             content_lines.append(Text())
             
-            # Arguments
             if arguments:
                 content_lines.append(Text(f"    {Symbols.BOX} Arguments:", style=f"bold {ColorScheme.NEON_CYAN}"))
                 for arg in arguments:
@@ -733,7 +708,6 @@ def _render_category_panel(console: Console, category: CommandCategory, commands
                     content_lines.append(Text(f"      {arg.flag:20} {help_text}", style=ColorScheme.SILVER))
                 content_lines.append(Text())
             
-            # Options
             if options:
                 content_lines.append(Text(f"    {Symbols.BOX} Options:", style=f"bold {ColorScheme.NEON_CYAN}"))
                 for opt in options:
@@ -742,18 +716,15 @@ def _render_category_panel(console: Console, category: CommandCategory, commands
                     content_lines.append(Text(f"      {opt.flag:20} {help_text}{default_info}", style=ColorScheme.SILVER))
                 content_lines.append(Text())
     
-    # Clean trailing empty lines
     while content_lines and str(content_lines[-1]).strip() == "":
         content_lines.pop()
     
+    content_lines.append(Text())
+    
     content = Text("\n").join(content_lines)
     console.print(content)
-    console.print()
 
 
-# ============================================================================
-# MAIN RENDER FUNCTION
-# ============================================================================
 def render_help(registry: CommandRegistry, json_mode: bool = False, ai_native: bool = False, full_help: bool = False):
     """
     Renders the complete system help with modern aesthetics.
@@ -765,9 +736,6 @@ def render_help(registry: CommandRegistry, json_mode: bool = False, ai_native: b
         full_help: If True, renders all commands from all categories
     """
     
-    # ========================================================================
-    # UTF-8 ENFORCEMENT for file redirection
-    # ========================================================================
     import io
     if not sys.stdout.isatty():
         if hasattr(sys.stdout, 'buffer'):
@@ -778,9 +746,6 @@ def render_help(registry: CommandRegistry, json_mode: bool = False, ai_native: b
                 line_buffering=False
             )
     
-    # ========================================================================
-    # JSON MODES
-    # ========================================================================
     if ai_native or (json_mode and "--ai" in sys.argv):
         ai_schema = _build_ai_native_json(registry)
         sys.stdout.write(json.dumps(ai_schema, indent=2, ensure_ascii=False, cls=JSONEncoder))
@@ -790,4 +755,68 @@ def render_help(registry: CommandRegistry, json_mode: bool = False, ai_native: b
     
     if json_mode:
         json_data = _build_json_structure(registry)
-        sys.stdout.write(json.dumps(
+        sys.stdout.write(json.dumps(json_data, indent=2, ensure_ascii=False, cls=JSONEncoder))
+        sys.stdout.write('\n')
+        sys.stdout.flush()
+        return
+    
+    is_file_output = not sys.stdout.isatty()
+    
+    if is_file_output:
+        console = Console(
+            record=True,
+            width=120,  
+            force_terminal=False,
+            legacy_windows=False
+        )
+    else:
+        console = Console(width=120)  
+    
+    structure = _extract_structure(registry)
+    
+    _render_header(console)
+    _render_usage(console)
+    console.print()
+    _render_options(console)
+    console.print()
+    _render_categories(console, structure.categories, structure)
+    console.print()
+    
+    if structure.root_commands:
+        _render_root_commands(console, structure.root_commands)
+        console.print()
+    
+    if full_help:
+        priority_order = [
+            CommandCategory.HEALTH, CommandCategory.SYSTEM, CommandCategory.NUCLEUS,
+            CommandCategory.PROJECT, CommandCategory.PROFILE, CommandCategory.EXTENSION,
+            CommandCategory.SYNAPSE, CommandCategory.SERVICE, CommandCategory.RUNTIME,
+            CommandCategory.CONTEXT, CommandCategory.INTENT, CommandCategory.FILESYSTEM,
+            CommandCategory.GITHUB, CommandCategory.GEMINI, CommandCategory.TWITTER,
+            CommandCategory.CHROME,
+        ]
+        
+        for category in priority_order:
+            if category in structure.commands_by_category:
+                commands = structure.commands_by_category[category]
+                _render_category_panel(console, category, commands)
+        
+        for category in structure.commands_by_category:
+            if category not in priority_order:
+                _render_category_panel(console, category, structure.commands_by_category[category])
+    else:
+        footer = Text()
+        footer.append(f"\n  {Symbols.ARROW} ", style=ColorScheme.ELECTRIC_BLUE)
+        footer.append("To see all detailed commands: ", style=ColorScheme.DIM)
+        footer.append(f"{get_executable_name()} --help --full\n", style=f"bold {ColorScheme.NEON_CYAN}")
+        console.print(footer)
+
+    if is_file_output:
+        full_output = console.export_text()
+        
+        if hasattr(sys.stdout, 'buffer'):
+            sys.stdout.buffer.write(full_output.encode('utf-8'))
+            sys.stdout.buffer.flush()
+        else:
+            sys.stdout.write(full_output)
+            sys.stdout.flush()

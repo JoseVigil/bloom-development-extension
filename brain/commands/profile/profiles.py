@@ -85,9 +85,16 @@ class ProfilesListCommand(BaseCommand):
         for p in profiles:
             status = "✓ Activo" if p.get('exists') else "✗ Borrado"
             profile_id = p.get('id', 'N/A')
+            
+            # ✅ Agregar badge visual para perfiles master
             alias = p.get('alias', 'N/A')[:18]
+            is_master = p.get('master_profile', False)
+            if is_master:
+                alias = f"👑 {alias}"  # Añadir corona para perfiles master
+            
             account = p.get('linked_account') or '-'
             created = p.get('created_at', 'N/A')[:10]
+            
             typer.echo(f"{status:<8} {profile_id} {alias:<20} {account:<30} {created}")
         
         typer.echo()
@@ -109,11 +116,12 @@ class ProfilesCreateCommand(BaseCommand):
         return CommandMetadata(
             name="create",
             category=CommandCategory.PROFILE,
-            version="1.0.0",
+            version="1.1.0",  # Version bump por nueva feature
             description="Crea un nuevo perfil de Chrome aislado",
             examples=[
                 "brain profile create 'ChatGPT Work'",
-                "brain profile create 'Claude Personal' --json"
+                "brain profile create 'Claude Personal' --master",
+                "brain profile create 'Main Profile' --master --json"
             ]
         )
 
@@ -121,10 +129,11 @@ class ProfilesCreateCommand(BaseCommand):
         @app.command(name="create")
         def create_profile(
             ctx: typer.Context,
-            alias: str = typer.Argument(..., help="Nombre descriptivo del perfil")
+            alias: str = typer.Argument(..., help="Nombre descriptivo del perfil"),
+            master: bool = typer.Option(False, "--master", help="Marcar como perfil master")
         ):
             """Crea un nuevo perfil con el alias especificado."""
-            logger.info(f"🔨 Comando: profile create - Alias: '{alias}'")
+            logger.info(f"🔨 Comando: profile create - Alias: '{alias}', Master: {master}")
             
             gc = ctx.obj
             if gc is None:
@@ -133,24 +142,27 @@ class ProfilesCreateCommand(BaseCommand):
             
             logger.debug(f"  → Modo JSON: {gc.json_mode}")
             logger.debug(f"  → Verbose: {gc.verbose}")
+            logger.debug(f"  → Master flag: {master}")
             
             try:
                 from brain.core.profile.profile_manager import ProfileManager
                 
                 if gc.verbose and not gc.json_mode:
-                    typer.echo(f"🔨 Creando perfil '{alias}'...", err=True)
+                    master_indicator = " (MASTER)" if master else ""
+                    typer.echo(f"🔨 Creando perfil '{alias}'{master_indicator}...", err=True)
                 
                 logger.debug("Inicializando ProfileManager...")
                 pm = ProfileManager()
                 
-                logger.info(f"Creando perfil con alias '{alias}'...")
-                profile_data = pm.create_profile(alias)
-                logger.info(f"✅ Perfil creado: ID={profile_data.get('id', 'N/A')[:8]}")
+                logger.info(f"Creando perfil con alias '{alias}' (master={master})...")
+                profile_data = pm.create_profile(alias, is_master=master)
+                logger.info(f"✅ Perfil creado: ID={profile_data.get('id', 'N/A')[:8]}, Master={profile_data.get('master_profile', False)}")
                 
                 # En modo JSON, devolver formato plano esperado por Sentinel
                 if gc.json_mode:
                     result = {
                         "uuid": profile_data.get('id'),
+                        "master_profile": profile_data.get('master_profile', False),
                         "status": "success"
                     }
                     # Usar dumps directamente para control total
@@ -174,10 +186,16 @@ class ProfilesCreateCommand(BaseCommand):
     def _render_create(self, data: dict) -> None:
         """Renderiza la confirmación de creación."""
         profile = data.get('data', {})
-        typer.echo(f"\n✅ Perfil creado exitosamente")
+        is_master = profile.get('master_profile', False)
+        master_badge = " 👑 MASTER" if is_master else ""
+        
+        typer.echo(f"\n✅ Perfil creado exitosamente{master_badge}")
         typer.echo(f"   ID:    {profile.get('id', 'N/A')}")
         typer.echo(f"   Alias: {profile.get('alias', 'N/A')}")
         typer.echo(f"   Ruta:  {profile.get('path', 'N/A')}")
+        
+        if is_master:
+            typer.echo(f"   🔑 Tipo:  Perfil Master")
         
         profile_id = profile.get('id')
         launch_id = (profile_id[:8] + '...') if isinstance(profile_id, str) and profile_id else 'N/A'

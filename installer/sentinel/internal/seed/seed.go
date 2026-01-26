@@ -119,10 +119,22 @@ func HandleSeed(c *core.Core, alias string, isMaster bool) (string, string, erro
 	}
 
 	sm, _ := discovery.DiscoverSystem(c.Paths.BinDir)
-	cmd := exec.Command(sm.BrainPath, "--json", "profile", "create", alias)
+	
+	// Construir argumentos según si es master o no
+	args := []string{"--json", "profile", "create", alias}
+	if isMaster {
+		args = append(args, "--master")
+	}
+	
+	c.Logger.Info("[SEED] Executing: %s %v", sm.BrainPath, args)
+	
+	cmd := exec.Command(sm.BrainPath, args...)
 	var out bytes.Buffer
+	var errOut bytes.Buffer
 	cmd.Stdout = &out
+	cmd.Stderr = &errOut
 	if err := cmd.Run(); err != nil {
+		c.Logger.Error("[SEED] Brain stderr: %s", errOut.String())
 		return "", "", fmt.Errorf("brain_error: %v", err)
 	}
 
@@ -164,12 +176,11 @@ func HandleSeed(c *core.Core, alias string, isMaster bool) (string, string, erro
 	updateProfilesInventory(c, uuid, alias, isMaster, profileDir, configDir, extDir, logsDir, specPath)
 
 	if isMaster {
-	status := startup.LoadCurrentStatus(c)
-	status.MasterProfile = uuid
-	status.ExtensionID = c.Config.Provisioning.ExtensionID 
-	status.Timestamp = time.Now().Format(time.RFC3339)
-	_ = startup.SaveSystemStatus(c, status)
-}
+		status := startup.LoadCurrentStatus(c)
+		status.MasterProfile = uuid
+		status.Timestamp = time.Now().Format(time.RFC3339)
+		_ = startup.SaveSystemStatus(c, status)
+	}
 
 	return uuid, profileDir, nil
 }

@@ -427,8 +427,6 @@ bloom-development-extension/
 │       │   │   ├── ignition.go
 │       │   │   ├── reaper.go
 │       │   │   └── telemetry.go
-│       │   ├── persistence/
-│       │   │   └── persistence.go
 │       │   ├── seed/
 │       │   │   └── seed.go
 │       │   ├── startup/
