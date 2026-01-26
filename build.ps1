@@ -1,306 +1,368 @@
-param(
-    [switch]$Clean
+#Requires -Version 5.1
+# =========================================
+# BLOOM BRAIN - BUILD SCRIPT
+# =========================================
+# Output moderno y limpio
+# Integración fluida con build.py
+# =========================================
+
+$ErrorActionPreference = "Stop"
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
+# =========================================
+# EMOJIS MODERNOS
+# =========================================
+$EMO = @{
+    brain    = [char]::ConvertFromUtf32(0x1F9E0)  # 🧠
+    clean    = [char]::ConvertFromUtf32(0x1F9F9)  # 🧹
+    build    = [char]::ConvertFromUtf32(0x1F528)  # 🔨
+    rocket   = [char]::ConvertFromUtf32(0x1F680)  # 🚀
+    box      = [char]::ConvertFromUtf32(0x1F4E6)  # 📦
+    doc      = [char]::ConvertFromUtf32(0x1F4C4)  # 📄
+    ok       = [char]::ConvertFromUtf32(0x2705)   # ✅
+    warn     = [char]::ConvertFromUtf32(0x26A0)   # ⚠️
+    fail     = [char]::ConvertFromUtf32(0x274C)   # ❌
+    progress = [char]::ConvertFromUtf32(0x23F3)   # ⏳
+}
+
+# Spinner frames
+$SPINNER = @("|", "/", "-", "\", "|", "/", "-", "\")
+
+# =========================================
+# FUNCIONES DE OUTPUT
+# =========================================
+function Write-Header($title) {
+    $line = "=" * 43
+    Write-Host ""
+    Write-Host $line -ForegroundColor Cyan
+    Write-Host "  $title" -ForegroundColor Cyan
+    Write-Host $line -ForegroundColor Cyan
+    Write-Host ""
+}
+
+function Write-Step($msg) { 
+    Write-Host "   $($EMO.progress) $msg" -ForegroundColor Cyan
+}
+
+function Write-Success($msg) { 
+    Write-Host "   $($EMO.ok) $msg" -ForegroundColor Green 
+}
+
+function Write-Warning($msg) { 
+    Write-Host "   $($EMO.warn) $msg" -ForegroundColor Yellow 
+}
+
+function Write-Error($msg) { 
+    Write-Host "   $($EMO.fail) $msg" -ForegroundColor Red
+    Write-Host ""
+    exit 1 
+}
+
+function Write-Separator() {
+    Write-Host ""
+    Write-Host ("-" * 70) -ForegroundColor DarkGray
+    Write-Host ""
+}
+
+# =========================================
+# INICIO
+# =========================================
+Clear-Host
+Write-Header "$($EMO.brain) BLOOM BRAIN BUILD"
+
+# =========================================
+# CONFIGURAR LOG
+# =========================================
+$logDir = Join-Path $env:LOCALAPPDATA "BloomNucleus\logs\build"
+if (-not (Test-Path $logDir)) {
+    New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+}
+$logFile = Join-Path $logDir "brain.build.log"
+
+# =========================================
+# LIMPIEZA INICIAL
+# =========================================
+Write-Step "Limpiando entorno..."
+
+# Detener procesos
+Get-Process -Name "brain" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+
+# Limpiar cache
+$dirsToClean = @("build", "dist", "__pycache__")
+foreach ($dir in $dirsToClean) {
+    if (Test-Path $dir) { 
+        Remove-Item $dir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+Write-Success "Entorno limpio"
+
+# =========================================
+# EJECUTAR BUILD.PY
+# =========================================
+Write-Host ""
+Write-Step "Ejecutando compilacion..."
+
+# Verificar Python
+$pythonExe = (Get-Command python -ErrorAction SilentlyContinue).Source
+if (-not $pythonExe) {
+    Write-Error "Python no encontrado en PATH"
+}
+
+# Verificar build.py
+if (-not (Test-Path "build.py")) {
+    Write-Error "build.py no encontrado"
+}
+
+Write-Separator
+
+# Mostrar spinner mientras compila
+Write-Host "   $($EMO.progress) Compilando con PyInstaller..." -NoNewline
+
+# Iniciar proceso en background
+$buildJob = Start-Job -ScriptBlock {
+    param($pythonPath, $workingDir, $logPath)
+    Set-Location $workingDir
+    $env:BUILD_LOG_PATH = $logPath
+    & $pythonPath "build.py" 2>&1
+} -ArgumentList $pythonExe, $PWD, $logFile
+
+# Spinner animation
+$spinnerIndex = 0
+while ($buildJob.State -eq "Running") {
+    Write-Host "`r   $($SPINNER[$spinnerIndex]) Compilando con PyInstaller..." -NoNewline -ForegroundColor Cyan
+    $spinnerIndex = ($spinnerIndex + 1) % $SPINNER.Count
+    Start-Sleep -Milliseconds 100
+}
+
+# Limpiar línea del spinner
+Write-Host "`r   $($EMO.progress) Compilando con PyInstaller...               " -NoNewline
+Write-Host "`r" -NoNewline
+
+# Obtener resultado
+$buildOutput = Receive-Job -Job $buildJob
+$buildExitCode = if ($buildJob.ChildJobs[0].State -eq "Completed") { 0 } else { 1 }
+Remove-Job -Job $buildJob -Force
+
+# Procesar output para mostrar solo mensajes importantes
+$importantLines = $buildOutput | Where-Object {
+    $_ -match "VERSION file creado" -or
+    $_ -match "Completado:" -or
+    $_ -match "Archivos copiados" -or
+    $_ -match "Ejecutable creado" -or
+    $_ -match "Ejecutable funciona" -or
+    $_ -match "Generando archivos de ayuda" -or
+    $_ -match "Generando arboles" -or
+    $_ -match "BUILD COMPLETADO"
+}
+
+$projectRoot = (Get-Location).Path
+foreach ($line in $importantLines) {
+    $cleanLine = $line -replace '\[.*?\]\s*', '' -replace '^\s+', ''
+    
+    if ($cleanLine -match "BUILD COMPLETADO EXITOSAMENTE") {
+        Write-Host "      BUILD COMPLETADO EXITOSAMENTE" -ForegroundColor Yellow
+    }
+    elseif ($cleanLine -match "VERSION file creado") {
+        Write-Host "      VERSION file creado:" -NoNewline -ForegroundColor White
+        $version = $cleanLine -replace '.*VERSION file creado:\s*', ''
+        Write-Host " $version" -ForegroundColor Gray
+    }
+    elseif ($cleanLine -match "Archivos copiados a:") {
+        Write-Host "      Archivos copiados a:" -NoNewline -ForegroundColor White
+        $fullPath = $cleanLine -replace '.*Archivos copiados a:\s*', ''
+        $relativePath = $fullPath -replace [regex]::Escape($projectRoot + "\"), ''
+        Write-Host " $relativePath" -ForegroundColor Green
+    }
+    elseif ($cleanLine -match "Ejecutable creado:") {
+        Write-Host "      Ejecutable creado:" -NoNewline -ForegroundColor White
+        $fullPath = $cleanLine -replace '.*Ejecutable creado:\s*', ''
+        $relativePath = $fullPath -replace [regex]::Escape($projectRoot + "\"), ''
+        Write-Host " $relativePath" -ForegroundColor Green
+    }
+    elseif ($cleanLine -match "Generando archivos de ayuda") {
+        Write-Host "      Generando archivos de ayuda..." -ForegroundColor Gray
+    }
+    elseif ($cleanLine -match "Generando arboles") {
+        Write-Host "      Generando arboles de directorios..." -ForegroundColor Gray
+    }
+    elseif ($cleanLine -match "Completado:") {
+        # Dividir en "Completado:" (blanco) y el resto (verde)
+        $parts = $cleanLine -split "Completado:", 2
+        if ($parts.Count -eq 2) {
+            Write-Host "      Completado:" -NoNewline -ForegroundColor White
+            Write-Host $parts[1] -ForegroundColor Green
+        }
+    }
+    else {
+        Write-Host "      $cleanLine" -ForegroundColor Gray
+    }
+}
+
+Write-Separator
+
+# Verificar resultado
+if ($buildExitCode -ne 0) {
+    Write-Host ""
+    Write-Error "Build fallo (ver $logFile)"
+}
+
+# =========================================
+# VERIFICAR EJECUTABLE
+# =========================================
+Write-Step "Localizando ejecutable..."
+
+$possiblePaths = @(
+    "installer\native\bin\win32\brain\brain.exe",
+    "dist\brain\brain.exe"
 )
 
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-$OutputEncoding = [System.Text.Encoding]::UTF8
-
-Write-Host "=========================================" -ForegroundColor Cyan
-Write-Host "   BLOOM BRAIN: BUILD & DEPLOY SYSTEM" -ForegroundColor Cyan
-Write-Host "=========================================" -ForegroundColor Cyan
-
-# ---------------------------------------------------------
-# FUNCION: Encontrar procesos que usan un archivo
-# ---------------------------------------------------------
-function Get-ProcessUsingFile {
-    param([string]$FilePath)
-    
-    try {
-        $processes = @()
-        Get-Process | ForEach-Object {
-            try {
-                $_.Modules | ForEach-Object {
-                    if ($_.FileName -eq $FilePath) {
-                        $processes += $_.ProcessName
-                    }
-                }
-            } catch {}
-        }
-        return $processes
-    } catch {
-        return @()
-    }
-}
-
-# ---------------------------------------------------------
-# FUNCION: Eliminar archivos con Handle.exe (si existe)
-# ---------------------------------------------------------
-function Unlock-FileWithHandle {
-    param([string]$FilePath)
-    
-    # Buscar handle.exe en ubicaciones comunes
-    $handlePaths = @(
-        "C:\Sysinternals\handle.exe",
-        "$env:USERPROFILE\Downloads\handle.exe",
-        "C:\Program Files\Sysinternals\handle.exe"
-    )
-    
-    $handleExe = $handlePaths | Where-Object { Test-Path $_ } | Select-Object -First 1
-    
-    if ($handleExe) {
-        Write-Host "   -> Usando handle.exe para liberar archivo..." -ForegroundColor Gray
-        $output = & $handleExe -accepteula -nobanner $FilePath 2>&1
-        
-        # Parsear el output para encontrar PIDs
-        $output | ForEach-Object {
-            if ($_ -match "pid:\s*(\d+)") {
-                $pid = $matches[1]
-                Write-Host "   -> Cerrando handle del proceso PID $pid..." -ForegroundColor Gray
-                & $handleExe -accepteula -c $matches[0] -p $pid -y 2>&1 | Out-Null
-            }
-        }
-        return $true
-    }
-    return $false
-}
-
-# ---------------------------------------------------------
-# PASO 1: MATAR PROCESOS (Limpieza AGRESIVA)
-# ---------------------------------------------------------
-Write-Host "1. Deteniendo procesos brain.exe activos..." -ForegroundColor Yellow
-
-$killAttempts = 0
-$maxAttempts = 3
-
-while ($killAttempts -lt $maxAttempts) {
-    $killAttempts++
-    
-    $brainProcesses = Get-Process -Name "brain" -ErrorAction SilentlyContinue
-    
-    if ($brainProcesses) {
-        Write-Host "   -> Intento $killAttempts de $maxAttempts..." -ForegroundColor Gray
-        
-        $brainProcesses | ForEach-Object { 
-            Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue 
-        }
-        
-        Start-Sleep -Milliseconds 500
-    } else {
-        Write-Host "   -> Sistema limpio (no hay procesos brain.exe)" -ForegroundColor Gray
+$exePath = $null
+foreach ($path in $possiblePaths) {
+    if (Test-Path $path) {
+        $exePath = $path
         break
     }
 }
 
-# Verificacion final
-$remainingProcesses = Get-Process -Name "brain" -ErrorAction SilentlyContinue
-if ($remainingProcesses) {
-    Write-Host "   ERROR: No se pudieron matar todos los procesos brain.exe" -ForegroundColor Red
-    Write-Host "   Por favor cierra manualmente todas las terminales con brain.exe" -ForegroundColor Red
-    exit 1
+if (-not $exePath) {
+    Write-Error "brain.exe no encontrado"
 }
 
-Write-Host "   -> Esperando liberacion de archivos..." -ForegroundColor Gray
-Start-Sleep -Seconds 2
+Write-Success "Ejecutable: $exePath"
 
-# ---------------------------------------------------------
-# PASO 1.5: LIMPIAR CACHÉ DE PYINSTALLER
-# ---------------------------------------------------------
-Write-Host "1.5. Limpiando caché de compilación..." -ForegroundColor Yellow
+# =========================================
+# VERIFICAR FUNCIONALIDAD
+# =========================================
+Write-Step "Verificando ejecutable..."
 
-@("build", "dist") | ForEach-Object {
-    if (Test-Path $_) {
-        Remove-Item -Recurse -Force $_ -ErrorAction SilentlyContinue
-        Write-Host "   -> Eliminado: $_" -ForegroundColor Gray
+$testResult = & $exePath --help 2>&1
+if ($LASTEXITCODE -eq 0) {
+    Write-Success "Ejecutable funcional"
+} else {
+    Write-Warning "Ejecutable no responde correctamente"
+}
+
+# =========================================
+# DEPLOY LOCAL
+# =========================================
+Write-Host ""
+Write-Step "Desplegando localmente..."
+
+$deployBin = Join-Path $env:LOCALAPPDATA "BloomNucleus\bin\brain"
+
+# Limpiar destino
+if (Test-Path $deployBin) {
+    try {
+        Remove-Item $deployBin -Recurse -Force -ErrorAction Stop
+    } catch {
+        Get-Process -Name "brain" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 1
+        Remove-Item $deployBin -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
 
-Get-ChildItem -Recurse -Filter "__pycache__" -ErrorAction SilentlyContinue | 
-    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+# Copiar archivos
+try {
+    New-Item -ItemType Directory -Path $deployBin -Force | Out-Null
+    $sourceDir = Split-Path $exePath -Parent
+    Copy-Item "$sourceDir\*" $deployBin -Recurse -Force
+    Write-Success "Binario desplegado"
+} catch {
+    Write-Error "Error copiando archivos: $_"
+}
 
-Get-ChildItem -Recurse -Filter "*.pyc" -ErrorAction SilentlyContinue | 
-    Remove-Item -Force -ErrorAction SilentlyContinue
+# =========================================
+# CONFIGURAR PATH
+# =========================================
+Write-Host ""
+Write-Step "Configurando PATH..."
 
-Write-Host "   -> Caché limpiado" -ForegroundColor Green
+$userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+$bloomBinPath = Join-Path $env:LOCALAPPDATA "BloomNucleus\bin"
 
-# ---------------------------------------------------------
-# PASO 2: COMPILAR (Delegar a Python)
-# ---------------------------------------------------------
-Write-Host "2. Ejecutando build.py..." -ForegroundColor Yellow
-
-if ($Clean) {
-    python build.py --clean
+if ($userPath -notlike "*BloomNucleus\bin*") {
+    try {
+        $newPath = "$userPath;$bloomBinPath"
+        [Environment]::SetEnvironmentVariable("PATH", $newPath, "User")
+        Write-Success "PATH actualizado (reinicia terminal)"
+    } catch {
+        Write-Warning "No se pudo actualizar PATH automaticamente"
+        Write-Host "      Anade manualmente: $bloomBinPath" -ForegroundColor Yellow
+    }
 } else {
-    python build.py
+    Write-Success "PATH ya configurado"
 }
 
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "ERROR CRITICO: El build de Python fallo." -ForegroundColor Red
-    exit 1
-}
+# =========================================
+# RESUMEN FINAL
+# =========================================
+Write-Host ""
+Write-Header "$($EMO.ok) BUILD COMPLETADO"
 
-Write-Host "   -> Compilacion exitosa." -ForegroundColor Green
+Write-Host "   $($EMO.box) Ejecutable:" -NoNewline
+Write-Host "  $deployBin\brain.exe" -ForegroundColor Yellow
+Write-Host ""
+Write-Host "   $($EMO.doc) Log:" -NoNewline
+Write-Host "         $logFile" -ForegroundColor Yellow
+Write-Host ""
 
-# ---------------------------------------------------------
-# PASO 3: DEPLOY - CORREGIDO (Copiar a bin\brain)
-# ---------------------------------------------------------
-$SourceDir = "dist\brain"
-$DestDir = "$env:LOCALAPPDATA\BloomNucleus\bin\brain"
+# =========================================
+# ACTUALIZAR TELEMETRY.JSON
+# =========================================
+Write-Step "Actualizando telemetry..."
 
-Write-Host "3. Desplegando a: $DestDir" -ForegroundColor Yellow
+$pythonExe = (Get-Command python -ErrorAction SilentlyContinue).Source
+if (-not $pythonExe) {
+    Write-Warning "Python no encontrado en el PATH. Telemetry no se actualizó."
+} else {
+    # Ruta relativa directa: desde la carpeta donde está build.ps1
+    $updateScript = Join-Path $PSScriptRoot "scripts\python\update_build_telemetry.py"
 
-if (!(Test-Path $SourceDir)) {
-    Write-Host "ERROR: No encuentro la carpeta compilada en: $SourceDir" -ForegroundColor Red
-    exit 1
-}
+    if (-not (Test-Path $updateScript)) {
+        Write-Warning "No se encontró el script de telemetry"
+        Write-Warning "Ruta buscada: $updateScript"
+        Write-Warning "Directorio actual: $PWD"
+        Write-Warning "PSScriptRoot   : $PSScriptRoot"
+    } else {
+        $telemetryKey   = "brain_build"
+        $emojiBox       = [char]::ConvertFromUtf32(0x1F4E6)   # 📦
+        $telemetryLabel = "$emojiBox BRAIN BUILD"             # ← exactamente como lo querés
+        $telemetryPath  = $logFile -replace '\\', '/'
 
-# Limpiar SOLO el subdirectorio brain/ (no tocar otros archivos en bin/)
-if (Test-Path -Path $DestDir) {
-    Write-Host "   -> Limpiando SOLO: $DestDir" -ForegroundColor Gray
-    
-    $cleanAttempts = 0
-    $cleanSuccess = $false
-    
-    while ($cleanAttempts -lt 3 -and -not $cleanSuccess) {
-        $cleanAttempts++
-        
         try {
-            Remove-Item -Path $DestDir -Force -Recurse -ErrorAction Stop
-            $cleanSuccess = $true
-            Write-Host "   -> Destino limpiado exitosamente" -ForegroundColor Gray
+            # Llamada al script Python
+            & $pythonExe $updateScript $telemetryKey $telemetryLabel $telemetryPath
+
+            if ($LASTEXITCODE -eq 0) {
+                Write-Success "Telemetry actualizado correctamente"
+                Write-Host "      Label: $telemetryLabel" -ForegroundColor White
+                Write-Host "      Path : $telemetryPath"  -ForegroundColor Gray
+            } else {
+                Write-Warning "El script de telemetry terminó con código $LASTEXITCODE"
+            }
         }
         catch {
-            $errorMessage = $_.Exception.Message
-            
-            if ($errorMessage -match "'([^']+)'") {
-                $lockedFile = $matches[1]
-                Write-Host "   -> Archivo bloqueado: $lockedFile" -ForegroundColor Yellow
-                
-                if (Unlock-FileWithHandle -FilePath $lockedFile) {
-                    Write-Host "   -> Archivo desbloqueado, reintentando..." -ForegroundColor Gray
-                    Start-Sleep -Seconds 1
-                    continue
-                }
-                
-                if ($cleanAttempts -eq 2) {
-                    Write-Host "   -> Intentando mover directorio en lugar de eliminar..." -ForegroundColor Yellow
-                    $backupDir = "$DestDir.old_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
-                    
-                    try {
-                        Move-Item -Path $DestDir -Destination $backupDir -Force -ErrorAction Stop
-                        Write-Host "   -> Directorio antiguo movido a: $backupDir" -ForegroundColor Gray
-                        Write-Host "   -> Puedes eliminarlo manualmente mas tarde" -ForegroundColor Gray
-                        $cleanSuccess = $true
-                        break
-                    } catch {
-                        Write-Host "   -> No se pudo mover el directorio tampoco" -ForegroundColor Red
-                    }
-                }
-            }
-            
-            if ($cleanAttempts -lt 3) {
-                Write-Host "   -> Reintento $cleanAttempts/3..." -ForegroundColor Gray
-                Start-Sleep -Seconds 2
-            } else {
-                Write-Host "" -ForegroundColor Red
-                Write-Host "   ================================================" -ForegroundColor Red
-                Write-Host "   ERROR: No se pudo limpiar el destino" -ForegroundColor Red
-                Write-Host "   ================================================" -ForegroundColor Red
-                Write-Host "   Archivo bloqueado: $lockedFile" -ForegroundColor Yellow
-                Write-Host "" -ForegroundColor Red
-                Write-Host "   SOLUCIONES:" -ForegroundColor Yellow
-                Write-Host "   1. Cierra TODAS las terminales y ventanas" -ForegroundColor White
-                Write-Host "   2. Busca procesos de Brain en el Administrador de tareas" -ForegroundColor White
-                Write-Host "   3. Reinicia el PC si nada funciona" -ForegroundColor White
-                Write-Host "" -ForegroundColor Red
-                
-                $possibleProcesses = Get-Process | Where-Object { 
-                    $_.Path -and $_.Path -like "*BloomNucleus*" 
-                }
-                
-                if ($possibleProcesses) {
-                    Write-Host "   PROCESOS SOSPECHOSOS ENCONTRADOS:" -ForegroundColor Yellow
-                    $possibleProcesses | ForEach-Object {
-                        Write-Host "   - PID: $($_.Id) | Nombre: $($_.ProcessName) | Path: $($_.Path)" -ForegroundColor White
-                    }
-                    Write-Host "" -ForegroundColor Red
-                    Write-Host "   Ejecuta: Stop-Process -Id <PID> -Force" -ForegroundColor Cyan
-                }
-                
-                exit 1
-            }
+            Write-Warning "Error al ejecutar el script de telemetry: $_"
         }
     }
 }
 
-New-Item -ItemType Directory -Force -Path $DestDir | Out-Null
-
-Write-Host "   -> Copiando archivos..." -ForegroundColor Gray
-
-$copyAttempts = 0
-$copySuccess = $false
-
-while ($copyAttempts -lt 3 -and -not $copySuccess) {
-    $copyAttempts++
-    
-    try {
-        Copy-Item -Path "$SourceDir\*" -Destination $DestDir -Recurse -Force -ErrorAction Stop
-        $copySuccess = $true
-        Write-Host "   -> Archivos copiados exitosamente" -ForegroundColor Gray
-    }
-    catch {
-        if ($copyAttempts -lt 3) {
-            Write-Host "   -> Reintento $copyAttempts/3..." -ForegroundColor Gray
-            Start-Sleep -Seconds 2
-        } else {
-            Write-Host "   ERROR: No se pudo copiar despues de 3 intentos" -ForegroundColor Red
-            Write-Host "   Mensaje: $($_.Exception.Message)" -ForegroundColor Red
-            exit 1
-        }
-    }
-}
-
-Write-Host "CICLO COMPLETADO: Brain actualizado." -ForegroundColor Green
-Write-Host "=========================================" -ForegroundColor Cyan
+# =========================================
+# RESUMEN FINAL
+# =========================================
 Write-Host ""
-Write-Host "Ejecutable: $DestDir\brain.exe" -ForegroundColor Cyan
+Write-Header "$($EMO.ok) BUILD COMPLETADO"
 
-# ---------------------------------------------------------
-# PASO 4: PROCESAR VERSIONES
-# ---------------------------------------------------------
-Write-Host "4. Procesando actualizaciones de versión..." -ForegroundColor Yellow
-python update_version.py
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "WARN: Fallo en update_version.py - Revisa update_version.log" -ForegroundColor Yellow
-} else {
-    Write-Host "   -> Versiones y commit procesados." -ForegroundColor Green
-}
-
-# ---------------------------------------------------------
-# PASO 5: GESTION INTELIGENTE DEL PATH
-# ---------------------------------------------------------
-Write-Host "5. Actualizando Variables de Entorno..." -ForegroundColor Yellow
-
-$OldPath = "$env:LOCALAPPDATA\BloomNucleus\bin"
-$NewPath = "$env:LOCALAPPDATA\BloomNucleus\bin\brain"
-
-$RegistryPath = [Environment]::GetEnvironmentVariable("Path", "User")
-
-if ($RegistryPath -like "*$OldPath*" -and $RegistryPath -notlike "*$OldPath\brain*") {
-    $RegistryPath = $RegistryPath.Replace(";$OldPath", "").Replace($OldPath, "")
-    Write-Host "   -> Ruta obsoleta eliminada del Registro" -ForegroundColor Gray
-}
-
-if ($RegistryPath -notlike "*$NewPath*") {
-    [Environment]::SetEnvironmentVariable("Path", "$RegistryPath;$NewPath", "User")
-    Write-Host "   [OK] Registro de Windows actualizado." -ForegroundColor Green
-} else {
-    Write-Host "   [OK] El Registro ya estaba correcto." -ForegroundColor Gray
-}
-
-if ($env:Path -notlike "*$NewPath*") {
-    $env:Path += ";$NewPath"
-    Write-Host "   [OK] Sesión actual actualizada (Ya puedes escribir 'brain')" -ForegroundColor Green
-}
-
+Write-Host "   $($EMO.box) Ejecutable:" -NoNewline
+Write-Host "  $deployBin\brain.exe" -ForegroundColor Yellow
 Write-Host ""
-Write-Host "✅ Ya puedes escribir 'brain' en esta terminal." -ForegroundColor Green
+Write-Host "   $($EMO.doc) Log:" -NoNewline
+Write-Host "         $logFile" -ForegroundColor Yellow
+Write-Host ""
+Write-Host "   Prueba con:" -ForegroundColor Cyan
+Write-Host "   > brain --help" -ForegroundColor White
+Write-Host "   > brain --help --full" -ForegroundColor Green
+Write-Host ""
+
+exit 0

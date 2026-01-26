@@ -49,12 +49,16 @@
     ],
     "options": [
       {
+        "name": "config-override",
+        "usage": "JSON para sobrescribir campos en synapse.config.js"
+      },
+      {
         "name": "mode",
         "usage": "Modo de lanzamiento (landing o discovery)",
         "default": "landing"
       }
     ],
-    "example": "  sentinel launch profile_001 --mode landing\n  sentinel --json launch profile_002 --mode discovery | jq .",
+    "example": "  sentinel launch profile_001 --mode landing\n  sentinel --json launch profile_002 --mode discovery | jq .\n  sentinel --json launch profile_003 --mode discovery --config-override '{\"register\":true,\"email\":\"user@example.com\"}'",
     "requires": "  - El perfil debe existir (usar 'sentinel seed' primero)\n  - brain.exe disponible y ejecutable\n  - Puerto 5678 libre para servicio Brain\n  - Extension ID válido en ignition_spec.json\n  - bloom-host.exe en bin/native/ para Native Messaging"
   },
   {

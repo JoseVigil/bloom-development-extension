@@ -1,17 +1,39 @@
 @echo off
-setlocal
+chcp 65001 >nul
+setlocal EnableDelayedExpansion
+
+:: Configurar directorio de logs (usando LOCALAPPDATA para ruta dinámica/portable)
+set LOG_BASE_DIR=%LOCALAPPDATA%\BloomNucleus\logs\build
+set LOG_FILE=%LOG_BASE_DIR%\sentinel.build.log
+
+:: Crear directorios de logs si no existen
+if not exist "%LOG_BASE_DIR%" mkdir "%LOG_BASE_DIR%"
+
+:: Iniciar log con timestamp
+echo ============================================ > "%LOG_FILE%"
+echo Build Log - %DATE% %TIME% >> "%LOG_FILE%"
+echo ============================================ >> "%LOG_FILE%"
+echo. >> "%LOG_FILE%"
 
 echo ============================================
-echo Building Sentinel Base (Safe Mode)
+echo 🚧 Building Sentinel Base (Safe Mode)
 echo ============================================
+echo 🚧 Building Sentinel Base (Safe Mode) >> "%LOG_FILE%"
 
 :: Forzamos arquitectura 386
 set GOOS=windows
 set GOARCH=386
 set CGO_ENABLED=0
 
-:: LIMITACIÓN DE RECURSOS PARA EVITAR "OUT OF MEMORY"
+:: Limitación de recursos para evitar OOM
 set GOMEMLIMIT=512MiB
+
+echo Environment: >> "%LOG_FILE%"
+echo   GOOS=%GOOS% >> "%LOG_FILE%"
+echo   GOARCH=%GOARCH% >> "%LOG_FILE%"
+echo   CGO_ENABLED=%CGO_ENABLED% >> "%LOG_FILE%"
+echo   GOMEMLIMIT=%GOMEMLIMIT% >> "%LOG_FILE%"
+echo. >> "%LOG_FILE%"
 
 set OUTPUT_DIR=..\native\bin\win32
 set OUTPUT_FILE=%OUTPUT_DIR%\sentinel.exe
@@ -20,60 +42,149 @@ set HELP_DIR=help
 if not exist "%OUTPUT_DIR%" mkdir "%OUTPUT_DIR%"
 if not exist "%HELP_DIR%" mkdir "%HELP_DIR%"
 
+echo.
 echo Compiling sentinel.exe...
-:: -p 1: Compila un paquete a la vez (usa poca RAM)
-:: -ldflags: Quita símbolos pesados para achicar el EXE
-go build -p 1 -ldflags="-s -w" -o "%OUTPUT_FILE%" .
+echo Compiling sentinel.exe... >> "%LOG_FILE%"
+
+:: Ejecutar compilación y capturar salida completa
+go build -p 1 -ldflags="-s -w" -o "%OUTPUT_FILE%" . >> "%LOG_FILE%" 2>&1
 
 if %ERRORLEVEL% NEQ 0 (
+    echo. >> "%LOG_FILE%"
+    echo ❌ Compilation failed with error code: %ERRORLEVEL% >> "%LOG_FILE%"
     echo.
-    echo ✗ Compilation failed. Si el error es de import, revisa el archivo mencionado.
+    echo ❌ Compilation failed. Revisa el error mostrado arriba.
+    echo.
+    echo 📋 Log guardado en: %LOG_FILE%
     exit /b 1
 )
 
-echo ✓ Compilation successful: %OUTPUT_FILE%
+echo ✅ Compilation successful: %OUTPUT_FILE%
+echo ✅ Compilation successful: %OUTPUT_FILE% >> "%LOG_FILE%"
+echo. >> "%LOG_FILE%"
 
 if exist "blueprint.json" (
     copy /Y "blueprint.json" "%OUTPUT_DIR%\blueprint.json" >nul
-    echo ✓ blueprint.json updated
+    echo 📦 blueprint.json updated
+    echo 📦 blueprint.json updated >> "%LOG_FILE%"
 )
 
 echo.
 echo ============================================
-echo Generating Help Documentation
+echo   Generating Help Documentation
 echo ============================================
+echo ============================================ >> "%LOG_FILE%"
+echo   Generating Help Documentation >> "%LOG_FILE%"
+echo ============================================ >> "%LOG_FILE%"
 
-:: Generar archivo JSON de ayuda
+echo.
 echo Generating sentinel_help.json...
-"%OUTPUT_FILE%" --json-help > "%HELP_DIR%\sentinel_help.json" 2>nul
+echo Generating sentinel_help.json... >> "%LOG_FILE%"
+
+"%OUTPUT_FILE%" --json-help > "%HELP_DIR%\sentinel_help.json" 2>> "%LOG_FILE%"
 if %ERRORLEVEL% EQU 0 (
-    echo ✓ JSON help generated: %HELP_DIR%\sentinel_help.json
+    echo ✅ JSON help generated: %HELP_DIR%\sentinel_help.json
+    echo ✅ JSON help generated: %HELP_DIR%\sentinel_help.json >> "%LOG_FILE%"
 ) else (
-    echo ✗ Warning: Failed to generate JSON help
+    echo ⚠️ Warning: Failed to generate JSON help
+    echo ⚠️ Warning: Failed to generate JSON help (Error: %ERRORLEVEL%) >> "%LOG_FILE%"
 )
 
-:: Generar archivo TXT de ayuda (sin colores ANSI)
+echo.
 echo Generating sentinel_help.txt...
-"%OUTPUT_FILE%" --help > "%HELP_DIR%\sentinel_help.txt" 2>nul
+echo Generating sentinel_help.txt... >> "%LOG_FILE%"
+
+"%OUTPUT_FILE%" --help > "%HELP_DIR%\sentinel_help.txt" 2>> "%LOG_FILE%"
 if %ERRORLEVEL% EQU 0 (
-    echo ✓ Text help generated: %HELP_DIR%\sentinel_help.txt
+    echo ✅ Text help generated: %HELP_DIR%\sentinel_help.txt
+    echo ✅ Text help generated: %HELP_DIR%\sentinel_help.txt >> "%LOG_FILE%"
 ) else (
-    echo ✗ Warning: Failed to generate text help
+    echo ⚠️ Warning: Failed to generate text help
+    echo ⚠️ Warning: Failed to generate text help (Error: %ERRORLEVEL%) >> "%LOG_FILE%"
 )
 
+:: ============================================
+:: ACTUALIZAR TELEMETRY.JSON
+:: ============================================
+echo.
+echo ⏳ Actualizando telemetry...
+echo ⏳ Actualizando telemetry... >> "%LOG_FILE%"
+
+set "PYTHON_EXE=python"
+where %PYTHON_EXE% >nul 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    echo ⚠️ Python no encontrado en el PATH. Telemetry no se actualizo.
+    echo ⚠️ Python no encontrado en el PATH. Telemetry no se actualizo. >> "%LOG_FILE%"
+    goto :resumen
+)
+
+:: ───────────────────────────────────────────────────────────────
+:: Ruta calculada desde el .bat (installer\sentinel\ → raíz → scripts\python)
+:: Subimos SOLO DOS niveles (..\..) porque sentinel está dentro de installer
+:: ───────────────────────────────────────────────────────────────
+set "PROJECT_ROOT=%~dp0..\..\"
+
+:: Normalizamos (quita el último \ si sobra y maneja bien)
+set "PROJECT_ROOT=%PROJECT_ROOT:\\=\%"
+set "UPDATE_SCRIPT=%PROJECT_ROOT%scripts\python\update_build_telemetry.py"
+
+:: Depuración clara (puedes comentarlo después de confirmar que funciona)
+echo Debug: PROJECT_ROOT resuelto → %PROJECT_ROOT%
+echo Debug: UPDATE_SCRIPT → %UPDATE_SCRIPT%
+echo Debug: PROJECT_ROOT resuelto → %PROJECT_ROOT% >> "%LOG_FILE%"
+echo Debug: UPDATE_SCRIPT → %UPDATE_SCRIPT% >> "%LOG_FILE%"
+
+if not exist "%UPDATE_SCRIPT%" (
+    echo ⚠️ No se encontró el script:
+    echo     %UPDATE_SCRIPT%
+    echo ⚠️ No se encontró el script: >> "%LOG_FILE%"
+    echo     %UPDATE_SCRIPT% >> "%LOG_FILE%"
+    goto :resumen
+)
+
+:: Preparar argumentos
+set "TELEMETRY_KEY=sentinel_build"
+set "TELEMETRY_LABEL=📦 SENTINEL BUILD"
+set "TELEMETRY_PATH=%LOG_FILE:\=/%"
+
+:: Ejecutar el script
+%PYTHON_EXE% "%UPDATE_SCRIPT%" "%TELEMETRY_KEY%" "%TELEMETRY_LABEL%" "%TELEMETRY_PATH%"
+
+if %ERRORLEVEL% EQU 0 (
+    echo   ✅ Telemetry actualizado correctamente
+    echo   Label: %TELEMETRY_LABEL%
+    echo   Path : %TELEMETRY_PATH%
+    echo   ✅ Telemetry actualizado correctamente >> "%LOG_FILE%"
+    echo   Label: %TELEMETRY_LABEL% >> "%LOG_FILE%"
+    echo   Path : %TELEMETRY_PATH% >> "%LOG_FILE%"
+) else (
+    echo   ⚠️ Error al actualizar telemetry (codigo: %ERRORLEVEL%)
+    echo   ⚠️ Error al actualizar telemetry (codigo: %ERRORLEVEL%) >> "%LOG_FILE%"
+)
+
+:resumen
 echo.
 echo ============================================
-echo Build completed.
+echo 🎉 Build completed.
 echo ============================================
+echo 🎉 Build completed successfully >> "%LOG_FILE%"
 echo.
-echo Output files:
+echo 📦 Output files:
 echo   Executable: %OUTPUT_FILE%
+echo. >> "%LOG_FILE%"
+echo Output files: >> "%LOG_FILE%"
+echo   Executable: %OUTPUT_FILE% >> "%LOG_FILE%"
+
 if exist "%HELP_DIR%\sentinel_help.json" (
-    echo   Help JSON:  %HELP_DIR%\sentinel_help.json
+    echo   Help JSON: %HELP_DIR%\sentinel_help.json
+    echo   Help JSON: %HELP_DIR%\sentinel_help.json >> "%LOG_FILE%"
 )
 if exist "%HELP_DIR%\sentinel_help.txt" (
-    echo   Help TXT:   %HELP_DIR%\sentinel_help.txt
+    echo   Help TXT:  %HELP_DIR%\sentinel_help.txt
+    echo   Help TXT:  %HELP_DIR%\sentinel_help.txt >> "%LOG_FILE%"
 )
+echo.
+echo 📋 Log guardado en: %LOG_FILE%
 echo.
 
 endlocal

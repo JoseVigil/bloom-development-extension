@@ -18,17 +18,19 @@ import (
 func init() {
 	core.RegisterCommand("RUNTIME", func(c *core.Core) *cobra.Command {
 		var mode string
+		var configOverride string
 		cmd := &cobra.Command{
 			Use:   "launch [profile_id]",
 			Short: "Arranca una instancia de navegador para un perfil",
 			Args:  cobra.ExactArgs(1),
 			Example: `  sentinel launch profile_001 --mode landing
-  sentinel --json launch profile_002 --mode discovery | jq .`,
+  sentinel --json launch profile_002 --mode discovery | jq .
+  sentinel --json launch profile_003 --mode discovery --config-override '{"register":true,"email":"user@example.com"}'`,
 			Run: func(cmd *cobra.Command, args []string) {
 				profileID := args[0]
 				ig := New(c)
 				
-				chromePID, port, extLoaded, err := ig.Launch(profileID, mode)
+				chromePID, port, extLoaded, effectiveConfig, err := ig.Launch(profileID, mode, configOverride)
 				if err != nil {
 					if c.IsJSON {
 						outputLaunchError(err)
@@ -39,13 +41,14 @@ func init() {
 				}
 				
 				if c.IsJSON {
-					outputLaunchJSON(profileID, chromePID, port, extLoaded)
+					outputLaunchJSON(profileID, chromePID, port, extLoaded, effectiveConfig)
 					os.Exit(0)
 				}
-				select {} // Bloqueo para telemetría solo en modo humano
+				select {}
 			},
 		}
 		cmd.Flags().StringVar(&mode, "mode", "landing", "Modo de lanzamiento (landing o discovery)")
+		cmd.Flags().StringVar(&configOverride, "config-override", "", "JSON para sobrescribir campos en synapse.config.js")
 
 		if cmd.Annotations == nil {
 			cmd.Annotations = make(map[string]string)
@@ -60,7 +63,7 @@ func init() {
 	})
 }
 
-func outputLaunchJSON(profileID string, chromePID, port int, extLoaded bool) {
+func outputLaunchJSON(profileID string, chromePID, port int, extLoaded bool, effectiveConfig map[string]interface{}) {
 	result := map[string]interface{}{
 		"success": true,
 		"data": map[string]interface{}{
@@ -68,6 +71,7 @@ func outputLaunchJSON(profileID string, chromePID, port int, extLoaded bool) {
 			"chrome_pid":       chromePID,
 			"port":             port,
 			"extension_loaded": extLoaded,
+			"effective_config": effectiveConfig,
 		},
 	}
 	jsonBytes, _ := json.Marshal(result)
@@ -133,12 +137,12 @@ func New(c *core.Core) *Ignition {
 	}
 }
 
-func (ig *Ignition) Launch(profileID string, mode string) (int, int, bool, error) {
+func (ig *Ignition) Launch(profileID string, mode string, configOverride string) (int, int, bool, map[string]interface{}, error) {
 	ig.Core.Logger.Info("[IGNITION] 🚀 Iniciando secuencia soberana de lanzamiento (Modo: %s).", mode)
 
 	profileData, err := ig.getProfileData(profileID)
 	if err != nil {
-		return 0, 0, false, fmt.Errorf("error crítico de inventario: %v", err)
+		return 0, 0, false, nil, fmt.Errorf("error crítico de inventario: %v", err)
 	}
 
 	ig.SpecPath = profileData["spec_path"].(string)
@@ -148,29 +152,28 @@ func (ig *Ignition) Launch(profileID string, mode string) (int, int, bool, error
 	ig.Core.Logger.Info("[IGNITION] Realizando pre-flight check...")
 	ig.preFlight(profileID)
 
-	if err := ig.prepareSessionFiles(profileID, launchID, profileData, mode); err != nil {
-		return 0, 0, false, fmt.Errorf("fallo en la inyección de identidad: %v", err)
+	effectiveConfig, err := ig.prepareSessionFiles(profileID, launchID, profileData, mode, configOverride)
+	if err != nil {
+		return 0, 0, false, nil, fmt.Errorf("fallo en la inyección de identidad: %v", err)
 	}
 
 	ig.Core.Logger.Info("[IGNITION] Sincronizando estados con el sistema de archivos...")
 	time.Sleep(800 * time.Millisecond)
 
 	if err := ig.startBrainService(); err != nil {
-		return 0, 0, false, err
+		return 0, 0, false, nil, err
 	}
 
 	finalPhysicalID, err := ig.execute(profileID)
 	if err != nil {
-		return 0, 0, false, err
+		return 0, 0, false, nil, err
 	}
-	_ = finalPhysicalID // Evitar error de variable no usada
+	_ = finalPhysicalID
 
-	// En modo JSON, retornamos inmediatamente
 	if ig.Core.IsJSON {
-		return ig.Session.BrowserPID, 5678, true, nil
+		return ig.Session.BrowserPID, 5678, true, effectiveConfig, nil
 	}
 
-	// En modo humano, continuamos con Guardian y telemetría
 	guardian, err := health.NewGuardian(ig.Core, profileID, launchID, ig.Session.ServicePID)
 	if err == nil {
 		ig.Guardians[profileID] = guardian
@@ -179,7 +182,7 @@ func (ig *Ignition) Launch(profileID string, mode string) (int, int, bool, error
 	}
 
 	ig.Core.Logger.Success("[IGNITION] 🔥 Sistema en línea.")
-	return ig.Session.BrowserPID, 5678, true, nil
+	return ig.Session.BrowserPID, 5678, true, effectiveConfig, nil
 }
 
 func (ig *Ignition) startBrainService() error {
@@ -233,12 +236,16 @@ func (ig *Ignition) generateLogicalLaunchID(profileID string) string {
 	return fmt.Sprintf("%03d_%s_%s", counter, shortUUID, timestamp)
 }
 
-func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profileData map[string]interface{}, mode string) error {
+func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profileData map[string]interface{}, mode string, configOverride string) (map[string]interface{}, error) {
 	specData, err := os.ReadFile(ig.SpecPath)
-	if err != nil { return fmt.Errorf("no se pudo leer ignition_spec: %v", err) }
+	if err != nil { 
+		return nil, fmt.Errorf("no se pudo leer ignition_spec: %v", err) 
+	}
 	
 	var spec IgnitionSpec
-	if err := json.Unmarshal(specData, &spec); err != nil { return err }
+	if err := json.Unmarshal(specData, &spec); err != nil { 
+		return nil, err 
+	}
 	
 	spec.LaunchID = launchID
 	spec.ProfileID = profileID
@@ -250,30 +257,60 @@ func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profi
 	}
 	
 	updatedSpec, _ := json.MarshalIndent(spec, "", "  ")
-	if err := os.WriteFile(ig.SpecPath, updatedSpec, 0644); err != nil { return err }
-
-	shortID := profileID[:8]
-	extDir := spec.Paths.Extension
-	configPath := filepath.Join(extDir, "synapse.config.js")
-	jsContent := fmt.Sprintf(`self.SYNAPSE_CONFIG = { 
-    profileId: '%s', 
-    bridge_name: 'com.bloom.synapse.%s',
-    launchId: "%s",
-    profile_alias: "%s",
-    mode: "%s",
-    extension_id: "%s"
-};`, profileID, shortID, launchID, profileData["alias"].(string), mode, ig.Core.Config.Provisioning.ExtensionID)
-	
-	if err := os.WriteFile(configPath, []byte(jsContent), 0644); err != nil {
-		return fmt.Errorf("error escribiendo synapse.config.js: %v", err)
+	if err := os.WriteFile(ig.SpecPath, updatedSpec, 0644); err != nil { 
+		return nil, err 
 	}
 
+	// ========== CONFIG BUILDER ==========
+	shortID := profileID[:8]
+	extDir := spec.Paths.Extension
+	
+	// Base config
+	configData := map[string]interface{}{
+		"profileId":    profileID,
+		"bridge_name":  fmt.Sprintf("com.bloom.synapse.%s", shortID),
+		"launchId":     launchID,
+		"profile_alias": profileData["alias"].(string),
+		"mode":         mode,
+		"extension_id": ig.Core.Config.Provisioning.ExtensionID,
+	}
+	
+	// Merge override JSON
+	if configOverride != "" {
+		var overrides map[string]interface{}
+		if err := json.Unmarshal([]byte(configOverride), &overrides); err != nil {
+			return nil, fmt.Errorf("config-override inválido: %v", err)
+		}
+		
+		for k, v := range overrides {
+			configData[k] = v
+		}
+		
+		ig.Core.Logger.Info("[IGNITION] 🔧 Config override aplicado: %d campos modificados", len(overrides))
+	}
+	
+	// Serialize to JS
+	configJSON, _ := json.MarshalIndent(configData, "    ", "  ")
+	
+	var jsContent string
+	if mode == "discovery" {
+		jsContent = fmt.Sprintf(`export const SYNAPSE_CONFIG = %s;`, string(configJSON))
+	} else {
+		jsContent = fmt.Sprintf(`self.SYNAPSE_CONFIG = %s;`, string(configJSON))
+	}
+	
+	configPath := filepath.Join(extDir, fmt.Sprintf("%s.synapse.config.js", mode))
+	if err := os.WriteFile(configPath, []byte(jsContent), 0644); err != nil {
+		return nil, fmt.Errorf("error escribiendo synapse.config.js: %v", err)
+	}
+
+	// Native manifest update
 	manifestName := fmt.Sprintf("com.bloom.synapse.%s.json", shortID)
 	manifestPath := filepath.Join(profileData["config_dir"].(string), manifestName)
 
 	mData, err := os.ReadFile(manifestPath)
 	if err != nil {
-		return fmt.Errorf("manifiesto nativo ausente en carpeta config: %v", err)
+		return nil, fmt.Errorf("manifiesto nativo ausente en carpeta config: %v", err)
 	}
 
 	var manifest map[string]interface{}
@@ -282,11 +319,11 @@ func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profi
 
 	updatedManifest, _ := json.MarshalIndent(manifest, "", "  ")
 	if err := os.WriteFile(manifestPath, updatedManifest, 0644); err != nil {
-		return err
+		return nil, err
 	}
 
 	ig.Core.Logger.Info("[IGNITION] 🆔 Identidad [%s] inyectada en Spec, JS y Native Host.", launchID)
-	return nil
+	return configData, nil
 }
 
 func (ig *Ignition) execute(profileID string) (string, error) {
