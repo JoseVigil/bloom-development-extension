@@ -124,6 +124,7 @@ def generate_tree_files(brain_exe):
         {"args": ["filesystem", "tree", "installer", "-o", "tree/installer_tree.txt"], "file": "installer_tree.txt"},
         {"args": ["filesystem", "tree", "brain", "-o", "tree/brain_tree.txt"], "file": "brain_tree.txt"},
         {"args": ["filesystem", "tree", "installer/electron-app", "-o", "tree/electron_tree.txt"], "file": "electron_tree.txt"},
+        {"args": ["filesystem", "tree", "installer/sentinel", "-o", "tree/sentinel_tree.txt"], "file": "sentinel_tree.txt"},
         {"args": ["filesystem", "tree", "webview", "-o", "tree/webview_tree.txt"], "file": "webview_tree.txt"},
         {"args": ["filesystem", "tree", "installer/chrome-extension", "-o", "tree/chrome_extension_tree.txt"], "file": "chrome_extension_tree.txt"}
     ]

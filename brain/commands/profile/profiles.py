@@ -155,7 +155,7 @@ class ProfilesCreateCommand(BaseCommand):
                 pm = ProfileManager()
                 
                 logger.info(f"Creando perfil con alias '{alias}' (master={master})...")
-                profile_data = pm.create_profile(alias, is_master=master)
+                profile_data = pm.create_profile(name=alias, master=master)
                 logger.info(f"✅ Perfil creado: ID={profile_data.get('id', 'N/A')[:8]}, Master={profile_data.get('master_profile', False)}")
                 
                 # En modo JSON, devolver formato plano esperado por Sentinel

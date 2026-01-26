@@ -8,6 +8,9 @@ import shutil
 from pathlib import Path
 from typing import Dict, Any
 from datetime import datetime
+from brain.shared.logger import get_logger
+
+logger = get_logger(__name__)  # ✅ Agregar esta línea al inicio
 
 
 def generate_profile_landing(target_ext_dir: Path, profile_data: Dict[str, Any]) -> None:
@@ -25,7 +28,8 @@ def generate_profile_landing(target_ext_dir: Path, profile_data: Dict[str, Any])
     paths = PathResolver()
     
     _copy_static_assets(landing_dir)
-    _generate_data_loader(landing_dir, profile_data, paths.extension_id)
+    extension_id = paths.get_extension_id()
+    _generate_data_loader(landing_dir, profile_data, extension_id)
     _generate_html(landing_dir, profile_data)
     _generate_manifest(landing_dir, profile_data)
 
@@ -34,7 +38,6 @@ def _copy_static_assets(landing_dir: Path) -> None:
     """Copies static CSS and JS from templates."""
     template_dir = Path(__file__).parent / "templates" / "landing"
     
-    # Archivos estáticos a copiar (sin modificación)
     files_to_copy = [
         "styles.css",
         "landingProtocol.js",
@@ -47,22 +50,20 @@ def _copy_static_assets(landing_dir: Path) -> None:
         if source.exists():
             shutil.copy2(source, landing_dir / file_name)
         else:
-            print(f"⚠️  Template not found: {source}")
+            logger.warning(f"Template not found: {source}")  # ✅ Cambio aquí
 
 
 def _generate_data_loader(landing_dir: Path, profile_data: Dict[str, Any], extension_id: str) -> None:
     """
     Generates data-loader.js with injected profile data.
-    Este archivo reemplaza los placeholders con datos reales.
     """
-    # Construir objeto de profile completo
     profile_json = {
         'id': profile_data.get('id'),
         'alias': profile_data.get('alias', 'Worker'),
         'role': profile_data.get('role', 'Worker'),
         'stats': {
             'totalLaunches': profile_data.get('total_launches', 0),
-            'uptime': profile_data.get('uptime', 0),  # en segundos
+            'uptime': profile_data.get('uptime', 0),
             'intentsCompleted': profile_data.get('intents_done', 0),
             'lastSync': profile_data.get('last_synch')
         },
@@ -74,7 +75,6 @@ def _generate_data_loader(landing_dir: Path, profile_data: Dict[str, Any], exten
         }
     }
     
-    # Generar contenido del data-loader.js
     data_loader_content = f"""// ============================================================================
 // DATA LOADER - Handles host-injected data
 // Generated on: {datetime.now().isoformat()}
@@ -85,23 +85,15 @@ window.BLOOM_EXTENSION_ID = '{extension_id}';
 """
     
     (landing_dir / "data-loader.js").write_text(data_loader_content, encoding='utf-8')
-    print(f"✅ Generated data-loader.js with profile: {profile_data.get('alias')}")
+    logger.info(f"Generated data-loader.js for profile: {profile_data.get('alias')}")  # ✅ Cambio aquí
 
 
 def _format_linked_accounts(accounts_data) -> list:
-    """
-    Formatea linked_accounts al formato esperado por el frontend.
-    
-    Input puede ser:
-    - Lista: [{'provider': 'Google', 'email': 'user@example.com', 'status': 'active'}]
-    - Dict: {'google': {'email': 'user@example.com'}, 'github': {'username': 'user'}}
-    """
+    """Formatea linked_accounts al formato esperado por el frontend."""
     if isinstance(accounts_data, list):
-        # Ya está en formato correcto
         return accounts_data
     
     if isinstance(accounts_data, dict):
-        # Convertir dict a lista
         formatted = []
         for provider, data in accounts_data.items():
             account = {
@@ -117,20 +109,16 @@ def _format_linked_accounts(accounts_data) -> list:
 
 
 def _generate_html(landing_dir: Path, profile_data: Dict[str, Any]) -> None:
-    """
-    Copia el index.html template sin modificaciones.
-    Los datos se inyectan vía data-loader.js
-    """
+    """Copia el index.html template sin modificaciones."""
     template_dir = Path(__file__).parent / "templates" / "landing"
     template_path = template_dir / "index.html"
     
     if not template_path.exists():
-        print(f"⚠️  Template HTML not found: {template_path}")
+        logger.warning(f"Template HTML not found: {template_path}")  # ✅ Cambio aquí
         return
     
-    # Copiar sin modificaciones (ya no hay placeholders en HTML)
     shutil.copy2(template_path, landing_dir / "index.html")
-    print(f"✅ Copied index.html template")
+    logger.info("Copied index.html template")  # ✅ Cambio aquí
 
 
 def _generate_manifest(landing_dir: Path, profile_data: Dict[str, Any]) -> None:
@@ -158,43 +146,29 @@ def _generate_manifest(landing_dir: Path, profile_data: Dict[str, Any]) -> None:
         json.dumps(manifest, indent=2, ensure_ascii=False),
         encoding='utf-8'
     )
-    print(f"✅ Generated manifest.json")
+    logger.info("Generated manifest.json")  # ✅ Cambio aquí
 
-
-# ============================================================================
-# HELPER: Update existing landing data (para refreshes en vivo)
-# ============================================================================
 
 def update_landing_data(landing_dir: Path, stats_update: Dict[str, Any]) -> None:
-    """
-    Actualiza solo los stats en un landing existente sin regenerar todo.
-    Útil para updates en tiempo real desde el host.
-    
-    Args:
-        landing_dir: Path to landing/
-        stats_update: Dict con {total_launches, uptime, intents_done, last_synch}
-    """
+    """Actualiza solo los stats en un landing existente."""
     data_loader_path = landing_dir / "data-loader.js"
     
     if not data_loader_path.exists():
-        print(f"⚠️  data-loader.js not found, cannot update")
+        logger.warning("data-loader.js not found, cannot update")  # ✅ Cambio aquí
         return
     
-    # Leer el archivo actual
     content = data_loader_path.read_text(encoding='utf-8')
     
-    # Extraer el JSON actual (simple regex, mejora si necesitas más robusto)
     import re
     match = re.search(r'window\.BLOOM_PROFILE_DATA = ({.*?});', content, re.DOTALL)
     
     if not match:
-        print(f"⚠️  Could not parse BLOOM_PROFILE_DATA")
+        logger.warning("Could not parse BLOOM_PROFILE_DATA")  # ✅ Cambio aquí
         return
     
     try:
         current_data = json.loads(match.group(1))
         
-        # Actualizar solo stats
         if 'stats' not in current_data:
             current_data['stats'] = {}
         
@@ -205,18 +179,16 @@ def update_landing_data(landing_dir: Path, stats_update: Dict[str, Any]) -> None
             'lastSync': stats_update.get('last_synch', current_data['stats'].get('lastSync'))
         })
         
-        # Actualizar lastLaunch
         if 'system' in current_data:
             current_data['system']['lastLaunch'] = datetime.now().isoformat()
         
-        # Reescribir el archivo
         new_content = content.replace(
             match.group(0),
             f"window.BLOOM_PROFILE_DATA = {json.dumps(current_data, indent=2)};"
         )
         
         data_loader_path.write_text(new_content, encoding='utf-8')
-        print(f"✅ Updated landing stats: launches={stats_update.get('total_launches')}, intents={stats_update.get('intents_done')}")
+        logger.info(f"Updated landing stats: launches={stats_update.get('total_launches')}, intents={stats_update.get('intents_done')}")  # ✅ Cambio aquí
         
     except json.JSONDecodeError as e:
-        print(f"❌ Error parsing JSON: {e}")
+        logger.error(f"Error parsing JSON: {e}")  # ✅ Cambio aquí
