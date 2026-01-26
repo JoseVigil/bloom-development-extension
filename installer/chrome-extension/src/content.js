@@ -327,9 +327,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       let result;
       
       switch (command) {
-        // ──────────────────────────────────────
+        // ─────────────────────────────────────────
         // COMANDOS DE CONTROL
-        // ──────────────────────────────────────
+        // ─────────────────────────────────────────
         
         case "LOCK_UI":
           enableSlaveMode(payload?.message);
@@ -341,9 +341,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           result = { unlocked: true };
           break;
         
-        // ──────────────────────────────────────
+        // ─────────────────────────────────────────
         // COMANDOS DE ACTUACIÓN DOM
-        // ──────────────────────────────────────
+        // ─────────────────────────────────────────
         
         case "DOM_CLICK":
           result = executeClick(payload.selector, payload.options);
@@ -373,9 +373,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           result = executeSnapshot(payload.options);
           break;
         
-        // ──────────────────────────────────────
+        // ─────────────────────────────────────────
         // COMANDO DESCONOCIDO
-        // ──────────────────────────────────────
+        // ─────────────────────────────────────────
         
         default:
           throw new Error(`Unknown command: ${command}`);
@@ -393,38 +393,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 // ============================================================================
-// INDICADOR VISUAL (Ribbon) - CON PROTECCIÓN
+// INDICADOR VISUAL (Ribbon)
 // ============================================================================
 
-function createRibbon() {
-  // PROTECCIÓN: Solo crear el ribbon si existe document.body
-  if (!document.body) {
-    console.warn("⚠️ [Ribbon] document.body not ready yet, skipping ribbon creation");
-    return;
-  }
-  
-  const ribbon = document.createElement('div');
-  Object.assign(ribbon.style, {
-    position: 'fixed',
-    top: '0',
-    left: '0',
-    width: '100%',
-    height: '4px',
-    background: 'linear-gradient(90deg, #00ff88, #00d4ff)',
-    zIndex: '2147483646',
-    boxShadow: '0 0 8px rgba(0, 255, 136, 0.6)',
-    pointerEvents: 'none'
-  });
-  document.body.appendChild(ribbon);
-  console.log("✅ [Ribbon] Visual indicator created");
-}
-
-// Esperar a que el DOM esté listo antes de crear el ribbon
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', createRibbon);
-} else {
-  createRibbon();
-}
+const ribbon = document.createElement('div');
+Object.assign(ribbon.style, {
+  position: 'fixed',
+  top: '0',
+  left: '0',
+  width: '100%',
+  height: '4px',
+  background: 'linear-gradient(90deg, #00ff88, #00d4ff)',
+  zIndex: '2147483646',
+  boxShadow: '0 0 8px rgba(0, 255, 136, 0.6)',
+  pointerEvents: 'none'
+});
+document.body.appendChild(ribbon);
 
 // ============================================================================
 // INICIALIZACIÓN
@@ -438,9 +422,3 @@ chrome.runtime.sendMessage({
 });
 
 console.log("✅ [Synapse Actuator] Ready");
-
-// ============================================================================
-// HANDSHAKE: AVISAR A LA PÁGINA QUE LA EXTENSIÓN ESTÁ LISTA
-// ============================================================================
-window.postMessage({ type: "BLOOM_EXTENSION_READY", version: "2.0.0" }, "*");
-console.log("⚡ [Bloom Content] Ready signal sent to page");
