@@ -17,20 +17,46 @@ import (
 )
 
 func main() {
-	// 1. Inicialización del Core (Config, Paths, Logger)
-	c, err := core.Initialize()
-	if err != nil {
-		os.Exit(1)
+	// DETECCIÓN TEMPRANA: Verificar si es un comando de help antes de inicializar
+	isHelpCommand := false
+	isJSONHelp := false
+	
+	for _, arg := range os.Args {
+		if arg == "--help" || arg == "-h" {
+			isHelpCommand = true
+		}
+		if arg == "--json-help" {
+			isJSONHelp = true
+			isHelpCommand = true
+		}
+	}
+	
+	// Si es comando de help, inicializar en modo silencioso
+	var c *core.Core
+	var err error
+	
+	if isHelpCommand {
+		// Modo silencioso: solo inicializar lo mínimo necesario
+		c, err = core.InitializeSilent()
+		if err != nil {
+			os.Exit(1)
+		}
+	} else {
+		// Modo normal: inicialización completa con logs
+		c, err = core.Initialize()
+		if err != nil {
+			os.Exit(1)
+		}
+		
+		// FASE STARTUP (solo en modo normal)
+		if err := startup.Initialize(c); err != nil {
+			c.Logger.Error("Fallo crítico en fase Startup: %v", err)
+			os.Exit(1)
+		}
 	}
 	defer c.Close()
 
-	// 2. FASE STARTUP
-	if err := startup.Initialize(c); err != nil {
-		c.Logger.Error("Fallo crítico en fase Startup: %v", err)
-		os.Exit(1)
-	}
-
-	// 3. Configuración del Comando Raíz
+	// Configuración del Comando Raíz
 	rootCmd := &cobra.Command{
 		Use:   "sentinel",
 		Short: "Sentinel Base v" + c.Config.Version,
@@ -39,13 +65,13 @@ func main() {
 		},
 	}
 
-	// 4. Flags Globales (Persistent Flags)
+	// Flags Globales (Persistent Flags)
 	var jsonHelp bool
 	var jsonOutput bool
 	rootCmd.PersistentFlags().BoolVar(&jsonHelp, "json-help", false, "Exporta el help en formato JSON para integración con Electron")
 	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output en formato JSON para integración programática")
 
-	// 5. Configuración del Help Renderer (cli/)
+	// Configuración del Help Renderer (cli/)
 	rootCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
 		if jsonHelp {
 			cli.RenderHelpJSON(cmd)
@@ -54,7 +80,7 @@ func main() {
 		}
 	})
 
-	// 6. Integración de comandos registrados en los paquetes internos
+	// Integración de comandos registrados en los paquetes internos
 	for _, reg := range core.CommandRegistry {
 		cmd := reg.Factory(c)
 		
@@ -67,7 +93,7 @@ func main() {
 		rootCmd.AddCommand(cmd)
 	}
 
-	// 7. Intercepción de flags globales antes de la ejecución
+	// Intercepción de flags globales antes de la ejecución
 	_ = rootCmd.ParseFlags(os.Args)
 	
 	// Capturamos el valor de --json y lo inyectamos en Core
@@ -75,12 +101,13 @@ func main() {
 		c.SetJSONMode(true)
 	}
 	
-	if jsonHelp {
+	// Si es --json-help, renderizar y salir inmediatamente
+	if isJSONHelp {
 		cli.RenderHelpJSON(rootCmd)
 		return
 	}
 
-	// 8. Ejecución del motor CLI
+	// Ejecución del motor CLI
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}

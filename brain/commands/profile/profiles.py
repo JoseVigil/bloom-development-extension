@@ -218,11 +218,12 @@ class ProfilesLaunchCommand(BaseCommand):
         return CommandMetadata(
             name="launch",
             category=CommandCategory.PROFILE,
-            version="2.0.0",
-            description="Lanza Chrome con un perfil de Worker (spec-driven mode REQUERIDO)",
+            version="2.1.0",
+            description="Lanza Chrome con un perfil de Worker usando spec-driven mode",
             examples=[
-                "brain profile launch <id> --spec /path/to/spec.json",
-                "brain profile launch abc12345 --spec ignition_spec.json"
+                "brain profile launch <id> --spec /path/to/spec.json --mode discovery",
+                "brain profile launch abc12345 --spec ignition_spec.json --mode landing",
+                "brain profile launch abc12345 --spec spec.json -m discovery --json"
             ]
         )
 
@@ -231,10 +232,11 @@ class ProfilesLaunchCommand(BaseCommand):
         def launch_profile(
             ctx: typer.Context,
             profile_id: str = typer.Argument(..., help="ID del perfil a lanzar"),
-            spec: str = typer.Option(..., "--spec", "-s", help="Archivo JSON con especificación completa de lanzamiento (REQUERIDO)")
+            spec: str = typer.Option(..., "--spec", "-s", help="Archivo JSON con especificación completa de lanzamiento (REQUERIDO)"),
+            mode: str = typer.Option("discovery", "--mode", "-m", help="Modo de página: 'discovery' (onboarding) o 'landing' (dashboard)")
         ):
             """Lanza Chrome con el perfil especificado usando spec-driven mode."""
-            logger.info(f"🚀 Comando: profile launch - ID: {profile_id[:8]}")
+            logger.info(f"🚀 Comando: profile launch - ID: {profile_id[:8]}, Mode: {mode}")
             
             gc = ctx.obj
             if gc is None:
@@ -244,17 +246,32 @@ class ProfilesLaunchCommand(BaseCommand):
             logger.debug(f"  → Modo JSON: {gc.json_mode}")
             logger.debug(f"  → Verbose: {gc.verbose}")
             logger.debug(f"  → Spec: {spec}")
+            logger.debug(f"  → Mode: {mode}")
+            
+            # Validación de mode
+            valid_modes = ['discovery', 'landing']
+            if mode not in valid_modes:
+                logger.error(f"✗ Modo inválido: {mode}")
+                error_msg = (
+                    f"⚙️ Modo '{mode}' no es válido\n\n"
+                    "Modos disponibles:\n"
+                    "  • discovery - Página de onboarding y validación inicial\n"
+                    "  • landing   - Dashboard del perfil (panel de control)\n\n"
+                    "Ejemplo:\n"
+                    "  brain profile launch abc12345 --spec spec.json --mode discovery\n"
+                )
+                self._handle_error(gc, error_msg)
             
             # Validación temprana del spec
             if not spec:
                 logger.error("✗ Flag --spec es obligatorio")
                 error_msg = (
-                    "⌘ Launch requiere el flag --spec (spec-driven mode)\n\n"
+                    "⚙️ Launch requiere el flag --spec (spec-driven mode)\n\n"
                     "Convention mode deprecated desde v2.0\n\n"
                     "Uso correcto:\n"
-                    "  brain profile launch <id> --spec /path/to/spec.json\n\n"
+                    f"  brain profile launch <id> --spec /path/to/spec.json --mode {mode}\n\n"
                     "Ejemplo:\n"
-                    "  brain profile launch abc12345 --spec ignition_spec.json\n"
+                    "  brain profile launch abc12345 --spec ignition_spec.json --mode discovery\n"
                 )
                 self._handle_error(gc, error_msg)
             
@@ -268,6 +285,19 @@ class ProfilesLaunchCommand(BaseCommand):
                 with open(spec_path, 'r', encoding='utf-8') as f:
                     spec_data = json.load(f)
                 logger.debug("✓ Spec cargado exitosamente")
+                
+                # 🆕 INYECTAR MODE EN EL SPEC
+                # Si no existe page_config, crear estructura vacía
+                if 'page_config' not in spec_data:
+                    spec_data['page_config'] = {}
+                
+                # Sobrescribir type con el mode del CLI
+                spec_data['page_config']['type'] = mode
+                spec_data['page_config']['auto_generate_url'] = True
+                
+                logger.info(f"✓ Mode '{mode}' inyectado en page_config")
+                logger.debug(f"  → page_config: {spec_data['page_config']}")
+                
             except json.JSONDecodeError as e:
                 logger.error(f"✗ JSON inválido en spec: {e}")
                 self._handle_error(gc, f"JSON inválido en spec: {e}")
@@ -279,23 +309,26 @@ class ProfilesLaunchCommand(BaseCommand):
                 from brain.core.profile.profile_manager import ProfileManager
                 
                 if gc.verbose:
+                    mode_desc = "ONBOARDING" if mode == "discovery" else "DASHBOARD"
                     typer.echo(f"📋 Lanzando con spec: {spec_path}", err=True)
+                    typer.echo(f"📄 Página: {mode} ({mode_desc})", err=True)
                 
                 logger.debug("Inicializando ProfileManager...")
                 pm = ProfileManager()
                 
-                logger.info(f"Lanzando perfil {profile_id[:8]} con spec...")
+                logger.info(f"Lanzando perfil {profile_id[:8]} con spec (mode: {mode})...")
                 result_data = pm.launch_profile(
                     profile_id=profile_id,
                     spec_data=spec_data
                 )
                 
-                logger.info(f"✅ Perfil lanzado exitosamente")
+                logger.info(f"✅ Perfil lanzado exitosamente en modo {mode}")
                 
                 result = {
                     "status": "success",
                     "operation": "launch",
-                    "data": result_data
+                    "data": result_data,
+                    "mode": mode
                 }
                 
                 gc.output(result, self._render_launch)
@@ -315,19 +348,15 @@ class ProfilesLaunchCommand(BaseCommand):
         """Renderiza la confirmación de lanzamiento."""
         launch_data = data.get('data', {}).get('data', {})
         profile_id = launch_data.get('profile_id', 'N/A')
+        mode = data.get('mode', 'unknown')
+        
+        mode_emoji = "🔎" if mode == "discovery" else "🏠"
+        mode_desc = "ONBOARDING" if mode == "discovery" else "DASHBOARD"
         
         typer.echo(f"\n✅ Perfil lanzado exitosamente")
         typer.echo(f"   ID:     {profile_id}")
+        typer.echo(f"   Página: {mode_emoji} {mode} ({mode_desc})")
         typer.echo(f"   Estado: {launch_data.get('engine', 'unknown')}\n")
-
-    def _handle_error(self, gc, message: str):
-        """Manejo unificado de errores."""
-        if gc.json_mode:
-            import json
-            typer.echo(json.dumps({"status": "error", "message": message}))
-        else:
-            typer.echo(f"✗ {message}", err=True)
-        raise typer.Exit(code=1)
 
 
 class ProfilesDestroyCommand(BaseCommand):

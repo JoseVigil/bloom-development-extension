@@ -2008,6 +2008,14 @@
               "help": "Archivo JSON con especificación completa de lanzamiento (REQUERIDO)",
               "type": "str",
               "default": null
+            },
+            {
+              "flag": "-m, --mode",
+              "is_required": false,
+              "is_argument": false,
+              "help": "Modo de página: 'discovery' (onboarding) o 'landing' (dashboard)",
+              "type": "str",
+              "default": "discovery"
             }
           ]
         },

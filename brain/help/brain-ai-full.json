@@ -1721,6 +1721,11 @@
           "_s,": {
             "description": "Archivo JSON con especificación completa de lanzamiento (REQUERIDO)",
             "type": "string"
+          },
+          "_m,": {
+            "description": "Modo de página: 'discovery' (onboarding) o 'landing' (dashboard)",
+            "type": "string",
+            "default": "discovery"
           }
         },
         "required": [
