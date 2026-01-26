@@ -181,6 +181,7 @@ hiddenimports = [
     'brain.core.profile.logic.profile_store',
     'brain.core.profile.logic.synapse_handler',
     'brain.core.profile.path_resolver',
+    'brain.core.profile.profile_accounts',
     'brain.core.profile.profile_create',
     'brain.core.profile.profile_launcher',
     'brain.core.profile.profile_manager',

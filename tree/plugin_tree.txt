@@ -671,6 +671,7 @@ bloom-development-extension/
     │   │   │   ├── profile_store.py
     │   │   │   └── synapse_handler.py
     │   │   ├── path_resolver.py
+    │   │   ├── profile_accounts.py
     │   │   ├── profile_create.py
     │   │   ├── profile_launcher.py
     │   │   ├── profile_manager.py
