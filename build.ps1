@@ -236,11 +236,16 @@ Write-Success "Ejecutable: $exePath"
 # =========================================
 Write-Step "Verificando ejecutable..."
 
+$ErrorActionPreference = "Continue"  # Temporalmente permitir errores
 $testResult = & $exePath --help 2>&1
-if ($LASTEXITCODE -eq 0) {
+$testExitCode = $LASTEXITCODE
+$ErrorActionPreference = "Stop"  # Restaurar
+
+if ($testExitCode -eq 0) {
     Write-Success "Ejecutable funcional"
 } else {
-    Write-Warning "Ejecutable no responde correctamente"
+    Write-Warning "No se pudo verificar ejecutable (código: $testExitCode)"
+    Write-Host "      Continuando de todas formas..." -ForegroundColor Yellow
 }
 
 # =========================================
