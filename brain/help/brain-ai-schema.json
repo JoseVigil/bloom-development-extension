@@ -15,17 +15,17 @@
             "description": "Chrome profile UUID",
             "type": "string"
           },
-          "_b": {
+          "_b,": {
             "description": "Lines of context before match",
             "type": "string",
             "default": 5
           },
-          "_a": {
+          "_a,": {
             "description": "Lines of context after match",
             "type": "string",
             "default": 5
           },
-          "_l": {
+          "_l,": {
             "description": "Launch ID for separate output file",
             "type": "string"
           }
@@ -52,7 +52,7 @@
             "type": "string",
             "default": false
           },
-          "_e": {
+          "_e,": {
             "description": "Exclude URL patterns",
             "type": "string"
           },
@@ -66,7 +66,7 @@
             "type": "string",
             "default": false
           },
-          "_l": {
+          "_l,": {
             "description": "Launch ID for separate output file",
             "type": "string"
           }
@@ -88,22 +88,22 @@
             "description": "Chrome profile UUID",
             "type": "string"
           },
-          "_k": {
+          "_k,": {
             "description": "Keyword to search for",
             "type": "string",
             "default": "bloom"
           },
-          "_b": {
+          "_b,": {
             "description": "Lines of context before match",
             "type": "string",
             "default": 5
           },
-          "_a": {
+          "_a,": {
             "description": "Lines of context after match",
             "type": "string",
             "default": 5
           },
-          "_l": {
+          "_l,": {
             "description": "Launch ID for separate output file",
             "type": "string"
           }
@@ -121,17 +121,17 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "_p": {
+          "_p,": {
             "description": "Root path of the project",
             "type": "string",
             "default": "."
           },
-          "_o": {
+          "_o,": {
             "description": "Output folder name",
             "type": "string",
             "default": ".bloom"
           },
-          "_s": {
+          "_s,": {
             "description": "Force specific strategy",
             "type": "string"
           }
@@ -147,11 +147,11 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "_s": {
+          "_s,": {
             "description": "Source directory (auto-detects if not provided)",
             "type": "string"
           },
-          "_f": {
+          "_f,": {
             "description": "Force reinstall even if same version exists",
             "type": "string",
             "default": false
@@ -168,7 +168,7 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "_s": {
+          "_s,": {
             "description": "Source directory (auto-detects if not provided)",
             "type": "string"
           }
@@ -199,16 +199,16 @@
             "description": "Paths to compress (files or directories)",
             "type": "string"
           },
-          "_m": {
+          "_m,": {
             "description": "Compression mode: 'codebase' or 'docbase'",
             "type": "string",
             "default": "codebase"
           },
-          "_o": {
+          "_o,": {
             "description": "Output directory (default: current directory)",
             "type": "string"
           },
-          "_e": {
+          "_e,": {
             "description": "Patterns to exclude (can be used multiple times)",
             "type": "string",
             "default": "[]"
@@ -236,7 +236,7 @@
             "description": "Compressed JSON file to extract",
             "type": "string"
           },
-          "_o": {
+          "_o,": {
             "description": "Output directory (default: extracted_<mode>)",
             "type": "string"
           },
@@ -259,7 +259,7 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "_o": {
+          "_o,": {
             "description": "Output file path",
             "type": "string",
             "default": "tree.txt"
@@ -292,11 +292,11 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "_p": {
+          "_p,": {
             "description": "Profile name (e.g., 'Personal Chrome')",
             "type": "string"
           },
-          "_k": {
+          "_k,": {
             "description": "Gemini API key",
             "type": "string"
           },
@@ -307,8 +307,8 @@
           }
         },
         "required": [
-          "_p",
-          "_k"
+          "_p,",
+          "_k,"
         ]
       }
     },
@@ -378,13 +378,13 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "_t": {
+          "_t,": {
             "description": "GitHub Personal Access Token",
             "type": "string"
           }
         },
         "required": [
-          "_t"
+          "_t,"
         ]
       }
     },
@@ -422,7 +422,7 @@
             "description": "Repository (owner/repo or full URL)",
             "type": "string"
           },
-          "_p": {
+          "_p,": {
             "description": "Target directory (defaults to repo name in current dir)",
             "type": "string"
           },
@@ -472,7 +472,7 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "_t": {
+          "_t,": {
             "description": "Connection timeout per port check in seconds",
             "type": "string",
             "default": 2.0
@@ -482,7 +482,7 @@
             "type": "string",
             "default": false
           },
-          "_v": {
+          "_v,": {
             "description": "Detailed logging of each port check",
             "type": "string",
             "default": false
@@ -499,7 +499,7 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "_t": {
+          "_t,": {
             "description": "Timeout per check in seconds",
             "type": "string",
             "default": 5
@@ -509,7 +509,7 @@
             "type": "string",
             "default": false
           },
-          "_v": {
+          "_v,": {
             "description": "Detailed logging",
             "type": "string",
             "default": false
@@ -526,12 +526,12 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "_t": {
+          "_t,": {
             "description": "Timeout in milliseconds for ping response",
             "type": "string",
             "default": 500
           },
-          "_p": {
+          "_p,": {
             "description": "Specific TCP port to test (auto-detect if not provided)",
             "type": "string"
           },
@@ -552,7 +552,7 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "_r": {
+          "_r,": {
             "description": "Force re-check, ignore cache",
             "type": "string",
             "default": false
@@ -562,7 +562,7 @@
             "type": "string",
             "default": false
           },
-          "_v": {
+          "_v,": {
             "description": "Detailed logging of each check",
             "type": "string",
             "default": false
@@ -579,7 +579,7 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "_t": {
+          "_t,": {
             "description": "Connection timeout in seconds",
             "type": "string",
             "default": 5
@@ -594,7 +594,7 @@
             "type": "string",
             "default": false
           },
-          "_v": {
+          "_v,": {
             "description": "Detailed connection logging",
             "type": "string",
             "default": false
@@ -611,30 +611,30 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "_i": {
+          "_i,": {
             "description": "Intent UUID",
             "type": "string"
           },
-          "_f": {
+          "_f,": {
             "description": "Intent folder name",
             "type": "string"
           },
-          "_a": {
+          "_a,": {
             "description": "Who is speaking: 'user' or 'ai'",
             "type": "string",
             "default": "user"
           },
-          "_c": {
+          "_c,": {
             "description": "Content of the message",
             "type": "string"
           },
-          "_p": {
+          "_p,": {
             "description": "Path to Bloom project",
             "type": "string"
           }
         },
         "required": [
-          "_c"
+          "_c,"
         ]
       }
     },
@@ -668,26 +668,26 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "_t": {
+          "_t,": {
             "description": "Intent type: 'dev' for development or 'doc' for documentation",
             "type": "string"
           },
-          "_n": {
+          "_n,": {
             "description": "Human-readable name for the intent (e.g., 'Fix login authentication flow')",
             "type": "string"
           },
-          "_f": {
+          "_f,": {
             "description": "Initial files to include in the intent context (can be repeated or comma-separated)",
             "type": "string"
           },
-          "_p": {
+          "_p,": {
             "description": "Path to the Nucleus (Bloom project root). Auto-detected if not provided.",
             "type": "string"
           }
         },
         "required": [
-          "_t",
-          "_n"
+          "_t,",
+          "_n,"
         ]
       }
     },
@@ -699,11 +699,11 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "_i": {
+          "_i,": {
             "description": "Intent UUID",
             "type": "string"
           },
-          "_f": {
+          "_f,": {
             "description": "Intent folder name",
             "type": "string"
           },
@@ -712,7 +712,7 @@
             "type": "string",
             "default": false
           },
-          "_p": {
+          "_p,": {
             "description": "Path to Bloom project",
             "type": "string"
           }
@@ -728,7 +728,7 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "_i": {
+          "_i,": {
             "description": "Intent UUID to download response for",
             "type": "string"
           },
@@ -776,15 +776,15 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "_i": {
+          "_i,": {
             "description": "Intent UUID",
             "type": "string"
           },
-          "_f": {
+          "_f,": {
             "description": "Intent folder name",
             "type": "string"
           },
-          "_p": {
+          "_p,": {
             "description": "Path to Bloom project",
             "type": "string"
           }
@@ -800,15 +800,15 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "_i": {
+          "_i,": {
             "description": "Intent UUID",
             "type": "string"
           },
-          "_f": {
+          "_f,": {
             "description": "Intent folder name",
             "type": "string"
           },
-          "_p": {
+          "_p,": {
             "description": "Path to Bloom project",
             "type": "string"
           }
@@ -824,27 +824,27 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "_i": {
+          "_i,": {
             "description": "Intent UUID",
             "type": "string"
           },
-          "_f": {
+          "_f,": {
             "description": "Intent folder name",
             "type": "string"
           },
-          "_b": {
+          "_b,": {
             "description": "Briefing text (instruction)",
             "type": "string"
           },
-          "_B": {
+          "_B,": {
             "description": "Path to text file containing briefing",
             "type": "string"
           },
-          "_F": {
+          "_F,": {
             "description": "Files to include in context (comma-separated)",
             "type": "string"
           },
-          "_p": {
+          "_p,": {
             "description": "Path to Bloom project root",
             "type": "string"
           }
@@ -860,11 +860,11 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "_p": {
+          "_p,": {
             "description": "Path to Bloom project (auto-detected if not provided)",
             "type": "string"
           },
-          "_t": {
+          "_t,": {
             "description": "Filter by intent type: 'dev' or 'doc'",
             "type": "string"
           }
@@ -880,15 +880,15 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "_i": {
+          "_i,": {
             "description": "Intent UUID",
             "type": "string"
           },
-          "_f": {
+          "_f,": {
             "description": "Intent folder name",
             "type": "string"
           },
-          "_p": {
+          "_p,": {
             "description": "Path to Bloom project",
             "type": "string"
           }
@@ -904,15 +904,15 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "_i": {
+          "_i,": {
             "description": "Intent UUID to merge files for",
             "type": "string"
           },
-          "_f": {
+          "_f,": {
             "description": "Intent folder name (e.g., .fix-login-a1b2c3d4)",
             "type": "string"
           },
-          "_s": {
+          "_s,": {
             "description": "Pipeline stage (briefing, execution, refinement_X). Auto-detect if not provided.",
             "type": "string"
           },
@@ -931,7 +931,7 @@
             "type": "string",
             "default": false
           },
-          "_p": {
+          "_p,": {
             "description": "Path to Bloom project (auto-detected if not provided)",
             "type": "string"
           }
@@ -947,11 +947,11 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "_i": {
+          "_i,": {
             "description": "Intent UUID to parse",
             "type": "string"
           },
-          "_s": {
+          "_s,": {
             "description": "Pipeline stage (briefing, execution, refinement_X). Auto-detect if not provided.",
             "type": "string"
           },
@@ -965,13 +965,13 @@
             "type": "string",
             "default": true
           },
-          "_n": {
+          "_n,": {
             "description": "Path to nucleus root (default: current directory)",
             "type": "string"
           }
         },
         "required": [
-          "_i"
+          "_i,"
         ]
       }
     },
@@ -1011,11 +1011,11 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "_i": {
+          "_i,": {
             "description": "Intent UUID to recover",
             "type": "string"
           },
-          "_f": {
+          "_f,": {
             "description": "Intent folder name (e.g., .fix-login-abc123)",
             "type": "string"
           },
@@ -1029,7 +1029,7 @@
             "type": "string",
             "default": false
           },
-          "_p": {
+          "_p,": {
             "description": "Path to Bloom project (auto-detected if not provided)",
             "type": "string"
           }
@@ -1045,15 +1045,15 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "_i": {
+          "_i,": {
             "description": "Intent UUID to stage files for",
             "type": "string"
           },
-          "_f": {
+          "_f,": {
             "description": "Intent folder name (e.g., .fix-login-a1b2c3d4)",
             "type": "string"
           },
-          "_s": {
+          "_s,": {
             "description": "Pipeline stage (briefing, execution, refinement_X). Auto-detect if not provided.",
             "type": "string"
           },
@@ -1083,11 +1083,11 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "_i": {
+          "_i,": {
             "description": "UUID of the intent to submit",
             "type": "string"
           },
-          "_f": {
+          "_f,": {
             "description": "Folder name of the intent (e.g., .fix-login-a1b2c3d4)",
             "type": "string"
           },
@@ -1096,7 +1096,7 @@
             "type": "string",
             "default": "claude"
           },
-          "_p": {
+          "_p,": {
             "description": "Path to the Nucleus (Bloom project root). Auto-detected if not provided.",
             "type": "string"
           },
@@ -1131,11 +1131,11 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "_i": {
+          "_i,": {
             "description": "Intent UUID",
             "type": "string"
           },
-          "_f": {
+          "_f,": {
             "description": "Intent folder name",
             "type": "string"
           },
@@ -1144,7 +1144,7 @@
             "type": "string",
             "default": false
           },
-          "_p": {
+          "_p,": {
             "description": "Path to Bloom project",
             "type": "string"
           }
@@ -1160,15 +1160,15 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "_i": {
+          "_i,": {
             "description": "UUID of the intent to update",
             "type": "string"
           },
-          "_f": {
+          "_f,": {
             "description": "Folder name of the intent (e.g., .fix-login-a1b2c3d4)",
             "type": "string"
           },
-          "_n": {
+          "_n,": {
             "description": "New name for the intent (triggers folder rename)",
             "type": "string"
           },
@@ -1184,7 +1184,7 @@
             "description": "Remove files from the initial_files list",
             "type": "string"
           },
-          "_p": {
+          "_p,": {
             "description": "Path to the Nucleus (Bloom project root). Auto-detected if not provided.",
             "type": "string"
           }
@@ -1200,15 +1200,15 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "_i": {
+          "_i,": {
             "description": "Intent UUID",
             "type": "string"
           },
-          "_f": {
+          "_f,": {
             "description": "Intent folder name (e.g., .fix-login-abc123)",
             "type": "string"
           },
-          "_s": {
+          "_s,": {
             "description": "Pipeline stage (briefing, execution, refinement_X)",
             "type": "string"
           },
@@ -1227,7 +1227,7 @@
             "type": "string",
             "default": false
           },
-          "_p": {
+          "_p,": {
             "description": "Path to Bloom project (auto-detected if omitted)",
             "type": "string"
           }
@@ -1243,11 +1243,11 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "_o": {
+          "_o,": {
             "description": "Organization name",
             "type": "string"
           },
-          "_p": {
+          "_p,": {
             "description": "Target path (default: current dir)",
             "type": "string"
           },
@@ -1261,14 +1261,14 @@
             "type": "string",
             "default": ""
           },
-          "_f": {
+          "_f,": {
             "description": "Force overwrite existing directory",
             "type": "string",
             "default": false
           }
         },
         "required": [
-          "_o"
+          "_o,"
         ]
       }
     },
@@ -1280,11 +1280,11 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "_n": {
+          "_n,": {
             "description": "Intent name (will be slugified)",
             "type": "string"
           },
-          "_p": {
+          "_p,": {
             "description": "Nucleus path (default: current dir)",
             "type": "string"
           },
@@ -1292,7 +1292,7 @@
             "description": "Initial inquiry question",
             "type": "string"
           },
-          "_d": {
+          "_d,": {
             "description": "Intent description",
             "type": "string"
           },
@@ -1302,7 +1302,7 @@
           }
         },
         "required": [
-          "_n"
+          "_n,"
         ]
       }
     },
@@ -1314,18 +1314,18 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "_p": {
+          "_p,": {
             "description": "Path to the Nucleus root directory to delete",
             "type": "string"
           },
-          "_f": {
+          "_f,": {
             "description": "Skip confirmation prompt",
             "type": "string",
             "default": false
           }
         },
         "required": [
-          "_p"
+          "_p,"
         ]
       }
     },
@@ -1337,11 +1337,11 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "_i": {
+          "_i,": {
             "description": "Intent ID or slug",
             "type": "string"
           },
-          "_p": {
+          "_p,": {
             "description": "Nucleus path (default: current dir)",
             "type": "string"
           },
@@ -1355,7 +1355,7 @@
           }
         },
         "required": [
-          "_i"
+          "_i,"
         ]
       }
     },
@@ -1367,15 +1367,15 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "_i": {
+          "_i,": {
             "description": "Intent ID or slug",
             "type": "string"
           },
-          "_p": {
+          "_p,": {
             "description": "Nucleus path (default: current dir)",
             "type": "string"
           },
-          "_f": {
+          "_f,": {
             "description": "Export format (markdown, json)",
             "type": "string",
             "default": "markdown"
@@ -1387,7 +1387,7 @@
           }
         },
         "required": [
-          "_i"
+          "_i,"
         ]
       }
     },
@@ -1399,13 +1399,13 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "_p": {
+          "_p,": {
             "description": "Path to the Nucleus root directory",
             "type": "string"
           }
         },
         "required": [
-          "_p"
+          "_p,"
         ]
       }
     },
@@ -1435,7 +1435,7 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "_d": {
+          "_d,": {
             "description": "Parent directory to scan for nuclei (default: current directory)",
             "type": "string"
           }
@@ -1451,11 +1451,11 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "_p": {
+          "_p,": {
             "description": "Nucleus root path (default: current directory)",
             "type": "string"
           },
-          "_s": {
+          "_s,": {
             "description": "Filter by project strategy (python, typescript, go, etc.)",
             "type": "string"
           },
@@ -1476,16 +1476,16 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "_s": {
+          "_s,": {
             "description": "Step name to mark as completed",
             "type": "string"
           },
-          "_a": {
+          "_a,": {
             "description": "Mark entire onboarding as completed",
             "type": "string",
             "default": false
           },
-          "_p": {
+          "_p,": {
             "description": "Nucleus root path (default: current dir)",
             "type": "string"
           }
@@ -1501,7 +1501,7 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "_p": {
+          "_p,": {
             "description": "Nucleus root path (default: current dir)",
             "type": "string"
           }
@@ -1521,7 +1521,7 @@
             "description": "Name of the project to inspect",
             "type": "string"
           },
-          "_p": {
+          "_p,": {
             "description": "Nucleus root path (default: current directory)",
             "type": "string"
           }
@@ -1539,7 +1539,7 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "_p": {
+          "_p,": {
             "description": "Nucleus path",
             "type": "string"
           }
@@ -1555,7 +1555,7 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "_p": {
+          "_p,": {
             "description": "Nucleus path (default: current dir)",
             "type": "string"
           },
@@ -1564,7 +1564,7 @@
             "type": "string",
             "default": false
           },
-          "_v": {
+          "_v,": {
             "description": "Show detailed progress",
             "type": "string",
             "default": false
@@ -1718,14 +1718,14 @@
             "description": "ID del perfil a lanzar",
             "type": "string"
           },
-          "_s": {
+          "_s,": {
             "description": "Archivo JSON con especificación completa de lanzamiento (REQUERIDO)",
             "type": "string"
           }
         },
         "required": [
           "profile_id",
-          "_s"
+          "_s,"
         ]
       }
     },
@@ -1752,7 +1752,7 @@
             "description": "Ruta al proyecto a vincular",
             "type": "string"
           },
-          "_n": {
+          "_n,": {
             "description": "Ruta al Nucleus destino",
             "type": "string"
           },
@@ -1775,7 +1775,7 @@
         },
         "required": [
           "project_path",
-          "_n"
+          "_n,"
         ]
       }
     },
@@ -1791,11 +1791,11 @@
             "description": "Git repository URL (HTTPS or SSH)",
             "type": "string"
           },
-          "_d": {
+          "_d,": {
             "description": "Absolute path where to clone the repository. If not provided, clones to Nucleus root using repo name.",
             "type": "string"
           },
-          "_n": {
+          "_n,": {
             "description": "Path to the Nucleus project. Auto-detected from current directory if not provided.",
             "type": "string"
           },
@@ -1829,16 +1829,16 @@
             "description": "Parent directory to scan for projects",
             "type": "string"
           },
-          "_d": {
+          "_d,": {
             "description": "Maximum depth for recursive scanning",
             "type": "string",
             "default": 3
           },
-          "_s": {
+          "_s,": {
             "description": "Filter projects by strategy type",
             "type": "string"
           },
-          "_c": {
+          "_c,": {
             "description": "Filter by minimum confidence level (high, medium, low)",
             "type": "string"
           }
@@ -1856,7 +1856,7 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "_p": {
+          "_p,": {
             "description": "Path to the project root",
             "type": "string",
             "default": "."
@@ -1884,17 +1884,17 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "_p": {
+          "_p,": {
             "description": "TCP port to bind",
             "type": "string",
             "default": 5678
           },
-          "_h": {
+          "_h,": {
             "description": "Host address to bind",
             "type": "string",
             "default": "127.0.0.1"
           },
-          "_d": {
+          "_d,": {
             "description": "Run as background daemon",
             "type": "string",
             "default": false
@@ -2012,18 +2012,18 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "_t": {
+          "_t,": {
             "description": "Twitter API token",
             "type": "string"
           },
-          "_u": {
+          "_u,": {
             "description": "Twitter username",
             "type": "string"
           }
         },
         "required": [
-          "_t",
-          "_u"
+          "_t,",
+          "_u,"
         ]
       }
     }

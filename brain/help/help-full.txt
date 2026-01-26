@@ -49,37 +49,37 @@ BRAIN CLI ─── Modular System for Bloom (Executable)
     brain health dev-check [OPTIONS]
 
     ▪ Options:
-      -t                   Connection timeout per port check in seconds [default: 2.0]
-      --json               Output raw JSON [default: False]
-      -v                   Detailed logging of each port check [default: False]
+      -t, --timeout             Connection timeout per port check in seconds
+      --json                    Output raw JSON
+      -v, --verbose             Detailed logging of each port check
 
   ▸ full-stack
     Verify complete stack health (host, API, extension, Brain, onboarding)
     brain health full-stack [OPTIONS]
 
     ▪ Options:
-      -t                   Timeout per check in seconds [default: 5]
-      --json               Output raw JSON [default: False]
-      -v                   Detailed logging [default: False]
+      -t, --timeout             Timeout per check in seconds
+      --json                    Output raw JSON
+      -v, --verbose             Detailed logging
 
   ▸ native-ping
     Ping the native host to verify it's alive and responding.
     brain health native-ping [OPTIONS]
 
     ▪ Options:
-      -t                   Timeout in milliseconds for ping response [default: 500]
-      -p                   Specific TCP port to test (auto-detect if not provided)
-      --check-ws/--no-check-ws Also verify WebSocket port status [default: True]
+      -t, --timeout             Timeout in milliseconds for ping response
+      -p, --port                Specific TCP port to test (auto-detect if not provided)
+      --check-ws/--no-check-ws  Also verify WebSocket port status
 
   ▸ websocket-status
     Verify WebSocket server status on localhost:4124
     brain health websocket-status [OPTIONS]
 
     ▪ Options:
-      -t                   Connection timeout in seconds [default: 5]
-      --test-sub           Test event subscription capability [default: False]
-      --json               Output raw JSON [default: False]
-      -v                   Detailed connection logging [default: False]
+      -t, --timeout             Connection timeout in seconds
+      --test-sub                Test event subscription capability
+      --json                    Output raw JSON
+      -v, --verbose             Detailed connection logging
 
   ▪ ONBOARDING & SETUP
   ──────────────────────
@@ -89,9 +89,9 @@ BRAIN CLI ─── Modular System for Bloom (Executable)
     brain health onboarding-status [OPTIONS]
 
     ▪ Options:
-      -r                   Force re-check, ignore cache [default: False]
-      --json               Output raw JSON [default: False]
-      -v                   Detailed logging of each check [default: False]
+      -r, --refresh             Force re-check, ignore cache
+      --json                    Output raw JSON
+      -v, --verbose             Detailed logging of each check
 
 
 =======================================================[ SYSTEM ]=======================================================
@@ -112,9 +112,9 @@ BRAIN CLI ─── Modular System for Bloom (Executable)
     brain system version [OPTIONS]
 
     ▪ Options:
-      --added              Feature or capability added (can be used multiple times)
-      --changed            Feature or behavior changed (can be used multiple times)
-      --details            Implementation detail or technical note (can be used multiple times)
+      --added                   Feature or capability added (can be used multiple times)
+      --changed                 Feature or behavior changed (can be used multiple times)
+      --details                 Implementation detail or technical note (can be used multiple times)
 
 
 ======================================================[ NUCLEUS ]=======================================================
@@ -130,11 +130,11 @@ BRAIN CLI ─── Modular System for Bloom (Executable)
     brain nucleus create [OPTIONS]
 
     ▪ Options:
-      -o <VALUE>           Organization name
-      -p                   Target path (default: current dir)
-      --output             Output directory name (legacy, kept for compatibility) [default: .bloom]
-      --url                Organization URL [default: ]
-      -f                   Force overwrite existing directory [default: False]
+      -o, --org <VALUE>         Organization name
+      -p, --path                Target path (default: current dir)
+      --output                  Output directory name (legacy, kept for compatibility)
+      --url                     Organization URL
+      -f, --force               Force overwrite existing directory
 
   ▪ EXPLORATION & DISCOVERY
   ───────────────────────────
@@ -144,46 +144,46 @@ BRAIN CLI ─── Modular System for Bloom (Executable)
     brain nucleus create-exp-intent [OPTIONS]
 
     ▪ Options:
-      -n <VALUE>           Intent name (will be slugified)
-      -p                   Nucleus path (default: current dir)
-      --inquiry            Initial inquiry question
-      -d                   Intent description
-      --projects           Comma-separated project names to include
+      -n, --name <VALUE>        Intent name (will be slugified)
+      -p, --path                Nucleus path (default: current dir)
+      --inquiry                 Initial inquiry question
+      -d, --description         Intent description
+      --projects                Comma-separated project names to include
 
   ▸ exp-discovery-turn
     Add a discovery turn to an exploration intent.
     brain nucleus exp-discovery-turn [OPTIONS]
 
     ▪ Options:
-      -i <VALUE>           Intent ID or slug
-      -p                   Nucleus path (default: current dir)
-      --notes              Turn notes/observations
-      --analysis           Analysis summary for this turn
+      -i, --intent <VALUE>      Intent ID or slug
+      -p, --path                Nucleus path (default: current dir)
+      --notes                   Turn notes/observations
+      --analysis                Analysis summary for this turn
 
   ▸ exp-export-findings
     Export findings from an exploration intent.
     brain nucleus exp-export-findings [OPTIONS]
 
     ▪ Options:
-      -i <VALUE>           Intent ID or slug
-      -p                   Nucleus path (default: current dir)
-      -f                   Export format (markdown, json) [default: markdown]
-      --include-raw        Include raw turn data [default: False]
+      -i, --intent <VALUE>      Intent ID or slug
+      -p, --path                Nucleus path (default: current dir)
+      -f, --format              Export format (markdown, json)
+      --include-raw             Include raw turn data
 
   ▸ delete
     Delete a complete nucleus including all its data.
     brain nucleus delete [OPTIONS]
 
     ▪ Options:
-      -p <VALUE>           Path to the Nucleus root directory to delete
-      -f                   Skip confirmation prompt [default: False]
+      -p, --nucleus-path <VALUE> Path to the Nucleus root directory to delete
+      -f, --force               Skip confirmation prompt
 
   ▸ get
     Retrieve complete details of a nucleus.
     brain nucleus get [OPTIONS]
 
     ▪ Options:
-      -p <VALUE>           Path to the Nucleus root directory
+      -p, --nucleus-path <VALUE> Path to the Nucleus root directory
 
   ▸ link
     Link an existing folder as a Nucleus project.
@@ -197,16 +197,16 @@ BRAIN CLI ─── Modular System for Bloom (Executable)
     brain nucleus status [OPTIONS]
 
     ▪ Options:
-      -p                   Nucleus path
+      -p, --path                Nucleus path
 
   ▸ sync
     Synchronize projects and rebuild nucleus cache.
     brain nucleus sync [OPTIONS]
 
     ▪ Options:
-      -p                   Nucleus path (default: current dir)
-      --skip-git           Skip git pull operations [default: False]
-      -v                   Show detailed progress [default: False]
+      -p, --path                Nucleus path (default: current dir)
+      --skip-git                Skip git pull operations
+      -v, --verbose             Show detailed progress
 
   ▪ LISTING & INSPECTION
   ────────────────────────
@@ -216,16 +216,16 @@ BRAIN CLI ─── Modular System for Bloom (Executable)
     brain nucleus list [OPTIONS]
 
     ▪ Options:
-      -d                   Parent directory to scan for nuclei (default: current directory)
+      -d, --parent-dir          Parent directory to scan for nuclei (default: current directory)
 
   ▸ list-projects
     List all projects linked to the nucleus with their details.
     brain nucleus list-projects [OPTIONS]
 
     ▪ Options:
-      -p                   Nucleus root path (default: current directory)
-      -s                   Filter by project strategy (python, typescript, go, etc.)
-      --active-only        Show only active projects [default: False]
+      -p, --path                Nucleus root path (default: current directory)
+      -s, --strategy            Filter by project strategy (python, typescript, go, etc.)
+      --active-only             Show only active projects
 
   ▪ ONBOARDING & SETUP
   ──────────────────────
@@ -235,16 +235,16 @@ BRAIN CLI ─── Modular System for Bloom (Executable)
     brain nucleus onboarding-complete [OPTIONS]
 
     ▪ Options:
-      -s                   Step name to mark as completed
-      -a                   Mark entire onboarding as completed [default: False]
-      -p                   Nucleus root path (default: current dir)
+      -s, --step                Step name to mark as completed
+      -a, --all                 Mark entire onboarding as completed
+      -p, --path                Nucleus root path (default: current dir)
 
   ▸ onboarding-status
     Get the current onboarding status from nucleus configuration.
     brain nucleus onboarding-status [OPTIONS]
 
     ▪ Options:
-      -p                   Nucleus root path (default: current dir)
+      -p, --path                Nucleus root path (default: current dir)
 
   ▪ PROJECT OPERATIONS
   ──────────────────────
@@ -257,7 +257,7 @@ BRAIN CLI ─── Modular System for Bloom (Executable)
       <PROJECT_NAME>       Name of the project to inspect
 
     ▪ Options:
-      -p                   Nucleus root path (default: current directory)
+      -p, --path                Nucleus root path (default: current directory)
 
 
 ======================================================[ PROJECT ]=======================================================
@@ -276,11 +276,11 @@ BRAIN CLI ─── Modular System for Bloom (Executable)
       <PROJECT_PATH>       Ruta al proyecto a vincular
 
     ▪ Options:
-      -n <VALUE>           Ruta al Nucleus destino
-      --name               Nombre custom del proyecto (default: nombre de carpeta)
-      --strategy           Forzar estrategia específica (default: auto-detect)
-      --description        Descripción del proyecto
-      --repo-url           URL del repositorio GitHub
+      -n, --nucleus <VALUE>     Ruta al Nucleus destino
+      --name                    Nombre custom del proyecto (default: nombre de carpeta)
+      --strategy                Forzar estrategia específica (default: auto-detect)
+      --description             Descripción del proyecto
+      --repo-url                URL del repositorio GitHub
 
   ▸ clone-and-add
     Clone a Git repository and automatically link it to the current Nucleus.
@@ -290,12 +290,12 @@ BRAIN CLI ─── Modular System for Bloom (Executable)
       <REPO_URL>           Git repository URL (HTTPS or SSH)
 
     ▪ Options:
-      -d                   Absolute path where to clone the repository. If not provided, clones to Nucleus root using 
-repo name.
-      -n                   Path to the Nucleus project. Auto-detected from current directory if not provided.
-      --name               Custom name for the project (default: repository name)
-      --strategy           Force specific technology strategy (e.g., python, typescript, android)
-      --description        Project description
+      -d, --dest-path           Absolute path where to clone the repository. If not provided, clones to Nucleus root 
+using repo name.
+      -n, --nucleus-path        Path to the Nucleus project. Auto-detected from current directory if not provided.
+      --name                    Custom name for the project (default: repository name)
+      --strategy                Force specific technology strategy (e.g., python, typescript, android)
+      --description             Project description
 
   ▸ detect
     Scan directory and detect project types automatically.
@@ -305,16 +305,16 @@ repo name.
       <PARENT_PATH>        Parent directory to scan for projects
 
     ▪ Options:
-      -d                   Maximum depth for recursive scanning [default: 3]
-      -s                   Filter projects by strategy type
-      -c                   Filter by minimum confidence level (high, medium, low)
+      -d, --max-depth           Maximum depth for recursive scanning
+      -s, --strategy            Filter projects by strategy type
+      -c, --min-confidence      Filter by minimum confidence level (high, medium, low)
 
   ▸ load
     Validates and loads project information. 
     brain project load [OPTIONS]
 
     ▪ Options:
-      -p                   Path to the project root [default: .]
+      -p, --path                Path to the project root
 
 
 ======================================================[ PROFILE ]=======================================================
@@ -337,7 +337,7 @@ repo name.
       <PROFILE_ID>         ID del perfil a lanzar
 
     ▪ Options:
-      -s <VALUE>           Archivo JSON con especificación completa de lanzamiento (REQUERIDO)
+      -s, --spec <VALUE>        Archivo JSON con especificación completa de lanzamiento (REQUERIDO)
 
   ▸ link
     Vincula un email a un perfil.
@@ -385,7 +385,7 @@ repo name.
       <ALIAS>              Nombre descriptivo del perfil
 
     ▪ Options:
-      --master             Marcar como perfil master [default: False]
+      --master                  Marcar como perfil master
 
   ▪ LISTING & INSPECTION
   ────────────────────────
@@ -405,15 +405,15 @@ repo name.
     brain extension install [OPTIONS]
 
     ▪ Options:
-      -s                   Source directory (auto-detects if not provided)
-      -f                   Force reinstall even if same version exists [default: False]
+      -s, --source              Source directory (auto-detects if not provided)
+      -f, --force               Force reinstall even if same version exists
 
   ▸ update
     Update Chrome extension to the latest version.
     brain extension update [OPTIONS]
 
     ▪ Options:
-      -s                   Source directory (auto-detects if not provided)
+      -s, --source              Source directory (auto-detects if not provided)
 
   ▸ verify
     Verify that the Chrome extension is correctly installed.
@@ -444,9 +444,9 @@ repo name.
     brain service start [OPTIONS]
 
     ▪ Options:
-      -p                   TCP port to bind [default: 5678]
-      -h                   Host address to bind [default: 127.0.0.1]
-      -d                   Run as background daemon [default: False]
+      -p, --port                TCP port to bind
+      -h, --host                Host address to bind
+      -d, --daemon              Run as background daemon
 
   ▸ status
     Check the current status of the Brain service.
@@ -477,9 +477,9 @@ repo name.
     brain context generate [OPTIONS]
 
     ▪ Options:
-      -p                   Root path of the project [default: .]
-      -o                   Output folder name [default: .bloom]
-      -s                   Force specific strategy
+      -p, --path                Root path of the project
+      -o, --output              Output folder name
+      -s, --strategy            Force specific strategy
 
 
 =======================================================[ INTENT ]=======================================================
@@ -495,11 +495,11 @@ repo name.
     brain intent add-turn [OPTIONS]
 
     ▪ Options:
-      -i                   Intent UUID
-      -f                   Intent folder name
-      -a                   Who is speaking: 'user' or 'ai' [default: user]
-      -c <VALUE>           Content of the message
-      -p                   Path to Bloom project
+      -i, --id                  Intent UUID
+      -f, --folder              Intent folder name
+      -a, --actor               Who is speaking: 'user' or 'ai'
+      -c, --content <VALUE>     Content of the message
+      -p, --nucleus-path        Path to Bloom project
 
   ▪ BUILD & COMPILATION
   ───────────────────────
@@ -509,8 +509,8 @@ repo name.
     brain intent build-payload [OPTIONS]
 
     ▪ Options:
-      --plan <VALUE>       Path to context_plan.json
-      --output             Output path for payload (default: same dir as plan)
+      --plan <VALUE>            Path to context_plan.json
+      --output                  Output path for payload (default: same dir as plan)
 
   ▪ CREATION & INITIALIZATION
   ─────────────────────────────
@@ -520,179 +520,179 @@ repo name.
     brain intent create [OPTIONS]
 
     ▪ Options:
-      -t <VALUE>           Intent type: 'dev' for development or 'doc' for documentation
-      -n <VALUE>           Human-readable name for the intent (e.g., 'Fix login authentication flow')
-      -f                   Initial files to include in the intent context (can be repeated or comma-separated)
-      -p                   Path to the Nucleus (Bloom project root). Auto-detected if not provided.
+      -t, --type <VALUE>        Intent type: 'dev' for development or 'doc' for documentation
+      -n, --name <VALUE>        Human-readable name for the intent (e.g., 'Fix login authentication flow')
+      -f, --files               Initial files to include in the intent context (can be repeated or comma-separated)
+      -p, --nucleus-path        Path to the Nucleus (Bloom project root). Auto-detected if not provided.
 
   ▸ delete
     Delete an intent and all its data.
     brain intent delete [OPTIONS]
 
     ▪ Options:
-      -i                   Intent UUID
-      -f                   Intent folder name
-      --force              Skip confirmation and force delete even if locked [default: False]
-      -p                   Path to Bloom project
+      -i, --id                  Intent UUID
+      -f, --folder              Intent folder name
+      --force                   Skip confirmation and force delete even if locked
+      -p, --nucleus-path        Path to Bloom project
 
   ▸ download
     Download AI response from Native Host or file.
     brain intent download [OPTIONS]
 
     ▪ Options:
-      -i                   Intent UUID to download response for
-      --folder             Intent folder name (alternative to intent-id)
-      --socket-mode        Listen on TCP socket for Host connection [default: False]
-      --input-file         Read response from file (for testing)
-      --host               Host IP to listen on [default: 127.0.0.1]
-      --port               Port to listen on (different from Host's 5678) [default: 5679]
-      --timeout            Socket timeout in seconds [default: 300]
-      --nucleus-path       Path to Bloom project (auto-detected if omitted)
+      -i, --intent-id           Intent UUID to download response for
+      --folder                  Intent folder name (alternative to intent-id)
+      --socket-mode             Listen on TCP socket for Host connection
+      --input-file              Read response from file (for testing)
+      --host                    Host IP to listen on
+      --port                    Port to listen on (different from Host's 5678)
+      --timeout                 Socket timeout in seconds
+      --nucleus-path            Path to Bloom project (auto-detected if omitted)
 
   ▸ finalize
     Finalize an intent, applying changes to the codebase.
     brain intent finalize [OPTIONS]
 
     ▪ Options:
-      -i                   Intent UUID
-      -f                   Intent folder name
-      -p                   Path to Bloom project
+      -i, --id                  Intent UUID
+      -f, --folder              Intent folder name
+      -p, --nucleus-path        Path to Bloom project
 
   ▸ get
     Get complete details of an intent.
     brain intent get [OPTIONS]
 
     ▪ Options:
-      -i                   Intent UUID
-      -f                   Intent folder name
-      -p                   Path to Bloom project
+      -i, --id                  Intent UUID
+      -f, --folder              Intent folder name
+      -p, --nucleus-path        Path to Bloom project
 
   ▸ hydrate
     Hydrate an intent by processing source files and briefing.
     brain intent hydrate [OPTIONS]
 
     ▪ Options:
-      -i                   Intent UUID
-      -f                   Intent folder name
-      -b                   Briefing text (instruction)
-      -B                   Path to text file containing briefing
-      -F                   Files to include in context (comma-separated)
-      -p                   Path to Bloom project root
+      -i, --id                  Intent UUID
+      -f, --folder              Intent folder name
+      -b, --briefing            Briefing text (instruction)
+      -B, --briefing-file       Path to text file containing briefing
+      -F, --files               Files to include in context (comma-separated)
+      -p, --nucleus-path        Path to Bloom project root
 
   ▸ lock
     Lock an intent for exclusive use.
     brain intent lock [OPTIONS]
 
     ▪ Options:
-      -i                   Intent UUID
-      -f                   Intent folder name
-      -p                   Path to Bloom project
+      -i, --id                  Intent UUID
+      -f, --folder              Intent folder name
+      -p, --nucleus-path        Path to Bloom project
 
   ▸ merge
     Merge staged files from .staging/ into the real codebase.
     brain intent merge [OPTIONS]
 
     ▪ Options:
-      -i                   Intent UUID to merge files for
-      -f                   Intent folder name (e.g., .fix-login-a1b2c3d4)
-      -s                   Pipeline stage (briefing, execution, refinement_X). Auto-detect if not provided.
-      --force              Skip approval check and merge anyway [default: False]
-      --dry-run            Show what would be merged without applying [default: False]
-      --no-backup          Skip backup creation (DANGEROUS) [default: False]
-      -p                   Path to Bloom project (auto-detected if not provided)
+      -i, --intent-id           Intent UUID to merge files for
+      -f, --folder              Intent folder name (e.g., .fix-login-a1b2c3d4)
+      -s, --stage               Pipeline stage (briefing, execution, refinement_X). Auto-detect if not provided.
+      --force                   Skip approval check and merge anyway
+      --dry-run                 Show what would be merged without applying
+      --no-backup               Skip backup creation (DANGEROUS)
+      -p, --nucleus-path        Path to Bloom project (auto-detected if not provided)
 
   ▸ parse
     Parse and validate .raw_output.json from an AI response.
     brain intent parse [OPTIONS]
 
     ▪ Options:
-      -i <VALUE>           Intent UUID to parse
-      -s                   Pipeline stage (briefing, execution, refinement_X). Auto-detect if not provided.
-      --strict             Fail on any protocol violation (no fallback parser) [default: False]
-      --output-report      Generate .parse_report.json [default: True]
-      -n                   Path to nucleus root (default: current directory)
+      -i, --intent-id <VALUE>   Intent UUID to parse
+      -s, --stage               Pipeline stage (briefing, execution, refinement_X). Auto-detect if not provided.
+      --strict                  Fail on any protocol violation (no fallback parser)
+      --output-report           Generate .parse_report.json
+      -n, --nucleus-path        Path to nucleus root (default: current directory)
 
   ▸ plan
     Generate context plan for an intent using Gemini Router.
     brain intent plan [OPTIONS]
 
     ▪ Options:
-      --intent-dir <VALUE> Intent directory path
-      --description <VALUE> Intent description
-      --type               Intent type: dev, doc, or seed [default: dev]
+      --intent-dir <VALUE>      Intent directory path
+      --description <VALUE>     Intent description
+      --type                    Intent type: dev, doc, or seed
 
   ▸ recover
     Recover interrupted intents using lock state recovery data.
     brain intent recover [OPTIONS]
 
     ▪ Options:
-      -i                   Intent UUID to recover
-      -f                   Intent folder name (e.g., .fix-login-abc123)
-      --auto-detect        Find and recover all interrupted intents [default: False]
-      --force-unlock       Force unlock without attempting recovery [default: False]
-      -p                   Path to Bloom project (auto-detected if not provided)
+      -i, --intent-id           Intent UUID to recover
+      -f, --folder              Intent folder name (e.g., .fix-login-abc123)
+      --auto-detect             Find and recover all interrupted intents
+      --force-unlock            Force unlock without attempting recovery
+      -p, --nucleus-path        Path to Bloom project (auto-detected if not provided)
 
   ▸ stage
     Prepare files in .staging/ directory for merge.
     brain intent stage [OPTIONS]
 
     ▪ Options:
-      -i                   Intent UUID to stage files for
-      -f                   Intent folder name (e.g., .fix-login-a1b2c3d4)
-      -s                   Pipeline stage (briefing, execution, refinement_X). Auto-detect if not provided.
-      --dry-run            Show what would be staged without writing files [default: False]
-      --overwrite          Overwrite existing .staging/ directory [default: True]
-      -p                   Path to Bloom project (auto-detected if not provided)
+      -i, --intent-id           Intent UUID to stage files for
+      -f, --folder              Intent folder name (e.g., .fix-login-a1b2c3d4)
+      -s, --stage               Pipeline stage (briefing, execution, refinement_X). Auto-detect if not provided.
+      --dry-run                 Show what would be staged without writing files
+      --overwrite               Overwrite existing .staging/ directory
+      -p                        Path to Bloom project (auto-detected if not provided)
 
   ▸ submit
     Submit an intent payload to an AI provider through the native host bridge.
     brain intent submit [OPTIONS]
 
     ▪ Options:
-      -i                   UUID of the intent to submit
-      -f                   Folder name of the intent (e.g., .fix-login-a1b2c3d4)
-      --provider           AI provider to use: 'claude', 'gemini', etc. [default: claude]
-      -p                   Path to the Nucleus (Bloom project root). Auto-detected if not provided.
-      --profile-path       Chrome profile path for the AI provider (optional)
-      --host               Native host IP address [default: 127.0.0.1]
-      --port               Native host TCP port [default: 5678]
-      --timeout            Connection timeout in seconds [default: 30]
+      -i, --intent-id           UUID of the intent to submit
+      -f, --folder-name         Folder name of the intent (e.g., .fix-login-a1b2c3d4)
+      --provider                AI provider to use: 'claude', 'gemini', etc.
+      -p, --nucleus-path        Path to the Nucleus (Bloom project root). Auto-detected if not provided.
+      --profile-path            Chrome profile path for the AI provider (optional)
+      --host                    Native host IP address
+      --port                    Native host TCP port
+      --timeout                 Connection timeout in seconds
 
   ▸ unlock
     Unlock an intent to free it for use.
     brain intent unlock [OPTIONS]
 
     ▪ Options:
-      -i                   Intent UUID
-      -f                   Intent folder name
-      --force              Force unlock even if locked by another host [default: False]
-      -p                   Path to Bloom project
+      -i, --id                  Intent UUID
+      -f, --folder              Intent folder name
+      --force                   Force unlock even if locked by another host
+      -p, --nucleus-path        Path to Bloom project
 
   ▸ update
     Update an existing intent's properties.
     brain intent update [OPTIONS]
 
     ▪ Options:
-      -i                   UUID of the intent to update
-      -f                   Folder name of the intent (e.g., .fix-login-a1b2c3d4)
-      -n                   New name for the intent (triggers folder rename)
-      --files              Replace all initial files with this new list
-      --add-files          Add files to the existing initial_files list
-      --remove-files       Remove files from the initial_files list
-      -p                   Path to the Nucleus (Bloom project root). Auto-detected if not provided.
+      -i, --intent-id           UUID of the intent to update
+      -f, --folder              Folder name of the intent (e.g., .fix-login-a1b2c3d4)
+      -n, --name                New name for the intent (triggers folder rename)
+      --files                   Replace all initial files with this new list
+      --add-files               Add files to the existing initial_files list
+      --remove-files            Remove files from the initial_files list
+      -p, --nucleus-path        Path to the Nucleus (Bloom project root). Auto-detected if not provided.
 
   ▸ validate
     Validate staging files using Gemini analysis.
     brain intent validate [OPTIONS]
 
     ▪ Options:
-      -i                   Intent UUID
-      -f                   Intent folder name (e.g., .fix-login-abc123)
-      -s                   Pipeline stage (briefing, execution, refinement_X)
-      --auto-approve       Skip manual review and approve automatically [default: False]
-      --gemini-model       Gemini model to use for analysis [default: gemini-2.0-flash-exp]
-      --skip-gemini        Skip Gemini analysis (only basic validation) [default: False]
-      -p                   Path to Bloom project (auto-detected if omitted)
+      -i, --intent-id           Intent UUID
+      -f, --folder              Intent folder name (e.g., .fix-login-abc123)
+      -s, --stage               Pipeline stage (briefing, execution, refinement_X)
+      --auto-approve            Skip manual review and approve automatically
+      --gemini-model            Gemini model to use for analysis
+      --skip-gemini             Skip Gemini analysis (only basic validation)
+      -p, --nucleus-path        Path to Bloom project (auto-detected if omitted)
 
   ▪ LISTING & INSPECTION
   ────────────────────────
@@ -702,8 +702,8 @@ repo name.
     brain intent list [OPTIONS]
 
     ▪ Options:
-      -p                   Path to Bloom project (auto-detected if not provided)
-      -t                   Filter by intent type: 'dev' or 'doc'
+      -p, --nucleus-path        Path to Bloom project (auto-detected if not provided)
+      -t, --type                Filter by intent type: 'dev' or 'doc'
 
 
 =====================================================[ FILESYSTEM ]=====================================================
@@ -719,10 +719,10 @@ repo name.
       <PATHS>              Paths to compress (files or directories)
 
     ▪ Options:
-      -m                   Compression mode: 'codebase' or 'docbase' [default: codebase]
-      -o                   Output directory (default: current directory)
-      -e                   Patterns to exclude (can be used multiple times) [default: []]
-      --no-comments        Remove comments during compression [default: False]
+      -m, --mode                Compression mode: 'codebase' or 'docbase'
+      -o, --output              Output directory (default: current directory)
+      -e, --exclude             Patterns to exclude (can be used multiple times)
+      --no-comments             Remove comments during compression
 
   ▸ extract
     Extract files from compressed JSON format.
@@ -732,8 +732,8 @@ repo name.
       <JSON_FILE>          Compressed JSON file to extract
 
     ▪ Options:
-      -o                   Output directory (default: extracted_<mode>)
-      --verify-hashes/--no-verify-hashes Verify MD5 hashes during extraction [default: True]
+      -o, --output              Output directory (default: extracted_<mode>)
+      --verify-hashes/--no-verify-hashes Verify MD5 hashes during extraction
 
   ▸ tree
     Generate a visual directory tree structure with intelligent exclusions.
@@ -743,9 +743,9 @@ repo name.
       <TARGETS>            Specific directories or files to include (supports absolute paths).
 
     ▪ Options:
-      -o                   Output file path [default: tree.txt]
-      --hash               Include MD5 hashes [default: False]
-      --export-json        Export JSON to disk [default: False]
+      -o, --output              Output file path
+      --hash                    Include MD5 hashes
+      --export-json             Export JSON to disk
 
 
 =======================================================[ GITHUB ]=======================================================
@@ -761,7 +761,7 @@ repo name.
     brain github auth-login [OPTIONS]
 
     ▪ Options:
-      -t <VALUE>           GitHub Personal Access Token
+      -t, --token <VALUE>       GitHub Personal Access Token
 
   ▸ auth-logout
     Remove stored GitHub token.
@@ -779,8 +779,8 @@ repo name.
       <REPO>               Repository (owner/repo or full URL)
 
     ▪ Options:
-      -p                   Target directory (defaults to repo name in current dir)
-      --progress/--no-progress Show clone progress [default: True]
+      -p, --path                Target directory (defaults to repo name in current dir)
+      --progress/--no-progress  Show clone progress
 
   ▪ ORGANIZATION MANAGEMENT
   ───────────────────────────
@@ -797,7 +797,7 @@ repo name.
     brain github repos-list [OPTIONS]
 
     ▪ Options:
-      --org                Organization name
+      --org                     Organization name
 
 
 =======================================================[ GEMINI ]=======================================================
@@ -813,9 +813,9 @@ repo name.
     brain gemini keys-add [OPTIONS]
 
     ▪ Options:
-      -p <VALUE>           Profile name (e.g., 'Personal Chrome')
-      -k <VALUE>           Gemini API key
-      --priority           Priority: 1=preferred, 0=normal, -1=backup [default: 0]
+      -p, --profile <VALUE>     Profile name (e.g., 'Personal Chrome')
+      -k, --key <VALUE>         Gemini API key
+      --priority                Priority: 1=preferred, 0=normal, -1=backup
 
   ▸ keys-delete
     Delete a Gemini API key.
@@ -853,8 +853,8 @@ repo name.
     brain twitter auth-login [OPTIONS]
 
     ▪ Options:
-      -t <VALUE>           Twitter API token
-      -u <VALUE>           Twitter username
+      -t, --token <VALUE>       Twitter API token
+      -u, --username <VALUE>    Twitter username
 
   ▸ auth-status
     Check Twitter/X authentication status.
@@ -877,9 +877,9 @@ repo name.
       <PROFILE_ID>         Chrome profile UUID
 
     ▪ Options:
-      -b                   Lines of context before match [default: 5]
-      -a                   Lines of context after match [default: 5]
-      -l                   Launch ID for separate output file
+      -b, --before              Lines of context before match
+      -a, --after               Lines of context after match
+      -l, --launch-id           Launch ID for separate output file
 
   ▸ read-net-log
     Analyze Chrome network logs with intelligent filtering.
@@ -889,11 +889,11 @@ repo name.
       <PROFILE_ID>         Chrome profile UUID
 
     ▪ Options:
-      --filter-ai          Filter for AI service requests only [default: False]
-      -e                   Exclude URL patterns
-      --include-quic       Include QUIC protocol events [default: False]
-      --show-headers       Show HTTP headers in output [default: False]
-      -l                   Launch ID for separate output file
+      --filter-ai               Filter for AI service requests only
+      -e, --exclude             Exclude URL patterns
+      --include-quic            Include QUIC protocol events
+      --show-headers            Show HTTP headers in output
+      -l, --launch-id           Launch ID for separate output file
 
   ▸ mining-log
     Read and filter engine_mining.log for a specific profile.
@@ -903,10 +903,10 @@ repo name.
       <PROFILE_ID>         Chrome profile UUID
 
     ▪ Options:
-      -k                   Keyword to search for [default: bloom]
-      -b                   Lines of context before match [default: 5]
-      -a                   Lines of context after match [default: 5]
-      -l                   Launch ID for separate output file
+      -k, --keyword             Keyword to search for
+      -b, --before              Lines of context before match
+      -a, --after               Lines of context after match
+      -l, --launch-id           Launch ID for separate output file
 
 
                                   BRAIN CLI ─── Modular System for Bloom (Executable)                                   
@@ -960,37 +960,37 @@ repo name.
     brain health dev-check [OPTIONS]
 
     ▪ Options:
-      -t                   Connection timeout per port check in seconds [default: 2.0]
-      --json               Output raw JSON [default: False]
-      -v                   Detailed logging of each port check [default: False]
+      -t, --timeout             Connection timeout per port check in seconds
+      --json                    Output raw JSON
+      -v, --verbose             Detailed logging of each port check
 
   ▸ full-stack
     Verify complete stack health (host, API, extension, Brain, onboarding)
     brain health full-stack [OPTIONS]
 
     ▪ Options:
-      -t                   Timeout per check in seconds [default: 5]
-      --json               Output raw JSON [default: False]
-      -v                   Detailed logging [default: False]
+      -t, --timeout             Timeout per check in seconds
+      --json                    Output raw JSON
+      -v, --verbose             Detailed logging
 
   ▸ native-ping
     Ping the native host to verify it's alive and responding.
     brain health native-ping [OPTIONS]
 
     ▪ Options:
-      -t                   Timeout in milliseconds for ping response [default: 500]
-      -p                   Specific TCP port to test (auto-detect if not provided)
-      --check-ws/--no-check-ws Also verify WebSocket port status [default: True]
+      -t, --timeout             Timeout in milliseconds for ping response
+      -p, --port                Specific TCP port to test (auto-detect if not provided)
+      --check-ws/--no-check-ws  Also verify WebSocket port status
 
   ▸ websocket-status
     Verify WebSocket server status on localhost:4124
     brain health websocket-status [OPTIONS]
 
     ▪ Options:
-      -t                   Connection timeout in seconds [default: 5]
-      --test-sub           Test event subscription capability [default: False]
-      --json               Output raw JSON [default: False]
-      -v                   Detailed connection logging [default: False]
+      -t, --timeout             Connection timeout in seconds
+      --test-sub                Test event subscription capability
+      --json                    Output raw JSON
+      -v, --verbose             Detailed connection logging
 
   ▪ ONBOARDING & SETUP
   ──────────────────────
@@ -1000,9 +1000,9 @@ repo name.
     brain health onboarding-status [OPTIONS]
 
     ▪ Options:
-      -r                   Force re-check, ignore cache [default: False]
-      --json               Output raw JSON [default: False]
-      -v                   Detailed logging of each check [default: False]
+      -r, --refresh             Force re-check, ignore cache
+      --json                    Output raw JSON
+      -v, --verbose             Detailed logging of each check
 
 
 =======================================================[ SYSTEM ]=======================================================
@@ -1023,9 +1023,9 @@ repo name.
     brain system version [OPTIONS]
 
     ▪ Options:
-      --added              Feature or capability added (can be used multiple times)
-      --changed            Feature or behavior changed (can be used multiple times)
-      --details            Implementation detail or technical note (can be used multiple times)
+      --added                   Feature or capability added (can be used multiple times)
+      --changed                 Feature or behavior changed (can be used multiple times)
+      --details                 Implementation detail or technical note (can be used multiple times)
 
 
 ======================================================[ NUCLEUS ]=======================================================
@@ -1041,11 +1041,11 @@ repo name.
     brain nucleus create [OPTIONS]
 
     ▪ Options:
-      -o <VALUE>           Organization name
-      -p                   Target path (default: current dir)
-      --output             Output directory name (legacy, kept for compatibility) [default: .bloom]
-      --url                Organization URL [default: ]
-      -f                   Force overwrite existing directory [default: False]
+      -o, --org <VALUE>         Organization name
+      -p, --path                Target path (default: current dir)
+      --output                  Output directory name (legacy, kept for compatibility)
+      --url                     Organization URL
+      -f, --force               Force overwrite existing directory
 
   ▪ EXPLORATION & DISCOVERY
   ───────────────────────────
@@ -1055,46 +1055,46 @@ repo name.
     brain nucleus create-exp-intent [OPTIONS]
 
     ▪ Options:
-      -n <VALUE>           Intent name (will be slugified)
-      -p                   Nucleus path (default: current dir)
-      --inquiry            Initial inquiry question
-      -d                   Intent description
-      --projects           Comma-separated project names to include
+      -n, --name <VALUE>        Intent name (will be slugified)
+      -p, --path                Nucleus path (default: current dir)
+      --inquiry                 Initial inquiry question
+      -d, --description         Intent description
+      --projects                Comma-separated project names to include
 
   ▸ exp-discovery-turn
     Add a discovery turn to an exploration intent.
     brain nucleus exp-discovery-turn [OPTIONS]
 
     ▪ Options:
-      -i <VALUE>           Intent ID or slug
-      -p                   Nucleus path (default: current dir)
-      --notes              Turn notes/observations
-      --analysis           Analysis summary for this turn
+      -i, --intent <VALUE>      Intent ID or slug
+      -p, --path                Nucleus path (default: current dir)
+      --notes                   Turn notes/observations
+      --analysis                Analysis summary for this turn
 
   ▸ exp-export-findings
     Export findings from an exploration intent.
     brain nucleus exp-export-findings [OPTIONS]
 
     ▪ Options:
-      -i <VALUE>           Intent ID or slug
-      -p                   Nucleus path (default: current dir)
-      -f                   Export format (markdown, json) [default: markdown]
-      --include-raw        Include raw turn data [default: False]
+      -i, --intent <VALUE>      Intent ID or slug
+      -p, --path                Nucleus path (default: current dir)
+      -f, --format              Export format (markdown, json)
+      --include-raw             Include raw turn data
 
   ▸ delete
     Delete a complete nucleus including all its data.
     brain nucleus delete [OPTIONS]
 
     ▪ Options:
-      -p <VALUE>           Path to the Nucleus root directory to delete
-      -f                   Skip confirmation prompt [default: False]
+      -p, --nucleus-path <VALUE> Path to the Nucleus root directory to delete
+      -f, --force               Skip confirmation prompt
 
   ▸ get
     Retrieve complete details of a nucleus.
     brain nucleus get [OPTIONS]
 
     ▪ Options:
-      -p <VALUE>           Path to the Nucleus root directory
+      -p, --nucleus-path <VALUE> Path to the Nucleus root directory
 
   ▸ link
     Link an existing folder as a Nucleus project.
@@ -1108,16 +1108,16 @@ repo name.
     brain nucleus status [OPTIONS]
 
     ▪ Options:
-      -p                   Nucleus path
+      -p, --path                Nucleus path
 
   ▸ sync
     Synchronize projects and rebuild nucleus cache.
     brain nucleus sync [OPTIONS]
 
     ▪ Options:
-      -p                   Nucleus path (default: current dir)
-      --skip-git           Skip git pull operations [default: False]
-      -v                   Show detailed progress [default: False]
+      -p, --path                Nucleus path (default: current dir)
+      --skip-git                Skip git pull operations
+      -v, --verbose             Show detailed progress
 
   ▪ LISTING & INSPECTION
   ────────────────────────
@@ -1127,16 +1127,16 @@ repo name.
     brain nucleus list [OPTIONS]
 
     ▪ Options:
-      -d                   Parent directory to scan for nuclei (default: current directory)
+      -d, --parent-dir          Parent directory to scan for nuclei (default: current directory)
 
   ▸ list-projects
     List all projects linked to the nucleus with their details.
     brain nucleus list-projects [OPTIONS]
 
     ▪ Options:
-      -p                   Nucleus root path (default: current directory)
-      -s                   Filter by project strategy (python, typescript, go, etc.)
-      --active-only        Show only active projects [default: False]
+      -p, --path                Nucleus root path (default: current directory)
+      -s, --strategy            Filter by project strategy (python, typescript, go, etc.)
+      --active-only             Show only active projects
 
   ▪ ONBOARDING & SETUP
   ──────────────────────
@@ -1146,16 +1146,16 @@ repo name.
     brain nucleus onboarding-complete [OPTIONS]
 
     ▪ Options:
-      -s                   Step name to mark as completed
-      -a                   Mark entire onboarding as completed [default: False]
-      -p                   Nucleus root path (default: current dir)
+      -s, --step                Step name to mark as completed
+      -a, --all                 Mark entire onboarding as completed
+      -p, --path                Nucleus root path (default: current dir)
 
   ▸ onboarding-status
     Get the current onboarding status from nucleus configuration.
     brain nucleus onboarding-status [OPTIONS]
 
     ▪ Options:
-      -p                   Nucleus root path (default: current dir)
+      -p, --path                Nucleus root path (default: current dir)
 
   ▪ PROJECT OPERATIONS
   ──────────────────────
@@ -1168,7 +1168,7 @@ repo name.
       <PROJECT_NAME>       Name of the project to inspect
 
     ▪ Options:
-      -p                   Nucleus root path (default: current directory)
+      -p, --path                Nucleus root path (default: current directory)
 
 
 ======================================================[ PROJECT ]=======================================================
@@ -1187,11 +1187,11 @@ repo name.
       <PROJECT_PATH>       Ruta al proyecto a vincular
 
     ▪ Options:
-      -n <VALUE>           Ruta al Nucleus destino
-      --name               Nombre custom del proyecto (default: nombre de carpeta)
-      --strategy           Forzar estrategia específica (default: auto-detect)
-      --description        Descripción del proyecto
-      --repo-url           URL del repositorio GitHub
+      -n, --nucleus <VALUE>     Ruta al Nucleus destino
+      --name                    Nombre custom del proyecto (default: nombre de carpeta)
+      --strategy                Forzar estrategia específica (default: auto-detect)
+      --description             Descripción del proyecto
+      --repo-url                URL del repositorio GitHub
 
   ▸ clone-and-add
     Clone a Git repository and automatically link it to the current Nucleus.
@@ -1201,12 +1201,12 @@ repo name.
       <REPO_URL>           Git repository URL (HTTPS or SSH)
 
     ▪ Options:
-      -d                   Absolute path where to clone the repository. If not provided, clones to Nucleus root using 
-repo name.
-      -n                   Path to the Nucleus project. Auto-detected from current directory if not provided.
-      --name               Custom name for the project (default: repository name)
-      --strategy           Force specific technology strategy (e.g., python, typescript, android)
-      --description        Project description
+      -d, --dest-path           Absolute path where to clone the repository. If not provided, clones to Nucleus root 
+using repo name.
+      -n, --nucleus-path        Path to the Nucleus project. Auto-detected from current directory if not provided.
+      --name                    Custom name for the project (default: repository name)
+      --strategy                Force specific technology strategy (e.g., python, typescript, android)
+      --description             Project description
 
   ▸ detect
     Scan directory and detect project types automatically.
@@ -1216,16 +1216,16 @@ repo name.
       <PARENT_PATH>        Parent directory to scan for projects
 
     ▪ Options:
-      -d                   Maximum depth for recursive scanning [default: 3]
-      -s                   Filter projects by strategy type
-      -c                   Filter by minimum confidence level (high, medium, low)
+      -d, --max-depth           Maximum depth for recursive scanning
+      -s, --strategy            Filter projects by strategy type
+      -c, --min-confidence      Filter by minimum confidence level (high, medium, low)
 
   ▸ load
     Validates and loads project information. 
     brain project load [OPTIONS]
 
     ▪ Options:
-      -p                   Path to the project root [default: .]
+      -p, --path                Path to the project root
 
 
 ======================================================[ PROFILE ]=======================================================
@@ -1248,7 +1248,7 @@ repo name.
       <PROFILE_ID>         ID del perfil a lanzar
 
     ▪ Options:
-      -s <VALUE>           Archivo JSON con especificación completa de lanzamiento (REQUERIDO)
+      -s, --spec <VALUE>        Archivo JSON con especificación completa de lanzamiento (REQUERIDO)
 
   ▸ link
     Vincula un email a un perfil.
@@ -1296,7 +1296,7 @@ repo name.
       <ALIAS>              Nombre descriptivo del perfil
 
     ▪ Options:
-      --master             Marcar como perfil master [default: False]
+      --master                  Marcar como perfil master
 
   ▪ LISTING & INSPECTION
   ────────────────────────
@@ -1316,15 +1316,15 @@ repo name.
     brain extension install [OPTIONS]
 
     ▪ Options:
-      -s                   Source directory (auto-detects if not provided)
-      -f                   Force reinstall even if same version exists [default: False]
+      -s, --source              Source directory (auto-detects if not provided)
+      -f, --force               Force reinstall even if same version exists
 
   ▸ update
     Update Chrome extension to the latest version.
     brain extension update [OPTIONS]
 
     ▪ Options:
-      -s                   Source directory (auto-detects if not provided)
+      -s, --source              Source directory (auto-detects if not provided)
 
   ▸ verify
     Verify that the Chrome extension is correctly installed.
@@ -1355,9 +1355,9 @@ repo name.
     brain service start [OPTIONS]
 
     ▪ Options:
-      -p                   TCP port to bind [default: 5678]
-      -h                   Host address to bind [default: 127.0.0.1]
-      -d                   Run as background daemon [default: False]
+      -p, --port                TCP port to bind
+      -h, --host                Host address to bind
+      -d, --daemon              Run as background daemon
 
   ▸ status
     Check the current status of the Brain service.
@@ -1388,9 +1388,9 @@ repo name.
     brain context generate [OPTIONS]
 
     ▪ Options:
-      -p                   Root path of the project [default: .]
-      -o                   Output folder name [default: .bloom]
-      -s                   Force specific strategy
+      -p, --path                Root path of the project
+      -o, --output              Output folder name
+      -s, --strategy            Force specific strategy
 
 
 =======================================================[ INTENT ]=======================================================
@@ -1406,11 +1406,11 @@ repo name.
     brain intent add-turn [OPTIONS]
 
     ▪ Options:
-      -i                   Intent UUID
-      -f                   Intent folder name
-      -a                   Who is speaking: 'user' or 'ai' [default: user]
-      -c <VALUE>           Content of the message
-      -p                   Path to Bloom project
+      -i, --id                  Intent UUID
+      -f, --folder              Intent folder name
+      -a, --actor               Who is speaking: 'user' or 'ai'
+      -c, --content <VALUE>     Content of the message
+      -p, --nucleus-path        Path to Bloom project
 
   ▪ BUILD & COMPILATION
   ───────────────────────
@@ -1420,8 +1420,8 @@ repo name.
     brain intent build-payload [OPTIONS]
 
     ▪ Options:
-      --plan <VALUE>       Path to context_plan.json
-      --output             Output path for payload (default: same dir as plan)
+      --plan <VALUE>            Path to context_plan.json
+      --output                  Output path for payload (default: same dir as plan)
 
   ▪ CREATION & INITIALIZATION
   ─────────────────────────────
@@ -1431,179 +1431,179 @@ repo name.
     brain intent create [OPTIONS]
 
     ▪ Options:
-      -t <VALUE>           Intent type: 'dev' for development or 'doc' for documentation
-      -n <VALUE>           Human-readable name for the intent (e.g., 'Fix login authentication flow')
-      -f                   Initial files to include in the intent context (can be repeated or comma-separated)
-      -p                   Path to the Nucleus (Bloom project root). Auto-detected if not provided.
+      -t, --type <VALUE>        Intent type: 'dev' for development or 'doc' for documentation
+      -n, --name <VALUE>        Human-readable name for the intent (e.g., 'Fix login authentication flow')
+      -f, --files               Initial files to include in the intent context (can be repeated or comma-separated)
+      -p, --nucleus-path        Path to the Nucleus (Bloom project root). Auto-detected if not provided.
 
   ▸ delete
     Delete an intent and all its data.
     brain intent delete [OPTIONS]
 
     ▪ Options:
-      -i                   Intent UUID
-      -f                   Intent folder name
-      --force              Skip confirmation and force delete even if locked [default: False]
-      -p                   Path to Bloom project
+      -i, --id                  Intent UUID
+      -f, --folder              Intent folder name
+      --force                   Skip confirmation and force delete even if locked
+      -p, --nucleus-path        Path to Bloom project
 
   ▸ download
     Download AI response from Native Host or file.
     brain intent download [OPTIONS]
 
     ▪ Options:
-      -i                   Intent UUID to download response for
-      --folder             Intent folder name (alternative to intent-id)
-      --socket-mode        Listen on TCP socket for Host connection [default: False]
-      --input-file         Read response from file (for testing)
-      --host               Host IP to listen on [default: 127.0.0.1]
-      --port               Port to listen on (different from Host's 5678) [default: 5679]
-      --timeout            Socket timeout in seconds [default: 300]
-      --nucleus-path       Path to Bloom project (auto-detected if omitted)
+      -i, --intent-id           Intent UUID to download response for
+      --folder                  Intent folder name (alternative to intent-id)
+      --socket-mode             Listen on TCP socket for Host connection
+      --input-file              Read response from file (for testing)
+      --host                    Host IP to listen on
+      --port                    Port to listen on (different from Host's 5678)
+      --timeout                 Socket timeout in seconds
+      --nucleus-path            Path to Bloom project (auto-detected if omitted)
 
   ▸ finalize
     Finalize an intent, applying changes to the codebase.
     brain intent finalize [OPTIONS]
 
     ▪ Options:
-      -i                   Intent UUID
-      -f                   Intent folder name
-      -p                   Path to Bloom project
+      -i, --id                  Intent UUID
+      -f, --folder              Intent folder name
+      -p, --nucleus-path        Path to Bloom project
 
   ▸ get
     Get complete details of an intent.
     brain intent get [OPTIONS]
 
     ▪ Options:
-      -i                   Intent UUID
-      -f                   Intent folder name
-      -p                   Path to Bloom project
+      -i, --id                  Intent UUID
+      -f, --folder              Intent folder name
+      -p, --nucleus-path        Path to Bloom project
 
   ▸ hydrate
     Hydrate an intent by processing source files and briefing.
     brain intent hydrate [OPTIONS]
 
     ▪ Options:
-      -i                   Intent UUID
-      -f                   Intent folder name
-      -b                   Briefing text (instruction)
-      -B                   Path to text file containing briefing
-      -F                   Files to include in context (comma-separated)
-      -p                   Path to Bloom project root
+      -i, --id                  Intent UUID
+      -f, --folder              Intent folder name
+      -b, --briefing            Briefing text (instruction)
+      -B, --briefing-file       Path to text file containing briefing
+      -F, --files               Files to include in context (comma-separated)
+      -p, --nucleus-path        Path to Bloom project root
 
   ▸ lock
     Lock an intent for exclusive use.
     brain intent lock [OPTIONS]
 
     ▪ Options:
-      -i                   Intent UUID
-      -f                   Intent folder name
-      -p                   Path to Bloom project
+      -i, --id                  Intent UUID
+      -f, --folder              Intent folder name
+      -p, --nucleus-path        Path to Bloom project
 
   ▸ merge
     Merge staged files from .staging/ into the real codebase.
     brain intent merge [OPTIONS]
 
     ▪ Options:
-      -i                   Intent UUID to merge files for
-      -f                   Intent folder name (e.g., .fix-login-a1b2c3d4)
-      -s                   Pipeline stage (briefing, execution, refinement_X). Auto-detect if not provided.
-      --force              Skip approval check and merge anyway [default: False]
-      --dry-run            Show what would be merged without applying [default: False]
-      --no-backup          Skip backup creation (DANGEROUS) [default: False]
-      -p                   Path to Bloom project (auto-detected if not provided)
+      -i, --intent-id           Intent UUID to merge files for
+      -f, --folder              Intent folder name (e.g., .fix-login-a1b2c3d4)
+      -s, --stage               Pipeline stage (briefing, execution, refinement_X). Auto-detect if not provided.
+      --force                   Skip approval check and merge anyway
+      --dry-run                 Show what would be merged without applying
+      --no-backup               Skip backup creation (DANGEROUS)
+      -p, --nucleus-path        Path to Bloom project (auto-detected if not provided)
 
   ▸ parse
     Parse and validate .raw_output.json from an AI response.
     brain intent parse [OPTIONS]
 
     ▪ Options:
-      -i <VALUE>           Intent UUID to parse
-      -s                   Pipeline stage (briefing, execution, refinement_X). Auto-detect if not provided.
-      --strict             Fail on any protocol violation (no fallback parser) [default: False]
-      --output-report      Generate .parse_report.json [default: True]
-      -n                   Path to nucleus root (default: current directory)
+      -i, --intent-id <VALUE>   Intent UUID to parse
+      -s, --stage               Pipeline stage (briefing, execution, refinement_X). Auto-detect if not provided.
+      --strict                  Fail on any protocol violation (no fallback parser)
+      --output-report           Generate .parse_report.json
+      -n, --nucleus-path        Path to nucleus root (default: current directory)
 
   ▸ plan
     Generate context plan for an intent using Gemini Router.
     brain intent plan [OPTIONS]
 
     ▪ Options:
-      --intent-dir <VALUE> Intent directory path
-      --description <VALUE> Intent description
-      --type               Intent type: dev, doc, or seed [default: dev]
+      --intent-dir <VALUE>      Intent directory path
+      --description <VALUE>     Intent description
+      --type                    Intent type: dev, doc, or seed
 
   ▸ recover
     Recover interrupted intents using lock state recovery data.
     brain intent recover [OPTIONS]
 
     ▪ Options:
-      -i                   Intent UUID to recover
-      -f                   Intent folder name (e.g., .fix-login-abc123)
-      --auto-detect        Find and recover all interrupted intents [default: False]
-      --force-unlock       Force unlock without attempting recovery [default: False]
-      -p                   Path to Bloom project (auto-detected if not provided)
+      -i, --intent-id           Intent UUID to recover
+      -f, --folder              Intent folder name (e.g., .fix-login-abc123)
+      --auto-detect             Find and recover all interrupted intents
+      --force-unlock            Force unlock without attempting recovery
+      -p, --nucleus-path        Path to Bloom project (auto-detected if not provided)
 
   ▸ stage
     Prepare files in .staging/ directory for merge.
     brain intent stage [OPTIONS]
 
     ▪ Options:
-      -i                   Intent UUID to stage files for
-      -f                   Intent folder name (e.g., .fix-login-a1b2c3d4)
-      -s                   Pipeline stage (briefing, execution, refinement_X). Auto-detect if not provided.
-      --dry-run            Show what would be staged without writing files [default: False]
-      --overwrite          Overwrite existing .staging/ directory [default: True]
-      -p                   Path to Bloom project (auto-detected if not provided)
+      -i, --intent-id           Intent UUID to stage files for
+      -f, --folder              Intent folder name (e.g., .fix-login-a1b2c3d4)
+      -s, --stage               Pipeline stage (briefing, execution, refinement_X). Auto-detect if not provided.
+      --dry-run                 Show what would be staged without writing files
+      --overwrite               Overwrite existing .staging/ directory
+      -p                        Path to Bloom project (auto-detected if not provided)
 
   ▸ submit
     Submit an intent payload to an AI provider through the native host bridge.
     brain intent submit [OPTIONS]
 
     ▪ Options:
-      -i                   UUID of the intent to submit
-      -f                   Folder name of the intent (e.g., .fix-login-a1b2c3d4)
-      --provider           AI provider to use: 'claude', 'gemini', etc. [default: claude]
-      -p                   Path to the Nucleus (Bloom project root). Auto-detected if not provided.
-      --profile-path       Chrome profile path for the AI provider (optional)
-      --host               Native host IP address [default: 127.0.0.1]
-      --port               Native host TCP port [default: 5678]
-      --timeout            Connection timeout in seconds [default: 30]
+      -i, --intent-id           UUID of the intent to submit
+      -f, --folder-name         Folder name of the intent (e.g., .fix-login-a1b2c3d4)
+      --provider                AI provider to use: 'claude', 'gemini', etc.
+      -p, --nucleus-path        Path to the Nucleus (Bloom project root). Auto-detected if not provided.
+      --profile-path            Chrome profile path for the AI provider (optional)
+      --host                    Native host IP address
+      --port                    Native host TCP port
+      --timeout                 Connection timeout in seconds
 
   ▸ unlock
     Unlock an intent to free it for use.
     brain intent unlock [OPTIONS]
 
     ▪ Options:
-      -i                   Intent UUID
-      -f                   Intent folder name
-      --force              Force unlock even if locked by another host [default: False]
-      -p                   Path to Bloom project
+      -i, --id                  Intent UUID
+      -f, --folder              Intent folder name
+      --force                   Force unlock even if locked by another host
+      -p, --nucleus-path        Path to Bloom project
 
   ▸ update
     Update an existing intent's properties.
     brain intent update [OPTIONS]
 
     ▪ Options:
-      -i                   UUID of the intent to update
-      -f                   Folder name of the intent (e.g., .fix-login-a1b2c3d4)
-      -n                   New name for the intent (triggers folder rename)
-      --files              Replace all initial files with this new list
-      --add-files          Add files to the existing initial_files list
-      --remove-files       Remove files from the initial_files list
-      -p                   Path to the Nucleus (Bloom project root). Auto-detected if not provided.
+      -i, --intent-id           UUID of the intent to update
+      -f, --folder              Folder name of the intent (e.g., .fix-login-a1b2c3d4)
+      -n, --name                New name for the intent (triggers folder rename)
+      --files                   Replace all initial files with this new list
+      --add-files               Add files to the existing initial_files list
+      --remove-files            Remove files from the initial_files list
+      -p, --nucleus-path        Path to the Nucleus (Bloom project root). Auto-detected if not provided.
 
   ▸ validate
     Validate staging files using Gemini analysis.
     brain intent validate [OPTIONS]
 
     ▪ Options:
-      -i                   Intent UUID
-      -f                   Intent folder name (e.g., .fix-login-abc123)
-      -s                   Pipeline stage (briefing, execution, refinement_X)
-      --auto-approve       Skip manual review and approve automatically [default: False]
-      --gemini-model       Gemini model to use for analysis [default: gemini-2.0-flash-exp]
-      --skip-gemini        Skip Gemini analysis (only basic validation) [default: False]
-      -p                   Path to Bloom project (auto-detected if omitted)
+      -i, --intent-id           Intent UUID
+      -f, --folder              Intent folder name (e.g., .fix-login-abc123)
+      -s, --stage               Pipeline stage (briefing, execution, refinement_X)
+      --auto-approve            Skip manual review and approve automatically
+      --gemini-model            Gemini model to use for analysis
+      --skip-gemini             Skip Gemini analysis (only basic validation)
+      -p, --nucleus-path        Path to Bloom project (auto-detected if omitted)
 
   ▪ LISTING & INSPECTION
   ────────────────────────
@@ -1613,8 +1613,8 @@ repo name.
     brain intent list [OPTIONS]
 
     ▪ Options:
-      -p                   Path to Bloom project (auto-detected if not provided)
-      -t                   Filter by intent type: 'dev' or 'doc'
+      -p, --nucleus-path        Path to Bloom project (auto-detected if not provided)
+      -t, --type                Filter by intent type: 'dev' or 'doc'
 
 
 =====================================================[ FILESYSTEM ]=====================================================
@@ -1630,10 +1630,10 @@ repo name.
       <PATHS>              Paths to compress (files or directories)
 
     ▪ Options:
-      -m                   Compression mode: 'codebase' or 'docbase' [default: codebase]
-      -o                   Output directory (default: current directory)
-      -e                   Patterns to exclude (can be used multiple times) [default: []]
-      --no-comments        Remove comments during compression [default: False]
+      -m, --mode                Compression mode: 'codebase' or 'docbase'
+      -o, --output              Output directory (default: current directory)
+      -e, --exclude             Patterns to exclude (can be used multiple times)
+      --no-comments             Remove comments during compression
 
   ▸ extract
     Extract files from compressed JSON format.
@@ -1643,8 +1643,8 @@ repo name.
       <JSON_FILE>          Compressed JSON file to extract
 
     ▪ Options:
-      -o                   Output directory (default: extracted_<mode>)
-      --verify-hashes/--no-verify-hashes Verify MD5 hashes during extraction [default: True]
+      -o, --output              Output directory (default: extracted_<mode>)
+      --verify-hashes/--no-verify-hashes Verify MD5 hashes during extraction
 
   ▸ tree
     Generate a visual directory tree structure with intelligent exclusions.
@@ -1654,9 +1654,9 @@ repo name.
       <TARGETS>            Specific directories or files to include (supports absolute paths).
 
     ▪ Options:
-      -o                   Output file path [default: tree.txt]
-      --hash               Include MD5 hashes [default: False]
-      --export-json        Export JSON to disk [default: False]
+      -o, --output              Output file path
+      --hash                    Include MD5 hashes
+      --export-json             Export JSON to disk
 
 
 =======================================================[ GITHUB ]=======================================================
@@ -1672,7 +1672,7 @@ repo name.
     brain github auth-login [OPTIONS]
 
     ▪ Options:
-      -t <VALUE>           GitHub Personal Access Token
+      -t, --token <VALUE>       GitHub Personal Access Token
 
   ▸ auth-logout
     Remove stored GitHub token.
@@ -1690,8 +1690,8 @@ repo name.
       <REPO>               Repository (owner/repo or full URL)
 
     ▪ Options:
-      -p                   Target directory (defaults to repo name in current dir)
-      --progress/--no-progress Show clone progress [default: True]
+      -p, --path                Target directory (defaults to repo name in current dir)
+      --progress/--no-progress  Show clone progress
 
   ▪ ORGANIZATION MANAGEMENT
   ───────────────────────────
@@ -1708,7 +1708,7 @@ repo name.
     brain github repos-list [OPTIONS]
 
     ▪ Options:
-      --org                Organization name
+      --org                     Organization name
 
 
 =======================================================[ GEMINI ]=======================================================
@@ -1724,9 +1724,9 @@ repo name.
     brain gemini keys-add [OPTIONS]
 
     ▪ Options:
-      -p <VALUE>           Profile name (e.g., 'Personal Chrome')
-      -k <VALUE>           Gemini API key
-      --priority           Priority: 1=preferred, 0=normal, -1=backup [default: 0]
+      -p, --profile <VALUE>     Profile name (e.g., 'Personal Chrome')
+      -k, --key <VALUE>         Gemini API key
+      --priority                Priority: 1=preferred, 0=normal, -1=backup
 
   ▸ keys-delete
     Delete a Gemini API key.
@@ -1764,8 +1764,8 @@ repo name.
     brain twitter auth-login [OPTIONS]
 
     ▪ Options:
-      -t <VALUE>           Twitter API token
-      -u <VALUE>           Twitter username
+      -t, --token <VALUE>       Twitter API token
+      -u, --username <VALUE>    Twitter username
 
   ▸ auth-status
     Check Twitter/X authentication status.
@@ -1788,9 +1788,9 @@ repo name.
       <PROFILE_ID>         Chrome profile UUID
 
     ▪ Options:
-      -b                   Lines of context before match [default: 5]
-      -a                   Lines of context after match [default: 5]
-      -l                   Launch ID for separate output file
+      -b, --before              Lines of context before match
+      -a, --after               Lines of context after match
+      -l, --launch-id           Launch ID for separate output file
 
   ▸ read-net-log
     Analyze Chrome network logs with intelligent filtering.
@@ -1800,11 +1800,11 @@ repo name.
       <PROFILE_ID>         Chrome profile UUID
 
     ▪ Options:
-      --filter-ai          Filter for AI service requests only [default: False]
-      -e                   Exclude URL patterns
-      --include-quic       Include QUIC protocol events [default: False]
-      --show-headers       Show HTTP headers in output [default: False]
-      -l                   Launch ID for separate output file
+      --filter-ai               Filter for AI service requests only
+      -e, --exclude             Exclude URL patterns
+      --include-quic            Include QUIC protocol events
+      --show-headers            Show HTTP headers in output
+      -l, --launch-id           Launch ID for separate output file
 
   ▸ mining-log
     Read and filter engine_mining.log for a specific profile.
@@ -1814,7 +1814,7 @@ repo name.
       <PROFILE_ID>         Chrome profile UUID
 
     ▪ Options:
-      -k                   Keyword to search for [default: bloom]
-      -b                   Lines of context before match [default: 5]
-      -a                   Lines of context after match [default: 5]
-      -l                   Launch ID for separate output file
+      -k, --keyword             Keyword to search for
+      -b, --before              Lines of context before match
+      -a, --after               Lines of context after match
+      -l, --launch-id           Launch ID for separate output file

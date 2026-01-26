@@ -21,7 +21,7 @@
               "default": null
             },
             {
-              "flag": "-b",
+              "flag": "-b, --before",
               "is_required": false,
               "is_argument": false,
               "help": "Lines of context before match",
@@ -29,7 +29,7 @@
               "default": 5
             },
             {
-              "flag": "-a",
+              "flag": "-a, --after",
               "is_required": false,
               "is_argument": false,
               "help": "Lines of context after match",
@@ -37,7 +37,7 @@
               "default": 5
             },
             {
-              "flag": "-l",
+              "flag": "-l, --launch-id",
               "is_required": false,
               "is_argument": false,
               "help": "Launch ID for separate output file",
@@ -68,7 +68,7 @@
               "default": false
             },
             {
-              "flag": "-e",
+              "flag": "-e, --exclude",
               "is_required": false,
               "is_argument": false,
               "help": "Exclude URL patterns",
@@ -92,7 +92,7 @@
               "default": false
             },
             {
-              "flag": "-l",
+              "flag": "-l, --launch-id",
               "is_required": false,
               "is_argument": false,
               "help": "Launch ID for separate output file",
@@ -115,7 +115,7 @@
               "default": null
             },
             {
-              "flag": "-k",
+              "flag": "-k, --keyword",
               "is_required": false,
               "is_argument": false,
               "help": "Keyword to search for",
@@ -123,7 +123,7 @@
               "default": "bloom"
             },
             {
-              "flag": "-b",
+              "flag": "-b, --before",
               "is_required": false,
               "is_argument": false,
               "help": "Lines of context before match",
@@ -131,7 +131,7 @@
               "default": 5
             },
             {
-              "flag": "-a",
+              "flag": "-a, --after",
               "is_required": false,
               "is_argument": false,
               "help": "Lines of context after match",
@@ -139,7 +139,7 @@
               "default": 5
             },
             {
-              "flag": "-l",
+              "flag": "-l, --launch-id",
               "is_required": false,
               "is_argument": false,
               "help": "Launch ID for separate output file",
@@ -161,7 +161,7 @@
           "subsection": null,
           "parameters": [
             {
-              "flag": "-p",
+              "flag": "-p, --path",
               "is_required": false,
               "is_argument": false,
               "help": "Root path of the project",
@@ -169,7 +169,7 @@
               "default": "."
             },
             {
-              "flag": "-o",
+              "flag": "-o, --output",
               "is_required": false,
               "is_argument": false,
               "help": "Output folder name",
@@ -177,7 +177,7 @@
               "default": ".bloom"
             },
             {
-              "flag": "-s",
+              "flag": "-s, --strategy",
               "is_required": false,
               "is_argument": false,
               "help": "Force specific strategy",
@@ -199,7 +199,7 @@
           "subsection": null,
           "parameters": [
             {
-              "flag": "-s",
+              "flag": "-s, --source",
               "is_required": false,
               "is_argument": false,
               "help": "Source directory (auto-detects if not provided)",
@@ -207,7 +207,7 @@
               "default": null
             },
             {
-              "flag": "-f",
+              "flag": "-f, --force",
               "is_required": false,
               "is_argument": false,
               "help": "Force reinstall even if same version exists",
@@ -222,7 +222,7 @@
           "subsection": null,
           "parameters": [
             {
-              "flag": "-s",
+              "flag": "-s, --source",
               "is_required": false,
               "is_argument": false,
               "help": "Source directory (auto-detects if not provided)",
@@ -258,7 +258,7 @@
               "default": null
             },
             {
-              "flag": "-m",
+              "flag": "-m, --mode",
               "is_required": false,
               "is_argument": false,
               "help": "Compression mode: 'codebase' or 'docbase'",
@@ -266,7 +266,7 @@
               "default": "codebase"
             },
             {
-              "flag": "-o",
+              "flag": "-o, --output",
               "is_required": false,
               "is_argument": false,
               "help": "Output directory (default: current directory)",
@@ -274,7 +274,7 @@
               "default": null
             },
             {
-              "flag": "-e",
+              "flag": "-e, --exclude",
               "is_required": false,
               "is_argument": false,
               "help": "Patterns to exclude (can be used multiple times)",
@@ -305,7 +305,7 @@
               "default": null
             },
             {
-              "flag": "-o",
+              "flag": "-o, --output",
               "is_required": false,
               "is_argument": false,
               "help": "Output directory (default: extracted_<mode>)",
@@ -328,7 +328,7 @@
           "subsection": null,
           "parameters": [
             {
-              "flag": "-o",
+              "flag": "-o, --output",
               "is_required": false,
               "is_argument": false,
               "help": "Output file path",
@@ -374,7 +374,7 @@
           "subsection": "API Key Management",
           "parameters": [
             {
-              "flag": "-p <VALUE>",
+              "flag": "-p, --profile <VALUE>",
               "is_required": true,
               "is_argument": false,
               "help": "Profile name (e.g., 'Personal Chrome')",
@@ -382,7 +382,7 @@
               "default": null
             },
             {
-              "flag": "-k <VALUE>",
+              "flag": "-k, --key <VALUE>",
               "is_required": true,
               "is_argument": false,
               "help": "Gemini API key",
@@ -454,7 +454,7 @@
           "subsection": "Authentication & Authorization",
           "parameters": [
             {
-              "flag": "-t <VALUE>",
+              "flag": "-t, --token <VALUE>",
               "is_required": true,
               "is_argument": false,
               "help": "GitHub Personal Access Token",
@@ -489,7 +489,7 @@
               "default": null
             },
             {
-              "flag": "-p",
+              "flag": "-p, --path",
               "is_required": false,
               "is_argument": false,
               "help": "Target directory (defaults to repo name in current dir)",
@@ -540,7 +540,7 @@
           "subsection": null,
           "parameters": [
             {
-              "flag": "-t",
+              "flag": "-t, --timeout",
               "is_required": false,
               "is_argument": false,
               "help": "Connection timeout per port check in seconds",
@@ -556,7 +556,7 @@
               "default": false
             },
             {
-              "flag": "-v",
+              "flag": "-v, --verbose",
               "is_required": false,
               "is_argument": false,
               "help": "Detailed logging of each port check",
@@ -571,7 +571,7 @@
           "subsection": null,
           "parameters": [
             {
-              "flag": "-t",
+              "flag": "-t, --timeout",
               "is_required": false,
               "is_argument": false,
               "help": "Timeout per check in seconds",
@@ -587,7 +587,7 @@
               "default": false
             },
             {
-              "flag": "-v",
+              "flag": "-v, --verbose",
               "is_required": false,
               "is_argument": false,
               "help": "Detailed logging",
@@ -602,7 +602,7 @@
           "subsection": null,
           "parameters": [
             {
-              "flag": "-t",
+              "flag": "-t, --timeout",
               "is_required": false,
               "is_argument": false,
               "help": "Timeout in milliseconds for ping response",
@@ -610,7 +610,7 @@
               "default": 500
             },
             {
-              "flag": "-p",
+              "flag": "-p, --port",
               "is_required": false,
               "is_argument": false,
               "help": "Specific TCP port to test (auto-detect if not provided)",
@@ -633,7 +633,7 @@
           "subsection": null,
           "parameters": [
             {
-              "flag": "-t",
+              "flag": "-t, --timeout",
               "is_required": false,
               "is_argument": false,
               "help": "Connection timeout in seconds",
@@ -657,7 +657,7 @@
               "default": false
             },
             {
-              "flag": "-v",
+              "flag": "-v, --verbose",
               "is_required": false,
               "is_argument": false,
               "help": "Detailed connection logging",
@@ -672,7 +672,7 @@
           "subsection": "Onboarding & Setup",
           "parameters": [
             {
-              "flag": "-r",
+              "flag": "-r, --refresh",
               "is_required": false,
               "is_argument": false,
               "help": "Force re-check, ignore cache",
@@ -688,7 +688,7 @@
               "default": false
             },
             {
-              "flag": "-v",
+              "flag": "-v, --verbose",
               "is_required": false,
               "is_argument": false,
               "help": "Detailed logging of each check",
@@ -710,7 +710,7 @@
           "subsection": "Adding & Linking",
           "parameters": [
             {
-              "flag": "-i",
+              "flag": "-i, --id",
               "is_required": false,
               "is_argument": false,
               "help": "Intent UUID",
@@ -718,7 +718,7 @@
               "default": null
             },
             {
-              "flag": "-f",
+              "flag": "-f, --folder",
               "is_required": false,
               "is_argument": false,
               "help": "Intent folder name",
@@ -726,7 +726,7 @@
               "default": null
             },
             {
-              "flag": "-a",
+              "flag": "-a, --actor",
               "is_required": false,
               "is_argument": false,
               "help": "Who is speaking: 'user' or 'ai'",
@@ -734,7 +734,7 @@
               "default": "user"
             },
             {
-              "flag": "-c <VALUE>",
+              "flag": "-c, --content <VALUE>",
               "is_required": true,
               "is_argument": false,
               "help": "Content of the message",
@@ -742,7 +742,7 @@
               "default": null
             },
             {
-              "flag": "-p",
+              "flag": "-p, --nucleus-path",
               "is_required": false,
               "is_argument": false,
               "help": "Path to Bloom project",
@@ -780,7 +780,7 @@
           "subsection": "Creation & Initialization",
           "parameters": [
             {
-              "flag": "-t <VALUE>",
+              "flag": "-t, --type <VALUE>",
               "is_required": true,
               "is_argument": false,
               "help": "Intent type: 'dev' for development or 'doc' for documentation",
@@ -788,7 +788,7 @@
               "default": null
             },
             {
-              "flag": "-n <VALUE>",
+              "flag": "-n, --name <VALUE>",
               "is_required": true,
               "is_argument": false,
               "help": "Human-readable name for the intent (e.g., 'Fix login authentication flow')",
@@ -796,7 +796,7 @@
               "default": null
             },
             {
-              "flag": "-f",
+              "flag": "-f, --files",
               "is_required": false,
               "is_argument": false,
               "help": "Initial files to include in the intent context (can be repeated or comma-separated)",
@@ -804,7 +804,7 @@
               "default": null
             },
             {
-              "flag": "-p",
+              "flag": "-p, --nucleus-path",
               "is_required": false,
               "is_argument": false,
               "help": "Path to the Nucleus (Bloom project root). Auto-detected if not provided.",
@@ -819,7 +819,7 @@
           "subsection": null,
           "parameters": [
             {
-              "flag": "-i",
+              "flag": "-i, --id",
               "is_required": false,
               "is_argument": false,
               "help": "Intent UUID",
@@ -827,7 +827,7 @@
               "default": null
             },
             {
-              "flag": "-f",
+              "flag": "-f, --folder",
               "is_required": false,
               "is_argument": false,
               "help": "Intent folder name",
@@ -843,7 +843,7 @@
               "default": false
             },
             {
-              "flag": "-p",
+              "flag": "-p, --nucleus-path",
               "is_required": false,
               "is_argument": false,
               "help": "Path to Bloom project",
@@ -858,7 +858,7 @@
           "subsection": null,
           "parameters": [
             {
-              "flag": "-i",
+              "flag": "-i, --intent-id",
               "is_required": false,
               "is_argument": false,
               "help": "Intent UUID to download response for",
@@ -929,7 +929,7 @@
           "subsection": null,
           "parameters": [
             {
-              "flag": "-i",
+              "flag": "-i, --id",
               "is_required": false,
               "is_argument": false,
               "help": "Intent UUID",
@@ -937,7 +937,7 @@
               "default": null
             },
             {
-              "flag": "-f",
+              "flag": "-f, --folder",
               "is_required": false,
               "is_argument": false,
               "help": "Intent folder name",
@@ -945,7 +945,7 @@
               "default": null
             },
             {
-              "flag": "-p",
+              "flag": "-p, --nucleus-path",
               "is_required": false,
               "is_argument": false,
               "help": "Path to Bloom project",
@@ -960,7 +960,7 @@
           "subsection": null,
           "parameters": [
             {
-              "flag": "-i",
+              "flag": "-i, --id",
               "is_required": false,
               "is_argument": false,
               "help": "Intent UUID",
@@ -968,7 +968,7 @@
               "default": null
             },
             {
-              "flag": "-f",
+              "flag": "-f, --folder",
               "is_required": false,
               "is_argument": false,
               "help": "Intent folder name",
@@ -976,7 +976,7 @@
               "default": null
             },
             {
-              "flag": "-p",
+              "flag": "-p, --nucleus-path",
               "is_required": false,
               "is_argument": false,
               "help": "Path to Bloom project",
@@ -991,7 +991,7 @@
           "subsection": null,
           "parameters": [
             {
-              "flag": "-i",
+              "flag": "-i, --id",
               "is_required": false,
               "is_argument": false,
               "help": "Intent UUID",
@@ -999,7 +999,7 @@
               "default": null
             },
             {
-              "flag": "-f",
+              "flag": "-f, --folder",
               "is_required": false,
               "is_argument": false,
               "help": "Intent folder name",
@@ -1007,7 +1007,7 @@
               "default": null
             },
             {
-              "flag": "-b",
+              "flag": "-b, --briefing",
               "is_required": false,
               "is_argument": false,
               "help": "Briefing text (instruction)",
@@ -1015,7 +1015,7 @@
               "default": null
             },
             {
-              "flag": "-B",
+              "flag": "-B, --briefing-file",
               "is_required": false,
               "is_argument": false,
               "help": "Path to text file containing briefing",
@@ -1023,7 +1023,7 @@
               "default": null
             },
             {
-              "flag": "-F",
+              "flag": "-F, --files",
               "is_required": false,
               "is_argument": false,
               "help": "Files to include in context (comma-separated)",
@@ -1031,7 +1031,7 @@
               "default": null
             },
             {
-              "flag": "-p",
+              "flag": "-p, --nucleus-path",
               "is_required": false,
               "is_argument": false,
               "help": "Path to Bloom project root",
@@ -1046,7 +1046,7 @@
           "subsection": null,
           "parameters": [
             {
-              "flag": "-i",
+              "flag": "-i, --id",
               "is_required": false,
               "is_argument": false,
               "help": "Intent UUID",
@@ -1054,7 +1054,7 @@
               "default": null
             },
             {
-              "flag": "-f",
+              "flag": "-f, --folder",
               "is_required": false,
               "is_argument": false,
               "help": "Intent folder name",
@@ -1062,7 +1062,7 @@
               "default": null
             },
             {
-              "flag": "-p",
+              "flag": "-p, --nucleus-path",
               "is_required": false,
               "is_argument": false,
               "help": "Path to Bloom project",
@@ -1077,7 +1077,7 @@
           "subsection": null,
           "parameters": [
             {
-              "flag": "-i",
+              "flag": "-i, --intent-id",
               "is_required": false,
               "is_argument": false,
               "help": "Intent UUID to merge files for",
@@ -1085,7 +1085,7 @@
               "default": null
             },
             {
-              "flag": "-f",
+              "flag": "-f, --folder",
               "is_required": false,
               "is_argument": false,
               "help": "Intent folder name (e.g., .fix-login-a1b2c3d4)",
@@ -1093,7 +1093,7 @@
               "default": null
             },
             {
-              "flag": "-s",
+              "flag": "-s, --stage",
               "is_required": false,
               "is_argument": false,
               "help": "Pipeline stage (briefing, execution, refinement_X). Auto-detect if not provided.",
@@ -1125,7 +1125,7 @@
               "default": false
             },
             {
-              "flag": "-p",
+              "flag": "-p, --nucleus-path",
               "is_required": false,
               "is_argument": false,
               "help": "Path to Bloom project (auto-detected if not provided)",
@@ -1140,7 +1140,7 @@
           "subsection": null,
           "parameters": [
             {
-              "flag": "-i <VALUE>",
+              "flag": "-i, --intent-id <VALUE>",
               "is_required": true,
               "is_argument": false,
               "help": "Intent UUID to parse",
@@ -1148,7 +1148,7 @@
               "default": null
             },
             {
-              "flag": "-s",
+              "flag": "-s, --stage",
               "is_required": false,
               "is_argument": false,
               "help": "Pipeline stage (briefing, execution, refinement_X). Auto-detect if not provided.",
@@ -1172,7 +1172,7 @@
               "default": true
             },
             {
-              "flag": "-n",
+              "flag": "-n, --nucleus-path",
               "is_required": false,
               "is_argument": false,
               "help": "Path to nucleus root (default: current directory)",
@@ -1218,7 +1218,7 @@
           "subsection": null,
           "parameters": [
             {
-              "flag": "-i",
+              "flag": "-i, --intent-id",
               "is_required": false,
               "is_argument": false,
               "help": "Intent UUID to recover",
@@ -1226,7 +1226,7 @@
               "default": null
             },
             {
-              "flag": "-f",
+              "flag": "-f, --folder",
               "is_required": false,
               "is_argument": false,
               "help": "Intent folder name (e.g., .fix-login-abc123)",
@@ -1250,7 +1250,7 @@
               "default": false
             },
             {
-              "flag": "-p",
+              "flag": "-p, --nucleus-path",
               "is_required": false,
               "is_argument": false,
               "help": "Path to Bloom project (auto-detected if not provided)",
@@ -1265,7 +1265,7 @@
           "subsection": null,
           "parameters": [
             {
-              "flag": "-i",
+              "flag": "-i, --intent-id",
               "is_required": false,
               "is_argument": false,
               "help": "Intent UUID to stage files for",
@@ -1273,7 +1273,7 @@
               "default": null
             },
             {
-              "flag": "-f",
+              "flag": "-f, --folder",
               "is_required": false,
               "is_argument": false,
               "help": "Intent folder name (e.g., .fix-login-a1b2c3d4)",
@@ -1281,7 +1281,7 @@
               "default": null
             },
             {
-              "flag": "-s",
+              "flag": "-s, --stage",
               "is_required": false,
               "is_argument": false,
               "help": "Pipeline stage (briefing, execution, refinement_X). Auto-detect if not provided.",
@@ -1320,7 +1320,7 @@
           "subsection": null,
           "parameters": [
             {
-              "flag": "-i",
+              "flag": "-i, --intent-id",
               "is_required": false,
               "is_argument": false,
               "help": "UUID of the intent to submit",
@@ -1328,7 +1328,7 @@
               "default": null
             },
             {
-              "flag": "-f",
+              "flag": "-f, --folder-name",
               "is_required": false,
               "is_argument": false,
               "help": "Folder name of the intent (e.g., .fix-login-a1b2c3d4)",
@@ -1344,7 +1344,7 @@
               "default": "claude"
             },
             {
-              "flag": "-p",
+              "flag": "-p, --nucleus-path",
               "is_required": false,
               "is_argument": false,
               "help": "Path to the Nucleus (Bloom project root). Auto-detected if not provided.",
@@ -1391,7 +1391,7 @@
           "subsection": null,
           "parameters": [
             {
-              "flag": "-i",
+              "flag": "-i, --id",
               "is_required": false,
               "is_argument": false,
               "help": "Intent UUID",
@@ -1399,7 +1399,7 @@
               "default": null
             },
             {
-              "flag": "-f",
+              "flag": "-f, --folder",
               "is_required": false,
               "is_argument": false,
               "help": "Intent folder name",
@@ -1415,7 +1415,7 @@
               "default": false
             },
             {
-              "flag": "-p",
+              "flag": "-p, --nucleus-path",
               "is_required": false,
               "is_argument": false,
               "help": "Path to Bloom project",
@@ -1430,7 +1430,7 @@
           "subsection": null,
           "parameters": [
             {
-              "flag": "-i",
+              "flag": "-i, --intent-id",
               "is_required": false,
               "is_argument": false,
               "help": "UUID of the intent to update",
@@ -1438,7 +1438,7 @@
               "default": null
             },
             {
-              "flag": "-f",
+              "flag": "-f, --folder",
               "is_required": false,
               "is_argument": false,
               "help": "Folder name of the intent (e.g., .fix-login-a1b2c3d4)",
@@ -1446,7 +1446,7 @@
               "default": null
             },
             {
-              "flag": "-n",
+              "flag": "-n, --name",
               "is_required": false,
               "is_argument": false,
               "help": "New name for the intent (triggers folder rename)",
@@ -1478,7 +1478,7 @@
               "default": null
             },
             {
-              "flag": "-p",
+              "flag": "-p, --nucleus-path",
               "is_required": false,
               "is_argument": false,
               "help": "Path to the Nucleus (Bloom project root). Auto-detected if not provided.",
@@ -1493,7 +1493,7 @@
           "subsection": null,
           "parameters": [
             {
-              "flag": "-i",
+              "flag": "-i, --intent-id",
               "is_required": false,
               "is_argument": false,
               "help": "Intent UUID",
@@ -1501,7 +1501,7 @@
               "default": null
             },
             {
-              "flag": "-f",
+              "flag": "-f, --folder",
               "is_required": false,
               "is_argument": false,
               "help": "Intent folder name (e.g., .fix-login-abc123)",
@@ -1509,7 +1509,7 @@
               "default": null
             },
             {
-              "flag": "-s",
+              "flag": "-s, --stage",
               "is_required": false,
               "is_argument": false,
               "help": "Pipeline stage (briefing, execution, refinement_X)",
@@ -1541,7 +1541,7 @@
               "default": false
             },
             {
-              "flag": "-p",
+              "flag": "-p, --nucleus-path",
               "is_required": false,
               "is_argument": false,
               "help": "Path to Bloom project (auto-detected if omitted)",
@@ -1556,7 +1556,7 @@
           "subsection": "Listing & Inspection",
           "parameters": [
             {
-              "flag": "-p",
+              "flag": "-p, --nucleus-path",
               "is_required": false,
               "is_argument": false,
               "help": "Path to Bloom project (auto-detected if not provided)",
@@ -1564,7 +1564,7 @@
               "default": null
             },
             {
-              "flag": "-t",
+              "flag": "-t, --type",
               "is_required": false,
               "is_argument": false,
               "help": "Filter by intent type: 'dev' or 'doc'",
@@ -1586,7 +1586,7 @@
           "subsection": "Creation & Initialization",
           "parameters": [
             {
-              "flag": "-o <VALUE>",
+              "flag": "-o, --org <VALUE>",
               "is_required": true,
               "is_argument": false,
               "help": "Organization name",
@@ -1594,7 +1594,7 @@
               "default": null
             },
             {
-              "flag": "-p",
+              "flag": "-p, --path",
               "is_required": false,
               "is_argument": false,
               "help": "Target path (default: current dir)",
@@ -1618,7 +1618,7 @@
               "default": ""
             },
             {
-              "flag": "-f",
+              "flag": "-f, --force",
               "is_required": false,
               "is_argument": false,
               "help": "Force overwrite existing directory",
@@ -1633,7 +1633,7 @@
           "subsection": "Exploration & Discovery",
           "parameters": [
             {
-              "flag": "-n <VALUE>",
+              "flag": "-n, --name <VALUE>",
               "is_required": true,
               "is_argument": false,
               "help": "Intent name (will be slugified)",
@@ -1641,7 +1641,7 @@
               "default": null
             },
             {
-              "flag": "-p",
+              "flag": "-p, --path",
               "is_required": false,
               "is_argument": false,
               "help": "Nucleus path (default: current dir)",
@@ -1657,7 +1657,7 @@
               "default": null
             },
             {
-              "flag": "-d",
+              "flag": "-d, --description",
               "is_required": false,
               "is_argument": false,
               "help": "Intent description",
@@ -1680,7 +1680,7 @@
           "subsection": "Exploration & Discovery",
           "parameters": [
             {
-              "flag": "-i <VALUE>",
+              "flag": "-i, --intent <VALUE>",
               "is_required": true,
               "is_argument": false,
               "help": "Intent ID or slug",
@@ -1688,7 +1688,7 @@
               "default": null
             },
             {
-              "flag": "-p",
+              "flag": "-p, --path",
               "is_required": false,
               "is_argument": false,
               "help": "Nucleus path (default: current dir)",
@@ -1719,7 +1719,7 @@
           "subsection": "Exploration & Discovery",
           "parameters": [
             {
-              "flag": "-i <VALUE>",
+              "flag": "-i, --intent <VALUE>",
               "is_required": true,
               "is_argument": false,
               "help": "Intent ID or slug",
@@ -1727,7 +1727,7 @@
               "default": null
             },
             {
-              "flag": "-p",
+              "flag": "-p, --path",
               "is_required": false,
               "is_argument": false,
               "help": "Nucleus path (default: current dir)",
@@ -1735,7 +1735,7 @@
               "default": null
             },
             {
-              "flag": "-f",
+              "flag": "-f, --format",
               "is_required": false,
               "is_argument": false,
               "help": "Export format (markdown, json)",
@@ -1758,7 +1758,7 @@
           "subsection": null,
           "parameters": [
             {
-              "flag": "-p <VALUE>",
+              "flag": "-p, --nucleus-path <VALUE>",
               "is_required": true,
               "is_argument": false,
               "help": "Path to the Nucleus root directory to delete",
@@ -1766,7 +1766,7 @@
               "default": null
             },
             {
-              "flag": "-f",
+              "flag": "-f, --force",
               "is_required": false,
               "is_argument": false,
               "help": "Skip confirmation prompt",
@@ -1781,7 +1781,7 @@
           "subsection": null,
           "parameters": [
             {
-              "flag": "-p <VALUE>",
+              "flag": "-p, --nucleus-path <VALUE>",
               "is_required": true,
               "is_argument": false,
               "help": "Path to the Nucleus root directory",
@@ -1811,7 +1811,7 @@
           "subsection": null,
           "parameters": [
             {
-              "flag": "-p",
+              "flag": "-p, --path",
               "is_required": false,
               "is_argument": false,
               "help": "Nucleus path",
@@ -1826,7 +1826,7 @@
           "subsection": null,
           "parameters": [
             {
-              "flag": "-p",
+              "flag": "-p, --path",
               "is_required": false,
               "is_argument": false,
               "help": "Nucleus path (default: current dir)",
@@ -1842,7 +1842,7 @@
               "default": false
             },
             {
-              "flag": "-v",
+              "flag": "-v, --verbose",
               "is_required": false,
               "is_argument": false,
               "help": "Show detailed progress",
@@ -1857,7 +1857,7 @@
           "subsection": "Listing & Inspection",
           "parameters": [
             {
-              "flag": "-d",
+              "flag": "-d, --parent-dir",
               "is_required": false,
               "is_argument": false,
               "help": "Parent directory to scan for nuclei (default: current directory)",
@@ -1872,7 +1872,7 @@
           "subsection": "Listing & Inspection",
           "parameters": [
             {
-              "flag": "-p",
+              "flag": "-p, --path",
               "is_required": false,
               "is_argument": false,
               "help": "Nucleus root path (default: current directory)",
@@ -1880,7 +1880,7 @@
               "default": null
             },
             {
-              "flag": "-s",
+              "flag": "-s, --strategy",
               "is_required": false,
               "is_argument": false,
               "help": "Filter by project strategy (python, typescript, go, etc.)",
@@ -1903,7 +1903,7 @@
           "subsection": "Onboarding & Setup",
           "parameters": [
             {
-              "flag": "-s",
+              "flag": "-s, --step",
               "is_required": false,
               "is_argument": false,
               "help": "Step name to mark as completed",
@@ -1911,7 +1911,7 @@
               "default": null
             },
             {
-              "flag": "-a",
+              "flag": "-a, --all",
               "is_required": false,
               "is_argument": false,
               "help": "Mark entire onboarding as completed",
@@ -1919,7 +1919,7 @@
               "default": false
             },
             {
-              "flag": "-p",
+              "flag": "-p, --path",
               "is_required": false,
               "is_argument": false,
               "help": "Nucleus root path (default: current dir)",
@@ -1934,7 +1934,7 @@
           "subsection": "Onboarding & Setup",
           "parameters": [
             {
-              "flag": "-p",
+              "flag": "-p, --path",
               "is_required": false,
               "is_argument": false,
               "help": "Nucleus root path (default: current dir)",
@@ -1957,7 +1957,7 @@
               "default": null
             },
             {
-              "flag": "-p",
+              "flag": "-p, --path",
               "is_required": false,
               "is_argument": false,
               "help": "Nucleus root path (default: current directory)",
@@ -2002,7 +2002,7 @@
               "default": null
             },
             {
-              "flag": "-s <VALUE>",
+              "flag": "-s, --spec <VALUE>",
               "is_required": true,
               "is_argument": false,
               "help": "Archivo JSON con especificación completa de lanzamiento (REQUERIDO)",
@@ -2153,7 +2153,7 @@
               "default": null
             },
             {
-              "flag": "-n <VALUE>",
+              "flag": "-n, --nucleus <VALUE>",
               "is_required": true,
               "is_argument": false,
               "help": "Ruta al Nucleus destino",
@@ -2208,7 +2208,7 @@
               "default": null
             },
             {
-              "flag": "-d",
+              "flag": "-d, --dest-path",
               "is_required": false,
               "is_argument": false,
               "help": "Absolute path where to clone the repository. If not provided, clones to Nucleus root using repo name.",
@@ -2216,7 +2216,7 @@
               "default": null
             },
             {
-              "flag": "-n",
+              "flag": "-n, --nucleus-path",
               "is_required": false,
               "is_argument": false,
               "help": "Path to the Nucleus project. Auto-detected from current directory if not provided.",
@@ -2263,7 +2263,7 @@
               "default": null
             },
             {
-              "flag": "-d",
+              "flag": "-d, --max-depth",
               "is_required": false,
               "is_argument": false,
               "help": "Maximum depth for recursive scanning",
@@ -2271,7 +2271,7 @@
               "default": 3
             },
             {
-              "flag": "-s",
+              "flag": "-s, --strategy",
               "is_required": false,
               "is_argument": false,
               "help": "Filter projects by strategy type",
@@ -2279,7 +2279,7 @@
               "default": null
             },
             {
-              "flag": "-c",
+              "flag": "-c, --min-confidence",
               "is_required": false,
               "is_argument": false,
               "help": "Filter by minimum confidence level (high, medium, low)",
@@ -2294,7 +2294,7 @@
           "subsection": null,
           "parameters": [
             {
-              "flag": "-p",
+              "flag": "-p, --path",
               "is_required": false,
               "is_argument": false,
               "help": "Path to the project root",
@@ -2329,7 +2329,7 @@
           "subsection": null,
           "parameters": [
             {
-              "flag": "-p",
+              "flag": "-p, --port",
               "is_required": false,
               "is_argument": false,
               "help": "TCP port to bind",
@@ -2337,7 +2337,7 @@
               "default": 5678
             },
             {
-              "flag": "-h",
+              "flag": "-h, --host",
               "is_required": false,
               "is_argument": false,
               "help": "Host address to bind",
@@ -2345,7 +2345,7 @@
               "default": "127.0.0.1"
             },
             {
-              "flag": "-d",
+              "flag": "-d, --daemon",
               "is_required": false,
               "is_argument": false,
               "help": "Run as background daemon",
@@ -2448,7 +2448,7 @@
           "subsection": "Authentication & Authorization",
           "parameters": [
             {
-              "flag": "-t <VALUE>",
+              "flag": "-t, --token <VALUE>",
               "is_required": true,
               "is_argument": false,
               "help": "Twitter API token",
@@ -2456,7 +2456,7 @@
               "default": null
             },
             {
-              "flag": "-u <VALUE>",
+              "flag": "-u, --username <VALUE>",
               "is_required": true,
               "is_argument": false,
               "help": "Twitter username",
