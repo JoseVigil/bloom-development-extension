@@ -10,9 +10,10 @@ import (
 )
 
 type Logger struct {
-	file      *os.File
-	logger    *log.Logger
+	file       *os.File
+	logger     *log.Logger
 	isJSONMode bool
+	silentMode bool  // Nuevo: modo silencioso para --help
 }
 
 func InitLogger(logsDir string) (*Logger, error) {
@@ -33,12 +34,37 @@ func InitLogger(logsDir string) (*Logger, error) {
 		file:       file,
 		logger:     logger,
 		isJSONMode: false,
+		silentMode: false,
 	}, nil
+}
+
+// SetSilentMode configura el logger para que SOLO escriba a archivo (no stdout/stderr)
+func (l *Logger) SetSilentMode(enabled bool) {
+	l.silentMode = enabled
+	
+	if enabled {
+		// Modo silencioso: solo archivo
+		l.logger = log.New(l.file, "", log.Ldate|log.Ltime)
+	} else {
+		// Restaurar modo normal
+		if l.isJSONMode {
+			multiWriter := io.MultiWriter(os.Stderr, l.file)
+			l.logger = log.New(multiWriter, "", log.Ldate|log.Ltime)
+		} else {
+			multiWriter := io.MultiWriter(os.Stdout, l.file)
+			l.logger = log.New(multiWriter, "", log.Ldate|log.Ltime)
+		}
+	}
 }
 
 // SetJSONMode reconfigura el destino de los logs
 func (l *Logger) SetJSONMode(enabled bool) {
 	l.isJSONMode = enabled
+	
+	// No reconfigurar si estamos en modo silencioso
+	if l.silentMode {
+		return
+	}
 	
 	if enabled {
 		// En modo JSON: logs van a stderr + archivo (NO stdout)

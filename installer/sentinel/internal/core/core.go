@@ -53,6 +53,32 @@ func Initialize() (*Core, error) {
 	}, nil
 }
 
+// InitializeSilent inicializa Core en modo silencioso (sin logs a stdout)
+// Usado cuando se ejecutan comandos --help o --json-help
+func InitializeSilent() (*Core, error) {
+	paths, err := InitPaths()
+	if err != nil { return nil, fmt.Errorf("error al inicializar rutas: %w", err) }
+	
+	logger, err := InitLogger(paths.LogsDir)
+	if err != nil { return nil, fmt.Errorf("error al inicializar logger: %w", err) }
+	
+	// Activar modo silencioso ANTES de cualquier log
+	logger.SetSilentMode(true)
+	
+	config, err := LoadConfig(paths.BinDir)
+	if err != nil {
+		if logger != nil { logger.Close() }
+		return nil, fmt.Errorf("error al cargar configuración: %w", err)
+	}
+	
+	return &Core{
+		Paths:  paths,
+		Config: config,
+		Logger: logger,
+		IsJSON: false,
+	}, nil
+}
+
 // SetJSONMode configura el modo de salida y reconfigura el logger
 func (c *Core) SetJSONMode(enabled bool) {
 	c.IsJSON = enabled

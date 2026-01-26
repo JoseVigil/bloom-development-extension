@@ -112,9 +112,20 @@ class ProfileLauncher:
         logger.debug(f"   Page Config: {page_config}")
         
         # ====================================================================
-        # 🆕 NUEVA LÓGICA: Resolución de target_url según page_config
+        # 🆕 RESOLUCIÓN DE target_url SEGÚN page_config
         # ====================================================================
         target_url = self._resolve_target_url(target_url_raw, page_config)
+        
+        page_type = page_config.get('type', 'custom')
+        if page_type == 'discovery':
+            logger.info(f"🔎 Lanzando en modo DISCOVERY")
+            logger.info(f"   → Onboarding y validación inicial")
+        elif page_type == 'landing':
+            logger.info(f"🏠 Lanzando en modo LANDING")
+            logger.info(f"   → Dashboard del perfil")
+        else:
+            logger.info(f"🎯 Lanzando en modo CUSTOM")
+        
         logger.info(f"🎯 Target URL resuelto: {target_url}")
         
         # Validación de campos requeridos
@@ -213,9 +224,14 @@ class ProfileLauncher:
         2. Si no hay page_config → Usar target_url tal cual (retrocompatibilidad)
         3. Si page_config.type existe → Validar y generar
         
+        Page types:
+        - discovery: extension/discovery/index.html (onboarding, registro)
+        - landing: extension/landing/index.html (dashboard, stats)
+        - custom: URL manual especificada
+        
         Args:
             target_url_raw: URL del spec (puede ser "auto", URL completa, o None)
-            page_config: Diccionario con {type: "discovery"|"landing", auto_generate_url: bool}
+            page_config: Diccionario con {type: "discovery"|"landing"|"custom", auto_generate_url: bool}
         
         Returns:
             URL final a usar
@@ -258,16 +274,19 @@ class ProfileLauncher:
             
             if page_type == 'discovery':
                 url = f"chrome-extension://{extension_id}/discovery/index.html"
-                logger.info(f"🔍 Modo DISCOVERY: {url}")
+                logger.info(f"🔎 Modo DISCOVERY: {url}")
+                logger.info("   → Página de onboarding y validación inicial")
             elif page_type == 'landing':
                 url = f"chrome-extension://{extension_id}/landing/index.html"
                 logger.info(f"🏠 Modo LANDING: {url}")
+                logger.info("   → Dashboard del perfil (panel de control)")
             
             return url
         
         # Caso 4: target_url manual especificado
         if target_url_raw:
             logger.info(f"🎯 Modo CUSTOM: Usando target_url manual")
+            logger.debug(f"   URL: {target_url_raw}")
             return target_url_raw
         
         # Caso 5: Ni auto ni manual → Error

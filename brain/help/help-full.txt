@@ -338,6 +338,7 @@ using repo name.
 
     ▪ Options:
       -s, --spec <VALUE>        Archivo JSON con especificación completa de lanzamiento (REQUERIDO)
+      -m, --mode                Modo de página: 'discovery' (onboarding) o 'landing' (dashboard)
 
   ▸ link
     Vincula un email a un perfil.
@@ -1249,6 +1250,7 @@ using repo name.
 
     ▪ Options:
       -s, --spec <VALUE>        Archivo JSON con especificación completa de lanzamiento (REQUERIDO)
+      -m, --mode                Modo de página: 'discovery' (onboarding) o 'landing' (dashboard)
 
   ▸ link
     Vincula un email a un perfil.
