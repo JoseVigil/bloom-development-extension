@@ -32,8 +32,9 @@ def generate_discovery_page(target_ext_dir: Path, profile_data: Dict[str, Any]) 
     # Copy static assets (sin modificar)
     _copy_static_assets(discovery_dir)
     
-    # Generate dynamic config file (único archivo con datos inyectados)
-    _generate_config_file(discovery_dir, profile_data, paths.extension_id)
+    # ✅ FIX: Llamar al método get_extension_id() en lugar de acceder como propiedad
+    extension_id = paths.get_extension_id()
+    _generate_config_file(discovery_dir, profile_data, extension_id)
     
     logger.info(f"  ✅ Discovery page generada en: {discovery_dir}")
 
