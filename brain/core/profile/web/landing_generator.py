@@ -10,7 +10,7 @@ from typing import Dict, Any
 from datetime import datetime
 from brain.shared.logger import get_logger
 
-logger = get_logger(__name__)  # ✅ Agregar esta línea al inicio
+logger = get_logger(__name__)
 
 
 def generate_profile_landing(target_ext_dir: Path, profile_data: Dict[str, Any]) -> None:
@@ -27,7 +27,13 @@ def generate_profile_landing(target_ext_dir: Path, profile_data: Dict[str, Any])
     from brain.core.profile.path_resolver import PathResolver
     paths = PathResolver()
     
+    # Copy static assets
     _copy_static_assets(landing_dir)
+    
+    # ✅ NUEVO: Copiar landing.synapse.config.js desde src/
+    _copy_synapse_config(target_ext_dir)
+    
+    # Generate configured data
     extension_id = paths.get_extension_id()
     _generate_data_loader(landing_dir, profile_data, extension_id)
     _generate_html(landing_dir, profile_data)
@@ -50,7 +56,36 @@ def _copy_static_assets(landing_dir: Path) -> None:
         if source.exists():
             shutil.copy2(source, landing_dir / file_name)
         else:
-            logger.warning(f"Template not found: {source}")  # ✅ Cambio aquí
+            logger.warning(f"Template not found: {source}")
+
+
+def _copy_synapse_config(target_ext_dir: Path) -> None:
+    """
+    Copia landing.synapse.config.js desde src/ a la raíz de extension/.
+    Este archivo será referenciado por el manifest.json.
+    
+    Args:
+        target_ext_dir: Path to profiles/[UUID]/extension/
+    """
+    logger.debug("  📦 Copiando landing.synapse.config.js a raíz de extension/")
+    
+    from brain.core.profile.path_resolver import PathResolver
+    paths = PathResolver()
+    
+    source_config = paths.base_dir / "bin" / "extension" / "src" / "landing.synapse.config.js"
+    dest_config = target_ext_dir / "landing.synapse.config.js"
+    
+    if not source_config.exists():
+        logger.warning(f"    ⚠️ landing.synapse.config.js no encontrado en: {source_config}")
+        logger.warning(f"    Se generará uno nuevo basado en template")
+        return
+    
+    try:
+        shutil.copy2(source_config, dest_config)
+        logger.debug(f"    ✓ landing.synapse.config.js copiado a raíz")
+    except Exception as e:
+        logger.error(f"    ❌ Error copiando landing.synapse.config.js: {e}")
+        raise
 
 
 def _generate_data_loader(landing_dir: Path, profile_data: Dict[str, Any], extension_id: str) -> None:
@@ -85,7 +120,7 @@ window.BLOOM_EXTENSION_ID = '{extension_id}';
 """
     
     (landing_dir / "data-loader.js").write_text(data_loader_content, encoding='utf-8')
-    logger.info(f"Generated data-loader.js for profile: {profile_data.get('alias')}")  # ✅ Cambio aquí
+    logger.info(f"Generated data-loader.js for profile: {profile_data.get('alias')}")
 
 
 def _format_linked_accounts(accounts_data) -> list:
@@ -114,11 +149,11 @@ def _generate_html(landing_dir: Path, profile_data: Dict[str, Any]) -> None:
     template_path = template_dir / "index.html"
     
     if not template_path.exists():
-        logger.warning(f"Template HTML not found: {template_path}")  # ✅ Cambio aquí
+        logger.warning(f"Template HTML not found: {template_path}")
         return
     
     shutil.copy2(template_path, landing_dir / "index.html")
-    logger.info("Copied index.html template")  # ✅ Cambio aquí
+    logger.info("Copied index.html template")
 
 
 def _generate_manifest(landing_dir: Path, profile_data: Dict[str, Any]) -> None:
@@ -146,7 +181,7 @@ def _generate_manifest(landing_dir: Path, profile_data: Dict[str, Any]) -> None:
         json.dumps(manifest, indent=2, ensure_ascii=False),
         encoding='utf-8'
     )
-    logger.info("Generated manifest.json")  # ✅ Cambio aquí
+    logger.info("Generated manifest.json")
 
 
 def update_landing_data(landing_dir: Path, stats_update: Dict[str, Any]) -> None:
@@ -154,7 +189,7 @@ def update_landing_data(landing_dir: Path, stats_update: Dict[str, Any]) -> None
     data_loader_path = landing_dir / "data-loader.js"
     
     if not data_loader_path.exists():
-        logger.warning("data-loader.js not found, cannot update")  # ✅ Cambio aquí
+        logger.warning("data-loader.js not found, cannot update")
         return
     
     content = data_loader_path.read_text(encoding='utf-8')
@@ -163,7 +198,7 @@ def update_landing_data(landing_dir: Path, stats_update: Dict[str, Any]) -> None
     match = re.search(r'window\.BLOOM_PROFILE_DATA = ({.*?});', content, re.DOTALL)
     
     if not match:
-        logger.warning("Could not parse BLOOM_PROFILE_DATA")  # ✅ Cambio aquí
+        logger.warning("Could not parse BLOOM_PROFILE_DATA")
         return
     
     try:
@@ -188,7 +223,7 @@ def update_landing_data(landing_dir: Path, stats_update: Dict[str, Any]) -> None
         )
         
         data_loader_path.write_text(new_content, encoding='utf-8')
-        logger.info(f"Updated landing stats: launches={stats_update.get('total_launches')}, intents={stats_update.get('intents_done')}")  # ✅ Cambio aquí
+        logger.info(f"Updated landing stats: launches={stats_update.get('total_launches')}, intents={stats_update.get('intents_done')}")
         
     except json.JSONDecodeError as e:
-        logger.error(f"Error parsing JSON: {e}")  # ✅ Cambio aquí
+        logger.error(f"Error parsing JSON: {e}")

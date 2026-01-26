@@ -1,0 +1,24 @@
+bloom-development-extension/
+└── src/
+    ├── 128x128.png
+    ├── background.js
+    ├── content.js
+    ├── discovery/
+    │   ├── content-aistudio.js
+    │   ├── discovery.js
+    │   ├── discoveryProtocol.js
+    │   ├── index.html
+    │   ├── onboarding.js
+    │   └── script.js
+    ├── discovery.synapse.config.js
+    ├── icon128.png
+    ├── icon16.png
+    ├── landing/
+    │   ├── data-loader.js
+    │   ├── index.html
+    │   ├── landing.js
+    │   ├── landing.synapse.config.js
+    │   ├── landingProtocol.js
+    │   └── styles.css
+    ├── landing.synapse.config.js
+    └── manifest.json
