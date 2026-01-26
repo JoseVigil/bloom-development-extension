@@ -22,7 +22,6 @@ type SystemStatus struct {
 	ExecutablesValid     bool             `json:"executables_valid"`
 	OnboardingCompleted  bool             `json:"onboarding_completed"`
 	MasterProfile        string           `json:"master_profile,omitempty"`
-	ExtensionID          string           `json:"extension_id,omitempty"` 
 	SystemMap            map[string]string `json:"system_map"`
 	Services             []ServiceStatus  `json:"services"`
 }
@@ -47,8 +46,12 @@ func Initialize(c *core.Core) error {
 	}
 	
 	status := LoadCurrentStatus(c)
-	if status.ExtensionID == "" || status.ExtensionID != c.Config.Provisioning.ExtensionID {
-		status.ExtensionID = c.Config.Provisioning.ExtensionID
+	// Ahora extension_id solo vive en system_map
+	if status.SystemMap == nil {
+		status.SystemMap = make(map[string]string)
+	}
+	if status.SystemMap["extension_id"] == "" || status.SystemMap["extension_id"] == "null" {
+		status.SystemMap["extension_id"] = c.Config.Provisioning.ExtensionID
 		status.Timestamp = time.Now().Format(time.RFC3339)
 		_ = SaveSystemStatus(c, status)
 	}
