@@ -196,11 +196,21 @@ def _extract_structure(registry: CommandRegistry) -> HelpStructure:
 
 
 def _extract_option_flag(name: str, default: OptionInfo) -> str:
-    """Extracts the primary flag from OptionInfo"""
+    """Extracts the primary flag from OptionInfo, showing both short and long forms"""
     if hasattr(default, "param_decls") and default.param_decls:
         short_flags = [f for f in default.param_decls if f.startswith('-') and not f.startswith('--')]
         long_flags = [f for f in default.param_decls if f.startswith('--')]
-        return short_flags[0] if short_flags else (long_flags[0] if long_flags else default.param_decls[0])
+        
+        # Show both short and long flags if both exist
+        if short_flags and long_flags:
+            return f"{short_flags[0]}, {long_flags[0]}"
+        elif long_flags:
+            return long_flags[0]
+        elif short_flags:
+            return short_flags[0]
+        else:
+            return default.param_decls[0]
+    
     return f"--{name.replace('_', '-')}"
 
 
@@ -713,7 +723,7 @@ def _render_category_panel(console: Console, category: CommandCategory, commands
                 for opt in options:
                     help_text = opt.help_text or "Sin descripción"
                     default_info = f" [default: {opt.default_value}]" if opt.default_value is not None else ""
-                    content_lines.append(Text(f"      {opt.flag:20} {help_text}{default_info}", style=ColorScheme.SILVER))
+                    content_lines.append(Text(f"      {opt.flag:25} {opt.help_text}", style=ColorScheme.SILVER))
                 content_lines.append(Text())
     
     while content_lines and str(content_lines[-1]).strip() == "":
