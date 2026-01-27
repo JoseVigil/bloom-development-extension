@@ -90,13 +90,24 @@
       profile_id            optional
 
     Flags:
-      --config-override          JSON para sobrescribir campos en synapse.config.js
+      --add-account              Agregar linked account (formato: provider,email_or_username,status). Repetible
+      --config-file              Cargar overrides desde JSON. Usar @archivo.json o - para STDIN
       --mode                     Modo de lanzamiento (landing o discovery) [default: landing]
+      --override-alias           Sobrescribir alias del perfil
+      --override-email           Sobrescribir email
+      --override-extension       Sobrescribir extension ID
+      --override-register        Sobrescribir flag de registro
+      --override-role            Sobrescribir rol (ej: Worker, Specialist, Premium)
+      --override-step            Sobrescribir step actual [default: 0]
+      --save                     Persistir overrides en profiles.json
 
     Example:
         sentinel launch profile_001 --mode landing
-        sentinel --json launch profile_002 --mode discovery | jq .
-        sentinel --json launch profile_003 --mode discovery --config-override '{"register":true,"email":"user@example.com"}'
+        sentinel launch profile_002 --mode discovery --override-alias "TestWorker"
+        sentinel launch profile_003 --override-role "Premium" --save
+        sentinel launch profile_004 --add-account "Google,user@gmail.com,active" --save
+        sentinel launch profile_005 --config-file @overrides.json --save
+        sentinel --json launch profile_006 --mode discovery | jq .
 
     Requirements:
       * El perfil debe existir (usar 'sentinel seed' primero)

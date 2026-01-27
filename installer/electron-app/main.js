@@ -257,7 +257,7 @@ async function executeSentinelCommand(args) {
 // ============================================================================
 async function checkHostStatus() {
   try {
-    const result = await executeSentinelCommand(['health', '--json']);
+    const result = await executeSentinelCommand(['--json', 'health']);
 
     return {
       connected: result.connected || false,
@@ -415,7 +415,7 @@ function registerSentinelHandlers() {
 
   ipcMain.handle('sentinel:health', async () => {
     try {
-      return await executeSentinelCommand(['health', '--json']);
+      return await executeSentinelCommand(['--json', 'health']);
     } catch (error) {
       return { connected: false, error: error.message };
     }
@@ -423,7 +423,7 @@ function registerSentinelHandlers() {
 
   ipcMain.handle('sentinel:validate', async () => {
     try {
-      return await executeSentinelCommand(['health', '--validate', '--json']);
+      return await executeSentinelCommand(['--json', 'health', '--validate']);
     } catch (error) {
       return { success: false, error: error.message };
     }
@@ -431,7 +431,7 @@ function registerSentinelHandlers() {
 
   ipcMain.handle('sentinel:repair-bridge', async () => {
     try {
-      return await executeSentinelCommand(['repair', 'bridge', '--json']);
+      return await executeSentinelCommand(['--json', 'repair', 'bridge']);
     } catch (error) {
       return { success: false, error: error.message };
     }
@@ -442,7 +442,7 @@ function registerSentinelHandlers() {
       if (!profileId) {
         return { success: false, error: 'Profile ID is required' };
       }
-      return await executeSentinelCommand(['launch', profileId, '--json']);
+      return await executeSentinelCommand(['--json', 'launch', profileId]);
     } catch (error) {
       return { success: false, error: error.message };
     }
@@ -851,6 +851,17 @@ let mainWindow = null;
 
 app.whenReady().then(async () => {
   log('🚀 App ready, initializing...');
+
+  // Check admin SOLO en modo INSTALL
+  if (!IS_LAUNCH_MODE && process.platform === 'win32') {
+    const { isElevated, relaunchAsAdmin } = require('./core/admin-utils');
+    if (!(await isElevated())) {
+      log('⚠️ Admin privileges required - relaunching...');
+      relaunchAsAdmin();
+      return; // Salir sin crear ventana
+    }
+    log('✅ Running with admin privileges');
+  }
 
   registerSharedHandlers();
   registerSentinelHandlers();
