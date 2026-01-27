@@ -16,10 +16,29 @@ class DiscoveryFlow {
     this.discoveryCompleted = false;
     this.pingInterval = null;
     
+    // Handshake stages tracking
+    this.currentStage = 'initializing';
+    this.stages = [
+      { name: 'initializing', label: 'Inicializando extensión', completed: false },
+      { name: 'searching', label: 'Buscando host nativo', completed: false },
+      { name: 'handshake', label: 'Estableciendo handshake', completed: false },
+      { name: 'heartbeat', label: 'Verificando heartbeat', completed: false },
+      { name: 'ready', label: 'Sistema listo', completed: false }
+    ];
+    
+    this.stageIndex = 0;
+    
     this.attemptCountEl = document.getElementById('attempt-count');
-    this.registerNoticeEl = document.getElementById('register-notice');
+    
+    // UI elements
+    this.statusCircleEl = document.getElementById('status-circle');
+    this.statusLineEl = document.getElementById('status-line');
+    this.statusTextEl = document.getElementById('status-text');
+    this.connectionRowEl = document.getElementById('connection-row');
+    this.profileInfoEl = document.getElementById('profile-info');
+    this.connectedTimeEl = document.getElementById('connected-time');
+    this.countdownLabelEl = document.getElementById('countdown-label');
   }
-
 
   async start() {
     console.log('[Discovery] Starting');
@@ -31,11 +50,13 @@ class DiscoveryFlow {
     // Display profile alias if available
     this.displayProfileAlias();
 
-    if (this.requiresRegistration && this.registerNoticeEl) {
-      this.registerNoticeEl.style.display = 'block';
-    }
-
     this.protocol.init();
+    
+    // Stage 1: Initializing
+    this.showStage(0);
+    await this.delay(800);
+    this.completeCurrentStage();
+    
     this.protocol.executePhase('initialization', { validator: this });
 
     if (!this.extensionId) {
@@ -46,6 +67,10 @@ class DiscoveryFlow {
       return;
     }
 
+    // Stage 2: Searching
+    this.showStage(1);
+    await this.delay(600);
+    
     this.setupStorageListener();
     this.startPinging();
   }
@@ -57,8 +82,10 @@ class DiscoveryFlow {
       const profileNameDisplay = document.getElementById('profile-name-display');
       const profileAliasText = document.getElementById('profile-alias-text');
       
-      if (profileNameDisplay && profileAliasText) {
+      if (profileAliasText) {
         profileAliasText.textContent = profileAlias;
+      }
+      if (profileNameDisplay) {
         profileNameDisplay.style.display = 'block';
       }
       
@@ -177,7 +204,7 @@ class DiscoveryFlow {
     }
   }
 
-  handleSystemReady(payload) {
+  async handleSystemReady(payload) {
     if (this.discoveryCompleted || this.isConnected) {
       if (this.config.debugMode) {
         console.warn('[Discovery] Duplicate SYSTEM_READY ignored');
@@ -189,6 +216,25 @@ class DiscoveryFlow {
       console.log('[Discovery] ✓ SYSTEM_READY received:', payload);
     }
     
+    // Complete searching stage
+    this.completeCurrentStage();
+    await this.delay(400);
+    
+    // Stage 3: Handshake
+    this.showStage(2);
+    await this.delay(800);
+    this.completeCurrentStage();
+    
+    // Stage 4: Heartbeat
+    this.showStage(3);
+    await this.delay(700);
+    this.completeCurrentStage();
+    
+    // Stage 5: Ready
+    this.showStage(4);
+    await this.delay(600);
+    this.completeCurrentStage();
+    
     this.transitionToSuccess(payload);
   }
 
@@ -198,6 +244,25 @@ class DiscoveryFlow {
     
     this.discoveryCompleted = true;
     this.isConnected = true;
+    
+    // Transform circle to green with checkmark
+    if (this.statusCircleEl) {
+      this.statusCircleEl.classList.add('success');
+    }
+    
+    // Show connection info
+    if (this.connectionRowEl) {
+      if (this.profileInfoEl && payload) {
+        const profileId = payload.profile_id || self.SYNAPSE_CONFIG?.profileId || '-';
+        this.profileInfoEl.textContent = `Profile: ${profileId.substring(0, 8)}...`;
+      }
+      
+      if (this.connectedTimeEl) {
+        this.connectedTimeEl.textContent = `Conectado: ${new Date().toLocaleTimeString()}`;
+      }
+      
+      this.connectionRowEl.style.display = 'flex';
+    }
     
     this.protocol.executePhase('success', {
       validator: this,
@@ -233,6 +298,12 @@ class DiscoveryFlow {
 
   autoCloseDiscovery() {
     console.log('[Discovery] Auto-closing with countdown (register=false)');
+    
+    // Show countdown label
+    if (this.countdownLabelEl) {
+      this.countdownLabelEl.classList.add('show');
+    }
+    
     this.startCountdown();
   }
 
@@ -340,6 +411,46 @@ class DiscoveryFlow {
     } else {
       console.error('[Discovery] Screen NOT FOUND:', `screen-${screenName}`);
     }
+  }
+
+  // ============================================================================
+  // STAGE MANAGEMENT - SINGLE LINE
+  // ============================================================================
+  
+  showStage(index) {
+    if (index >= this.stages.length) return;
+    
+    this.stageIndex = index;
+    const stage = this.stages[index];
+    
+    if (this.statusTextEl) {
+      this.statusTextEl.textContent = stage.label;
+    }
+    
+    if (this.statusLineEl) {
+      this.statusLineEl.classList.remove('completed');
+      this.statusLineEl.classList.add('active');
+    }
+    
+    console.log('[Discovery] Stage:', stage.name, '-', stage.label);
+  }
+  
+  completeCurrentStage() {
+    if (this.stageIndex >= this.stages.length) return;
+    
+    const stage = this.stages[this.stageIndex];
+    stage.completed = true;
+    
+    if (this.statusLineEl) {
+      this.statusLineEl.classList.remove('active');
+      this.statusLineEl.classList.add('completed');
+    }
+    
+    console.log('[Discovery] Stage completed:', stage.name);
+  }
+  
+  delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 }
 
@@ -462,7 +573,7 @@ class OnboardingFlow {
         startedAt: Date.now()
         }
     });
-    }
+  }
 
   openAIStudio() {
     chrome.tabs.create({ 

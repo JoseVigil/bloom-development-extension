@@ -30,7 +30,10 @@ const PROTOCOL = {
     errorContainer: null,
     errorMessage: null,
     errorDetails: null,
-    debugBadge: null
+    debugBadge: null,
+    connectionInfo: null,
+    stageIndicator: null,
+    stageList: null
   },
 
   // ═══════════════════════════════════════════════════════════════════
@@ -38,18 +41,21 @@ const PROTOCOL = {
   // ═══════════════════════════════════════════════════════════════════
   init() {
     // Cachear referencias DOM
-    this.elements.statusDot = document.getElementById('status-dot');
-    this.elements.statusMessage = document.getElementById('status-message');
-    this.elements.progressInfo = document.getElementById('progress-info');
+    this.elements.statusDot = document.getElementById('discovery-dot');
+    this.elements.statusMessage = document.getElementById('discovery-message');
+    this.elements.progressInfo = document.getElementById('discovery-progress');
     this.elements.attemptCount = document.getElementById('attempt-count');
     this.elements.profileId = document.getElementById('profile-id');
     this.elements.profileAlias = document.getElementById('profile-alias');
     this.elements.timestamp = document.getElementById('timestamp');
-    this.elements.autoCloseNotice = document.getElementById('auto-close-notice');
-    this.elements.errorContainer = document.getElementById('error-container');
+    this.elements.autoCloseNotice = document.getElementById('discovery-auto-close');
+    this.elements.errorContainer = document.getElementById('discovery-error');
     this.elements.errorMessage = document.getElementById('error-message');
     this.elements.errorDetails = document.getElementById('error-details');
     this.elements.debugBadge = document.getElementById('debug-badge');
+    this.elements.connectionInfo = document.getElementById('connection-info');
+    this.elements.stageIndicator = document.getElementById('stage-indicator');
+    this.elements.stageList = document.getElementById('stage-list');
 
     // Mostrar badge de debug si está activo
     if (this.config.debugMode && this.elements.debugBadge) {
@@ -79,8 +85,7 @@ const PROTOCOL = {
   // ═══════════════════════════════════════════════════════════════════
   phases: {
     initialization(context) {
-      this.updateStatusDot('initializing');
-      this.updateStatusMessage('🔄 Inicializando...');
+      this.updateStatusDot('searching');
       
       if (this.config.debugMode) {
         console.log('[Protocol] Initialization phase');
@@ -89,7 +94,6 @@ const PROTOCOL = {
 
     searching(context) {
       this.updateStatusDot('searching');
-      this.updateStatusMessage('🔍 Buscando extensión...');
       
       if (this.elements.progressInfo) {
         this.elements.progressInfo.classList.remove('hidden');
@@ -104,7 +108,6 @@ const PROTOCOL = {
       const { payload } = context;
 
       this.updateStatusDot('connected');
-      this.updateStatusMessage('✅ Extensión conectada');
 
       // Ocultar contador de intentos
       if (this.elements.progressInfo) {
@@ -112,6 +115,10 @@ const PROTOCOL = {
       }
 
       // Mostrar información del profile
+      if (this.elements.connectionInfo) {
+        this.elements.connectionInfo.style.display = 'block';
+      }
+
       if (payload) {
         if (payload.profile_id && this.elements.profileId) {
           this.elements.profileId.textContent = `Profile: ${payload.profile_id}`;
@@ -140,7 +147,6 @@ const PROTOCOL = {
       const { errorData } = context;
 
       this.updateStatusDot('error');
-      this.updateStatusMessage('❌ Error de conexión');
 
       // Ocultar contador de intentos
       if (this.elements.progressInfo) {
