@@ -283,7 +283,8 @@ BloomNucleus/
 │   │   │   ├── discoveryProtocol.js
 │   │   │   ├── index.html
 │   │   │   ├── onboarding.js
-│   │   │   └── script.js
+│   │   │   ├── script.js
+│   │   │   └── styles.css
 │   │   ├── discovery.synapse.config.js
 │   │   ├── icon128.png
 │   │   ├── icon16.png
@@ -293,6 +294,7 @@ BloomNucleus/
 │   │   │   ├── landing.js
 │   │   │   ├── landing.synapse.config.js
 │   │   │   ├── landingProtocol.js
+│   │   │   ├── script.js
 │   │   │   └── styles.css
 │   │   ├── landing.synapse.config.js
 │   │   └── manifest.json
@@ -347,43 +349,55 @@ BloomNucleus/
 │       ├── vcruntime140_1.dll
 │       └── winsound.pyd
 ├── logs/
-│   ├── brain_core_20260126.log
 │   ├── brain_core_20260127.log
 │   ├── brain_error.log
-│   ├── brain_profile_20260126.log
 │   ├── brain_profile_20260127.log
 │   ├── brain_service.log
 │   ├── build/ [... build output]
-│   ├── install/
-│   │   └── electron_install.log
 │   ├── profiles/
 │   │   └── ecdeed9b-222f-4919-b4cb-dbf55a4f32ef/
-│   │       ├── 20260127_023615_13248aba_chrome_debug.log
-│   │       ├── 20260127_023615_13248aba_chrome_net.log
-│   │       ├── 20260127_024435_d2b59b86_chrome_debug.log
-│   │       ├── 20260127_024435_d2b59b86_chrome_net.log
-│   │       ├── 20260127_025129_d495dac7_chrome_debug.log
-│   │       ├── 20260127_025129_d495dac7_chrome_net.log
-│   │       ├── 20260127_025547_d412c27d_chrome_debug.log
-│   │       ├── 20260127_025547_d412c27d_chrome_net.log
-│   │       ├── 20260127_025945_8b772e6b_chrome_debug.log
-│   │       ├── 20260127_025945_8b772e6b_chrome_net.log
-│   │       ├── 20260127_030927_64c970ad_chrome_debug.log
-│   │       ├── 20260127_030927_64c970ad_chrome_net.log
-│   │       ├── 20260127_032859_5d285158_chrome_debug.log
-│   │       ├── 20260127_032936_0c5b29d0_chrome_debug.log
-│   │       ├── 20260127_032936_0c5b29d0_chrome_net.log
-│   │       ├── 20260127_033045_9bd04204_chrome_debug.log
-│   │       ├── 20260127_033045_9bd04204_chrome_net.log
-│   │       ├── 20260127_033825_454b678a_chrome_debug.log
-│   │       ├── 20260127_033825_454b678a_chrome_net.log
-│   │       └── default_engine_read.log
-│   ├── sentinel_2026-01-26.log
+│   │       ├── net_20260127_040354.log
+│   │       ├── net_20260127_040829.log
+│   │       ├── net_20260127_040928.log
+│   │       ├── net_20260127_093159.log
+│   │       ├── net_20260127_095414.log
+│   │       ├── net_20260127_112750.log
+│   │       ├── net_20260127_112816.log
+│   │       ├── net_20260127_113256.log
+│   │       ├── net_20260127_113316.log
+│   │       ├── net_20260127_113804.log
+│   │       ├── net_20260127_120928.log
+│   │       ├── net_20260127_122244.log
+│   │       ├── synapse_browser_020_ecdeed9b_040351.log
+│   │       ├── synapse_browser_021_ecdeed9b_040826.log
+│   │       ├── synapse_browser_022_ecdeed9b_040925.log
+│   │       ├── synapse_browser_023_ecdeed9b_093157.log
+│   │       ├── synapse_browser_024_ecdeed9b_095411.log
+│   │       ├── synapse_browser_026_ecdeed9b_112747.log
+│   │       ├── synapse_browser_027_ecdeed9b_112814.log
+│   │       ├── synapse_browser_028_ecdeed9b_113253.log
+│   │       ├── synapse_browser_029_ecdeed9b_113313.log
+│   │       ├── synapse_browser_030_ecdeed9b_113801.log
+│   │       ├── synapse_browser_031_ecdeed9b_120925.log
+│   │       ├── synapse_browser_032_ecdeed9b_122240.log
+│   │       ├── synapse_native_020_ecdeed9b_040351.log
+│   │       ├── synapse_native_021_ecdeed9b_040826.log
+│   │       ├── synapse_native_022_ecdeed9b_040925.log
+│   │       ├── synapse_native_023_ecdeed9b_093157.log
+│   │       ├── synapse_native_024_ecdeed9b_095411.log
+│   │       ├── synapse_native_026_ecdeed9b_112747.log
+│   │       ├── synapse_native_027_ecdeed9b_112814.log
+│   │       ├── synapse_native_028_ecdeed9b_113253.log
+│   │       ├── synapse_native_029_ecdeed9b_113313.log
+│   │       ├── synapse_native_030_ecdeed9b_113801.log
+│   │       ├── synapse_native_031_ecdeed9b_120925.log
+│   │       └── synapse_native_032_ecdeed9b_122240.log
 │   ├── sentinel_2026-01-27.log
 │   └── telemetry.json
 └── profiles/
     └── ecdeed9b-222f-4919-b4cb-dbf55a4f32ef/
         ├── .chrome_app.lock
+        ├── 5a183531-3e57-4edb-83df-9670e5507870.tmp
         ├── ActorSafetyLists/
         │   └── 8.5866.7803/
         │       ├── _metadata/
@@ -396,8 +410,15 @@ BloomNucleus/
         │       │   └── verified_contents.json
         │       ├── heuristic_regexes.binarypb
         │       └── manifest.json
+        ├── BrowserMetrics-spare.pma
         ├── CertificateRevocation/
-        │   └── 10308/
+        │   ├── 10308/
+        │   │   ├── LICENSE
+        │   │   ├── _metadata/
+        │   │   │   └── verified_contents.json
+        │   │   ├── crl-set
+        │   │   └── manifest.json
+        │   └── 10309/
         │       ├── LICENSE
         │       ├── _metadata/
         │       │   └── verified_contents.json
@@ -452,6 +473,8 @@ BloomNucleus/
         │   │   └── pc/
         │   │       ├── 05_@;2t2fb2=a6@=`6`2`25[.9092[9660;65-[99164=57144=815`2.db
         │   │       ├── 05_@;2t2fb2=a6@=`6`2`25[.9092[9660;65-[99164=57144=815`2.journal
+        │   │       ├── 5bb[a`6`2`2-00@c=bau4@@492u0@;`2.db
+        │   │       ├── 5bb[a`6`2`2-00@c=bau4@@492u0@;`2.journal
         │   │       ├── 5bb[a`6`2`24@@492u0@;`2.db
         │   │       └── 5bb[a`6`2`24@@492u0@;`2.journal
         │   ├── Collaboration/
@@ -532,6 +555,7 @@ BloomNucleus/
         │   │       ├── CURRENT
         │   │       ├── LOCK
         │   │       ├── LOG
+        │   │       ├── LOG.old
         │   │       └── MANIFEST-000001
         │   ├── Local Storage/
         │   │   └── leveldb/
@@ -545,6 +569,8 @@ BloomNucleus/
         │   ├── Login Data For Account
         │   ├── Login Data For Account-journal
         │   ├── Login Data-journal
+        │   ├── MediaDeviceSalts
+        │   ├── MediaDeviceSalts-journal
         │   ├── Network/
         │   │   ├── Cookies
         │   │   ├── Cookies-journal
@@ -605,7 +631,7 @@ BloomNucleus/
         │   │   │   ├── LOG.old
         │   │   │   └── MANIFEST-000001
         │   │   └── ScriptCache/
-        │   │       ├── 297ecea5cebb5dfe_0
+        │   │       ├── 0ae129c33e7a30bd_0
         │   │       ├── index
         │   │       └── index-dir/
         │   │           └── the-real-index
@@ -619,10 +645,10 @@ BloomNucleus/
         │   ├── Sessions/
         │   │   ├── Apps_13413969048036238
         │   │   ├── Apps_13413969508979136
-        │   │   ├── Session_13413969053133552
-        │   │   ├── Session_13413969513064396
-        │   │   ├── Tabs_13413969048860986
-        │   │   └── Tabs_13413969509696621
+        │   │   ├── Session_13414000171640240
+        │   │   ├── Session_13414000967549513
+        │   │   ├── Tabs_13414000173375252
+        │   │   └── Tabs_13414000968573558
         │   ├── Shared Dictionary/
         │   │   ├── cache/
         │   │   │   ├── index
@@ -658,7 +684,7 @@ BloomNucleus/
         │   │   ├── QuotaManager
         │   │   └── QuotaManager-journal
         │   ├── blob_storage/
-        │   │   └── a59eaf46-c2f1-41cc-91e8-c0e5aeacd92e/
+        │   │   └── c67c5a6f-25b3-4fbf-b3b1-1b5df6a42599/
         │   ├── chrome_cart_db/
         │   │   ├── LOCK
         │   │   ├── LOG
@@ -752,7 +778,7 @@ BloomNucleus/
         │       ├── cr_en-us_500000_index.bin
         │       └── manifest.json
         ├── OptimizationHints/
-        │   └── 615/
+        │   └── 616/
         │       ├── _metadata/
         │       │   └── verified_contents.json
         │       ├── manifest.json
@@ -848,6 +874,7 @@ BloomNucleus/
         │   ├── 1d8841b32883d1b437c141301250512840d957c652328ffc1a6f7cd0cfa5e371
         │   ├── 23759e3f6d0119a00038b963cec9fb7abafd7b65a35a7e83c7697511db59e6e7
         │   ├── 261bea60d22ebca3a95ce335c03ec751a0b58b2b7bdbd6ea51dfa54381b07775
+        │   ├── 3b57529910d90ec8f5b5dc27fa0c151da0d3b65828e117e74487949725038007
         │   ├── 3c143c90ecc1782e53738192a23067da69fe5b63daec935cfb3c19898e5acfa6
         │   ├── 4a06cfbce6f26c81ec6cba52e84985c0111183e0b06a953b14992b4511bb78af
         │   ├── 4ba115c8f775bb4fdc6653bde09327a7e2a369f783f9823fc915fefc3d4c690c
@@ -859,10 +886,9 @@ BloomNucleus/
         │   ├── c52c62a7c50daf7d3f73ec16977cd4b0ea401710807d5dbe3850941dd1b73a70
         │   ├── caf22da361a099ee7f504cfd6018872cff61e16946d0a5a57fb07c529bfa8072
         │   ├── dcf55d426f73919cddae73510fd466d107bff68ca7501509a33071b525caec35
-        │   ├── e7ae6dfb46e1015bb54074e3eff552f42d9dd765d6d7af59c428358d73061eea
         │   ├── e7d940df2c889e995be27b7048b6b314efe610aa7e87b9a003973ce9a2c985ae
         │   ├── ed43e732234cc8b79a137be0a0aab8f72b37ae6ca51caf1292986edbf618c1d1
-        │   ├── fd124e777b43bc3e89f541334adbc22a169035b90f065947ce390f3f9541f307
+        │   ├── f27cf2f94477d7977b743946660972345d173418be5af8ce7defb6dabdc6047e
         │   └── metadata.json
         ├── extension/
         │   ├── 128x128.png
@@ -883,9 +909,12 @@ BloomNucleus/
         │   │   ├── data-loader.js
         │   │   ├── index.html
         │   │   ├── landing.js
+        │   │   ├── landing.synapse.config.js
         │   │   ├── landingProtocol.js
         │   │   ├── manifest.json
+        │   │   ├── script.js
         │   │   └── styles.css
+        │   ├── landing.synapse.config.js
         │   └── manifest.json
         ├── extensions_crx_cache/
         │   └── metadata.json
