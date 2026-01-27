@@ -251,7 +251,8 @@ async function deployBinaries() {
   const files = await fs.readdir(nativeSourceDir);
   let copiedCount = 0;
   for (const file of files) {
-    if (/\.(exe|dll)$/i.test(file)) {
+    // CRÍTICO: Excluir sentinel.exe - va a bin/sentinel/ aparte
+    if (/\.(exe|dll)$/i.test(file) && file !== 'sentinel.exe') {
       await fs.copy(
         path.join(nativeSourceDir, file),
         path.join(nativeDest, file),

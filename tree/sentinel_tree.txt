@@ -40,6 +40,9 @@ bloom-development-extension/
     │   │   └── health.go
     │   ├── ignition/
     │   │   ├── ignition.go
+    │   │   ├── ignition_execution.go
+    │   │   ├── ignition_identity.go
+    │   │   ├── ignition_lifecycle.go
     │   │   ├── reaper.go
     │   │   └── telemetry.go
     │   ├── seed/

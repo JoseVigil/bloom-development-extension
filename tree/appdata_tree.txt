@@ -1,0 +1,953 @@
+BloomNucleus/
+├── .brain/
+│   ├── service.pid
+│   └── tcp_traffic.log
+├── bin/
+│   ├── brain/
+│   │   ├── _internal/ [... dependencies]
+│   │   └── brain.exe
+│   ├── chrome-win/
+│   │   ├── 146.0.7635.0.manifest
+│   │   ├── D3DCompiler_47.dll
+│   │   ├── First Run
+│   │   ├── IwaKeyDistribution/
+│   │   │   ├── iwa-key-distribution.pb
+│   │   │   └── manifest.json
+│   │   ├── MEIPreload/
+│   │   │   ├── manifest.json
+│   │   │   └── preloaded_data.pb
+│   │   ├── PrivacySandboxAttestationsPreloaded/
+│   │   │   ├── manifest.json
+│   │   │   └── privacy-sandbox-attestations.dat
+│   │   ├── chrome.dll
+│   │   ├── chrome.exe
+│   │   ├── chrome_100_percent.pak
+│   │   ├── chrome_200_percent.pak
+│   │   ├── chrome_elf.dll
+│   │   ├── chrome_proxy.exe
+│   │   ├── chrome_pwa_launcher.exe
+│   │   ├── chrome_wer.dll
+│   │   ├── debug.log
+│   │   ├── dxcompiler.dll
+│   │   ├── dxil.dll
+│   │   ├── elevated_tracing_service.exe
+│   │   ├── elevation_service.exe
+│   │   ├── eventlog_provider.dll
+│   │   ├── icudtl.dat
+│   │   ├── interactive_ui_tests.exe
+│   │   ├── libEGL.dll
+│   │   ├── libGLESv2.dll
+│   │   ├── locales/
+│   │   │   ├── af.pak
+│   │   │   ├── af_FEMININE.pak
+│   │   │   ├── af_MASCULINE.pak
+│   │   │   ├── af_NEUTER.pak
+│   │   │   ├── am.pak
+│   │   │   ├── am_FEMININE.pak
+│   │   │   ├── am_MASCULINE.pak
+│   │   │   ├── am_NEUTER.pak
+│   │   │   ├── ar-XB.pak
+│   │   │   ├── ar-XB_FEMININE.pak
+│   │   │   ├── ar-XB_MASCULINE.pak
+│   │   │   ├── ar-XB_NEUTER.pak
+│   │   │   ├── ar.pak
+│   │   │   ├── ar_FEMININE.pak
+│   │   │   ├── ar_MASCULINE.pak
+│   │   │   ├── ar_NEUTER.pak
+│   │   │   ├── bg.pak
+│   │   │   ├── bg_FEMININE.pak
+│   │   │   ├── bg_MASCULINE.pak
+│   │   │   ├── bg_NEUTER.pak
+│   │   │   ├── bn.pak
+│   │   │   ├── bn_FEMININE.pak
+│   │   │   ├── bn_MASCULINE.pak
+│   │   │   ├── bn_NEUTER.pak
+│   │   │   ├── ca.pak
+│   │   │   ├── ca_FEMININE.pak
+│   │   │   ├── ca_MASCULINE.pak
+│   │   │   ├── ca_NEUTER.pak
+│   │   │   ├── cs.pak
+│   │   │   ├── cs_FEMININE.pak
+│   │   │   ├── cs_MASCULINE.pak
+│   │   │   ├── cs_NEUTER.pak
+│   │   │   ├── da.pak
+│   │   │   ├── da_FEMININE.pak
+│   │   │   ├── da_MASCULINE.pak
+│   │   │   ├── da_NEUTER.pak
+│   │   │   ├── de.pak
+│   │   │   ├── de_FEMININE.pak
+│   │   │   ├── de_MASCULINE.pak
+│   │   │   ├── de_NEUTER.pak
+│   │   │   ├── el.pak
+│   │   │   ├── el_FEMININE.pak
+│   │   │   ├── el_MASCULINE.pak
+│   │   │   ├── el_NEUTER.pak
+│   │   │   ├── en-GB.pak
+│   │   │   ├── en-GB_FEMININE.pak
+│   │   │   ├── en-GB_MASCULINE.pak
+│   │   │   ├── en-GB_NEUTER.pak
+│   │   │   ├── en-US.pak
+│   │   │   ├── en-US_FEMININE.pak
+│   │   │   ├── en-US_MASCULINE.pak
+│   │   │   ├── en-US_NEUTER.pak
+│   │   │   ├── en-XA.pak
+│   │   │   ├── en-XA_FEMININE.pak
+│   │   │   ├── en-XA_MASCULINE.pak
+│   │   │   ├── en-XA_NEUTER.pak
+│   │   │   ├── es-419.pak
+│   │   │   ├── es-419_FEMININE.pak
+│   │   │   ├── es-419_MASCULINE.pak
+│   │   │   ├── es-419_NEUTER.pak
+│   │   │   ├── es.pak
+│   │   │   ├── es_FEMININE.pak
+│   │   │   ├── es_MASCULINE.pak
+│   │   │   ├── es_NEUTER.pak
+│   │   │   ├── et.pak
+│   │   │   ├── et_FEMININE.pak
+│   │   │   ├── et_MASCULINE.pak
+│   │   │   ├── et_NEUTER.pak
+│   │   │   ├── fa.pak
+│   │   │   ├── fa_FEMININE.pak
+│   │   │   ├── fa_MASCULINE.pak
+│   │   │   ├── fa_NEUTER.pak
+│   │   │   ├── fi.pak
+│   │   │   ├── fi_FEMININE.pak
+│   │   │   ├── fi_MASCULINE.pak
+│   │   │   ├── fi_NEUTER.pak
+│   │   │   ├── fil.pak
+│   │   │   ├── fil_FEMININE.pak
+│   │   │   ├── fil_MASCULINE.pak
+│   │   │   ├── fil_NEUTER.pak
+│   │   │   ├── fr.pak
+│   │   │   ├── fr_FEMININE.pak
+│   │   │   ├── fr_MASCULINE.pak
+│   │   │   ├── fr_NEUTER.pak
+│   │   │   ├── gu.pak
+│   │   │   ├── gu_FEMININE.pak
+│   │   │   ├── gu_MASCULINE.pak
+│   │   │   ├── gu_NEUTER.pak
+│   │   │   ├── he.pak
+│   │   │   ├── he_FEMININE.pak
+│   │   │   ├── he_MASCULINE.pak
+│   │   │   ├── he_NEUTER.pak
+│   │   │   ├── hi.pak
+│   │   │   ├── hi_FEMININE.pak
+│   │   │   ├── hi_MASCULINE.pak
+│   │   │   ├── hi_NEUTER.pak
+│   │   │   ├── hr.pak
+│   │   │   ├── hr_FEMININE.pak
+│   │   │   ├── hr_MASCULINE.pak
+│   │   │   ├── hr_NEUTER.pak
+│   │   │   ├── hu.pak
+│   │   │   ├── hu_FEMININE.pak
+│   │   │   ├── hu_MASCULINE.pak
+│   │   │   ├── hu_NEUTER.pak
+│   │   │   ├── id.pak
+│   │   │   ├── id_FEMININE.pak
+│   │   │   ├── id_MASCULINE.pak
+│   │   │   ├── id_NEUTER.pak
+│   │   │   ├── it.pak
+│   │   │   ├── it_FEMININE.pak
+│   │   │   ├── it_MASCULINE.pak
+│   │   │   ├── it_NEUTER.pak
+│   │   │   ├── ja.pak
+│   │   │   ├── ja_FEMININE.pak
+│   │   │   ├── ja_MASCULINE.pak
+│   │   │   ├── ja_NEUTER.pak
+│   │   │   ├── kn.pak
+│   │   │   ├── kn_FEMININE.pak
+│   │   │   ├── kn_MASCULINE.pak
+│   │   │   ├── kn_NEUTER.pak
+│   │   │   ├── ko.pak
+│   │   │   ├── ko_FEMININE.pak
+│   │   │   ├── ko_MASCULINE.pak
+│   │   │   ├── ko_NEUTER.pak
+│   │   │   ├── lt.pak
+│   │   │   ├── lt_FEMININE.pak
+│   │   │   ├── lt_MASCULINE.pak
+│   │   │   ├── lt_NEUTER.pak
+│   │   │   ├── lv.pak
+│   │   │   ├── lv_FEMININE.pak
+│   │   │   ├── lv_MASCULINE.pak
+│   │   │   ├── lv_NEUTER.pak
+│   │   │   ├── ml.pak
+│   │   │   ├── ml_FEMININE.pak
+│   │   │   ├── ml_MASCULINE.pak
+│   │   │   ├── ml_NEUTER.pak
+│   │   │   ├── mr.pak
+│   │   │   ├── mr_FEMININE.pak
+│   │   │   ├── mr_MASCULINE.pak
+│   │   │   ├── mr_NEUTER.pak
+│   │   │   ├── ms.pak
+│   │   │   ├── ms_FEMININE.pak
+│   │   │   ├── ms_MASCULINE.pak
+│   │   │   ├── ms_NEUTER.pak
+│   │   │   ├── nb.pak
+│   │   │   ├── nb_FEMININE.pak
+│   │   │   ├── nb_MASCULINE.pak
+│   │   │   ├── nb_NEUTER.pak
+│   │   │   ├── nl.pak
+│   │   │   ├── nl_FEMININE.pak
+│   │   │   ├── nl_MASCULINE.pak
+│   │   │   ├── nl_NEUTER.pak
+│   │   │   ├── pl.pak
+│   │   │   ├── pl_FEMININE.pak
+│   │   │   ├── pl_MASCULINE.pak
+│   │   │   ├── pl_NEUTER.pak
+│   │   │   ├── pt-BR.pak
+│   │   │   ├── pt-BR_FEMININE.pak
+│   │   │   ├── pt-BR_MASCULINE.pak
+│   │   │   ├── pt-BR_NEUTER.pak
+│   │   │   ├── pt-PT.pak
+│   │   │   ├── pt-PT_FEMININE.pak
+│   │   │   ├── pt-PT_MASCULINE.pak
+│   │   │   ├── pt-PT_NEUTER.pak
+│   │   │   ├── ro.pak
+│   │   │   ├── ro_FEMININE.pak
+│   │   │   ├── ro_MASCULINE.pak
+│   │   │   ├── ro_NEUTER.pak
+│   │   │   ├── ru.pak
+│   │   │   ├── ru_FEMININE.pak
+│   │   │   ├── ru_MASCULINE.pak
+│   │   │   ├── ru_NEUTER.pak
+│   │   │   ├── sk.pak
+│   │   │   ├── sk_FEMININE.pak
+│   │   │   ├── sk_MASCULINE.pak
+│   │   │   ├── sk_NEUTER.pak
+│   │   │   ├── sl.pak
+│   │   │   ├── sl_FEMININE.pak
+│   │   │   ├── sl_MASCULINE.pak
+│   │   │   ├── sl_NEUTER.pak
+│   │   │   ├── sr.pak
+│   │   │   ├── sr_FEMININE.pak
+│   │   │   ├── sr_MASCULINE.pak
+│   │   │   ├── sr_NEUTER.pak
+│   │   │   ├── sv.pak
+│   │   │   ├── sv_FEMININE.pak
+│   │   │   ├── sv_MASCULINE.pak
+│   │   │   ├── sv_NEUTER.pak
+│   │   │   ├── sw.pak
+│   │   │   ├── sw_FEMININE.pak
+│   │   │   ├── sw_MASCULINE.pak
+│   │   │   ├── sw_NEUTER.pak
+│   │   │   ├── ta.pak
+│   │   │   ├── ta_FEMININE.pak
+│   │   │   ├── ta_MASCULINE.pak
+│   │   │   ├── ta_NEUTER.pak
+│   │   │   ├── te.pak
+│   │   │   ├── te_FEMININE.pak
+│   │   │   ├── te_MASCULINE.pak
+│   │   │   ├── te_NEUTER.pak
+│   │   │   ├── th.pak
+│   │   │   ├── th_FEMININE.pak
+│   │   │   ├── th_MASCULINE.pak
+│   │   │   ├── th_NEUTER.pak
+│   │   │   ├── tr.pak
+│   │   │   ├── tr_FEMININE.pak
+│   │   │   ├── tr_MASCULINE.pak
+│   │   │   ├── tr_NEUTER.pak
+│   │   │   ├── uk.pak
+│   │   │   ├── uk_FEMININE.pak
+│   │   │   ├── uk_MASCULINE.pak
+│   │   │   ├── uk_NEUTER.pak
+│   │   │   ├── ur.pak
+│   │   │   ├── ur_FEMININE.pak
+│   │   │   ├── ur_MASCULINE.pak
+│   │   │   ├── ur_NEUTER.pak
+│   │   │   ├── vi.pak
+│   │   │   ├── vi_FEMININE.pak
+│   │   │   ├── vi_MASCULINE.pak
+│   │   │   ├── vi_NEUTER.pak
+│   │   │   ├── zh-CN.pak
+│   │   │   ├── zh-CN_FEMININE.pak
+│   │   │   ├── zh-CN_MASCULINE.pak
+│   │   │   ├── zh-CN_NEUTER.pak
+│   │   │   ├── zh-TW.pak
+│   │   │   ├── zh-TW_FEMININE.pak
+│   │   │   ├── zh-TW_MASCULINE.pak
+│   │   │   └── zh-TW_NEUTER.pak
+│   │   ├── notification_helper.exe
+│   │   ├── resources.pak
+│   │   ├── setup.exe
+│   │   ├── v8_context_snapshot.bin
+│   │   ├── vk_swiftshader.dll
+│   │   ├── vk_swiftshader_icd.json
+│   │   └── vulkan-1.dll
+│   ├── extension/
+│   │   ├── 128x128.png
+│   │   ├── background.js
+│   │   ├── content.js
+│   │   ├── discovery/
+│   │   │   ├── content-aistudio.js
+│   │   │   ├── discovery.js
+│   │   │   ├── discoveryProtocol.js
+│   │   │   ├── index.html
+│   │   │   ├── onboarding.js
+│   │   │   └── script.js
+│   │   ├── discovery.synapse.config.js
+│   │   ├── icon128.png
+│   │   ├── icon16.png
+│   │   ├── landing/
+│   │   │   ├── data-loader.js
+│   │   │   ├── index.html
+│   │   │   ├── landing.js
+│   │   │   ├── landing.synapse.config.js
+│   │   │   ├── landingProtocol.js
+│   │   │   └── styles.css
+│   │   ├── landing.synapse.config.js
+│   │   └── manifest.json
+│   ├── native/
+│   │   ├── bloom-host.exe
+│   │   ├── libwinpthread-1.dll
+│   │   └── nssm.exe
+│   └── sentinel/
+│       ├── blueprint.json
+│       └── sentinel.exe
+├── config/
+│   ├── nucleus.json
+│   ├── profile/
+│   │   └── ecdeed9b-222f-4919-b4cb-dbf55a4f32ef/
+│   │       ├── com.bloom.synapse.ecdeed9b.json
+│   │       └── ignition_spec.json
+│   └── profiles.json
+├── engine/
+│   └── runtime/
+│       ├── LICENSE.txt
+│       ├── _asyncio.pyd
+│       ├── _bz2.pyd
+│       ├── _ctypes.pyd
+│       ├── _decimal.pyd
+│       ├── _elementtree.pyd
+│       ├── _hashlib.pyd
+│       ├── _lzma.pyd
+│       ├── _msi.pyd
+│       ├── _multiprocessing.pyd
+│       ├── _overlapped.pyd
+│       ├── _queue.pyd
+│       ├── _socket.pyd
+│       ├── _sqlite3.pyd
+│       ├── _ssl.pyd
+│       ├── _uuid.pyd
+│       ├── _zoneinfo.pyd
+│       ├── libcrypto-1_1.dll
+│       ├── libffi-7.dll
+│       ├── libssl-1_1.dll
+│       ├── pyexpat.pyd
+│       ├── python.cat
+│       ├── python.exe
+│       ├── python3.dll
+│       ├── python310._pth
+│       ├── python310.dll
+│       ├── python310.zip
+│       ├── pythonw.exe
+│       ├── select.pyd
+│       ├── sqlite3.dll
+│       ├── unicodedata.pyd
+│       ├── vcruntime140.dll
+│       ├── vcruntime140_1.dll
+│       └── winsound.pyd
+├── logs/
+│   ├── brain_core_20260126.log
+│   ├── brain_core_20260127.log
+│   ├── brain_error.log
+│   ├── brain_profile_20260126.log
+│   ├── brain_profile_20260127.log
+│   ├── brain_service.log
+│   ├── build/ [... build output]
+│   ├── install/
+│   │   └── electron_install.log
+│   ├── profiles/
+│   │   └── ecdeed9b-222f-4919-b4cb-dbf55a4f32ef/
+│   │       ├── 20260127_023615_13248aba_chrome_debug.log
+│   │       ├── 20260127_023615_13248aba_chrome_net.log
+│   │       ├── 20260127_024435_d2b59b86_chrome_debug.log
+│   │       ├── 20260127_024435_d2b59b86_chrome_net.log
+│   │       ├── 20260127_025129_d495dac7_chrome_debug.log
+│   │       ├── 20260127_025129_d495dac7_chrome_net.log
+│   │       ├── 20260127_025547_d412c27d_chrome_debug.log
+│   │       ├── 20260127_025547_d412c27d_chrome_net.log
+│   │       ├── 20260127_025945_8b772e6b_chrome_debug.log
+│   │       ├── 20260127_025945_8b772e6b_chrome_net.log
+│   │       ├── 20260127_030927_64c970ad_chrome_debug.log
+│   │       ├── 20260127_030927_64c970ad_chrome_net.log
+│   │       ├── 20260127_032859_5d285158_chrome_debug.log
+│   │       ├── 20260127_032936_0c5b29d0_chrome_debug.log
+│   │       ├── 20260127_032936_0c5b29d0_chrome_net.log
+│   │       ├── 20260127_033045_9bd04204_chrome_debug.log
+│   │       ├── 20260127_033045_9bd04204_chrome_net.log
+│   │       ├── 20260127_033825_454b678a_chrome_debug.log
+│   │       ├── 20260127_033825_454b678a_chrome_net.log
+│   │       └── default_engine_read.log
+│   ├── sentinel_2026-01-26.log
+│   ├── sentinel_2026-01-27.log
+│   └── telemetry.json
+└── profiles/
+    └── ecdeed9b-222f-4919-b4cb-dbf55a4f32ef/
+        ├── .chrome_app.lock
+        ├── ActorSafetyLists/
+        │   └── 8.5866.7803/
+        │       ├── _metadata/
+        │       │   └── verified_contents.json
+        │       ├── listdata.json
+        │       └── manifest.json
+        ├── AmountExtractionHeuristicRegexes/
+        │   └── 4/
+        │       ├── _metadata/
+        │       │   └── verified_contents.json
+        │       ├── heuristic_regexes.binarypb
+        │       └── manifest.json
+        ├── CertificateRevocation/
+        │   └── 10308/
+        │       ├── LICENSE
+        │       ├── _metadata/
+        │       │   └── verified_contents.json
+        │       ├── crl-set
+        │       └── manifest.json
+        ├── Crashpad/
+        │   ├── attachments/
+        │   ├── metadata
+        │   ├── reports/
+        │   └── settings.dat
+        ├── Crowd Deny/
+        │   └── 2026.1.26.121/
+        │       ├── Preload Data
+        │       ├── _metadata/
+        │       │   └── verified_contents.json
+        │       └── manifest.json
+        ├── Default/
+        │   ├── Account Web Data
+        │   ├── Account Web Data-journal
+        │   ├── Affiliation Database
+        │   ├── Affiliation Database-journal
+        │   ├── AutofillAiModelCache/
+        │   │   ├── LOCK
+        │   │   ├── LOG
+        │   │   └── LOG.old
+        │   ├── AutofillStrikeDatabase/
+        │   │   ├── LOCK
+        │   │   ├── LOG
+        │   │   └── LOG.old
+        │   ├── BookmarkMergedSurfaceOrdering
+        │   ├── BrowsingTopicsSiteData
+        │   ├── BrowsingTopicsSiteData-journal
+        │   ├── BrowsingTopicsState
+        │   ├── BudgetDatabase/
+        │   │   ├── LOCK
+        │   │   ├── LOG
+        │   │   └── LOG.old
+        │   ├── Cache/
+        │   │   ├── Cache_Data/
+        │   │   │   ├── index
+        │   │   │   ├── sqldb0
+        │   │   │   ├── sqldb1
+        │   │   │   └── sqldb2
+        │   │   └── No_Vary_Search/
+        │   │       ├── journal.baj
+        │   │       └── snapshot.baf
+        │   ├── ClientCertificates/
+        │   │   ├── LOCK
+        │   │   ├── LOG
+        │   │   └── LOG.old
+        │   ├── Code Cache/
+        │   │   └── pc/
+        │   │       ├── 05_@;2t2fb2=a6@=`6`2`25[.9092[9660;65-[99164=57144=815`2.db
+        │   │       ├── 05_@;2t2fb2=a6@=`6`2`25[.9092[9660;65-[99164=57144=815`2.journal
+        │   │       ├── 5bb[a`6`2`24@@492u0@;`2.db
+        │   │       └── 5bb[a`6`2`24@@492u0@;`2.journal
+        │   ├── Collaboration/
+        │   │   ├── MessageDB
+        │   │   └── MessageDB-journal
+        │   ├── DIPS
+        │   ├── DataSharing/
+        │   │   ├── DataSharingDB
+        │   │   └── DataSharingDB-journal
+        │   ├── DawnGraphiteCache/
+        │   │   ├── data_0
+        │   │   ├── data_1
+        │   │   ├── data_2
+        │   │   ├── data_3
+        │   │   └── index
+        │   ├── DawnWebGPUCache/
+        │   │   ├── data_0
+        │   │   ├── data_1
+        │   │   ├── data_2
+        │   │   ├── data_3
+        │   │   └── index
+        │   ├── Extension Cookies
+        │   ├── Extension Cookies-journal
+        │   ├── Extension Rules/
+        │   │   ├── 000003.log
+        │   │   ├── CURRENT
+        │   │   ├── LOCK
+        │   │   ├── LOG
+        │   │   ├── LOG.old
+        │   │   └── MANIFEST-000001
+        │   ├── Extension Scripts/
+        │   │   ├── 000003.log
+        │   │   ├── CURRENT
+        │   │   ├── LOCK
+        │   │   ├── LOG
+        │   │   ├── LOG.old
+        │   │   └── MANIFEST-000001
+        │   ├── Extension State/
+        │   │   ├── 000003.log
+        │   │   ├── CURRENT
+        │   │   ├── LOCK
+        │   │   ├── LOG
+        │   │   ├── LOG.old
+        │   │   └── MANIFEST-000001
+        │   ├── Favicons
+        │   ├── Favicons-journal
+        │   ├── Feature Engagement Tracker/
+        │   │   ├── AvailabilityDB/
+        │   │   │   ├── LOCK
+        │   │   │   ├── LOG
+        │   │   │   └── LOG.old
+        │   │   └── EventDB/
+        │   │       ├── LOCK
+        │   │       ├── LOG
+        │   │       └── LOG.old
+        │   ├── GCM Store/
+        │   │   ├── 000003.log
+        │   │   ├── CURRENT
+        │   │   ├── LOCK
+        │   │   ├── LOG
+        │   │   ├── LOG.old
+        │   │   └── MANIFEST-000001
+        │   ├── GPUCache/
+        │   │   ├── data_0
+        │   │   ├── data_1
+        │   │   ├── data_2
+        │   │   ├── data_3
+        │   │   └── index
+        │   ├── History
+        │   ├── History-journal
+        │   ├── InterestGroups
+        │   ├── LOCK
+        │   ├── LOG
+        │   ├── LOG.old
+        │   ├── Local Extension Settings/
+        │   │   └── hpblclepliicmihaplldignhjdggnkdh/
+        │   │       ├── 000003.log
+        │   │       ├── CURRENT
+        │   │       ├── LOCK
+        │   │       ├── LOG
+        │   │       └── MANIFEST-000001
+        │   ├── Local Storage/
+        │   │   └── leveldb/
+        │   │       ├── 000003.log
+        │   │       ├── CURRENT
+        │   │       ├── LOCK
+        │   │       ├── LOG
+        │   │       ├── LOG.old
+        │   │       └── MANIFEST-000001
+        │   ├── Login Data
+        │   ├── Login Data For Account
+        │   ├── Login Data For Account-journal
+        │   ├── Login Data-journal
+        │   ├── Network/
+        │   │   ├── Cookies
+        │   │   ├── Cookies-journal
+        │   │   ├── Device Bound Sessions
+        │   │   ├── Device Bound Sessions-journal
+        │   │   ├── Network Persistent State
+        │   │   ├── NetworkDataMigrated
+        │   │   ├── Reporting and NEL
+        │   │   ├── Reporting and NEL-journal
+        │   │   ├── SCT Auditing Pending Reports
+        │   │   ├── TransportSecurity
+        │   │   ├── Trust Tokens
+        │   │   └── Trust Tokens-journal
+        │   ├── Network Action Predictor
+        │   ├── Network Action Predictor-journal
+        │   ├── PersistentOriginTrials/
+        │   │   ├── LOCK
+        │   │   ├── LOG
+        │   │   └── LOG.old
+        │   ├── Platform Notifications/
+        │   │   ├── 000003.log
+        │   │   ├── CURRENT
+        │   │   ├── LOCK
+        │   │   ├── LOG
+        │   │   ├── LOG.old
+        │   │   └── MANIFEST-000001
+        │   ├── Preferences
+        │   ├── PreferredApps
+        │   ├── PrivateAggregation
+        │   ├── PrivateAggregation-journal
+        │   ├── README
+        │   ├── Safe Browsing Network/
+        │   │   ├── NetworkDataMigrated
+        │   │   ├── Safe Browsing Cookies
+        │   │   └── Safe Browsing Cookies-journal
+        │   ├── Secure Preferences
+        │   ├── Segmentation Platform/
+        │   │   ├── SegmentInfoDB/
+        │   │   │   ├── LOCK
+        │   │   │   ├── LOG
+        │   │   │   └── LOG.old
+        │   │   ├── SignalDB/
+        │   │   │   ├── LOCK
+        │   │   │   ├── LOG
+        │   │   │   └── LOG.old
+        │   │   └── SignalStorageConfigDB/
+        │   │       ├── LOCK
+        │   │       ├── LOG
+        │   │       └── LOG.old
+        │   ├── ServerCertificate
+        │   ├── ServerCertificate-journal
+        │   ├── Service Worker/
+        │   │   ├── Database/
+        │   │   │   ├── 000003.log
+        │   │   │   ├── CURRENT
+        │   │   │   ├── LOCK
+        │   │   │   ├── LOG
+        │   │   │   ├── LOG.old
+        │   │   │   └── MANIFEST-000001
+        │   │   └── ScriptCache/
+        │   │       ├── 297ecea5cebb5dfe_0
+        │   │       ├── index
+        │   │       └── index-dir/
+        │   │           └── the-real-index
+        │   ├── Session Storage/
+        │   │   ├── 000003.log
+        │   │   ├── CURRENT
+        │   │   ├── LOCK
+        │   │   ├── LOG
+        │   │   ├── LOG.old
+        │   │   └── MANIFEST-000001
+        │   ├── Sessions/
+        │   │   ├── Apps_13413969048036238
+        │   │   ├── Apps_13413969508979136
+        │   │   ├── Session_13413969053133552
+        │   │   ├── Session_13413969513064396
+        │   │   ├── Tabs_13413969048860986
+        │   │   └── Tabs_13413969509696621
+        │   ├── Shared Dictionary/
+        │   │   ├── cache/
+        │   │   │   ├── index
+        │   │   │   └── index-dir/
+        │   │   │       └── the-real-index
+        │   │   ├── db
+        │   │   └── db-journal
+        │   ├── SharedStorage
+        │   ├── Shortcuts
+        │   ├── Shortcuts-journal
+        │   ├── Site Characteristics Database/
+        │   │   ├── 000003.log
+        │   │   ├── CURRENT
+        │   │   ├── LOCK
+        │   │   ├── LOG
+        │   │   ├── LOG.old
+        │   │   └── MANIFEST-000001
+        │   ├── Sync App Settings/
+        │   ├── Sync Data/
+        │   │   └── LevelDB/
+        │   │       ├── 000003.log
+        │   │       ├── CURRENT
+        │   │       ├── LOCK
+        │   │       ├── LOG
+        │   │       ├── LOG.old
+        │   │       └── MANIFEST-000001
+        │   ├── Sync Extension Settings/
+        │   ├── Top Sites
+        │   ├── Top Sites-journal
+        │   ├── Web Data
+        │   ├── Web Data-journal
+        │   ├── WebStorage/
+        │   │   ├── QuotaManager
+        │   │   └── QuotaManager-journal
+        │   ├── blob_storage/
+        │   │   └── a59eaf46-c2f1-41cc-91e8-c0e5aeacd92e/
+        │   ├── chrome_cart_db/
+        │   │   ├── LOCK
+        │   │   ├── LOG
+        │   │   └── LOG.old
+        │   ├── commerce_subscription_db/
+        │   │   ├── LOCK
+        │   │   ├── LOG
+        │   │   └── LOG.old
+        │   ├── discount_infos_db/
+        │   │   ├── LOCK
+        │   │   ├── LOG
+        │   │   └── LOG.old
+        │   ├── discounts_db/
+        │   │   ├── LOCK
+        │   │   ├── LOG
+        │   │   └── LOG.old
+        │   ├── heavy_ad_intervention_opt_out.db
+        │   ├── heavy_ad_intervention_opt_out.db-journal
+        │   ├── optimization_guide_hint_cache_store/
+        │   │   ├── LOCK
+        │   │   ├── LOG
+        │   │   └── LOG.old
+        │   ├── parcel_tracking_db/
+        │   │   ├── LOCK
+        │   │   ├── LOG
+        │   │   └── LOG.old
+        │   ├── passkey_enclave_state
+        │   ├── power_bookmarks/
+        │   │   ├── PowerBookmarks.db
+        │   │   └── PowerBookmarks.db-journal
+        │   ├── shared_proto_db/
+        │   │   ├── 000003.log
+        │   │   ├── CURRENT
+        │   │   ├── LOCK
+        │   │   ├── LOG
+        │   │   ├── LOG.old
+        │   │   ├── MANIFEST-000001
+        │   │   └── metadata/
+        │   │       ├── 000003.log
+        │   │       ├── CURRENT
+        │   │       ├── LOCK
+        │   │       ├── LOG
+        │   │       ├── LOG.old
+        │   │       └── MANIFEST-000001
+        │   └── trusted_vault.pb
+        ├── DevToolsActivePort
+        ├── FileTypePolicies/
+        │   └── 145.0.7584.0/
+        │       ├── _metadata/
+        │       │   └── verified_contents.json
+        │       ├── download_file_types.pb
+        │       └── manifest.json
+        ├── FirstPartySetsPreloaded/
+        │   └── 2025.7.24.0/
+        │       ├── LICENSE
+        │       ├── _metadata/
+        │       │   └── verified_contents.json
+        │       ├── manifest.json
+        │       └── sets.json
+        ├── GPUPersistentCache/
+        │   └── DawnGraphiteCache/
+        │       └── AD277SZPBPK7F6SGJV5FTCFBB7NJ7QPK/
+        │           ├── cache.db
+        │           ├── cache.db-wal
+        │           └── cache.journal
+        ├── GrShaderCache/
+        │   ├── data_0
+        │   ├── data_1
+        │   ├── data_2
+        │   ├── data_3
+        │   └── index
+        ├── HistorySearch/
+        │   └── 6.7431.9692/
+        │       ├── _metadata/
+        │       │   └── verified_contents.json
+        │       ├── history_search_strings_farmhashed.binarypb
+        │       └── manifest.json
+        ├── Last Browser
+        ├── Last Version
+        ├── Local State
+        ├── MEIPreload/
+        │   └── 1.1.0.2/
+        │       ├── _metadata/
+        │       │   └── verified_contents.json
+        │       ├── manifest.json
+        │       └── preloaded_data.pb
+        ├── OnDeviceHeadSuggestModel/
+        │   └── 20251024.824731831.14/
+        │       ├── _metadata/
+        │       │   └── verified_contents.json
+        │       ├── cr_en-us_500000_index.bin
+        │       └── manifest.json
+        ├── OptimizationHints/
+        │   └── 615/
+        │       ├── _metadata/
+        │       │   └── verified_contents.json
+        │       ├── manifest.json
+        │       └── optimization-hints.pb
+        ├── OriginTrials/
+        ├── PKIMetadata/
+        │   └── 1562/
+        │       ├── _metadata/
+        │       │   └── verified_contents.json
+        │       ├── crs.pb
+        │       ├── ct_config.pb
+        │       ├── kp_pinslist.pb
+        │       └── manifest.json
+        ├── PlusAddressBlocklist/
+        │   └── 3/
+        │       ├── _metadata/
+        │       │   └── verified_contents.json
+        │       ├── compact_blocked_facets.pb
+        │       └── manifest.json
+        ├── PrivacySandboxAttestationsPreloaded/
+        ├── SSLErrorAssistant/
+        │   └── 7/
+        │       ├── _metadata/
+        │       │   └── verified_contents.json
+        │       ├── manifest.json
+        │       └── ssl_error_assistant.pb
+        ├── Safe Browsing/
+        ├── SafetyTips/
+        │   └── 3091/
+        │       ├── _metadata/
+        │       │   └── verified_contents.json
+        │       ├── manifest.json
+        │       └── safety_tips.pb
+        ├── ShaderCache/
+        │   ├── data_0
+        │   ├── data_1
+        │   ├── data_2
+        │   ├── data_3
+        │   └── index
+        ├── Subresource Filter/
+        │   ├── Indexed Rules/
+        │   │   └── 37/
+        │   │       └── 9.64.0/
+        │   │           └── Ruleset Data
+        │   └── Unindexed Rules/
+        │       └── 9.64.0/
+        │           ├── Filtering Rules
+        │           ├── LICENSE.txt
+        │           ├── _metadata/
+        │           │   └── verified_contents.json
+        │           └── manifest.json
+        ├── TpcdMetadata/
+        │   └── 2025.10.7.1/
+        │       ├── _metadata/
+        │       │   └── verified_contents.json
+        │       ├── manifest.json
+        │       └── metadata.pb
+        ├── TrustTokenKeyCommitments/
+        │   └── 2025.9.29.1/
+        │       ├── LICENSE
+        │       ├── _metadata/
+        │       │   └── verified_contents.json
+        │       ├── keys.json
+        │       └── manifest.json
+        ├── Variations
+        ├── WasmTtsEngine/
+        │   └── 20260122.1/
+        │       ├── _metadata/
+        │       │   └── verified_contents.json
+        │       ├── background_compiled.js
+        │       ├── bindings_main.js
+        │       ├── bindings_main.wasm
+        │       ├── manifest.json
+        │       ├── offscreen.html
+        │       ├── offscreen_compiled.js
+        │       ├── streaming_worklet_processor.js
+        │       ├── voices.json
+        │       └── wasm_tts_manifest_v3.json
+        ├── ZxcvbnData/
+        │   └── 3/
+        │       ├── _metadata/
+        │       │   └── verified_contents.json
+        │       ├── english_wikipedia.txt
+        │       ├── female_names.txt
+        │       ├── male_names.txt
+        │       ├── manifest.json
+        │       ├── passwords.txt
+        │       ├── ranked_dicts
+        │       ├── surnames.txt
+        │       └── us_tv_and_film.txt
+        ├── component_crx_cache/
+        │   ├── 00e6a1f0d9e926ed6cc8081ab5cba537f78b8eb9b84bd6fe69851388d81d8d5e
+        │   ├── 1d8841b32883d1b437c141301250512840d957c652328ffc1a6f7cd0cfa5e371
+        │   ├── 23759e3f6d0119a00038b963cec9fb7abafd7b65a35a7e83c7697511db59e6e7
+        │   ├── 261bea60d22ebca3a95ce335c03ec751a0b58b2b7bdbd6ea51dfa54381b07775
+        │   ├── 3c143c90ecc1782e53738192a23067da69fe5b63daec935cfb3c19898e5acfa6
+        │   ├── 4a06cfbce6f26c81ec6cba52e84985c0111183e0b06a953b14992b4511bb78af
+        │   ├── 4ba115c8f775bb4fdc6653bde09327a7e2a369f783f9823fc915fefc3d4c690c
+        │   ├── 545666a4efd056351597bb386aea1368105ededc976ed5650d8682daab9f37ff
+        │   ├── 56c21927faa028be6ce18c931660eec37e41da4bfbfd47cafa48350f828c0dbd
+        │   ├── 6f9945bb965ce4aef3427164fc19faf47a46b069dd2c9f1f931858445e1652a0
+        │   ├── 9bec6c2c0185d3305ac8495047a1aa01e725d58f8f18d219742a2988f07cd93a
+        │   ├── abd93867c038d4d17c101ace2226d7e21303d984d7097271392bae6be478495b
+        │   ├── c52c62a7c50daf7d3f73ec16977cd4b0ea401710807d5dbe3850941dd1b73a70
+        │   ├── caf22da361a099ee7f504cfd6018872cff61e16946d0a5a57fb07c529bfa8072
+        │   ├── dcf55d426f73919cddae73510fd466d107bff68ca7501509a33071b525caec35
+        │   ├── e7ae6dfb46e1015bb54074e3eff552f42d9dd765d6d7af59c428358d73061eea
+        │   ├── e7d940df2c889e995be27b7048b6b314efe610aa7e87b9a003973ce9a2c985ae
+        │   ├── ed43e732234cc8b79a137be0a0aab8f72b37ae6ca51caf1292986edbf618c1d1
+        │   ├── fd124e777b43bc3e89f541334adbc22a169035b90f065947ce390f3f9541f307
+        │   └── metadata.json
+        ├── extension/
+        │   ├── 128x128.png
+        │   ├── background.js
+        │   ├── content.js
+        │   ├── discovery/
+        │   │   ├── content-aistudio.js
+        │   │   ├── discovery.js
+        │   │   ├── discoveryProtocol.js
+        │   │   ├── index.html
+        │   │   ├── onboarding.js
+        │   │   ├── script.js
+        │   │   └── styles.css
+        │   ├── discovery.synapse.config.js
+        │   ├── icon128.png
+        │   ├── icon16.png
+        │   ├── landing/
+        │   │   ├── data-loader.js
+        │   │   ├── index.html
+        │   │   ├── landing.js
+        │   │   ├── landingProtocol.js
+        │   │   ├── manifest.json
+        │   │   └── styles.css
+        │   └── manifest.json
+        ├── extensions_crx_cache/
+        │   └── metadata.json
+        ├── first_party_sets.db
+        ├── first_party_sets.db-journal
+        ├── hyphen-data/
+        │   └── 120.0.6050.0/
+        │       ├── _metadata/
+        │       │   └── verified_contents.json
+        │       ├── hyph-af.hyb
+        │       ├── hyph-as.hyb
+        │       ├── hyph-be.hyb
+        │       ├── hyph-bg.hyb
+        │       ├── hyph-bn.hyb
+        │       ├── hyph-cs.hyb
+        │       ├── hyph-cu.hyb
+        │       ├── hyph-cy.hyb
+        │       ├── hyph-da.hyb
+        │       ├── hyph-de-1901.hyb
+        │       ├── hyph-de-1996.hyb
+        │       ├── hyph-de-ch-1901.hyb
+        │       ├── hyph-el.hyb
+        │       ├── hyph-en-gb.hyb
+        │       ├── hyph-en-us.hyb
+        │       ├── hyph-es.hyb
+        │       ├── hyph-et.hyb
+        │       ├── hyph-eu.hyb
+        │       ├── hyph-fr.hyb
+        │       ├── hyph-ga.hyb
+        │       ├── hyph-gl.hyb
+        │       ├── hyph-gu.hyb
+        │       ├── hyph-hi.hyb
+        │       ├── hyph-hr.hyb
+        │       ├── hyph-hu.hyb
+        │       ├── hyph-hy.hyb
+        │       ├── hyph-it.hyb
+        │       ├── hyph-ka.hyb
+        │       ├── hyph-kn.hyb
+        │       ├── hyph-la.hyb
+        │       ├── hyph-lt.hyb
+        │       ├── hyph-lv.hyb
+        │       ├── hyph-ml.hyb
+        │       ├── hyph-mn-cyrl.hyb
+        │       ├── hyph-mr.hyb
+        │       ├── hyph-mul-ethi.hyb
+        │       ├── hyph-nb.hyb
+        │       ├── hyph-nl.hyb
+        │       ├── hyph-nn.hyb
+        │       ├── hyph-or.hyb
+        │       ├── hyph-pa.hyb
+        │       ├── hyph-pt.hyb
+        │       ├── hyph-ru.hyb
+        │       ├── hyph-sk.hyb
+        │       ├── hyph-sl.hyb
+        │       ├── hyph-sq.hyb
+        │       ├── hyph-sv.hyb
+        │       ├── hyph-ta.hyb
+        │       ├── hyph-te.hyb
+        │       ├── hyph-tk.hyb
+        │       ├── hyph-uk.hyb
+        │       ├── hyph-und-ethi.hyb
+        │       └── manifest.json
+        └── segmentation_platform/
+            ├── ukm_db
+            └── ukm_db-wal

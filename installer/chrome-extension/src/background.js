@@ -38,8 +38,19 @@ async function detectActiveMode() {
 }
 
 function validateConfig(mode) {
+  if (!config) {
+    console.error('[Synapse] ✗ Config is null or undefined');
+    return;
+  }
+
   const requiredBase = ['profileId', 'bridge_name', 'launchId', 'profile_alias', 'extension_id'];
-  const requiredDiscovery = ['register', 'email'];
+  
+  // ✅ CORREGIDO: Solo requerir email si register === true
+  let requiredDiscovery = ['register'];
+  if (config.register === true) {
+    requiredDiscovery.push('email');
+  }
+  
   const requiredLanding = ['total_launches', 'uptime', 'intents_done', 'last_synch'];
 
   const required = [
@@ -51,8 +62,24 @@ function validateConfig(mode) {
 
   if (missing.length > 0) {
     console.error(`[Synapse] ✗ Missing config keys (${mode} mode):`, missing);
+    console.error('[Synapse] Current config:', config);
+    console.error('[Synapse] Required keys:', required);
+    
+    // Hint especial para el campo email
+    if (missing.includes('email') && config.register === true) {
+      console.error('[Synapse] ℹ️  Email is required because register=true');
+    }
   } else {
     console.log(`[Synapse] ✓ All required config keys present (${mode} mode)`);
+    console.log('[Synapse] Config summary:', {
+      mode: config.mode,
+      profileId: config.profileId,
+      bridge_name: config.bridge_name,
+      profile_alias: config.profile_alias,
+      register: config.register,
+      hasEmail: !!config.email,
+      emailRequired: config.register === true
+    });
   }
 }
 
@@ -76,85 +103,130 @@ async function initialize() {
 
 async function loadConfig() {
   try {
-    // ⭐ PASO 1: Determinar qué modo está activo
     const mode = await detectActiveMode();
     console.log('[Synapse] Active mode detected:', mode);
 
-    // ⭐ PASO 2: Definir matchers según el modo
+    // Matchers base (siempre requeridos)
     const baseMatchers = {
-      profileId: /profileId:\s*['"]([^'"]+)['"]/,
-      bridge_name: /bridge_name:\s*['"]([^'"]+)['"]/,
-      launchId: /launchId:\s*['"]([^'"]+)['"]/,
-      profile_alias: /profile_alias:\s*['"]([^'"]+)['"]/,
-      extension_id: /extension_id:\s*['"]([^'"]+)['"]/
+      profileId: /"profileId"\s*:\s*"([^"]+)"/,
+      bridge_name: /"bridge_name"\s*:\s*"([^"]+)"/,
+      launchId: /"launchId"\s*:\s*"([^"]+)"/,
+      profile_alias: /"profile_alias"\s*:\s*"([^"]+)"/,
+      extension_id: /"extension_id"\s*:\s*"([^"]+)"/
     };
 
-    const discoveryMatchers = {
-      register: /register:\s*(true|false)/,
-      email: /email:\s*['"]([^'"]+)['"]/
+    // Matcher para register (siempre en discovery)
+    const registerMatcher = {
+      register: /"register"\s*:\s*(true|false)/
     };
 
+    // Matcher para email (condicional)
+    const emailMatcher = {
+      email: /"email"\s*:\s*"([^"]+)"/
+    };
+
+    // Matchers para landing
     const landingMatchers = {
-      total_launches: /total_launches:\s*(\d+)/,
-      uptime: /uptime:\s*(\d+)/,
-      intents_done: /intents_done:\s*(\d+)/,
-      last_synch: /last_synch:\s*['"]([^'"]+)['"]/
+      total_launches: /"total_launches"\s*:\s*(\d+)/,
+      uptime: /"uptime"\s*:\s*(\d+)/,
+      intents_done: /"intents_done"\s*:\s*(\d+)/,
+      last_synch: /"last_synch"\s*:\s*"([^"]+)"/
     };
 
-    const matchers = {
-      ...baseMatchers,
-      ...(mode === 'discovery' ? discoveryMatchers : landingMatchers)
-    };
-
-    // ⭐ PASO 3: Cargar config desde RAÍZ (no subcarpetas)
     const configFile = mode === 'discovery' 
       ? 'discovery.synapse.config.js'
       : 'landing.synapse.config.js';
 
-    // Intento 1: importScripts desde raíz
+    console.log('[Synapse] Loading config file:', configFile);
+
+    // Intento 1: importScripts
     try {
+      console.log('[Synapse] Attempting importScripts...');
       importScripts(configFile);
       
       if (self.SYNAPSE_CONFIG) {
         config = { ...self.SYNAPSE_CONFIG, mode };
         console.log(`[Synapse] ✓ Config loaded via importScripts (${mode} mode):`, config);
+        
+        await chrome.storage.local.set({ synapseMode: mode });
+        validateConfig(mode);
+        return;
       } else {
-        throw new Error('SYNAPSE_CONFIG not defined');
+        throw new Error('SYNAPSE_CONFIG not defined after importScripts');
       }
       
     } catch (importError) {
-      console.log('[Synapse] importScripts failed, using fetch...');
+      console.warn('[Synapse] importScripts failed:', importError.message);
+      console.log('[Synapse] Attempting fetch fallback...');
       
-      // Intento 2: fetch desde raíz
-      const resp = await fetch(chrome.runtime.getURL(configFile));
-      const text = await resp.text();
-      
-      config = { mode };
-      
-      for (const [key, regex] of Object.entries(matchers)) {
-        const match = text.match(regex);
-        if (match) {
-          if (key === 'register') {
-            config[key] = match[1] === 'true';
-          } else if (['total_launches', 'uptime', 'intents_done'].includes(key)) {
-            config[key] = parseInt(match[1], 10);
+      // Intento 2: fetch + parse
+      try {
+        const url = chrome.runtime.getURL(configFile);
+        console.log('[Synapse] Fetching from URL:', url);
+        
+        const resp = await fetch(url);
+        
+        if (!resp.ok) {
+          throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+        }
+        
+        const text = await resp.text();
+        console.log('[Synapse] Config file content length:', text.length);
+        console.log('[Synapse] First 200 chars:', text.substring(0, 200));
+        
+        config = { mode };
+        
+        // PASO 1: Parsear campos base + register
+        const initialMatchers = {
+          ...baseMatchers,
+          ...(mode === 'discovery' ? registerMatcher : landingMatchers)
+        };
+        
+        for (const [key, regex] of Object.entries(initialMatchers)) {
+          const match = text.match(regex);
+          
+          if (match) {
+            let value;
+            if (key === 'register') {
+              value = match[1] === 'true';
+            } else if (['total_launches', 'uptime', 'intents_done'].includes(key)) {
+              value = parseInt(match[1], 10);
+            } else {
+              value = match[1];
+            }
+            
+            config[key] = value;
+            console.log(`[Synapse] ✓ Parsed ${key}:`, value);
           } else {
-            config[key] = match[1];
+            console.warn(`[Synapse] ✗ Could not parse ${key} with regex:`, regex);
           }
         }
-      }
+        
+        // PASO 2: Si modo discovery Y register=true, parsear email
+        if (mode === 'discovery' && config.register === true) {
+          const emailMatch = text.match(emailMatcher.email);
+          if (emailMatch) {
+            config.email = emailMatch[1];
+            console.log(`[Synapse] ✓ Parsed email:`, config.email);
+          } else {
+            console.warn(`[Synapse] ✗ Could not parse email (required when register=true)`);
+          }
+        }
 
-      console.log(`[Synapse] ✓ Config loaded via fetch (${mode} mode):`, config);
+        console.log(`[Synapse] ✓ Config loaded via fetch (${mode} mode):`, config);
+        
+      } catch (fetchError) {
+        console.error('[Synapse] ✗ Fetch failed:', fetchError);
+        throw fetchError;
+      }
     }
 
-    // ⭐ PASO 4: Guardar modo activo en storage
     await chrome.storage.local.set({ synapseMode: mode });
-
-    // ⭐ PASO 5: Validar configuración
     validateConfig(mode);
 
   } catch (e) {
     console.error('[Synapse] ✗ Config load failed:', e);
+    console.error('[Synapse] Stack trace:', e.stack);
   }
 }
 

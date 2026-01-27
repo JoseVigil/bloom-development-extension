@@ -129,8 +129,12 @@ while ($buildJob.State -eq "Running") {
 
     # 3. Dibujar Spinner. Si el progreso es 0, mostramos que está iniciando.
     $frame = $SPINNER[$spinnerIndex]
-    $text = "`r   $frame Compilando con PyInstaller... [$currentPercent%]"
-    Write-Host $text.PadRight(60) -NoNewline -ForegroundColor Cyan
+
+    Write-Host "`r   " -NoNewline
+    Write-Host $frame -NoNewline -ForegroundColor Yellow
+    Write-Host " Compilando con PyInstaller... " -NoNewline -ForegroundColor Cyan
+    Write-Host "[$currentPercent%]" -NoNewline -ForegroundColor Magenta
+    Write-Host " ".PadRight(10) -NoNewline
     
     $spinnerIndex = ($spinnerIndex + 1) % $SPINNER.Count
     Start-Sleep -Milliseconds 150
@@ -152,21 +156,36 @@ Write-Host ""
 Remove-Job -Job $buildJob -Force
 
 # --- RESUMEN DE HITOS ---
+Write-Host ""
+Write-Host "   HITOS IMPORTANTES" -ForegroundColor Cyan
+
+$basePath = (Get-Location).Path
+
 $importantLines = $buildOutput | Where-Object {
-    ( $_ -match "VERSION file creado" -or $_ -match "Completado:" -or 
-      $_ -match "Archivos copiados" -or $_ -match "Ejecutable creado" ) -and ($_ -notmatch "\[PROG:")
+    $_ -and
+    $_ -notmatch "\[PROG:" -and
+    (
+        $_ -match "VERSION file creado" -or
+        $_ -match "Completado:" -or
+        $_ -match "Archivos copiados" -or
+        $_ -match "Ejecutable creado"
+    )
 }
 
-foreach ($line in $importantLines) {
-    $cleanLine = $line -replace '\[\d+m', '' -replace '\[.*?\]\s*', '' -replace '^\s+', ''
-    if ($cleanLine -match "Completado:") {
-        $parts = $cleanLine -split "Completado:", 2
-        Write-Host "      Completado:" -NoNewline -ForegroundColor White
-        Write-Host $parts[1] -ForegroundColor Green
-    } else {
-        Write-Host "      $cleanLine" -ForegroundColor Gray
+foreach ($rawLine in $importantLines) {
+
+    $line = ([string]$rawLine).Trim()
+    $line = $line -replace "`e\[[\d;]*m", ""
+
+    # Rutas relativas
+    if ($line -match ":\\" ) {
+        $line = $line -replace [regex]::Escape($basePath), "."
     }
+
+    Write-Host "        $line" -ForegroundColor Green
 }
+
+
 Write-Separator
 
 if ($buildExitCode -ne 0) { Write-Error "Build fallo catastróficamente." }

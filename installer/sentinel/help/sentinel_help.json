@@ -49,16 +49,51 @@
     ],
     "options": [
       {
-        "name": "config-override",
-        "usage": "JSON para sobrescribir campos en synapse.config.js"
+        "name": "add-account",
+        "usage": "Agregar linked account (formato: provider,email_or_username,status). Repetible"
+      },
+      {
+        "name": "config-file",
+        "usage": "Cargar overrides desde JSON. Usar @archivo.json o - para STDIN"
       },
       {
         "name": "mode",
         "usage": "Modo de lanzamiento (landing o discovery)",
         "default": "landing"
+      },
+      {
+        "name": "override-alias",
+        "usage": "Sobrescribir alias del perfil"
+      },
+      {
+        "name": "override-email",
+        "usage": "Sobrescribir email"
+      },
+      {
+        "name": "override-extension",
+        "usage": "Sobrescribir extension ID"
+      },
+      {
+        "name": "override-register",
+        "usage": "Sobrescribir flag de registro",
+        "default": "false"
+      },
+      {
+        "name": "override-role",
+        "usage": "Sobrescribir rol (ej: Worker, Specialist, Premium)"
+      },
+      {
+        "name": "override-step",
+        "usage": "Sobrescribir step actual",
+        "default": "0"
+      },
+      {
+        "name": "save",
+        "usage": "Persistir overrides en profiles.json",
+        "default": "false"
       }
     ],
-    "example": "  sentinel launch profile_001 --mode landing\n  sentinel --json launch profile_002 --mode discovery | jq .\n  sentinel --json launch profile_003 --mode discovery --config-override '{\"register\":true,\"email\":\"user@example.com\"}'",
+    "example": "  sentinel launch profile_001 --mode landing\n  sentinel launch profile_002 --mode discovery --override-alias \"TestWorker\"\n  sentinel launch profile_003 --override-role \"Premium\" --save\n  sentinel launch profile_004 --add-account \"Google,user@gmail.com,active\" --save\n  sentinel launch profile_005 --config-file @overrides.json --save\n  sentinel --json launch profile_006 --mode discovery | jq .",
     "requires": "  - El perfil debe existir (usar 'sentinel seed' primero)\n  - brain.exe disponible y ejecutable\n  - Puerto 5678 libre para servicio Brain\n  - Extension ID válido en ignition_spec.json\n  - bloom-host.exe en bin/native/ para Native Messaging"
   },
   {
