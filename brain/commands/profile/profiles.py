@@ -2,6 +2,11 @@
 Comandos para gestión de perfiles de Chrome (Workers).
 Versión refactorizada con logger dedicado para perfiles.
 Launch mode actualizado: Solo acepta --spec (v2.0+).
+
+CHANGELOG v2.4:
+- Error handling estructurado desde ProfileLauncher
+- Manejo de LaunchError con códigos y data
+- Clasificación de errores fatales vs recuperables
 """
 
 import typer
@@ -62,7 +67,7 @@ class ProfilesListCommand(BaseCommand):
                 logger.info("✅ Comando profile list completado")
                 
             except Exception as e:
-                logger.error(f"✗ Error al listar perfiles: {str(e)}", exc_info=True)
+                logger.error(f"❌ Error al listar perfiles: {str(e)}", exc_info=True)
                 self._handle_error(gc, f"Error al listar perfiles: {e}")
 
     def _render_list(self, data: dict) -> None:
@@ -102,10 +107,9 @@ class ProfilesListCommand(BaseCommand):
     def _handle_error(self, gc, message: str):
         """Manejo unificado de errores."""
         if gc.json_mode:
-            import json
             typer.echo(json.dumps({"status": "error", "message": message}))
         else:
-            typer.echo(f"✗ {message}", err=True)
+            typer.echo(f"❌ {message}", err=True)
         raise typer.Exit(code=1)
 
 
@@ -166,7 +170,6 @@ class ProfilesCreateCommand(BaseCommand):
                         "status": "success"
                     }
                     # Usar dumps directamente para control total
-                    import json
                     output = json.dumps(result, ensure_ascii=False)
                     typer.echo(output)
                     logger.info("✅ Comando profile create completado (JSON)")
@@ -180,7 +183,7 @@ class ProfilesCreateCommand(BaseCommand):
                     logger.info("✅ Comando profile create completado")
                 
             except Exception as e:
-                logger.error(f"✗ Error al crear perfil '{alias}': {str(e)}", exc_info=True)
+                logger.error(f"❌ Error al crear perfil '{alias}': {str(e)}", exc_info=True)
                 self._handle_error(gc, f"Error al crear perfil: {str(e)}")
 
     def _render_create(self, data: dict) -> None:
@@ -195,7 +198,7 @@ class ProfilesCreateCommand(BaseCommand):
         typer.echo(f"   Ruta:  {profile.get('path', 'N/A')}")
         
         if is_master:
-            typer.echo(f"   🔑 Tipo:  Perfil Master")
+            typer.echo(f"   🔐 Tipo:  Perfil Master")
         
         profile_id = profile.get('id')
         launch_id = (profile_id[:8] + '...') if isinstance(profile_id, str) and profile_id else 'N/A'
@@ -204,10 +207,9 @@ class ProfilesCreateCommand(BaseCommand):
     def _handle_error(self, gc, message: str):
         """Manejo unificado de errores."""
         if gc.json_mode:
-            import json
             typer.echo(json.dumps({"status": "error", "message": message}))
         else:
-            typer.echo(f"✗ {message}", err=True)
+            typer.echo(f"❌ {message}", err=True)
         raise typer.Exit(code=1)
 
 
@@ -218,7 +220,7 @@ class ProfilesLaunchCommand(BaseCommand):
         return CommandMetadata(
             name="launch",
             category=CommandCategory.PROFILE,
-            version="2.1.0",
+            version="2.4.0",  # Version bump por error handling
             description="Lanza Chrome con un perfil de Worker usando spec-driven mode",
             examples=[
                 "brain profile launch <id> --spec /path/to/spec.json --mode discovery",
@@ -251,7 +253,7 @@ class ProfilesLaunchCommand(BaseCommand):
             # Validación de mode
             valid_modes = ['discovery', 'landing']
             if mode not in valid_modes:
-                logger.error(f"✗ Modo inválido: {mode}")
+                logger.error(f"❌ Modo inválido: {mode}")
                 error_msg = (
                     f"⚙️ Modo '{mode}' no es válido\n\n"
                     "Modos disponibles:\n"
@@ -264,7 +266,7 @@ class ProfilesLaunchCommand(BaseCommand):
             
             # Validación temprana del spec
             if not spec:
-                logger.error("✗ Flag --spec es obligatorio")
+                logger.error("❌ Flag --spec es obligatorio")
                 error_msg = (
                     "⚙️ Launch requiere el flag --spec (spec-driven mode)\n\n"
                     "Convention mode deprecated desde v2.0\n\n"
@@ -277,7 +279,7 @@ class ProfilesLaunchCommand(BaseCommand):
             
             spec_path = Path(spec)
             if not spec_path.exists():
-                logger.error(f"✗ Archivo spec no encontrado: {spec}")
+                logger.error(f"❌ Archivo spec no encontrado: {spec}")
                 self._handle_error(gc, f"Archivo spec no encontrado: {spec}")
             
             try:
@@ -299,14 +301,15 @@ class ProfilesLaunchCommand(BaseCommand):
                 logger.debug(f"  → page_config: {spec_data['page_config']}")
                 
             except json.JSONDecodeError as e:
-                logger.error(f"✗ JSON inválido en spec: {e}")
+                logger.error(f"❌ JSON inválido en spec: {e}")
                 self._handle_error(gc, f"JSON inválido en spec: {e}")
             except Exception as e:
-                logger.error(f"✗ Error al leer spec: {e}")
+                logger.error(f"❌ Error al leer spec: {e}")
                 self._handle_error(gc, f"Error al leer spec: {e}")
             
             try:
                 from brain.core.profile.profile_manager import ProfileManager
+                from brain.core.profile.profile_launcher import LaunchError
                 
                 if gc.verbose:
                     mode_desc = "ONBOARDING" if mode == "discovery" else "DASHBOARD"
@@ -334,15 +337,35 @@ class ProfilesLaunchCommand(BaseCommand):
                 gc.output(result, self._render_launch)
                 logger.info("✅ Comando profile launch completado")
                 
+            except LaunchError as e:
+                # ✅ Error estructurado desde ProfileLauncher
+                logger.error(f"❌ Launch error [{e.code}]: {e}", exc_info=False)
+                
+                error_result = {
+                    "status": "error",
+                    "message": str(e),
+                    "code": e.code,
+                    "data": e.data
+                }
+                
+                if gc.json_mode:
+                    typer.echo(json.dumps(error_result))
+                else:
+                    typer.echo(f"❌ {e}", err=True)
+                    if gc.verbose and e.data:
+                        typer.echo(f"   Details: {json.dumps(e.data, indent=2)}", err=True)
+                
+                raise typer.Exit(code=1)
+                
             except FileNotFoundError as e:
-                logger.error(f"✗ Archivo no encontrado: {str(e)}")
+                logger.error(f"❌ Archivo no encontrado: {str(e)}")
                 self._handle_error(gc, str(e))
             except ValueError as e:
-                logger.error(f"✗ Error de validación: {str(e)}")
+                logger.error(f"❌ Error de validación: {str(e)}")
                 self._handle_error(gc, str(e))
             except Exception as e:
-                logger.error(f"✗ Error al lanzar perfil: {str(e)}", exc_info=True)
-                self._handle_error(gc, f"Error al lanzar perfil: {str(e)}")
+                logger.error(f"❌ Error inesperado: {str(e)}", exc_info=True)
+                self._handle_error(gc, f"Unexpected error: {str(e)}")
 
     def _render_launch(self, data: dict) -> None:
         """Renderiza la confirmación de lanzamiento."""
@@ -357,6 +380,14 @@ class ProfilesLaunchCommand(BaseCommand):
         typer.echo(f"   ID:     {profile_id}")
         typer.echo(f"   Página: {mode_emoji} {mode} ({mode_desc})")
         typer.echo(f"   Estado: {launch_data.get('engine', 'unknown')}\n")
+
+    def _handle_error(self, gc, message: str):
+        """Manejo unificado de errores."""
+        if gc.json_mode:
+            typer.echo(json.dumps({"status": "error", "message": message}))
+        else:
+            typer.echo(f"❌ {message}", err=True)
+        raise typer.Exit(code=1)
 
 
 class ProfilesDestroyCommand(BaseCommand):
@@ -414,7 +445,7 @@ class ProfilesDestroyCommand(BaseCommand):
                 logger.info("✅ Comando profile destroy completado")
                 
             except Exception as e:
-                logger.error(f"✗ Error al eliminar perfil: {str(e)}", exc_info=True)
+                logger.error(f"❌ Error al eliminar perfil: {str(e)}", exc_info=True)
                 self._handle_error(gc, f"Error al eliminar perfil: {str(e)}")
 
     def _render_destroy(self, data: dict) -> None:
@@ -426,10 +457,9 @@ class ProfilesDestroyCommand(BaseCommand):
     def _handle_error(self, gc, message: str):
         """Manejo unificado de errores."""
         if gc.json_mode:
-            import json
             typer.echo(json.dumps({"status": "error", "message": message}))
         else:
-            typer.echo(f"✗ {message}", err=True)
+            typer.echo(f"❌ {message}", err=True)
         raise typer.Exit(code=1)
 
 
@@ -489,7 +519,7 @@ class ProfilesLinkCommand(BaseCommand):
                 logger.info("✅ Comando profile link completado")
                 
             except Exception as e:
-                logger.error(f"✗ Error al vincular cuenta: {str(e)}", exc_info=True)
+                logger.error(f"❌ Error al vincular cuenta: {str(e)}", exc_info=True)
                 self._handle_error(gc, f"Error al vincular cuenta: {str(e)}")
 
     def _render_link(self, data: dict) -> None:
@@ -500,10 +530,9 @@ class ProfilesLinkCommand(BaseCommand):
     def _handle_error(self, gc, message: str):
         """Manejo unificado de errores."""
         if gc.json_mode:
-            import json
             typer.echo(json.dumps({"status": "error", "message": message}))
         else:
-            typer.echo(f"✗ {message}", err=True)
+            typer.echo(f"❌ {message}", err=True)
         raise typer.Exit(code=1)
 
 
@@ -562,7 +591,7 @@ class ProfilesUnlinkCommand(BaseCommand):
                 logger.info("✅ Comando profile unlink completado")
                 
             except Exception as e:
-                logger.error(f"✗ Error al desvincular cuenta: {str(e)}", exc_info=True)
+                logger.error(f"❌ Error al desvincular cuenta: {str(e)}", exc_info=True)
                 self._handle_error(gc, f"Error al desvincular cuenta: {str(e)}")
 
     def _render_unlink(self, data: dict) -> None:
@@ -573,10 +602,9 @@ class ProfilesUnlinkCommand(BaseCommand):
     def _handle_error(self, gc, message: str):
         """Manejo unificado de errores."""
         if gc.json_mode:
-            import json
             typer.echo(json.dumps({"status": "error", "message": message}))
         else:
-            typer.echo(f"✗ {message}", err=True)
+            typer.echo(f"❌ {message}", err=True)
         raise typer.Exit(code=1)
 
 
@@ -638,7 +666,7 @@ class ProfilesAccountsRegisterCommand(BaseCommand):
                 logger.info("✅ Comando profile accounts-register completado")
                 
             except Exception as e:
-                logger.error(f"✗ Error al registrar cuenta: {str(e)}", exc_info=True)
+                logger.error(f"❌ Error al registrar cuenta: {str(e)}", exc_info=True)
                 self._handle_error(gc, f"Error al registrar cuenta: {str(e)}")
 
     def _render_register(self, data: dict) -> None:
@@ -651,10 +679,9 @@ class ProfilesAccountsRegisterCommand(BaseCommand):
     def _handle_error(self, gc, message: str):
         """Manejo unificado de errores."""
         if gc.json_mode:
-            import json
             typer.echo(json.dumps({"status": "error", "message": message}))
         else:
-            typer.echo(f"✗ {message}", err=True)
+            typer.echo(f"❌ {message}", err=True)
         raise typer.Exit(code=1)
 
 
@@ -714,7 +741,7 @@ class ProfilesAccountsRemoveCommand(BaseCommand):
                 logger.info("✅ Comando profile accounts-remove completado")
                 
             except Exception as e:
-                logger.error(f"✗ Error al remover cuenta: {str(e)}", exc_info=True)
+                logger.error(f"❌ Error al remover cuenta: {str(e)}", exc_info=True)
                 self._handle_error(gc, f"Error al remover cuenta: {str(e)}")
 
     def _render_remove(self, data: dict) -> None:
@@ -727,8 +754,7 @@ class ProfilesAccountsRemoveCommand(BaseCommand):
     def _handle_error(self, gc, message: str):
         """Manejo unificado de errores."""
         if gc.json_mode:
-            import json
             typer.echo(json.dumps({"status": "error", "message": message}))
         else:
-            typer.echo(f"✗ {message}", err=True)
+            typer.echo(f"❌ {message}", err=True)
         raise typer.Exit(code=1)

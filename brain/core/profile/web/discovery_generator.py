@@ -51,10 +51,11 @@ def _copy_static_assets(discovery_dir: Path) -> None:
     files_to_copy = [
         "index.html",
         "discovery.js",
+        "script.js",
         "discoveryProtocol.js",
         "content-aistudio.js",
         "onboarding.js",
-        "styles.css"
+        "styles.css"        
     ]
     
     copied = 0
