@@ -264,7 +264,9 @@ bloom-development-extension/
     │   │               ├── data-loader.js
     │   │               ├── index.html
     │   │               ├── landing.js
+    │   │               ├── landing.synapse.config.js
     │   │               ├── landingProtocol.js
+    │   │               ├── script.js
     │   │               └── styles.css
     │   ├── project/
     │   │   ├── __init__.py

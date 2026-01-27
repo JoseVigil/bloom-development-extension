@@ -16,7 +16,8 @@ bloom-development-extension/
         │   ├── discoveryProtocol.js
         │   ├── index.html
         │   ├── onboarding.js
-        │   └── script.js
+        │   ├── script.js
+        │   └── styles.css
         ├── discovery.synapse.config.js
         ├── icon128.png
         ├── icon16.png
@@ -26,6 +27,7 @@ bloom-development-extension/
         │   ├── landing.js
         │   ├── landing.synapse.config.js
         │   ├── landingProtocol.js
+        │   ├── script.js
         │   └── styles.css
         ├── landing.synapse.config.js
         └── manifest.json

@@ -1,4 +1,6 @@
-/* styles.css */
+/* ============================================================================
+   BLOOM DISCOVERY & ONBOARDING - UNIFIED STYLES
+   ============================================================================ */
 
 * {
   margin: 0;
@@ -6,9 +8,35 @@
   box-sizing: border-box;
 }
 
+:root {
+  /* Fondos */
+  --color-bg: #0f0f1e;
+  --color-surface: #1a1a2e;
+  --color-surface-hover: #242438;
+  
+  /* Primarios */
+  --color-primary: #a855f7;
+  --color-primary-light: #c084fc;
+  --color-secondary: #ec4899;
+  
+  /* Funcionales */
+  --color-success: #22c55e;
+  --color-warning: #eab308;
+  --color-error: #ef4444;
+  
+  /* Texto */
+  --color-text: #e2e8f0;
+  --color-text-muted: #94a3b8;
+  
+  /* Sombras */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.5);
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-  background: linear-gradient(135deg, #0f0f23 0%, #1a0b2e 50%, #0f0f23 100%);
+  background: linear-gradient(135deg, var(--color-bg) 0%, #1e1e3f 100%);
   color: white;
   min-height: 100vh;
   display: flex;
@@ -17,13 +45,13 @@ body {
   padding: 20px;
 }
 
-/* SQUARE CONTAINER - DOBLE DE TAMAÑO */
+/* SQUARE CONTAINER */
 .container {
-  background: rgba(15, 23, 42, 0.6);
+  background: rgba(26, 26, 46, 0.6);
   border: 1px solid rgba(148, 163, 184, 0.15);
   border-radius: 24px;
   padding: 100px 80px;
-  box-shadow: 0 20px 60px rgba(147, 51, 234, 0.2);
+  box-shadow: 0 20px 60px rgba(168, 85, 247, 0.2);
   backdrop-filter: blur(10px);
   text-align: center;
   width: 960px;
@@ -51,7 +79,7 @@ body {
   to { opacity: 1; }
 }
 
-/* STATUS CIRCLE - MÁS ESPACIO ARRIBA */
+/* STATUS CIRCLE */
 .status-circle {
   width: 160px;
   height: 160px;
@@ -62,7 +90,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #eab308;
+  background: var(--color-warning);
   box-shadow: 0 0 60px rgba(234, 179, 8, 0.6);
   animation: pulsate 1.8s ease-in-out infinite;
 }
@@ -102,13 +130,13 @@ body {
 
 /* SUCCESS STATE */
 .status-circle.success {
-  background: #22c55e;
+  background: var(--color-success);
   box-shadow: 0 0 50px rgba(34, 197, 94, 0.8);
   animation: successPulse 0.6s ease-out;
 }
 
 .status-circle.success::before {
-  background: #22c55e;
+  background: var(--color-success);
 }
 
 @keyframes successPulse {
@@ -142,7 +170,7 @@ body {
 h1 {
   font-size: 52px;
   font-weight: 800;
-  background: linear-gradient(135deg, #a78bfa 0%, #f472b6 100%);
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -152,12 +180,12 @@ h1 {
 .profile-name {
   font-size: 24px;
   font-weight: 500;
-  color: #94a3b8;
+  color: var(--color-text-muted);
   margin-bottom: 40px;
 }
 
 p {
-  color: #cbd5e1;
+  color: var(--color-text);
   font-size: 22px;
   line-height: 1.6;
   margin-bottom: 25px;
@@ -166,7 +194,7 @@ p {
 /* SINGLE STATUS LINE */
 .status-line {
   padding: 20px 32px;
-  background: rgba(30, 41, 59, 0.4);
+  background: rgba(26, 26, 46, 0.4);
   border-radius: 12px;
   margin: 30px 0;
   min-width: 400px;
@@ -175,7 +203,7 @@ p {
 
 #status-text {
   font-size: 20px;
-  color: #94a3b8;
+  color: var(--color-text-muted);
   font-weight: 500;
   transition: color 0.3s ease;
 }
@@ -195,7 +223,7 @@ p {
   justify-content: center;
   gap: 16px;
   font-size: 20px;
-  color: #cbd5e1;
+  color: var(--color-text);
   margin: 30px 0;
   opacity: 0;
   animation: slideUp 0.5s ease 0.3s forwards;
@@ -226,7 +254,7 @@ p {
 .countdown-label {
   display: none;
   font-size: 20px;
-  color: #94a3b8;
+  color: var(--color-text-muted);
   margin-top: 35px;
 }
 
@@ -238,7 +266,7 @@ p {
 #countdown-value {
   font-size: 32px;
   font-weight: 700;
-  color: #22c55e;
+  color: var(--color-success);
   display: inline-block;
   min-width: 28px;
   animation: countdownPulse 1s ease-in-out infinite;
@@ -273,7 +301,7 @@ p {
 #error-details {
   margin-top: 8px;
   padding: 8px;
-  background: rgba(15, 23, 42, 0.6);
+  background: rgba(15, 30, 46, 0.6);
   border-radius: 6px;
   font-family: 'Courier New', monospace;
   font-size: 11px;
@@ -282,27 +310,27 @@ p {
   white-space: pre-wrap;
   max-height: 150px;
   overflow-y: auto;
-  color: #cbd5e1;
+  color: var(--color-text);
 }
 
 /* BUTTONS */
 .btn {
-  background: linear-gradient(135deg, #9333ea 0%, #ec4899 100%);
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
   color: white;
   border: none;
-  padding: 14px 40px;
-  border-radius: 12px;
-  font-size: 16px;
+  padding: 20px 60px;
+  border-radius: 16px;
+  font-size: 24px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
-  margin: 20px 0 10px;
-  box-shadow: 0 4px 15px rgba(147, 51, 234, 0.3);
+  margin: 40px 0 20px;
+  box-shadow: 0 6px 20px rgba(168, 85, 247, 0.3);
 }
 
 .btn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(147, 51, 234, 0.5);
+  box-shadow: 0 8px 30px rgba(168, 85, 247, 0.5);
 }
 
 .btn:active {
@@ -312,81 +340,84 @@ p {
 /* PROGRESS BAR */
 .progress-bar {
   width: 100%;
-  height: 4px;
-  background: rgba(30, 41, 59, 0.5);
-  border-radius: 2px;
-  margin-bottom: 20px;
+  height: 6px;
+  background: rgba(26, 26, 46, 0.5);
+  border-radius: 3px;
+  margin-bottom: 40px;
   overflow: hidden;
 }
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #9333ea 0%, #ec4899 100%);
+  background: linear-gradient(90deg, var(--color-primary) 0%, var(--color-secondary) 100%);
   transition: width 0.3s ease;
-  box-shadow: 0 0 10px rgba(147, 51, 234, 0.4);
+  box-shadow: 0 0 15px rgba(168, 85, 247, 0.4);
 }
 
 .step-indicator {
-  color: #94a3b8;
-  font-size: 13px;
-  margin-bottom: 20px;
+  color: var(--color-text-muted);
+  font-size: 20px;
+  margin-bottom: 40px;
+  font-weight: 500;
 }
 
 .status-icon {
-  font-size: 56px;
-  margin-bottom: 20px;
+  font-size: 100px;
+  margin-bottom: 40px;
 }
 
 /* INFO BOX */
 .info-box {
-  background: rgba(30, 41, 59, 0.4);
+  background: rgba(26, 26, 46, 0.4);
   border: 1px solid rgba(148, 163, 184, 0.15);
-  padding: 18px;
-  border-radius: 12px;
-  margin: 20px 0;
+  padding: 32px;
+  border-radius: 16px;
+  margin: 40px 0;
   text-align: left;
+  max-width: 600px;
 }
 
 .info-box h3 {
-  color: #e2e8f0;
-  font-size: 15px;
-  margin-bottom: 12px;
+  color: var(--color-text);
+  font-size: 22px;
+  margin-bottom: 20px;
+  font-weight: 600;
 }
 
 .info-box ol {
-  padding-left: 18px;
-  color: #cbd5e1;
+  padding-left: 28px;
+  color: var(--color-text);
 }
 
 .info-box li {
-  margin: 6px 0;
-  line-height: 1.6;
-  color: #cbd5e1;
-  font-size: 14px;
+  margin: 12px 0;
+  line-height: 1.8;
+  color: var(--color-text);
+  font-size: 20px;
 }
 
 .info-box p {
-  margin: 5px 0;
-  color: #e2e8f0;
-  font-size: 14px;
+  margin: 10px 0;
+  color: var(--color-text);
+  font-size: 20px;
 }
 
 .success-checkmark {
-  color: #22c55e;
-  font-size: 72px;
-  margin-bottom: 20px;
-  text-shadow: 0 0 30px rgba(34, 197, 94, 0.5);
+  color: var(--color-success);
+  font-size: 140px;
+  margin-bottom: 40px;
+  text-shadow: 0 0 50px rgba(34, 197, 94, 0.5);
 }
 
 /* SPINNER */
 .spinner {
-  border: 3px solid rgba(148, 163, 184, 0.2);
-  border-top: 3px solid #9333ea;
+  border: 5px solid rgba(148, 163, 184, 0.2);
+  border-top: 5px solid var(--color-primary);
   border-radius: 50%;
-  width: 50px;
-  height: 50px;
+  width: 100px;
+  height: 100px;
   animation: spin 1s linear infinite;
-  margin: 20px auto;
+  margin: 40px auto;
 }
 
 @keyframes spin {
