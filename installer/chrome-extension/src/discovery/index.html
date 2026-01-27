@@ -10,87 +10,80 @@
   <div class="container">
     <!-- DISCOVERY SCREEN -->
     <div id="screen-discovery" class="screen active">
-      <div class="status-dot searching" id="discovery-dot"></div>
+      <!-- Status Circle -->
+      <div class="status-circle" id="status-circle">
+        <div class="circle-checkmark" id="circle-checkmark">✓</div>
+      </div>
+      
+      <!-- Title -->
       <h1>Synapse Discovery</h1>
-      <p class="profile-name" id="profile-name-display" style="display: none;">
+      
+      <!-- Profile Name -->
+      <p class="profile-name" id="profile-name-display">
         Profile: <span id="profile-alias-text">-</span>
       </p>
-      <p id="discovery-message">🔍 Buscando extensión...</p>
-     
-      <div class="progress-info" id="discovery-progress">
-        Intento: <span id="attempt-count">0</span>
+      
+      <!-- Single Status Line -->
+      <div class="status-line" id="status-line">
+        <span id="status-text">Inicializando extensión</span>
       </div>
-     
-      <div class="info-section">
-        <p id="profile-id">Profile: -</p>
-        <p id="profile-alias"></p>
-        <p id="timestamp">Estado: Esperando conexión</p>
+      
+      <!-- Connection Info (single row) -->
+      <div class="connection-row" id="connection-row" style="display: none;">
+        <span id="profile-info">Profile: -</span>
+        <span class="separator">•</span>
+        <span id="connected-time">Conectado: -</span>
       </div>
-      <div class="register-notice" id="register-notice" style="display: none;">
-        ⚠️ Después de conectar, se iniciará el proceso de registro de Google y Gemini API
+      
+      <!-- Countdown Label -->
+      <div class="countdown-label" id="countdown-label">
+        Esta ventana se cerrará en <span id="countdown-value">5</span> segundos
       </div>
-     
-      <div class="auto-close-notice" id="discovery-auto-close">
-        ✓ Conexión establecida exitosamente<br>
-        <small class="countdown-text">Cerrando en <span id="countdown-value">5</span> segundos...</small>
-      </div>
-     
+      
+      <!-- Error Container -->
       <div class="error-container" id="discovery-error">
         <div id="error-message">Error</div>
         <pre id="error-details"></pre>
       </div>
+      
+      <!-- Hidden progress counter -->
+      <div class="debug-info" id="debug-info" style="display: none;">
+        Intento: <span id="attempt-count">0</span>
+      </div>
     </div>
 
-    <!-- STEP 0: WELCOME -->
+    <!-- ONBOARDING SCREENS -->
     <div id="screen-onboarding-welcome" class="screen">
       <div class="progress-bar"><div class="progress-fill" style="width: 0%"></div></div>
       <div class="step-indicator">Paso 1 de 3</div>
-     
       <div class="status-icon">🌸</div>
       <h1>Bienvenido a Bloom</h1>
-      <p>
-        Vamos a configurar tu perfil en 2 pasos simples.<br>
-        Necesitarás una cuenta de Google y crear una API Key de Gemini.
-      </p>
-     
+      <p>Vamos a configurar tu perfil en 2 pasos simples.<br>Necesitarás una cuenta de Google y crear una API Key de Gemini.</p>
       <button class="btn" id="btn-start-onboarding">Comenzar</button>
     </div>
 
-    <!-- STEP 1: GOOGLE LOGIN -->
     <div id="screen-google-login" class="screen">
       <div class="progress-bar"><div class="progress-fill" style="width: 33%"></div></div>
       <div class="step-indicator">Paso 2 de 3</div>
-     
       <div class="status-icon">🔐</div>
       <h1>Inicia sesión con Google</h1>
-      <p>
-        Necesitamos que inicies sesión en tu cuenta de Google para continuar.
-      </p>
-     
+      <p>Necesitamos que inicies sesión en tu cuenta de Google para continuar.</p>
       <button class="btn" id="btn-google-login">Iniciar sesión con Google</button>
     </div>
 
-    <!-- STEP 1.5: WAITING FOR LOGIN -->
     <div id="screen-google-waiting" class="screen">
       <div class="progress-bar"><div class="progress-fill" style="width: 33%"></div></div>
       <div class="step-indicator">Paso 2 de 3</div>
-     
       <div class="spinner"></div>
       <h1>Esperando inicio de sesión...</h1>
-      <p>
-        Completa el inicio de sesión en la pestaña que se abrió.<br>
-        Detectaremos automáticamente cuando hayas iniciado sesión.
-      </p>
+      <p>Completa el inicio de sesión en la pestaña que se abrió.<br>Detectaremos automáticamente cuando hayas iniciado sesión.</p>
     </div>
 
-    <!-- STEP 2: GEMINI API -->
     <div id="screen-gemini-api" class="screen">
       <div class="progress-bar"><div class="progress-fill" style="width: 66%"></div></div>
       <div class="step-indicator">Paso 3 de 3</div>
-     
       <div class="status-icon">🔑</div>
       <h1>Crea tu Gemini API Key</h1>
-     
       <div class="info-box">
         <h3>Instrucciones:</h3>
         <ol>
@@ -99,34 +92,22 @@
           <li>La detectaremos automáticamente</li>
         </ol>
       </div>
-     
       <button class="btn" id="btn-open-aistudio">Ir a AI Studio</button>
     </div>
 
-    <!-- STEP 2.5: WAITING FOR API KEY -->
     <div id="screen-gemini-waiting" class="screen">
       <div class="progress-bar"><div class="progress-fill" style="width: 66%"></div></div>
       <div class="step-indicator">Paso 3 de 3</div>
-     
       <div class="spinner"></div>
       <h1>Esperando API Key...</h1>
-      <p>
-        Crea y copia tu API Key en AI Studio.<br>
-        La detectaremos automáticamente cuando la copies.
-      </p>
+      <p>Crea y copia tu API Key en AI Studio.<br>La detectaremos automáticamente cuando la copies.</p>
     </div>
 
-    <!-- STEP 3: SUCCESS -->
     <div id="screen-onboarding-success" class="screen">
       <div class="progress-bar"><div class="progress-fill" style="width: 100%"></div></div>
-     
       <div class="success-checkmark">✓</div>
       <h1>¡Configuración completa!</h1>
-      <p>
-        Tu perfil está listo para usar.<br>
-        Esta ventana se cerrará automáticamente.
-      </p>
-     
+      <p>Tu perfil está listo para usar.<br>Esta ventana se cerrará automáticamente.</p>
       <div class="info-box">
         <p><strong>Email:</strong> <span id="final-email">-</span></p>
         <p><strong>API Key:</strong> ✓ Configurada</p>
