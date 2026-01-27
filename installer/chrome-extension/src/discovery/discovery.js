@@ -20,12 +20,16 @@ class DiscoveryFlow {
     this.registerNoticeEl = document.getElementById('register-notice');
   }
 
+
   async start() {
     console.log('[Discovery] Starting');
 
     await this.loadSynapseConfig();
 
     console.log('[Discovery] Register mode:', this.requiresRegistration);
+
+    // Display profile alias if available
+    this.displayProfileAlias();
 
     if (this.requiresRegistration && this.registerNoticeEl) {
       this.registerNoticeEl.style.display = 'block';
@@ -44,6 +48,22 @@ class DiscoveryFlow {
 
     this.setupStorageListener();
     this.startPinging();
+  }
+
+  displayProfileAlias() {
+    const profileAlias = self.SYNAPSE_CONFIG?.profile_alias;
+    
+    if (profileAlias) {
+      const profileNameDisplay = document.getElementById('profile-name-display');
+      const profileAliasText = document.getElementById('profile-alias-text');
+      
+      if (profileNameDisplay && profileAliasText) {
+        profileAliasText.textContent = profileAlias;
+        profileNameDisplay.style.display = 'block';
+      }
+      
+      console.log('[Discovery] Profile alias displayed:', profileAlias);
+    }
   }
 
   async loadSynapseConfig() {
@@ -212,12 +232,42 @@ class DiscoveryFlow {
   }
 
   autoCloseDiscovery() {
-    console.log('[Discovery] Auto-closing in 5s (register=false)');
+    console.log('[Discovery] Auto-closing with countdown (register=false)');
+    this.startCountdown();
+  }
+
+  startCountdown() {
+    let count = 5;
     
-    setTimeout(() => {
-      this.cleanup();
-      window.close();
-    }, 5000);
+    // Get countdown element
+    let countdownEl = document.getElementById('countdown-value');
+    
+    if (!countdownEl) {
+      console.error('[Discovery] Countdown element not found');
+      // Fallback: close after 5s without countdown
+      setTimeout(() => {
+        this.cleanup();
+        window.close();
+      }, 5000);
+      return;
+    }
+    
+    // Set initial value
+    countdownEl.textContent = count;
+    
+    const countdownInterval = setInterval(() => {
+      count--;
+      countdownEl.textContent = count;
+      
+      console.log('[Discovery] Countdown:', count);
+      
+      if (count <= 0) {
+        clearInterval(countdownInterval);
+        console.log('[Discovery] Countdown complete, closing window');
+        this.cleanup();
+        window.close();
+      }
+    }, 1000);
   }
 
   transitionToError(message, details = {}) {
