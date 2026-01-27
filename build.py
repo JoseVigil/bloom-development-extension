@@ -12,6 +12,7 @@ import subprocess
 from pathlib import Path
 import io
 import time
+import threading
 from datetime import datetime
 
 # ========================================
@@ -143,15 +144,35 @@ def safe_subprocess_run(cmd, timeout=None, cwd=None, desc=""):
 # ========================================
 def run_build_process(build_script):
     """
-    Ejecuta build_main.py con streaming.
-    Output formateado para PowerShell.
+    Ejecuta build_main.py con streaming y progreso validado.
     """
-    cmd = [sys.executable, str(build_script)] + sys.argv[1:]
+    cmd = [sys.executable, "-u", str(build_script)] + sys.argv[1:]
     
     log_to_file("=" * 70)
-    log_to_file("COMPILACIÓN CON PYINSTALLER")
+    log_to_file("INICIANDO COMPILACIÓN")
     log_to_file("=" * 70)
-    
+
+    # Estado de control
+    state = {
+        "prog": 0,
+        "active": True,
+        "success": False
+    }
+
+    def heartbeat_logic():
+        """Hilo de latido seguro: nunca llega al final por sí solo."""
+        while state["active"]:
+            time.sleep(2)
+            # Solo incrementamos si estamos en fases intermedias y el proceso sigue vivo
+            if state["prog"] < 40:
+                state["prog"] += 1
+            elif 40 <= state["prog"] < 85: # Techo de seguridad en 85%
+                state["prog"] += 0.5
+            
+            if state["active"]:
+                sys.stdout.write(f"[PROG:{int(state['prog'])}]\n")
+                sys.stdout.flush()
+
     try:
         process = subprocess.Popen(
             cmd,
@@ -162,19 +183,20 @@ def run_build_process(build_script):
             errors='replace',
             bufsize=1
         )
-        
-        # Patrones importantes para mostrar en consola
-        important_patterns = [
-            ("VERSION file creado", "gray"),
-            ("Completado: Generacion", "split"),  # Split significa: blanco + verde
-            ("Completado: Actualizacion", "split"),
-            ("Completado: Compilacion", "split"),
-            ("Archivos copiados", "gray"),
-            ("Ejecutable creado", "gray"),
-            ("Ejecutable funciona", "gray"),
-            ("BUILD COMPLETADO EXITOSAMENTE", "yellow"),
-        ]
-        
+
+        # Iniciar latido
+        t = threading.Thread(target=heartbeat_logic, daemon=True)
+        t.start()
+
+        # Hitos estrictos
+        milestones = {
+            "GENERANDO COMMAND_LOADER": 15,
+            "ACTUALIZANDO BRAIN.SPEC": 30,
+            "COMPILANDO CON PYINSTALLER": 45,
+            "COPIANDO A DIRECTORIO FINAL": 85,
+            "VERIFICANDO COMPILACIÓN": 90
+        }
+
         while True:
             line = process.stdout.readline()
             if not line and process.poll() is not None:
@@ -182,30 +204,40 @@ def run_build_process(build_script):
             
             if line:
                 line = line.rstrip()
-                
-                # Todo al archivo de log
                 log_to_file(f"[BUILD] {line}", level="DEBUG")
-                
-                # Solo mensajes importantes a consola
-                for pattern, color_type in important_patterns:
-                    if pattern in line:
-                        # Limpiar formato viejo
-                        clean = line.replace("[OK]", "").replace("CREANDO", "").replace("GENERANDO", "")
-                        clean = clean.replace("ACTUALIZANDO", "").replace("COMPILANDO", "").replace("COPIANDO", "")
-                        clean = clean.replace("VERIFICANDO", "").strip()
-                        
-                        if clean:
-                            # PowerShell parseará esto
-                            console_print(clean)
-                        break
-        
+
+                # Actualizar progreso por hitos reales detectados en el log
+                clean_upper = line.upper()
+                for msg, val in milestones.items():
+                    if msg in clean_upper and val > state["prog"]:
+                        state["prog"] = val
+                        sys.stdout.write(f"[PROG:{int(state['prog'])}]\n")
+                        sys.stdout.flush()
+
+                # Si detectamos el éxito explícito en el log de build_main.py
+                if "BUILD COMPLETADO EXITOSAMENTE" in clean_upper:
+                    state["success"] = True
+
+                # Filtrar mensajes importantes para PowerShell
+                if any(p in line for p in ["VERSION file", "Completado:", "Archivos copiados", "Ejecutable creado"]):
+                    clean = line.replace("[OK]", "").strip()
+                    if clean: console_print(clean)
+
+        # Fin del proceso
+        state["active"] = False
         exit_code = process.poll()
+
+        # SOLO si el exit_code es 0 y detectamos éxito, marcamos 100
+        if exit_code == 0 and state["success"]:
+            state["prog"] = 100
+            sys.stdout.write(f"[PROG:100]\n")
+            sys.stdout.flush()
         
         return exit_code
         
     except Exception as e:
-        log_to_file(f"Error ejecutando build: {e}", level="ERROR")
-        console_print(f"Error en compilacion: {e}")
+        state["active"] = False
+        log_to_file(f"Error en run_build_process: {e}", level="ERROR")
         return -1
 
 # ========================================

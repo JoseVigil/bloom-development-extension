@@ -186,7 +186,10 @@ func HandleSeed(c *core.Core, alias string, isMaster bool) (string, string, erro
 }
 
 func writeNativeManifest(c *core.Core, path, hostName, uuid string) error {
-	bridgePath := filepath.Join(c.Paths.BinDir, "native", "bloom-host.exe")
+	// CAMBIO: usar LOCALAPPDATA en lugar de c.Paths.BinDir
+	bloomBaseDir := filepath.Join(os.Getenv("LOCALAPPDATA"), "BloomNucleus")
+	bridgePath := filepath.Join(bloomBaseDir, "bin", "native", "bloom-host.exe")
+	
 	manifest := map[string]interface{}{
 		"name":        hostName,
 		"description": "Synapse v2 Native Bridge Host",

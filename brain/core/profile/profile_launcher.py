@@ -3,10 +3,12 @@ Profile Launcher - Lógica aislada de lanzamiento de perfiles.
 Versión spec-driven pura: Solo acepta especificaciones JSON.
 Convention mode eliminado - deprecated desde v2.0.
 
-CHANGELOG v2.3:
+CHANGELOG v2.4:
+- Error handling estructurado con códigos y data
+- Clasificación de errores (fatales vs recuperables)
+- Manejo robusto de condiciones de carrera
 - Agregado soporte para page_config (discovery/landing)
 - Generación automática de target_url según page_config.type
-- Retrocompatibilidad con specs sin page_config
 """
 import sys
 import json
@@ -23,11 +25,28 @@ from brain.shared.logger import get_logger
 logger = get_logger("brain.profile.launcher")
 
 
+class LaunchError(Exception):
+    """Base exception para errores de lanzamiento."""
+    def __init__(self, message: str, code: str, data: Optional[Dict[str, Any]] = None):
+        super().__init__(message)
+        self.code = code
+        self.data = data or {}
+
+
 class ProfileLauncher:
     """
     Lanzador de perfiles con handoff estandarizado a Sentinel.
     SOLO soporta spec-driven mode - todos los parámetros vienen del JSON.
     """
+    
+    # Error codes (clasificados por severidad)
+    ERROR_PROFILE_NOT_FOUND = "PROFILE_NOT_FOUND"           # Fatal
+    ERROR_SPEC_INVALID = "SPEC_INVALID"                     # Fatal
+    ERROR_CHROME_NOT_FOUND = "CHROME_NOT_FOUND"             # Fatal
+    ERROR_EXTENSION_NOT_FOUND = "EXTENSION_NOT_FOUND"       # Fatal
+    ERROR_CHROME_ALREADY_RUNNING = "CHROME_ALREADY_RUNNING" # Recuperable
+    ERROR_PORT_IN_USE = "PORT_IN_USE"                       # Recuperable
+    ERROR_LAUNCH_FAILED = "LAUNCH_FAILED"                   # Fatal
     
     def __init__(self, paths, chrome_resolver):
         """
@@ -54,162 +73,192 @@ class ProfileLauncher:
             spec_data: Especificación completa (REQUERIDO)
         
         Returns:
-            Resultado del handoff (nunca llega, os._exit antes)
+            Dict con resultado estructurado (success o error)
             
         Raises:
-            ValueError: Si no se provee spec_data
+            LaunchError: Con código y data específicos
         """
         logger.info(f"🚀 Lanzando perfil: {profile['id'][:8]}...")
         
-        if not spec_data:
-            logger.error("✗ Spec-driven mode requerido")
-            raise ValueError(
-                "Spec-driven mode required. "
-                "Convention mode deprecated since v2.0. "
-                "Use: brain profile launch <id> --spec /path/to/spec.json"
+        try:
+            if not spec_data:
+                raise LaunchError(
+                    "Spec-driven mode required. Convention mode deprecated since v2.0.",
+                    self.ERROR_SPEC_INVALID
+                )
+            
+            logger.info("📋 Modo SPEC-DRIVEN")
+            return self._launch_spec_driven(profile, spec_data)
+            
+        except LaunchError:
+            raise  # Re-raise con mismo código
+        except Exception as e:
+            # Wrap unexpected errors
+            logger.error(f"❌ Unexpected launch error: {e}", exc_info=True)
+            raise LaunchError(
+                f"Unexpected error during launch: {str(e)}",
+                self.ERROR_LAUNCH_FAILED,
+                {"original_error": str(e)}
             )
-        
-        logger.info("📋 Modo SPEC-DRIVEN")
-        return self._launch_spec_driven(profile, spec_data)
     
     def _launch_spec_driven(self, profile: Dict[str, Any], spec: Dict[str, Any]) -> Dict[str, Any]:
         """
         Lanzamiento spec-driven: JSON define TODO (executable, paths, flags, url).
         
-        El spec controla:
-        - engine.type: "chrome" | "chromium"
-        - engine.executable: Ruta al binario
-        - paths.user_data: Manejo de user-data-dir
-        - paths.extension: Ruta a extensión
-        - paths.logs_base: Directorio de logs
-        - target_url: URL a abrir (puede ser "auto")
-        - page_config: Configuración de página (discovery/landing)
-        - engine_flags: Flags del motor
-        - custom_flags: Flags personalizados
-        
-        NO hay lógica hardcoded - todo viene del JSON.
+        Returns:
+            Dict estructurado con status/message/data
+            
+        Raises:
+            LaunchError: Con código específico del error
         """
-        logger.info("🎯 Ejecutando spec-driven v2.3 (con page_config)")
+        logger.info("🎯 Ejecutando spec-driven v2.4 (error handling)")
         
-        # Extracción de configuración
-        engine_config = spec.get('engine', {})
-        paths_config = spec.get('paths', {})
-        page_config = spec.get('page_config', {})
-        
-        engine_type = engine_config.get('type')
-        exe = engine_config.get('executable')
-        u_data = paths_config.get('user_data')
-        ext = paths_config.get('extension')
-        logs_base = paths_config.get('logs_base')
-        target_url_raw = spec.get('target_url')
-        
-        logger.debug(f"📋 Spec recibido:")
-        logger.debug(f"   Engine Type: {engine_type}")
-        logger.debug(f"   Executable: {exe}")
-        logger.debug(f"   User Data: {u_data}")
-        logger.debug(f"   Extension: {ext}")
-        logger.debug(f"   Target URL (raw): {target_url_raw}")
-        logger.debug(f"   Page Config: {page_config}")
-        
-        # ====================================================================
-        # 🆕 RESOLUCIÓN DE target_url SEGÚN page_config
-        # ====================================================================
-        target_url = self._resolve_target_url(target_url_raw, page_config)
-        
-        page_type = page_config.get('type', 'custom')
-        if page_type == 'discovery':
-            logger.info(f"🔎 Lanzando en modo DISCOVERY")
-            logger.info(f"   → Onboarding y validación inicial")
-        elif page_type == 'landing':
-            logger.info(f"🏠 Lanzando en modo LANDING")
-            logger.info(f"   → Dashboard del perfil")
-        else:
-            logger.info(f"🎯 Lanzando en modo CUSTOM")
-        
-        logger.info(f"🎯 Target URL resuelto: {target_url}")
-        
-        # Validación de campos requeridos
-        if not all([engine_type, exe, u_data, ext, target_url]):
-            logger.error("✗ Spec incompleto: faltan campos requeridos")
-            raise ValueError(
-                "Spec incompleto. Campos requeridos: "
-                "engine.type, engine.executable, paths.user_data, paths.extension, target_url"
+        try:
+            # Extracción de configuración
+            engine_config = spec.get('engine', {})
+            paths_config = spec.get('paths', {})
+            page_config = spec.get('page_config', {})
+            
+            engine_type = engine_config.get('type')
+            exe = engine_config.get('executable')
+            u_data = paths_config.get('user_data')
+            ext = paths_config.get('extension')
+            logs_base = paths_config.get('logs_base')
+            target_url_raw = spec.get('target_url')
+            
+            logger.debug(f"📋 Spec recibido:")
+            logger.debug(f"   Engine Type: {engine_type}")
+            logger.debug(f"   Executable: {exe}")
+            logger.debug(f"   User Data: {u_data}")
+            logger.debug(f"   Extension: {ext}")
+            logger.debug(f"   Target URL (raw): {target_url_raw}")
+            logger.debug(f"   Page Config: {page_config}")
+            
+            # Validación de campos requeridos
+            if not all([engine_type, exe, u_data, ext]):
+                missing = []
+                if not engine_type: missing.append('engine.type')
+                if not exe: missing.append('engine.executable')
+                if not u_data: missing.append('paths.user_data')
+                if not ext: missing.append('paths.extension')
+                
+                raise LaunchError(
+                    f"Spec incompleto. Campos faltantes: {', '.join(missing)}",
+                    self.ERROR_SPEC_INVALID,
+                    {"missing_fields": missing}
+                )
+            
+            # Validación de engine type
+            if engine_type not in ['chrome', 'chromium']:
+                raise LaunchError(
+                    f"Engine type inválido: '{engine_type}'. Permitidos: chrome, chromium",
+                    self.ERROR_SPEC_INVALID,
+                    {"provided_type": engine_type, "valid_types": ["chrome", "chromium"]}
+                )
+            
+            # Resolución de target_url
+            target_url = self._resolve_target_url(target_url_raw, page_config)
+            
+            page_type = page_config.get('type', 'custom')
+            if page_type == 'discovery':
+                logger.info(f"🔎 Lanzando en modo DISCOVERY")
+                logger.info(f"   → Onboarding y validación inicial")
+            elif page_type == 'landing':
+                logger.info(f"🏠 Lanzando en modo LANDING")
+                logger.info(f"   → Dashboard del perfil")
+            else:
+                logger.info(f"🎯 Lanzando en modo CUSTOM")
+            
+            logger.info(f"🎯 Target URL resuelto: {target_url}")
+            
+            # Resolución de rutas (relativas a base_dir o absolutas)
+            exec_path = self.paths.base_dir / exe if not os.path.isabs(exe) else Path(exe)
+            user_data_path = self.paths.base_dir / u_data if not os.path.isabs(u_data) else Path(u_data)
+            extension_path = self.paths.base_dir / ext if not os.path.isabs(ext) else Path(ext)
+            
+            logger.debug(f"🔧 Rutas resueltas:")
+            logger.debug(f"   Executable: {exec_path}")
+            logger.debug(f"   User Data: {user_data_path}")
+            logger.debug(f"   Extension: {extension_path}")
+            
+            # Validación de existencia
+            if not exec_path.exists():
+                raise LaunchError(
+                    f"Chrome executable not found: {exec_path}",
+                    self.ERROR_CHROME_NOT_FOUND,
+                    {"path": str(exec_path)}
+                )
+            
+            if not extension_path.exists():
+                raise LaunchError(
+                    f"Extension directory not found: {extension_path}",
+                    self.ERROR_EXTENSION_NOT_FOUND,
+                    {"path": str(extension_path)}
+                )
+            
+            # Generación de logs granulares (opcional)
+            debug_log = None
+            net_log = None
+            launch_id = None
+            log_files = {}
+            
+            if logs_base:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                short_uuid = str(uuid.uuid4())[:8]
+                launch_id = f"{timestamp}_{short_uuid}"
+                
+                logs_dir = self.paths.base_dir / logs_base if not os.path.isabs(logs_base) else Path(logs_base)
+                logs_dir.mkdir(parents=True, exist_ok=True)
+                
+                debug_log = logs_dir / f"{launch_id}_chrome_debug.log"
+                net_log = logs_dir / f"{launch_id}_chrome_net.log"
+                
+                log_files = {
+                    "debug_log": str(debug_log.absolute()),
+                    "net_log": str(net_log.absolute()),
+                    "logs_dir": str(logs_dir.absolute())
+                }
+                
+                logger.info(f"📁 Launch ID: {launch_id}")
+                logger.debug(f"   Debug Log: {debug_log}")
+                logger.debug(f"   Net Log: {net_log}")
+            
+            # Construcción de argumentos del navegador
+            chrome_args = [
+                str(exec_path),
+                f"--user-data-dir={user_data_path}",
+                "--profile-directory=Default",
+                f"--load-extension={extension_path}",
+                f"--app={target_url}",            
+                "--app-id=bloom-synapse"
+            ]
+            
+            # Logs opcionales
+            if debug_log:
+                chrome_args.append(f"--log-file={debug_log}")
+            if net_log:
+                chrome_args.append(f"--log-net-log={net_log}")
+            
+            # Flags desde spec (sin hardcoded)
+            chrome_args.extend(spec.get('engine_flags', []))
+            chrome_args.extend(spec.get('custom_flags', []))
+            
+            logger.debug(f"🔧 Chrome args construidos: {len(chrome_args)} argumentos")
+            logger.debug(f"   Engine flags: {len(spec.get('engine_flags', []))}")
+            logger.debug(f"   Custom flags: {len(spec.get('custom_flags', []))}")
+            
+            # Handoff estándar a Sentinel (ahora incluye log_files)
+            return self._execute_handoff(chrome_args, profile['id'], log_files, launch_id)
+            
+        except LaunchError:
+            raise  # Re-raise con código original
+        except Exception as e:
+            logger.error(f"❌ Error en spec-driven launch: {e}", exc_info=True)
+            raise LaunchError(
+                f"Spec-driven launch failed: {str(e)}",
+                self.ERROR_LAUNCH_FAILED,
+                {"stage": "spec_processing", "error": str(e)}
             )
-        
-        # Validación de engine type
-        if engine_type not in ['chrome', 'chromium']:
-            logger.error(f"✗ Engine type inválido: {engine_type}")
-            raise ValueError(f"Engine type debe ser 'chrome' o 'chromium', recibido: {engine_type}")
-        
-        # Resolución de rutas (relativas a base_dir o absolutas)
-        exec_path = self.paths.base_dir / exe if not os.path.isabs(exe) else Path(exe)
-        user_data_path = self.paths.base_dir / u_data if not os.path.isabs(u_data) else Path(u_data)
-        extension_path = self.paths.base_dir / ext if not os.path.isabs(ext) else Path(ext)
-        
-        logger.debug(f"🔧 Rutas resueltas:")
-        logger.debug(f"   Executable: {exec_path}")
-        logger.debug(f"   User Data: {user_data_path}")
-        logger.debug(f"   Extension: {extension_path}")
-        
-        # Validación de existencia
-        if not exec_path.exists():
-            logger.error(f"✗ Ejecutable no encontrado: {exec_path}")
-            raise FileNotFoundError(f"Ejecutable no encontrado: {exec_path}")
-        
-        # Generación de logs granulares (opcional)
-        debug_log = None
-        net_log = None
-        launch_id = None
-        log_files = {}
-        
-        if logs_base:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            short_uuid = str(uuid.uuid4())[:8]
-            launch_id = f"{timestamp}_{short_uuid}"
-            
-            logs_dir = self.paths.base_dir / logs_base if not os.path.isabs(logs_base) else Path(logs_base)
-            logs_dir.mkdir(parents=True, exist_ok=True)
-            
-            debug_log = logs_dir / f"{launch_id}_chrome_debug.log"
-            net_log = logs_dir / f"{launch_id}_chrome_net.log"
-            
-            # Construcción del objeto log_files con rutas absolutas
-            log_files = {
-                "debug_log": str(debug_log.absolute()),
-                "net_log": str(net_log.absolute()),
-                "logs_dir": str(logs_dir.absolute())
-            }
-            
-            logger.info(f"📁 Launch ID: {launch_id}")
-            logger.debug(f"   Debug Log: {debug_log}")
-            logger.debug(f"   Net Log: {net_log}")
-        
-        # Construcción de argumentos del navegador
-        chrome_args = [
-            str(exec_path),
-            f"--user-data-dir={user_data_path}",
-            "--profile-directory=Default",
-            f"--load-extension={extension_path}",
-            f"--app={target_url}",            
-            "--app-id=bloom-synapse"
-        ]
-        
-        # Logs opcionales
-        if debug_log:
-            chrome_args.append(f"--log-file={debug_log}")
-        if net_log:
-            chrome_args.append(f"--log-net-log={net_log}")
-        
-        # Flags desde spec (sin hardcoded)
-        chrome_args.extend(spec.get('engine_flags', []))
-        chrome_args.extend(spec.get('custom_flags', []))
-        
-        logger.debug(f"🔧 Chrome args construidos: {len(chrome_args)} argumentos")
-        logger.debug(f"   Engine flags: {len(spec.get('engine_flags', []))}")
-        logger.debug(f"   Custom flags: {len(spec.get('custom_flags', []))}")
-        
-        # Handoff estándar a Sentinel (ahora incluye log_files)
-        return self._execute_handoff(chrome_args, profile['id'], log_files, launch_id)
     
     def _resolve_target_url(
         self, 
@@ -237,63 +286,80 @@ class ProfileLauncher:
             URL final a usar
             
         Raises:
-            ValueError: Si page_config.type es inválido o target_url falta
+            LaunchError: Si configuración es inválida
         """
-        # Caso 1: No hay page_config → Modo retrocompatible
-        if not page_config:
-            logger.debug("📄 No hay page_config, usando target_url directo (retrocompatibilidad)")
-            if not target_url_raw:
-                raise ValueError("target_url es requerido cuando no hay page_config")
-            return target_url_raw
-        
-        # Caso 2: page_config existe → Validar type
-        page_type = page_config.get('type', 'custom')
-        auto_generate = page_config.get('auto_generate_url', False)
-        
-        logger.debug(f"📄 page_config detectado:")
-        logger.debug(f"   type: {page_type}")
-        logger.debug(f"   auto_generate_url: {auto_generate}")
-        
-        # Validar page_type
-        valid_types = ['discovery', 'landing', 'custom']
-        if page_type not in valid_types:
-            raise ValueError(
-                f"page_config.type inválido: '{page_type}'. "
-                f"Valores permitidos: {valid_types}"
-            )
-        
-        # Caso 3: target_url == "auto" → Generar según page_type
-        if target_url_raw == "auto" or auto_generate:
-            if page_type == 'custom':
-                raise ValueError(
-                    "No se puede usar target_url='auto' con page_config.type='custom'. "
-                    "Especifica 'discovery' o 'landing', o provee target_url manual."
+        try:
+            # Caso 1: No hay page_config → Modo retrocompatible
+            if not page_config:
+                logger.debug("📄 No hay page_config, usando target_url directo (retrocompatibilidad)")
+                if not target_url_raw:
+                    raise LaunchError(
+                        "target_url is required when no page_config provided",
+                        self.ERROR_SPEC_INVALID,
+                        {"missing": "target_url"}
+                    )
+                return target_url_raw
+            
+            # Caso 2: page_config existe → Validar type
+            page_type = page_config.get('type', 'custom')
+            auto_generate = page_config.get('auto_generate_url', False)
+            
+            logger.debug(f"📄 page_config detectado:")
+            logger.debug(f"   type: {page_type}")
+            logger.debug(f"   auto_generate_url: {auto_generate}")
+            
+            # Validar page_type
+            valid_types = ['discovery', 'landing', 'custom']
+            if page_type not in valid_types:
+                raise LaunchError(
+                    f"Invalid page_config.type: '{page_type}'",
+                    self.ERROR_SPEC_INVALID,
+                    {"provided": page_type, "valid": valid_types}
                 )
             
-            extension_id = self.paths.get_extension_id()
+            # Caso 3: target_url == "auto" → Generar según page_type
+            if target_url_raw == "auto" or auto_generate:
+                if page_type == 'custom':
+                    raise LaunchError(
+                        "Cannot auto-generate URL for page_config.type='custom'",
+                        self.ERROR_SPEC_INVALID,
+                        {"suggestion": "Use 'discovery' or 'landing', or provide manual target_url"}
+                    )
+                
+                extension_id = self.paths.get_extension_id()
+                
+                if page_type == 'discovery':
+                    url = f"chrome-extension://{extension_id}/discovery/index.html"
+                    logger.info(f"🔎 Modo DISCOVERY: {url}")
+                    logger.info("   → Página de onboarding y validación inicial")
+                elif page_type == 'landing':
+                    url = f"chrome-extension://{extension_id}/landing/index.html"
+                    logger.info(f"🏠 Modo LANDING: {url}")
+                    logger.info("   → Dashboard del perfil (panel de control)")
+                
+                return url
             
-            if page_type == 'discovery':
-                url = f"chrome-extension://{extension_id}/discovery/index.html"
-                logger.info(f"🔎 Modo DISCOVERY: {url}")
-                logger.info("   → Página de onboarding y validación inicial")
-            elif page_type == 'landing':
-                url = f"chrome-extension://{extension_id}/landing/index.html"
-                logger.info(f"🏠 Modo LANDING: {url}")
-                logger.info("   → Dashboard del perfil (panel de control)")
+            # Caso 4: target_url manual especificado
+            if target_url_raw:
+                logger.info(f"🎯 Modo CUSTOM: Usando target_url manual")
+                logger.debug(f"   URL: {target_url_raw}")
+                return target_url_raw
             
-            return url
-        
-        # Caso 4: target_url manual especificado
-        if target_url_raw:
-            logger.info(f"🎯 Modo CUSTOM: Usando target_url manual")
-            logger.debug(f"   URL: {target_url_raw}")
-            return target_url_raw
-        
-        # Caso 5: Ni auto ni manual → Error
-        raise ValueError(
-            "target_url no especificado. Use 'auto' para generación automática "
-            "o provea URL manual."
-        )
+            # Caso 5: Ni auto ni manual → Error
+            raise LaunchError(
+                "target_url not specified. Use 'auto' or provide manual URL",
+                self.ERROR_SPEC_INVALID,
+                {"page_type": page_type}
+            )
+            
+        except LaunchError:
+            raise
+        except Exception as e:
+            raise LaunchError(
+                f"Failed to resolve target_url: {str(e)}",
+                self.ERROR_SPEC_INVALID,
+                {"error": str(e)}
+            )
     
     def _execute_handoff(
         self, 
@@ -303,61 +369,89 @@ class ProfileLauncher:
         launch_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Handoff estándar a Sentinel (Go).
+        Handoff estándar a Sentinel (Go) con error handling robusto.
         Implementa el contrato Python -> Go v2.0.
+        
+        Returns:
+            Dict estructurado con resultado
+            
+        Raises:
+            LaunchError: Con código específico del error
         """
         logger.info(f"🚀 Iniciando handoff a Sentinel")
         logger.debug(f"  → Args count: {len(args)}")
         logger.debug(f"  → Executable: {args[0]}")
 
-        # ==========================================================
-        # FIX DEFINITIVO – LOCK ATÓMICO A NIVEL SO
-        # ==========================================================
-
-        # Extraer --user-data-dir
-        user_data_arg = next(
-            (a for a in args if a.startswith("--user-data-dir=")),
-            None
-        )
-
-        if not user_data_arg:
-            raise RuntimeError("No se encontró --user-data-dir en args")
-
-        user_data_path = Path(user_data_arg.split("=", 1)[1])
-        lock_file = user_data_path / ".chrome_app.lock"
-
         try:
-            # CREACIÓN ATÓMICA: solo UN proceso puede pasar
-            fd = os.open(
-                lock_file,
-                os.O_CREAT | os.O_EXCL | os.O_WRONLY
+            # ==========================================================
+            # FIX DEFINITIVO – LOCK ATÓMICO A NIVEL SO
+            # ==========================================================
+
+            # Extraer --user-data-dir
+            user_data_arg = next(
+                (a for a in args if a.startswith("--user-data-dir=")),
+                None
             )
-            with os.fdopen(fd, "w") as f:
-                f.write(
-                    f"pid={os.getpid()}\n"
-                    f"time={datetime.now().isoformat()}\n"
+
+            if not user_data_arg:
+                raise LaunchError(
+                    "Missing --user-data-dir in Chrome args",
+                    self.ERROR_SPEC_INVALID,
+                    {"args": args}
                 )
 
-            logger.debug("🔒 Lock de app creado correctamente")
+            user_data_path = Path(user_data_arg.split("=", 1)[1])
+            lock_file = user_data_path / ".chrome_app.lock"
 
-        except FileExistsError:
-            logger.warning("🚫 Launch abortado: la app ya está en ejecución")
-            return {
-                "status": "already_running",
-                "data": {
-                    "profile_id": profile_id,
-                    "reason": "atomic_lock_present"
-                }
-            }
+            # 🧹 Limpiar lock previo siempre
+            if lock_file.exists():
+                lock_file.unlink()
+                logger.debug("🧹 Lock previo eliminado")
 
-        # ==========================================================
-        # Kill preventivo de bloom-host (Windows only)
-        # ==========================================================
-        if platform.system() == 'Windows':
-            logger.debug("🔪 Matando procesos bloom-host.exe previos")
-            os.system('taskkill /f /im bloom-host.exe >nul 2>&1')
+            try:
+                # CREACIÓN ATÓMICA: solo UN proceso puede pasar
+                fd = os.open(
+                    lock_file,
+                    os.O_CREAT | os.O_EXCL | os.O_WRONLY
+                )
+                with os.fdopen(fd, "w") as f:
+                    f.write(
+                        f"pid={os.getpid()}\n"
+                        f"time={datetime.now().isoformat()}\n"
+                    )
 
-        try:
+                logger.debug("🔒 Lock de app creado correctamente")
+
+            except FileExistsError:
+                logger.warning("🚫 Launch abortado: Chrome ya en ejecución")
+                
+                # Leer PID del lock existente (si es posible)
+                existing_pid = None
+                try:
+                    with open(lock_file, 'r') as f:
+                        for line in f:
+                            if line.startswith('pid='):
+                                existing_pid = int(line.split('=')[1].strip())
+                except:
+                    pass
+                
+                raise LaunchError(
+                    f"Chrome already running for profile {profile_id[:8]}",
+                    self.ERROR_CHROME_ALREADY_RUNNING,
+                    {
+                        "profile_id": profile_id,
+                        "lock_file": str(lock_file),
+                        "existing_pid": existing_pid
+                    }
+                )
+
+            # ==========================================================
+            # Kill preventivo de bloom-host (Windows only)
+            # ==========================================================
+            if platform.system() == 'Windows':
+                logger.debug("🔪 Matando procesos bloom-host.exe previos")
+                os.system('taskkill /f /im bloom-host.exe >nul 2>&1')
+
             # ======================================================
             # 1. SILENCIO TOTAL EN STDOUT
             # ======================================================
@@ -388,6 +482,7 @@ class ProfileLauncher:
 
             result = {
                 "status": "success",
+                "message": "Profile launched successfully",
                 "data": {
                     "profile_id": profile_id,
                     "launch": {
@@ -407,8 +502,12 @@ class ProfileLauncher:
             time.sleep(0.5)
             os._exit(0)
 
+        except LaunchError:
+            raise  # Re-raise con código original
         except Exception as e:
-            logger.error(f"✗ Error fatal en handoff: {str(e)}", exc_info=True)
-            sys.stderr.write(f"FATAL_ERROR: {str(e)}\n")
-            sys.stderr.flush()
-            os._exit(1)
+            logger.error(f"❌ Error fatal en handoff: {e}", exc_info=True)
+            raise LaunchError(
+                f"Handoff failed: {str(e)}",
+                self.ERROR_LAUNCH_FAILED,
+                {"stage": "handoff", "error": str(e)}
+            )

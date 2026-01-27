@@ -6,7 +6,6 @@ const fs = require('fs-extra');
 const path = require('path');
 const { paths } = require('../config/paths');
 
-// Colores para consola (solo visual, no se guardan en archivo)
 const COLORS = {
   reset: '\x1b[0m',
   bright: '\x1b[1m',
@@ -24,6 +23,37 @@ class Logger {
     this.category = category;
     this.logFile = null;
     this.initialized = false;
+    this.telemetryPath = path.join(paths.logsDir, 'telemetry.json');
+  }
+
+  /**
+   * Actualiza el archivo telemetry.json con la información del stream actual
+   */
+  async _updateTelemetry() {
+    try {
+      let telemetry = { active_streams: {} };
+      
+      if (await fs.pathExists(this.telemetryPath)) {
+        telemetry = await fs.readJson(this.telemetryPath);
+      }
+
+      if (!telemetry.active_streams) telemetry.active_streams = {};
+
+      const isInstaller = this.category === 'installer';
+      const key = isInstaller ? 'electron_install' : 'electron_launch';
+      const label = isInstaller ? '📥 ELECTRON INSTALL' : '⚡ ELECTRON LAUNCH';
+      
+      telemetry.active_streams[key] = {
+        label: label,
+        path: this.logFile,
+        priority: 2,
+        last_update: new Date().toISOString()
+      };
+
+      await fs.writeJson(this.telemetryPath, telemetry, { spaces: 2 });
+    } catch (error) {
+      // Silently fail telemetry update to not interrupt logging
+    }
   }
 
   /**
@@ -33,22 +63,21 @@ class Logger {
     if (this.initialized) return;
 
     try {
-      // Asegurar que el directorio de logs existe
-      await fs.ensureDir(paths.logsDir);
-
-      // Determinar el nombre del archivo basado en la categoría
+      let targetDir = paths.logsDir;
       let filename;
+
       if (this.category === 'installer') {
-        filename = 'installation.log';
-      } else if (this.category === 'launcher') {
-        filename = 'launcher.log';
+        targetDir = path.join(paths.logsDir, 'install');
+        filename = 'electron_install.log';
       } else {
-        filename = `${this.category}.log`;
+        // Por defecto para launcher o general
+        filename = 'electron_launch.log';
       }
 
-      this.logFile = path.join(paths.logsDir, filename);
+      // Asegurar que el directorio (base o /install) existe
+      await fs.ensureDir(targetDir);
+      this.logFile = path.join(targetDir, filename);
 
-      // Crear header en el archivo
       const header = `
 ================================================================================
 ${this.category.toUpperCase()} LOG
@@ -58,6 +87,9 @@ Started: ${new Date().toISOString()}
       
       await fs.appendFile(this.logFile, header);
       this.initialized = true;
+
+      // Primera actualización de telemetría
+      await this._updateTelemetry();
 
       console.log(`${COLORS.cyan}[Logger]${COLORS.reset} Initialized: ${this.logFile}`);
     } catch (error) {
@@ -69,7 +101,6 @@ Started: ${new Date().toISOString()}
    * Escribe un mensaje en consola y archivo
    */
   async writeLog(level, emoji, color, ...args) {
-    // Asegurar inicialización
     if (!this.initialized) {
       await this.initialize();
     }
@@ -77,105 +108,66 @@ Started: ${new Date().toISOString()}
     const timestamp = new Date().toISOString();
     const prefix = `[${this.category.toUpperCase()}]`;
     
-    // Construir mensaje
     const message = args.map(arg => 
       typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
     ).join(' ');
 
-    // Log a consola (con color y emoji)
     const consoleMsg = `${color}${emoji} ${prefix}${COLORS.reset} ${message}`;
     console.log(consoleMsg);
 
-    // Log a archivo (sin color, formato limpio)
     if (this.logFile) {
       try {
         const fileMsg = `[${timestamp}] [${level}] ${prefix} ${message}\n`;
         await fs.appendFile(this.logFile, fileMsg);
+        
+        // Actualizar telemetría periódicamente (en cada escritura importante)
+        await this._updateTelemetry();
       } catch (error) {
         console.error(`${COLORS.red}[Logger]${COLORS.reset} Failed to write to file:`, error.message);
       }
     }
   }
 
-  // Métodos de logging públicos
-  info(...args) {
-    return this.writeLog('INFO', '📋', COLORS.blue, ...args);
-  }
+  info(...args) { return this.writeLog('INFO', '📋', COLORS.blue, ...args); }
+  success(...args) { return this.writeLog('SUCCESS', '✅', COLORS.green, ...args); }
+  warn(...args) { return this.writeLog('WARN', '⚠️', COLORS.yellow, ...args); }
+  error(...args) { return this.writeLog('ERROR', '❌', COLORS.red, ...args); }
+  debug(...args) { return this.writeLog('DEBUG', '🔍', COLORS.gray, ...args); }
+  step(...args) { return this.writeLog('STEP', '🔹', COLORS.magenta, ...args); }
 
-  success(...args) {
-    return this.writeLog('SUCCESS', '✅', COLORS.green, ...args);
-  }
-
-  warn(...args) {
-    return this.writeLog('WARN', '⚠️', COLORS.yellow, ...args);
-  }
-
-  error(...args) {
-    return this.writeLog('ERROR', '❌', COLORS.red, ...args);
-  }
-
-  debug(...args) {
-    return this.writeLog('DEBUG', '🔍', COLORS.gray, ...args);
-  }
-
-  step(...args) {
-    return this.writeLog('STEP', '🔹', COLORS.magenta, ...args);
-  }
-
-  /**
-   * Escribe un separador visual en el log
-   */
   async separator(title = '') {
-    if (!this.initialized) {
-      await this.initialize();
-    }
-
+    if (!this.initialized) await this.initialize();
     const line = '='.repeat(80);
     const msg = title ? `\n${line}\n  ${title}\n${line}\n` : `\n${line}\n`;
-    
     console.log(`${COLORS.cyan}${msg}${COLORS.reset}`);
-    
     if (this.logFile) {
       try {
         await fs.appendFile(this.logFile, msg + '\n');
-      } catch (error) {
-        // Silently fail
-      }
+        await this._updateTelemetry();
+      } catch (error) {}
     }
   }
 }
 
-// ============================================================================
-// SINGLETON PATTERN - Un logger por categoría
-// ============================================================================
-
 const loggers = new Map();
 
-/**
- * Obtiene o crea un logger para una categoría específica
- * @param {string} category - 'installer', 'launcher', 'brain-service', etc.
- */
 function getLogger(category = 'general') {
   if (!loggers.has(category)) {
     const logger = new Logger(category);
-    logger.initialize(); // Inicializar inmediatamente
+    logger.initialize();
     loggers.set(category, logger);
   }
   return loggers.get(category);
 }
 
-/**
- * Cierra todos los loggers (llamar al finalizar la app)
- */
 async function closeAllLoggers() {
   for (const [category, logger] of loggers.entries()) {
     if (logger.logFile) {
       try {
         const footer = `\n[${new Date().toISOString()}] Logger closed\n\n`;
         await fs.appendFile(logger.logFile, footer);
-      } catch (error) {
-        // Silently fail
-      }
+        await logger._updateTelemetry();
+      } catch (error) {}
     }
   }
   loggers.clear();

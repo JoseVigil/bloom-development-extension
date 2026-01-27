@@ -102,110 +102,74 @@ Write-Success "Entorno limpio"
 # =========================================
 Write-Host ""
 Write-Step "Ejecutando compilacion..."
-
-# Verificar Python
-$pythonExe = (Get-Command python -ErrorAction SilentlyContinue).Source
-if (-not $pythonExe) {
-    Write-Error "Python no encontrado en PATH"
-}
-
-# Verificar build.py
-if (-not (Test-Path "build.py")) {
-    Write-Error "build.py no encontrado"
-}
-
 Write-Separator
 
-# Mostrar spinner mientras compila
-Write-Host "   $($EMO.progress) Compilando con PyInstaller..." -NoNewline
-
-# Iniciar proceso en background
+$pythonExe = (Get-Command python -ErrorAction SilentlyContinue).Source
 $buildJob = Start-Job -ScriptBlock {
     param($pythonPath, $workingDir, $logPath)
     Set-Location $workingDir
     $env:BUILD_LOG_PATH = $logPath
-    & $pythonPath "build.py" 2>&1
+    & $pythonPath -u "build.py" 2>&1
 } -ArgumentList $pythonExe, $PWD, $logFile
 
-# Spinner animation
 $spinnerIndex = 0
+$currentPercent = 0
+
 while ($buildJob.State -eq "Running") {
-    Write-Host "`r   $($SPINNER[$spinnerIndex]) Compilando con PyInstaller..." -NoNewline -ForegroundColor Cyan
-    $spinnerIndex = ($spinnerIndex + 1) % $SPINNER.Count
-    Start-Sleep -Milliseconds 100
-}
-
-# Limpiar línea del spinner
-Write-Host "`r   $($EMO.progress) Compilando con PyInstaller...               " -NoNewline
-Write-Host "`r" -NoNewline
-
-# Obtener resultado
-$buildOutput = Receive-Job -Job $buildJob
-$buildExitCode = if ($buildJob.ChildJobs[0].State -eq "Completed") { 0 } else { 1 }
-Remove-Job -Job $buildJob -Force
-
-# Procesar output para mostrar solo mensajes importantes
-$importantLines = $buildOutput | Where-Object {
-    $_ -match "VERSION file creado" -or
-    $_ -match "Completado:" -or
-    $_ -match "Archivos copiados" -or
-    $_ -match "Ejecutable creado" -or
-    $_ -match "Ejecutable funciona" -or
-    $_ -match "Generando archivos de ayuda" -or
-    $_ -match "Generando arboles" -or
-    $_ -match "BUILD COMPLETADO"
-}
-
-$projectRoot = (Get-Location).Path
-foreach ($line in $importantLines) {
-    $cleanLine = $line -replace '\[.*?\]\s*', '' -replace '^\s+', ''
+    # 1. Recibir salida
+    $jobOutput = Receive-Job -Job $buildJob -Keep
     
-    if ($cleanLine -match "BUILD COMPLETADO EXITOSAMENTE") {
-        Write-Host "      BUILD COMPLETADO EXITOSAMENTE" -ForegroundColor Yellow
-    }
-    elseif ($cleanLine -match "VERSION file creado") {
-        Write-Host "      VERSION file creado:" -NoNewline -ForegroundColor White
-        $version = $cleanLine -replace '.*VERSION file creado:\s*', ''
-        Write-Host " $version" -ForegroundColor Gray
-    }
-    elseif ($cleanLine -match "Archivos copiados a:") {
-        Write-Host "      Archivos copiados a:" -NoNewline -ForegroundColor White
-        $fullPath = $cleanLine -replace '.*Archivos copiados a:\s*', ''
-        $relativePath = $fullPath -replace [regex]::Escape($projectRoot + "\"), ''
-        Write-Host " $relativePath" -ForegroundColor Green
-    }
-    elseif ($cleanLine -match "Ejecutable creado:") {
-        Write-Host "      Ejecutable creado:" -NoNewline -ForegroundColor White
-        $fullPath = $cleanLine -replace '.*Ejecutable creado:\s*', ''
-        $relativePath = $fullPath -replace [regex]::Escape($projectRoot + "\"), ''
-        Write-Host " $relativePath" -ForegroundColor Green
-    }
-    elseif ($cleanLine -match "Generando archivos de ayuda") {
-        Write-Host "      Generando archivos de ayuda..." -ForegroundColor Gray
-    }
-    elseif ($cleanLine -match "Generando arboles") {
-        Write-Host "      Generando arboles de directorios..." -ForegroundColor Gray
-    }
-    elseif ($cleanLine -match "Completado:") {
-        # Dividir en "Completado:" (blanco) y el resto (verde)
-        $parts = $cleanLine -split "Completado:", 2
-        if ($parts.Count -eq 2) {
-            Write-Host "      Completado:" -NoNewline -ForegroundColor White
-            Write-Host $parts[1] -ForegroundColor Green
+    # 2. Buscar último progreso reportado
+    if ($jobOutput) {
+        $lastProg = $jobOutput | Where-Object { $_ -match "\[PROG:(\d+)\]" } | Select-Object -Last 1
+        if ($lastProg -and $lastProg -match "\[PROG:(\d+)\]") {
+            $currentPercent = [int]$matches[1]
         }
     }
-    else {
+
+    # 3. Dibujar Spinner. Si el progreso es 0, mostramos que está iniciando.
+    $frame = $SPINNER[$spinnerIndex]
+    $text = "`r   $frame Compilando con PyInstaller... [$currentPercent%]"
+    Write-Host $text.PadRight(60) -NoNewline -ForegroundColor Cyan
+    
+    $spinnerIndex = ($spinnerIndex + 1) % $SPINNER.Count
+    Start-Sleep -Milliseconds 150
+}
+
+# 4. Obtener resultado final ANTES de imprimir el 100%
+$buildOutput = Receive-Job -Job $buildJob
+$buildExitCode = if ($buildJob.ChildJobs[0].State -eq "Completed") { 0 } else { 1 }
+
+# Verificar si realmente terminó bien leyendo la última línea de progreso del output total
+$finalProg = $buildOutput | Where-Object { $_ -match "\[PROG:(\d+)\]" } | Select-Object -Last 1
+if ($finalProg -match "\[PROG:100\]" -and $buildExitCode -eq 0) {
+    Write-Host "`r   $($EMO.ok) Compilando con PyInstaller... [100%]" -ForegroundColor Green
+} else {
+    Write-Host "`r   $($EMO.fail) Compilacion interrumpida o fallida [$currentPercent%]" -ForegroundColor Red
+}
+Write-Host ""
+
+Remove-Job -Job $buildJob -Force
+
+# --- RESUMEN DE HITOS ---
+$importantLines = $buildOutput | Where-Object {
+    ( $_ -match "VERSION file creado" -or $_ -match "Completado:" -or 
+      $_ -match "Archivos copiados" -or $_ -match "Ejecutable creado" ) -and ($_ -notmatch "\[PROG:")
+}
+
+foreach ($line in $importantLines) {
+    $cleanLine = $line -replace '\[\d+m', '' -replace '\[.*?\]\s*', '' -replace '^\s+', ''
+    if ($cleanLine -match "Completado:") {
+        $parts = $cleanLine -split "Completado:", 2
+        Write-Host "      Completado:" -NoNewline -ForegroundColor White
+        Write-Host $parts[1] -ForegroundColor Green
+    } else {
         Write-Host "      $cleanLine" -ForegroundColor Gray
     }
 }
-
 Write-Separator
 
-# Verificar resultado
-if ($buildExitCode -ne 0) {
-    Write-Host ""
-    Write-Error "Build fallo (ver $logFile)"
-}
+if ($buildExitCode -ne 0) { Write-Error "Build fallo catastróficamente." }
 
 # =========================================
 # VERIFICAR EJECUTABLE
