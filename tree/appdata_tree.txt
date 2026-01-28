@@ -101,6 +101,7 @@ BloomNucleus/
 │   ├── brain_core_20260128.log
 │   ├── brain_error.log
 │   ├── brain_profile_20260128.log
+│   ├── brain_server_20260128.log
 │   ├── brain_service.log
 │   ├── build/ [... build output]
 │   ├── install/

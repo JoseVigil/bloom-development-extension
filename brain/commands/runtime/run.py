@@ -19,7 +19,7 @@ class RuntimeRunCommand(BaseCommand):
             sys.stderr.reconfigure(line_buffering=True)
             
             try:
-                from brain.core.service.server_manager import ServerManager
+                from brain.core.server.server_manager import ServerManager
                 manager = ServerManager(host="127.0.0.1", port=5678)
                 
                 # Esto BLOQUEA el proceso hasta que Windows/NSSM lo mate

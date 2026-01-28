@@ -578,10 +578,10 @@ bloom-development-extension/
     │   │   ├── __init__.py
     │   │   ├── __pycache__/ [... cache]
     │   │   └── run.py
-    │   ├── service/
+    │   ├── server/
     │   │   ├── __init__.py
     │   │   ├── __pycache__/ [... cache]
-    │   │   └── service.py
+    │   │   └── server.py
     │   ├── synapse/
     │   │   ├── __init__.py
     │   │   ├── __pycache__/ [... cache]
@@ -723,7 +723,7 @@ bloom-development-extension/
     │   │   ├── models.py
     │   │   └── scanner.py
     │   ├── project_manager.py
-    │   ├── service/
+    │   ├── server/
     │   │   ├── server_event_bus.py
     │   │   └── server_manager.py
     │   ├── synapse/

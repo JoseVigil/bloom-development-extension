@@ -2333,7 +2333,7 @@
       "commands": [
         {
           "name": "start",
-          "description": "Start the Brain TCP multiplexer service.",
+          "description": "Start the Brain TCP multiplexer server.",
           "subsection": null,
           "parameters": [
             {
@@ -2364,13 +2364,13 @@
         },
         {
           "name": "status",
-          "description": "Check the current status of the Brain service.",
+          "description": "Check the current status of the Brain server.",
           "subsection": null,
           "parameters": []
         },
         {
           "name": "stop",
-          "description": "Stop the running Brain service.",
+          "description": "Stop the running Brain server.",
           "subsection": null,
           "parameters": []
         }

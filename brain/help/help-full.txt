@@ -441,7 +441,7 @@ using repo name.
 
 
   ▸ start
-    Start the Brain TCP multiplexer service.
+    Start the Brain TCP multiplexer server.
     brain service start [OPTIONS]
 
     ▪ Options:
@@ -450,11 +450,11 @@ using repo name.
       -d, --daemon              Run as background daemon
 
   ▸ status
-    Check the current status of the Brain service.
+    Check the current status of the Brain server.
     brain service status
 
   ▸ stop
-    Stop the running Brain service.
+    Stop the running Brain server.
     brain service stop
 
 
@@ -1353,7 +1353,7 @@ using repo name.
 
 
   ▸ start
-    Start the Brain TCP multiplexer service.
+    Start the Brain TCP multiplexer server.
     brain service start [OPTIONS]
 
     ▪ Options:
@@ -1362,11 +1362,11 @@ using repo name.
       -d, --daemon              Run as background daemon
 
   ▸ status
-    Check the current status of the Brain service.
+    Check the current status of the Brain server.
     brain service status
 
   ▸ stop
-    Stop the running Brain service.
+    Stop the running Brain server.
     brain service stop
 
 

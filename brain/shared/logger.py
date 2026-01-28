@@ -31,7 +31,13 @@ class BrainLogger:
             'level': logging.DEBUG,
             'propagate': True,  # También va a brain_core.log
             'label': '🚀 BRAIN PROFILE',
-        }
+        },
+        'brain.server': {
+            'file_prefix': 'brain_server',
+            'level': logging.DEBUG,
+            'propagate': True,  # También va a brain_core.log
+            'label': '🖥️ BRAIN SERVER',
+        },
         # Puedes agregar más aquí en el futuro:
         # 'brain.worker': {'file_prefix': 'brain_worker', 'label': '⚙️ WORKER', ...},
     }
