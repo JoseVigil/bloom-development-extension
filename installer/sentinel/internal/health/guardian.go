@@ -2,7 +2,7 @@ package health
 
 import (
 	"context"
-	"encoding/binary" // <--- Importante
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sentinel/internal/core"
+	"sentinel/internal/eventbus"
 	"strconv"
 	"strings"
 	"sync"
@@ -26,16 +27,17 @@ type HeartbeatRequest struct {
 }
 
 type GuardianInstance struct {
-	ProfileID string
-	LaunchID  string
-	BrainPID  int 
-	Core      *core.Core
-	Logger    *log.Logger
-	LogFile   *os.File
-	Failures  int
-	Mu        sync.Mutex
-	ctx       context.Context
-	cancel    context.CancelFunc
+	ProfileID   string
+	LaunchID    string
+	BrainPID    int 
+	Core        *core.Core
+	Logger      *log.Logger
+	LogFile     *os.File
+	Failures    int
+	Mu          sync.Mutex
+	ctx         context.Context
+	cancel      context.CancelFunc
+	eventClient *eventbus.SentinelClient  // Cliente para emitir eventos
 }
 
 func NewGuardian(c *core.Core, profileID string, launchID string, brainPID int) (*GuardianInstance, error) {
@@ -49,15 +51,29 @@ func NewGuardian(c *core.Core, profileID string, launchID string, brainPID int) 
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	
+	// Crear cliente de eventos (opcional, solo si se necesita emitir eventos)
+	var eventClient *eventbus.SentinelClient
+	if brainAddr := os.Getenv("BRAIN_ADDR"); brainAddr != "" {
+		eventClient = eventbus.NewSentinelClient(brainAddr)
+		// Intentar conectar en background
+		go func() {
+			if err := eventClient.Connect(); err != nil {
+				log.Printf("[Guardian] No se pudo conectar EventClient: %v", err)
+			}
+		}()
+	}
+	
 	g := &GuardianInstance{
-		ProfileID: profileID,
-		LaunchID:  launchID,
-		BrainPID:  brainPID,
-		Core:      c,
-		Logger:    log.New(f, "", log.LstdFlags),
-		LogFile:   f,
-		ctx:       ctx,
-		cancel:    cancel,
+		ProfileID:   profileID,
+		LaunchID:    launchID,
+		BrainPID:    brainPID,
+		Core:        c,
+		Logger:      log.New(f, "", log.LstdFlags),
+		LogFile:     f,
+		ctx:         ctx,
+		cancel:      cancel,
+		eventClient: eventClient,
 	}
 
 	g.logInfo(fmt.Sprintf("🛡️ Guardian Activo | Perfil: %s | Launch: %s | PID: %d", profileID, launchID, brainPID))
@@ -77,6 +93,9 @@ func (g *GuardianInstance) Start() {
 			case <-g.ctx.Done():
 				g.logInfo("Cerrando loop del Guardian.")
 				g.LogFile.Close()
+				if g.eventClient != nil {
+					g.eventClient.Close()
+				}
 				return
 			case <-ticker.C:
 				g.performCheck()
@@ -92,15 +111,33 @@ func (g *GuardianInstance) performCheck() {
 	if err := g.checkHeartbeat(); err != nil {
 		g.Failures++
 		g.logWarn(fmt.Sprintf("Heartbeat fallido (%d/3)", g.Failures), err)
+		
+		// Emitir evento de warning
+		g.emitEvent("HEARTBEAT_FAILED", map[string]interface{}{
+			"failures": g.Failures,
+			"max":      3,
+		})
+		
 		if g.Failures >= 3 {
+			g.emitEvent("EXTENSION_ERROR", map[string]interface{}{
+				"reason": "heartbeat_timeout",
+				"consecutive_failures": g.Failures,
+			})
 			g.recoverService()
 		}
 	} else {
+		if g.Failures > 0 {
+			g.logInfo("Heartbeat recuperado")
+			g.emitEvent("HEARTBEAT_RECOVERED", nil)
+		}
 		g.Failures = 0
 	}
 
 	if !g.checkResources() {
 		g.logWarn("Anomalía de recursos detectada.", nil)
+		g.emitEvent("RESOURCE_ANOMALY", map[string]interface{}{
+			"reason": "memory_threshold_exceeded",
+		})
 		g.recoverService()
 	}
 }
@@ -129,13 +166,11 @@ func (g *GuardianInstance) checkHeartbeat() error {
 	if _, err := conn.Write(header); err != nil { return err }
 	if _, err := conn.Write(payload); err != nil { return err }
 
-	// 3. Leer Respuesta (Opcional, con que no de EOF basta por ahora)
+	// 3. Leer Respuesta
 	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	var resp map[string]interface{}
 	return json.NewDecoder(conn).Decode(&resp)
 }
-
-// ... (checkResources, recoverService y cleanupPort se mantienen igual) ...
 
 func (g *GuardianInstance) checkResources() bool {
 	if g.BrainPID <= 0 { return true }
@@ -156,15 +191,35 @@ func (g *GuardianInstance) checkResources() bool {
 
 func (g *GuardianInstance) recoverService() {
 	g.logError("Iniciando recuperación quirúrgica...", nil)
+	
+	// Emitir evento de recuperación iniciada
+	g.emitEvent("SERVICE_RECOVERY_STARTED", map[string]interface{}{
+		"brain_pid": g.BrainPID,
+	})
+	
 	if g.BrainPID > 0 {
 		exec.Command("taskkill", "/F", "/T", "/PID", strconv.Itoa(g.BrainPID)).Run()
 	}
 	g.cleanupPort(5678)
+	
 	cmd := exec.Command("brain.exe", "service", "start")
 	if err := cmd.Start(); err == nil {
 		g.BrainPID = cmd.Process.Pid
 		g.logInfo(fmt.Sprintf("Brain Service relanzado (PID: %d)", g.BrainPID))
+		
+		// Emitir evento de recuperación exitosa
+		g.emitEvent("SERVICE_RECOVERY_COMPLETE", map[string]interface{}{
+			"new_brain_pid": g.BrainPID,
+		})
+	} else {
+		g.logError("Fallo al relanzar Brain Service", err)
+		
+		// Emitir evento de recuperación fallida
+		g.emitEvent("SERVICE_RECOVERY_FAILED", map[string]interface{}{
+			"error": err.Error(),
+		})
 	}
+	
 	g.Failures = 0
 }
 
@@ -178,4 +233,26 @@ func (g *GuardianInstance) cleanupPort(port int) {
 			exec.Command("taskkill", "/F", "/PID", fields[4], "/T").Run()
 		}
 	}
+}
+
+// emitEvent envía un evento al EventBus si está disponible
+func (g *GuardianInstance) emitEvent(eventType string, data map[string]interface{}) {
+	if g.eventClient == nil || !g.eventClient.IsConnected() {
+		return
+	}
+	
+	event := eventbus.Event{
+		Type:      eventType,
+		ProfileID: g.ProfileID,
+		Timestamp: time.Now().UnixNano(),
+		Data:      data,
+	}
+	
+	if err := g.eventClient.Send(event); err != nil {
+		g.logWarn("No se pudo emitir evento al EventBus", err)
+	}
+}
+
+func (g *GuardianInstance) Stop() {
+	g.cancel()
 }

@@ -1,9 +1,11 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"sentinel/cli"
 	"sentinel/internal/core"
+	"sentinel/internal/eventbus"
 	"sentinel/internal/startup"
 	"github.com/spf13/cobra"
 
@@ -17,61 +19,148 @@ import (
 )
 
 func main() {
-	// DETECCIÓN TEMPRANA: Verificar si es un comando de help antes de inicializar
-	isHelpCommand := false
-	isJSONHelp := false
+	// DETECCIÓN TEMPRANA: Verificar modo de operación
+	operationMode := detectOperationMode()
 	
+	switch operationMode {
+	case "daemon":
+		// Modo Daemon: iniciar como proceso persistente (sidecar)
+		runDaemonMode()
+		
+	case "help":
+		// Modo Help: mostrar ayuda sin inicialización completa
+		runHelpMode()
+		
+	default:
+		// Modo Normal: ejecución estándar de comandos CLI
+		runNormalMode()
+	}
+}
+
+// detectOperationMode analiza los argumentos para determinar el modo
+func detectOperationMode() string {
 	for _, arg := range os.Args {
-		if arg == "--help" || arg == "-h" {
-			isHelpCommand = true
+		if arg == "--mode" {
+			// Buscar el valor después de --mode
+			for i, a := range os.Args {
+				if a == "--mode" && i+1 < len(os.Args) {
+					return os.Args[i+1]
+				}
+			}
 		}
-		if arg == "--json-help" {
-			isJSONHelp = true
-			isHelpCommand = true
+		if arg == "--help" || arg == "-h" || arg == "--json-help" {
+			return "help"
 		}
 	}
+	return "normal"
+}
+
+// runDaemonMode ejecuta Sentinel como proceso persistente (Sidecar)
+func runDaemonMode() {
+	// En modo daemon, toda la salida de logs va a stderr
+	// El stdout está reservado exclusivamente para eventos JSON
 	
-	// Si es comando de help, inicializar en modo silencioso
-	var c *core.Core
-	var err error
+	// Determinar dirección del Brain desde variable de entorno o default
+	brainAddr := os.Getenv("BRAIN_ADDR")
+	if brainAddr == "" {
+		brainAddr = "127.0.0.1:5678"
+	}
 	
-	if isHelpCommand {
-		// Modo silencioso: solo inicializar lo mínimo necesario
-		c, err = core.InitializeSilent()
-		if err != nil {
-			os.Exit(1)
-		}
-	} else {
-		// Modo normal: inicialización completa con logs
-		c, err = core.Initialize()
-		if err != nil {
-			os.Exit(1)
-		}
-		
-		// FASE STARTUP (solo en modo normal)
-		if err := startup.Initialize(c); err != nil {
-			c.Logger.Error("Fallo crítico en fase Startup: %v", err)
-			os.Exit(1)
-		}
+	// Crear e iniciar el modo daemon
+	daemon := eventbus.NewDaemonMode(brainAddr)
+	
+	if err := daemon.Start(); err != nil {
+		fmt.Fprintf(os.Stderr, "[FATAL] Error iniciando modo daemon: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+// runHelpMode muestra la ayuda sin inicialización completa
+func runHelpMode() {
+	// Modo silencioso: solo inicializar lo mínimo necesario
+	c, err := core.InitializeSilent()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error inicializando core: %v\n", err)
+		os.Exit(1)
 	}
 	defer c.Close()
+	
+	// Construir el comando raíz solo para el help
+	rootCmd := buildRootCommand(c)
+	
+	// Verificar si es JSON help
+	isJSONHelp := false
+	for _, arg := range os.Args {
+		if arg == "--json-help" {
+			isJSONHelp = true
+			break
+		}
+	}
+	
+	if isJSONHelp {
+		cli.RenderHelpJSON(rootCmd)
+	} else {
+		cli.RenderFullDiscoveryHelp(rootCmd)
+	}
+}
 
-	// Configuración del Comando Raíz
+// runNormalMode ejecuta Sentinel en modo CLI estándar
+func runNormalMode() {
+	// Modo normal: inicialización completa con logs
+	c, err := core.Initialize()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error inicializando core: %v\n", err)
+		os.Exit(1)
+	}
+	defer c.Close()
+	
+	// FASE STARTUP (solo en modo normal)
+	if err := startup.Initialize(c); err != nil {
+		c.Logger.Error("Fallo crítico en fase Startup: %v", err)
+		os.Exit(1)
+	}
+	
+	// Construir comando raíz
+	rootCmd := buildRootCommand(c)
+	
+	// Intercepción de flags globales antes de la ejecución
+	var jsonOutput bool
+	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output en formato JSON para integración programática")
+	
+	_ = rootCmd.ParseFlags(os.Args)
+	
+	// Inyectar modo JSON en Core si está activo
+	if jsonOutput {
+		c.SetJSONMode(true)
+	}
+	
+	// Ejecución del motor CLI
+	if err := rootCmd.Execute(); err != nil {
+		os.Exit(1)
+	}
+}
+
+// buildRootCommand construye el comando raíz con todos los subcomandos
+func buildRootCommand(c *core.Core) *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:   "sentinel",
 		Short: "Sentinel Base v" + c.Config.Version,
+		Long: `Sentinel - Modular Orchestrator for Bloom
+		
+Modos de operación:
+  sentinel <command>           Ejecuta un comando específico (modo CLI)
+  sentinel --mode daemon       Inicia como proceso persistente (Sidecar)
+  sentinel --help              Muestra esta ayuda`,
 		Run: func(cmd *cobra.Command, args []string) {
 			c.Logger.Success("Sentinel Base v%s activa y sincronizada.", c.Config.Version)
 		},
 	}
-
+	
 	// Flags Globales (Persistent Flags)
 	var jsonHelp bool
-	var jsonOutput bool
 	rootCmd.PersistentFlags().BoolVar(&jsonHelp, "json-help", false, "Exporta el help en formato JSON para integración con Electron")
-	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output en formato JSON para integración programática")
-
-	// Configuración del Help Renderer (cli/)
+	
+	// Configuración del Help Renderer
 	rootCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
 		if jsonHelp {
 			cli.RenderHelpJSON(cmd)
@@ -79,12 +168,12 @@ func main() {
 			cli.RenderFullDiscoveryHelp(cmd)
 		}
 	})
-
+	
 	// Integración de comandos registrados en los paquetes internos
 	for _, reg := range core.CommandRegistry {
 		cmd := reg.Factory(c)
 		
-		// Inyectamos metadatos de categoría para el renderizador visual
+		// Inyectar metadatos de categoría para el renderizador visual
 		if cmd.Annotations == nil {
 			cmd.Annotations = make(map[string]string)
 		}
@@ -92,23 +181,6 @@ func main() {
 		
 		rootCmd.AddCommand(cmd)
 	}
-
-	// Intercepción de flags globales antes de la ejecución
-	_ = rootCmd.ParseFlags(os.Args)
 	
-	// Capturamos el valor de --json y lo inyectamos en Core
-	if jsonOutput {
-		c.SetJSONMode(true)
-	}
-	
-	// Si es --json-help, renderizar y salir inmediatamente
-	if isJSONHelp {
-		cli.RenderHelpJSON(rootCmd)
-		return
-	}
-
-	// Ejecución del motor CLI
-	if err := rootCmd.Execute(); err != nil {
-		os.Exit(1)
-	}
+	return rootCmd
 }

@@ -31,10 +31,10 @@
   SYSTEM         Health checks and system diagnostics                     1 cmd
   IDENTITY       Profile identity and seed management                     1 cmd
   RUNTIME        Browser instance lifecycle control                       1 cmd
-  BRIDGE         JSON-RPC communication with Electron                     1 cmd
+  BRIDGE         JSON-RPC communication with Electron                     3 cmds
   DEVELOPMENT    Integrated development environment                       1 cmd
   UI             Monitoring and telemetry interfaces                      2 cmds
-  -----------------------------------------------------------------------  Total: 7 commands
+  -----------------------------------------------------------------------  Total: 9 commands
 
 
 =======================================================[ SYSTEM ]=======================================================
@@ -125,6 +125,35 @@
     Modo Bridge para comunicación JSON-RPC con Electron
 
     Usage: sentinel bridge
+
+    --------------------------------------------------------------------------------
+
+  > LAUNCH-PROFILE
+    Lanza un perfil de Chrome y monitorea su onboarding
+
+    Usage: sentinel launch-profile <profile_id>
+
+    Arguments:
+      <profile_id>          required
+
+    Flags:
+      --timeout, -t              Timeout en segundos para esperar onboarding [default: 60]
+      --wait, -w                 Esperar a que complete el onboarding
+
+    --------------------------------------------------------------------------------
+
+  > SUBMIT-INTENT
+    Envía una intención al Brain y espera la respuesta
+
+    Usage: sentinel submit-intent <profile_id>
+
+    Arguments:
+      <profile_id>          required
+
+    Flags:
+      --payload, -p              Payload JSON de la intención [default: {}]
+      --timeout                  Timeout en segundos [default: 30]
+      --type, -t                 Tipo de intención (requerido)
 
     --------------------------------------------------------------------------------
 

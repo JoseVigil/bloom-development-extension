@@ -97,6 +97,32 @@
     "requires": "  - El perfil debe existir (usar 'sentinel seed' primero)\n  - brain.exe disponible y ejecutable\n  - Puerto 5678 libre para servicio Brain\n  - Extension ID válido en ignition_spec.json\n  - bloom-host.exe en bin/native/ para Native Messaging"
   },
   {
+    "name": "launch-profile",
+    "use": "launch-profile \u003cprofile_id\u003e",
+    "short": "Lanza un perfil de Chrome y monitorea su onboarding",
+    "category": "BRIDGE",
+    "args": [
+      {
+        "name": "\u003cprofile_id\u003e",
+        "required": true
+      }
+    ],
+    "options": [
+      {
+        "name": "timeout",
+        "shorthand": "t",
+        "usage": "Timeout en segundos para esperar onboarding",
+        "default": "60"
+      },
+      {
+        "name": "wait",
+        "shorthand": "w",
+        "usage": "Esperar a que complete el onboarding",
+        "default": "false"
+      }
+    ]
+  },
+  {
     "name": "seed",
     "use": "seed [alias] [is_master]",
     "short": "Registra una nueva identidad de perfil",
@@ -113,6 +139,36 @@
     ],
     "example": "  sentinel seed profile_001 true\n  sentinel --json seed burner_temp false | jq .",
     "requires": "  - brain.exe debe estar disponible en bin/\n  - Permiso de escritura en HKCU\\Software\\Google\\Chrome\\NativeMessagingHosts\n  - bloom-host.exe en bin/native/\n  - Extension ID válido en configuración"
+  },
+  {
+    "name": "submit-intent",
+    "use": "submit-intent \u003cprofile_id\u003e",
+    "short": "Envía una intención al Brain y espera la respuesta",
+    "category": "BRIDGE",
+    "args": [
+      {
+        "name": "\u003cprofile_id\u003e",
+        "required": true
+      }
+    ],
+    "options": [
+      {
+        "name": "payload",
+        "shorthand": "p",
+        "usage": "Payload JSON de la intención",
+        "default": "{}"
+      },
+      {
+        "name": "timeout",
+        "usage": "Timeout en segundos",
+        "default": "30"
+      },
+      {
+        "name": "type",
+        "shorthand": "t",
+        "usage": "Tipo de intención (requerido)"
+      }
+    ]
   },
   {
     "name": "telemetry",
