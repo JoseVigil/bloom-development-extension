@@ -10,8 +10,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sentinel/internal/core"
 	"sentinel/internal/eventbus"
+	"sentinel/internal/process"
 	"strconv"
 	"strings"
 	"sync"
@@ -234,6 +236,104 @@ func (g *GuardianInstance) cleanupPort(port int) {
 		}
 	}
 }
+
+// ========== FUNCIONES AGREGADAS DESDE health.go ==========
+
+// killProcessTree mata el proceso y todo su árbol de hijos de forma segura
+func (g *GuardianInstance) killProcessTree(pid int) error {
+	// 1. Validar que el PID pertenece a BloomNucleus
+	if !g.isBloomProcess(pid) {
+		return fmt.Errorf("el PID %d no pertenece a BloomNucleus, abortando tree kill", pid)
+	}
+
+	// 2. Ejecutar tree kill usando el package process
+	g.logInfo(fmt.Sprintf("Ejecutando tree kill en PID %d...", pid))
+	return process.KillProcessTree(pid)
+}
+
+// isBloomProcess verifica que el PID pertenece a la ruta de Bloom
+func (g *GuardianInstance) isBloomProcess(pid int) bool {
+	if runtime.GOOS != "windows" {
+		return true // Simplificado para Unix
+	}
+
+	cmd := exec.Command("wmic", "process", "where", fmt.Sprintf("ProcessId=%d", pid), 
+		"get", "ExecutablePath", "/format:list")
+	output, err := cmd.Output()
+	if err != nil {
+		g.logError("Error verificando ruta del proceso", err)
+		return false
+	}
+
+	path := string(output)
+	bloomPath := filepath.Join(g.Core.Paths.AppDataDir, "bin", "chrome-win")
+	
+	isBloom := len(path) > 0 && filepath.IsAbs(path) && 
+		(filepath.Dir(path) == bloomPath || strings.HasPrefix(path, bloomPath))
+	
+	if !isBloom {
+		g.logWarn(fmt.Sprintf("PID %d no pertenece a Bloom (ruta: %s)", pid, path), nil)
+	}
+	
+	return isBloom
+}
+
+// updateProfileStatus actualiza el estado en profiles.json
+func (g *GuardianInstance) updateProfileStatus(newStatus string) {
+	profilesPath := filepath.Join(g.Core.Paths.AppDataDir, "config", "profiles.json")
+	
+	data, err := os.ReadFile(profilesPath)
+	if err != nil {
+		g.logError("Error leyendo profiles.json", err)
+		return
+	}
+
+	var registry process.ProfileRegistry
+	if err := json.Unmarshal(data, &registry); err != nil {
+		g.logError("Error parseando profiles.json", err)
+		return
+	}
+
+	// Actualizar estado
+	for i, profile := range registry.Profiles {
+		if profile.ProfileID == g.ProfileID {
+			registry.Profiles[i].Status = newStatus
+			registry.Profiles[i].PID = 0
+			break
+		}
+	}
+
+	// Guardar
+	updatedData, _ := json.MarshalIndent(registry, "", "  ")
+	if err := os.WriteFile(profilesPath, updatedData, 0644); err != nil {
+		g.logError("Error guardando profiles.json", err)
+	} else {
+		g.logInfo(fmt.Sprintf("Estado actualizado a '%s' en profiles.json", newStatus))
+	}
+}
+
+// cleanup ejecuta la limpieza completa cuando un proceso muere o se desconecta
+func (g *GuardianInstance) cleanup(chromePID int) {
+	g.logInfo(fmt.Sprintf("Iniciando limpieza para perfil %s (Chrome PID: %d)...", g.ProfileID, chromePID))
+
+	// 1. Tree kill quirúrgico
+	if err := g.killProcessTree(chromePID); err != nil {
+		g.logError("Error en tree kill", err)
+	}
+
+	// 2. Actualizar estado en profiles.json
+	g.updateProfileStatus("closed")
+
+	// 3. Notificar al Brain
+	g.emitEvent("PROFILE_DISCONNECTED", map[string]interface{}{
+		"chrome_pid": chromePID,
+		"reason":     "process_died",
+	})
+
+	g.logInfo("Limpieza completada")
+}
+
+// ========== FIN FUNCIONES AGREGADAS ==========
 
 // emitEvent envía un evento al EventBus si está disponible
 func (g *GuardianInstance) emitEvent(eventType string, data map[string]interface{}) {

@@ -57,8 +57,16 @@ func detectOperationMode() string {
 
 // runDaemonMode ejecuta Sentinel como proceso persistente (Sidecar)
 func runDaemonMode() {
-	// En modo daemon, toda la salida de logs va a stderr
-	// El stdout está reservado exclusivamente para eventos JSON
+	// ============================================================
+	// MODO DAEMON - REGLA DE ORO DE STDOUT/STDERR
+	// ============================================================
+	// - STDOUT: Exclusivo para eventos JSON (consumo de Electron)
+	// - STDERR: Toda telemetría, logs, y mensajes de diagnóstico
+	// ============================================================
+	
+	fmt.Fprintf(os.Stderr, "[DAEMON] ========================================\n")
+	fmt.Fprintf(os.Stderr, "[DAEMON] Sentinel - Modo Sidecar Persistente\n")
+	fmt.Fprintf(os.Stderr, "[DAEMON] ========================================\n")
 	
 	// Determinar dirección del Brain desde variable de entorno o default
 	brainAddr := os.Getenv("BRAIN_ADDR")
@@ -150,7 +158,21 @@ func buildRootCommand(c *core.Core) *cobra.Command {
 Modos de operación:
   sentinel <command>           Ejecuta un comando específico (modo CLI)
   sentinel --mode daemon       Inicia como proceso persistente (Sidecar)
-  sentinel --help              Muestra esta ayuda`,
+  sentinel --help              Muestra esta ayuda
+
+Modo Daemon (Sidecar):
+  El modo daemon convierte a Sentinel en un proceso persistente que:
+  - Realiza auditoría de inicio (reconciliation logic)
+  - Monitorea la salud de perfiles activos (Guardian)
+  - Limpia procesos zombies de Chromium
+  - Se comunica con Brain a través del EventBus
+  - Emite eventos JSON en stdout para integración con Electron
+
+  Uso: sentinel --mode daemon
+
+  Variables de entorno:
+    BRAIN_ADDR      Dirección del Brain (default: 127.0.0.1:5678)
+    LOCALAPPDATA    Ruta base de datos (default: %LOCALAPPDATA%/BloomNucleus)`,
 		Run: func(cmd *cobra.Command, args []string) {
 			c.Logger.Success("Sentinel Base v%s activa y sincronizada.", c.Config.Version)
 		},

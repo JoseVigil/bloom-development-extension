@@ -1,0 +1,1784 @@
+internal\ignition\ignition.go
+
+```go
+package ignition
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"sentinel/internal/core"
+	"sentinel/internal/health"
+	"sentinel/internal/process"
+	"strings"
+	"syscall"
+	"time"
+
+	"github.com/spf13/cobra"
+)
+
+func init() {
+	core.RegisterCommand("RUNTIME", func(c *core.Core) *cobra.Command {
+		// === FLAGS PRINCIPALES ===
+		var mode string
+		var saveOverrides bool
+		
+		// === OVERRIDE FLAGS SIMPLES ===
+		var overrideAlias string
+		var overrideRole string
+		var overrideEmail string
+		var overrideExtension string
+		var overrideRegister bool
+		var overrideStep int
+		
+		// === OVERRIDE FLAGS PARA LINKED ACCOUNTS ===
+		var linkedAccounts arrayFlags
+		
+		// === OVERRIDE AVANZADO ===
+		var configFile string
+		
+		cmd := &cobra.Command{
+			Use:   "launch [profile_id]",
+			Short: "Arranca una instancia de navegador para un perfil",
+			Args:  cobra.ExactArgs(1),
+			Example: `  sentinel launch profile_001 --mode landing
+  sentinel launch profile_002 --mode discovery --override-alias "TestWorker"
+  sentinel launch profile_003 --override-role "Premium" --save
+  sentinel launch profile_004 --add-account "Google,user@gmail.com,active" --save
+  sentinel launch profile_005 --config-file @overrides.json --save
+  sentinel --json launch profile_006 --mode discovery | jq .`,
+			Run: func(cmd *cobra.Command, args []string) {
+				profileID := args[0]
+				ig := New(c)
+				
+				// === CONSTRUIR OBJETO DE OVERRIDES ===
+				overrides := buildOverridesFromFlags(
+					overrideAlias,
+					overrideRole,
+					overrideEmail,
+					overrideExtension,
+					overrideRegister,
+					overrideStep,
+					cmd.Flags().Changed("override-register"),
+				)
+				
+				// === PARSEAR LINKED ACCOUNTS ===
+				if len(linkedAccounts) > 0 {
+					accounts, err := parseLinkedAccounts(linkedAccounts)
+					if err != nil {
+						if c.IsJSON {
+							outputLaunchError(fmt.Errorf("error parseando linked accounts: %v", err))
+						} else {
+							c.Logger.Error("Error parseando linked accounts: %v", err)
+						}
+						os.Exit(1)
+					}
+					overrides["linked_accounts"] = accounts
+				}
+				
+				// === APLICAR OVERRIDES DESDE ARCHIVO/STDIN ===
+				if configFile != "" {
+					fileOverrides, err := loadOverridesFromFile(configFile)
+					if err != nil {
+						if c.IsJSON {
+							outputLaunchError(fmt.Errorf("error leyendo config-file: %v", err))
+						} else {
+							c.Logger.Error("Error leyendo config-file: %v", err)
+						}
+						os.Exit(1)
+					}
+					overrides = mergeOverrides(fileOverrides, overrides)
+				}
+				
+				// === PERSISTIR OVERRIDES SI --save ===
+				if saveOverrides && len(overrides) > 0 {
+					if err := ig.updateProfileWithOverrides(profileID, overrides); err != nil {
+						c.Logger.Error("⚠️  No se pudo guardar config: %v", err)
+					} else {
+						c.Logger.Info("✅ Config guardada permanentemente en profiles.json")
+					}
+				}
+				
+				// === CONVERTIR A JSON STRING ===
+				configOverride := ""
+				if len(overrides) > 0 {
+					overrideBytes, _ := json.Marshal(overrides)
+					configOverride = string(overrideBytes)
+				}
+				
+				// === EJECUTAR LAUNCH CON CAPTURA DE PID ===
+				chromePID, port, extLoaded, effectiveConfig, err := ig.Launch(profileID, mode, configOverride)
+				if err != nil {
+					if c.IsJSON {
+						outputLaunchError(err)
+					} else {
+						c.Logger.Error("Fallo de lanzamiento: %v", err)
+					}
+					os.Exit(1)
+				}
+				
+				// Registrar PID capturado
+				ig.Session.BrowserPID = chromePID
+				
+				if c.IsJSON {
+					outputLaunchJSON(profileID, chromePID, port, extLoaded, effectiveConfig)
+					os.Exit(0)
+				}
+				select {}
+			},
+		}
+		
+		// === DEFINICIÓN DE FLAGS ===
+		cmd.Flags().StringVar(&mode, "mode", "landing", "Modo de lanzamiento (landing o discovery)")
+		cmd.Flags().BoolVar(&saveOverrides, "save", false, "Persistir overrides en profiles.json")
+		cmd.Flags().StringVar(&overrideAlias, "override-alias", "", "Sobrescribir alias del perfil")
+		cmd.Flags().StringVar(&overrideRole, "override-role", "", "Sobrescribir rol (ej: Worker, Specialist, Premium)")
+		cmd.Flags().StringVar(&overrideEmail, "override-email", "", "Sobrescribir email")
+		cmd.Flags().StringVar(&overrideExtension, "override-extension", "", "Sobrescribir extension ID")
+		cmd.Flags().BoolVar(&overrideRegister, "override-register", false, "Sobrescribir flag de registro")
+		cmd.Flags().IntVar(&overrideStep, "override-step", 0, "Sobrescribir step actual")
+		cmd.Flags().Var(&linkedAccounts, "add-account", "Agregar linked account (formato: provider,email_or_username,status). Repetible")
+		cmd.Flags().StringVar(&configFile, "config-file", "", "Cargar overrides desde JSON. Usar @archivo.json o - para STDIN")
+		
+		// Anotaciones
+		if cmd.Annotations == nil {
+			cmd.Annotations = make(map[string]string)
+		}
+		cmd.Annotations["requires"] = `  - El perfil debe existir (usar 'sentinel seed' primero)
+  - brain.exe disponible y ejecutable
+  - Puerto 5678 libre para servicio Brain
+  - Extension ID válido en ignition_spec.json
+  - bloom-host.exe en bin/native/ para Native Messaging`
+
+		return cmd
+	})
+}
+
+// ========== HELPER FUNCTIONS ==========
+
+// buildOverridesFromFlags construye el mapa de overrides desde flags individuales
+func buildOverridesFromFlags(
+	alias, role, email, extension string,
+	register bool,
+	step int,
+	registerChanged bool,
+) map[string]interface{} {
+	overrides := make(map[string]interface{})
+	
+	if alias != "" {
+		overrides["profile_alias"] = alias
+	}
+	if role != "" {
+		overrides["role"] = role
+	}
+	if email != "" {
+		overrides["email"] = email
+	}
+	if extension != "" {
+		overrides["extension_id"] = extension
+	}
+	if registerChanged {
+		overrides["register"] = register
+	}
+	if step > 0 {
+		overrides["step"] = step
+	}
+	
+	return overrides
+}
+
+// parseLinkedAccounts convierte el formato "provider,email,status" a objetos
+func parseLinkedAccounts(accounts []string) ([]map[string]interface{}, error) {
+	result := make([]map[string]interface{}, 0, len(accounts))
+	
+	for _, acc := range accounts {
+		parts := strings.Split(acc, ",")
+		if len(parts) != 3 {
+			return nil, fmt.Errorf("formato inválido: %s (debe ser provider,email_or_username,status)", acc)
+		}
+		
+		provider := strings.TrimSpace(parts[0])
+		identifier := strings.TrimSpace(parts[1])
+		status := strings.TrimSpace(parts[2])
+		
+		// Validar status
+		if status != "active" && status != "inactive" && status != "error" {
+			return nil, fmt.Errorf("status inválido: %s (debe ser active, inactive o error)", status)
+		}
+		
+		account := map[string]interface{}{
+			"provider": provider,
+			"status":   status,
+		}
+		
+		// Determinar si es email o username (simple heurística)
+		if strings.Contains(identifier, "@") {
+			account["email"] = identifier
+			account["username"] = nil
+		} else {
+			account["email"] = nil
+			account["username"] = identifier
+		}
+		
+		result = append(result, account)
+	}
+	
+	return result, nil
+}
+
+// loadOverridesFromFile carga overrides desde archivo o STDIN
+func loadOverridesFromFile(path string) (map[string]interface{}, error) {
+	var data []byte
+	var err error
+	
+	switch {
+	case path == "-":
+		data, err = io.ReadAll(os.Stdin)
+		if err != nil {
+			return nil, fmt.Errorf("error leyendo desde STDIN: %v", err)
+		}
+	case len(path) > 0 && path[0] == '@':
+		data, err = os.ReadFile(path[1:])
+		if err != nil {
+			return nil, fmt.Errorf("error leyendo archivo %s: %v", path[1:], err)
+		}
+	default:
+		data, err = os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("error leyendo archivo %s: %v", path, err)
+		}
+	}
+	
+	var overrides map[string]interface{}
+	if err := json.Unmarshal(data, &overrides); err != nil {
+		return nil, fmt.Errorf("JSON inválido: %v", err)
+	}
+	
+	return overrides, nil
+}
+
+// mergeOverrides combina mapas dando prioridad al segundo
+func mergeOverrides(base, priority map[string]interface{}) map[string]interface{} {
+	result := make(map[string]interface{})
+	
+	for k, v := range base {
+		result[k] = v
+	}
+	
+	for k, v := range priority {
+		result[k] = v
+	}
+	
+	return result
+}
+
+// arrayFlags permite flags repetibles (--add-account múltiples veces)
+type arrayFlags []string
+
+func (i *arrayFlags) String() string {
+	return strings.Join(*i, ",")
+}
+
+func (i *arrayFlags) Set(value string) error {
+	*i = append(*i, value)
+	return nil
+}
+
+func (i *arrayFlags) Type() string {
+	return "stringArray"
+}
+
+// ========== OUTPUT FUNCTIONS ==========
+
+func outputLaunchJSON(profileID string, chromePID, port int, extLoaded bool, effectiveConfig map[string]interface{}) {
+	result := map[string]interface{}{
+		"success": true,
+		"data": map[string]interface{}{
+			"profile_id":       profileID,
+			"chrome_pid":       chromePID,
+			"port":             port,
+			"extension_loaded": extLoaded,
+			"effective_config": effectiveConfig,
+		},
+	}
+	jsonBytes, _ := json.Marshal(result)
+	fmt.Println(string(jsonBytes))
+}
+
+func outputLaunchError(err error) {
+	result := map[string]interface{}{
+		"success": false,
+		"error":   err.Error(),
+	}
+	jsonBytes, _ := json.Marshal(result)
+	fmt.Println(string(jsonBytes))
+}
+
+// ========== TYPE DEFINITIONS ==========
+
+type IgnitionSpec struct {
+	Engine struct {
+		Executable string `json:"executable"`
+		Type       string `json:"type"`
+	} `json:"engine"`
+	EngineFlags []string `json:"engine_flags"`
+	Paths       struct {
+		Extension string `json:"extension"`
+		LogsBase  string `json:"logs_base"`
+		UserData  string `json:"user_data"`
+	} `json:"paths"`
+	TargetURL   string   `json:"target_url"`
+	CustomFlags []string `json:"custom_flags"`
+	LaunchID    string   `json:"launch_id"`
+	ProfileID   string   `json:"profile_id"`
+}
+
+type LaunchResponse struct {
+	Status string `json:"status"`
+	Data   struct {
+		ProfileID string `json:"profile_id"`
+		Launch struct {
+			LaunchID string `json:"launch_id"`
+			PID      int    `json:"pid"`
+		} `json:"launch"`
+		LogFiles struct {
+			DebugLog string `json:"debug_log"`
+			NetLog   string `json:"net_log"`
+		} `json:"log_files"`
+	} `json:"data"`
+}
+
+type Ignition struct {
+	Core      *core.Core
+	Guardians map[string]*health.GuardianInstance
+	SpecPath  string
+	Session   struct {
+		ServicePID int
+		BrowserPID int
+		LaunchID   string
+	}
+}
+
+func New(c *core.Core) *Ignition {
+	return &Ignition{
+		Core:      c,
+		Guardians: make(map[string]*health.GuardianInstance),
+	}
+}
+
+// ========== LAUNCH LOGIC CON SILENT IGNITION ==========
+
+// Launch ejecuta el navegador con flags de silencio y captura el PID
+func (ig *Ignition) Launch(profileID, mode, configOverride string) (int, int, bool, map[string]interface{}, error) {
+	// Cargar spec de ignition
+	spec, err := ig.loadIgnitionSpec(profileID)
+	if err != nil {
+		return 0, 0, false, nil, err
+	}
+
+	// Construir comando con flags silenciosos
+	chromePath := spec.Engine.Executable
+	args := ig.buildSilentLaunchArgs(spec, mode)
+
+	// Configurar comando con ocultación de ventana
+	cmd := exec.Command(chromePath, args...)
+	
+	if runtime.GOOS == "windows" {
+		cmd.SysProcAttr = &syscall.SysProcAttr{
+			HideWindow:    true,
+			CreationFlags: 0x08000000, // CREATE_NO_WINDOW
+		}
+	}
+
+	// Redirigir logs a archivos en lugar de stdout/stderr
+	logDir := filepath.Join(ig.Core.Paths.AppDataDir, "logs", "chromium")
+	os.MkdirAll(logDir, 0755)
+	
+	logFile := filepath.Join(logDir, fmt.Sprintf("%s_%s.log", profileID, time.Now().Format("20060102_150405")))
+	logFileHandle, err := os.Create(logFile)
+	if err == nil {
+		cmd.Stdout = logFileHandle
+		cmd.Stderr = logFileHandle
+		defer logFileHandle.Close()
+	}
+
+	// Lanzar proceso
+	if err := cmd.Start(); err != nil {
+		return 0, 0, false, nil, fmt.Errorf("error iniciando Chromium: %v", err)
+	}
+
+	chromePID := cmd.Process.Pid
+	
+	// Esperar a que se estabilice
+	time.Sleep(2 * time.Second)
+
+	// Verificar que el proceso sigue vivo
+	if !ig.isProcessAlive(chromePID) {
+		return 0, 0, false, nil, fmt.Errorf("Chromium se cerró inmediatamente después del lanzamiento")
+	}
+
+	// TODO: Obtener puerto de debugging y verificar extensión
+	port := 9222 // Placeholder
+	extLoaded := true
+
+	effectiveConfig := make(map[string]interface{})
+	if configOverride != "" {
+		json.Unmarshal([]byte(configOverride), &effectiveConfig)
+	}
+
+	return chromePID, port, extLoaded, effectiveConfig, nil
+}
+
+// buildSilentLaunchArgs construye los argumentos con flags de silencio
+func (ig *Ignition) buildSilentLaunchArgs(spec *IgnitionSpec, mode string) []string {
+	args := []string{}
+
+	// Flags básicos de la spec
+	args = append(args, spec.EngineFlags...)
+
+	// FLAGS DE SILENCIO (Prompt B - Sección 3)
+	silentFlags := []string{
+		"--disable-background-networking",
+		"--disable-backgrounding-occluded-windows",
+		"--disable-breakpad",
+		"--silent-launch",
+		"--no-first-run",
+		"--no-default-browser-check",
+		"--disable-translate",
+		"--disable-sync",
+		"--disable-features=MediaRouter",
+	}
+	args = append(args, silentFlags...)
+
+	// Redirección de logs a archivo
+	logDir := filepath.Join(ig.Core.Paths.AppDataDir, "logs", "chromium")
+	logFile := filepath.Join(logDir, fmt.Sprintf("%s_%s.log", spec.ProfileID, time.Now().Format("20060102_150405")))
+	args = append(args, fmt.Sprintf("--log-file=%s", logFile))
+
+	// User data directory
+	if spec.Paths.UserData != "" {
+		args = append(args, fmt.Sprintf("--user-data-dir=%s", spec.Paths.UserData))
+	}
+
+	// Extension
+	if spec.Paths.Extension != "" {
+		args = append(args, fmt.Sprintf("--load-extension=%s", spec.Paths.Extension))
+	}
+
+	// Target URL
+	if spec.TargetURL != "" {
+		args = append(args, spec.TargetURL)
+	}
+
+	return args
+}
+
+// isProcessAlive verifica si un proceso está vivo
+func (ig *Ignition) isProcessAlive(pid int) bool {
+	if runtime.GOOS == "windows" {
+		cmd := exec.Command("tasklist", "/FI", fmt.Sprintf("PID eq %d", pid), "/NH")
+		output, err := cmd.Output()
+		return err == nil && len(output) > 0
+	}
+	
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	err = process.Signal(syscall.Signal(0))
+	return err == nil
+}
+
+// loadIgnitionSpec carga la especificación de ignition
+func (ig *Ignition) loadIgnitionSpec(profileID string) (*IgnitionSpec, error) {
+	// TODO: Cargar desde archivo real
+	// Por ahora retornar una spec de ejemplo
+	spec := &IgnitionSpec{
+		ProfileID: profileID,
+		LaunchID:  fmt.Sprintf("launch_%d", time.Now().Unix()),
+	}
+	
+	spec.Engine.Executable = filepath.Join(ig.Core.Paths.BinDir, "chrome-win", "chrome.exe")
+	spec.Engine.Type = "chromium"
+	
+	spec.Paths.UserData = filepath.Join(ig.Core.Paths.AppDataDir, "profiles", profileID)
+	spec.Paths.Extension = filepath.Join(ig.Core.Paths.BinDir, "extensions", "bloom-extension")
+	spec.Paths.LogsBase = filepath.Join(ig.Core.Paths.AppDataDir, "logs")
+	
+	spec.TargetURL = "https://bloom.localhost/landing"
+	
+	return spec, nil
+}
+
+// updateProfileWithOverrides actualiza profiles.json con los overrides
+func (ig *Ignition) updateProfileWithOverrides(profileID string, overrides map[string]interface{}) error {
+	profilesPath := filepath.Join(ig.Core.Paths.AppDataDir, "config", "profiles.json")
+	
+	data, err := os.ReadFile(profilesPath)
+	if err != nil {
+		return err
+	}
+
+	var registry process.ProfileRegistry
+	if err := json.Unmarshal(data, &registry); err != nil {
+		return err
+	}
+
+	// Buscar el perfil y aplicar overrides
+	found := false
+	for i, profile := range registry.Profiles {
+		if profile.ProfileID == profileID {
+			// Aplicar overrides (esto es simplificado, en realidad necesitarías una estructura más completa)
+			found = true
+			registry.Profiles[i] = profile
+			break
+		}
+	}
+
+	if !found {
+		return fmt.Errorf("perfil %s no encontrado", profileID)
+	}
+
+	// Guardar de vuelta
+	updatedData, _ := json.MarshalIndent(registry, "", "  ")
+	return os.WriteFile(profilesPath, updatedData, 0644)
+}
+
+// Stop detiene un perfil usando tree kill quirúrgico
+func (ig *Ignition) Stop(profileID string) error {
+	// Obtener PID del perfil
+	pid := ig.Session.BrowserPID
+	if pid == 0 {
+		return fmt.Errorf("no hay PID registrado para el perfil")
+	}
+
+	// Validar que el PID pertenece a Bloom antes de matar
+	if !ig.isBloomProcess(pid) {
+		return fmt.Errorf("el PID %d no pertenece a BloomNucleus", pid)
+	}
+
+	// Ejecutar tree kill
+	return process.KillProcessTree(pid)
+}
+
+// isBloomProcess verifica que un PID pertenece a Bloom
+func (ig *Ignition) isBloomProcess(pid int) bool {
+	if runtime.GOOS != "windows" {
+		return true // Simplificado para Unix
+	}
+
+	cmd := exec.Command("wmic", "process", "where", fmt.Sprintf("ProcessId=%d", pid), "get", "ExecutablePath", "/format:list")
+	output, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+
+	path := string(output)
+	bloomPath := filepath.Join(ig.Core.Paths.BinDir, "chrome-win")
+	return strings.Contains(strings.ToLower(path), strings.ToLower(bloomPath))
+}
+```
+
+--------------------------------------------------------------------------------
+
+internal\ignition\ignition_identity.go
+
+```go
+package ignition
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"time"
+)
+
+func (ig *Ignition) generateLogicalLaunchID(profileID string) string {
+	shortUUID := profileID[:8]
+	timestamp := time.Now().Format("150405")
+
+	profilesPath := filepath.Join(ig.Core.Paths.AppDataDir, "config", "profiles.json")
+	data, _ := os.ReadFile(profilesPath)
+
+	var root struct {
+		Profiles []map[string]interface{} `json:"profiles"`
+	}
+	json.Unmarshal(data, &root)
+
+	counter := 1
+	var launchID string
+
+	for i, p := range root.Profiles {
+		if p["id"] == profileID {
+			if val, ok := p["launch_count"].(float64); ok {
+				counter = int(val) + 1
+			}
+			
+			launchID = fmt.Sprintf("%03d_%s_%s", counter, shortUUID, timestamp)
+			
+			root.Profiles[i]["launch_count"] = counter
+			root.Profiles[i]["last_launch_id"] = launchID
+			break
+		}
+	}
+
+	updatedData, _ := json.MarshalIndent(root, "", "  ")
+	_ = os.WriteFile(profilesPath, updatedData, 0644)
+
+	return launchID
+}
+
+// prepareSessionFiles genera los archivos de configuración para la sesión
+// CRITICAL: Este es el ÚNICO lugar donde se generan los archivos *.synapse.config.js
+// Python (Brain) ya NO genera estos archivos - delegación completa a Go
+func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profileData map[string]interface{}, mode string, configOverride string) (map[string]interface{}, error) {
+	// === 1. CARGAR Y ACTUALIZAR IGNITION SPEC ===
+	specData, err := os.ReadFile(ig.SpecPath)
+	if err != nil {
+		return nil, fmt.Errorf("no se pudo leer ignition_spec: %v", err)
+	}
+
+	var spec IgnitionSpec
+	if err := json.Unmarshal(specData, &spec); err != nil {
+		return nil, err
+	}
+
+	spec.LaunchID = launchID
+	spec.ProfileID = profileID
+
+	if mode == "landing" {
+		spec.TargetURL = fmt.Sprintf("chrome-extension://%s/landing/index.html", ig.Core.Config.Provisioning.ExtensionID)
+	} else {
+		spec.TargetURL = fmt.Sprintf("chrome-extension://%s/discovery/index.html", ig.Core.Config.Provisioning.ExtensionID)
+	}
+
+	updatedSpec, _ := json.MarshalIndent(spec, "", "  ")
+	if err := os.WriteFile(ig.SpecPath, updatedSpec, 0644); err != nil {
+		return nil, err
+	}
+
+	// === 2. CONSTRUIR CONFIGURACIÓN BASE (desde profiles.json) ===
+	shortID := profileID[:8]
+	extDir := spec.Paths.Extension
+
+	configData := map[string]interface{}{
+		"profileId":     profileID,
+		"bridge_name":   fmt.Sprintf("com.bloom.synapse.%s", shortID),
+		"launchId":      launchID,
+		"profile_alias": getStringField(profileData, "alias", "MasterWorker"),
+		"mode":          mode,
+		"extension_id":  ig.Core.Config.Provisioning.ExtensionID,
+	}
+
+	// === 3. AGREGAR CAMPOS ESPECÍFICOS DE LANDING (desde profiles.json) ===
+	if mode == "landing" {
+		// Campos numéricos
+		configData["total_launches"] = getIntField(profileData, "launch_count", 0)
+		configData["intents_done"] = getIntField(profileData, "intents_done", 0)
+		configData["uptime"] = calculateUptime(profileData)
+		
+		// Strings
+		configData["role"] = getStringField(profileData, "role", "Worker")
+		configData["last_synch"] = getStringField(profileData, "last_synch", time.Now().Format(time.RFC3339))
+		
+		// Timestamps
+		configData["created_at"] = getStringField(profileData, "created_at", time.Now().Format(time.RFC3339))
+		configData["last_launch_at"] = time.Now().Format(time.RFC3339)
+		
+		// Linked accounts (array complejo)
+		if accounts, ok := profileData["linked_accounts"].([]interface{}); ok {
+			configData["linked_accounts"] = accounts
+		} else {
+			// Default vacío si no existe
+			configData["linked_accounts"] = []interface{}{}
+		}
+	}
+
+	// === 4. APLICAR OVERRIDES ===
+	if configOverride != "" {
+		var overrides map[string]interface{}
+		
+		if err := json.Unmarshal([]byte(configOverride), &overrides); err != nil {
+			return nil, fmt.Errorf("config-override inválido: %v", err)
+		}
+
+		for k, v := range overrides {
+			configData[k] = v
+		}
+
+		ig.Core.Logger.Info("[IGNITION] 🔧 %d overrides aplicados", len(overrides))
+	}
+
+	// === 5. GENERAR ARCHIVO SYNAPSE.CONFIG.JS ===
+	// IMPORTANTE: Este es el ÚNICO lugar donde se genera este archivo
+	// Python ya NO lo genera - evita race conditions y duplicación
+	configJSON, _ := json.MarshalIndent(configData, "", "  ")
+
+	var jsContent string
+	jsContent = fmt.Sprintf(`self.SYNAPSE_CONFIG = %s;`, string(configJSON))
+
+	configPath := filepath.Join(extDir, fmt.Sprintf("%s.synapse.config.js", mode))
+	if err := os.WriteFile(configPath, []byte(jsContent), 0644); err != nil {
+		return nil, fmt.Errorf("error escribiendo synapse.config.js: %v", err)
+	}
+
+	// === 5.1 VALIDAR QUE EL ARCHIVO SE CREÓ CORRECTAMENTE ===
+	if _, err := os.Stat(configPath); err != nil {
+		return nil, fmt.Errorf("validación fallida: config no generado correctamente en %s: %v", configPath, err)
+	}
+	
+	// Verificar que el contenido sea válido (opcional pero recomendado)
+	generatedContent, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("validación fallida: no se puede leer config generado: %v", err)
+	}
+	
+	if len(generatedContent) == 0 {
+		return nil, fmt.Errorf("validación fallida: config generado está vacío")
+	}
+
+	ig.Core.Logger.Info("[IGNITION] ✅ Config generado y validado: %s (%d bytes)", configPath, len(generatedContent))
+
+	// === 6. ACTUALIZAR NATIVE HOST MANIFEST ===
+	manifestName := fmt.Sprintf("com.bloom.synapse.%s.json", shortID)
+	manifestPath := filepath.Join(profileData["config_dir"].(string), manifestName)
+
+	mData, err := os.ReadFile(manifestPath)
+	if err != nil {
+		return nil, fmt.Errorf("manifiesto nativo ausente: %v", err)
+	}
+
+	var manifest map[string]interface{}
+	json.Unmarshal(mData, &manifest)
+	manifest["args"] = []string{"--profile-id", profileID, "--launch-id", launchID}
+
+	updatedManifest, _ := json.MarshalIndent(manifest, "", "  ")
+	if err := os.WriteFile(manifestPath, updatedManifest, 0644); err != nil {
+		return nil, err
+	}
+
+	ig.Core.Logger.Info("[IGNITION] 🆔 Identidad [%s] inyectada en Spec, JS y Native Host.", launchID)
+	ig.Core.Logger.Info("[IGNITION] 📁 Archivos de sesión preparados:")
+	ig.Core.Logger.Info("           - ignition_spec.json: ✅")
+	ig.Core.Logger.Info("           - %s.synapse.config.js: ✅", mode)
+	ig.Core.Logger.Info("           - native host manifest: ✅")
+	
+	return configData, nil
+}
+
+// updateProfileWithOverrides persiste overrides en profiles.json
+func (ig *Ignition) updateProfileWithOverrides(profileID string, overrides map[string]interface{}) error {
+	profilesPath := filepath.Join(ig.Core.Paths.AppDataDir, "config", "profiles.json")
+	data, err := os.ReadFile(profilesPath)
+	if err != nil {
+		return fmt.Errorf("no se pudo leer profiles.json: %v", err)
+	}
+	
+	var root struct {
+		Profiles []map[string]interface{} `json:"profiles"`
+	}
+	if err := json.Unmarshal(data, &root); err != nil {
+		return fmt.Errorf("JSON inválido en profiles.json: %v", err)
+	}
+	
+	found := false
+	for i, p := range root.Profiles {
+		if p["id"] == profileID {
+			found = true
+			
+			// Aplicar cada override
+			for k, v := range overrides {
+				// Mapear nombres de campos si es necesario
+				fieldName := k
+				
+				// Mapeo especial para campos específicos
+				switch k {
+				case "profile_alias":
+					fieldName = "alias"
+				case "extension_id":
+					// Este NO se guarda en profiles.json, es global
+					continue
+				}
+				
+				root.Profiles[i][fieldName] = v
+			}
+			
+			// Actualizar timestamp de modificación
+			root.Profiles[i]["updated_at"] = time.Now().Format(time.RFC3339)
+			
+			break
+		}
+	}
+	
+	if !found {
+		return fmt.Errorf("perfil %s no encontrado en profiles.json", profileID)
+	}
+	
+	// Escribir archivo actualizado
+	updatedData, _ := json.MarshalIndent(root, "", "  ")
+	if err := os.WriteFile(profilesPath, updatedData, 0644); err != nil {
+		return fmt.Errorf("error escribiendo profiles.json: %v", err)
+	}
+	
+	return nil
+}
+
+func (ig *Ignition) getProfileData(profileID string) (map[string]interface{}, error) {
+	profilesPath := filepath.Join(ig.Core.Paths.AppDataDir, "config", "profiles.json")
+	data, err := os.ReadFile(profilesPath)
+	if err != nil {
+		return nil, err
+	}
+
+	var root struct {
+		Profiles []map[string]interface{} `json:"profiles"`
+	}
+	if err := json.Unmarshal(data, &root); err != nil {
+		return nil, err
+	}
+
+	for _, p := range root.Profiles {
+		if p["id"] == profileID {
+			return p, nil
+		}
+	}
+	return nil, fmt.Errorf("perfil no registrado")
+}
+
+func (ig *Ignition) updateProfilesConfig(profileID string, physicalID string, debugLog string, netLog string) error {
+	profilesPath := filepath.Join(ig.Core.Paths.AppDataDir, "config", "profiles.json")
+	data, err := os.ReadFile(profilesPath)
+	if err != nil {
+		return err
+	}
+
+	var root struct {
+		Profiles []map[string]interface{} `json:"profiles"`
+	}
+	json.Unmarshal(data, &root)
+
+	for i, p := range root.Profiles {
+		if p["id"] == profileID {
+			root.Profiles[i]["last_physical_id"] = physicalID
+			root.Profiles[i]["last_logical_id"] = ig.Session.LaunchID
+			root.Profiles[i]["last_launch_id"] = ig.Session.LaunchID
+			root.Profiles[i]["log_files"] = map[string]string{
+				"debug_log": debugLog,
+				"net_log":   netLog,
+			}
+			break
+		}
+	}
+
+	updatedData, _ := json.MarshalIndent(root, "", "  ")
+	return os.WriteFile(profilesPath, updatedData, 0644)
+}
+
+// ========== HELPER FUNCTIONS ==========
+
+// getStringField obtiene un campo string con fallback
+func getStringField(data map[string]interface{}, field string, defaultValue string) string {
+	if val, ok := data[field].(string); ok {
+		return val
+	}
+	return defaultValue
+}
+
+// getIntField obtiene un campo int con fallback
+func getIntField(data map[string]interface{}, field string, defaultValue int) int {
+	if val, ok := data[field].(float64); ok {
+		return int(val)
+	}
+	return defaultValue
+}
+
+// calculateUptime calcula el uptime desde created_at
+func calculateUptime(profileData map[string]interface{}) int {
+	createdAtStr := getStringField(profileData, "created_at", "")
+	if createdAtStr == "" {
+		return 0
+	}
+	
+	createdAt, err := time.Parse(time.RFC3339, createdAtStr)
+	if err != nil {
+		return 0
+	}
+	
+	return int(time.Since(createdAt).Seconds())
+}
+```
+
+--------------------------------------------------------------------------------
+
+internal\ignition\ignition_lifecycle.go
+
+```go
+package ignition
+
+import (
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"sentinel/internal/health"
+	"strings"
+	"time"
+)
+
+func (ig *Ignition) Launch(profileID string, mode string, configOverride string) (int, int, bool, map[string]interface{}, error) {
+	ig.Core.Logger.Info("[IGNITION] 🚀 Iniciando secuencia soberana de lanzamiento (Modo: %s).", mode)
+
+	profileData, err := ig.getProfileData(profileID)
+	if err != nil {
+		return 0, 0, false, nil, fmt.Errorf("error crítico de inventario: %v", err)
+	}
+
+	ig.SpecPath = profileData["spec_path"].(string)
+	launchID := ig.generateLogicalLaunchID(profileID)
+	ig.Session.LaunchID = launchID
+
+	ig.Core.Logger.Info("[IGNITION] Realizando pre-flight check...")
+	ig.preFlight(profileID)
+
+	effectiveConfig, err := ig.prepareSessionFiles(profileID, launchID, profileData, mode, configOverride)
+	if err != nil {
+		return 0, 0, false, nil, fmt.Errorf("fallo en la inyección de identidad: %v", err)
+	}
+
+	ig.Core.Logger.Info("[IGNITION] Sincronizando estados con el sistema de archivos...")
+	time.Sleep(800 * time.Millisecond)
+
+	if err := ig.startBrainService(); err != nil {
+		return 0, 0, false, nil, err
+	}
+
+	finalPhysicalID, err := ig.execute(profileID)
+	if err != nil {
+		return 0, 0, false, nil, err
+	}
+	_ = finalPhysicalID
+
+	if ig.Core.IsJSON {
+		return ig.Session.BrowserPID, 5678, true, effectiveConfig, nil
+	}
+
+	guardian, err := health.NewGuardian(ig.Core, profileID, launchID, ig.Session.ServicePID)
+	if err == nil {
+		ig.Guardians[profileID] = guardian
+		guardian.Start()
+		ig.Core.Logger.Info("[IGNITION] 🛡️ Guardian desplegado con éxito.")
+	}
+
+	ig.Core.Logger.Success("[IGNITION] 🔥 Sistema en línea.")
+	return ig.Session.BrowserPID, 5678, true, effectiveConfig, nil
+}
+
+func (ig *Ignition) preFlight(profileID string) {
+	ig.freePortQuirurgico(5678)
+	lock := filepath.Join(ig.Core.Paths.ProfilesDir, profileID, "SingletonLock")
+	if _, err := os.Stat(lock); err == nil {
+		_ = os.Remove(lock)
+		ig.Core.Logger.Info("[IGNITION] SingletonLock eliminado.")
+	}
+}
+
+func (ig *Ignition) freePortQuirurgico(port int) {
+	cmd := exec.Command("cmd", "/C", fmt.Sprintf("netstat -ano | findstr :%d", port))
+	out, _ := cmd.Output()
+	lines := strings.Split(string(out), "\r\n")
+	for _, line := range lines {
+		fields := strings.Fields(line)
+		if len(fields) < 5 {
+			continue
+		}
+		if fields[4] != "0" && fields[4] != "" {
+			_ = exec.Command("taskkill", "/F", "/PID", fields[4], "/T").Run()
+		}
+	}
+	time.Sleep(1 * time.Second)
+}
+```
+
+--------------------------------------------------------------------------------
+
+internal\eventbus\daemon.go
+
+```go
+package eventbus
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"log"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"sentinel/internal/process"
+	"sync"
+	"syscall"
+	"time"
+)
+
+// StdinCommand representa un comando recibido desde Electron vía Stdin
+type StdinCommand struct {
+	Command   string                 `json:"command"`
+	ProfileID string                 `json:"profile_id,omitempty"`
+	ID        string                 `json:"id"`
+	Data      map[string]interface{} `json:"data,omitempty"`
+}
+
+// StdoutResponse representa una respuesta enviada a Electron vía Stdout
+type StdoutResponse struct {
+	Type      string                 `json:"type"`
+	ID        string                 `json:"id,omitempty"`
+	Status    string                 `json:"status,omitempty"`
+	ProfileID string                 `json:"profile_id,omitempty"`
+	Data      map[string]interface{} `json:"data,omitempty"`
+	Error     string                 `json:"error,omitempty"`
+	Timestamp int64                  `json:"timestamp"`
+}
+
+// DaemonMode gestiona el modo persistente de Sentinel
+type DaemonMode struct {
+	client         *SentinelClient
+	stdinChan      chan StdinCommand
+	shutdownChan   chan os.Signal
+	ctx            context.Context
+	cancel         context.CancelFunc
+	logger         *log.Logger
+	stdoutMu       sync.Mutex
+	lastStateFile  string
+	appDataDir     string
+}
+
+// NewDaemonMode crea una nueva instancia del modo daemon
+func NewDaemonMode(brainAddr string) *DaemonMode {
+	ctx, cancel := context.WithCancel(context.Background())
+	
+	// Obtener AppDataDir desde variable de entorno o default
+	appDataDir := os.Getenv("LOCALAPPDATA")
+	if appDataDir == "" {
+		appDataDir = os.Getenv("HOME") // Fallback para Unix
+	}
+	if appDataDir != "" {
+		appDataDir = filepath.Join(appDataDir, "BloomNucleus")
+	} else {
+		appDataDir = "/tmp/BloomNucleus" // Fallback final
+	}
+	
+	return &DaemonMode{
+		client:        NewSentinelClient(brainAddr),
+		stdinChan:     make(chan StdinCommand, 10),
+		shutdownChan:  make(chan os.Signal, 1),
+		ctx:           ctx,
+		cancel:        cancel,
+		logger:        log.New(os.Stderr, "[Daemon] ", log.LstdFlags),
+		lastStateFile: filepath.Join(appDataDir, "sentinel_last_event.txt"),
+		appDataDir:    appDataDir,
+	}
+}
+
+// Start inicia el modo daemon con todos los workers
+func (dm *DaemonMode) Start() error {
+	dm.logger.Printf("========================================")
+	dm.logger.Printf("🚀 Sentinel - Modo Sidecar Persistente")
+	dm.logger.Printf("========================================")
+	
+	// FASE 1: AUDITORÍA DE INICIO (Prompt B - Sección 1)
+	dm.logger.Printf("🔍 Ejecutando auditoría de inicio (Reconciliation Logic)...")
+	report, err := process.StartupAudit(dm.appDataDir, dm.client.addr)
+	if err != nil {
+		dm.logger.Printf("⚠️  Error en auditoría: %v", err)
+	} else {
+		dm.logger.Printf("✓ Auditoría completada:")
+		dm.logger.Printf("  - Perfiles totales: %d", report.TotalProfiles)
+		dm.logger.Printf("  - Perfiles abiertos: %d", report.OpenProfiles)
+		dm.logger.Printf("  - Perfiles huérfanos detectados: %d", len(report.OrphanedProfiles))
+		dm.logger.Printf("  - Correcciones aplicadas: %d", report.CorrectedCount)
+		
+		if len(report.OrphanedProfiles) > 0 {
+			dm.logger.Printf("  - IDs huérfanos: %v", report.OrphanedProfiles)
+		}
+		
+		// Emitir reporte como evento JSON en stdout
+		dm.emitToElectron(StdoutResponse{
+			Type:      "AUDIT_COMPLETED",
+			Status:    "success",
+			Timestamp: time.Now().UnixNano(),
+			Data: map[string]interface{}{
+				"total_profiles":    report.TotalProfiles,
+				"open_profiles":     report.OpenProfiles,
+				"orphaned_profiles": report.OrphanedProfiles,
+				"corrected_count":   report.CorrectedCount,
+				"errors":            report.Errors,
+			},
+		})
+	}
+	
+	// FASE 2: CONECTAR CON EL BRAIN
+	dm.logger.Printf("🔌 Conectando con Brain en %s...", dm.client.addr)
+	if err := dm.client.Connect(); err != nil {
+		return fmt.Errorf("no se pudo conectar con Brain: %w", err)
+	}
+	
+	// Esperar a que la conexión esté activa
+	if err := dm.client.WaitForConnection(10 * time.Second); err != nil {
+		return fmt.Errorf("timeout conectando con Brain: %w", err)
+	}
+	
+	dm.logger.Printf("✓ Conectado con Brain")
+	
+	// FASE 3: REHIDRATACIÓN
+	dm.rehydrate()
+	
+	// Configurar manejo de señales
+	signal.Notify(dm.shutdownChan, os.Interrupt, syscall.SIGTERM)
+	
+	// FASE 4: REGISTRAR HANDLERS
+	dm.registerEventHandlers()
+	
+	// FASE 5: INICIAR WORKERS
+	go dm.stdinWorker()
+	go dm.controlWorker()
+	go dm.zombieCleanupWorker() // Nuevo worker de limpieza
+	
+	// Enviar evento de inicio
+	dm.emitToElectron(StdoutResponse{
+		Type:      "DAEMON_READY",
+		Status:    "running",
+		Timestamp: time.Now().UnixNano(),
+		Data: map[string]interface{}{
+			"pid":     os.Getpid(),
+			"version": "1.0.0",
+			"audit":   report,
+		},
+	})
+	
+	dm.logger.Printf("✓ Todos los workers activos. Sentinel en modo escucha...")
+	
+	// Bloquear hasta recibir señal de shutdown
+	<-dm.shutdownChan
+	
+	return dm.gracefulShutdown()
+}
+
+// stdinWorker escucha comandos desde Electron vía Stdin
+func (dm *DaemonMode) stdinWorker() {
+	dm.logger.Printf("Worker Stdin iniciado")
+	scanner := bufio.NewScanner(os.Stdin)
+	
+	for scanner.Scan() {
+		line := scanner.Text()
+		
+		var cmd StdinCommand
+		if err := json.Unmarshal([]byte(line), &cmd); err != nil {
+			dm.logger.Printf("Error parseando comando stdin: %v", err)
+			dm.emitError("", "PARSE_ERROR", fmt.Sprintf("JSON inválido: %v", err))
+			continue
+		}
+		
+		// Enviar comando al canal de control
+		select {
+		case dm.stdinChan <- cmd:
+		case <-dm.ctx.Done():
+			return
+		}
+	}
+	
+	if err := scanner.Err(); err != nil {
+		dm.logger.Printf("Error leyendo stdin: %v", err)
+	}
+}
+
+// controlWorker procesa comandos y eventos
+func (dm *DaemonMode) controlWorker() {
+	dm.logger.Printf("Worker de Control iniciado")
+	
+	for {
+		select {
+		case <-dm.ctx.Done():
+			dm.logger.Printf("Cerrando worker de control")
+			return
+			
+		case cmd := <-dm.stdinChan:
+			dm.handleStdinCommand(cmd)
+		}
+	}
+}
+
+// zombieCleanupWorker ejecuta limpieza periódica de procesos zombies (Prompt B - Sección 2)
+func (dm *DaemonMode) zombieCleanupWorker() {
+	dm.logger.Printf("Worker de Limpieza de Zombies iniciado (cada 2 minutos)")
+	ticker := time.NewTicker(2 * time.Minute)
+	defer ticker.Stop()
+	
+	for {
+		select {
+		case <-dm.ctx.Done():
+			dm.logger.Printf("Cerrando worker de limpieza")
+			return
+			
+		case <-ticker.C:
+			dm.executeZombieCleanup()
+		}
+	}
+}
+
+// executeZombieCleanup ejecuta la limpieza de zombies
+func (dm *DaemonMode) executeZombieCleanup() {
+	dm.logger.Printf("🧹 Iniciando limpieza de zombies...")
+	
+	// Obtener PIDs activos desde profiles.json
+	activePIDs := dm.getActivePIDs()
+	dm.logger.Printf("PIDs activos registrados: %v", activePIDs)
+	
+	// Ejecutar limpieza
+	if err := process.SafeCleanup(dm.appDataDir, activePIDs); err != nil {
+		dm.logger.Printf("⚠️  Error en limpieza de zombies: %v", err)
+		
+		dm.emitToElectron(StdoutResponse{
+			Type:      "ZOMBIE_CLEANUP_ERROR",
+			Status:    "error",
+			Error:     err.Error(),
+			Timestamp: time.Now().UnixNano(),
+		})
+	} else {
+		dm.logger.Printf("✓ Limpieza de zombies completada")
+		
+		dm.emitToElectron(StdoutResponse{
+			Type:      "ZOMBIE_CLEANUP_COMPLETED",
+			Status:    "success",
+			Timestamp: time.Now().UnixNano(),
+		})
+	}
+}
+
+// getActivePIDs obtiene los PIDs activos desde profiles.json
+func (dm *DaemonMode) getActivePIDs() []int {
+	profilesPath := filepath.Join(dm.appDataDir, "config", "profiles.json")
+	data, err := os.ReadFile(profilesPath)
+	if err != nil {
+		dm.logger.Printf("Error leyendo profiles.json: %v", err)
+		return []int{}
+	}
+
+	var registry process.ProfileRegistry
+	if err := json.Unmarshal(data, &registry); err != nil {
+		dm.logger.Printf("Error parseando profiles.json: %v", err)
+		return []int{}
+	}
+
+	var pids []int
+	for _, profile := range registry.Profiles {
+		if profile.Status == "open" && profile.PID > 0 {
+			pids = append(pids, profile.PID)
+		}
+	}
+
+	return pids
+}
+
+// handleStdinCommand procesa un comando recibido desde Electron
+func (dm *DaemonMode) handleStdinCommand(cmd StdinCommand) {
+	dm.logger.Printf("Procesando comando: %s (ID: %s)", cmd.Command, cmd.ID)
+	
+	// Enviar ACK inmediato
+	dm.emitToElectron(StdoutResponse{
+		Type:      "ACK",
+		ID:        cmd.ID,
+		Status:    "processing",
+		Timestamp: time.Now().UnixNano(),
+	})
+	
+	// Procesar según el comando
+	switch cmd.Command {
+	case "launch":
+		dm.handleLaunch(cmd)
+		
+	case "stop":
+		dm.handleStop(cmd)
+		
+	case "status":
+		dm.handleStatus(cmd)
+		
+	case "intent":
+		dm.handleIntent(cmd)
+		
+	case "poll_events":
+		dm.handlePollEvents(cmd)
+		
+	case "cleanup_zombies":
+		dm.handleCleanupZombies(cmd)
+		
+	case "exit":
+		dm.handleExit(cmd)
+		
+	default:
+		dm.emitError(cmd.ID, "UNKNOWN_COMMAND", fmt.Sprintf("Comando desconocido: %s", cmd.Command))
+	}
+}
+
+// handleLaunch procesa el comando de lanzamiento de perfil
+func (dm *DaemonMode) handleLaunch(cmd StdinCommand) {
+	if cmd.ProfileID == "" {
+		dm.emitError(cmd.ID, "MISSING_PROFILE_ID", "profile_id es requerido")
+		return
+	}
+	
+	// Enviar comando al Brain
+	if err := dm.client.LaunchProfile(cmd.ProfileID); err != nil {
+		dm.emitError(cmd.ID, "LAUNCH_FAILED", err.Error())
+		return
+	}
+	
+	// Respuesta exitosa
+	dm.emitToElectron(StdoutResponse{
+		Type:      "COMMAND_RESULT",
+		ID:        cmd.ID,
+		Status:    "success",
+		ProfileID: cmd.ProfileID,
+		Timestamp: time.Now().UnixNano(),
+		Data: map[string]interface{}{
+			"message": "Perfil lanzado correctamente",
+		},
+	})
+}
+
+// handleStop procesa el comando de detención de perfil
+func (dm *DaemonMode) handleStop(cmd StdinCommand) {
+	if cmd.ProfileID == "" {
+		dm.emitError(cmd.ID, "MISSING_PROFILE_ID", "profile_id es requerido")
+		return
+	}
+	
+	if err := dm.client.StopProfile(cmd.ProfileID); err != nil {
+		dm.emitError(cmd.ID, "STOP_FAILED", err.Error())
+		return
+	}
+	
+	dm.emitToElectron(StdoutResponse{
+		Type:      "COMMAND_RESULT",
+		ID:        cmd.ID,
+		Status:    "success",
+		ProfileID: cmd.ProfileID,
+		Timestamp: time.Now().UnixNano(),
+	})
+}
+
+// handleStatus solicita el estado de un perfil
+func (dm *DaemonMode) handleStatus(cmd StdinCommand) {
+	if cmd.ProfileID == "" {
+		dm.emitError(cmd.ID, "MISSING_PROFILE_ID", "profile_id es requerido")
+		return
+	}
+	
+	if err := dm.client.RequestProfileStatus(cmd.ProfileID); err != nil {
+		dm.emitError(cmd.ID, "STATUS_FAILED", err.Error())
+		return
+	}
+	
+	dm.emitToElectron(StdoutResponse{
+		Type:      "COMMAND_RESULT",
+		ID:        cmd.ID,
+		Status:    "success",
+		Timestamp: time.Now().UnixNano(),
+	})
+}
+
+// handleIntent envía una intención al Brain
+func (dm *DaemonMode) handleIntent(cmd StdinCommand) {
+	if cmd.ProfileID == "" {
+		dm.emitError(cmd.ID, "MISSING_PROFILE_ID", "profile_id es requerido")
+		return
+	}
+	
+	intentType, ok := cmd.Data["intent_type"].(string)
+	if !ok {
+		dm.emitError(cmd.ID, "MISSING_INTENT_TYPE", "intent_type es requerido")
+		return
+	}
+	
+	payload, _ := cmd.Data["payload"].(map[string]interface{})
+	
+	if err := dm.client.SubmitIntent(cmd.ProfileID, intentType, payload); err != nil {
+		dm.emitError(cmd.ID, "INTENT_FAILED", err.Error())
+		return
+	}
+	
+	dm.emitToElectron(StdoutResponse{
+		Type:      "COMMAND_RESULT",
+		ID:        cmd.ID,
+		Status:    "success",
+		Timestamp: time.Now().UnixNano(),
+	})
+}
+
+// handlePollEvents solicita eventos históricos
+func (dm *DaemonMode) handlePollEvents(cmd StdinCommand) {
+	since := int64(0)
+	if sinceVal, ok := cmd.Data["since"].(float64); ok {
+		since = int64(sinceVal)
+	}
+	
+	if err := dm.client.PollEvents(since); err != nil {
+		dm.emitError(cmd.ID, "POLL_FAILED", err.Error())
+		return
+	}
+	
+	dm.emitToElectron(StdoutResponse{
+		Type:      "COMMAND_RESULT",
+		ID:        cmd.ID,
+		Status:    "success",
+		Timestamp: time.Now().UnixNano(),
+	})
+}
+
+// handleCleanupZombies ejecuta limpieza manual de zombies
+func (dm *DaemonMode) handleCleanupZombies(cmd StdinCommand) {
+	dm.logger.Printf("Limpieza manual de zombies solicitada")
+	dm.executeZombieCleanup()
+	
+	dm.emitToElectron(StdoutResponse{
+		Type:      "COMMAND_RESULT",
+		ID:        cmd.ID,
+		Status:    "success",
+		Timestamp: time.Now().UnixNano(),
+		Data: map[string]interface{}{
+			"message": "Limpieza de zombies ejecutada",
+		},
+	})
+}
+
+// handleExit inicia el shutdown graceful
+func (dm *DaemonMode) handleExit(cmd StdinCommand) {
+	dm.logger.Printf("Comando exit recibido, iniciando shutdown...")
+	
+	dm.emitToElectron(StdoutResponse{
+		Type:      "COMMAND_RESULT",
+		ID:        cmd.ID,
+		Status:    "success",
+		Timestamp: time.Now().UnixNano(),
+		Data: map[string]interface{}{
+			"message": "Iniciando shutdown...",
+		},
+	})
+	
+	// Señalizar shutdown
+	dm.shutdownChan <- syscall.SIGTERM
+}
+
+// registerEventHandlers registra handlers para eventos del Brain
+func (dm *DaemonMode) registerEventHandlers() {
+	// Handler global que reenvía todos los eventos a Electron
+	dm.client.On("*", func(event Event) {
+		// Guardar timestamp del último evento
+		dm.saveLastEventTimestamp(event.Timestamp)
+		
+		// Convertir el evento del Brain a formato de salida para Electron
+		dm.emitToElectron(StdoutResponse{
+			Type:      event.Type,
+			ProfileID: event.ProfileID,
+			Status:    event.Status,
+			Data:      event.Data,
+			Error:     event.Error,
+			Timestamp: event.Timestamp,
+		})
+	})
+	
+	// Handler específico para EXTENSION_ERROR (integración con Guardian)
+	dm.client.On("EXTENSION_ERROR", func(event Event) {
+		dm.logger.Printf("⚠️  Error de extensión detectado: %s", event.ProfileID)
+	})
+	
+	// Handler para ONBOARDING_COMPLETE
+	dm.client.On("ONBOARDING_COMPLETE", func(event Event) {
+		dm.logger.Printf("✓ Onboarding completado: %s", event.ProfileID)
+	})
+	
+	// Handler para PROFILE_CONNECTED (Handshake de 3 fases confirmado)
+	dm.client.On("PROFILE_CONNECTED", func(event Event) {
+		dm.logger.Printf("✓ Perfil conectado (handshake confirmado): %s", event.ProfileID)
+	})
+	
+	// Handler para PROFILE_DISCONNECTED
+	dm.client.On("PROFILE_DISCONNECTED", func(event Event) {
+		dm.logger.Printf("⚠️  Perfil desconectado: %s", event.ProfileID)
+	})
+}
+
+// emitToElectron envía un mensaje a Electron vía Stdout (JSON)
+func (dm *DaemonMode) emitToElectron(response StdoutResponse) {
+	dm.stdoutMu.Lock()
+	defer dm.stdoutMu.Unlock()
+	
+	data, err := json.Marshal(response)
+	if err != nil {
+		dm.logger.Printf("Error serializando respuesta: %v", err)
+		return
+	}
+	
+	// Escribir JSON seguido de newline
+	fmt.Println(string(data))
+}
+
+// emitError envía un error a Electron
+func (dm *DaemonMode) emitError(id, errorType, message string) {
+	dm.emitToElectron(StdoutResponse{
+		Type:      "ERROR",
+		ID:        id,
+		Status:    "error",
+		Error:     fmt.Sprintf("[%s] %s", errorType, message),
+		Timestamp: time.Now().UnixNano(),
+	})
+}
+
+// rehydrate carga el último timestamp y solicita eventos perdidos
+func (dm *DaemonMode) rehydrate() {
+	data, err := os.ReadFile(dm.lastStateFile)
+	if err != nil {
+		dm.logger.Printf("No se encontró estado previo, iniciando desde cero")
+		return
+	}
+	
+	var lastTimestamp int64
+	if _, err := fmt.Sscanf(string(data), "%d", &lastTimestamp); err != nil {
+		dm.logger.Printf("Error parseando último timestamp: %v", err)
+		return
+	}
+	
+	dm.logger.Printf("Rehidratando desde timestamp: %d", lastTimestamp)
+	
+	if err := dm.client.PollEvents(lastTimestamp); err != nil {
+		dm.logger.Printf("Error solicitando eventos históricos: %v", err)
+	}
+}
+
+// saveLastEventTimestamp guarda el timestamp del último evento
+func (dm *DaemonMode) saveLastEventTimestamp(timestamp int64) {
+	data := fmt.Sprintf("%d", timestamp)
+	if err := os.WriteFile(dm.lastStateFile, []byte(data), 0644); err != nil {
+		dm.logger.Printf("Error guardando timestamp: %v", err)
+	}
+}
+
+// gracefulShutdown cierra todos los recursos limpiamente
+func (dm *DaemonMode) gracefulShutdown() error {
+	dm.logger.Printf("Iniciando shutdown graceful...")
+	
+	// Emitir evento de shutdown a Electron
+	dm.emitToElectron(StdoutResponse{
+		Type:      "DAEMON_SHUTDOWN",
+		Status:    "stopping",
+		Timestamp: time.Now().UnixNano(),
+	})
+	
+	// Cancelar contexto para detener workers
+	dm.cancel()
+	
+	// Notificar al Brain antes de cerrar
+	shutdownEvent := Event{
+		Type:      "SENTINEL_SHUTDOWN",
+		Timestamp: time.Now().UnixNano(),
+		Data: map[string]interface{}{
+			"reason": "graceful_shutdown",
+		},
+	}
+	
+	if err := dm.client.Send(shutdownEvent); err != nil {
+		dm.logger.Printf("Error notificando shutdown al Brain: %v", err)
+	}
+	
+	// Dar tiempo para que el mensaje llegue
+	time.Sleep(500 * time.Millisecond)
+	
+	// Cerrar la conexión con el Brain
+	if err := dm.client.Close(); err != nil {
+		dm.logger.Printf("Error cerrando cliente: %v", err)
+	}
+	
+	dm.logger.Printf("✓ Shutdown completado correctamente")
+	
+	return nil
+}
+```
+
+--------------------------------------------------------------------------------
+
+internal\ui\dashboard.go
+
+```go
+package ui
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sentinel/internal/core"
+	"time"
+
+	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
+	"github.com/spf13/cobra"
+)
+
+func init() {
+	// --- COMANDO 1: COCKPIT (La TUI) ---
+	core.RegisterCommand("UI", func(c *core.Core) *cobra.Command {
+		var healthMode bool
+		cmd := &cobra.Command{
+			Use:   "cockpit",
+			Short: "Lanza la interfaz de monitoreo integrada (TUI)",
+			Example: `  sentinel cockpit
+  sentinel cockpit --health`,
+			Run: func(cmd *cobra.Command, args []string) {
+				mode := "log"
+				if healthMode { mode = "health" }
+				Launch(c, mode)
+			},
+		}
+		cmd.Flags().BoolVar(&healthMode, "health", false, "Iniciar directamente en modo health")
+
+		if cmd.Annotations == nil {
+			cmd.Annotations = make(map[string]string)
+		}
+		cmd.Annotations["requires"] = `  - Archivo telemetry.json en logs/ (se crea automáticamente si no existe)
+  - Terminal con soporte para TUI (tview/tcell)
+  - Comandos disponibles en TUI: 'log', 'health', 'q' o 'exit'`
+
+		return cmd
+	})
+
+	// --- COMANDO 2: TELEMETRY (Gestión de Datos) ---
+	core.RegisterCommand("UI", func(c *core.Core) *cobra.Command {
+		telCmd := &cobra.Command{
+			Use:   "telemetry",
+			Short: "Gestión y diagnóstico de streams de telemetría",
+			Example: `  sentinel telemetry status
+  sentinel telemetry clean`,
+		}
+
+		// Subcomando: STATUS
+		statusCmd := &cobra.Command{
+			Use:   "status",
+			Short: "Muestra el estado actual del JSON de telemetría",
+			Example: `  sentinel telemetry status`,
+			Run: func(cmd *cobra.Command, args []string) {
+				telPath := filepath.Join(c.Paths.LogsDir, "telemetry.json")
+				data, err := os.ReadFile(telPath)
+				if err != nil {
+					fmt.Printf("Error: No se pudo leer el archivo de telemetría: %v\n", err)
+					return
+				}
+				var tel core.TelemetryData
+				json.Unmarshal(data, &tel)
+				fmt.Printf("Streams Activos: %d\n", len(tel.Streams))
+				for id, info := range tel.Streams {
+					status := "[OFFLINE]"
+					if info.Active { status = "[ACTIVE]" }
+					fmt.Printf(" - %-10s %s (%s)\n", id, info.Label, status)
+				}
+			},
+		}
+
+		// Subcomando: CLEAN
+		cleanCmd := &cobra.Command{
+			Use:   "clean",
+			Short: "Limpia y resetea el archivo de telemetría",
+			Example: `  sentinel telemetry clean`,
+			Run: func(cmd *cobra.Command, args []string) {
+				telPath := filepath.Join(c.Paths.LogsDir, "telemetry.json")
+				emptyTel := core.TelemetryData{Streams: make(map[string]core.StreamInfo)}
+				data, _ := json.MarshalIndent(emptyTel, "", "  ")
+				_ = os.WriteFile(telPath, data, 0644)
+				c.Logger.Success("Archivo de telemetría reseteado correctamente.")
+			},
+		}
+
+		if statusCmd.Annotations == nil {
+			statusCmd.Annotations = make(map[string]string)
+		}
+		statusCmd.Annotations["requires"] = `  - telemetry.json existente en logs/`
+
+		if cleanCmd.Annotations == nil {
+			cleanCmd.Annotations = make(map[string]string)
+		}
+		cleanCmd.Annotations["requires"] = `  - Permiso de escritura en logs/`
+
+		telCmd.AddCommand(statusCmd)
+		telCmd.AddCommand(cleanCmd)
+
+		return telCmd
+	})
+}
+
+func Launch(c *core.Core, mode string) {
+	telPath := filepath.Join(c.Paths.LogsDir, "telemetry.json")
+	
+	// Limpieza de telemetría (Refresher)
+	CleanTelemetry(telPath)
+
+	app := tview.NewApplication()
+	pages := tview.NewPages()
+	logs := NewLogStation()
+	health := NewHealthStation()
+	cmd := tview.NewInputField().SetLabel(": ").SetFieldBackgroundColor(tcell.ColorBlack)
+
+	pages.AddPage("log", logs.Layout, true, mode == "log")
+	pages.AddPage("health", health.Layout, true, mode == "health")
+
+	root := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(pages, 0, 1, true).
+		AddItem(cmd, 1, 1, false)
+
+	// Manejo de comandos en la línea inferior
+	cmd.SetDoneFunc(func(key tcell.Key) {
+		if key == tcell.KeyEnter {
+			text := cmd.GetText()
+			switch text {
+			case "log": pages.SwitchToPage("log")
+			case "health": pages.SwitchToPage("health")
+			case "q", "exit": app.Stop()
+			}
+			cmd.SetText("")
+			app.SetFocus(pages)
+		}
+	})
+
+	// Loop independiente para Logs
+	go func() {
+		for {
+			data, err := os.ReadFile(telPath)
+			if err == nil {
+				var tel core.TelemetryData
+				if err := json.Unmarshal(data, &tel); err == nil {
+					app.QueueUpdateDraw(func() { logs.Update(tel, app) })
+				}
+			}
+			time.Sleep(2 * time.Second)
+		}
+	}()
+
+	// Loop independiente para Health
+	go func() {
+		for {
+			app.QueueUpdateDraw(func() { health.Refresh(c) })
+			time.Sleep(5 * time.Second)
+		}
+	}()
+
+	if err := app.SetRoot(root, true).EnableMouse(true).Run(); err != nil {
+		panic(err)
+	}
+}
+```
+
+--------------------------------------------------------------------------------
+

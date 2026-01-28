@@ -11,6 +11,7 @@ type Paths struct {
 	AppDataDir  string
 	ProfilesDir string
 	LogsDir     string
+	ExtensionsDir string
 }
 
 func InitPaths() (*Paths, error) {
