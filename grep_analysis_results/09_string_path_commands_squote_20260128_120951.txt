@@ -1,0 +1,9 @@
+Command: 09_string_path_commands_squote
+Timestamp: 20260128_120951
+Success: False
+================================================================================
+
+OUTPUT: (no matches found)
+
+ERRORS:
+Command timed out after 30 seconds

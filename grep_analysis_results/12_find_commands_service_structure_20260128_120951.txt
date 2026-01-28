@@ -1,0 +1,10 @@
+Command: 12_find_commands_service_structure
+Timestamp: 20260128_120951
+Success: False
+================================================================================
+
+OUTPUT: (no matches found)
+
+ERRORS:
+FIND: Parameter format not correct
+

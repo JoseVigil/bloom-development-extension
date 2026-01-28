@@ -240,6 +240,7 @@ bloom-development-extension/
     │   │   ├── profile_create.py
     │   │   ├── profile_launcher.py
     │   │   ├── profile_manager.py
+    │   │   ├── profile_state_manager.py
     │   │   └── web/
     │   │       ├── __init__.py
     │   │       ├── __pycache__/ [... cache]
@@ -277,6 +278,7 @@ bloom-development-extension/
     │   │   └── scanner.py
     │   ├── project_manager.py
     │   ├── service/
+    │   │   ├── server_event_bus.py
     │   │   └── server_manager.py
     │   ├── synapse/
     │   │   ├── __init__.py
