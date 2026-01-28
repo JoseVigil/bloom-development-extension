@@ -1,9 +1,0 @@
-Command: 10_string_path_core_squote
-Timestamp: 20260128_120951
-Success: False
-================================================================================
-
-OUTPUT: (no matches found)
-
-ERRORS:
-Command timed out after 30 seconds

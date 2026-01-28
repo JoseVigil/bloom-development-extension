@@ -1,39 +1,26 @@
 """
-Service command for Brain CLI.
+Server command for Brain CLI.
 Manages the central TCP multiplexer server for Chrome Native Host connections.
 
-FIXES CRÍTICOS:
-- Logging defensivo antes de que el logger principal arranque
-- Catch-all de excepciones para evitar crashes silenciosos
-- Validación de puerto disponible
-- GUARDAS DEFENSIVAS en _render_stop para evitar NoneType subscriptable
+REFACTORED: Usa brain.server logger especializado en lugar de emergency_log.
 """
 
 import typer
 import sys
 import os
+import logging
 from typing import Optional
 from pathlib import Path
 
-# ============================================================================
-# FIX CRÍTICO 1: LOGGING DE EMERGENCIA
-# Si el logger principal falla, necesitamos escribir ALGO al log del servicio
-# ============================================================================
-def emergency_log(message: str, is_error: bool = False):
-    """
-    Escribe al log de emergencia si el logger principal falla.
-    En servicios Windows, esto va a brain_service.err
-    """
-    try:
-        stream = sys.stderr if is_error else sys.stdout
-        stream.write(f"[EMERGENCY] {message}\n")
-        stream.flush()
-    except:
-        pass  # Si hasta esto falla, no hay nada que hacer
+from brain.cli.base import BaseCommand, CommandMetadata
+from brain.cli.categories import CommandCategory
+
+# Logger especializado para el servidor
+logger = logging.getLogger("brain.server")
 
 
 # ============================================================================
-# FIX CRÍTICO 2: VALIDAR ENTORNO ANTES DE IMPORTAR
+# VALIDACIÓN DE ENTORNO
 # ============================================================================
 def validate_service_environment():
     """
@@ -45,17 +32,17 @@ def validate_service_environment():
         import asyncio
         import socket
         
-        emergency_log("✅ Dependencias críticas OK")
+        logger.info("✅ Dependencias críticas OK")
         return True
         
     except ImportError as e:
-        emergency_log(f"❌ FALTA DEPENDENCIA: {e}", is_error=True)
-        emergency_log("   -> Recompilar con: --hidden-import=asyncio", is_error=True)
+        logger.error(f"❌ FALTA DEPENDENCIA: {e}")
+        logger.error("   -> Recompilar con: --hidden-import=asyncio")
         return False
 
 
 # ============================================================================
-# FIX CRÍTICO 3: VALIDAR PUERTO DISPONIBLE
+# VALIDACIÓN DE PUERTO
 # ============================================================================
 def is_port_available(port: int, host: str = "127.0.0.1") -> bool:
     """
@@ -67,20 +54,16 @@ def is_port_available(port: int, host: str = "127.0.0.1") -> bool:
             s.bind((host, port))
             return True
     except OSError as e:
-        emergency_log(f"❌ Puerto {port} no disponible: {e}", is_error=True)
+        logger.error(f"❌ Puerto {port} no disponible: {e}")
         return False
 
 
 # ============================================================================
-# COMANDO SERVICE (CON FIXES)
+# COMANDO SERVER
 # ============================================================================
-from brain.cli.base import BaseCommand, CommandMetadata
-from brain.cli.categories import CommandCategory
-
-
-class ServiceCommand(BaseCommand):
+class ServerCommand(BaseCommand):
     """
-    Service management command for Brain's central TCP multiplexer.
+    Server management command for Brain's central TCP multiplexer.
     
     This command starts/stops/monitors the background service that acts as
     a central connection hub for all Chrome Native Host instances.
@@ -88,25 +71,22 @@ class ServiceCommand(BaseCommand):
     
     def metadata(self) -> CommandMetadata:
         return CommandMetadata(
-            name="service",
+            name="server",
             category=CommandCategory.SERVICE,
             version="1.0.0",
-            description="Manage the Brain TCP multiplexer service",
+            description="Manage the Brain TCP multiplexer server",
             examples=[
-                "brain service start",
-                "brain service start --port 5678 --host 0.0.0.0",
-                "brain service start --json",
-                "brain service status",
-                "brain service stop"
+                "brain server start",
+                "brain server start --port 5678 --host 0.0.0.0",
+                "brain server start --json",
+                "brain server status",
+                "brain server stop"
             ]
         )
 
     def register(self, app: typer.Typer) -> None:
         """
-        Register service subcommands in the Typer application.
-        
-        IMPORTANTE: app ya es el grupo 'service' creado por __main__.py,
-        así que registramos los subcomandos DIRECTAMENTE en él.
+        Register server subcommands in the Typer application.
         """
         
         @app.command(name="start")
@@ -117,27 +97,27 @@ class ServiceCommand(BaseCommand):
             daemon: bool = typer.Option(False, "--daemon", "-d", help="Run as background daemon")
         ):
             """
-            Start the Brain TCP multiplexer service.
+            Start the Brain TCP multiplexer server.
             
             The service acts as a central hub for Chrome Native Host connections,
             handling message routing and client management.
             """
             
             # ================================================================
-            # FIX CRÍTICO: VALIDACIONES ANTES DE ARRANCAR
+            # VALIDACIONES ANTES DE ARRANCAR
             # ================================================================
-            emergency_log(f"🚀 Brain Service Starting...")
-            emergency_log(f"   Host: {host}, Port: {port}, Daemon: {daemon}")
+            logger.info("🚀 Brain Server Starting...")
+            logger.info(f"   Host: {host}, Port: {port}, Daemon: {daemon}")
             
             # Validar entorno
             if not validate_service_environment():
-                emergency_log("❌ Environment validation failed", is_error=True)
+                logger.error("❌ Environment validation failed")
                 sys.exit(1)
             
             # Validar puerto disponible
             if not is_port_available(port, host):
-                emergency_log(f"❌ Puerto {port} ya está en uso", is_error=True)
-                emergency_log("   Solución: matar proceso o cambiar puerto", is_error=True)
+                logger.error(f"❌ Puerto {port} ya está en uso")
+                logger.error("   Solución: matar proceso o cambiar puerto")
                 sys.exit(1)
             
             # ================================================================
@@ -147,25 +127,25 @@ class ServiceCommand(BaseCommand):
                 # 1. Recuperar GlobalContext
                 gc = ctx.obj
                 if gc is None:
-                    emergency_log("⚠️ No GlobalContext, creando uno nuevo...")
+                    logger.warning("⚠️ No GlobalContext, creando uno nuevo...")
                     from brain.shared.context import GlobalContext
                     gc = GlobalContext()
                 
                 # 2. Lazy Import del Core
-                emergency_log("📦 Importando ServerManager...")
-                from brain.core.service.server_manager import ServerManager
+                logger.info("📦 Importando ServerManager...")
+                from brain.core.server.server_manager import ServerManager
                 
                 # 3. Verbose logging
                 if gc.verbose:
                     typer.echo(f"🔌 Starting TCP server on {host}:{port}...", err=True)
                 
                 # 4. Ejecutar lógica del Core
-                emergency_log("🔧 Creando ServerManager...")
+                logger.info("🔧 Creando ServerManager...")
                 manager = ServerManager(host=host, port=port)
                 
                 if daemon:
                     # Daemon mode (background process)
-                    emergency_log("🌙 Starting in daemon mode...")
+                    logger.info("🌙 Starting in daemon mode...")
                     result = manager.start_daemon()
                     gc.output(result, self._render_daemon_start)
                 else:
@@ -173,47 +153,43 @@ class ServiceCommand(BaseCommand):
                     if gc.verbose:
                         typer.echo("ℹ️  Press Ctrl+C to stop the server", err=True)
                     
-                    emergency_log("▶️ Starting in foreground mode (blocking)...")
+                    logger.info("▶️ Starting in foreground mode (blocking)...")
                     result = manager.start_blocking()
                     
                     # This will only be reached after server stops
                     gc.output(result, self._render_stop)
                 
-                emergency_log("✅ Service started successfully")
+                logger.info("✅ Server started successfully")
                 
             except KeyboardInterrupt:
-                emergency_log("🛑 Received Ctrl+C, shutting down...")
+                logger.info("🛑 Received Ctrl+C, shutting down...")
                 
                 if gc.verbose:
                     typer.echo("\n🛑 Received shutdown signal...", err=True)
                 
                 result = {
                     "status": "success",
-                    "operation": "service_shutdown",
+                    "operation": "server_shutdown",
                     "data": {"reason": "user_interrupt"}
                 }
                 gc.output(result, self._render_stop)
                 
             except Exception as e:
                 # ============================================================
-                # FIX CRÍTICO: CATCH-ALL CON TRACEBACK COMPLETO
+                # CATCH-ALL CON TRACEBACK COMPLETO
                 # ============================================================
                 import traceback
-                error_details = traceback.format_exc()
+                logger.critical("❌ FATAL ERROR EN SERVER START:", exc_info=True)
+                logger.debug(f"   Python: {sys.version}")
+                logger.debug(f"   CWD: {os.getcwd()}")
+                logger.debug(f"   Executable: {sys.executable}")
                 
-                emergency_log("❌ FATAL ERROR EN SERVICE START:", is_error=True)
-                emergency_log(error_details, is_error=True)
-                emergency_log("\n📋 INFORMACIÓN DE DEBUG:", is_error=True)
-                emergency_log(f"   Python: {sys.version}", is_error=True)
-                emergency_log(f"   CWD: {os.getcwd()}", is_error=True)
-                emergency_log(f"   Executable: {sys.executable}", is_error=True)
-                
-                self._handle_error(gc, f"Failed to start service: {e}")
+                self._handle_error(gc, f"Failed to start server: {e}")
         
         @app.command(name="status")
         def status(ctx: typer.Context):
             """
-            Check the current status of the Brain service.
+            Check the current status of the Brain server.
             """
             
             gc = ctx.obj
@@ -222,11 +198,11 @@ class ServiceCommand(BaseCommand):
                 gc = GlobalContext()
             
             try:
-                emergency_log("🔍 Checking service status...")
-                from brain.core.service.server_manager import ServerManager
+                logger.info("🔍 Checking server status...")
+                from brain.core.server.server_manager import ServerManager
                 
                 if gc.verbose:
-                    typer.echo("🔍 Checking service status...", err=True)
+                    typer.echo("🔍 Checking server status...", err=True)
                 
                 manager = ServerManager()
                 result = manager.get_status()
@@ -234,13 +210,13 @@ class ServiceCommand(BaseCommand):
                 gc.output(result, self._render_status)
                 
             except Exception as e:
-                emergency_log(f"❌ Status check failed: {e}", is_error=True)
+                logger.error(f"❌ Status check failed: {e}", exc_info=True)
                 self._handle_error(gc, f"Failed to check status: {e}")
         
         @app.command(name="stop")
         def stop(ctx: typer.Context):
             """
-            Stop the running Brain service.
+            Stop the running Brain server.
             """
             
             gc = ctx.obj
@@ -249,11 +225,11 @@ class ServiceCommand(BaseCommand):
                 gc = GlobalContext()
             
             try:
-                emergency_log("🛑 Stopping service...")
-                from brain.core.service.server_manager import ServerManager
+                logger.info("🛑 Stopping server...")
+                from brain.core.server.server_manager import ServerManager
                 
                 if gc.verbose:
-                    typer.echo("🛑 Stopping service...", err=True)
+                    typer.echo("🛑 Stopping server...", err=True)
                 
                 manager = ServerManager()
                 result = manager.stop()
@@ -261,12 +237,12 @@ class ServiceCommand(BaseCommand):
                 gc.output(result, self._render_stop)
                 
             except Exception as e:
-                emergency_log(f"❌ Stop failed: {e}", is_error=True)
-                self._handle_error(gc, f"Failed to stop service: {e}")
+                logger.error(f"❌ Stop failed: {e}", exc_info=True)
+                self._handle_error(gc, f"Failed to stop server: {e}")
     
     def _render_daemon_start(self, data: dict):
         """Output humano para inicio en modo daemon."""
-        typer.echo(f"✅ Service started in background")
+        typer.echo(f"✅ Server started in background")
         typer.echo(f"   PID: {data.get('data', {}).get('pid', 'unknown')}")
         typer.echo(f"   Port: {data.get('data', {}).get('port', 5678)}")
         typer.echo(f"   Log: {data.get('data', {}).get('log_file', 'N/A')}")
@@ -275,16 +251,16 @@ class ServiceCommand(BaseCommand):
         """
         Output humano para detención del servicio.
         
-        FIX CRÍTICO: GUARDAS DEFENSIVAS contra NoneType
+        Con guardas defensivas contra NoneType.
         """
         # GUARDA 1: Validar que data no sea None
         if data is None:
-            typer.echo("⚠️  Service stopped (no status data available)")
+            typer.echo("⚠️  Server stopped (no status data available)")
             return
         
         # GUARDA 2: Validar que 'data' key exista
         if 'data' not in data:
-            typer.echo("⚠️  Service stopped (incomplete status data)")
+            typer.echo("⚠️  Server stopped (incomplete status data)")
             return
         
         # GUARDA 3: Extraer data_dict de forma segura
@@ -296,7 +272,7 @@ class ServiceCommand(BaseCommand):
         
         # Ahora sí, extracción segura
         reason = data_dict.get('reason', 'unknown')
-        typer.echo(f"✅ Service stopped ({reason})")
+        typer.echo(f"✅ Server stopped ({reason})")
         
         # GUARDA 5: Stats puede no existir
         stats = data_dict.get('stats')
@@ -310,11 +286,11 @@ class ServiceCommand(BaseCommand):
         """
         Output humano para estado del servicio.
         
-        FIX CRÍTICO: GUARDAS DEFENSIVAS contra NoneType
+        Con guardas defensivas contra NoneType.
         """
         # GUARDA 1: Validar data
         if data is None or 'data' not in data:
-            typer.echo("⚠️  Cannot determine service status")
+            typer.echo("⚠️  Cannot determine server status")
             return
         
         status_data = data.get('data', {})
@@ -326,14 +302,14 @@ class ServiceCommand(BaseCommand):
         running = status_data.get('running', False)
         
         if running:
-            typer.echo(f"✅ Service is running")
+            typer.echo(f"✅ Server is running")
             typer.echo(f"   Host: {status_data.get('host', 'N/A')}")
             typer.echo(f"   Port: {status_data.get('port', 'N/A')}")
             typer.echo(f"   PID: {status_data.get('pid', 'N/A')}")
             typer.echo(f"   Uptime: {status_data.get('uptime', 'N/A')}")
             typer.echo(f"   Active clients: {status_data.get('active_clients', 0)}")
         else:
-            typer.echo(f"⚠️  Service is not running")
+            typer.echo(f"⚠️  Server is not running")
     
     def _handle_error(self, gc, message: str):
         """Manejo unificado de errores."""

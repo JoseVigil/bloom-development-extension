@@ -1883,7 +1883,7 @@
     },
     {
       "name": "service.start",
-      "description": "Start the Brain TCP multiplexer service.",
+      "description": "Start the Brain TCP multiplexer server.",
       "category": "service",
       "syntax": "brain service start",
       "parameters": {
@@ -1910,7 +1910,7 @@
     },
     {
       "name": "service.status",
-      "description": "Check the current status of the Brain service.",
+      "description": "Check the current status of the Brain server.",
       "category": "service",
       "syntax": "brain service status",
       "parameters": {
@@ -1921,7 +1921,7 @@
     },
     {
       "name": "service.stop",
-      "description": "Stop the running Brain service.",
+      "description": "Stop the running Brain server.",
       "category": "service",
       "syntax": "brain service stop",
       "parameters": {
