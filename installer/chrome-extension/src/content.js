@@ -1,19 +1,27 @@
 // ============================================================================
-// BLOOM NUCLEUS: SYNAPSE ACTUATOR v2.0 (content.js)
+// BLOOM NUCLEUS: SYNAPSE ACTUATOR v2.1 (content.js)
 // Filosofía: Músculo ciego. Ejecuta comandos primitivos sin pensar.
 // ============================================================================
 
 console.log("⚡ [Synapse Actuator] Injected");
 
 // ============================================================================
-// SLAVE MODE (UI Lock)
+// SLAVE MODE (UI Lock) - CON TIMEOUT DE SEGURIDAD
 // ============================================================================
 
 const SLAVE_OVERLAY_ID = 'bloom-slave-overlay';
+const SLAVE_MODE_TIMEOUT_MS = 30000; // 🔒 30 segundos de seguridad
+
 let isSlaveMode = false;
+let slaveModeTimer = null;
+let lastCommandTimestamp = 0;
 
 function enableSlaveMode(message = "🤖 BLOOM AI OPERATING") {
-  if (isSlaveMode) return;
+  if (isSlaveMode) {
+    // Si ya está activo, solo resetear el timer
+    resetSlaveModeTimer();
+    return;
+  }
   
   console.log("[Actuator] Slave mode: ENABLED");
   
@@ -87,6 +95,10 @@ function enableSlaveMode(message = "🤖 BLOOM AI OPERATING") {
   
   document.body.appendChild(overlay);
   isSlaveMode = true;
+  lastCommandTimestamp = Date.now();
+  
+  // 🔒 Iniciar timer de seguridad
+  resetSlaveModeTimer();
   
   // Notificar al router
   chrome.runtime.sendMessage({
@@ -108,6 +120,12 @@ function disableSlaveMode() {
   const overlay = document.getElementById(SLAVE_OVERLAY_ID);
   if (overlay) overlay.remove();
   
+  // Limpiar timer
+  if (slaveModeTimer) {
+    clearTimeout(slaveModeTimer);
+    slaveModeTimer = null;
+  }
+  
   isSlaveMode = false;
   
   // Notificar al router
@@ -115,6 +133,34 @@ function disableSlaveMode() {
     event: "slave_mode_changed",
     enabled: false
   });
+}
+
+function resetSlaveModeTimer() {
+  // Limpiar timer existente
+  if (slaveModeTimer) {
+    clearTimeout(slaveModeTimer);
+  }
+  
+  // Crear nuevo timer
+  slaveModeTimer = setTimeout(() => {
+    console.warn("[Actuator] ⚠️ TIMEOUT DE SEGURIDAD - Auto-liberando slave mode");
+    
+    const timeSinceLastCommand = Date.now() - lastCommandTimestamp;
+    console.log(`[Actuator] Tiempo desde último comando: ${timeSinceLastCommand}ms`);
+    
+    // Notificar al background sobre el timeout
+    chrome.runtime.sendMessage({
+      event: "slave_mode_timeout",
+      time_since_last_command: timeSinceLastCommand,
+      timestamp: Date.now()
+    });
+    
+    // Liberar UI
+    disableSlaveMode();
+    
+  }, SLAVE_MODE_TIMEOUT_MS);
+  
+  console.log(`[Actuator] Timer de seguridad reseteado (${SLAVE_MODE_TIMEOUT_MS}ms)`);
 }
 
 // ============================================================================
@@ -326,10 +372,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     try {
       let result;
       
+      // 🔒 Resetear timer en CADA comando cuando slave mode está activo
+      if (isSlaveMode) {
+        lastCommandTimestamp = Date.now();
+        resetSlaveModeTimer();
+        console.log(`[Actuator] Timer reseteado por comando: ${command}`);
+      }
+      
       switch (command) {
-        // ─────────────────────────────────────────
+        // ────────────────────────────────────────────
         // COMANDOS DE CONTROL
-        // ─────────────────────────────────────────
+        // ────────────────────────────────────────────
         
         case "LOCK_UI":
           enableSlaveMode(payload?.message);
@@ -341,9 +394,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           result = { unlocked: true };
           break;
         
-        // ─────────────────────────────────────────
+        // ────────────────────────────────────────────
         // COMANDOS DE ACTUACIÓN DOM
-        // ─────────────────────────────────────────
+        // ────────────────────────────────────────────
         
         case "DOM_CLICK":
           result = executeClick(payload.selector, payload.options);
@@ -373,9 +426,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           result = executeSnapshot(payload.options);
           break;
         
-        // ─────────────────────────────────────────
+        // ────────────────────────────────────────────
         // COMANDO DESCONOCIDO
-        // ─────────────────────────────────────────
+        // ────────────────────────────────────────────
         
         default:
           throw new Error(`Unknown command: ${command}`);
@@ -422,3 +475,4 @@ chrome.runtime.sendMessage({
 });
 
 console.log("✅ [Synapse Actuator] Ready");
+console.log(`🔒 [Synapse Actuator] Slave mode timeout: ${SLAVE_MODE_TIMEOUT_MS}ms`);
