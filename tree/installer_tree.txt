@@ -200,6 +200,7 @@ bloom-development-extension/
         ├── build.bat
         ├── cli/
         │   └── help_renderer.go
+        ├── codebase/
         ├── docs/
         │   ├── Sentinel - Fase 2 Discovery - Health Modular.md
         │   ├── Sentinel Base.md
@@ -220,7 +221,8 @@ bloom-development-extension/
         │   │   ├── reaper.go
         │   │   └── vscode.go
         │   ├── bridge/
-        │   │   └── bridge.go
+        │   │   ├── bridge.go
+        │   │   └── launch_commands.go
         │   ├── core/
         │   │   ├── config.go
         │   │   ├── core.go
@@ -230,6 +232,12 @@ bloom-development-extension/
         │   ├── discovery/
         │   │   ├── discovery.go
         │   │   └── vscode.go
+        │   ├── eventbus/
+        │   │   ├── daemon.go
+        │   │   ├── eventbus.go
+        │   │   ├── protocol.go
+        │   │   ├── sentinel_client.go
+        │   │   └── synapse_handshake.go
         │   ├── health/
         │   │   ├── guardian.go
         │   │   └── health.go

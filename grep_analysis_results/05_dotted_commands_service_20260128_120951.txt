@@ -1,0 +1,14 @@
+Command: 05_dotted_commands_service
+Timestamp: 20260128_120951
+Success: True
+================================================================================
+
+OUTPUT:
+./brain/cli/command_loader.py:        from brain.commands.service.service import ServiceCommand
+./brain/cli/command_loader.py:        'brain.commands.service.service',
+./installer/electron-app/dist/win-unpacked/resources/brain/cli/command_loader.py:        from brain.commands.service.service import ServiceCommand
+./installer/electron-app/dist/win-unpacked/resources/brain/cli/command_loader.py:        'brain.commands.service.service',
+./run_grep_analysis.py:        "cmd": ['grep', '-r', 'from brain.commands.service', '--include=*.py', '.']
+./run_grep_analysis.py:        "cmd": ['grep', '-r', 'import brain.commands.service', '--include=*.py', '.']
+
+
