@@ -1,9 +1,10 @@
 // ============================================================================
-// SYNAPSE THIN CLIENT - ROUTER PURO (PRODUCTION READY)
+// SYNAPSE THIN CLIENT - ROUTER CON HANDSHAKE DE 3 FASES
 // ============================================================================
 
 let nativePort = null;
 let connectionState = 'DISCONNECTED';
+let handshakeState = 'NONE'; // NONE | EXTENSION_READY | HOST_READY | CONFIRMED
 let config = null;
 let reconnectAttempts = 0;
 let isInitialized = false;
@@ -12,11 +13,10 @@ const MAX_RECONNECT = 10;
 const BASE_DELAY = 2000;
 
 // ============================================================================
-// HELPER FUNCTIONS - DEFINIDAS PRIMERO
+// HELPER FUNCTIONS
 // ============================================================================
 
 async function detectActiveMode() {
-  // Opción 1: Verificar tabs activos
   const tabs = await chrome.tabs.query({});
   
   const hasDiscovery = tabs.some(t => 
@@ -30,10 +30,7 @@ async function detectActiveMode() {
   if (hasDiscovery) return 'discovery';
   if (hasLanding) return 'landing';
   
-  // Opción 2: Verificar storage (último modo usado)
   const { synapseMode } = await chrome.storage.local.get(['synapseMode']);
-  
-  // Opción 3: Default
   return synapseMode || 'discovery';
 }
 
@@ -45,7 +42,6 @@ function validateConfig(mode) {
 
   const requiredBase = ['profileId', 'bridge_name', 'launchId', 'profile_alias', 'extension_id'];
   
-  // ✅ CORREGIDO: Solo requerir email si register === true
   let requiredDiscovery = ['register'];
   if (config.register === true) {
     requiredDiscovery.push('email');
@@ -65,7 +61,6 @@ function validateConfig(mode) {
     console.error('[Synapse] Current config:', config);
     console.error('[Synapse] Required keys:', required);
     
-    // Hint especial para el campo email
     if (missing.includes('email') && config.register === true) {
       console.error('[Synapse] ℹ️  Email is required because register=true');
     }
@@ -106,7 +101,6 @@ async function loadConfig() {
     const mode = await detectActiveMode();
     console.log('[Synapse] Active mode detected:', mode);
 
-    // Matchers base (siempre requeridos)
     const baseMatchers = {
       profileId: /"profileId"\s*:\s*"([^"]+)"/,
       bridge_name: /"bridge_name"\s*:\s*"([^"]+)"/,
@@ -115,17 +109,14 @@ async function loadConfig() {
       extension_id: /"extension_id"\s*:\s*"([^"]+)"/
     };
 
-    // Matcher para register (siempre en discovery)
     const registerMatcher = {
       register: /"register"\s*:\s*(true|false)/
     };
 
-    // Matcher para email (condicional)
     const emailMatcher = {
       email: /"email"\s*:\s*"([^"]+)"/
     };
 
-    // Matchers para landing
     const landingMatchers = {
       total_launches: /"total_launches"\s*:\s*(\d+)/,
       uptime: /"uptime"\s*:\s*(\d+)/,
@@ -139,7 +130,6 @@ async function loadConfig() {
 
     console.log('[Synapse] Loading config file:', configFile);
 
-    // Intento 1: importScripts
     try {
       console.log('[Synapse] Attempting importScripts...');
       importScripts(configFile);
@@ -159,7 +149,6 @@ async function loadConfig() {
       console.warn('[Synapse] importScripts failed:', importError.message);
       console.log('[Synapse] Attempting fetch fallback...');
       
-      // Intento 2: fetch + parse
       try {
         const url = chrome.runtime.getURL(configFile);
         console.log('[Synapse] Fetching from URL:', url);
@@ -176,7 +165,6 @@ async function loadConfig() {
         
         config = { mode };
         
-        // PASO 1: Parsear campos base + register
         const initialMatchers = {
           ...baseMatchers,
           ...(mode === 'discovery' ? registerMatcher : landingMatchers)
@@ -202,7 +190,6 @@ async function loadConfig() {
           }
         }
         
-        // PASO 2: Si modo discovery Y register=true, parsear email
         if (mode === 'discovery' && config.register === true) {
           const emailMatch = text.match(emailMatcher.email);
           if (emailMatch) {
@@ -231,7 +218,7 @@ async function loadConfig() {
 }
 
 // ============================================================================
-// NATIVE CONNECTION
+// NATIVE CONNECTION - CON HANDSHAKE DE 3 FASES
 // ============================================================================
 
 function connectNative() {
@@ -246,6 +233,7 @@ function connectNative() {
   }
 
   connectionState = 'CONNECTING';
+  handshakeState = 'NONE';
 
   try {
     nativePort = chrome.runtime.connectNative(config.bridge_name);
@@ -253,34 +241,44 @@ function connectNative() {
     nativePort.onMessage.addListener(handleHostMessage);
     nativePort.onDisconnect.addListener(handleDisconnect);
 
+    // 🔒 FASE 1: Extension → Host (extension_ready)
+    console.log('[HANDSHAKE] FASE 1: Extension → Host (extension_ready)');
+    
     nativePort.postMessage({
-      type: "SYSTEM_HELLO",
-      payload: {
-        profile_id: config.profileId,
-        launch_id: config.launchId,
-        extension_id: config.extension_id,
-        profile_alias: config.profile_alias
-      }
+      command: "extension_ready",
+      profile_id: config.profileId,
+      launch_id: config.launchId,
+      extension_id: config.extension_id || chrome.runtime.id,
+      profile_alias: config.profile_alias,
+      timestamp: Date.now()
     });
 
+    handshakeState = 'EXTENSION_READY';
     connectionState = 'CONNECTED';
     reconnectAttempts = 0;
 
-    console.log('[Synapse] ✓ Connected to native host');
+    console.log('[Synapse] ✓ Connected to native host - Waiting for host_ready...');
+    
   } catch (e) {
-    console.error('[Synapse] ✗ Connect failed:', e);
+    console.error('[Synapse] ✗ Native connection failed:', e);
+    connectionState = 'DISCONNECTED';
+    handshakeState = 'NONE';
     nativePort = null;
     scheduleReconnect();
   }
 }
 
 function handleDisconnect() {
-  const err = chrome.runtime.lastError;
-  console.warn('[Synapse] Disconnected:', err?.message || 'Unknown');
-
+  const error = chrome.runtime.lastError;
+  
+  console.warn('[Synapse] ⚠ Native host disconnected:', error?.message || 'No error');
+  console.log('[Synapse] Connection state was:', connectionState);
+  console.log('[Synapse] Handshake state was:', handshakeState);
+  
   connectionState = 'DISCONNECTED';
+  handshakeState = 'NONE';
   nativePort = null;
-
+  
   scheduleReconnect();
 }
 
@@ -291,163 +289,119 @@ function scheduleReconnect() {
   }
 
   reconnectAttempts++;
-  const delay = Math.min(BASE_DELAY * Math.pow(2, reconnectAttempts), 30000);
+  const delay = BASE_DELAY * Math.min(reconnectAttempts, 5);
 
-  console.log(`[Synapse] ⏳ Reconnect in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT})`);
-  setTimeout(connectNative, delay);
+  console.log(`[Synapse] Reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT})`);
+
+  setTimeout(() => {
+    if (connectionState === 'DISCONNECTED') {
+      connectNative();
+    }
+  }, delay);
 }
 
 // ============================================================================
-// HOST MESSAGES
+// HOST MESSAGE HANDLER
 // ============================================================================
 
 function handleHostMessage(msg) {
-  const cmd = msg.command || msg.type;
+  const { type, command, id, payload, target } = msg;
 
-  console.log(`[Synapse] Host → ${cmd}`);
+  console.log(`[Synapse] ⬅ Host message:`, { type, command, id, target });
 
-  if (cmd === 'SYSTEM_ACK') {
-    handleSystemAck(msg);
+  // 🔒 FASE 2: Host → Extension (host_ready)
+  if (command === 'host_ready') {
+    console.log('[HANDSHAKE] FASE 2: Host → Extension (host_ready)');
+    console.log('[HANDSHAKE] Host capabilities:', msg.capabilities);
+    console.log('[HANDSHAKE] Host version:', msg.version);
+    console.log('[HANDSHAKE] Max message size:', msg.max_message_size);
+    
+    handshakeState = 'HOST_READY';
+    
+    // La Fase 3 la maneja el Host automáticamente (envía PROFILE_CONNECTED al Brain)
+    // Nosotros solo actualizamos estado local
+    
+    setTimeout(() => {
+      if (handshakeState === 'HOST_READY') {
+        console.log('[HANDSHAKE] FASE 3: Asumiendo handshake confirmado');
+        handshakeState = 'CONFIRMED';
+        
+        console.log('[HANDSHAKE] ✓ COMPLETO - Sistema listo para comandos');
+        
+        // Notificar a UI si está activa
+        chrome.storage.local.set({
+          handshakeState: 'CONFIRMED',
+          handshakeTimestamp: Date.now()
+        });
+      }
+    }, 500);
+    
     return;
   }
 
-  if (cmd === 'system_ready') {
-    handleSystemReady(msg);
-    return;
-  }
-
-  if (cmd === 'HEARTBEAT') {
+  // Heartbeat
+  if (type === 'HEARTBEAT') {
     handleHeartbeat(msg);
     return;
   }
 
-  // ============================================================================
-  // NUEVO HANDLER PARA ACTUALIZAR PROFILE DATA (Landing Mode)
-  // ============================================================================
-  if (msg.command === 'UPDATE_PROFILE_DATA') {
-    const payload = msg.payload || {};
-    
-    chrome.storage.local.get('profileData', (result) => {
-      const currentData = result.profileData || {};
-      
-      const updatedData = {
-        ...currentData,
-        stats: {
-          ...(currentData.stats || {}),
-          ...(payload.stats || {})
-        },
-        accounts: payload.accounts || currentData.accounts || [],
-        system: {
-          ...(currentData.system || {}),
-          ...(payload.system || {})
-        }
-      };
-      
-      chrome.storage.local.set({ profileData: updatedData }, () => {
-        console.log('[Synapse] Profile data updated');
-      });
-    });
-    
+  // System ready
+  if (type === 'SYSTEM_READY') {
+    console.log('[Synapse] 🟢 System ready');
+    handleSystemReady(msg);
     return;
   }
 
-  if (cmd === 'TAB_CLOSE') {
-    executeTabClose(msg.target, msg.id);
+  // 🔒 VALIDACIÓN: Solo procesar comandos si handshake confirmado
+  if (handshakeState !== 'CONFIRMED' && handshakeState !== 'HOST_READY') {
+    console.warn('[Synapse] ⚠️ Mensaje ignorado - Handshake no confirmado:', handshakeState);
+    console.warn('[Synapse] Mensaje:', { type, command, id });
     return;
   }
 
-  if (cmd === 'TAB_OPEN') {
-    executeTabOpen(msg.payload, msg.id);
+  // Commands routing
+  if (type === 'COMMAND') {
+    switch (command) {
+      case 'TAB_CLOSE':
+        executeTabClose(target, id);
+        break;
+      case 'TAB_OPEN':
+        executeTabOpen(payload, id);
+        break;
+      case 'TAB_NAVIGATE':
+        executeTabNavigate(target, payload, id);
+        break;
+      case 'TAB_QUERY':
+        executeTabQuery(payload, id);
+        break;
+      case 'WINDOW_CLOSE':
+        executeWindowClose(id);
+        break;
+      default:
+        console.warn('[Synapse] ⚠ Unknown command:', command);
+    }
     return;
   }
 
-  if (cmd === 'TAB_NAVIGATE') {
-    executeTabNavigate(msg.target, msg.payload, msg.id);
-    return;
-  }
+  // DOM commands (forward to content script)
+  const domCommands = [
+    'LOCK_UI', 'UNLOCK_UI',
+    'DOM_CLICK', 'DOM_TYPE', 'DOM_READ', 
+    'DOM_UPLOAD', 'DOM_SCROLL', 'DOM_WAIT', 'DOM_SNAPSHOT'
+  ];
 
-  if (cmd === 'TAB_QUERY') {
-    executeTabQuery(msg.payload, msg.id);
-    return;
-  }
-
-  if (cmd === 'WINDOW_CLOSE') {
-    executeWindowClose(msg.id);
-    return;
-  }
-
-  if (cmd.startsWith('DOM_') || cmd === 'LOCK_UI' || cmd === 'UNLOCK_UI') {
+  if (domCommands.includes(command)) {
     forwardToContent(msg);
     return;
   }
 
-  console.warn('[Synapse] ⚠ Unknown command:', cmd);
-}
-
-function handleSystemAck(msg) {
-  console.log('[Synapse] ✓ Handshake confirmed');
-
-  const payload = msg.payload || {};
-  
-  // ⭐ Construir datos según el modo
-  const configToSave = {
-    profileId: config.profileId,
-    profile_alias: config.profile_alias,
-    mode: config.mode
-  };
-
-  // ⭐ Agregar campos específicos del modo
-  if (config.mode === 'discovery') {
-    configToSave.register = config.register || false;
-    configToSave.email = config.email || null;
-  } else if (config.mode === 'landing') {
-    configToSave.total_launches = config.total_launches || 0;
-    configToSave.uptime = config.uptime || 0;
-    configToSave.intents_done = config.intents_done || 0;
-    configToSave.last_synch = config.last_synch || null;
-  }
-
-  console.log('[Synapse] Saving to storage:', configToSave);
-
-  chrome.storage.local.set({
-    synapseStatus: {
-      command: 'system_ready',
-      payload: {
-        profile_id: config.profileId,
-        profile_alias: config.profile_alias,
-        launch_id: config.launchId,
-        mode: config.mode,
-        brain_version: payload.brain_version || payload.host_version,
-        host_version: payload.host_version,
-        identity_method: payload.identity_method,
-        timestamp: Date.now()
-      }
-    },
-    synapseConfig: configToSave
-  }, () => {
-    console.log('[Synapse] ✓ Storage saved');
-    
-    chrome.storage.local.get(['synapseConfig'], (result) => {
-      console.log('[Synapse] Verification - stored config:', result.synapseConfig);
-    });
-  });
-
-  chrome.tabs.query({}, (tabs) => {
-    sendToHost({
-      event: "TABS_STATUS",
-      tabs: tabs.map(t => ({ id: t.id, url: t.url, title: t.title }))
-    });
-  });
+  console.log('[Synapse] Unhandled message:', msg);
 }
 
 function handleSystemReady(msg) {
-  const payload = msg.payload || {};
+  console.log('[Synapse] System ready notification:', msg.payload);
   
-  if (payload.profile_id) {
-    console.log('[Synapse] System ready:', payload.profile_id);
-  }
-  
-  chrome.storage.local.get('synapseStatus', (result) => {
+  chrome.storage.local.get(['synapseStatus'], (result) => {
     if (!result.synapseStatus) {
       chrome.storage.local.set({
         synapseStatus: {
@@ -470,6 +424,10 @@ function handleHeartbeat(msg) {
   
   if (stats.pending_queue && parseInt(stats.pending_queue) > 0) {
     console.log('[Synapse] ⚡ Heartbeat - Pending:', stats.pending_queue);
+  }
+  
+  if (stats.handshake_state !== undefined) {
+    console.log('[Synapse] ⚡ Heartbeat - Handshake state:', stats.handshake_state);
   }
 }
 
@@ -557,10 +515,6 @@ async function forwardToContent(msg) {
 chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
   const { event, command } = msg;
 
-  // ============================================================================
-  // HANDLERS ADICIONALES PARA LANDING MODE
-  // ============================================================================
-
   // Handler para comandos ejecutados desde landing
   if (msg.action === 'executeBrainCommand') {
     console.log('[Synapse] Brain command received:', msg.command);
@@ -584,7 +538,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
   if (msg.action === 'ping') {
     sendResp({ 
       status: 'pong',
-      connection_state: connectionState 
+      connection_state: connectionState,
+      handshake_state: handshakeState
     });
     return true;
   }
@@ -593,12 +548,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
   if (msg.action === 'checkHost') {
     sendResp({ 
       hostConnected: connectionState === 'CONNECTED',
-      connection_state: connectionState 
+      connection_state: connectionState,
+      handshake_state: handshakeState,
+      handshake_confirmed: handshakeState === 'CONFIRMED'
     });
     return true;
   }
 
-  // ⭐ Handler para cambio de modo
+  // Handler para cambio de modo
   if (event === 'SET_MODE') {
     console.log('[Synapse] Mode switch requested:', msg.mode);
     
@@ -612,6 +569,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
     return true;
   }
 
+  // Actuator ready
   if (event === 'actuator_ready') {
     sendToHost({
       event: "ACTUATOR_READY",
@@ -622,6 +580,33 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
     return true;
   }
 
+  // Slave mode notifications
+  if (event === 'slave_mode_changed') {
+    console.log('[Synapse] Slave mode changed:', msg.enabled);
+    sendToHost({
+      event: "SLAVE_MODE_CHANGED",
+      enabled: msg.enabled,
+      tab_id: sender.tab?.id,
+      timestamp: Date.now()
+    });
+    sendResp({ received: true });
+    return true;
+  }
+
+  // Slave mode timeout
+  if (event === 'slave_mode_timeout') {
+    console.warn('[Synapse] ⚠️ Slave mode timeout on tab:', sender.tab?.id);
+    sendToHost({
+      event: "SLAVE_MODE_TIMEOUT",
+      tab_id: sender.tab?.id,
+      selector: msg.selector,
+      timestamp: Date.now()
+    });
+    sendResp({ received: true });
+    return true;
+  }
+
+  // Discovery complete
   if (event === 'DISCOVERY_COMPLETE' || command === 'discovery_complete') {
     console.log('[Synapse] ✓ Discovery complete');
     sendToHost({
@@ -632,9 +617,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
     return true;
   }
 
+  // Check handshake status
   if (command === 'check_handshake_status') {
     const response = {
-      handshake_confirmed: connectionState === 'CONNECTED',
+      handshake_confirmed: handshakeState === 'CONFIRMED',
+      handshake_state: handshakeState,
       status: 'pong',
       connection_state: connectionState
     };
@@ -651,6 +638,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
 
 function sendToHost(msg) {
   if (nativePort && connectionState === 'CONNECTED') {
+    // 🔒 Validar handshake antes de enviar mensajes críticos
+    if (handshakeState !== 'CONFIRMED' && handshakeState !== 'HOST_READY') {
+      console.warn('[Synapse] ⚠️ Message blocked - Handshake not confirmed:', msg.event || msg.type);
+      return;
+    }
+    
     nativePort.postMessage(msg);
   } else {
     console.warn('[Synapse] ⚠ Cannot send - not connected:', msg.event || msg.type);
@@ -670,13 +663,13 @@ function setupKeepalive() {
   chrome.alarms.create('keepalive', { periodInMinutes: 1 });
   chrome.alarms.onAlarm.addListener((a) => {
     if (a.name === 'keepalive') {
-      console.log('[Synapse] 💓 Keepalive');
+      console.log('[Synapse] 💓 Keepalive - Handshake:', handshakeState);
     }
   });
 }
 
 // ============================================================================
-// STARTUP - PRODUCTION SAFE
+// STARTUP
 // ============================================================================
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -694,7 +687,7 @@ chrome.runtime.onSuspend?.addListener(() => {
 });
 
 // ============================================================================
-// DEBUGGING HELPERS (Solo para desarrollo)
+// DEBUGGING HELPERS
 // ============================================================================
 
 if (typeof self !== 'undefined' && self.location?.href?.includes('debug=true')) {
@@ -704,6 +697,7 @@ if (typeof self !== 'undefined' && self.location?.href?.includes('debug=true')) 
     getState: () => ({
       initialized: isInitialized,
       connectionState,
+      handshakeState,
       hasPort: nativePort !== null,
       config: config ? { ...config, bridge_name: '***' } : null,
       mode: config?.mode
