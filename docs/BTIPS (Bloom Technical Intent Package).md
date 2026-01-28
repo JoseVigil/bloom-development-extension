@@ -48,9 +48,11 @@ flowchart LR
         VS[🧩 VS Code Plugin]
         Launcher[🚀 Electron Launcher]
 
-        Sentinel[🛡️ Sentinel\nProcess Orchestrator]
+        Sentinel[🛡️ Sentinel
+        Sidecar / Event Bus]
 
-        Brain[🐍 Brain\nPython Engine]
+        Brain[🐍 Brain
+        Python Engine]
         Host[⚙️ Host Service\nC++]
 
         subgraph Chrome["🌐 Chromium Profiles"]
@@ -58,8 +60,10 @@ flowchart LR
         end
 
         subgraph BloomFS["📁 Bloom File System"]
-            Nucleus[🧠 Nucleus\nOrganization Control]
-            Projects[📦 Projects\nExecution Layer]
+            Nucleus[🧠 Nucleus
+            Organization Control]
+            Projects[📦 Projects
+            Execution Layer]
         end
     end
 
@@ -71,11 +75,10 @@ flowchart LR
     end
 
     User --> VS
-    User --> Launcher
+    User <--> Launcher
 
-    Launcher --> Sentinel
-    Sentinel --> Brain
-    Sentinel --> Chrome
+    Launcher <--> Sentinel
+    Sentinel <--> Brain
 
     VS --> Brain
 
@@ -95,6 +98,13 @@ flowchart LR
     Launcher <--> Nucleus
     VS <--> Projects
 ```
+## 2.1️⃣ Bloom Runtime Infrastructure
+
+La ejecución de BTIPS se apoya en una infraestructura de **Sidecar** que independiza la lógica organizacional de la interfaz visual.
+
+*   **Sentinel Sidecar:** Proceso *daemon* que actúa como orquestador persistente. Mantiene el Event Bus activo y garantiza que la ejecución técnica no se interrumpa si el Launcher se cierra.
+*   **Synapse Protocol:** Handshake de 3 fases (Extension ↔ Host ↔ Brain) que valida la integridad del canal antes de procesar intents.
+*   **Data Persistence & Stateless UI:** El Launcher opera como una **Stateless UI**. No depende de estados volátiles en memoria, sino que reconstruye su realidad escaneando los archivos de intents en el Filesystem (`.bloom/intents/`) y sincronizando eventos perdidos mediante *polling* histórico al Sidecar.
 
 ---
 
@@ -167,6 +177,27 @@ Basado en tu árbol real:
    (dev / doc)      (dev / doc)
 ```
 
+## 2.1️⃣ Bloom Runtime Infrastructure
+
+La ejecución de BTIPS se apoya en una infraestructura de **Sidecar** que garantiza que la lógica de la organización sea independiente de la interfaz visual.
+
+### 🛡️ Sentinel Sidecar (The Orchestrator)
+Sentinel opera como un proceso **Daemon (Sidecar)** persistente. Su función no es solo ejecutar comandos, sino mantener el **Event Bus** activo entre el cerebro (Brain) y la interfaz (Electron). 
+*   **Persistent Execution:** Sentinel sobrevive al cierre de la UI de Electron, permitiendo que tareas largas finalicen y se registren sin intervención del usuario.
+*   **Event Bus TCP:** Canal bidireccional asíncrono que transporta eventos de sistema y resultados de intents en tiempo real.
+
+### 🔌 Synapse Protocol (Handshake de 3 Fases)
+Para garantizar una ejecución técnica infalible, el runtime implementa un saludo de tres vías antes de cada operación:
+1.  **Extension → Host:** La extensión notifica su disponibilidad.
+2.  **Host → Extension:** El Bridge C++ valida capacidades y versión.
+3.  **Host → Brain:** El canal se declara oficialmente "Conectado" y listo para recibir intents.
+
+### 🗄️ Stateless UI & Data Persistence
+Bajo esta arquitectura, el **Electron Launcher es una "Stateless UI"**. 
+*   **Single Source of Truth:** La verdad no reside en la memoria de la aplicación, sino en el **Bloom File System** (archivos `.json` en cada proyecto).
+*   **Rehydration:** Al abrirse, Electron reconstruye su estado escaneando los archivos de intents y solicitando al Sentinel los eventos perdidos vía *polling* histórico al bus. Esto asegura que el usuario siempre vea el estado real de la organización, sin importar cortes de energía o cierres de la aplicación.
+
+
 ### Reglas de oro
 
 * Un **Project** puede:
@@ -229,6 +260,8 @@ Se usa para merges cognitivos, orden de trabajo y control de impacto.
 Se ejecuta **en Nucleus o en Projects complejos**, como autoridad.
 
 ---
+
+
 
 
 
