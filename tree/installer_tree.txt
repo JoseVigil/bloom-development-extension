@@ -137,7 +137,6 @@ bloom-development-extension/
     │   │       │   ├── _internal/ [... dependencies]
     │   │       │   └── brain.exe
     │   │       ├── libwinpthread-1.dll
-    │   │       ├── profiles.json
     │   │       └── sentinel.exe
     │   ├── host/
     │   │   └── com.bloom.nucleus.bridge.json
@@ -201,7 +200,6 @@ bloom-development-extension/
         ├── build.bat
         ├── cli/
         │   └── help_renderer.go
-        ├── codebase/
         ├── docs/
         │   ├── Sentinel - Fase 2 Discovery - Health Modular.md
         │   ├── Sentinel Base.md

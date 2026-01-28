@@ -231,7 +231,7 @@ datas = [
     (str(templates_src / 'landing' / 'landing.synapse.config.js'), 'brain/core/profile/web/templates/landing'),
     (str(templates_src / 'landing' / 'landingProtocol.js'), 'brain/core/profile/web/templates/landing'),
     (str(templates_src / 'landing' / 'script.js'), 'brain/core/profile/web/templates/landing'),
-    (str(templates_src / 'landing' / 'styles.css'), 'brain/core/profile/web/templates/landing')
+    (str(templates_src / 'landing' / 'styles.css'), 'brain/core/profile/web/templates/landing'),
     
     # Templates - Base __init__.py
     (str(templates_src / '__init__.py'), 'brain/core/profile/web/templates'),
