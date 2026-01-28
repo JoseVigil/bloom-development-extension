@@ -356,6 +356,9 @@ BloomNucleus/
 │   ├── build/ [... build output]
 │   ├── profiles/
 │   │   └── ecdeed9b-222f-4919-b4cb-dbf55a4f32ef/
+│   │       ├── host/
+│   │       │   ├── synapse_extension_033_ecdeed9b_130836.log
+│   │       │   └── synapse_host_027_ecdeed9b_112814.log
 │   │       ├── net_20260127_040354.log
 │   │       ├── net_20260127_040829.log
 │   │       ├── net_20260127_040928.log
@@ -368,18 +371,20 @@ BloomNucleus/
 │   │       ├── net_20260127_113804.log
 │   │       ├── net_20260127_120928.log
 │   │       ├── net_20260127_122244.log
+│   │       ├── net_20260127_130841.log
+│   │       ├── net_20260127_130938.log
 │   │       ├── synapse_browser_020_ecdeed9b_040351.log
 │   │       ├── synapse_browser_021_ecdeed9b_040826.log
 │   │       ├── synapse_browser_022_ecdeed9b_040925.log
 │   │       ├── synapse_browser_023_ecdeed9b_093157.log
 │   │       ├── synapse_browser_024_ecdeed9b_095411.log
 │   │       ├── synapse_browser_026_ecdeed9b_112747.log
-│   │       ├── synapse_browser_027_ecdeed9b_112814.log
 │   │       ├── synapse_browser_028_ecdeed9b_113253.log
 │   │       ├── synapse_browser_029_ecdeed9b_113313.log
 │   │       ├── synapse_browser_030_ecdeed9b_113801.log
 │   │       ├── synapse_browser_031_ecdeed9b_120925.log
 │   │       ├── synapse_browser_032_ecdeed9b_122240.log
+│   │       ├── synapse_browser_033_ecdeed9b_130836.log
 │   │       ├── synapse_native_020_ecdeed9b_040351.log
 │   │       ├── synapse_native_021_ecdeed9b_040826.log
 │   │       ├── synapse_native_022_ecdeed9b_040925.log
@@ -392,12 +397,14 @@ BloomNucleus/
 │   │       ├── synapse_native_030_ecdeed9b_113801.log
 │   │       ├── synapse_native_031_ecdeed9b_120925.log
 │   │       └── synapse_native_032_ecdeed9b_122240.log
-│   ├── sentinel_2026-01-27.log
+│   ├── sentinel/
+│   │   └── sentinel_core_2026-01-27.log
+│   ├── sentinel_core_2026-01-27.log
 │   └── telemetry.json
 └── profiles/
     └── ecdeed9b-222f-4919-b4cb-dbf55a4f32ef/
         ├── .chrome_app.lock
-        ├── 5a183531-3e57-4edb-83df-9670e5507870.tmp
+        ├── 467e1f88-8986-46ad-be13-4a6060962b83.tmp
         ├── ActorSafetyLists/
         │   └── 8.5866.7803/
         │       ├── _metadata/
@@ -410,14 +417,7 @@ BloomNucleus/
         │       │   └── verified_contents.json
         │       ├── heuristic_regexes.binarypb
         │       └── manifest.json
-        ├── BrowserMetrics-spare.pma
         ├── CertificateRevocation/
-        │   ├── 10308/
-        │   │   ├── LICENSE
-        │   │   ├── _metadata/
-        │   │   │   └── verified_contents.json
-        │   │   ├── crl-set
-        │   │   └── manifest.json
         │   └── 10309/
         │       ├── LICENSE
         │       ├── _metadata/
@@ -645,10 +645,10 @@ BloomNucleus/
         │   ├── Sessions/
         │   │   ├── Apps_13413969048036238
         │   │   ├── Apps_13413969508979136
-        │   │   ├── Session_13414000171640240
-        │   │   ├── Session_13414000967549513
-        │   │   ├── Tabs_13414000173375252
-        │   │   └── Tabs_13414000968573558
+        │   │   ├── Session_13414003725352945
+        │   │   ├── Session_13414003782290633
+        │   │   ├── Tabs_13414003727338404
+        │   │   └── Tabs_13414003783139073
         │   ├── Shared Dictionary/
         │   │   ├── cache/
         │   │   │   ├── index
@@ -684,7 +684,7 @@ BloomNucleus/
         │   │   ├── QuotaManager
         │   │   └── QuotaManager-journal
         │   ├── blob_storage/
-        │   │   └── c67c5a6f-25b3-4fbf-b3b1-1b5df6a42599/
+        │   │   └── 68dd47ac-5eca-43eb-9334-ca6eb7c2ef62/
         │   ├── chrome_cart_db/
         │   │   ├── LOCK
         │   │   ├── LOG

@@ -44,6 +44,8 @@ https://aistudio.google.com/prompts/1HHaY15KVj5I6ccAdGetfLzwaJxZCuJQN
 V6
 gmail notimation electron (Documentación Maestra de Arquitectura de Instalación)
 https://claude.ai/chat/2c14461a-053b-4106-b2dd-e9f6aafe5d22
+V8 elias electron install sentinel
+https://claude.ai/chat/0a743294-b33c-414f-b342-b4548d9bdb8f
 
 uitool descarga artifacts
 https://claude.ai/chat/866e7c25-82c0-4dcb-baaf-848d5bddf815
@@ -327,6 +329,8 @@ https://grok.com/c/71769657-4e96-43fd-92fe-45752f569aa2?rid=f0368f50-9c71-42e0-8
 
 uitool sentinel guardian
 https://aistudio.google.com/prompts/1eEs9b_t5ULYzGM1RXfzoqP-SaiK4RBxZ
+V1 nenes sentinel dashboard
+https://aistudio.google.com/prompts/1xD9lKhqx9U45eKPWUKMiozQgTV35cLhb
 
 nenes telemetry
 https://aistudio.google.com/prompts/1xD9lKhqx9U45eKPWUKMiozQgTV35cLhb
@@ -344,3 +348,18 @@ https://chatgpt.com/c/69715848-5d88-832e-8a55-bbc6920d35f7
 
 roamtocuh btips modelo financiero IMPORTANTE
 https://claude.ai/chat/f5bf37ee-f960-4a5a-8d94-0868cac2e331
+V0 jose gmail documentacion inicial y mermaid
+https://chatgpt.com/c/695badcf-6a04-832e-93f8-eb58147f0401
+
+roamingpads webhools sentinel
+https://claude.ai/chat/cb5b2375-cdc8-41dc-b9bb-7fbb65a82ee6
+
+elias Sentinel Event-Bus & Multi-Layer Orchestration Implementation
+https://aistudio.google.com/prompts/1a3NjwokWyQkMh04vCG-T4er82PIoqo_l
+Fase 1 - btips - host, backgroun y content limit 1MG mesagging
+https://claude.ai/chat/e861dbfc-49d7-4194-94c7-03669c4cf1b8
+Fase 2 - jose gmail - Brain ServerManager Persistance Workers
+https://claude.ai/chat/a2517cfa-3963-45ac-b03e-3d77f9953121
+
+
+https://claude.ai/chat/e861dbfc-49d7-4194-94c7-03669c4cf1b8

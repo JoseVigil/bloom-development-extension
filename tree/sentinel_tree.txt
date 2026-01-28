@@ -4,7 +4,6 @@ bloom-development-extension/
     ├── build.bat
     ├── cli/
     │   └── help_renderer.go
-    ├── codebase/
     ├── docs/
     │   ├── Sentinel - Fase 2 Discovery - Health Modular.md
     │   ├── Sentinel Base.md
