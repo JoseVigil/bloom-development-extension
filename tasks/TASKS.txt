@@ -356,10 +356,10 @@ https://claude.ai/chat/cb5b2375-cdc8-41dc-b9bb-7fbb65a82ee6
 
 elias Sentinel Event-Bus & Multi-Layer Orchestration Implementation
 https://aistudio.google.com/prompts/1a3NjwokWyQkMh04vCG-T4er82PIoqo_l
-Fase 1 - btips - host, backgroun y content limit 1MG mesagging
+Fase 1 - host, backgroun y content limit 1MG mesagging
 https://claude.ai/chat/e861dbfc-49d7-4194-94c7-03669c4cf1b8
-Fase 2 - jose gmail - Brain ServerManager Persistance Workers
+btips - Fase 2 - jose gmail - Brain ServerManager Persistance Workers
 https://claude.ai/chat/a2517cfa-3963-45ac-b03e-3d77f9953121
+btips - Fase 3 - Sentinel Sidecar
+https://claude.ai/chat/c6e7f1de-c53c-43a3-be14-bb99fb2578e4
 
-
-https://claude.ai/chat/e861dbfc-49d7-4194-94c7-03669c4cf1b8
