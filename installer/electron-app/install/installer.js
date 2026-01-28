@@ -206,12 +206,33 @@ async function createDirectories() {
 
 async function cleanNativeDir() {
   const nativeDir = path.join(paths.binDir, 'native');
+  
   if (await fs.pathExists(nativeDir)) {
-    await fs.emptyDir(nativeDir);
+    // Intentar limpieza con manejo de archivos bloqueados
+    try {
+      await fs.emptyDir(nativeDir);
+      logger.success('Native directory cleaned');
+    } catch (error) {
+      if (error.code === 'EPERM' || error.code === 'EBUSY') {
+        logger.warn('Some files in native dir are locked - attempting forced cleanup');
+        
+        // Reintentar después de esperar
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        try {
+          await fs.emptyDir(nativeDir);
+          logger.success('Native directory cleaned (retry succeeded)');
+        } catch (retryError) {
+          logger.warn('Could not fully clean native dir - will overwrite files instead');
+        }
+      } else {
+        throw error;
+      }
+    }
   } else {
     await fs.ensureDir(nativeDir);
+    logger.success('Native directory created');
   }
-  logger.success('Native directory cleaned / prepared');
 }
 
 async function deployExtensionTemplate() {
@@ -322,11 +343,15 @@ async function runFullInstallation(mainWindow = null) {
   logger.info(`Install dir: ${paths.bloomBase}`);
 
   try {
-    // 1. Cleanup
+    // 1. Cleanup - CRÍTICO: Detener servicios ANTES de borrar archivos
     emitProgress(mainWindow, 'cleanup');
-    await cleanupOldServices();
-    await killAllBloomProcesses();
-    await cleanNativeDir();
+    await cleanupOldServices();  // Detiene y desinstala servicios
+    await killAllBloomProcesses();  // Mata procesos restantes
+    
+    // Esperar a que archivos se liberen
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    await cleanNativeDir();  // Ahora sí es seguro limpiar
 
     // 2. Directories
     emitProgress(mainWindow, 'directories');

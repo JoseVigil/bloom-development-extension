@@ -52,6 +52,13 @@ let heartbeatTimer = null;
 let lastHeartbeatStatus = { connected: false, port: null };
 
 // ============================================================================
+// SENTINEL SIDECAR (Daemon Mode)
+// ============================================================================
+let sentinelDaemon = null;
+let daemonReady = false;
+const pendingRequests = new Map(); // request_id -> resolver
+
+// ============================================================================
 // PATHS
 // ============================================================================
 const REPO_ROOT = path.join(__dirname, '..', '..');
@@ -253,6 +260,178 @@ async function executeSentinelCommand(args) {
 }
 
 // ============================================================================
+// SENTINEL SIDECAR DAEMON
+// ============================================================================
+function startSentinelDaemon() {
+  if (sentinelDaemon) {
+    log('⚠️ Sentinel daemon already running');
+    return;
+  }
+
+  const sentinelPath = getSentinelExecutablePath();
+  if (!fs.existsSync(sentinelPath)) {
+    error('❌ Sentinel executable not found:', sentinelPath);
+    error('   Expected location:', sentinelPath);
+    error('   Working directory:', getSentinelWorkingDirectory());
+    return;
+  }
+
+  log('🤖 Starting Sentinel daemon...');
+  log(`   Executable: ${sentinelPath}`);
+  log(`   Working dir: ${getSentinelWorkingDirectory()}`);
+  log(`   Mode: daemon`);
+
+  sentinelDaemon = spawn(sentinelPath, ['--mode', 'daemon'], {
+    cwd: getSentinelWorkingDirectory(),
+    env: {
+      ...process.env,
+      PYTHONIOENCODING: 'utf-8',
+      PYTHONUTF8: '1',
+      PYTHONLEGACYWINDOWSSTDIO: '0'
+    },
+    shell: false,
+    windowsHide: true,
+    stdio: ['pipe', 'pipe', 'pipe']
+  });
+
+  sentinelDaemon.stdout.setEncoding('utf8');
+  sentinelDaemon.stderr.setEncoding('utf8');
+
+  let buffer = '';
+
+  sentinelDaemon.stdout.on('data', (chunk) => {
+    buffer += chunk;
+    const lines = buffer.split('\n');
+    buffer = lines.pop();
+
+    lines.forEach(line => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+
+      try {
+        const event = JSON.parse(trimmed);
+        handleSentinelEvent(event);
+      } catch (e) {
+        if (IS_DEV) console.log('[Sentinel stdout]', trimmed);
+      }
+    });
+  });
+
+  sentinelDaemon.stderr.on('data', (data) => {
+    if (IS_DEV) console.log('[Sentinel stderr]', data.toString().trim());
+  });
+
+  sentinelDaemon.on('close', (code) => {
+    log(`⚠️ Sentinel daemon closed with code ${code}`);
+    sentinelDaemon = null;
+    daemonReady = false;
+  });
+
+  sentinelDaemon.on('error', (err) => {
+    error('❌ Sentinel daemon error:', err.message);
+    sentinelDaemon = null;
+    daemonReady = false;
+  });
+}
+
+function handleSentinelEvent(event) {
+  const mainWin = BrowserWindow.getAllWindows()[0];
+
+  switch (event.type) {
+    case 'DAEMON_READY':
+      daemonReady = true;
+      log('✅ Sentinel daemon ready');
+      break;
+
+    case 'ACK':
+      if (event.id && pendingRequests.has(event.id)) {
+        const resolver = pendingRequests.get(event.id);
+        resolver({ ack: true, status: event.status });
+        pendingRequests.delete(event.id);
+      }
+      break;
+
+    case 'PROFILE_CONNECTED':
+      log('✅ Profile connected - Handshake confirmed');
+      if (mainWin && !mainWin.isDestroyed()) {
+        mainWin.webContents.send('sentinel:profile-connected', event);
+      }
+      break;
+
+    case 'EXTENSION_ERROR':
+      error('❌ Extension error:', event.error);
+      if (mainWin && !mainWin.isDestroyed()) {
+        mainWin.webContents.send('sentinel:extension-error', event);
+      }
+      break;
+
+    case 'ONBOARDING_COMPLETE':
+    case 'ONBOARDING_FAILED':
+    case 'HEARTBEAT_FAILED':
+    case 'SERVICE_RECOVERY_STARTED':
+    case 'SERVICE_RECOVERY_COMPLETE':
+      log(`📨 Sentinel event: ${event.type}`);
+      if (mainWin && !mainWin.isDestroyed()) {
+        mainWin.webContents.send('sentinel:event', event);
+      }
+      break;
+
+    default:
+      if (mainWin && !mainWin.isDestroyed()) {
+        mainWin.webContents.send('sentinel:event', event);
+      }
+  }
+}
+
+function sendSentinelCommand(command) {
+  return new Promise((resolve, reject) => {
+    if (!sentinelDaemon) {
+      return reject(new Error('Sentinel daemon not spawned. Call startSentinelDaemon() first.'));
+    }
+    
+    if (!daemonReady) {
+      return reject(new Error('Sentinel daemon not ready. Wait for DAEMON_READY event.'));
+    }
+
+    const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const commandObj = { ...command, id: requestId };
+
+    pendingRequests.set(requestId, resolve);
+
+    const commandStr = JSON.stringify(commandObj) + '\n';
+    
+    sentinelDaemon.stdin.write(commandStr, (err) => {
+      if (err) {
+        pendingRequests.delete(requestId);
+        reject(new Error(`Failed to write to stdin: ${err.message}`));
+      } else {
+        if (IS_DEV) {
+          log(`📤 Sent command to Sentinel: ${command.command} (${requestId})`);
+        }
+      }
+    });
+
+    // Timeout para ACK (5s)
+    setTimeout(() => {
+      if (pendingRequests.has(requestId)) {
+        pendingRequests.delete(requestId);
+        reject(new Error(`Command ACK timeout (5s) for: ${command.command}`));
+      }
+    }, 5000);
+  });
+}
+
+function stopSentinelDaemon() {
+  if (sentinelDaemon) {
+    log('🛑 Stopping Sentinel daemon...');
+    sentinelDaemon.kill();
+    sentinelDaemon = null;
+    daemonReady = false;
+  }
+}
+
+
+// ============================================================================
 // HEARTBEAT IMPLEMENTATION (Sentinel)
 // ============================================================================
 async function checkHostStatus() {
@@ -412,6 +591,15 @@ function registerSharedHandlers() {
 // ============================================================================
 function registerSentinelHandlers() {
   log('🤖 Registering Sentinel handlers...');
+
+  ipcMain.handle('sentinel:daemon-status', async () => {
+    return {
+      running: !!sentinelDaemon,
+      ready: daemonReady,
+      pid: sentinelDaemon?.pid || null,
+      pendingCommands: pendingRequests.size
+    };
+  });
 
   ipcMain.handle('sentinel:health', async () => {
     try {
@@ -577,7 +765,7 @@ function registerInstallHandlers() {
                  || profileIdOrObject.data?.profileId;
       }
 
-      log(`🚀 [MAIN] Launching profile via Sentinel: ${profileId}`);
+      log(`🚀 [MAIN] Launching profile via Sentinel daemon: ${profileId}`);
 
       if (!profileId || profileId === 'undefined' || profileId === 'null') {
         const errorMsg = `Profile ID is missing or invalid. Received: ${JSON.stringify(profileIdOrObject)}`;
@@ -589,10 +777,23 @@ function registerInstallHandlers() {
         };
       }
 
-      const result = await executeSentinelCommand(['launch', profileId, '--json']);
+      // Enviar comando al daemon
+      await sendSentinelCommand({
+        command: 'launch',
+        profile_id: profileId,
+        mode: 'discovery',
+        override_register: false
+      });
 
-      log("✅ Profile launched via Sentinel:", result);
-      return result;
+      log("✅ Launch command sent to Sentinel");
+      log("⏳ Waiting for PROFILE_CONNECTED event (timeout: 30s)");
+      log("   The UI will react when the handshake completes");
+      
+      return {
+        success: true,
+        message: 'Launch initiated, listening for handshake',
+        note: 'PROFILE_CONNECTED event will be sent to renderer when ready'
+      };
     } catch (err) {
       error("❌ Launch error:", err.message);
       return {
@@ -708,6 +909,29 @@ function registerInstallHandlers() {
       };
     }
   });
+
+  ipcMain.handle('run-diagnostics', async (event) => {
+    log('🔬 [IPC] run-diagnostics called (delegating to Sentinel)');
+
+    try {
+      const result = await executeSentinelCommand(['health', '--diagnostics', '--json']);
+
+      if (result.success) {
+        log('✅ [IPC] Diagnostics completed');
+      } else {
+        log('⚠️ [IPC] Diagnostics failed');
+      }
+
+      return result;
+    } catch (err) {
+      error('❌ [IPC] run-diagnostics error:', err.message);
+      return {
+        success: false,
+        error: err.message,
+        diagnostics: {}
+      };
+    }
+  });
 }
 
 // ============================================================================
@@ -740,6 +964,22 @@ async function createWindow() {
       webSecurity: true,
       sandbox: false
     }
+  });
+
+  // CSP Configuration (correcto)
+  win.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [
+          "default-src 'self'; " +
+          "script-src 'self' 'unsafe-inline'; " +
+          "style-src 'self' 'unsafe-inline'; " +
+          "img-src 'self' data: https:; " +
+          "connect-src 'self' ws://localhost:* http://localhost:*;"
+        ]
+      }
+    });
   });
 
   win.once('ready-to-show', () => {
@@ -874,6 +1114,9 @@ app.whenReady().then(async () => {
 
   mainWindow = await createWindow();
 
+  // Iniciar Sentinel Sidecar Daemon
+  startSentinelDaemon();
+
   if (IS_LAUNCH_MODE) {
     log('💓 Starting heartbeat (Launch Mode)');
     startHeartbeat();
@@ -895,6 +1138,7 @@ app.on('activate', async () => {
 
 app.on('window-all-closed', () => {
   stopHeartbeat();
+  stopSentinelDaemon();
   if (process.platform !== 'darwin') {
     log('👋 All windows closed, quitting...');
     app.quit();
@@ -904,6 +1148,7 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   log('👋 Application closing...');
   stopHeartbeat();
+  stopSentinelDaemon();
 });
 
 process.on('uncaughtException', (error) => {

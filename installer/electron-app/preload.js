@@ -32,10 +32,12 @@ const API = {
   startInstallation: (options = {}) => ipcRenderer.invoke('install:start', options),
   checkRequirements: () => ipcRenderer.invoke('install:check-requirements'),
   cleanupInstallation: () => ipcRenderer.invoke('install:cleanup'),
+  
   // 🆕 REPAIR & DIAGNOSTICS
   repairBridge: () => ipcRenderer.invoke('repair-bridge'),
   validateInstallation: () => ipcRenderer.invoke('validate-installation'),
   runDiagnostics: () => ipcRenderer.invoke('run-diagnostics'),
+  checkDaemonStatus: () => ipcRenderer.invoke('sentinel:daemon-status'),
 
   // ==========================================
   // LAUNCH MODE HANDLERS (Existing)
@@ -80,6 +82,11 @@ const API = {
       'profiles:list',
       'dashboard:error',
       'services:status',
+      
+      // Sentinel sidecar events
+      'sentinel:profile-connected',
+      'sentinel:extension-error',
+      'sentinel:event',
       
       // Shared events
       'error',
@@ -136,7 +143,6 @@ if (process.env.NODE_ENV === 'development') {
     info: (...args) => console.info('[Renderer]', ...args),
     checkBrainServiceStatus: () => ipcRenderer.invoke('check-brain-service-status'),
   });
-  
 }
 
 // ============================================================================

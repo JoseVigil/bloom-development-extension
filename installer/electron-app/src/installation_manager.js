@@ -172,71 +172,73 @@ export class InstallationManager {
   }
 
   startHeartbeatMonitoring() {
-    console.log("💓 [Heartbeat] Iniciando...");
+    console.log("💓 [Heartbeat] Listening for PROFILE_CONNECTED event...");
     
-    let attempts = 0;
-    const maxAttempts = 120;
+    this.ui.updateText('heartbeat-status', 'Esperando handshake del navegador...');
     
-    const interval = setInterval(async () => {
-      attempts++;
-      
-      // Animar dot
-      const dot = document.getElementById('heartbeat-dot');
+    const dot = document.getElementById('heartbeat-dot');
+    
+    // Animar dot mientras espera
+    const animationInterval = setInterval(() => {
       if (dot) {
         dot.style.opacity = dot.style.opacity === '0.5' ? '1' : '0.5';
       }
+    }, 500);
+    
+    // Timeout de 30 segundos
+    const timeout = setTimeout(() => {
+      clearInterval(animationInterval);
       
-      this.ui.updateText('heartbeat-status', 
-        `Esperando conexión... (${attempts}/${maxAttempts})`
+      this.ui.updateHTML('heartbeat-status', 
+        '<strong style="color:#e53e3e;">No se detectó conexión</strong><br>' +
+        '<small>Verifica que Chrome abrió correctamente</small>'
       );
       
-      // Verificar conexión
-      try {
-        const status = await this.api.checkExtensionHeartbeat();
-        
-        if (status && status.chromeConnected) {
-          clearInterval(interval);
-          console.log("✅ [Heartbeat] ¡CONECTADO!");
-          
-          // Cambiar a verde
-          if (dot) {
-            dot.classList.remove('red');
-            dot.classList.add('green');
-          }
-          
-          // Mostrar success
-          this.ui.toggleElement('heartbeat-container', false);
-          this.ui.toggleElement('connection-success', true);
-          
-          // REDIRIGIR A ONBOARDING
-          setTimeout(() => {
-            console.log("🌐 [Redirect] Abriendo onboarding...");
-            this.api.openExternal('http://localhost:5678');
-            
-            // Cerrar instalador después de 3 segundos
-            setTimeout(() => window.close(), 3000);
-          }, 1500);
-          
-          return;
-        }
-      } catch (error) {
-        console.warn("⚠️  [Heartbeat] Check falló:", error.message);
+      this.ui.toggleElement('repair-section', true);
+    }, 30000);
+    
+    // Escuchar evento PROFILE_CONNECTED
+    window.api.on('sentinel:profile-connected', (event) => {
+      clearInterval(animationInterval);
+      clearTimeout(timeout);
+      
+      console.log("✅ [Heartbeat] ¡CONECTADO!", event);
+      
+      // Cambiar a verde
+      if (dot) {
+        dot.classList.remove('red');
+        dot.classList.add('green');
       }
       
-      // Timeout
-      if (attempts >= maxAttempts) {
-        clearInterval(interval);
-        this.ui.updateHTML('heartbeat-status', 
-          '<strong style="color:#e53e3e;">No se detectó conexión</strong><br>' +
-          '<small>Verifica que Chrome abrió correctamente</small>'
-        );
-        
-        // Mostrar opción de reparación
-        this.ui.toggleElement('repair-section', true);
-      }
+      // Mostrar success
+      this.ui.toggleElement('heartbeat-container', false);
+      this.ui.toggleElement('connection-success', true);
       
-    }, 1000);
+      // REDIRIGIR A ONBOARDING
+      setTimeout(() => {
+        console.log("🌐 [Redirect] Abriendo onboarding...");
+        this.api.openExternal('http://localhost:5678');
+        
+        // Cerrar instalador después de 3 segundos
+        setTimeout(() => window.close(), 3000);
+      }, 1500);
+    });
+    
+    // Escuchar errores
+    window.api.on('sentinel:extension-error', (event) => {
+      clearInterval(animationInterval);
+      clearTimeout(timeout);
+      
+      console.error("❌ [Extension Error]:", event.error);
+      
+      this.ui.updateHTML('heartbeat-status', 
+        `<strong style="color:#e53e3e;">Error: ${event.error}</strong>`
+      );
+      
+      this.ui.toggleElement('repair-section', true);
+    });
   }
+
 
   sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
