@@ -8,6 +8,8 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"sentinel/internal/process"
 	"sync"
 	"syscall"
 	"time"
@@ -42,11 +44,23 @@ type DaemonMode struct {
 	logger         *log.Logger
 	stdoutMu       sync.Mutex
 	lastStateFile  string
+	appDataDir     string
 }
 
 // NewDaemonMode crea una nueva instancia del modo daemon
 func NewDaemonMode(brainAddr string) *DaemonMode {
 	ctx, cancel := context.WithCancel(context.Background())
+	
+	// Obtener AppDataDir desde variable de entorno o default
+	appDataDir := os.Getenv("LOCALAPPDATA")
+	if appDataDir == "" {
+		appDataDir = os.Getenv("HOME") // Fallback para Unix
+	}
+	if appDataDir != "" {
+		appDataDir = filepath.Join(appDataDir, "BloomNucleus")
+	} else {
+		appDataDir = "/tmp/BloomNucleus" // Fallback final
+	}
 	
 	return &DaemonMode{
 		client:        NewSentinelClient(brainAddr),
@@ -55,15 +69,50 @@ func NewDaemonMode(brainAddr string) *DaemonMode {
 		ctx:           ctx,
 		cancel:        cancel,
 		logger:        log.New(os.Stderr, "[Daemon] ", log.LstdFlags),
-		lastStateFile: "/tmp/sentinel_last_event.txt",
+		lastStateFile: filepath.Join(appDataDir, "sentinel_last_event.txt"),
+		appDataDir:    appDataDir,
 	}
 }
 
 // Start inicia el modo daemon con todos los workers
 func (dm *DaemonMode) Start() error {
-	dm.logger.Printf("🚀 Iniciando Sentinel en modo Daemon...")
+	dm.logger.Printf("========================================")
+	dm.logger.Printf("🚀 Sentinel - Modo Sidecar Persistente")
+	dm.logger.Printf("========================================")
 	
-	// Conectar con el Brain
+	// FASE 1: AUDITORÍA DE INICIO (Prompt B - Sección 1)
+	dm.logger.Printf("🔍 Ejecutando auditoría de inicio (Reconciliation Logic)...")
+	report, err := process.StartupAudit(dm.appDataDir, dm.client.addr)
+	if err != nil {
+		dm.logger.Printf("⚠️  Error en auditoría: %v", err)
+	} else {
+		dm.logger.Printf("✓ Auditoría completada:")
+		dm.logger.Printf("  - Perfiles totales: %d", report.TotalProfiles)
+		dm.logger.Printf("  - Perfiles abiertos: %d", report.OpenProfiles)
+		dm.logger.Printf("  - Perfiles huérfanos detectados: %d", len(report.OrphanedProfiles))
+		dm.logger.Printf("  - Correcciones aplicadas: %d", report.CorrectedCount)
+		
+		if len(report.OrphanedProfiles) > 0 {
+			dm.logger.Printf("  - IDs huérfanos: %v", report.OrphanedProfiles)
+		}
+		
+		// Emitir reporte como evento JSON en stdout
+		dm.emitToElectron(StdoutResponse{
+			Type:      "AUDIT_COMPLETED",
+			Status:    "success",
+			Timestamp: time.Now().UnixNano(),
+			Data: map[string]interface{}{
+				"total_profiles":    report.TotalProfiles,
+				"open_profiles":     report.OpenProfiles,
+				"orphaned_profiles": report.OrphanedProfiles,
+				"corrected_count":   report.CorrectedCount,
+				"errors":            report.Errors,
+			},
+		})
+	}
+	
+	// FASE 2: CONECTAR CON EL BRAIN
+	dm.logger.Printf("🔌 Conectando con Brain en %s...", dm.client.addr)
 	if err := dm.client.Connect(); err != nil {
 		return fmt.Errorf("no se pudo conectar con Brain: %w", err)
 	}
@@ -75,18 +124,19 @@ func (dm *DaemonMode) Start() error {
 	
 	dm.logger.Printf("✓ Conectado con Brain")
 	
-	// Rehidratación: cargar el último timestamp y solicitar eventos perdidos
+	// FASE 3: REHIDRATACIÓN
 	dm.rehydrate()
 	
 	// Configurar manejo de señales
 	signal.Notify(dm.shutdownChan, os.Interrupt, syscall.SIGTERM)
 	
-	// Registrar handlers de eventos del Brain
+	// FASE 4: REGISTRAR HANDLERS
 	dm.registerEventHandlers()
 	
-	// Iniciar workers
+	// FASE 5: INICIAR WORKERS
 	go dm.stdinWorker()
 	go dm.controlWorker()
+	go dm.zombieCleanupWorker() // Nuevo worker de limpieza
 	
 	// Enviar evento de inicio
 	dm.emitToElectron(StdoutResponse{
@@ -96,6 +146,7 @@ func (dm *DaemonMode) Start() error {
 		Data: map[string]interface{}{
 			"pid":     os.Getpid(),
 			"version": "1.0.0",
+			"audit":   report,
 		},
 	})
 	
@@ -151,6 +202,78 @@ func (dm *DaemonMode) controlWorker() {
 	}
 }
 
+// zombieCleanupWorker ejecuta limpieza periódica de procesos zombies (Prompt B - Sección 2)
+func (dm *DaemonMode) zombieCleanupWorker() {
+	dm.logger.Printf("Worker de Limpieza de Zombies iniciado (cada 2 minutos)")
+	ticker := time.NewTicker(2 * time.Minute)
+	defer ticker.Stop()
+	
+	for {
+		select {
+		case <-dm.ctx.Done():
+			dm.logger.Printf("Cerrando worker de limpieza")
+			return
+			
+		case <-ticker.C:
+			dm.executeZombieCleanup()
+		}
+	}
+}
+
+// executeZombieCleanup ejecuta la limpieza de zombies
+func (dm *DaemonMode) executeZombieCleanup() {
+	dm.logger.Printf("🧹 Iniciando limpieza de zombies...")
+	
+	// Obtener PIDs activos desde profiles.json
+	activePIDs := dm.getActivePIDs()
+	dm.logger.Printf("PIDs activos registrados: %v", activePIDs)
+	
+	// Ejecutar limpieza
+	if err := process.SafeCleanup(dm.appDataDir, activePIDs); err != nil {
+		dm.logger.Printf("⚠️  Error en limpieza de zombies: %v", err)
+		
+		dm.emitToElectron(StdoutResponse{
+			Type:      "ZOMBIE_CLEANUP_ERROR",
+			Status:    "error",
+			Error:     err.Error(),
+			Timestamp: time.Now().UnixNano(),
+		})
+	} else {
+		dm.logger.Printf("✓ Limpieza de zombies completada")
+		
+		dm.emitToElectron(StdoutResponse{
+			Type:      "ZOMBIE_CLEANUP_COMPLETED",
+			Status:    "success",
+			Timestamp: time.Now().UnixNano(),
+		})
+	}
+}
+
+// getActivePIDs obtiene los PIDs activos desde profiles.json
+func (dm *DaemonMode) getActivePIDs() []int {
+	profilesPath := filepath.Join(dm.appDataDir, "config", "profiles.json")
+	data, err := os.ReadFile(profilesPath)
+	if err != nil {
+		dm.logger.Printf("Error leyendo profiles.json: %v", err)
+		return []int{}
+	}
+
+	var registry process.ProfileRegistry
+	if err := json.Unmarshal(data, &registry); err != nil {
+		dm.logger.Printf("Error parseando profiles.json: %v", err)
+		return []int{}
+	}
+
+	var pids []int
+	for _, profile := range registry.Profiles {
+		if profile.Status == "open" && profile.PID > 0 {
+			pids = append(pids, profile.PID)
+		}
+	}
+
+	return pids
+}
+
 // handleStdinCommand procesa un comando recibido desde Electron
 func (dm *DaemonMode) handleStdinCommand(cmd StdinCommand) {
 	dm.logger.Printf("Procesando comando: %s (ID: %s)", cmd.Command, cmd.ID)
@@ -179,6 +302,9 @@ func (dm *DaemonMode) handleStdinCommand(cmd StdinCommand) {
 		
 	case "poll_events":
 		dm.handlePollEvents(cmd)
+		
+	case "cleanup_zombies":
+		dm.handleCleanupZombies(cmd)
 		
 	case "exit":
 		dm.handleExit(cmd)
@@ -303,6 +429,22 @@ func (dm *DaemonMode) handlePollEvents(cmd StdinCommand) {
 	})
 }
 
+// handleCleanupZombies ejecuta limpieza manual de zombies
+func (dm *DaemonMode) handleCleanupZombies(cmd StdinCommand) {
+	dm.logger.Printf("Limpieza manual de zombies solicitada")
+	dm.executeZombieCleanup()
+	
+	dm.emitToElectron(StdoutResponse{
+		Type:      "COMMAND_RESULT",
+		ID:        cmd.ID,
+		Status:    "success",
+		Timestamp: time.Now().UnixNano(),
+		Data: map[string]interface{}{
+			"message": "Limpieza de zombies ejecutada",
+		},
+	})
+}
+
 // handleExit inicia el shutdown graceful
 func (dm *DaemonMode) handleExit(cmd StdinCommand) {
 	dm.logger.Printf("Comando exit recibido, iniciando shutdown...")
@@ -347,6 +489,16 @@ func (dm *DaemonMode) registerEventHandlers() {
 	// Handler para ONBOARDING_COMPLETE
 	dm.client.On("ONBOARDING_COMPLETE", func(event Event) {
 		dm.logger.Printf("✓ Onboarding completado: %s", event.ProfileID)
+	})
+	
+	// Handler para PROFILE_CONNECTED (Handshake de 3 fases confirmado)
+	dm.client.On("PROFILE_CONNECTED", func(event Event) {
+		dm.logger.Printf("✓ Perfil conectado (handshake confirmado): %s", event.ProfileID)
+	})
+	
+	// Handler para PROFILE_DISCONNECTED
+	dm.client.On("PROFILE_DISCONNECTED", func(event Event) {
+		dm.logger.Printf("⚠️  Perfil desconectado: %s", event.ProfileID)
 	})
 }
 

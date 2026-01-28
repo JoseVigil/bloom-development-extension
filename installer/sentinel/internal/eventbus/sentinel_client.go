@@ -1,287 +1,311 @@
 package eventbus
 
 import (
-	"context"
+	"bufio"
+	"encoding/json"
 	"fmt"
-	"log"
+	"net"
 	"os"
+	"sync"
 	"time"
 )
 
-// SentinelClient proporciona una API de alto nivel sobre el EventBus
+// SentinelClient gestiona la conexión con el Brain
 type SentinelClient struct {
-	bus           *EventBus
-	logger        *log.Logger
-	eventHandlers map[string][]func(Event)
-	ctx           context.Context
-	cancel        context.CancelFunc
+	addr            string
+	conn            net.Conn
+	connected       bool
+	connMu          sync.RWMutex
+	handlers        map[string][]EventHandler
+	handlersMu      sync.RWMutex
+	reconnecting    bool
+	reconnectMu     sync.Mutex
+	stopChan        chan struct{}
+	eventChan       chan Event
 }
 
-// NewSentinelClient crea un nuevo cliente de alto nivel
-func NewSentinelClient(brainAddr string) *SentinelClient {
-	ctx, cancel := context.WithCancel(context.Background())
-	
+// NewSentinelClient crea un nuevo cliente de Sentinel
+func NewSentinelClient(addr string) *SentinelClient {
 	return &SentinelClient{
-		bus:           NewEventBus(brainAddr),
-		logger:        log.New(os.Stderr, "[SentinelClient] ", log.LstdFlags),
-		eventHandlers: make(map[string][]func(Event)),
-		ctx:           ctx,
-		cancel:        cancel,
+		addr:      addr,
+		handlers:  make(map[string][]EventHandler),
+		stopChan:  make(chan struct{}),
+		eventChan: make(chan Event, 100),
 	}
 }
 
-// Connect establece la conexión con el Brain
+// Connect establece conexión con el Brain
 func (sc *SentinelClient) Connect() error {
-	if err := sc.bus.Connect(); err != nil {
-		return err
+	sc.connMu.Lock()
+	defer sc.connMu.Unlock()
+
+	conn, err := net.DialTimeout("tcp", sc.addr, 10*time.Second)
+	if err != nil {
+		return fmt.Errorf("conexión fallida: %w", err)
 	}
-	
-	// Iniciar el bus de eventos
-	sc.bus.Start()
-	
-	// Iniciar el dispatcher de eventos
+
+	sc.conn = conn
+	sc.connected = true
+
+	// Iniciar goroutine de lectura
+	go sc.readLoop()
 	go sc.eventDispatcher()
-	
-	return nil
+
+	// Enviar evento de registro
+	return sc.sendRegistration()
 }
 
-// eventDispatcher distribuye eventos a los handlers registrados
-func (sc *SentinelClient) eventDispatcher() {
-	sc.logger.Printf("Iniciando dispatcher de eventos...")
+// WaitForConnection espera a que la conexión esté activa
+func (sc *SentinelClient) WaitForConnection(timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
 	
-	for {
-		select {
-		case <-sc.ctx.Done():
-			sc.logger.Printf("Cerrando dispatcher de eventos")
-			return
-		case event := <-sc.bus.Events():
-			// Distribuir a los handlers específicos del tipo
-			if handlers, ok := sc.eventHandlers[event.Type]; ok {
-				for _, handler := range handlers {
-					go handler(event)
-				}
-			}
-			
-			// Distribuir a los handlers globales (tipo "*")
-			if handlers, ok := sc.eventHandlers["*"]; ok {
-				for _, handler := range handlers {
-					go handler(event)
-				}
-			}
+	for time.Now().Before(deadline) {
+		sc.connMu.RLock()
+		connected := sc.connected
+		sc.connMu.RUnlock()
+		
+		if connected {
+			return nil
 		}
+		
+		time.Sleep(100 * time.Millisecond)
 	}
+	
+	return fmt.Errorf("timeout esperando conexión")
 }
 
-// On registra un handler para un tipo de evento específico
-func (sc *SentinelClient) On(eventType string, handler func(Event)) {
-	sc.eventHandlers[eventType] = append(sc.eventHandlers[eventType], handler)
+// sendRegistration envía el evento REGISTER_SENTINEL
+func (sc *SentinelClient) sendRegistration() error {
+	event := Event{
+		Type:      "REGISTER_SENTINEL",
+		Timestamp: time.Now().UnixNano(),
+		Data: map[string]interface{}{
+			"sentinel_version": "1.0.0",
+			"pid":              os.Getpid(),
+			"capabilities":     []string{"process_hygiene", "tree_kill", "guardian", "stdin_commands"},
+		},
+	}
+
+	return sc.Send(event)
 }
 
 // Send envía un evento al Brain
 func (sc *SentinelClient) Send(event Event) error {
-	return sc.bus.Send(event)
+	sc.connMu.RLock()
+	defer sc.connMu.RUnlock()
+
+	if !sc.connected || sc.conn == nil {
+		return fmt.Errorf("no hay conexión con Brain")
+	}
+
+	data, err := json.Marshal(event)
+	if err != nil {
+		return fmt.Errorf("error serializando evento: %w", err)
+	}
+
+	// Agregar newline como delimitador
+	data = append(data, '\n')
+
+	_, err = sc.conn.Write(data)
+	if err != nil {
+		// Marcar como desconectado
+		sc.connMu.RUnlock()
+		sc.connMu.Lock()
+		sc.connected = false
+		sc.connMu.Unlock()
+		sc.connMu.RLock()
+
+		// Intentar reconexión
+		go sc.reconnect()
+		return fmt.Errorf("error enviando evento: %w", err)
+	}
+
+	return nil
 }
 
-// LaunchProfile envía un comando de lanzamiento de perfil
-func (sc *SentinelClient) LaunchProfile(profileID string) error {
-	sc.logger.Printf("Lanzando perfil: %s", profileID)
+// readLoop lee eventos del Brain continuamente
+func (sc *SentinelClient) readLoop() {
+	scanner := bufio.NewScanner(sc.conn)
 	
-	launchEvent := Event{
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		
+		var event Event
+		if err := json.Unmarshal(line, &event); err != nil {
+			fmt.Fprintf(os.Stderr, "[SentinelClient] Error parseando evento: %v\n", err)
+			continue
+		}
+
+		// Enviar al canal de eventos
+		select {
+		case sc.eventChan <- event:
+		case <-sc.stopChan:
+			return
+		default:
+			fmt.Fprintf(os.Stderr, "[SentinelClient] Canal de eventos lleno, descartando evento\n")
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		fmt.Fprintf(os.Stderr, "[SentinelClient] Error leyendo del Brain: %v\n", err)
+	}
+
+	// Conexión cerrada
+	sc.connMu.Lock()
+	sc.connected = false
+	sc.connMu.Unlock()
+
+	// Intentar reconexión
+	go sc.reconnect()
+}
+
+// eventDispatcher despacha eventos a los handlers registrados
+func (sc *SentinelClient) eventDispatcher() {
+	for {
+		select {
+		case <-sc.stopChan:
+			return
+		case event := <-sc.eventChan:
+			sc.dispatch(event)
+		}
+	}
+}
+
+// dispatch envía un evento a los handlers correspondientes
+func (sc *SentinelClient) dispatch(event Event) {
+	sc.handlersMu.RLock()
+	defer sc.handlersMu.RUnlock()
+
+	// Ejecutar handlers específicos del tipo de evento
+	if handlers, ok := sc.handlers[event.Type]; ok {
+		for _, handler := range handlers {
+			go handler(event)
+		}
+	}
+
+	// Ejecutar handler wildcard (*)
+	if handlers, ok := sc.handlers["*"]; ok {
+		for _, handler := range handlers {
+			go handler(event)
+		}
+	}
+}
+
+// On registra un handler para un tipo de evento
+func (sc *SentinelClient) On(eventType string, handler EventHandler) {
+	sc.handlersMu.Lock()
+	defer sc.handlersMu.Unlock()
+
+	sc.handlers[eventType] = append(sc.handlers[eventType], handler)
+}
+
+// LaunchProfile envía comando de lanzamiento al Brain
+func (sc *SentinelClient) LaunchProfile(profileID string) error {
+	event := Event{
 		Type:      "LAUNCH_PROFILE",
 		ProfileID: profileID,
 		Timestamp: time.Now().UnixNano(),
 	}
-	
-	return sc.bus.Send(launchEvent)
+	return sc.Send(event)
 }
 
-// LaunchAndWaitOnboarding lanza un perfil y espera a que complete el onboarding
-func (sc *SentinelClient) LaunchAndWaitOnboarding(profileID string, timeout time.Duration) error {
-	sc.logger.Printf("Lanzando perfil %s y esperando onboarding...", profileID)
-	
-	// Canal para recibir el resultado
-	resultChan := make(chan error, 1)
-	
-	// Registrar handler temporal para ONBOARDING_COMPLETE
-	handler := func(event Event) {
-		if event.ProfileID == profileID {
-			if event.Type == "ONBOARDING_COMPLETE" {
-				sc.logger.Printf("✓ Onboarding completado para %s", profileID)
-				resultChan <- nil
-			} else if event.Type == "ONBOARDING_FAILED" || event.Type == "EXTENSION_ERROR" {
-				errMsg := "onboarding falló"
-				if event.Error != "" {
-					errMsg = event.Error
-				}
-				resultChan <- fmt.Errorf("%s", errMsg)
-			}
-		}
+// StopProfile envía comando de detención al Brain
+func (sc *SentinelClient) StopProfile(profileID string) error {
+	event := Event{
+		Type:      "STOP_PROFILE",
+		ProfileID: profileID,
+		Timestamp: time.Now().UnixNano(),
 	}
-	
-	// Registrar handlers para los eventos relevantes
-	sc.On("ONBOARDING_COMPLETE", handler)
-	sc.On("ONBOARDING_FAILED", handler)
-	sc.On("EXTENSION_ERROR", handler)
-	
-	// Enviar comando de lanzamiento
-	if err := sc.LaunchProfile(profileID); err != nil {
-		return err
+	return sc.Send(event)
+}
+
+// RequestProfileStatus solicita el estado de un perfil
+func (sc *SentinelClient) RequestProfileStatus(profileID string) error {
+	event := Event{
+		Type:      "REQUEST_PROFILE_STATUS",
+		ProfileID: profileID,
+		Timestamp: time.Now().UnixNano(),
 	}
-	
-	// Esperar resultado o timeout
-	select {
-	case err := <-resultChan:
-		return err
-	case <-time.After(timeout):
-		return fmt.Errorf("timeout esperando onboarding de %s", profileID)
-	case <-sc.ctx.Done():
-		return fmt.Errorf("operación cancelada")
-	}
+	return sc.Send(event)
 }
 
 // SubmitIntent envía una intención al Brain
-func (sc *SentinelClient) SubmitIntent(profileID, intentType string, data map[string]interface{}) error {
-	sc.logger.Printf("Enviando intent '%s' para perfil %s", intentType, profileID)
-	
-	intentEvent := Event{
+func (sc *SentinelClient) SubmitIntent(profileID, intentType string, payload map[string]interface{}) error {
+	event := Event{
 		Type:      "SUBMIT_INTENT",
 		ProfileID: profileID,
 		Timestamp: time.Now().UnixNano(),
 		Data: map[string]interface{}{
 			"intent_type": intentType,
-			"payload":     data,
+			"payload":     payload,
 		},
 	}
-	
-	return sc.bus.Send(intentEvent)
+	return sc.Send(event)
 }
 
-// SubmitIntentAndWait envía una intención y espera la respuesta
-func (sc *SentinelClient) SubmitIntentAndWait(profileID, intentType string, data map[string]interface{}, timeout time.Duration) (Event, error) {
-	sc.logger.Printf("Enviando intent '%s' y esperando respuesta...", intentType)
-	
-	// Canal para recibir el resultado
-	resultChan := make(chan Event, 1)
-	errorChan := make(chan error, 1)
-	
-	// Generar un ID único para correlacionar request/response
-	requestID := fmt.Sprintf("%s_%d", intentType, time.Now().UnixNano())
-	
-	// Registrar handler temporal para la respuesta
-	handler := func(event Event) {
-		// Verificar si es la respuesta a nuestro request
-		if event.ProfileID == profileID {
-			if event.Type == "INTENT_RESPONSE" {
-				if reqID, ok := event.Data["request_id"].(string); ok && reqID == requestID {
-					resultChan <- event
-				}
-			} else if event.Type == "INTENT_ERROR" {
-				if reqID, ok := event.Data["request_id"].(string); ok && reqID == requestID {
-					errMsg := "error procesando intent"
-					if event.Error != "" {
-						errMsg = event.Error
-					}
-					errorChan <- fmt.Errorf("%s", errMsg)
-				}
-			}
-		}
-	}
-	
-	sc.On("INTENT_RESPONSE", handler)
-	sc.On("INTENT_ERROR", handler)
-	
-	// Agregar request_id al payload
-	if data == nil {
-		data = make(map[string]interface{})
-	}
-	data["request_id"] = requestID
-	
-	// Enviar el intent
-	if err := sc.SubmitIntent(profileID, intentType, data); err != nil {
-		return Event{}, err
-	}
-	
-	// Esperar resultado, error o timeout
-	select {
-	case result := <-resultChan:
-		return result, nil
-	case err := <-errorChan:
-		return Event{}, err
-	case <-time.After(timeout):
-		return Event{}, fmt.Errorf("timeout esperando respuesta del intent")
-	case <-sc.ctx.Done():
-		return Event{}, fmt.Errorf("operación cancelada")
-	}
-}
-
-// RequestProfileStatus solicita el estado actual de un perfil
-func (sc *SentinelClient) RequestProfileStatus(profileID string) error {
-	statusEvent := Event{
-		Type:      "REQUEST_STATUS",
-		ProfileID: profileID,
+// PollEvents solicita eventos históricos desde un timestamp
+func (sc *SentinelClient) PollEvents(since int64) error {
+	event := Event{
+		Type:      "POLL_EVENTS",
 		Timestamp: time.Now().UnixNano(),
+		Data: map[string]interface{}{
+			"since": since,
+		},
 	}
-	
-	return sc.bus.Send(statusEvent)
+	return sc.Send(event)
 }
 
-// StopProfile envía un comando para detener un perfil
-func (sc *SentinelClient) StopProfile(profileID string) error {
-	sc.logger.Printf("Deteniendo perfil: %s", profileID)
-	
-	stopEvent := Event{
-		Type:      "STOP_PROFILE",
-		ProfileID: profileID,
-		Timestamp: time.Now().UnixNano(),
+// reconnect intenta reconectar al Brain
+func (sc *SentinelClient) reconnect() {
+	sc.reconnectMu.Lock()
+	if sc.reconnecting {
+		sc.reconnectMu.Unlock()
+		return
 	}
-	
-	return sc.bus.Send(stopEvent)
-}
+	sc.reconnecting = true
+	sc.reconnectMu.Unlock()
 
-// PollEvents solicita eventos históricos
-func (sc *SentinelClient) PollEvents(sinceTimestamp int64) error {
-	return sc.bus.PollEvents(sinceTimestamp)
-}
+	defer func() {
+		sc.reconnectMu.Lock()
+		sc.reconnecting = false
+		sc.reconnectMu.Unlock()
+	}()
 
-// IsConnected verifica si hay conexión activa con el Brain
-func (sc *SentinelClient) IsConnected() bool {
-	return sc.bus.IsConnected()
-}
+	fmt.Fprintf(os.Stderr, "[SentinelClient] Intentando reconexión...\n")
 
-// WaitForConnection espera hasta que se establezca conexión con el Brain
-func (sc *SentinelClient) WaitForConnection(timeout time.Duration) error {
-	ticker := time.NewTicker(500 * time.Millisecond)
-	defer ticker.Stop()
-	
-	timeoutTimer := time.NewTimer(timeout)
-	defer timeoutTimer.Stop()
-	
-	for {
-		select {
-		case <-ticker.C:
-			if sc.IsConnected() {
-				return nil
-			}
-		case <-timeoutTimer.C:
-			return fmt.Errorf("timeout esperando conexión con Brain")
-		case <-sc.ctx.Done():
-			return fmt.Errorf("operación cancelada")
+	maxRetries := 5
+	for i := 0; i < maxRetries; i++ {
+		time.Sleep(time.Duration(i+1) * 2 * time.Second)
+
+		if err := sc.Connect(); err != nil {
+			fmt.Fprintf(os.Stderr, "[SentinelClient] Reintento %d/%d fallido: %v\n", i+1, maxRetries, err)
+			continue
 		}
+
+		fmt.Fprintf(os.Stderr, "[SentinelClient] Reconexión exitosa\n")
+		return
 	}
+
+	fmt.Fprintf(os.Stderr, "[SentinelClient] Reconexión fallida tras %d intentos\n", maxRetries)
 }
 
-// Close cierra la conexión y limpia recursos
+// Close cierra la conexión con el Brain
 func (sc *SentinelClient) Close() error {
-	sc.logger.Printf("Cerrando SentinelClient...")
-	
-	// Cancelar contexto
-	sc.cancel()
-	
-	// Cerrar el bus
-	return sc.bus.Close()
+	close(sc.stopChan)
+
+	sc.connMu.Lock()
+	defer sc.connMu.Unlock()
+
+	if sc.conn != nil {
+		return sc.conn.Close()
+	}
+
+	return nil
 }
 
-// GetLastEventTimestamp retorna el timestamp del último evento recibido
-func (sc *SentinelClient) GetLastEventTimestamp() int64 {
-	return sc.bus.lastEventTime
+// IsConnected retorna si hay conexión activa con el Brain
+func (sc *SentinelClient) IsConnected() bool {
+	sc.connMu.RLock()
+	defer sc.connMu.RUnlock()
+	return sc.connected
 }

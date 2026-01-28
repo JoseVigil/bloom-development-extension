@@ -25,6 +25,9 @@ type Event struct {
 	Error     string                 `json:"error,omitempty"`
 }
 
+// EventHandler es una función que maneja eventos
+type EventHandler func(Event)
+
 // EventBus gestiona la conexión TCP con el Brain y distribuye eventos
 type EventBus struct {
 	addr           string

@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"sentinel/internal/core"
 	"sentinel/internal/discovery"
+	"sentinel/internal/process"
 	"sentinel/internal/startup"
 	"sync"
 	"time"
@@ -87,9 +88,7 @@ func outputHealthJSON(c *core.Core, status *startup.SystemStatus) {
 	profilesCount := 0
 	profilesPath := filepath.Join(c.Paths.AppDataDir, "config", "profiles.json")
 	if data, err := os.ReadFile(profilesPath); err == nil {
-		var reg struct {
-			Profiles []interface{} `json:"profiles"`
-		}
+		var reg process.ProfileRegistry
 		if json.Unmarshal(data, &reg) == nil {
 			profilesCount = len(reg.Profiles)
 		}

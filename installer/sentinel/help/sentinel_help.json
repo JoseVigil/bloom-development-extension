@@ -50,11 +50,11 @@
     "options": [
       {
         "name": "add-account",
-        "usage": "Agregar linked account (formato: provider,email_or_username,status). Repetible"
+        "usage": "Agregar linked account (provider,email_or_username,status). Repetible"
       },
       {
         "name": "config-file",
-        "usage": "Cargar overrides desde JSON. Usar @archivo.json o - para STDIN"
+        "usage": "Cargar overrides desde JSON (@archivo o - para stdin)"
       },
       {
         "name": "mode",
@@ -80,7 +80,7 @@
       },
       {
         "name": "override-role",
-        "usage": "Sobrescribir rol (ej: Worker, Specialist, Premium)"
+        "usage": "Sobrescribir rol"
       },
       {
         "name": "override-step",
@@ -92,9 +92,7 @@
         "usage": "Persistir overrides en profiles.json",
         "default": "false"
       }
-    ],
-    "example": "  sentinel launch profile_001 --mode landing\n  sentinel launch profile_002 --mode discovery --override-alias \"TestWorker\"\n  sentinel launch profile_003 --override-role \"Premium\" --save\n  sentinel launch profile_004 --add-account \"Google,user@gmail.com,active\" --save\n  sentinel launch profile_005 --config-file @overrides.json --save\n  sentinel --json launch profile_006 --mode discovery | jq .",
-    "requires": "  - El perfil debe existir (usar 'sentinel seed' primero)\n  - brain.exe disponible y ejecutable\n  - Puerto 5678 libre para servicio Brain\n  - Extension ID válido en ignition_spec.json\n  - bloom-host.exe en bin/native/ para Native Messaging"
+    ]
   },
   {
     "name": "launch-profile",
@@ -111,13 +109,13 @@
       {
         "name": "timeout",
         "shorthand": "t",
-        "usage": "Timeout en segundos para esperar onboarding",
+        "usage": "Timeout en segundos para esperar onboarding (no implementado aún)",
         "default": "60"
       },
       {
         "name": "wait",
         "shorthand": "w",
-        "usage": "Esperar a que complete el onboarding",
+        "usage": "Esperar a que complete el onboarding (no implementado aún)",
         "default": "false"
       }
     ]
@@ -139,36 +137,6 @@
     ],
     "example": "  sentinel seed profile_001 true\n  sentinel --json seed burner_temp false | jq .",
     "requires": "  - brain.exe debe estar disponible en bin/\n  - Permiso de escritura en HKCU\\Software\\Google\\Chrome\\NativeMessagingHosts\n  - bloom-host.exe en bin/native/\n  - Extension ID válido en configuración"
-  },
-  {
-    "name": "submit-intent",
-    "use": "submit-intent \u003cprofile_id\u003e",
-    "short": "Envía una intención al Brain y espera la respuesta",
-    "category": "BRIDGE",
-    "args": [
-      {
-        "name": "\u003cprofile_id\u003e",
-        "required": true
-      }
-    ],
-    "options": [
-      {
-        "name": "payload",
-        "shorthand": "p",
-        "usage": "Payload JSON de la intención",
-        "default": "{}"
-      },
-      {
-        "name": "timeout",
-        "usage": "Timeout en segundos",
-        "default": "30"
-      },
-      {
-        "name": "type",
-        "shorthand": "t",
-        "usage": "Tipo de intención (requerido)"
-      }
-    ]
   },
   {
     "name": "telemetry",

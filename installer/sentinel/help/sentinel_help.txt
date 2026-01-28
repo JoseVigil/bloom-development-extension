@@ -31,10 +31,10 @@
   SYSTEM         Health checks and system diagnostics                     1 cmd
   IDENTITY       Profile identity and seed management                     1 cmd
   RUNTIME        Browser instance lifecycle control                       1 cmd
-  BRIDGE         JSON-RPC communication with Electron                     3 cmds
+  BRIDGE         JSON-RPC communication with Electron                     2 cmds
   DEVELOPMENT    Integrated development environment                       1 cmd
   UI             Monitoring and telemetry interfaces                      2 cmds
-  -----------------------------------------------------------------------  Total: 9 commands
+  -----------------------------------------------------------------------  Total: 8 commands
 
 
 =======================================================[ SYSTEM ]=======================================================
@@ -90,31 +90,16 @@
       profile_id            optional
 
     Flags:
-      --add-account              Agregar linked account (formato: provider,email_or_username,status). Repetible
-      --config-file              Cargar overrides desde JSON. Usar @archivo.json o - para STDIN
+      --add-account              Agregar linked account (provider,email_or_username,status). Repetible
+      --config-file              Cargar overrides desde JSON (@archivo o - para stdin)
       --mode                     Modo de lanzamiento (landing o discovery) [default: landing]
       --override-alias           Sobrescribir alias del perfil
       --override-email           Sobrescribir email
       --override-extension       Sobrescribir extension ID
       --override-register        Sobrescribir flag de registro
-      --override-role            Sobrescribir rol (ej: Worker, Specialist, Premium)
+      --override-role            Sobrescribir rol
       --override-step            Sobrescribir step actual [default: 0]
       --save                     Persistir overrides en profiles.json
-
-    Example:
-        sentinel launch profile_001 --mode landing
-        sentinel launch profile_002 --mode discovery --override-alias "TestWorker"
-        sentinel launch profile_003 --override-role "Premium" --save
-        sentinel launch profile_004 --add-account "Google,user@gmail.com,active" --save
-        sentinel launch profile_005 --config-file @overrides.json --save
-        sentinel --json launch profile_006 --mode discovery | jq .
-
-    Requirements:
-      * El perfil debe existir (usar 'sentinel seed' primero)
-      * brain.exe disponible y ejecutable
-      * Puerto 5678 libre para servicio Brain
-      * Extension ID válido en ignition_spec.json
-      * bloom-host.exe en bin/native/ para Native Messaging
 
     --------------------------------------------------------------------------------
 
@@ -137,23 +122,8 @@
       <profile_id>          required
 
     Flags:
-      --timeout, -t              Timeout en segundos para esperar onboarding [default: 60]
-      --wait, -w                 Esperar a que complete el onboarding
-
-    --------------------------------------------------------------------------------
-
-  > SUBMIT-INTENT
-    Envía una intención al Brain y espera la respuesta
-
-    Usage: sentinel submit-intent <profile_id>
-
-    Arguments:
-      <profile_id>          required
-
-    Flags:
-      --payload, -p              Payload JSON de la intención [default: {}]
-      --timeout                  Timeout en segundos [default: 30]
-      --type, -t                 Tipo de intención (requerido)
+      --timeout, -t              Timeout en segundos para esperar onboarding (no implementado aún) [default: 60]
+      --wait, -w                 Esperar a que complete el onboarding (no implementado aún)
 
     --------------------------------------------------------------------------------
 
