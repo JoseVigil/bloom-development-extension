@@ -15,6 +15,7 @@ import (
 	_ "sentinel/internal/health"
 	_ "sentinel/internal/ignition"
 	_ "sentinel/internal/seed"
+	_ "sentinel/internal/system"
 	_ "sentinel/internal/ui"
 )
 

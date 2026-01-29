@@ -46,6 +46,8 @@ gmail notimation electron (Documentación Maestra de Arquitectura de Instalació
 https://claude.ai/chat/2c14461a-053b-4106-b2dd-e9f6aafe5d22
 V8 elias electron install sentinel
 https://claude.ai/chat/0a743294-b33c-414f-b342-b4548d9bdb8f
+V9 uitool electron sentinel sidecar
+https://claude.ai/chat/8890a3ab-2ed6-49b0-bc56-9303f698fe06
 
 uitool descarga artifacts
 https://claude.ai/chat/866e7c25-82c0-4dcb-baaf-848d5bddf815
@@ -358,8 +360,17 @@ elias Sentinel Event-Bus & Multi-Layer Orchestration Implementation
 https://aistudio.google.com/prompts/1a3NjwokWyQkMh04vCG-T4er82PIoqo_l
 Fase 1 - host, backgroun y content limit 1MG mesagging
 https://claude.ai/chat/e861dbfc-49d7-4194-94c7-03669c4cf1b8
-btips - Fase 2 - jose gmail - Brain ServerManager Persistance Workers
+jose gmail - Fase 2 - Brain ServerManager Persistance Workers
 https://claude.ai/chat/a2517cfa-3963-45ac-b03e-3d77f9953121
 btips - Fase 3 - Sentinel Sidecar
 https://claude.ai/chat/c6e7f1de-c53c-43a3-be14-bb99fb2578e4
+elias - Fase 4 - Impelmentacion Sidecar en electron
+https://claude.ai/chat/0a743294-b33c-414f-b342-b4548d9bdb8f
+nenes - Fase 5 - Sentinel Process Hygiene & Stateful Orchestration
+https://claude.ai/chat/7ec9ab0b-68b2-4450-95d3-82b7f24cf8f1
 
+jose gmail version e info en todas las apps
+https://grok.com/c/39684473-6986-41cb-8875-dabc755f92a9?rid=bbbb1ac3-4e5f-422f-823c-9df06c984bf7
+
+nenes tree en rust
+https://grok.com/c/d3a6b370-85c7-48d1-a745-5fc65f018598?rid=368d1fec-a8d2-4692-b15e-1e47e642bd2e
