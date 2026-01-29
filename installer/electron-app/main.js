@@ -270,16 +270,11 @@ function startSentinelDaemon() {
 
   const sentinelPath = getSentinelExecutablePath();
   if (!fs.existsSync(sentinelPath)) {
-    error('❌ Sentinel executable not found:', sentinelPath);
-    error('   Expected location:', sentinelPath);
-    error('   Working directory:', getSentinelWorkingDirectory());
+    error('Sentinel executable not found:', sentinelPath);
     return;
   }
 
-  log('🤖 Starting Sentinel daemon...');
-  log(`   Executable: ${sentinelPath}`);
-  log(`   Working dir: ${getSentinelWorkingDirectory()}`);
-  log(`   Mode: daemon`);
+  log('🤖 Starting Sentinel Sidecar Orchestrator...');
 
   sentinelDaemon = spawn(sentinelPath, ['--mode', 'daemon'], {
     cwd: getSentinelWorkingDirectory(),
@@ -299,10 +294,11 @@ function startSentinelDaemon() {
 
   let buffer = '';
 
+  // EVENT BUS: Stdout es la única fuente de verdad técnica
   sentinelDaemon.stdout.on('data', (chunk) => {
     buffer += chunk;
     const lines = buffer.split('\n');
-    buffer = lines.pop();
+    buffer = lines.pop(); // Última línea incompleta
 
     lines.forEach(line => {
       const trimmed = line.trim();
@@ -312,23 +308,33 @@ function startSentinelDaemon() {
         const event = JSON.parse(trimmed);
         handleSentinelEvent(event);
       } catch (e) {
-        if (IS_DEV) console.log('[Sentinel stdout]', trimmed);
+        // No-JSON output (ignorar)
+        if (IS_DEV) console.log('[Sentinel Non-JSON]', trimmed);
       }
     });
   });
 
+  // TELEMETRÍA: Stderr solo para logs humanos
   sentinelDaemon.stderr.on('data', (data) => {
-    if (IS_DEV) console.log('[Sentinel stderr]', data.toString().trim());
+    const logLine = data.toString().trim();
+    // Redirigir a logs de aplicación (no parsear como JSON)
+    console.log('[Sentinel Log]', logLine);
   });
 
   sentinelDaemon.on('close', (code) => {
-    log(`⚠️ Sentinel daemon closed with code ${code}`);
+    log(`🛑 Sentinel daemon closed with code ${code}`);
     sentinelDaemon = null;
     daemonReady = false;
+    
+    // Limpiar requests pendientes
+    pendingRequests.forEach((resolver, id) => {
+      resolver({ error: 'Daemon closed unexpectedly' });
+    });
+    pendingRequests.clear();
   });
 
   sentinelDaemon.on('error', (err) => {
-    error('❌ Sentinel daemon error:', err.message);
+    error('❌ Sentinel daemon error:', err);
     sentinelDaemon = null;
     daemonReady = false;
   });
@@ -337,22 +343,47 @@ function startSentinelDaemon() {
 function handleSentinelEvent(event) {
   const mainWin = BrowserWindow.getAllWindows()[0];
 
+  // Log evento recibido
+  if (IS_DEV) {
+    log(`📨 Event received: ${event.type}`, event.id ? `(id: ${event.id})` : '');
+  }
+
   switch (event.type) {
     case 'DAEMON_READY':
       daemonReady = true;
-      log('✅ Sentinel daemon ready');
+      log('✅ Sentinel Sidecar ready - System operational');
+      
+      // Solicitar eventos perdidos durante cierre anterior
+      if (mainWin && !mainWin.isDestroyed()) {
+        // TODO: Implementar rehidratación con poll_events
+        // sendSentinelCommand({ command: 'poll_events', data: { since: lastTimestamp }});
+      }
       break;
 
     case 'ACK':
+      // Confirmar que comando fue recibido
       if (event.id && pendingRequests.has(event.id)) {
         const resolver = pendingRequests.get(event.id);
         resolver({ ack: true, status: event.status });
         pendingRequests.delete(event.id);
       }
+      log(`✅ Command ACK received (${event.status})`);
+      break;
+
+    case 'AUDIT_COMPLETED':
+      // Reporte de limpieza inicial de perfiles huérfanos
+      log('🧹 Audit completed:', event.orphans_cleaned || 0, 'orphaned profiles cleaned');
+      if (mainWin && !mainWin.isDestroyed()) {
+        mainWin.webContents.send('sentinel:audit-completed', event);
+      }
       break;
 
     case 'PROFILE_CONNECTED':
-      log('✅ Profile connected - Handshake confirmed');
+      // Handshake 3 fases completado exitosamente
+      log('✅ Profile connected - 3-phase handshake confirmed');
+      log(`   Profile: ${event.profile_id}`);
+      log(`   Extension loaded: ${event.handshake_confirmed}`);
+      
       if (mainWin && !mainWin.isDestroyed()) {
         mainWin.webContents.send('sentinel:profile-connected', event);
       }
@@ -360,37 +391,43 @@ function handleSentinelEvent(event) {
 
     case 'EXTENSION_ERROR':
       error('❌ Extension error:', event.error);
+      error('   Profile:', event.profile_id);
+      
       if (mainWin && !mainWin.isDestroyed()) {
         mainWin.webContents.send('sentinel:extension-error', event);
       }
       break;
 
-    case 'ONBOARDING_COMPLETE':
-    case 'ONBOARDING_FAILED':
-    case 'HEARTBEAT_FAILED':
-    case 'SERVICE_RECOVERY_STARTED':
-    case 'SERVICE_RECOVERY_COMPLETE':
-      log(`📨 Sentinel event: ${event.type}`);
+    case 'INTENT_COMPLETE':
+      log('✅ Intent completed:', event.intent_id);
       if (mainWin && !mainWin.isDestroyed()) {
-        mainWin.webContents.send('sentinel:event', event);
+        mainWin.webContents.send('sentinel:intent-complete', event);
+      }
+      break;
+
+    case 'INTENT_FAILED':
+      error('❌ Intent failed:', event.intent_id, '-', event.error);
+      if (mainWin && !mainWin.isDestroyed()) {
+        mainWin.webContents.send('sentinel:intent-failed', event);
       }
       break;
 
     default:
+      // Eventos genéricos - enviar a renderer
       if (mainWin && !mainWin.isDestroyed()) {
         mainWin.webContents.send('sentinel:event', event);
+      }
+      
+      if (IS_DEV) {
+        log(`📨 Unhandled event type: ${event.type}`);
       }
   }
 }
 
 function sendSentinelCommand(command) {
   return new Promise((resolve, reject) => {
-    if (!sentinelDaemon) {
-      return reject(new Error('Sentinel daemon not spawned. Call startSentinelDaemon() first.'));
-    }
-    
-    if (!daemonReady) {
-      return reject(new Error('Sentinel daemon not ready. Wait for DAEMON_READY event.'));
+    if (!sentinelDaemon || !daemonReady) {
+      return reject(new Error('Sentinel daemon not ready'));
     }
 
     const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -398,36 +435,47 @@ function sendSentinelCommand(command) {
 
     pendingRequests.set(requestId, resolve);
 
-    const commandStr = JSON.stringify(commandObj) + '\n';
-    
-    sentinelDaemon.stdin.write(commandStr, (err) => {
+    sentinelDaemon.stdin.write(JSON.stringify(commandObj) + '\n', (err) => {
       if (err) {
         pendingRequests.delete(requestId);
-        reject(new Error(`Failed to write to stdin: ${err.message}`));
-      } else {
-        if (IS_DEV) {
-          log(`📤 Sent command to Sentinel: ${command.command} (${requestId})`);
-        }
+        reject(err);
       }
     });
 
-    // Timeout para ACK (5s)
     setTimeout(() => {
       if (pendingRequests.has(requestId)) {
         pendingRequests.delete(requestId);
-        reject(new Error(`Command ACK timeout (5s) for: ${command.command}`));
+        reject(new Error('Command ACK timeout'));
       }
     }, 5000);
   });
 }
 
 function stopSentinelDaemon() {
-  if (sentinelDaemon) {
-    log('🛑 Stopping Sentinel daemon...');
-    sentinelDaemon.kill();
+  if (!sentinelDaemon) return;
+
+  log('🛑 Initiating Sentinel graceful shutdown...');
+
+  // Enviar comando exit para que Sentinel limpie procesos Chromium
+  const exitCommand = { command: 'exit', id: 'shutdown_001' };
+  
+  try {
+    sentinelDaemon.stdin.write(JSON.stringify(exitCommand) + '\n');
+    log('📤 Exit command sent to Sentinel');
+  } catch (err) {
+    error('⚠️ Could not send exit command:', err.message);
+  }
+
+  // Esperar 2 segundos para que Sentinel cierre limpiamente
+  setTimeout(() => {
+    if (sentinelDaemon && !sentinelDaemon.killed) {
+      log('⏱️ Forcing daemon termination...');
+      sentinelDaemon.kill();
+    }
     sentinelDaemon = null;
     daemonReady = false;
-  }
+    pendingRequests.clear();
+  }, 2000);
 }
 
 
@@ -592,15 +640,6 @@ function registerSharedHandlers() {
 function registerSentinelHandlers() {
   log('🤖 Registering Sentinel handlers...');
 
-  ipcMain.handle('sentinel:daemon-status', async () => {
-    return {
-      running: !!sentinelDaemon,
-      ready: daemonReady,
-      pid: sentinelDaemon?.pid || null,
-      pendingCommands: pendingRequests.size
-    };
-  });
-
   ipcMain.handle('sentinel:health', async () => {
     try {
       return await executeSentinelCommand(['--json', 'health']);
@@ -642,6 +681,18 @@ function registerSentinelHandlers() {
     } catch (error) {
       return { success: false, error: error.message };
     }
+  });
+
+  // ============================================================================
+  // DAEMON STATUS (para UI debugging)
+  // ============================================================================
+  ipcMain.handle('sentinel:daemon-status', async () => {
+    return {
+      running: sentinelDaemon !== null && !sentinelDaemon.killed,
+      ready: daemonReady,
+      pending_requests: pendingRequests.size,
+      pid: sentinelDaemon?.pid || null
+    };
   });
 
   log('✅ Sentinel handlers registered');
@@ -751,6 +802,9 @@ function registerInstallHandlers() {
     }
   });
 
+  // ============================================================================
+  // PROFILE LAUNCH (Stateless UI - Async Command)
+  // ============================================================================
   ipcMain.handle('brain:launch', async (event, profileIdOrObject) => {
     try {
       let profileId;
@@ -765,7 +819,7 @@ function registerInstallHandlers() {
                  || profileIdOrObject.data?.profileId;
       }
 
-      log(`🚀 [MAIN] Launching profile via Sentinel daemon: ${profileId}`);
+      log(`🚀 [Stateless UI] Sending launch command to Sentinel: ${profileId}`);
 
       if (!profileId || profileId === 'undefined' || profileId === 'null') {
         const errorMsg = `Profile ID is missing or invalid. Received: ${JSON.stringify(profileIdOrObject)}`;
@@ -777,7 +831,8 @@ function registerInstallHandlers() {
         };
       }
 
-      // Enviar comando al daemon
+      // Enviar comando asíncrono - NO esperamos resultado del launch
+      // Solo esperamos el ACK confirmando que el comando fue recibido
       await sendSentinelCommand({
         command: 'launch',
         profile_id: profileId,
@@ -785,17 +840,17 @@ function registerInstallHandlers() {
         override_register: false
       });
 
-      log("✅ Launch command sent to Sentinel");
-      log("⏳ Waiting for PROFILE_CONNECTED event (timeout: 30s)");
-      log("   The UI will react when the handshake completes");
+      log("✅ Launch ACK received - Command processing");
+      log("   UI debe escuchar evento PROFILE_CONNECTED en stdout");
       
+      // Retornar inmediatamente - UI escuchará el evento
       return {
         success: true,
-        message: 'Launch initiated, listening for handshake',
-        note: 'PROFILE_CONNECTED event will be sent to renderer when ready'
+        message: 'Launch command sent - Listening for PROFILE_CONNECTED event',
+        profile_id: profileId
       };
     } catch (err) {
-      error("❌ Launch error:", err.message);
+      error("❌ Launch command failed:", err.message);
       return {
         success: false,
         error: err.message,
@@ -909,29 +964,6 @@ function registerInstallHandlers() {
       };
     }
   });
-
-  ipcMain.handle('run-diagnostics', async (event) => {
-    log('🔬 [IPC] run-diagnostics called (delegating to Sentinel)');
-
-    try {
-      const result = await executeSentinelCommand(['health', '--diagnostics', '--json']);
-
-      if (result.success) {
-        log('✅ [IPC] Diagnostics completed');
-      } else {
-        log('⚠️ [IPC] Diagnostics failed');
-      }
-
-      return result;
-    } catch (err) {
-      error('❌ [IPC] run-diagnostics error:', err.message);
-      return {
-        success: false,
-        error: err.message,
-        diagnostics: {}
-      };
-    }
-  });
 }
 
 // ============================================================================
@@ -964,22 +996,6 @@ async function createWindow() {
       webSecurity: true,
       sandbox: false
     }
-  });
-
-  // CSP Configuration (correcto)
-  win.webContents.session.webRequest.onHeadersReceived((details, callback) => {
-    callback({
-      responseHeaders: {
-        ...details.responseHeaders,
-        'Content-Security-Policy': [
-          "default-src 'self'; " +
-          "script-src 'self' 'unsafe-inline'; " +
-          "style-src 'self' 'unsafe-inline'; " +
-          "img-src 'self' data: https:; " +
-          "connect-src 'self' ws://localhost:* http://localhost:*;"
-        ]
-      }
-    });
   });
 
   win.once('ready-to-show', () => {

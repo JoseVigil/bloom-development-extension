@@ -74,45 +74,39 @@ func NewDaemonMode(brainAddr string) *DaemonMode {
 	}
 }
 
-// Start inicia el modo daemon con todos los workers
+// Start inicia el modo daemon con la Coreografía de Inicio exacta
 func (dm *DaemonMode) Start() error {
 	dm.logger.Printf("========================================")
 	dm.logger.Printf("🚀 Sentinel - Modo Sidecar Persistente")
 	dm.logger.Printf("========================================")
 	
-	// FASE 1: AUDITORÍA DE INICIO (Prompt B - Sección 1)
-	dm.logger.Printf("🔍 Ejecutando auditoría de inicio (Reconciliation Logic)...")
-	report, err := process.StartupAudit(dm.appDataDir, dm.client.addr)
+	// ═══════════════════════════════════════════════════════════════
+	// COREOGRAFÍA DE INICIO (según Prompt - Sección 2)
+	// ═══════════════════════════════════════════════════════════════
+	
+	// ── FASE 1: AUDIT ──────────────────────────────────────────────
+	dm.logger.Printf("📋 FASE 1: Ejecutando auditoría local de procesos...")
+	report, err := process.StartupAudit(dm.appDataDir, dm.client.bus.addr)
 	if err != nil {
 		dm.logger.Printf("⚠️  Error en auditoría: %v", err)
+		// Continuar de todas formas
+		report = &process.HygieneReport{
+			Timestamp: time.Now().Format(time.RFC3339),
+			Errors:    []string{err.Error()},
+		}
 	} else {
 		dm.logger.Printf("✓ Auditoría completada:")
 		dm.logger.Printf("  - Perfiles totales: %d", report.TotalProfiles)
 		dm.logger.Printf("  - Perfiles abiertos: %d", report.OpenProfiles)
 		dm.logger.Printf("  - Perfiles huérfanos detectados: %d", len(report.OrphanedProfiles))
-		dm.logger.Printf("  - Correcciones aplicadas: %d", report.CorrectedCount)
 		
 		if len(report.OrphanedProfiles) > 0 {
 			dm.logger.Printf("  - IDs huérfanos: %v", report.OrphanedProfiles)
 		}
-		
-		// Emitir reporte como evento JSON en stdout
-		dm.emitToElectron(StdoutResponse{
-			Type:      "AUDIT_COMPLETED",
-			Status:    "success",
-			Timestamp: time.Now().UnixNano(),
-			Data: map[string]interface{}{
-				"total_profiles":    report.TotalProfiles,
-				"open_profiles":     report.OpenProfiles,
-				"orphaned_profiles": report.OrphanedProfiles,
-				"corrected_count":   report.CorrectedCount,
-				"errors":            report.Errors,
-			},
-		})
 	}
 	
-	// FASE 2: CONECTAR CON EL BRAIN
-	dm.logger.Printf("🔌 Conectando con Brain en %s...", dm.client.addr)
+	// ── FASE 2: CONNECT ────────────────────────────────────────────
+	dm.logger.Printf("🔌 FASE 2: Conectando con Brain en %s...", dm.client.bus.addr)
 	if err := dm.client.Connect(); err != nil {
 		return fmt.Errorf("no se pudo conectar con Brain: %w", err)
 	}
@@ -124,19 +118,49 @@ func (dm *DaemonMode) Start() error {
 	
 	dm.logger.Printf("✓ Conectado con Brain")
 	
-	// FASE 3: REHIDRATACIÓN
+	// ── FASE 3: SYNC ───────────────────────────────────────────────
+	dm.logger.Printf("🔄 FASE 3: Sincronizando estado con Brain...")
+	if len(report.Corrections) > 0 {
+		if err := dm.client.SendProfileStateSync(report.Corrections); err != nil {
+			dm.logger.Printf("⚠️  Error enviando sincronización: %v", err)
+		} else {
+			dm.logger.Printf("✓ Sincronización enviada: %d correcciones aplicadas", len(report.Corrections))
+		}
+	} else {
+		dm.logger.Printf("✓ No se requieren correcciones de estado")
+	}
+	
+	// ═══════════════════════════════════════════════════════════════
+	// FIN DE COREOGRAFÍA DE INICIO
+	// ═══════════════════════════════════════════════════════════════
+	
+	// Emitir reporte de auditoría a Electron
+	dm.emitToElectron(StdoutResponse{
+		Type:      "AUDIT_COMPLETED",
+		Status:    "success",
+		Timestamp: time.Now().UnixNano(),
+		Data: map[string]interface{}{
+			"total_profiles":    report.TotalProfiles,
+			"open_profiles":     report.OpenProfiles,
+			"orphaned_profiles": report.OrphanedProfiles,
+			"corrected_count":   report.CorrectedCount,
+			"errors":            report.Errors,
+		},
+	})
+	
+	// Rehidratación de eventos históricos
 	dm.rehydrate()
 	
 	// Configurar manejo de señales
 	signal.Notify(dm.shutdownChan, os.Interrupt, syscall.SIGTERM)
 	
-	// FASE 4: REGISTRAR HANDLERS
+	// Registrar handlers de eventos
 	dm.registerEventHandlers()
 	
-	// FASE 5: INICIAR WORKERS
+	// Iniciar workers
 	go dm.stdinWorker()
 	go dm.controlWorker()
-	go dm.zombieCleanupWorker() // Nuevo worker de limpieza
+	go dm.zombieCleanupWorker()
 	
 	// Enviar evento de inicio
 	dm.emitToElectron(StdoutResponse{
@@ -202,7 +226,7 @@ func (dm *DaemonMode) controlWorker() {
 	}
 }
 
-// zombieCleanupWorker ejecuta limpieza periódica de procesos zombies (Prompt B - Sección 2)
+// zombieCleanupWorker ejecuta limpieza periódica de procesos zombies
 func (dm *DaemonMode) zombieCleanupWorker() {
 	dm.logger.Printf("Worker de Limpieza de Zombies iniciado (cada 2 minutos)")
 	ticker := time.NewTicker(2 * time.Minute)
@@ -274,41 +298,25 @@ func (dm *DaemonMode) getActivePIDs() []int {
 	return pids
 }
 
-// handleStdinCommand procesa un comando recibido desde Electron
+// handleStdinCommand despacha comandos recibidos desde Electron
 func (dm *DaemonMode) handleStdinCommand(cmd StdinCommand) {
-	dm.logger.Printf("Procesando comando: %s (ID: %s)", cmd.Command, cmd.ID)
+	dm.logger.Printf("Comando recibido: %s (ID: %s, ProfileID: %s)", cmd.Command, cmd.ID, cmd.ProfileID)
 	
-	// Enviar ACK inmediato
-	dm.emitToElectron(StdoutResponse{
-		Type:      "ACK",
-		ID:        cmd.ID,
-		Status:    "processing",
-		Timestamp: time.Now().UnixNano(),
-	})
-	
-	// Procesar según el comando
 	switch cmd.Command {
 	case "launch":
 		dm.handleLaunch(cmd)
-		
 	case "stop":
 		dm.handleStop(cmd)
-		
 	case "status":
 		dm.handleStatus(cmd)
-		
 	case "intent":
 		dm.handleIntent(cmd)
-		
 	case "poll_events":
 		dm.handlePollEvents(cmd)
-		
 	case "cleanup_zombies":
 		dm.handleCleanupZombies(cmd)
-		
 	case "exit":
 		dm.handleExit(cmd)
-		
 	default:
 		dm.emitError(cmd.ID, "UNKNOWN_COMMAND", fmt.Sprintf("Comando desconocido: %s", cmd.Command))
 	}
@@ -321,7 +329,6 @@ func (dm *DaemonMode) handleLaunch(cmd StdinCommand) {
 		return
 	}
 	
-	// Enviar comando al Brain
 	if err := dm.client.LaunchProfile(cmd.ProfileID); err != nil {
 		dm.emitError(cmd.ID, "LAUNCH_FAILED", err.Error())
 		return

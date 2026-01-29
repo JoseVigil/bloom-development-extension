@@ -27,19 +27,22 @@ type ProfileRegistry struct {
 
 // HygieneReport contiene el resultado de la auditoría de inicio
 type HygieneReport struct {
-	TotalProfiles   int      `json:"total_profiles"`
-	OpenProfiles    int      `json:"open_profiles"`
-	OrphanedProfiles []string `json:"orphaned_profiles"`
-	CorrectedCount  int      `json:"corrected_count"`
-	Errors          []string `json:"errors"`
-	Timestamp       string   `json:"timestamp"`
+	TotalProfiles      int                      `json:"total_profiles"`
+	OpenProfiles       int                      `json:"open_profiles"`
+	OrphanedProfiles   []string                 `json:"orphaned_profiles"`
+	Corrections        []map[string]interface{} `json:"corrections"`
+	CorrectedCount     int                      `json:"corrected_count"`
+	Errors             []string                 `json:"errors"`
+	Timestamp          string                   `json:"timestamp"`
 }
 
 // StartupAudit realiza la auditoría de inicio según Prompt B
+// CRÍTICO: Solo identifica y retorna problemas, NO envía correcciones
 func StartupAudit(appDataDir string, brainAddr string) (*HygieneReport, error) {
 	report := &HygieneReport{
 		Timestamp:        time.Now().Format(time.RFC3339),
 		OrphanedProfiles: make([]string, 0),
+		Corrections:      make([]map[string]interface{}, 0),
 		Errors:           make([]string, 0),
 	}
 
@@ -67,12 +70,16 @@ func StartupAudit(appDataDir string, brainAddr string) (*HygieneReport, error) {
 				// Proceso huérfano detectado
 				report.OrphanedProfiles = append(report.OrphanedProfiles, profile.ProfileID)
 
-				// 4. Enviar corrección al Brain
-				if err := sendCorrectionToBrain(profile.ProfileID, brainAddr); err != nil {
-					report.Errors = append(report.Errors, fmt.Sprintf("Error corrigiendo %s: %v", profile.ProfileID, err))
-				} else {
-					report.CorrectedCount++
+				// 4. Preparar corrección (NO enviar aquí)
+				correction := map[string]interface{}{
+					"profile_id": profile.ProfileID,
+					"old_status": "open",
+					"new_status": "closed",
+					"old_pid":    profile.PID,
+					"reason":     "orphaned_pid",
 				}
+				report.Corrections = append(report.Corrections, correction)
+				report.CorrectedCount++
 			}
 		}
 	}
@@ -125,22 +132,6 @@ func isValidBloomProcess(pid int, appDataDir string) bool {
 	path = strings.ReplaceAll(strings.ToLower(path), "/", "\\")
 
 	return strings.Contains(path, bloomPath)
-}
-
-// sendCorrectionToBrain envía un mensaje al Brain para corregir el estado
-func sendCorrectionToBrain(profileID string, brainAddr string) error {
-	// En modo daemon, esto se haría a través del EventBus
-	// Por ahora, simplemente logueamos a stderr
-	fmt.Fprintf(os.Stderr, "[HYGIENE] Corrección enviada para perfil: %s (PID huérfano)\n", profileID)
-	
-	// TODO: Implementar comunicación real con Brain a través de EventBus
-	// eventbus.SendEvent("PROFILE_STATE_CORRECTION", map[string]interface{}{
-	//     "profile_id": profileID,
-	//     "new_status": "closed",
-	//     "reason": "orphaned_pid",
-	// })
-	
-	return nil
 }
 
 // SafeCleanup busca y elimina procesos zombies de Chromium que no estén en sesión activa
