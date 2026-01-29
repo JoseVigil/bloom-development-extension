@@ -47,6 +47,9 @@ Sentinel
 .\sentinel.exe seed "MasterWorker" true
 .\sentinel.exe launch 14c11dbf-7f2a-43be-beba-7ae757cc7486 --discovery.\build.bat
 
+.\sentinel.exe --help > C:\repos\bloom-videos\bloom-development-extension\installer\sentinel\help\sentinel_help.txt
+.\sentinel.exe --json-help > C:\repos\bloom-videos\bloom-development-extension\installer\sentinel\help\sentinel_help.json
+
 tree commands
 brain filesystem tree src installer webview brain contracts package.json tsconfig.json -o tree/plugin_tree.txt
 
@@ -58,13 +61,14 @@ brain filesystem tree webview -o tree/webview_tree.txt
 
 brain filesystem tree installer/electron-app -o tree/electron_tree.txt
 
-brain filesystem tree installer/chrome-extension -o tree/chrome_extension_tree.txt
+brain filesystem tree installer/sentinel -o tree/sentinel_tree.txt
+
+brain filesystem tree installer/chrome-extension/src -o tree/chrome_extension_src_tree.txt
 
 brain filesystem tree C:\Users\josev\AppData\Local\BloomNucleus -o tree/appdata_tree.txt
 
 Asterisk
 sudo asterisk -rvvv
-
 
 Servidores
 API REST: PluginApiServer.ts → Puerto 48215
@@ -77,3 +81,42 @@ Conecta a: API 48215 + WS 4124
 
 Borrar todas las keys 
 Get-ChildItem "HKCU:\Software\Google\Chrome\NativeMessagingHosts" | Where-Object { $_.PSChildName -like "com.bloom.synapse*" } | Remove-Item -Recurse -Force -Verbose
+
+
+& "C:\Users\josev\AppData\Local\BloomNucleus\bin\chrome-win\chrome.exe" --user-data-dir="C:\Users\josev\AppData\Local\BloomNucleus\profiles\14c11dbf-7f2a-43be-beba-7ae757cc7486" --profile-directory=Default --no-first-run --no-default-browser-check --disable-default-apps --disable-session-crashed-bubble --disable-features=ChromeWhatsNewUI --load-extension="C:\Users\josev\AppData\Local\BloomNucleus\profiles\14c11dbf-7f2a-43be-beba-7ae757cc7486\extension" "chrome-extension://hpblclepliicmihaplldignhjdggnkdh/discovery/index.html"
+
+& "C:\Users\josev\AppData\Local\BloomNucleus\bin\chrome-win\chrome.exe" --user-data-dir="C:\Users\josev\AppData\Local\BloomNucleus\profiles\14c11dbf-7f2a-43be-beba-7ae757cc7486" --profile-directory=Default --no-first-run --no-default-browser-check --disable-default-apps --disable-session-crashed-bubble --disable-features=ChromeWhatsNewUI --load-extension="C:\Users\josev\AppData\Local\BloomNucleus\profiles\14c11dbf-7f2a-43be-beba-7ae757cc7486\extension" "chrome-extension://hpblclepliicmihaplldignhjdggnkdh/landing/index.html"
+
+Kill
+taskkill /IM brain.exe /F
+
+\sentinel.exe --json launch ecdeed9b-222f-4919-b4cb-dbf55a4f32ef --mode discovery --override-register=false
+
+.\sentinel.exe --json launch ecdeed9b-222f-4919-b4cb-dbf55a4f32ef --mode discovery --override-register=true  --override-email="josevigil@gmail.com"
+
+.\sentinel.exe --json launch ecdeed9b-222f-4919-b4cb-dbf55a4f32ef --mode landing
+
+
+CLAUDE - COPY CODE FROM DOWNLOAD FILE 
+
+Decime esto al final de tus pedidos:
+
+"Cuando presentes los archivos, usa las rutas reales como nombres (ej: internal/core/version_reader.go en lugar de nombres generados)"
+
+O más corto:
+
+"Present files con rutas reales como nombres"
+
+SINO Hard-Way
+
+F12 → Network tab → Click download button → Ve el filename en la request/response headers
+O más fácil:
+Hover sobre el botón → Bottom left de Chrome muestra la URL → contiene el nombre real del archivo
+O:
+Right-click en el botón → "Copy link address" → pégalo en notepad → verás el nombre del archivo en la URL
+
+Sí:
+Right-click en el área del archivo → Inspect Element → busca el atributo data-filename o similar en el HTML
+O más directo:
+F12 → Console → pega esto:
+document.querySelectorAll('[download]').forEach(el => console.log(el.download || el.href))

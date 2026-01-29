@@ -42,6 +42,48 @@ set HELP_DIR=help
 if not exist "%OUTPUT_DIR%" mkdir "%OUTPUT_DIR%"
 if not exist "%HELP_DIR%" mkdir "%HELP_DIR%"
 
+:: ============================================
+:: INCREMENTAR BUILD NUMBER
+:: ============================================
+echo.
+echo Incrementando build number...
+echo Incrementando build number... >> "%LOG_FILE%"
+
+set BUILD_FILE=build_number.txt
+set BUILD_INFO=internal\core\build_info.go
+
+:: Leer build number actual (o iniciar en 0)
+if not exist "%BUILD_FILE%" (
+    echo 0 > "%BUILD_FILE%"
+)
+set /p CURRENT_BUILD=<%BUILD_FILE%
+set /a NEXT_BUILD=%CURRENT_BUILD%+1
+
+:: Obtener timestamp con formato corregido
+for /f "tokens=1-3 delims=/-" %%a in ('date /t') do (
+    set BUILD_DATE=%%c-%%a-%%b
+)
+for /f "tokens=1-2 delims=:." %%a in ('echo %time: =0%') do (
+    set BUILD_TIME=%%a:%%b:00
+)
+
+:: Generar build_info.go
+echo package core > "%BUILD_INFO%"
+echo. >> "%BUILD_INFO%"
+echo // Auto-generated during build - DO NOT EDIT >> "%BUILD_INFO%"
+echo // Generated: %BUILD_DATE% %BUILD_TIME% >> "%BUILD_INFO%"
+echo. >> "%BUILD_INFO%"
+echo const BuildNumber = %NEXT_BUILD% >> "%BUILD_INFO%"
+echo const BuildDate = "%BUILD_DATE%" >> "%BUILD_INFO%"
+echo const BuildTime = "%BUILD_TIME%" >> "%BUILD_INFO%"
+
+:: Guardar nuevo número
+echo %NEXT_BUILD% > "%BUILD_FILE%"
+
+echo ✅ Build number actualizado: %NEXT_BUILD%
+echo ✅ Build number actualizado: %NEXT_BUILD% >> "%LOG_FILE%"
+echo.
+
 echo.
 echo Compiling sentinel.exe...
 echo Compiling sentinel.exe... >> "%LOG_FILE%"

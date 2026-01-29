@@ -28,13 +28,13 @@
   COMMAND CATEGORIES
 ------------------------------------------------------------------------------------------------------------------------
 
-  SYSTEM         Health checks and system diagnostics                     1 cmd
+  SYSTEM         Health checks and system diagnostics                     3 cmds
   IDENTITY       Profile identity and seed management                     1 cmd
   RUNTIME        Browser instance lifecycle control                       1 cmd
   BRIDGE         JSON-RPC communication with Electron                     2 cmds
   DEVELOPMENT    Integrated development environment                       1 cmd
   UI             Monitoring and telemetry interfaces                      2 cmds
-  -----------------------------------------------------------------------  Total: 8 commands
+  -----------------------------------------------------------------------  Total: 10 commands
 
 
 =======================================================[ SYSTEM ]=======================================================
@@ -51,6 +51,20 @@
     Requirements:
       * brain.exe debe estar en PATH o en bin/
       * Puertos 5678, 3001, 5173 accesibles para verificación
+
+    --------------------------------------------------------------------------------
+
+  > INFO
+    Display detailed system and runtime information
+
+    Usage: sentinel info
+
+    --------------------------------------------------------------------------------
+
+  > VERSION
+    Display version and build information
+
+    Usage: sentinel version
 
     --------------------------------------------------------------------------------
 
