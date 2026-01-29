@@ -12,6 +12,8 @@
 #include "synapse_logger.h"
 #include "chunked_buffer.h"
 #include "platform_utils.h"
+#include "cli_handler.h"
+#include "build_info.h"
 
 using json = nlohmann::json;
 
@@ -20,7 +22,7 @@ using json = nlohmann::json;
 // ============================================================================
 
 const std::string VERSION = "2.1.0";
-const int BUILD = 22;
+const int BUILD = BUILD_NUMBER;
 const int SERVICE_PORT = 5678;
 const size_t MAX_MESSAGE_SIZE = 50 * 1024 * 1024;
 const size_t MAX_CHROME_MSG_SIZE = 1020000; // 🔒 MURO DE 1MB (con margen de seguridad)
@@ -711,6 +713,11 @@ void tcp_client_loop() {
 
 int main(int argc, char* argv[]) {
     try {
+        // Manejar comandos CLI primero
+        if (handle_cli_args(argc, argv)) {
+            return 0;
+        }
+
         PlatformUtils::initialize_networking();
         PlatformUtils::setup_binary_io();
         
