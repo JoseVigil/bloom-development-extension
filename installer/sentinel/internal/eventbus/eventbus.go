@@ -42,6 +42,7 @@ type EventBus struct {
 	isConnected    bool
 	lastEventTime  int64
 	sequence       uint64
+	sequenceMu     sync.Mutex
 }
 
 // NewEventBus crea una nueva instancia del bus de eventos
@@ -88,9 +89,10 @@ func (eb *EventBus) sendRegister() error {
 		Type:      "REGISTER_SENTINEL",
 		Timestamp: time.Now().UnixNano(),
 		Data: map[string]interface{}{
-			"version":  "1.0.0",
-			"hostname": getHostname(),
-			"pid":      os.Getpid(),
+			"version":      "1.0.0",
+			"hostname":     getHostname(),
+			"pid":          os.Getpid(),
+			"capabilities": []string{"process_hygiene", "tree_kill", "guardian", "stdin_commands"},
 		},
 	}
 	
@@ -103,9 +105,9 @@ func (eb *EventBus) Start() {
 	go eb.healthCheckLoop()
 }
 
-// readLoop lee continuamente del socket TCP
+// readLoop lee continuamente del socket TCP usando protocolo 4-byte BigEndian
 func (eb *EventBus) readLoop() {
-	eb.logger.Printf("Iniciando loop de lectura de eventos...")
+	eb.logger.Printf("Iniciando loop de lectura de eventos (protocolo 4-byte BigEndian)...")
 	
 	for {
 		select {
@@ -118,7 +120,7 @@ func (eb *EventBus) readLoop() {
 				if err == io.EOF || isConnectionError(err) {
 					eb.logger.Printf("Conexión perdida con Brain: %v", err)
 					eb.handleDisconnect()
-					continue
+					return // Salir del loop, será reiniciado por reconnect
 				}
 				eb.logger.Printf("Error leyendo evento: %v", err)
 				continue
@@ -132,12 +134,15 @@ func (eb *EventBus) readLoop() {
 			case eb.eventChan <- event:
 			case <-eb.ctx.Done():
 				return
+			default:
+				eb.logger.Printf("⚠️  Canal de eventos lleno, descartando evento")
 			}
 		}
 	}
 }
 
 // readEvent lee un evento completo usando el protocolo de 4 bytes BigEndian
+// CRÍTICO: Esta es la única función autorizada para leer del socket TCP
 func (eb *EventBus) readEvent() (Event, error) {
 	eb.connMu.RLock()
 	conn := eb.conn
@@ -175,20 +180,22 @@ func (eb *EventBus) readEvent() (Event, error) {
 	return event, nil
 }
 
-// Send envía un mensaje al Brain usando el protocolo de 4 bytes
+// Send envía un mensaje al Brain usando el protocolo de 4 bytes BigEndian
+// CRÍTICO: Esta es la única función autorizada para escribir al socket TCP
 func (eb *EventBus) Send(event Event) error {
-	eb.connMu.RLock()
-	conn := eb.conn
-	eb.connMu.RUnlock()
+	eb.connMu.Lock() // Lock de escritura para evitar writes concurrentes
+	defer eb.connMu.Unlock()
 	
-	if conn == nil {
+	if eb.conn == nil {
 		return fmt.Errorf("no hay conexión activa con el Brain")
 	}
 	
 	// Agregar secuencia si no la tiene
 	if event.Sequence == 0 {
+		eb.sequenceMu.Lock()
 		eb.sequence++
 		event.Sequence = eb.sequence
+		eb.sequenceMu.Unlock()
 	}
 	
 	// Agregar timestamp si no lo tiene
@@ -206,12 +213,12 @@ func (eb *EventBus) Send(event Event) error {
 	header := make([]byte, 4)
 	binary.BigEndian.PutUint32(header, uint32(len(payload)))
 	
-	// 3. Enviar header + payload
-	if _, err := conn.Write(header); err != nil {
+	// 3. Enviar header + payload atómicamente
+	if _, err := eb.conn.Write(header); err != nil {
 		return fmt.Errorf("error enviando header: %w", err)
 	}
 	
-	if _, err := conn.Write(payload); err != nil {
+	if _, err := eb.conn.Write(payload); err != nil {
 		return fmt.Errorf("error enviando payload: %w", err)
 	}
 	

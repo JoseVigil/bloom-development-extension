@@ -2,7 +2,6 @@ package ignition
 
 import (
 	"fmt"
-	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,6 +12,8 @@ import (
 	"time"
 )
 
+// Launch ejecuta la secuencia de lanzamiento del perfil
+// Sentinel lanza, el Brain gobierna
 func (ig *Ignition) Launch(profileID string, mode string, configOverride string) (int, int, bool, map[string]interface{}, error) {
 	ig.Core.Logger.Info("[IGNITION] 🚀 Iniciando secuencia soberana de lanzamiento (Modo: %s)", mode)
 
@@ -36,9 +37,8 @@ func (ig *Ignition) Launch(profileID string, mode string, configOverride string)
 	ig.Core.Logger.Info("[IGNITION] Sincronizando estados con el sistema de archivos...")
 	time.Sleep(800 * time.Millisecond)
 
-	if err := ig.startBrainService(); err != nil {
-		return 0, 0, false, nil, fmt.Errorf("error iniciando servicio Brain: %v", err)
-	}
+	// Sentinel asume que el Brain está corriendo, no lo arranca
+	// El Launcher (Electron) es responsable de asegurar que el servicio base esté vivo
 
 	chromePID, err := ig.execute(profileID, mode)
 	if err != nil {
@@ -46,13 +46,15 @@ func (ig *Ignition) Launch(profileID string, mode string, configOverride string)
 	}
 
 	ig.Session.BrowserPID = chromePID
-	ig.startPostLaunchAnalysis(profileID, launchID)
+
+	// La confirmación de éxito viene del evento PROFILE_CONNECTED desde el Brain,
+	// NO de un timer de 2 segundos en Go
 
 	if ig.Core.IsJSON {
-		return chromePID, 5678, true, effectiveConfig, nil
+		return chromePID, 9222, true, effectiveConfig, nil
 	}
 
-	guardian, err := health.NewGuardian(ig.Core, profileID, launchID, ig.Session.ServicePID)
+	guardian, err := health.NewGuardian(ig.Core, profileID, launchID, chromePID)
 	if err == nil {
 		ig.Guardians[profileID] = guardian
 		guardian.Start()
@@ -62,9 +64,11 @@ func (ig *Ignition) Launch(profileID string, mode string, configOverride string)
 	}
 
 	ig.Core.Logger.Success("[IGNITION] 🔥 Sistema en línea (PID: %d)", chromePID)
-	return chromePID, 5678, true, effectiveConfig, nil
+	return chromePID, 9222, true, effectiveConfig, nil
 }
 
+// execute construye los argumentos y lanza Chromium
+// Solo construye buildSilentLaunchArgs, configura HideWindow: true, lanza el proceso y retorna el PID
 func (ig *Ignition) execute(profileID string, mode string) (int, error) {
 	spec, err := ig.loadIgnitionSpec(profileID)
 	if err != nil {
@@ -119,6 +123,7 @@ func (ig *Ignition) execute(profileID string, mode string) (int, error) {
 	return pid, nil
 }
 
+// isProcessAlive verifica si un proceso está activo
 func (ig *Ignition) isProcessAlive(pid int) bool {
 	if runtime.GOOS == "windows" {
 		cmd := exec.Command("tasklist", "/FI", fmt.Sprintf("PID eq %d", pid), "/NH")
@@ -133,8 +138,9 @@ func (ig *Ignition) isProcessAlive(pid int) bool {
 	return err == nil
 }
 
+// preFlight realiza verificaciones previas al lanzamiento
 func (ig *Ignition) preFlight(profileID string) {
-	ig.freePortQuirurgico(5678)
+	ig.freePortQuirurgico(9222)
 
 	lockPath := filepath.Join(ig.Core.Paths.ProfilesDir, profileID, "SingletonLock")
 	if _, err := os.Stat(lockPath); err == nil {
@@ -146,6 +152,7 @@ func (ig *Ignition) preFlight(profileID string) {
 	}
 }
 
+// freePortQuirurgico libera el puerto especificado matando procesos que lo ocupan
 func (ig *Ignition) freePortQuirurgico(port int) {
 	if runtime.GOOS != "windows" {
 		ig.Core.Logger.Info("[WARN] [PORT] Liberación quirúrgica de puerto solo implementada en Windows por ahora")
@@ -176,48 +183,4 @@ func (ig *Ignition) freePortQuirurgico(port int) {
 	}
 
 	time.Sleep(1200 * time.Millisecond)
-}
-
-func (ig *Ignition) startBrainService() error {
-	ig.Core.Logger.Info("[IGNITION] Levantando servicio base brain.exe...")
-	cmd := exec.Command("brain.exe", "service", "start")
-	cmd.Env = append(os.Environ(), "PYTHONIOENCODING=utf-8")
-
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("no se pudo ejecutar brain.exe: %v", err)
-	}
-
-	ig.Session.ServicePID = cmd.Process.Pid
-
-	for i := 0; i < 15; i++ {
-		conn, _ := net.DialTimeout("tcp", "127.0.0.1:5678", 500*time.Millisecond)
-		if conn != nil {
-			conn.Close()
-			return nil
-		}
-		time.Sleep(500 * time.Millisecond)
-	}
-	return fmt.Errorf("timeout: el servicio brain.exe no respondió en el puerto 5678")
-}
-
-func (ig *Ignition) startPostLaunchAnalysis(profileID string, launchID string) {
-	go func() {
-		time.Sleep(2 * time.Second)
-		ig.runAnalysisCommand("read-log", profileID, launchID)
-		ig.runAnalysisCommand("mining-log", profileID, launchID)
-	}()
-	go func() {
-		time.Sleep(10 * time.Second)
-		ig.runAnalysisCommand("read-net-log", profileID, launchID)
-	}()
-}
-
-func (ig *Ignition) runAnalysisCommand(commandType string, profileID string, launchID string) {
-	args := []string{"--json", "chrome", commandType, profileID, "--launch-id", launchID}
-	if commandType == "read-net-log" {
-		args = append(args, "--filter-ai")
-	}
-	cmd := exec.Command("brain.exe", args...)
-	cmd.Env = append(os.Environ(), "PYTHONIOENCODING=utf-8", "PYTHONUTF8=1")
-	_, _ = cmd.CombinedOutput()
 }

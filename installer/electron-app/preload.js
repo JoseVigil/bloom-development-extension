@@ -32,12 +32,10 @@ const API = {
   startInstallation: (options = {}) => ipcRenderer.invoke('install:start', options),
   checkRequirements: () => ipcRenderer.invoke('install:check-requirements'),
   cleanupInstallation: () => ipcRenderer.invoke('install:cleanup'),
-  
   // 🆕 REPAIR & DIAGNOSTICS
   repairBridge: () => ipcRenderer.invoke('repair-bridge'),
   validateInstallation: () => ipcRenderer.invoke('validate-installation'),
   runDiagnostics: () => ipcRenderer.invoke('run-diagnostics'),
-  checkDaemonStatus: () => ipcRenderer.invoke('sentinel:daemon-status'),
 
   // ==========================================
   // LAUNCH MODE HANDLERS (Existing)
@@ -83,10 +81,13 @@ const API = {
       'dashboard:error',
       'services:status',
       
-      // Sentinel sidecar events
-      'sentinel:profile-connected',
-      'sentinel:extension-error',
-      'sentinel:event',
+      // Sentinel sidecar events (Event Bus)
+      'sentinel:profile-connected',    // Handshake 3 fases OK
+      'sentinel:extension-error',      // Error en bridge/extension
+      'sentinel:audit-completed',      // Limpieza de perfiles huérfanos
+      'sentinel:intent-complete',      // Operación IA completada
+      'sentinel:intent-failed',        // Operación IA falló
+      'sentinel:event',                // Eventos genéricos
       
       // Shared events
       'error',
@@ -143,6 +144,7 @@ if (process.env.NODE_ENV === 'development') {
     info: (...args) => console.info('[Renderer]', ...args),
     checkBrainServiceStatus: () => ipcRenderer.invoke('check-brain-service-status'),
   });
+  
 }
 
 // ============================================================================
