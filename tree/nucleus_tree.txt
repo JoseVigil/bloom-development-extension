@@ -1,0 +1,57 @@
+bloom-development-extension/
+└── nucleus/
+    ├── .gitignore
+    ├── README.md
+    ├── VERSION
+    ├── blueprint.json
+    ├── build_number.txt
+    ├── cmd/
+    │   └── nucleus/
+    │       └── main.go
+    ├── docs/
+    │   ├── EXECUTIVE_SUMMARY.md
+    │   ├── GOVERNANCE.md
+    │   └── NUCLEUS_README.md
+    ├── go.mod
+    ├── go.sum
+    ├── internal/
+    │   ├── analytics/
+    │   │   └── client.go
+    │   ├── cli/
+    │   │   ├── config.go
+    │   │   └── help_renderer.go
+    │   ├── commands/
+    │   │   ├── analytics/
+    │   │   │   └── heartbeat.go
+    │   │   ├── governance/
+    │   │   │   └── init.go
+    │   │   ├── sync/
+    │   │   │   ├── pull.go
+    │   │   │   └── push.go
+    │   │   ├── system/
+    │   │   │   ├── info.go
+    │   │   │   └── version.go
+    │   │   ├── team/
+    │   │   │   ├── add.go
+    │   │   │   ├── list.go
+    │   │   │   └── remove.go
+    │   │   └── vault/
+    │   │       ├── lock.go
+    │   │       ├── request.go
+    │   │       ├── status.go
+    │   │       └── unlock.go
+    │   ├── core/
+    │   │   ├── build_info.go
+    │   │   ├── core.go
+    │   │   ├── metadata.go
+    │   │   ├── registry.go
+    │   │   └── version.go
+    │   ├── governance/
+    │   │   └── roles.go
+    │   └── vault/
+    │       └── vault.go
+    └── scripts/
+        ├── build-darwin.sh
+        ├── build-linux.sh
+        ├── build.bat
+        └── build_number.txt

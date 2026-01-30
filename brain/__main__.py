@@ -207,6 +207,55 @@ def main():
                 traceback.print_exc()
             pass
     
+    # ========================================================================
+    # INTERCEPT --version, --info (ANTES DE TYPER)
+    # ========================================================================
+    if "--version" in sys.argv or "--info" in sys.argv:
+        try:
+            # Detectar cuál flag se usó
+            is_version = "--version" in sys.argv
+            is_info = "--info" in sys.argv
+            
+            flag_name = "--version" if is_version else "--info"
+            
+            # Detectar flags globales
+            json_flag = "--json" in sys.argv
+            verbose_flag = "--verbose" in sys.argv
+            
+            # Remover flags custom ANTES de que Typer los vea
+            sys.argv = [arg for arg in sys.argv if arg not in [flag_name, "--json", "--verbose"]]
+            
+            # Solo procesar si es invocación global (no subcomando)
+            # Ejemplo: "brain --version" ✓ vs "brain system --version" ✗
+            if len([arg for arg in sys.argv if not arg.startswith('-')]) == 1:
+                if is_version:
+                    # Lazy import del comando
+                    from brain.commands.system.version_flags import VersionFlagCommand
+                    VersionFlagCommand.execute_intercepted(
+                        json_mode=json_flag,
+                        verbose=verbose_flag
+                    )
+                else:  # --info
+                    # Lazy import del comando
+                    from brain.commands.system.info_flags import InfoFlagCommand
+                    InfoFlagCommand.execute_intercepted(
+                        json_mode=json_flag,
+                        verbose=verbose_flag
+                    )
+                # Si llegamos aquí sin sys.exit(), algo salió mal
+                sys.exit(1)
+                
+        except SystemExit:
+            # Salida normal del comando interceptado
+            raise
+        except Exception as e:
+            # Si falla la intercepción, dejar que Typer maneje el error
+            if not json_mode:
+                logger.warning(f"⚠️ Error en flag interceptor, usando fallback de Typer: {e}")
+                import traceback
+                traceback.print_exc()
+            pass
+    
     try:
         registry = load_commands()
         sub_apps = {}

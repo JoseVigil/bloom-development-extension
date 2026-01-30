@@ -148,8 +148,10 @@ bloom-development-extension/
     │   │   ├── __init__.py
     │   │   ├── __pycache__/ [... cache]
     │   │   ├── info.py
+    │   │   ├── info_flags.py
     │   │   ├── release_info.py
-    │   │   └── system_specs.py
+    │   │   ├── system_specs.py
+    │   │   └── version_flags.py
     │   └── twitter/
     │       ├── __init__.py
     │       ├── __pycache__/ [... cache]

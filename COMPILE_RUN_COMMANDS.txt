@@ -50,6 +50,10 @@ Sentinel
 .\sentinel.exe --help > C:\repos\bloom-videos\bloom-development-extension\installer\sentinel\help\sentinel_help.txt
 .\sentinel.exe --json-help > C:\repos\bloom-videos\bloom-development-extension\installer\sentinel\help\sentinel_help.json
 
+Nucleus
+cd \installer\nucleus\scripts
+
+
 tree commands
 brain filesystem tree src installer webview brain contracts package.json tsconfig.json -o tree/plugin_tree.txt
 

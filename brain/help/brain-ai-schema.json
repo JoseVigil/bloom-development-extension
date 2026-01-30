@@ -1965,7 +1965,7 @@
     },
     {
       "name": "system.path",
-      "description": "Display the absolute path to the brain executable.",
+      "description": "Display the path to the Brain executable.",
       "category": "system",
       "syntax": "brain system path",
       "parameters": {
@@ -1976,22 +1976,14 @@
     },
     {
       "name": "system.version",
-      "description": "Display or increment the version number.",
+      "description": "Display or set version information.",
       "category": "system",
       "syntax": "brain system version",
       "parameters": {
         "type": "object",
         "properties": {
-          "added": {
-            "description": "Feature or capability added (can be used multiple times)",
-            "type": "string"
-          },
-          "changed": {
-            "description": "Feature or behavior changed (can be used multiple times)",
-            "type": "string"
-          },
-          "details": {
-            "description": "Implementation detail or technical note (can be used multiple times)",
+          "set": {
+            "description": "Set new MAJOR.MINOR version (e.g., --set 2.2)",
             "type": "string"
           }
         },
