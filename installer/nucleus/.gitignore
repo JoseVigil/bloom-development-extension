@@ -1,0 +1,8 @@
+bin/
+build_number.txt
+internal/core/build_info.go
+*.exe
+help/*.txt
+help/*.json
+*.log
+logs/
