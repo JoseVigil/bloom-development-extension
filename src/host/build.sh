@@ -199,6 +199,8 @@ if command -v x86_64-w64-mingw32-g++ &> /dev/null; then
         "/usr/local/opt/mingw-w64/toolchain-x86_64/x86_64-w64-mingw32/bin"
         "/opt/homebrew/opt/mingw-w64/toolchain-x86_64/x86_64-w64-mingw32/bin"
         "/usr/local/Cellar/mingw-w64/*/toolchain-x86_64/x86_64-w64-mingw32/bin"
+        "/usr/x86_64-w64-mingw32/bin"
+        "/usr/lib/gcc/x86_64-w64-mingw32/*/bin"
     )
     
     # Intentar cada ubicación
@@ -213,10 +215,10 @@ if command -v x86_64-w64-mingw32-g++ &> /dev/null; then
         done
     done
     
-    # Si no se encontró, buscar con find
+    # Si no se encontró, buscar con find en todo el sistema
     if [ -z "$MINGW_BIN" ]; then
         echo -e "${YELLOW}  Searching for libwinpthread-1.dll...${NC}"
-        FOUND_DLL=$(find /usr/local /opt/homebrew -name "libwinpthread-1.dll" 2>/dev/null | head -1)
+        FOUND_DLL=$(find /usr /opt 2>/dev/null | grep -m 1 "x86_64-w64-mingw32.*libwinpthread-1.dll$")
         if [ -n "$FOUND_DLL" ]; then
             MINGW_BIN=$(dirname "$FOUND_DLL")
         fi
@@ -226,31 +228,69 @@ if command -v x86_64-w64-mingw32-g++ &> /dev/null; then
         echo -e "${GREEN}✓ Found MinGW bin: $MINGW_BIN${NC}"
         
         # Detectar qué DLLs necesita el ejecutable
-        REQUIRED_DLLS=$(x86_64-w64-mingw32-objdump -p "$OUT_DIR/win32/host/bloom-host.exe" | \
+        REQUIRED_DLLS=$(x86_64-w64-mingw32-objdump -p "$OUT_DIR/win32/host/bloom-host.exe" 2>/dev/null | \
             grep "DLL Name:" | \
             grep -v "KERNEL32\|api-ms-win\|SHELL32\|WS2_32\|CRYPT32\|ADVAPI32\|USER32\|GDI32" | \
             awk '{print $3}')
         
-        if [ -n "$REQUIRED_DLLS" ]; then
-            echo -e "${YELLOW}Required DLLs:${NC}"
-            echo "$REQUIRED_DLLS"
+        # Lista de DLLs comunes de MinGW que siempre deben incluirse
+        COMMON_DLLS=(
+            "libwinpthread-1.dll"
+            "libgcc_s_seh-1.dll"
+            "libstdc++-6.dll"
+        )
+        
+        # Combinar DLLs detectadas con DLLs comunes
+        ALL_DLLS=$(echo -e "$REQUIRED_DLLS\n${COMMON_DLLS[@]}" | sort -u)
+        
+        if [ -n "$ALL_DLLS" ]; then
+            echo -e "${YELLOW}Copying DLLs:${NC}"
             
-            # Copiar cada DLL requerida
-            for DLL in $REQUIRED_DLLS; do
+            # Copiar cada DLL
+            COPIED_COUNT=0
+            for DLL in $ALL_DLLS; do
+                [ -z "$DLL" ] && continue
                 DLL_PATH="$MINGW_BIN/$DLL"
                 if [ -f "$DLL_PATH" ]; then
                     cp "$DLL_PATH" "$OUT_DIR/win32/host/"
                     echo -e "${GREEN}  ✓ Copied: $DLL${NC}"
-                else
-                    echo -e "${RED}  ✗ Not found: $DLL${NC}"
+                    ((COPIED_COUNT++))
                 fi
             done
+            
+            if [ $COPIED_COUNT -eq 0 ]; then
+                echo -e "${YELLOW}  ⚠ No DLLs copied (may be statically linked)${NC}"
+            else
+                echo -e "${GREEN}✓ Copied $COPIED_COUNT DLL(s)${NC}"
+            fi
         else
             echo -e "${GREEN}✓ No external DLLs required (fully static)${NC}"
         fi
     else
         echo -e "${YELLOW}⚠  Could not find MinGW bin directory${NC}"
-        echo -e "${YELLOW}  The executable should still work if OpenSSL was statically linked${NC}"
+        echo -e "${YELLOW}  Searching for DLLs in alternative locations...${NC}"
+        
+        # Buscar DLLs individuales en el sistema
+        COMMON_DLLS=(
+            "libwinpthread-1.dll"
+            "libgcc_s_seh-1.dll"
+            "libstdc++-6.dll"
+        )
+        
+        COPIED_COUNT=0
+        for DLL in "${COMMON_DLLS[@]}"; do
+            FOUND_DLL=$(find /usr 2>/dev/null | grep -m 1 "x86_64-w64-mingw32.*/$DLL$")
+            if [ -n "$FOUND_DLL" ] && [ -f "$FOUND_DLL" ]; then
+                cp "$FOUND_DLL" "$OUT_DIR/win32/host/"
+                echo -e "${GREEN}  ✓ Found and copied: $DLL${NC}"
+                ((COPIED_COUNT++))
+            fi
+        done
+        
+        if [ $COPIED_COUNT -eq 0 ]; then
+            echo -e "${YELLOW}  ⚠ No DLLs found. If the executable doesn't run on Windows,${NC}"
+            echo -e "${YELLOW}     you may need to install mingw-w64 runtime libraries.${NC}"
+        fi
     fi
 fi
 
