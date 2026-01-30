@@ -73,65 +73,6 @@ if %ERRORLEVEL% NEQ 0 (
 echo ✅ Compilation successful
 
 :: ============================================
-:: ACTUALIZAR TELEMETRY.JSON
-:: ============================================
-echo.
-echo ⏳ Actualizando telemetry...
-echo ⏳ Actualizando telemetry... >> "%LOG_FILE%"
-
-set "PYTHON_EXE=python"
-where %PYTHON_EXE% >nul 2>&1
-if %ERRORLEVEL% NEQ 0 (
-    echo ⚠️ Python no encontrado en el PATH. Telemetry no se actualizo.
-    echo ⚠️ Python no encontrado en el PATH. Telemetry no se actualizo. >> "%LOG_FILE%"
-    goto :resumen
-)
-
-:: ───────────────────────────────────────────────────────────────
-:: Ruta calculada desde el .bat (installer\sentinel\ → raíz → scripts\python)
-:: Subimos SOLO DOS niveles (..\..) porque sentinel está dentro de installer
-:: ───────────────────────────────────────────────────────────────
-set "PROJECT_ROOT=%~dp0..\..\..\"
-
-:: Normalizamos (quita el último \ si sobra y maneja bien)
-set "PROJECT_ROOT=%PROJECT_ROOT:\\=\%"
-set "UPDATE_SCRIPT=%PROJECT_ROOT%scripts\python\update_build_telemetry.py"
-
-:: Depuración clara (puedes comentarlo después de confirmar que funciona)
-echo Debug: PROJECT_ROOT resuelto → %PROJECT_ROOT%
-echo Debug: UPDATE_SCRIPT → %UPDATE_SCRIPT%
-echo Debug: PROJECT_ROOT resuelto → %PROJECT_ROOT% >> "%LOG_FILE%"
-echo Debug: UPDATE_SCRIPT → %UPDATE_SCRIPT% >> "%LOG_FILE%"
-
-if not exist "%UPDATE_SCRIPT%" (
-    echo ⚠️ No se encontró el script:
-    echo     %UPDATE_SCRIPT%
-    echo ⚠️ No se encontró el script: >> "%LOG_FILE%"
-    echo     %UPDATE_SCRIPT% >> "%LOG_FILE%"
-    goto :resumen
-)
-
-:: Preparar argumentos
-set "TELEMETRY_KEY=nucleus_build"
-set "TELEMETRY_LABEL=📦 NUECLEUS BUILD"
-set "TELEMETRY_PATH=%LOG_FILE:\=/%"
-
-:: Ejecutar el script
-%PYTHON_EXE% "%UPDATE_SCRIPT%" "%TELEMETRY_KEY%" "%TELEMETRY_LABEL%" "%TELEMETRY_PATH%"
-
-if %ERRORLEVEL% EQU 0 (
-    echo   ✅ Telemetry actualizado correctamente
-    echo   Label: %TELEMETRY_LABEL%
-    echo   Path : %TELEMETRY_PATH%
-    echo   ✅ Telemetry actualizado correctamente >> "%LOG_FILE%"
-    echo   Label: %TELEMETRY_LABEL% >> "%LOG_FILE%"
-    echo   Path : %TELEMETRY_PATH% >> "%LOG_FILE%"
-) else (
-    echo   ⚠️ Error al actualizar telemetry (codigo: %ERRORLEVEL%)
-    echo   ⚠️ Error al actualizar telemetry (codigo: %ERRORLEVEL%) >> "%LOG_FILE%"
-)
-
-:: ============================================
 :: GENERAR AYUDA
 :: ============================================
 echo.
