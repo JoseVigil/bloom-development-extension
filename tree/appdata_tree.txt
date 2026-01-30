@@ -2,7 +2,13 @@ BloomNucleus/
 ├── bin/
 │   ├── brain/
 │   │   ├── _internal/ [... dependencies]
-│   │   └── brain.exe
+│   │   ├── brain.exe
+│   │   └── help/
+│   │       ├── brain-ai-full.json
+│   │       ├── brain-ai-schema.json
+│   │       ├── brain-legacy.json
+│   │       ├── help-full.txt
+│   │       └── help.txt
 │   ├── chrome-win/
 │   │   ├── 146.0.7635.0.manifest
 │   │   ├── D3DCompiler_47.dll

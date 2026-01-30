@@ -136,7 +136,13 @@ bloom-development-extension/
     │   │       ├── bloom-host.exe
     │   │       ├── brain/
     │   │       │   ├── _internal/ [... dependencies]
-    │   │       │   └── brain.exe
+    │   │       │   ├── brain.exe
+    │   │       │   └── help/
+    │   │       │       ├── brain-ai-full.json
+    │   │       │       ├── brain-ai-schema.json
+    │   │       │       ├── brain-legacy.json
+    │   │       │       ├── help-full.txt
+    │   │       │       └── help.txt
     │   │       ├── host/
     │   │       │   └── bloom-host.exe
     │   │       ├── libwinpthread-1.dll

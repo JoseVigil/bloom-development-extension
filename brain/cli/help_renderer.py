@@ -36,6 +36,7 @@ class ColorScheme:
     GOLD = "gold1"
     CORAL = "light_coral"
     LAVENDER = "plum2"
+    RED = "red"
     
     # Neutral colors
     WHITE = "white"
@@ -521,6 +522,8 @@ def _render_options(console: Console):
         ("--json", "Output in JSON format", ColorScheme.NEON_CYAN),
         ("--verbose", "Enable detailed logging", ColorScheme.NEON_GREEN),
         ("--help", "Show help information", ColorScheme.GOLD),
+        ("--version", "Brain Version Number", ColorScheme.ELECTRIC_BLUE),
+        ("--info", "Technicall System Information", ColorScheme.RED)
     ]
     
     for flag, desc, color in options:

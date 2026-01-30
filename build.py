@@ -356,9 +356,54 @@ def main():
     # ========================================
     # 4. GENERAR DOCUMENTACIÓN
     # ========================================
-    generate_help_files(brain_exe)
-    generate_tree_files(brain_exe)
-    
+    # Crear carpeta help/ junto al ejecutable final
+    deploy_dir = brain_exe.parent.resolve()           # ej: .../installer/native/bin/win32/brain
+    help_output_dir = deploy_dir / "help"
+    help_output_dir.mkdir(parents=True, exist_ok=True)
+
+    log_to_file(f"Generando documentación en: {help_output_dir}", level="INFO")
+    console_print(f"Generando documentación → {help_output_dir.name}/")
+
+    # Generar archivos de ayuda (pasando --output-dir)
+    help_script = Path("scripts/python/generate_help_files.py")
+    if help_script.exists():
+        code, stdout, stderr = safe_subprocess_run(
+            [
+                sys.executable,
+                str(help_script),
+                str(brain_exe),
+                "--output-dir", str(help_output_dir)
+            ],
+            timeout=90,
+            desc="Generación de archivos de ayuda"
+        )
+        if code == 0:
+            console_print("  Archivos de ayuda generados correctamente", indent=2)
+        else:
+            console_print("  Problema al generar archivos de ayuda", indent=2)
+            log_to_file("Fallo en generate_help_files.py → ver log para detalles", level="WARN")
+    else:
+        log_to_file("Script generate_help_files.py no encontrado", level="WARN")
+
+    # Opcional: lo mismo para generate_tree_files.py (si también querés moverlo a help/)
+    tree_output_dir = help_output_dir   # o elige otra carpeta si preferís
+    tree_script = Path("scripts/python/generate_tree_files.py")
+    if tree_script.exists():
+        console_print("Generando árboles de directorios...")
+        code, stdout, stderr = safe_subprocess_run(
+            [
+                sys.executable,
+                str(tree_script),
+                str(brain_exe),
+                "--output-dir", str(tree_output_dir)   # ← asume que acepta --output-dir
+            ],
+            timeout=180,
+            desc="Generación de árboles de directorios"
+        )
+        # Puedes agregar manejo similar de éxito/fallo si lo deseas
+    else:
+        log_to_file("Script generate_tree_files.py no encontrado", level="WARN")
+
     return 0
 
 # ========================================
