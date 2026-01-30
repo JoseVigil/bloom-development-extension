@@ -23,11 +23,121 @@ if (process.platform === 'win32') {
   } catch (e) {}
 }
 
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
+// ============================================================================
+// CLI CONTRACT - Salida Temprana (antes de inicializar Electron)
+// ============================================================================
 const path = require('path');
-const { spawn } = require('child_process');
 const fs = require('fs');
 const os = require('os');
+
+function getBloomBasePathCLI() {
+  const homeDir = os.homedir();
+  if (process.platform === 'win32') {
+    return path.join(homeDir, 'AppData', 'Local', 'BloomNucleus');
+  } else if (process.platform === 'darwin') {
+    return path.join(homeDir, 'Library', 'Application Support', 'BloomNucleus');
+  } else {
+    return path.join(homeDir, '.local', 'share', 'BloomNucleus');
+  }
+}
+
+function handleCLICommands() {
+  const args = process.argv.slice(2);
+  
+  // --version
+  if (args.includes('--version')) {
+    const packageJson = require('../package.json');
+    console.log(JSON.stringify({
+      version: packageJson.version,
+      name: packageJson.name
+    }));
+    process.exit(0);
+  }
+
+  // --info
+  if (args.includes('--info')) {
+    const bloomBase = getBloomBasePathCLI();
+    console.log(JSON.stringify({
+      platform: process.platform,
+      arch: process.arch,
+      bloom_base: bloomBase,
+      node_version: process.version
+    }));
+    process.exit(0);
+  }
+
+  // --binaries
+  if (args.includes('--binaries')) {
+    const bloomBase = getBloomBasePathCLI();
+    const binaries = {
+      brain: path.join(bloomBase, 'bin', 'brain', 'brain.exe'),
+      sentinel: path.join(bloomBase, 'bin', 'sentinel', 'sentinel.exe'),
+      host: path.join(bloomBase, 'bin', 'native', 'bloom-host.exe'),
+      chromium: path.join(bloomBase, 'bin', 'chromium', 'chrome.exe')
+    };
+
+    const result = {};
+    Object.entries(binaries).forEach(([key, filepath]) => {
+      result[key] = {
+        path: filepath,
+        exists: fs.existsSync(filepath)
+      };
+    });
+
+    console.log(JSON.stringify(result));
+    process.exit(0);
+  }
+
+  // --health
+  if (args.includes('--health')) {
+    const { spawn } = require('child_process');
+    const bloomBase = getBloomBasePathCLI();
+    const sentinelExe = path.join(bloomBase, 'bin', 'sentinel', 'sentinel.exe');
+
+    if (!fs.existsSync(sentinelExe)) {
+      console.log(JSON.stringify({
+        error: 'Sentinel executable not found',
+        path: sentinelExe
+      }));
+      process.exit(1);
+    }
+
+    const child = spawn(sentinelExe, ['--json', 'health'], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true
+    });
+
+    let stdout = '';
+    child.stdout.on('data', (data) => { stdout += data; });
+
+    child.on('close', (code) => {
+      try {
+        const lines = stdout.split('\n');
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed.startsWith('{')) {
+            console.log(trimmed);
+            process.exit(code);
+            return;
+          }
+        }
+        console.log(JSON.stringify({ error: 'No JSON output from sentinel health' }));
+        process.exit(1);
+      } catch (err) {
+        console.log(JSON.stringify({ error: err.message }));
+        process.exit(1);
+      }
+    });
+
+    return; // No continuar con inicialización de Electron
+  }
+}
+
+// Ejecutar CLI contract ANTES de importar Electron
+handleCLICommands();
+
+const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { spawn } = require('child_process');
 
 // ============================================================================
 // CONSTANTS & MODE DETECTION

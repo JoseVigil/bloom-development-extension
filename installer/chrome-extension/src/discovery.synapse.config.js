@@ -5,5 +5,7 @@ self.SYNAPSE_CONFIG = {
     profile_alias: "MasterWorker",
     extension_id: "hpblclepliicmihaplldignhjdggnkdh",
     register: true,
-    email: "user@example.com"
+    email: "user@example.com",
+    heartbeat: true,
+    service: "name"
 };

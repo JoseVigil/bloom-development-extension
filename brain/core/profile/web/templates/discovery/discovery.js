@@ -9,6 +9,8 @@ class DiscoveryFlow {
     this.extensionId = self.SYNAPSE_CONFIG?.extension_id;
     
     this.requiresRegistration = false;
+    this.heartbeatMode = false;
+    this.serviceTarget = null;
     this.userEmail = null;
     
     this.attemptCount = 0;
@@ -102,12 +104,18 @@ class DiscoveryFlow {
       
       if (synapseConfig) {
         this.requiresRegistration = synapseConfig.register === true;
+        this.heartbeatMode = synapseConfig.heartbeat === true;
+        this.serviceTarget = synapseConfig.service || null;
         this.userEmail = synapseConfig.email || null;
         
         console.log('[Discovery] Config loaded - register:', this.requiresRegistration);
+        console.log('[Discovery] Config loaded - heartbeat:', this.heartbeatMode);
+        console.log('[Discovery] Config loaded - service:', this.serviceTarget);
         console.log('[Discovery] Config loaded - email:', this.userEmail);
       } else {
         this.requiresRegistration = self.SYNAPSE_CONFIG?.register === true;
+        this.heartbeatMode = self.SYNAPSE_CONFIG?.heartbeat === true;
+        this.serviceTarget = self.SYNAPSE_CONFIG?.service || null;
         this.userEmail = self.SYNAPSE_CONFIG?.email || null;
         
         console.warn('[Discovery] Fallback to SYNAPSE_CONFIG');
@@ -115,6 +123,8 @@ class DiscoveryFlow {
     } catch (error) {
       console.error('[Discovery] Error loading config:', error);
       this.requiresRegistration = self.SYNAPSE_CONFIG?.register === true;
+      this.heartbeatMode = self.SYNAPSE_CONFIG?.heartbeat === true;
+      this.serviceTarget = self.SYNAPSE_CONFIG?.service || null;
       this.userEmail = self.SYNAPSE_CONFIG?.email || null;
     }
   }
@@ -235,7 +245,37 @@ class DiscoveryFlow {
     await this.delay(600);
     this.completeCurrentStage();
     
+    // Si es modo heartbeat, enviar evento y preparar cierre
+    if (this.heartbeatMode && !this.requiresRegistration) {
+      console.log('[Discovery] Heartbeat mode detected - sending HEARTBEAT_SUCCESS');
+      this.sendHeartbeatSuccess();
+      await this.delay(2000);
+      window.close();
+      return;
+    }
+    
     this.transitionToSuccess(payload);
+  }
+
+  sendHeartbeatSuccess() {
+    try {
+      chrome.runtime.sendMessage(
+        {
+          event: 'HEARTBEAT_SUCCESS',
+          status: 'ok',
+          timestamp: Date.now()
+        },
+        (response) => {
+          if (chrome.runtime.lastError) {
+            console.error('[Discovery] Error sending heartbeat:', chrome.runtime.lastError);
+            return;
+          }
+          console.log('[Discovery] HEARTBEAT_SUCCESS sent:', response);
+        }
+      );
+    } catch (error) {
+      console.error('[Discovery] Exception sending heartbeat:', error);
+    }
   }
 
   transitionToSuccess(payload) {

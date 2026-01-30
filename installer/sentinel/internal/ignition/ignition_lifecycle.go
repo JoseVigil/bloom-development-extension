@@ -37,18 +37,12 @@ func (ig *Ignition) Launch(profileID string, mode string, configOverride string)
 	ig.Core.Logger.Info("[IGNITION] Sincronizando estados con el sistema de archivos...")
 	time.Sleep(800 * time.Millisecond)
 
-	// Sentinel asume que el Brain está corriendo, no lo arranca
-	// El Launcher (Electron) es responsable de asegurar que el servicio base esté vivo
-
-	chromePID, err := ig.execute(profileID, mode)
+	chromePID, err := ig.execute(profileID, mode, profileData)
 	if err != nil {
 		return 0, 0, false, nil, fmt.Errorf("fallo al ejecutar el motor: %v", err)
 	}
 
 	ig.Session.BrowserPID = chromePID
-
-	// La confirmación de éxito viene del evento PROFILE_CONNECTED desde el Brain,
-	// NO de un timer de 2 segundos en Go
 
 	if ig.Core.IsJSON {
 		return chromePID, 9222, true, effectiveConfig, nil
@@ -67,13 +61,43 @@ func (ig *Ignition) Launch(profileID string, mode string, configOverride string)
 	return chromePID, 9222, true, effectiveConfig, nil
 }
 
+// applyMissionTargetURL aplica la lógica de TargetURL según los flags de misión
+func (ig *Ignition) applyMissionTargetURL(spec *IgnitionSpec, profileData map[string]interface{}) {
+	heartbeat, _ := profileData["heartbeat"].(bool)
+	register, _ := profileData["register"].(bool)
+	service, _ := profileData["service"].(string)
+
+	if heartbeat && !register {
+		spec.TargetURL = "about:blank"
+		ig.Core.Logger.Info("[IGNITION] Modo Heartbeat: about:blank")
+		return
+	}
+
+	if register && service != "" {
+		switch service {
+		case "google,gemini":
+			spec.TargetURL = "https://aistudio.google.com/app/apikey"
+			ig.Core.Logger.Info("[IGNITION] Misión: Google + Gemini")
+		case "github":
+			spec.TargetURL = "https://github.com/login"
+			ig.Core.Logger.Info("[IGNITION] Misión: GitHub")
+		case "twitter":
+			spec.TargetURL = "https://twitter.com/i/flow/login"
+			ig.Core.Logger.Info("[IGNITION] Misión: Twitter")
+		default:
+			ig.Core.Logger.Info("[IGNITION] Servicio desconocido: %s", service)
+		}
+	}
+}
+
 // execute construye los argumentos y lanza Chromium
-// Solo construye buildSilentLaunchArgs, configura HideWindow: true, lanza el proceso y retorna el PID
-func (ig *Ignition) execute(profileID string, mode string) (int, error) {
+func (ig *Ignition) execute(profileID string, mode string, profileData map[string]interface{}) (int, error) {
 	spec, err := ig.loadIgnitionSpec(profileID)
 	if err != nil {
 		return 0, fmt.Errorf("no se pudo cargar spec de ignition: %v", err)
 	}
+
+	ig.applyMissionTargetURL(spec, profileData)
 
 	args := ig.buildSilentLaunchArgs(spec, mode)
 
@@ -82,7 +106,7 @@ func (ig *Ignition) execute(profileID string, mode string) (int, error) {
 	if runtime.GOOS == "windows" {
 		cmd.SysProcAttr = &syscall.SysProcAttr{
 			HideWindow:    true,
-			CreationFlags: 0x08000000, // CREATE_NO_WINDOW
+			CreationFlags: 0x08000000,
 		}
 	}
 

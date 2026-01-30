@@ -80,6 +80,11 @@
         "usage": "Sobrescribir extension ID"
       },
       {
+        "name": "override-heartbeat",
+        "usage": "Sobrescribir flag de heartbeat",
+        "default": "false"
+      },
+      {
         "name": "override-register",
         "usage": "Sobrescribir flag de registro",
         "default": "false"
@@ -87,6 +92,10 @@
       {
         "name": "override-role",
         "usage": "Sobrescribir rol"
+      },
+      {
+        "name": "override-service",
+        "usage": "Sobrescribir servicio de registro (google, twitter, github, etc)"
       },
       {
         "name": "override-step",

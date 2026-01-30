@@ -63,7 +63,9 @@ func init() {
 		var overrideRole string
 		var overrideEmail string
 		var overrideExtension string
+		var overrideService string
 		var overrideRegister bool
+		var overrideHeartbeat bool
 		var overrideStep int
 
 		var linkedAccounts arrayFlags
@@ -79,9 +81,10 @@ func init() {
 				ig := New(c)
 
 				overrides := buildOverridesFromFlags(
-					overrideAlias, overrideRole, overrideEmail, overrideExtension,
-					overrideRegister, overrideStep,
+					overrideAlias, overrideRole, overrideEmail, overrideExtension, overrideService,
+					overrideRegister, overrideHeartbeat, overrideStep,
 					cmd.Flags().Changed("override-register"),
+					cmd.Flags().Changed("override-heartbeat"),
 				)
 
 				if len(linkedAccounts) > 0 {
@@ -161,7 +164,9 @@ func init() {
 		cmd.Flags().StringVar(&overrideRole, "override-role", "", "Sobrescribir rol")
 		cmd.Flags().StringVar(&overrideEmail, "override-email", "", "Sobrescribir email")
 		cmd.Flags().StringVar(&overrideExtension, "override-extension", "", "Sobrescribir extension ID")
+		cmd.Flags().StringVar(&overrideService, "override-service", "", "Sobrescribir servicio de registro (google, twitter, github, etc)")
 		cmd.Flags().BoolVar(&overrideRegister, "override-register", false, "Sobrescribir flag de registro")
+		cmd.Flags().BoolVar(&overrideHeartbeat, "override-heartbeat", false, "Sobrescribir flag de heartbeat")
 		cmd.Flags().IntVar(&overrideStep, "override-step", 0, "Sobrescribir step actual")
 		cmd.Flags().Var(&linkedAccounts, "add-account", "Agregar linked account (provider,email_or_username,status). Repetible")
 		cmd.Flags().StringVar(&configFile, "config-file", "", "Cargar overrides desde JSON (@archivo o - para stdin)")
@@ -187,13 +192,15 @@ func (i *arrayFlags) Type() string {
 	return "string"
 }
 
-func buildOverridesFromFlags(alias, role, email, extension string, register bool, step int, registerChanged bool) map[string]interface{} {
+func buildOverridesFromFlags(alias, role, email, extension, service string, register, heartbeat bool, step int, registerChanged, heartbeatChanged bool) map[string]interface{} {
 	overrides := make(map[string]interface{})
 	if alias != "" { overrides["profile_alias"] = alias }
 	if role != "" { overrides["role"] = role }
 	if email != "" { overrides["email"] = email }
 	if extension != "" { overrides["extension_id"] = extension }
+	if service != "" { overrides["service"] = service }
 	if registerChanged { overrides["register"] = register }
+	if heartbeatChanged { overrides["heartbeat"] = heartbeat }
 	if step > 0 { overrides["step"] = step }
 	return overrides
 }

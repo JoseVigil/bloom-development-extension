@@ -27,6 +27,55 @@ const { installChromium } = require('./chromium-installer');
 const APP_VERSION = app?.getVersion() || process.env.npm_package_version || '1.0.0';
 
 // ============================================================================
+// BINARY VERSION UTILITIES
+// ============================================================================
+async function getBinaryVersion(exePath) {
+  if (!await fs.pathExists(exePath)) {
+    return 'not_found';
+  }
+
+  try {
+    const stats = await fs.stat(exePath);
+    const fileSize = stats.size;
+    const modifiedTime = stats.mtime.toISOString();
+
+    // Intentar ejecutar --version si es posible
+    return new Promise((resolve) => {
+      const child = spawn(exePath, ['--version'], {
+        timeout: 3000,
+        windowsHide: true,
+        stdio: ['ignore', 'pipe', 'ignore']
+      });
+
+      let output = '';
+      child.stdout.on('data', (data) => { output += data.toString(); });
+
+      child.on('close', () => {
+        const version = output.trim() || `size:${fileSize}`;
+        resolve({
+          version,
+          size: fileSize,
+          modified: modifiedTime
+        });
+      });
+
+      child.on('error', () => {
+        resolve({
+          version: `size:${fileSize}`,
+          size: fileSize,
+          modified: modifiedTime
+        });
+      });
+    });
+  } catch (err) {
+    return {
+      version: 'error',
+      error: err.message
+    };
+  }
+}
+
+// ============================================================================
 // SENTINEL UTILITIES
 // ============================================================================
 function getSentinelExecutablePath() {
@@ -430,39 +479,86 @@ async function runFullInstallation(mainWindow = null) {
 
     logger.success(`Profile created: ${profileId}`);
 
-    // Actualizar nucleus.json con profileId
+    // Actualizar nucleus.json con profileId y versiones
     nucleusConfig.master_profile = profileId;
     nucleusConfig.timestamp = new Date().toISOString();
+    
+    // SNAPSHOT DE VERSIONES (Manifest de Binarios)
+    nucleusConfig.binary_versions = {
+      brain: await getBinaryVersion(path.join(paths.binDir, 'brain', 'brain.exe')),
+      sentinel: await getBinaryVersion(path.join(paths.binDir, 'sentinel', 'sentinel.exe')),
+      host: await getBinaryVersion(path.join(paths.binDir, 'native', 'bloom-host.exe')),
+      chromium: chromiumResult.version || 'unknown'
+    };
+    
+    // INSTALACIÓN COMPLETADA, ONBOARDING PENDIENTE
+    nucleusConfig.installation = {
+      completed: true,
+      completed_at: new Date().toISOString()
+    };
+    nucleusConfig.onboarding = {
+      completed: false,
+      started: false
+    };
+    
     await fs.writeJson(nucleusPath, nucleusConfig, { spaces: 2 });
-    logger.success('nucleus.json updated with master_profile');
+    logger.success('nucleus.json updated: installation.completed=true, onboarding.completed=false');
 
-    // 9. Launch & validation
-    emitProgress(mainWindow, 'validation', 'Launching profile');
-    const launchResult = await executeSentinelCommand([
+    // 9. DISCOVERY HEARTBEAT (Validación Silenciosa)
+    emitProgress(mainWindow, 'validation', 'Discovery heartbeat test');
+    logger.info('Launching discovery heartbeat (--override-heartbeat=true)...');
+    
+    const discoveryResult = await executeSentinelCommand([
       '--json',
       'launch',
       profileId,
-      '--mode', 'discovery'
+      '--mode', 'discovery',
+      '--override-heartbeat=true',
+      '--override-register=false'
     ]);
 
-    if (!launchResult?.success) {
-      logger.warn(`Launch warning: ${launchResult?.error || 'unknown'}`);
+    if (!discoveryResult?.success) {
+      logger.warn(`Discovery launch warning: ${discoveryResult?.error || 'unknown'}`);
     }
 
-    emitProgress(mainWindow, 'validation', 'Final health check');
+    // Esperar 5 segundos para que handshake complete
+    logger.info('Waiting 5s for handshake to complete...');
+    await new Promise(resolve => setTimeout(resolve, 5000));
+
+    // CERTIFICACIÓN: Health check final
+    emitProgress(mainWindow, 'validation', 'Certificación de tubería');
     const health = await executeSentinelCommand(['--json', 'health']);
 
-    logger.info(`Health check: ${health.connected ? `OK (port ${health.port})` : 'not connected yet (may still initialize)'}`);
+    if (!health.connected) {
+      throw new Error('Health check failed: Brain service not responding');
+    }
 
-    // 10. Shortcuts (opcional)
+    logger.success(`✅ CERTIFICADO: Tubería Brain-Sentinel-Host operativa (port ${health.port})`);
+    logger.info(`Profiles registered: ${health.profiles_registered || 0}`);
+
+    // 10. Deploy Launcher & Acceso Directo
+    emitProgress(mainWindow, 'complete', 'Creando acceso directo');
+    
     try {
-      const { createLauncherShortcuts } = require('./launcher-creator');
-      await createLauncherShortcuts({
-        chromiumPath: chromiumResult.chromiumPath,
-        profileId
+      const launcherDir = path.join(paths.binDir, 'launcher');
+      await fs.ensureDir(launcherDir);
+      
+      // Copiar ejecutable actual como launcher
+      const currentExe = process.execPath;
+      const launcherExe = path.join(launcherDir, 'bloom-launcher.exe');
+      await fs.copy(currentExe, launcherExe, { overwrite: true });
+      
+      // Crear acceso directo con flag --launch
+      const { createDesktopShortcut } = require('./launcher-creator');
+      await createDesktopShortcut({
+        targetPath: launcherExe,
+        args: ['--launch'],
+        name: 'Bloom Nucleus'
       });
+      
+      logger.success('Launcher deployed and shortcut created');
     } catch (e) {
-      logger.warn('Could not create launcher shortcuts', e.message);
+      logger.warn('Could not deploy launcher:', e.message);
     }
 
     emitProgress(mainWindow, 'complete');

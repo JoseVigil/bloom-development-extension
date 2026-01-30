@@ -110,8 +110,10 @@
       --override-alias           Sobrescribir alias del perfil
       --override-email           Sobrescribir email
       --override-extension       Sobrescribir extension ID
+      --override-heartbeat       Sobrescribir flag de heartbeat
       --override-register        Sobrescribir flag de registro
       --override-role            Sobrescribir rol
+      --override-service         Sobrescribir servicio de registro (google, twitter, github, etc)
       --override-step            Sobrescribir step actual [default: 0]
       --save                     Persistir overrides en profiles.json
 
