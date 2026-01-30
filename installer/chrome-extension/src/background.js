@@ -617,6 +617,18 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
     return true;
   }
 
+  // Heartbeat success
+  if (event === 'HEARTBEAT_SUCCESS') {
+    console.log('[Synapse] ✓ Heartbeat validation successful');
+    sendToHost({
+      event: "HEARTBEAT_SUCCESS",
+      status: msg.status,
+      timestamp: msg.timestamp
+    });
+    sendResp({ received: true });
+    return true;
+  }
+
   // Check handshake status
   if (command === 'check_handshake_status') {
     const response = {

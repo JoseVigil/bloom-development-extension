@@ -55,7 +55,7 @@ def _copy_static_assets(landing_dir: Path) -> None:
     template_dir = Path(__file__).parent / "templates" / "landing"
     
     # Only static files - NO config files, NO data loaders
-        files_to_copy = [
+    files_to_copy = [
         "landing/data-loader.js",
         "landing/index.html",
         "landing/landing.js",
