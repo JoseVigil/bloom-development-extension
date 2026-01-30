@@ -84,10 +84,10 @@ PROJECT_ROOT="$SCRIPT_DIR/../.."
 OUT_DIR="$PROJECT_ROOT/installer/native/bin"
 
 # Crear carpetas separadas por arquitectura
-mkdir -p "$OUT_DIR/win32" \
-         "$OUT_DIR/linux" \
-         "$OUT_DIR/darwin/arm64" \
-         "$OUT_DIR/darwin/x64"
+mkdir -p "$OUT_DIR/win32/host" \
+         "$OUT_DIR/linux/host" \
+         "$OUT_DIR/darwin/arm64/host" \
+         "$OUT_DIR/darwin/x64/host"
 
 # Descargar json.hpp si no existe
 if [ ! -f "$HEADER_DIR/json.hpp" ]; then
@@ -179,7 +179,7 @@ if command -v x86_64-w64-mingw32-g++ &> /dev/null; then
     
     x86_64-w64-mingw32-g++ -std=c++20 -O2 -I. -I"$OPENSSL_INCLUDE" \
         "${SOURCE_FILES[@]}" \
-        -o "$OUT_DIR/win32/bloom-host.exe" \
+        -o "$OUT_DIR/win32/host/bloom-host.exe" \
         -L"$OPENSSL_LIB" \
         "$OPENSSL_LIB/libssl.a" "$OPENSSL_LIB/libcrypto.a" \
         -lws2_32 -lshell32 -lcrypt32 -luser32 -lgdi32 \
@@ -226,7 +226,7 @@ if command -v x86_64-w64-mingw32-g++ &> /dev/null; then
         echo -e "${GREEN}✓ Found MinGW bin: $MINGW_BIN${NC}"
         
         # Detectar qué DLLs necesita el ejecutable
-        REQUIRED_DLLS=$(x86_64-w64-mingw32-objdump -p "$OUT_DIR/win32/bloom-host.exe" | \
+        REQUIRED_DLLS=$(x86_64-w64-mingw32-objdump -p "$OUT_DIR/win32/host/bloom-host.exe" | \
             grep "DLL Name:" | \
             grep -v "KERNEL32\|api-ms-win\|SHELL32\|WS2_32\|CRYPT32\|ADVAPI32\|USER32\|GDI32" | \
             awk '{print $3}')
@@ -239,7 +239,7 @@ if command -v x86_64-w64-mingw32-g++ &> /dev/null; then
             for DLL in $REQUIRED_DLLS; do
                 DLL_PATH="$MINGW_BIN/$DLL"
                 if [ -f "$DLL_PATH" ]; then
-                    cp "$DLL_PATH" "$OUT_DIR/win32/"
+                    cp "$DLL_PATH" "$OUT_DIR/win32/host/"
                     echo -e "${GREEN}  ✓ Copied: $DLL${NC}"
                 else
                     echo -e "${RED}  ✗ Not found: $DLL${NC}"
@@ -320,9 +320,9 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
         echo -e "${YELLOW}  Compiling for macOS (ARM64)...${NC}"
         clang++ -arch arm64 -std=c++20 -O2 -I. -I"$MACOS_OPENSSL_INCLUDE" \
             "${SOURCE_FILES[@]}" \
-            -o "$OUT_DIR/darwin/arm64/bloom-host" \
+            -o "$OUT_DIR/darwin/arm64/host/bloom-host" \
             -L"$MACOS_OPENSSL_LIB" -lssl -lcrypto
-        chmod +x "$OUT_DIR/darwin/arm64/bloom-host"
+        chmod +x "$OUT_DIR/darwin/arm64/host/bloom-host"
         echo -e "${GREEN}✓ ARM64 binary created${NC}"
     else
         echo -e "${YELLOW}⊘ Skipping ARM64 build (OpenSSL not available for this arch)${NC}"
@@ -335,9 +335,9 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
         echo -e "${YELLOW}  Compiling for macOS (x64)...${NC}"
         clang++ -arch x86_64 -std=c++20 -O2 -I. -I"$MACOS_OPENSSL_INCLUDE" \
             "${SOURCE_FILES[@]}" \
-            -o "$OUT_DIR/darwin/x64/bloom-host" \
+            -o "$OUT_DIR/darwin/x64/host/bloom-host" \
             -L"$MACOS_OPENSSL_LIB" -lssl -lcrypto
-        chmod +x "$OUT_DIR/darwin/x64/bloom-host"
+        chmod +x "$OUT_DIR/darwin/x64/host/bloom-host"
         echo -e "${GREEN}✓ x86_64 binary created${NC}"
     else
         echo -e "${YELLOW}⊘ Skipping x86_64 build (OpenSSL not available for this arch)${NC}"
@@ -360,9 +360,9 @@ if command -v g++ &> /dev/null && [[ "$OSTYPE" == "linux-gnu"* ]]; then
     echo -e "${YELLOW}🐧 Compiling for Linux...${NC}"
     g++ -std=c++20 -O2 -I. \
         "${SOURCE_FILES[@]}" \
-        -o "$OUT_DIR/linux/bloom-host" \
+        -o "$OUT_DIR/linux/host/bloom-host" \
         -lpthread -lssl -lcrypto -static-libgcc -static-libstdc++
-    chmod +x "$OUT_DIR/linux/bloom-host"
+    chmod +x "$OUT_DIR/linux/host/bloom-host"
     echo -e "${GREEN}✓ bloom-host created${NC}"
 fi
 
@@ -380,27 +380,27 @@ echo -e "${YELLOW}📁 Output directory: $OUT_DIR/${NC}"
 echo ""
 
 # Mostrar contenido de cada plataforma
-if [ -d "$OUT_DIR/win32" ] && [ "$(ls -A $OUT_DIR/win32 2>/dev/null)" ]; then
+if [ -d "$OUT_DIR/win32/host" ] && [ "$(ls -A $OUT_DIR/win32/host 2>/dev/null)" ]; then
     echo -e "${YELLOW}🪟 Windows build:${NC}"
-    ls -lh "$OUT_DIR/win32/"
+    ls -lh "$OUT_DIR/win32/host/"
     echo ""
 fi
 
-if [ -d "$OUT_DIR/darwin/arm64" ] && [ "$(ls -A $OUT_DIR/darwin/arm64 2>/dev/null)" ]; then
+if [ -d "$OUT_DIR/darwin/arm64/host" ] && [ "$(ls -A $OUT_DIR/darwin/arm64/host 2>/dev/null)" ]; then
     echo -e "${YELLOW}🍎 macOS ARM64 build:${NC}"
-    ls -lh "$OUT_DIR/darwin/arm64/"
+    ls -lh "$OUT_DIR/darwin/arm64/host/"
     echo ""
 fi
 
-if [ -d "$OUT_DIR/darwin/x64" ] && [ "$(ls -A $OUT_DIR/darwin/x64 2>/dev/null)" ]; then
+if [ -d "$OUT_DIR/darwin/x64/host" ] && [ "$(ls -A $OUT_DIR/darwin/x64/host 2>/dev/null)" ]; then
     echo -e "${YELLOW}🍎 macOS x86_64 build:${NC}"
-    ls -lh "$OUT_DIR/darwin/x64/"
+    ls -lh "$OUT_DIR/darwin/x64/host/"
     echo ""
 fi
 
-if [ -d "$OUT_DIR/linux" ] && [ "$(ls -A $OUT_DIR/linux 2>/dev/null)" ]; then
+if [ -d "$OUT_DIR/linux/host" ] && [ "$(ls -A $OUT_DIR/linux/host 2>/dev/null)" ]; then
     echo -e "${YELLOW}🐧 Linux build:${NC}"
-    ls -lh "$OUT_DIR/linux/"
+    ls -lh "$OUT_DIR/linux/host/"
     echo ""
 fi
 
