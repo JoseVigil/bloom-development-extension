@@ -1,0 +1,136 @@
+[
+  {
+    "name": "add",
+    "use": "add \u003cgithub-id\u003e",
+    "short": "Add team member",
+    "category": "IDENTITY",
+    "args": [
+      {
+        "name": "\u003cgithub-id\u003e",
+        "required": true
+      }
+    ],
+    "options": [
+      {
+        "name": "name",
+        "usage": "Display name"
+      },
+      {
+        "name": "role",
+        "usage": "Role",
+        "default": "specialist"
+      }
+    ]
+  },
+  {
+    "name": "heartbeat",
+    "use": "heartbeat",
+    "short": "Send heartbeat to central server",
+    "category": "GOVERNANCE",
+    "options": [
+      {
+        "name": "volume",
+        "usage": "Intent volume",
+        "default": "0"
+      },
+      {
+        "name": "workers",
+        "usage": "Active workers count",
+        "default": "0"
+      }
+    ]
+  },
+  {
+    "name": "info",
+    "use": "info",
+    "short": "Display detailed system information",
+    "category": "SYSTEM"
+  },
+  {
+    "name": "init",
+    "use": "init",
+    "short": "Initialize Nucleus organization",
+    "category": "GOVERNANCE",
+    "options": [
+      {
+        "name": "github-id",
+        "usage": "GitHub username"
+      },
+      {
+        "name": "master",
+        "usage": "Initialize as master",
+        "default": "false"
+      },
+      {
+        "name": "name",
+        "usage": "Display name"
+      }
+    ]
+  },
+  {
+    "name": "list",
+    "use": "list",
+    "short": "List team members",
+    "category": "IDENTITY"
+  },
+  {
+    "name": "remove",
+    "use": "remove \u003cgithub-id\u003e",
+    "short": "Remove team member",
+    "category": "IDENTITY",
+    "args": [
+      {
+        "name": "\u003cgithub-id\u003e",
+        "required": true
+      }
+    ]
+  },
+  {
+    "name": "sync-pull",
+    "use": "sync-pull",
+    "short": "Pull permissions from central server",
+    "category": "GOVERNANCE"
+  },
+  {
+    "name": "sync-push",
+    "use": "sync-push",
+    "short": "Push state to central server",
+    "category": "GOVERNANCE"
+  },
+  {
+    "name": "vault-lock",
+    "use": "vault-lock",
+    "short": "Lock vault",
+    "category": "GOVERNANCE"
+  },
+  {
+    "name": "vault-request",
+    "use": "vault-request \u003ckey-id\u003e",
+    "short": "Request key from vault",
+    "category": "GOVERNANCE",
+    "args": [
+      {
+        "name": "\u003ckey-id\u003e",
+        "required": true
+      }
+    ]
+  },
+  {
+    "name": "vault-status",
+    "use": "vault-status",
+    "short": "Display vault status",
+    "category": "GOVERNANCE"
+  },
+  {
+    "name": "vault-unlock",
+    "use": "vault-unlock",
+    "short": "Unlock vault",
+    "category": "GOVERNANCE"
+  },
+  {
+    "name": "version",
+    "use": "version",
+    "short": "Display version and build information",
+    "category": "SYSTEM"
+  }
+]

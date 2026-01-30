@@ -1,0 +1,161 @@
+
+                                                        NUCLEUS
+                                              Core CLI for Bloom Ecosystem
+
+
+------------------------------------------------------------------------------------------------------------------------
+  USAGE
+------------------------------------------------------------------------------------------------------------------------
+
+  nucleus [OPTIONS] <command> [args]
+
+  Quick examples:
+    nucleus version                    # Display version information
+    nucleus info                       # Show system information
+    nucleus --json info              # JSON output for automation
+
+
+------------------------------------------------------------------------------------------------------------------------
+  GLOBAL OPTIONS
+------------------------------------------------------------------------------------------------------------------------
+
+  --json           Output in JSON format (machine-readable)
+  --verbose        Enable detailed logging for debugging
+  --help           Show this help message
+
+
+------------------------------------------------------------------------------------------------------------------------
+  COMMAND CATEGORIES
+------------------------------------------------------------------------------------------------------------------------
+
+  SYSTEM        System information and diagnostics                       2 cmds
+  GOVERNANCE    Role, vault, sync, and analytics management              8 cmds
+  IDENTITY      Team and collaboration management                        3 cmds
+  ----------------------------------------------------------------------  Total: 13 commands
+
+
+=======================================================[ SYSTEM ]=======================================================
+
+  > INFO
+    Display detailed system information
+
+    Usage: nucleus info
+
+    --------------------------------------------------------------------------------
+
+  > VERSION
+    Display version and build information
+
+    Usage: nucleus version
+
+    --------------------------------------------------------------------------------
+
+
+=====================================================[ GOVERNANCE ]=====================================================
+
+  > HEARTBEAT
+    Send heartbeat to central server
+
+    Usage: nucleus heartbeat
+
+    Flags:
+      --volume                   Intent volume [default: 0]
+      --workers                  Active workers count [default: 0]
+
+    --------------------------------------------------------------------------------
+
+  > INIT
+    Initialize Nucleus organization
+
+    Usage: nucleus init
+
+    Flags:
+      --github-id                GitHub username
+      --master                   Initialize as master
+      --name                     Display name
+
+    --------------------------------------------------------------------------------
+
+  > SYNC-PULL
+    Pull permissions from central server
+
+    Usage: nucleus sync-pull
+
+    --------------------------------------------------------------------------------
+
+  > SYNC-PUSH
+    Push state to central server
+
+    Usage: nucleus sync-push
+
+    --------------------------------------------------------------------------------
+
+  > VAULT-LOCK
+    Lock vault
+
+    Usage: nucleus vault-lock
+
+    --------------------------------------------------------------------------------
+
+  > VAULT-REQUEST
+    Request key from vault
+
+    Usage: nucleus vault-request <key-id>
+
+    Arguments:
+      <key-id>              required
+
+    --------------------------------------------------------------------------------
+
+  > VAULT-STATUS
+    Display vault status
+
+    Usage: nucleus vault-status
+
+    --------------------------------------------------------------------------------
+
+  > VAULT-UNLOCK
+    Unlock vault
+
+    Usage: nucleus vault-unlock
+
+    --------------------------------------------------------------------------------
+
+
+======================================================[ IDENTITY ]======================================================
+
+  > ADD
+    Add team member
+
+    Usage: nucleus add <github-id>
+
+    Arguments:
+      <github-id>           required
+
+    Flags:
+      --name                     Display name
+      --role                     Role [default: specialist]
+
+    --------------------------------------------------------------------------------
+
+  > LIST
+    List team members
+
+    Usage: nucleus list
+
+    --------------------------------------------------------------------------------
+
+  > REMOVE
+    Remove team member
+
+    Usage: nucleus remove <github-id>
+
+    Arguments:
+      <github-id>           required
+
+    --------------------------------------------------------------------------------
+
+
+                                  [!] Nucleus: Governance Layer for Bloom Organization
+                            Use 'nucleus <command> --help' for detailed command information
+
