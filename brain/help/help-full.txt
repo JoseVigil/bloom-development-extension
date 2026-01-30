@@ -104,7 +104,7 @@ BRAIN CLI ─── Modular System for Bloom (Executable)
     brain system info
 
   ▸ path
-    Display the absolute path to the brain executable.
+    Display the path to the Brain executable.
     brain system path
 
   ▸ release-info
@@ -116,13 +116,11 @@ BRAIN CLI ─── Modular System for Bloom (Executable)
     brain system system-specs
 
   ▸ version
-    Display or increment the version number.
+    Display or set version information.
     brain system version [OPTIONS]
 
     ▪ Options:
-      --added                   Feature or capability added (can be used multiple times)
-      --changed                 Feature or behavior changed (can be used multiple times)
-      --details                 Implementation detail or technical note (can be used multiple times)
+      --set                     Set new MAJOR.MINOR version (e.g., --set 2.2)
 
 
 ======================================================[ NUCLEUS ]=======================================================
@@ -1024,7 +1022,7 @@ using repo name.
     brain system info
 
   ▸ path
-    Display the absolute path to the brain executable.
+    Display the path to the Brain executable.
     brain system path
 
   ▸ release-info
@@ -1036,13 +1034,11 @@ using repo name.
     brain system system-specs
 
   ▸ version
-    Display or increment the version number.
+    Display or set version information.
     brain system version [OPTIONS]
 
     ▪ Options:
-      --added                   Feature or capability added (can be used multiple times)
-      --changed                 Feature or behavior changed (can be used multiple times)
-      --details                 Implementation detail or technical note (can be used multiple times)
+      --set                     Set new MAJOR.MINOR version (e.g., --set 2.2)
 
 
 ======================================================[ NUCLEUS ]=======================================================

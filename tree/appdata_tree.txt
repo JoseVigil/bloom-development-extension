@@ -359,6 +359,7 @@ BloomNucleus/
 │   ├── profiles/
 │   │   └── 37ae1c62-645a-4f46-8d02-7ab1db745acb/
 │   ├── sentinel_2026-01-29.log
+│   ├── sentinel_2026-01-30.log
 │   └── telemetry.json
 └── profiles/
     └── 37ae1c62-645a-4f46-8d02-7ab1db745acb/

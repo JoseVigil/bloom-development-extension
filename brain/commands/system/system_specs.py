@@ -21,6 +21,8 @@ class SystemSpecsCommand(BaseCommand):
             category=CommandCategory.SYSTEM,
             version="1.0.0",
             description="Display comprehensive system specifications and runtime metadata",
+            requires_git=False,
+            requires_network=False,
             examples=[
                 "brain system system-specs",
                 "brain system system-specs --json"

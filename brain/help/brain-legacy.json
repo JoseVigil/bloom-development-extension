@@ -2408,7 +2408,7 @@
         },
         {
           "name": "path",
-          "description": "Display the absolute path to the brain executable.",
+          "description": "Display the path to the Brain executable.",
           "subsection": null,
           "parameters": []
         },
@@ -2426,30 +2426,14 @@
         },
         {
           "name": "version",
-          "description": "Display or increment the version number.",
+          "description": "Display or set version information.",
           "subsection": null,
           "parameters": [
             {
-              "flag": "--added",
+              "flag": "--set",
               "is_required": false,
               "is_argument": false,
-              "help": "Feature or capability added (can be used multiple times)",
-              "type": "Optional",
-              "default": null
-            },
-            {
-              "flag": "--changed",
-              "is_required": false,
-              "is_argument": false,
-              "help": "Feature or behavior changed (can be used multiple times)",
-              "type": "Optional",
-              "default": null
-            },
-            {
-              "flag": "--details",
-              "is_required": false,
-              "is_argument": false,
-              "help": "Implementation detail or technical note (can be used multiple times)",
+              "help": "Set new MAJOR.MINOR version (e.g., --set 2.2)",
               "type": "Optional",
               "default": null
             }

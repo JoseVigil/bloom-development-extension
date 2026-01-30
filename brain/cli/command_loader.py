@@ -575,6 +575,12 @@ def load_all_commands_explicit() -> CommandRegistry:
         print(f"Warning: Could not load SystemVersionCommand: {e}")
     
     try:
+        from brain.commands.system.info_flags import InfoFlagCommand
+        registry.register(InfoFlagCommand())
+    except ImportError as e:
+        print(f"Warning: Could not load InfoFlagCommand: {e}")
+    
+    try:
         from brain.commands.system.release_info import ReleaseInfoCommand
         registry.register(ReleaseInfoCommand())
     except ImportError as e:
@@ -585,6 +591,18 @@ def load_all_commands_explicit() -> CommandRegistry:
         registry.register(SystemSpecsCommand())
     except ImportError as e:
         print(f"Warning: Could not load SystemSpecsCommand: {e}")
+    
+    try:
+        from brain.commands.system.version_flags import ReleaseFlagCommand
+        registry.register(ReleaseFlagCommand())
+    except ImportError as e:
+        print(f"Warning: Could not load ReleaseFlagCommand: {e}")
+    
+    try:
+        from brain.commands.system.version_flags import VersionFlagCommand
+        registry.register(VersionFlagCommand())
+    except ImportError as e:
+        print(f"Warning: Could not load VersionFlagCommand: {e}")
     
     # =================================================================
     # TWITTER
@@ -691,7 +709,10 @@ def get_hiddenimports_list():
         'brain.commands.system.info',
         'brain.commands.system.info',
         'brain.commands.system.info',
+        'brain.commands.system.info_flags',
         'brain.commands.system.release_info',
         'brain.commands.system.system_specs',
+        'brain.commands.system.version_flags',
+        'brain.commands.system.version_flags',
         'brain.commands.twitter.auth',
     ]

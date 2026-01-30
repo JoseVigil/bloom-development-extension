@@ -16,6 +16,8 @@ class CommandMetadata:
     description: str
     version: str = "1.0.0"
     is_root: bool = False
+    requires_git: bool = False
+    requires_network: bool = False
     aliases: List[str] = field(default_factory=list)
     examples: List[str] = field(default_factory=list)
 

@@ -14,7 +14,6 @@ from brain.cli.categories import CommandCategory
 class SystemInfoCommand(BaseCommand):
     """Display comprehensive system information."""
     
-    @property
     def metadata(self) -> CommandMetadata:
         return CommandMetadata(
             name="info",
@@ -63,12 +62,20 @@ class SystemInfoCommand(BaseCommand):
             lines.append(f"{key}: {value}")
         
         return "\n".join(lines)
+    
+    def _handle_error(self, gc, message: str):
+        """Manejo unificado de errores."""
+        if gc.json_mode:
+            import json
+            typer.echo(json.dumps({"status": "error", "message": message}))
+        else:
+            typer.echo(f"❌ {message}", err=True)
+        raise typer.Exit(code=1)
 
 
 class SystemVersionCommand(BaseCommand):
     """Display or set version information."""
     
-    @property
     def metadata(self) -> CommandMetadata:
         return CommandMetadata(
             name="version",
@@ -108,7 +115,7 @@ class SystemVersionCommand(BaseCommand):
                 
                 if set_version:
                     if gc.verbose:
-                        typer.echo(f"📝 Setting version to {set_version}...", err=True)
+                        typer.echo(f"🔍 Setting version to {set_version}...", err=True)
                     
                     if manager.set_version_base(set_version):
                         result = {
@@ -157,12 +164,20 @@ class SystemVersionCommand(BaseCommand):
         """Render version set confirmation in human-readable format."""
         data = result.get("data", {})
         return data.get("message", "Version updated")
+    
+    def _handle_error(self, gc, message: str):
+        """Manejo unificado de errores."""
+        if gc.json_mode:
+            import json
+            typer.echo(json.dumps({"status": "error", "message": message}))
+        else:
+            typer.echo(f"❌ {message}", err=True)
+        raise typer.Exit(code=1)
 
 
 class SystemPathCommand(BaseCommand):
     """Display Brain executable path."""
     
-    @property
     def metadata(self) -> CommandMetadata:
         return CommandMetadata(
             name="path",
@@ -205,3 +220,12 @@ class SystemPathCommand(BaseCommand):
         """Render executable path in human-readable format."""
         data = result.get("data", {})
         return data.get("executable_path", "unknown")
+    
+    def _handle_error(self, gc, message: str):
+        """Manejo unificado de errores."""
+        if gc.json_mode:
+            import json
+            typer.echo(json.dumps({"status": "error", "message": message}))
+        else:
+            typer.echo(f"❌ {message}", err=True)
+        raise typer.Exit(code=1)

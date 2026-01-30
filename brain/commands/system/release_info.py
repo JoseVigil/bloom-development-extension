@@ -21,6 +21,8 @@ class ReleaseInfoCommand(BaseCommand):
             category=CommandCategory.SYSTEM,
             version="1.0.0",
             description="Display Brain CLI release version and build number",
+            requires_git=False,
+            requires_network=False,
             examples=[
                 "brain system release-info",
                 "brain system release-info --json"
