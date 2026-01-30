@@ -92,6 +92,7 @@ class ProfileCreator:
             "name": profile_name,
             "profile_dir": str(profile_dir),
             "extension_path": str(extension_path),
+            "spec_path": str(profile_dir / "ignition_spec.json"),  
             "master": master,
             "created_at": datetime.now().isoformat()
         }

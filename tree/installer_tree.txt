@@ -146,6 +146,57 @@ bloom-development-extension/
     │       └── win64/
     │           └── nssm.exe
     ├── node_modules/ [... dependencies]
+    ├── nucleus/
+    │   ├── .gitignore
+    │   ├── README.md
+    │   ├── VERSION
+    │   ├── build_number.txt
+    │   ├── cmd/
+    │   │   └── nucleus/
+    │   │       └── main.go
+    │   ├── docs/
+    │   │   ├── EXECUTIVE_SUMMARY.md
+    │   │   ├── GOVERNANCE.md
+    │   │   └── NUCLEUS_README.md
+    │   ├── go.mod
+    │   ├── internal/
+    │   │   ├── analytics/
+    │   │   │   └── client.go
+    │   │   ├── cli/
+    │   │   │   ├── config.go
+    │   │   │   └── help_renderer.go
+    │   │   ├── commands/
+    │   │   │   ├── analytics/
+    │   │   │   │   └── heartbeat.go
+    │   │   │   ├── governance/
+    │   │   │   │   └── init.go
+    │   │   │   ├── sync/
+    │   │   │   │   ├── pull.go
+    │   │   │   │   └── push.go
+    │   │   │   ├── system/
+    │   │   │   │   ├── info.go
+    │   │   │   │   └── version.go
+    │   │   │   ├── team/
+    │   │   │   │   ├── add.go
+    │   │   │   │   ├── list.go
+    │   │   │   │   └── remove.go
+    │   │   │   └── vault/
+    │   │   │       ├── lock.go
+    │   │   │       ├── request.go
+    │   │   │       ├── status.go
+    │   │   │       └── unlock.go
+    │   │   ├── core/
+    │   │   │   ├── core.go
+    │   │   │   ├── metadata.go
+    │   │   │   ├── registry.go
+    │   │   │   └── version.go
+    │   │   ├── governance/
+    │   │   │   └── roles.go
+    │   │   └── vault/
+    │   │       └── vault.go
+    │   └── scripts/
+    │       ├── build.bat
+    │       └── test.bat
     ├── package-lock.json
     ├── package.json
     ├── resources/
@@ -195,67 +246,79 @@ bloom-development-extension/
     │   ├── setup-dev.js
     │   ├── setup_runtime.js
     │   └── validate.js
-    └── sentinel/
-        ├── blueprint.json
-        ├── build.bat
-        ├── cli/
-        │   └── help_renderer.go
-        ├── codebase/
-        ├── docs/
-        │   ├── Sentinel - Fase 2 Discovery - Health Modular.md
-        │   ├── Sentinel Base.md
-        │   └── research/
-        │       ├── CHROMIUM PATH FIX - Arquitectura de Rutas.md
-        │       ├── SENTINEL v1.2 - Estructura de Archivos.md
-        │       └── SENTINEL v1.2 Deployment & Testing Guide.md
-        ├── extract_go_files.py
-        ├── go.mod
-        ├── go.sum
-        ├── help/
-        │   ├── sentinel_help.json
-        │   └── sentinel_help.txt
-        ├── internal/
-        │   ├── boot/
-        │   │   ├── dev.go
-        │   │   ├── npm.go
-        │   │   ├── reaper.go
-        │   │   └── vscode.go
-        │   ├── bridge/
-        │   │   ├── bridge.go
-        │   │   └── launch_commands.go
-        │   ├── core/
-        │   │   ├── config.go
-        │   │   ├── core.go
-        │   │   ├── logger.go
-        │   │   ├── paths.go
-        │   │   └── telemetry.go
-        │   ├── discovery/
-        │   │   ├── discovery.go
-        │   │   └── vscode.go
-        │   ├── eventbus/
-        │   │   ├── daemon.go
-        │   │   ├── eventbus.go
-        │   │   ├── protocol.go
-        │   │   ├── sentinel_client.go
-        │   │   └── synapse_handshake.go
-        │   ├── health/
-        │   │   ├── guardian.go
-        │   │   └── health.go
-        │   ├── ignition/
-        │   │   ├── ignition.go
-        │   │   ├── ignition_execution.go
-        │   │   ├── ignition_identity.go
-        │   │   ├── ignition_lifecycle.go
-        │   │   ├── reaper.go
-        │   │   └── telemetry.go
-        │   ├── seed/
-        │   │   └── seed.go
-        │   ├── startup/
-        │   │   └── startup.go
-        │   └── ui/
-        │       ├── cockpit.go
-        │       ├── dashboard.go
-        │       ├── health_station.go
-        │       ├── log_station.go
-        │       └── refresher.go
-        └── main.go
+    ├── sentinel/
+    │   ├── Prompt de Bootstrap Maestro para Nucleus.md
+    │   ├── VERSION
+    │   ├── blueprint.json
+    │   ├── build.bat
+    │   ├── build_number.txt
+    │   ├── cli/
+    │   │   └── help_renderer.go
+    │   ├── codebase/
+    │   ├── docs/
+    │   │   ├── Sentinel - Fase 2 Discovery - Health Modular.md
+    │   │   ├── Sentinel Base.md
+    │   │   └── research/
+    │   │       ├── CHROMIUM PATH FIX - Arquitectura de Rutas.md
+    │   │       ├── SENTINEL v1.2 - Estructura de Archivos.md
+    │   │       └── SENTINEL v1.2 Deployment & Testing Guide.md
+    │   ├── extract_go_files.py
+    │   ├── go.mod
+    │   ├── go.sum
+    │   ├── help/
+    │   │   ├── sentinel_help.json
+    │   │   └── sentinel_help.txt
+    │   ├── internal/
+    │   │   ├── boot/
+    │   │   │   ├── dev.go
+    │   │   │   ├── npm.go
+    │   │   │   ├── reaper.go
+    │   │   │   └── vscode.go
+    │   │   ├── bridge/
+    │   │   │   ├── bridge.go
+    │   │   │   └── launch_commands.go
+    │   │   ├── core/
+    │   │   │   ├── build_info.go
+    │   │   │   ├── config.go
+    │   │   │   ├── core.go
+    │   │   │   ├── logger.go
+    │   │   │   ├── metadata.go
+    │   │   │   ├── paths.go
+    │   │   │   ├── telemetry.go
+    │   │   │   └── version_reader.go
+    │   │   ├── discovery/
+    │   │   │   ├── discovery.go
+    │   │   │   └── vscode.go
+    │   │   ├── eventbus/
+    │   │   │   ├── daemon.go
+    │   │   │   ├── eventbus.go
+    │   │   │   ├── protocol.go
+    │   │   │   ├── sentinel_client.go
+    │   │   │   └── synapse_handshake.go
+    │   │   ├── health/
+    │   │   │   ├── guardian.go
+    │   │   │   └── health.go
+    │   │   ├── ignition/
+    │   │   │   ├── ignition.go
+    │   │   │   ├── ignition_identity.go
+    │   │   │   ├── ignition_lifecycle.go
+    │   │   │   ├── ignition_spec.go
+    │   │   │   ├── reaper.go
+    │   │   │   └── telemetry.go
+    │   │   ├── process/
+    │   │   │   └── hygiene.go
+    │   │   ├── seed/
+    │   │   │   └── seed.go
+    │   │   ├── startup/
+    │   │   │   └── startup.go
+    │   │   ├── system/
+    │   │   │   ├── cmd_info.go
+    │   │   │   └── cmd_version.go
+    │   │   └── ui/
+    │   │       ├── cockpit.go
+    │   │       ├── dashboard.go
+    │   │       ├── health_station.go
+    │   │       ├── log_station.go
+    │   │       └── refresher.go
+    │   └── main.go
+    └── structure.py

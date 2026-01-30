@@ -116,6 +116,8 @@ hiddenimports = [
     'brain.commands.server.server',
     'brain.commands.synapse.synapse_host_cli',
     'brain.commands.system.info',
+    'brain.commands.system.release_info',
+    'brain.commands.system.system_specs',
     'brain.commands.twitter.auth',
     'brain.core',
     'brain.core.bloom_project_inspector',
@@ -206,6 +208,7 @@ hiddenimports = [
     'brain.core.synapse.synapse_protocol',
     'brain.core.system',
     'brain.core.system.info_manager',
+    'brain.core.system.metadata_manager',
     'brain.core.twitter.auth_manager',
 ]
 
@@ -213,7 +216,7 @@ hiddenimports = [
 templates_src = PROJECT_ROOT / 'brain' / 'core' / 'profile' / 'web' / 'templates'
 
 datas = [
-    (str(PROJECT_ROOT / 'brain' / 'VERSION'), '.'),
+        (str(PROJECT_ROOT / 'brain' / 'VERSION'), '.'),
     
     # Templates - Discovery
     (str(templates_src / 'discovery' / '__init__.py'), 'brain/core/profile/web/templates/discovery'),
@@ -237,6 +240,10 @@ datas = [
     
     # Templates - Base __init__.py
     (str(templates_src / '__init__.py'), 'brain/core/profile/web/templates'),
+
+    # Version
+    (r'C:/repos/bloom-videos/bloom-development-extension/brain/VERSION', '.'),
+       (r'C:/repos/bloom-videos/bloom-development-extension/brain/__build__.py', '.'), 
 ]
 
 # Forzar la estructura física de core/profile para evitar el bug de colisión de nombres
@@ -262,7 +269,6 @@ binaries = []
 
 a = Analysis(
     [str(PROJECT_ROOT / 'brain' / '__main__.py')],
-    pathex=[str(PROJECT_ROOT)],
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,

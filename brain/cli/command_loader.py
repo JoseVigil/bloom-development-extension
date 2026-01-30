@@ -574,6 +574,18 @@ def load_all_commands_explicit() -> CommandRegistry:
     except ImportError as e:
         print(f"Warning: Could not load SystemVersionCommand: {e}")
     
+    try:
+        from brain.commands.system.release_info import ReleaseInfoCommand
+        registry.register(ReleaseInfoCommand())
+    except ImportError as e:
+        print(f"Warning: Could not load ReleaseInfoCommand: {e}")
+    
+    try:
+        from brain.commands.system.system_specs import SystemSpecsCommand
+        registry.register(SystemSpecsCommand())
+    except ImportError as e:
+        print(f"Warning: Could not load SystemSpecsCommand: {e}")
+    
     # =================================================================
     # TWITTER
     # =================================================================
@@ -679,5 +691,7 @@ def get_hiddenimports_list():
         'brain.commands.system.info',
         'brain.commands.system.info',
         'brain.commands.system.info',
+        'brain.commands.system.release_info',
+        'brain.commands.system.system_specs',
         'brain.commands.twitter.auth',
     ]
