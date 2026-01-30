@@ -2,6 +2,7 @@ bloom-development-extension/
 └── brain/
     ├── .env
     ├── VERSION
+    ├── __build__.py
     ├── __init__.py
     ├── __main__.py
     ├── __pycache__/ [... cache]
@@ -13,11 +14,14 @@ bloom-development-extension/
     │   ├── commits/
     │   │   └── brain/
     │   │       └── 1_semantic-changelog_2026-01-11.txt
+    │   ├── generate_build_module.py
     │   ├── generate_command_loader.py
     │   ├── generate_commit.py
     │   ├── update_spec_hiddenimports.py
+    │   ├── update_spec_metadata.py
     │   ├── update_version.py
     │   └── versions.json
+    ├── build_number.txt
     ├── cli/
     │   ├── __init__.py
     │   ├── __pycache__/ [... cache]
@@ -143,7 +147,9 @@ bloom-development-extension/
     │   ├── system/
     │   │   ├── __init__.py
     │   │   ├── __pycache__/ [... cache]
-    │   │   └── info.py
+    │   │   ├── info.py
+    │   │   ├── release_info.py
+    │   │   └── system_specs.py
     │   └── twitter/
     │       ├── __init__.py
     │       ├── __pycache__/ [... cache]
@@ -289,7 +295,8 @@ bloom-development-extension/
     │   ├── system/
     │   │   ├── __init__.py
     │   │   ├── __pycache__/ [... cache]
-    │   │   └── info_manager.py
+    │   │   ├── info_manager.py
+    │   │   └── metadata_manager.py
     │   └── twitter/
     │       └── auth_manager.py
     ├── entry.py

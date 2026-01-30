@@ -1,7 +1,10 @@
 bloom-development-extension/
 └── sentinel/
+    ├── Prompt de Bootstrap Maestro para Nucleus.md
+    ├── VERSION
     ├── blueprint.json
     ├── build.bat
+    ├── build_number.txt
     ├── cli/
     │   └── help_renderer.go
     ├── codebase/
@@ -28,11 +31,14 @@ bloom-development-extension/
     │   │   ├── bridge.go
     │   │   └── launch_commands.go
     │   ├── core/
+    │   │   ├── build_info.go
     │   │   ├── config.go
     │   │   ├── core.go
     │   │   ├── logger.go
+    │   │   ├── metadata.go
     │   │   ├── paths.go
-    │   │   └── telemetry.go
+    │   │   ├── telemetry.go
+    │   │   └── version_reader.go
     │   ├── discovery/
     │   │   ├── discovery.go
     │   │   └── vscode.go
@@ -47,15 +53,20 @@ bloom-development-extension/
     │   │   └── health.go
     │   ├── ignition/
     │   │   ├── ignition.go
-    │   │   ├── ignition_execution.go
     │   │   ├── ignition_identity.go
     │   │   ├── ignition_lifecycle.go
+    │   │   ├── ignition_spec.go
     │   │   ├── reaper.go
     │   │   └── telemetry.go
+    │   ├── process/
+    │   │   └── hygiene.go
     │   ├── seed/
     │   │   └── seed.go
     │   ├── startup/
     │   │   └── startup.go
+    │   ├── system/
+    │   │   ├── cmd_info.go
+    │   │   └── cmd_version.go
     │   └── ui/
     │       ├── cockpit.go
     │       ├── dashboard.go

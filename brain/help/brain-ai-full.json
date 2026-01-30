@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
   "executable": "brain",
-  "total_commands": 82,
+  "total_commands": 84,
   "commands": [
     {
       "name": "chrome.read-log",
@@ -1995,6 +1995,28 @@
             "type": "string"
           }
         },
+        "required": []
+      }
+    },
+    {
+      "name": "system.release-info",
+      "description": "Display Brain CLI release information (version and build number).",
+      "category": "system",
+      "syntax": "brain system release-info",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "system.system-specs",
+      "description": "Display comprehensive system specifications.",
+      "category": "system",
+      "syntax": "brain system system-specs",
+      "parameters": {
+        "type": "object",
+        "properties": {},
         "required": []
       }
     },

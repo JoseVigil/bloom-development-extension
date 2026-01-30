@@ -108,8 +108,12 @@ bloom-development-extension/
 │   │   ├── bloom-host.cpp
 │   │   ├── bloom-host.cpp.save
 │   │   ├── build.sh
+│   │   ├── build_info.h
+│   │   ├── build_number.txt
 │   │   ├── chunked_buffer.cpp
 │   │   ├── chunked_buffer.h
+│   │   ├── cli_handler.cpp
+│   │   ├── cli_handler.h
 │   │   ├── nlohmann/
 │   │   │   └── json.hpp
 │   │   ├── platform_utils.cpp
@@ -332,6 +336,57 @@ bloom-development-extension/
 │   │       └── win64/
 │   │           └── nssm.exe
 │   ├── node_modules/ [... dependencies]
+│   ├── nucleus/
+│   │   ├── .gitignore
+│   │   ├── README.md
+│   │   ├── VERSION
+│   │   ├── build_number.txt
+│   │   ├── cmd/
+│   │   │   └── nucleus/
+│   │   │       └── main.go
+│   │   ├── docs/
+│   │   │   ├── EXECUTIVE_SUMMARY.md
+│   │   │   ├── GOVERNANCE.md
+│   │   │   └── NUCLEUS_README.md
+│   │   ├── go.mod
+│   │   ├── internal/
+│   │   │   ├── analytics/
+│   │   │   │   └── client.go
+│   │   │   ├── cli/
+│   │   │   │   ├── config.go
+│   │   │   │   └── help_renderer.go
+│   │   │   ├── commands/
+│   │   │   │   ├── analytics/
+│   │   │   │   │   └── heartbeat.go
+│   │   │   │   ├── governance/
+│   │   │   │   │   └── init.go
+│   │   │   │   ├── sync/
+│   │   │   │   │   ├── pull.go
+│   │   │   │   │   └── push.go
+│   │   │   │   ├── system/
+│   │   │   │   │   ├── info.go
+│   │   │   │   │   └── version.go
+│   │   │   │   ├── team/
+│   │   │   │   │   ├── add.go
+│   │   │   │   │   ├── list.go
+│   │   │   │   │   └── remove.go
+│   │   │   │   └── vault/
+│   │   │   │       ├── lock.go
+│   │   │   │       ├── request.go
+│   │   │   │       ├── status.go
+│   │   │   │       └── unlock.go
+│   │   │   ├── core/
+│   │   │   │   ├── core.go
+│   │   │   │   ├── metadata.go
+│   │   │   │   ├── registry.go
+│   │   │   │   └── version.go
+│   │   │   ├── governance/
+│   │   │   │   └── roles.go
+│   │   │   └── vault/
+│   │   │       └── vault.go
+│   │   └── scripts/
+│   │       ├── build.bat
+│   │       └── test.bat
 │   ├── package-lock.json
 │   ├── package.json
 │   ├── resources/
@@ -381,73 +436,86 @@ bloom-development-extension/
 │   │   ├── setup-dev.js
 │   │   ├── setup_runtime.js
 │   │   └── validate.js
-│   └── sentinel/
-│       ├── blueprint.json
-│       ├── build.bat
-│       ├── cli/
-│       │   └── help_renderer.go
-│       ├── codebase/
-│       ├── docs/
-│       │   ├── Sentinel - Fase 2 Discovery - Health Modular.md
-│       │   ├── Sentinel Base.md
-│       │   └── research/
-│       │       ├── CHROMIUM PATH FIX - Arquitectura de Rutas.md
-│       │       ├── SENTINEL v1.2 - Estructura de Archivos.md
-│       │       └── SENTINEL v1.2 Deployment & Testing Guide.md
-│       ├── extract_go_files.py
-│       ├── go.mod
-│       ├── go.sum
-│       ├── help/
-│       │   ├── sentinel_help.json
-│       │   └── sentinel_help.txt
-│       ├── internal/
-│       │   ├── boot/
-│       │   │   ├── dev.go
-│       │   │   ├── npm.go
-│       │   │   ├── reaper.go
-│       │   │   └── vscode.go
-│       │   ├── bridge/
-│       │   │   ├── bridge.go
-│       │   │   └── launch_commands.go
-│       │   ├── core/
-│       │   │   ├── config.go
-│       │   │   ├── core.go
-│       │   │   ├── logger.go
-│       │   │   ├── paths.go
-│       │   │   └── telemetry.go
-│       │   ├── discovery/
-│       │   │   ├── discovery.go
-│       │   │   └── vscode.go
-│       │   ├── eventbus/
-│       │   │   ├── daemon.go
-│       │   │   ├── eventbus.go
-│       │   │   ├── protocol.go
-│       │   │   ├── sentinel_client.go
-│       │   │   └── synapse_handshake.go
-│       │   ├── health/
-│       │   │   ├── guardian.go
-│       │   │   └── health.go
-│       │   ├── ignition/
-│       │   │   ├── ignition.go
-│       │   │   ├── ignition_execution.go
-│       │   │   ├── ignition_identity.go
-│       │   │   ├── ignition_lifecycle.go
-│       │   │   ├── reaper.go
-│       │   │   └── telemetry.go
-│       │   ├── seed/
-│       │   │   └── seed.go
-│       │   ├── startup/
-│       │   │   └── startup.go
-│       │   └── ui/
-│       │       ├── cockpit.go
-│       │       ├── dashboard.go
-│       │       ├── health_station.go
-│       │       ├── log_station.go
-│       │       └── refresher.go
-│       └── main.go
+│   ├── sentinel/
+│   │   ├── Prompt de Bootstrap Maestro para Nucleus.md
+│   │   ├── VERSION
+│   │   ├── blueprint.json
+│   │   ├── build.bat
+│   │   ├── build_number.txt
+│   │   ├── cli/
+│   │   │   └── help_renderer.go
+│   │   ├── codebase/
+│   │   ├── docs/
+│   │   │   ├── Sentinel - Fase 2 Discovery - Health Modular.md
+│   │   │   ├── Sentinel Base.md
+│   │   │   └── research/
+│   │   │       ├── CHROMIUM PATH FIX - Arquitectura de Rutas.md
+│   │   │       ├── SENTINEL v1.2 - Estructura de Archivos.md
+│   │   │       └── SENTINEL v1.2 Deployment & Testing Guide.md
+│   │   ├── extract_go_files.py
+│   │   ├── go.mod
+│   │   ├── go.sum
+│   │   ├── help/
+│   │   │   ├── sentinel_help.json
+│   │   │   └── sentinel_help.txt
+│   │   ├── internal/
+│   │   │   ├── boot/
+│   │   │   │   ├── dev.go
+│   │   │   │   ├── npm.go
+│   │   │   │   ├── reaper.go
+│   │   │   │   └── vscode.go
+│   │   │   ├── bridge/
+│   │   │   │   ├── bridge.go
+│   │   │   │   └── launch_commands.go
+│   │   │   ├── core/
+│   │   │   │   ├── build_info.go
+│   │   │   │   ├── config.go
+│   │   │   │   ├── core.go
+│   │   │   │   ├── logger.go
+│   │   │   │   ├── metadata.go
+│   │   │   │   ├── paths.go
+│   │   │   │   ├── telemetry.go
+│   │   │   │   └── version_reader.go
+│   │   │   ├── discovery/
+│   │   │   │   ├── discovery.go
+│   │   │   │   └── vscode.go
+│   │   │   ├── eventbus/
+│   │   │   │   ├── daemon.go
+│   │   │   │   ├── eventbus.go
+│   │   │   │   ├── protocol.go
+│   │   │   │   ├── sentinel_client.go
+│   │   │   │   └── synapse_handshake.go
+│   │   │   ├── health/
+│   │   │   │   ├── guardian.go
+│   │   │   │   └── health.go
+│   │   │   ├── ignition/
+│   │   │   │   ├── ignition.go
+│   │   │   │   ├── ignition_identity.go
+│   │   │   │   ├── ignition_lifecycle.go
+│   │   │   │   ├── ignition_spec.go
+│   │   │   │   ├── reaper.go
+│   │   │   │   └── telemetry.go
+│   │   │   ├── process/
+│   │   │   │   └── hygiene.go
+│   │   │   ├── seed/
+│   │   │   │   └── seed.go
+│   │   │   ├── startup/
+│   │   │   │   └── startup.go
+│   │   │   ├── system/
+│   │   │   │   ├── cmd_info.go
+│   │   │   │   └── cmd_version.go
+│   │   │   └── ui/
+│   │   │       ├── cockpit.go
+│   │   │       ├── dashboard.go
+│   │   │       ├── health_station.go
+│   │   │       ├── log_station.go
+│   │   │       └── refresher.go
+│   │   └── main.go
+│   └── structure.py
 └── brain/
     ├── .env
     ├── VERSION
+    ├── __build__.py
     ├── __init__.py
     ├── __main__.py
     ├── __pycache__/ [... cache]
@@ -459,11 +527,14 @@ bloom-development-extension/
     │   ├── commits/
     │   │   └── brain/
     │   │       └── 1_semantic-changelog_2026-01-11.txt
+    │   ├── generate_build_module.py
     │   ├── generate_command_loader.py
     │   ├── generate_commit.py
     │   ├── update_spec_hiddenimports.py
+    │   ├── update_spec_metadata.py
     │   ├── update_version.py
     │   └── versions.json
+    ├── build_number.txt
     ├── cli/
     │   ├── __init__.py
     │   ├── __pycache__/ [... cache]
@@ -589,7 +660,9 @@ bloom-development-extension/
     │   ├── system/
     │   │   ├── __init__.py
     │   │   ├── __pycache__/ [... cache]
-    │   │   └── info.py
+    │   │   ├── info.py
+    │   │   ├── release_info.py
+    │   │   └── system_specs.py
     │   └── twitter/
     │       ├── __init__.py
     │       ├── __pycache__/ [... cache]
@@ -735,7 +808,8 @@ bloom-development-extension/
     │   ├── system/
     │   │   ├── __init__.py
     │   │   ├── __pycache__/ [... cache]
-    │   │   └── info_manager.py
+    │   │   ├── info_manager.py
+    │   │   └── metadata_manager.py
     │   └── twitter/
     │       └── auth_manager.py
     ├── entry.py

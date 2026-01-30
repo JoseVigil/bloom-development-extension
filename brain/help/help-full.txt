@@ -32,11 +32,11 @@ BRAIN CLI ─── Modular System for Bloom (Executable)
   ▸ runtime        Non-interactive system runtime operations                1 cmd
   ▸ service        Background connection multiplexer and task runner        3 cmds
   ▸ synapse        Chrome Native Messaging Bridge and protocol management   2 cmds
-  ▸ system         Runtime and system introspection                         3 cmds
+  ▸ system         Runtime and system introspection                         5 cmds
   ▸ twitter        Twitter/X integration and social data analysis           2 cmds
 
   ──────────────────────────────────────────────────────────────────────
-  ✓ TOTAL: 16 categories • 82 commands
+  ✓ TOTAL: 16 categories • 84 commands
 
 
 =======================================================[ HEALTH ]=======================================================
@@ -106,6 +106,14 @@ BRAIN CLI ─── Modular System for Bloom (Executable)
   ▸ path
     Display the absolute path to the brain executable.
     brain system path
+
+  ▸ release-info
+    Display Brain CLI release information (version and build number).
+    brain system release-info
+
+  ▸ system-specs
+    Display comprehensive system specifications.
+    brain system system-specs
 
   ▸ version
     Display or increment the version number.
@@ -944,11 +952,11 @@ using repo name.
   ▸ runtime        Non-interactive system runtime operations                1 cmd
   ▸ service        Background connection multiplexer and task runner        3 cmds
   ▸ synapse        Chrome Native Messaging Bridge and protocol management   2 cmds
-  ▸ system         Runtime and system introspection                         3 cmds
+  ▸ system         Runtime and system introspection                         5 cmds
   ▸ twitter        Twitter/X integration and social data analysis           2 cmds
 
   ──────────────────────────────────────────────────────────────────────
-  ✓ TOTAL: 16 categories • 82 commands
+  ✓ TOTAL: 16 categories • 84 commands
 
 
 =======================================================[ HEALTH ]=======================================================
@@ -1018,6 +1026,14 @@ using repo name.
   ▸ path
     Display the absolute path to the brain executable.
     brain system path
+
+  ▸ release-info
+    Display Brain CLI release information (version and build number).
+    brain system release-info
+
+  ▸ system-specs
+    Display comprehensive system specifications.
+    brain system system-specs
 
   ▸ version
     Display or increment the version number.

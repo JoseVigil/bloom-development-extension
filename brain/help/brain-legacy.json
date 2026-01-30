@@ -2398,7 +2398,7 @@
     {
       "name": "system",
       "description": "Runtime and system introspection",
-      "command_count": 3,
+      "command_count": 5,
       "commands": [
         {
           "name": "info",
@@ -2409,6 +2409,18 @@
         {
           "name": "path",
           "description": "Display the absolute path to the brain executable.",
+          "subsection": null,
+          "parameters": []
+        },
+        {
+          "name": "release-info",
+          "description": "Display Brain CLI release information (version and build number).",
+          "subsection": null,
+          "parameters": []
+        },
+        {
+          "name": "system-specs",
+          "description": "Display comprehensive system specifications.",
           "subsection": null,
           "parameters": []
         },

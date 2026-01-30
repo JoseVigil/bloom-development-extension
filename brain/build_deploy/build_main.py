@@ -87,6 +87,38 @@ def create_version_file():
     return True
 
 
+def increment_build_number():
+    """Incrementa el build number y genera __build__.py"""
+    print_step("INCREMENTANDO BUILD NUMBER")
+    
+    script = SCRIPT_DIR / "generate_build_module.py"
+    
+    if not script.exists():
+        print_warning(f"Script no encontrado: {script}")
+        return False
+    
+    return run_command(
+        [sys.executable, str(script)],
+        "Incremento de build number"
+    )
+
+
+def update_spec_metadata():
+    """Actualiza brain.spec para incluir VERSION y __build__.py"""
+    print_step("ACTUALIZANDO SPEC CON METADATA")
+    
+    script = SCRIPT_DIR / "update_spec_metadata.py"
+    
+    if not script.exists():
+        print_warning(f"Script no encontrado: {script}")
+        return False
+    
+    return run_command(
+        [sys.executable, str(script)],
+        "Actualización de spec con metadata"
+    )
+
+
 def run_command(cmd, description):
     """Ejecuta un comando y maneja errores"""
     print(f"Ejecutando: {description}")
@@ -160,7 +192,7 @@ def compile_with_pyinstaller(clean=False):
         print_error(f"No existe: {spec_file}")
         return False
     
-    cmd = ["pyinstaller", str(spec_file), "--noconfirm"]  # ← Agregar --noconfirm
+    cmd = ["pyinstaller", str(spec_file), "--noconfirm"]
     if clean:
         cmd.append("--clean")
     
@@ -262,11 +294,16 @@ def main():
     # 🔥 0. Aplicar versión si existe solicitud
     run_update_version()
     
+    # ✅ NUEVO: 0.5. Incrementar build number
+    if not increment_build_number():
+        print_error("Falló el incremento de build number")
+        sys.exit(1)
+    
     # Paso 1: Limpiar (opcional)
     if args.clean:
         clean_build_dirs()
     
-    # ✅ NUEVO: Paso 1.5: Crear VERSION file
+    # Paso 1.5: Crear VERSION file
     if not create_version_file():
         print_error("Falló la creación del VERSION file")
         sys.exit(1)
@@ -275,6 +312,11 @@ def main():
     if not args.skip_gen:
         if not generate_command_loader():
             print_error("Falló la generación de command_loader.py")
+            sys.exit(1)
+        
+        # ✅ NUEVO: Actualizar spec con metadata
+        if not update_spec_metadata():
+            print_error("Falló la actualización de spec con metadata")
             sys.exit(1)
         
         if not update_spec_hiddenimports():
