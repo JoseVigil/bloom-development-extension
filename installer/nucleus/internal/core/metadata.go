@@ -1,6 +1,9 @@
 package core
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"os"
 	"runtime"
 	"time"
@@ -8,17 +11,19 @@ import (
 
 // SystemInfo contiene información completa del sistema
 type SystemInfo struct {
-	AppName        string `json:"app_name"`
-	AppRelease     string `json:"app_release"`
-	BuildCounter   int    `json:"build_counter"`
-	CompileDate    string `json:"compile_date"`
-	CompileTime    string `json:"compile_time"`
-	CurrentTime    string `json:"current_time"`
-	PlatformArch   string `json:"platform_arch"`
-	PlatformOS     string `json:"platform_os"`
-	RuntimeEngine  string `json:"runtime_engine"`
-	RuntimeRelease string `json:"runtime_release"`
-	UserRole       string `json:"user_role"`
+	AppName           string `json:"app_name"`
+	AppRelease        string `json:"app_release"`
+	BuildCounter      int    `json:"build_counter"`
+	CompileDate       string `json:"compile_date"`
+	CompileTime       string `json:"compile_time"`
+	CurrentTime       string `json:"current_time"`
+	PlatformArch      string `json:"platform_arch"`
+	PlatformOS        string `json:"platform_os"`
+	RuntimeEngine     string `json:"runtime_engine"`
+	RuntimeRelease    string `json:"runtime_release"`
+	UserRole          string `json:"user_role"`
+	ActiveCollaborators int  `json:"active_collaborators"`
+	StateHash         string `json:"state_hash"`
 }
 
 // Role representa el nivel de autoridad en Nucleus
@@ -34,19 +39,23 @@ const (
 func GetSystemInfo() SystemInfo {
 	version := readVersionFile()
 	role := detectUserRole()
+	collaborators := countActiveCollaborators()
+	stateHash := computeStateHash()
 
 	return SystemInfo{
-		AppName:        "nucleus",
-		AppRelease:     version,
-		BuildCounter:   BuildNumber,
-		CompileDate:    BuildDate,
-		CompileTime:    BuildTime,
-		CurrentTime:    time.Now().Format("2006-01-02 15:04:05"),
-		PlatformArch:   runtime.GOARCH,
-		PlatformOS:     runtime.GOOS,
-		RuntimeEngine:  "go",
-		RuntimeRelease: runtime.Version(),
-		UserRole:       roleToString(role),
+		AppName:             "nucleus",
+		AppRelease:          version,
+		BuildCounter:        BuildNumber,
+		CompileDate:         BuildDate,
+		CompileTime:         BuildTime,
+		CurrentTime:         time.Now().Format("2006-01-02 15:04:05"),
+		PlatformArch:        runtime.GOARCH,
+		PlatformOS:          runtime.GOOS,
+		RuntimeEngine:       "go",
+		RuntimeRelease:      runtime.Version(),
+		UserRole:            roleToString(role),
+		ActiveCollaborators: collaborators,
+		StateHash:           stateHash,
 	}
 }
 
@@ -111,4 +120,52 @@ func SetSpecialistRole() error {
 
 	specialistFile := homeDir + "/.bloom/.nucleus/.specialist"
 	return os.WriteFile(specialistFile, []byte("specialist"), 0644)
+}
+
+// countActiveCollaborators cuenta los colaboradores activos en el ownership
+func countActiveCollaborators() int {
+	homeDir, _ := os.UserHomeDir()
+	ownershipPath := homeDir + "/.bloom/.nucleus/ownership.json"
+	
+	data, err := os.ReadFile(ownershipPath)
+	if err != nil {
+		return 0
+	}
+
+	var record struct {
+		TeamMembers []struct {
+			Active bool `json:"active"`
+		} `json:"team_members"`
+	}
+
+	if err := json.Unmarshal(data, &record); err != nil {
+		return 0
+	}
+
+	count := 0
+	for _, member := range record.TeamMembers {
+		if member.Active {
+			count++
+		}
+	}
+
+	return count
+}
+
+// computeStateHash genera un hash semántico del estado actual
+func computeStateHash() string {
+	homeDir, _ := os.UserHomeDir()
+	nucleusRoot := homeDir + "/.bloom/.nucleus"
+	
+	// Hash combinado de ownership + blueprint
+	ownershipData, _ := os.ReadFile(nucleusRoot + "/ownership.json")
+	blueprintData, _ := os.ReadFile(nucleusRoot + "/blueprint.json")
+	
+	combined := string(ownershipData) + string(blueprintData)
+	if combined == "" {
+		return "no-state"
+	}
+	
+	hash := sha256.Sum256([]byte(combined))
+	return hex.EncodeToString(hash[:8])
 }

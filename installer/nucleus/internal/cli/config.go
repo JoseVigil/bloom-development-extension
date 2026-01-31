@@ -12,7 +12,7 @@ type HelpConfig struct {
 // DefaultNucleusConfig retorna la configuración por defecto para Nucleus
 func DefaultNucleusConfig() HelpConfig {
 	return HelpConfig{
-		AppName:       "NUCLEUS",
+		AppName:       "NUCLEUS - Governance Magistrate",
 		AppSubtitle:   "Core CLI for Bloom Ecosystem",
 		Width:         120,
 		CategoryOrder: []string{"SYSTEM", "GOVERNANCE", "IDENTITY"},

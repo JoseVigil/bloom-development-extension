@@ -3,7 +3,6 @@ package governance
 import (
 	"fmt"
 	"nucleus/internal/core"
-	"nucleus/internal/governance"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -20,7 +19,7 @@ func init() {
 			Short: "Initialize Nucleus organization",
 			Args:  cobra.NoArgs,
 			Run: func(cmd *cobra.Command, args []string) {
-				existing, _ := governance.LoadOwnership()
+				existing, _ := LoadOwnership()
 				if existing != nil {
 					fmt.Println("Organization already initialized")
 					os.Exit(1)
@@ -36,14 +35,14 @@ func init() {
 				}
 
 				// Crear ownership record
-				record, err := governance.CreateInitialOwnership(githubID, name)
+				record, err := CreateInitialOwnership(githubID, name)
 				if err != nil {
 					fmt.Printf("Error: %v\n", err)
 					os.Exit(1)
 				}
 
 				// Crear blueprint.json
-				_, err = governance.CreateInitialBlueprint(githubID, name)
+				_, err = CreateInitialBlueprint(githubID, name)
 				if err != nil {
 					fmt.Printf("Error creating blueprint: %v\n", err)
 					os.Exit(1)
