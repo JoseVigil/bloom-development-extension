@@ -173,3 +173,12 @@ func AddVaultKey(id, label string) error {
 
 	return os.WriteFile(keysPath, data, 0600)
 }
+
+// IsVaultUnlocked verifica si el vault está desbloqueado
+func IsVaultUnlocked() (bool, error) {
+	status, err := GetVaultStatus()
+	if err != nil {
+		return false, err
+	}
+	return !status.Locked, nil
+}

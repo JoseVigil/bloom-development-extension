@@ -68,6 +68,27 @@
     ]
   },
   {
+    "name": "init",
+    "use": "init",
+    "short": "Initialize Nucleus organization",
+    "category": "GOVERNANCE",
+    "options": [
+      {
+        "name": "github-id",
+        "usage": "GitHub username"
+      },
+      {
+        "name": "master",
+        "usage": "Initialize as master",
+        "default": "false"
+      },
+      {
+        "name": "name",
+        "usage": "Display name"
+      }
+    ]
+  },
+  {
     "name": "list",
     "use": "list",
     "short": "List team members",

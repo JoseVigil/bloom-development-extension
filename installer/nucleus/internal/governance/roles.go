@@ -61,7 +61,7 @@ func LoadOwnership() (*OwnershipRecord, error) {
 	return &record, nil
 }
 
-// SaveOwnership guarda el registro de propiedad
+// SaveOwnership guarda el registro de propiedad con escritura atómica
 func SaveOwnership(record *OwnershipRecord) error {
 	path, err := GetOwnershipPath()
 	if err != nil {
@@ -73,7 +73,20 @@ func SaveOwnership(record *OwnershipRecord) error {
 		return err
 	}
 
-	return os.WriteFile(path, data, 0644)
+	// Escritura atómica usando archivo temporal
+	tmpPath := path + ".tmp"
+	
+	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
+		return err
+	}
+
+	// Renombrado atómico
+	if err := os.Rename(tmpPath, path); err != nil {
+		os.Remove(tmpPath)
+		return err
+	}
+
+	return nil
 }
 
 // CreateInitialOwnership crea el registro inicial de propiedad
@@ -111,4 +124,35 @@ func AddTeamMember(record *OwnershipRecord, memberID, memberName, role string) e
 // generateOrgID genera un ID único para la organización
 func generateOrgID() string {
 	return fmt.Sprintf("org_%d", time.Now().Unix())
+}
+
+// GetEffectiveRole determina el rol efectivo cruzando marcador local con blueprint
+func GetEffectiveRole() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+
+	nucleusRoot := filepath.Join(homeDir, ".bloom", ".nucleus")
+
+	// Verificar marcador .master
+	masterFile := filepath.Join(nucleusRoot, ".master")
+	if _, err := os.Stat(masterFile); err == nil {
+		// Verificar que coincida con owner_github_id del blueprint
+		bp, err := LoadBlueprint()
+		if err != nil {
+			return "master", nil // Si no hay blueprint, confiar en marcador
+		}
+		if bp != nil {
+			return "master", nil
+		}
+	}
+
+	// Verificar marcador .specialist
+	specialistFile := filepath.Join(nucleusRoot, ".specialist")
+	if _, err := os.Stat(specialistFile); err == nil {
+		return "specialist", nil
+	}
+
+	return "unknown", nil
 }

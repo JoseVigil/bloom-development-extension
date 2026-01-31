@@ -1,5 +1,5 @@
 
-                                                        NUCLEUS
+                                            NUCLEUS - Governance Magistrate
                                               Core CLI for Bloom Ecosystem
 
 
@@ -29,9 +29,9 @@
 ------------------------------------------------------------------------------------------------------------------------
 
   SYSTEM        System information and diagnostics                       2 cmds
-  GOVERNANCE    Role, vault, sync, and analytics management              8 cmds
+  GOVERNANCE    Role, vault, sync, and analytics management              9 cmds
   IDENTITY      Team and collaboration management                        3 cmds
-  ----------------------------------------------------------------------  Total: 13 commands
+  ----------------------------------------------------------------------  Total: 14 commands
 
 
 =======================================================[ SYSTEM ]=======================================================
@@ -61,6 +61,18 @@
     Flags:
       --volume                   Intent volume [default: 0]
       --workers                  Active workers count [default: 0]
+
+    --------------------------------------------------------------------------------
+
+  > INIT
+    Initialize Nucleus organization
+
+    Usage: nucleus init
+
+    Flags:
+      --github-id                GitHub username
+      --master                   Initialize as master
+      --name                     Display name
 
     --------------------------------------------------------------------------------
 

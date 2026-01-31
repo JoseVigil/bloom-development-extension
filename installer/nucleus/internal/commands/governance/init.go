@@ -35,9 +35,17 @@ func init() {
 					name = githubID
 				}
 
+				// Crear ownership record
 				record, err := governance.CreateInitialOwnership(githubID, name)
 				if err != nil {
 					fmt.Printf("Error: %v\n", err)
+					os.Exit(1)
+				}
+
+				// Crear blueprint.json
+				_, err = governance.CreateInitialBlueprint(githubID, name)
+				if err != nil {
+					fmt.Printf("Error creating blueprint: %v\n", err)
 					os.Exit(1)
 				}
 
@@ -55,6 +63,7 @@ func init() {
 					fmt.Printf("✅ Organization initialized\n")
 					fmt.Printf("Org ID: %s\n", record.OrgID)
 					fmt.Printf("Owner: %s\n", record.OwnerName)
+					fmt.Printf("Blueprint: created\n")
 				}
 			},
 		}
