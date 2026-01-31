@@ -5,6 +5,7 @@ bloom-development-extension/
     ├── cli/
     │   └── help_renderer.go
     ├── codebase/
+    │   └── go_files_2026-01-31_09-07-39.txt
     ├── docs/
     │   ├── Sentinel - Fase 2 Discovery - Health Modular.md
     │   ├── Sentinel Base.md

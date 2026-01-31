@@ -1,18 +1,20 @@
 package seed
 
 import (
+	"archive/zip"
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sentinel/internal/core"
 	"sentinel/internal/discovery"
 	"sentinel/internal/startup"
+	"strconv"
 	"strings"
 	"time"
-	"strconv"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/sys/windows/registry"
@@ -29,7 +31,7 @@ func init() {
 			Run: func(cmd *cobra.Command, args []string) {
 				alias := args[0]
 				isMaster, _ := strconv.ParseBool(args[1])
-				
+
 				uuid, profilePath, err := HandleSeed(c, alias, isMaster)
 				if err != nil {
 					if c.IsJSON {
@@ -39,7 +41,7 @@ func init() {
 					}
 					os.Exit(1)
 				}
-				
+
 				if c.IsJSON {
 					outputSeedJSON(uuid, alias, profilePath, isMaster)
 				} else {
@@ -52,6 +54,7 @@ func init() {
 			cmd.Annotations = make(map[string]string)
 		}
 		cmd.Annotations["requires"] = `  - brain.exe debe estar disponible en bin/
+  - bloom-cortex.blx en bin/native/cortex/
   - Permiso de escritura en HKCU\Software\Google\Chrome\NativeMessagingHosts
   - bloom-host.exe en bin/native/
   - Extension ID válido en configuración`
@@ -110,7 +113,14 @@ type ProfilesRegistry struct {
 	Profiles []ProfileEntry `json:"profiles"`
 }
 
+type CortexMetadata struct {
+	Version      string `json:"version"`
+	BuildDate    string `json:"build_date"`
+	Compatibility string `json:"compatibility"`
+}
+
 func HandleSeed(c *core.Core, alias string, isMaster bool) (string, string, error) {
+	// Verificar alias duplicado
 	registry_data := loadProfilesRegistry(c)
 	for _, p := range registry_data.Profiles {
 		if p.Alias == alias {
@@ -119,15 +129,37 @@ func HandleSeed(c *core.Core, alias string, isMaster bool) (string, string, erro
 	}
 
 	sm, _ := discovery.DiscoverSystem(c.Paths.BinDir)
-	
-	// Construir argumentos según si es master o no
+
+	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+	// 1️⃣ PRECONDICIÓN: Verificar existencia del .blx
+	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+	blxPath := filepath.Join(c.Paths.BinDir, "native", "cortex", "bloom-cortex.blx")
+	if _, err := os.Stat(blxPath); os.IsNotExist(err) {
+		return "", "", fmt.Errorf("cortex_missing: %s no encontrado", blxPath)
+	}
+
+	c.Logger.Info("[SEED] ✓ Cortex package found: %s", blxPath)
+
+	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+	// 2️⃣ INSPECCIÓN: Leer metadatos sin desplegar
+	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+	metadata, err := inspectCortexPackage(blxPath, c)
+	if err != nil {
+		return "", "", fmt.Errorf("cortex_inspection_failed: %v", err)
+	}
+
+	c.Logger.Info("[SEED] Cortex version: %s (build: %s)", metadata.Version, metadata.BuildDate)
+
+	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+	// 3️⃣ CREACIÓN DEL PERFIL (estado actual)
+	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 	args := []string{"--json", "profile", "create", alias}
 	if isMaster {
 		args = append(args, "--master")
 	}
-	
+
 	c.Logger.Info("[SEED] Executing: %s %v", sm.BrainPath, args)
-	
+
 	cmd := exec.Command(sm.BrainPath, args...)
 	var out bytes.Buffer
 	var errOut bytes.Buffer
@@ -161,6 +193,19 @@ func HandleSeed(c *core.Core, alias string, isMaster bool) (string, string, erro
 	_ = os.MkdirAll(extDir, 0755)
 	_ = os.MkdirAll(logsDir, 0755)
 
+	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+	// 4️⃣ DEPLOY: Descomprimir Cortex en extension/
+	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+	c.Logger.Info("[SEED] Deploying Cortex to: %s", extDir)
+	if err := deployCortexPackage(blxPath, extDir, c); err != nil {
+		return "", "", fmt.Errorf("cortex_deploy_failed: %v", err)
+	}
+
+	c.Logger.Info("[SEED] ✓ Cortex deployed successfully")
+
+	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+	// 5️⃣ POSTCONDICIÓN: Configuración y registro
+	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 	shortID := uuid[:8]
 	hostName := fmt.Sprintf("com.bloom.synapse.%s", shortID)
 	manifestPath := filepath.Join(configDir, hostName+".json")
@@ -185,11 +230,99 @@ func HandleSeed(c *core.Core, alias string, isMaster bool) (string, string, erro
 	return uuid, profileDir, nil
 }
 
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// inspectCortexPackage - Lee metadatos del .blx SIN extraer
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+func inspectCortexPackage(blxPath string, c *core.Core) (*CortexMetadata, error) {
+	reader, err := zip.OpenReader(blxPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open blx: %v", err)
+	}
+	defer reader.Close()
+
+	// Buscar cortex.meta.json
+	var metaFile *zip.File
+	for _, f := range reader.File {
+		if f.Name == "cortex.meta.json" {
+			metaFile = f
+			break
+		}
+	}
+
+	if metaFile == nil {
+		return nil, fmt.Errorf("cortex.meta.json not found in package")
+	}
+
+	rc, err := metaFile.Open()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read meta: %v", err)
+	}
+	defer rc.Close()
+
+	var metadata CortexMetadata
+	if err := json.NewDecoder(rc).Decode(&metadata); err != nil {
+		return nil, fmt.Errorf("invalid metadata format: %v", err)
+	}
+
+	return &metadata, nil
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// deployCortexPackage - Extrae COMPLETO el .blx a destDir
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+func deployCortexPackage(blxPath, destDir string, c *core.Core) error {
+	reader, err := zip.OpenReader(blxPath)
+	if err != nil {
+		return fmt.Errorf("failed to open blx: %v", err)
+	}
+	defer reader.Close()
+
+	for _, f := range reader.File {
+		// Ignorar archivos de metadata que no son parte de la extensión
+		if strings.HasPrefix(f.Name, "__") || f.Name == "cortex.meta.json" {
+			continue
+		}
+
+		targetPath := filepath.Join(destDir, f.Name)
+
+		if f.FileInfo().IsDir() {
+			_ = os.MkdirAll(targetPath, f.Mode())
+			continue
+		}
+
+		// Crear directorios padre si no existen
+		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+			return fmt.Errorf("failed to create dir: %v", err)
+		}
+
+		// Extraer archivo
+		rc, err := f.Open()
+		if err != nil {
+			return fmt.Errorf("failed to open file in zip: %v", err)
+		}
+
+		outFile, err := os.OpenFile(targetPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
+		if err != nil {
+			rc.Close()
+			return fmt.Errorf("failed to create target file: %v", err)
+		}
+
+		_, err = io.Copy(outFile, rc)
+		rc.Close()
+		outFile.Close()
+
+		if err != nil {
+			return fmt.Errorf("failed to write file: %v", err)
+		}
+	}
+
+	return nil
+}
+
 func writeNativeManifest(c *core.Core, path, hostName, uuid string) error {
-	// CAMBIO: usar LOCALAPPDATA en lugar de c.Paths.BinDir
 	bloomBaseDir := filepath.Join(os.Getenv("LOCALAPPDATA"), "BloomNucleus")
 	bridgePath := filepath.Join(bloomBaseDir, "bin", "native", "bloom-host.exe")
-	
+
 	manifest := map[string]interface{}{
 		"name":        hostName,
 		"description": "Synapse v2 Native Bridge Host",
@@ -207,7 +340,9 @@ func writeNativeManifest(c *core.Core, path, hostName, uuid string) error {
 func registerInWindows(hostName, manifestPath string) error {
 	keyPath := `Software\Google\Chrome\NativeMessagingHosts\` + hostName
 	k, _, err := registry.CreateKey(registry.CURRENT_USER, keyPath, registry.ALL_ACCESS)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	defer k.Close()
 	return k.SetStringValue("", manifestPath)
 }
@@ -234,8 +369,8 @@ func writeIgnitionSpec(c *core.Core, sm *discovery.SystemMap, uuid, profileDir, 
 		},
 		"paths": map[string]string{
 			"extension": extDir,
-			"logs_base":  logsDir,
-			"user_data":  profileDir,
+			"logs_base": logsDir,
+			"user_data": profileDir,
 		},
 		"target_url":   fmt.Sprintf("chrome-extension://%s/discovery/index.html", c.Config.Provisioning.ExtensionID),
 		"custom_flags": []string{},
@@ -259,7 +394,9 @@ func updateProfilesInventory(c *core.Core, uuid, alias string, isMaster bool, pr
 	}
 
 	for i, p := range registry_data.Profiles {
-		if isMaster { registry_data.Profiles[i].Master = false }
+		if isMaster {
+			registry_data.Profiles[i].Master = false
+		}
 		if p.ID == uuid {
 			newEntry.LaunchCount = p.LaunchCount
 			registry_data.Profiles[i] = newEntry
@@ -280,7 +417,9 @@ func saveRegistry(c *core.Core, reg ProfilesRegistry) {
 func loadProfilesRegistry(c *core.Core) ProfilesRegistry {
 	path := filepath.Join(c.Paths.AppDataDir, "config", "profiles.json")
 	data, err := os.ReadFile(path)
-	if err != nil { return ProfilesRegistry{Profiles: []ProfileEntry{}} }
+	if err != nil {
+		return ProfilesRegistry{Profiles: []ProfileEntry{}}
+	}
 	var registry_data ProfilesRegistry
 	if err := json.Unmarshal(data, &registry_data); err != nil {
 		var list []ProfileEntry

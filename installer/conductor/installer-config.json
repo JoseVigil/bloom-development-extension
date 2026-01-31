@@ -1,0 +1,49 @@
+{
+  "system": {
+    "name": "Bloom Nucleus",
+    "version": "1.0.0",
+    "description": "Local automation server for BTIP workflow"
+  },
+  
+  "installation": {
+    "mode": "development",
+    "paths": {
+      "win32": {
+        "install_dir": "C:\\Program Files\\BloomNucleus",
+        "config_dir": "%LOCALAPPDATA%\\BloomNucleus",
+        "logs_dir": "%LOCALAPPDATA%\\BloomNucleus\\logs"
+      },
+      "darwin": {
+        "install_dir": "/Library/Application Support/BloomNucleus",
+        "config_dir": "~/.config/BloomNucleus",
+        "logs_dir": "~/.config/BloomNucleus/logs"
+      },
+      "linux": {
+        "install_dir": "/opt/bloom-nucleus",
+        "config_dir": "~/.config/BloomNucleus",
+        "logs_dir": "~/.config/BloomNucleus/logs"
+      }
+    }
+  },
+
+  "service": {
+    "name": "BloomNucleusHost",
+    "default_port": 5678,
+    "port_range": [5678, 5698],
+    "health_check": {
+      "timeout_ms": 30000,
+      "interval_ms": 200
+    }
+  },
+
+  "btip": {
+    "workspace_dir": ".bloom",
+    "intent_types": ["dev", "doc"],
+    "file_extension": ".bl"
+  },
+
+  "security": {
+    "localhost_only": true,
+    "no_telemetry": true
+  }
+}

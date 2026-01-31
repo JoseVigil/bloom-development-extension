@@ -1,0 +1,24 @@
+bloom-development-extension/
+└── cortex/
+    ├── build-cortex/
+    │   ├── VERSION
+    │   ├── package.py
+    │   └── validate.py
+    ├── extension/
+    │   ├── assets/
+    │   │   ├── 128x128.png
+    │   │   ├── icon128.png
+    │   │   └── icon16.png
+    │   ├── background.js
+    │   ├── content.js
+    │   ├── manifest.json
+    │   └── synapse/
+    │       ├── discovery.synapse.config.js
+    │       └── landing.synapse.config.js
+    └── legacy-crypto/
+        ├── crx/
+        │   ├── id.json
+        │   └── key.pem
+        └── pem/
+            ├── key_generation_extesion.crx
+            └── key_generation_extesion.pem

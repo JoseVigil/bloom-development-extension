@@ -5,7 +5,7 @@ bloom-development-extension/
     ├── chrome/
     │   ├── chrome-mac.zip
     │   └── chrome-win.zip
-    ├── chrome-extension/
+    ├── cortex/
     │   ├── crx/
     │   │   ├── id.json
     │   │   └── key.pem
@@ -144,7 +144,8 @@ bloom-development-extension/
     │   │       │       ├── help-full.txt
     │   │       │       └── help.txt
     │   │       ├── host/
-    │   │       │   └── bloom-host.exe
+    │   │       │   ├── bloom-host.exe
+    │   │       │   └── libwinpthread-1.dll
     │   │       ├── libwinpthread-1.dll
     │   │       ├── nucleus/
     │   │       │   ├── blueprint.json
@@ -214,6 +215,8 @@ bloom-development-extension/
     │   │   │   ├── registry.go
     │   │   │   └── version.go
     │   │   ├── governance/
+    │   │   │   ├── blueprint.go
+    │   │   │   ├── init.go
     │   │   │   └── roles.go
     │   │   └── vault/
     │   │       └── vault.go
@@ -277,6 +280,7 @@ bloom-development-extension/
         ├── cli/
         │   └── help_renderer.go
         ├── codebase/
+        │   └── go_files_2026-01-31_09-07-39.txt
         ├── docs/
         │   ├── Sentinel - Fase 2 Discovery - Health Modular.md
         │   ├── Sentinel Base.md
