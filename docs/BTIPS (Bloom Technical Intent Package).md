@@ -41,62 +41,95 @@ Sigue siendo simple, pero ahora **explica la pirámide**.
 
 ```mermaid
 flowchart LR
-    User[👤 Usuario]
-
-    subgraph PC["🖥️ Computadora del Usuario"]
+    subgraph DevPC["💻 Developer PC"]
+        User["👨‍💻 Usuario
+        Developer"]
         
-        VS[🧩 VS Code Plugin]
-        Launcher[🚀 Electron Launcher]
+        subgraph VS["🧩 VS Code Plugin"]
+            VSSocket[🔌 Socket Server]
+            VSHttp[🖥️ HTTP Server]
+            VSSwagger[📜 Swagger / API Contract]
+        end
+
+        Launcher[🎛️ Bloom Conductor
+        Sovereign Intent Interface]
+
+        NucleusExe[⚖️ Nucleus
+        Gobernanza]
 
         Sentinel[🛡️ Sentinel
         Sidecar / Event Bus]
 
-        Brain[🐍 Brain
+        Brain[🧠 Brain
         Python Engine]
         Host[⚙️ Host Service\nC++]
 
         subgraph Chrome["🌐 Chromium Profiles"]
-            Ext[🧩 Chrome Extension]
+            Ext["🧩 Bloom Cortex
+            Chrome Extension Runtime
+            ────────────────────────
+            UI + Synapse Client"]
         end
 
-        subgraph BloomFS["📁 Bloom File System"]
-            Nucleus[🧠 Nucleus
-            Organization Control]
-            Projects[📦 Projects
-            Execution Layer]
+        subgraph BloomFS["📂 .bloom/"]
+            NucleusFolder["📦 .nucleus-{organization}/
+            Pipelines"]
+            ProjectFolder["🐍 .project-{name}/
+            Pipelines"]
         end
-    end
 
-    subgraph AI["🤖 AI Providers"]
-        ChatGPT
-        Claude
-        Gemini
-        Grok
-    end
+        subgraph BloomLocalSites["🏠 Bloom Local Sites"]
+            Discovery["📊 Discovery Page
+            Dashboard"]
+            Landing["🔧 Landing Page
+            Tool"]
+        end
 
-    User --> VS
-    User <--> Launcher
+        subgraph AIWebSites["🌐 AI Web Sites"]
+            ChatGPTSite["🟢 ChatGPT
+            OpenAI"]
+            ClaudeSite["🟠 Claude
+            Anthropic"]
+            GrokSite["⚡ Grok
+            xAI"]
+        end
 
-    Launcher <--> Sentinel
-    Sentinel <--> Brain
+        subgraph AIProviders["🤖 AI Providers"]
+            GeminiAPI["🔷 Gemini API
+            Google"]
+        end
 
-    VS --> Brain
+        Ext --> Discovery
+        Ext --> Landing
 
-    Brain <--> Host
-    Host <--> Ext
+        User --> VS
+        User <--> Launcher
+        User <--> Discovery
+        User <--> Landing
 
-    Ext --> ChatGPT
-    Ext --> Claude
-    Ext --> Grok
+        Launcher <--> Sentinel
+        Launcher <--> NucleusExe
+        Sentinel <--> NucleusExe
+        Sentinel <--> Brain
 
-    Brain --> Gemini
+        VS --> Brain
 
-    Brain <--> Projects
-    Brain <--> Nucleus
+        Brain <--> Host
+        Host <--> Ext
 
-    Launcher <--> Projects
-    Launcher <--> Nucleus
-    VS <--> Projects
+        Brain <--> ProjectFolder
+        Brain <--> NucleusFolder
+
+        Launcher <--> ProjectFolder
+        Launcher <--> NucleusFolder
+        VS <--> ProjectFolder
+
+        Ext --> ChatGPTSite
+        Ext --> ClaudeSite
+        Ext --> GrokSite
+
+        Brain <--> GeminiAPI
+    end  
 ```
 
 ## 2.1️⃣ Bloom Runtime Infrastructure
@@ -107,12 +140,33 @@ La ejecución de BTIPS se apoya en una infraestructura de **Sidecar** que indepe
 *   **Synapse Protocol:** Handshake de 3 fases (Extension ↔ Host ↔ Brain) que valida la integridad del canal antes de procesar intents.
 *   **Data Persistence & Stateless UI:** El Launcher opera como una **Stateless UI**. No depende de estados volátiles en memoria, sino que reconstruye su realidad escaneando los archivos de intents en el Filesystem (`.bloom/intents/`) y sincronizando eventos perdidos mediante *polling* histórico al Sidecar.
 
+---
+
 ## 2.2️⃣ Nucleus Governance Layer
 Nucleus es la autoridad de mando y el árbitro de identidad del sistema. Actúa como el puente entre la voluntad del propietario y la ejecución técnica.
 
 *   **Identity & Role Management:** Gestiona la jerarquía de poder (Master/Architect/Specialist), validando quién tiene permiso para ejecutar acciones sensibles.
 *   **Vault Authority:** Es el único componente capaz de autorizar el flujo de llaves (API Keys/OAuth) desde el almacenamiento seguro de Chrome hacia el motor de ejecución.
 *   **Organizacional Truth:** Nucleus firma digitalmente el estado de los proyectos en el filesystem, asegurando que la configuración de la organización sea inalterable para colaboradores no autorizados.
+
+---
+
+## 2.3️⃣ Bloom Cortex
+
+Bloom Cortex es el **runtime de ejecución cognitiva en Chromium**.
+Se materializa como una **Chrome Extension versionada, inmutable y reproducible**, empaquetada como un artefacto `.blx` y desplegada por Sentinel en cada perfil.
+
+Cortex actúa como la **capa de interacción directa con el usuario y los AI Providers**, exponiendo la UI, gestionando el contexto de navegación y ejecutando el protocolo Synapse como cliente activo. No contiene lógica organizacional ni persistencia: su función es **conectar intención humana, contexto web y capacidades del sistema** de forma segura y gobernada.
+
+El runtime de Cortex incluye páginas web locales (Discovery y Landing) que permiten explorar intents, inicializar perfiles y establecer el contexto cognitivo antes de cualquier ejecución técnica. Cortex es deliberadamente **stateless**, delegando autoridad, versionado y despliegue a Sentinel, y razonamiento profundo a Brain.
+
+---
+
+## 2.4️⃣ Bloom Conductor
+
+**Bloom Conductor** es la terminal de interacción humana soberana y el centro de comando estratégico del ecosistema. Como una *Stateless UI* de alta precisión, actúa como el nervio óptico que permite al usuario visualizar el pulso del Event Bus en tiempo real y forjar intenciones técnicas mediante un editor de intents avanzado. Es el espacio donde la complejidad del sistema se simplifica en una interfaz de observabilidad total, diseñada para orquestar la ejecución de los workers sin retener estado volátil, garantizando que la verdad operativa y el historial de ejecución residan siempre de forma segura en el sistema de archivos.
+
+Su función principal es elevar el proceso de desarrollo a un nivel de gobernanza consciente, facilitando la creación, edición e integración de intents —especialmente los de tipo `cor` (coordinación)— para lograr merges cognitivos que superan las limitaciones lógicas de las herramientas de versionado tradicionales. Al operar en simbiosis con el Sentinel Sidecar, el Conductor asegura que la voluntad del usuario se transmute en acciones técnicas verificables y reproducibles, convirtiéndose en el órgano vital para la dirección estratégica y la convergencia lógica de toda la organización Bloom.
 
 ---
 

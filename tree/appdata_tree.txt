@@ -354,10 +354,13 @@ BloomNucleus/
 ├── logs/
 │   ├── brain_core_20260129.log
 │   ├── brain_core_20260130.log
+│   ├── brain_core_20260131.log
 │   ├── brain_profile_20260129.log
 │   ├── brain_profile_20260130.log
+│   ├── brain_profile_20260131.log
 │   ├── brain_server_20260129.log
 │   ├── brain_server_20260130.log
+│   ├── brain_server_20260131.log
 │   ├── brain_service.log
 │   ├── build/ [... build output]
 │   ├── install/

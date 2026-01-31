@@ -47,6 +47,8 @@ bloom-development-extension/
     │   │   ├── registry.go
     │   │   └── version.go
     │   ├── governance/
+    │   │   ├── blueprint.go
+    │   │   ├── init.go
     │   │   └── roles.go
     │   └── vault/
     │       └── vault.go
