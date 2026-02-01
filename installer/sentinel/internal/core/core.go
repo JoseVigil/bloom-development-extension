@@ -5,19 +5,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// CommandFactory define la firma de la función constructora
+// === SISTEMA DE REGISTRO DE COMANDOS (PRESERVADO) ===
 type CommandFactory func(c *Core) *cobra.Command
-
-// RegisteredCommand vincula un comando con su categoría visual
 type RegisteredCommand struct {
 	Factory  CommandFactory
 	Category string
 }
-
-// CommandRegistry es la lista global de comandos descubiertos
 var CommandRegistry []RegisteredCommand
 
-// RegisterCommand ahora requiere obligatoriamente una categoría
 func RegisterCommand(category string, factory CommandFactory) {
 	CommandRegistry = append(CommandRegistry, RegisteredCommand{
 		Factory:  factory,
@@ -25,52 +20,33 @@ func RegisterCommand(category string, factory CommandFactory) {
 	})
 }
 
+// === ESTRUCTURA CORE ===
 type Core struct {
 	Paths  *Paths
 	Config *Config
 	Logger *Logger
-	IsJSON bool  // Nuevo: indica si el output debe ser JSON
+	IsJSON bool
+	OllamaSupervisor any
 }
 
 func Initialize() (*Core, error) {
 	paths, err := InitPaths()
-	if err != nil { return nil, fmt.Errorf("error al inicializar rutas: %w", err) }
-	
-	logger, err := InitLogger(paths.LogsDir)
-	if err != nil { return nil, fmt.Errorf("error al inicializar logger: %w", err) }
-	
-	config, err := LoadConfig(paths.BinDir)
 	if err != nil {
-		if logger != nil { logger.Close() }
-		return nil, fmt.Errorf("error al cargar configuración: %w", err)
+		return nil, fmt.Errorf("error al inicializar rutas: %w", err)
 	}
-	
-	return &Core{
-		Paths:  paths,
-		Config: config,
-		Logger: logger,
-		IsJSON: false,  // Por defecto: modo humano
-	}, nil
-}
 
-// InitializeSilent inicializa Core en modo silencioso (sin logs a stdout)
-// Usado cuando se ejecutan comandos --help o --json-help
-func InitializeSilent() (*Core, error) {
-	paths, err := InitPaths()
-	if err != nil { return nil, fmt.Errorf("error al inicializar rutas: %w", err) }
-	
-	logger, err := InitLogger(paths.LogsDir)
-	if err != nil { return nil, fmt.Errorf("error al inicializar logger: %w", err) }
-	
-	// Activar modo silencioso ANTES de cualquier log
-	logger.SetSilentMode(true)
-	
+	// Sincronizado con la firma de InitLogger en logger.go
+	logger, err := InitLogger(paths, "sentinel_core", "SENTINEL CORE", 1)
+	if err != nil {
+		return nil, fmt.Errorf("error al inicializar logger: %w", err)
+	}
+
 	config, err := LoadConfig(paths.BinDir)
 	if err != nil {
-		if logger != nil { logger.Close() }
+		logger.Close()
 		return nil, fmt.Errorf("error al cargar configuración: %w", err)
 	}
-	
+
 	return &Core{
 		Paths:  paths,
 		Config: config,
@@ -79,7 +55,15 @@ func InitializeSilent() (*Core, error) {
 	}, nil
 }
 
-// SetJSONMode configura el modo de salida y reconfigura el logger
+func InitializeSilent() (*Core, error) {
+	c, err := Initialize()
+	if err != nil {
+		return nil, err
+	}
+	c.Logger.SetSilentMode(true)
+	return c, nil
+}
+
 func (c *Core) SetJSONMode(enabled bool) {
 	c.IsJSON = enabled
 	if c.Logger != nil {
@@ -88,6 +72,8 @@ func (c *Core) SetJSONMode(enabled bool) {
 }
 
 func (c *Core) Close() error {
-	if c.Logger != nil { return c.Logger.Close() }
+	if c.Logger != nil {
+		return c.Logger.Close()
+	}
 	return nil
 }

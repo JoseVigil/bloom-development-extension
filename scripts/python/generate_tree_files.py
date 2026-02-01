@@ -116,11 +116,11 @@ def generate_tree_files(brain_exe):
         {"args": ["filesystem", "tree", "src", "installer", "brain", "-o", "tree/plugin_tree.txt"], "file": "plugin_tree.txt"},
         {"args": ["filesystem", "tree", "installer", "-o", "tree/installer_tree.txt"], "file": "installer_tree.txt"},
         {"args": ["filesystem", "tree", "brain", "-o", "tree/brain_tree.txt"], "file": "brain_tree.txt"},
-        {"args": ["filesystem", "tree", "installer/electron-app", "-o", "tree/electron_tree.txt"], "file": "electron_tree.txt"},
         {"args": ["filesystem", "tree", "installer/sentinel", "-o", "tree/sentinel_tree.txt"], "file": "sentinel_tree.txt"},
         {"args": ["filesystem", "tree", "installer/nucleus", "-o", "tree/nucleus_tree.txt"], "file": "nucleus_tree.txt"},
         {"args": ["filesystem", "tree", "installer/native", "-o", "tree/native_tree.txt"], "file": "native_tree.txt"},
         {"args": ["filesystem", "tree", "webview", "-o", "tree/webview_tree.txt"], "file": "webview_tree.txt"},
+        {"args": ["filesystem", "tree", "installer/conductor", "-o", "tree/conductor_tree.txt"], "file": "conductor_tree.txt"},
         {"args": ["filesystem", "tree", "installer/cortex", "-o", "tree/cortex_tree.txt"], "file": "cortex_tree.txt"},
         {"args": ["filesystem", "tree", "C:/Users/josev/AppData/Local/BloomNucleus", "-o", "tree/appdata_tree.txt"], "file": "appdata_tree.txt"}
     ]

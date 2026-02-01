@@ -7,6 +7,7 @@ import (
 	"sentinel/internal/core"
 	"sentinel/internal/discovery"
 	"sentinel/internal/health"
+	"sentinel/internal/ollama"
 	"sentinel/internal/startup"
 	"syscall"
 	"time"
@@ -17,12 +18,31 @@ import (
 func init() {
 	core.RegisterCommand("DEVELOPMENT", func(c *core.Core) *cobra.Command {
 		cmd := &cobra.Command{
-			Use:   "dev-start",
-			Short: "Inicia el entorno de desarrollo integrado",
+			Use:     "dev-start",
+			Short:   "Inicia el entorno de desarrollo integrado",
 			Example: `  sentinel dev-start`,
 			Run: func(cmd *cobra.Command, args []string) {
 				c.Logger.Info("🚀 Iniciando Entorno de Desarrollo...")
-				
+
+				// --- INICIAR OLLAMA SUPERVISOR ---
+				var ollamaSup *ollama.Supervisor
+
+				if c.OllamaSupervisor != nil {
+					// Reutilizar supervisor existente
+					ollamaSup = c.OllamaSupervisor.(*ollama.Supervisor)
+					c.Logger.Info("♻️ Reutilizando supervisor de Ollama existente")
+				} else {
+					// Crear nuevo supervisor
+					ollamaSup = ollama.NewSupervisor(c)
+					c.OllamaSupervisor = ollamaSup
+					c.Logger.Success("✓ Supervisor de Ollama creado")
+				}
+
+				// Iniciar en goroutine para no bloquear
+				go ollamaSup.StartSupervisor(5 * time.Second)
+				c.Logger.Success("✓ Ollama Supervisor activado")
+				// --------------------------------------
+
 				if err := health.EnsureBrainRunning(c); err != nil {
 					c.Logger.Error("❌ %v", err)
 					os.Exit(1)
@@ -44,16 +64,28 @@ func init() {
 
 				c.Logger.Info("🔍 Validando estado...")
 				time.Sleep(2 * time.Second)
-				_, _ = health.CheckHealth(c, sm)  // ✅ Ya guarda internamente el estado
+				_, _ = health.CheckHealth(c, sm)
 
 				sigs := make(chan os.Signal, 1)
 				signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 				c.Logger.Success(">>> Entorno LISTO. Presiona Ctrl+C para cerrar.")
-				<-sigs 
+				<-sigs
 
-				if vsCmd != nil { KillProcessTree(vsCmd.Process.Pid) }
-				if svelteCmd != nil { KillProcessTree(svelteCmd.Process.Pid) }
-				CleanPorts([]int{5173, 3001, 5678})
+				// --- CLEANUP ---
+				c.Logger.Info("Cerrando servicios...")
+				if vsCmd != nil {
+					KillProcessTree(vsCmd.Process.Pid)
+				}
+				if svelteCmd != nil {
+					KillProcessTree(svelteCmd.Process.Pid)
+				}
+
+				// Detener Ollama al salir
+				if c.OllamaSupervisor != nil {
+					ollamaSup.Stop()
+				}
+
+				CleanPorts([]int{5173, 3001, 5678, 11434})
 			},
 		}
 
@@ -61,9 +93,10 @@ func init() {
 			cmd.Annotations = make(map[string]string)
 		}
 		cmd.Annotations["requires"] = `  - brain.exe disponible y ejecutable
+  - Ollama.exe en carpeta bin/
   - VSCode instalado y detectado en PATH
   - Node.js y npm para servidor Svelte (puerto 5173)
-  - Puertos 5173, 3001, 5678 libres
+  - Puertos 5173, 3001, 5678, 11434 libres
   - extension_path y test_workspace configurados en sentinel.yaml
   - Python runtime en resources/runtime/`
 

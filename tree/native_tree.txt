@@ -6,6 +6,9 @@ bloom-development-extension/
     │   ├── bin/
     │   ├── config/
     │   │   └── profiles.json
+    │   ├── cortex/
+    │   │   ├── bloom-cortex-1.0.0+build.2.blx
+    │   │   └── bloom-cortex-1.0.0+build.3.blx
     │   ├── darwin/
     │   │   └── x64/
     │   │       └── bloom-host
@@ -43,8 +46,6 @@ bloom-development-extension/
     │           │   ├── sentinel_help.json
     │           │   └── sentinel_help.txt
     │           └── sentinel.exe
-    ├── host/
-    │   └── com.bloom.nucleus.bridge.json
     └── nssm/
         ├── win32/
         │   └── nssm.exe
