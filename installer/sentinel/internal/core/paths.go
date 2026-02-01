@@ -11,7 +11,6 @@ type Paths struct {
 	AppDataDir  string
 	ProfilesDir string
 	LogsDir     string
-	ExtensionsDir string
 }
 
 func InitPaths() (*Paths, error) {
@@ -36,7 +35,9 @@ func InitPaths() (*Paths, error) {
 
 	dirs := []string{paths.AppDataDir, paths.ProfilesDir, paths.LogsDir}
 	for _, dir := range dirs {
-		os.MkdirAll(dir, 0755)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return nil, err
+		}
 	}
 
 	return paths, nil

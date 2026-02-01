@@ -1,0 +1,78 @@
+bloom-development-extension/
+└── conductor/
+    ├── .gitignore
+    ├── app.manifest
+    ├── assets/
+    │   ├── bloom.ico
+    │   └── installer.gif
+    ├── check-admin.ps1
+    ├── config/
+    │   ├── constants.js
+    │   └── paths.js
+    ├── config-loader.js
+    ├── core/
+    │   ├── admin-utils.js
+    │   ├── menu-builder.js
+    │   └── window-manager.js
+    ├── dist/ [... build output]
+    ├── electron-readme.md
+    ├── entitlements.plist
+    ├── forge.config.js
+    ├── install/
+    │   ├── chromium-installer.js
+    │   ├── diagnose/
+    │   │   ├── diagnose-service.js
+    │   │   └── service-diagnostics.js
+    │   ├── extension-installer.js
+    │   ├── installer.js
+    │   ├── launcher-creator.js
+    │   ├── native-host-installer.js
+    │   ├── runtime-installer.js
+    │   ├── service-installer.js
+    │   ├── service-manager.js
+    │   └── shortcut-installer.js
+    ├── installHelpers.js
+    ├── installer-config.json
+    ├── ipc/
+    │   ├── install-handlers.js
+    │   ├── launch-handlers.js
+    │   └── shared-handlers.js
+    ├── launch/
+    │   ├── brain-commands.js
+    │   ├── health-monitor.js
+    │   ├── launcher.js
+    │   ├── preload_launch.js
+    │   └── profile-manager.js
+    ├── main.js
+    ├── node_modules/ [... dependencies]
+    ├── package-lock.json
+    ├── package.json
+    ├── preload.js
+    ├── registry-scripts/
+    │   ├── cleanup.ps1
+    │   └── hkcu.ps1
+    ├── run-admin.bat
+    ├── run-dev.bat
+    ├── run-elevated.bat
+    ├── run-elevated.js
+    ├── scripts/
+    │   ├── check-status.bat
+    │   ├── clean_chrome_cache.ps1
+    │   ├── cleanup_zombies.ps1
+    │   ├── emergency-cleanup.bat
+    │   ├── fix_bridge_id.py
+    │   └── sanitize_manifest.py
+    ├── src/
+    │   ├── index.html
+    │   ├── installation_manager.js
+    │   ├── launch/
+    │   │   ├── index_launch.html
+    │   │   └── renderer_launch.js
+    │   ├── logger.js
+    │   ├── renderer.js
+    │   ├── styles.css
+    │   └── ui_manager.js
+    ├── test-installation.js
+    └── utils/
+        ├── exec-helper.js
+        └── repair-tools.js

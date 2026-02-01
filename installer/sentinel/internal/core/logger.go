@@ -13,93 +13,77 @@ type Logger struct {
 	file       *os.File
 	logger     *log.Logger
 	isJSONMode bool
-	silentMode bool  // Nuevo: modo silencioso para --help
+	silentMode bool
 }
 
-func InitLogger(logsDir string) (*Logger, error) {
-	now := time.Now()
-	logFileName := fmt.Sprintf("sentinel_%s.log", now.Format("2006-01-02"))
-	logFilePath := filepath.Join(logsDir, logFileName)
-
-	file, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		return nil, fmt.Errorf("error al crear archivo de log: %w", err)
+func InitLogger(paths *Paths, componentID, label string, priority int) (*Logger, error) {
+	// 1. Determinar subcarpeta según el ID del componente
+	subDir := "sentinel"
+	if componentID == "ollama_service" {
+		subDir = "ollama"
+	} else if componentID == "brain_core" || componentID == "brain_profile" {
+		subDir = "brain"
 	}
 
-	// Por defecto: logs van a stdout + archivo
+	targetDir := filepath.Join(paths.LogsDir, subDir)
+	if err := os.MkdirAll(targetDir, 0755); err != nil {
+		return nil, fmt.Errorf("error creando directorio %s: %w", targetDir, err)
+	}
+
+	// 2. Preparar archivo de log
+	now := time.Now()
+	logFileName := fmt.Sprintf("%s_%s.log", componentID, now.Format("2006-01-02"))
+	logPath := filepath.Join(targetDir, logFileName)
+
+	file, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		return nil, fmt.Errorf("error al abrir log: %w", err)
+	}
+
 	multiWriter := io.MultiWriter(os.Stdout, file)
-	logger := log.New(multiWriter, "", log.Ldate|log.Ltime)
+	l := log.New(multiWriter, "", log.Ldate|log.Ltime)
+
+	// 3. Registro en telemetría (con icono según prioridad)
+	icon := getPriorityIcon(priority)
+	tm := GetTelemetryManager(paths.LogsDir)
+	tm.RegisterStream(componentID, icon+" "+label, logPath, priority)
 
 	return &Logger{
 		file:       file,
-		logger:     logger,
+		logger:     l,
 		isJSONMode: false,
 		silentMode: false,
 	}, nil
 }
 
-// SetSilentMode configura el logger para que SOLO escriba a archivo (no stdout/stderr)
-func (l *Logger) SetSilentMode(enabled bool) {
-	l.silentMode = enabled
-	
-	if enabled {
-		// Modo silencioso: solo archivo
-		l.logger = log.New(l.file, "", log.Ldate|log.Ltime)
-	} else {
-		// Restaurar modo normal
+func getPriorityIcon(priority int) string {
+	switch priority {
+	case 1: return "🔥"
+	case 2: return "🚀"
+	case 3: return "⚙️"
+	case 4: return "📦"
+	case 5: return "⚫"
+	default: return "📝"
+	}
+}
+
+func (l *Logger) SetSilentMode(e bool) { l.silentMode = e; l.reconfigure() }
+func (l *Logger) SetJSONMode(e bool)   { l.isJSONMode = e; l.reconfigure() }
+
+func (l *Logger) reconfigure() {
+	var dest io.Writer = l.file
+	if !l.silentMode {
 		if l.isJSONMode {
-			multiWriter := io.MultiWriter(os.Stderr, l.file)
-			l.logger = log.New(multiWriter, "", log.Ldate|log.Ltime)
+			dest = io.MultiWriter(os.Stderr, l.file)
 		} else {
-			multiWriter := io.MultiWriter(os.Stdout, l.file)
-			l.logger = log.New(multiWriter, "", log.Ldate|log.Ltime)
+			dest = io.MultiWriter(os.Stdout, l.file)
 		}
 	}
+	l.logger.SetOutput(dest)
 }
 
-// SetJSONMode reconfigura el destino de los logs
-func (l *Logger) SetJSONMode(enabled bool) {
-	l.isJSONMode = enabled
-	
-	// No reconfigurar si estamos en modo silencioso
-	if l.silentMode {
-		return
-	}
-	
-	if enabled {
-		// En modo JSON: logs van a stderr + archivo (NO stdout)
-		multiWriter := io.MultiWriter(os.Stderr, l.file)
-		l.logger = log.New(multiWriter, "", log.Ldate|log.Ltime)
-	} else {
-		// Modo normal: logs van a stdout + archivo
-		multiWriter := io.MultiWriter(os.Stdout, l.file)
-		l.logger = log.New(multiWriter, "", log.Ldate|log.Ltime)
-	}
-}
-
-func (l *Logger) Info(format string, v ...interface{}) {
-	msg := fmt.Sprintf("[INFO] "+format, v...)
-	l.logger.Println(msg)
-}
-
-func (l *Logger) Error(format string, v ...interface{}) {
-	msg := fmt.Sprintf("[ERROR] "+format, v...)
-	l.logger.Println(msg)
-}
-
-func (l *Logger) Warning(format string, v ...interface{}) {
-	msg := fmt.Sprintf("[WARNING] "+format, v...)
-	l.logger.Println(msg)
-}
-
-func (l *Logger) Success(format string, v ...interface{}) {
-	msg := fmt.Sprintf("[SUCCESS] "+format, v...)
-	l.logger.Println(msg)
-}
-
-func (l *Logger) Close() error {
-	if l.file != nil {
-		return l.file.Close()
-	}
-	return nil
-}
+func (l *Logger) Info(f string, v ...any)    { l.logger.Printf("[INFO] "+f, v...) }
+func (l *Logger) Error(f string, v ...any)   { l.logger.Printf("[ERROR] "+f, v...) }
+func (l *Logger) Warning(f string, v ...any) { l.logger.Printf("[WARNING] "+f, v...) }
+func (l *Logger) Success(f string, v ...any) { l.logger.Printf("[SUCCESS] "+f, v...) }
+func (l *Logger) Close() error               { return l.file.Close() }

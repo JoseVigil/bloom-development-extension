@@ -2,8 +2,8 @@ bloom-development-extension/
 └── cortex/
     ├── build-cortex/
     │   ├── VERSION
-    │   ├── package.py
-    │   └── validate.py
+    │   ├── build_number.txt
+    │   └── package.py
     ├── extension/
     │   ├── assets/
     │   │   ├── 128x128.png

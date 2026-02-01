@@ -276,6 +276,8 @@ BloomNucleus/
 │   │   ├── vk_swiftshader.dll
 │   │   ├── vk_swiftshader_icd.json
 │   │   └── vulkan-1.dll
+│   ├── cortex/
+│   │   └── bloom-cortex-1.0.0+build.1.blx
 │   ├── extension/
 │   │   ├── 128x128.png
 │   │   ├── background.js
@@ -355,6 +357,7 @@ BloomNucleus/
 │   ├── brain_core_20260129.log
 │   ├── brain_core_20260130.log
 │   ├── brain_core_20260131.log
+│   ├── brain_error.log
 │   ├── brain_profile_20260129.log
 │   ├── brain_profile_20260130.log
 │   ├── brain_profile_20260131.log
@@ -367,33 +370,37 @@ BloomNucleus/
 │   │   └── electron_install.log
 │   ├── profiles/
 │   │   └── 37ae1c62-645a-4f46-8d02-7ab1db745acb/
-│   ├── sentinel_2026-01-29.log
-│   ├── sentinel_2026-01-30.log
+│   ├── sentinel_2026-01-31.log
 │   └── telemetry.json
-└── profiles/
-    └── 37ae1c62-645a-4f46-8d02-7ab1db745acb/
-        └── extension/
-            ├── 128x128.png
-            ├── background.js
-            ├── content.js
-            ├── discovery/
-            │   ├── content-aistudio.js
-            │   ├── discovery.js
-            │   ├── discoveryProtocol.js
-            │   ├── index.html
-            │   ├── onboarding.js
-            │   ├── script.js
-            │   └── styles.css
-            ├── discovery.synapse.config.js
-            ├── icon128.png
-            ├── icon16.png
-            ├── landing/
-            │   ├── data-loader.js
-            │   ├── index.html
-            │   ├── landing.js
-            │   ├── landing.synapse.config.js
-            │   ├── landingProtocol.js
-            │   ├── script.js
-            │   └── styles.css
-            ├── landing.synapse.config.js
-            └── manifest.json
+├── profiles/
+│   └── 37ae1c62-645a-4f46-8d02-7ab1db745acb/
+│       └── extension/
+│           ├── 128x128.png
+│           ├── background.js
+│           ├── content.js
+│           ├── discovery/
+│           │   ├── content-aistudio.js
+│           │   ├── discovery.js
+│           │   ├── discoveryProtocol.js
+│           │   ├── index.html
+│           │   ├── onboarding.js
+│           │   ├── script.js
+│           │   └── styles.css
+│           ├── discovery.synapse.config.js
+│           ├── icon128.png
+│           ├── icon16.png
+│           ├── landing/
+│           │   ├── data-loader.js
+│           │   ├── index.html
+│           │   ├── landing.js
+│           │   ├── landing.synapse.config.js
+│           │   ├── landingProtocol.js
+│           │   ├── script.js
+│           │   └── styles.css
+│           ├── landing.synapse.config.js
+│           └── manifest.json
+└── workers/
+    └── brain/
+        ├── events.jsonl
+        ├── service.pid
+        └── tcp_traffic.log

@@ -153,13 +153,30 @@ func CheckHealth(c *core.Core, sm *discovery.SystemMap) (*startup.SystemStatus, 
 	}
 	
 	var wg sync.WaitGroup
-	sc := make(chan startup.ServiceStatus, 3)
-	wg.Add(3)
+	// Incrementado a 4 para incluir Ollama
+	sc := make(chan startup.ServiceStatus, 4)
+	wg.Add(4)
+	
 	go func() { defer wg.Done(); sc <- checkPort(5678, "Core Bridge", "TCP") }()
 	go func() { defer wg.Done(); sc <- checkPort(3001, "Extension API", "HTTP") }()
 	go func() { defer wg.Done(); sc <- checkPort(5173, "Svelte Dev", "TCP") }()
 	
+	// NUEVO: Check de Ollama Runtime
+	go func() {
+		defer wg.Done()
+		addr := "127.0.0.1:11434"
+		active := false
+		// Usamos el endpoint de versión como pide el prompt
+		resp, err := http.Get(fmt.Sprintf("http://%s/api/version", addr))
+		if err == nil && resp.StatusCode == 200 {
+			active = true
+			resp.Body.Close()
+		}
+		sc <- startup.ServiceStatus{Name: "Ollama Runtime", Port: 11434, Active: active}
+	}()
+	
 	go func() { wg.Wait(); close(sc) }()
+	
 	status.Services = []startup.ServiceStatus{}
 	for s := range sc { status.Services = append(status.Services, s) }
 	

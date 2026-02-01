@@ -332,6 +332,12 @@ const SOVEREIGN_COMPONENTS = {
     destSubpath: 'cortex',
     criticalFiles: ['bloom-cortex.blx'],
     immutable: true
+  },
+  ollama: {
+    sourceSubpath: 'ollama',
+    destSubpath: 'ollama',
+    criticalFiles: ['ollama.exe'],
+    preserveStructure: true
   }
 };
 
@@ -688,7 +694,47 @@ async function runFullInstallation(mainWindow = null) {
       throw new Error('Failed to start Brain service');
     }
 
-    // 7.5. Crear nucleus.json ANTES de seed (Brain lo requiere)
+    // 7.5. OLLAMA COGNITIVE ENGINE - Heartbeat
+    emitProgress(mainWindow, 'ollama-init', 'Iniciando motor de IA local');
+    logger.separator('OLLAMA COGNITIVE ENGINE');
+    
+    try {
+      // Iniciar daemon vía Sentinel
+      logger.info('Starting Ollama daemon via Sentinel...');
+      await executeSentinelCommand(['ollama', 'start']);
+      
+      // Heartbeat polling (max 30 intentos x 2s = 60s)
+      let ollamaReady = false;
+      const maxAttempts = 30;
+      
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        emitProgress(mainWindow, 'ollama-init', `Verificando motor IA (${attempt}/${maxAttempts})...`);
+        
+        try {
+          const healthResult = await executeSentinelCommand(['--json', 'ollama', 'healthcheck']);
+          
+          if (healthResult?.reachable === true) {
+            ollamaReady = true;
+            logger.success(`✓ Ollama ready (port ${healthResult.port || 11434})`);
+            break;
+          }
+        } catch (err) {
+          // Continuar polling
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+      
+      if (!ollamaReady) {
+        logger.warn('Ollama healthcheck timeout - AI features may be limited');
+      }
+      
+    } catch (err) {
+      logger.warn(`Ollama initialization warning: ${err.message}`);
+      logger.info('Installation will continue - AI can be configured later');
+    }
+
+    // 7.6. Crear nucleus.json ANTES de seed (Brain lo requiere)
     logger.info('Creating minimal nucleus.json for Brain...');
     const nucleusPath = path.join(paths.configDir, 'nucleus.json');
     const nucleusConfig = {

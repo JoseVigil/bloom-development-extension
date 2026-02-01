@@ -378,7 +378,6 @@ https://grok.com/c/d3a6b370-85c7-48d1-a745-5fc65f018598?rid=368d1fec-a8d2-4692-b
 roamingpads Nucleus Go Bootstrap
 https://claude.ai/chat/fd9b6da4-f2e3-497d-ae62-1e4860638340
 
-
 elias Electron Install Sentinel
 https://aistudio.google.com/prompts/1T0FG49qbzVG24q_QGGgOjjbGXIg2MMlc
 elias Nuecleus
@@ -388,4 +387,15 @@ https://aistudio.google.com/prompts/1nTslhyINoBug6DknCGoLqQmDD6CO7nVo
 
 jose gmail btips skills, marketplace y ACL
 https://chatgpt.com/c/697ccadc-c1a8-8327-a177-ee7cec8c7a61
+
+btips update
+https://aistudio.google.com/prompts/1rngXBOs04eUqP_3VcsS9_pC4G6hHV-Hk
+uitool cortex
+https://chatgpt.com/c/697e002f-8e68-8332-935f-25af41c1b5e5
+
+notimation gmail ollama
+https://chatgpt.com/c/697e89b7-7844-8326-b1ec-588bc1d1f973
+roamingpads ollama setup
+https://claude.ai/chat/4de7f1be-ecd2-4dc5-a0dd-4d9930e1e52c
+
 
