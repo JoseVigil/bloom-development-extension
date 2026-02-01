@@ -110,4 +110,4 @@ installer/chrome/chrome-mac.zip
 
 # Ollama
 installer/ollama/ollama.exe  
-installer/chrome/lib
+installer/ollama/lib
