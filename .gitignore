@@ -107,3 +107,7 @@ Thumbs.db
 # Chrome Installer
 installer/chrome/chrome-win.zip  
 installer/chrome/chrome-mac.zip  
+
+# Ollama
+installer/ollama/ollama.exe  
+installer/chrome/lib
