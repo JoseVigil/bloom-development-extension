@@ -15,7 +15,6 @@ import (
 
 func init() {
 	// Este init() es vital para asegurar que el paquete se vincule al binario
-	fmt.Fprintf(os.Stderr, "DEBUG: Paquete eventbus cargado correctamente\n")
 }
 
 // Event representa un evento genérico del Brain

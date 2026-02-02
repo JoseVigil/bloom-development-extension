@@ -1,0 +1,873 @@
+bloom-development-extension/
+├── src/
+│   ├── UNKNOWN.egg-info/
+│   │   ├── PKG-INFO
+│   │   ├── SOURCES.txt
+│   │   ├── dependency_links.txt
+│   │   └── top_level.txt
+│   ├── ai/
+│   │   ├── AiAccountChecker.ts
+│   │   ├── adapters/
+│   │   │   ├── ChatGPTAdapter.ts
+│   │   │   ├── ClaudeAdapter.ts
+│   │   │   ├── GeminiAdapter.ts
+│   │   │   ├── GrokAdapter.ts
+│   │   │   └── OllamaNativeAdapter.ts
+│   │   └── index.ts
+│   ├── api/
+│   │   ├── adapters/
+│   │   │   ├── AIRuntimeAdapter.ts
+│   │   │   ├── BrainApiAdapter.ts
+│   │   │   └── routes/
+│   │   │       └── auth.routes.ts
+│   │   ├── index.ts
+│   │   ├── middleware/
+│   │   │   ├── errorHandler.ts
+│   │   │   └── validation.ts
+│   │   ├── routes/
+│   │   │   ├── auth.routes.ts
+│   │   │   ├── explorer.routes.ts
+│   │   │   ├── health.routes.ts
+│   │   │   ├── intent.routes.ts
+│   │   │   ├── nucleus.routes.ts
+│   │   │   ├── profile.routes.ts
+│   │   │   └── project.routes.ts
+│   │   ├── schemas/
+│   │   │   ├── auth.schema.ts
+│   │   │   ├── explorer.schema.ts
+│   │   │   ├── intent.schema.ts
+│   │   │   ├── nucleus.schema.ts
+│   │   │   ├── profile.schema.ts
+│   │   │   └── project.schema.ts
+│   │   ├── server.ts
+│   │   └── types/
+│   │       └── brain.types.ts
+│   ├── auth/
+│   │   ├── GitHubOAuthServer.ts
+│   │   └── TwitterOAuthServer.ts
+│   ├── commands/
+│   │   ├── addToIntent.ts
+│   │   ├── auth/
+│   │   │   └── startGithubOAuth.ts
+│   │   ├── changeIntentStatus.ts
+│   │   ├── configureIntentProfile.ts
+│   │   ├── copyContextToClipboard.ts
+│   │   ├── createBTIPProject.ts
+│   │   ├── createNucleusProject.ts
+│   │   ├── debug/
+│   │   │   └── debugCommands.ts
+│   │   ├── deleteIntent.ts
+│   │   ├── deleteIntentFromForm.ts
+│   │   ├── duplicateIntent.ts
+│   │   ├── editIntent.ts
+│   │   ├── generateIntent.ts
+│   │   ├── generateQuestions.ts
+│   │   ├── git/
+│   │   │   └── gitCommands.ts
+│   │   ├── intent/
+│   │   │   ├── __tests__/
+│   │   │   │   └── createIntentDev.test.ts
+│   │   │   └── createIntentDev.ts
+│   │   ├── linkToNucleus.ts
+│   │   ├── manageProject.ts
+│   │   ├── nucleus/
+│   │   │   └── nucleusCommands.ts
+│   │   ├── openFileInVSCode.ts
+│   │   ├── openIntent.ts
+│   │   ├── openIntentInBrowser.ts
+│   │   ├── openMarkdownPreview.ts
+│   │   ├── profile/
+│   │   │   ├── addAiAccount.ts
+│   │   │   ├── checkAiAccounts.ts
+│   │   │   └── profileCommands.ts
+│   │   ├── regenerateContext.ts
+│   │   ├── reloadIntentForm.ts
+│   │   ├── revealInFinder.ts
+│   │   ├── searchIntents.ts
+│   │   └── submitAnswers.ts
+│   ├── context/
+│   │   └── ContextCollector.ts
+│   ├── core/
+│   │   ├── chromeProfileManager.ts
+│   │   ├── claudeApiClient.ts
+│   │   ├── codebaseGenerator.ts
+│   │   ├── contextGatherer.ts
+│   │   ├── filePackager.ts
+│   │   ├── gitOrchestrator.ts
+│   │   ├── intentAutoSaver.ts
+│   │   ├── intentGenerator.ts
+│   │   ├── intentSession.ts
+│   │   ├── metadataManager.ts
+│   │   ├── nucleusManager.ts
+│   │   └── validator.ts
+│   ├── extension.ts
+│   ├── helpers/
+│   │   └── chromeProfileHelper.ts
+│   ├── host/
+│   │   ├── HostExecutor.ts
+│   │   ├── bloom-host.cpp
+│   │   ├── bloom-host.cpp.save
+│   │   ├── build.sh
+│   │   ├── build_info.h
+│   │   ├── build_number.txt
+│   │   ├── chunked_buffer.cpp
+│   │   ├── chunked_buffer.h
+│   │   ├── cli_handler.cpp
+│   │   ├── cli_handler.h
+│   │   ├── nlohmann/
+│   │   │   └── json.hpp
+│   │   ├── platform_utils.cpp
+│   │   ├── platform_utils.h
+│   │   ├── setup-openssl-mingw.sh
+│   │   ├── synapse_logger.cpp
+│   │   └── synapse_logger.h
+│   ├── initialization/
+│   │   ├── commandRegistry.ts
+│   │   ├── contextInitializer.ts
+│   │   ├── criticalCommandsInitializer.ts
+│   │   ├── initializeProfileAccounts.ts
+│   │   ├── managersInitializer.ts
+│   │   ├── providersInitializer.ts
+│   │   ├── registerProfileCommands.ts
+│   │   └── serverAndUiInitializer.ts
+│   ├── managers/
+│   │   ├── userManager.ts
+│   │   └── workspaceManager.ts
+│   ├── models/
+│   │   ├── bloomConfig.ts
+│   │   ├── codebaseStrategy.ts
+│   │   ├── contextLayer.ts
+│   │   └── intent.ts
+│   ├── processor/
+│   │   └── ArtifactProcessor.ts
+│   ├── providers/
+│   │   ├── intentTreeProvider.ts
+│   │   ├── nucleusTreeProvider.ts
+│   │   └── profileTreeProvider.ts
+│   ├── server/
+│   │   ├── BTIPExplorerController.ts
+│   │   ├── PluginApiServer.ts
+│   │   ├── WebSocketManager.ts
+│   │   └── index.ts
+│   ├── strategies/
+│   │   ├── AndroidStrategy.ts
+│   │   ├── GenericStrategy.ts
+│   │   ├── IOSStrategy.ts
+│   │   ├── NucleusStrategy.ts
+│   │   ├── ProjectDetector.ts
+│   │   ├── ReactStrategy.ts
+│   │   ├── WebStrategy.ts
+│   │   └── helpers.ts
+│   ├── types/
+│   │   ├── api-contracts.ts
+│   │   ├── brain-schemas.ts
+│   │   └── ws-events.ts
+│   ├── ui/
+│   │   ├── ClaudeBridgePanel.ts
+│   │   ├── intent/
+│   │   │   ├── intentForm.css
+│   │   │   ├── intentForm.html
+│   │   │   ├── intentForm.js
+│   │   │   └── intentFormPanel.ts
+│   │   ├── markdownPreviewPanel.ts
+│   │   ├── nucleus/
+│   │   │   └── NucleusSetupPanel.ts
+│   │   └── profile/
+│   │       ├── profileManager.css
+│   │       ├── profileManager.html
+│   │       ├── profileManager.js
+│   │       └── profileManagerPanel.ts
+│   └── utils/
+│       ├── brainExecutor.ts
+│       ├── gitExecutor.ts
+│       ├── gitManager.ts
+│       ├── gitPathResolver.ts
+│       ├── github.ts
+│       ├── githubApi.ts
+│       ├── githubOAuth.ts
+│       ├── logger.ts
+│       ├── runtimeResolver.ts
+│       ├── tokenEstimator.ts
+│       └── uriHelper.ts
+├── installer/
+│   ├── .DS_Store
+│   ├── README.md
+│   ├── chrome/
+│   │   ├── chrome-mac.zip
+│   │   └── chrome-win.zip
+│   ├── conductor/
+│   │   ├── .gitignore
+│   │   ├── app.manifest
+│   │   ├── assets/
+│   │   │   ├── bloom.ico
+│   │   │   └── installer.gif
+│   │   ├── check-admin.ps1
+│   │   ├── config/
+│   │   │   ├── constants.js
+│   │   │   └── paths.js
+│   │   ├── config-loader.js
+│   │   ├── core/
+│   │   │   ├── admin-utils.js
+│   │   │   ├── menu-builder.js
+│   │   │   └── window-manager.js
+│   │   ├── dist/ [... build output]
+│   │   ├── electron-readme.md
+│   │   ├── entitlements.plist
+│   │   ├── forge.config.js
+│   │   ├── install/
+│   │   │   ├── chromium-installer.js
+│   │   │   ├── diagnose/
+│   │   │   │   ├── diagnose-service.js
+│   │   │   │   └── service-diagnostics.js
+│   │   │   ├── extension-installer.js
+│   │   │   ├── installer.js
+│   │   │   ├── launcher-creator.js
+│   │   │   ├── native-host-installer.js
+│   │   │   ├── runtime-installer.js
+│   │   │   ├── service-installer.js
+│   │   │   ├── service-manager.js
+│   │   │   └── shortcut-installer.js
+│   │   ├── installHelpers.js
+│   │   ├── installer-config.json
+│   │   ├── ipc/
+│   │   │   ├── install-handlers.js
+│   │   │   ├── launch-handlers.js
+│   │   │   └── shared-handlers.js
+│   │   ├── launch/
+│   │   │   ├── brain-commands.js
+│   │   │   ├── health-monitor.js
+│   │   │   ├── launcher.js
+│   │   │   ├── preload_launch.js
+│   │   │   └── profile-manager.js
+│   │   ├── main.js
+│   │   ├── node_modules/ [... dependencies]
+│   │   ├── package-lock.json
+│   │   ├── package.json
+│   │   ├── preload.js
+│   │   ├── registry-scripts/
+│   │   │   ├── cleanup.ps1
+│   │   │   └── hkcu.ps1
+│   │   ├── run-admin.bat
+│   │   ├── run-dev.bat
+│   │   ├── run-elevated.bat
+│   │   ├── run-elevated.js
+│   │   ├── scripts/
+│   │   │   ├── check-status.bat
+│   │   │   ├── clean_chrome_cache.ps1
+│   │   │   ├── cleanup_zombies.ps1
+│   │   │   ├── emergency-cleanup.bat
+│   │   │   ├── fix_bridge_id.py
+│   │   │   └── sanitize_manifest.py
+│   │   ├── src/
+│   │   │   ├── index.html
+│   │   │   ├── installation_manager.js
+│   │   │   ├── launch/
+│   │   │   │   ├── index_launch.html
+│   │   │   │   └── renderer_launch.js
+│   │   │   ├── logger.js
+│   │   │   ├── renderer.js
+│   │   │   ├── styles.css
+│   │   │   └── ui_manager.js
+│   │   ├── test-installation.js
+│   │   └── utils/
+│   │       ├── exec-helper.js
+│   │       └── repair-tools.js
+│   ├── cortex/
+│   │   ├── build-cortex/
+│   │   │   ├── VERSION
+│   │   │   ├── build_number.txt
+│   │   │   └── package.py
+│   │   ├── extension/
+│   │   │   ├── assets/
+│   │   │   │   ├── 128x128.png
+│   │   │   │   ├── icon128.png
+│   │   │   │   └── icon16.png
+│   │   │   ├── background.js
+│   │   │   ├── content.js
+│   │   │   ├── manifest.json
+│   │   │   └── synapse/
+│   │   │       ├── discovery.synapse.config.js
+│   │   │       └── landing.synapse.config.js
+│   │   └── legacy-crypto/
+│   │       ├── crx/
+│   │       │   ├── id.json
+│   │       │   └── key.pem
+│   │       └── pem/
+│   │           ├── key_generation_extesion.crx
+│   │           └── key_generation_extesion.pem
+│   ├── create_installer.py
+│   ├── native/
+│   │   ├── .DS_Store
+│   │   ├── bin/
+│   │   │   ├── .DS_Store
+│   │   │   ├── bin/
+│   │   │   ├── config/
+│   │   │   │   └── profiles.json
+│   │   │   ├── cortex/
+│   │   │   │   ├── bloom-cortex-1.0.0+build.2.blx
+│   │   │   │   └── bloom-cortex-1.0.0+build.3.blx
+│   │   │   ├── darwin/
+│   │   │   │   └── x64/
+│   │   │   │       └── bloom-host
+│   │   │   ├── linux/
+│   │   │   │   ├── bloom-host
+│   │   │   │   └── host/
+│   │   │   │       └── bloom-host
+│   │   │   ├── profiles/
+│   │   │   └── win32/
+│   │   │       ├── brain/
+│   │   │       │   ├── _internal/ [... dependencies]
+│   │   │       │   ├── brain.exe
+│   │   │       │   └── help/
+│   │   │       │       ├── brain-ai-full.json
+│   │   │       │       ├── brain-ai-schema.json
+│   │   │       │       ├── brain-legacy.json
+│   │   │       │       ├── help-full.txt
+│   │   │       │       └── help.txt
+│   │   │       ├── host/
+│   │   │       │   ├── bloom-host.exe
+│   │   │       │   └── libwinpthread-1.dll
+│   │   │       ├── nucleus/
+│   │   │       │   ├── blueprint.json
+│   │   │       │   ├── help/
+│   │   │       │   │   ├── nucleus_help.json
+│   │   │       │   │   └── nucleus_help.txt
+│   │   │       │   └── nucleus.exe
+│   │   │       └── sentinel/
+│   │   │           ├── blueprint.json
+│   │   │           ├── help/
+│   │   │           │   ├── sentinel_help.json
+│   │   │           │   └── sentinel_help.txt
+│   │   │           └── sentinel.exe
+│   │   └── nssm/
+│   │       ├── win32/
+│   │       │   └── nssm.exe
+│   │       └── win64/
+│   │           └── nssm.exe
+│   ├── node_modules/ [... dependencies]
+│   ├── nucleus/
+│   │   ├── .gitignore
+│   │   ├── README.md
+│   │   ├── VERSION
+│   │   ├── blueprint.json
+│   │   ├── build_number.txt
+│   │   ├── cmd/
+│   │   │   └── nucleus/
+│   │   │       └── main.go
+│   │   ├── docs/
+│   │   │   ├── EXECUTIVE_SUMMARY.md
+│   │   │   ├── GOVERNANCE.md
+│   │   │   └── NUCLEUS_README.md
+│   │   ├── go.mod
+│   │   ├── go.sum
+│   │   ├── internal/
+│   │   │   ├── analytics/
+│   │   │   │   └── client.go
+│   │   │   ├── cli/
+│   │   │   │   ├── config.go
+│   │   │   │   └── help_renderer.go
+│   │   │   ├── commands/
+│   │   │   │   ├── analytics/
+│   │   │   │   │   └── heartbeat.go
+│   │   │   │   ├── governance/
+│   │   │   │   │   └── init.go
+│   │   │   │   ├── sync/
+│   │   │   │   │   ├── pull.go
+│   │   │   │   │   └── push.go
+│   │   │   │   ├── system/
+│   │   │   │   │   ├── info.go
+│   │   │   │   │   └── version.go
+│   │   │   │   ├── team/
+│   │   │   │   │   ├── add.go
+│   │   │   │   │   ├── list.go
+│   │   │   │   │   └── remove.go
+│   │   │   │   └── vault/
+│   │   │   │       ├── lock.go
+│   │   │   │       ├── request.go
+│   │   │   │       ├── status.go
+│   │   │   │       └── unlock.go
+│   │   │   ├── core/
+│   │   │   │   ├── build_info.go
+│   │   │   │   ├── core.go
+│   │   │   │   ├── metadata.go
+│   │   │   │   ├── registry.go
+│   │   │   │   └── version.go
+│   │   │   ├── governance/
+│   │   │   │   ├── blueprint.go
+│   │   │   │   ├── init.go
+│   │   │   │   └── roles.go
+│   │   │   └── vault/
+│   │   │       └── vault.go
+│   │   └── scripts/
+│   │       ├── build-darwin.sh
+│   │       ├── build-linux.sh
+│   │       ├── build.bat
+│   │       └── build_number.txt
+│   ├── ollama/
+│   │   ├── lib/
+│   │   │   └── ollama/
+│   │   │       ├── cuda_v12/
+│   │   │       │   ├── cublas64_12.dll
+│   │   │       │   ├── cublasLt64_12.dll
+│   │   │       │   ├── cudart64_12.dll
+│   │   │       │   └── ggml-cuda.dll
+│   │   │       ├── cuda_v13/
+│   │   │       │   ├── cublas64_13.dll
+│   │   │       │   ├── cublasLt64_13.dll
+│   │   │       │   └── ggml-cuda.dll
+│   │   │       ├── ggml-base.dll
+│   │   │       ├── ggml-cpu-alderlake.dll
+│   │   │       ├── ggml-cpu-haswell.dll
+│   │   │       ├── ggml-cpu-icelake.dll
+│   │   │       ├── ggml-cpu-sandybridge.dll
+│   │   │       ├── ggml-cpu-skylakex.dll
+│   │   │       ├── ggml-cpu-sse42.dll
+│   │   │       ├── ggml-cpu-x64.dll
+│   │   │       └── vulkan/
+│   │   │           ├── ggml-vulkan.dll
+│   │   │           └── vulkan-1.dll
+│   │   └── ollama.exe
+│   ├── package-lock.json
+│   ├── package.json
+│   ├── resources/
+│   │   ├── .gitkeep
+│   │   └── runtime/
+│   │       ├── LICENSE.txt
+│   │       ├── _asyncio.pyd
+│   │       ├── _bz2.pyd
+│   │       ├── _ctypes.pyd
+│   │       ├── _decimal.pyd
+│   │       ├── _elementtree.pyd
+│   │       ├── _hashlib.pyd
+│   │       ├── _lzma.pyd
+│   │       ├── _msi.pyd
+│   │       ├── _multiprocessing.pyd
+│   │       ├── _overlapped.pyd
+│   │       ├── _queue.pyd
+│   │       ├── _socket.pyd
+│   │       ├── _sqlite3.pyd
+│   │       ├── _ssl.pyd
+│   │       ├── _uuid.pyd
+│   │       ├── _zoneinfo.pyd
+│   │       ├── libcrypto-1_1.dll
+│   │       ├── libffi-7.dll
+│   │       ├── libssl-1_1.dll
+│   │       ├── pyexpat.pyd
+│   │       ├── python.cat
+│   │       ├── python.exe
+│   │       ├── python3.dll
+│   │       ├── python310._pth
+│   │       ├── python310.dll
+│   │       ├── python310.zip
+│   │       ├── pythonw.exe
+│   │       ├── select.pyd
+│   │       ├── sqlite3.dll
+│   │       ├── unicodedata.pyd
+│   │       ├── vcruntime140.dll
+│   │       ├── vcruntime140_1.dll
+│   │       └── winsound.pyd
+│   ├── scripts/
+│   │   ├── build-extension.js
+│   │   ├── check-health.js
+│   │   ├── get_extension_key_from_pem_store_key_manfest.js
+│   │   ├── god-mode.js
+│   │   ├── python-runtime.config.json
+│   │   ├── run-elevated.ps1
+│   │   ├── setup-dev.js
+│   │   ├── setup_runtime.js
+│   │   └── validate.js
+│   └── sentinel/
+│       ├── VERSION
+│       ├── blueprint.json
+│       ├── cli/
+│       │   └── help_renderer.go
+│       ├── codebase/
+│       ├── docs/
+│       │   ├── Sentinel - Fase 2 Discovery - Health Modular.md
+│       │   ├── Sentinel Base.md
+│       │   └── research/
+│       │       ├── CHROMIUM PATH FIX - Arquitectura de Rutas.md
+│       │       ├── SENTINEL v1.2 - Estructura de Archivos.md
+│       │       └── SENTINEL v1.2 Deployment & Testing Guide.md
+│       ├── extract_go_files.py
+│       ├── go.mod
+│       ├── go.sum
+│       ├── help/
+│       │   ├── sentinel_help.json
+│       │   └── sentinel_help.txt
+│       ├── internal/
+│       │   ├── boot/
+│       │   │   ├── dev.go
+│       │   │   ├── npm.go
+│       │   │   ├── reaper.go
+│       │   │   └── vscode.go
+│       │   ├── bridge/
+│       │   │   ├── bridge.go
+│       │   │   └── launch_commands.go
+│       │   ├── core/
+│       │   │   ├── build_info.go
+│       │   │   ├── config.go
+│       │   │   ├── core.go
+│       │   │   ├── logger.go
+│       │   │   ├── metadata.go
+│       │   │   ├── paths.go
+│       │   │   ├── telemetry.go
+│       │   │   └── version_reader.go
+│       │   ├── discovery/
+│       │   │   ├── discovery.go
+│       │   │   └── vscode.go
+│       │   ├── eventbus/
+│       │   │   ├── daemon.go
+│       │   │   ├── eventbus.go
+│       │   │   ├── protocol.go
+│       │   │   ├── sentinel_client.go
+│       │   │   └── synapse_handshake.go
+│       │   ├── health/
+│       │   │   ├── guardian.go
+│       │   │   └── health.go
+│       │   ├── ignition/
+│       │   │   ├── ignition.go
+│       │   │   ├── ignition_identity.go
+│       │   │   ├── ignition_lifecycle.go
+│       │   │   ├── ignition_spec.go
+│       │   │   ├── monitor.go
+│       │   │   └── reaper.go
+│       │   ├── ollama/
+│       │   │   ├── ollama_controller.go
+│       │   │   └── ollama_manager.go
+│       │   ├── process/
+│       │   │   └── hygiene.go
+│       │   ├── seed/
+│       │   │   └── seed.go
+│       │   ├── startup/
+│       │   │   └── startup.go
+│       │   ├── system/
+│       │   │   ├── cmd_info.go
+│       │   │   └── cmd_version.go
+│       │   └── ui/
+│       │       ├── cockpit.go
+│       │       ├── dashboard.go
+│       │       ├── health_station.go
+│       │       ├── log_station.go
+│       │       └── refresher.go
+│       ├── main.go
+│       └── scripts/
+│           ├── build-darwin.sh
+│           ├── build-linux.sh
+│           ├── build.bat
+│           └── build_number.txt
+└── brain/
+    ├── .env
+    ├── VERSION
+    ├── __build__.py
+    ├── __init__.py
+    ├── __main__.py
+    ├── __pycache__/ [... cache]
+    ├── build_deploy/
+    │   ├── __init__.py
+    │   ├── brain.spec
+    │   ├── build_main.py
+    │   ├── bump_version.py
+    │   ├── commits/
+    │   │   └── brain/
+    │   │       └── 1_semantic-changelog_2026-01-11.txt
+    │   ├── generate_build_module.py
+    │   ├── generate_command_loader.py
+    │   ├── generate_commit.py
+    │   ├── update_spec_hiddenimports.py
+    │   ├── update_spec_metadata.py
+    │   ├── update_version.py
+    │   └── versions.json
+    ├── build_number.txt
+    ├── cli/
+    │   ├── __init__.py
+    │   ├── __pycache__/ [... cache]
+    │   ├── base.py
+    │   ├── categories.py
+    │   ├── command_loader.py
+    │   ├── help_renderer.py
+    │   └── registry.py
+    ├── commands/
+    │   ├── __init__.py
+    │   ├── __pycache__/ [... cache]
+    │   ├── chrome/
+    │   │   └── chrome.py
+    │   ├── context/
+    │   │   └── generate.py
+    │   ├── extension/
+    │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
+    │   │   ├── backups.py
+    │   │   ├── install.py
+    │   │   ├── update.py
+    │   │   └── verify.py
+    │   ├── filesystem/
+    │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
+    │   │   ├── compress.py
+    │   │   └── tree.py
+    │   ├── gemini/
+    │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
+    │   │   ├── keys_add.py
+    │   │   ├── keys_delete.py
+    │   │   ├── keys_list.py
+    │   │   ├── keys_stats.py
+    │   │   └── keys_validate.py
+    │   ├── github/
+    │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
+    │   │   ├── auth.py
+    │   │   ├── auth_login.py
+    │   │   ├── auth_logout.py
+    │   │   ├── auth_status.py
+    │   │   ├── clone.py
+    │   │   ├── orgs.py
+    │   │   ├── orgs_list.py
+    │   │   ├── repos.py
+    │   │   └── repos_list.py
+    │   ├── health/
+    │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
+    │   │   ├── dev_check.py
+    │   │   ├── full_stack.py
+    │   │   ├── native_ping.py
+    │   │   ├── onboarding_status.py
+    │   │   └── websocket_status.py
+    │   ├── init.py
+    │   ├── intent/
+    │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
+    │   │   ├── add_turn.py
+    │   │   ├── build_payload.py
+    │   │   ├── create.py
+    │   │   ├── delete.py
+    │   │   ├── download.py
+    │   │   ├── finalize.py
+    │   │   ├── get.py
+    │   │   ├── hydrate.py
+    │   │   ├── list.py
+    │   │   ├── lock.py
+    │   │   ├── merge.py
+    │   │   ├── parse.py
+    │   │   ├── plan.py
+    │   │   ├── recover.py
+    │   │   ├── router_prompt.md
+    │   │   ├── stage.py
+    │   │   ├── submit.py
+    │   │   ├── unlock.py
+    │   │   ├── update.py
+    │   │   └── validate.py
+    │   ├── nucleus/
+    │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
+    │   │   ├── create.py
+    │   │   ├── create_exp_intent.py
+    │   │   ├── delete.py
+    │   │   ├── exp_discovery_turn.py
+    │   │   ├── exp_export_findings.py
+    │   │   ├── get.py
+    │   │   ├── info.py
+    │   │   ├── link.py
+    │   │   ├── list.py
+    │   │   ├── list_projects.py
+    │   │   ├── onboarding_complete.py
+    │   │   ├── onboarding_status.py
+    │   │   ├── project_info.py
+    │   │   ├── status.py
+    │   │   └── sync.py
+    │   ├── profile/
+    │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
+    │   │   ├── accounts.py
+    │   │   └── profiles.py
+    │   ├── project/
+    │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
+    │   │   ├── add.py
+    │   │   ├── clone_and_add.py
+    │   │   ├── detect.py
+    │   │   ├── load.py
+    │   │   └── nucleus.py
+    │   ├── runtime/
+    │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
+    │   │   └── run.py
+    │   ├── server/
+    │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
+    │   │   └── server.py
+    │   ├── synapse/
+    │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
+    │   │   └── synapse_host_cli.py
+    │   ├── system/
+    │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
+    │   │   ├── info.py
+    │   │   ├── info_flags.py
+    │   │   ├── release_info.py
+    │   │   ├── system_specs.py
+    │   │   └── version_flags.py
+    │   └── twitter/
+    │       ├── __init__.py
+    │       ├── __pycache__/ [... cache]
+    │       └── auth.py
+    ├── core/
+    │   ├── __init__.py
+    │   ├── __pycache__/ [... cache]
+    │   ├── bloom_project_inspector.py
+    │   ├── chrome/
+    │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
+    │   │   ├── log_reader.py
+    │   │   ├── mining_log_reader.py
+    │   │   └── net_log_analyzer.py
+    │   ├── context/
+    │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
+    │   │   ├── detector.py
+    │   │   ├── detector.py.backup
+    │   │   ├── generate.py
+    │   │   ├── manager.py
+    │   │   ├── strategies/
+    │   │   │   ├── android.py
+    │   │   │   ├── cicd.py
+    │   │   │   ├── cpp.py
+    │   │   │   ├── dotnet.py
+    │   │   │   ├── flutter.py
+    │   │   │   ├── go.py
+    │   │   │   ├── iac.py
+    │   │   │   ├── ios.py
+    │   │   │   ├── jvm.py
+    │   │   │   ├── macos.py
+    │   │   │   ├── php.py
+    │   │   │   ├── python.py
+    │   │   │   ├── ruby.py
+    │   │   │   ├── rust.py
+    │   │   │   └── typescript.py
+    │   │   ├── strategy_base.py
+    │   │   └── strategy_loader.py
+    │   ├── context_planning/
+    │   │   ├── enriched_tree_generator.py
+    │   │   ├── gemini_router.py
+    │   │   └── payload_builder.py
+    │   ├── download_manager.py
+    │   ├── extension/
+    │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
+    │   │   └── manager.py
+    │   ├── filesystem/
+    │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
+    │   │   ├── code_compressor.py
+    │   │   ├── files_compressor.py
+    │   │   ├── files_extractor.py
+    │   │   └── tree_manager.py
+    │   ├── git/
+    │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
+    │   │   ├── executor.py
+    │   │   └── repository.py
+    │   ├── github/
+    │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
+    │   │   ├── api_client.py
+    │   │   └── models.py
+    │   ├── health/
+    │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
+    │   │   ├── dev_environment_manager.py
+    │   │   ├── full_stack_manager.py
+    │   │   ├── native_host_manager.py
+    │   │   ├── onboarding_status_manager.py
+    │   │   └── websocket_status_manager.py
+    │   ├── intent/
+    │   │   ├── merge_manager.py
+    │   │   ├── recovery_manager.py
+    │   │   ├── response_parser.py
+    │   │   ├── staging_manager.py
+    │   │   └── validation_manager.py
+    │   ├── intent_manager.py
+    │   ├── nucleus_inspector.py
+    │   ├── nucleus_manager.py
+    │   ├── profile/
+    │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
+    │   │   ├── logic/
+    │   │   │   ├── __init__.py
+    │   │   │   ├── __pycache__/ [... cache]
+    │   │   │   ├── chrome_resolver.py
+    │   │   │   ├── profile_store.py
+    │   │   │   └── synapse_handler.py
+    │   │   ├── path_resolver.py
+    │   │   ├── profile_accounts.py
+    │   │   ├── profile_create.py
+    │   │   ├── profile_launcher.py
+    │   │   ├── profile_manager.py
+    │   │   ├── profile_state_manager.py
+    │   │   └── web/
+    │   │       ├── __init__.py
+    │   │       ├── __pycache__/ [... cache]
+    │   │       ├── discovery_generator.py
+    │   │       ├── landing_generator.py
+    │   │       └── templates/
+    │   │           ├── __init__.py
+    │   │           ├── __pycache__/ [... cache]
+    │   │           ├── discovery/
+    │   │           │   ├── __init__.py
+    │   │           │   ├── __pycache__/ [... cache]
+    │   │           │   ├── content-aistudio.js
+    │   │           │   ├── discovery.js
+    │   │           │   ├── discoveryProtocol.js
+    │   │           │   ├── index.html
+    │   │           │   ├── onboarding.js
+    │   │           │   ├── script.js
+    │   │           │   └── styles.css
+    │   │           └── landing/
+    │   │               ├── __init__.py
+    │   │               ├── __pycache__/ [... cache]
+    │   │               ├── data-loader.js
+    │   │               ├── index.html
+    │   │               ├── landing.js
+    │   │               ├── landing.synapse.config.js
+    │   │               ├── landingProtocol.js
+    │   │               ├── script.js
+    │   │               └── styles.css
+    │   ├── project/
+    │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
+    │   │   ├── clone_manager.py
+    │   │   ├── linker.py
+    │   │   ├── models.py
+    │   │   └── scanner.py
+    │   ├── project_manager.py
+    │   ├── server/
+    │   │   ├── server_event_bus.py
+    │   │   └── server_manager.py
+    │   ├── synapse/
+    │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
+    │   │   ├── synapse_exceptions.py
+    │   │   ├── synapse_manager.py
+    │   │   └── synapse_protocol.py
+    │   ├── system/
+    │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
+    │   │   ├── info_manager.py
+    │   │   └── metadata_manager.py
+    │   └── twitter/
+    │       └── auth_manager.py
+    ├── entry.py
+    ├── libs/ [... python vendored dependencies]
+    ├── pyproject.toml
+    ├── requirements.txt
+    └── shared/
+        ├── __init__.py
+        ├── __pycache__/ [... cache]
+        ├── context.py
+        ├── credentials.py
+        ├── environment.py
+        ├── github_types.py
+        ├── logger.py
+        └── runtime_resolver.py

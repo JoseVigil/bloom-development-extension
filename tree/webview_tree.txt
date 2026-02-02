@@ -12,7 +12,6 @@ bloom-development-extension/
         │   │   ├── components/
         │   │   │   ├── BriefingEditor.svelte
         │   │   │   ├── ChatBTIP.svelte
-        │   │   │   ├── CopilotChat.svelte
         │   │   │   ├── FileTree.svelte
         │   │   │   ├── GeminiTokenForm.svelte
         │   │   │   ├── GithubAuthButton.svelte
@@ -21,6 +20,7 @@ bloom-development-extension/
         │   │   │   ├── OnboardingWizard.svelte
         │   │   │   ├── ProjectsPanel.svelte
         │   │   │   ├── SystemStatus.svelte
+        │   │   │   ├── TipsChat.svelte
         │   │   │   └── TokenEstimator.svelte
         │   │   ├── stores/
         │   │   │   ├── auth.ts

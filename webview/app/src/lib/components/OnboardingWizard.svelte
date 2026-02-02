@@ -1,7 +1,7 @@
 <script lang="ts">
   import { fly } from 'svelte/transition';
   import { onboardingStore } from '$lib/stores/onboarding';
-  import CopilotChat from '$lib/components/CopilotChat.svelte';
+  import TipsChat from '$lib/components/TipsChat.svelte';
   
   // Import step components
   import GithubAuthButton from '$lib/components/GithubAuthButton.svelte';
@@ -158,10 +158,10 @@
     </div>
   </div>
 
-  <!-- Copilot Sidebar -->
+  <!-- Tips Sidebar -->
   <div class="sidebar">
-    <h3>💬 Copilot Assistant</h3>
-    <CopilotChat />
+    <h3>💬 Tips Assistant</h3>
+    <TipsChat />
   </div>
 </div>
 

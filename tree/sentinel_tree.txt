@@ -53,8 +53,11 @@ bloom-development-extension/
     │   │   ├── ignition_identity.go
     │   │   ├── ignition_lifecycle.go
     │   │   ├── ignition_spec.go
-    │   │   ├── reaper.go
-    │   │   └── telemetry.go
+    │   │   ├── monitor.go
+    │   │   └── reaper.go
+    │   ├── ollama/
+    │   │   ├── ollama_controller.go
+    │   │   └── ollama_manager.go
     │   ├── process/
     │   │   └── hygiene.go
     │   ├── seed/

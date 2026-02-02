@@ -120,7 +120,7 @@ def deploy_package():
         build = next_build_number()
         full_version = f"{version}+build.{build}"
         
-        output_file = OUTPUT_DIR / f"bloom-cortex-{full_version}.blx"
+        output_file = OUTPUT_DIR / "bloom-cortex.blx"
         
         logger.info(f"Versión detectada    : {version}")
         logger.info(f"Nuevo build number   : {build}")

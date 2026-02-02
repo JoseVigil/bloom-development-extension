@@ -97,8 +97,8 @@ function createWebSocketStore() {
       if (callbacks) callbacks.forEach(cb => cb(data));
     }
 
-    // Copilot events
-    if (event === 'copilot.stream_start') {
+    // AI events
+    if (event === 'bloom.ai.execution.stream_start') {
       update(state => ({
         ...state,
         streaming: true,
@@ -107,37 +107,37 @@ function createWebSocketStore() {
         activeIntentId: data.intentId || null
       }));
       
-      const callbacks = eventCallbacks.get('copilot.stream_start');
+      const callbacks = eventCallbacks.get('bloom.ai.execution.stream_start');
       if (callbacks) callbacks.forEach(cb => cb(data));
     }
 
-    if (event === 'copilot.stream_chunk') {
+    if (event === 'bloom.ai.execution.stream_chunk') {
       update(state => ({
         ...state,
         chunks: [...state.chunks, data.chunk]
       }));
       
-      const callbacks = eventCallbacks.get('copilot.stream_chunk');
+      const callbacks = eventCallbacks.get('bloom.ai.execution.stream_chunk');
       if (callbacks) callbacks.forEach(cb => cb(data));
     }
 
-    if (event === 'copilot.stream_end') {
+    if (event === 'bloom.ai.execution.stream_end') {
       update(state => ({
         ...state,
         streaming: false
       }));
       
-      const callbacks = eventCallbacks.get('copilot.stream_end');
+      const callbacks = eventCallbacks.get('bloom.ai.execution.stream_end');
       if (callbacks) callbacks.forEach(cb => cb(data));
     }
 
-    if (event === 'copilot.error') {
+    if (event === 'bloom.ai.execution.error') {
       update(state => ({
         ...state,
         streaming: false
       }));
       
-      const callbacks = eventCallbacks.get('copilot.error');
+      const callbacks = eventCallbacks.get('bloom.ai.execution.error');
       if (callbacks) callbacks.forEach(cb => cb(data));
     }
   }
@@ -164,12 +164,12 @@ function createWebSocketStore() {
     return true;
   }
 
-  function sendCopilotPrompt(
+  function sendAIPrompt(
     context: 'onboarding' | 'genesis' | 'dev' | 'doc',
     text: string,
     intentId?: string
   ) {
-    return send('copilot.prompt', {
+    return send('bloom.ai.execution.prompt', {
       context,
       text,
       intentId
@@ -196,7 +196,7 @@ function createWebSocketStore() {
     connect,
     disconnect,
     send,
-    sendCopilotPrompt,
+    sendAIPrompt,
     onUpdate,
     on,
     clearChunks
