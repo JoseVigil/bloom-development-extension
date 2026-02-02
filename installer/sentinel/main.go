@@ -5,7 +5,7 @@ import (
 	"os"
 	"sentinel/cli"
 	"sentinel/internal/core"
-	"sentinel/internal/eventbus"
+	"sentinel/internal/eventbus" 
 	"sentinel/internal/startup"
 	"github.com/spf13/cobra"
 
@@ -16,7 +16,7 @@ import (
 	_ "sentinel/internal/ignition"
 	_ "sentinel/internal/seed"
 	_ "sentinel/internal/system"
-	_ "sentinel/internal/ui"
+	_ "sentinel/internal/ui"	
 )
 
 func main() {
@@ -175,13 +175,7 @@ Modo Daemon (Sidecar):
   - Monitorea la salud de perfiles activos (Guardian)
   - Limpia procesos zombies de Chromium
   - Se comunica con Brain a través del EventBus
-  - Emite eventos JSON en stdout para integración con Electron
-
-  Uso: sentinel --mode daemon
-
-  Variables de entorno:
-    BRAIN_ADDR      Dirección del Brain (default: 127.0.0.1:5678)
-    LOCALAPPDATA    Ruta base de datos (default: %LOCALAPPDATA%/BloomNucleus)`,
+  - Emite eventos JSON en stdout para integración con Electron`,
 		Run: func(cmd *cobra.Command, args []string) {
 			c.Logger.Success("Sentinel Base v%s activa y sincronizada.", c.Config.Version)
 		},
@@ -201,8 +195,12 @@ Modo Daemon (Sidecar):
 	})
 	
 	// Integración de comandos registrados en los paquetes internos
+	// El DEBUG nos confirmará si la eliminación del import duplicado resolvió la carga
+	fmt.Fprintf(os.Stderr, "DEBUG: Total comandos registrados antes de añadir: %d\n", len(core.CommandRegistry))
 	for _, reg := range core.CommandRegistry {
 		cmd := reg.Factory(c)
+
+		fmt.Fprintf(os.Stderr, "DEBUG: Añadiendo comando %s en categoría %s\n", cmd.Use, reg.Category) 
 		
 		// Inyectar metadatos de categoría para el renderizador visual
 		if cmd.Annotations == nil {

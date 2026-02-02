@@ -13,7 +13,88 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/spf13/cobra"
 )
+
+func init() {
+	// ═══════════════════════════════════════════════════════════════
+	// COMANDO: daemon
+	// Categoría: RUNTIME
+	// Descripción: Inicia Sentinel en modo daemon persistente
+	// ═══════════════════════════════════════════════════════════════
+	core.RegisterCommand("RUNTIME", func(c *core.Core) *cobra.Command {
+		var brainAddr string
+
+		cmd := &cobra.Command{
+			Use:   "daemon",
+			Short: "Inicia Sentinel en modo daemon persistente",
+			Long: `Inicia Sentinel en modo daemon (sidecar) que se conecta con el Brain
+y mantiene comunicación bidireccional con Electron.
+
+El daemon:
+- Se conecta automáticamente con el Brain (TCP en 127.0.0.1:5678)
+- Escucha comandos desde Electron vía stdin (JSON line-delimited)
+- Emite eventos del Brain a Electron vía stdout (JSON)
+- Ejecuta auditorías periódicas de procesos zombies
+- Mantiene reconexión automática con backoff exponencial
+- Implementa la Coreografía de Inicio (AUDIT → CONNECT → SYNC)
+
+Ejemplo de uso:
+  sentinel daemon
+  sentinel daemon --brain-addr 127.0.0.1:5678
+
+Comandos disponibles vía stdin (JSON):
+  {"command": "launch", "profile_id": "profile_001", "id": "msg_001"}
+  {"command": "stop", "profile_id": "profile_001", "id": "msg_002"}
+  {"command": "status", "profile_id": "profile_001", "id": "msg_003"}
+  {"command": "intent", "profile_id": "p001", "id": "msg_004", "data": {...}}
+  {"command": "poll_events", "id": "msg_005", "data": {"since": 1234567890}}
+  {"command": "cleanup_zombies", "id": "msg_006"}
+  {"command": "exit", "id": "msg_007"}`,
+			Args: cobra.NoArgs,
+			Run: func(cmd *cobra.Command, args []string) {
+				// Inicializar logger del EventBus registrado en telemetry.json
+				// Componente: sentinel_event_bus
+				// Label: 🚌 SENTINEL EVENT BUS
+				// Priority: 2 (alta prioridad, logs de runtime críticos)
+				// Ruta: logs/sentinel/eventbus/
+				
+				// Crear paths personalizado para eventbus
+				eventbusPaths := *c.Paths
+				eventbusPaths.LogsDir = filepath.Join(c.Paths.LogsDir, "sentinel", "eventbus")
+				
+				logger, err := core.InitLogger(
+					&eventbusPaths,
+					"sentinel_event_bus",
+					"🚌 SENTINEL EVENT BUS",
+					2,
+				)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "[ERROR] No se pudo inicializar logger: %v\n", err)
+					os.Exit(1)
+				}
+				defer logger.Close()
+
+				logger.Info("Iniciando Sentinel en modo daemon...")
+				
+				// Crear instancia del daemon con logger integrado
+				daemon := NewDaemonMode(brainAddr, logger)
+				
+				// Iniciar el daemon (bloqueante hasta shutdown)
+				if err := daemon.Start(); err != nil {
+					logger.Error("Error en modo daemon: %v", err)
+					os.Exit(1)
+				}
+			},
+		}
+
+		cmd.Flags().StringVar(&brainAddr, "brain-addr", "127.0.0.1:5678", 
+			"Dirección TCP del Brain (host:puerto)")
+
+		return cmd
+	})
+}
 
 // StdinCommand representa un comando recibido desde Electron vía Stdin
 type StdinCommand struct {
@@ -245,6 +326,37 @@ func (dm *DaemonMode) zombieCleanupWorker() {
 	}
 }
 
+// handleStdinCommand procesa comandos recibidos desde Electron
+func (dm *DaemonMode) handleStdinCommand(cmd StdinCommand) {
+	dm.logger.Info("Procesando comando: %s", cmd.Command)
+	
+	switch cmd.Command {
+	case "launch":
+		dm.handleLaunch(cmd)
+	case "stop":
+		dm.handleStop(cmd)
+	case "status":
+		dm.handleStatus(cmd)
+	case "intent":
+		dm.handleIntent(cmd)
+	case "poll_events":
+		dm.handlePollEvents(cmd)
+	case "cleanup_zombies":
+		dm.handleCleanupZombies(cmd)
+	case "exit":
+		dm.handleExit(cmd)
+	default:
+		dm.emitError(cmd.ID, "UNKNOWN_COMMAND", fmt.Sprintf("Comando desconocido: %s", cmd.Command))
+	}
+}
+
+// getActivePIDs obtiene PIDs activos desde profiles.json
+func (dm *DaemonMode) getActivePIDs() []int {
+	// TODO: Implementar lectura real de profiles.json
+	// Por ahora retornamos slice vacío
+	return []int{}
+}
+
 // executeZombieCleanup ejecuta la limpieza de zombies
 func (dm *DaemonMode) executeZombieCleanup() {
 	dm.logger.Info("🧹 Iniciando limpieza de zombies...")
@@ -271,46 +383,6 @@ func (dm *DaemonMode) executeZombieCleanup() {
 			Status:    "success",
 			Timestamp: time.Now().UnixNano(),
 		})
-	}
-}
-
-// getActivePIDs obtiene los PIDs activos desde profiles.json
-func (dm *DaemonMode) getActivePIDs() []int {
-	// Implementación pendiente: leer profiles.json y extraer PIDs activos
-	// Por ahora retornamos lista vacía
-	return []int{}
-}
-
-// handleStdinCommand procesa un comando recibido desde Electron
-func (dm *DaemonMode) handleStdinCommand(cmd StdinCommand) {
-	dm.logger.Info("Comando recibido: %s (id: %s)", cmd.Command, cmd.ID)
-	
-	// ACK inmediato
-	dm.emitToElectron(StdoutResponse{
-		Type:      "ACK",
-		ID:        cmd.ID,
-		Status:    "processing",
-		Timestamp: time.Now().UnixNano(),
-	})
-	
-	// Procesar según tipo de comando
-	switch cmd.Command {
-	case "launch":
-		dm.handleLaunch(cmd)
-	case "stop":
-		dm.handleStop(cmd)
-	case "status":
-		dm.handleStatus(cmd)
-	case "intent":
-		dm.handleIntent(cmd)
-	case "poll_events":
-		dm.handlePollEvents(cmd)
-	case "cleanup_zombies":
-		dm.handleCleanupZombies(cmd)
-	case "exit":
-		dm.handleExit(cmd)
-	default:
-		dm.emitError(cmd.ID, "UNKNOWN_COMMAND", fmt.Sprintf("Comando desconocido: %s", cmd.Command))
 	}
 }
 

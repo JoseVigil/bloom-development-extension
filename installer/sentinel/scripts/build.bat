@@ -175,7 +175,7 @@ if %ERRORLEVEL% NEQ 0 (
     goto :resumen
 )
 
-set "PROJECT_ROOT=%~dp0..\..\"
+set "PROJECT_ROOT=%~dp0..\..\..\"
 
 set "PROJECT_ROOT=%PROJECT_ROOT:\\=\%"
 set "UPDATE_SCRIPT=%PROJECT_ROOT%scripts\python\update_build_telemetry.py"
