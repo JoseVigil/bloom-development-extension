@@ -1,0 +1,128 @@
+installer/
+├── sentinel/
+│   ├── VERSION
+│   ├── blueprint.json
+│   ├── cli/
+│   │   └── help_renderer.go
+│   ├── codebase/
+│   ├── docs/
+│   │   ├── Sentinel - Fase 2 Discovery - Health Modular.md
+│   │   ├── Sentinel Base.md
+│   │   └── research/
+│   │       ├── CHROMIUM PATH FIX - Arquitectura de Rutas.md
+│   │       ├── SENTINEL v1.2 - Estructura de Archivos.md
+│   │       └── SENTINEL v1.2 Deployment & Testing Guide.md
+│   ├── extract_go_files.py
+│   ├── go.mod
+│   ├── go.sum
+│   ├── help/
+│   │   ├── sentinel_help.json
+│   │   └── sentinel_help.txt
+│   ├── internal/
+│   │   ├── boot/
+│   │   │   ├── dev.go
+│   │   │   ├── npm.go
+│   │   │   ├── reaper.go
+│   │   │   └── vscode.go
+│   │   ├── bridge/
+│   │   │   └── bridge.go
+│   │   ├── core/
+│   │   │   ├── build_info.go
+│   │   │   ├── config.go
+│   │   │   ├── core.go
+│   │   │   ├── logger.go
+│   │   │   ├── metadata.go
+│   │   │   ├── paths.go
+│   │   │   ├── telemetry.go
+│   │   │   └── version_reader.go
+│   │   ├── discovery/
+│   │   │   └── discovery.go
+│   │   ├── eventbus/
+│   │   │   ├── daemon.go
+│   │   │   ├── eventbus.go
+│   │   │   ├── protocol.go
+│   │   │   ├── sentinel_client.go
+│   │   │   └── synapse_handshake.go
+│   │   ├── health/
+│   │   │   ├── guardian.go
+│   │   │   └── health.go
+│   │   ├── ignition/
+│   │   │   ├── ignition.go
+│   │   │   ├── ignition_identity.go
+│   │   │   ├── ignition_lifecycle.go
+│   │   │   ├── ignition_spec.go
+│   │   │   ├── launch_commands.go
+│   │   │   ├── monitor.go
+│   │   │   └── reaper.go
+│   │   ├── ollama/
+│   │   │   ├── ollama_controller.go
+│   │   │   └── ollama_manager.go
+│   │   ├── process/
+│   │   │   └── hygiene.go
+│   │   ├── seed/
+│   │   │   └── seed.go
+│   │   ├── startup/
+│   │   │   └── startup.go
+│   │   ├── system/
+│   │   │   ├── cmd_info.go
+│   │   │   └── cmd_version.go
+│   │   └── ui/
+│   │       ├── cockpit.go
+│   │       ├── dashboard.go
+│   │       ├── health_station.go
+│   │       ├── log_station.go
+│   │       └── refresher.go
+│   ├── main.go
+│   └── scripts/
+│       ├── build-darwin.sh
+│       ├── build-linux.sh
+│       ├── build.bat
+│       ├── build_number.txt
+│       └── tree/
+│           └── problem_solve_tree.txt
+└── native/
+    ├── .DS_Store
+    ├── bin/
+    │   ├── .DS_Store
+    │   ├── config/
+    │   │   └── profiles.json
+    │   ├── cortex/
+    │   │   ├── bloom-cortex-1.0.0+build.2.blx
+    │   │   └── bloom-cortex-1.0.0+build.3.blx
+    │   ├── darwin/
+    │   │   └── x64/
+    │   │       └── bloom-host
+    │   ├── linux/
+    │   │   ├── bloom-host
+    │   │   └── host/
+    │   │       └── bloom-host
+    │   ├── profiles/
+    │   └── win32/
+    │       ├── brain/
+    │       │   ├── _internal/ [... dependencies]
+    │       │   ├── brain.exe
+    │       │   └── help/
+    │       │       ├── brain-ai-full.json
+    │       │       ├── brain-ai-schema.json
+    │       │       ├── brain-legacy.json
+    │       │       ├── help-full.txt
+    │       │       └── help.txt
+    │       ├── host/
+    │       │   ├── bloom-host.exe
+    │       │   └── libwinpthread-1.dll
+    │       ├── nucleus/
+    │       │   ├── blueprint.json
+    │       │   ├── help/
+    │       │   │   ├── nucleus_help.json
+    │       │   │   └── nucleus_help.txt
+    │       │   └── nucleus.exe
+    │       └── sentinel/
+    │           ├── blueprint.json
+    │           └── help/
+    │               ├── sentinel_help.json
+    │               └── sentinel_help.txt
+    └── nssm/
+        ├── win32/
+        │   └── nssm.exe
+        └── win64/
+            └── nssm.exe

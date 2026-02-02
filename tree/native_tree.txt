@@ -16,11 +16,8 @@ bloom-development-extension/
     │   │   ├── bloom-host
     │   │   └── host/
     │   │       └── bloom-host
-    │   ├── logs/
-    │   │   └── sentinel_2026-01-17.log
     │   ├── profiles/
     │   └── win32/
-    │       ├── bloom-host.exe
     │       ├── brain/
     │       │   ├── _internal/ [... dependencies]
     │       │   ├── brain.exe
@@ -33,7 +30,6 @@ bloom-development-extension/
     │       ├── host/
     │       │   ├── bloom-host.exe
     │       │   └── libwinpthread-1.dll
-    │       ├── libwinpthread-1.dll
     │       ├── nucleus/
     │       │   ├── blueprint.json
     │       │   ├── help/

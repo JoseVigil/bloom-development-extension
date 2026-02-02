@@ -354,23 +354,20 @@ BloomNucleus/
 │       ├── vcruntime140_1.dll
 │       └── winsound.pyd
 ├── logs/
-│   ├── brain_core_20260129.log
-│   ├── brain_core_20260130.log
-│   ├── brain_core_20260131.log
-│   ├── brain_error.log
-│   ├── brain_profile_20260129.log
-│   ├── brain_profile_20260130.log
-│   ├── brain_profile_20260131.log
-│   ├── brain_server_20260129.log
-│   ├── brain_server_20260130.log
-│   ├── brain_server_20260131.log
-│   ├── brain_service.log
+│   ├── brain/
+│   │   ├── brain_core_20260202.log
+│   │   ├── brain_profile_20260202.log
+│   │   ├── brain_server_20260202.log
+│   │   ├── core/
+│   │   │   └── brain_core_20260202.log
+│   │   ├── profile/
+│   │   │   └── brain_profile_20260202.log
+│   │   ├── server/
+│   │   │   ├── brain_server_20260202.log
+│   │   │   ├── brain_server_event_bus_20260202.log
+│   │   │   └── brain_server_manager_20260202.log
+│   │   └── service/
 │   ├── build/ [... build output]
-│   ├── install/
-│   │   └── electron_install.log
-│   ├── profiles/
-│   │   └── 37ae1c62-645a-4f46-8d02-7ab1db745acb/
-│   ├── sentinel_2026-01-31.log
 │   └── telemetry.json
 ├── profiles/
 │   └── 37ae1c62-645a-4f46-8d02-7ab1db745acb/
@@ -402,5 +399,4 @@ BloomNucleus/
 └── workers/
     └── brain/
         ├── events.jsonl
-        ├── service.pid
-        └── tcp_traffic.log
+        └── service.pid

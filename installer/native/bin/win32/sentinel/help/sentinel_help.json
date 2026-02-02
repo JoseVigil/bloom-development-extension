@@ -1,24 +1,35 @@
-DEBUG: Registrando comando en categoría RUNTIME
-DEBUG: Registrando comando en categoría BRIDGE
-DEBUG: Registrando comando en categoría BRIDGE
-DEBUG: Registrando comando en categoría BRIDGE
-DEBUG: Registrando comando en categoría IDENTITY
-DEBUG: Registrando comando en categoría SYSTEM
-DEBUG: Registrando comando en categoría SYSTEM
-DEBUG: Registrando comando en categoría SYSTEM
-DEBUG: Registrando comando en categoría BRIDGE
-DEBUG: Registrando comando en categoría RUNTIME
-DEBUG: Registrando comando en categoría IGNITION
-DEBUG: Registrando comando en categoría OLLAMA
-DEBUG: Registrando comando en categoría DEVELOPMENT
-DEBUG: Registrando comando en categoría UI
-DEBUG: Registrando comando en categoría UI
 [
   {
     "name": "bridge",
     "use": "bridge",
     "short": "Modo Bridge para comunicación JSON-RPC con Electron",
     "category": "BRIDGE"
+  },
+  {
+    "name": "check",
+    "use": "check [componente]",
+    "short": "Ejecuta un diagnóstico profundo de salud del sistema y procesos",
+    "category": "SYSTEM",
+    "args": [
+      {
+        "name": "componente",
+        "required": false
+      }
+    ],
+    "subcommands": [
+      {
+        "name": "workers",
+        "use": "workers",
+        "short": "Lista todos los workers (Chrome Profiles) activos",
+        "subcommands": [
+          {
+            "name": "health",
+            "use": "health",
+            "short": "Resumen de salud de todos los workers"
+          }
+        ]
+      }
+    ]
   },
   {
     "name": "cockpit",
@@ -54,7 +65,7 @@ DEBUG: Registrando comando en categoría UI
     "short": "Inicia el entorno de desarrollo integrado",
     "category": "DEVELOPMENT",
     "example": "  sentinel dev-start",
-    "requires": "  - brain.exe disponible y ejecutable\n  - Ollama.exe en carpeta bin/\n  - VSCode instalado y detectado en PATH\n  - Node.js y npm para servidor Svelte (puerto 5173)\n  - Puertos 5173, 3001, 5678, 11434 libres\n  - extension_path y test_workspace configurados en sentinel.yaml\n  - Python runtime en resources/runtime/"
+    "requires": "  - brain.exe disponible y ejecutable\n  - Ollama.exe en carpeta bin/\n  - VSCode instalado y detectado en PATH\n  - Node.js y npm para servidor Svelte (puerto 5173)\n  - Puertos 5173, 48215, 5678, 11434 libres\n  - extension_path y test_workspace configurados en sentinel.yaml\n  - Python runtime en resources/runtime/"
   },
   {
     "name": "health",
@@ -62,7 +73,7 @@ DEBUG: Registrando comando en categoría UI
     "short": "Escaneo de integridad del sistema",
     "category": "SYSTEM",
     "example": "  sentinel health\n  sentinel --json health | jq '.services[] | select(.active == false)'",
-    "requires": "  - brain.exe debe estar en PATH o en bin/\n  - Puertos 5678, 3001, 5173 accesibles para verificación"
+    "requires": "  - brain.exe debe estar en PATH o en bin/\n  - Puertos 5678, 48215, 5173, 11434 accesibles para verificación"
   },
   {
     "name": "info",

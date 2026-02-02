@@ -1,14 +1,14 @@
-// src/server/WebSocketManager.ts (corregido con attachHost agregado)
+// src/server/WebSocketManager.ts
 
 import WebSocket, { WebSocketServer } from 'ws';
 import type { IncomingMessage } from 'http';
 import { EventEmitter } from 'events';
 import * as vscode from 'vscode';
-import { CopilotNativeAdapter } from '../ai/adapters/CopilotNativeAdapter';
-import { BrainApiAdapter } from '../api/adapters/BrainApiAdapter';
+import OllamaNativeAdapter from '../ai/adapters/OllamaNativeAdapter';
+import { AIRuntimeAdapter } from '../api/adapters/AIRuntimeAdapter';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { HostExecutor } from '../host/HostExecutor';  // Import agregado basado en la ubicación proporcionada (src/host/HostExecutor.ts)
+import { HostExecutor } from '../host/HostExecutor';
 
 interface ExtendedWebSocket extends WebSocket {
   isAlive: boolean;
@@ -20,7 +20,7 @@ interface WebSocketMessage {
   data?: any;
 }
 
-interface CopilotProcess {
+interface AIExecutionProcess {
   processId: string;
   context: 'onboarding' | 'genesis' | 'dev' | 'doc';
   intentId?: string;
@@ -37,17 +37,16 @@ export class WebSocketManager extends EventEmitter {
   private clients: Set<ExtendedWebSocket> = new Set();
   private intentSubscribers: Set<ExtendedWebSocket> = new Set();
   private heartbeatInterval: NodeJS.Timeout | null = null;
-  private copilotAdapter: CopilotNativeAdapter;
-  private activeProcesses: Map<string, CopilotProcess> = new Map();
+  private ollamaAdapter: OllamaNativeAdapter;
+  private activeProcesses: Map<string, AIExecutionProcess> = new Map();
   private readonly PORT = 4124;
   private readonly HEARTBEAT_INTERVAL = 20000;
 
-  // Nueva propiedad para el HostExecutor
   private hostExecutor?: HostExecutor;
 
   private constructor() {
     super();
-    this.copilotAdapter = new CopilotNativeAdapter();
+    this.ollamaAdapter = new OllamaNativeAdapter();
   }
 
   static getInstance(): WebSocketManager {
@@ -69,13 +68,8 @@ export class WebSocketManager extends EventEmitter {
           verifyClient: (info: { origin: string; req: IncomingMessage; secure: boolean }) => {
             const origin = info.origin || (info.req.headers.origin as string | undefined);
             
-            // Allow vscode webviews
             if (origin?.startsWith('vscode-webview://')) return true;
-            
-            // Allow localhost/127.0.0.1
             if (origin?.includes('localhost') || origin?.includes('127.0.0.1')) return true;
-            
-            // Allow file:// protocol (Electron) and null origin (same)
             if (!origin || origin === 'null' || origin.startsWith('file://')) {
               console.log('[WebSocketManager] Allowing connection from file:// or null origin');
               return true;
@@ -110,9 +104,8 @@ export class WebSocketManager extends EventEmitter {
       this.heartbeatInterval = null;
     }
 
-    // Cancel all active processes
     this.activeProcesses.forEach(process => {
-      this.sendToClient(process.client, 'copilot.cancelled', {
+      this.sendToClient(process.client, 'bloom.ai.execution.cancelled', {
         processId: process.processId,
         reason: 'server_shutdown'
       });
@@ -153,107 +146,68 @@ export class WebSocketManager extends EventEmitter {
       this.handleMessage(ws, data.toString());
     });
 
-    ws.on('close', () => {
-      console.log('[WebSocketManager] Client disconnected');
-      
-      // Cancel client's active processes
-      this.activeProcesses.forEach((process, processId) => {
-        if (process.client === ws) {
-          process.status = 'cancelled';
-          this.activeProcesses.delete(processId);
-        }
-      });
-      
+    ws.on('close', (code: number, reason: Buffer) => {
+      console.log(`[WebSocketManager] Connection closed: ${code} - ${reason.toString()}`);
       this.clients.delete(ws);
       this.intentSubscribers.delete(ws);
     });
 
     ws.on('error', (error: Error) => {
       console.error('[WebSocketManager] Client error:', error);
-      this.clients.delete(ws);
-      this.intentSubscribers.delete(ws);
     });
 
-    this.sendToClient(ws, 'connected', {
+    this.sendToClient(ws, 'bloom.ai.execution.connected', {
       clientId: ws.clientId,
-      timestamp: Date.now(),
-      protocolVersion: '1.0.0'
+      timestamp: Date.now()
     });
   }
 
   private async handleMessage(ws: ExtendedWebSocket, rawMessage: string): Promise<void> {
-    let message: WebSocketMessage;
     try {
-      message = JSON.parse(rawMessage);
-    } catch (err) {
-      this.sendError(ws, 'Invalid JSON message');
-      return;
-    }
-    console.log(`[WebSocketManager] Event received: ${message.event}`);
+      const message: WebSocketMessage = JSON.parse(rawMessage);
+      console.log(`[WebSocketManager] Received: ${message.event}`);
 
-    try {
       switch (message.event) {
+        case 'bloom.ai.execution.prompt':
+          await this.handleAIExecutionPrompt(ws, message.data);
+          break;
+
+        case 'bloom.ai.execution.cancel':
+          await this.handleAIExecutionCancel(ws, message.data);
+          break;
+
         case 'subscribe_intents':
           this.handleSubscribeIntents(ws);
-          break;
-
-        case 'copilot.prompt':
-          await this.handleCopilotPrompt(ws, message.data);
-          break;
-
-        case 'copilot.cancel':
-          await this.handleCopilotCancel(ws, message.data);
           break;
 
         case 'intent:subscribe':
           this.handleIntentSubscribe(ws, message.data);
           break;
 
+        case 'ping':
+          this.sendToClient(ws, 'pong', { timestamp: Date.now() });
+          break;
+
         default:
+          console.warn(`[WebSocketManager] Unknown event: ${message.event}`);
           this.sendError(ws, `Unknown event: ${message.event}`);
       }
-    } catch (err: any) {
-      console.error('[WebSocketManager] Error processing message:', err);
-      this.sendError(ws, err.message || 'Internal error');
+    } catch (error) {
+      console.error('[WebSocketManager] Message handling error:', error);
+      this.sendError(ws, 'Invalid message format');
     }
   }
 
-  // ============================================================================
-  // COPILOT HANDLERS
-  // ============================================================================
+  private async handleAIExecutionPrompt(ws: ExtendedWebSocket, data: any): Promise<void> {
+    const { context, text, intentId, profileId, metadata } = data;
 
-  private async handleCopilotPrompt(ws: ExtendedWebSocket, payload: any): Promise<void> {
-    const { context, intentId, text, profileId } = payload;
-    // Generate unique process ID
+    if (!context || !text) {
+      this.sendError(ws, 'Missing required fields: context or text');
+      return;
+    }
+
     const processId = `proc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-    // Validate context
-    const validContexts = ['onboarding', 'genesis', 'dev', 'doc'];
-    if (!validContexts.includes(context)) {
-      this.sendToClient(ws, 'copilot.error', {
-        processId,
-        error_code: 'INVALID_CONTEXT',
-        message: `Invalid context: ${context}. Must be one of: ${validContexts.join(', ')}`,
-        recoverable: false
-      });
-      return;
-    }
-
-    // Get workspace
-    const workspaceFolders = vscode.workspace.workspaceFolders;
-    if (!workspaceFolders || workspaceFolders.length === 0) {
-      this.sendToClient(ws, 'copilot.error', {
-        processId,
-        error_code: 'NO_WORKSPACE',
-        message: 'No workspace open',
-        recoverable: false
-      });
-      return;
-    }
-    const projectRoot = workspaceFolders[0].uri.fsPath;
-
-    // Register process
-    const process: CopilotProcess = {
+    const process: AIExecutionProcess = {
       processId,
       context,
       intentId,
@@ -263,218 +217,107 @@ export class WebSocketManager extends EventEmitter {
       status: 'streaming',
       client: ws
     };
+
     this.activeProcesses.set(processId, process);
 
+    this.sendToClient(ws, 'bloom.ai.execution.stream_start', {
+      processId,
+      context,
+      intentId,
+      timestamp: Date.now(),
+      cancellable: true
+    });
+
     try {
-      // Load contract file
-      const contractContent = await this.loadContract(context, projectRoot);
-      
-      // Load intent context if applicable
-      let intentContext = '';
-      if (intentId && (context === 'dev' || context === 'doc')) {
-        intentContext = await this.loadIntentContextViaBrain(projectRoot, context, intentId);
-      }
-      
-      // Build enhanced prompt
-      const enhancedPrompt = this.buildEnhancedPrompt({
-        contract: contractContent,
-        context,
-        intentId,
-        intentContext,
-        projectRoot,
-        userMessage: text
+      const result = await this.ollamaAdapter.executePrompt({
+        prompt: text,
+        context: { intentId, profileId, metadata },
+        stream: true
       });
-      
-      // Notify stream start
-      this.sendToClient(ws, 'copilot.stream_start', {
+
+      for await (const chunk of result.chunks) {
+        process.sequence++;
+        this.sendToClient(ws, 'bloom.ai.execution.stream_chunk', {
+          processId,
+          context,
+          intentId,
+          sequence: process.sequence,
+          chunk
+        });
+      }
+
+      process.status = 'completed';
+      this.sendToClient(ws, 'bloom.ai.execution.stream_end', {
         processId,
         context,
         intentId,
         timestamp: Date.now(),
-        cancellable: true
+        total_chunks: process.sequence,
+        total_chars: result.totalChars
       });
-      
-      // Stream response using CopilotNativeAdapter
-      await this.copilotAdapter.streamResponse(
-        enhancedPrompt,
-        intentId || 'global',
-        projectRoot,
-        (chunk: string) => {
-          // Check if process was cancelled
-          if (process.status === 'cancelled') {
-            throw new Error('Process cancelled by user');
-          }
-          
-          process.sequence++;
-          this.sendToClient(ws, 'copilot.stream_chunk', {
-            processId,
-            context,
-            intentId,
-            sequence: process.sequence,
-            chunk
-          });
-        }
-      );
-      
-      // Mark as completed
-      process.status = 'completed';
-      this.sendToClient(ws, 'copilot.stream_end', {
-        processId,
-        context,
-        intentId,
-        timestamp: Date.now()
-      });
-      
     } catch (error: any) {
-      console.error('[WebSocketManager] Copilot prompt failed:', error);
       process.status = 'error';
-      
-      this.sendToClient(ws, 'copilot.error', {
+      const code = this.classifyError(error);
+      this.sendToClient(ws, 'bloom.ai.execution.error', {
         processId,
-        context,
-        intentId,
-        error_code: this.classifyError(error),
-        message: error.message,
-        recoverable: this.isRecoverableError(error),
-        retry_after: error.retryAfter || 5000
+        error_code: code,
+        details: error?.message || 'Unknown error'
       });
+
+      if (this.isRecoverableError(error)) {
+        console.log('[WebSocketManager] Recoverable error detected');
+      }
     } finally {
-      // Cleanup after 30 seconds
-      setTimeout(() => {
-        this.activeProcesses.delete(processId);
-      }, 30000);
+      this.activeProcesses.delete(processId);
     }
   }
 
-  private async handleCopilotCancel(ws: ExtendedWebSocket, payload: any): Promise<void> {
-    const { processId } = payload;
+  private async handleAIExecutionCancel(ws: ExtendedWebSocket, data: any): Promise<void> {
+    const { processId } = data;
+
     const process = this.activeProcesses.get(processId);
     if (!process) {
-      this.sendError(ws, 'Process not found');
+      this.sendError(ws, `Process not found: ${processId}`);
       return;
     }
 
-    // Verify ownership
-    if (process.client !== ws) {
-      this.sendToClient(ws, 'copilot.error', {
-        processId,
-        error_code: 'PROCESS_UNAUTHORIZED',
-        message: 'Cannot cancel another client\'s process',
-        recoverable: false
-      });
-      return;
-    }
+    await this.ollamaAdapter.cancelProcess(processId);
 
-    // Mark as cancelled
     process.status = 'cancelled';
-
-    this.sendToClient(ws, 'copilot.cancelled', {
+    this.sendToClient(ws, 'bloom.ai.execution.cancelled', {
       processId,
-      partial_output: true,
-      timestamp: Date.now()
+      reason: 'user_request'
     });
 
-    // Cleanup immediately
     this.activeProcesses.delete(processId);
   }
 
-  private async loadContract(context: string, projectRoot: string): Promise<string> {
-    const contractMap: Record<string, string> = {
-      onboarding: '.bloom/.core/.copilot.bootstrap.bl',
-      genesis: '.bloom/.core/.copilot.genesis.bl',
-      dev: '.bloom/.project/.copilot.dev.intent.bl',
-      doc: '.bloom/.project/.copilot.doc.intent.bl'
-    };
-    const relativePath = contractMap[context];
-    if (!relativePath) {
-      return this.getDefaultContract(context);
-    }
-
-    const contractPath = path.join(projectRoot, relativePath);
-
-    try {
-      const content = await fs.readFile(contractPath, 'utf-8');
-      console.log(`[WebSocketManager] Loaded contract: ${contractPath}`);
-      return content;
-    } catch (error) {
-      console.warn(`[WebSocketManager] Contract not found: ${contractPath}, using default`);
-      return this.getDefaultContract(context);
-    }
+  private handleSubscribeIntents(ws: ExtendedWebSocket): void {
+    this.intentSubscribers.add(ws);
+    console.log(`[WebSocketManager] Client subscribed to intents (${this.intentSubscribers.size} total)`);
+    this.sendToClient(ws, 'subscribed', { type: 'intents', timestamp: Date.now() });
   }
 
-  private async loadIntentContextViaBrain(
-    projectRoot: string,
-    context: 'dev' | 'doc',
-    intentId: string
-  ): Promise<string> {
-    try {
-      const result = await BrainApiAdapter.intentGet(intentId, projectRoot);
-      if (result.status === 'success' && result.data) {
-        return this.formatIntentContext(result.data);
-      }
-      
-      return `\n[Intent ${intentId} context unavailable]\n`;
-    } catch (error) {
-      console.warn(`[WebSocketManager] Could not load intent via Brain: ${error}`);
-      return `\n[Intent ${intentId} context unavailable]\n`;
-    }
+  private handleIntentSubscribe(ws: ExtendedWebSocket, data: any): void {
+    const { intentId } = data;
+    console.log(`[WebSocketManager] Client subscribed to intent: ${intentId}`);
+    this.sendToClient(ws, 'intent:subscribed', { intentId, timestamp: Date.now() });
   }
 
-  private formatIntentContext(intentData: any): string {
-    const state = intentData.state;
-    return `═══════════════════════════════════════════════════════════════ INTENT CONTEXT ═══════════════════════════════════════════════════════════════
-Intent ID: ${state.id}
-Type: ${state.type.toUpperCase()}
-Phase: ${state.phase}
-Status: ${state.status}
-Locked: ${state.locked ? `Yes (by ${state.locked_by})` : 'No'}
-
-FILES:
-${state.initial_files.map((f: string) => `  - ${f}`).join('\n')}
-
-${intentData.briefing ? `BRIEFING:
-Problem: ${intentData.briefing.problem}
-Expected Output: ${intentData.briefing.expected_output}` : ''}
-
-${intentData.turns && intentData.turns.length > 0 ? `CHAT HISTORY (${intentData.turns.length} turns):
-${intentData.turns.slice(-3).map((t: any) => `    [${t.actor}]: ${t.content.substring(0, 100)}...`).join('\n')}` : ''}
-
-═══════════════════════════════════════════════════════════════
-`;
-  }
-
-  private buildEnhancedPrompt(params: {
-    contract: string;
-    context: string;
-    intentId?: string;
-    intentContext: string;
-    projectRoot: string;
-    userMessage: string;
-  }): string {
-    return `${params.contract}
-═══════════════════════════════════════════════════════════════
-EXECUTION CONTEXT
-═══════════════════════════════════════════════════════════════
-Mode: ${params.context.toUpperCase()}
-${params.intentId ? `Intent: ${params.intentId}` : 'Global Context'}
-Project Root: ${params.projectRoot}
-${params.intentContext}
-═══════════════════════════════════════════════════════════════
-USER REQUEST
-═══════════════════════════════════════════════════════════════
-${params.userMessage}
-═══════════════════════════════════════════════════════════════
-Respond according to the contract rules above. If this is a DEV or DOC intent,
-ensure you read and respect the current phase and state. If structural health
-markers indicate issues, surface them immediately.
-`;
+  private getSystemContract(): string {
+    return `
+You are Bloom AI Runtime - Arquitecto de Campo.
+Rules:
+- You are sovereign, persistent, with memory and authority.
+- Respect the current phase and state.
+- If structural health markers indicate issues, surface them immediately.
+    `;
   }
 
   private getDefaultContract(context: string): string {
     const defaults: Record<string, string> = {
       onboarding: `# ONBOARDING MODE
 You are assisting with initial system setup. Guide the user through:
-
 Authentication
 Profile creation
 Nucleus setup
@@ -482,7 +325,6 @@ Project linking
 Do not generate code or make architectural decisions.`,
       genesis: `# GENESIS MODE
 You are executing one-time project initialization. Your authority:
-
 Create PROJECT_STRATEGY.md
 Execute nucleus.sync
 Ingest documentation
@@ -511,34 +353,20 @@ Explain and derive, don't implement`
     if (msg.includes('authentication')) return 'AI_AUTH_FAILED';
     if (msg.includes('timeout')) return 'AI_TIMEOUT';
     if (msg.includes('cancelled')) return 'PROCESS_CANCELLED';
+    if (msg.includes('ollama') && msg.includes('not running')) return 'AI_EXECUTION_OLLAMA_NOT_RUNNING';
     return 'AI_EXECUTION_FAILED';
   }
 
   private isRecoverableError(error: any): boolean {
     const code = this.classifyError(error);
-    const recoverable = ['AI_RATE_LIMIT', 'AI_TIMEOUT', 'AI_QUOTA_EXCEEDED'];
+    const recoverable = [
+      'AI_RATE_LIMIT',
+      'AI_TIMEOUT',
+      'AI_QUOTA_EXCEEDED',
+      'AI_EXECUTION_OLLAMA_NOT_RUNNING'
+    ];
     return recoverable.includes(code);
   }
-
-  // ============================================================================
-  // OTHER HANDLERS
-  // ============================================================================
-
-  private handleSubscribeIntents(ws: ExtendedWebSocket): void {
-    this.intentSubscribers.add(ws);
-    console.log(`[WebSocketManager] Client subscribed to intents (${this.intentSubscribers.size} total)`);
-    this.sendToClient(ws, 'subscribed', { type: 'intents', timestamp: Date.now() });
-  }
-
-  private handleIntentSubscribe(ws: ExtendedWebSocket, data: any): void {
-    const { intentId } = data;
-    console.log(`[WebSocketManager] Client subscribed to intent: ${intentId}`);
-    this.sendToClient(ws, 'intent:subscribed', { intentId, timestamp: Date.now() });
-  }
-
-  // ============================================================================
-  // BROADCAST METHODS
-  // ============================================================================
 
   broadcast(event: string, payload?: any): void {
     const message = JSON.stringify({ event, data: payload });
@@ -564,10 +392,6 @@ Explain and derive, don't implement`
     }
   }
 
-  // ============================================================================
-  // HEARTBEAT
-  // ============================================================================
-
   private startHeartbeat(): void {
     this.heartbeatInterval = setInterval(() => {
       this.clients.forEach(ws => {
@@ -591,12 +415,8 @@ Explain and derive, don't implement`
     };
   }
 
-  // Método agregado como recomendado por Claude
   public attachHost(hostExecutor: HostExecutor): void {
     this.hostExecutor = hostExecutor;
     console.log('[WebSocketManager] HostExecutor attached successfully');
-    // Integración adicional: Si es necesario, puedes agregar lógica aquí para usar el hostExecutor en otros métodos.
-    // Por ejemplo, en handleCopilotPrompt, podrías delegar ejecuciones al hostExecutor si aplica.
-    // Ejemplo básico: this.hostExecutor.onMessage((msg) => this.broadcast('host_message', msg));
   }
 }
