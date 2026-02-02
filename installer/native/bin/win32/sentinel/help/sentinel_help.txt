@@ -1,3 +1,18 @@
+DEBUG: Registrando comando en categoría RUNTIME
+DEBUG: Registrando comando en categoría BRIDGE
+DEBUG: Registrando comando en categoría BRIDGE
+DEBUG: Registrando comando en categoría BRIDGE
+DEBUG: Registrando comando en categoría IDENTITY
+DEBUG: Registrando comando en categoría SYSTEM
+DEBUG: Registrando comando en categoría SYSTEM
+DEBUG: Registrando comando en categoría SYSTEM
+DEBUG: Registrando comando en categoría BRIDGE
+DEBUG: Registrando comando en categoría RUNTIME
+DEBUG: Registrando comando en categoría IGNITION
+DEBUG: Registrando comando en categoría OLLAMA
+DEBUG: Registrando comando en categoría DEVELOPMENT
+DEBUG: Registrando comando en categoría UI
+DEBUG: Registrando comando en categoría UI
 
                                                         SENTINEL
                                              Modular Orchestrator for Bloom
@@ -30,11 +45,11 @@
 
   SYSTEM         Health checks and system diagnostics                     3 cmds
   IDENTITY       Profile identity and seed management                     1 cmd
-  RUNTIME        Browser instance lifecycle control                       1 cmd
-  BRIDGE         JSON-RPC communication with Electron                     2 cmds
+  RUNTIME        Browser instance lifecycle control                       2 cmds
+  BRIDGE         JSON-RPC communication with Electron                     4 cmds
   DEVELOPMENT    Integrated development environment                       1 cmd
   UI             Monitoring and telemetry interfaces                      2 cmds
-  -----------------------------------------------------------------------  Total: 10 commands
+  -----------------------------------------------------------------------  Total: 13 commands
 
 
 =======================================================[ SYSTEM ]=======================================================
@@ -86,6 +101,7 @@
 
     Requirements:
       * brain.exe debe estar disponible en bin/
+      * bloom-cortex.blx en bin/native/cortex/
       * Permiso de escritura en HKCU\Software\Google\Chrome\NativeMessagingHosts
       * bloom-host.exe en bin/native/
       * Extension ID válido en configuración
@@ -94,6 +110,16 @@
 
 
 ======================================================[ RUNTIME ]=======================================================
+
+  > DAEMON
+    Inicia Sentinel en modo daemon persistente
+
+    Usage: sentinel daemon
+
+    Flags:
+      --brain-addr               Dirección TCP del Brain (host:puerto) [default: 127.0.0.1:5678]
+
+    --------------------------------------------------------------------------------
 
   > LAUNCH
     Arranca una instancia de navegador para un perfil
@@ -129,17 +155,40 @@
 
     --------------------------------------------------------------------------------
 
-  > LAUNCH-PROFILE
-    Lanza un perfil de Chrome y monitorea su onboarding
+  > LISTEN
+    Escucha eventos del Brain en tiempo real
 
-    Usage: sentinel launch-profile <profile_id>
-
-    Arguments:
-      <profile_id>          required
+    Usage: sentinel listen
 
     Flags:
-      --timeout, -t              Timeout en segundos para esperar onboarding (no implementado aún) [default: 60]
-      --wait, -w                 Esperar a que complete el onboarding (no implementado aún)
+      --brain-addr               Dirección TCP del Brain [default: 127.0.0.1:5678]
+      --filter, -f               Filtrar eventos por tipo o profile_id (substring match)
+      --json                     Salida en JSON puro (sin formateo legible)
+
+    --------------------------------------------------------------------------------
+
+  > POLL
+    Solicita eventos históricos desde un timestamp
+
+    Usage: sentinel poll
+
+    Flags:
+      --brain-addr               Dirección TCP del Brain [default: 127.0.0.1:5678]
+      --since                    Timestamp Unix (segundos o nanosegundos) [default: 0]
+      --since-time               Tiempo relativo (ej: 5m, 1h, 30s)
+
+    --------------------------------------------------------------------------------
+
+  > SEND
+    Envía un evento/comando directo al Brain
+
+    Usage: sentinel send
+
+    Flags:
+      --brain-addr               Dirección TCP del Brain [default: 127.0.0.1:5678]
+      --data, -d                 Datos adicionales en formato JSON (opcional)
+      --profile-id, -p           ID del perfil (opcional)
+      --type, -t                 Tipo de evento (LAUNCH_PROFILE, STOP_PROFILE, etc.) [REQUERIDO]
 
     --------------------------------------------------------------------------------
 
@@ -156,9 +205,10 @@
 
     Requirements:
       * brain.exe disponible y ejecutable
+      * Ollama.exe en carpeta bin/
       * VSCode instalado y detectado en PATH
       * Node.js y npm para servidor Svelte (puerto 5173)
-      * Puertos 5173, 3001, 5678 libres
+      * Puertos 5173, 3001, 5678, 11434 libres
       * extension_path y test_workspace configurados en sentinel.yaml
       * Python runtime en resources/runtime/
 

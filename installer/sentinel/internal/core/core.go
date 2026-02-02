@@ -14,6 +14,7 @@ type RegisteredCommand struct {
 var CommandRegistry []RegisteredCommand
 
 func RegisterCommand(category string, factory CommandFactory) {
+	fmt.Printf("DEBUG: Registrando comando en categoría %s\n", category)
 	CommandRegistry = append(CommandRegistry, RegisteredCommand{
 		Factory:  factory,
 		Category: category,
