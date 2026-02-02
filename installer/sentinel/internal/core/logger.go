@@ -17,15 +17,8 @@ type Logger struct {
 }
 
 func InitLogger(paths *Paths, componentID, label string, priority int) (*Logger, error) {
-	// 1. Determinar subcarpeta según el ID del componente
-	subDir := "sentinel"
-	if componentID == "ollama_service" {
-		subDir = "ollama"
-	} else if componentID == "brain_core" || componentID == "brain_profile" {
-		subDir = "brain"
-	}
-
-	targetDir := filepath.Join(paths.LogsDir, subDir)
+	// 1. Crear directorio de logs si no existe
+	targetDir := paths.LogsDir
 	if err := os.MkdirAll(targetDir, 0755); err != nil {
 		return nil, fmt.Errorf("error creando directorio %s: %w", targetDir, err)
 	}

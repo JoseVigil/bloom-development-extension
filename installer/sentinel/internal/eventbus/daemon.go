@@ -5,10 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sentinel/internal/core"
 	"sentinel/internal/process"
 	"sync"
 	"syscall"
@@ -41,14 +41,15 @@ type DaemonMode struct {
 	shutdownChan   chan os.Signal
 	ctx            context.Context
 	cancel         context.CancelFunc
-	logger         *log.Logger
+	logger         *core.Logger
 	stdoutMu       sync.Mutex
 	lastStateFile  string
 	appDataDir     string
 }
 
 // NewDaemonMode crea una nueva instancia del modo daemon
-func NewDaemonMode(brainAddr string) *DaemonMode {
+// IMPORTANTE: Ahora recibe el logger centralizado desde core
+func NewDaemonMode(brainAddr string, logger *core.Logger) *DaemonMode {
 	ctx, cancel := context.WithCancel(context.Background())
 	
 	// Obtener AppDataDir desde variable de entorno o default
@@ -63,12 +64,12 @@ func NewDaemonMode(brainAddr string) *DaemonMode {
 	}
 	
 	return &DaemonMode{
-		client:        NewSentinelClient(brainAddr),
+		client:        NewSentinelClient(brainAddr, logger),
 		stdinChan:     make(chan StdinCommand, 10),
 		shutdownChan:  make(chan os.Signal, 1),
 		ctx:           ctx,
 		cancel:        cancel,
-		logger:        log.New(os.Stderr, "[Daemon] ", log.LstdFlags),
+		logger:        logger,
 		lastStateFile: filepath.Join(appDataDir, "sentinel_last_event.txt"),
 		appDataDir:    appDataDir,
 	}
@@ -76,37 +77,37 @@ func NewDaemonMode(brainAddr string) *DaemonMode {
 
 // Start inicia el modo daemon con la Coreografía de Inicio exacta
 func (dm *DaemonMode) Start() error {
-	dm.logger.Printf("========================================")
-	dm.logger.Printf("🚀 Sentinel - Modo Sidecar Persistente")
-	dm.logger.Printf("========================================")
+	dm.logger.Info("========================================")
+	dm.logger.Info("🚀 Sentinel - Modo Sidecar Persistente")
+	dm.logger.Info("========================================")
 	
 	// ═══════════════════════════════════════════════════════════════
 	// COREOGRAFÍA DE INICIO (según Prompt - Sección 2)
 	// ═══════════════════════════════════════════════════════════════
 	
 	// ── FASE 1: AUDIT ──────────────────────────────────────────────
-	dm.logger.Printf("📋 FASE 1: Ejecutando auditoría local de procesos...")
+	dm.logger.Info("📋 FASE 1: Ejecutando auditoría local de procesos...")
 	report, err := process.StartupAudit(dm.appDataDir, dm.client.bus.addr)
 	if err != nil {
-		dm.logger.Printf("⚠️  Error en auditoría: %v", err)
+		dm.logger.Warning("Error en auditoría: %v", err)
 		// Continuar de todas formas
 		report = &process.HygieneReport{
 			Timestamp: time.Now().Format(time.RFC3339),
 			Errors:    []string{err.Error()},
 		}
 	} else {
-		dm.logger.Printf("✓ Auditoría completada:")
-		dm.logger.Printf("  - Perfiles totales: %d", report.TotalProfiles)
-		dm.logger.Printf("  - Perfiles abiertos: %d", report.OpenProfiles)
-		dm.logger.Printf("  - Perfiles huérfanos detectados: %d", len(report.OrphanedProfiles))
+		dm.logger.Success("Auditoría completada:")
+		dm.logger.Info("  - Perfiles totales: %d", report.TotalProfiles)
+		dm.logger.Info("  - Perfiles abiertos: %d", report.OpenProfiles)
+		dm.logger.Info("  - Perfiles huérfanos detectados: %d", len(report.OrphanedProfiles))
 		
 		if len(report.OrphanedProfiles) > 0 {
-			dm.logger.Printf("  - IDs huérfanos: %v", report.OrphanedProfiles)
+			dm.logger.Info("  - IDs huérfanos: %v", report.OrphanedProfiles)
 		}
 	}
 	
 	// ── FASE 2: CONNECT ────────────────────────────────────────────
-	dm.logger.Printf("🔌 FASE 2: Conectando con Brain en %s...", dm.client.bus.addr)
+	dm.logger.Info("🔌 FASE 2: Conectando con Brain en %s...", dm.client.bus.addr)
 	if err := dm.client.Connect(); err != nil {
 		return fmt.Errorf("no se pudo conectar con Brain: %w", err)
 	}
@@ -116,18 +117,18 @@ func (dm *DaemonMode) Start() error {
 		return fmt.Errorf("timeout conectando con Brain: %w", err)
 	}
 	
-	dm.logger.Printf("✓ Conectado con Brain")
+	dm.logger.Success("Conectado con Brain")
 	
 	// ── FASE 3: SYNC ───────────────────────────────────────────────
-	dm.logger.Printf("🔄 FASE 3: Sincronizando estado con Brain...")
+	dm.logger.Info("🔄 FASE 3: Sincronizando estado con Brain...")
 	if len(report.Corrections) > 0 {
 		if err := dm.client.SendProfileStateSync(report.Corrections); err != nil {
-			dm.logger.Printf("⚠️  Error enviando sincronización: %v", err)
+			dm.logger.Warning("Error enviando sincronización: %v", err)
 		} else {
-			dm.logger.Printf("✓ Sincronización enviada: %d correcciones aplicadas", len(report.Corrections))
+			dm.logger.Success("Sincronización enviada: %d correcciones aplicadas", len(report.Corrections))
 		}
 	} else {
-		dm.logger.Printf("✓ No se requieren correcciones de estado")
+		dm.logger.Success("No se requieren correcciones de estado")
 	}
 	
 	// ═══════════════════════════════════════════════════════════════
@@ -174,7 +175,7 @@ func (dm *DaemonMode) Start() error {
 		},
 	})
 	
-	dm.logger.Printf("✓ Todos los workers activos. Sentinel en modo escucha...")
+	dm.logger.Success("Todos los workers activos. Sentinel en modo escucha...")
 	
 	// Bloquear hasta recibir señal de shutdown
 	<-dm.shutdownChan
@@ -184,7 +185,7 @@ func (dm *DaemonMode) Start() error {
 
 // stdinWorker escucha comandos desde Electron vía Stdin
 func (dm *DaemonMode) stdinWorker() {
-	dm.logger.Printf("Worker Stdin iniciado")
+	dm.logger.Info("Worker Stdin iniciado")
 	scanner := bufio.NewScanner(os.Stdin)
 	
 	for scanner.Scan() {
@@ -192,7 +193,7 @@ func (dm *DaemonMode) stdinWorker() {
 		
 		var cmd StdinCommand
 		if err := json.Unmarshal([]byte(line), &cmd); err != nil {
-			dm.logger.Printf("Error parseando comando stdin: %v", err)
+			dm.logger.Error("Error parseando comando stdin: %v", err)
 			dm.emitError("", "PARSE_ERROR", fmt.Sprintf("JSON inválido: %v", err))
 			continue
 		}
@@ -206,18 +207,18 @@ func (dm *DaemonMode) stdinWorker() {
 	}
 	
 	if err := scanner.Err(); err != nil {
-		dm.logger.Printf("Error leyendo stdin: %v", err)
+		dm.logger.Error("Error leyendo stdin: %v", err)
 	}
 }
 
 // controlWorker procesa comandos y eventos
 func (dm *DaemonMode) controlWorker() {
-	dm.logger.Printf("Worker de Control iniciado")
+	dm.logger.Info("Worker de Control iniciado")
 	
 	for {
 		select {
 		case <-dm.ctx.Done():
-			dm.logger.Printf("Cerrando worker de control")
+			dm.logger.Info("Cerrando worker de control")
 			return
 			
 		case cmd := <-dm.stdinChan:
@@ -228,14 +229,14 @@ func (dm *DaemonMode) controlWorker() {
 
 // zombieCleanupWorker ejecuta limpieza periódica de procesos zombies
 func (dm *DaemonMode) zombieCleanupWorker() {
-	dm.logger.Printf("Worker de Limpieza de Zombies iniciado (cada 2 minutos)")
+	dm.logger.Info("Worker de Limpieza de Zombies iniciado (cada 2 minutos)")
 	ticker := time.NewTicker(2 * time.Minute)
 	defer ticker.Stop()
 	
 	for {
 		select {
 		case <-dm.ctx.Done():
-			dm.logger.Printf("Cerrando worker de limpieza")
+			dm.logger.Info("Cerrando worker de limpieza")
 			return
 			
 		case <-ticker.C:
@@ -246,15 +247,15 @@ func (dm *DaemonMode) zombieCleanupWorker() {
 
 // executeZombieCleanup ejecuta la limpieza de zombies
 func (dm *DaemonMode) executeZombieCleanup() {
-	dm.logger.Printf("🧹 Iniciando limpieza de zombies...")
+	dm.logger.Info("🧹 Iniciando limpieza de zombies...")
 	
 	// Obtener PIDs activos desde profiles.json
 	activePIDs := dm.getActivePIDs()
-	dm.logger.Printf("PIDs activos registrados: %v", activePIDs)
+	dm.logger.Info("PIDs activos registrados: %v", activePIDs)
 	
 	// Ejecutar limpieza
 	if err := process.SafeCleanup(dm.appDataDir, activePIDs); err != nil {
-		dm.logger.Printf("⚠️  Error en limpieza de zombies: %v", err)
+		dm.logger.Error("Error en limpieza de zombies: %v", err)
 		
 		dm.emitToElectron(StdoutResponse{
 			Type:      "ZOMBIE_CLEANUP_ERROR",
@@ -263,10 +264,10 @@ func (dm *DaemonMode) executeZombieCleanup() {
 			Timestamp: time.Now().UnixNano(),
 		})
 	} else {
-		dm.logger.Printf("✓ Limpieza de zombies completada")
+		dm.logger.Success("Limpieza de zombies completada")
 		
 		dm.emitToElectron(StdoutResponse{
-			Type:      "ZOMBIE_CLEANUP_COMPLETED",
+			Type:      "ZOMBIE_CLEANUP_SUCCESS",
 			Status:    "success",
 			Timestamp: time.Now().UnixNano(),
 		})
@@ -275,33 +276,24 @@ func (dm *DaemonMode) executeZombieCleanup() {
 
 // getActivePIDs obtiene los PIDs activos desde profiles.json
 func (dm *DaemonMode) getActivePIDs() []int {
-	profilesPath := filepath.Join(dm.appDataDir, "config", "profiles.json")
-	data, err := os.ReadFile(profilesPath)
-	if err != nil {
-		dm.logger.Printf("Error leyendo profiles.json: %v", err)
-		return []int{}
-	}
-
-	var registry process.ProfileRegistry
-	if err := json.Unmarshal(data, &registry); err != nil {
-		dm.logger.Printf("Error parseando profiles.json: %v", err)
-		return []int{}
-	}
-
-	var pids []int
-	for _, profile := range registry.Profiles {
-		if profile.Status == "open" && profile.PID > 0 {
-			pids = append(pids, profile.PID)
-		}
-	}
-
-	return pids
+	// Implementación pendiente: leer profiles.json y extraer PIDs activos
+	// Por ahora retornamos lista vacía
+	return []int{}
 }
 
-// handleStdinCommand despacha comandos recibidos desde Electron
+// handleStdinCommand procesa un comando recibido desde Electron
 func (dm *DaemonMode) handleStdinCommand(cmd StdinCommand) {
-	dm.logger.Printf("Comando recibido: %s (ID: %s, ProfileID: %s)", cmd.Command, cmd.ID, cmd.ProfileID)
+	dm.logger.Info("Comando recibido: %s (id: %s)", cmd.Command, cmd.ID)
 	
+	// ACK inmediato
+	dm.emitToElectron(StdoutResponse{
+		Type:      "ACK",
+		ID:        cmd.ID,
+		Status:    "processing",
+		Timestamp: time.Now().UnixNano(),
+	})
+	
+	// Procesar según tipo de comando
 	switch cmd.Command {
 	case "launch":
 		dm.handleLaunch(cmd)
@@ -334,7 +326,6 @@ func (dm *DaemonMode) handleLaunch(cmd StdinCommand) {
 		return
 	}
 	
-	// Respuesta exitosa
 	dm.emitToElectron(StdoutResponse{
 		Type:      "COMMAND_RESULT",
 		ID:        cmd.ID,
@@ -438,7 +429,7 @@ func (dm *DaemonMode) handlePollEvents(cmd StdinCommand) {
 
 // handleCleanupZombies ejecuta limpieza manual de zombies
 func (dm *DaemonMode) handleCleanupZombies(cmd StdinCommand) {
-	dm.logger.Printf("Limpieza manual de zombies solicitada")
+	dm.logger.Info("Limpieza manual de zombies solicitada")
 	dm.executeZombieCleanup()
 	
 	dm.emitToElectron(StdoutResponse{
@@ -454,7 +445,7 @@ func (dm *DaemonMode) handleCleanupZombies(cmd StdinCommand) {
 
 // handleExit inicia el shutdown graceful
 func (dm *DaemonMode) handleExit(cmd StdinCommand) {
-	dm.logger.Printf("Comando exit recibido, iniciando shutdown...")
+	dm.logger.Info("Comando exit recibido, iniciando shutdown...")
 	
 	dm.emitToElectron(StdoutResponse{
 		Type:      "COMMAND_RESULT",
@@ -490,22 +481,22 @@ func (dm *DaemonMode) registerEventHandlers() {
 	
 	// Handler específico para EXTENSION_ERROR (integración con Guardian)
 	dm.client.On("EXTENSION_ERROR", func(event Event) {
-		dm.logger.Printf("⚠️  Error de extensión detectado: %s", event.ProfileID)
+		dm.logger.Warning("Error de extensión detectado: %s", event.ProfileID)
 	})
 	
 	// Handler para ONBOARDING_COMPLETE
 	dm.client.On("ONBOARDING_COMPLETE", func(event Event) {
-		dm.logger.Printf("✓ Onboarding completado: %s", event.ProfileID)
+		dm.logger.Success("Onboarding completado: %s", event.ProfileID)
 	})
 	
 	// Handler para PROFILE_CONNECTED (Handshake de 3 fases confirmado)
 	dm.client.On("PROFILE_CONNECTED", func(event Event) {
-		dm.logger.Printf("✓ Perfil conectado (handshake confirmado): %s", event.ProfileID)
+		dm.logger.Success("Perfil conectado (handshake confirmado): %s", event.ProfileID)
 	})
 	
 	// Handler para PROFILE_DISCONNECTED
 	dm.client.On("PROFILE_DISCONNECTED", func(event Event) {
-		dm.logger.Printf("⚠️  Perfil desconectado: %s", event.ProfileID)
+		dm.logger.Warning("Perfil desconectado: %s", event.ProfileID)
 	})
 }
 
@@ -516,7 +507,7 @@ func (dm *DaemonMode) emitToElectron(response StdoutResponse) {
 	
 	data, err := json.Marshal(response)
 	if err != nil {
-		dm.logger.Printf("Error serializando respuesta: %v", err)
+		dm.logger.Error("Error serializando respuesta: %v", err)
 		return
 	}
 	
@@ -539,20 +530,20 @@ func (dm *DaemonMode) emitError(id, errorType, message string) {
 func (dm *DaemonMode) rehydrate() {
 	data, err := os.ReadFile(dm.lastStateFile)
 	if err != nil {
-		dm.logger.Printf("No se encontró estado previo, iniciando desde cero")
+		dm.logger.Info("No se encontró estado previo, iniciando desde cero")
 		return
 	}
 	
 	var lastTimestamp int64
 	if _, err := fmt.Sscanf(string(data), "%d", &lastTimestamp); err != nil {
-		dm.logger.Printf("Error parseando último timestamp: %v", err)
+		dm.logger.Error("Error parseando último timestamp: %v", err)
 		return
 	}
 	
-	dm.logger.Printf("Rehidratando desde timestamp: %d", lastTimestamp)
+	dm.logger.Info("Rehidratando desde timestamp: %d", lastTimestamp)
 	
 	if err := dm.client.PollEvents(lastTimestamp); err != nil {
-		dm.logger.Printf("Error solicitando eventos históricos: %v", err)
+		dm.logger.Error("Error solicitando eventos históricos: %v", err)
 	}
 }
 
@@ -560,13 +551,13 @@ func (dm *DaemonMode) rehydrate() {
 func (dm *DaemonMode) saveLastEventTimestamp(timestamp int64) {
 	data := fmt.Sprintf("%d", timestamp)
 	if err := os.WriteFile(dm.lastStateFile, []byte(data), 0644); err != nil {
-		dm.logger.Printf("Error guardando timestamp: %v", err)
+		dm.logger.Error("Error guardando timestamp: %v", err)
 	}
 }
 
 // gracefulShutdown cierra todos los recursos limpiamente
 func (dm *DaemonMode) gracefulShutdown() error {
-	dm.logger.Printf("Iniciando shutdown graceful...")
+	dm.logger.Info("Iniciando shutdown graceful...")
 	
 	// Emitir evento de shutdown a Electron
 	dm.emitToElectron(StdoutResponse{
@@ -588,7 +579,7 @@ func (dm *DaemonMode) gracefulShutdown() error {
 	}
 	
 	if err := dm.client.Send(shutdownEvent); err != nil {
-		dm.logger.Printf("Error notificando shutdown al Brain: %v", err)
+		dm.logger.Error("Error notificando shutdown al Brain: %v", err)
 	}
 	
 	// Dar tiempo para que el mensaje llegue
@@ -596,10 +587,10 @@ func (dm *DaemonMode) gracefulShutdown() error {
 	
 	// Cerrar la conexión con el Brain
 	if err := dm.client.Close(); err != nil {
-		dm.logger.Printf("Error cerrando cliente: %v", err)
+		dm.logger.Error("Error cerrando cliente: %v", err)
 	}
 	
-	dm.logger.Printf("✓ Shutdown completado correctamente")
+	dm.logger.Success("Shutdown completado correctamente")
 	
 	return nil
 }

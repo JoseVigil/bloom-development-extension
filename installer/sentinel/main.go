@@ -75,8 +75,16 @@ func runDaemonMode() {
 		brainAddr = "127.0.0.1:5678"
 	}
 	
+	// Inicializar Core en modo silencioso para tener acceso al logger
+	c, err := core.InitializeSilent()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[FATAL] Error inicializando core: %v\n", err)
+		os.Exit(1)
+	}
+	defer c.Close()
+	
 	// Crear e iniciar el modo daemon
-	daemon := eventbus.NewDaemonMode(brainAddr)
+	daemon := eventbus.NewDaemonMode(brainAddr, c.Logger)
 	
 	if err := daemon.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "[FATAL] Error iniciando modo daemon: %v\n", err)

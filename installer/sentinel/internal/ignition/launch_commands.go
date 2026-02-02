@@ -1,4 +1,4 @@
-package bridge
+package ignition
 
 import (
 	"sentinel/internal/core"
@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	core.RegisterCommand("BRIDGE", func(c *core.Core) *cobra.Command {
+	core.RegisterCommand("IGNITION", func(c *core.Core) *cobra.Command {
 		var timeout int
 		var wait bool
 
@@ -27,7 +27,7 @@ que requieren correlación de eventos y espera de respuestas.`,
 
 				c.Logger.Info("Iniciando lanzamiento de perfil %s...", profileID)
 
-				client := eventbus.NewSentinelClient("127.0.0.1:5678")
+				client := eventbus.NewSentinelClient("127.0.0.1:5678", c.Logger)
 
 				if err := client.Connect(); err != nil {
 					c.Logger.Error("No se pudo conectar con Brain: %v", err)
@@ -61,4 +61,4 @@ que requieren correlación de eventos y espera de respuestas.`,
 
 		return cmd
 	})
-}	
+}

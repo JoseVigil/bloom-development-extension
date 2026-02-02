@@ -6,9 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"os"
+	"sentinel/internal/core"
 	"sync"
 	"time"
 )
@@ -38,7 +38,7 @@ type EventBus struct {
 	reconnectTimer *time.Timer
 	ctx            context.Context
 	cancel         context.CancelFunc
-	logger         *log.Logger
+	logger         *core.Logger
 	isConnected    bool
 	lastEventTime  int64
 	sequence       uint64
@@ -46,7 +46,8 @@ type EventBus struct {
 }
 
 // NewEventBus crea una nueva instancia del bus de eventos
-func NewEventBus(brainAddr string) *EventBus {
+// IMPORTANTE: Ahora recibe el logger centralizado desde core
+func NewEventBus(brainAddr string, logger *core.Logger) *EventBus {
 	ctx, cancel := context.WithCancel(context.Background())
 	
 	return &EventBus{
@@ -55,13 +56,13 @@ func NewEventBus(brainAddr string) *EventBus {
 		stopChan:  make(chan struct{}),
 		ctx:       ctx,
 		cancel:    cancel,
-		logger:    log.New(os.Stderr, "[EventBus] ", log.LstdFlags),
+		logger:    logger,
 	}
 }
 
 // Connect establece la conexión inicial con el Brain
 func (eb *EventBus) Connect() error {
-	eb.logger.Printf("Intentando conectar con Brain en %s...", eb.addr)
+	eb.logger.Info("Intentando conectar con Brain en %s...", eb.addr)
 	
 	conn, err := net.DialTimeout("tcp", eb.addr, 5*time.Second)
 	if err != nil {
@@ -73,11 +74,11 @@ func (eb *EventBus) Connect() error {
 	eb.isConnected = true
 	eb.connMu.Unlock()
 	
-	eb.logger.Printf("✓ Conexión establecida con Brain")
+	eb.logger.Success("Conexión establecida con Brain")
 	
 	// Enviar registro inicial
 	if err := eb.sendRegister(); err != nil {
-		eb.logger.Printf("Advertencia: No se pudo enviar REGISTER: %v", err)
+		eb.logger.Warning("No se pudo enviar REGISTER: %v", err)
 	}
 	
 	return nil
@@ -107,22 +108,22 @@ func (eb *EventBus) Start() {
 
 // readLoop lee continuamente del socket TCP usando protocolo 4-byte BigEndian
 func (eb *EventBus) readLoop() {
-	eb.logger.Printf("Iniciando loop de lectura de eventos (protocolo 4-byte BigEndian)...")
+	eb.logger.Info("Iniciando loop de lectura de eventos (protocolo 4-byte BigEndian)...")
 	
 	for {
 		select {
 		case <-eb.ctx.Done():
-			eb.logger.Printf("Cerrando loop de lectura")
+			eb.logger.Info("Cerrando loop de lectura")
 			return
 		default:
 			event, err := eb.readEvent()
 			if err != nil {
 				if err == io.EOF || isConnectionError(err) {
-					eb.logger.Printf("Conexión perdida con Brain: %v", err)
+					eb.logger.Warning("Conexión perdida con Brain: %v", err)
 					eb.handleDisconnect()
 					return // Salir del loop, será reiniciado por reconnect
 				}
-				eb.logger.Printf("Error leyendo evento: %v", err)
+				eb.logger.Error("Error leyendo evento: %v", err)
 				continue
 			}
 			
@@ -135,7 +136,7 @@ func (eb *EventBus) readLoop() {
 			case <-eb.ctx.Done():
 				return
 			default:
-				eb.logger.Printf("⚠️  Canal de eventos lleno, descartando evento")
+				eb.logger.Warning("Canal de eventos lleno, descartando evento")
 			}
 		}
 	}
@@ -240,7 +241,7 @@ func (eb *EventBus) handleDisconnect() {
 	}
 	eb.connMu.Unlock()
 	
-	eb.logger.Printf("Activando reconexión con backoff exponencial...")
+	eb.logger.Warning("Activando reconexión con backoff exponencial...")
 	eb.scheduleReconnect(2 * time.Second)
 }
 
@@ -251,10 +252,10 @@ func (eb *EventBus) scheduleReconnect(delay time.Duration) {
 	}
 	
 	eb.reconnectTimer = time.AfterFunc(delay, func() {
-		eb.logger.Printf("Intentando reconectar...")
+		eb.logger.Info("Intentando reconectar...")
 		
 		if err := eb.Connect(); err != nil {
-			eb.logger.Printf("Reconexión fallida: %v", err)
+			eb.logger.Error("Reconexión fallida: %v", err)
 			
 			// Backoff exponencial: duplicar el delay hasta un máximo de 60 segundos
 			nextDelay := delay * 2
@@ -266,7 +267,7 @@ func (eb *EventBus) scheduleReconnect(delay time.Duration) {
 			return
 		}
 		
-		eb.logger.Printf("✓ Reconexión exitosa")
+		eb.logger.Success("Reconexión exitosa")
 		// Reiniciar el loop de lectura
 		go eb.readLoop()
 	})
@@ -297,7 +298,7 @@ func (eb *EventBus) healthCheckLoop() {
 			}
 			
 			if err := eb.Send(pingEvent); err != nil {
-				eb.logger.Printf("Health check falló: %v", err)
+				eb.logger.Error("Health check falló: %v", err)
 				eb.handleDisconnect()
 			}
 		}
@@ -326,7 +327,7 @@ func (eb *EventBus) IsConnected() bool {
 
 // Close cierra la conexión y limpia recursos
 func (eb *EventBus) Close() error {
-	eb.logger.Printf("Cerrando EventBus...")
+	eb.logger.Info("Cerrando EventBus...")
 	
 	// Cancelar contexto para detener goroutines
 	eb.cancel()
@@ -348,7 +349,7 @@ func (eb *EventBus) Close() error {
 	// Cerrar canales
 	close(eb.stopChan)
 	
-	eb.logger.Printf("✓ EventBus cerrado correctamente")
+	eb.logger.Success("EventBus cerrado correctamente")
 	return nil
 }
 

@@ -52,8 +52,6 @@ func (th *MonitorHub) StartGranularTelemetry(profileID, launchID string) {
 	go th.tailFile(miningLog, "[BROWSER-MINING]", true)
 }
 
-// ... Métodos tailFile y runLogMiner se mantienen con th.MonitorHub ...
-
 func (th *MonitorHub) Setup() error {
 	os.MkdirAll(filepath.Join(th.Core.Paths.LogsDir, "profiles"), 0755)
 	f, _ := os.OpenFile(th.NativeLog, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
