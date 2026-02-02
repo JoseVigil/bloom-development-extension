@@ -22,7 +22,7 @@ import { TwitterAuthStatus } from '../../../contracts/types';
  * - Format: python -m brain --json <category> <command> [ARGS]
  * - Added comprehensive logging for debugging
  */
-export class BrainApiAdapter {
+export class AIRuntimeAdapter {
 
   // ============================================================================
   // NUCLEUS OPERATIONS
@@ -157,13 +157,16 @@ export class BrainApiAdapter {
     actor: 'user' | 'ai';
     content: string;
     nucleusPath: string;
+    provider?: 'ollama' | 'gemini';
   }): Promise<BrainResult<void>> {
-    return BrainExecutor.execute(['--json', 'intent', 'add-turn'], {
+    const args: Record<string, any> = {
       '-i': params.intentId,
       '-a': params.actor,
       '-c': params.content,
       '-p': params.nucleusPath
-    });
+    };
+    if (params.provider) args['--provider'] = params.provider;
+    return BrainExecutor.execute(['--json', 'intent', 'add-turn'], args);
   }
 
   static async intentFinalize(intentId: string, nucleusPath: string): Promise<BrainResult<void>> {
@@ -203,16 +206,15 @@ export class BrainApiAdapter {
 
   static async projectDetect(params: {
     parentPath: string;
-    maxDepth?: number;
-    strategy?: string;
-    minConfidence?: 'high' | 'medium' | 'low';
+    recursive?: boolean;
+    excludeDirs?: string[];
+    maxDepth?: number; 
   }): Promise<BrainResult<{ projects: DetectedProject[] }>> {
-    const args: Record<string, any> = {};
-    if (params.maxDepth) args['-d'] = params.maxDepth.toString();
-    if (params.strategy) args['-s'] = params.strategy;
-    if (params.minConfidence) args['-c'] = params.minConfidence;
-
-    return BrainExecutor.execute(['--json', 'project', 'detect', params.parentPath], args);
+    const args: Record<string, any> = { '-p': params.parentPath };
+    if (params.recursive) args['--recursive'] = true;
+    if (params.excludeDirs) args['--exclude-dirs'] = params.excludeDirs.join(',');
+    if (params.maxDepth !== undefined) args['--max-depth'] = params.maxDepth;
+    return BrainExecutor.execute(['--json', 'project', 'detect'], args);
   }
 
   static async projectAdd(params: {
@@ -395,4 +397,31 @@ export class BrainApiAdapter {
   static async healthWebSocketStatus(): Promise<BrainResult> {
     return BrainExecutor.execute(['--json', 'health', 'websocket-status'], {});
   }
+
+  // ============================================================================
+  // OLLAMA OPERATIONS
+  // ============================================================================
+
+  static async ollamaStatus(): Promise<BrainResult<{ running: boolean }>> {
+    return BrainExecutor.execute(['--json', 'ollama', 'status'], {});
+  }
+
+  static async ollamaListModels(): Promise<BrainResult<{ models: string[] }>> {
+    return BrainExecutor.execute(['--json', 'ollama', 'list-models'], {});
+  }
+
+  static async ollamaChat(params: {
+    prompt: string;
+    context?: Record<string, any>;
+    model?: string;
+    stream?: boolean;
+  }): Promise<BrainResult<{ response: string }>> {
+    const args: Record<string, any> = { '--prompt': params.prompt };
+    if (params.context) args['--context'] = JSON.stringify(params.context);
+    if (params.model) args['--model'] = params.model;
+    if (params.stream) args['--stream'] = true;
+    return BrainExecutor.execute(['--json', 'ollama', 'chat'], args);
+  }
 }
+
+export const BrainApiAdapter = AIRuntimeAdapter;
