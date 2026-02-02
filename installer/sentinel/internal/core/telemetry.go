@@ -33,10 +33,10 @@ var (
 	once              sync.Once
 )
 
-func GetTelemetryManager(logsDir string) *TelemetryManager {
-	once.Do(func() {
-		telemetryInstance = &TelemetryManager{
-			path: filepath.Join(logsDir, "telemetry.json"),
+func GetTelemetryManager(logsDir, telemetryDir string) *TelemetryManager {
+    once.Do(func() {
+        telemetryInstance = &TelemetryManager{
+            path: filepath.Join(telemetryDir, "telemetry.json"),
 			data: TelemetryData{Streams: make(map[string]StreamInfo)},
 		}
 		telemetryInstance.load()

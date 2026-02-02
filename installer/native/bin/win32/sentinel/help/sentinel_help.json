@@ -64,8 +64,7 @@
     "use": "dev-start",
     "short": "Inicia el entorno de desarrollo integrado",
     "category": "DEVELOPMENT",
-    "example": "  sentinel dev-start",
-    "requires": "  - brain.exe disponible y ejecutable\n  - Ollama.exe en carpeta bin/\n  - VSCode instalado y detectado en PATH\n  - Node.js y npm para servidor Svelte (puerto 5173)\n  - Puertos 5173, 48215, 5678, 11434 libres\n  - extension_path y test_workspace configurados en sentinel.yaml\n  - Python runtime en resources/runtime/"
+    "example": "  sentinel dev-start"
   },
   {
     "name": "health",

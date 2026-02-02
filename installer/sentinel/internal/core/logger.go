@@ -38,7 +38,7 @@ func InitLogger(paths *Paths, componentID, label string, priority int) (*Logger,
 
 	// 3. Registro en telemetría (con icono según prioridad)
 	icon := getPriorityIcon(priority)
-	tm := GetTelemetryManager(paths.LogsDir)
+	tm := GetTelemetryManager(paths.LogsDir, paths.TelemetryDir)
 	tm.RegisterStream(componentID, icon+" "+label, logPath, priority)
 
 	return &Logger{

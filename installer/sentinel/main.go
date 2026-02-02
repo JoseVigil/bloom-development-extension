@@ -148,11 +148,8 @@ Modo Daemon (Sidecar):
 	
 	// Integración de comandos registrados en los paquetes internos
 	// El DEBUG nos confirmará si la eliminación del import duplicado resolvió la carga
-	fmt.Fprintf(os.Stderr, "DEBUG: Total comandos registrados antes de añadir: %d\n", len(core.CommandRegistry))
 	for _, reg := range core.CommandRegistry {
 		cmd := reg.Factory(c)
-
-		fmt.Fprintf(os.Stderr, "DEBUG: Añadiendo comando %s en categoría %s\n", cmd.Use, reg.Category) 
 		
 		// Inyectar metadatos de categoría para el renderizador visual
 		if cmd.Annotations == nil {

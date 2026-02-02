@@ -42,7 +42,10 @@ func (th *MonitorHub) StartGranularTelemetry(profileID, launchID string) {
 	_ = os.WriteFile(readLog, []byte(""), 0644)
 
 	// REGISTRO PERSISTENTE CON ICONO 📦 (Prioridad 4)
-	tm := core.GetTelemetryManager(th.Core.Paths.LogsDir)
+	tm := core.GetTelemetryManager(
+		th.Core.Paths.LogsDir,
+		th.Core.Paths.TelemetryDir,
+	)
 	tm.RegisterStream("mining_"+profileID, "📦 MINING ENGINE", miningLog, 4)
 	tm.RegisterStream("reader_"+profileID, "📖 MINING READER", readLog, 4)
 

@@ -201,15 +201,6 @@
     Example:
         sentinel dev-start
 
-    Requirements:
-      * brain.exe disponible y ejecutable
-      * Ollama.exe en carpeta bin/
-      * VSCode instalado y detectado en PATH
-      * Node.js y npm para servidor Svelte (puerto 5173)
-      * Puertos 5173, 48215, 5678, 11434 libres
-      * extension_path y test_workspace configurados en sentinel.yaml
-      * Python runtime en resources/runtime/
-
     --------------------------------------------------------------------------------
 
 
