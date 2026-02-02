@@ -35,16 +35,24 @@ echo   CGO_ENABLED=%CGO_ENABLED% >> "%LOG_FILE%"
 echo   GOMEMLIMIT=%GOMEMLIMIT% >> "%LOG_FILE%"
 echo. >> "%LOG_FILE%"
 
-:: ───────────────────────────────────────────────────────────────
-:: Nueva estructura de salida (ajustada desde scripts/)
-:: ───────────────────────────────────────────────────────────────
+:: ────────────────────────────────────────────────────────────────
+:: Nueva estructura de salida: installer\native\bin\win32\sentinel\
+:: El script se ejecuta desde una ubicación dentro de installer\
+:: por lo que necesitamos subir hasta la raíz y bajar a installer\native\
+:: ────────────────────────────────────────────────────────────────
 set PLATFORM=win32
 set APP_FOLDER=sentinel
 
-set OUTPUT_BASE=..\..\native\bin\%PLATFORM%\%APP_FOLDER%
-set OUTPUT_DIR=%OUTPUT_BASE%
-set OUTPUT_FILE=%OUTPUT_DIR%\sentinel.exe
-set HELP_DIR=%OUTPUT_DIR%\help
+:: ============================================
+:: PROJECT ROOT (ABSOLUTO, CANONICO)
+:: ============================================
+set "PROJECT_ROOT=%~dp0..\..\.."
+for %%I in ("%PROJECT_ROOT%") do set "PROJECT_ROOT=%%~fI"
+
+set "OUTPUT_BASE=%PROJECT_ROOT%\installer\native\bin\%PLATFORM%\%APP_FOLDER%"
+set "OUTPUT_DIR=%OUTPUT_BASE%"
+set "OUTPUT_FILE=%OUTPUT_DIR%\sentinel.exe"
+set "HELP_DIR=%OUTPUT_DIR%\help"
 
 :: Crear directorios de salida
 if not exist "%OUTPUT_BASE%" mkdir "%OUTPUT_BASE%"
@@ -63,7 +71,7 @@ set BUILD_INFO=..\internal\core\build_info.go
 if not exist "%BUILD_FILE%" (
     echo 0 > "%BUILD_FILE%"
 )
-set /p CURRENT_BUILD=<%BUILD_FILE%"
+set /p CURRENT_BUILD=<%BUILD_FILE%
 set /a NEXT_BUILD=%CURRENT_BUILD%+1
 
 for /f "tokens=1-3 delims=/-" %%a in ('date /t') do (
@@ -97,7 +105,7 @@ echo.
 echo Compiling sentinel.exe → %OUTPUT_FILE% ...
 echo Compiling sentinel.exe → %OUTPUT_FILE% ... >> "%LOG_FILE%"
 
-pushd ".."
+pushd "%PROJECT_ROOT%\installer\sentinel"
 
 go build -p 1 -ldflags="-s -w" -o "%OUTPUT_FILE%" . >> "%LOG_FILE%" 2>&1
 
@@ -114,6 +122,9 @@ if %BUILD_RC% NEQ 0 (
     echo 📋 Log guardado en: %LOG_FILE%
     exit /b 1
 )
+
+:: Convertir OUTPUT_FILE a ruta absoluta para poder ejecutarlo
+for %%F in ("%OUTPUT_FILE%") do set "OUTPUT_FILE_ABS=%%~fF"
 
 echo ✅ Compilation successful: %OUTPUT_FILE%
 echo ✅ Compilation successful: %OUTPUT_FILE% >> "%LOG_FILE%"
@@ -138,7 +149,7 @@ echo.
 echo Generating sentinel_help.json...
 echo Generating sentinel_help.json... >> "%LOG_FILE%"
 
-"%OUTPUT_FILE%" --json-help > "%HELP_DIR%\sentinel_help.json" 2>> "%LOG_FILE%"
+"%OUTPUT_FILE_ABS%" --json-help > "%HELP_DIR%\sentinel_help.json" 2>> "%LOG_FILE%"
 if %ERRORLEVEL% EQU 0 (
     echo ✅ JSON help generated: %HELP_DIR%\sentinel_help.json
     echo ✅ JSON help generated: %HELP_DIR%\sentinel_help.json >> "%LOG_FILE%"
@@ -151,7 +162,7 @@ echo.
 echo Generating sentinel_help.txt...
 echo Generating sentinel_help.txt... >> "%LOG_FILE%"
 
-"%OUTPUT_FILE%" --help > "%HELP_DIR%\sentinel_help.txt" 2>> "%LOG_FILE%"
+"%OUTPUT_FILE_ABS%" --help > "%HELP_DIR%\sentinel_help.txt" 2>> "%LOG_FILE%"
 if %ERRORLEVEL% EQU 0 (
     echo ✅ Text help generated: %HELP_DIR%\sentinel_help.txt
     echo ✅ Text help generated: %HELP_DIR%\sentinel_help.txt >> "%LOG_FILE%"
@@ -175,10 +186,7 @@ if %ERRORLEVEL% NEQ 0 (
     goto :resumen
 )
 
-set "PROJECT_ROOT=%~dp0..\..\..\"
-
-set "PROJECT_ROOT=%PROJECT_ROOT:\\=\%"
-set "UPDATE_SCRIPT=%PROJECT_ROOT%scripts\python\update_build_telemetry.py"
+set "UPDATE_SCRIPT=%PROJECT_ROOT%\scripts\python\update_build_telemetry.py"
 
 echo Debug: PROJECT_ROOT resuelto → %PROJECT_ROOT% >> "%LOG_FILE%"
 echo Debug: UPDATE_SCRIPT → %UPDATE_SCRIPT% >> "%LOG_FILE%"
