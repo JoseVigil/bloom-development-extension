@@ -38,6 +38,63 @@ function serviceExists(serviceName) {
 }
 
 // ============================================================================
+// TELEMETRY
+// ============================================================================
+
+async function updateTelemetry(logPath) {
+  const telemetryPath = path.join(paths.logsDir, 'telemetry.json');
+  
+  let telemetry = { active_streams: {} };
+  
+  // Leer telemetry existente
+  if (fs.existsSync(telemetryPath)) {
+    try {
+      telemetry = await fs.readJson(telemetryPath);
+    } catch (e) {
+      console.warn('⚠️ Could not read telemetry.json, creating new one');
+    }
+  }
+  
+  // Actualizar entrada del servicio
+  telemetry.active_streams.brain_service = {
+    label: "⚙️ BRAIN SERVICE",
+    path: logPath.replace(/\\/g, '/'), // Normalizar a forward slashes
+    priority: 3,
+    last_update: new Date().toISOString()
+  };
+  
+  // Escribir telemetry actualizado
+  await fs.writeJson(telemetryPath, telemetry, { spaces: 2 });
+  console.log('📊 Telemetry updated');
+}
+
+// ============================================================================
+// ROTACIÓN DE LOGS
+// ============================================================================
+
+async function rotateLogIfNeeded(logPath) {
+  if (!fs.existsSync(logPath)) {
+    return; // No hay nada que rotar
+  }
+  
+  const stats = fs.statSync(logPath);
+  const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+  
+  if (stats.size > MAX_SIZE) {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const logDir = path.dirname(logPath);
+    const logName = path.basename(logPath, '.log');
+    const rotatedPath = path.join(logDir, `${logName}_${timestamp}.old.log`);
+    
+    console.log(`🔄 Rotating log: ${path.basename(logPath)} → ${path.basename(rotatedPath)}`);
+    await fs.move(logPath, rotatedPath);
+    
+    // Actualizar telemetry con el nuevo archivo (vacío)
+    await updateTelemetry(logPath);
+  }
+}
+
+// ============================================================================
 // INSTALACIÓN
 // ============================================================================
 
@@ -58,15 +115,18 @@ async function installWindowsService() {
     await removeService(NEW_SERVICE_NAME);
   }
 
-  // 3. Crear Logs
-  const logDir = paths.logsDir;
+  // 3. Crear Logs en la nueva ubicación
+  const logDir = path.join(paths.logsDir, 'brain', 'service');
   await fs.ensureDir(logDir);
-  const stdoutLog = path.join(logDir, 'brain_service.log');
-  const stderrLog = path.join(logDir, 'brain_error.log');
+  const serviceLog = path.join(logDir, 'brain_service.log');
+
+  // 4. Rotar log si existe y es muy grande
+  await rotateLogIfNeeded(serviceLog);
 
   console.log(`🔧 Configuring NSSM...`);
   console.log(`   Bin: ${binaryPath}`);
   console.log(`   Dir: ${workDir}`);
+  console.log(`   Log: ${serviceLog}`);
 
   // ---------------------------------------------------------
   // SECUENCIA DE COMANDOS NSSM
@@ -91,14 +151,17 @@ async function installWindowsService() {
   
   await runCommand(`"${nssmPath}" set "${NEW_SERVICE_NAME}" AppEnvironmentExtra "${envExtra}"`);
   
-  // E. Redirección de IO (Logs)
-  await runCommand(`"${nssmPath}" set "${NEW_SERVICE_NAME}" AppStdout "${stdoutLog}"`);
-  await runCommand(`"${nssmPath}" set "${NEW_SERVICE_NAME}" AppStderr "${stderrLog}"`);
+  // E. Redirección de IO (UN SOLO LOG para stdout Y stderr)
+  await runCommand(`"${nssmPath}" set "${NEW_SERVICE_NAME}" AppStdout "${serviceLog}"`);
+  await runCommand(`"${nssmPath}" set "${NEW_SERVICE_NAME}" AppStderr "${serviceLog}"`);
   
   // F. Configuración de Inicio
   await runCommand(`"${nssmPath}" set "${NEW_SERVICE_NAME}" Start SERVICE_AUTO_START`);
   await runCommand(`"${nssmPath}" set "${NEW_SERVICE_NAME}" AppExit Default Restart`);
   await runCommand(`"${nssmPath}" set "${NEW_SERVICE_NAME}" DisplayName "Bloom Brain Service"`);
+
+  // G. Actualizar telemetry
+  await updateTelemetry(serviceLog);
 
   console.log('✅ Service registered.');
 }
@@ -126,11 +189,11 @@ async function startService() {
     console.error(`❌ Failed to start service: ${e.message}`);
     // Leemos el log de error para dar pistas
     try {
-        const logDir = paths.logsDir;
-        const errLog = path.join(logDir, 'brain_error.log');
-        if (fs.existsSync(errLog)) {
-            const content = fs.readFileSync(errLog, 'utf8');
-            console.error('📄 Last Service Error Log:\n', content.slice(-500));
+        const logDir = path.join(paths.logsDir, 'brain', 'service');
+        const serviceLog = path.join(logDir, 'brain_service.log');
+        if (fs.existsSync(serviceLog)) {
+            const content = fs.readFileSync(serviceLog, 'utf8');
+            console.error('📄 Last Service Log:\n', content.slice(-500));
         }
     } catch (_) {}
     return false;
