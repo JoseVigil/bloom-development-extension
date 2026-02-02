@@ -148,46 +148,47 @@ export const NUCLEUS_LIST_TRANSITIONS: Record<NucleusListState['status'], Nucleu
 };
 
 // ============================================================================
-// COPILOT STATE
+// AI EXECUTION STATE
 // ============================================================================
 
 /**
- * Copilot streaming state machine
+ * AI execution streaming state machine
  * Manages connection, streaming, completion, and errors
  * 
  * State Flow:
  * 1. idle → connecting
  * 2. connecting → (streaming | error)
- * 3. streaming → (completed | error)
+ * 3. streaming → (completed | cancelled | error)
  * 4. completed → idle (reset for next prompt)
- * 5. error → idle (reset)
+ * 5. cancelled → idle (reset for next prompt)
+ * 6. error → idle (reset)
  * 
  * @example
  * ```typescript
- * const [copilotState, setCopilotState] = useState<CopilotState>({
+ * const [aiState, setAIState] = useState<AIExecutionState>({
  *   status: 'idle',
  *   streaming: false
  * });
  * 
  * // User sends prompt
- * setCopilotState({ status: 'connecting', streaming: false });
+ * setAIState({ status: 'connecting', streaming: false });
  * 
  * // AI starts streaming
- * setCopilotState({
+ * setAIState({
  *   status: 'streaming',
  *   streaming: true,
  *   chunks: ['Hello', ', ', 'I can help']
  * });
  * 
  * // Streaming complete
- * setCopilotState({
+ * setAIState({
  *   status: 'completed',
  *   streaming: false,
  *   response: 'Hello, I can help you with that...'
  * });
  * ```
  */
-export type CopilotState =
+export type AIExecutionState =
   | { status: 'idle'; streaming: false }
   | { status: 'connecting'; streaming: false }
   | { status: 'streaming'; streaming: true; chunks: string[]; processId?: string }
@@ -196,9 +197,9 @@ export type CopilotState =
   | { status: 'error'; streaming: false; error: Error };
 
 /**
- * Valid transitions for CopilotState
+ * Valid transitions for AIExecutionState
  */
-export const COPILOT_STATE_TRANSITIONS: Record<CopilotState['status'], CopilotState['status'][]> = {
+export const AI_EXECUTION_STATE_TRANSITIONS: Record<AIExecutionState['status'], AIExecutionState['status'][]> = {
   idle: ['connecting'],
   connecting: ['streaming', 'error'],
   streaming: ['completed', 'cancelled', 'error'],
@@ -364,7 +365,7 @@ export const FILE_WATCHER_TRANSITIONS: Record<FileWatcherState['status'], FileWa
  * @example
  * ```typescript
  * const canTransition = isValidTransition(
- *   COPILOT_STATE_TRANSITIONS,
+ *   AI_EXECUTION_STATE_TRANSITIONS,
  *   'streaming',
  *   'completed'
  * ); // true

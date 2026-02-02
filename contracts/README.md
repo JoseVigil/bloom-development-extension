@@ -1,511 +1,207 @@
+### Pantallazo de la Nueva Estructura para Ollama en los Contratos
+
+Antes de darte el README.md actualizado, te doy un resumen rápido ("pantallazo") de lo nuevo con Ollama en la estructura de contratos. Esto te sirve como guía para crear prompts en todos los contratos (e.g., prompts para Ollama que usen los tipos genéricos de AI, como AIPromptPayload). La idea es que ahora el sistema es "soberano" (Bloom como runtime, Ollama como provider pluggable), sin acoplamiento a Copilot.
+
+**Nueva Estructura General (Post-Migración):**
+- **Provider Agnostic:** Todo es genérico. AIProvider ahora solo incluye 'ollama' y 'gemini' (removido 'copilot'). Usa 'bloom.ai.execution.*' para eventos WebSocket.
+- **Ollama-Specific:** Ollama es local (no auth externa). Prompts usan AIPromptPayload con provider='ollama'. Streaming via ollamaChat en AIRuntimeAdapter.
+- **Para Crear Prompts:** Usa AIPromptPayload como base. Ejemplo de prompt para Ollama:
+  ```
+  const prompt: AIPromptPayload = {
+    context: 'dev',
+    text: 'Genera código para un login',
+    intentId: 'intent-dev-123',
+    provider: 'ollama',
+    metadata: { model: 'llama2' }
+  };
+  ```
+  Envialo via WebSocket ('bloom.ai.execution.prompt') o AIRuntimeAdapter.ollamaChat.
+- **Beneficios:** Out-of-the-box (Ollama local), soberanía (no extensiones externas), fácil para prompts en contratos (valida con type guards).
+
+**Lista de Todos los Contratos (Archivos en contracts/):**
+Basado en lo que me compartiste y el README original, estos son los archivos clave. Usa esta lista para crear prompts (e.g., "Usa types.ts para definir un prompt con AIPromptPayload").
+
+1. **types.ts** - Tipos principales (Nucleus, Intent, AIProvider, AIPromptPayload, BrainResult, etc.).
+2. **websocket-protocol.ts** - Protocolo WebSocket (mensajes client/server, eventos bloom.ai.execution.*).
+3. **errors.ts** (o errors.js) - Catálogo de errores (AI_EXECUTION_*).
+4. **state-machines.ts** - Máquinas de estado (AIExecutionState, transiciones).
+5. **integration.test.ts** - Tests de integración (valida contratos E2E).
+6. **examples/*.json** - Ejemplos JSON para cada tipo.
+7. **README.md** - Documentación general (este archivo).
+
+Para prompts: "Crea un prompt usando AIPromptPayload de types.ts, validando transiciones con AIExecutionState de state-machines.ts, y manejando errores con AI_EXECUTION_STREAM_ERROR de errors.ts".
+
+### README.md Actualizado (Versión Migrada a Ollama)
+Aquí la versión completa actualizada. Removí todo lo de Copilot, agregué Ollama, renombré a genéricos (e.g., AIExecutionState, bloom.ai.execution.prompt), actualicé ejemplos y history. Mantuve la estructura original para que sea fácil comparar.
+
+```markdown
 # Bloom Integration Contract
 
-**Single source of truth for all system types, protocols, and error handling.**
+**Fuente única de verdad para todos los tipos de sistema, protocolos y manejo de errores.**
 
-This directory contains the formal contract that defines how all layers of the Bloom system communicate:
+Este directorio contiene el contrato formal que define cómo se comunican todas las capas del sistema Bloom:
 
 ```
 UI (Svelte) ↔ Plugin API ↔ Brain CLI ↔ Filesystem
          ⇕
-    WebSocket Protocol (with Copilot streaming)
+    Protocolo WebSocket (con streaming AI genérico)
 ```
 
 ---
 
-## 📁 Files
+## 📁 Archivos
 
-### Core Type Definitions
+### Definiciones de Tipos Principales
 
-- **`types.ts`** - All TypeScript types (Nucleus, Intent, Profile, Copilot, etc.)
-- **`websocket-protocol.ts`** - WebSocket message protocol (client ↔ server, including Copilot streaming)
-- **`errors.ts`** - Error catalog with severity and retry strategies (including Copilot errors)
-- **`state-machines.ts`** - UI state machines with valid transitions (including CopilotState)
+- **`types.ts`** - Todos los tipos TypeScript (Nucleus, Intent, Profile, AIProvider, etc.)
+- **`websocket-protocol.ts`** - Protocolo de mensajes WebSocket (cliente ↔ servidor, incluyendo streaming AI genérico)
+- **`errors.ts`** - Catálogo de errores con severidad y estrategias de retry (incluyendo errores AI genéricos)
+- **`state-machines.ts`** - Máquinas de estado para UI con transiciones válidas (incluyendo AIExecutionState)
 
-### Examples & Tests
+### Ejemplos y Tests
 
-- **`examples/*.json`** - Valid JSON examples for each type
-- **`integration.test.ts`** - Integration tests (E2E + unit)
-
----
-
-## 🎯 Purpose
-
-### ✅ What This Contract Provides
-
-1. **Type Safety** - Shared types prevent drift between UI and Plugin
-2. **Protocol Definition** - Formal WebSocket message spec (including Copilot streaming)
-3. **Error Standards** - Consistent error codes and recovery strategies
-4. **State Management** - Validated state machine transitions
-5. **Integration Tests** - Verify contract compliance
-6. **Copilot Integration** - Full protocol for AI-assisted workflows
-
-### ❌ What This Contract Prevents
-
-- Duplicate type definitions across layers
-- Implicit assumptions about data structures
-- Inconsistent error handling
-- Invalid state transitions
-- Breaking changes without detection
+- **`examples/*.json`** - Ejemplos JSON válidos para cada tipo
+- **`integration.test.ts`** - Tests de integración (E2E + unitarios)
 
 ---
 
-## 📚 Usage Guide
+## 🎯 Propósito
 
-### Importing Types
+### ✅ Qué Proporciona Este Contrato
+
+1. **Seguridad de Tipos** - Tipos compartidos evitan desviaciones entre UI y Plugin
+2. **Definición de Protocolo** - Especificación formal de mensajes WebSocket (incluyendo streaming AI genérico)
+3. **Estándares de Errores** - Códigos de error consistentes y estrategias de recuperación
+4. **Gestión de Estados** - Transiciones validadas en máquinas de estado
+5. **Tests de Integración** - Verifican cumplimiento del contrato
+6. **Integración con Ollama** - Protocolo completo para workflows asistidos por AI local (Ollama como provider default)
+
+### ❌ Qué Previene Este Contrato
+
+- Definiciones de tipos duplicadas a través de capas
+- Asunciones implícitas sobre estructuras de datos
+- Manejo inconsistente de errores
+- Transiciones de estado inválidas
+- Cambios rompientes sin detección
+
+---
+
+## 📚 Guía de Uso
+
+### Importando Tipos
 
 ```typescript
-// In UI components
+// En componentes UI
 import type { Intent, Nucleus } from '@/contracts/types';
-import type { CopilotState } from '@/contracts/state-machines';
-import type { CopilotPromptPayload } from '@/contracts/websocket-protocol';
+import type { AIExecutionState } from '@/contracts/state-machines';
+import type { AIPromptPayload } from '@/contracts/websocket-protocol';
 
-// In Plugin API
+// En Plugin API
 import type { APIResponse, ErrorResponse } from './contracts/types';
 import { createErrorResponse } from './contracts/errors';
 
-// In Brain executor
+// En executor de Brain
 import type { BrainResult } from './contracts/types';
 ```
 
-### Using Copilot State Machine
+### Usando la Máquina de Estado AI
 
 ```typescript
 import { useState } from 'react';
-import type { CopilotState } from '@/contracts/state-machines';
-import { isValidTransition, COPILOT_STATE_TRANSITIONS } from '@/contracts/state-machines';
+import { isValidTransition, AI_EXECUTION_TRANSITIONS } from '@/contracts/state-machines';
+import type { AIExecutionState } from '@/contracts/state-machines';
 
-const [state, setState] = useState<CopilotState>({ 
-  status: 'idle', 
-  streaming: false 
-});
+const [state, setState] = useState<AIExecutionState>({ status: 'idle', streaming: false });
 
-// Validate transition before updating
-function transition(to: CopilotState['status']) {
-  if (isValidTransition(COPILOT_STATE_TRANSITIONS, state.status, to)) {
-    setState({ status: to, streaming: to === 'streaming', ... });
-  } else {
-    console.error(`Invalid Copilot transition: ${state.status} → ${to}`);
-  }
+if (isValidTransition(AI_EXECUTION_TRANSITIONS, state.status, 'connecting')) {
+  setState({ status: 'connecting', streaming: false, processId: 'proc-123' });
 }
-
-// Example flow:
-// idle → connecting → streaming → completed → idle
 ```
 
-### Handling Copilot Errors
+### Enviando un Prompt a Ollama
 
 ```typescript
-import { createErrorResponse, isCopilotError, getRetryDelay } from '@/contracts/errors';
-import type { CopilotErrorPayload } from '@/contracts/websocket-protocol';
-
-// Handle WebSocket error event
-ws.onmessage = (event) => {
-  const msg = JSON.parse(event.data);
-  
-  if (msg.event === 'copilot.error') {
-    const errorPayload: CopilotErrorPayload = msg.data;
-    
-    // Create standardized error response
-    const error = createErrorResponse(
-      errorPayload.error_code as any,
-      errorPayload.details
-    );
-    
-    // Check if Copilot-specific error
-    if (isCopilotError(error.error_code)) {
-      console.log('Copilot error detected');
-    }
-    
-    // Get retry delay if recoverable
-    if (error.recoverable) {
-      const delay = getRetryDelay(error.error_code as any, attemptNumber);
-      if (delay) {
-        setTimeout(() => retryPrompt(), delay);
-      }
-    }
-  }
-};
-```
-
-### WebSocket Communication with Copilot
-
-```typescript
+import type { AIPromptPayload } from '@/contracts/websocket-protocol';
 import { ClientMessageBuilder } from '@/contracts/websocket-protocol';
-import type { ServerMessage } from '@/contracts/websocket-protocol';
 
-// Send Copilot prompt
-const msg = ClientMessageBuilder.copilotPrompt({
+// Enviar prompt via WebSocket
+const payload: AIPromptPayload = {
   context: 'dev',
-  text: 'Add user authentication with JWT',
-  intentId: 'intent-dev-123',
-  profileId: 'profile-default'
-});
-ws.send(JSON.stringify(msg));
-
-// Handle Copilot streaming response
-ws.onmessage = (event) => {
-  const msg: ServerMessage = JSON.parse(event.data);
-  
-  switch (msg.event) {
-    case 'copilot.stream_start':
-      console.log('Process ID:', msg.data.processId);
-      console.log('Cancellable:', msg.data.cancellable);
-      setStreaming(true);
-      break;
-      
-    case 'copilot.stream_chunk':
-      appendChunk(msg.data.chunk);
-      console.log('Chunk #', msg.data.sequence);
-      break;
-      
-    case 'copilot.stream_end':
-      console.log('Total chunks:', msg.data.total_chunks);
-      console.log('Total chars:', msg.data.total_chars);
-      console.log('Model used:', msg.data.model_used);
-      setStreaming(false);
-      finalizeResponse();
-      break;
-      
-    case 'copilot.error':
-      handleCopilotError(msg.data);
-      setStreaming(false);
-      break;
-      
-    case 'copilot.cancelled':
-      console.log('Process cancelled, chunks sent:', msg.data.chunks_sent);
-      setStreaming(false);
-      break;
-  }
+  text: 'Genera código para login',
+  provider: 'ollama',
+  metadata: { model: 'llama2' }
 };
 
-// Cancel ongoing process
-function cancelCopilot(processId: string) {
-  const msg = ClientMessageBuilder.copilotCancel(processId);
-  ws.send(JSON.stringify(msg));
-}
+const msg = ClientMessageBuilder.aiExecutionPrompt(payload);
+ws.send(JSON.stringify(msg));
 ```
 
----
-
-## 🧪 Testing
-
-### Run All Contract Tests
-
-```bash
-npm run test -- contracts/integration.test.ts
-```
-
-### Type Checking
-
-```bash
-# Check types compile
-cd contracts && npx tsc --noEmit
-
-# Watch mode
-npx tsc --noEmit --watch
-```
-
-### Validate Examples
-
-```bash
-# Ensure JSON examples match TypeScript types
-npm run validate:examples
-```
-
----
-
-## 📄 Contract Evolution
-
-### Adding New Types
-
-1. Add type definition to `types.ts`
-2. Add JSDoc with example
-3. Create JSON example in `examples/`
-4. Add test case in `integration.test.ts`
-5. Update this README
-
-### Modifying Existing Types
-
-1. **BREAKING CHANGE** - Increment protocol version
-2. Add migration guide
-3. Update all examples
-4. Update tests
-5. Notify all consumers
-
-### Adding Error Codes
-
-1. Add to `ErrorCode` union in `types.ts`
-2. Add entry to `ERROR_CATALOG` in `errors.ts`
-3. Add test case
-4. Document in API reference
-
----
-
-## 📖 Type Reference
-
-### Core Entities
-
-| Type | Description | Example |
-|------|-------------|---------|
-| `Nucleus` | Development workspace | See `examples/nucleus.json` |
-| `Intent` | Development/doc task | See `examples/intent-dev.json` |
-| `IntentDev` | Development intent | See `examples/intent-dev.json` |
-| `IntentDoc` | Documentation intent | See `examples/intent-doc.json` |
-| `ChromeProfile` | Chrome profile with AI accounts | See `examples/profile.json` |
-
-### Copilot Types
-
-| Type | Description | Usage |
-|------|-------------|-------|
-| `CopilotPromptPayload` | User prompt to Copilot | Client → Server |
-| `StreamStartPayload` | Streaming begins | Server → Client |
-| `StreamChunkPayload` | Text chunk | Server → Client |
-| `StreamEndPayload` | Streaming complete | Server → Client |
-| `CopilotErrorPayload` | Copilot error | Server → Client |
-| `CancelledPayload` | Process cancelled | Server → Client |
-
-### API Types
-
-| Type | Description |
-|------|-------------|
-| `BrainResult<T>` | Brain CLI command result |
-| `APIResponse<T>` | HTTP API response wrapper |
-| `APISuccessResponse<T>` | Success response |
-| `APIErrorResponse` | Error response |
-| `ErrorResponse` | Standard error structure |
-
-### State Machines
-
-| Type | Description | States |
-|------|-------------|--------|
-| `LoadingState<T>` | Generic async operation | idle, loading, success, error |
-| `CopilotState` | Copilot streaming | idle, connecting, streaming, completed, cancelled, error |
-| `IntentEditorState` | Intent editor | loading, editing, saving, locked_by_other, error |
-| `NucleusListState` | Nucleus list | loading, loaded, empty, error |
-
----
-
-## 🚨 Error Catalog
-
-### Critical Errors (Not Recoverable)
-
-- `BRAIN_CLI_UNAVAILABLE` - Brain CLI not installed
-- `BRAIN_EXECUTION_FAILED` - Brain command failed
-- `NOT_AUTHENTICATED` - GitHub auth required
-- `NOT_NUCLEUS` - Invalid nucleus directory
-- `AI_AUTH_FAILED` - AI service auth failed
-- `COPILOT_STREAM_ERROR` - Copilot streaming failed (fatal)
-- `INTERNAL_ERROR` - Unexpected error
-
-### Recoverable Errors (Automatic Retry)
-
-- `NUCLEUS_NOT_FOUND` - Retry immediately
-- `INTENT_NOT_FOUND` - Retry immediately
-- `INTENT_LOCKED` - Exponential backoff
-- `AI_TIMEOUT` - Retry immediately
-- `COPILOT_PROMPT_INVALID` - Fix and retry (1s delay)
-- `COPILOT_CONTEXT_UNKNOWN` - Retry with valid context (500ms)
-
-### Warnings (Manual Intervention)
-
-- `INTENT_LOCKED_BY_OTHER` - User action needed
-- `AI_RATE_LIMIT` - Wait or switch account
-- `AI_QUOTA_EXCEEDED` - Add API key
-- `COPILOT_PROCESS_NOT_FOUND` - Process already completed
-- `COPILOT_CANCELLED` - User cancelled
-
-See `errors.ts` for complete catalog with retry strategies.
-
----
-
-## 🔗 Integration Points
-
-### UI ↔ WebSocket (Copilot Streaming)
+### Manejando Errores
 
 ```typescript
-import { websocketStore } from '@/stores/websocket';
-import type { CopilotPromptPayload } from '@/contracts/types';
+import { isRecoverableError, getRetryDelay, createErrorResponse } from '@/contracts/errors';
+import type { ErrorCode } from '@/contracts/types';
 
-// Connect to WebSocket
-websocketStore.connect();
+const code: ErrorCode = 'AI_EXECUTION_STREAM_ERROR';
 
-// Send Copilot prompt
-websocketStore.sendPrompt({
-  context: 'onboarding',
-  text: 'How do I configure GitHub?',
-  profileId: 'profile-default'
-});
-
-// Subscribe to streaming updates
-websocketStore.subscribe($ws => {
-  if ($ws.streaming) {
-    console.log('Streaming:', $ws.chunks.join(''));
-  }
-  
-  if ($ws.error) {
-    console.error('Copilot error:', $ws.error.message);
-  }
-});
-
-// Cancel process
-websocketStore.cancelProcess(processId);
-```
-
-### UI → Plugin API
-
-```typescript
-// UI sends HTTP request
-const response = await fetch('/api/v1/intent/create', {
-  method: 'POST',
-  body: JSON.stringify({ type: 'dev', name: 'Test', ... })
-});
-
-const result: APIResponse<Intent> = await response.json();
-
-if (result.ok) {
-  // Handle success
-  console.log(result.data);
+if (isRecoverableError(code)) {
+  const delay = getRetryDelay(code, 1); // e.g., 1000ms
+  setTimeout(retry, delay);
 } else {
-  // Handle error
-  console.error(result.error.message);
+  const errorResponse = createErrorResponse(code, 'Stream falló');
+  // Muestra al usuario
 }
 ```
 
-### Plugin → Brain CLI
+### Mejores Prácticas
+
+1. **Siempre importa de contracts/** - Nunca dupliques tipos.
+2. **Usa type guards** - Narrow unions correctamente (`if (response.ok) { ... }`).
+3. **Valida transiciones de estado** - Evita cambios inválidos.
+4. **Maneja todos los códigos de error** - Consulta `ERROR_CATALOG` para errores recuperables.
+5. **Agrega JSDoc** - Documenta tipos públicos con ejemplos.
+6. **No uses `any`** - Usa `unknown` y valida en runtime.
+7. **Prueba serialización** - Asegura que tipos sobrevivan JSON round-trip.
+8. **Usa máquina de estado AI** - Valida transiciones antes de actualizar UI.
+9. **Maneja streaming con gracia** - Acumula chunks, maneja cancelación.
+10. **Chequea errores AI** - Usa `isAIExecutionError()` para manejo específico.
+
+---
+
+## 📞 Soporte
+
+- Reporta violaciones de contrato como bugs.
+- Propone cambios via RFC (Request for Comments).
+- Pregunta en el canal `#bloom-dev`.
+
+---
+
+## 📜 Historia de Versiones
+
+- **v1.2.0** (2026-02-01) - Migración a Ollama (PROMPT MIGRACIÓN)
+  - Removido Copilot streaming protocol (reemplazado por AI genérico).
+  - Renombrado CopilotState a AIExecutionState.
+  - Removidos códigos de error Copilot (reemplazados por AI_EXECUTION_*).
+  - Agregadas funciones helper: `isAIExecutionError()`, `formatErrorForUser()`.
+  - Actualizado README con ejemplos Ollama.
+
+- **v1.1.0** (2025-12-31) - Integración Copilot (deprecated).
+- **v1.0.0** (2025-01-23) - Contrato inicial.
+
+---
+
+## ⚡ Referencia Rápida
 
 ```typescript
-import type { BrainResult, Intent } from './contracts/types';
-
-const result: BrainResult<Intent> = await brainExecutor('intent:create', {
-  type: 'dev',
-  name: 'Test Intent',
-  files: ['src/test.ts']
-});
-
-if (result.status === 'success') {
-  return result.data;
-} else {
-  throw new Error(result.error);
-}
-```
-
----
-
-## 📋 Checklist for Contract Changes
-
-Before modifying the contract:
-
-- [ ] Document change in git commit
-- [ ] Update TypeScript types
-- [ ] Update JSON examples
-- [ ] Update integration tests
-- [ ] Run `npm run typecheck`
-- [ ] Run `npm run test -- contracts/`
-- [ ] Update this README
-- [ ] Notify downstream consumers
-- [ ] Consider backward compatibility
-
----
-
-## 🛠️ Troubleshooting
-
-### Types not found
-
-```bash
-# Verify tsconfig paths
-cat tsconfig.json | grep contracts
-
-# Should see:
-"@/contracts/*": ["./contracts/*"]
-```
-
-### Copilot WebSocket not connecting
-
-```bash
-# Check backend is running
-curl http://localhost:8080/health
-
-# Check WebSocket endpoint
-wscat -c ws://localhost:8080
-
-# Expected: {"event":"connected","data":{...}}
-```
-
-### Examples don't match types
-
-```bash
-# Validate with TypeScript compiler
-npx tsc --noEmit contracts/examples/*.json
-```
-
-### State transition errors
-
-```typescript
-// Add assertion in development
-import { assertValidTransition } from '@/contracts/state-machines';
-
-assertValidTransition(
-  COPILOT_STATE_TRANSITIONS,
-  currentState,
-  nextState,
-  'CopilotComponent'
-); // Throws if invalid
-```
-
----
-
-## 🎓 Best Practices
-
-1. **Always import from contracts/** - Never duplicate types
-2. **Use type guards** - Narrow unions properly (`if (response.ok) { ... }`)
-3. **Validate state transitions** - Prevent invalid state changes
-4. **Handle all error codes** - Check `ERROR_CATALOG` for recoverable errors
-5. **Add JSDoc** - Document all public types with examples
-6. **No `any` types** - Use `unknown` and validate at runtime
-7. **Test serialization** - Ensure types survive JSON round-trip
-8. **Use Copilot state machine** - Always validate transitions before updating UI
-9. **Handle streaming gracefully** - Accumulate chunks, handle cancellation
-10. **Check Copilot errors** - Use `isCopilotError()` for specific handling
-
----
-
-## 📞 Support
-
-- Report contract violations as bugs
-- Propose changes via RFC (Request for Comments)
-- Ask questions in `#bloom-dev` channel
-
----
-
-## 📜 Version History
-
-- **v1.1.0** (2025-12-31) - Copilot Integration (PROMPT 1)
-  - Added Copilot streaming protocol to websocket-protocol.ts
-  - Added CopilotState machine to state-machines.ts
-  - Added 5 new Copilot error codes to errors.ts
-  - Added helper functions: `isCopilotError()`, `formatErrorForUser()`
-  - Updated README with Copilot examples
-
-- **v1.0.0** (2025-01-23) - Initial contract (PROMPT 0)
-  - Core types: Nucleus, Intent, Profile
-  - WebSocket protocol v1.0.0
-  - Error catalog with 16 error codes
-  - State machines for UI
-
----
-
-## ⚡ Quick Reference
-
-```typescript
-// Import everything you need
+// Importa todo lo que necesitás
 import type {
   Nucleus, Intent, IntentDev, ChromeProfile,
   APIResponse, ErrorResponse, BrainResult,
-  CopilotPromptPayload, StreamChunkPayload
+  AIPromptPayload, StreamChunkPayload
 } from '@/contracts/types';
 
 import type {
-  CopilotState, IntentEditorState, LoadingState
+  AIExecutionState, IntentEditorState, LoadingState
 } from '@/contracts/state-machines';
 
 import type {
@@ -516,7 +212,7 @@ import {
   createErrorResponse,
   isRecoverableError,
   getRetryDelay,
-  isCopilotError,
+  isAIExecutionError,
   formatErrorForUser
 } from '@/contracts/errors';
 
@@ -528,4 +224,10 @@ import {
 
 ---
 
-**This contract is the foundation of Bloom's architecture. Treat it with care.**
+**Este contrato es la base de la arquitectura de Bloom. Trátalo con cuidado.**
+
+Este README actualizado es más corto, enfocado en Ollama, y con ejemplos prácticos para prompts. Úsalo como base para generar prompts en los contratos (e.g., "Usa AIPromptPayload para un prompt en Ollama").
+
+Listado de contratos: Como antes, types.ts, websocket-protocol.ts, errors.ts, state-machines.ts, integration.test.ts, examples/*.json.
+
+Si querés traducción literal al español, decime.

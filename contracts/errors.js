@@ -183,12 +183,78 @@ exports.ERROR_CATALOG = {
     },
     RATE_LIMIT_EXCEEDED: {
         severity: 'warning',
-        default_message: 'Rate limit exceeded',
-        user_action: 'Wait a moment and try again',
+        default_message: 'Too many requests, please slow down',
+        user_action: 'Wait a moment before trying again',
         retry_strategy: 'exponential',
         http_status: 429,
-        docs_url: '/docs/troubleshooting/rate-limits',
+        docs_url: '/docs/api/rate-limits',
         telemetry_category: 'system'
+    },
+    // ============================================================================
+    // AI EXECUTION ERRORS
+    // ============================================================================
+    AI_EXECUTION_PROMPT_INVALID: {
+        severity: 'recoverable',
+        default_message: 'Invalid AI prompt format or missing required fields',
+        user_action: 'Check your prompt structure and required fields',
+        retry_strategy: 'immediate',
+        http_status: 400,
+        docs_url: '/docs/ai-execution/prompts',
+        telemetry_category: 'ai_service'
+    },
+    AI_EXECUTION_CONTEXT_UNKNOWN: {
+        severity: 'recoverable',
+        default_message: 'Unknown or unsupported AI context',
+        user_action: 'Verify the context type and parameters',
+        retry_strategy: 'immediate',
+        http_status: 400,
+        docs_url: '/docs/ai-execution/context',
+        telemetry_category: 'ai_service'
+    },
+    AI_EXECUTION_STREAM_ERROR: {
+        severity: 'critical',
+        default_message: 'AI streaming failed unexpectedly',
+        user_action: 'Check connection and try again. Report if persists',
+        retry_strategy: 'manual',
+        http_status: 500,
+        docs_url: '/docs/troubleshooting/ai-stream',
+        telemetry_category: 'ai_service'
+    },
+    AI_EXECUTION_PROCESS_NOT_FOUND: {
+        severity: 'warning',
+        default_message: 'AI process not found or already completed',
+        user_action: 'Start a new AI process if needed',
+        retry_strategy: 'none',
+        http_status: 404,
+        docs_url: '/docs/ai-execution/processes',
+        telemetry_category: 'ai_service'
+    },
+    AI_EXECUTION_CANCELLED: {
+        severity: 'warning',
+        default_message: 'AI process was cancelled by user',
+        user_action: 'No action needed, process was intentionally cancelled',
+        retry_strategy: 'none',
+        http_status: 499,
+        docs_url: '/docs/ai-execution/cancellation',
+        telemetry_category: 'ai_service'
+    },
+    AI_EXECUTION_OLLAMA_NOT_RUNNING: {
+        severity: 'recoverable',
+        default_message: 'Ollama server is not running',
+        user_action: 'Start Ollama manually or check installation',
+        retry_strategy: 'manual',
+        http_status: 503,
+        docs_url: '/docs/ollama/setup',
+        telemetry_category: 'ai_service'
+    },
+    AI_EXECUTION_OLLAMA_MODEL_MISSING: {
+        severity: 'recoverable',
+        default_message: 'Required Ollama model is not installed',
+        user_action: 'Install the required model using "ollama pull <model>"',
+        retry_strategy: 'manual',
+        http_status: 404,
+        docs_url: '/docs/ollama/models',
+        telemetry_category: 'ai_service'
     },
     // ============================================================================
     // VALIDATION & SYSTEM ERRORS
@@ -226,7 +292,7 @@ exports.ERROR_CATALOG = {
  * @example
  * ```typescript
  * const error = createErrorResponse('INTENT_LOCKED', undefined, {
- *   locked_by: 'copilot-process-123',
+ *   locked_by: 'ai-executor-123',
  *   locked_at: '2025-01-23T10:00:00Z'
  * });
  *

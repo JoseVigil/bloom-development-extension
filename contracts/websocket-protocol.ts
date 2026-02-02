@@ -8,7 +8,7 @@
  * @module contracts/websocket-protocol
  */
 
-import type { Intent, AIAccount, ErrorCode } from './types';
+import type { Intent, AIAccount, ErrorCode, AIPromptPayload } from './types';
 
 // ============================================================================
 // PROTOCOL METADATA
@@ -45,14 +45,15 @@ export type ConnectionState =
  *   data: {} 
  * };
  * 
- * // Send copilot prompt
+ * // Send AI prompt
  * const msg: ClientMessage = {
- *   event: 'copilot.prompt',
+ *   event: 'bloom.ai.execution.prompt',
  *   data: {
  *     context: 'dev',
  *     text: 'Add user authentication',
  *     intentId: 'intent-dev-123',
- *     profileId: 'profile-default'
+ *     profileId: 'profile-default',
+ *     provider: 'ollama'
  *   }
  * };
  * ```
@@ -62,8 +63,8 @@ export type ClientMessage =
   | { event: 'unsubscribe_intents'; data: Record<string, never> }
   | { event: 'intent:subscribe'; data: IntentSubscribePayload }
   | { event: 'intent:unsubscribe'; data: IntentUnsubscribePayload }
-  | { event: 'copilot.prompt'; data: CopilotPromptPayload }
-  | { event: 'copilot.cancel'; data: CopilotCancelPayload }
+  | { event: 'bloom.ai.execution.prompt'; data: AIPromptPayload }
+  | { event: 'bloom.ai.execution.cancel'; data: AIExecutionCancelPayload }
   | { event: 'ping'; data: PingPayload };
 
 /**
@@ -78,39 +79,14 @@ export interface IntentSubscribePayload {
  * Unsubscribe from specific intent updates
  */
 export interface IntentUnsubscribePayload {
-  /** Intent ID to unsubscribe from */
   intentId: string;
 }
 
-/**
- * Send a prompt to Copilot AI
- */
-export interface CopilotPromptPayload {
-  /** Conversation context */
-  context: 'onboarding' | 'genesis' | 'dev' | 'doc' | 'general';
-  /** User's prompt text */
-  text: string;
-  /** Intent ID (if in intent context) */
-  intentId?: string;
-  /** Chrome profile ID (for AI account selection) */
-  profileId?: string;
-  /** Additional context metadata */
-  metadata?: Record<string, unknown>;
-}
-
-/**
- * Cancel an ongoing Copilot process
- */
-export interface CopilotCancelPayload {
-  /** Process ID to cancel (from stream_start) */
+export interface AIExecutionCancelPayload {
   processId: string;
 }
 
-/**
- * Ping message for keep-alive
- */
 export interface PingPayload {
-  /** Client timestamp (ms since epoch) */
   timestamp: number;
 }
 
@@ -133,9 +109,9 @@ export interface PingPayload {
  *   }
  * };
  * 
- * // Copilot streaming chunk
+ * // AI streaming chunk
  * const msg: ServerMessage = {
- *   event: 'copilot.stream_chunk',
+ *   event: 'bloom.ai.execution.stream_chunk',
  *   data: {
  *     processId: 'process-xyz',
  *     context: 'dev',
@@ -147,18 +123,15 @@ export interface PingPayload {
  * ```
  */
 export type ServerMessage =
-  // Connection lifecycle
   | { event: 'connected'; data: ConnectedPayload }
   | { event: 'subscribed'; data: SubscribedPayload }
   | { event: 'unsubscribed'; data: UnsubscribedPayload }
   | { event: 'pong'; data: PongPayload }
-  // Copilot streaming
-  | { event: 'copilot.stream_start'; data: StreamStartPayload }
-  | { event: 'copilot.stream_chunk'; data: StreamChunkPayload }
-  | { event: 'copilot.stream_end'; data: StreamEndPayload }
-  | { event: 'copilot.error'; data: CopilotErrorPayload }
-  | { event: 'copilot.cancelled'; data: CancelledPayload }
-  // Resource updates
+  | { event: 'bloom.ai.execution.stream_start'; data: StreamStartPayload }
+  | { event: 'bloom.ai.execution.stream_chunk'; data: StreamChunkPayload }
+  | { event: 'bloom.ai.execution.stream_end'; data: StreamEndPayload }
+  | { event: 'bloom.ai.execution.error'; data: AIExecutionErrorPayload }
+  | { event: 'bloom.ai.execution.cancelled'; data: CancelledPayload }
   | { event: 'intents:updated'; data: IntentsUpdatedPayload }
   | { event: 'intents:created'; data: IntentCreatedPayload }
   | { event: 'intent:updated'; data: IntentUpdatedPayload }
@@ -167,7 +140,6 @@ export type ServerMessage =
   | { event: 'nucleus:created'; data: NucleusCreatedPayload }
   | { event: 'nucleus:updated'; data: NucleusUpdatedPayload }
   | { event: 'profile:update'; data: ProfileUpdatePayload }
-  // Errors
   | { event: 'error'; data: ErrorPayload };
 
 // ============================================================================
@@ -186,7 +158,8 @@ export interface ConnectedPayload {
   protocolVersion: string;
   /** Server capabilities */
   capabilities?: {
-    copilot: boolean;
+    ollama: boolean;
+    gemini: boolean;
     file_watching: boolean;
     real_time_sync: boolean;
   };
@@ -223,11 +196,11 @@ export interface PongPayload {
 }
 
 // ============================================================================
-// COPILOT STREAMING PAYLOADS
+// AI STREAMING PAYLOADS
 // ============================================================================
 
 /**
- * Copilot starts streaming a response
+ * AI starts streaming a response
  */
 export interface StreamStartPayload {
   /** Unique process identifier */
@@ -242,10 +215,12 @@ export interface StreamStartPayload {
   cancellable: boolean;
   /** Estimated response length (if available) */
   estimated_length?: number;
+  /** AI provider being used */
+  provider?: 'ollama' | 'gemini';
 }
 
 /**
- * Copilot streams a text chunk
+ * AI streams a text chunk
  */
 export interface StreamChunkPayload {
   /** Process identifier (from stream_start) */
@@ -263,7 +238,7 @@ export interface StreamChunkPayload {
 }
 
 /**
- * Copilot finishes streaming
+ * AI finishes streaming
  */
 export interface StreamEndPayload {
   /** Process identifier */
@@ -280,7 +255,9 @@ export interface StreamEndPayload {
   total_chars: number;
   /** AI model used */
   model_used?: string;
-  /** Token usage stats */
+  /** AI provider used */
+  provider?: 'ollama' | 'gemini';
+  /** Token usage stats (if available from provider) */
   usage?: {
     prompt_tokens: number;
     completion_tokens: number;
@@ -288,30 +265,19 @@ export interface StreamEndPayload {
   };
 }
 
-/**
- * Copilot encountered an error
- */
-export interface CopilotErrorPayload {
-  /** Process identifier (if available) */
+export interface AIExecutionErrorPayload {
   processId: string;
-  /** Conversation context */
   context?: string;
-  /** Intent ID (if applicable) */
   intentId?: string;
-  /** Standard error code */
   error_code: ErrorCode;
-  /** Human-readable error message */
   message: string;
-  /** Additional error details */
   details?: Record<string, unknown>;
-  /** Whether error is recoverable */
   recoverable: boolean;
-  /** Milliseconds to wait before retry */
   retry_after?: number;
 }
 
 /**
- * Copilot process was cancelled
+ * AI process was cancelled
  */
 export interface CancelledPayload {
   /** Process identifier */
@@ -468,11 +434,8 @@ export function isServerMessage(msg: unknown): msg is ServerMessage {
   );
 }
 
-/**
- * Type guard for Copilot streaming events
- */
-export function isCopilotEvent(msg: ServerMessage): msg is Extract<ServerMessage, { event: `copilot.${string}` }> {
-  return msg.event.startsWith('copilot.');
+export function isAIExecutionEvent(msg: ServerMessage): msg is Extract<ServerMessage, { event: `bloom.ai.execution.${string}` }> {
+  return msg.event.startsWith('bloom.ai.execution.');
 }
 
 /**
@@ -486,9 +449,6 @@ export function isResourceEvent(msg: ServerMessage): msg is Extract<ServerMessag
 // MESSAGE BUILDERS
 // ============================================================================
 
-/**
- * Helper to build client messages with type safety
- */
 export const ClientMessageBuilder = {
   subscribeIntents: (): ClientMessage => ({
     event: 'subscribe_intents',
@@ -500,13 +460,13 @@ export const ClientMessageBuilder = {
     data: { intentId }
   }),
 
-  copilotPrompt: (payload: CopilotPromptPayload): ClientMessage => ({
-    event: 'copilot.prompt',
+  aiExecutionPrompt: (payload: AIPromptPayload): ClientMessage => ({
+    event: 'bloom.ai.execution.prompt',
     data: payload
   }),
 
-  copilotCancel: (processId: string): ClientMessage => ({
-    event: 'copilot.cancel',
+  aiExecutionCancel: (processId: string): ClientMessage => ({
+    event: 'bloom.ai.execution.cancel',
     data: { processId }
   }),
 
@@ -529,19 +489,20 @@ export const ServerMessageBuilder = {
     }
   }),
 
-  streamStart: (processId: string, context: string, intentId?: string): ServerMessage => ({
-    event: 'copilot.stream_start',
+  streamStart: (processId: string, context: string, intentId?: string, provider?: 'ollama' | 'gemini'): ServerMessage => ({
+    event: 'bloom.ai.execution.stream_start',
     data: {
       processId,
       context,
       intentId,
       timestamp: Date.now(),
-      cancellable: true
+      cancellable: true,
+      provider
     }
   }),
 
   streamChunk: (processId: string, context: string, sequence: number, chunk: string, intentId?: string): ServerMessage => ({
-    event: 'copilot.stream_chunk',
+    event: 'bloom.ai.execution.stream_chunk',
     data: {
       processId,
       context,
@@ -551,15 +512,16 @@ export const ServerMessageBuilder = {
     }
   }),
 
-  streamEnd: (processId: string, context: string, totalChunks: number, totalChars: number, intentId?: string): ServerMessage => ({
-    event: 'copilot.stream_end',
+  streamEnd: (processId: string, context: string, totalChunks: number, totalChars: number, intentId?: string, provider?: 'ollama' | 'gemini'): ServerMessage => ({
+    event: 'bloom.ai.execution.stream_end',
     data: {
       processId,
       context,
       intentId,
       timestamp: Date.now(),
       total_chunks: totalChunks,
-      total_chars: totalChars
+      total_chars: totalChars,
+      provider
     }
   }),
 
