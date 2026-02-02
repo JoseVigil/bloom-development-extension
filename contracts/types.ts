@@ -7,6 +7,25 @@
  */
 
 // ============================================================================
+// AI PROVIDER TYPES
+// ============================================================================
+
+export interface AIProvider {
+  id: 'ollama' | 'gemini';
+  capabilities: ('streaming' | 'local' | 'auth-required')[];
+  config?: Record<string, any>;
+}
+
+export interface AIPromptPayload {
+  context: 'onboarding' | 'genesis' | 'dev' | 'doc' | 'general';
+  text: string;
+  intentId?: string;
+  profileId?: string;
+  provider?: AIProvider['id'];
+  metadata?: Record<string, unknown>;
+}
+
+// ============================================================================
 // BRAIN CLI TYPES - Lo que Brain retorna
 // ============================================================================
 
@@ -123,6 +142,7 @@ export interface OnboardingState {
     gemini_setup: boolean;
     nucleus_created: boolean;
     projects_linked: boolean;
+    ollama_setup: boolean;
   };
 }
 
@@ -337,6 +357,8 @@ export interface Turn {
   content: string;
   /** ISO 8601 timestamp */
   timestamp: string;
+  /** AI provider used (for AI turns) */
+  provider?: AIProvider['id'];
   /** Additional metadata (e.g., model used, tokens) */
   metadata?: Record<string, unknown>;
 }
@@ -577,33 +599,29 @@ export interface GitHubOrganization {
  * Standard error codes for the entire system
  */
 export type ErrorCode =
-  // Brain CLI errors
   | 'BRAIN_CLI_UNAVAILABLE'
   | 'BRAIN_EXECUTION_FAILED'
-  // Auth errors
   | 'NOT_AUTHENTICATED'
   | 'NOT_NUCLEUS'
   | 'AUTH_FAILED'
-  // Resource not found
   | 'NUCLEUS_NOT_FOUND'
   | 'INTENT_NOT_FOUND'
   | 'INTENT_LOCKED'
   | 'INTENT_LOCKED_BY_OTHER'
   | 'PROJECT_NOT_FOUND'
   | 'PROFILE_NOT_FOUND'
-  // AI service errors
   | 'AI_RATE_LIMIT'
   | 'AI_QUOTA_EXCEEDED'
   | 'AI_AUTH_FAILED'
   | 'AI_TIMEOUT'
   | 'RATE_LIMIT_EXCEEDED'
-  // Copilot errors (AGREGADOS)
-  | 'COPILOT_PROMPT_INVALID'
-  | 'COPILOT_CONTEXT_UNKNOWN'
-  | 'COPILOT_STREAM_ERROR'
-  | 'COPILOT_PROCESS_NOT_FOUND'
-  | 'COPILOT_CANCELLED'
-  // Generic errors
+  | 'AI_EXECUTION_PROMPT_INVALID'
+  | 'AI_EXECUTION_CONTEXT_UNKNOWN'
+  | 'AI_EXECUTION_STREAM_ERROR'
+  | 'AI_EXECUTION_PROCESS_NOT_FOUND'
+  | 'AI_EXECUTION_CANCELLED'
+  | 'AI_EXECUTION_OLLAMA_NOT_RUNNING'
+  | 'AI_EXECUTION_OLLAMA_MODEL_MISSING'
   | 'VALIDATION_ERROR'
   | 'INTERNAL_ERROR';
 
@@ -616,7 +634,7 @@ export type ErrorCode =
  *   error: 'INTENT_LOCKED',
  *   error_code: 'INTENT_LOCKED',
  *   message: 'Intent is currently locked by another process',
- *   details: { locked_by: 'copilot-process-123', locked_at: '2025-01-23T10:00:00Z' },
+ *   details: { locked_by: 'ai-executor-123', locked_at: '2025-01-23T10:00:00Z' },
  *   recoverable: true,
  *   retry_after: 5000,
  *   timestamp: '2025-01-23T10:05:00Z'

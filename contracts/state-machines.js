@@ -7,7 +7,7 @@
  * @module contracts/state-machines
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.FILE_WATCHER_TRANSITIONS = exports.PROFILE_SELECTOR_TRANSITIONS = exports.AI_ACCOUNT_TRANSITIONS = exports.ONBOARDING_TRANSITIONS = exports.COPILOT_STATE_TRANSITIONS = exports.NUCLEUS_LIST_TRANSITIONS = exports.INTENT_EDITOR_TRANSITIONS = exports.LOADING_STATE_TRANSITIONS = void 0;
+exports.FILE_WATCHER_TRANSITIONS = exports.PROFILE_SELECTOR_TRANSITIONS = exports.AI_ACCOUNT_TRANSITIONS = exports.ONBOARDING_TRANSITIONS = exports.AI_EXECUTION_STATE_TRANSITIONS = exports.NUCLEUS_LIST_TRANSITIONS = exports.INTENT_EDITOR_TRANSITIONS = exports.LOADING_STATE_TRANSITIONS = void 0;
 exports.isValidTransition = isValidTransition;
 exports.assertValidTransition = assertValidTransition;
 exports.getNextStates = getNextStates;
@@ -41,9 +41,9 @@ exports.NUCLEUS_LIST_TRANSITIONS = {
     error: ['loading'] // Can retry
 };
 /**
- * Valid transitions for CopilotState
+ * Valid transitions for AIExecutionState
  */
-exports.COPILOT_STATE_TRANSITIONS = {
+exports.AI_EXECUTION_STATE_TRANSITIONS = {
     idle: ['connecting'],
     connecting: ['streaming', 'error'],
     streaming: ['completed', 'cancelled', 'error'],
@@ -98,7 +98,7 @@ exports.FILE_WATCHER_TRANSITIONS = {
  * @example
  * ```typescript
  * const canTransition = isValidTransition(
- *   COPILOT_STATE_TRANSITIONS,
+ *   AI_EXECUTION_STATE_TRANSITIONS,
  *   'streaming',
  *   'completed'
  * ); // true
