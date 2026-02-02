@@ -1,112 +1,113 @@
-.project/
+.project-{name}/
 │
-├── .core/
-│   ├── .doc.instructions.bl
-│   ├── .dev.instructions.bl
-│   ├── .dev.rules.bl
-│   ├── .doc.rules.bl
-│   ├── .copilot.genesis.bl
-│   ├── .copilot.bootstrap.bl
-│   └── .core.meta.json
-│
-├── .intents/
-│   ├── .dev/
-│   │   └── .{intent-name-uuid3}/	
-│   │       ├── .dev_state.json
-│   │       ├── .briefing/
-│   │       │   ├── .briefing.json
-│   │       │   ├── .context_dev_plan.json
-│   │       │   └── .files/
-│   │       │       ├── .codebase.json
-│   │       │       ├── .codebase_index.json
-│   │       │       ├── .docbase.json
-│   │       │       ├── .docbase_index.json
-│   │       │       └── [optional files]
-│   │       ├── .execution/
-│   │       │   ├── .answers.json
-│   │       │   ├── .context_dev_plan.json
-│   │       │   └── .files/
-│   │       │       ├── .codebase.json
-│   │       │       ├── .codebase_index.json
-│   │       │       ├── .docbase.json
-│   │       │       ├── .docbase_index.json
-│   │       │       └── [optional files]
-│   │       ├── .refinement/
-│   │       │   └── .turn_X/
-│   │       │       ├── .turn.json
-│   │       │       ├── .context_dev_plan.json
-│   │       │       └── .files/
-│   │       │           ├── .codebase.json
-│   │       │           ├── .codebase_index.json
-│   │       │           ├── .docbase.json
-│   │       │           ├── .docbase_index.json
-│   │       │           └── [optional files]
-│   │       └── .pipeline/
-│   │           ├── .briefing/
-│   │           │   ├── .payload.json
-│   │           │   ├── .index.json
-│   │           │   └── .response/ 
-│   │           │       ├── .raw_output.txt
-│   │           │       ├── .report.json
-│   │           │       └── .staging/
-│   │           ├── .execution/
-│   │           │   ├── .payload.json
-│   │           │   ├── .index.json
-│   │           │   └── .response/ 
-│   │           │       ├── .raw_output.txt
-│   │           │       ├── .report.json
-│   │           │       └── .staging/
-│   │           └── .refinement/
-│   │               └── .turn_X/
-│   │                   ├── .payload.json
-│   │                   └── .index.json
-│   │                      └── .response/ 
-│   │                          ├── .raw_output.txt
-│   │                          ├── .report.json
-│   │                          └── .staging/
-│   └── .doc/
-│       └── .{intent-name-uuid3}/
-│           ├── .doc_state.json
-│           ├── .context/
-│           │   ├── .doc.json
-│           │   ├── .context_doc_plan.json
-│           │   └── .files/
-│           │       ├── .docbase.json
-│           │       ├── .docbase_index.json
-│           │       └── [optional files]
-│           ├── .curation/
-│           │   └── .turn_X/
-│           │       ├── .doc.json
-│           │       ├── .context_doc_plan.json
-│           │       └── .files/
-│           │           ├── .docbase.json
-│           │           ├── .docbase_index.json
-│           │           └── [optional files]
-│           └── .pipeline/
-│               ├── .context/
-│               │   ├── .payload.json
-│               │   └── .index.json
-│               │       .response/ 
-│               │       ├── .raw_output.txt
-│	            │       ├── .report.json
-│	            │       └── .staging/
-│               └── .curation/
-│                   └── .turn_X/
-│                       ├── .payload.json
-│                       └── .index.json
-│                           .response/ 
-│                           ├── .raw_output.txt
-│                           ├── .report.json
-│                           └── .staging/
-│
-└── .project/
-    ├── .tree.bl
-    ├── .dev.strategy.standards.bl
-    ├── .dev.strategy.context.bl
-    ├── .doc.app.architecture.bl
-    ├── .doc.app.workflow.bl
-    ├── .doc.app.implementation.bl
-    ├── .copilot.dev.intent.bl
-	├── .copilot.doc.intent.bl
-    └── .project.meta.json
-    
+└── .bloom/
+    │
+    ├── .core/
+    │   ├── .doc.instructions.bl
+    │   ├── .dev.instructions.bl
+    │   ├── .dev.rules.bl
+    │   ├── .doc.rules.bl
+    │   ├── .ai_bot.genesis.bl
+    │   ├── .ai_bot.bootstrap.bl
+    │   └── .core.meta.json
+    │
+    ├── .intents/
+    │   ├── .dev/
+    │   │   └── .{intent-name-uuid3}/	
+    │   │       ├── .dev_state.json
+    │   │       ├── .briefing/
+    │   │       │   ├── .briefing.json
+    │   │       │   ├── .context_dev_plan.json
+    │   │       │   └── .files/
+    │   │       │       ├── .codebase.json
+    │   │       │       ├── .codebase_index.json
+    │   │       │       ├── .docbase.json
+    │   │       │       ├── .docbase_index.json
+    │   │       │       └── [optional files]
+    │   │       ├── .execution/
+    │   │       │   ├── .answers.json
+    │   │       │   ├── .context_dev_plan.json
+    │   │       │   └── .files/
+    │   │       │       ├── .codebase.json
+    │   │       │       ├── .codebase_index.json
+    │   │       │       ├── .docbase.json
+    │   │       │       ├── .docbase_index.json
+    │   │       │       └── [optional files]
+    │   │       ├── .refinement/
+    │   │       │   └── .turn_X/
+    │   │       │       ├── .turn.json
+    │   │       │       ├── .context_dev_plan.json
+    │   │       │       └── .files/
+    │   │       │           ├── .codebase.json
+    │   │       │           ├── .codebase_index.json
+    │   │       │           ├── .docbase.json
+    │   │       │           ├── .docbase_index.json
+    │   │       │           └── [optional files]
+    │   │       └── .pipeline/
+    │   │           ├── .briefing/
+    │   │           │   ├── .payload.json
+    │   │           │   ├── .index.json
+    │   │           │   └── .response/ 
+    │   │           │       ├── .raw_output.txt
+    │   │           │       ├── .report.json
+    │   │           │       └── .staging/
+    │   │           ├── .execution/
+    │   │           │   ├── .payload.json
+    │   │           │   ├── .index.json
+    │   │           │   └── .response/ 
+    │   │           │       ├── .raw_output.txt
+    │   │           │       ├── .report.json
+    │   │           │       └── .staging/
+    │   │           └── .refinement/
+    │   │               └── .turn_X/
+    │   │                   ├── .payload.json
+    │   │                   ├── .index.json
+    │   │                   └── .response/ 
+    │   │                       ├── .raw_output.txt
+    │   │                       ├── .report.json
+    │   │                       └── .staging/
+    │   └── .doc/
+    │       └── .{intent-name-uuid3}/
+    │           ├── .doc_state.json
+    │           ├── .context/
+    │           │   ├── .doc.json
+    │           │   ├── .context_doc_plan.json
+    │           │   └── .files/
+    │           │       ├── .docbase.json
+    │           │       ├── .docbase_index.json
+    │           │       └── [optional files]
+    │           ├── .curation/
+    │           │   └── .turn_X/
+    │           │       ├── .doc.json
+    │           │       ├── .context_doc_plan.json
+    │           │       └── .files/
+    │           │           ├── .docbase.json
+    │           │           ├── .docbase_index.json
+    │           │           └── [optional files]
+    │           └── .pipeline/
+    │               ├── .context/
+    │               │   ├── .payload.json
+    │               │   ├── .index.json
+    │               │   └── .response/ 
+    │               │       ├── .raw_output.txt
+    │               │       ├── .report.json
+    │               │       └── .staging/
+    │               └── .curation/
+    │                   └── .turn_X/
+    │                       ├── .payload.json
+    │                       ├── .index.json
+    │                       └── .response/ 
+    │                           ├── .raw_output.txt
+    │                           ├── .report.json
+    │                           └── .staging/
+    │
+    └── .project/
+        ├── .tree.bl
+        ├── .dev.strategy.standards.bl
+        ├── .dev.strategy.context.bl
+        ├── .doc.app.architecture.bl
+        ├── .doc.app.workflow.bl
+        ├── .doc.app.implementation.bl
+        ├── .ai_bot.dev.intent.bl
+        ├── .ai_bot.doc.intent.bl
+        └── .project.meta.json
