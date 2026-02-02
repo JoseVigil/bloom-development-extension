@@ -23,49 +23,153 @@
     │       └── .testing-requirements.bl
     │
     ├── .intents/
-    │   └── .exp/
+    │   │
+    │   ├── .exp/
+    │   │   └── .{intent-name-uuid}/
+    │   │       ├── .exp_state.json
+    │   │       │
+    │   │       ├── .inquiry/
+    │   │       │   ├── .inquiry.json
+    │   │       │   ├── .context_exp_plan.json
+    │   │       │   └── .files/
+    │   │       │       ├── .expbase.json
+    │   │       │       ├── .expbase_index.json
+    │   │       │       └── [optional files]
+    │   │       │
+    │   │       ├── .discovery/
+    │   │       │   └── .turn_X/
+    │   │       │       ├── .turn.json
+    │   │       │       ├── .context_exp_plan.json
+    │   │       │       └── .files/
+    │   │       │           ├── .expbase.json
+    │   │       │           ├── .expbase_index.json
+    │   │       │           └── [optional files]
+    │   │       │
+    │   │       ├── .findings/
+    │   │       │   ├── .findings.json
+    │   │       │   ├── .context_exp_plan.json
+    │   │       │   └── .files/
+    │   │       │       ├── .expbase.json
+    │   │       │       ├── .expbase_index.json
+    │   │       │       └── [optional files]
+    │   │       │
+    │   │       └── .pipeline/
+    │   │           ├── .inquiry/
+    │   │           │   ├── .payload.json
+    │   │           │   ├── .index.json
+    │   │           │   └── .response/
+    │   │           │       ├── .raw_output.txt
+    │   │           │       └── .report.json
+    │   │           └── .discovery/
+    │   │               └── .turn_X/
+    │   │                   ├── .payload.json
+    │   │                   ├── .index.json
+    │   │                   └── .response/
+    │   │                       ├── .raw_output.txt
+    │   │                       └── .report.json
+    │   │
+    │   └── .cor/
     │       └── .{intent-name-uuid}/
-    │           ├── .exp_state.json
+    │           ├── .cor_state.json
     │           │
-    │           ├── .inquiry/
-    │           │   ├── .inquiry.json
-    │           │   ├── .context_exp_plan.json
+    │           ├── .freeze_snapshot/
+    │           │   ├── .snapshot.json
+    │           │   ├── .context_cor_plan.json
     │           │   └── .files/
-    │           │       ├── .expbase.json
-    │           │       ├── .expbase_index.json
-    │           │       └── [optional files]
+    │           │       ├── .left_tree.json
+    │           │       ├── .right_tree.json
+    │           │       ├── .left_hashes.json
+    │           │       └── .right_hashes.json
     │           │
-    │           ├── .discovery/
-    │           │   └── .turn_X/
-    │           │       ├── .turn.json
-    │           │       ├── .context_exp_plan.json
-    │           │       └── .files/
-    │           │           ├── .expbase.json
-    │           │           ├── .expbase_index.json
-    │           │           └── [optional files]
-    │           │
-    │           ├── .findings/
-    │           │   ├── .findings.json
-    │           │   ├── .context_exp_plan.json
+    │           ├── .structural_analysis/
+    │           │   ├── .analysis.json
+    │           │   ├── .context_cor_plan.json
     │           │   └── .files/
-    │           │       ├── .expbase.json
-    │           │       ├── .expbase_index.json
-    │           │       └── [optional files]
+    │           │       ├── .shared.json
+    │           │       ├── .divergent.json
+    │           │       ├── .conflicts.json
+    │           │       └── .orphans.json
+    │           │
+    │           ├── .semantic_interpretation/
+    │           │   ├── .interpretation.json
+    │           │   ├── .context_cor_plan.json
+    │           │   └── .files/
+    │           │       ├── .intent_deltas.json
+    │           │       ├── .semantic_conflicts.json
+    │           │       └── .compatible_changes.json
+    │           │
+    │           ├── .dual_path_synthesis/
+    │           │   ├── .synthesis.json
+    │           │   ├── .context_cor_plan.json
+    │           │   └── .files/
+    │           │       ├── .dev_path.json
+    │           │       ├── .doc_path.json
+    │           │       └── .cross_references.json
+    │           │
+    │           ├── .proposal_assembly/
+    │           │   ├── .proposal.json
+    │           │   ├── .context_cor_plan.json
+    │           │   └── .files/
+    │           │       ├── .merge_plan.json
+    │           │       ├── .risk_matrix.json
+    │           │       └── .impact_summary.json
+    │           │
+    │           ├── .governed_submission/
+    │           │   ├── .submission.json
+    │           │   ├── .context_cor_plan.json
+    │           │   └── .files/
+    │           │       ├── .generated_dev_intents.json
+    │           │       ├── .generated_doc_intents.json
+    │           │       └── .approval_log.json
     │           │
     │           └── .pipeline/
-    │               ├── .inquiry/
+    │               ├── .freeze_snapshot/
     │               │   ├── .payload.json
     │               │   ├── .index.json
     │               │   └── .response/
     │               │       ├── .raw_output.txt
-    │               │       └── .report.json
-    │               └── .discovery/
-    │                   └── .turn_X/
-    │                       ├── .payload.json
-    │                       ├── .index.json
-    │                       └── .response/
-    │                           ├── .raw_output.txt
-    │                           └── .report.json
+    │               │       ├── .report.json
+    │               │       └── .staging/
+    │               │
+    │               ├── .structural_analysis/
+    │               │   ├── .payload.json
+    │               │   ├── .index.json
+    │               │   └── .response/
+    │               │       ├── .raw_output.txt
+    │               │       ├── .report.json
+    │               │       └── .staging/
+    │               │
+    │               ├── .semantic_interpretation/
+    │               │   ├── .payload.json
+    │               │   ├── .index.json
+    │               │   └── .response/
+    │               │       ├── .raw_output.txt
+    │               │       ├── .report.json
+    │               │       └── .staging/
+    │               │
+    │               ├── .dual_path_synthesis/
+    │               │   ├── .payload.json
+    │               │   ├── .index.json
+    │               │   └── .response/
+    │               │       ├── .raw_output.txt
+    │               │       ├── .report.json
+    │               │       └── .staging/
+    │               │
+    │               ├── .proposal_assembly/
+    │               │   ├── .payload.json
+    │               │   ├── .index.json
+    │               │   └── .response/
+    │               │       ├── .raw_output.txt
+    │               │       ├── .report.json
+    │               │       └── .staging/
+    │               │
+    │               └── .governed_submission/
+    │                   ├── .payload.json
+    │                   ├── .index.json
+    │                   └── .response/
+    │                       ├── .raw_output.txt
+    │                       ├── .report.json
+    │                       └── .staging/
     │
     ├── .cache/
     │   ├── .projects-snapshot.json
@@ -77,6 +181,8 @@
     │   ├── .project-links.json
     │   └── .dependency-map.json
     │
+	├── .ownership.json
+	│
     ├── findings/
     │   ├── README.md
     │   └── {intent-name}/
