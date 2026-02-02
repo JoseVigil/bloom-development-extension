@@ -8,28 +8,33 @@ import (
 	"runtime"
 )
 
-// LaunchApiServer inicia el servidor Fastify independiente
-func LaunchApiServer(extPath string) (*exec.Cmd, error) {
-	if extPath == "" {
-		return nil, fmt.Errorf("extensionPath no definido")
+// prefixedWriter añade prefijo a cada línea para distinguir API de SVELTE en la consola
+type prefixedWriter struct {
+	prefix string
+	out    *os.File
+}
+
+func (pw *prefixedWriter) Write(p []byte) (n int, err error) {
+	_, err = fmt.Fprintf(pw.out, "%s%s", pw.prefix, string(p))
+	return len(p), err
+}
+
+// LaunchApiServer inicia el servidor de la API/Swagger
+func LaunchApiServer(serverPath string) (*exec.Cmd, error) {
+	if serverPath == "" {
+		return nil, fmt.Errorf("serverPath no definido")
 	}
 
-	// Ruta al entrypoint compilado de la API
-	apiEntry := filepath.Join(extPath, "out", "extension.js")
+	// Verificar que el archivo existe antes de lanzar
+	if _, err := os.Stat(serverPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("API entrypoint no encontrado: %s", serverPath)
+	}
+
+	cmd := exec.Command("node", serverPath)
 	
-	// Verificar que existe
-	if _, err := os.Stat(apiEntry); os.IsNotExist(err) {
-		return nil, fmt.Errorf("API entrypoint no encontrado: %s", apiEntry)
-	}
-
-	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		cmd = exec.Command("node", apiEntry)
-	} else {
-		cmd = exec.Command("node", apiEntry)
-	}
-
-	cmd.Dir = extPath
+	// La carpeta de trabajo es la raíz de la extensión
+	cmd.Dir = filepath.Dir(filepath.Dir(serverPath)) 
+	
 	cmd.Env = append(os.Environ(), "PORT=48215")
 	cmd.Stdout = &prefixedWriter{prefix: "[API] ", out: os.Stderr}
 	cmd.Stderr = &prefixedWriter{prefix: "[API-ERR] ", out: os.Stderr}
@@ -43,19 +48,20 @@ func LaunchApiServer(extPath string) (*exec.Cmd, error) {
 }
 
 // LaunchSvelte inicia el servidor de desarrollo Svelte
-func LaunchSvelte(extPath string) (*exec.Cmd, error) {
-	if extPath == "" {
-		return nil, fmt.Errorf("extensionPath no definido")
+func LaunchSvelte(workingDir string) (*exec.Cmd, error) {
+	if workingDir == "" {
+		return nil, fmt.Errorf("workingDir no definido")
 	}
 
 	var cmd *exec.Cmd
+	// En Windows es mandatorio usar npm.cmd para que exec lo encuentre
 	if runtime.GOOS == "windows" {
-		cmd = exec.Command("npm", "run", "dev")
+		cmd = exec.Command("npm.cmd", "run", "dev")
 	} else {
 		cmd = exec.Command("npm", "run", "dev")
 	}
 
-	cmd.Dir = extPath
+	cmd.Dir = workingDir
 	cmd.Stdout = &prefixedWriter{prefix: "[SVELTE] ", out: os.Stderr}
 	cmd.Stderr = &prefixedWriter{prefix: "[SVELTE-ERR] ", out: os.Stderr}
 
@@ -65,16 +71,4 @@ func LaunchSvelte(extPath string) (*exec.Cmd, error) {
 
 	fmt.Fprintf(os.Stderr, "[SVELTE] Servidor iniciado (PID: %d)\n", cmd.Process.Pid)
 	return cmd, nil
-}
-
-// prefixedWriter añade prefijo a cada línea
-type prefixedWriter struct {
-	prefix string
-	out    *os.File
-}
-
-func (pw *prefixedWriter) Write(p []byte) (n int, err error) {
-	// Escribir con prefijo
-	_, err = fmt.Fprintf(pw.out, "%s%s", pw.prefix, string(p))
-	return len(p), err
 }

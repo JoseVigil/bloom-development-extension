@@ -24,30 +24,28 @@ func init() {
 			Run: func(cmd *cobra.Command, args []string) {
 				c.Logger.Info("🚀 Iniciando Entorno de Desarrollo...")
 
-				// --- INICIAR OLLAMA SUPERVISOR ---
-				var ollamaSup *ollama.Supervisor
+				// 1. CONFIGURACIÓN OLLAMA
+				ollamaPath := filepath.Join(c.Paths.AppDataDir, "bin", "ollama", "ollama.exe")
+				c.Logger.Info("📍 Supervisando Ollama en: %s", ollamaPath)
 
+				var ollamaSup *ollama.Supervisor
 				if c.OllamaSupervisor != nil {
-					// Reutilizar supervisor existente
 					ollamaSup = c.OllamaSupervisor.(*ollama.Supervisor)
-					c.Logger.Info("♻️ Reutilizando supervisor de Ollama existente")
 				} else {
-					// Crear nuevo supervisor
 					ollamaSup = ollama.NewSupervisor(c)
 					c.OllamaSupervisor = ollamaSup
-					c.Logger.Success("✓ Supervisor de Ollama creado")
 				}
 
-				// Iniciar en goroutine para no bloquear
 				go ollamaSup.StartSupervisor(5 * time.Second)
 				c.Logger.Success("✓ Ollama Supervisor activado")
-				// --------------------------------------
 
+				// 2. VALIDACIÓN BRAIN
 				if err := health.EnsureBrainRunning(c); err != nil {
 					c.Logger.Error("❌ %v", err)
 					os.Exit(1)
 				}
 
+				// 3. RUTAS Y DESCUBRIMIENTO
 				codePath, _ := discovery.FindVSCodeBinary()
 				extPath := c.Config.Settings.ExtensionPath
 				wsPath := c.Config.Settings.TestWorkspace
@@ -57,12 +55,14 @@ func init() {
 					"vscode_exe": codePath,
 				})
 
-				// 3. Iniciar BLOOM API (Swagger) - INDEPENDIENTE
+				// 4. INICIO DE SERVICIOS (Definidos en npm.go)
 				c.Logger.Info("📡 Levantando Bloom API + Swagger...")
-				apiCmd, _ := LaunchApiServer(extPath)
+				apiCmd, _ := LaunchApiServer(filepath.Join(extPath, "out", "server.js"))
 				
-				// 4. Iniciar Svelte
-				svelteCmd, _ := LaunchSvelte(extPath)
+				c.Logger.Info("🎨 Levantando Svelte UI...")
+				svelteCmd, _ := LaunchSvelte(filepath.Join(extPath, "ui"))
+
+				// 5. EXTENSIÓN Y SETTINGS
 				sm, _ := discovery.DiscoverSystem(c.Paths.BinDir)
 				_ = SyncVScodeSettings(extPath, sm.BrainPath, filepath.Join(runtimePath, "python.exe"))
 				vsCmd, _ := LaunchExtensionHost(codePath, extPath, wsPath, runtimePath)
@@ -71,27 +71,17 @@ func init() {
 				time.Sleep(2 * time.Second)
 				_, _ = health.CheckHealth(c, sm)
 
+				// 6. MANEJO DE SEÑALES Y LIMPIEZA
 				sigs := make(chan os.Signal, 1)
 				signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 				c.Logger.Success(">>> Entorno LISTO. Presiona Ctrl+C para cerrar.")
 				<-sigs
 
-				// --- CLEANUP ---
 				c.Logger.Info("Cerrando servicios...")
-				if vsCmd != nil {
-					KillProcessTree(vsCmd.Process.Pid)
-				}
-				if apiCmd != nil {
-					KillProcessTree(apiCmd.Process.Pid)
-				}
-				if svelteCmd != nil {
-					KillProcessTree(svelteCmd.Process.Pid)
-				}
-
-				// Detener Ollama al salir
-				if c.OllamaSupervisor != nil {
-					ollamaSup.Stop()
-				}
+				if vsCmd != nil { KillProcessTree(vsCmd.Process.Pid) }
+				if apiCmd != nil { KillProcessTree(apiCmd.Process.Pid) }
+				if svelteCmd != nil { KillProcessTree(svelteCmd.Process.Pid) }
+				if c.OllamaSupervisor != nil { ollamaSup.Stop() }
 
 				CleanPorts([]int{5173, 48215, 5678, 11434})
 			},
@@ -100,13 +90,7 @@ func init() {
 		if cmd.Annotations == nil {
 			cmd.Annotations = make(map[string]string)
 		}
-		cmd.Annotations["requires"] = `  - brain.exe disponible y ejecutable
-  - Ollama.exe en carpeta bin/
-  - VSCode instalado y detectado en PATH
-  - Node.js y npm para servidor Svelte (puerto 5173)
-  - Puertos 5173, 48215, 5678, 11434 libres
-  - extension_path y test_workspace configurados en sentinel.yaml
-  - Python runtime en resources/runtime/`
+		cmd.Annotations["category"] = "DEVELOPMENT"
 
 		return cmd
 	})

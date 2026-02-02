@@ -11,6 +11,7 @@ type Paths struct {
 	AppDataDir  string
 	ProfilesDir string
 	LogsDir     string
+	TelemetryDir   string
 }
 
 func InitPaths() (*Paths, error) {
@@ -31,6 +32,7 @@ func InitPaths() (*Paths, error) {
 		AppDataDir:  appDataDir,
 		ProfilesDir: filepath.Join(appDataDir, "profiles"),
 		LogsDir:     filepath.Join(appDataDir, "logs", "sentinel"),
+		TelemetryDir:   filepath.Join(appDataDir, "logs"),
 	}
 
 	dirs := []string{paths.AppDataDir, paths.ProfilesDir, paths.LogsDir}
