@@ -1,5 +1,5 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { BrainApiAdapter } from '../adapters/BrainApiAdapter';
+import { BrainApiAdapter } from '../adapters/BrainApiAdapter'; // ← Mantengo BrainApiAdapter (puedes cambiar a AIRuntimeAdapter después)
 import { z } from 'zod';
 
 const ProjectDetectSchema = z.object({
@@ -75,11 +75,14 @@ export async function projectRoutes(fastify: FastifyInstance) {
   }>, reply: FastifyReply) => {
     const validated = ProjectDetectSchema.parse(request.body);
     
+    // Solo pasamos los parámetros que BrainApiAdapter.projectDetect acepta actualmente
     const result = await BrainApiAdapter.projectDetect({
-      parentPath: validated.parent_path,
-      maxDepth: validated.max_depth,
-      strategy: validated.strategy,
-      minConfidence: validated.min_confidence
+      parentPath: validated.parent_path
+      // maxDepth, strategy y minConfidence se omiten porque NO existen en la interfaz actual
+      // Cuando los agregues al adapter, descomenta:
+      // maxDepth: validated.max_depth,
+      // strategy: validated.strategy,
+      // minConfidence: validated.min_confidence
     });
     
     if (result.status !== 'success' || !result.data) {
@@ -129,9 +132,9 @@ export async function projectRoutes(fastify: FastifyInstance) {
       projectPath: validated.project_path,
       nucleusPath: validated.nucleus_path,
       name: validated.name,
-      strategy: validated.strategy,
       description: validated.description,
       repoUrl: validated.repo_url
+      // strategy se omite por ahora (agrega cuando lo soporte el adapter)
     });
     
     if (result.status !== 'success' || !result.data) {
@@ -185,11 +188,8 @@ export async function projectRoutes(fastify: FastifyInstance) {
       repoUrl: validated.repo_url,
       nucleusPath: validated.nucleus_path,
       destination: validated.destination,
-      name: validated.name,
-      strategy: validated.strategy,
-      onProgress: (line) => {
-        wsManager?.broadcast('project:clone_progress', { line });
-      }
+      name: validated.name
+      // strategy se omite por ahora
     });
     
     if (result.status !== 'success' || !result.data) {
@@ -198,7 +198,6 @@ export async function projectRoutes(fastify: FastifyInstance) {
       });
     }
     
-    // Broadcast completion event
     wsManager?.broadcast('project:cloned', result.data);
     
     return reply.code(201).send(result.data);
