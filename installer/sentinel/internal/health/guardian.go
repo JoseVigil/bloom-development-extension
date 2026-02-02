@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net"
 	"os"
 	"os/exec"
@@ -33,35 +32,46 @@ type GuardianInstance struct {
 	LaunchID    string
 	BrainPID    int 
 	Core        *core.Core
-	Logger      *log.Logger
-	LogFile     *os.File
+	Logger      *core.Logger  // Usar el Logger del sistema, no log.Logger
 	Failures    int
 	Mu          sync.Mutex
 	ctx         context.Context
 	cancel      context.CancelFunc
-	eventClient *eventbus.SentinelClient  // Cliente para emitir eventos
+	eventClient *eventbus.SentinelClient
 }
 
 func NewGuardian(c *core.Core, profileID string, launchID string, brainPID int) (*GuardianInstance, error) {
-	logDir := filepath.Join(c.Paths.AppDataDir, "logs", "profiles", profileID)
-	_ = os.MkdirAll(logDir, 0755)
+	// 1. Crear directorio específico para logs de Guardian
+	guardianLogDir := filepath.Join(c.Paths.AppDataDir, "logs", "sentinel", "guardian")
+	if err := os.MkdirAll(guardianLogDir, 0755); err != nil {
+		return nil, fmt.Errorf("error creando directorio de logs: %w", err)
+	}
 
-	logPath := filepath.Join(logDir, fmt.Sprintf("guardian_%s.log", launchID))
-	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	// 2. Inicializar Logger usando el sistema de telemetría
+	// ComponentID único por perfil para que cada Guardian tenga su entrada
+	componentID := fmt.Sprintf("sentinel_guardian_%s", profileID)
+	label := fmt.Sprintf("SENTINEL GUARDIAN [%s]", profileID)
+	
+	// Crear paths temporal con el directorio correcto
+	guardianPaths := &core.Paths{
+		LogsDir: guardianLogDir,
+	}
+	
+	logger, err := core.InitLogger(guardianPaths, componentID, label, 6)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error inicializando logger: %w", err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	
-	// Crear cliente de eventos (opcional, solo si se necesita emitir eventos)
+	// 3. Crear cliente de eventos con el logger correcto
 	var eventClient *eventbus.SentinelClient
 	if brainAddr := os.Getenv("BRAIN_ADDR"); brainAddr != "" {
-		eventClient = eventbus.NewSentinelClient(brainAddr)
+		eventClient = eventbus.NewSentinelClient(brainAddr, logger)
 		// Intentar conectar en background
 		go func() {
 			if err := eventClient.Connect(); err != nil {
-				log.Printf("[Guardian] No se pudo conectar EventClient: %v", err)
+				logger.Warning("No se pudo conectar EventClient: %v", err)
 			}
 		}()
 	}
@@ -71,20 +81,15 @@ func NewGuardian(c *core.Core, profileID string, launchID string, brainPID int) 
 		LaunchID:    launchID,
 		BrainPID:    brainPID,
 		Core:        c,
-		Logger:      log.New(f, "", log.LstdFlags),
-		LogFile:     f,
+		Logger:      logger,
 		ctx:         ctx,
 		cancel:      cancel,
 		eventClient: eventClient,
 	}
 
-	g.logInfo(fmt.Sprintf("🛡️ Guardian Activo | Perfil: %s | Launch: %s | PID: %d", profileID, launchID, brainPID))
+	g.Logger.Info("🛡️ Guardian Activo | Perfil: %s | Launch: %s | PID: %d", profileID, launchID, brainPID)
 	return g, nil
 }
-
-func (g *GuardianInstance) logInfo(msg string) { g.Logger.Printf("[INFO] %s", msg) }
-func (g *GuardianInstance) logWarn(msg string, data any) { g.Logger.Printf("[WARN] %s | Data: %v", msg, data) }
-func (g *GuardianInstance) logError(msg string, err error) { g.Logger.Printf("[ERROR] %s | Error: %v", msg, err) }
 
 func (g *GuardianInstance) Start() {
 	ticker := time.NewTicker(10 * time.Second)
@@ -93,8 +98,8 @@ func (g *GuardianInstance) Start() {
 		for {
 			select {
 			case <-g.ctx.Done():
-				g.logInfo("Cerrando loop del Guardian.")
-				g.LogFile.Close()
+				g.Logger.Info("Cerrando loop del Guardian.")
+				g.Logger.Close()
 				if g.eventClient != nil {
 					g.eventClient.Close()
 				}
@@ -112,7 +117,7 @@ func (g *GuardianInstance) performCheck() {
 
 	if err := g.checkHeartbeat(); err != nil {
 		g.Failures++
-		g.logWarn(fmt.Sprintf("Heartbeat fallido (%d/3)", g.Failures), err)
+		g.Logger.Warning("Heartbeat fallido (%d/3): %v", g.Failures, err)
 		
 		// Emitir evento de warning
 		g.emitEvent("HEARTBEAT_FAILED", map[string]interface{}{
@@ -129,14 +134,14 @@ func (g *GuardianInstance) performCheck() {
 		}
 	} else {
 		if g.Failures > 0 {
-			g.logInfo("Heartbeat recuperado")
+			g.Logger.Info("Heartbeat recuperado")
 			g.emitEvent("HEARTBEAT_RECOVERED", nil)
 		}
 		g.Failures = 0
 	}
 
 	if !g.checkResources() {
-		g.logWarn("Anomalía de recursos detectada.", nil)
+		g.Logger.Warning("Anomalía de recursos detectada")
 		g.emitEvent("RESOURCE_ANOMALY", map[string]interface{}{
 			"reason": "memory_threshold_exceeded",
 		})
@@ -192,7 +197,7 @@ func (g *GuardianInstance) checkResources() bool {
 }
 
 func (g *GuardianInstance) recoverService() {
-	g.logError("Iniciando recuperación quirúrgica...", nil)
+	g.Logger.Info("Iniciando recuperación quirúrgica...")
 	
 	// Emitir evento de recuperación iniciada
 	g.emitEvent("SERVICE_RECOVERY_STARTED", map[string]interface{}{
@@ -207,14 +212,14 @@ func (g *GuardianInstance) recoverService() {
 	cmd := exec.Command("brain.exe", "service", "start")
 	if err := cmd.Start(); err == nil {
 		g.BrainPID = cmd.Process.Pid
-		g.logInfo(fmt.Sprintf("Brain Service relanzado (PID: %d)", g.BrainPID))
+		g.Logger.Success("Brain Service relanzado (PID: %d)", g.BrainPID)
 		
 		// Emitir evento de recuperación exitosa
 		g.emitEvent("SERVICE_RECOVERY_COMPLETE", map[string]interface{}{
 			"new_brain_pid": g.BrainPID,
 		})
 	} else {
-		g.logError("Fallo al relanzar Brain Service", err)
+		g.Logger.Error("Fallo al relanzar Brain Service: %v", err)
 		
 		// Emitir evento de recuperación fallida
 		g.emitEvent("SERVICE_RECOVERY_FAILED", map[string]interface{}{
@@ -247,7 +252,7 @@ func (g *GuardianInstance) killProcessTree(pid int) error {
 	}
 
 	// 2. Ejecutar tree kill usando el package process
-	g.logInfo(fmt.Sprintf("Ejecutando tree kill en PID %d...", pid))
+	g.Logger.Info("Ejecutando tree kill en PID %d...", pid)
 	return process.KillProcessTree(pid)
 }
 
@@ -261,7 +266,7 @@ func (g *GuardianInstance) isBloomProcess(pid int) bool {
 		"get", "ExecutablePath", "/format:list")
 	output, err := cmd.Output()
 	if err != nil {
-		g.logError("Error verificando ruta del proceso", err)
+		g.Logger.Error("Error verificando ruta del proceso: %v", err)
 		return false
 	}
 
@@ -272,7 +277,7 @@ func (g *GuardianInstance) isBloomProcess(pid int) bool {
 		(filepath.Dir(path) == bloomPath || strings.HasPrefix(path, bloomPath))
 	
 	if !isBloom {
-		g.logWarn(fmt.Sprintf("PID %d no pertenece a Bloom (ruta: %s)", pid, path), nil)
+		g.Logger.Warning("PID %d no pertenece a Bloom (ruta: %s)", pid, path)
 	}
 	
 	return isBloom
@@ -284,13 +289,13 @@ func (g *GuardianInstance) updateProfileStatus(newStatus string) {
 	
 	data, err := os.ReadFile(profilesPath)
 	if err != nil {
-		g.logError("Error leyendo profiles.json", err)
+		g.Logger.Error("Error leyendo profiles.json: %v", err)
 		return
 	}
 
 	var registry process.ProfileRegistry
 	if err := json.Unmarshal(data, &registry); err != nil {
-		g.logError("Error parseando profiles.json", err)
+		g.Logger.Error("Error parseando profiles.json: %v", err)
 		return
 	}
 
@@ -306,19 +311,19 @@ func (g *GuardianInstance) updateProfileStatus(newStatus string) {
 	// Guardar
 	updatedData, _ := json.MarshalIndent(registry, "", "  ")
 	if err := os.WriteFile(profilesPath, updatedData, 0644); err != nil {
-		g.logError("Error guardando profiles.json", err)
+		g.Logger.Error("Error guardando profiles.json: %v", err)
 	} else {
-		g.logInfo(fmt.Sprintf("Estado actualizado a '%s' en profiles.json", newStatus))
+		g.Logger.Info("Estado actualizado a '%s' en profiles.json", newStatus)
 	}
 }
 
 // cleanup ejecuta la limpieza completa cuando un proceso muere o se desconecta
 func (g *GuardianInstance) cleanup(chromePID int) {
-	g.logInfo(fmt.Sprintf("Iniciando limpieza para perfil %s (Chrome PID: %d)...", g.ProfileID, chromePID))
+	g.Logger.Info("Iniciando limpieza para perfil %s (Chrome PID: %d)...", g.ProfileID, chromePID)
 
 	// 1. Tree kill quirúrgico
 	if err := g.killProcessTree(chromePID); err != nil {
-		g.logError("Error en tree kill", err)
+		g.Logger.Error("Error en tree kill: %v", err)
 	}
 
 	// 2. Actualizar estado en profiles.json
@@ -330,7 +335,7 @@ func (g *GuardianInstance) cleanup(chromePID int) {
 		"reason":     "process_died",
 	})
 
-	g.logInfo("Limpieza completada")
+	g.Logger.Success("Limpieza completada")
 }
 
 // ========== FIN FUNCIONES AGREGADAS ==========
@@ -349,7 +354,7 @@ func (g *GuardianInstance) emitEvent(eventType string, data map[string]interface
 	}
 	
 	if err := g.eventClient.Send(event); err != nil {
-		g.logWarn("No se pudo emitir evento al EventBus", err)
+		g.Logger.Warning("No se pudo emitir evento al EventBus: %v", err)
 	}
 }
 

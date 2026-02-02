@@ -27,7 +27,6 @@ func SyncVScodeSettings(repoRoot, brainPath, pythonPath string) error {
 	// Inyectar rutas detectadas por Sentinel
 	settings["bloom.brain.executable"] = brainPath
 	settings["bloom.pythonPath"] = pythonPath
-	// Forzamos a la extensión a usar el ejecutable directamente si existe
 	settings["bloom.useInternalRuntime"] = true 
 
 	data, err := json.MarshalIndent(settings, "", "  ")
@@ -57,7 +56,14 @@ func LaunchExtensionHost(codePath, extPath, workspacePath, runtimePath string) (
 	newEnv = append(newEnv, fmt.Sprintf("%s=%s%c%s", pathKey, runtimePath, os.PathListSeparator, os.Getenv(pathKey)))
 	newEnv = append(newEnv, "BLOOM_PYTHON_PATH="+pythonExe)
 
-	args := []string{"--extensionDevelopmentPath=" + extPath}
+	// --- CONFIGURACIÓN DE ARGUMENTOS ---
+	args := []string{
+		"--extensionDevelopmentPath=" + extPath,
+		"--disable-extension", "github.copilot",      // Mata el proceso de Copilot
+		"--disable-extension", "github.copilot-chat", // Mata el chat de Copilot
+		"--no-proxy-server",                          // Evita que intente salir por proxys de red
+	}
+
 	if workspacePath != "" {
 		args = append(args, workspacePath)
 	}

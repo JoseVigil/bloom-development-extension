@@ -30,7 +30,7 @@ func InitPaths() (*Paths, error) {
 		BinDir:      binDir,
 		AppDataDir:  appDataDir,
 		ProfilesDir: filepath.Join(appDataDir, "profiles"),
-		LogsDir:     filepath.Join(appDataDir, "logs"),
+		LogsDir:     filepath.Join(appDataDir, "logs", "sentinel"),
 	}
 
 	dirs := []string{paths.AppDataDir, paths.ProfilesDir, paths.LogsDir}

@@ -3,6 +3,7 @@ package eventbus
 import (
 	"fmt"
 	"os"
+	"sentinel/internal/core"
 	"sync"
 	"time"
 )
@@ -12,15 +13,18 @@ type SentinelClient struct {
 	bus         *EventBus
 	handlers    map[string][]EventHandler
 	handlersMu  sync.RWMutex
+	logger      *core.Logger
 }
 
 // NewSentinelClient crea un nuevo cliente de Sentinel que consume un EventBus
-func NewSentinelClient(addr string) *SentinelClient {
-	bus := NewEventBus(addr)
+// IMPORTANTE: Ahora recibe el logger centralizado
+func NewSentinelClient(addr string, logger *core.Logger) *SentinelClient {
+	bus := NewEventBus(addr, logger)
 	
 	sc := &SentinelClient{
 		bus:      bus,
 		handlers: make(map[string][]EventHandler),
+		logger:   logger,
 	}
 	
 	// Iniciar dispatcher de eventos desde el bus
