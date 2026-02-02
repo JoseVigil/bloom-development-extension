@@ -19,7 +19,7 @@ from brain.core.server.server_event_bus import EventBus
 from brain.core.profile.profile_state_manager import ProfileStateManager
 
 # Logger with DEBUG level
-logger = get_logger("brain.service")
+logger = get_logger("brain.server.manager")
 logger.setLevel(logging.DEBUG)
 
 

@@ -38,6 +38,18 @@ class BrainLogger:
             'propagate': True,  # También va a brain_core.log
             'label': '🖥️ BRAIN SERVER',
         },
+        'brain.server.manager': {
+            'file_prefix': 'brain_server_manager',
+            'level': logging.DEBUG,
+            'propagate': True,  # También va a brain_core.log
+            'label': '🎛️ SERVER MANAGER',
+        },
+        'brain.server.event_bus': {
+            'file_prefix': 'brain_server_event_bus',
+            'level': logging.DEBUG,
+            'propagate': True,  # También va a brain_core.log
+            'label': '📡 EVENT BUS',
+        },
         # Puedes agregar más aquí en el futuro:
         # 'brain.worker': {'file_prefix': 'brain_worker', 'label': '⚙️ WORKER', ...},
     }
@@ -78,11 +90,17 @@ class BrainLogger:
             self.log_dir.mkdir(parents=True, exist_ok=True)
             
             # Determinar ruta de telemetría
-            self.telemetry_path = self.log_dir / "telemetry.json"
+            self.telemetry_path = self.log_dir.parent / "telemetry.json"
             
-            # Archivo por día
+            # Archivo por día (en subcarpeta según log_name)
             timestamp = datetime.now().strftime("%Y%m%d")
-            self.log_file = self.log_dir / f"{log_name}_{timestamp}.log"
+            
+            # Extraer categoría del log_name (ej: "brain_core" -> "core")
+            category = log_name.replace("brain_", "") if log_name.startswith("brain_") else "general"
+            category_dir = self.log_dir / category
+            category_dir.mkdir(parents=True, exist_ok=True)
+            
+            self.log_file = category_dir / f"{log_name}_{timestamp}.log"
             
             # 2. Formato detallado para el archivo
             log_format = logging.Formatter(
@@ -161,7 +179,13 @@ class BrainLogger:
             try:
                 # Crear archivo dedicado
                 file_prefix = config['file_prefix']
-                specialized_file = self.log_dir / f"{file_prefix}_{timestamp}.log"
+                # Extraer categoría del namespace (ej: 'brain.profile' -> 'profile')
+                parts = namespace.split('.')
+                category = parts[1] if len(parts) > 1 else 'general'
+                category_dir = self.log_dir / category
+                category_dir.mkdir(parents=True, exist_ok=True)
+                
+                specialized_file = category_dir / f"{file_prefix}_{timestamp}.log"
                 
                 # Handler dedicado
                 specialized_handler = RotatingFileHandler(
@@ -301,15 +325,15 @@ class BrainLogger:
         if sys.platform == "win32":
             app_data = os.environ.get('LOCALAPPDATA') or os.environ.get('APPDATA')
             if not app_data:
-                return Path.cwd() / "logs"
-            return Path(app_data) / "BloomNucleus" / "logs"
+                return Path.cwd() / "logs" / "brain"
+            return Path(app_data) / "BloomNucleus" / "logs" / "brain"
         elif sys.platform == "darwin":
-            return Path.home() / "Library" / "Logs" / "BloomNucleus"
+            return Path.home() / "Library" / "Logs" / "BloomNucleus" / "brain"
         else:
             xdg_data = os.environ.get('XDG_DATA_HOME')
             if xdg_data:
-                return Path(xdg_data) / "BloomNucleus" / "logs"
-            return Path.home() / ".local" / "share" / "BloomNucleus" / "logs"
+                return Path(xdg_data) / "BloomNucleus" / "logs" / "brain"
+            return Path.home() / ".local" / "share" / "BloomNucleus" / "logs" / "brain"
     
     def _log_system_info(self, json_mode: bool = False):
         """Registra información del sistema (Solo va al archivo de log)."""

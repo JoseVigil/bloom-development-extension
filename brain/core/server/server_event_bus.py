@@ -17,7 +17,7 @@ try:
 except ImportError:
     AIOFILES_AVAILABLE = False
 
-logger = logging.getLogger("brain.event_bus")
+logger = logging.getLogger("brain.server.event_bus")
 
 
 class EventBus:
