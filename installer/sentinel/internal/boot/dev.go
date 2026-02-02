@@ -57,6 +57,11 @@ func init() {
 					"vscode_exe": codePath,
 				})
 
+				// 3. Iniciar BLOOM API (Swagger) - INDEPENDIENTE
+				c.Logger.Info("📡 Levantando Bloom API + Swagger...")
+				apiCmd, _ := LaunchApiServer(extPath)
+				
+				// 4. Iniciar Svelte
 				svelteCmd, _ := LaunchSvelte(extPath)
 				sm, _ := discovery.DiscoverSystem(c.Paths.BinDir)
 				_ = SyncVScodeSettings(extPath, sm.BrainPath, filepath.Join(runtimePath, "python.exe"))
@@ -76,6 +81,9 @@ func init() {
 				if vsCmd != nil {
 					KillProcessTree(vsCmd.Process.Pid)
 				}
+				if apiCmd != nil {
+					KillProcessTree(apiCmd.Process.Pid)
+				}
 				if svelteCmd != nil {
 					KillProcessTree(svelteCmd.Process.Pid)
 				}
@@ -85,7 +93,7 @@ func init() {
 					ollamaSup.Stop()
 				}
 
-				CleanPorts([]int{5173, 3001, 5678, 11434})
+				CleanPorts([]int{5173, 48215, 5678, 11434})
 			},
 		}
 
@@ -96,7 +104,7 @@ func init() {
   - Ollama.exe en carpeta bin/
   - VSCode instalado y detectado en PATH
   - Node.js y npm para servidor Svelte (puerto 5173)
-  - Puertos 5173, 3001, 5678, 11434 libres
+  - Puertos 5173, 48215, 5678, 11434 libres
   - extension_path y test_workspace configurados en sentinel.yaml
   - Python runtime en resources/runtime/`
 

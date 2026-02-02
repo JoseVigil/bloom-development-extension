@@ -1,73 +1,80 @@
 package boot
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 )
 
-func LaunchSvelte(repoRoot string) (*exec.Cmd, error) {
-	appPath := filepath.Join(repoRoot, "webview", "app")
+// LaunchApiServer inicia el servidor Fastify independiente
+func LaunchApiServer(extPath string) (*exec.Cmd, error) {
+	if extPath == "" {
+		return nil, fmt.Errorf("extensionPath no definido")
+	}
+
+	// Ruta al entrypoint compilado de la API
+	apiEntry := filepath.Join(extPath, "out", "extension.js")
 	
-	// 1. Validación de node_modules
-	if _, err := os.Stat(filepath.Join(appPath, "node_modules")); err != nil {
-		return nil, fmt.Errorf("error: node_modules no detectado. Ejecuta 'npm install' en %s", appPath)
+	// Verificar que existe
+	if _, err := os.Stat(apiEntry); os.IsNotExist(err) {
+		return nil, fmt.Errorf("API entrypoint no encontrado: %s", apiEntry)
 	}
 
-	// 2. PRE-FLIGHT: Sincronización de SvelteKit
-	// Esto genera .svelte-kit/tsconfig.json y evita el WARNING que viste
-	fmt.Println("\033[35m[SVELTE]\033[0m Sincronizando SvelteKit...")
-	var syncCmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		syncCmd = exec.Command("cmd", "/C", "npx", "svelte-kit", "sync")
-	} else {
-		syncCmd = exec.Command("npx", "svelte-kit", "sync")
-	}
-	syncCmd.Dir = appPath
-	_ = syncCmd.Run() // No importa si falla, el dev intentará levantarlo igual
-
-	// 3. LANZAMIENTO: Servidor Dev
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
-		// Usamos exactamente el comando que te funcionó manualmente
-		cmd = exec.Command("cmd", "/C", "npm", "run", "dev", "--", "--host", "127.0.0.1")
+		cmd = exec.Command("node", apiEntry)
 	} else {
-		cmd = exec.Command("npm", "run", "dev", "--", "--host", "127.0.0.1")
+		cmd = exec.Command("node", apiEntry)
 	}
 
-	cmd.Dir = appPath
-	cmd.Env = os.Environ()
-
-	stdout, _ := cmd.StdoutPipe()
-	stderr, _ := cmd.StderrPipe()
-
-	// Handler de Logs
-	go func() {
-		scanner := bufio.NewScanner(stdout)
-		for scanner.Scan() {
-			line := scanner.Text()
-			fmt.Printf("\033[35m[SVELTE]\033[0m %s\n", line)
-		}
-	}()
-
-	go func() {
-		scanner := bufio.NewScanner(stderr)
-		for scanner.Scan() {
-			line := scanner.Text()
-			// Solo imprimimos si no es ruido de red
-			if !strings.Contains(line, "api.github.com") {
-				fmt.Printf("\033[31m[SVELTE-ERR]\033[0m %s\n", line)
-			}
-		}
-	}()
+	cmd.Dir = extPath
+	cmd.Env = append(os.Environ(), "PORT=48215")
+	cmd.Stdout = &prefixedWriter{prefix: "[API] ", out: os.Stderr}
+	cmd.Stderr = &prefixedWriter{prefix: "[API-ERR] ", out: os.Stderr}
 
 	if err := cmd.Start(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error iniciando API server: %w", err)
 	}
 
+	fmt.Fprintf(os.Stderr, "[API] Servidor iniciado (PID: %d)\n", cmd.Process.Pid)
 	return cmd, nil
+}
+
+// LaunchSvelte inicia el servidor de desarrollo Svelte
+func LaunchSvelte(extPath string) (*exec.Cmd, error) {
+	if extPath == "" {
+		return nil, fmt.Errorf("extensionPath no definido")
+	}
+
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		cmd = exec.Command("npm", "run", "dev")
+	} else {
+		cmd = exec.Command("npm", "run", "dev")
+	}
+
+	cmd.Dir = extPath
+	cmd.Stdout = &prefixedWriter{prefix: "[SVELTE] ", out: os.Stderr}
+	cmd.Stderr = &prefixedWriter{prefix: "[SVELTE-ERR] ", out: os.Stderr}
+
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("error iniciando Svelte: %w", err)
+	}
+
+	fmt.Fprintf(os.Stderr, "[SVELTE] Servidor iniciado (PID: %d)\n", cmd.Process.Pid)
+	return cmd, nil
+}
+
+// prefixedWriter añade prefijo a cada línea
+type prefixedWriter struct {
+	prefix string
+	out    *os.File
+}
+
+func (pw *prefixedWriter) Write(p []byte) (n int, err error) {
+	// Escribir con prefijo
+	_, err = fmt.Fprintf(pw.out, "%s%s", pw.prefix, string(p))
+	return len(p), err
 }

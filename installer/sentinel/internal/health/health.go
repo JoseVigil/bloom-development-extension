@@ -52,9 +52,70 @@ func init() {
 			cmd.Annotations = make(map[string]string)
 		}
 		cmd.Annotations["requires"] = `  - brain.exe debe estar en PATH o en bin/
-  - Puertos 5678, 3001, 5173 accesibles para verificación`
+  - Puertos 5678, 48215, 5173, 11434 accesibles para verificación`
 
 		return cmd
+	})
+
+	// Comando check con subcomandos
+	core.RegisterCommand("SYSTEM", func(c *core.Core) *cobra.Command {
+		checkCmd := &cobra.Command{
+			Use:   "check [componente]",
+			Short: "Ejecuta un diagnóstico profundo de salud del sistema y procesos",
+			Args:  cobra.MaximumNArgs(1),
+			Run: func(cmd *cobra.Command, args []string) {
+				component := ""
+				if len(args) > 0 {
+					component = args[0]
+				}
+				
+				if err := RunHealthCheck(c, component); err != nil {
+					c.Logger.Error("Error en diagnóstico: %v", err)
+					os.Exit(1)
+				}
+			},
+		}
+
+		// Subcomando: check workers
+		checkCmd.AddCommand(&cobra.Command{
+			Use:   "workers",
+			Short: "Lista todos los workers (Chrome Profiles) activos",
+			Run: func(cmd *cobra.Command, args []string) {
+				profiles := getActiveProfiles(c)
+				if c.IsJSON {
+					out, _ := json.MarshalIndent(profiles, "", "  ")
+					fmt.Println(string(out))
+					return
+				}
+				fmt.Println("📦 WORKERS ACTIVOS:")
+				for _, p := range profiles {
+					fmt.Printf("[%s] Status: %s | PID: %d\n", p.ProfileID, p.Status, p.PID)
+				}
+			},
+		})
+
+		// Subcomando: check workers health
+		workersCmd := checkCmd.Commands()[0]
+		workersCmd.AddCommand(&cobra.Command{
+			Use:   "health",
+			Short: "Resumen de salud de todos los workers",
+			Run: func(cmd *cobra.Command, args []string) {
+				profiles := getActiveProfiles(c)
+				healthy := 0
+				for _, p := range profiles {
+					if p.Status == "active" || p.Status == "running" {
+						healthy++
+					}
+				}
+				if c.IsJSON {
+					fmt.Printf(`{"total": %d, "healthy": %d}`+"\n", len(profiles), healthy)
+				} else {
+					c.Logger.Info("Salud de Workers: %d/%d operativos", healthy, len(profiles))
+				}
+			},
+		})
+
+		return checkCmd
 	})
 }
 
@@ -153,26 +214,54 @@ func CheckHealth(c *core.Core, sm *discovery.SystemMap) (*startup.SystemStatus, 
 	}
 	
 	var wg sync.WaitGroup
-	// Incrementado a 4 para incluir Ollama
-	sc := make(chan startup.ServiceStatus, 4)
-	wg.Add(4)
+	sc := make(chan startup.ServiceStatus, 5)
+	wg.Add(5)
 	
+	// 1. Core Bridge
 	go func() { defer wg.Done(); sc <- checkPort(5678, "Core Bridge", "TCP") }()
-	go func() { defer wg.Done(); sc <- checkPort(3001, "Extension API", "HTTP") }()
+	
+	// 2. Bloom API + Swagger (Puerto corregido a 48215)
+	go func() { 
+		defer wg.Done()
+		addr := "127.0.0.1:48215"
+		active := false
+		// Intentamos validar Swagger UI directamente
+		resp, err := http.Get(fmt.Sprintf("http://%s/documentation", addr))
+		if err == nil && (resp.StatusCode == 200 || resp.StatusCode == 302) {
+			active = true
+			resp.Body.Close()
+		}
+		sc <- startup.ServiceStatus{Name: "Bloom API (Swagger)", Port: 48215, Active: active}
+	}()
+	
+	// 3. Svelte Dev
 	go func() { defer wg.Done(); sc <- checkPort(5173, "Svelte Dev", "TCP") }()
 	
-	// NUEVO: Check de Ollama Runtime
+	// 4. Ollama Runtime
 	go func() {
 		defer wg.Done()
 		addr := "127.0.0.1:11434"
 		active := false
-		// Usamos el endpoint de versión como pide el prompt
 		resp, err := http.Get(fmt.Sprintf("http://%s/api/version", addr))
 		if err == nil && resp.StatusCode == 200 {
 			active = true
 			resp.Body.Close()
 		}
-		sc <- startup.ServiceStatus{Name: "Ollama Runtime", Port: 11434, Active: active}
+		sc <- startup.ServiceStatus{Name: "Ollama Engine", Port: 11434, Active: active}
+	}()
+
+	// 5. Worker Manager (Busca perfiles activos en el registry)
+	go func() {
+		defer wg.Done()
+		profilesPath := filepath.Join(c.Paths.AppDataDir, "config", "profiles.json")
+		active := false
+		if data, err := os.ReadFile(profilesPath); err == nil {
+			var reg process.ProfileRegistry
+			if json.Unmarshal(data, &reg) == nil && len(reg.Profiles) > 0 {
+				active = true
+			}
+		}
+		sc <- startup.ServiceStatus{Name: "Worker Manager", Port: 0, Active: active}
 	}()
 	
 	go func() { wg.Wait(); close(sc) }()
@@ -195,4 +284,55 @@ func checkPort(port int, name, proto string) startup.ServiceStatus {
 		if err == nil { active = true; conn.Close() }
 	}
 	return startup.ServiceStatus{Name: name, Port: port, Active: active}
+}
+
+// RunHealthCheck ejecuta diagnóstico profundo de salud
+func RunHealthCheck(c *core.Core, component string) error {
+	c.Logger.Info("🔬 Iniciando diagnóstico profundo...")
+	
+	// Verificar integridad de carpetas
+	c.Logger.Info("📁 Verificando integridad de directorios...")
+	dirs := []string{c.Paths.LogsDir, c.Paths.AppDataDir, c.Paths.BinDir}
+	for _, dir := range dirs {
+		if _, err := os.Stat(dir); os.IsNotExist(err) {
+			c.Logger.Warning("❌ Directorio no existe: %s", dir)
+		} else {
+			c.Logger.Success("✅ %s", dir)
+		}
+	}
+	
+	// Ejecutar health check normal
+	sm, err := discovery.DiscoverSystem(c.Paths.BinDir)
+	if err != nil {
+		return fmt.Errorf("error en discovery: %w", err)
+	}
+	
+	status, err := CheckHealth(c, sm)
+	if err != nil {
+		return fmt.Errorf("error en health check: %w", err)
+	}
+	
+	// Mostrar resultados
+	c.Logger.Info("📊 Resultados del diagnóstico:")
+	for _, svc := range status.Services {
+		if svc.Active {
+			c.Logger.Success("✅ %s (puerto %d)", svc.Name, svc.Port)
+		} else {
+			c.Logger.Warning("❌ %s (puerto %d) - NO DISPONIBLE", svc.Name, svc.Port)
+		}
+	}
+	
+	return nil
+}
+
+// getActiveProfiles obtiene lista de perfiles activos desde profiles.json
+func getActiveProfiles(c *core.Core) []process.ProfileStatus {
+	profilesPath := filepath.Join(c.Paths.AppDataDir, "config", "profiles.json")
+	data, err := os.ReadFile(profilesPath)
+	if err != nil {
+		 return []process.ProfileStatus{}
+	}
+	var reg process.ProfileRegistry
+	json.Unmarshal(data, &reg)
+	return reg.Profiles
 }

@@ -59,9 +59,9 @@ func LaunchExtensionHost(codePath, extPath, workspacePath, runtimePath string) (
 	// --- CONFIGURACIÓN DE ARGUMENTOS ---
 	args := []string{
 		"--extensionDevelopmentPath=" + extPath,
-		"--disable-extension", "github.copilot",      // Mata el proceso de Copilot
-		"--disable-extension", "github.copilot-chat", // Mata el chat de Copilot
-		"--no-proxy-server",                          // Evita que intente salir por proxys de red
+		"--disable-extensions",                   // Desactivación TOTAL de plugins globales
+		"--user-data-dir=" + os.TempDir() + "/bloom-vscode-isolated", // Perfil temporal
+		"--no-proxy-server",                      // Evita proxys de red
 	}
 
 	if workspacePath != "" {
