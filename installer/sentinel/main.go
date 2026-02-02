@@ -5,13 +5,13 @@ import (
 	"os"
 	"sentinel/cli"
 	"sentinel/internal/core"
-	"sentinel/internal/eventbus" 
 	"sentinel/internal/startup"
 	"github.com/spf13/cobra"
 
 	// Registro de comandos mediante imports en blanco
 	_ "sentinel/internal/boot"
 	_ "sentinel/internal/bridge"
+	_ "sentinel/internal/eventbus"
 	_ "sentinel/internal/health"
 	_ "sentinel/internal/ignition"
 	_ "sentinel/internal/seed"
@@ -24,10 +24,6 @@ func main() {
 	operationMode := detectOperationMode()
 	
 	switch operationMode {
-	case "daemon":
-		// Modo Daemon: iniciar como proceso persistente (sidecar)
-		runDaemonMode()
-		
 	case "help":
 		// Modo Help: mostrar ayuda sin inicialización completa
 		runHelpMode()
@@ -41,55 +37,11 @@ func main() {
 // detectOperationMode analiza los argumentos para determinar el modo
 func detectOperationMode() string {
 	for _, arg := range os.Args {
-		if arg == "--mode" {
-			// Buscar el valor después de --mode
-			for i, a := range os.Args {
-				if a == "--mode" && i+1 < len(os.Args) {
-					return os.Args[i+1]
-				}
-			}
-		}
 		if arg == "--help" || arg == "-h" || arg == "--json-help" {
 			return "help"
 		}
 	}
 	return "normal"
-}
-
-// runDaemonMode ejecuta Sentinel como proceso persistente (Sidecar)
-func runDaemonMode() {
-	// ============================================================
-	// MODO DAEMON - REGLA DE ORO DE STDOUT/STDERR
-	// ============================================================
-	// - STDOUT: Exclusivo para eventos JSON (consumo de Electron)
-	// - STDERR: Toda telemetría, logs, y mensajes de diagnóstico
-	// ============================================================
-	
-	fmt.Fprintf(os.Stderr, "[DAEMON] ========================================\n")
-	fmt.Fprintf(os.Stderr, "[DAEMON] Sentinel - Modo Sidecar Persistente\n")
-	fmt.Fprintf(os.Stderr, "[DAEMON] ========================================\n")
-	
-	// Determinar dirección del Brain desde variable de entorno o default
-	brainAddr := os.Getenv("BRAIN_ADDR")
-	if brainAddr == "" {
-		brainAddr = "127.0.0.1:5678"
-	}
-	
-	// Inicializar Core en modo silencioso para tener acceso al logger
-	c, err := core.InitializeSilent()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "[FATAL] Error inicializando core: %v\n", err)
-		os.Exit(1)
-	}
-	defer c.Close()
-	
-	// Crear e iniciar el modo daemon
-	daemon := eventbus.NewDaemonMode(brainAddr, c.Logger)
-	
-	if err := daemon.Start(); err != nil {
-		fmt.Fprintf(os.Stderr, "[FATAL] Error iniciando modo daemon: %v\n", err)
-		os.Exit(1)
-	}
 }
 
 // runHelpMode muestra la ayuda sin inicialización completa
