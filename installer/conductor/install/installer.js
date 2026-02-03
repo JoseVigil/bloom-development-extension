@@ -22,7 +22,6 @@ const {
 } = require('./service-installer');
 
 const { installRuntime } = require('./runtime-installer');
-const { installExtension } = require('./extension-installer');
 const { installChromium } = require('./chromium-installer');
 
 const APP_VERSION = app?.getVersion() || process.env.npm_package_version || '1.0.0';
@@ -241,7 +240,6 @@ async function createDirectories() {
     paths.binDir,
     path.join(paths.binDir, 'brain'),
     path.join(paths.binDir, 'native'),
-    path.join(paths.binDir, 'extension'),
     path.join(paths.binDir, 'sentinel'),
     paths.configDir,
     paths.profilesDir,
@@ -285,14 +283,8 @@ async function cleanNativeDir() {
   }
 }
 
-async function deployExtensionTemplate() {
-  const templateDir = path.join(paths.binDir, 'extension');
-  if (await fs.pathExists(templateDir)) {
-    await fs.emptyDir(templateDir);
-  }
-  await installExtension();
-  logger.success(`Extension template deployed → ${templateDir}`);
-}
+// Extension deployment removed - Cortex (.blx) deployed via deployBinaries
+
 
 // ============================================================================
 // SOVEREIGN RUNTIME PROVISIONING
@@ -329,7 +321,7 @@ const SOVEREIGN_COMPONENTS = {
   },
   cortex: {
     sourceSubpath: 'cortex',
-    destSubpath: 'cortex',
+    destSubpath: 'native',
     criticalFiles: ['bloom-cortex.blx'],
     immutable: true
   },
@@ -674,19 +666,15 @@ async function runFullInstallation(mainWindow = null) {
       throw new Error(`Chromium installation failed: ${chromiumResult?.error || 'unknown'}`);
     }
 
-    // 4. Extension template
-    emitProgress(mainWindow, 'extension-template');
-    await deployExtensionTemplate();
-
-    // 5. Python runtime
+    // 4. Python runtime
     emitProgress(mainWindow, 'brain-runtime');
     await installRuntime();
 
-    // 6. Binaries (incluye sentinel + blueprint)
+    // 5. Binaries (incluye cortex.blx)
     emitProgress(mainWindow, 'binaries');
     await deployBinaries();
 
-    // 7. Service
+    // 6. Service
     emitProgress(mainWindow, 'service');
     await installWindowsService();
     const started = await startService();
@@ -694,7 +682,7 @@ async function runFullInstallation(mainWindow = null) {
       throw new Error('Failed to start Brain service');
     }
 
-    // 7.5. OLLAMA COGNITIVE ENGINE - Heartbeat
+    // 6.5. OLLAMA COGNITIVE ENGINE - Heartbeat
     emitProgress(mainWindow, 'ollama-init', 'Iniciando motor de IA local');
     logger.separator('OLLAMA COGNITIVE ENGINE');
     
@@ -734,7 +722,7 @@ async function runFullInstallation(mainWindow = null) {
       logger.info('Installation will continue - AI can be configured later');
     }
 
-    // 7.6. Crear nucleus.json ANTES de seed (Brain lo requiere)
+    // 6.6. Crear nucleus.json ANTES de seed (Brain lo requiere)
     logger.info('Creating minimal nucleus.json for Brain...');
     const nucleusPath = path.join(paths.configDir, 'nucleus.json');
     const nucleusConfig = {
@@ -760,7 +748,7 @@ async function runFullInstallation(mainWindow = null) {
     await fs.writeJson(nucleusPath, nucleusConfig, { spaces: 2 });
     logger.success('nucleus.json created (minimal)');
 
-    // 8. Sentinel profile creation
+    // 7. Sentinel profile creation
     emitProgress(mainWindow, 'sentinel-handoff');
     const seedResult = await executeSentinelCommand([
       '--json',
@@ -805,7 +793,7 @@ async function runFullInstallation(mainWindow = null) {
     await fs.writeJson(nucleusPath, nucleusConfig, { spaces: 2 });
     logger.success('nucleus.json updated: installation.completed=true, onboarding.completed=false');
 
-    // 9. DISCOVERY HEARTBEAT (Validación Silenciosa)
+    // 8. DISCOVERY HEARTBEAT (Validación Silenciosa)
     emitProgress(mainWindow, 'validation', 'Discovery heartbeat test');
     logger.info('Launching discovery heartbeat (--override-heartbeat=true)...');
     
@@ -837,7 +825,7 @@ async function runFullInstallation(mainWindow = null) {
     logger.success(`✅ CERTIFICADO: Tubería Brain-Sentinel-Host operativa (port ${health.port})`);
     logger.info(`Profiles registered: ${health.profiles_registered || 0}`);
 
-    // 10. LAUNCHER SELF-DEPLOYMENT & SHORTCUTS
+    // 9. LAUNCHER SELF-DEPLOYMENT & SHORTCUTS
     emitProgress(mainWindow, 'complete', 'Deploying launcher');
     await deployLauncher(paths.binDir);
 
