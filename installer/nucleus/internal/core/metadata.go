@@ -159,7 +159,7 @@ func computeStateHash() string {
 	
 	// Hash combinado de ownership + blueprint
 	ownershipData, _ := os.ReadFile(nucleusRoot + "/ownership.json")
-	blueprintData, _ := os.ReadFile(nucleusRoot + "/blueprint.json")
+	blueprintData, _ := os.ReadFile(nucleusRoot + "/nucleus-governance.json")
 	
 	combined := string(ownershipData) + string(blueprintData)
 	if combined == "" {

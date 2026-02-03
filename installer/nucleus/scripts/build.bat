@@ -35,9 +35,9 @@ echo   CGO_ENABLED=%CGO_ENABLED% >> "%LOG_FILE%"
 echo   GOMEMLIMIT=%GOMEMLIMIT% >> "%LOG_FILE%"
 echo. >> "%LOG_FILE%"
 
-:: ───────────────────────────────────────────────────────────────
+:: ────────────────────────────────────────────────────────────────
 :: Estructura de salida deseada → installer\native\bin\...
-:: ───────────────────────────────────────────────────────────────
+:: ────────────────────────────────────────────────────────────────
 set PLATFORM=win32
 set APP_FOLDER=nucleus
 
@@ -106,7 +106,8 @@ echo Ruta absoluta del output (antes de pushd): !ABS_OUTPUT_FILE! >> "%LOG_FILE%
 :: Nos movemos a la carpeta del proyecto (donde está go.mod)
 pushd ".."
 
-go build -p 1 -ldflags="-s -w" -o "!ABS_OUTPUT_FILE!" ./cmd/nucleus >> "%LOG_FILE%" 2>&1
+:: CAMBIO CRÍTICO: Compilar desde la raíz (.) en lugar de ./cmd/nucleus
+go build -p 1 -ldflags="-s -w" -o "!ABS_OUTPUT_FILE!" ./main.go >> "%LOG_FILE%" 2>&1
 
 set BUILD_RC=%ERRORLEVEL%
 
@@ -123,6 +124,30 @@ if %BUILD_RC% NEQ 0 (
 echo ✅ Compilation successful: !ABS_OUTPUT_FILE!
 echo ✅ Compilation successful: !ABS_OUTPUT_FILE! >> "%LOG_FILE%"
 echo. >> "%LOG_FILE%"
+
+:: ============================================
+:: COPIAR NUCLEUS-GOVERNANCE.JSON
+:: ============================================
+echo.
+echo Copying nucleus-governance.json...
+echo Copying nucleus-governance.json... >> "%LOG_FILE%"
+
+set "GOVERNANCE_SOURCE=..\nucleus-governance.json"
+set "GOVERNANCE_DEST=%OUTPUT_DIR%\nucleus-governance.json"
+
+if exist "%GOVERNANCE_SOURCE%" (
+    copy /Y "%GOVERNANCE_SOURCE%" "%GOVERNANCE_DEST%" >> "%LOG_FILE%" 2>&1
+    if %ERRORLEVEL% EQU 0 (
+        echo ✅ nucleus-governance.json copied
+        echo ✅ nucleus-governance.json copied >> "%LOG_FILE%"
+    ) else (
+        echo ⚠️ Warning: Failed to copy nucleus-governance.json
+        echo ⚠️ Warning: Failed to copy nucleus-governance.json >> "%LOG_FILE%"
+    )
+) else (
+    echo ⚠️ Warning: nucleus-governance.json not found at %GOVERNANCE_SOURCE%
+    echo ⚠️ Warning: nucleus-governance.json not found at %GOVERNANCE_SOURCE% >> "%LOG_FILE%"
+)
 
 :: ============================================
 :: GENERAR AYUDA
@@ -224,7 +249,7 @@ echo 📦 Archivos generados en:
 echo   %OUTPUT_DIR%
 echo.
 echo   • Executable     : nucleus.exe
-echo   • Blueprint      : blueprint.json
+echo   • Blueprint      : nucleus-governance.json
 echo   • Help JSON      : help\nucleus_help.json
 echo   • Help TXT       : help\nucleus_help.txt
 echo.
