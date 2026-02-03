@@ -112,13 +112,13 @@ echo "" >> "${LOG_FILE}"
 # Copiar blueprint.json
 # ───────────────────────────────────────────────────────────────
 
-if [[ -f "../blueprint.json" ]]; then
-    cp -f "../blueprint.json" "${OUTPUT_DIR}/blueprint.json"
-    echo "📦 blueprint.json updated"
-    echo "📦 blueprint.json updated" >> "${LOG_FILE}"
+if [[ -f "../sentinel-config.json" ]]; then
+    cp -f "../sentinel-config.json" "${OUTPUT_DIR}/sentinel-config.json"
+    echo "📦 sentinel-config.json updated"
+    echo "📦 sentinel-config.json updated" >> "${LOG_FILE}"
 else
-    echo "⚠️ No se encontró blueprint.json para copiar"
-    echo "⚠️ No se encontró blueprint.json para copiar" >> "${LOG_FILE}"
+    echo "⚠️ No se encontró sentinel-config.json para copiar"
+    echo "⚠️ No se encontró sentinel-config.json para copiar" >> "${LOG_FILE}"
 fi
 
 # ───────────────────────────────────────────────────────────────
