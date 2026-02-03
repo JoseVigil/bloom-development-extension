@@ -7,8 +7,7 @@ bloom-development-extension/
     │   ├── config/
     │   │   └── profiles.json
     │   ├── cortex/
-    │   │   ├── bloom-cortex-1.0.0+build.2.blx
-    │   │   └── bloom-cortex-1.0.0+build.3.blx
+    │   │   └── bloom-cortex.blx
     │   ├── darwin/
     │   │   └── x64/
     │   │       └── bloom-host

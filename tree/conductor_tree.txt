@@ -23,7 +23,6 @@ bloom-development-extension/
     │   ├── diagnose/
     │   │   ├── diagnose-service.js
     │   │   └── service-diagnostics.js
-    │   ├── extension-installer.js
     │   ├── installer.js
     │   ├── launcher-creator.js
     │   ├── native-host-installer.js
