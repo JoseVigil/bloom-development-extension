@@ -25,8 +25,7 @@ bloom-development-extension/
     │   │   ├── reaper.go
     │   │   └── vscode.go
     │   ├── bridge/
-    │   │   ├── bridge.go
-    │   │   └── launch_commands.go
+    │   │   └── bridge.go
     │   ├── core/
     │   │   ├── build_info.go
     │   │   ├── config.go
@@ -37,8 +36,7 @@ bloom-development-extension/
     │   │   ├── telemetry.go
     │   │   └── version_reader.go
     │   ├── discovery/
-    │   │   ├── discovery.go
-    │   │   └── vscode.go
+    │   │   └── discovery.go
     │   ├── eventbus/
     │   │   ├── daemon.go
     │   │   ├── eventbus.go
@@ -53,6 +51,7 @@ bloom-development-extension/
     │   │   ├── ignition_identity.go
     │   │   ├── ignition_lifecycle.go
     │   │   ├── ignition_spec.go
+    │   │   ├── launch_commands.go
     │   │   ├── monitor.go
     │   │   └── reaper.go
     │   ├── ollama/

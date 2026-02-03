@@ -3,11 +3,7 @@ bloom-development-extension/
     ├── .gitignore
     ├── README.md
     ├── VERSION
-    ├── blueprint.json
     ├── build_number.txt
-    ├── cmd/
-    │   └── nucleus/
-    │       └── main.go
     ├── docs/
     │   ├── EXECUTIVE_SUMMARY.md
     │   ├── GOVERNANCE.md
@@ -16,30 +12,12 @@ bloom-development-extension/
     ├── go.sum
     ├── internal/
     │   ├── analytics/
-    │   │   └── client.go
+    │   │   └── heartbeat.go
     │   ├── cli/
     │   │   ├── config.go
     │   │   └── help_renderer.go
-    │   ├── commands/
-    │   │   ├── analytics/
-    │   │   │   └── heartbeat.go
-    │   │   ├── governance/
-    │   │   │   └── init.go
-    │   │   ├── sync/
-    │   │   │   ├── pull.go
-    │   │   │   └── push.go
-    │   │   ├── system/
-    │   │   │   ├── info.go
-    │   │   │   └── version.go
-    │   │   ├── team/
-    │   │   │   ├── add.go
-    │   │   │   ├── list.go
-    │   │   │   └── remove.go
-    │   │   └── vault/
-    │   │       ├── lock.go
-    │   │       ├── request.go
-    │   │       ├── status.go
-    │   │       └── unlock.go
+    │   ├── client/
+    │   │   └── client.go
     │   ├── core/
     │   │   ├── build_info.go
     │   │   ├── core.go
@@ -48,10 +26,14 @@ bloom-development-extension/
     │   │   └── version.go
     │   ├── governance/
     │   │   ├── blueprint.go
-    │   │   ├── init.go
-    │   │   └── roles.go
+    │   │   └── ownership.go
+    │   ├── system/
+    │   │   ├── info.go
+    │   │   └── version.go
     │   └── vault/
     │       └── vault.go
+    ├── main.go
+    ├── nucleus-governance.json
     └── scripts/
         ├── build-darwin.sh
         ├── build-linux.sh

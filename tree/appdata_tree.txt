@@ -1,14 +1,6 @@
 BloomNucleus/
 ├── bin/
 │   ├── brain/
-│   │   ├── _internal/ [... dependencies]
-│   │   ├── brain.exe
-│   │   └── help/
-│   │       ├── brain-ai-full.json
-│   │       ├── brain-ai-schema.json
-│   │       ├── brain-legacy.json
-│   │       ├── help-full.txt
-│   │       └── help.txt
 │   ├── chrome-win/
 │   │   ├── 146.0.7635.0.manifest
 │   │   ├── D3DCompiler_47.dll
@@ -277,126 +269,26 @@ BloomNucleus/
 │   │   ├── vk_swiftshader_icd.json
 │   │   └── vulkan-1.dll
 │   ├── cortex/
-│   │   └── bloom-cortex-1.0.0+build.1.blx
 │   ├── extension/
-│   │   ├── 128x128.png
-│   │   ├── background.js
-│   │   ├── content.js
-│   │   ├── discovery/
-│   │   │   ├── content-aistudio.js
-│   │   │   ├── discovery.js
-│   │   │   ├── discoveryProtocol.js
-│   │   │   ├── index.html
-│   │   │   ├── onboarding.js
-│   │   │   ├── script.js
-│   │   │   └── styles.css
-│   │   ├── discovery.synapse.config.js
-│   │   ├── icon128.png
-│   │   ├── icon16.png
-│   │   ├── landing/
-│   │   │   ├── data-loader.js
-│   │   │   ├── index.html
-│   │   │   ├── landing.js
-│   │   │   ├── landing.synapse.config.js
-│   │   │   ├── landingProtocol.js
-│   │   │   ├── script.js
-│   │   │   └── styles.css
-│   │   ├── landing.synapse.config.js
-│   │   └── manifest.json
 │   ├── native/
-│   │   ├── bloom-host.exe
-│   │   ├── libwinpthread-1.dll
-│   │   └── nssm.exe
 │   └── sentinel/
-│       ├── blueprint.json
-│       └── sentinel.exe
 ├── config/
-│   ├── nucleus.json
-│   ├── profile/
-│   │   └── 37ae1c62-645a-4f46-8d02-7ab1db745acb/
-│   │       ├── com.bloom.synapse.37ae1c62.json
-│   │       └── ignition_spec.json
-│   └── profiles.json
 ├── engine/
 │   └── runtime/
-│       ├── LICENSE.txt
-│       ├── _asyncio.pyd
-│       ├── _bz2.pyd
-│       ├── _ctypes.pyd
-│       ├── _decimal.pyd
-│       ├── _elementtree.pyd
-│       ├── _hashlib.pyd
-│       ├── _lzma.pyd
-│       ├── _msi.pyd
-│       ├── _multiprocessing.pyd
-│       ├── _overlapped.pyd
-│       ├── _queue.pyd
-│       ├── _socket.pyd
-│       ├── _sqlite3.pyd
-│       ├── _ssl.pyd
-│       ├── _uuid.pyd
-│       ├── _zoneinfo.pyd
-│       ├── libcrypto-1_1.dll
-│       ├── libffi-7.dll
-│       ├── libssl-1_1.dll
-│       ├── pyexpat.pyd
-│       ├── python.cat
-│       ├── python.exe
-│       ├── python3.dll
-│       ├── python310._pth
-│       ├── python310.dll
-│       ├── python310.zip
-│       ├── pythonw.exe
-│       ├── select.pyd
-│       ├── sqlite3.dll
-│       ├── unicodedata.pyd
-│       ├── vcruntime140.dll
-│       ├── vcruntime140_1.dll
-│       └── winsound.pyd
 ├── logs/
 │   ├── brain/
-│   │   ├── brain_core_20260202.log
-│   │   ├── brain_profile_20260202.log
-│   │   ├── brain_server_20260202.log
 │   │   ├── core/
-│   │   │   └── brain_core_20260202.log
+│   │   │   └── brain_core_20260203.log
 │   │   ├── profile/
-│   │   │   └── brain_profile_20260202.log
-│   │   ├── server/
-│   │   │   ├── brain_server_20260202.log
-│   │   │   ├── brain_server_event_bus_20260202.log
-│   │   │   └── brain_server_manager_20260202.log
-│   │   └── service/
+│   │   │   └── brain_profile_20260203.log
+│   │   └── server/
+│   │       ├── brain_server_20260203.log
+│   │       ├── brain_server_event_bus_20260203.log
+│   │       └── brain_server_manager_20260203.log
 │   ├── build/ [... build output]
+│   ├── install/
+│   │   └── electron_install.log
+│   ├── sentinel/
+│   │   └── sentinel_core_2026-02-02.log
 │   └── telemetry.json
-├── profiles/
-│   └── 37ae1c62-645a-4f46-8d02-7ab1db745acb/
-│       └── extension/
-│           ├── 128x128.png
-│           ├── background.js
-│           ├── content.js
-│           ├── discovery/
-│           │   ├── content-aistudio.js
-│           │   ├── discovery.js
-│           │   ├── discoveryProtocol.js
-│           │   ├── index.html
-│           │   ├── onboarding.js
-│           │   ├── script.js
-│           │   └── styles.css
-│           ├── discovery.synapse.config.js
-│           ├── icon128.png
-│           ├── icon16.png
-│           ├── landing/
-│           │   ├── data-loader.js
-│           │   ├── index.html
-│           │   ├── landing.js
-│           │   ├── landing.synapse.config.js
-│           │   ├── landingProtocol.js
-│           │   ├── script.js
-│           │   └── styles.css
-│           ├── landing.synapse.config.js
-│           └── manifest.json
-└── workers/
-    └── brain/
-        ├── events.jsonl
-        └── service.pid
+└── profiles/
