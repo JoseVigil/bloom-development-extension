@@ -13,7 +13,7 @@ PLATFORM=linux
 APP_FOLDER=nucleus
 
 # Rutas relativas desde installer/nucleus/scripts/
-OUTPUT_BASE=../../../native/bin/${PLATFORM}/${APP_FOLDER}
+OUTPUT_BASE=../../native/bin/${PLATFORM}/${APP_FOLDER}
 OUTPUT_DIR="${OUTPUT_BASE}"
 OUTPUT_FILE="${OUTPUT_DIR}/nucleus"          # sin .exe
 HELP_DIR="${OUTPUT_DIR}/help"
@@ -109,16 +109,16 @@ echo "✅ Compilation successful: ${OUTPUT_FILE}" >> "${LOG_FILE}"
 echo "" >> "${LOG_FILE}"
 
 # ───────────────────────────────────────────────────────────────
-# Copiar blueprint.json
+# Copiar nucleus-governance.json
 # ───────────────────────────────────────────────────────────────
 
-if [[ -f "../blueprint.json" ]]; then
-    cp -f "../blueprint.json" "${OUTPUT_DIR}/blueprint.json"
-    echo "📦 blueprint.json copiado"
-    echo "📦 blueprint.json copiado" >> "${LOG_FILE}"
+if [[ -f "../nucleus-governance.json" ]]; then
+    cp -f "../nucleus-governance.json" "${OUTPUT_DIR}/nucleus-governance.json"
+    echo "📦 nucleus-governance.json copiado"
+    echo "📦 nucleus-governance.json copiado" >> "${LOG_FILE}"
 else
-    echo "⚠️ blueprint.json no encontrado"
-    echo "⚠️ blueprint.json no encontrado" >> "${LOG_FILE}"
+    echo "⚠️ nucleus-governance.json no encontrado"
+    echo "⚠️ nucleus-governance.json no encontrado" >> "${LOG_FILE}"
 fi
 
 # ───────────────────────────────────────────────────────────────
@@ -173,7 +173,7 @@ echo "📦 Archivos generados en:"
 echo "  ${OUTPUT_DIR}"
 echo ""
 echo "  • Executable     : nucleus"
-echo "  • Blueprint      : blueprint.json"
+echo "  • Blueprint      : nucleus-governance.json"
 echo "  • Help JSON      : help/nucleus_help.json"
 echo "  • Help TXT       : help/nucleus_help.txt"
 echo ""

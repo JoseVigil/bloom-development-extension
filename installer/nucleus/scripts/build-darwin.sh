@@ -13,7 +13,7 @@ PLATFORM=darwin
 APP_FOLDER=nucleus
 
 # Rutas relativas desde installer/nucleus/scripts/
-OUTPUT_BASE=../../../native/bin/${PLATFORM}/${APP_FOLDER}
+OUTPUT_BASE=../../native/bin/${PLATFORM}/${APP_FOLDER}
 OUTPUT_DIR="${OUTPUT_BASE}"
 OUTPUT_FILE="${OUTPUT_DIR}/nucleus"
 HELP_DIR="${OUTPUT_DIR}/help"
