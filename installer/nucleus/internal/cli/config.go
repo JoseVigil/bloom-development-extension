@@ -11,15 +11,25 @@ type HelpConfig struct {
 
 // DefaultNucleusConfig retorna la configuración por defecto para Nucleus
 func DefaultNucleusConfig() HelpConfig {
-	return HelpConfig{
-		AppName:       "NUCLEUS - Governance Magistrate",
-		AppSubtitle:   "Core CLI for Bloom Ecosystem",
-		Width:         120,
-		CategoryOrder: []string{"SYSTEM", "GOVERNANCE", "IDENTITY"},
-		CategoryDescs: map[string]string{
-			"SYSTEM":     "System information and diagnostics",
-			"GOVERNANCE": "Role, vault, sync, and analytics management",
-			"IDENTITY":   "Team and collaboration management",
-		},
-	}
+    return HelpConfig{
+        AppName:    "NUCLEUS",
+        AppSubtitle: "Governance Magistrate",
+        Width:      120,
+        CategoryOrder: []string{
+            "SYSTEM",
+            "GOVERNANCE",
+            "TEAM",
+            "VAULT",
+            "SYNC",
+            "ANALYTICS",
+        },
+        CategoryDescs: map[string]string{
+            "SYSTEM":     "System information and diagnostics",
+            "GOVERNANCE": "Organization initialization and authority",
+            "TEAM":       "Team and collaboration management",
+            "VAULT":      "Secure key and credential management",
+            "SYNC":       "State synchronization with central server",
+            "ANALYTICS":  "System monitoring and telemetry",
+        },
+    }
 }

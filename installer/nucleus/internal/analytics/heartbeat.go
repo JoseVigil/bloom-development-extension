@@ -1,13 +1,10 @@
 package analytics
 
 import (
-	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"net/http"
+	"nucleus/internal/client"
 	"nucleus/internal/core"
-	"nucleus/internal/governance"
 	"os"
 	"time"
 
@@ -15,21 +12,11 @@ import (
 )
 
 // ============================================
-// BUSINESS LOGIC (Client & HTTP)
+// BUSINESS LOGIC (estructuras de datos propias de analytics)
 // ============================================
 
-const (
-	DefaultEndpoint = "https://api.bloom.ai/v1/analytics"
-	Timeout         = 10 * time.Second
-)
-
-type Client struct {
-	endpoint string
-	orgID    string
-	apiKey   string
-	client   *http.Client
-}
-
+// Heartbeat representa el payload que se envía al servidor central.
+// La lógica de envío HTTP vive ahora en el paquete client.
 type Heartbeat struct {
 	OrgID         string    `json:"org_id"`
 	Timestamp     time.Time `json:"timestamp"`
@@ -39,108 +26,18 @@ type Heartbeat struct {
 	SystemHealth  string    `json:"system_health"`
 }
 
+// HeartbeatResponse modela la respuesta del servidor (se mantiene por
+// compatibilidad aunque el decode se movió a client).
 type HeartbeatResponse struct {
 	Status  string `json:"status"`
 	Message string `json:"message"`
 }
 
-func NewClient(orgID, apiKey string) *Client {
-	return &Client{
-		endpoint: DefaultEndpoint,
-		orgID:    orgID,
-		apiKey:   apiKey,
-		client: &http.Client{
-			Timeout: Timeout,
-		},
-	}
-}
-
-func (c *Client) SendHeartbeat(hb *Heartbeat) error {
-	hb.OrgID = c.orgID
+// PrepareHeartbeat setea los campos que analytics conoce (OrgID, Timestamp)
+// antes de delegar el envío a client.SendHeartbeat.
+func PrepareHeartbeat(orgID string, hb *Heartbeat) {
+	hb.OrgID = orgID
 	hb.Timestamp = time.Now()
-
-	data, err := json.Marshal(hb)
-	if err != nil {
-		return err
-	}
-
-	req, err := http.NewRequest("POST", c.endpoint+"/heartbeat", bytes.NewBuffer(data))
-	if err != nil {
-		return err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
-
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return errors.New("heartbeat failed")
-	}
-
-	var response HeartbeatResponse
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (c *Client) PushState(state map[string]interface{}) error {
-	data, err := json.Marshal(state)
-	if err != nil {
-		return err
-	}
-
-	req, err := http.NewRequest("POST", c.endpoint+"/state", bytes.NewBuffer(data))
-	if err != nil {
-		return err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
-
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return errors.New("state push failed")
-	}
-
-	return nil
-}
-
-func (c *Client) PullPermissions() (map[string]interface{}, error) {
-	req, err := http.NewRequest("GET", c.endpoint+"/permissions", nil)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
-
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, errors.New("permissions pull failed")
-	}
-
-	var permissions map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&permissions); err != nil {
-		return nil, err
-	}
-
-	return permissions, nil
 }
 
 // ============================================
@@ -148,7 +45,7 @@ func (c *Client) PullPermissions() (map[string]interface{}, error) {
 // ============================================
 
 func init() {
-	core.RegisterCommand("GOVERNANCE", func(c *core.Core) *cobra.Command {
+	core.RegisterCommand("ANALYTICS", func(c *core.Core) *cobra.Command {
 		var workers int
 		var volume int
 
@@ -157,13 +54,15 @@ func init() {
 			Short: "Send heartbeat to central server",
 			Args:  cobra.NoArgs,
 			Run: func(cmd *cobra.Command, args []string) {
-				record, err := governance.LoadOwnership()
-				if err != nil || record == nil {
+				// client expone el OrgID sin que analytics necesite
+				// importar governance directamente.
+				orgID, err := client.GetOrgID()
+				if err != nil {
 					fmt.Println("Error: organization not initialized")
 					os.Exit(1)
 				}
 
-				client := NewClient(record.OrgID, "demo-key")
+				cl := client.NewClient(orgID, "demo-key")
 
 				versionInfo := core.GetVersionInfo()
 
@@ -174,14 +73,18 @@ func init() {
 					SystemHealth:  "ok",
 				}
 
-				err = client.SendHeartbeat(hb)
+				// Preparar campos temporales/org antes de enviar
+				PrepareHeartbeat(orgID, hb)
+
+				err = cl.SendHeartbeat(hb)
 				if err != nil {
 					fmt.Printf("Error: %v\n", err)
 					os.Exit(1)
 				}
 
 				if c.IsJSON {
-					fmt.Println("{\"status\":\"sent\"}")
+					data, _ := json.Marshal(HeartbeatResponse{Status: "sent", Message: "ok"})
+					fmt.Println(string(data))
 				} else {
 					fmt.Println("💓 Heartbeat sent")
 				}

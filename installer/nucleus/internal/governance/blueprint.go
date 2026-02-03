@@ -3,17 +3,21 @@ package governance
 import (
 	"encoding/json"
 	"fmt"
+	"nucleus/internal/client"
+	"nucleus/internal/core"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/spf13/cobra"
 )
 
 // Blueprint representa el ADN de la Organización
 type Blueprint struct {
-	OrgIdentity      OrgIdentity      `json:"org_identity"`
-	GovernanceModel  GovernanceModel  `json:"governance_model"`
-	VaultSnapshot    VaultSnapshot    `json:"vault_snapshot"`
-	Manifest         Manifest         `json:"manifest"`
+	OrgIdentity     OrgIdentity     `json:"org_identity"`
+	GovernanceModel GovernanceModel `json:"governance_model"`
+	VaultSnapshot   VaultSnapshot   `json:"vault_snapshot"`
+	Manifest        Manifest        `json:"manifest"`
 }
 
 type OrgIdentity struct {
@@ -88,7 +92,7 @@ func SaveBlueprint(bp *Blueprint) error {
 
 	// Escritura atómica usando archivo temporal
 	tmpPath := path + ".tmp"
-	
+
 	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
 		return err
 	}
@@ -146,4 +150,92 @@ func UpdateVaultSnapshot(bp *Blueprint, services []string) error {
 func IncrementIntents(bp *Blueprint) error {
 	bp.Manifest.TotalIntentsProcessed++
 	return SaveBlueprint(bp)
+}
+
+// ============================================
+// CLI COMMANDS - SYNC (Auto-registration via init())
+// ============================================
+
+func init() {
+	// Command: sync-pull
+	core.RegisterCommand("SYNC", func(c *core.Core) *cobra.Command {
+		cmd := &cobra.Command{
+			Use:   "sync-pull",
+			Short: "Pull permissions from central server",
+			Args:  cobra.NoArgs,
+			Run: func(cmd *cobra.Command, args []string) {
+				record, err := LoadOwnership()
+				if err != nil || record == nil {
+					fmt.Println("Error: organization not initialized")
+					os.Exit(1)
+				}
+
+				// cl instead of client para no colisionar con el paquete
+				cl := client.NewClient(record.OrgID, "demo-key")
+
+				permissions, err := cl.PullPermissions()
+				if err != nil {
+					fmt.Printf("Error: %v\n", err)
+					os.Exit(1)
+				}
+
+				if c.IsJSON {
+					data, _ := json.MarshalIndent(permissions, "", "  ")
+					fmt.Println(string(data))
+				} else {
+					fmt.Println("✅ Permissions pulled from central server")
+					for k, v := range permissions {
+						fmt.Printf("  %s: %v\n", k, v)
+					}
+				}
+			},
+		}
+
+		return cmd
+	})
+
+	// Command: sync-push
+	core.RegisterCommand("SYNC", func(c *core.Core) *cobra.Command {
+		cmd := &cobra.Command{
+			Use:   "sync-push",
+			Short: "Push state to central server",
+			Args:  cobra.NoArgs,
+			Run: func(cmd *cobra.Command, args []string) {
+				if core.GetUserRole() != core.RoleMaster {
+					fmt.Println("Error: requires master role")
+					os.Exit(1)
+				}
+
+				record, err := LoadOwnership()
+				if err != nil || record == nil {
+					fmt.Println("Error: organization not initialized")
+					os.Exit(1)
+				}
+
+				cl := client.NewClient(record.OrgID, "demo-key")
+
+				state := map[string]interface{}{
+					"org_id":       record.OrgID,
+					"owner_id":     record.OwnerID,
+					"team_count":   len(record.TeamMembers),
+					"system_info":  core.GetSystemInfo(),
+					"version_info": core.GetVersionInfo(),
+				}
+
+				err = cl.PushState(state)
+				if err != nil {
+					fmt.Printf("Error: %v\n", err)
+					os.Exit(1)
+				}
+
+				if c.IsJSON {
+					fmt.Println("{\"status\":\"pushed\"}")
+				} else {
+					fmt.Println("✅ State pushed to central server")
+				}
+			},
+		}
+
+		return cmd
+	})
 }

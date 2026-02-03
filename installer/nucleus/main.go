@@ -10,9 +10,7 @@ import (
 	// Importar comandos (auto-registro via init())
 	_ "nucleus/internal/analytics"
 	_ "nucleus/internal/governance"
-	_ "nucleus/internal/sync"
 	_ "nucleus/internal/system"
-	_ "nucleus/internal/team"
 	_ "nucleus/internal/vault"
 
 	"github.com/spf13/cobra"

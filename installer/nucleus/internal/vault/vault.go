@@ -5,9 +5,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"nucleus/internal/core"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/spf13/cobra"
 )
 
 type VaultStatus struct {
@@ -181,4 +185,146 @@ func IsVaultUnlocked() (bool, error) {
 		return false, err
 	}
 	return !status.Locked, nil
+}
+
+// ============================================
+// CLI COMMANDS (Auto-registration via init())
+// ============================================
+
+func init() {
+	// Command: vault-lock
+	core.RegisterCommand("VAULT", func(c *core.Core) *cobra.Command {
+		cmd := &cobra.Command{
+			Use:   "vault-lock",
+			Short: "Lock vault",
+			Args:  cobra.NoArgs,
+			Run: func(cmd *cobra.Command, args []string) {
+				if core.GetUserRole() != core.RoleMaster {
+					fmt.Println("Error: requires master role")
+					os.Exit(1)
+				}
+
+				err := LockVault()
+				if err != nil {
+					fmt.Printf("Error: %v\n", err)
+					os.Exit(1)
+				}
+
+				if c.IsJSON {
+					fmt.Println("{\"status\":\"locked\"}")
+				} else {
+					fmt.Println("🔒 Vault locked")
+				}
+			},
+		}
+
+		return cmd
+	})
+
+	// Command: vault-unlock
+	core.RegisterCommand("VAULT", func(c *core.Core) *cobra.Command {
+		cmd := &cobra.Command{
+			Use:   "vault-unlock",
+			Short: "Unlock vault",
+			Args:  cobra.NoArgs,
+			Run: func(cmd *cobra.Command, args []string) {
+				if core.GetUserRole() != core.RoleMaster {
+					fmt.Println("Error: requires master role")
+					os.Exit(1)
+				}
+
+				err := UnlockVault()
+				if err != nil {
+					fmt.Printf("Error: %v\n", err)
+					os.Exit(1)
+				}
+
+				if c.IsJSON {
+					fmt.Println("{\"status\":\"unlocked\"}")
+				} else {
+					fmt.Println("🔓 Vault unlocked")
+				}
+			},
+		}
+
+		return cmd
+	})
+
+	// Command: vault-status
+	core.RegisterCommand("VAULT", func(c *core.Core) *cobra.Command {
+		cmd := &cobra.Command{
+			Use:   "vault-status",
+			Short: "Display vault status",
+			Args:  cobra.NoArgs,
+			Run: func(cmd *cobra.Command, args []string) {
+				status, err := GetVaultStatus()
+				if err != nil {
+					fmt.Printf("Error: %v\n", err)
+					os.Exit(1)
+				}
+
+				if c.IsJSON {
+					data, _ := json.MarshalIndent(status, "", "  ")
+					fmt.Println(string(data))
+				} else {
+					lockStatus := "🔒 LOCKED"
+					if !status.Locked {
+						lockStatus = "🔓 UNLOCKED"
+					}
+
+					fmt.Printf("Vault Status: %s\n", lockStatus)
+					fmt.Printf("Keys: %d\n", status.KeyCount)
+					if !status.LastAccess.IsZero() {
+						fmt.Printf("Last Access: %s\n", status.LastAccess.Format("2006-01-02 15:04:05"))
+					}
+					if status.MasterKeyID != "" {
+						fmt.Printf("Master Key: %s\n", status.MasterKeyID)
+					}
+				}
+			},
+		}
+
+		return cmd
+	})
+
+	// Command: vault-request
+	core.RegisterCommand("VAULT", func(c *core.Core) *cobra.Command {
+		cmd := &cobra.Command{
+			Use:   "vault-request <key-id>",
+			Short: "Request key from vault",
+			Args:  cobra.ExactArgs(1),
+			Run: func(cmd *cobra.Command, args []string) {
+				if core.GetUserRole() != core.RoleMaster {
+					fmt.Println("Error: vault access denied - requires master role")
+					os.Exit(1)
+				}
+
+				unlocked, err := IsVaultUnlocked()
+				if err != nil {
+					fmt.Printf("Error checking vault status: %v\n", err)
+					os.Exit(1)
+				}
+
+				if !unlocked {
+					fmt.Println("Error: vault is locked")
+					os.Exit(1)
+				}
+
+				keyID := args[0]
+				key, err := RequestKey(keyID)
+				if err != nil {
+					fmt.Printf("Error: %v\n", err)
+					os.Exit(1)
+				}
+
+				if c.IsJSON {
+					fmt.Printf("{\"key_id\":\"%s\",\"key\":\"%s\"}\n", keyID, key)
+				} else {
+					fmt.Printf("Key: %s\n", key)
+				}
+			},
+		}
+
+		return cmd
+	})
 }
