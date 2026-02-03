@@ -109,7 +109,7 @@ echo "✅ Compilation successful: ${OUTPUT_FILE}" >> "${LOG_FILE}"
 echo "" >> "${LOG_FILE}"
 
 # ───────────────────────────────────────────────────────────────
-# Copiar blueprint.json
+# Copiar sentinel-config.json
 # ───────────────────────────────────────────────────────────────
 
 if [[ -f "../sentinel-config.json" ]]; then
