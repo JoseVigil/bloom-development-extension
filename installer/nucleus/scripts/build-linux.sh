@@ -90,7 +90,8 @@ echo "Compiling nucleus → ${OUTPUT_FILE} ..." >> "${LOG_FILE}"
 
 pushd .. >/dev/null
 
-go build -p 1 -ldflags="-s -w" -o "${OUTPUT_FILE}" ./cmd/nucleus >> "${LOG_FILE}" 2>&1
+# CAMBIO CRÍTICO: Compilar desde la raíz (.) en lugar de ./cmd/nucleus
+go build -p 1 -ldflags="-s -w" -o "${OUTPUT_FILE}" . >> "${LOG_FILE}" 2>&1
 BUILD_RC=$?
 
 popd >/dev/null

@@ -90,7 +90,8 @@ echo "Compiling nucleus → ${OUTPUT_FILE} ..." >> "${LOG_FILE}"
 
 pushd .. >/dev/null
 
-go build -p 1 -ldflags="-s -w" -o "${OUTPUT_FILE}" ./cmd/nucleus >> "${LOG_FILE}" 2>&1
+# CAMBIO CRÍTICO: Compilar desde la raíz (.) en lugar de ./cmd/nucleus
+go build -p 1 -ldflags="-s -w" -o "${OUTPUT_FILE}" . >> "${LOG_FILE}" 2>&1
 BUILD_RC=$?
 
 popd >/dev/null
@@ -108,16 +109,16 @@ echo "✅ Compilation successful: ${OUTPUT_FILE}" >> "${LOG_FILE}"
 echo "" >> "${LOG_FILE}"
 
 # ───────────────────────────────────────────────────────────────
-# Copiar blueprint.json
+# Copiar nucleus-governance.json
 # ───────────────────────────────────────────────────────────────
 
-if [[ -f "../blueprint.json" ]]; then
-    cp -f "../blueprint.json" "${OUTPUT_DIR}/blueprint.json"
-    echo "📦 blueprint.json copiado"
-    echo "📦 blueprint.json copiado" >> "${LOG_FILE}"
+if [[ -f "../nucleus-governance.json" ]]; then
+    cp -f "../nucleus-governance.json" "${OUTPUT_DIR}/nucleus-governance.json"
+    echo "📦 nucleus-governance.json copiado"
+    echo "📦 nucleus-governance.json copiado" >> "${LOG_FILE}"
 else
-    echo "⚠️ blueprint.json no encontrado"
-    echo "⚠️ blueprint.json no encontrado" >> "${LOG_FILE}"
+    echo "⚠️ nucleus-governance.json no encontrado"
+    echo "⚠️ nucleus-governance.json no encontrado" >> "${LOG_FILE}"
 fi
 
 # ───────────────────────────────────────────────────────────────
@@ -172,7 +173,7 @@ echo "📦 Archivos generados en:"
 echo "  ${OUTPUT_DIR}"
 echo ""
 echo "  • Executable     : nucleus"
-echo "  • Blueprint      : blueprint.json"
+echo "  • Blueprint      : nucleus-governance.json"
 echo "  • Help JSON      : help/nucleus_help.json"
 echo "  • Help TXT       : help/nucleus_help.txt"
 echo ""

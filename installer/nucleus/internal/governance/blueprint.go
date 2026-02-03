@@ -41,17 +41,17 @@ type Manifest struct {
 	SystemVersion         string   `json:"system_version"`
 }
 
-// GetBlueprintPath retorna la ruta del blueprint.json
+// GetBlueprintPath retorna la ruta del nucleus-governance.json
 func GetBlueprintPath() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
 	nucleusRoot := filepath.Join(homeDir, ".bloom", ".nucleus")
-	return filepath.Join(nucleusRoot, "blueprint.json"), nil
+	return filepath.Join(nucleusRoot, "nucleus-governance.json"), nil
 }
 
-// LoadBlueprint carga el blueprint.json
+// LoadBlueprint carga el nucleus-governance.json
 func LoadBlueprint() (*Blueprint, error) {
 	path, err := GetBlueprintPath()
 	if err != nil {
@@ -74,7 +74,7 @@ func LoadBlueprint() (*Blueprint, error) {
 	return &bp, nil
 }
 
-// SaveBlueprint guarda el blueprint.json con escritura atómica
+// SaveBlueprint guarda el nucleus-governance.json con escritura atómica
 func SaveBlueprint(bp *Blueprint) error {
 	path, err := GetBlueprintPath()
 	if err != nil {
