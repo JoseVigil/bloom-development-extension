@@ -130,11 +130,11 @@ echo ✅ Compilation successful: %OUTPUT_FILE%
 echo ✅ Compilation successful: %OUTPUT_FILE% >> "%LOG_FILE%"
 echo. >> "%LOG_FILE%"
 
-:: Copiar blueprint.json
-if exist "..\blueprint.json" (
-    copy /Y "..\blueprint.json" "%OUTPUT_DIR%\blueprint.json" >nul
-    echo 📦 blueprint.json updated
-    echo 📦 blueprint.json updated >> "%LOG_FILE%"
+:: Copiar sentinel-config.json
+if exist "..\sentinel-config.json" (
+    copy /Y "..\sentinel-config.json" "%OUTPUT_DIR%\sentinel-config.json" >nul
+    echo 📦 sentinel-config.json updated
+    echo 📦 sentinel-config.json updated >> "%LOG_FILE%"
 )
 
 echo.

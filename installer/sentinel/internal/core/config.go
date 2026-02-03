@@ -46,14 +46,14 @@ type Config struct {
 }
 
 func LoadConfig(binDir string) (*Config, error) {
-	blueprintPath := filepath.Join(binDir, "blueprint.json")
-	data, err := os.ReadFile(blueprintPath)
+	configPath := filepath.Join(binDir, "sentinel-config.json")
+	data, err := os.ReadFile(configPath) 
 	if err != nil {
-		return nil, fmt.Errorf("error al leer blueprint.json: %w", err)
+		return nil, fmt.Errorf("error al leer sentinel-config.json: %w", err)
 	}
 	var config Config
 	if err := json.Unmarshal(data, &config); err != nil {
-		return nil, fmt.Errorf("error al parsear blueprint.json: %w", err)
+		return nil, fmt.Errorf("error al parsear sentinel-config.json: %w", err)
 	}
 	return &config, nil
 }

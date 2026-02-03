@@ -30,11 +30,11 @@
 
   SYSTEM         Health checks and system diagnostics                     4 cmds
   IDENTITY       Profile identity and seed management                     1 cmd
-  RUNTIME        Browser instance lifecycle control                       2 cmds
+  RUNTIME        Browser instance lifecycle control                       3 cmds
   BRIDGE         JSON-RPC communication with Electron                     4 cmds
   DEVELOPMENT    Integrated development environment                       1 cmd
   UI             Monitoring and telemetry interfaces                      2 cmds
-  -----------------------------------------------------------------------  Total: 14 commands
+  -----------------------------------------------------------------------  Total: 15 commands
 
 
 =======================================================[ SYSTEM ]=======================================================
@@ -140,6 +140,23 @@
       --override-service         Sobrescribir servicio de registro (google, twitter, github, etc)
       --override-step            Sobrescribir step actual [default: 0]
       --save                     Persistir overrides en profiles.json
+
+    --------------------------------------------------------------------------------
+
+  > OLLAMA
+    Controlador maestro del runtime de Ollama
+
+    Usage: sentinel ollama
+
+    Subcommands:
+      healthcheck           Verificación de conectividad inmediata
+      logs                  Muestra logs recientes del proceso Ollama
+      pull                  Descarga un modelo específico
+      purge                 Limpia modelos y archivos temporales
+      restart               Forzar reinicio del runtime
+      start                 Inicia el supervisor y el heartbeat de Ollama
+      status                Muestra el estado actual de la FSM de Ollama
+      stop                  Detiene el proceso de Ollama y el supervisor
 
     --------------------------------------------------------------------------------
 

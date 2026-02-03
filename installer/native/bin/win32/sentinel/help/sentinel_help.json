@@ -200,53 +200,72 @@
     "name": "ollama",
     "use": "ollama",
     "short": "Controlador maestro del runtime de Ollama",
-    "category": "OLLAMA",
+    "category": "RUNTIME",
     "subcommands": [
       {
         "name": "healthcheck",
         "use": "healthcheck",
-        "short": "Verificación de conectividad inmediata"
+        "short": "Verificación de conectividad inmediata",
+        "category": "RUNTIME",
+        "example": "    sentinel ollama healthcheck\n    sentinel ollama healthcheck \u0026\u0026 echo \"OK\" || echo \"FAIL\""
       },
       {
         "name": "logs",
         "use": "logs",
-        "short": "Muestra logs recientes del proceso Ollama"
+        "short": "Muestra logs recientes del proceso Ollama",
+        "category": "RUNTIME",
+        "example": "    sentinel ollama logs\n    sentinel ollama logs | tail -n 50",
+        "requires": "- Archivo de logs en logs/ollama/ollama_service_*.log\n- Permisos de lectura en directorio de logs"
       },
       {
         "name": "pull",
         "use": "pull [modelo]",
         "short": "Descarga un modelo específico",
+        "category": "RUNTIME",
         "args": [
           {
             "name": "modelo",
             "required": false
           }
-        ]
+        ],
+        "example": "    sentinel ollama pull llama2\n    sentinel ollama pull mistral:7b",
+        "requires": "- Servicio Ollama en ejecución\n- Conexión a internet activa\n- Espacio en disco suficiente en OLLAMA_MODELS"
       },
       {
         "name": "purge",
         "use": "purge",
-        "short": "Limpia modelos y archivos temporales"
+        "short": "Limpia modelos y archivos temporales",
+        "category": "RUNTIME",
+        "example": "    sentinel ollama purge\n    sentinel ollama purge \u0026\u0026 sentinel ollama status"
       },
       {
         "name": "restart",
         "use": "restart",
-        "short": "Forzar reinicio del runtime"
+        "short": "Forzar reinicio del runtime",
+        "category": "RUNTIME",
+        "example": "    sentinel ollama restart\n    sentinel ollama restart \u0026\u0026 sentinel ollama status"
       },
       {
         "name": "start",
         "use": "start",
-        "short": "Inicia el supervisor y el heartbeat de Ollama"
+        "short": "Inicia el supervisor y el heartbeat de Ollama",
+        "category": "RUNTIME",
+        "example": "    sentinel ollama start\n    sentinel ollama start \u0026\u0026 sentinel ollama status"
       },
       {
         "name": "status",
         "use": "status",
-        "short": "Muestra el estado actual de la FSM de Ollama"
+        "short": "Muestra el estado actual de la FSM de Ollama",
+        "category": "RUNTIME",
+        "example": "    sentinel ollama status\n    sentinel --json ollama status | jq .",
+        "requires": "- Servicio Ollama debe estar iniciado previamente\n- Puerto 11434 accesible para verificación"
       },
       {
         "name": "stop",
         "use": "stop",
-        "short": "Detiene el proceso de Ollama y el supervisor"
+        "short": "Detiene el proceso de Ollama y el supervisor",
+        "category": "RUNTIME",
+        "example": "    sentinel ollama stop\n    sentinel ollama stop \u0026\u0026 sleep 2 \u0026\u0026 sentinel ollama start"
       }
     ]
   },

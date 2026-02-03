@@ -90,11 +90,11 @@ echo "✅ Compilation successful: ${OUTPUT_FILE}" | tee -a "${LOG_FILE}"
 # Copiar blueprint.json
 # ───────────────────────────────────────────────────────────────
 
-if [[ -f "../blueprint.json" ]]; then
-    cp -f "../blueprint.json" "${OUTPUT_DIR}/blueprint.json"
-    echo "📦 blueprint.json copiado" | tee -a "${LOG_FILE}"
+if [[ -f "../sentinel-config.json" ]]; then
+    cp -f "../sentinel-config.json" "${OUTPUT_DIR}/sentinel-config.json"
+    echo "📦 sentinel-config.json copiado" | tee -a "${LOG_FILE}"
 else
-    echo "⚠️ blueprint.json no encontrado" | tee -a "${LOG_FILE}"
+    echo "⚠️ sentinel-config.json no encontrado" | tee -a "${LOG_FILE}"
 fi
 
 # ───────────────────────────────────────────────────────────────
