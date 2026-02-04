@@ -103,29 +103,44 @@
         ]
       },
       {
-        "from": "../../brain",
+        "from": "../native/bin/win32/nucleus",
+        "to": "nucleus",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "../native/bin/win32/sentinel",
+        "to": "sentinel",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "../native/bin/win32/brain",
         "to": "brain",
-        "filter": [
-          "**/*",
-          "!**/__pycache__",
-          "!**/*.pyc",
-          "!**/.git",
-          "!**/tests"
-        ]
+        "filter": ["**/*"]
       },
       {
-        "from": "../native/bin/win32",
+        "from": "../native/bin/win32/host",
         "to": "native",
-        "filter": [
-          "**/*"
-        ]
+        "filter": ["**/*"]
       },
       {
-        "from": "../native/nssm/win64",
+        "from": "../native/bin/win32/ollama",
+        "to": "ollama",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "../native/bin/cortex",
+        "to": "cortex",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "../native/nssm/win32",
         "to": "nssm",
-        "filter": [
-          "**/*"
-        ]
+        "filter": ["**/*"]
+      },
+      {
+        "from": "../resources/conductor",
+        "to": "conductor",
+        "filter": ["**/*"]
       },
       {
         "from": "../chrome-extension/src",
@@ -144,9 +159,14 @@
     "asar": true,
     "asarUnpack": [
       "**/*.node",
+      "**/nucleus/**/*",
+      "**/sentinel/**/*",
       "**/brain/**/*",
       "**/runtime/**/*",
       "**/native/**/*",
+      "**/ollama/**/*",
+      "**/cortex/**/*",
+      "**/conductor/**/*",
       "**/extension/**/*",
       "**/nssm/**/*",
       "assets/**/*",

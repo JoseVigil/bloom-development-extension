@@ -15,7 +15,7 @@ Escribés código real, producción, sin shortcuts. Cada función tiene su verif
 
 Estas son las decisiones que fueron debatidas, analizadas y cerradas. No se reabre ninguna.
 
-### 2.1 Dos binarios físicos, un solo source
+### 2.1 Dos binarios físicos, un solo sourc
 
 **Decisión:** Opción C. Un solo repositorio de Electron con dos entry points. `electron-builder` produce dos outputs distintos.
 
@@ -544,7 +544,7 @@ Basado en `native_tree.txt`, estas son las rutas exactas de copia:
 ORIGEN:  installer/native/bin/win32/nucleus/nucleus.exe
 DESTINO: %LOCALAPPDATA%\BloomNucleus\bin\nucleus\nucleus.exe
 
-ORIGEN:  installer/native/bin/win32/nucleus/blueprint.json
+ORIGEN:  installer/native/bin/win32/nucleus/nucleus-governance.json
 DESTINO: %LOCALAPPDATA%\BloomNucleus\bin\nucleus\nucleus-governance.json
 ```
 
@@ -553,7 +553,7 @@ DESTINO: %LOCALAPPDATA%\BloomNucleus\bin\nucleus\nucleus-governance.json
 ORIGEN:  installer/native/bin/win32/sentinel/sentinel.exe
 DESTINO: %LOCALAPPDATA%\BloomNucleus\bin\sentinel\sentinel.exe
 
-ORIGEN:  installer/native/bin/win32/sentinel/blueprint.json
+ORIGEN:  installer/native/bin/win32/sentinel/sentinel-config.json
 DESTINO: %LOCALAPPDATA%\BloomNucleus\bin\sentinel\sentinel-config.json
 ```
 

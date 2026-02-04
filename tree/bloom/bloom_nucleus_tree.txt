@@ -7,6 +7,9 @@
     │   ├── .rules.bl
     │   ├── .standards.bl
     │   ├── .policies.bl
+	│   ├── .ai_bot.sovereign.bl
+	│   ├── .ai_bot.governance.bl
+	│   ├── .ai_bot.plane.bl
     │   └── .meta.json
     │
     ├── .governance/
