@@ -70,10 +70,13 @@ function handleCLICommands() {
   if (args.includes('--binaries')) {
     const bloomBase = getBloomBasePathCLI();
     const binaries = {
-      brain: path.join(bloomBase, 'bin', 'brain', 'brain.exe'),
+      nucleus: path.join(bloomBase, 'bin', 'nucleus', 'nucleus.exe'),
       sentinel: path.join(bloomBase, 'bin', 'sentinel', 'sentinel.exe'),
+      brain: path.join(bloomBase, 'bin', 'brain', 'brain.exe'),
       host: path.join(bloomBase, 'bin', 'native', 'bloom-host.exe'),
-      chromium: path.join(bloomBase, 'bin', 'chromium', 'chrome.exe')
+      ollama: path.join(bloomBase, 'bin', 'ollama', 'ollama.exe'),
+      conductor: path.join(bloomBase, 'bin', 'conductor', 'bloom-conductor.exe'),
+      chromium: path.join(bloomBase, 'bin', 'chrome-win', 'chrome.exe')
     };
 
     const result = {};
@@ -92,17 +95,17 @@ function handleCLICommands() {
   if (args.includes('--health')) {
     const { spawn } = require('child_process');
     const bloomBase = getBloomBasePathCLI();
-    const sentinelExe = path.join(bloomBase, 'bin', 'sentinel', 'sentinel.exe');
+    const nucleusExe = path.join(bloomBase, 'bin', 'nucleus', 'nucleus.exe');
 
-    if (!fs.existsSync(sentinelExe)) {
+    if (!fs.existsSync(nucleusExe)) {
       console.log(JSON.stringify({
-        error: 'Sentinel executable not found',
-        path: sentinelExe
+        error: 'Nucleus executable not found',
+        path: nucleusExe
       }));
       process.exit(1);
     }
 
-    const child = spawn(sentinelExe, ['--json', 'health'], {
+    const child = spawn(nucleusExe, ['--json', 'health'], {
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true
     });
@@ -121,7 +124,7 @@ function handleCLICommands() {
             return;
           }
         }
-        console.log(JSON.stringify({ error: 'No JSON output from sentinel health' }));
+        console.log(JSON.stringify({ error: 'No JSON output from nucleus health' }));
         process.exit(1);
       } catch (err) {
         console.log(JSON.stringify({ error: err.message }));
@@ -1018,15 +1021,58 @@ function registerInstallHandlers() {
   });
 
   ipcMain.handle('preflight-checks', async () => {
+    const nucleusExe = path.join(BLOOM_BASE, 'bin', 'nucleus', 'nucleus.exe');
+    
     const checks = {
-      brainExists: fs.existsSync(BRAIN_EXE),
+      nucleusExists: fs.existsSync(nucleusExe),
       sentinelExists: fs.existsSync(SENTINEL_EXE),
+      brainExists: fs.existsSync(BRAIN_EXE),
       bloomBaseExists: fs.existsSync(BLOOM_BASE),
       platform: os.platform(),
       adminRights: false
     };
 
     return checks;
+  });
+
+  ipcMain.handle('nucleus:health', async () => {
+    try {
+      const nucleusExe = path.join(BLOOM_BASE, 'bin', 'nucleus', 'nucleus.exe');
+      
+      if (!fs.existsSync(nucleusExe)) {
+        return { success: false, error: 'Nucleus executable not found' };
+      }
+
+      return new Promise((resolve) => {
+        const child = spawn(nucleusExe, ['--json', 'health'], {
+          windowsHide: true,
+          timeout: 10000
+        });
+
+        let output = '';
+        child.stdout.on('data', (data) => { output += data.toString(); });
+
+        child.on('close', (code) => {
+          if (code !== 0) {
+            resolve({ success: false, error: `Nucleus health failed (code ${code})` });
+            return;
+          }
+
+          try {
+            const result = JSON.parse(output.trim());
+            resolve({ success: true, ...result });
+          } catch (error) {
+            resolve({ success: false, error: 'Failed to parse health response' });
+          }
+        });
+
+        child.on('error', (err) => {
+          resolve({ success: false, error: err.message });
+        });
+      });
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
   });
 
   ipcMain.handle('repair-bridge', async (event) => {

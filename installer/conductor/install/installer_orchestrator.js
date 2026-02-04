@@ -1,15 +1,14 @@
-// install/installer.js
-// Integrated with Nucleus Manager - Atomic Milestones
+// install/installer.js - INTEGRATION POINT
+// Orquestador principal que delega a installer_nucleus.js
 
-const path = require('path');
-const fs = require('fs-extra');
-const { BrowserWindow } = require('electron');
-
-const { paths } = require('../config/paths');
-const { getLogger } = require('../src/logger');
 const { nucleusManager } = require('../core/nucleus_manager');
-
-const logger = getLogger('installer');
+const { getLogger } = require('../src/logger');
+const {
+  deployAllBinaries,
+  deployConductor,
+  nucleusHealth,
+  executeSentinelCommand
+} = require('./installer_nucleus');
 
 const {
   cleanupOldServices,
@@ -20,28 +19,7 @@ const {
 const { installRuntime } = require('./runtime-installer');
 const { installChromium } = require('./chromium-installer');
 
-const {
-  deployAllBinaries,
-  deployConductor,
-  nucleusHealth,
-  executeSentinelCommand
-} = require('./installer_nucleus');
-
-// ============================================================================
-// PROGRESS REPORTING
-// ============================================================================
-
-function emitProgress(win, current, total, message) {
-  if (win && win.webContents) {
-    win.webContents.send('installation-progress', {
-      current,
-      total,
-      percentage: Math.round((current / total) * 100),
-      message
-    });
-  }
-  logger.info(`[${current}/${total}] ${message}`);
-}
+const logger = getLogger('installer');
 
 // ============================================================================
 // MILESTONE EXECUTORS
@@ -51,12 +29,14 @@ async function createDirectories(win) {
   const MILESTONE = 'directories';
   
   if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
-    logger.info(`⏭️ ${MILESTONE} completed, skipping`);
+    logger.info(`⏭️ Milestone ${MILESTONE} ya completado`);
     return { success: true, skipped: true };
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 1, 9, 'Creating directories...');
+
+  const { paths } = require('../config/paths');
+  const fs = require('fs-extra');
 
   try {
     logger.separator('CREATING DIRECTORIES');
@@ -80,10 +60,11 @@ async function createDirectories(win) {
 
     for (const dir of dirs) {
       await fs.ensureDir(dir);
-      logger.success(`✓ ${path.basename(dir)}/`);
+      logger.success(`✓ ${dir}`);
     }
 
     await nucleusManager.completeMilestone(MILESTONE, { dirs_created: dirs.length });
+
     return { success: true };
 
   } catch (error) {
@@ -96,12 +77,11 @@ async function runChromiumInstall(win) {
   const MILESTONE = 'chromium';
   
   if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
-    logger.info(`⏭️ ${MILESTONE} completed, skipping`);
+    logger.info(`⏭️ Milestone ${MILESTONE} ya completado`);
     return { success: true, skipped: true };
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 2, 9, 'Installing Chromium...');
 
   try {
     const result = await installChromium(win);
@@ -118,12 +98,11 @@ async function runRuntimeInstall(win) {
   const MILESTONE = 'brain_runtime';
   
   if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
-    logger.info(`⏭️ ${MILESTONE} completed, skipping`);
+    logger.info(`⏭️ Milestone ${MILESTONE} ya completado`);
     return { success: true, skipped: true };
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 3, 9, 'Installing Python Runtime...');
 
   try {
     const result = await installRuntime(win);
@@ -136,63 +115,23 @@ async function runRuntimeInstall(win) {
   }
 }
 
-async function runBinariesDeploy(win) {
-  const MILESTONE = 'binaries';
-  
-  if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
-    logger.info(`⏭️ ${MILESTONE} completed, skipping`);
-    return { success: true, skipped: true };
-  }
-
-  emitProgress(win, 4, 9, 'Deploying binaries (Nucleus, Sentinel, Brain, Ollama)...');
-
-  try {
-    const result = await deployAllBinaries(win);
-    return result;
-
-  } catch (error) {
-    throw error;
-  }
-}
-
-async function runConductorDeploy(win) {
-  const MILESTONE = 'conductor';
-  
-  if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
-    logger.info(`⏭️ ${MILESTONE} completed, skipping`);
-    return { success: true, skipped: true };
-  }
-
-  emitProgress(win, 5, 9, 'Deploying Conductor...');
-
-  try {
-    const result = await deployConductor(win);
-    return result;
-
-  } catch (error) {
-    throw error;
-  }
-}
-
 async function installBrainService(win) {
   const MILESTONE = 'brain_service';
   
   if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
-    logger.info(`⏭️ ${MILESTONE} completed, skipping`);
+    logger.info(`⏭️ Milestone ${MILESTONE} ya completado`);
     return { success: true, skipped: true };
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 6, 9, 'Installing Brain Service...');
 
   try {
-    logger.separator('INSTALLING BRAIN SERVICE');
-
     await cleanupOldServices();
     await installWindowsService();
     await startService();
 
     await nucleusManager.completeMilestone(MILESTONE, { service_running: true });
+
     return { success: true };
 
   } catch (error) {
@@ -205,19 +144,20 @@ async function initOllama(win) {
   const MILESTONE = 'ollama_init';
   
   if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
-    logger.info(`⏭️ ${MILESTONE} completed, skipping`);
+    logger.info(`⏭️ Milestone ${MILESTONE} ya completado`);
     return { success: true, skipped: true };
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 7, 9, 'Initializing Ollama...');
 
   try {
     logger.separator('INITIALIZING OLLAMA');
 
+    // Start Ollama via Sentinel
     const startResult = await executeSentinelCommand(['--json', 'ollama', 'start']);
     logger.success('✓ Ollama started');
 
+    // Health check
     const healthResult = await executeSentinelCommand(['--json', 'ollama', 'healthcheck']);
     
     if (healthResult.status !== 'healthy') {
@@ -227,6 +167,7 @@ async function initOllama(win) {
     logger.success('✓ Ollama healthy');
 
     await nucleusManager.completeMilestone(MILESTONE, healthResult);
+
     return { success: true };
 
   } catch (error) {
@@ -239,12 +180,11 @@ async function seedMasterProfile(win) {
   const MILESTONE = 'nucleus_seed';
   
   if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
-    logger.info(`⏭️ ${MILESTONE} completed, skipping`);
+    logger.info(`⏭️ Milestone ${MILESTONE} ya completado`);
     return { success: true, skipped: true };
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 8, 9, 'Seeding Master Profile...');
 
   try {
     logger.separator('SEEDING MASTER PROFILE');
@@ -255,7 +195,7 @@ async function seedMasterProfile(win) {
       throw new Error('Seed failed: no profile_id returned');
     }
 
-    logger.success(`✓ Master profile: ${result.profile_id}`);
+    logger.success(`✓ Master profile created: ${result.profile_id}`);
 
     await nucleusManager.setMasterProfile(result.profile_id);
     await nucleusManager.completeMilestone(MILESTONE, result);
@@ -272,12 +212,11 @@ async function runCertification(win) {
   const MILESTONE = 'certification';
   
   if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
-    logger.info(`⏭️ ${MILESTONE} completed, skipping`);
+    logger.info(`⏭️ Milestone ${MILESTONE} ya completado`);
     return { success: true, skipped: true };
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 9, 9, 'Running certification...');
 
   try {
     logger.separator('CERTIFICATION - NUCLEUS HEALTH CHECK');
@@ -288,9 +227,10 @@ async function runCertification(win) {
       throw new Error(`Certification failed: ${JSON.stringify(healthResult)}`);
     }
 
-    logger.success('✅ SYSTEM CERTIFIED');
+    logger.success('✅ SYSTEM CERTIFIED - All services healthy');
 
     await nucleusManager.completeMilestone(MILESTONE, healthResult);
+
     return { success: true };
 
   } catch (error) {
@@ -305,53 +245,32 @@ async function runCertification(win) {
 
 async function installService(win) {
   try {
-    logger.separator('BLOOM NUCLEUS INSTALLATION');
-
+    // Initialize nucleus manager
     await nucleusManager.initialize();
 
     const summary = nucleusManager.getInstallationSummary();
-    logger.info('Installation state:', summary);
+    logger.info('Installation summary:', summary);
 
-    if (summary.next_milestone) {
-      logger.info(`Resuming from: ${summary.next_milestone}`);
-    }
-
+    // Execute milestones in order
     await createDirectories(win);
     await runChromiumInstall(win);
     await runRuntimeInstall(win);
-    await runBinariesDeploy(win);
-    await runConductorDeploy(win);
+    await deployAllBinaries(win);
+    await deployConductor(win);
     await installBrainService(win);
     await initOllama(win);
     await seedMasterProfile(win);
     await runCertification(win);
 
+    // Mark installation complete
     await nucleusManager.markInstallationComplete();
 
     logger.success('🎉 INSTALLATION COMPLETE');
 
-    if (win && win.webContents) {
-      win.webContents.send('installation-complete', {
-        success: true,
-        profile_id: nucleusManager.state.master_profile
-      });
-    }
-
-    return {
-      success: true,
-      profile_id: nucleusManager.state.master_profile
-    };
+    return { success: true };
 
   } catch (error) {
     logger.error('Installation failed:', error.message);
-
-    if (win && win.webContents) {
-      win.webContents.send('installation-error', {
-        error: error.message,
-        stack: error.stack
-      });
-    }
-
     throw error;
   }
 }

@@ -30,16 +30,16 @@ bloom-development-extension/
     │       │   ├── bloom-host.exe
     │       │   └── libwinpthread-1.dll
     │       ├── nucleus/
-    │       │   ├── blueprint.json
     │       │   ├── help/
     │       │   │   ├── nucleus_help.json
     │       │   │   └── nucleus_help.txt
+    │       │   ├── nucleus-governance.json
     │       │   └── nucleus.exe
     │       └── sentinel/
-    │           ├── blueprint.json
     │           ├── help/
     │           │   ├── sentinel_help.json
     │           │   └── sentinel_help.txt
+    │           ├── sentinel-config.json
     │           └── sentinel.exe
     └── nssm/
         ├── win32/

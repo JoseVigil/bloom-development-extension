@@ -46,12 +46,22 @@ const getResourcePath = (resourceName) => {
   switch (resourceName) {
     case 'runtime':
       return path.join(installerRoot, 'resources', 'runtime');
+    case 'nucleus':
+      return path.join(installerRoot, 'native', 'bin', 'win32', 'nucleus');
+    case 'sentinel':
+      return path.join(installerRoot, 'native', 'bin', 'win32', 'sentinel');
     case 'brain':
       return path.join(installerRoot, 'native', 'bin', 'win32', 'brain');
     case 'native':
-      return path.join(installerRoot, 'native', 'bin', 'win32', 'bloom-host.exe');
+      return path.join(installerRoot, 'native', 'bin', 'win32', 'host');
     case 'nssm':
-      return path.join(installerRoot, 'native', 'nssm', 'win64', 'nssm.exe');
+      return path.join(installerRoot, 'native', 'nssm', 'win32', 'nssm.exe');
+    case 'ollama':
+      return path.join(installerRoot, 'native', 'bin', 'win32', 'ollama');
+    case 'conductor':
+      return path.join(installerRoot, 'resources', 'conductor');
+    case 'cortex':
+      return path.join(installerRoot, 'native', 'bin', 'cortex');
     case 'extension':
       return path.join(installerRoot, 'chrome-extension', 'src');
     case 'chrome-win':
@@ -138,10 +148,53 @@ const paths = {
 
   // Binary directory structure (NEW UNIFIED LAYOUT)
   binDir: path.join(baseDir, 'bin'),
+  
+  // Nucleus (Governance Layer)
+  nucleusDir: path.join(baseDir, 'bin', 'nucleus'),
+  nucleusExe: platform === 'win32'
+    ? path.join(baseDir, 'bin', 'nucleus', 'nucleus.exe')
+    : path.join(baseDir, 'bin', 'nucleus', 'nucleus'),
+  nucleusConfig: path.join(baseDir, 'bin', 'nucleus', 'nucleus-governance.json'),
+  
+  // Sentinel (Operations Layer)
+  sentinelDir: path.join(baseDir, 'bin', 'sentinel'),
+  sentinelExe: platform === 'win32'
+    ? path.join(baseDir, 'bin', 'sentinel', 'sentinel.exe')
+    : path.join(baseDir, 'bin', 'sentinel', 'sentinel'),
+  sentinelConfig: path.join(baseDir, 'bin', 'sentinel', 'sentinel-config.json'),
+  
+  // Brain (AI Engine)
   brainDir: path.join(baseDir, 'bin', 'brain'),
   brainExe,
+  
+  // Native Host + NSSM
   nativeDir: path.join(baseDir, 'bin', 'native'),
   hostBinary,
+  nssmExe: platform === 'win32'
+    ? path.join(baseDir, 'bin', 'native', 'nssm.exe')
+    : null,
+  
+  // Ollama (LLM Runtime)
+  ollamaDir: path.join(baseDir, 'bin', 'ollama'),
+  ollamaExe: platform === 'win32'
+    ? path.join(baseDir, 'bin', 'ollama', 'ollama.exe')
+    : path.join(baseDir, 'bin', 'ollama', 'ollama'),
+  
+  // Conductor (Launcher - deployed by installer)
+  conductorDir: path.join(baseDir, 'bin', 'conductor'),
+  conductorExe: platform === 'win32'
+    ? path.join(baseDir, 'bin', 'conductor', 'bloom-conductor.exe')
+    : path.join(baseDir, 'bin', 'conductor', 'bloom-conductor'),
+  
+  // Cortex (Extension Package)
+  cortexDir: path.join(baseDir, 'bin', 'cortex'),
+  cortexBlx: path.join(baseDir, 'bin', 'cortex', 'bloom-cortex.blx'),
+  
+  // Chrome
+  chromeDir: path.join(baseDir, 'bin', 'chrome-win'),
+  chromeExe: platform === 'win32'
+    ? path.join(baseDir, 'bin', 'chrome-win', 'chrome.exe')
+    : null,
   
   // Extension template (copied per-profile by Brain)
   extensionDir: path.join(baseDir, 'bin', 'extension'),
@@ -177,10 +230,16 @@ const paths = {
   // SOURCE PATHS (resources to copy during installation)
   // ============================================================================
   runtimeSource: getResourcePath('runtime'),
+  nucleusSource: getResourcePath('nucleus'),
+  sentinelSource: getResourcePath('sentinel'),
   brainSource: getResourcePath('brain'),
   nativeSource: getResourcePath('native'),
-  nssmExe: getResourcePath('nssm'),
+  nssmSource: getResourcePath('nssm'),
+  ollamaSource: getResourcePath('ollama'),
+  conductorSource: getResourcePath('conductor'),
+  cortexSource: getResourcePath('cortex'),
   extensionSource: getResourcePath('extension'),
+  chromeWinSource: getResourcePath('chrome-win'),
 };
 
 // ============================================================================
@@ -229,9 +288,16 @@ function getSynapseManifestPath(profileId) {
 // VALIDATION
 // ============================================================================
 const criticalPaths = [
-  'baseDir', 'bloomBase', 'binDir', 'brainDir', 'nativeDir',
-  'extensionDir', 'engineDir', 'runtimeDir', 'configDir', 
-  'profilesDir', 'logsDir'
+  'baseDir', 'bloomBase', 'binDir',
+  'nucleusDir', 'nucleusExe',
+  'sentinelDir', 'sentinelExe',
+  'brainDir', 'brainExe',
+  'nativeDir', 'hostBinary',
+  'ollamaDir', 'ollamaExe',
+  'conductorDir', 'cortexDir',
+  'chromeDir',
+  'extensionDir', 'engineDir', 'runtimeDir', 
+  'configDir', 'profilesDir', 'logsDir'
 ];
 
 for (const key of criticalPaths) {
@@ -243,9 +309,13 @@ for (const key of criticalPaths) {
 
 console.log('✅ Paths initialized successfully (Unified Structure)');
 console.log(`📁 Base directory: ${baseDir}`);
+console.log(`⚖️ Nucleus binary: ${paths.nucleusExe}`);
+console.log(`🎯 Sentinel binary: ${paths.sentinelExe}`);
 console.log(`🧠 Brain binary: ${brainExe}`);
 console.log(`🔗 Native host: ${hostBinary}`);
-console.log(`🧩 Extension template: ${paths.extensionTemplateDir}`);
+console.log(`🦙 Ollama binary: ${paths.ollamaExe}`);
+console.log(`🎮 Conductor binary: ${paths.conductorExe}`);
+console.log(`📦 Cortex package: ${paths.cortexBlx}`);
 console.log(`👤 Profiles directory: ${paths.profilesDir}`);
 console.log(`⚙️ Config directory: ${paths.configDir}`);
 

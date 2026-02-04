@@ -35,6 +35,7 @@ btips actulizacion electron - DEPRECATED
 https://claude.ai/chat/653160b2-5bb4-42c3-8e1d-e7179d5eb076
 V3 jose gmail electron - DEPRECATED
 https://aistudio.google.com/prompts/1IX1blWdvNaLPW4t2RHXrBYWjYiycPQar
+https://aistudio.google.com/prompts/1IX1blWdvNaLPW4t2RHXrBYWjYiycPQar
 V4
 notimaton gmail electron refactory enterprise manual - DEPRECATED
 https://claude.ai/chat/b195e89e-6cbf-41b5-8394-9c75b96aed13
@@ -60,6 +61,7 @@ gmail jose, plugin chrome c++ bridge y web server con socket.
 https://chatgpt.com/c/692f540d-01dc-832a-96b2-d187b8044354
 
 nenes webserver
+https://claude.ai/chat/0ed92be9-cd88-4e50-a4c6-8790cd178759
 https://claude.ai/chat/0ed92be9-cd88-4e50-a4c6-8790cd178759
 nenes webserver home 
 https://claude.ai/chat/21e49f6d-de54-4e3f-85a5-1161adbebef9
@@ -145,6 +147,8 @@ jose Content Planner
 https://claude.ai/chat/c9477be1-f442-480b-b209-29d59efd0073
 jose arbol enriquecido
 https://claude.ai/chat/c9477be1-f442-480b-b209-29d59efd0073
+jose gmail analisis content planner. 
+https://chatgpt.com/c/697fedc3-5b0c-8333-a08c-0af60f595979
 
 jose BTIPS vs Copilot, Cursos y Jules
 https://aistudio.google.com/prompts/1AgzVam_4eZiD6pW7Hxvfd6J23iuDgtTY
@@ -387,6 +391,8 @@ https://aistudio.google.com/prompts/1nTslhyINoBug6DknCGoLqQmDD6CO7nVo
 
 jose gmail btips skills, marketplace y ACL
 https://chatgpt.com/c/697ccadc-c1a8-8327-a177-ee7cec8c7a61
+elias skills governance
+https://claude.ai/chat/a2517cfa-3963-45ac-b03e-3d77f9953121
 
 btips update
 https://aistudio.google.com/prompts/1rngXBOs04eUqP_3VcsS9_pC4G6hHV-Hk
@@ -397,5 +403,14 @@ notimation gmail ollama
 https://chatgpt.com/c/697e89b7-7844-8326-b1ec-588bc1d1f973
 roamingpads ollama setup
 https://claude.ai/chat/4de7f1be-ecd2-4dc5-a0dd-4d9930e1e52c
+V1 jose gmail migracion copilo ollama
+https://grok.com/c/5c014314-3879-416f-a95f-90bab52ec99d?rid=7b2b01ed-c191-4ade-ac68-083e15fb545e
+
+elias claude system prompt
+https://grok.com/c/ce3cc729-fd3a-4836-a256-634160392198?rid=695099e6-5d0b-4c0e-9f82-e7b7b889114d
+
+elias Codespace Phone API 
+https://chatgpt.com/c/6982aa2e-8248-832a-b945-e32c4343be6c
+
 
 
