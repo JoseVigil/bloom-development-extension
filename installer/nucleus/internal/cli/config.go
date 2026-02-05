@@ -22,14 +22,16 @@ func DefaultNucleusConfig() HelpConfig {
             "VAULT",
             "SYNC",
             "ANALYTICS",
+            "ORCHESTRATION",
         },
         CategoryDescs: map[string]string{
-            "SYSTEM":     "System information and diagnostics",
-            "GOVERNANCE": "Organization initialization and authority",
-            "TEAM":       "Team and collaboration management",
-            "VAULT":      "Secure key and credential management",
-            "SYNC":       "State synchronization with central server",
-            "ANALYTICS":  "System monitoring and telemetry",
+            "SYSTEM":        "System information and diagnostics",
+            "GOVERNANCE":    "Organization initialization and authority",
+            "TEAM":          "Team and collaboration management",
+            "VAULT":         "Secure key and credential management",
+            "SYNC":          "State synchronization with central server",
+            "ANALYTICS":     "System monitoring and telemetry",
+            "ORCHESTRATION": "Temporal workflow orchestration and lifecycle",
         },
     }
 }

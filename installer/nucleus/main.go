@@ -10,6 +10,7 @@ import (
 	// Importar comandos (auto-registro via init())
 	_ "nucleus/internal/analytics"
 	_ "nucleus/internal/governance"
+	_ "nucleus/internal/orchestration/temporal"
 	_ "nucleus/internal/system"
 	_ "nucleus/internal/vault"
 

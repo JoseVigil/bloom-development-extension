@@ -16,14 +16,12 @@ type Logger struct {
 	silentMode bool
 }
 
-func InitLogger(paths *Paths, category string) (*Logger, error) {
-	// 1. Directorio en AppData/nucleus/logs
-	targetDir := filepath.Join(paths.LogsDir, "nucleus")
+func InitLogger(paths *PathConfig, category string) (*Logger, error) {
+	targetDir := filepath.Join(paths.Logs, "nucleus")
 	if err := os.MkdirAll(targetDir, 0755); err != nil {
 		return nil, fmt.Errorf("error creando directorio %s: %w", targetDir, err)
 	}
 
-	// 2. Preparar archivo de log ( nucleus_GOVERNANCE_2026-02-04.log )
 	now := time.Now()
 	logFileName := fmt.Sprintf("nucleus_%s_%s.log", category, now.Format("2006-01-02"))
 	logPath := filepath.Join(targetDir, logFileName)
@@ -36,10 +34,8 @@ func InitLogger(paths *Paths, category string) (*Logger, error) {
 	multiWriter := io.MultiWriter(os.Stdout, file)
 	l := log.New(multiWriter, "", log.Ldate|log.Ltime)
 
-	// 3. Registro en telemetría (usando categorías de Nucleus)
 	icon := getNucleusIcon(category)
-	tm := GetTelemetryManager(paths.LogsDir, paths.TelemetryDir)
-	// Registra en el telemetry.json global
+	tm := GetTelemetryManager(paths.Logs, paths.Root)
 	tm.RegisterStream("nucleus-"+category, icon+" "+category, logPath, 2)
 
 	return &Logger{
@@ -52,12 +48,13 @@ func InitLogger(paths *Paths, category string) (*Logger, error) {
 
 func getNucleusIcon(category string) string {
 	switch category {
-	case "SYSTEM":     return "🏛️"
-	case "GOVERNANCE": return "⚖️"
-	case "TEAM":       return "👥"
-	case "VAULT":      return "🔐"
-	case "SYNC":       return "🔄"
-	default:           return "⚙️"
+	case "SYSTEM":        return "🏛️"
+	case "GOVERNANCE":    return "⚖️"
+	case "TEAM":          return "👥"
+	case "VAULT":         return "🔐"
+	case "SYNC":          return "🔄"
+	case "ORCHESTRATION": return "🕒"
+	default:              return "⚙️"
 	}
 }
 
