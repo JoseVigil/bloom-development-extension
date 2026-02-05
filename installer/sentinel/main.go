@@ -17,6 +17,8 @@ import (
 	_ "sentinel/internal/seed"
 	_ "sentinel/internal/system"
 	_ "sentinel/internal/ui"	
+	_ "sentinel/internal/temporal"
+	_ "sentinel/internal/ollama"
 )
 
 func main() {

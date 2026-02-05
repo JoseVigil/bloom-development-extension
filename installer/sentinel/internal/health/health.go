@@ -13,6 +13,7 @@ import (
 	"sentinel/internal/discovery"
 	"sentinel/internal/process"
 	"sentinel/internal/startup"
+	"sentinel/internal/temporal"
 	"sync"
 	"time"
 
@@ -24,6 +25,10 @@ func init() {
 		cmd := &cobra.Command{
 			Use:   "health",
 			Short: "Escaneo de integridad del sistema",
+			Long: `Escaneo de integridad del sistema
+
+JSON OUTPUT (--json flag):
+{"connected":true,"port":5678,"services":{"Core Bridge":{"status":"running","port":5678},"Bloom API (Swagger)":{"status":"running","port":48215},"Svelte Dev":{"status":"running","port":5173},"Ollama Engine":{"status":"running","port":11434},"Worker Manager":{"status":"running","port":0},"Temporal Server":{"status":"running","port":7233}},"profiles_registered":2}`,
 			Example: `  sentinel health
   sentinel --json health | jq '.services[] | select(.active == false)'`,
 			Run: func(cmd *cobra.Command, args []string) {
@@ -52,7 +57,9 @@ func init() {
 			cmd.Annotations = make(map[string]string)
 		}
 		cmd.Annotations["requires"] = `  - brain.exe debe estar en PATH o en bin/
-  - Puertos 5678, 48215, 5173, 11434 accesibles para verificación`
+  - Puertos 5678, 48215, 5173, 11434, 7233 accesibles para verificación`
+		cmd.Annotations["output"] = `JSON (--json):
+  {"connected":true,"port":5678,"services":{"Core Bridge":{"status":"running","port":5678},"Bloom API (Swagger)":{"status":"running","port":48215},"Svelte Dev":{"status":"running","port":5173},"Ollama Engine":{"status":"running","port":11434},"Worker Manager":{"status":"running","port":0},"Temporal Server":{"status":"running","port":7233}},"profiles_registered":2}`
 
 		return cmd
 	})
@@ -214,8 +221,8 @@ func CheckHealth(c *core.Core, sm *discovery.SystemMap) (*startup.SystemStatus, 
 	}
 	
 	var wg sync.WaitGroup
-	sc := make(chan startup.ServiceStatus, 5)
-	wg.Add(5)
+	sc := make(chan startup.ServiceStatus, 6)
+	wg.Add(6)
 	
 	// 1. Core Bridge
 	go func() { defer wg.Done(); sc <- checkPort(5678, "Core Bridge", "TCP") }()
@@ -264,6 +271,12 @@ func CheckHealth(c *core.Core, sm *discovery.SystemMap) (*startup.SystemStatus, 
 		sc <- startup.ServiceStatus{Name: "Worker Manager", Port: 0, Active: active}
 	}()
 	
+	// 6. Temporal Runtime (consulta estado sin modificar)
+	go func() {
+		defer wg.Done()
+		sc <- checkTemporalHealth(c)
+	}()
+	
 	go func() { wg.Wait(); close(sc) }()
 	
 	status.Services = []startup.ServiceStatus{}
@@ -271,6 +284,36 @@ func CheckHealth(c *core.Core, sm *discovery.SystemMap) (*startup.SystemStatus, 
 	
 	_ = startup.SaveSystemStatus(c, *status)
 	return status, nil
+}
+
+// checkTemporalHealth consulta el estado de Temporal sin modificar el runtime
+// Cumple con el principio: health consume estado, no ejecuta infraestructura
+func checkTemporalHealth(c *core.Core) startup.ServiceStatus {
+	svc := startup.ServiceStatus{
+		Name:   "Temporal Server",
+		Port:   7233,
+		Active: false,
+	}
+	
+	// Si no hay manager inicializado, Temporal no está corriendo
+	if c.TemporalManager == nil {
+		return svc
+	}
+	
+	// Obtener el manager sin crear uno nuevo
+	tm := c.TemporalManager.(*temporal.Manager)
+	
+	// Consultar estado actual (FSM)
+	state := tm.GetState()
+	
+	// Solo está activo si está en estado RUNNING
+	if state == temporal.StateRunning {
+		// Verificar que realmente responda
+		healthy, _ := tm.HealthCheck()
+		svc.Active = healthy
+	}
+	
+	return svc
 }
 
 func checkPort(port int, name, proto string) startup.ServiceStatus {
@@ -291,7 +334,7 @@ func RunHealthCheck(c *core.Core, component string) error {
 	c.Logger.Info("🔬 Iniciando diagnóstico profundo...")
 	
 	// Verificar integridad de carpetas
-	c.Logger.Info("📁 Verificando integridad de directorios...")
+	c.Logger.Info("📂 Verificando integridad de directorios...")
 	dirs := []string{c.Paths.LogsDir, c.Paths.AppDataDir, c.Paths.BinDir}
 	for _, dir := range dirs {
 		if _, err := os.Stat(dir); os.IsNotExist(err) {
