@@ -111,3 +111,6 @@ installer/chrome/chrome-mac.zip
 # Ollama
 installer/ollama/ollama.exe  
 installer/ollama/lib
+
+# Temporal
+installer/temporal/temporal.exe
