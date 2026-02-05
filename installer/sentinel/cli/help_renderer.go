@@ -142,7 +142,7 @@ func (r *ModernHelpRenderer) printCategoriesOverview(root *cobra.Command) {
 	r.printSectionHeader("COMMAND CATEGORIES", BrightMagenta)
 	
 	categories := r.categorizeCommands(root)
-	categoryOrder := []string{"SYSTEM", "IDENTITY", "RUNTIME", "BRIDGE", "DEVELOPMENT", "UI"}
+	categoryOrder := []string{"SYSTEM", "IDENTITY", "RUNTIME", "TEMPORAL", "BRIDGE", "DEVELOPMENT", "UI"}
 	
 	maxNameLen := 0
 	for name := range categories {
@@ -186,7 +186,7 @@ func (r *ModernHelpRenderer) printCategoriesOverview(root *cobra.Command) {
 
 func (r *ModernHelpRenderer) printDetailedCommands(root *cobra.Command) {
 	categories := r.categorizeCommands(root)
-	categoryOrder := []string{"SYSTEM", "IDENTITY", "RUNTIME", "BRIDGE", "DEVELOPMENT", "UI"}
+	categoryOrder := []string{"SYSTEM", "IDENTITY", "RUNTIME", "TEMPORAL", "BRIDGE", "DEVELOPMENT", "UI"}
 	
 	for _, catName := range categoryOrder {
 		cmds, exists := categories[catName]
@@ -318,6 +318,18 @@ func (r *ModernHelpRenderer) printCommandDetail(cmd *cobra.Command) {
 		r.writeln("")
 	}
 	
+	// Output
+	if out, ok := cmd.Annotations["output"]; ok {
+		r.writeln("    " + Bold.Apply("Output:", r.useColors))
+		for _, line := range strings.Split(out, "\n") {
+			line = strings.TrimSpace(line)
+			if line != "" {
+				r.writeln("      " + Cyan.Apply(line, r.useColors))
+			}
+		}
+		r.writeln("")
+	}
+	
 	var separator string
 	if r.isRedirected() {
 		separator = strings.Repeat("-", 80)
@@ -407,6 +419,7 @@ func (r *ModernHelpRenderer) getCategoryDescription(category string) string {
 		"SYSTEM":      "Health checks and system diagnostics",
 		"IDENTITY":    "Profile identity and seed management",
 		"RUNTIME":     "Browser instance lifecycle control",
+		"TEMPORAL":    "Workflow orchestration and task execution",
 		"BRIDGE":      "JSON-RPC communication with Electron",
 		"DEVELOPMENT": "Integrated development environment",
 		"UI":          "Monitoring and telemetry interfaces",
@@ -559,6 +572,11 @@ func parseCommand(cmd *cobra.Command) CommandJSON {
 		item.Requires = req
 	}
 	
+	// Extract output
+	if out, ok := cmd.Annotations["output"]; ok {
+		item.Output = out
+	}
+	
 	// Extract subcommands
 	for _, child := range cmd.Commands() {
 		item.SubCommands = append(item.SubCommands, parseCommand(child))
@@ -578,6 +596,7 @@ type CommandJSON struct {
 	SubCommands []CommandJSON `json:"subcommands,omitempty"`
 	Example     string        `json:"example,omitempty"`
 	Requires    string        `json:"requires,omitempty"`
+	Output      string        `json:"output,omitempty"`
 }
 
 type ArgJSON struct {

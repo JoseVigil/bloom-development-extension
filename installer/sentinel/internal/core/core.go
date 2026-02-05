@@ -22,11 +22,12 @@ func RegisterCommand(category string, factory CommandFactory) {
 
 // === ESTRUCTURA CORE ===
 type Core struct {
-	Paths  *Paths
-	Config *Config
-	Logger *Logger
-	IsJSON bool
+	Paths            *Paths
+	Config           *Config
+	Logger           *Logger
+	IsJSON           bool
 	OllamaSupervisor any
+	TemporalManager  any 
 }
 
 func Initialize() (*Core, error) {
