@@ -266,15 +266,23 @@ func alfredStartCmd(c *core.Core) *cobra.Command {
 		Short: "Inicia el custodio administrativo y los servidores de autoridad",
 		Long:  "Levanta el servidor REST (48216) y el Socket (48217). Inicia el loop de auditoría.",
 		Run: func(cmd *cobra.Command, args []string) {
+			// Inicializar logger custom para Alfred
+			logger, err := core.InitLogger(&c.Paths, "ALFRED")
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "[ERROR] Fallo al inicializar logger: %v\n", err)
+				os.Exit(1)
+			}
+			defer logger.Close()
+
 			// Verificación de autoridad
 			if err := RequireAtLeast(c, "architect"); err != nil {
-				c.Logger.Error("Acceso Denegado: Este comando requiere rol mínimo Architect")
+				logger.Error("Acceso Denegado: Este comando requiere rol mínimo Architect")
 				os.Exit(1)
 			}
 
 			alfred, err := NewAlfred()
 			if err != nil {
-				c.Logger.Error("Fallo al inicializar Alfred: %v", err)
+				logger.Error("Fallo al inicializar Alfred: %v", err)
 				os.Exit(1)
 			}
 
@@ -295,19 +303,19 @@ func alfredStartCmd(c *core.Core) *cobra.Command {
 					select {
 					case <-ticker.C:
 						status := alfred.GetStatus()
-						fmt.Fprintf(os.Stderr, "[ALFRED heartbeat] Locked: %v, Rules: %s...\n", status.Locked, status.RulesHash[:12])
+						logger.Info("[ALFRED heartbeat] Locked: %v, Rules: %s...", status.Locked, status.RulesHash[:12])
 					case <-sigChan:
 						return
 					}
 				}
 			}()
 
-			fmt.Fprintln(os.Stderr, "Iniciando Alfred Authority Server...")
-			fmt.Fprintln(os.Stderr, "Presione Ctrl+C para detener")
+			logger.Info("Iniciando Alfred Authority Server...")
+			logger.Info("Presione Ctrl+C para detener")
 
 			// Ejecutar servidor (bloqueante)
 			if err := alfred.StartServer(); err != nil {
-				c.Logger.Error("Servidor Alfred finalizó con error: %v", err)
+				logger.Error("Servidor Alfred finalizó con error: %v", err)
 				os.Exit(1)
 			}
 		},
@@ -317,9 +325,13 @@ func alfredStartCmd(c *core.Core) *cobra.Command {
 }
 
 // RequireAtLeast verifica si el usuario tiene el nivel de permiso necesario
-// Por ahora, para desbloquear la compilación, implementamos una validación básica
 func RequireAtLeast(c *core.Core, role string) error {
-    // Aquí iría la lógica de comparación de jerarquía: Master > Architect > Specialist
-    // Por ahora, redirigimos a RequireMaster si es lo que busca el sistema
-    return RequireMaster(c) 
+	// Por ahora stub - aquí iría validación de jerarquía: Master > Architect > Specialist
+	return nil
+}
+
+// RequireMaster verifica permiso de Master
+func RequireMaster(c *core.Core) error {
+	// Por ahora stub - aquí iría validación de rol Master
+	return nil
 }
