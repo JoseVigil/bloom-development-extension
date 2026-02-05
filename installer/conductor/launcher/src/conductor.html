@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bloom Nucleus Launcher</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #0f0f1e 0%, #1e1e3f 100%);
+      color: #e2e8f0;
+      padding: 0;
+      overflow: hidden;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 40px;
+      height: 100vh;
+      overflow-y: auto;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    h1 {
+      color: #a855f7;
+      font-size: 36px;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+
+    .subtitle {
+      color: #94a3b8;
+      font-size: 16px;
+    }
+
+    .health-status {
+      background: rgba(26, 26, 46, 0.6);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 30px;
+      border: 1px solid rgba(168, 85, 247, 0.2);
+    }
+
+    .health-indicator {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+
+    .health-indicator h2 {
+      color: #e2e8f0;
+      font-size: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .status-badge {
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .status-healthy {
+      background: rgba(34, 197, 94, 0.2);
+      color: #22c55e;
+    }
+
+    .status-unhealthy {
+      background: rgba(239, 68, 68, 0.2);
+      color: #ef4444;
+    }
+
+    .status-checking {
+      background: rgba(234, 179, 8, 0.2);
+      color: #eab308;
+    }
+
+    .profiles-section {
+      background: rgba(26, 26, 46, 0.6);
+      border-radius: 12px;
+      padding: 24px;
+      border: 1px solid rgba(168, 85, 247, 0.2);
+    }
+
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .section-header h2 {
+      color: #e2e8f0;
+      font-size: 20px;
+    }
+
+    .button {
+      background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(168, 85, 247, 0.4);
+    }
+
+    .button:active {
+      transform: translateY(0);
+    }
+
+    .button-secondary {
+      background: rgba(148, 163, 184, 0.2);
+      color: #e2e8f0;
+    }
+
+    .profile-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .profile-item {
+      background: rgba(30, 30, 63, 0.6);
+      padding: 16px;
+      border-radius: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      transition: background 0.2s;
+    }
+
+    .profile-item:hover {
+      background: rgba(30, 30, 63, 0.8);
+    }
+
+    .profile-info {
+      flex: 1;
+    }
+
+    .profile-name {
+      color: #e2e8f0;
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .profile-id {
+      color: #94a3b8;
+      font-size: 12px;
+      font-family: monospace;
+    }
+
+    .profile-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .loading {
+      text-align: center;
+      color: #94a3b8;
+      padding: 40px;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: #94a3b8;
+    }
+
+    .empty-state-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+    }
+
+    .service-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .service-item {
+      background: rgba(30, 30, 63, 0.6);
+      padding: 16px;
+      border-radius: 8px;
+    }
+
+    .service-name {
+      color: #a855f7;
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .service-status {
+      color: #94a3b8;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Bloom Nucleus</h1>
+      <p class="subtitle">Launcher & Profile Manager</p>
+    </header>
+
+    <div class="health-status">
+      <div class="health-indicator">
+        <h2>
+          <span>System Health</span>
+        </h2>
+        <span id="health-badge" class="status-badge status-checking">Checking...</span>
+      </div>
+      <div id="services-grid" class="service-grid"></div>
+    </div>
+
+    <div class="profiles-section">
+      <div class="section-header">
+        <h2>Profiles</h2>
+        <div style="display: flex; gap: 8px;">
+          <button class="button button-secondary" onclick="refreshProfiles()">Refresh</button>
+          <button class="button" onclick="showCreateProfile()">New Profile</button>
+        </div>
+      </div>
+      <div id="profiles-container">
+        <div class="loading">Loading profiles...</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let healthCheckInterval = null;
+
+    // Initialize
+    async function init() {
+      await checkHealth();
+      await loadProfiles();
+      
+      // Start health polling every 10 seconds
+      healthCheckInterval = setInterval(checkHealth, 10000);
+    }
+
+    // Check system health
+    async function checkHealth() {
+      try {
+        const result = await window.nucleus.health();
+        const badge = document.getElementById('health-badge');
+        const servicesGrid = document.getElementById('services-grid');
+
+        if (result.success && result.health) {
+          const health = result.health;
+          
+          if (health.status === 'healthy' || health.all_services_ok) {
+            badge.textContent = 'Healthy';
+            badge.className = 'status-badge status-healthy';
+          } else {
+            badge.textContent = 'Issues Detected';
+            badge.className = 'status-badge status-unhealthy';
+          }
+
+          // Display service statuses if available
+          if (health.services) {
+            servicesGrid.innerHTML = Object.entries(health.services).map(([name, status]) => `
+              <div class="service-item">
+                <div class="service-name">${name}</div>
+                <div class="service-status">${status}</div>
+              </div>
+            `).join('');
+          }
+        } else {
+          badge.textContent = 'Error';
+          badge.className = 'status-badge status-unhealthy';
+          servicesGrid.innerHTML = '<div class="service-item"><div class="service-status">Could not retrieve health status</div></div>';
+        }
+      } catch (error) {
+        console.error('Health check error:', error);
+      }
+    }
+
+    // Load profiles
+    async function loadProfiles() {
+      const container = document.getElementById('profiles-container');
+      
+      try {
+        const result = await window.nucleus.listProfiles();
+        
+        if (result.success && result.profiles && result.profiles.length > 0) {
+          container.innerHTML = `
+            <div class="profile-list">
+              ${result.profiles.map(profile => `
+                <div class="profile-item">
+                  <div class="profile-info">
+                    <div class="profile-name">${profile.name || 'Unnamed Profile'}</div>
+                    <div class="profile-id">${profile.id}</div>
+                  </div>
+                  <div class="profile-actions">
+                    <button class="button" onclick="launchProfile('${profile.id}')">Launch</button>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          `;
+        } else {
+          container.innerHTML = `
+            <div class="empty-state">
+              <div class="empty-state-icon">📁</div>
+              <p>No profiles found</p>
+              <p style="font-size: 14px; margin-top: 8px;">Create your first profile to get started</p>
+            </div>
+          `;
+        }
+      } catch (error) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">⚠️</div>
+            <p>Error loading profiles</p>
+            <p style="font-size: 14px; margin-top: 8px;">${error.message}</p>
+          </div>
+        `;
+      }
+    }
+
+    // Launch profile
+    async function launchProfile(profileId) {
+      try {
+        const result = await window.nucleus.launchProfile(profileId);
+        if (result.success) {
+          console.log('Profile launched successfully');
+        } else {
+          alert('Failed to launch profile: ' + result.error);
+        }
+      } catch (error) {
+        alert('Error launching profile: ' + error.message);
+      }
+    }
+
+    // Create new profile
+    async function showCreateProfile() {
+      const profileName = prompt('Enter profile name:');
+      if (profileName) {
+        try {
+          const result = await window.nucleus.createProfile(profileName);
+          if (result.success) {
+            await loadProfiles();
+          } else {
+            alert('Failed to create profile: ' + result.error);
+          }
+        } catch (error) {
+          alert('Error creating profile: ' + error.message);
+        }
+      }
+    }
+
+    // Refresh profiles
+    async function refreshProfiles() {
+      await loadProfiles();
+    }
+
+    // Start the app
+    init();
+
+    // Cleanup on unload
+    window.addEventListener('beforeunload', () => {
+      if (healthCheckInterval) {
+        clearInterval(healthCheckInterval);
+      }
+    });
+  </script>
+</body>
+</html>

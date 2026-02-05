@@ -20,7 +20,8 @@ const getBaseDir = () => {
 
 const baseDir = getBaseDir();
 
-// Repository root (for development)
+// Repository root (for development) - WORKSPACE AWARE
+// setup/ is now inside a workspace, so we need to go up 3 levels to reach the root
 const repoRoot = path.join(__dirname, '..', '..', '..');
 
 // ============================================================================
@@ -40,40 +41,40 @@ const getResourcePath = (resourceName) => {
     return resourcePath;
   }
 
-  // Development mode
-  const installerRoot = path.join(__dirname, '..', '..');
+  // Development mode - workspace structure
+  // We are in: conductor/setup/config/paths.js
+  // Workspace root is: conductor/
+  const workspaceRoot = path.join(__dirname, '..', '..');
 
   switch (resourceName) {
     case 'runtime':
-      return path.join(installerRoot, 'resources', 'runtime');
+      return path.join(workspaceRoot, '..', 'resources', 'runtime');
     case 'nucleus':
-      return path.join(installerRoot, 'native', 'bin', 'win32', 'nucleus');
+      return path.join(workspaceRoot, '..', 'native', 'bin', 'win32', 'nucleus');
     case 'sentinel':
-      return path.join(installerRoot, 'native', 'bin', 'win32', 'sentinel');
+      return path.join(workspaceRoot, '..', 'native', 'bin', 'win32', 'sentinel');
     case 'brain':
-      return path.join(installerRoot, 'native', 'bin', 'win32', 'brain');
+      return path.join(workspaceRoot, '..', 'native', 'bin', 'win32', 'brain');
     case 'native':
-      return path.join(installerRoot, 'native', 'bin', 'win32', 'host');
+      return path.join(workspaceRoot, '..', 'native', 'bin', 'win32', 'host');
     case 'nssm':
-      return path.join(installerRoot, 'native', 'nssm', 'win32', 'nssm.exe');
+      return path.join(workspaceRoot, '..', 'native', 'nssm', 'win32', 'nssm.exe');
     case 'ollama':
-      return path.join(installerRoot, 'native', 'bin', 'win32', 'ollama');
+      return path.join(workspaceRoot, '..', 'ollama');
     case 'conductor':
-      return path.join(installerRoot, 'resources', 'conductor');
+      return path.join(workspaceRoot, '..', 'native', 'bin', 'win32', 'conductor');
     case 'cortex':
-      return path.join(installerRoot, 'native', 'bin', 'cortex');
-    case 'extension':
-      return path.join(installerRoot, 'chrome-extension', 'src');
+      return path.join(workspaceRoot, '..', 'native', 'bin', 'cortex');
     case 'chrome-win':
-      return path.join(installerRoot, 'chrome', 'chrome-win.zip');
+      return path.join(workspaceRoot, '..', 'chrome', 'chrome-win.zip');
     case 'chrome-mac':
-      return path.join(installerRoot, 'chrome', 'chrome-mac.zip');
+      return path.join(workspaceRoot, '..', 'chrome', 'chrome-mac.zip');
     case 'chrome-linux':
-      return path.join(installerRoot, 'chrome', 'chrome-linux.zip');
+      return path.join(workspaceRoot, '..', 'chrome', 'chrome-linux.zip');
     case 'assets':
-      return path.join(installerRoot, 'electron-app', 'assets');
+      return path.join(workspaceRoot, 'setup', 'assets');
     default:
-      return path.join(installerRoot, 'resources', resourceName);
+      return path.join(workspaceRoot, '..', 'resources', resourceName);
   }
 };
 

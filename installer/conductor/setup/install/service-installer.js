@@ -226,6 +226,7 @@ module.exports = {
   startService,
   cleanupOldServices,
   killAllBloomProcesses,
+  removeService,
   OLD_SERVICE_NAME,
   NEW_SERVICE_NAME
 };

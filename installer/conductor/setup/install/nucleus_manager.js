@@ -127,7 +127,7 @@ const EMPTY_NUCLEUS = {
       error: null
     },
 
-    brain_service: {
+    brain_service_install: {
       status: 'pending',
       started_at: null,
       completed_at: null,
@@ -135,6 +135,19 @@ const EMPTY_NUCLEUS = {
         method: 'nssm_service_check',
         service_name: 'BloomBrain',
         expected_state: 'SERVICE_RUNNING',
+        result: null
+      },
+      error: null
+    },
+
+    nucleus_seed: {
+      status: 'pending',
+      started_at: null,
+      completed_at: null,
+      verification: {
+        method: 'sentinel_command',
+        command: 'sentinel --json seed MasterWorker true',
+        expected_output: 'profile_id',
         result: null
       },
       error: null
@@ -153,14 +166,13 @@ const EMPTY_NUCLEUS = {
       error: null
     },
 
-    nucleus_seed: {
+    shortcuts: {
       status: 'pending',
       started_at: null,
       completed_at: null,
       verification: {
-        method: 'sentinel_command',
-        command: 'sentinel --json seed MasterWorker true',
-        expected_output: 'profile_id',
+        method: 'file_exists',
+        targets: ['shortcuts/Bloom Nucleus.lnk'],
         result: null
       },
       error: null
@@ -218,26 +230,45 @@ async function atomicWrite(filepath, data) {
  */
 async function readNucleus() {
   try {
-    if (!await fs.pathExists(paths.configFile)) {
-      logger.info('nucleus.json no existe, creando con valores por defecto');
+    if (!await fs.pathExists(NUCLEUS_PATH)) {
       return null;
     }
 
-    const data = await fs.readJson(paths.configFile);
+    const raw = await fs.readJson(NUCLEUS_PATH);
     
-    // Validar versión
-    if (data.version !== NUCLEUS_SCHEMA_VERSION) {
-      logger.warn(`Version mismatch: esperado ${NUCLEUS_SCHEMA_VERSION}, encontrado ${data.version}`);
+    // MIGRACIÓN: Detectar esquema viejo (sin campo "version")
+    if (!raw.version) {
+      logger.info('🔄 Migrando nucleus.json desde esquema legacy...');
+      
+      return {
+        version: 1,
+        created_at: raw.timestamp || new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        installation: {
+          started_at: raw.timestamp || new Date().toISOString(),
+          completed: raw.onboarding_completed || false,
+          completed_at: null,
+          force_reinstall: false
+        },
+        milestones: EMPTY_NUCLEUS.milestones, // 10 milestones en "pending"
+        master_profile: null,
+        // PRESERVAR info útil del esquema viejo
+        legacy_data: {
+          extension_id: raw.extension_id,
+          system_map: raw.system_map,
+          executables_valid: raw.executables_valid
+        }
+      };
     }
-
-    return data;
     
+    // Esquema nuevo, retornar tal cual
+    return raw;
+
   } catch (error) {
     logger.error('Error leyendo nucleus.json:', error.message);
-    throw error;
+    return null;
   }
 }
-
 /**
  * Escribe nucleus.json de forma atómica
  * @param {object} data - Datos a escribir
@@ -376,6 +407,30 @@ class NucleusManager {
     logger.success(`✅ Hito completado: ${milestoneName}`);
   }
 
+  // ============================================================================
+  // SUB-MILESTONES (para componentes dentro de 'binaries')
+  // ============================================================================
+
+  isSubMilestoneCompleted(milestone, subKey) {
+    return this.state.milestones[milestone]?.sub_milestones?.[subKey]?.completed || false;
+  }
+
+  async completeSubMilestone(milestone, subKey) {
+    if (!this.state?.milestones?.[milestone]) {
+      throw new Error(`Milestone no existe: ${milestone}`);
+    }
+
+    this.state.milestones[milestone].sub_milestones ??= {};
+
+    this.state.milestones[milestone].sub_milestones[subKey] = {
+      completed: true,
+      completed_at: new Date().toISOString(),
+    };
+
+    await writeNucleus(this.state);
+    logger.success(`✓ Sub-milestone: ${milestone}.${subKey}`);
+  }
+
   /**
    * Marca un hito como fallido
    * @param {string} milestoneName - Nombre del hito
@@ -428,9 +483,10 @@ class NucleusManager {
       'brain_runtime',
       'binaries',
       'conductor',
-      'brain_service',
-      'ollama_init',
+      'brain_service_install',
       'nucleus_seed',
+      'ollama_init',
+      'shortcuts',
       'certification'
     ];
 

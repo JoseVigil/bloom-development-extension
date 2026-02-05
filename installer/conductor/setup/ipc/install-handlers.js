@@ -3,7 +3,7 @@ const fs = require('fs-extra');
 const { execSync } = require('child_process');
 const net = require('net');
 const path = require('path');
-const { runFullInstallation } = require('../install/installer');
+const { installService } = require('../install/installer');
 const { paths } = require('../config/paths');
 const { DEFAULT_PORT } = require('../config/constants');
 const { isElevated } = require('../core/admin-utils');
@@ -41,9 +41,9 @@ function setupInstallHandlers() {
 
   // Handler principal de instalación
   ipcMain.handle('brain:install-extension', async () => {
-    const mainWindow = BrowserWindow.getFocusedWindow();
-    return await runFullInstallation(mainWindow);
-  });
+  const mainWindow = BrowserWindow.getFocusedWindow();
+  return await installService(mainWindow);
+});
 
   // Handler para lanzar el perfil maestro después de la instalación
   ipcMain.handle('brain:launch', async () => {
