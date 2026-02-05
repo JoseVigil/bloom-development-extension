@@ -1,0 +1,53 @@
+{
+  "name": "bloom-conductor",
+  "productName": "Bloom Nucleus Launcher",
+  "version": "1.0.0",
+  "description": "Bloom Nucleus Conductor - Post-installation launcher",
+  "main": "main_conductor.js",
+  "author": {
+    "name": "BTIP Studio",
+    "email": "support@btip.studio"
+  },
+  "license": "MIT",
+  "scripts": {
+    "dev": "electron .",
+    "build": "electron-builder --win --x64"
+  },
+  "build": {
+    "appId": "com.bloom.nucleus.conductor",
+    "productName": "Bloom Nucleus Launcher",
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/bloom.ico",
+      "requestedExecutionLevel": "asInvoker",
+      "artifactName": "bloom-conductor.exe"
+    },
+    "portable": {
+      "artifactName": "bloom-conductor.exe"
+    },
+    "files": [
+      "main_conductor.js",
+      "preload_conductor.js",
+      "src/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "../../native/bin/win32/conductor",
+      "buildResources": "assets"
+    },
+    "compression": "maximum",
+    "asar": true
+  },
+  "devDependencies": {
+    "electron": "^28.3.3",
+    "electron-builder": "^24.9.1"
+  }
+}

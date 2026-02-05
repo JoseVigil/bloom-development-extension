@@ -6,6 +6,19 @@ const { paths } = require('../config/paths');
 async function installRuntime() {
   console.log("📦 Installing AI Engine (Runtime + Brain)...");
 
+  // Kill brain.exe if running
+  const { execSync } = require('child_process');
+  try {
+    execSync('taskkill /F /IM brain.exe', { 
+      windowsHide: true,
+      stdio: 'ignore'
+    });
+    console.log(" 🛑 Stopped running brain.exe");
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  } catch (e) {
+    // No problem if it wasn't running
+  }
+
   // 1. Instalar Python runtime
   console.log(" 📦 Installing Python runtime...");
   await fs.copy(paths.runtimeSource, paths.runtimeDir, {

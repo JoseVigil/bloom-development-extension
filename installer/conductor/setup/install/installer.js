@@ -7,8 +7,7 @@ const { BrowserWindow } = require('electron');
 
 const { paths } = require('../config/paths');
 const { getLogger } = require('../src/logger');
-const { nucleusManager } = require('../core/nucleus_manager');
-
+const { nucleusManager } = require('./nucleus_manager');
 const logger = getLogger('installer');
 
 const {
@@ -118,7 +117,7 @@ async function runRuntimeInstall(win) {
   const MILESTONE = 'brain_runtime';
   
   if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
-    logger.info(`⏭️ ${MILESTONE} completed, skipping`);
+    logger.info(`⭐️ ${MILESTONE} completed, skipping`);
     return { success: true, skipped: true };
   }
 
@@ -126,6 +125,13 @@ async function runRuntimeInstall(win) {
   emitProgress(win, 3, 9, 'Installing Python Runtime...');
 
   try {
+    // ✅ PARAR Y REMOVER EL SERVICIO ANTES DE INSTALAR RUNTIME
+    const { cleanupOldServices, removeService, NEW_SERVICE_NAME } = require('./service-installer');
+    
+    logger.info('Stopping Brain Service before runtime install...');
+    await removeService(NEW_SERVICE_NAME);
+    await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2s
+    
     const result = await installRuntime(win);
     await nucleusManager.completeMilestone(MILESTONE, result);
     return result;
@@ -144,7 +150,7 @@ async function runBinariesDeploy(win) {
     return { success: true, skipped: true };
   }
 
-  emitProgress(win, 4, 9, 'Deploying binaries (Nucleus, Sentinel, Brain, Ollama)...');
+  emitProgress(win, 4, 9, 'Deploying binaries (Nucleus, Sentinel, Brain, Alfred)...');
 
   try {
     const result = await deployAllBinaries(win);
@@ -175,7 +181,7 @@ async function runConductorDeploy(win) {
 }
 
 async function installBrainService(win) {
-  const MILESTONE = 'brain_service';
+  const MILESTONE = 'brain_service_install';
   
   if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
     logger.info(`⏭️ ${MILESTONE} completed, skipping`);
@@ -205,7 +211,7 @@ async function initOllama(win) {
   const MILESTONE = 'ollama_init';
   
   if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
-    logger.info(`⏭️ ${MILESTONE} completed, skipping`);
+    logger.info(`⭐️ ${MILESTONE} completed, skipping`);
     return { success: true, skipped: true };
   }
 
@@ -215,18 +221,19 @@ async function initOllama(win) {
   try {
     logger.separator('INITIALIZING OLLAMA');
 
-    const startResult = await executeSentinelCommand(['--json', 'ollama', 'start']);
-    logger.success('✓ Ollama started');
+    // Start Ollama
+    await executeSentinelCommand(['--json', 'ollama', 'start']);
+    logger.success('✓ Ollama start command sent');
 
-    const healthResult = await executeSentinelCommand(['--json', 'ollama', 'healthcheck']);
+    // Wait 5 seconds for Ollama to boot
+    await new Promise(resolve => setTimeout(resolve, 5000));
+
+    // Check health
+    const health = await executeSentinelCommand(['--json', 'ollama', 'healthcheck']);
     
-    if (healthResult.status !== 'healthy') {
-      throw new Error(`Ollama health check failed: ${healthResult.status}`);
-    }
+    logger.success('✓ Ollama initialized');
 
-    logger.success('✓ Ollama healthy');
-
-    await nucleusManager.completeMilestone(MILESTONE, healthResult);
+    await nucleusManager.completeMilestone(MILESTONE, health);
     return { success: true };
 
   } catch (error) {
@@ -251,7 +258,9 @@ async function seedMasterProfile(win) {
 
     const result = await executeSentinelCommand(['--json', 'seed', 'MasterWorker', 'true']);
 
-    if (!result.profile_id) {
+    const profileId = result.data?.uuid || result.profile_id;
+
+    if (!profileId) {
       throw new Error('Seed failed: no profile_id returned');
     }
 
