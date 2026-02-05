@@ -54,7 +54,7 @@ func init() {
 			cmd.Annotations = make(map[string]string)
 		}
 		cmd.Annotations["requires"] = `  - brain.exe debe estar disponible en bin/
-  - bloom-cortex.blx en bin/native/cortex/
+  - bloom-cortex.blx en bin/cortex/
   - Permiso de escritura en HKCU\Software\Google\Chrome\NativeMessagingHosts
   - bloom-host.exe en bin/native/
   - Extension ID válido en configuración`
@@ -152,7 +152,34 @@ func HandleSeed(c *core.Core, alias string, isMaster bool) (string, string, erro
 	c.Logger.Info("[SEED] Cortex version: %s (build: %s)", metadata.Version, metadata.BuildDate)
 
 	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-	// 3️⃣ CREACIÓN DEL PERFIL (estado actual)
+	// 🔧 NUEVO: Desempaquetar .blx a bin/extension ANTES de llamar a brain
+	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+	baseExtensionDir := filepath.Join(bloomBaseDir, "bin", "extension")
+	
+	c.Logger.Info("[SEED] Deploying base extension to: %s", baseExtensionDir)
+	
+	// Limpiar directorio si existe
+	if _, err := os.Stat(baseExtensionDir); err == nil {
+		c.Logger.Info("[SEED] Removing existing base extension directory")
+		if err := os.RemoveAll(baseExtensionDir); err != nil {
+			return "", "", fmt.Errorf("failed to remove existing extension: %v", err)
+		}
+	}
+	
+	// Crear directorio
+	if err := os.MkdirAll(baseExtensionDir, 0755); err != nil {
+		return "", "", fmt.Errorf("failed to create base extension dir: %v", err)
+	}
+	
+	// Desempaquetar cortex a bin/extension
+	if err := deployCortexPackage(blxPath, baseExtensionDir, c); err != nil {
+		return "", "", fmt.Errorf("failed to deploy base extension: %v", err)
+	}
+	
+	c.Logger.Info("[SEED] ✓ Base extension deployed to bin/extension")
+
+	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+	// 3️⃣ CREACIÓN DEL PERFIL (ahora brain puede copiar desde bin/extension)
 	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 	args := []string{"--json", "profile", "create", alias}
 	if isMaster {
@@ -168,6 +195,7 @@ func HandleSeed(c *core.Core, alias string, isMaster bool) (string, string, erro
 	cmd.Stderr = &errOut
 	if err := cmd.Run(); err != nil {
 		c.Logger.Error("[SEED] Brain stderr: %s", errOut.String())
+		c.Logger.Error("[SEED] Brain stdout: %s", out.String())
 		return "", "", fmt.Errorf("brain_error: %v", err)
 	}
 
@@ -175,11 +203,13 @@ func HandleSeed(c *core.Core, alias string, isMaster bool) (string, string, erro
 	jsonStart := strings.LastIndex(rawOut, "{")
 	jsonEnd := strings.LastIndex(rawOut, "}")
 	if jsonStart == -1 || jsonEnd == -1 {
+		c.Logger.Error("[SEED] Invalid brain output: %s", rawOut)
 		return "", "", fmt.Errorf("formato_invalido: %s", rawOut)
 	}
 
 	var brainRes struct{ UUID string `json:"uuid"` }
 	if err := json.Unmarshal([]byte(rawOut[jsonStart:jsonEnd+1]), &brainRes); err != nil {
+		c.Logger.Error("[SEED] Failed to parse brain response: %s", rawOut[jsonStart:jsonEnd+1])
 		return "", "", err
 	}
 	uuid := brainRes.UUID
@@ -190,22 +220,20 @@ func HandleSeed(c *core.Core, alias string, isMaster bool) (string, string, erro
 	configDir := filepath.Join(c.Paths.AppDataDir, "config", "profile", uuid)
 	specPath := filepath.Join(configDir, "ignition_spec.json")
 
+	// Asegurar que los directorios existen (brain debería crearlos, pero por si acaso)
 	_ = os.MkdirAll(configDir, 0755)
-	_ = os.MkdirAll(extDir, 0755)
 	_ = os.MkdirAll(logsDir, 0755)
 
-	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-	// 4️⃣ DEPLOY: Descomprimir Cortex en extension/
-	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-	c.Logger.Info("[SEED] Deploying Cortex to: %s", extDir)
-	if err := deployCortexPackage(blxPath, extDir, c); err != nil {
-		return "", "", fmt.Errorf("cortex_deploy_failed: %v", err)
+	// Verificar que brain creó el directorio de extensión
+	if _, err := os.Stat(extDir); os.IsNotExist(err) {
+		c.Logger.Error("[SEED] Brain failed to create extension directory at: %s", extDir)
+		return "", "", fmt.Errorf("brain did not create extension directory")
 	}
 
-	c.Logger.Info("[SEED] ✓ Cortex deployed successfully")
+	c.Logger.Info("[SEED] ✓ Profile created by brain with extension at: %s", extDir)
 
 	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-	// 5️⃣ POSTCONDICIÓN: Configuración y registro
+	// 4️⃣ POSTCONDICIÓN: Configuración y registro
 	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 	shortID := uuid[:8]
 	hostName := fmt.Sprintf("com.bloom.synapse.%s", shortID)
