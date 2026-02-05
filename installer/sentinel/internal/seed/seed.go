@@ -133,7 +133,8 @@ func HandleSeed(c *core.Core, alias string, isMaster bool) (string, string, erro
 	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 	// 1️⃣ PRECONDICIÓN: Verificar existencia del .blx
 	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-	blxPath := filepath.Join(c.Paths.BinDir, "native", "cortex", "bloom-cortex.blx")
+	bloomBaseDir := filepath.Join(os.Getenv("LOCALAPPDATA"), "BloomNucleus")
+	blxPath := filepath.Join(bloomBaseDir, "bin", "cortex", "bloom-cortex.blx")
 	if _, err := os.Stat(blxPath); os.IsNotExist(err) {
 		return "", "", fmt.Errorf("cortex_missing: %s no encontrado", blxPath)
 	}
