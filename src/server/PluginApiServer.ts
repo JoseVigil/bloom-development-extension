@@ -1,3 +1,7 @@
+// src/api/PluginApiServer.ts
+// LEGACY WRAPPER - Cliente pasivo del WebSocket de Nucleus
+// El WebSocket es iniciado por nucleus-server, no por este componente
+
 import type * as vscode from 'vscode';
 import type { FastifyInstance } from 'fastify';
 import { WebSocketManager } from './WebSocketManager';

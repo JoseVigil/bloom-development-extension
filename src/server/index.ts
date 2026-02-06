@@ -1,4 +1,8 @@
 // src/server/index.ts
+// NUCLEUS CONTROL PLANE INITIALIZER
+// WebSocket ownership: nucleus-server (independiente de VS Code)
+// El plugin solo se conecta como cliente pasivo
+
 import * as vscode from 'vscode';
 import { BloomApiServer } from '../api/server';
 import { WebSocketManager } from './WebSocketManager';
