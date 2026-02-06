@@ -114,3 +114,6 @@ installer/ollama/lib
 
 # Temporal
 installer/temporal/temporal.exe
+
+# Node
+installer/node/node.exe
