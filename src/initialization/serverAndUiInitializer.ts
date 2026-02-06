@@ -1,4 +1,8 @@
-// src/initialization/serverAndUiInitializer.ts - CONSOLIDADO
+// src/initialization/serverAndUiInitializer.ts - NUCLEUS CONTROL PLANE
+// WebSocket Manager: Inicializado por Nucleus, NO por VS Code
+// Ownership: nucleus-server (parte del Control Plane)
+// El plugin VS Code es solo un consumer/cliente pasivo
+
 import * as vscode from 'vscode';
 import { Logger } from '../utils/logger';
 import { BloomApiServer } from '../api/server';
@@ -16,15 +20,25 @@ export interface ServerAndUIComponents {
 }
 
 /**
- * Inicializa el stack completo de servidores:
- * - BloomApiServer (Fastify + Swagger)
- * - WebSocketManager (singleton)
- * - HostExecutor
- * - GitHub OAuth Server
- * - UI Commands (openHome, openBTIPExplorer, etc.)
- * - FileSystemWatcher para .bloom/**
+ * Inicializa el stack completo del Control Plane de Nucleus:
  * 
- * CONSOLIDADO: Fusiona server/index.ts + serverAndUiInitializer.ts
+ * ORDEN CRÍTICO (respeta arquitectura Nucleus):
+ * 1. WebSocketManager - PRIMERO (Control Plane fundacional)
+ * 2. BloomApiServer - Depende de WS
+ * 3. HostExecutor - Depende de WS
+ * 4. GitHub OAuth Server - Independiente
+ * 5. UI Commands - Consumer layer
+ * 6. FileSystemWatcher - Observer layer
+ * 
+ * PROPIEDAD DEL WEBSOCKET:
+ * - Inicializado por nucleus-server
+ * - Existe independientemente de VS Code
+ * - El plugin solo se conecta como cliente
+ * - Lifecycle sigue a `nucleus dev-start`, NO al editor
+ * 
+ * HEADLESS READY:
+ * - WebSocket NO depende de vscode runtime
+ * - Preparado para UI externa / Codespaces / Control remoto
  */
 export async function initializeServerAndUI(
     context: vscode.ExtensionContext,
@@ -38,10 +52,14 @@ export async function initializeServerAndUI(
     context.subscriptions.push(outputChannel);
     outputChannel.show();
 
-    // 2. Inicializar WebSocket Manager (singleton)
+    // 2. Inicializar WebSocket Manager (NUCLEUS CONTROL PLANE - primera prioridad)
+    // CRÍTICO: WebSocket debe existir ANTES que cualquier consumer
+    // Ownership: nucleus-server (NO VS Code)
     const wsManager = WebSocketManager.getInstance();
     await wsManager.start();
-    logger.info('✅ WebSocket server running on ws://localhost:4124');
+    logger.info('✅ WebSocket Control Plane initialized on ws://localhost:4124');
+    logger.info('   → Managed by Nucleus, NOT by VS Code');
+    logger.info('   → Plugin acts as passive client');
     
     context.subscriptions.push({
         dispose: () => wsManager.stop()

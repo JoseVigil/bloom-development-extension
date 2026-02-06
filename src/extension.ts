@@ -1,4 +1,7 @@
-// src/extension.ts - VERSIÓN CONSOLIDADA Y LIMPIA
+// src/extension.ts - NUCLEUS CONTROL PLANE BOOTSTRAP
+// Inicializa WebSocket como parte del Control Plane de Nucleus
+// El plugin VS Code actúa como consumer, NO como iniciador
+
 import * as vscode from 'vscode';
 import { Logger } from './utils/logger';
 import { BrainExecutor } from './utils/brainExecutor';
@@ -12,7 +15,21 @@ import { registerCriticalCommands } from './initialization/criticalCommandsIniti
 
 /**
  * Activación del plugin Bloom
- * Versión consolidada que integra stable + current
+ * 
+ * ORDEN DE INICIALIZACIÓN (CRÍTICO):
+ * 0. Brain CLI
+ * 1. Context (UserManager singleton)
+ * 2. Managers (singletons)
+ * 3. Workspace validation
+ * 4. Providers (legacy tree)
+ * 5. SERVER STACK - WebSocket primero (Nucleus Control Plane)
+ * 6. Profiles & AI Accounts
+ * 7. Commands registration
+ * 
+ * WEBSOCKET OWNERSHIP:
+ * - Inicializado en paso 5 como parte de Nucleus Control Plane
+ * - NO depende del lifecycle de VS Code
+ * - Plugin actúa como cliente pasivo
  */
 export async function activate(context: vscode.ExtensionContext) {
     const logger = new Logger();

@@ -1,9 +1,11 @@
 // src/server/WebSocketManager.ts
+// NUCLEUS CONTROL PLANE - WebSocket Server
+// Owner: nucleus-server (NO VS Code dependency)
+// Lifecycle: Managed by Nucleus, not IDE
 
 import WebSocket, { WebSocketServer } from 'ws';
 import type { IncomingMessage } from 'http';
 import { EventEmitter } from 'events';
-import * as vscode from 'vscode';
 import OllamaNativeAdapter from '../ai/adapters/OllamaNativeAdapter';
 import { AIRuntimeAdapter } from '../api/adapters/AIRuntimeAdapter';
 import * as fs from 'fs/promises';
