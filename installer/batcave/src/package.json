@@ -1,0 +1,32 @@
+{
+  "name": "@bloom/batcave",
+  "version": "1.0.0",
+  "description": "BATCAVE - Dynamic multi-tenant sovereign control plane for GitHub Codespaces",
+  "type": "module",
+  "main": "dist/main.js",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "build": "tsc",
+    "start": "node dist/main.js",
+    "test": "vitest"
+  },
+  "keywords": [
+    "batcave",
+    "bloom",
+    "codespace",
+    "multi-tenant",
+    "sovereign"
+  ],
+  "author": "BLOOM Organization",
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "tsx": "^4.7.1",
+    "typescript": "^5.4.3",
+    "vitest": "^1.4.0"
+  }
+}
