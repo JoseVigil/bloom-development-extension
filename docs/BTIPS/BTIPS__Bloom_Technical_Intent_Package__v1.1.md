@@ -55,27 +55,48 @@ flowchart LR
         Sovereign Intent Interface]
 
         NucleusExe[⚖️ Nucleus
-        Gobernanza]
+        Gobernanza & Vault Authority]
 
-        Sentinel[🛡️ Sentinel
-        Sidecar / Event Bus]
+        subgraph SentinelSystem["🛡️ Sentinel Sidecar System"]
+            Sentinel["Sentinel
+            Event Bus Orchestrator"]
+            Temporal["⏱️ Temporal
+            Workflow Engine"]
+            Sentinel -.Workflows.-> Temporal
+        end
 
         Brain[🧠 Brain
-        Python Engine]
-        Host[⚙️ Host Service\nC++]
+        Python Engine
+        Event Bus Server - TCP]
+        
+        Host[⚙️ Host Service
+        C++ Bridge
+        Synapse Protocol]
 
         subgraph Chrome["🌐 Chromium Profiles"]
-            Ext["🧩 Bloom Cortex
-            Chrome Extension Runtime
-            ────────────────────────
-            UI + Synapse Client"]
+            subgraph CortexRuntime["🧩 Bloom Cortex Runtime"]
+                Ext["Bloom Cortex Extension
+                ────────────────────────
+                UI + Synapse Client"]
+                VaultShield["🔐 Vault Shield
+                Security Visualization Layer"]
+                Ext -.observa.-> VaultShield
+            end
+            
+            ChromeVault["🔒 Chrome Native Vault
+            ════════════════════
+            Encrypted Storage
+            API Keys / OAuth Tokens
+            (Chrome's Own Security)"]
+            
+            VaultShield -.accede.-> ChromeVault
         end
 
         subgraph BloomFS["📂 .bloom/"]
             NucleusFolder["📦 .nucleus-{organization}/
-            Pipelines"]
+            Pipelines & Intents"]
             ProjectFolder["🐍 .project-{name}/
-            Pipelines"]
+            Pipelines & Intents"]
         end
 
         subgraph BloomLocalSites["🏠 Bloom Local Sites"]
@@ -99,37 +120,64 @@ flowchart LR
             Google"]
         end
 
-        Ext --> Discovery
-        Ext --> Landing
-
+        %% User Interactions
         User --> VS
         User <--> Launcher
         User <--> Discovery
         User <--> Landing
 
-        Launcher <--> Sentinel
+        %% Conductor connections (DIRECT to Nucleus, NO Sentinel)
         Launcher <--> NucleusExe
-        Sentinel <--> NucleusExe
-        Sentinel <--> Brain
+        Launcher <--> ProjectFolder
+        Launcher <--> NucleusFolder
 
+        %% Nucleus orchestration via Temporal
+        NucleusExe -.orchestrates via.-> Temporal
+        
+        %% Sentinel connections
+        Sentinel <--> NucleusExe
+        Sentinel <-->|Event Bus TCP| Brain
+
+        %% VS Code to Brain
         VS --> Brain
 
-        Brain <--> Host
-        Host <--> Ext
+        %% Brain <-> Host <-> Extension (Synapse Protocol)
+        Brain <-->|Synapse
+        Phase 3| Host
+        Host <-->|Synapse
+        Phase 1-2| Ext
 
+        %% Brain filesystem access
         Brain <--> ProjectFolder
         Brain <--> NucleusFolder
 
-        Launcher <--> ProjectFolder
-        Launcher <--> NucleusFolder
+        %% VS Code filesystem
         VS <--> ProjectFolder
 
+        %% Cortex to local sites
+        Ext --> Discovery
+        Ext --> Landing
+
+        %% Cortex to AI Sites
         Ext --> ChatGPTSite
         Ext --> ClaudeSite
         Ext --> GrokSite
 
+        %% Brain to AI API
         Brain <--> GeminiAPI
-    end  
+
+        %% Vault Authority (only Nucleus can authorize)
+        NucleusExe -.autoriza flujo de llaves.-> ChromeVault
+    end
+    
+    %% Style definitions
+    classDef vaultStyle fill:#2d1b00,stroke:#ff6b35,stroke-width:3px,color:#fff
+    classDef temporalStyle fill:#1a1a2e,stroke:#16c79a,stroke-width:2px,color:#fff
+    classDef synapseStyle fill:#0f3460,stroke:#00d9ff,stroke-width:2px,color:#fff
+    
+    class ChromeVault,VaultShield vaultStyle
+    class Temporal temporalStyle
+    class Host synapseStyle
 ```
 
 ## 2. ARQUITECTURA DE BLOOM

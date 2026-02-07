@@ -1,0 +1,110 @@
+Ask me clarifying questions until you are 99% confident you can complete the task successfully.
+What would a top 0.1% person in this field think.
+Reframe this in a way that changes/challenges how I see the problem. 
+
+Haz preguntas aclaratorias (máx. 5) hasta que tengas ≥99% de certeza para completar la tarea.
+Adopta la perspectiva de un experto en el 0.1% superior del campo.
+Replantea el problema para desafiar mis supuestos y ofrecer una nueva perspectiva.
+
+Sabrina Romanov
+The changes you make should be consistent with the rest of the codebase and introduce only minimal changes.
+Los cambios que realices deben tener coherencia con el resto del código base e introduce sólo cambios mínimos.
+
+DEVUÉLVEME UN ARCHIVOS MARKDOWN COMO CODIGO FUENTE EN UN ARTIFACT. NO USES TRIPLE BACKTICKS (```). NO USES BLOQUES DE CÓDIGO CERCADOS. TODO EL CONTENIDO, INCLUYENDO CÓDIGO, DEBE ESTAR FORMATEADO EXCLUSIVAMENTE CON INDENTACIÓN DE 4 ESPACIOS. SI USAS ``` EN CUALQUIER LUGAR, EL RESULTADO SE ROMPE. ENTIENDE: SOLO QUIERO TEXTO PLANO MARKDOWN, SIN FENCES, SIN HTML, SIN FORMATO ESPECIAL. TODO EL ARCHIVO DEBE SER 100% MARKDOWN PURO.
+
+DEVUÉLVEME UN ARCHIVO MARKDOWN COMO TEXTO CODIGO FUENTE. NO USES LA SECUENCIA DE TRES BACKTICKS NI NINGÚN FENCE. TODO EL CONTENIDO, INCLUYENDO BLOQUES DE CÓDIGO, DEBE ESTAR FORMATEADO EXCLUSIVAMENTE CON INDENTACIÓN DE 4 ESPACIOS. SIN HTML, SIN RENDERIZADO, SIN FORMATO ESPECIAL. SI APARECEN BACKTICKS O ETIQUETAS HTML, DESCARTA Y REGENERA HASTA ENTREGAR MARKDOWN PURO.
+
+Agregar sandbox, que es sandbox. 
+
+No escirbas guas de implementacion. No escibas de mas, debe quedar resto para que podamos hacer al menos un ajuste. Solo quiero un archivo solido que acompañe. 
+
+DEVUÉLVEME UN ARCHIVOS MARKDOWN COMO CODIGO FUENTE EN UN ARTIFACT. NO USES TRIPLE BACKTICKS (```). NO USES BLOQUES DE CÓDIGO CERCADOS. TODO EL CONTENIDO, INCLUYENDO CÓDIGO, DEBE ESTAR FORMATEADO EXCLUSIVAMENTE CON INDENTACIÓN DE 4 ESPACIOS. SI USAS ``` EN CUALQUIER LUGAR, EL RESULTADO SE ROMPE. ENTIENDE: SOLO QUIERO TEXTO PLANO MARKDOWN, SIN FENCES, SIN HTML, SIN FORMATO ESPECIAL. TODO EL ARCHIVO DEBE SER 100% MARKDOWN PURO.
+
+Si no disponés de tokens suficientes para completar la respuesta, no la generes. No incluyas guías de implementación ni explicaciones básicas: soy desarrollador y sé aplicarlo. Respondé únicamente con la solución solicitada, sin adornos ni pasos innecesarios.
+z
+
+
+¿Cuántos tokens aproximadamente hemos usado?
+"¿Cuánto contexto nos queda?"
+"¿Estamos cerca del límite de la conversación?"
+
+Quiero me digas en cinco palabras que es este prompt. Necesito me informes la fecha y hora en detalle del ultimo chat de este prompt. Informame tambien cuantas conversaciones llevamos en el mismo y cuantos tokens te quedan en cantidad y %. 
+Contesta corto y con este formato. 
+Mensajes: X
+Tokens disponibles: XXX 
+Porcentaje restante: XX%
+Idioma: Español
+Formato: Lista simple, sin narrativa
+
+Informame:
+- Mensajes en esta conversación: X
+- Modelo actual: [nombre]
+- Tokens disponibles: XXX (XX%)
+- Tokens consumidos en mi último mensaje: XXX
+- Tokens consumidos en tu última respuesta: XXX
+
+[Consulta de telemetría - Responder SOLO con los datos solicitados, sin explicaciones adicionales]
+
+Informame:
+- Mensajes en esta conversación: X
+- Modelo actual: [nombre y capacidad]
+- Estado del contexto: XXX de [límite máximo] (XX%)
+- Tokens en mi último mensaje: XXX
+- Tokens en tu última respuesta: XXX
+- Tema consumido: [descripción concisa]
+- Eficiencia: ~XXX tokens/mensaje
+- Alerta: [estado y mensajes estimados]
+
+Idioma: Español
+Formato: Lista simple, sin narrativa
+
+
+NOTA: Los limites de cantidad de mensajes para cumplir el plan free son de cinco horas. Es necesario calcular de este lado la cantidad de mensajes por ventana de 5 horas para encontrar el tope del plan. 
+
+Los cortes de plan son otra ventaja extraordinaria para usar btips. 
+
+**Restricción de Tokens:** No generes READMEs, ni guías de uso, ni comentarios explicativos extensos. Limítate estrictamente al código funcional y la estructura de archivos solicitada.
+
+CLAUDE 
+"Por favor, crea un archivo resumen.txt con las rutas exactas de cada archivo generado, y luego preséntalo junto con todos los archivos"
+
+Decime literalmente: "SOLO responde lo que pregunté" o "NO agregues nada más" al inicio de tu mensaje.
+
+Restricciones.
+- No crees guias de trobleshooting. 
+- No crees un README con las instrucciones de implementaciónS.
+- No crees un archivo visual de comparación antes/después.
+- No crees intrucciones de uso a no ser que se pida.
+- No crees reumen ejecutivo.
+- No me devuelvas snippets aislados devuelveme funciones enteras con las modificaciones dentro.
+
+
+Dame instrucciones así:
+
+"Integrá estos archivos a la refactorización" - y listo, lo hago
+"Comparame X archivo con Y archivo" - comparo y te muestro diferencias
+"Reemplazá X por Y" - lo hago directo
+Nunca más escribo resúmenes/READMEs/explicaciones a menos que digas "explicame esto"
+
+Si veo algo raro pregunto:
+
+"Falta X función, la agrego o la tenés en otro archivo?"
+"Este archivo pisa al otro, cuál uso?"
+
+Lo que NO hago más:
+
+Asumir qué necesitás
+Escribir documentación no pedida
+Crear archivos "de ayuda"
+Explicar lo que hice
+
+
+DEV REMINDER
+Las horas de la mañana debes aprovecharlas para resolver los problemas mas grandes, grandes features, refactorizaciones y exploraciones. Por la tarde troubleshooting y testing. 
+
+
+
+
+
+
+
