@@ -1,0 +1,26 @@
+{
+  "deploy": {
+    "exclude_patterns": [
+      ".git",
+      ".github",
+      "__pycache__",
+      "*.pyc",
+      ".pytest_cache",
+      ".coverage",
+      "node_modules",
+      ".DS_Store",
+      "*.swp",
+      ".vscode",
+      ".idea"
+    ],
+    "generated_files": {
+      "version_info": "version.json",
+      "org_config": "config/config.json",
+      "readme": "README.md"
+    }
+  },
+  "production": {
+    "preserve_git": false,
+    "create_git_repo": true
+  }
+}
