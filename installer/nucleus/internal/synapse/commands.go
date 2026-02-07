@@ -1,14 +1,17 @@
 package synapse
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"time"
 
 	"nucleus/internal/core"
+	temporalclient "nucleus/internal/orchestration/temporal"
 
 	"github.com/spf13/cobra"
+	"go.temporal.io/sdk/client"
 )
 
 // ============================================
@@ -27,12 +30,11 @@ func NewSynapseCommand(c *core.Core) *cobra.Command {
 		Long:  "High-level orchestration layer over Sentinel using Temporal workflows",
 	}
 
-	// Add subcommands
+	// Add all subcommands
 	cmd.AddCommand(newLaunchCommand(c))
-	// Future subcommands:
-	// cmd.AddCommand(newSubmitCommand(c))
-	// cmd.AddCommand(newStopCommand(c))
-	// cmd.AddCommand(newStatusCommand(c))
+	cmd.AddCommand(newStartOllamaCommand(c))
+	cmd.AddCommand(newVaultStatusCommand(c))
+	cmd.AddCommand(newShutdownAllCommand(c))
 
 	return cmd
 }
@@ -150,6 +152,161 @@ This command abstracts Sentinel complexity and exposes a clean interface.`,
 }
 
 // ============================================
+// SUBCOMMAND: start-ollama
+// ============================================
+
+func newStartOllamaCommand(c *core.Core) *cobra.Command {
+	var simulation bool
+
+	cmd := &cobra.Command{
+		Use:   "start-ollama",
+		Short: "Start Ollama service via Temporal workflow",
+		Long: `Start the Ollama AI service through Sentinel orchestration.
+
+This command executes a Temporal workflow that:
+1. Validates system prerequisites
+2. Starts Ollama service via Sentinel
+3. Verifies port availability (11434)
+4. Returns process ID and status`,
+		Args: cobra.NoArgs,
+		Example: `  nucleus --json synapse start-ollama
+  nucleus synapse start-ollama --simulation`,
+		Run: func(cmd *cobra.Command, args []string) {
+			ctx := context.Background()
+			result, err := executeStartOllamaWorkflow(ctx, c, simulation)
+			if err != nil {
+				if c.IsJSON {
+					output, _ := json.Marshal(map[string]interface{}{
+						"success": false,
+						"error":   err.Error(),
+						"state":   "FAILED",
+					})
+					fmt.Println(string(output))
+				} else {
+					c.Logger.Printf("[ERROR] ❌ Start Ollama failed: %v", err)
+				}
+				os.Exit(1)
+			}
+
+			if c.IsJSON {
+				output, _ := json.MarshalIndent(result, "", "  ")
+				fmt.Println(string(output))
+				return
+			}
+
+			c.Logger.Printf("[SUCCESS] ✅ Ollama started successfully")
+			c.Logger.Printf("[INFO]    PID: %d", result.PID)
+			c.Logger.Printf("[INFO]    Port: %d", result.Port)
+			c.Logger.Printf("[INFO]    State: %s", result.State)
+		},
+	}
+
+	cmd.Flags().BoolVar(&simulation, "simulation", false, "Run in simulation mode")
+	return cmd
+}
+
+// ============================================
+// SUBCOMMAND: vault-status
+// ============================================
+
+func newVaultStatusCommand(c *core.Core) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "vault-status",
+		Short: "Query Vault lock status via Brain",
+		Long: `Query the current state of the Vault via Brain component.
+
+Returns:
+- Vault state (LOCKED/UNLOCKED)
+- Master profile activation status
+- Overall health state`,
+		Args: cobra.NoArgs,
+		Example: `  nucleus --json synapse vault-status
+  nucleus synapse vault-status`,
+		Run: func(cmd *cobra.Command, args []string) {
+			ctx := context.Background()
+			result, err := executeVaultStatusWorkflow(ctx, c)
+			if err != nil {
+				if c.IsJSON {
+					output, _ := json.Marshal(map[string]interface{}{
+						"success": false,
+						"error":   err.Error(),
+						"state":   "FAILED",
+					})
+					fmt.Println(string(output))
+				} else {
+					c.Logger.Printf("[ERROR] ❌ Vault status query failed: %v", err)
+				}
+				os.Exit(1)
+			}
+
+			if c.IsJSON {
+				output, _ := json.MarshalIndent(result, "", "  ")
+				fmt.Println(string(output))
+				return
+			}
+
+			c.Logger.Printf("[INFO] Vault Status:")
+			c.Logger.Printf("[INFO]    State: %s", result.VaultState)
+			c.Logger.Printf("[INFO]    Master Profile Active: %v", result.MasterProfileActive)
+			c.Logger.Printf("[INFO]    Overall State: %s", result.State)
+
+			if result.VaultState == "LOCKED" {
+				c.Logger.Printf("[WARNING] ⚠️  Vault is locked - some operations may be restricted")
+			}
+		},
+	}
+
+	return cmd
+}
+
+// ============================================
+// SUBCOMMAND: shutdown-all
+// ============================================
+
+func newShutdownAllCommand(c *core.Core) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "shutdown-all",
+		Short: "Shutdown all orchestrated services",
+		Long: `Gracefully shutdown all services managed by Nucleus orchestration.
+
+Services shutdown include:
+- Ollama AI service
+- Temporal workflows (if applicable)
+- Other orchestrated components`,
+		Args: cobra.NoArgs,
+		Example: `  nucleus --json synapse shutdown-all
+  nucleus synapse shutdown-all`,
+		Run: func(cmd *cobra.Command, args []string) {
+			ctx := context.Background()
+			result, err := executeShutdownAllWorkflow(ctx, c)
+			if err != nil {
+				if c.IsJSON {
+					output, _ := json.Marshal(map[string]interface{}{
+						"success": false,
+						"error":   err.Error(),
+					})
+					fmt.Println(string(output))
+				} else {
+					c.Logger.Printf("[ERROR] ❌ Shutdown failed: %v", err)
+				}
+				os.Exit(1)
+			}
+
+			if c.IsJSON {
+				output, _ := json.MarshalIndent(result, "", "  ")
+				fmt.Println(string(output))
+				return
+			}
+
+			c.Logger.Printf("[SUCCESS] ✅ Shutdown completed")
+			c.Logger.Printf("[INFO]    Services stopped: %v", result.ServicesShutdown)
+		},
+	}
+
+	return cmd
+}
+
+// ============================================
 // DATA STRUCTURES
 // ============================================
 
@@ -172,10 +329,16 @@ type LaunchConfig struct {
 
 // LaunchResult represents the final result of a launch operation
 type LaunchResult struct {
-	Type      string `json:"type"`
-	ProfileID string `json:"profile_id"`
-	Status    string `json:"status"`
-	Timestamp int64  `json:"timestamp"`
+	Success         bool                   `json:"success"`
+	ProfileID       string                 `json:"profile_id"`
+	LaunchID        string                 `json:"launch_id,omitempty"`
+	ChromePID       int                    `json:"chrome_pid,omitempty"`
+	DebugPort       int                    `json:"debug_port,omitempty"`
+	ExtensionLoaded bool                   `json:"extension_loaded,omitempty"`
+	EffectiveConfig map[string]interface{} `json:"effective_config,omitempty"`
+	State           string                 `json:"state,omitempty"`
+	Error           string                 `json:"error,omitempty"`
+	Timestamp       int64                  `json:"timestamp"`
 }
 
 // CommandError represents a structured error
@@ -185,6 +348,28 @@ type CommandError struct {
 	Command   string `json:"command"`
 	Message   string `json:"message"`
 	Timestamp int64  `json:"timestamp"`
+}
+
+// StartOllamaResult representa el resultado del workflow de Ollama
+type StartOllamaResult struct {
+	Success bool   `json:"success"`
+	PID     int    `json:"pid"`
+	Port    int    `json:"port"`
+	State   string `json:"state"`
+}
+
+// VaultStatusResult representa el resultado del workflow de Vault
+type VaultStatusResult struct {
+	Success             bool   `json:"success"`
+	VaultState          string `json:"vault_state"`
+	MasterProfileActive bool   `json:"master_profile_active"`
+	State               string `json:"state"`
+}
+
+// ShutdownAllResult representa el resultado del workflow de shutdown
+type ShutdownAllResult struct {
+	Success          bool     `json:"success"`
+	ServicesShutdown []string `json:"services_shutdown"`
 }
 
 // ============================================
@@ -217,8 +402,9 @@ func validateLaunchConfig(config *LaunchConfig) error {
 func executeLaunch(c *core.Core, logger *core.Logger, config *LaunchConfig) (*LaunchResult, error) {
 	logger.Info("Initializing Temporal client")
 
-	// Initialize Temporal client
-	tc, err := NewTemporalClient(c, logger)
+	// Initialize Temporal client (orchestration/temporal)
+	ctx := context.Background()
+	tc, err := temporalclient.NewClient(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize Temporal client: %w", err)
 	}
@@ -226,13 +412,107 @@ func executeLaunch(c *core.Core, logger *core.Logger, config *LaunchConfig) (*La
 
 	logger.Info("Starting launch workflow")
 
-	// Execute workflow
-	result, err := tc.ExecuteLaunchWorkflow(config)
+	// Execute workflow usando ExecuteLaunchWorkflow de orchestration/temporal
+	result, err := tc.ExecuteLaunchWorkflow(ctx, logger, config.ProfileID, config.Mode)
 	if err != nil {
 		return nil, fmt.Errorf("workflow execution failed: %w", err)
 	}
 
-	return result, nil
+	// Convertir temporal.LaunchResult a synapse.LaunchResult
+	return &LaunchResult{
+		Success:         result.Success,
+		ProfileID:       result.ProfileID,
+		LaunchID:        result.LaunchID,
+		ChromePID:       result.ChromePID,
+		DebugPort:       result.DebugPort,
+		ExtensionLoaded: result.ExtensionLoaded,
+		EffectiveConfig: result.EffectiveConfig,
+		State:           result.State,
+		Error:           result.Error,
+		Timestamp:       result.Timestamp,
+	}, nil
+}
+
+// ============================================
+// WORKFLOW EXECUTION HELPERS
+// ============================================
+
+func getTemporalClient(ctx context.Context) (client.Client, error) {
+	return client.Dial(client.Options{
+		HostPort: "localhost:7233",
+	})
+}
+
+func executeStartOllamaWorkflow(ctx context.Context, c *core.Core, simulation bool) (*StartOllamaResult, error) {
+	tc, err := getTemporalClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tc.Close()
+
+	// Por ahora, implementación simulada - deberás conectar con tus workflows reales
+	// cuando los tengas implementados
+	input := map[string]interface{}{
+		"simulation_mode": simulation,
+	}
+
+	workflowOptions := client.StartWorkflowOptions{
+		ID:        fmt.Sprintf("start_ollama_%d", time.Now().Unix()),
+		TaskQueue: "nucleus-task-queue",
+	}
+
+	we, err := tc.ExecuteWorkflow(ctx, workflowOptions, "StartOllamaWorkflow", input)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute workflow: %w", err)
+	}
+
+	var result StartOllamaResult
+	err = we.Get(ctx, &result)
+	return &result, err
+}
+
+func executeVaultStatusWorkflow(ctx context.Context, c *core.Core) (*VaultStatusResult, error) {
+	tc, err := getTemporalClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tc.Close()
+
+	workflowOptions := client.StartWorkflowOptions{
+		ID:        fmt.Sprintf("vault_status_%d", time.Now().Unix()),
+		TaskQueue: "nucleus-task-queue",
+	}
+
+	we, err := tc.ExecuteWorkflow(ctx, workflowOptions, "VaultStatusWorkflow")
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute workflow: %w", err)
+	}
+
+	var result VaultStatusResult
+	err = we.Get(ctx, &result)
+	return &result, err
+}
+
+func executeShutdownAllWorkflow(ctx context.Context, c *core.Core) (*ShutdownAllResult, error) {
+	tc, err := getTemporalClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tc.Close()
+
+	workflowOptions := client.StartWorkflowOptions{
+		ID:        fmt.Sprintf("shutdown_all_%d", time.Now().Unix()),
+		TaskQueue: "nucleus-task-queue",
+	}
+
+	we, err := tc.ExecuteWorkflow(ctx, workflowOptions, "ShutdownAllWorkflow")
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute workflow: %w", err)
+	}
+
+	var result ShutdownAllResult
+	err = we.Get(ctx, &result)
+	return &result, err
 }
 
 // ============================================

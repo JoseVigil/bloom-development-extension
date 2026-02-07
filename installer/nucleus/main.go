@@ -11,6 +11,7 @@ import (
 	_ "nucleus/internal/analytics"
 	_ "nucleus/internal/governance"
 	_ "nucleus/internal/orchestration/temporal"
+	_ "nucleus/internal/supervisor"  
 	_ "nucleus/internal/synapse"
 	_ "nucleus/internal/system"
 	_ "nucleus/internal/vault"
