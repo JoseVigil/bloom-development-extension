@@ -1,0 +1,52 @@
+### 1️⃣ Gobernanza en el JSON: El Nodo `.governance`
+
+Para que el intent `.cor` sea "Soberano", debe interactuar con el archivo `.nucleus-{org}/.governance/security/.meta.json` (o similar). Propongo inyectar este bloque de validación en el pipeline del `cor`:
+
+#### El Objeto de Autoridad (`cor_governance.json`):
+```json
+{
+  "authority_level": "master", 
+  "required_signature": true,
+  "vault_access": "unlocked",
+  "governing_policies": [
+    ".nucleus/.core/.rules.bl",
+    ".nucleus/.governance/.architecture/.principles.bl"
+  ]
+}
+```
+
+---
+
+### 2️⃣ Roles y Acceso al Pipeline
+
+El Conductor (UI) filtrará las etapas del `cor` según el **Rol detectado por el Nucleus Service**:
+
+*   **Fases 1 a 4 (Freeze, Analysis, Interpretation, Synthesis):**
+    *   **Rol:** *Architect*. 
+    *   **Acción:** Puede "cocinar" la propuesta. El Conductor le permite ver los resultados de IA y ajustar la síntesis dual.
+*   **Fase 5 (Proposal Assembly):**
+    *   **Rol:** *Architect* (Genera) y *Master* (Pre-aprueba).
+*   **Fase 6 (Governed Submission):**
+    *   **Rol:** **EXCLUSIVAMENTE MASTER**.
+    *   **Mecánica de Bloqueo:** El botón **[SUBMIT TO PROJECTS]** en el Conductor solo se activa si el usuario local tiene el marcador `.master`.
+
+---
+
+### 3️⃣ Integración con la Bóveda (Vault)
+
+El `cor` es el único intent que puede demandar **"Llaves de Integridad"**. 
+
+*   **Momento Vault:** En la fase 6, antes de que el `cor` genere los intents `dev` y `doc` en los sub-proyectos, el Conductor disparará el **Vault Shield**.
+*   **Firma Criptográfica:** El Master debe firmar el `impact_summary.json` usando la llave privada de su navegador (Bóveda Volátil).
+*   **Seguridad:** Sin esa firma, el Sentinel se negará a ejecutar la creación de carpetas en los proyectos subalternos. Esto garantiza que nadie del equipo "fuerce" una integración sin el consentimiento firmado del Master.
+
+---
+
+### 4️⃣ Operatoria Diaria del Conductor (Demandas de la UI)
+
+Como **Conductor**, mi operatoria diaria para el `cor` será:
+
+1.  **Observabilidad de Conflicto:** Mostrar una alerta roja en el Dashboard cuando el `.cache/.dependency-graph.json` detecte una divergencia crítica entre proyectos.
+2.  **Modo "War Room":** Al iniciar un `cor`, la interfaz de Svelte cambia a un modo de "Doble Panel" (Left Tree vs Right Tree).
+3.  **Gestión de Aprobaciones:** El Conductor mantendrá una lista de "Pendientes de Firma". Si soy Master, veré el botón dorado de **[Firmar con Bóveda]**.
+4.  **Trazabilidad:** Mostrar el `approval_log.json` como una línea de tiempo histórica de quién autorizó qué integración.

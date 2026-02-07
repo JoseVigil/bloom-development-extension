@@ -31,15 +31,28 @@ func ProfileLifecycleWorkflow(ctx workflow.Context, input types.ProfileLifecycle
 		SentinelRunning: false,
 	}
 
+	// Estado extendido para detalles de Sentinel
+	var sentinelDetails *types.SentinelLaunchResult
+
 	// Channels para signals
 	brainEventChan := workflow.GetSignalChannel(ctx, signals.SignalBrainEvent)
 	shutdownChan := workflow.GetSignalChannel(ctx, signals.SignalShutdown)
 
-	// Registrar queries
+	// Registrar query para estado básico
 	if err := workflow.SetQueryHandler(ctx, queries.QueryStatus, func() (types.ProfileStatus, error) {
 		return state, nil
 	}); err != nil {
 		return fmt.Errorf("failed to register status query: %w", err)
+	}
+
+	// Registrar query para detalles de Sentinel (NUEVO)
+	if err := workflow.SetQueryHandler(ctx, "sentinel-details", func() (*types.SentinelLaunchResult, error) {
+		if sentinelDetails == nil {
+			return nil, fmt.Errorf("sentinel not launched yet")
+		}
+		return sentinelDetails, nil
+	}); err != nil {
+		return fmt.Errorf("failed to register sentinel-details query: %w", err)
 	}
 
 	// Activity options
@@ -93,11 +106,16 @@ func ProfileLifecycleWorkflow(ctx workflow.Context, input types.ProfileLifecycle
 					state.ErrorMessage = err.Error()
 				} else if launchResult.Success {
 					state.SentinelRunning = true
-					sentinelProcessID = launchResult.ProcessID
-					logger.Info("Sentinel launched successfully", "process_id", sentinelProcessID)
+					sentinelProcessID = launchResult.ChromePID // ChromePID, no ProcessID
+					sentinelDetails = &launchResult // ← GUARDAR DETALLES COMPLETOS
+					logger.Info("Sentinel launched successfully", 
+						"chrome_pid", launchResult.ChromePID,
+						"debug_port", launchResult.DebugPort,
+						"extension_loaded", launchResult.ExtensionLoaded)
 				} else {
 					state.State = types.StateFailed
 					state.ErrorMessage = launchResult.Error
+					sentinelDetails = &launchResult // Guardar incluso en caso de error
 				}
 
 			case signals.EventOnboardingFailed:
@@ -188,9 +206,9 @@ func ProfileLifecycleWorkflow(ctx workflow.Context, input types.ProfileLifecycle
 	return nil
 }
 
-// ────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
 // CLI COMMANDS
-// ────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
 
 func init() {
 	core.RegisterCommand("ORCHESTRATION", workflowStartCmd)
@@ -349,7 +367,7 @@ func workflowStatusCmd(c *core.Core) *cobra.Command {
 			}
 
 			// Mostrar estado
-			logger.Info("─────────────────────────────────────")
+			logger.Info("─────────────────────────────────")
 			logger.Info("Profile ID: %s", status.ProfileID)
 			logger.Info("Estado: %s", status.State)
 			logger.Info("Última actualización: %s", status.LastUpdate.Format(time.RFC3339))
@@ -357,7 +375,7 @@ func workflowStatusCmd(c *core.Core) *cobra.Command {
 			if status.ErrorMessage != "" {
 				logger.Warning("Error: %s", status.ErrorMessage)
 			}
-			logger.Info("─────────────────────────────────────")
+			logger.Info("─────────────────────────────────")
 		},
 	}
 

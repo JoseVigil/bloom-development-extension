@@ -30,6 +30,25 @@ func BuildCommands(c *Core, root *cobra.Command) {
 			cmd.Annotations = make(map[string]string)
 		}
 		cmd.Annotations["category"] = registered.Category
+		
+		// Anotar subcomandos con la misma categoría
+		annotateSubcommands(cmd, registered.Category)
+		
 		root.AddCommand(cmd)
+	}
+}
+
+// annotateSubcommands anota recursivamente los subcomandos con la categoría del padre
+func annotateSubcommands(cmd *cobra.Command, category string) {
+	for _, subcmd := range cmd.Commands() {
+		if subcmd.Annotations == nil {
+			subcmd.Annotations = make(map[string]string)
+		}
+		subcmd.Annotations["category"] = category
+		
+		// Recursión para subcomandos anidados
+		if subcmd.HasSubCommands() {
+			annotateSubcommands(subcmd, category)
+		}
 	}
 }

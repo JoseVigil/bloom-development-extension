@@ -6,11 +6,11 @@ import "time"
 type ProfileState string
 
 const (
-	StateIdle      ProfileState = "IDLE"
+	StateIdle       ProfileState = "IDLE"
 	StateOnboarding ProfileState = "ONBOARDING"
-	StateReady     ProfileState = "READY"
-	StateDegraded  ProfileState = "DEGRADED"
-	StateFailed    ProfileState = "FAILED"
+	StateReady      ProfileState = "READY"
+	StateDegraded   ProfileState = "DEGRADED"
+	StateFailed     ProfileState = "FAILED"
 	StateRecovering ProfileState = "RECOVERING"
 )
 
@@ -31,25 +31,33 @@ type ProfileLifecycleInput struct {
 
 // ProfileStatus es el estado retornado por queries
 type ProfileStatus struct {
-	ProfileID     string       `json:"profile_id"`
-	State         ProfileState `json:"state"`
-	LastUpdate    time.Time    `json:"last_update"`
-	ErrorMessage  string       `json:"error_message,omitempty"`
-	SentinelRunning bool       `json:"sentinel_running"`
+	ProfileID       string       `json:"profile_id"`
+	State           ProfileState `json:"state"`
+	LastUpdate      time.Time    `json:"last_update"`
+	ErrorMessage    string       `json:"error_message,omitempty"`
+	SentinelRunning bool         `json:"sentinel_running"`
 }
 
 // SentinelLaunchInput son los parámetros para lanzar Sentinel
 type SentinelLaunchInput struct {
-	ProfileID   string `json:"profile_id"`
-	CommandID   string `json:"command_id"`
-	Environment string `json:"environment"`
+	ProfileID      string `json:"profile_id"`
+	CommandID      string `json:"command_id"`
+	Environment    string `json:"environment"`
+	Mode           string `json:"mode,omitempty"`           // landing, discovery, headless
+	ConfigOverride string `json:"config_override,omitempty"` // JSON string con overrides
 }
 
 // SentinelLaunchResult es el resultado de lanzar Sentinel
+// CRITICAL: Este tipo DEBE coincidir con el COMMAND_RESULT de Sentinel
 type SentinelLaunchResult struct {
-	Success   bool   `json:"success"`
-	ProcessID int    `json:"process_id,omitempty"`
-	Error     string `json:"error,omitempty"`
+	Success         bool                   `json:"success"`
+	ProfileID       string                 `json:"profile_id,omitempty"`
+	LaunchID        string                 `json:"launch_id,omitempty"`        // ← NUEVO: ID único de esta sesión
+	ChromePID       int                    `json:"chrome_pid,omitempty"`       // ← PID del proceso Chrome
+	DebugPort       int                    `json:"debug_port,omitempty"`       // ← Puerto DevTools
+	ExtensionLoaded bool                   `json:"extension_loaded,omitempty"` // ← Estado de extensión
+	EffectiveConfig map[string]interface{} `json:"effective_config,omitempty"` // ← Config aplicada
+	Error           string                 `json:"error,omitempty"`            // ← Mensaje de error si success=false
 }
 
 // SentinelStopInput son los parámetros para detener Sentinel
@@ -80,7 +88,7 @@ type RecoveryFlowInput struct {
 
 // RecoveryFlowResult es el resultado del workflow de recovery
 type RecoveryFlowResult struct {
-	Success      bool   `json:"success"`
+	Success      bool         `json:"success"`
 	NewState     ProfileState `json:"new_state"`
-	ErrorMessage string `json:"error_message,omitempty"`
+	ErrorMessage string       `json:"error_message,omitempty"`
 }

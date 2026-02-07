@@ -218,6 +218,22 @@ func (r *ModernHelpRenderer) printCommandDetail(cmd *cobra.Command) {
 	usage := fmt.Sprintf("nucleus %s", cmd.Use)
 	r.writeln("    " + Dim.Apply("Usage:", r.useColors) + " " + Green.Apply(usage, r.useColors))
 	r.writeln("")
+	
+	// Show subcommands if they exist
+	if cmd.HasSubCommands() {
+		r.writeln("    " + Bold.Apply("Subcommands:", r.useColors))
+		for _, subcmd := range cmd.Commands() {
+			if subcmd.Name() == "help" {
+				continue
+			}
+			subUsage := fmt.Sprintf("nucleus %s %s", cmd.Name(), subcmd.Use)
+			r.writeln(fmt.Sprintf("      %s  %s",
+				Cyan.Apply(r.padRight(subcmd.Name(), 20), r.useColors),
+				Dim.Apply(subcmd.Short, r.useColors)))
+			r.writeln(fmt.Sprintf("        %s", Dim.Apply(subUsage, r.useColors)))
+		}
+		r.writeln("")
+	}
 
 	// Args
 	if args := r.extractArgs(cmd); len(args) > 0 {
@@ -347,7 +363,19 @@ func (r *ModernHelpRenderer) categorizeCommands(root *cobra.Command) map[string]
 			category = "OTHER"
 		}
 
+		// Siempre agregar el comando (incluso si tiene subcomandos)
 		categories[category] = append(categories[category], cmd)
+
+		// Incluir subcomandos recursivamente
+		if cmd.HasSubCommands() {
+			for _, subcmd := range cmd.Commands() {
+				subCategory := subcmd.Annotations["category"]
+				if subCategory == "" {
+					subCategory = category
+				}
+				categories[subCategory] = append(categories[subCategory], subcmd)
+			}
+		}
 	}
 
 	return categories
@@ -449,7 +477,16 @@ func RenderHelpJSON(root *cobra.Command) {
 		if sub.Name() == "help" || sub.Name() == "completion" {
 			continue
 		}
-		fullMap = append(fullMap, parseCommand(sub))
+		
+		// Si tiene subcomandos, solo exportar los subcomandos
+		if sub.HasSubCommands() {
+			for _, subsub := range sub.Commands() {
+				fullMap = append(fullMap, parseCommand(subsub))
+			}
+		} else {
+			// Si no tiene subcomandos, exportar el comando directamente
+			fullMap = append(fullMap, parseCommand(sub))
+		}
 	}
 
 	output, _ := json.MarshalIndent(fullMap, "", "  ")
