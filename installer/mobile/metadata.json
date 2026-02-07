@@ -1,0 +1,8 @@
+
+{
+  "name": "BTIPS Conductor Mobile",
+  "description": "Terminal Soberano del Paladín. Interfaz de autoridad biométrica para el ecosistema Bloom, diseñada para la observación y validación de intents mediante soberanía local.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BTIPS - Bloom Sovereign Identity Terminal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+          --color-bg: #0f0f1e;
+          --color-surface: #1a1a2e;
+          --color-primary: #a855f7;
+          --color-secondary: #ec4899;
+          --color-success: #22c55e;
+          --color-warning: #eab308;
+          --color-error: #ef4444;
+          --color-text: #e2e8f0;
+          --color-text-muted: #94a3b8;
+        }
+        body { 
+          font-family: 'JetBrains Mono', monospace; 
+          background-color: var(--color-bg);
+          color: var(--color-text);
+        }
+        ::-webkit-scrollbar {
+          width: 4px;
+        }
+        ::-webkit-scrollbar-track {
+          background: var(--color-bg);
+        }
+        ::-webkit-scrollbar-thumb {
+          background: #242438;
+          border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+          background: var(--color-primary);
+        }
+        .bloom-gradient-text {
+          background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);
+          -webkit-background-clip: text;
+          background-clip: text;
+          -webkit-text-fill-color: transparent;
+        }
+        .bloom-gradient-bg {
+          background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);
+        }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "react": "https://esm.sh/react@^19.2.4",
+    "@google/genai": "https://esm.sh/@google/genai@^1.38.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body class="bg-[#0f0f1e] text-[#e2e8f0]">
+    <div id="root"></div>
+<script type="module" src="/index.tsx"></script>
+</body>
+</html>
