@@ -51,4 +51,18 @@ Modifiqué: [archivo2.ext]
 [view de archivo2]
 ```
 
+## INVENTARIO OBLIGATORIO
+
+Toda entrega de código DEBE empezar con:
+```
+INVENTARIO:
+- Total archivos: X
+- Nuevos: file1.js, file2.js
+- Modificados: file3.js
+
+[código]
+```
+
+Sin inventario = respuesta inválida.
+
 **FIN. Sin más texto.**
