@@ -117,3 +117,24 @@ installer/temporal/temporal.exe
 
 # Node
 installer/node/node.exe
+
+# ===============================
+# Electron / Native artifacts
+# ===============================
+installer/native/bin/**
+
+# Electron builder outputs
+**/win-unpacked/
+**/*.exe
+**/*.dll
+**/*.pak
+**/*.asar
+**/*.bin
+**/*.node
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
