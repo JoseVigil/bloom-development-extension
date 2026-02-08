@@ -288,6 +288,17 @@ func (r *ModernHelpRenderer) printCommandDetail(cmd *cobra.Command) {
 		r.writeln("")
 	}
 
+	// JSON Response
+	if jsonResp, ok := cmd.Annotations["json_response"]; ok && jsonResp != "" {
+		r.writeln("    " + Bold.Apply("JSON Response:", r.useColors))
+		for _, line := range strings.Split(jsonResp, "\n") {
+			if strings.TrimSpace(line) != "" {
+				r.writeln("      " + Dim.Apply(line, r.useColors))
+			}
+		}
+		r.writeln("")
+	}
+
 	var separator string
 	if r.isRedirected() {
 		separator = strings.Repeat("-", 80)
@@ -495,11 +506,12 @@ func RenderHelpJSON(root *cobra.Command) {
 
 func parseCommand(cmd *cobra.Command) CommandJSON {
 	item := CommandJSON{
-		Name:     cmd.Name(),
-		Use:      cmd.Use,
-		Short:    cmd.Short,
-		Category: cmd.Annotations["category"],
-		Example:  cmd.Example,
+		Name:         cmd.Name(),
+		Use:          cmd.Use,
+		Short:        cmd.Short,
+		Category:     cmd.Annotations["category"],
+		Example:      cmd.Example,
+		JSONResponse: cmd.Annotations["json_response"],
 	}
 
 	// Extract args
@@ -536,13 +548,14 @@ func parseCommand(cmd *cobra.Command) CommandJSON {
 
 // JSON structures
 type CommandJSON struct {
-	Name     string        `json:"name"`
-	Use      string        `json:"use"`
-	Short    string        `json:"short"`
-	Category string        `json:"category,omitempty"`
-	Args     []ArgJSON     `json:"args,omitempty"`
-	Options  []FlagJSON    `json:"options,omitempty"`
-	Example  string        `json:"example,omitempty"`
+	Name         string     `json:"name"`
+	Use          string     `json:"use"`
+	Short        string     `json:"short"`
+	Category     string     `json:"category,omitempty"`
+	Args         []ArgJSON  `json:"args,omitempty"`
+	Options      []FlagJSON `json:"options,omitempty"`
+	Example      string     `json:"example,omitempty"`
+	JSONResponse string     `json:"json_response,omitempty"`
 }
 
 type ArgJSON struct {

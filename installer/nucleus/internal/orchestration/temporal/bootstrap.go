@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -85,7 +84,7 @@ func (tp *TemporalProcess) Start(ctx context.Context, logger *core.Logger) error
 		"server", "start-dev",
 		"--db-filename", tp.dbPath,
 		"--ui-port", "8233",
-		"--port", "7233",
+		"--http-port", "7233",
 		"--log-format", "pretty",
 		"--log-level", "info")
 	
@@ -146,7 +145,7 @@ func (tp *TemporalProcess) waitForReady(ctx context.Context, logger *core.Logger
 			attemptCount++
 			
 			// Health check 1: gRPC endpoint (puerto 7233)
-			grpcReady := tp.checkGRPCHealth()
+			grpcReady := tp.checkGRPCHealth(httpClient)
 			
 			// Health check 2: UI endpoint (puerto 8233)
 			uiReady := tp.checkUIHealth(httpClient)
@@ -179,14 +178,17 @@ func (tp *TemporalProcess) waitForReady(ctx context.Context, logger *core.Logger
 	}
 }
 
-// checkGRPCHealth verifica que el puerto gRPC esté abierto
-func (tp *TemporalProcess) checkGRPCHealth() bool {
-	conn, err := net.DialTimeout("tcp", "localhost:7233", 1*time.Second)
+// checkGRPCHealth verifica el endpoint gRPC de Temporal
+func (tp *TemporalProcess) checkGRPCHealth(client *http.Client) bool {
+	// Temporal expone un endpoint de salud en el puerto HTTP (7233)
+	resp, err := client.Get("http://localhost:7233/")
 	if err != nil {
 		return false
 	}
-	conn.Close()
-	return true
+	defer resp.Body.Close()
+	
+	// Cualquier respuesta (incluso 404) indica que el servidor está vivo
+	return resp.StatusCode > 0
 }
 
 // checkUIHealth verifica el endpoint de la UI de Temporal
@@ -265,14 +267,14 @@ func (tp *TemporalProcess) Stop(logger *core.Logger) error {
 		case err := <-done:
 			if err != nil {
 				logger.Info("Temporal process exited with: %v", err)
-			} else {
-				logger.Success("Temporal process stopped cleanly")
 			}
 		}
 	}
 
-	// Cerrar archivo de log
 	if tp.logFile != nil {
+		finalLog := fmt.Sprintf("\n[%s] Temporal Server stopped\n", time.Now().Format("2006-01-02 15:04:05"))
+		tp.logFile.WriteString(finalLog)
+		tp.logFile.Sync()
 		tp.logFile.Close()
 	}
 
@@ -280,229 +282,169 @@ func (tp *TemporalProcess) Stop(logger *core.Logger) error {
 	return nil
 }
 
-// getTemporalExecutablePath devuelve la ruta del ejecutable temporal según el SO
+// IsRunning retorna si el proceso está activo
+func (tp *TemporalProcess) IsRunning() bool {
+	return tp.isRunning
+}
+
+// getTemporalExecutablePath determina la ruta al ejecutable temporal
 func getTemporalExecutablePath() (string, error) {
 	var temporalPath string
 	
 	switch runtime.GOOS {
 	case "windows":
-		temporalPath = filepath.Join(os.Getenv("LOCALAPPDATA"), "BloomNucleus", "bin", "temporal", "temporal.exe")
+		localAppData := os.Getenv("LOCALAPPDATA")
+		if localAppData == "" {
+			userProfile := os.Getenv("USERPROFILE")
+			if userProfile == "" {
+				return "", fmt.Errorf("no se puede determinar LOCALAPPDATA ni USERPROFILE")
+			}
+			localAppData = filepath.Join(userProfile, "AppData", "Local")
+		}
+		temporalPath = filepath.Join(localAppData, "BloomNucleus", "bin", "temporal", "temporal.exe")
+		
 	case "darwin":
-		temporalPath = filepath.Join(os.Getenv("HOME"), "Library", "Application Support", "BloomNucleus", "bin", "temporal", "temporal")
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("no se puede determinar el directorio home: %w", err)
+		}
+		temporalPath = filepath.Join(homeDir, "Library", "Application Support", "BloomNucleus", "bin", "temporal", "temporal")
+		
 	case "linux":
-		temporalPath = filepath.Join(os.Getenv("HOME"), ".local", "share", "BloomNucleus", "bin", "temporal", "temporal")
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("no se puede determinar el directorio home: %w", err)
+		}
+		temporalPath = filepath.Join(homeDir, ".local", "share", "BloomNucleus", "bin", "temporal", "temporal")
+		
 	default:
-		return "", fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
+		return "", fmt.Errorf("sistema operativo no soportado: %s", runtime.GOOS)
 	}
-
+	
+	// Verificar que el ejecutable existe
+	if _, err := os.Stat(temporalPath); err != nil {
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("ejecutable temporal no encontrado en: %s", temporalPath)
+		}
+		return "", fmt.Errorf("error al verificar ejecutable temporal: %w", err)
+	}
+	
 	return temporalPath, nil
 }
 
-// checkTemporalHealth hace un health check rápido de Temporal
-func checkTemporalHealth() (operational bool, state string, healthChecks map[string]bool) {
-	healthChecks = map[string]bool{
+// checkTemporalHealth verifica si Temporal está operativo
+func checkTemporalHealth() (bool, string, map[string]bool) {
+	client := &http.Client{Timeout: 2 * time.Second}
+	
+	healthChecks := map[string]bool{
 		"grpc": false,
 		"ui":   false,
 	}
-
-	// Check gRPC port
-	conn, err := net.DialTimeout("tcp", "localhost:7233", 2*time.Second)
-	if err == nil {
-		conn.Close()
-		healthChecks["grpc"] = true
-	}
-
-	// Check UI port
-	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get("http://localhost:8233/")
-	if err == nil {
+	
+	// Check gRPC
+	if resp, err := client.Get("http://localhost:7233/"); err == nil {
 		resp.Body.Close()
-		if resp.StatusCode == 200 {
-			healthChecks["ui"] = true
-		}
+		healthChecks["grpc"] = resp.StatusCode > 0
 	}
-
-	// Determinar estado
-	if healthChecks["grpc"] && healthChecks["ui"] {
+	
+	// Check UI
+	if resp, err := client.Get("http://localhost:8233/"); err == nil {
+		resp.Body.Close()
+		healthChecks["ui"] = resp.StatusCode == 200
+	}
+	
+	// Temporal está operativo si al menos gRPC responde
+	if healthChecks["grpc"] {
 		return true, "RUNNING", healthChecks
-	} else if healthChecks["grpc"] {
-		return true, "RUNNING (UI not ready)", healthChecks
-	} else {
-		return false, "STOPPED", healthChecks
 	}
+	
+	return false, "STOPPED", healthChecks
 }
 
-// Variable global para mantener referencia al proceso Temporal
+// ────────────────────────────────────────────────────────────────
+// CLI COMMANDS
+// ────────────────────────────────────────────────────────────────
+
 var globalTemporalProcess *TemporalProcess
 
 func init() {
-	core.RegisterCommand("ORCHESTRATION", BuildTemporalCommands)
-}
-
-// BuildTemporalCommands crea todos los subcomandos de Temporal
-func BuildTemporalCommands(c *core.Core) *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "temporal",
-		Short: "Manage Temporal server lifecycle",
-		Long:  "Start, stop, restart, and monitor the embedded Temporal server for workflow orchestration",
-		Example: `    nucleus temporal start
-    nucleus temporal stop
-    nucleus temporal status
-    nucleus temporal diagnostics`,
-	}
-
-	cmd.AddCommand(temporalStartCmd(c))
-	cmd.AddCommand(temporalStopCmd(c))
-	cmd.AddCommand(temporalStatusCmd(c))
-	cmd.AddCommand(temporalDiagnosticsCmd(c))
-
-	return cmd
+	core.RegisterCommand("ORCHESTRATION", temporalStartCmd)
+	core.RegisterCommand("ORCHESTRATION", temporalStopCmd)
+	core.RegisterCommand("ORCHESTRATION", temporalStatusCmd)
+	core.RegisterCommand("ORCHESTRATION", temporalDiagnosticsCmd)
 }
 
 func temporalStartCmd(c *core.Core) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "start",
-		Short: "Start the Temporal server",
-		Long:  "Launch the embedded Temporal server in the background",
-		Example: `    nucleus temporal start
-    nucleus --json temporal start
-
-JSON Output:
-    {
-      "status": "started",
-      "pid": 22048,
-      "grpc_url": "localhost:7233",
-      "ui_url": "http://localhost:8233",
-      "grpc_port": 7233,
-      "ui_port": 8233
-    }`,
+		Use:   "temporal start",
+		Short: "Inicia el servidor Temporal local",
+		Long:  "Levanta el proceso temporal.exe en modo development con UI en puerto 8233",
 		Run: func(cmd *cobra.Command, args []string) {
-			// Detectar --json PRIMERO
-			jsonOutput := false
-			if rootCmd := cmd.Root(); rootCmd != nil {
-				if flag := rootCmd.PersistentFlags().Lookup("json"); flag != nil {
-					jsonOutput = flag.Value.String() == "true"
-				}
-			}
-			if !jsonOutput {
-				for _, arg := range os.Args {
-					if arg == "--json" {
-						jsonOutput = true
-						break
-					}
-				}
-			}
-
-			// Inicializar logger CON silentMode desde el inicio
-			logger, err := core.InitLogger(&c.Paths, "ORCHESTRATION", jsonOutput)
+			// Inicializar logger PRIMERO
+			logger, err := core.InitLogger(&c.Paths, "ORCHESTRATION", false)
 			if err != nil {
-				if !jsonOutput {
-					fmt.Fprintf(os.Stderr, "[ERROR] Failed to initialize logger: %v\n", err)
-				}
+				fmt.Fprintf(os.Stderr, "[ERROR] Fallo al inicializar logger: %v\n", err)
 				os.Exit(1)
 			}
-			defer logger.Close()
+			defer func() {
+				logger.Info("Closing logger...")
+				logger.Close()
+			}()
 
+			logger.Info("=== TEMPORAL START SEQUENCE ===")
 			logger.Info("Iniciando Temporal Server...")
+			logger.Info("Logs directory: %s", c.Paths.Logs)
 
-			if globalTemporalProcess != nil && globalTemporalProcess.isRunning {
-				if jsonOutput {
-					output, _ := json.MarshalIndent(map[string]interface{}{
-						"status": "already_running",
-						"error":  "Temporal is already running",
-					}, "", "  ")
-					fmt.Println(string(output))
-				} else {
-					logger.Warning("Temporal ya está corriendo")
-				}
-				return
-			}
-
-			temporalPath, err := getTemporalExecutablePath()
+			// Determinar la ruta al ejecutable temporal
+			temporalExePath, err := getTemporalExecutablePath()
 			if err != nil {
-				if jsonOutput {
-					output, _ := json.MarshalIndent(map[string]interface{}{
-						"status": "error",
-						"error":  err.Error(),
-					}, "", "  ")
-					fmt.Println(string(output))
-				} else {
-					logger.Error("Error al obtener ruta de Temporal: %v", err)
-				}
+				logger.Error("No se pudo localizar temporal.exe: %v", err)
+				logger.Info("Ruta esperada (Windows): %%LOCALAPPDATA%%\\BloomNucleus\\bin\\temporal\\temporal.exe")
+				logger.Info("Ruta esperada (macOS): ~/Library/Application Support/BloomNucleus/bin/temporal/temporal")
+				logger.Info("Ruta esperada (Linux): ~/.local/share/BloomNucleus/bin/temporal/temporal")
 				os.Exit(1)
 			}
 
-			if _, err := os.Stat(temporalPath); os.IsNotExist(err) {
-				if jsonOutput {
-					output, _ := json.MarshalIndent(map[string]interface{}{
-						"status": "error",
-						"error":  "Temporal executable not found",
-						"path":   temporalPath,
-					}, "", "  ")
-					fmt.Println(string(output))
-				} else {
-					logger.Error("Temporal executable not found at: %s", temporalPath)
-					logger.Info("Please run 'nucleus setup' to install Temporal")
-				}
-				os.Exit(1)
+			logger.Info("Ejecutable Temporal encontrado: %s", temporalExePath)
+
+			// Verificar que el ejecutable es válido
+			if info, err := os.Stat(temporalExePath); err == nil {
+				logger.Info("Executable size: %d bytes, mode: %s", info.Size(), info.Mode())
 			}
 
-			globalTemporalProcess = NewTemporalProcess(c.Paths.Logs, temporalPath)
+			// Crear proceso Temporal con la ruta completa
+			globalTemporalProcess = NewTemporalProcess(c.Paths.Logs, temporalExePath)
 
+			// Iniciar en contexto con cancelación
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			if err := globalTemporalProcess.Start(ctx, logger); err != nil {
-				if jsonOutput {
-					output, _ := json.MarshalIndent(map[string]interface{}{
-						"status": "error",
-						"error":  err.Error(),
-					}, "", "  ")
-					fmt.Println(string(output))
-				} else {
-					logger.Error("Failed to start Temporal: %v", err)
-				}
-				os.Exit(1)
-			}
-
-			// Modo JSON: retornar inmediatamente con info
-			if jsonOutput {
-				output, _ := json.MarshalIndent(map[string]interface{}{
-					"status":    "started",
-					"pid":       globalTemporalProcess.cmd.Process.Pid,
-					"grpc_url":  "localhost:7233",
-					"ui_url":    "http://localhost:8233",
-					"grpc_port": 7233,
-					"ui_port":   8233,
-				}, "", "  ")
-				fmt.Println(string(output))
-				return
-			}
-
-			// Modo interactivo: esperar señal
-			logger.Success("Temporal Server started successfully")
-			logger.Info("gRPC endpoint: localhost:7233")
-			logger.Info("Web UI: http://localhost:8233")
-			logger.Info("Press Ctrl+C to stop")
-
+			// Configurar señales para shutdown graceful
 			sigChan := make(chan os.Signal, 1)
-			signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+			signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-			go func() {
-				<-sigChan
-				logger.Info("Received interrupt signal, stopping Temporal...")
-				cancel()
-			}()
-
-			<-ctx.Done()
-
-			logger.Info("Shutting down Temporal Server...")
-			if err := globalTemporalProcess.Stop(logger); err != nil {
-				logger.Error("Error stopping Temporal: %v", err)
+			// Iniciar proceso (pasamos el logger)
+			logger.Info("Starting Temporal process...")
+			if err := globalTemporalProcess.Start(ctx, logger); err != nil {
+				logger.Error("Fallo al iniciar Temporal: %v", err)
 				os.Exit(1)
 			}
 
-			logger.Success("Temporal Server stopped")
+			logger.Success("=== TEMPORAL READY ===")
+			logger.Info("UI disponible en: http://localhost:8233")
+			logger.Info("gRPC endpoint: localhost:7233")
+			logger.Info("Presione Ctrl+C para detener")
+
+			// Esperar señal de terminación
+			<-sigChan
+			logger.Info("=== SHUTTING DOWN ===")
+			logger.Info("Deteniendo Temporal Server...")
+
+			if err := globalTemporalProcess.Stop(logger); err != nil {
+				logger.Error("Error al detener Temporal: %v", err)
+			} else {
+				logger.Success("Temporal Server detenido exitosamente")
+			}
 		},
 	}
 
@@ -511,56 +453,28 @@ JSON Output:
 
 func temporalStopCmd(c *core.Core) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "stop",
-		Short: "Stop the Temporal server",
-		Long:  "Gracefully shutdown the running Temporal server",
-		Example: `    nucleus temporal stop
-    nucleus --json temporal stop
-
-JSON Output:
-    {
-      "status": "stopped",
-      "message": "Temporal server stopped successfully"
-    }`,
+		Use:   "temporal stop",
+		Short: "Detiene el servidor Temporal local",
+		Long:  "Envía señal de terminación al proceso temporal.exe",
 		Run: func(cmd *cobra.Command, args []string) {
-			// Detectar --json PRIMERO
-			jsonOutput := false
-			if rootCmd := cmd.Root(); rootCmd != nil {
-				if flag := rootCmd.PersistentFlags().Lookup("json"); flag != nil {
-					jsonOutput = flag.Value.String() == "true"
-				}
-			}
-			if !jsonOutput {
-				for _, arg := range os.Args {
-					if arg == "--json" {
-						jsonOutput = true
-						break
-					}
-				}
-			}
-
-			// Inicializar logger CON silentMode desde el inicio
-			logger, err := core.InitLogger(&c.Paths, "ORCHESTRATION", jsonOutput)
+			logger, err := core.InitLogger(&c.Paths, "ORCHESTRATION", false)
 			if err != nil {
-				if !jsonOutput {
-					fmt.Fprintf(os.Stderr, "[ERROR] Failed to initialize logger: %v\n", err)
-				}
+				fmt.Fprintf(os.Stderr, "[ERROR] Fallo al inicializar logger: %v\n", err)
 				os.Exit(1)
 			}
 			defer logger.Close()
 
-			if globalTemporalProcess == nil || !globalTemporalProcess.isRunning {
-				operational, _, _ := checkTemporalHealth()
-				if !operational {
-					if jsonOutput {
-						output, _ := json.MarshalIndent(map[string]interface{}{
-							"status": "not_running",
-							"message": "Temporal is not running",
-						}, "", "  ")
-						fmt.Println(string(output))
-					} else {
-						logger.Info("Temporal no está corriendo")
-					}
+			if globalTemporalProcess == nil {
+				logger.Warning("No hay proceso Temporal activo en esta sesión")
+				logger.Info("Verificando si Temporal está corriendo...")
+				
+				operational, state, _ := checkTemporalHealth()
+				if operational {
+					logger.Warning("Temporal está corriendo pero no fue iniciado por esta sesión de nucleus")
+					logger.Info("Estado: %s", state)
+					logger.Info("Puede que necesites detenerlo manualmente o desde otra terminal")
+				} else {
+					logger.Info("Temporal no está corriendo")
 				}
 				return
 			}
@@ -568,27 +482,11 @@ JSON Output:
 			logger.Info("Deteniendo Temporal Server...")
 			
 			if err := globalTemporalProcess.Stop(logger); err != nil {
-				if jsonOutput {
-					output, _ := json.MarshalIndent(map[string]interface{}{
-						"status": "error",
-						"error": err.Error(),
-					}, "", "  ")
-					fmt.Println(string(output))
-				} else {
-					logger.Error("Error al detener Temporal: %v", err)
-				}
+				logger.Error("Error al detener Temporal: %v", err)
 				os.Exit(1)
 			}
 
-			if jsonOutput {
-				output, _ := json.MarshalIndent(map[string]interface{}{
-					"status": "stopped",
-					"message": "Temporal server stopped successfully",
-				}, "", "  ")
-				fmt.Println(string(output))
-			} else {
-				logger.Success("Temporal Server detenido exitosamente")
-			}
+			logger.Success("Temporal Server detenido exitosamente")
 			globalTemporalProcess = nil
 		},
 	}
@@ -598,66 +496,51 @@ JSON Output:
 
 func temporalStatusCmd(c *core.Core) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "status",
-		Short: "Check Temporal server status",
-		Long:  "Query if the Temporal server is operational via HTTP health check",
+		Use:   "temporal status",
+		Short: "Verifica el estado del servidor Temporal",
+		Long:  "Consulta si el servidor Temporal está operativo mediante health check HTTP",
+		Annotations: map[string]string{
+			"category": "ORCHESTRATION",
+			"json_response": `{
+  "temporal": {
+    "operational": true,
+    "state": "RUNNING",
+    "ui_port": 8233,
+    "grpc_port": 7233,
+    "ui_url": "http://localhost:8233",
+    "grpc_url": "localhost:7233",
+    "health_checks": {
+      "grpc": true,
+      "ui": true
+    }
+  }
+}`,
+		},
 		Example: `    nucleus temporal status
-    nucleus --json temporal status
-
-JSON Output:
-    {
-      "temporal": {
-        "operational": true,
-        "state": "RUNNING",
-        "ui_port": 8233,
-        "grpc_port": 7233,
-        "ui_url": "http://localhost:8233",
-        "grpc_url": "localhost:7233",
-        "health_checks": {
-          "grpc": true,
-          "ui": true
-        }
-      }
-    }`,
+    nucleus --json temporal status`,
 		Run: func(cmd *cobra.Command, args []string) {
-			// Detectar --json PRIMERO
+			// Detectar si se solicitó output JSON
 			jsonOutput := false
-			if rootCmd := cmd.Root(); rootCmd != nil {
-				if flag := rootCmd.PersistentFlags().Lookup("json"); flag != nil {
-					jsonOutput = flag.Value.String() == "true"
+			if cmd.Flag("json") != nil && cmd.Flag("json").Changed {
+				jsonOutput = true
+			}
+			for _, arg := range os.Args {
+				if arg == "--json" {
+					jsonOutput = true
+					break
 				}
 			}
-			if !jsonOutput {
-				for _, arg := range os.Args {
-					if arg == "--json" {
-						jsonOutput = true
-						break
-					}
-				}
-			}
-
-			// Inicializar logger CON silentMode desde el inicio
-			logger, err := core.InitLogger(&c.Paths, "ORCHESTRATION", jsonOutput)
-			if err != nil {
-				if !jsonOutput {
-					fmt.Fprintf(os.Stderr, "[ERROR] Failed to initialize logger: %v\n", err)
-				}
-				os.Exit(1)
-			}
-			defer logger.Close()
-
-			logger.Info("Checking Temporal Server status...")
 
 			operational, state, healthChecks := checkTemporalHealth()
 
 			status := map[string]interface{}{
 				"temporal": map[string]interface{}{
-					"operational":   operational,
-					"state":         state,
-					"ui_port":       8233,
-					"grpc_port":     7233,
-					"ui_url":        "http://localhost:8233",
-					"grpc_url":      "localhost:7233",
+					"operational": operational,
+					"state":       state,
+					"ui_port":     8233,
+					"grpc_port":   7233,
+					"ui_url":      "http://localhost:8233",
+					"grpc_url":    "localhost:7233",
 					"health_checks": healthChecks,
 				},
 			}
@@ -666,6 +549,13 @@ JSON Output:
 				output, _ := json.MarshalIndent(status, "", "  ")
 				fmt.Println(string(output))
 			} else {
+				logger, err := core.InitLogger(&c.Paths, "ORCHESTRATION", false)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "[ERROR] Fallo al inicializar logger: %v\n", err)
+					os.Exit(1)
+				}
+				defer logger.Close()
+
 				logger.Info("Verificando estado de Temporal Server...")
 
 				if operational {
@@ -680,12 +570,6 @@ JSON Output:
 				}
 			}
 
-			if operational {
-				logger.Success("Status check completed - Temporal is operational")
-			} else {
-				logger.Warning("Status check completed - Temporal is not running")
-			}
-
 			if !operational {
 				os.Exit(1)
 			}
@@ -697,65 +581,46 @@ JSON Output:
 
 func temporalDiagnosticsCmd(c *core.Core) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "diagnostics",
+		Use:   "temporal diagnostics",
 		Short: "Run comprehensive Temporal diagnostics",
-		Long:  "Check Temporal installation, ports, health, logs, database, and telemetry",
+		Long:  "Checks Temporal installation, ports, health, logs, database, and telemetry",
+		Annotations: map[string]string{
+			"category": "ORCHESTRATION",
+			"json_response": `{
+  "executable": {
+    "path": "C:\\Users\\user\\AppData\\Local\\BloomNucleus\\bin\\temporal\\temporal.exe",
+    "exists": true,
+    "size": 123456789
+  },
+  "health": {
+    "operational": true,
+    "state": "RUNNING",
+    "grpc_responding": true,
+    "ui_responding": true
+  },
+  "database": {
+    "path": "C:\\Users\\user\\AppData\\Local\\BloomNucleus\\logs\\temporal\\temporal.db",
+    "exists": true,
+    "size": 98304
+  },
+  "overall_status": "HEALTHY"
+}`,
+		},
 		Example: `    nucleus temporal diagnostics
-    nucleus --json temporal diagnostics
-
-JSON Output:
-    {
-      "executable": {
-        "path": "C:\\Users\\user\\AppData\\Local\\BloomNucleus\\bin\\temporal\\temporal.exe",
-        "exists": true,
-        "size": 52428800
-      },
-      "health": {
-        "operational": true,
-        "state": "RUNNING",
-        "grpc_responding": true,
-        "ui_responding": true
-      },
-      "database": {
-        "path": "C:\\Users\\user\\AppData\\Local\\BloomNucleus\\logs\\temporal\\temporal.db",
-        "exists": true,
-        "size": 204800
-      },
-      "overall_status": "HEALTHY"
-    }`,
+    nucleus --json temporal diagnostics`,
 		Run: func(cmd *cobra.Command, args []string) {
-			// Detectar --json PRIMERO
 			jsonOutput := false
-			if rootCmd := cmd.Root(); rootCmd != nil {
-				if flag := rootCmd.PersistentFlags().Lookup("json"); flag != nil {
-					jsonOutput = flag.Value.String() == "true"
+			for _, arg := range os.Args {
+				if arg == "--json" {
+					jsonOutput = true
+					break
 				}
 			}
-			if !jsonOutput {
-				for _, arg := range os.Args {
-					if arg == "--json" {
-						jsonOutput = true
-						break
-					}
-				}
-			}
-
-			// Inicializar logger CON silentMode desde el inicio
-			logger, err := core.InitLogger(&c.Paths, "ORCHESTRATION", jsonOutput)
-			if err != nil {
-				if !jsonOutput {
-					fmt.Fprintf(os.Stderr, "[ERROR] Failed to initialize logger: %v\n", err)
-				}
-				os.Exit(1)
-			}
-			defer logger.Close()
-
-			logger.Info("Running Temporal diagnostics...")
 
 			if jsonOutput {
-				runDiagnosticsJSON(c, logger)
+				runDiagnosticsJSON(c)
 			} else {
-				runDiagnosticsHuman(c, logger)
+				runDiagnosticsHuman(c)
 			}
 		},
 	}
@@ -763,11 +628,9 @@ JSON Output:
 	return cmd
 }
 
-func runDiagnosticsJSON(c *core.Core, logger *core.Logger) {
+func runDiagnosticsJSON(c *core.Core) {
 	result := map[string]interface{}{}
 
-	// 1. Executable
-	logger.Info("Checking Temporal executable...")
 	temporalPath, _ := getTemporalExecutablePath()
 	execInfo := map[string]interface{}{
 		"path":   temporalPath,
@@ -776,14 +639,9 @@ func runDiagnosticsJSON(c *core.Core, logger *core.Logger) {
 	if info, err := os.Stat(temporalPath); err == nil {
 		execInfo["exists"] = true
 		execInfo["size"] = info.Size()
-		logger.Info("Temporal executable found: %s (%d bytes)", temporalPath, info.Size())
-	} else {
-		logger.Warning("Temporal executable NOT FOUND: %s", temporalPath)
 	}
 	result["executable"] = execInfo
 
-	// 2. Health
-	logger.Info("Checking Temporal health...")
 	operational, state, healthChecks := checkTemporalHealth()
 	result["health"] = map[string]interface{}{
 		"operational":     operational,
@@ -791,10 +649,7 @@ func runDiagnosticsJSON(c *core.Core, logger *core.Logger) {
 		"grpc_responding": healthChecks["grpc"],
 		"ui_responding":   healthChecks["ui"],
 	}
-	logger.Info("Health check complete - State: %s, Operational: %v", state, operational)
 
-	// 3. Database
-	logger.Info("Checking database...")
 	dbPath := filepath.Join(c.Paths.Logs, "temporal", "temporal.db")
 	dbInfo := map[string]interface{}{
 		"path":   dbPath,
@@ -803,25 +658,16 @@ func runDiagnosticsJSON(c *core.Core, logger *core.Logger) {
 	if info, err := os.Stat(dbPath); err == nil {
 		dbInfo["exists"] = true
 		dbInfo["size"] = info.Size()
-		logger.Info("Database found: %s (%d bytes)", dbPath, info.Size())
-	} else {
-		logger.Info("Database not found: %s", dbPath)
 	}
 	result["database"] = dbInfo
 
-	// Overall status
 	if execInfo["exists"].(bool) && operational {
 		result["overall_status"] = "HEALTHY"
-		logger.Success("Overall status: HEALTHY")
 	} else if execInfo["exists"].(bool) {
 		result["overall_status"] = "INSTALLED_NOT_RUNNING"
-		logger.Warning("Overall status: INSTALLED_NOT_RUNNING")
 	} else {
 		result["overall_status"] = "NOT_INSTALLED"
-		logger.Error("Overall status: NOT_INSTALLED")
 	}
-
-	logger.Info("Diagnostics complete")
 
 	output, _ := json.MarshalIndent(result, "", "  ")
 	fmt.Println(string(output))
@@ -831,10 +677,16 @@ func runDiagnosticsJSON(c *core.Core, logger *core.Logger) {
 	}
 }
 
-func runDiagnosticsHuman(c *core.Core, logger *core.Logger) {
+func runDiagnosticsHuman(c *core.Core) {
+	logger, err := core.InitLogger(&c.Paths, "ORCHESTRATION", false)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[ERROR] Failed to initialize logger: %v\n", err)
+		os.Exit(1)
+	}
+	defer logger.Close()
+
 	logger.Info("=== TEMPORAL DIAGNOSTICS ===")
 
-	// 1. Temporal Executable
 	logger.Info("[1] Temporal Executable")
 	temporalPath, _ := getTemporalExecutablePath()
 	if info, err := os.Stat(temporalPath); err == nil {
@@ -844,7 +696,6 @@ func runDiagnosticsHuman(c *core.Core, logger *core.Logger) {
 		logger.Error("  NOT FOUND: %s", temporalPath)
 	}
 
-	// 2. Health
 	logger.Info("[2] Temporal Health")
 	operational, state, healthChecks := checkTemporalHealth()
 	if operational {
@@ -856,7 +707,6 @@ func runDiagnosticsHuman(c *core.Core, logger *core.Logger) {
 		logger.Info("  Use 'nucleus temporal start' to start")
 	}
 
-	// 3. Database
 	logger.Info("[3] Database")
 	dbPath := filepath.Join(c.Paths.Logs, "temporal", "temporal.db")
 	if info, err := os.Stat(dbPath); err == nil {
@@ -866,17 +716,16 @@ func runDiagnosticsHuman(c *core.Core, logger *core.Logger) {
 		logger.Info("  Database not found (will be created on first run)")
 	}
 
-	// 4. Logs
 	logger.Info("[4] Logs")
 	nucleusLogs := filepath.Join(c.Paths.Logs, "nucleus")
 	temporalLogs := filepath.Join(c.Paths.Logs, "temporal")
-
+	
 	if _, err := os.Stat(nucleusLogs); err == nil {
 		logger.Success("  Nucleus logs: %s", nucleusLogs)
 	} else {
 		logger.Warning("  Nucleus logs NOT FOUND: %s", nucleusLogs)
 	}
-
+	
 	if _, err := os.Stat(temporalLogs); err == nil {
 		logger.Success("  Temporal logs: %s", temporalLogs)
 	} else {
