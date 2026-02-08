@@ -83,9 +83,9 @@ func (wm *WorkerManager) StopAll() {
 	}
 }
 
-// ────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────
 // CLI COMMANDS
-// ────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────
 
 func init() {
 	core.RegisterCommand("ORCHESTRATION", workerStartCmd)
@@ -99,7 +99,7 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 		Short: "Inicia el worker de Temporal para procesar workflows",
 		Long:  "Levanta un worker que escucha en la task queue y ejecuta workflows y activities registrados",
 		Run: func(cmd *cobra.Command, args []string) {
-			logger, err := core.InitLogger(&c.Paths, "ORCHESTRATION")
+			logger, err := core.InitLogger(&c.Paths, "ORCHESTRATION", false)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "[ERROR] Fallo al inicializar logger: %v\n", err)
 				os.Exit(1)

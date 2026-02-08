@@ -70,7 +70,19 @@ This command abstracts Sentinel complexity and exposes a clean interface.`,
 		Example: `  nucleus synapse launch profile_001
   nucleus synapse launch profile_001 --email test@mail.com --service google
   nucleus synapse launch profile_001 --mode discovery --save
-  nucleus --json synapse launch profile_001 --config launch.json`,
+  nucleus --json synapse launch profile_001 --config launch.json
+
+JSON Output:
+  {
+    "success": true,
+    "profile_id": "profile_001",
+    "launch_id": "launch_abc123",
+    "chrome_pid": 9876,
+    "debug_port": 9222,
+    "extension_loaded": true,
+    "state": "RUNNING",
+    "timestamp": 1707418080
+  }`,
 		Run: func(cmd *cobra.Command, args []string) {
 			profileID := ""
 			if len(args) > 0 {
@@ -78,7 +90,7 @@ This command abstracts Sentinel complexity and exposes a clean interface.`,
 			}
 
 			// Initialize logger for orchestration
-			logger, err := core.InitLogger(&c.Paths, "orchestration")
+			logger, err := core.InitLogger(&c.Paths, "orchestration", false)
 			if err != nil {
 				emitError(c, "nucleus", "synapse launch", fmt.Sprintf("Failed to initialize logger: %v", err))
 				os.Exit(1)
@@ -169,8 +181,16 @@ This command executes a Temporal workflow that:
 3. Verifies port availability (11434)
 4. Returns process ID and status`,
 		Args: cobra.NoArgs,
-		Example: `  nucleus --json synapse start-ollama
-  nucleus synapse start-ollama --simulation`,
+		Example: `  nucleus synapse start-ollama
+  nucleus --json synapse start-ollama --simulation
+
+JSON Output:
+  {
+    "success": true,
+    "pid": 12345,
+    "port": 11434,
+    "state": "RUNNING"
+  }`,
 		Run: func(cmd *cobra.Command, args []string) {
 			ctx := context.Background()
 			result, err := executeStartOllamaWorkflow(ctx, c, simulation)
@@ -220,8 +240,16 @@ Returns:
 - Master profile activation status
 - Overall health state`,
 		Args: cobra.NoArgs,
-		Example: `  nucleus --json synapse vault-status
-  nucleus synapse vault-status`,
+		Example: `  nucleus synapse vault-status
+  nucleus --json synapse vault-status
+
+JSON Output:
+  {
+    "success": true,
+    "vault_state": "UNLOCKED",
+    "master_profile_active": true,
+    "state": "HEALTHY"
+  }`,
 		Run: func(cmd *cobra.Command, args []string) {
 			ctx := context.Background()
 			result, err := executeVaultStatusWorkflow(ctx, c)
@@ -266,16 +294,25 @@ Returns:
 func newShutdownAllCommand(c *core.Core) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "shutdown-all",
-		Short: "Shutdown all orchestrated services",
-		Long: `Gracefully shutdown all services managed by Nucleus orchestration.
-
-Services shutdown include:
+		Short: "Gracefully shutdown all orchestrated services",
+		Long: `Shutdown all services managed by Nucleus/Synapse orchestration:
+- Browser instances
 - Ollama AI service
 - Temporal workflows (if applicable)
 - Other orchestrated components`,
 		Args: cobra.NoArgs,
-		Example: `  nucleus --json synapse shutdown-all
-  nucleus synapse shutdown-all`,
+		Example: `  nucleus synapse shutdown-all
+  nucleus --json synapse shutdown-all
+
+JSON Output:
+  {
+    "success": true,
+    "services_shutdown": [
+      "browser_instances",
+      "ollama_service",
+      "temporal_workflows"
+    ]
+  }`,
 		Run: func(cmd *cobra.Command, args []string) {
 			ctx := context.Background()
 			result, err := executeShutdownAllWorkflow(ctx, c)

@@ -252,9 +252,9 @@ func (s *AlfredServer) EmitSecurityBreach(details string) {
 	s.broadcast <- msg
 }
 
-// ────────────────────────────────────────────────
+// ────────────────────────────────────────────────────
 // CLI: nucleus alfred start
-// ────────────────────────────────────────────────
+// ────────────────────────────────────────────────────
 
 func init() {
 	core.RegisterCommand("GOVERNANCE", alfredStartCmd)
@@ -267,7 +267,7 @@ func alfredStartCmd(c *core.Core) *cobra.Command {
 		Long:  "Levanta el servidor REST (48216) y el Socket (48217). Inicia el loop de auditoría.",
 		Run: func(cmd *cobra.Command, args []string) {
 			// Inicializar logger custom para Alfred
-			logger, err := core.InitLogger(&c.Paths, "ALFRED")
+			logger, err := core.InitLogger(&c.Paths, "ALFRED", false)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "[ERROR] Fallo al inicializar logger: %v\n", err)
 				os.Exit(1)
