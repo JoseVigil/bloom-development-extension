@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -18,6 +19,21 @@ import (
 	"nucleus/internal/core"
 	"github.com/spf13/cobra"
 )
+
+// ────────────────────────────────────────────────────────────────
+// EXIT CODES
+// ────────────────────────────────────────────────────────────────
+
+const (
+	ExitSuccess         = 0
+	ExitGeneralError    = 1
+	ExitNotRunning      = 2
+	ExitNotInstalled    = 3
+)
+
+// ────────────────────────────────────────────────────────────────
+// TEMPORAL PROCESS MANAGEMENT
+// ────────────────────────────────────────────────────────────────
 
 // TemporalProcess maneja el proceso hijo de Temporal
 type TemporalProcess struct {
@@ -27,6 +43,7 @@ type TemporalProcess struct {
 	isRunning      bool
 	executablePath string
 	dbPath         string
+	pidFile        string
 }
 
 // NewTemporalProcess crea una nueva instancia del proceso Temporal
@@ -35,6 +52,7 @@ func NewTemporalProcess(logsDir string, executablePath string) *TemporalProcess 
 		logsDir:        logsDir,
 		executablePath: executablePath,
 		isRunning:      false,
+		pidFile:        filepath.Join(logsDir, "temporal", "temporal.pid"),
 	}
 }
 
@@ -42,6 +60,16 @@ func NewTemporalProcess(logsDir string, executablePath string) *TemporalProcess 
 func (tp *TemporalProcess) Start(ctx context.Context, logger *core.Logger) error {
 	if tp.isRunning {
 		return fmt.Errorf("temporal already running")
+	}
+
+	// Verificar si ya hay un proceso corriendo
+	if existingPID, err := tp.loadPID(); err == nil {
+		if tp.isProcessRunning(existingPID) {
+			return fmt.Errorf("temporal already running with PID %d (use 'nucleus temporal stop' to stop it)", existingPID)
+		}
+		// PID stale, limpiar
+		logger.Warning("Found stale PID file, cleaning up...")
+		os.Remove(tp.pidFile)
 	}
 
 	// Crear directorio de logs si no existe
@@ -110,6 +138,11 @@ func (tp *TemporalProcess) Start(ctx context.Context, logger *core.Logger) error
 	tp.isRunning = true
 	logger.Info("Temporal process started (PID: %d)", tp.cmd.Process.Pid)
 
+	// Guardar PID
+	if err := tp.savePID(); err != nil {
+		logger.Warning("Failed to save PID file: %v", err)
+	}
+
 	// Esperar a que Temporal esté listo con múltiples health checks
 	if err := tp.waitForReady(ctx, logger); err != nil {
 		tp.Stop(logger)
@@ -121,8 +154,8 @@ func (tp *TemporalProcess) Start(ctx context.Context, logger *core.Logger) error
 
 // waitForReady espera a que Temporal responda mediante múltiples health checks
 func (tp *TemporalProcess) waitForReady(ctx context.Context, logger *core.Logger) error {
-	timeout := time.After(45 * time.Second) // Aumentado a 45s
-	ticker := time.NewTicker(1 * time.Second) // Check cada segundo
+	timeout := time.After(45 * time.Second)
+	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
 	httpClient := &http.Client{Timeout: 3 * time.Second}
@@ -133,7 +166,6 @@ func (tp *TemporalProcess) waitForReady(ctx context.Context, logger *core.Logger
 	for {
 		select {
 		case <-timeout:
-			// Leer últimas líneas del log para diagnóstico
 			tp.logFile.Sync()
 			lastLines := tp.readLastLogLines(20)
 			return fmt.Errorf("timeout waiting for temporal to start\nLast log lines:\n%s", lastLines)
@@ -144,22 +176,16 @@ func (tp *TemporalProcess) waitForReady(ctx context.Context, logger *core.Logger
 		case <-ticker.C:
 			attemptCount++
 			
-			// Health check 1: gRPC endpoint (puerto 7233)
 			grpcReady := tp.checkGRPCHealth(httpClient)
-			
-			// Health check 2: UI endpoint (puerto 8233)
 			uiReady := tp.checkUIHealth(httpClient)
 			
-			// Log del progreso cada 5 intentos
 			if attemptCount % 5 == 0 {
 				logger.Info("Health check attempt %d - gRPC: %v, UI: %v", attemptCount, grpcReady, uiReady)
 			}
 
-			// Temporal está listo cuando AL MENOS el gRPC responde
 			if grpcReady {
 				logger.Success("Temporal gRPC server ready on port 7233")
 				
-				// Esperar un poco más por la UI (opcional)
 				if !uiReady {
 					logger.Info("Waiting for UI to be ready...")
 					time.Sleep(2 * time.Second)
@@ -180,14 +206,11 @@ func (tp *TemporalProcess) waitForReady(ctx context.Context, logger *core.Logger
 
 // checkGRPCHealth verifica el endpoint gRPC de Temporal
 func (tp *TemporalProcess) checkGRPCHealth(client *http.Client) bool {
-	// Temporal expone un endpoint de salud en el puerto HTTP (7233)
 	resp, err := client.Get("http://localhost:7233/")
 	if err != nil {
 		return false
 	}
 	defer resp.Body.Close()
-	
-	// Cualquier respuesta (incluso 404) indica que el servidor está vivo
 	return resp.StatusCode > 0
 }
 
@@ -198,7 +221,6 @@ func (tp *TemporalProcess) checkUIHealth(client *http.Client) bool {
 		return false
 	}
 	defer resp.Body.Close()
-	
 	return resp.StatusCode == 200
 }
 
@@ -208,17 +230,14 @@ func (tp *TemporalProcess) readLastLogLines(n int) string {
 		return "(log file not available)"
 	}
 
-	// Sync antes de leer
 	tp.logFile.Sync()
 	
-	// Abrir el archivo en modo lectura
 	readFile, err := os.Open(tp.logFile.Name())
 	if err != nil {
 		return fmt.Sprintf("(error reading log: %v)", err)
 	}
 	defer readFile.Close()
 
-	// Leer todo el contenido
 	content, err := io.ReadAll(readFile)
 	if err != nil {
 		return fmt.Sprintf("(error reading log content: %v)", err)
@@ -228,7 +247,6 @@ func (tp *TemporalProcess) readLastLogLines(n int) string {
 		return "(log file is empty - temporal may not be writing logs)"
 	}
 
-	// Dividir en líneas y tomar las últimas N
 	lines := strings.Split(string(content), "\n")
 	start := 0
 	if len(lines) > n {
@@ -247,13 +265,11 @@ func (tp *TemporalProcess) Stop(logger *core.Logger) error {
 	if tp.cmd != nil && tp.cmd.Process != nil {
 		logger.Info("Sending interrupt signal to Temporal (PID: %d)...", tp.cmd.Process.Pid)
 		
-		// Enviar señal de terminación
 		if err := tp.cmd.Process.Signal(os.Interrupt); err != nil {
 			logger.Warning("Failed to send interrupt, forcing kill: %v", err)
 			tp.cmd.Process.Kill()
 		}
 		
-		// Esperar hasta 5 segundos
 		done := make(chan error, 1)
 		go func() {
 			done <- tp.cmd.Wait()
@@ -278,6 +294,9 @@ func (tp *TemporalProcess) Stop(logger *core.Logger) error {
 		tp.logFile.Close()
 	}
 
+	// Limpiar PID file
+	os.Remove(tp.pidFile)
+
 	tp.isRunning = false
 	return nil
 }
@@ -286,6 +305,106 @@ func (tp *TemporalProcess) Stop(logger *core.Logger) error {
 func (tp *TemporalProcess) IsRunning() bool {
 	return tp.isRunning
 }
+
+// savePID guarda el PID del proceso en un archivo
+func (tp *TemporalProcess) savePID() error {
+	if tp.cmd == nil || tp.cmd.Process == nil {
+		return fmt.Errorf("no process to save")
+	}
+
+	pidDir := filepath.Dir(tp.pidFile)
+	if err := os.MkdirAll(pidDir, 0755); err != nil {
+		return fmt.Errorf("failed to create PID directory: %w", err)
+	}
+
+	pidData := fmt.Sprintf("%d", tp.cmd.Process.Pid)
+	return os.WriteFile(tp.pidFile, []byte(pidData), 0644)
+}
+
+// loadPID carga el PID desde el archivo
+func (tp *TemporalProcess) loadPID() (int, error) {
+	data, err := os.ReadFile(tp.pidFile)
+	if err != nil {
+		return 0, err
+	}
+
+	pidStr := strings.TrimSpace(string(data))
+	pid, err := strconv.Atoi(pidStr)
+	if err != nil {
+		return 0, fmt.Errorf("invalid PID format: %w", err)
+	}
+
+	return pid, nil
+}
+
+// isProcessRunning verifica si un proceso con el PID dado está corriendo
+func (tp *TemporalProcess) isProcessRunning(pid int) bool {
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+
+	// En Unix, FindProcess siempre retorna un proceso, necesitamos verificar con Signal
+	// En Windows, si el proceso no existe, FindProcess retorna error
+	if runtime.GOOS == "windows" {
+		return true
+	}
+
+	// En Unix, enviar signal 0 no mata el proceso, solo verifica si existe
+	err = process.Signal(syscall.Signal(0))
+	return err == nil
+}
+
+// stopByPID detiene el proceso usando el PID guardado
+func (tp *TemporalProcess) stopByPID(logger *core.Logger) error {
+	pid, err := tp.loadPID()
+	if err != nil {
+		return fmt.Errorf("no PID file found or invalid: %w", err)
+	}
+
+	if !tp.isProcessRunning(pid) {
+		logger.Warning("Process with PID %d is not running (stale PID file)", pid)
+		os.Remove(tp.pidFile)
+		return fmt.Errorf("process not running")
+	}
+
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return fmt.Errorf("failed to find process: %w", err)
+	}
+
+	logger.Info("Sending interrupt signal to Temporal (PID: %d)...", pid)
+	
+	if err := process.Signal(os.Interrupt); err != nil {
+		logger.Warning("Failed to send interrupt, forcing kill: %v", err)
+		process.Kill()
+	}
+
+	// Esperar hasta 5 segundos
+	timeout := time.After(5 * time.Second)
+	ticker := time.NewTicker(200 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-timeout:
+			logger.Warning("Temporal did not stop gracefully, forcing kill")
+			process.Kill()
+			os.Remove(tp.pidFile)
+			return nil
+		case <-ticker.C:
+			if !tp.isProcessRunning(pid) {
+				logger.Success("Temporal stopped successfully")
+				os.Remove(tp.pidFile)
+				return nil
+			}
+		}
+	}
+}
+
+// ────────────────────────────────────────────────────────────────
+// UTILITY FUNCTIONS
+// ────────────────────────────────────────────────────────────────
 
 // getTemporalExecutablePath determina la ruta al ejecutable temporal
 func getTemporalExecutablePath() (string, error) {
@@ -361,6 +480,27 @@ func checkTemporalHealth() (bool, string, map[string]bool) {
 	return false, "STOPPED", healthChecks
 }
 
+// getGlobalJSONFlag obtiene el valor del flag --json de manera robusta
+func getGlobalJSONFlag(cmd *cobra.Command) bool {
+	// Intentar obtener del root command (donde está el flag global)
+	root := cmd.Root()
+	if root != nil {
+		if flag := root.PersistentFlags().Lookup("json"); flag != nil {
+			value, _ := strconv.ParseBool(flag.Value.String())
+			return value
+		}
+	}
+	
+	// Fallback: parsear os.Args manualmente (por si acaso)
+	for _, arg := range os.Args {
+		if arg == "--json" || arg == "--json=true" {
+			return true
+		}
+	}
+	
+	return false
+}
+
 // ────────────────────────────────────────────────────────────────
 // CLI COMMANDS
 // ────────────────────────────────────────────────────────────────
@@ -368,74 +508,159 @@ func checkTemporalHealth() (bool, string, map[string]bool) {
 var globalTemporalProcess *TemporalProcess
 
 func init() {
-	core.RegisterCommand("ORCHESTRATION", temporalStartCmd)
-	core.RegisterCommand("ORCHESTRATION", temporalStopCmd)
-	core.RegisterCommand("ORCHESTRATION", temporalStatusCmd)
-	core.RegisterCommand("ORCHESTRATION", temporalDiagnosticsCmd)
+	// Registrar comando padre temporal con sus subcomandos
+	core.RegisterCommand("TEMPORAL_SERVER", temporalCmd)
+}
+
+// temporalCmd es el comando padre que agrupa todos los subcomandos de temporal
+func temporalCmd(c *core.Core) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "temporal",
+		Short: "Temporal server management commands",
+		Long:  "Manage the Temporal workflow server: start, stop, check status, and run diagnostics",
+		Annotations: map[string]string{
+			"category": "TEMPORAL_SERVER",
+		},
+	}
+
+	// Agregar subcomandos
+	cmd.AddCommand(temporalStartCmd(c))
+	cmd.AddCommand(temporalStopCmd(c))
+	cmd.AddCommand(temporalStatusCmd(c))
+	cmd.AddCommand(temporalDiagnosticsCmd(c))
+
+	return cmd
 }
 
 func temporalStartCmd(c *core.Core) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "temporal start",
+		Use:   "start",
 		Short: "Inicia el servidor Temporal local",
 		Long:  "Levanta el proceso temporal.exe en modo development con UI en puerto 8233",
+		Annotations: map[string]string{
+			"category": "TEMPORAL_SERVER",
+			"json_response": `{
+  "success": true,
+  "state": "RUNNING",
+  "pid": 12345,
+  "ui_url": "http://localhost:8233",
+  "grpc_url": "localhost:7233",
+  "ui_port": 8233,
+  "grpc_port": 7233,
+  "message": "Temporal server started successfully (running in background)"
+}`,
+		},
+		Example: `    nucleus temporal start
+    nucleus --json temporal start`,
 		Run: func(cmd *cobra.Command, args []string) {
-			// Inicializar logger PRIMERO
-			logger, err := core.InitLogger(&c.Paths, "ORCHESTRATION", false)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "[ERROR] Fallo al inicializar logger: %v\n", err)
-				os.Exit(1)
+			// Detectar modo JSON
+			jsonOutput := getGlobalJSONFlag(cmd)
+
+			// Si es modo JSON, NO inicializar logger (para no contaminar stdout)
+			var logger *core.Logger
+			if !jsonOutput {
+				var err error
+				logger, err = core.InitLogger(&c.Paths, "TEMPORAL_SERVER", false)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "[ERROR] Fallo al inicializar logger: %v\n", err)
+					os.Exit(ExitGeneralError)
+				}
+				defer func() {
+					logger.Info("Closing logger...")
+					logger.Close()
+				}()
+
+				logger.Info("=== TEMPORAL START SEQUENCE ===")
+				logger.Info("Iniciando Temporal Server...")
+				logger.Info("Logs directory: %s", c.Paths.Logs)
 			}
-			defer func() {
-				logger.Info("Closing logger...")
-				logger.Close()
-			}()
 
-			logger.Info("=== TEMPORAL START SEQUENCE ===")
-			logger.Info("Iniciando Temporal Server...")
-			logger.Info("Logs directory: %s", c.Paths.Logs)
-
-			// Determinar la ruta al ejecutable temporal
 			temporalExePath, err := getTemporalExecutablePath()
 			if err != nil {
-				logger.Error("No se pudo localizar temporal.exe: %v", err)
-				logger.Info("Ruta esperada (Windows): %%LOCALAPPDATA%%\\BloomNucleus\\bin\\temporal\\temporal.exe")
-				logger.Info("Ruta esperada (macOS): ~/Library/Application Support/BloomNucleus/bin/temporal/temporal")
-				logger.Info("Ruta esperada (Linux): ~/.local/share/BloomNucleus/bin/temporal/temporal")
-				os.Exit(1)
+				if jsonOutput {
+					result := map[string]interface{}{
+						"success": false,
+						"error":   "temporal executable not found",
+						"message": err.Error(),
+					}
+					output, _ := json.MarshalIndent(result, "", "  ")
+					fmt.Println(string(output))
+				} else {
+					logger.Error("No se pudo localizar temporal.exe: %v", err)
+					logger.Info("Ruta esperada (Windows): %%LOCALAPPDATA%%\\BloomNucleus\\bin\\temporal\\temporal.exe")
+					logger.Info("Ruta esperada (macOS): ~/Library/Application Support/BloomNucleus/bin/temporal/temporal")
+					logger.Info("Ruta esperada (Linux): ~/.local/share/BloomNucleus/bin/temporal/temporal")
+				}
+				os.Exit(ExitNotInstalled)
 			}
 
-			logger.Info("Ejecutable Temporal encontrado: %s", temporalExePath)
-
-			// Verificar que el ejecutable es válido
-			if info, err := os.Stat(temporalExePath); err == nil {
-				logger.Info("Executable size: %d bytes, mode: %s", info.Size(), info.Mode())
+			if !jsonOutput {
+				logger.Info("Ejecutable Temporal encontrado: %s", temporalExePath)
+				if info, err := os.Stat(temporalExePath); err == nil {
+					logger.Info("Executable size: %d bytes, mode: %s", info.Size(), info.Mode())
+				}
 			}
 
-			// Crear proceso Temporal con la ruta completa
 			globalTemporalProcess = NewTemporalProcess(c.Paths.Logs, temporalExePath)
 
-			// Iniciar en contexto con cancelación
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			// Configurar señales para shutdown graceful
+			if !jsonOutput {
+				logger.Info("Starting Temporal process...")
+			}
+
+			// Crear un logger silencioso para modo JSON
+			silentLogger := logger
+			if jsonOutput {
+				silentLogger, _ = core.InitLogger(&c.Paths, "TEMPORAL_SERVER", false)
+				defer silentLogger.Close()
+			}
+
+			if err := globalTemporalProcess.Start(ctx, silentLogger); err != nil {
+				if jsonOutput {
+					result := map[string]interface{}{
+						"success": false,
+						"error":   "failed to start temporal",
+						"message": err.Error(),
+					}
+					output, _ := json.MarshalIndent(result, "", "  ")
+					fmt.Println(string(output))
+				} else {
+					logger.Error("Fallo al iniciar Temporal: %v", err)
+				}
+				os.Exit(ExitGeneralError)
+			}
+
+			// En modo JSON, imprimir resultado y salir
+			if jsonOutput {
+				result := map[string]interface{}{
+					"success":    true,
+					"state":      "RUNNING",
+					"pid":        globalTemporalProcess.cmd.Process.Pid,
+					"ui_url":     "http://localhost:8233",
+					"grpc_url":   "localhost:7233",
+					"ui_port":    8233,
+					"grpc_port":  7233,
+					"message":    "Temporal server started successfully (running in background)",
+				}
+				output, _ := json.MarshalIndent(result, "", "  ")
+				fmt.Println(string(output))
+				
+				// Detach del proceso para que siga corriendo en background
+				// En modo JSON no esperamos Ctrl+C
+				return
+			}
+
+			// Modo normal (interactivo)
 			sigChan := make(chan os.Signal, 1)
 			signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-
-			// Iniciar proceso (pasamos el logger)
-			logger.Info("Starting Temporal process...")
-			if err := globalTemporalProcess.Start(ctx, logger); err != nil {
-				logger.Error("Fallo al iniciar Temporal: %v", err)
-				os.Exit(1)
-			}
 
 			logger.Success("=== TEMPORAL READY ===")
 			logger.Info("UI disponible en: http://localhost:8233")
 			logger.Info("gRPC endpoint: localhost:7233")
 			logger.Info("Presione Ctrl+C para detener")
 
-			// Esperar señal de terminación
 			<-sigChan
 			logger.Info("=== SHUTTING DOWN ===")
 			logger.Info("Deteniendo Temporal Server...")
@@ -453,41 +678,152 @@ func temporalStartCmd(c *core.Core) *cobra.Command {
 
 func temporalStopCmd(c *core.Core) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "temporal stop",
+		Use:   "stop",
 		Short: "Detiene el servidor Temporal local",
-		Long:  "Envía señal de terminación al proceso temporal.exe",
+		Long:  "Envía señal de terminación al proceso temporal.exe usando el PID guardado",
+		Annotations: map[string]string{
+			"category": "TEMPORAL_SERVER",
+			"json_response": `{
+  "success": true,
+  "message": "Temporal server stopped successfully",
+  "pid": 12345
+}`,
+		},
+		Example: `    nucleus temporal stop
+    nucleus --json temporal stop`,
 		Run: func(cmd *cobra.Command, args []string) {
-			logger, err := core.InitLogger(&c.Paths, "ORCHESTRATION", false)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "[ERROR] Fallo al inicializar logger: %v\n", err)
-				os.Exit(1)
-			}
-			defer logger.Close()
+			jsonOutput := getGlobalJSONFlag(cmd)
 
-			if globalTemporalProcess == nil {
-				logger.Warning("No hay proceso Temporal activo en esta sesión")
-				logger.Info("Verificando si Temporal está corriendo...")
-				
-				operational, state, _ := checkTemporalHealth()
-				if operational {
-					logger.Warning("Temporal está corriendo pero no fue iniciado por esta sesión de nucleus")
-					logger.Info("Estado: %s", state)
-					logger.Info("Puede que necesites detenerlo manualmente o desde otra terminal")
-				} else {
-					logger.Info("Temporal no está corriendo")
+			var logger *core.Logger
+			if !jsonOutput {
+				var err error
+				logger, err = core.InitLogger(&c.Paths, "TEMPORAL_SERVER", false)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "[ERROR] Fallo al inicializar logger: %v\n", err)
+					os.Exit(ExitGeneralError)
 				}
+				defer logger.Close()
+				logger.Info("Deteniendo Temporal Server...")
+			}
+
+			// Primero intentar detener usando la instancia global
+			if globalTemporalProcess != nil && globalTemporalProcess.IsRunning() {
+				pid := globalTemporalProcess.cmd.Process.Pid
+				
+				// Crear logger silencioso para modo JSON
+				silentLogger := logger
+				if jsonOutput {
+					silentLogger, _ = core.InitLogger(&c.Paths, "TEMPORAL_SERVER", false)
+					defer silentLogger.Close()
+				}
+				
+				if err := globalTemporalProcess.Stop(silentLogger); err != nil {
+					if jsonOutput {
+						result := map[string]interface{}{
+							"success": false,
+							"error":   "failed to stop temporal",
+							"message": err.Error(),
+						}
+						output, _ := json.MarshalIndent(result, "", "  ")
+						fmt.Println(string(output))
+					} else {
+						logger.Error("Error al detener Temporal: %v", err)
+					}
+					os.Exit(ExitGeneralError)
+				}
+				
+				if jsonOutput {
+					result := map[string]interface{}{
+						"success": true,
+						"message": "Temporal server stopped successfully",
+						"pid":     pid,
+					}
+					output, _ := json.MarshalIndent(result, "", "  ")
+					fmt.Println(string(output))
+				} else {
+					logger.Success("Temporal Server detenido exitosamente")
+				}
+				globalTemporalProcess = nil
 				return
 			}
 
-			logger.Info("Deteniendo Temporal Server...")
-			
-			if err := globalTemporalProcess.Stop(logger); err != nil {
-				logger.Error("Error al detener Temporal: %v", err)
-				os.Exit(1)
+			// Si no hay instancia global, intentar usar el PID file
+			temporalExePath, err := getTemporalExecutablePath()
+			if err != nil {
+				if jsonOutput {
+					result := map[string]interface{}{
+						"success": false,
+						"error":   "temporal executable not found",
+						"message": err.Error(),
+					}
+					output, _ := json.MarshalIndent(result, "", "  ")
+					fmt.Println(string(output))
+				} else {
+					logger.Error("No se pudo localizar temporal.exe: %v", err)
+				}
+				os.Exit(ExitNotInstalled)
 			}
 
-			logger.Success("Temporal Server detenido exitosamente")
-			globalTemporalProcess = nil
+			tp := NewTemporalProcess(c.Paths.Logs, temporalExePath)
+			
+			// Obtener PID antes de intentar detener
+			pid, _ := tp.loadPID()
+			
+			// Crear logger silencioso para modo JSON
+			silentLogger := logger
+			if jsonOutput {
+				silentLogger, _ = core.InitLogger(&c.Paths, "TEMPORAL_SERVER", false)
+				defer silentLogger.Close()
+			}
+			
+			if err := tp.stopByPID(silentLogger); err != nil {
+				// No se pudo detener, verificar si está corriendo
+				operational, state, _ := checkTemporalHealth()
+				
+				if jsonOutput {
+					result := map[string]interface{}{
+						"success":     false,
+						"error":       "no active temporal process found",
+						"operational": operational,
+						"state":       state,
+					}
+					if operational {
+						result["message"] = "Temporal is running but could not be stopped automatically"
+					} else {
+						result["message"] = "Temporal is not running"
+					}
+					output, _ := json.MarshalIndent(result, "", "  ")
+					fmt.Println(string(output))
+				} else {
+					logger.Warning("No se encontró proceso Temporal activo")
+					logger.Info("Verificando si Temporal está corriendo...")
+					
+					if operational {
+						logger.Warning("Temporal está corriendo pero no se pudo detener automáticamente")
+						logger.Info("Estado: %s", state)
+						logger.Info("Intente detenerlo manualmente o use 'nucleus temporal diagnostics' para más información")
+					} else {
+						logger.Info("Temporal no está corriendo")
+					}
+				}
+				
+				if operational {
+					os.Exit(ExitGeneralError)
+				}
+				os.Exit(ExitSuccess)
+			}
+
+			if jsonOutput {
+				result := map[string]interface{}{
+					"success": true,
+					"message": "Temporal server stopped successfully",
+					"pid":     pid,
+				}
+				output, _ := json.MarshalIndent(result, "", "  ")
+				fmt.Println(string(output))
+			} else {
+				logger.Success("Temporal Server detenido exitosamente")
+			}
 		},
 	}
 
@@ -496,11 +832,11 @@ func temporalStopCmd(c *core.Core) *cobra.Command {
 
 func temporalStatusCmd(c *core.Core) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "temporal status",
+		Use:   "status",
 		Short: "Verifica el estado del servidor Temporal",
 		Long:  "Consulta si el servidor Temporal está operativo mediante health check HTTP",
 		Annotations: map[string]string{
-			"category": "ORCHESTRATION",
+			"category": "TEMPORAL_SERVER",
 			"json_response": `{
   "temporal": {
     "operational": true,
@@ -519,17 +855,8 @@ func temporalStatusCmd(c *core.Core) *cobra.Command {
 		Example: `    nucleus temporal status
     nucleus --json temporal status`,
 		Run: func(cmd *cobra.Command, args []string) {
-			// Detectar si se solicitó output JSON
-			jsonOutput := false
-			if cmd.Flag("json") != nil && cmd.Flag("json").Changed {
-				jsonOutput = true
-			}
-			for _, arg := range os.Args {
-				if arg == "--json" {
-					jsonOutput = true
-					break
-				}
-			}
+			// Obtener flag --json de manera robusta
+			jsonOutput := getGlobalJSONFlag(cmd)
 
 			operational, state, healthChecks := checkTemporalHealth()
 
@@ -549,10 +876,10 @@ func temporalStatusCmd(c *core.Core) *cobra.Command {
 				output, _ := json.MarshalIndent(status, "", "  ")
 				fmt.Println(string(output))
 			} else {
-				logger, err := core.InitLogger(&c.Paths, "ORCHESTRATION", false)
+				logger, err := core.InitLogger(&c.Paths, "TEMPORAL_SERVER", false)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "[ERROR] Fallo al inicializar logger: %v\n", err)
-					os.Exit(1)
+					os.Exit(ExitGeneralError)
 				}
 				defer logger.Close()
 
@@ -571,7 +898,7 @@ func temporalStatusCmd(c *core.Core) *cobra.Command {
 			}
 
 			if !operational {
-				os.Exit(1)
+				os.Exit(ExitNotRunning)
 			}
 		},
 	}
@@ -581,11 +908,11 @@ func temporalStatusCmd(c *core.Core) *cobra.Command {
 
 func temporalDiagnosticsCmd(c *core.Core) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "temporal diagnostics",
+		Use:   "diagnostics",
 		Short: "Run comprehensive Temporal diagnostics",
 		Long:  "Checks Temporal installation, ports, health, logs, database, and telemetry",
 		Annotations: map[string]string{
-			"category": "ORCHESTRATION",
+			"category": "TEMPORAL_SERVER",
 			"json_response": `{
   "executable": {
     "path": "C:\\Users\\user\\AppData\\Local\\BloomNucleus\\bin\\temporal\\temporal.exe",
@@ -603,19 +930,19 @@ func temporalDiagnosticsCmd(c *core.Core) *cobra.Command {
     "exists": true,
     "size": 98304
   },
+  "pid_file": {
+    "path": "C:\\Users\\user\\AppData\\Local\\BloomNucleus\\logs\\temporal\\temporal.pid",
+    "exists": true,
+    "pid": 12345
+  },
   "overall_status": "HEALTHY"
 }`,
 		},
 		Example: `    nucleus temporal diagnostics
     nucleus --json temporal diagnostics`,
 		Run: func(cmd *cobra.Command, args []string) {
-			jsonOutput := false
-			for _, arg := range os.Args {
-				if arg == "--json" {
-					jsonOutput = true
-					break
-				}
-			}
+			// Obtener flag --json de manera robusta
+			jsonOutput := getGlobalJSONFlag(cmd)
 
 			if jsonOutput {
 				runDiagnosticsJSON(c)
@@ -661,6 +988,21 @@ func runDiagnosticsJSON(c *core.Core) {
 	}
 	result["database"] = dbInfo
 
+	// PID file info
+	pidPath := filepath.Join(c.Paths.Logs, "temporal", "temporal.pid")
+	pidInfo := map[string]interface{}{
+		"path":   pidPath,
+		"exists": false,
+	}
+	if pidData, err := os.ReadFile(pidPath); err == nil {
+		pidInfo["exists"] = true
+		if pid, err := strconv.Atoi(strings.TrimSpace(string(pidData))); err == nil {
+			pidInfo["pid"] = pid
+		}
+	}
+	result["pid_file"] = pidInfo
+
+	// Determinar overall status
 	if execInfo["exists"].(bool) && operational {
 		result["overall_status"] = "HEALTHY"
 	} else if execInfo["exists"].(bool) {
@@ -672,16 +1014,24 @@ func runDiagnosticsJSON(c *core.Core) {
 	output, _ := json.MarshalIndent(result, "", "  ")
 	fmt.Println(string(output))
 
-	if result["overall_status"] != "HEALTHY" && result["overall_status"] != "INSTALLED_NOT_RUNNING" {
-		os.Exit(1)
+	// Exit codes consistentes
+	switch result["overall_status"] {
+	case "HEALTHY":
+		os.Exit(ExitSuccess)
+	case "INSTALLED_NOT_RUNNING":
+		os.Exit(ExitNotRunning)
+	case "NOT_INSTALLED":
+		os.Exit(ExitNotInstalled)
+	default:
+		os.Exit(ExitGeneralError)
 	}
 }
 
 func runDiagnosticsHuman(c *core.Core) {
-	logger, err := core.InitLogger(&c.Paths, "ORCHESTRATION", false)
+	logger, err := core.InitLogger(&c.Paths, "TEMPORAL_SERVER", false)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "[ERROR] Failed to initialize logger: %v\n", err)
-		os.Exit(1)
+		os.Exit(ExitGeneralError)
 	}
 	defer logger.Close()
 
@@ -689,7 +1039,9 @@ func runDiagnosticsHuman(c *core.Core) {
 
 	logger.Info("[1] Temporal Executable")
 	temporalPath, _ := getTemporalExecutablePath()
+	execExists := false
 	if info, err := os.Stat(temporalPath); err == nil {
+		execExists = true
 		logger.Success("  Found: %s", temporalPath)
 		logger.Info("  Size: %d bytes", info.Size())
 	} else {
@@ -716,7 +1068,18 @@ func runDiagnosticsHuman(c *core.Core) {
 		logger.Info("  Database not found (will be created on first run)")
 	}
 
-	logger.Info("[4] Logs")
+	logger.Info("[4] PID File")
+	pidPath := filepath.Join(c.Paths.Logs, "temporal", "temporal.pid")
+	if pidData, err := os.ReadFile(pidPath); err == nil {
+		logger.Success("  PID file: %s", pidPath)
+		if pid, err := strconv.Atoi(strings.TrimSpace(string(pidData))); err == nil {
+			logger.Info("  PID: %d", pid)
+		}
+	} else {
+		logger.Info("  PID file not found (no active process)")
+	}
+
+	logger.Info("[5] Logs")
 	nucleusLogs := filepath.Join(c.Paths.Logs, "nucleus")
 	temporalLogs := filepath.Join(c.Paths.Logs, "temporal")
 	
@@ -733,14 +1096,21 @@ func runDiagnosticsHuman(c *core.Core) {
 	}
 
 	logger.Info("=== SUMMARY ===")
-	if operational {
+	
+	// Determinar overall status y exit code
+	var exitCode int
+	if execExists && operational {
 		logger.Success("Overall Status: HEALTHY")
-	} else {
+		exitCode = ExitSuccess
+	} else if execExists && !operational {
 		logger.Warning("Overall Status: INSTALLED_NOT_RUNNING")
 		logger.Info("Run: nucleus temporal start")
+		exitCode = ExitNotRunning
+	} else {
+		logger.Error("Overall Status: NOT_INSTALLED")
+		logger.Info("Temporal executable not found. Please install Temporal.")
+		exitCode = ExitNotInstalled
 	}
 
-	if !operational {
-		os.Exit(1)
-	}
+	os.Exit(exitCode)
 }
