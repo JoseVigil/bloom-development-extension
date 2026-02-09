@@ -47,6 +47,25 @@ set OUTPUT_FILE=%OUTPUT_DIR%\nucleus.exe
 set HELP_DIR=%OUTPUT_DIR%\help
 
 :: Crear carpetas de salida
+:: Limpiar directorio de destino si existe
+if exist "%OUTPUT_DIR%" (
+    echo.
+    echo Limpiando directorio de destino...
+    echo Limpiando directorio de destino... >> "%LOG_FILE%"
+    echo   %OUTPUT_DIR%
+    
+    rd /s /q "%OUTPUT_DIR%" >> "%LOG_FILE%" 2>&1
+    if %ERRORLEVEL% EQU 0 (
+        echo ✅ Directorio limpiado correctamente
+        echo ✅ Directorio limpiado correctamente >> "%LOG_FILE%"
+    ) else (
+        echo ⚠️ Advertencia: No se pudo limpiar completamente el directorio
+        echo ⚠️ Advertencia: No se pudo limpiar completamente el directorio >> "%LOG_FILE%"
+    )
+    echo.
+)
+
+:: Crear carpetas de salida
 if not exist "%OUTPUT_BASE%" mkdir "%OUTPUT_BASE%"
 if not exist "%HELP_DIR%"    mkdir "%HELP_DIR%"
 
