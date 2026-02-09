@@ -123,18 +123,6 @@ installer/node/node.exe
 # ===============================
 # Ignorar todo binario nativo
 installer/native/bin/**
-
-# Reabrir jerarquía necesaria
-!installer/native/bin/
-!installer/native/bin/win32/
-
-# Excepciones: help files
-!installer/native/bin/win32/nucleus/
-!installer/native/bin/win32/nucleus/help/**
-!installer/native/bin/win32/sentinel/
-!installer/native/bin/win32/sentinel/help/**
-!installer/native/bin/win32/brain/
-!installer/native/bin/win32/brain/help/**
  
 # Electron builder outputs
 **/win-unpacked/
