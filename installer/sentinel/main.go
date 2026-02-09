@@ -9,10 +9,8 @@ import (
 	"github.com/spf13/cobra"
 
 	// Registro de comandos mediante imports en blanco
-	_ "sentinel/internal/boot"
 	_ "sentinel/internal/bridge"
 	_ "sentinel/internal/eventbus"
-	_ "sentinel/internal/health"
 	_ "sentinel/internal/ignition"
 	_ "sentinel/internal/seed"
 	_ "sentinel/internal/system"

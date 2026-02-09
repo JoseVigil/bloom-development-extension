@@ -1,11 +1,12 @@
 // install/installer_nucleus.js
 // Sistema de Hitos Atómicos - Deployments de Nucleus, Sentinel, Ollama, Conductor, Cortex
+// FIXED: JSON parsing now handles stdout logs from binaries
 
 const path = require('path');
 const fs = require('fs-extra');
 const { spawn } = require('child_process');
 const { paths } = require('../config/paths');
-const { getLogger } = require('../src/logger');
+const { getLogger } = require('../../shared/logger');
 const { nucleusManager } = require('./nucleus_manager');
 
 const logger = getLogger('installer');
@@ -40,9 +41,65 @@ async function executeNucleusCommand(args) {
 
     child.on('close', (code) => {
       if (code !== 0) {
-        return reject(new Error(`Nucleus exited ${code}: ${stderr.trim()}`));
+        // Include both stdout and stderr in error message for better debugging
+        const errorDetails = [];
+        if (stderr.trim()) errorDetails.push(`stderr: ${stderr.trim()}`);
+        if (stdout.trim()) errorDetails.push(`stdout: ${stdout.trim()}`);
+        
+        const errorMsg = errorDetails.length > 0 
+          ? errorDetails.join('\n') 
+          : 'No error message provided';
+          
+        return reject(new Error(`Nucleus exited ${code}: ${errorMsg}`));
       }
-      resolve(stdout.trim());
+      
+      // Si es --json, parsear extrayendo solo el JSON válido
+      if (args.includes('--json')) {
+        try {
+          // Extraer solo el JSON válido usando un parser incremental
+          const lines = stdout.split('\n');
+          let jsonStart = -1;
+          let braceCount = 0;
+          let inJson = false;
+          let jsonLines = [];
+          
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i].trim();
+            
+            // Detectar inicio de JSON
+            if (!inJson && (line.startsWith('{') || line.startsWith('['))) {
+              inJson = true;
+              jsonStart = i;
+            }
+            
+            if (inJson) {
+              jsonLines.push(lines[i]);
+              
+              // Contar llaves para detectar fin del JSON
+              for (const char of line) {
+                if (char === '{' || char === '[') braceCount++;
+                if (char === '}' || char === ']') braceCount--;
+              }
+              
+              // JSON completo cuando braceCount vuelve a 0
+              if (braceCount === 0) {
+                break;
+              }
+            }
+          }
+          
+          if (jsonLines.length === 0) {
+            return reject(new Error(`No JSON found in Nucleus output: ${stdout.trim()}`));
+          }
+          
+          const jsonStr = jsonLines.join('\n').trim();
+          resolve(JSON.parse(jsonStr));
+        } catch (e) {
+          reject(new Error(`Failed to parse Nucleus JSON: ${e.message}\nOutput: ${stdout.slice(0, 200)}`));
+        }
+      } else {
+        resolve(stdout.trim());
+      }
     });
 
     child.on('error', (err) => reject(err));
@@ -50,8 +107,8 @@ async function executeNucleusCommand(args) {
 }
 
 async function nucleusHealth() {
-  const output = await executeNucleusCommand(['--json', 'health']);
-  return JSON.parse(output);
+  const output = await executeNucleusCommand(['--json', 'info']);
+  return output;
 }
 
 // ============================================================================
@@ -88,21 +145,47 @@ async function executeSentinelCommand(args) {
       }
       
       try {
-        // ✅ SOLO parsear stdout, ignorar stderr (logs)
-        const cleanOutput = stdout.trim();
+        // Extraer solo el JSON válido usando un parser incremental
+        const lines = stdout.split('\n');
+        let jsonStart = -1;
+        let braceCount = 0;
+        let inJson = false;
+        let jsonLines = [];
         
-        // Buscar el JSON en el output (puede tener logs antes)
-        const jsonMatch = cleanOutput.match(/\{[\s\S]*\}/);
-        
-        if (jsonMatch) {
-          const result = JSON.parse(jsonMatch[0]);
-          resolve(result);
-        } else {
-          // Si no hay JSON, retornar el stdout tal cual
-          resolve({ raw_output: cleanOutput });
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i].trim();
+          
+          // Detectar inicio de JSON
+          if (!inJson && (line.startsWith('{') || line.startsWith('['))) {
+            inJson = true;
+            jsonStart = i;
+          }
+          
+          if (inJson) {
+            jsonLines.push(lines[i]);
+            
+            // Contar llaves para detectar fin del JSON
+            for (const char of line) {
+              if (char === '{' || char === '[') braceCount++;
+              if (char === '}' || char === ']') braceCount--;
+            }
+            
+            // JSON completo cuando braceCount vuelve a 0
+            if (braceCount === 0) {
+              break;
+            }
+          }
         }
+        
+        if (jsonLines.length === 0) {
+          return reject(new Error(`No JSON found in Sentinel output: ${stdout.trim()}`));
+        }
+        
+        const jsonStr = jsonLines.join('\n').trim();
+        const result = JSON.parse(jsonStr);
+        resolve(result);
       } catch (e) {
-        reject(new Error(`Failed to parse Sentinel JSON: ${e.message}\nOutput: ${stdout}`));
+        reject(new Error(`Failed to parse Sentinel JSON: ${e.message}\nOutput: ${stdout.slice(0, 200)}`));
       }
     });
 
@@ -118,7 +201,7 @@ async function deployNucleus(win) {
   const MILESTONE = 'binaries'; // Nucleus es parte de binaries
   
   if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
-    logger.info(`⏭️ Milestone ${MILESTONE} ya completado, saltando Nucleus`);
+    logger.info(`⭐️ Milestone ${MILESTONE} ya completado, saltando Nucleus`);
     return { success: true, skipped: true };
   }
 
@@ -162,7 +245,7 @@ async function deploySentinel(win) {
   const MILESTONE = 'binaries';
   
   if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
-    logger.info(`⏭️ Milestone ${MILESTONE} ya completado, saltando Sentinel`);
+    logger.info(`⭐️ Milestone ${MILESTONE} ya completado, saltando Sentinel`);
     return { success: true, skipped: true };
   }
 
@@ -190,9 +273,9 @@ async function deploySentinel(win) {
       logger.success('✓ help/');
     }
 
-    // Smoke test - CAMBIADO: usar executeSentinelVersion que NO parsea JSON
-    const version = await executeSentinelVersion();
-    logger.success(`✓ Sentinel version: ${version}`);
+    // Smoke test - NOW USES --json flag
+    const versionInfo = await executeSentinelCommand(['--json', 'version']);
+    logger.success(`✓ Sentinel version: ${versionInfo.full_release || versionInfo.version}`);
 
     return { success: true };
 
@@ -202,44 +285,11 @@ async function deploySentinel(win) {
   }
 }
 
-// NUEVA FUNCIÓN: ejecuta "sentinel version" SIN parsear JSON
-async function executeSentinelVersion() {
-  return new Promise((resolve, reject) => {
-    const sentinelExe = getSentinelExecutablePath();
-
-    if (!fs.existsSync(sentinelExe)) {
-      return reject(new Error(`Sentinel not found: ${sentinelExe}`));
-    }
-
-    const child = spawn(sentinelExe, ['version'], {
-      cwd: path.dirname(sentinelExe),
-      windowsHide: true,
-      timeout: 10000
-    });
-
-    let stdout = '';
-    let stderr = '';
-
-    child.stdout.on('data', (data) => { stdout += data.toString(); });
-    child.stderr.on('data', (data) => { stderr += data.toString(); });
-
-    child.on('close', (code) => {
-      if (code !== 0) {
-        return reject(new Error(`Sentinel exited ${code}: ${stderr.trim()}`));
-      }
-      // Retornar texto plano sin parsear
-      resolve(stdout.trim());
-    });
-
-    child.on('error', (err) => reject(err));
-  });
-}
-
 async function deployBrain(win) {
   const MILESTONE = 'binaries';
   
   if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
-    logger.info(`⏭️ Milestone ${MILESTONE} ya completado, saltando Brain`);
+    logger.info(`⭐️ Milestone ${MILESTONE} ya completado, saltando Brain`);
     return { success: true, skipped: true };
   }
 
@@ -271,7 +321,7 @@ async function deployNativeHost(win) {
   const MILESTONE = 'binaries';
   
   if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
-    logger.info(`⏭️ Milestone ${MILESTONE} ya completado, saltando Native Host`);
+    logger.info(`⭐️ Milestone ${MILESTONE} ya completado, saltando Native Host`);
     return { success: true, skipped: true };
   }
 
@@ -311,12 +361,6 @@ async function deployOllama(win) {
     return { success: true, skipped: true };
   }
 
-  // ✅ AGREGAR: Verificar sub-milestone
-  if (await nucleusManager.isSubMilestoneCompleted(MILESTONE, 'ollama')) {
-    logger.info(`⭐️ Sub-milestone ollama ya completado, saltando`);
-    return { success: true, skipped: true };
-  }
-
   logger.separator('DEPLOYING OLLAMA');
 
   try {
@@ -338,9 +382,6 @@ async function deployOllama(win) {
       logger.success('✓ lib/vulkan/');
     }
 
-    // ✅ MARCAR sub-milestone completado
-    await nucleusManager.completeSubMilestone(MILESTONE, 'ollama');
-
     return { success: true };
 
   } catch (error) {
@@ -353,7 +394,7 @@ async function deployCortex(win) {
   const MILESTONE = 'binaries';
   
   if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
-    logger.info(`⏭️ Milestone ${MILESTONE} ya completado, saltando Cortex`);
+    logger.info(`⭐️ Milestone ${MILESTONE} ya completado, saltando Cortex`);
     return { success: true, skipped: true };
   }
 
@@ -362,22 +403,15 @@ async function deployCortex(win) {
   try {
     await fs.ensureDir(paths.cortexDir);
 
-    // Buscar bloom-cortex.blx o bloom-cortex-*.blx
-    const cortexFiles = await fs.readdir(paths.cortexSource);
-    const blxFile = cortexFiles.find(f => 
-      f === 'bloom-cortex.blx' || 
-      (f.startsWith('bloom-cortex-') && f.endsWith('.blx'))
-    );
+    // Copy bloom-cortex.blx (fixed filename)
+    const cortexSource = path.join(paths.cortexSource, 'bloom-cortex.blx');
     
-    if (!blxFile) {
-      throw new Error('bloom-cortex.blx not found in source');
+    if (!await fs.pathExists(cortexSource)) {
+      throw new Error(`bloom-cortex.blx not found at: ${cortexSource}`);
     }
 
-    const cortexSource = path.join(paths.cortexSource, blxFile);
-    
-    // Copiar siempre como bloom-cortex.blx (normalizar nombre)
     await fs.copy(cortexSource, paths.cortexBlx, { overwrite: true });
-    logger.success(`✓ ${blxFile} → bloom-cortex.blx`);
+    logger.success('✓ bloom-cortex.blx');
 
     return { success: true };
 
@@ -387,11 +421,90 @@ async function deployCortex(win) {
   }
 }
 
+async function deployNode(win) {
+  logger.separator('DEPLOYING NODE.JS');
+
+  try {
+    await fs.ensureDir(paths.nodeDir);
+
+    // Copy node.exe - fix path if nodeSource is incorrect
+    let nodeExeSource = path.join(paths.nodeSource, 'node.exe');
+    
+    // Check if path has double 'installer' and fix it
+    if (!await fs.pathExists(nodeExeSource)) {
+      // Try alternate path without double 'installer'
+      const altPath = nodeExeSource.replace(/installer[\\\/]installer[\\\/]/, 'installer/');
+      if (await fs.pathExists(altPath)) {
+        nodeExeSource = altPath;
+        logger.warn(`⚠️ Fixed path: ${nodeExeSource}`);
+      } else {
+        throw new Error(`node.exe not found at: ${nodeExeSource} or ${altPath}`);
+      }
+    }
+
+    await fs.copy(nodeExeSource, paths.nodeExe, { overwrite: true });
+    logger.success('✓ node.exe');
+
+    return { success: true };
+
+  } catch (error) {
+    logger.error('Node deployment failed:', error.message);
+    throw error;
+  }
+}
+
+async function deployTemporal(win) {
+  const MILESTONE = 'binaries';
+  
+  if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
+    logger.info(`⭐️ Milestone ${MILESTONE} ya completado, saltando Temporal`);
+    return { success: true, skipped: true };
+  }
+
+  logger.separator('DEPLOYING TEMPORAL');
+
+  try {
+    // Ensure temporal directory exists (use paths.temporalDir or construct it)
+    const temporalDir = paths.temporalDir || path.join(paths.binDir, 'temporal');
+    await fs.ensureDir(temporalDir);
+
+    // Determine source path - use same pattern as other sources
+    // paths.nucleusSource points to installer/native/bin/win32/nucleus
+    // So installer root is 4 levels up from there
+    let temporalSource;
+    if (paths.temporalSource) {
+      temporalSource = paths.temporalSource;
+    } else if (paths.nucleusSource) {
+      // Go up from installer/native/bin/win32/nucleus to installer/
+      const installerRoot = path.dirname(path.dirname(path.dirname(path.dirname(paths.nucleusSource))));
+      temporalSource = path.join(installerRoot, 'temporal');
+    } else {
+      throw new Error('Cannot determine temporal source path - paths.temporalSource and paths.nucleusSource are both undefined');
+    }
+    
+    const temporalExeSource = path.join(temporalSource, 'temporal.exe');
+    
+    if (!await fs.pathExists(temporalExeSource)) {
+      throw new Error(`temporal.exe not found at: ${temporalExeSource}`);
+    }
+
+    const temporalExe = paths.temporalExe || path.join(temporalDir, 'temporal.exe');
+    await fs.copy(temporalExeSource, temporalExe, { overwrite: true });
+    logger.success('✓ temporal.exe');
+
+    return { success: true };
+
+  } catch (error) {
+    logger.error('Temporal deployment failed:', error.message);
+    throw error;
+  }
+}
+
 async function deployConductor(win) {
   const MILESTONE = 'conductor';
   
   if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
-    logger.info(`⏭️ Milestone ${MILESTONE} ya completado, saltando Conductor`);
+    logger.info(`⭐️ Milestone ${MILESTONE} ya completado, saltando Conductor`);
     return { success: true, skipped: true };
   }
 
@@ -430,45 +543,56 @@ async function deployAllBinaries(win) {
   const MILESTONE = 'binaries';
   
   if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
-    logger.info(`⏭️ Milestone ${MILESTONE} completado`);
+    logger.info(`⭐️ Milestone ${MILESTONE} ya completado`);
     return { success: true, skipped: true };
   }
 
   await nucleusManager.startMilestone(MILESTONE);
 
   try {
-    // Cada componente verifica su propio sub-estado
-    if (!await nucleusManager.isSubMilestoneCompleted(MILESTONE, 'nucleus')) {
+    // Sub-milestones individuales
+    if (!nucleusManager.isSubMilestoneCompleted(MILESTONE, 'nucleus')) {
       await deployNucleus(win);
       await nucleusManager.completeSubMilestone(MILESTONE, 'nucleus');
     }
 
-    if (!await nucleusManager.isSubMilestoneCompleted(MILESTONE, 'sentinel')) {
+    if (!nucleusManager.isSubMilestoneCompleted(MILESTONE, 'sentinel')) {
       await deploySentinel(win);
       await nucleusManager.completeSubMilestone(MILESTONE, 'sentinel');
     }
 
-    if (!await nucleusManager.isSubMilestoneCompleted(MILESTONE, 'brain')) {
+    if (!nucleusManager.isSubMilestoneCompleted(MILESTONE, 'brain')) {
       await deployBrain(win);
       await nucleusManager.completeSubMilestone(MILESTONE, 'brain');
     }
 
-    if (!await nucleusManager.isSubMilestoneCompleted(MILESTONE, 'native')) {
+    if (!nucleusManager.isSubMilestoneCompleted(MILESTONE, 'native')) {
       await deployNativeHost(win);
       await nucleusManager.completeSubMilestone(MILESTONE, 'native');
     }
 
-    if (!await nucleusManager.isSubMilestoneCompleted(MILESTONE, 'ollama')) {
+    if (!nucleusManager.isSubMilestoneCompleted(MILESTONE, 'ollama')) {
       await deployOllama(win);
       await nucleusManager.completeSubMilestone(MILESTONE, 'ollama');
     }
 
-    if (!await nucleusManager.isSubMilestoneCompleted(MILESTONE, 'cortex')) {
+    if (!nucleusManager.isSubMilestoneCompleted(MILESTONE, 'cortex')) {
       await deployCortex(win);
       await nucleusManager.completeSubMilestone(MILESTONE, 'cortex');
     }
 
+    if (!nucleusManager.isSubMilestoneCompleted(MILESTONE, 'node')) {
+      await deployNode(win);
+      await nucleusManager.completeSubMilestone(MILESTONE, 'node');
+    }
+
+    if (!nucleusManager.isSubMilestoneCompleted(MILESTONE, 'temporal')) {
+      await deployTemporal(win);
+      await nucleusManager.completeSubMilestone(MILESTONE, 'temporal');
+    }
+
     await nucleusManager.completeMilestone(MILESTONE, { all_binaries_deployed: true });
+
     return { success: true };
 
   } catch (error) {
@@ -484,8 +608,12 @@ module.exports = {
   deployNativeHost,
   deployOllama,
   deployCortex,
+  deployNode,
+  deployTemporal,
   deployConductor,
   deployAllBinaries,
   nucleusHealth,
-  executeSentinelCommand
+  executeNucleusCommand,
+  executeSentinelCommand,
+  getNucleusExecutablePath
 };

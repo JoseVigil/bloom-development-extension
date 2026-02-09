@@ -6,32 +6,6 @@
     "category": "BRIDGE"
   },
   {
-    "name": "check",
-    "use": "check [componente]",
-    "short": "Ejecuta un diagnóstico profundo de salud del sistema y procesos",
-    "category": "SYSTEM",
-    "args": [
-      {
-        "name": "componente",
-        "required": false
-      }
-    ],
-    "subcommands": [
-      {
-        "name": "workers",
-        "use": "workers",
-        "short": "Lista todos los workers (Chrome Profiles) activos",
-        "subcommands": [
-          {
-            "name": "health",
-            "use": "health",
-            "short": "Resumen de salud de todos los workers"
-          }
-        ]
-      }
-    ]
-  },
-  {
     "name": "cockpit",
     "use": "cockpit",
     "short": "Lanza la interfaz de monitoreo integrada (TUI)",
@@ -58,22 +32,6 @@
         "default": "127.0.0.1:5678"
       }
     ]
-  },
-  {
-    "name": "dev-start",
-    "use": "dev-start",
-    "short": "Inicia el entorno de desarrollo integrado",
-    "category": "DEVELOPMENT",
-    "example": "  sentinel dev-start"
-  },
-  {
-    "name": "health",
-    "use": "health",
-    "short": "Escaneo de integridad del sistema",
-    "category": "SYSTEM",
-    "example": "  sentinel health\n  sentinel --json health | jq '.services[] | select(.active == false)'",
-    "requires": "  - brain.exe debe estar en PATH o en bin/\n  - Puertos 5678, 48215, 5173, 11434, 7233 accesibles para verificación",
-    "output": "JSON (--json):\n  {\"connected\":true,\"port\":5678,\"services\":{\"Core Bridge\":{\"status\":\"running\",\"port\":5678},\"Bloom API (Swagger)\":{\"status\":\"running\",\"port\":48215},\"Svelte Dev\":{\"status\":\"running\",\"port\":5173},\"Ollama Engine\":{\"status\":\"running\",\"port\":11434},\"Worker Manager\":{\"status\":\"running\",\"port\":0},\"Temporal Server\":{\"status\":\"running\",\"port\":7233}},\"profiles_registered\":2}"
   },
   {
     "name": "info",

@@ -61,10 +61,14 @@ const getResourcePath = (resourceName) => {
       return path.join(workspaceRoot, '..', 'native', 'nssm', 'win32', 'nssm.exe');
     case 'ollama':
       return path.join(workspaceRoot, '..', 'ollama');
+    case 'node':
+      return path.join(workspaceRoot, '..', 'installer', 'node');
     case 'conductor':
       return path.join(workspaceRoot, '..', 'native', 'bin', 'win32', 'conductor');
     case 'cortex':
       return path.join(workspaceRoot, '..', 'native', 'bin', 'cortex');
+    case 'temporal':
+      return path.join(workspaceRoot, '..', 'temporal');
     case 'chrome-win':
       return path.join(workspaceRoot, '..', 'chrome', 'chrome-win.zip');
     case 'chrome-mac':
@@ -191,6 +195,18 @@ const paths = {
   cortexDir: path.join(baseDir, 'bin', 'cortex'),
   cortexBlx: path.join(baseDir, 'bin', 'cortex', 'bloom-cortex.blx'),
   
+  // Node.js (for Nucleus dev-start and API services)
+  nodeDir: path.join(baseDir, 'bin', 'node'),
+  nodeExe: platform === 'win32'
+    ? path.join(baseDir, 'bin', 'node', 'node.exe')
+    : path.join(baseDir, 'bin', 'node', 'node'),
+  
+  // Temporal (Workflow Orchestration)
+  temporalDir: path.join(baseDir, 'bin', 'temporal'),
+  temporalExe: platform === 'win32'
+    ? path.join(baseDir, 'bin', 'temporal', 'temporal.exe')
+    : path.join(baseDir, 'bin', 'temporal', 'temporal'),
+  
   // Chrome
   chromeDir: path.join(baseDir, 'bin', 'chrome-win'),
   chromeExe: platform === 'win32'
@@ -237,8 +253,10 @@ const paths = {
   nativeSource: getResourcePath('native'),
   nssmSource: getResourcePath('nssm'),
   ollamaSource: getResourcePath('ollama'),
+  nodeSource: getResourcePath('node'),
   conductorSource: getResourcePath('conductor'),
   cortexSource: getResourcePath('cortex'),
+  temporalSource: getResourcePath('temporal'),
   extensionSource: getResourcePath('extension'),
   chromeWinSource: getResourcePath('chrome-win'),
 };
@@ -295,6 +313,8 @@ const criticalPaths = [
   'brainDir', 'brainExe',
   'nativeDir', 'hostBinary',
   'ollamaDir', 'ollamaExe',
+  'nodeDir', 'nodeExe',
+  'temporalDir', 'temporalExe',
   'conductorDir', 'cortexDir',
   'chromeDir',
   'extensionDir', 'engineDir', 'runtimeDir', 
@@ -315,6 +335,7 @@ console.log(`🎯 Sentinel binary: ${paths.sentinelExe}`);
 console.log(`🧠 Brain binary: ${brainExe}`);
 console.log(`🔗 Native host: ${hostBinary}`);
 console.log(`🦙 Ollama binary: ${paths.ollamaExe}`);
+console.log(`⏱️ Temporal binary: ${paths.temporalExe}`);
 console.log(`🎮 Conductor binary: ${paths.conductorExe}`);
 console.log(`📦 Cortex package: ${paths.cortexBlx}`);
 console.log(`👤 Profiles directory: ${paths.profilesDir}`);

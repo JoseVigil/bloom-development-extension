@@ -59,6 +59,19 @@
 =====================================================[ GOVERNANCE ]=====================================================
 
   > ALFRED
+    Muestra el reporte de salud administrativa y estado de la Bóveda
+
+    Usage: nucleus alfred status
+
+    Arguments:
+      status                required
+
+    Flags:
+      --json                     Salida en formato JSON (para Conductor u otras herramientas)
+
+    --------------------------------------------------------------------------------
+
+  > ALFRED
     Ejecuta una verificación de integridad manual sobre el sistema de archivos
 
     Usage: nucleus alfred audit
@@ -75,19 +88,6 @@
 
     Arguments:
       start                 required
-
-    --------------------------------------------------------------------------------
-
-  > ALFRED
-    Muestra el reporte de salud administrativa y estado de la Bóveda
-
-    Usage: nucleus alfred status
-
-    Arguments:
-      status                required
-
-    Flags:
-      --json                     Salida en formato JSON (para Conductor u otras herramientas)
 
     --------------------------------------------------------------------------------
 
@@ -437,7 +437,7 @@
     Subcommands:
       launch                Launch a browser instance for a profile using Sentinel
         nucleus synapse launch [profile_id]
-      shutdown-all          Gracefully shutdown all orchestrated services
+      shutdown-all          Gracefully shutdown all running services
         nucleus synapse shutdown-all
       start-ollama          Start Ollama service via Temporal workflow
         nucleus synapse start-ollama
@@ -488,7 +488,7 @@
         ----------------------------------------------------------------------
 
       └─ SHUTDOWN-ALL
-        Gracefully shutdown all orchestrated services
+        Gracefully shutdown all running services
 
         Usage: nucleus synapse shutdown-all
 
@@ -498,11 +498,7 @@
           JSON Output:
             {
               "success": true,
-              "services_shutdown": [
-                "browser_instances",
-                "ollama_service",
-                "temporal_workflows"
-              ]
+              "services_shutdown": ["chrome", "ollama", "brain", "temporal"]
             }
 
         ----------------------------------------------------------------------

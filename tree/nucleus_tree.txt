@@ -4,6 +4,7 @@ bloom-development-extension/
     ├── README.md
     ├── VERSION
     ├── build_number.txt
+    ├── codebase/
     ├── docs/
     │   ├── EXECUTIVE_SUMMARY.md
     │   ├── GOVERNANCE.md
@@ -21,12 +22,60 @@ bloom-development-extension/
     │   ├── core/
     │   │   ├── build_info.go
     │   │   ├── core.go
+    │   │   ├── logger.go
     │   │   ├── metadata.go
+    │   │   ├── paths.go
     │   │   ├── registry.go
+    │   │   ├── telemetry.go
     │   │   └── version.go
     │   ├── governance/
+    │   │   ├── alfred.go
+    │   │   ├── alfred_server.go
+    │   │   ├── audit.go
     │   │   ├── blueprint.go
+    │   │   ├── ollama_client.go
     │   │   └── ownership.go
+    │   ├── orchestration/
+    │   │   ├── activities/
+    │   │   │   ├── sentinel_intent.go
+    │   │   │   ├── sentinel_launch.go
+    │   │   │   ├── sentinel_ollama.go
+    │   │   │   └── sentinel_stop.go
+    │   │   ├── commands/
+    │   │   │   └── synapse.go
+    │   │   ├── queries/
+    │   │   │   └── status.go
+    │   │   ├── signals/
+    │   │   │   ├── brain_events.go
+    │   │   │   └── system_events.go
+    │   │   ├── temporal/
+    │   │   │   ├── bootstrap/
+    │   │   │   │   ├── bootstrap.go
+    │   │   │   │   ├── cleanup.go
+    │   │   │   │   ├── diagnostics.go
+    │   │   │   │   ├── ensure.go
+    │   │   │   │   ├── force_stop.go
+    │   │   │   │   ├── health.go
+    │   │   │   │   ├── helpers.go
+    │   │   │   │   ├── lifecycle.go
+    │   │   │   │   ├── pid.go
+    │   │   │   │   ├── ports.go
+    │   │   │   │   └── process.go
+    │   │   │   ├── client.go
+    │   │   │   ├── worker.go
+    │   │   │   └── workflows/
+    │   │   │       └── system_workflows.go
+    │   │   ├── types/
+    │   │   │   └── orchestration.go
+    │   │   └── workflows/
+    │   │       ├── profile_lifecycle.go
+    │   │       ├── recovery_flow.go
+    │   │       └── system_gate.go
+    │   ├── supervisor/
+    │   │   ├── dev_start.go
+    │   │   └── supervisor.go
+    │   ├── synapse/
+    │   │   └── commands.go
     │   ├── system/
     │   │   ├── info.go
     │   │   └── version.go
@@ -34,8 +83,36 @@ bloom-development-extension/
     │       └── vault.go
     ├── main.go
     ├── nucleus-governance.json
+    ├── nucleus.exe
     └── scripts/
         ├── build-darwin.sh
         ├── build-linux.sh
         ├── build.bat
-        └── build_number.txt
+        ├── build_number.txt
+        ├── extract_go_files.py
+        ├── simulate_environment.py
+        └── simulation_env/
+            └── .bloom/
+                └── .nucleus-bloom-labs/
+                    ├── .cache/
+                    ├── .core/
+                    │   ├── .ai_bot.governance.bl
+                    │   ├── .ai_bot.plane.bl
+                    │   ├── .ai_bot.sovereign.bl
+                    │   ├── .rules.bl
+                    │   └── nucleus-config.json
+                    ├── .governance/
+                    │   ├── .architecture/
+                    │   │   ├── .patterns.bl
+                    │   │   └── .principles.bl
+                    │   ├── .quality/
+                    │   │   └── .code-standards.bl
+                    │   └── .security/
+                    │       └── .security-standards.bl
+                    ├── .intents/
+                    │   ├── .cor/
+                    │   └── .exp/
+                    ├── .ownership.json
+                    ├── .relations/
+                    └── reports/
+                        └── exports/

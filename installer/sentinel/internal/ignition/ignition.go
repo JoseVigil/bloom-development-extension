@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"sentinel/internal/core"
-	"sentinel/internal/health"
 	"sentinel/internal/process"
 	"strings"
 
@@ -18,7 +17,7 @@ import (
 
 type Ignition struct {
 	Core      *core.Core
-	Guardians map[string]*health.GuardianInstance
+	Guardians map[string]interface{}
 	Session   struct {
 		ServicePID int
 		BrowserPID int
@@ -30,7 +29,7 @@ type Ignition struct {
 func New(c *core.Core) *Ignition {
 	return &Ignition{
 		Core:      c,
-		Guardians: make(map[string]*health.GuardianInstance),
+		Guardians: make(map[string]interface{}),
 		SpecPath:  "",
 	}
 }

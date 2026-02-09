@@ -6,7 +6,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"sentinel/internal/health"
 	"strings"
 	"syscall"
 	"time"
@@ -46,15 +45,6 @@ func (ig *Ignition) Launch(profileID string, mode string, configOverride string)
 
 	if ig.Core.IsJSON {
 		return chromePID, 9222, true, effectiveConfig, nil
-	}
-
-	guardian, err := health.NewGuardian(ig.Core, profileID, launchID, chromePID)
-	if err == nil {
-		ig.Guardians[profileID] = guardian
-		guardian.Start()
-		ig.Core.Logger.Info("[IGNITION] 🛡️ Guardián desplegado con éxito")
-	} else {
-		ig.Core.Logger.Info("[WARN] No se pudo iniciar guardián: %v", err)
 	}
 
 	ig.Core.Logger.Success("[IGNITION] 🔥 Sistema en línea (PID: %d)", chromePID)

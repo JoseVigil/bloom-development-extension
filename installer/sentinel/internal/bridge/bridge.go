@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"os"
 	"sentinel/internal/core"
-	"sentinel/internal/discovery"
-	"sentinel/internal/health"
 	"sentinel/internal/seed"
 
 	"github.com/spf13/cobra"
@@ -50,11 +48,6 @@ func init() {
 								"path":   path,
 							})
 						}
-
-					case "health":
-						sm, _ := discovery.DiscoverSystem(c.Paths.BinDir)
-						report, _ := health.CheckHealth(c, sm)
-						sendResponse(report)
 
 					case "ping":
 						sendResponse("pong")

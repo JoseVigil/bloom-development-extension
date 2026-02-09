@@ -112,11 +112,9 @@ func Launch(c *core.Core, mode string) {
 	app := tview.NewApplication()
 	pages := tview.NewPages()
 	logs := NewLogStation()
-	health := NewHealthStation()
 	cmd := tview.NewInputField().SetLabel(": ").SetFieldBackgroundColor(tcell.ColorBlack)
 
 	pages.AddPage("log", logs.Layout, true, mode == "log")
-	pages.AddPage("health", health.Layout, true, mode == "health")
 
 	root := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(pages, 0, 1, true).
@@ -128,7 +126,6 @@ func Launch(c *core.Core, mode string) {
 			text := cmd.GetText()
 			switch text {
 			case "log": pages.SwitchToPage("log")
-			case "health": pages.SwitchToPage("health")
 			case "q", "exit": app.Stop()
 			}
 			cmd.SetText("")
@@ -147,14 +144,6 @@ func Launch(c *core.Core, mode string) {
 				}
 			}
 			time.Sleep(2 * time.Second)
-		}
-	}()
-
-	// Loop independiente para Health
-	go func() {
-		for {
-			app.QueueUpdateDraw(func() { health.Refresh(c) })
-			time.Sleep(5 * time.Second)
 		}
 	}()
 

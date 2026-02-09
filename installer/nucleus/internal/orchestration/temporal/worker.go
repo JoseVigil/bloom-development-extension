@@ -5,12 +5,16 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
+	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	
 	"nucleus/internal/core"
+	"nucleus/internal/orchestration/temporal/workflows"
+	"nucleus/internal/orchestration/activities"
 	"github.com/spf13/cobra"
 )
 
@@ -33,6 +37,11 @@ func (w *Worker) RegisterWorkflow(workflow interface{}) {
 // RegisterActivity registra una activity
 func (w *Worker) RegisterActivity(activity interface{}) {
 	w.worker.RegisterActivity(activity)
+}
+
+// RegisterActivityWithOptions registra una activity con opciones personalizadas
+func (w *Worker) RegisterActivityWithOptions(act interface{}, options activity.RegisterOptions) {
+	w.worker.RegisterActivityWithOptions(act, options)
 }
 
 // Start inicia el worker
@@ -83,9 +92,9 @@ func (wm *WorkerManager) StopAll() {
 	}
 }
 
-// ────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
 // CLI COMMANDS
-// ────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
 
 func init() {
 	core.RegisterCommand("ORCHESTRATION", workerStartCmd)
@@ -109,12 +118,10 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 			logger.Info("Iniciando Temporal Worker...")
 			logger.Info("Task Queue: %s", taskQueue)
 
-			// Crear cliente Temporal
 			ctx := context.Background()
-			temporalClient, err := NewClient(ctx)
+			temporalClient, err := NewClient(ctx, &c.Paths, false)
 			if err != nil {
 				logger.Error("Fallo al conectar con Temporal: %v", err)
-				logger.Error("Asegúrate de que el servidor Temporal esté corriendo (nucleus temporal start)")
 				os.Exit(1)
 			}
 			defer temporalClient.Close()
@@ -122,18 +129,37 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 			// Crear worker
 			w := NewWorker(temporalClient.GetClient(), taskQueue)
 
-			// Registrar workflows y activities
-			// NOTA: Aquí se registran todos los workflows y activities del sistema
-			// En una implementación completa, esto vendría de un registro centralizado
-			logger.Info("Registrando workflows y activities...")
+			// ✅ REGISTRAR WORKFLOWS
+			logger.Info("Registrando workflows...")
+			w.RegisterWorkflow(workflows.StartOllamaWorkflow)
+			w.RegisterWorkflow(workflows.VaultStatusWorkflow)
+			w.RegisterWorkflow(workflows.ShutdownAllWorkflow)
 			
-			// Ejemplo de registro (comentado porque necesitaríamos importar workflows)
-			// w.RegisterWorkflow(workflows.ProfileLifecycleWorkflow)
-			// w.RegisterWorkflow(workflows.RecoveryFlowWorkflow)
-			// w.RegisterActivity(activities.SentinelActivities)
+			// ✅ REGISTRAR ACTIVITIES
+			logger.Info("Registrando activities...")
 			
-			logger.Warning("ADVERTENCIA: Registros de workflows/activities deben agregarse manualmente")
-			logger.Warning("Ver documentación en internal/orchestration/workflows/ y activities/")
+			// Construir paths usando PathConfig disponible
+			logsDir := c.Paths.Logs
+			telemetryPath := filepath.Join(c.Paths.Root, "telemetry.json")
+			sentinelExe := filepath.Join(c.Paths.Bin, "sentinel", "sentinel.exe")
+			
+			// Crear instancia de SentinelActivities
+			sentinelAct := activities.NewSentinelActivities(
+				logsDir,
+				telemetryPath,
+				sentinelExe,
+			)
+			
+			// Registrar con nombres específicos que usa el workflow
+			w.RegisterActivityWithOptions(sentinelAct.StartOllama, activity.RegisterOptions{
+				Name: "sentinel.StartOllama",
+			})
+			
+			w.RegisterActivityWithOptions(sentinelAct.StopSentinel, activity.RegisterOptions{
+				Name: "sentinel.StopOllama",
+			})
+			
+			logger.Success("✅ Workflows y activities registrados")
 
 			// Iniciar worker
 			if err := w.Start(); err != nil {
@@ -145,11 +171,9 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 			logger.Info("Escuchando en task queue: %s", taskQueue)
 			logger.Info("Presione Ctrl+C para detener")
 
-			// Configurar señales para shutdown graceful
 			sigChan := make(chan os.Signal, 1)
 			signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-			// Esperar señal de terminación
 			<-sigChan
 			logger.Info("Deteniendo Worker...")
 

@@ -19,17 +19,25 @@ type Client struct {
 }
 
 // NewClient crea un nuevo cliente Temporal
-func NewClient(ctx context.Context) (*Client, error) {
-	// Conectar a localhost:7233 (puerto por defecto de Temporal)
-	c, err := client.Dial(client.Options{
-		HostPort:  "localhost:7233",
-		Namespace: "default",
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create temporal client: %w", err)
-	}
+func NewClient(ctx context.Context, paths *core.PathConfig, jsonMode bool) (*Client, error) {
+    // Crear logger específico para Temporal
+    temporalLogger, err := core.InitTemporalLogger(paths, jsonMode)
+    if err != nil {
+        return nil, fmt.Errorf("failed to create temporal logger: %w", err)
+    }
 
-	return &Client{client: c}, nil
+    opts := client.Options{
+        HostPort:  "localhost:7233",
+        Namespace: "default",
+        Logger:    temporalLogger, 
+    }
+    
+    c, err := client.Dial(opts)
+    if err != nil {
+        return nil, fmt.Errorf("failed to create temporal client: %w", err)
+    }
+
+    return &Client{client: c}, nil
 }
 
 // GetClient retorna el cliente nativo de Temporal

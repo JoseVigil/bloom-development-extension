@@ -28,49 +28,16 @@
   COMMAND CATEGORIES
 ------------------------------------------------------------------------------------------------------------------------
 
-  SYSTEM         Health checks and system diagnostics                     4 cmds
-  IDENTITY       Profile identity and seed management                     1 cmd
-  RUNTIME        Browser instance lifecycle control                       3 cmds
-  TEMPORAL       Workflow orchestration and task execution                1 cmd
-  BRIDGE         JSON-RPC communication with Electron                     4 cmds
-  DEVELOPMENT    Integrated development environment                       1 cmd
-  UI             Monitoring and telemetry interfaces                      2 cmds
-  -----------------------------------------------------------------------  Total: 16 commands
+  SYSTEM      Health checks and system diagnostics                     2 cmds
+  IDENTITY    Profile identity and seed management                     1 cmd
+  RUNTIME     Browser instance lifecycle control                       3 cmds
+  TEMPORAL    Workflow orchestration and task execution                1 cmd
+  BRIDGE      JSON-RPC communication with Electron                     4 cmds
+  UI          Monitoring and telemetry interfaces                      2 cmds
+  --------------------------------------------------------------------  Total: 13 commands
 
 
 =======================================================[ SYSTEM ]=======================================================
-
-  > CHECK
-    Ejecuta un diagnóstico profundo de salud del sistema y procesos
-
-    Usage: sentinel check [componente]
-
-    Arguments:
-      componente            optional
-
-    Subcommands:
-      workers               Lista todos los workers (Chrome Profiles) activos
-
-    --------------------------------------------------------------------------------
-
-  > HEALTH
-    Escaneo de integridad del sistema
-
-    Usage: sentinel health
-
-    Example:
-        sentinel health
-        sentinel --json health | jq '.services[] | select(.active == false)'
-
-    Requirements:
-      * brain.exe debe estar en PATH o en bin/
-      * Puertos 5678, 48215, 5173, 11434, 7233 accesibles para verificación
-
-    Output:
-      JSON (--json):
-      {"connected":true,"port":5678,"services":{"Core Bridge":{"status":"running","port":5678},"Bloom API (Swagger)":{"status":"running","port":48215},"Svelte Dev":{"status":"running","port":5173},"Ollama Engine":{"status":"running","port":11434},"Worker Manager":{"status":"running","port":0},"Temporal Server":{"status":"running","port":7233}},"profiles_registered":2}
-
-    --------------------------------------------------------------------------------
 
   > INFO
     Display detailed system and runtime information
@@ -227,19 +194,6 @@
       --data, -d                 Datos adicionales en formato JSON (opcional)
       --profile-id, -p           ID del perfil (opcional)
       --type, -t                 Tipo de evento (LAUNCH_PROFILE, STOP_PROFILE, etc.) [REQUERIDO]
-
-    --------------------------------------------------------------------------------
-
-
-====================================================[ DEVELOPMENT ]=====================================================
-
-  > DEV-START
-    Inicia el entorno de desarrollo integrado
-
-    Usage: sentinel dev-start
-
-    Example:
-        sentinel dev-start
 
     --------------------------------------------------------------------------------
 

@@ -24,6 +24,25 @@
   },
   {
     "name": "alfred",
+    "use": "alfred status",
+    "short": "Muestra el reporte de salud administrativa y estado de la Bóveda",
+    "category": "GOVERNANCE",
+    "args": [
+      {
+        "name": "status",
+        "required": true
+      }
+    ],
+    "options": [
+      {
+        "name": "json",
+        "usage": "Salida en formato JSON (para Conductor u otras herramientas)",
+        "default": "false"
+      }
+    ]
+  },
+  {
+    "name": "alfred",
     "use": "alfred audit",
     "short": "Ejecuta una verificación de integridad manual sobre el sistema de archivos",
     "category": "GOVERNANCE",
@@ -43,25 +62,6 @@
       {
         "name": "start",
         "required": true
-      }
-    ]
-  },
-  {
-    "name": "alfred",
-    "use": "alfred status",
-    "short": "Muestra el reporte de salud administrativa y estado de la Bóveda",
-    "category": "GOVERNANCE",
-    "args": [
-      {
-        "name": "status",
-        "required": true
-      }
-    ],
-    "options": [
-      {
-        "name": "json",
-        "usage": "Salida en formato JSON (para Conductor u otras herramientas)",
-        "default": "false"
       }
     ]
   },
@@ -88,6 +88,29 @@
       }
     ],
     "example": "  nucleus dev-start\n  nucleus dev-start --simulation\n  nucleus dev-start --skip-vault"
+  },
+  {
+    "name": "health",
+    "use": "health",
+    "short": "System integrity check - validates all Nucleus components",
+    "category": "DIAGNOSTICS",
+    "options": [
+      {
+        "name": "component",
+        "usage": "Check only specific component (temporal, worker, ollama, etc.)"
+      },
+      {
+        "name": "json",
+        "usage": "Output result as JSON (one-line compact)",
+        "default": "false"
+      },
+      {
+        "name": "validate",
+        "usage": "Deep validation checks (slower)",
+        "default": "false"
+      }
+    ],
+    "example": "  nucleus health\n  nucleus health --json\n  nucleus health --json --validate\n  nucleus health --component temporal"
   },
   {
     "name": "heartbeat",
@@ -222,9 +245,9 @@
   {
     "name": "shutdown-all",
     "use": "shutdown-all",
-    "short": "Gracefully shutdown all orchestrated services",
+    "short": "Gracefully shutdown all running services",
     "category": "ORCHESTRATION",
-    "example": "  nucleus synapse shutdown-all\n  nucleus --json synapse shutdown-all\n\nJSON Output:\n  {\n    \"success\": true,\n    \"services_shutdown\": [\n      \"browser_instances\",\n      \"ollama_service\",\n      \"temporal_workflows\"\n    ]\n  }"
+    "example": "  nucleus synapse shutdown-all\n  nucleus --json synapse shutdown-all\n\nJSON Output:\n  {\n    \"success\": true,\n    \"services_shutdown\": [\"chrome\", \"ollama\", \"brain\", \"temporal\"]\n  }"
   },
   {
     "name": "start-ollama",

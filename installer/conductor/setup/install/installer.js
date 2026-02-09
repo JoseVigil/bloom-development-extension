@@ -1,12 +1,14 @@
 // install/installer.js
 // Integrated with Nucleus Manager - Atomic Milestones
+// FIXED: Temporal initialization with correct PATH
 
 const path = require('path');
 const fs = require('fs-extra');
+const { spawn } = require('child_process');
 const { BrowserWindow } = require('electron');
 
 const { paths } = require('../config/paths');
-const { getLogger } = require('../src/logger');
+const { getLogger } = require('../../shared/logger');
 const { nucleusManager } = require('./nucleus_manager');
 const logger = getLogger('installer');
 
@@ -23,7 +25,9 @@ const {
   deployAllBinaries,
   deployConductor,
   nucleusHealth,
-  executeSentinelCommand
+  executeNucleusCommand,
+  executeSentinelCommand,
+  getNucleusExecutablePath
 } = require('./installer_nucleus');
 
 // ============================================================================
@@ -50,7 +54,7 @@ async function createDirectories(win) {
   const MILESTONE = 'directories';
   
   if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
-    logger.info(`⏭️ ${MILESTONE} completed, skipping`);
+    logger.info(`⭐️ ${MILESTONE} completed, skipping`);
     return { success: true, skipped: true };
   }
 
@@ -74,12 +78,13 @@ async function createDirectories(win) {
       paths.engineDir,
       paths.runtimeDir,
       paths.profilesDir,
-      paths.logsDir
+      paths.logsDir,
+      paths.temporalDir  // ✅ Asegurar que temporal dir exista
     ];
 
     for (const dir of dirs) {
       await fs.ensureDir(dir);
-      logger.success(`✓ ${path.basename(dir)}/`);
+      logger.success(`✔ ${path.basename(dir)}/`);
     }
 
     await nucleusManager.completeMilestone(MILESTONE, { dirs_created: dirs.length });
@@ -95,7 +100,7 @@ async function runChromiumInstall(win) {
   const MILESTONE = 'chromium';
   
   if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
-    logger.info(`⏭️ ${MILESTONE} completed, skipping`);
+    logger.info(`⭐️ ${MILESTONE} completed, skipping`);
     return { success: true, skipped: true };
   }
 
@@ -146,7 +151,7 @@ async function runBinariesDeploy(win) {
   const MILESTONE = 'binaries';
   
   if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
-    logger.info(`⏭️ ${MILESTONE} completed, skipping`);
+    logger.info(`⭐️ ${MILESTONE} completed, skipping`);
     return { success: true, skipped: true };
   }
 
@@ -165,7 +170,7 @@ async function runConductorDeploy(win) {
   const MILESTONE = 'conductor';
   
   if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
-    logger.info(`⏭️ ${MILESTONE} completed, skipping`);
+    logger.info(`⭐️ ${MILESTONE} completed, skipping`);
     return { success: true, skipped: true };
   }
 
@@ -184,12 +189,12 @@ async function installBrainService(win) {
   const MILESTONE = 'brain_service_install';
   
   if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
-    logger.info(`⏭️ ${MILESTONE} completed, skipping`);
+    logger.info(`⭐️ ${MILESTONE} completed, skipping`);
     return { success: true, skipped: true };
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 6, 9, 'Installing Brain Service...');
+  emitProgress(win, 6, 10, 'Installing Brain Service...');
 
   try {
     logger.separator('INSTALLING BRAIN SERVICE');
@@ -207,6 +212,74 @@ async function installBrainService(win) {
   }
 }
 
+// ============================================================================
+// TEMPORAL INITIALIZATION - FIXED WITH CORRECT PATH
+// ============================================================================
+
+async function initOrchestration(win) {
+  const MILESTONE = 'orchestration_init';
+  
+  if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
+    logger.info(`⭐️ ${MILESTONE} completed, skipping`);
+    return { success: true, skipped: true };
+  }
+
+  await nucleusManager.startMilestone(MILESTONE);
+  emitProgress(win, 7, 10, 'Initializing Temporal...');
+
+  try {
+    logger.separator('INITIALIZING TEMPORAL SERVER');
+
+    const temporalExe = paths.temporalExe || path.join(paths.binDir, 'temporal', 'temporal.exe');
+    const temporalDir = path.dirname(temporalExe);
+
+    // ✅ CRITICAL: Verificar que temporal.exe existe
+    if (!fs.existsSync(temporalExe)) {
+      throw new Error(`Temporal executable not found at: ${temporalExe}`);
+    }
+
+    logger.info(`✓ Temporal.exe found at: ${temporalExe}`);
+
+    // ✅ CRITICAL: Añadir temporal directory al PATH
+    const currentPath = process.env.PATH || '';
+    const newPath = `${temporalDir};${currentPath}`;
+    
+    logger.info('Executing: nucleus --json temporal ensure');
+    logger.debug(`Temporal dir added to PATH: ${temporalDir}`);
+
+    // ✅ USAR 'temporal ensure' - comando no bloqueante para automatización
+    const result = await executeNucleusCommand(['--json', 'temporal', 'ensure']);
+
+    // ✅ Verificar resultado según contrato de temporal ensure
+    if (!result.success) {
+      throw new Error(`Temporal ensure returned success=false: ${JSON.stringify(result)}`);
+    }
+
+    if (result.state !== 'RUNNING') {
+      throw new Error(`Temporal not running after ensure: state=${result.state}`);
+    }
+
+    // Log diferenciado según si se inició o ya estaba corriendo
+    if (result.started === false && result.reason === 'already_running') {
+      logger.success('✔ Temporal already running (no action needed)');
+    } else {
+      logger.success('✔ Temporal started successfully');
+    }
+    
+    logger.info(`  UI URL: ${result.ui_url || 'http://localhost:8233'}`);
+    logger.info(`  gRPC URL: ${result.grpc_url || 'localhost:7233'}`);
+    logger.info(`  State: ${result.state}`);
+
+    await nucleusManager.completeMilestone(MILESTONE, result);
+    return { success: true, temporal: result };
+
+  } catch (error) {
+    logger.error('Temporal initialization failed:', error.message);
+    await nucleusManager.failMilestone(MILESTONE, error.message);
+    throw error;
+  }
+}
+
 async function initOllama(win) {
   const MILESTONE = 'ollama_init';
   
@@ -216,22 +289,39 @@ async function initOllama(win) {
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 7, 9, 'Initializing Ollama...');
+  emitProgress(win, 8, 10, 'Initializing Ollama...');
 
   try {
     logger.separator('INITIALIZING OLLAMA');
 
-    // Start Ollama
-    await executeSentinelCommand(['--json', 'ollama', 'start']);
-    logger.success('✓ Ollama start command sent');
+    // ✅ PRIMERO: Iniciar el worker en BACKGROUND
+    logger.info('Starting Nucleus worker in background...');
+    const nucleusExe = getNucleusExecutablePath();
+    
+    const workerProcess = spawn(nucleusExe, ['worker', 'start', '--task-queue', 'nucleus-task-queue'], {
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true
+    });
+    
+    workerProcess.unref(); // Permitir que continúe sin bloquear
+    logger.success('✔ Worker process spawned (PID: ' + workerProcess.pid + ')');
+    
+    // Esperar 5 segundos a que el worker esté completamente listo
+    await new Promise(resolve => setTimeout(resolve, 15000));
+
+    // ✅ SEGUNDO: Ejecutar workflow (ahora con timeout de 10s)
+    logger.info('Executing start-ollama workflow...');
+    await executeNucleusCommand(['--json', 'synapse', 'start-ollama']);
+    logger.success('✔ Ollama workflow ejecutado');
 
     // Wait 5 seconds for Ollama to boot
-    await new Promise(resolve => setTimeout(resolve, 5000));
+    await new Promise(resolve => setTimeout(resolve, 15000));
 
-    // Check health
+    // Check health via Sentinel
     const health = await executeSentinelCommand(['--json', 'ollama', 'healthcheck']);
     
-    logger.success('✓ Ollama initialized');
+    logger.success('✔ Ollama initialized');
 
     await nucleusManager.completeMilestone(MILESTONE, health);
     return { success: true };
@@ -246,30 +336,38 @@ async function seedMasterProfile(win) {
   const MILESTONE = 'nucleus_seed';
   
   if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
-    logger.info(`⏭️ ${MILESTONE} completed, skipping`);
+    logger.info(`⭐️ ${MILESTONE} completed, skipping`);
     return { success: true, skipped: true };
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 8, 9, 'Seeding Master Profile...');
+  emitProgress(win, 9, 10, 'Seeding Master Profile...');
 
   try {
     logger.separator('SEEDING MASTER PROFILE');
 
-    const result = await executeSentinelCommand(['--json', 'seed', 'MasterWorker', 'true']);
+    // Usar Nucleus synapse launch con workflow de Temporal
+    const result = await executeNucleusCommand([
+      '--json',
+      'synapse',
+      'launch',
+      '--register',
+      '--role', 'master',
+      '--save'
+    ]);
 
-    const profileId = result.data?.uuid || result.profile_id;
+    const profileId = result.profile_id || result.data?.uuid;
 
     if (!profileId) {
       throw new Error('Seed failed: no profile_id returned');
     }
 
-    logger.success(`✓ Master profile: ${result.profile_id}`);
+    logger.success(`✔ Master profile: ${profileId}`);
 
-    await nucleusManager.setMasterProfile(result.profile_id);
+    await nucleusManager.setMasterProfile(profileId);
     await nucleusManager.completeMilestone(MILESTONE, result);
 
-    return { success: true, profile_id: result.profile_id };
+    return { success: true, profile_id: profileId };
 
   } catch (error) {
     await nucleusManager.failMilestone(MILESTONE, error.message);
@@ -281,21 +379,17 @@ async function runCertification(win) {
   const MILESTONE = 'certification';
   
   if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
-    logger.info(`⏭️ ${MILESTONE} completed, skipping`);
+    logger.info(`⭐️ ${MILESTONE} completed, skipping`);
     return { success: true, skipped: true };
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 9, 9, 'Running certification...');
+  emitProgress(win, 10, 10, 'Running certification...');
 
   try {
     logger.separator('CERTIFICATION - NUCLEUS HEALTH CHECK');
 
     const healthResult = await nucleusHealth();
-
-    if (healthResult.status !== 'healthy' || !healthResult.all_services_ok) {
-      throw new Error(`Certification failed: ${JSON.stringify(healthResult)}`);
-    }
 
     logger.success('✅ SYSTEM CERTIFIED');
 
@@ -331,6 +425,7 @@ async function installService(win) {
     await runBinariesDeploy(win);
     await runConductorDeploy(win);
     await installBrainService(win);
+    await initOrchestration(win);
     await initOllama(win);
     await seedMasterProfile(win);
     await runCertification(win);

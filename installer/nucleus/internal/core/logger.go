@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -11,6 +12,10 @@ import (
 	"time"
 )
 
+// ============================================================================
+// LOGGER - Maneja logs estructurados (archivo + consola)
+// ============================================================================
+
 type Logger struct {
 	file       *os.File
 	logger     *log.Logger
@@ -20,29 +25,38 @@ type Logger struct {
 	category   string
 }
 
-func InitLogger(paths *PathConfig, category string, silent bool) (*Logger, error) {
+// InitLogger crea un logger que escribe a archivo y consola
+// En modo JSON, los logs van a stderr; en modo normal, a stdout
+func InitLogger(paths *PathConfig, category string, jsonMode bool) (*Logger, error) {
 	targetDir := filepath.Join(paths.Logs, "nucleus")
 	if err := os.MkdirAll(targetDir, 0755); err != nil {
 		return nil, fmt.Errorf("error creando directorio %s: %w", targetDir, err)
 	}
 
 	now := time.Now()
-	logFileName := fmt.Sprintf("nucleus_%s_%s.log", category, now.Format("2006-01-02"))
+	logFileName := fmt.Sprintf("nucleus_%s_%s.log", strings.ToLower(category), now.Format("20060102"))
 	logPath := filepath.Join(targetDir, logFileName)
 
 	file, err := os.OpenFile(logPath, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0666)
 	if err != nil {
-		return nil, fmt.Errorf("error al abrir log %s: %w", logPath, err)
+		return nil, fmt.Errorf("error al abrirlog %s: %w", logPath, err)
 	}
 
 	if file == nil {
 		return nil, fmt.Errorf("file handle es nil después de OpenFile")
 	}
 
-	var dest io.Writer = file
-	if !silent {
-		dest = io.MultiWriter(os.Stdout, file)
+	// ✅ DECISIÓN ÚNICA DE ROUTING
+	var consoleWriter io.Writer
+	if jsonMode {
+		// Modo JSON: logs van a stderr para no contaminar stdout
+		consoleWriter = os.Stderr
+	} else {
+		// Modo normal: logs van a stdout
+		consoleWriter = os.Stdout
 	}
+	
+	dest := io.MultiWriter(consoleWriter, file)
 	l := log.New(dest, "", log.Ldate|log.Ltime)
 
 	icon := getNucleusIcon(category)
@@ -50,8 +64,8 @@ func InitLogger(paths *PathConfig, category string, silent bool) (*Logger, error
 	logger := &Logger{
 		file:       file,
 		logger:     l,
-		isJSONMode: false,
-		silentMode: silent,
+		isJSONMode: jsonMode,
+		silentMode: false,
 		category:   category,
 	}
 
@@ -65,9 +79,9 @@ func InitLogger(paths *PathConfig, category string, silent bool) (*Logger, error
 
 	// Registrar stream en telemetry
 	tm := GetTelemetryManager(paths.Logs, paths.Root)
-	streamID := "nucleus-" + category
+	streamID := "nucleus-" + strings.ToLower(category)
 	streamLabel := icon + " " + category
-	tm.RegisterStream(streamID, streamLabel, logPath, 2)
+	tm.RegisterStream(streamID, streamLabel, filepath.ToSlash(logPath), 2)
 
 	return logger, nil
 }
@@ -88,6 +102,8 @@ func getNucleusIcon(category string) string {
 		return "🕸️"
 	case "ANALYTICS":
 		return "📊"
+	case "TEMPORAL":
+		return "⏱️"
 	default:
 		return "⚙️"
 	}
@@ -100,46 +116,26 @@ func (l *Logger) SetSilentMode(e bool) {
 	l.reconfigure()
 }
 
-func (l *Logger) SetJSONMode(e bool) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.isJSONMode = e
-	l.reconfigure()
-}
-
 func (l *Logger) reconfigure() {
-	var dest io.Writer = l.file
-	if !l.silentMode {
-		dest = io.MultiWriter(os.Stdout, l.file)
+	var dest io.Writer
+	
+	if l.silentMode {
+		// Modo silencioso: solo archivo
+		dest = l.file
+	} else {
+		// ✅ Decisión según modo JSON (configurado en Init)
+		var consoleWriter io.Writer
+		if l.isJSONMode {
+			consoleWriter = os.Stderr
+		} else {
+			consoleWriter = os.Stdout
+		}
+		dest = io.MultiWriter(consoleWriter, l.file)
 	}
+	
 	if l.logger != nil {
 		l.logger.SetOutput(dest)
 	}
-}
-
-// writeAndFlush escribe y hace flush inmediatamente con manejo de errores
-func (l *Logger) writeAndFlush(message string) error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	
-	if l.file == nil {
-		return fmt.Errorf("log file is nil")
-	}
-	
-	n, err := l.file.WriteString(message)
-	if err != nil {
-		return fmt.Errorf("failed to write to log file: %w", err)
-	}
-	
-	if n != len(message) {
-		return fmt.Errorf("incomplete write: wrote %d of %d bytes", n, len(message))
-	}
-	
-	if err := l.file.Sync(); err != nil {
-		return fmt.Errorf("failed to sync log file: %w", err)
-	}
-	
-	return nil
 }
 
 // Flush fuerza la escritura de logs al disco
@@ -158,7 +154,6 @@ func (l *Logger) Info(f string, v ...any) {
 		return
 	}
 	l.logger.Printf("[INFO] "+f, v...)
-	// Info no hace flush automático para performance
 }
 
 func (l *Logger) Error(f string, v ...any) {
@@ -166,10 +161,7 @@ func (l *Logger) Error(f string, v ...any) {
 		return
 	}
 	l.logger.Printf("[ERROR] "+f, v...)
-	// Errores se escriben inmediatamente
-	if err := l.Flush(); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to flush error log: %v\n", err)
-	}
+	l.Flush() // Errores se escriben inmediatamente
 }
 
 func (l *Logger) Warning(f string, v ...any) {
@@ -177,10 +169,7 @@ func (l *Logger) Warning(f string, v ...any) {
 		return
 	}
 	l.logger.Printf("[WARNING] "+f, v...)
-	// Warnings se escriben inmediatamente
-	if err := l.Flush(); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to flush warning log: %v\n", err)
-	}
+	l.Flush()
 }
 
 func (l *Logger) Success(f string, v ...any) {
@@ -188,10 +177,7 @@ func (l *Logger) Success(f string, v ...any) {
 		return
 	}
 	l.logger.Printf("[SUCCESS] "+f, v...)
-	// Success se escribe inmediatamente
-	if err := l.Flush(); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to flush success log: %v\n", err)
-	}
+	l.Flush()
 }
 
 func (l *Logger) Debug(f string, v ...any) {
@@ -206,23 +192,84 @@ func (l *Logger) Close() error {
 	defer l.mu.Unlock()
 	
 	if l.file != nil {
-		// Escribir footer
 		footer := fmt.Sprintf("\n%s [%s] Logging session ended %s\n\n", 
 			strings.Repeat("=", 40), 
 			l.category, 
 			strings.Repeat("=", 40))
 		
-		// Intentar escribir footer pero no fallar si falla
 		l.file.WriteString(footer)
-		
-		// Flush final
 		l.file.Sync()
 		
-		// Cerrar archivo
 		err := l.file.Close()
 		l.file = nil
 		l.logger = nil
 		return err
 	}
 	return nil
+}
+
+// ============================================================================
+// OUTPUT HELPERS - Resultados finales de comandos
+// ============================================================================
+
+// OutputJSON escribe JSON a stdout (para --json flag)
+func (l *Logger) OutputJSON(data interface{}) error {
+	bytes, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return fmt.Errorf("error marshaling JSON: %w", err)
+	}
+	
+	// ✅ JSON SIEMPRE a stdout, independiente del logger
+	fmt.Fprintln(os.Stdout, string(bytes))
+	return nil
+}
+
+// OutputResult maneja el resultado final según el modo
+func (l *Logger) OutputResult(jsonData interface{}, interactiveMessage string) error {
+	if l.isJSONMode {
+		return l.OutputJSON(jsonData)
+	} else {
+		// En modo interactivo, usa el mismo canal que los logs (stdout)
+		fmt.Fprintln(os.Stdout, interactiveMessage)
+		return nil
+	}
+}
+
+// ============================================================================
+// TEMPORAL LOGGER ADAPTER
+// ============================================================================
+
+// TemporalLogger adapta nuestro Logger al interface de Temporal SDK
+type TemporalLogger struct {
+	logger *Logger
+}
+
+// InitTemporalLogger crea un logger específico para Temporal
+func InitTemporalLogger(paths *PathConfig, jsonMode bool) (*TemporalLogger, error) {
+	logger, err := InitLogger(paths, "TEMPORAL", jsonMode)
+	if err != nil {
+		return nil, err
+	}
+	
+	return &TemporalLogger{logger: logger}, nil
+}
+
+// Debug implements Temporal's logger interface
+func (tl *TemporalLogger) Debug(msg string, keyvals ...interface{}) {
+	tl.logger.Debug("%s %v", msg, keyvals)
+}
+
+// Info implements Temporal's logger interface
+func (tl *TemporalLogger) Info(msg string, keyvals ...interface{}) {
+	tl.logger.Info("%s %v", msg, keyvals)
+}
+
+// Warn implements Temporal's logger interface
+func (tl *TemporalLogger) Warn(msg string, keyvals ...interface{}) {
+	tl.logger.Warning("%s %v", msg, keyvals)
+}
+
+// Error implements Temporal's logger interface
+func (tl *TemporalLogger) Error(msg string, keyvals ...interface{}) {
+	tl.logger.Error("%s %v", msg, keyvals)
 }

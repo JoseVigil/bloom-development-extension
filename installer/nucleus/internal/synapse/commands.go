@@ -3,8 +3,10 @@ package synapse
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"nucleus/internal/core"
@@ -89,17 +91,13 @@ JSON Output:
 				profileID = args[0]
 			}
 
-			// Initialize logger for orchestration
-			logger, err := core.InitLogger(&c.Paths, "orchestration", false)
+			// ✅ Inicializar logger con modo JSON correcto
+			logger, err := core.InitLogger(&c.Paths, "ORCHESTRATION", c.IsJSON)
 			if err != nil {
-				emitError(c, "nucleus", "synapse launch", fmt.Sprintf("Failed to initialize logger: %v", err))
+				emitError(c, nil, "nucleus", "synapse launch", fmt.Sprintf("Failed to initialize logger: %v", err))
 				os.Exit(1)
 			}
 			defer logger.Close()
-
-			if c.IsJSON {
-				logger.SetJSONMode(true)
-			}
 
 			logger.Info("Starting synapse launch for profile: %s", profileID)
 
@@ -123,7 +121,7 @@ JSON Output:
 			// Validate config
 			if err := validateLaunchConfig(&config); err != nil {
 				logger.Error("Invalid configuration: %v", err)
-				emitError(c, "nucleus", "synapse launch", err.Error())
+				emitError(c, logger, "nucleus", "synapse launch", err.Error())
 				os.Exit(1)
 			}
 
@@ -131,18 +129,16 @@ JSON Output:
 			result, err := executeLaunch(c, logger, &config)
 			if err != nil {
 				logger.Error("Launch failed: %v", err)
-				emitError(c, "sentinel", "synapse launch", err.Error())
+				emitError(c, logger, "sentinel", "synapse launch", err.Error())
 				os.Exit(1)
 			}
 
-			// Emit success
+			// ✅ Emit success usando logger.OutputResult
 			logger.Success("Launch completed successfully")
-			if c.IsJSON {
-				output, _ := json.Marshal(result)
-				fmt.Println(string(output))
-			} else {
-				fmt.Printf("🚀 Launch complete for profile: %s\n", profileID)
-			}
+			logger.OutputResult(
+				result, // JSON data
+				fmt.Sprintf("🚀 Launch complete for profile: %s", profileID), // Interactive message
+			)
 		},
 	}
 
@@ -192,32 +188,47 @@ JSON Output:
     "state": "RUNNING"
   }`,
 		Run: func(cmd *cobra.Command, args []string) {
-			ctx := context.Background()
-			result, err := executeStartOllamaWorkflow(ctx, c, simulation)
+			// ✅ 1. Inicializar logger con modo JSON correcto
+			logger, err := core.InitLogger(&c.Paths, "ORCHESTRATION", c.IsJSON)
 			if err != nil {
-				if c.IsJSON {
-					output, _ := json.Marshal(map[string]interface{}{
+				emitError(c, nil, "nucleus", "synapse start-ollama", fmt.Sprintf("Failed to initialize logger: %v", err))
+				os.Exit(1)
+			}
+			defer logger.Close()
+
+			logger.Info("Starting Ollama service via Temporal workflow")
+
+			// ✅ 2. Ejecutar workflow
+			ctx := context.Background()
+			result, err := executeStartOllamaWorkflow(ctx, c, logger, simulation)
+			if err != nil {
+				logger.Error("Start Ollama failed: %v", err)
+				
+				// ✅ Error output según modo
+				if err := logger.OutputResult(
+					map[string]interface{}{
 						"success": false,
 						"error":   err.Error(),
 						"state":   "FAILED",
-					})
-					fmt.Println(string(output))
-				} else {
-					c.Logger.Printf("[ERROR] ❌ Start Ollama failed: %v", err)
+					},
+					fmt.Sprintf("❌ Start Ollama failed: %v", err),
+				); err != nil {
+					fmt.Fprintf(os.Stderr, "Failed to output result: %v\n", err)
 				}
 				os.Exit(1)
 			}
 
-			if c.IsJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-				return
+			// ✅ 3. Success output según modo
+			logger.Success("Ollama started successfully - PID: %d, Port: %d, State: %s", 
+				result.PID, result.Port, result.State)
+			
+			if err := logger.OutputResult(
+				result, // JSON data
+				fmt.Sprintf("✅ Ollama started successfully\n   PID: %d\n   Port: %d\n   State: %s", 
+					result.PID, result.Port, result.State), // Interactive message
+			); err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to output result: %v\n", err)
 			}
-
-			c.Logger.Printf("[SUCCESS] ✅ Ollama started successfully")
-			c.Logger.Printf("[INFO]    PID: %d", result.PID)
-			c.Logger.Printf("[INFO]    Port: %d", result.Port)
-			c.Logger.Printf("[INFO]    State: %s", result.State)
 		},
 	}
 
@@ -251,35 +262,42 @@ JSON Output:
     "state": "HEALTHY"
   }`,
 		Run: func(cmd *cobra.Command, args []string) {
-			ctx := context.Background()
-			result, err := executeVaultStatusWorkflow(ctx, c)
+			logger, err := core.InitLogger(&c.Paths, "ORCHESTRATION", c.IsJSON)
 			if err != nil {
-				if c.IsJSON {
-					output, _ := json.Marshal(map[string]interface{}{
+				emitError(c, nil, "nucleus", "synapse vault-status", fmt.Sprintf("Failed to initialize logger: %v", err))
+				os.Exit(1)
+			}
+			defer logger.Close()
+
+			logger.Info("Querying Vault status via Brain workflow")
+
+			ctx := context.Background()
+			result, err := executeVaultStatusWorkflow(ctx, c, logger)
+			if err != nil {
+				logger.Error("Vault status query failed: %v", err)
+				
+				if err := logger.OutputResult(
+					map[string]interface{}{
 						"success": false,
 						"error":   err.Error(),
 						"state":   "FAILED",
-					})
-					fmt.Println(string(output))
-				} else {
-					c.Logger.Printf("[ERROR] ❌ Vault status query failed: %v", err)
+					},
+					fmt.Sprintf("❌ Vault status query failed: %v", err),
+				); err != nil {
+					fmt.Fprintf(os.Stderr, "Failed to output result: %v\n", err)
 				}
 				os.Exit(1)
 			}
 
-			if c.IsJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-				return
-			}
-
-			c.Logger.Printf("[INFO] Vault Status:")
-			c.Logger.Printf("[INFO]    State: %s", result.VaultState)
-			c.Logger.Printf("[INFO]    Master Profile Active: %v", result.MasterProfileActive)
-			c.Logger.Printf("[INFO]    Overall State: %s", result.State)
-
-			if result.VaultState == "LOCKED" {
-				c.Logger.Printf("[WARNING] ⚠️  Vault is locked - some operations may be restricted")
+			logger.Success("Vault status retrieved - State: %s, Master Profile: %v", 
+				result.VaultState, result.MasterProfileActive)
+			
+			if err := logger.OutputResult(
+				result,
+				fmt.Sprintf("✅ Vault Status\n   State: %s\n   Master Profile Active: %v\n   Overall State: %s", 
+					result.VaultState, result.MasterProfileActive, result.State),
+			); err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to output result: %v\n", err)
 			}
 		},
 	}
@@ -294,12 +312,14 @@ JSON Output:
 func newShutdownAllCommand(c *core.Core) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "shutdown-all",
-		Short: "Gracefully shutdown all orchestrated services",
-		Long: `Shutdown all services managed by Nucleus/Synapse orchestration:
-- Browser instances
-- Ollama AI service
-- Temporal workflows (if applicable)
-- Other orchestrated components`,
+		Short: "Gracefully shutdown all running services",
+		Long: `Executes a coordinated shutdown of all Nucleus-managed services.
+
+This includes:
+- All running Chrome instances
+- Ollama service
+- Brain component
+- Temporal workers`,
 		Args: cobra.NoArgs,
 		Example: `  nucleus synapse shutdown-all
   nucleus --json synapse shutdown-all
@@ -307,36 +327,43 @@ func newShutdownAllCommand(c *core.Core) *cobra.Command {
 JSON Output:
   {
     "success": true,
-    "services_shutdown": [
-      "browser_instances",
-      "ollama_service",
-      "temporal_workflows"
-    ]
+    "services_shutdown": ["chrome", "ollama", "brain", "temporal"]
   }`,
 		Run: func(cmd *cobra.Command, args []string) {
-			ctx := context.Background()
-			result, err := executeShutdownAllWorkflow(ctx, c)
+			logger, err := core.InitLogger(&c.Paths, "ORCHESTRATION", c.IsJSON)
 			if err != nil {
-				if c.IsJSON {
-					output, _ := json.Marshal(map[string]interface{}{
+				emitError(c, nil, "nucleus", "synapse shutdown-all", fmt.Sprintf("Failed to initialize logger: %v", err))
+				os.Exit(1)
+			}
+			defer logger.Close()
+
+			logger.Info("Initiating graceful shutdown of all services")
+
+			ctx := context.Background()
+			result, err := executeShutdownAllWorkflow(ctx, c, logger)
+			if err != nil {
+				logger.Error("Shutdown failed: %v", err)
+				
+				if err := logger.OutputResult(
+					map[string]interface{}{
 						"success": false,
 						"error":   err.Error(),
-					})
-					fmt.Println(string(output))
-				} else {
-					c.Logger.Printf("[ERROR] ❌ Shutdown failed: %v", err)
+					},
+					fmt.Sprintf("❌ Shutdown failed: %v", err),
+				); err != nil {
+					fmt.Fprintf(os.Stderr, "Failed to output result: %v\n", err)
 				}
 				os.Exit(1)
 			}
 
-			if c.IsJSON {
-				output, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(output))
-				return
+			logger.Success("All services shutdown successfully")
+			
+			if err := logger.OutputResult(
+				result,
+				fmt.Sprintf("✅ Shutdown Complete\n   Services: %v", result.ServicesShutdown),
+			); err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to output result: %v\n", err)
 			}
-
-			c.Logger.Printf("[SUCCESS] ✅ Shutdown completed")
-			c.Logger.Printf("[INFO]    Services stopped: %v", result.ServicesShutdown)
 		},
 	}
 
@@ -439,9 +466,9 @@ func validateLaunchConfig(config *LaunchConfig) error {
 func executeLaunch(c *core.Core, logger *core.Logger, config *LaunchConfig) (*LaunchResult, error) {
 	logger.Info("Initializing Temporal client")
 
-	// Initialize Temporal client (orchestration/temporal)
+	// ✅ Initialize Temporal client con PathConfig y modo JSON
 	ctx := context.Background()
-	tc, err := temporalclient.NewClient(ctx)
+	tc, err := temporalclient.NewClient(ctx, &c.Paths, c.IsJSON)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize Temporal client: %w", err)
 	}
@@ -474,21 +501,18 @@ func executeLaunch(c *core.Core, logger *core.Logger, config *LaunchConfig) (*La
 // WORKFLOW EXECUTION HELPERS
 // ============================================
 
-func getTemporalClient(ctx context.Context) (client.Client, error) {
-	return client.Dial(client.Options{
-		HostPort: "localhost:7233",
-	})
-}
-
-func executeStartOllamaWorkflow(ctx context.Context, c *core.Core, simulation bool) (*StartOllamaResult, error) {
-	tc, err := getTemporalClient(ctx)
+func executeStartOllamaWorkflow(ctx context.Context, c *core.Core, logger *core.Logger, simulation bool) (*StartOllamaResult, error) {
+	// ✅ Usar temporalclient.NewClient con PathConfig
+	temporalClient, err := temporalclient.NewClient(ctx, &c.Paths, c.IsJSON)
 	if err != nil {
 		return nil, err
 	}
-	defer tc.Close()
+	defer temporalClient.Close()
+	
+	tc := temporalClient.GetClient()
 
-	// Por ahora, implementación simulada - deberás conectar con tus workflows reales
-	// cuando los tengas implementados
+	logger.Info("Executing StartOllamaWorkflow (simulation: %v)", simulation)
+
 	input := map[string]interface{}{
 		"simulation_mode": simulation,
 	}
@@ -498,22 +522,49 @@ func executeStartOllamaWorkflow(ctx context.Context, c *core.Core, simulation bo
 		TaskQueue: "nucleus-task-queue",
 	}
 
+	// ────────────────────────────────────────────────
+	//     IMPORTANTE: Agregamos timeout al contexto
+	// ────────────────────────────────────────────────
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
 	we, err := tc.ExecuteWorkflow(ctx, workflowOptions, "StartOllamaWorkflow", input)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute workflow: %w", err)
 	}
 
 	var result StartOllamaResult
+
+	// Usamos el mismo ctx con timeout también en Get
 	err = we.Get(ctx, &result)
-	return &result, err
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			return nil, fmt.Errorf("workflow timeout después de 10s – probablemente no hay workers corriendo. Ejecutá: nucleus worker start")
+		}
+		
+		// Si el error contiene "no poller" o "no worker", también indicarlo
+		errStr := err.Error()
+		if strings.Contains(errStr, "no worker") || strings.Contains(errStr, "no poller") {
+			return nil, fmt.Errorf("no hay workers disponibles. Ejecutá: nucleus worker start")
+		}
+		
+		return nil, fmt.Errorf("failed to get workflow result: %w", err)
+	}
+
+	return &result, nil
 }
 
-func executeVaultStatusWorkflow(ctx context.Context, c *core.Core) (*VaultStatusResult, error) {
-	tc, err := getTemporalClient(ctx)
+func executeVaultStatusWorkflow(ctx context.Context, c *core.Core, logger *core.Logger) (*VaultStatusResult, error) {
+	// ✅ Usar temporalclient.NewClient con PathConfig
+	temporalClient, err := temporalclient.NewClient(ctx, &c.Paths, c.IsJSON)
 	if err != nil {
 		return nil, err
 	}
-	defer tc.Close()
+	defer temporalClient.Close()
+	
+	tc := temporalClient.GetClient()
+
+	logger.Info("Executing VaultStatusWorkflow")
 
 	workflowOptions := client.StartWorkflowOptions{
 		ID:        fmt.Sprintf("vault_status_%d", time.Now().Unix()),
@@ -527,15 +578,24 @@ func executeVaultStatusWorkflow(ctx context.Context, c *core.Core) (*VaultStatus
 
 	var result VaultStatusResult
 	err = we.Get(ctx, &result)
-	return &result, err
+	if err != nil {
+		return nil, fmt.Errorf("failed to get workflow result: %w", err)
+	}
+	
+	return &result, nil
 }
 
-func executeShutdownAllWorkflow(ctx context.Context, c *core.Core) (*ShutdownAllResult, error) {
-	tc, err := getTemporalClient(ctx)
+func executeShutdownAllWorkflow(ctx context.Context, c *core.Core, logger *core.Logger) (*ShutdownAllResult, error) {
+	// ✅ Usar temporalclient.NewClient con PathConfig
+	temporalClient, err := temporalclient.NewClient(ctx, &c.Paths, c.IsJSON)
 	if err != nil {
 		return nil, err
 	}
-	defer tc.Close()
+	defer temporalClient.Close()
+	
+	tc := temporalClient.GetClient()
+
+	logger.Info("Executing ShutdownAllWorkflow")
 
 	workflowOptions := client.StartWorkflowOptions{
 		ID:        fmt.Sprintf("shutdown_all_%d", time.Now().Unix()),
@@ -549,14 +609,18 @@ func executeShutdownAllWorkflow(ctx context.Context, c *core.Core) (*ShutdownAll
 
 	var result ShutdownAllResult
 	err = we.Get(ctx, &result)
-	return &result, err
+	if err != nil {
+		return nil, fmt.Errorf("failed to get workflow result: %w", err)
+	}
+	
+	return &result, nil
 }
 
 // ============================================
 // ERROR HANDLING
 // ============================================
 
-func emitError(c *core.Core, source, command, message string) {
+func emitError(c *core.Core, logger *core.Logger, source, command, message string) {
 	errObj := CommandError{
 		Type:      "COMMAND_ERROR",
 		Source:    source,
@@ -565,10 +629,19 @@ func emitError(c *core.Core, source, command, message string) {
 		Timestamp: time.Now().Unix(),
 	}
 
-	if c.IsJSON {
-		output, _ := json.Marshal(errObj)
-		fmt.Println(string(output))
+	// ✅ Usar logger si está disponible
+	if logger != nil {
+		logger.OutputResult(
+			errObj,
+			fmt.Sprintf("❌ Error [%s]: %s", source, message),
+		)
 	} else {
-		fmt.Fprintf(os.Stderr, "❌ Error [%s]: %s\n", source, message)
+		// Fallback si logger no está disponible
+		if c.IsJSON {
+			output, _ := json.Marshal(errObj)
+			fmt.Println(string(output))
+		} else {
+			fmt.Fprintf(os.Stderr, "❌ Error [%s]: %s\n", source, message)
+		}
 	}
 }

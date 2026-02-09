@@ -60,16 +60,23 @@ brain filesystem tree src installer webview brain contracts package.json tsconfi
 brain filesystem tree installer -o tree/installer_tree.txt
 
 brain filesystem tree brain -o tree/brain_tree.txt
-|
+
 brain filesystem tree webview -o tree/webview_tree.txt
 
 brain filesystem tree installer/electron-app -o tree/electron_tree.txt
+
+brain filesystem tree installer/nucleus -o tree/nucleus_tree.txt
 
 brain filesystem tree installer/sentinel -o tree/sentinel_tree.txt
 
 brain filesystem tree installer/chrome-extension/src -o tree/chrome_extension_src_tree.txt
 
 brain filesystem tree C:\Users\josev\AppData\Local\BloomNucleus -o tree/appdata_tree.txt
+
+Push help
+git add -f installer/native/bin/win32/nucleus/help
+git add -f installer/native/bin/win32/sentinel/help
+git add -f installer/native/bin/win32/brain/help
 
 Asterisk
 sudo asterisk -rvvv
