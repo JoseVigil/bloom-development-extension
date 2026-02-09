@@ -391,7 +391,38 @@ async function runCertification(win) {
 
     const healthResult = await nucleusHealth();
 
+    // Nuevo formato: { success: boolean, state: string, components: {...} }
+    if (!healthResult.success) {
+      logger.warn('⚠️ Health check failed:');
+      logger.warn(`  State: ${healthResult.state}`);
+      logger.warn(`  Error: ${healthResult.error}`);
+      
+      // Log componentes unhealthy
+      const components = healthResult.components || {};
+      for (const [name, status] of Object.entries(components)) {
+        if (!status.healthy) {
+          logger.warn(`  ${name}: ${status.state} - ${status.error || 'N/A'}`);
+        }
+      }
+      
+      throw new Error(`Certification failed: ${healthResult.error}`);
+    }
+
+    // Verificar componentes críticos
+    const critical = ['brain_service', 'temporal', 'worker_manager'];
+    const unhealthy = critical.filter(c => !healthResult.components?.[c]?.healthy);
+    
+    if (unhealthy.length > 0) {
+      throw new Error(`Critical components unhealthy: ${unhealthy.join(', ')}`);
+    }
+
     logger.success('✅ SYSTEM CERTIFIED');
+    logger.info('  Healthy components:');
+    for (const [name, status] of Object.entries(healthResult.components || {})) {
+      if (status.healthy) {
+        logger.info(`    ✓ ${name}: ${status.state}`);
+      }
+    }
 
     await nucleusManager.completeMilestone(MILESTONE, healthResult);
     return { success: true };
