@@ -29,6 +29,7 @@
 ------------------------------------------------------------------------------------------------------------------------
 
   SYSTEM             System information and diagnostics                       2 cmds
+  DIAGNOSTICS        Health checks and system diagnostics                     1 cmd
   GOVERNANCE         Organization initialization and authority                4 cmds
   TEAM               Team and collaboration management                        3 cmds
   VAULT              Secure key and credential management                     4 cmds
@@ -36,7 +37,7 @@
   ANALYTICS          System monitoring and telemetry                          1 cmd
   TEMPORAL_SERVER    Temporal server management and diagnostics               1 cmd
   ORCHESTRATION      Workflow orchestration and automation                    3 cmds
-  ---------------------------------------------------------------------------  Total: 20 commands
+  ---------------------------------------------------------------------------  Total: 21 commands
 
 
 =======================================================[ SYSTEM ]=======================================================
@@ -52,6 +53,27 @@
     Display version and build information
 
     Usage: nucleus version
+
+    --------------------------------------------------------------------------------
+
+
+====================================================[ DIAGNOSTICS ]=====================================================
+
+  > HEALTH
+    System integrity check - validates all Nucleus components
+
+    Usage: nucleus health
+
+    Flags:
+      --component                Check only specific component (temporal, worker, ollama, etc.)
+      --json                     Output result as JSON (one-line compact)
+      --validate                 Deep validation checks (slower)
+
+    Example:
+        nucleus health
+        nucleus health --json
+        nucleus health --json --validate
+        nucleus health --component temporal
 
     --------------------------------------------------------------------------------
 
