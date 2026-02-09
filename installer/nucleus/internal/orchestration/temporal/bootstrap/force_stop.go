@@ -13,9 +13,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func init() {
-	core.RegisterCommand("TEMPORAL_SERVER", temporalForceStopCmd)
-}
 
 // temporalForceStopCmd implementa la lógica de detención forzada
 func temporalForceStopCmd(c *core.Core) *cobra.Command {

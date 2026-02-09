@@ -12,10 +12,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func init() {
-	core.RegisterCommand("TEMPORAL_SERVER", createTemporalDiagnosticsCommand)
-}
-
 func createTemporalDiagnosticsCommand(c *core.Core) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "diagnostics",

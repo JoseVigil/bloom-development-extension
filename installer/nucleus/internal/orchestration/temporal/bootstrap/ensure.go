@@ -10,10 +10,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func init() {
-	core.RegisterCommand("TEMPORAL_SERVER", createTemporalEnsureCommand)
-}
-
 // EnsureResponse define la respuesta JSON del comando ensure
 type EnsureResponse struct {
 	Success  bool   `json:"success"`

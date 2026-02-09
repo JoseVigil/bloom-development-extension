@@ -233,6 +233,16 @@ func (r *ModernHelpRenderer) printCommandDetail(cmd *cobra.Command) {
 			r.writeln(fmt.Sprintf("        %s", Dim.Apply(subUsage, r.useColors)))
 		}
 		r.writeln("")
+		
+		// Mostrar detalles completos de cada subcomando
+		r.writeln("    " + Bold.Apply("Subcommand Details:", r.useColors))
+		r.writeln("")
+		for _, subcmd := range cmd.Commands() {
+			if subcmd.Name() == "help" {
+				continue
+			}
+			r.printSubcommandDetail(cmd.Name(), subcmd)
+		}
 	}
 
 	// Args
@@ -310,6 +320,92 @@ func (r *ModernHelpRenderer) printCommandDetail(cmd *cobra.Command) {
 	r.writeln("")
 }
 
+func (r *ModernHelpRenderer) printSubcommandDetail(parentName string, subcmd *cobra.Command) {
+	subcmdName := strings.ToUpper(subcmd.Name())
+	
+	r.writeln("      " + Bold.Apply(BrightCyan.Apply("└─ ", r.useColors)+subcmdName, r.useColors))
+	r.writeln("        " + Dim.Apply(subcmd.Short, r.useColors))
+	r.writeln("")
+	
+	usage := fmt.Sprintf("nucleus %s %s", parentName, subcmd.Use)
+	r.writeln("        " + Dim.Apply("Usage:", r.useColors) + " " + Green.Apply(usage, r.useColors))
+	r.writeln("")
+	
+	// Args
+	if args := r.extractArgs(subcmd); len(args) > 0 {
+		r.writeln("        " + Bold.Apply("Arguments:", r.useColors))
+		for _, arg := range args {
+			reqLabel := Dim.Apply("optional", r.useColors)
+			if arg.Required {
+				reqLabel = Yellow.Apply("required", r.useColors)
+			}
+			r.writeln(fmt.Sprintf("          %s  %s",
+				Cyan.Apply(r.padRight(arg.Name, 20), r.useColors),
+				reqLabel))
+		}
+		r.writeln("")
+	}
+	
+	// Flags
+	hasFlags := false
+	subcmd.LocalFlags().VisitAll(func(f *pflag.Flag) {
+		if !hasFlags {
+			r.writeln("        " + Bold.Apply("Flags:", r.useColors))
+			hasFlags = true
+		}
+
+		flagStr := "--" + f.Name
+		if f.Shorthand != "" {
+			flagStr += ", -" + f.Shorthand
+		}
+
+		defaultInfo := ""
+		if f.DefValue != "" && f.DefValue != "false" {
+			defaultInfo = Dim.Apply(fmt.Sprintf(" [default: %s]", f.DefValue), r.useColors)
+		}
+
+		r.writeln(fmt.Sprintf("          %s  %s%s",
+			BrightYellow.Apply(r.padRight(flagStr, 25), r.useColors),
+			f.Usage,
+			defaultInfo))
+	})
+	if hasFlags {
+		r.writeln("")
+	}
+	
+	// Example
+	if subcmd.Example != "" {
+		r.writeln("        " + Bold.Apply("Example:", r.useColors))
+		for _, line := range strings.Split(subcmd.Example, "\n") {
+			if strings.TrimSpace(line) != "" {
+				r.writeln("          " + Green.Apply(line, r.useColors))
+			}
+		}
+		r.writeln("")
+	}
+	
+	// JSON Response
+	if jsonResp, ok := subcmd.Annotations["json_response"]; ok && jsonResp != "" {
+		r.writeln("        " + Bold.Apply("JSON Response:", r.useColors))
+		for _, line := range strings.Split(jsonResp, "\n") {
+			if strings.TrimSpace(line) != "" {
+				r.writeln("          " + Dim.Apply(line, r.useColors))
+			}
+		}
+		r.writeln("")
+	}
+	
+	var separator string
+	if r.isRedirected() {
+		separator = strings.Repeat("-", 70)
+	} else {
+		separator = strings.Repeat("─", 70)
+	}
+	
+	r.writeln(Gray.Apply("        "+separator, r.useColors))
+	r.writeln("")
+}
+
 func (r *ModernHelpRenderer) printFooter() {
 	r.writeln("")
 
@@ -374,19 +470,9 @@ func (r *ModernHelpRenderer) categorizeCommands(root *cobra.Command) map[string]
 			category = "OTHER"
 		}
 
-		// Siempre agregar el comando (incluso si tiene subcomandos)
+		// Solo agregar el comando padre, NO los subcomandos individualmente
+		// Los subcomandos se mostrarán dentro del comando padre
 		categories[category] = append(categories[category], cmd)
-
-		// Incluir subcomandos recursivamente
-		if cmd.HasSubCommands() {
-			for _, subcmd := range cmd.Commands() {
-				subCategory := subcmd.Annotations["category"]
-				if subCategory == "" {
-					subCategory = category
-				}
-				categories[subCategory] = append(categories[subCategory], subcmd)
-			}
-		}
 	}
 
 	return categories

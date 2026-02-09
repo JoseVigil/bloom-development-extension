@@ -34,9 +34,9 @@
   VAULT              Secure key and credential management                     4 cmds
   SYNC               State synchronization with central server                2 cmds
   ANALYTICS          System monitoring and telemetry                          1 cmd
-  TEMPORAL_SERVER    Temporal server management and diagnostics               12 cmds
-  ORCHESTRATION      Workflow orchestration and automation                    7 cmds
-  ---------------------------------------------------------------------------  Total: 35 commands
+  TEMPORAL_SERVER    Temporal server management and diagnostics               1 cmd
+  ORCHESTRATION      Workflow orchestration and automation                    3 cmds
+  ---------------------------------------------------------------------------  Total: 20 commands
 
 
 =======================================================[ SYSTEM ]=======================================================
@@ -59,15 +59,12 @@
 =====================================================[ GOVERNANCE ]=====================================================
 
   > ALFRED
-    Muestra el reporte de salud administrativa y estado de la Bóveda
+    Ejecuta una verificación de integridad manual sobre el sistema de archivos
 
-    Usage: nucleus alfred status
+    Usage: nucleus alfred audit
 
     Arguments:
-      status                required
-
-    Flags:
-      --json                     Salida en formato JSON (para Conductor u otras herramientas)
+      audit                 required
 
     --------------------------------------------------------------------------------
 
@@ -82,12 +79,15 @@
     --------------------------------------------------------------------------------
 
   > ALFRED
-    Ejecuta una verificación de integridad manual sobre el sistema de archivos
+    Muestra el reporte de salud administrativa y estado de la Bóveda
 
-    Usage: nucleus alfred audit
+    Usage: nucleus alfred status
 
     Arguments:
-      audit                 required
+      status                required
+
+    Flags:
+      --json                     Salida en formato JSON (para Conductor u otras herramientas)
 
     --------------------------------------------------------------------------------
 
@@ -205,295 +205,6 @@
 
 ==================================================[ TEMPORAL_SERVER ]===================================================
 
-  > CLEANUP
-    Clean up zombie Temporal processes on port 7233
-
-    Usage: nucleus cleanup
-
-    Example:
-          nucleus temporal cleanup
-          nucleus --json temporal cleanup
-
-    JSON Response:
-      {
-        "command": "temporal_cleanup",
-        "port": 7233,
-        "found_process": true,
-        "pid": 19580,
-        "executable": "C:\\Users\\user\\AppData\\Local\\BloomNucleus\\bin\\temporal\\temporal.exe",
-        "action_taken": "killed",
-        "port_free_after": true,
-        "errors": []
-      }
-
-    --------------------------------------------------------------------------------
-
-  > CLEANUP
-    Clean up zombie Temporal processes on port 7233
-
-    Usage: nucleus cleanup
-
-    Example:
-          nucleus temporal cleanup
-          nucleus --json temporal cleanup
-
-    JSON Response:
-      {
-        "command": "temporal_cleanup",
-        "port": 7233,
-        "found_process": true,
-        "pid": 19580,
-        "executable": "C:\\Users\\user\\AppData\\Local\\BloomNucleus\\bin\\temporal\\temporal.exe",
-        "action_taken": "killed",
-        "port_free_after": true,
-        "errors": []
-      }
-
-    --------------------------------------------------------------------------------
-
-  > DIAGNOSTICS
-    Run comprehensive Temporal diagnostics
-
-    Usage: nucleus diagnostics
-
-    Example:
-        nucleus temporal diagnostics
-        nucleus --json temporal diagnostics
-
-    JSON Response:
-      {
-        "executable": {
-          "path": "C:\\Users\\user\\AppData\\Local\\BloomNucleus\\bin\\temporal\\temporal.exe",
-          "exists": true,
-          "size": 123456789
-        },
-        "health": {
-          "operational": true,
-          "state": "RUNNING",
-          "grpc_responding": true,
-          "ui_responding": true
-        },
-        "database": {
-          "path": "C:\\Users\\user\\AppData\\Local\\BloomNucleus\\logs\\temporal\\temporal.db",
-          "exists": true,
-          "size": 98304
-        },
-        "pid_file": {
-          "path": "C:\\Users\\user\\AppData\\Local\\BloomNucleus\\logs\\temporal\\temporal.pid",
-          "exists": true,
-          "pid": 12345
-        },
-        "overall_status": "HEALTHY"
-      }
-
-    --------------------------------------------------------------------------------
-
-  > DIAGNOSTICS
-    Run comprehensive Temporal diagnostics
-
-    Usage: nucleus diagnostics
-
-    Example:
-        nucleus temporal diagnostics
-        nucleus --json temporal diagnostics
-
-    JSON Response:
-      {
-        "executable": {
-          "path": "C:\\Users\\user\\AppData\\Local\\BloomNucleus\\bin\\temporal\\temporal.exe",
-          "exists": true,
-          "size": 123456789
-        },
-        "health": {
-          "operational": true,
-          "state": "RUNNING",
-          "grpc_responding": true,
-          "ui_responding": true
-        },
-        "database": {
-          "path": "C:\\Users\\user\\AppData\\Local\\BloomNucleus\\logs\\temporal\\temporal.db",
-          "exists": true,
-          "size": 98304
-        },
-        "pid_file": {
-          "path": "C:\\Users\\user\\AppData\\Local\\BloomNucleus\\logs\\temporal\\temporal.pid",
-          "exists": true,
-          "pid": 12345
-        },
-        "overall_status": "HEALTHY"
-      }
-
-    --------------------------------------------------------------------------------
-
-  > ENSURE
-    Ensure Temporal Server is running (non-interactive, automation-safe)
-
-    Usage: nucleus ensure
-
-    Example:
-        nucleus temporal ensure
-
-    JSON Response:
-      {
-        "success": true,
-        "state": "RUNNING",
-        "started": true,
-        "pid": 14192,
-        "grpc_port": 7233,
-        "ui_port": 8233,
-        "ui_url": "http://localhost:8233",
-        "grpc_url": "localhost:7233"
-      }
-
-    --------------------------------------------------------------------------------
-
-  > ENSURE
-    Ensure Temporal Server is running (non-interactive, automation-safe)
-
-    Usage: nucleus ensure
-
-    Example:
-        nucleus temporal ensure
-
-    JSON Response:
-      {
-        "success": true,
-        "state": "RUNNING",
-        "started": true,
-        "pid": 14192,
-        "grpc_port": 7233,
-        "ui_port": 8233,
-        "ui_url": "http://localhost:8233",
-        "grpc_url": "localhost:7233"
-      }
-
-    --------------------------------------------------------------------------------
-
-  > FORCE-STOP
-    Forcefully stop all Temporal processes
-
-    Usage: nucleus force-stop
-
-    Example:
-          nucleus temporal force-stop
-          nucleus --json temporal force-stop
-
-    JSON Response:
-      {
-        "command": "temporal_force_stop",
-        "processes_found": 2,
-        "processes_killed": 2,
-        "port_7233_free": true,
-        "state_cleaned": true,
-        "details": [
-          {
-            "pid": 19580,
-            "executable": "C:\\Users\\user\\AppData\\Local\\BloomNucleus\\bin\\temporal\\temporal.exe",
-            "killed": true
-          }
-        ],
-        "errors": []
-      }
-
-    --------------------------------------------------------------------------------
-
-  > FORCE-STOP
-    Forcefully stop all Temporal processes
-
-    Usage: nucleus force-stop
-
-    Example:
-          nucleus temporal force-stop
-          nucleus --json temporal force-stop
-
-    JSON Response:
-      {
-        "command": "temporal_force_stop",
-        "processes_found": 2,
-        "processes_killed": 2,
-        "port_7233_free": true,
-        "state_cleaned": true,
-        "details": [
-          {
-            "pid": 19580,
-            "executable": "C:\\Users\\user\\AppData\\Local\\BloomNucleus\\bin\\temporal\\temporal.exe",
-            "killed": true
-          }
-        ],
-        "errors": []
-      }
-
-    --------------------------------------------------------------------------------
-
-  > START
-    Start Temporal Server (interactive mode)
-
-    Usage: nucleus start
-
-    Example:
-        nucleus temporal start
-        nucleus --json temporal start
-
-    JSON Response:
-      {
-        "temporal": {
-          "state": "RUNNING",
-          "pid": 12345,
-          "grpc_port": 7233,
-          "ui_port": 8233,
-          "ui_url": "http://localhost:8233",
-          "grpc_url": "localhost:7233"
-        }
-      }
-
-    --------------------------------------------------------------------------------
-
-  > STATUS
-    Check Temporal Server status
-
-    Usage: nucleus status
-
-    Example:
-        nucleus temporal status
-        nucleus --json temporal status
-
-    JSON Response:
-      {
-        "temporal": {
-          "operational": true,
-          "state": "RUNNING",
-          "ui_port": 8233,
-          "grpc_port": 7233,
-          "ui_url": "http://localhost:8233",
-          "grpc_url": "localhost:7233",
-          "health_checks": {
-            "grpc": true,
-            "ui": true
-          }
-        }
-      }
-
-    --------------------------------------------------------------------------------
-
-  > STOP
-    Stop running Temporal Server
-
-    Usage: nucleus stop
-
-    Example:
-        nucleus temporal stop
-        nucleus --json temporal stop
-
-    JSON Response:
-      {
-        "temporal": {
-          "state": "STOPPED",
-          "message": "Temporal Server stopped successfully"
-        }
-      }
-
-    --------------------------------------------------------------------------------
-
   > TEMPORAL
     Manage Temporal Server lifecycle
 
@@ -514,6 +225,187 @@
         nucleus temporal status
       stop                  Stop running Temporal Server
         nucleus temporal stop
+
+    Subcommand Details:
+
+      └─ CLEANUP
+        Clean up zombie Temporal processes on port 7233
+
+        Usage: nucleus temporal cleanup
+
+        Example:
+              nucleus temporal cleanup
+              nucleus --json temporal cleanup
+
+        JSON Response:
+          {
+            "command": "temporal_cleanup",
+            "port": 7233,
+            "found_process": true,
+            "pid": 19580,
+            "executable": "C:\\Users\\user\\AppData\\Local\\BloomNucleus\\bin\\temporal\\temporal.exe",
+            "action_taken": "killed",
+            "port_free_after": true,
+            "errors": []
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ DIAGNOSTICS
+        Run comprehensive Temporal diagnostics
+
+        Usage: nucleus temporal diagnostics
+
+        Example:
+            nucleus temporal diagnostics
+            nucleus --json temporal diagnostics
+
+        JSON Response:
+          {
+            "executable": {
+              "path": "C:\\Users\\user\\AppData\\Local\\BloomNucleus\\bin\\temporal\\temporal.exe",
+              "exists": true,
+              "size": 123456789
+            },
+            "health": {
+              "operational": true,
+              "state": "RUNNING",
+              "grpc_responding": true,
+              "ui_responding": true
+            },
+            "database": {
+              "path": "C:\\Users\\user\\AppData\\Local\\BloomNucleus\\logs\\temporal\\temporal.db",
+              "exists": true,
+              "size": 98304
+            },
+            "pid_file": {
+              "path": "C:\\Users\\user\\AppData\\Local\\BloomNucleus\\logs\\temporal\\temporal.pid",
+              "exists": true,
+              "pid": 12345
+            },
+            "overall_status": "HEALTHY"
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ ENSURE
+        Ensure Temporal Server is running (non-interactive, automation-safe)
+
+        Usage: nucleus temporal ensure
+
+        Example:
+            nucleus temporal ensure
+
+        JSON Response:
+          {
+            "success": true,
+            "state": "RUNNING",
+            "started": true,
+            "pid": 14192,
+            "grpc_port": 7233,
+            "ui_port": 8233,
+            "ui_url": "http://localhost:8233",
+            "grpc_url": "localhost:7233"
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ FORCE-STOP
+        Forcefully stop all Temporal processes
+
+        Usage: nucleus temporal force-stop
+
+        Example:
+              nucleus temporal force-stop
+              nucleus --json temporal force-stop
+
+        JSON Response:
+          {
+            "command": "temporal_force_stop",
+            "processes_found": 2,
+            "processes_killed": 2,
+            "port_7233_free": true,
+            "state_cleaned": true,
+            "details": [
+              {
+                "pid": 19580,
+                "executable": "C:\\Users\\user\\AppData\\Local\\BloomNucleus\\bin\\temporal\\temporal.exe",
+                "killed": true
+              }
+            ],
+            "errors": []
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ START
+        Start Temporal Server (interactive mode)
+
+        Usage: nucleus temporal start
+
+        Example:
+            nucleus temporal start
+            nucleus --json temporal start
+
+        JSON Response:
+          {
+            "temporal": {
+              "state": "RUNNING",
+              "pid": 12345,
+              "grpc_port": 7233,
+              "ui_port": 8233,
+              "ui_url": "http://localhost:8233",
+              "grpc_url": "localhost:7233"
+            }
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ STATUS
+        Check Temporal Server status
+
+        Usage: nucleus temporal status
+
+        Example:
+            nucleus temporal status
+            nucleus --json temporal status
+
+        JSON Response:
+          {
+            "temporal": {
+              "operational": true,
+              "state": "RUNNING",
+              "ui_port": 8233,
+              "grpc_port": 7233,
+              "ui_url": "http://localhost:8233",
+              "grpc_url": "localhost:7233",
+              "health_checks": {
+                "grpc": true,
+                "ui": true
+              }
+            }
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ STOP
+        Stop running Temporal Server
+
+        Usage: nucleus temporal stop
+
+        Example:
+            nucleus temporal stop
+            nucleus --json temporal stop
+
+        JSON Response:
+          {
+            "temporal": {
+              "state": "STOPPED",
+              "message": "Temporal Server stopped successfully"
+            }
+          }
+
+        ----------------------------------------------------------------------
 
     --------------------------------------------------------------------------------
 
@@ -537,88 +429,6 @@
 
     --------------------------------------------------------------------------------
 
-  > LAUNCH
-    Launch a browser instance for a profile using Sentinel
-
-    Usage: nucleus launch [profile_id]
-
-    Arguments:
-      profile_id            optional
-
-    Flags:
-      --account                  Account identifier
-      --alias                    Profile alias
-      --config                   JSON config file path or '-' for stdin
-      --email                    Email address
-      --extension                Extension to load
-      --heartbeat                Enable heartbeat tracking
-      --mode                     Launch mode (landing, discovery, etc.) [default: landing]
-      --register                 Register new profile
-      --role                     User role
-      --save                     Save configuration for future use
-      --service                  Service identifier
-      --step                     Execution step
-
-    Example:
-        nucleus synapse launch profile_001
-        nucleus synapse launch profile_001 --email test@mail.com --service google
-        nucleus synapse launch profile_001 --mode discovery --save
-        nucleus --json synapse launch profile_001 --config launch.json
-      JSON Output:
-        {
-          "success": true,
-          "profile_id": "profile_001",
-          "launch_id": "launch_abc123",
-          "chrome_pid": 9876,
-          "debug_port": 9222,
-          "extension_loaded": true,
-          "state": "RUNNING",
-          "timestamp": 1707418080
-        }
-
-    --------------------------------------------------------------------------------
-
-  > SHUTDOWN-ALL
-    Gracefully shutdown all orchestrated services
-
-    Usage: nucleus shutdown-all
-
-    Example:
-        nucleus synapse shutdown-all
-        nucleus --json synapse shutdown-all
-      JSON Output:
-        {
-          "success": true,
-          "services_shutdown": [
-            "browser_instances",
-            "ollama_service",
-            "temporal_workflows"
-          ]
-        }
-
-    --------------------------------------------------------------------------------
-
-  > START-OLLAMA
-    Start Ollama service via Temporal workflow
-
-    Usage: nucleus start-ollama
-
-    Flags:
-      --simulation               Run in simulation mode
-
-    Example:
-        nucleus synapse start-ollama
-        nucleus --json synapse start-ollama --simulation
-      JSON Output:
-        {
-          "success": true,
-          "pid": 12345,
-          "port": 11434,
-          "state": "RUNNING"
-        }
-
-    --------------------------------------------------------------------------------
-
   > SYNAPSE
     Temporal workflow orchestration and lifecycle management
 
@@ -634,23 +444,107 @@
       vault-status          Query Vault lock status via Brain
         nucleus synapse vault-status
 
-    --------------------------------------------------------------------------------
+    Subcommand Details:
 
-  > VAULT-STATUS
-    Query Vault lock status via Brain
+      └─ LAUNCH
+        Launch a browser instance for a profile using Sentinel
 
-    Usage: nucleus vault-status
+        Usage: nucleus synapse launch [profile_id]
 
-    Example:
-        nucleus synapse vault-status
-        nucleus --json synapse vault-status
-      JSON Output:
-        {
-          "success": true,
-          "vault_state": "UNLOCKED",
-          "master_profile_active": true,
-          "state": "HEALTHY"
-        }
+        Arguments:
+          profile_id            optional
+
+        Flags:
+          --account                  Account identifier
+          --alias                    Profile alias
+          --config                   JSON config file path or '-' for stdin
+          --email                    Email address
+          --extension                Extension to load
+          --heartbeat                Enable heartbeat tracking
+          --mode                     Launch mode (landing, discovery, etc.) [default: landing]
+          --register                 Register new profile
+          --role                     User role
+          --save                     Save configuration for future use
+          --service                  Service identifier
+          --step                     Execution step
+
+        Example:
+            nucleus synapse launch profile_001
+            nucleus synapse launch profile_001 --email test@mail.com --service google
+            nucleus synapse launch profile_001 --mode discovery --save
+            nucleus --json synapse launch profile_001 --config launch.json
+          JSON Output:
+            {
+              "success": true,
+              "profile_id": "profile_001",
+              "launch_id": "launch_abc123",
+              "chrome_pid": 9876,
+              "debug_port": 9222,
+              "extension_loaded": true,
+              "state": "RUNNING",
+              "timestamp": 1707418080
+            }
+
+        ----------------------------------------------------------------------
+
+      └─ SHUTDOWN-ALL
+        Gracefully shutdown all orchestrated services
+
+        Usage: nucleus synapse shutdown-all
+
+        Example:
+            nucleus synapse shutdown-all
+            nucleus --json synapse shutdown-all
+          JSON Output:
+            {
+              "success": true,
+              "services_shutdown": [
+                "browser_instances",
+                "ollama_service",
+                "temporal_workflows"
+              ]
+            }
+
+        ----------------------------------------------------------------------
+
+      └─ START-OLLAMA
+        Start Ollama service via Temporal workflow
+
+        Usage: nucleus synapse start-ollama
+
+        Flags:
+          --simulation               Run in simulation mode
+
+        Example:
+            nucleus synapse start-ollama
+            nucleus --json synapse start-ollama --simulation
+          JSON Output:
+            {
+              "success": true,
+              "pid": 12345,
+              "port": 11434,
+              "state": "RUNNING"
+            }
+
+        ----------------------------------------------------------------------
+
+      └─ VAULT-STATUS
+        Query Vault lock status via Brain
+
+        Usage: nucleus synapse vault-status
+
+        Example:
+            nucleus synapse vault-status
+            nucleus --json synapse vault-status
+          JSON Output:
+            {
+              "success": true,
+              "vault_state": "UNLOCKED",
+              "master_profile_active": true,
+              "state": "HEALTHY"
+            }
+
+        ----------------------------------------------------------------------
 
     --------------------------------------------------------------------------------
 

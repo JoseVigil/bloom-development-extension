@@ -13,10 +13,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func init() {
-	core.RegisterCommand("TEMPORAL_SERVER", temporalCleanupCmd)
-}
-
 // temporalCleanupCmd implementa la lógica de limpieza conservadora
 func temporalCleanupCmd(c *core.Core) *cobra.Command {
 	cmd := &cobra.Command{

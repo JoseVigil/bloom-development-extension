@@ -166,12 +166,23 @@ The heartbeat includes:
 		// Validación de argumentos
 		Args: cobra.MaximumNArgs(1),
 		
+		// PASO 3: Annotations (OBLIGATORIO)
+		Annotations: map[string]string{
+			"category": "ANALYTICS",
+			"json_response": `{
+  "status": "healthy",
+  "latency_ms": 45,
+  "target": "default"
+}`,
+		},
+		
 		// Ejemplo de uso
 		Example: `  nucleus heartbeat
   nucleus heartbeat central-server
-  nucleus heartbeat --interval 60 --continuous`,
+  nucleus heartbeat --interval 60 --continuous
+  nucleus --json heartbeat`,
 
-		// PASO 3: Lógica de ejecución
+		// PASO 4: Lógica de ejecución
 		Run: func(cmd *cobra.Command, args []string) {
 			target := "default"
 			if len(args) > 0 {
@@ -206,14 +217,14 @@ The heartbeat includes:
 		},
 	}
 
-	// PASO 4: Definir flags
+	// PASO 5: Definir flags
 	cmd.Flags().IntVarP(&interval, "interval", "i", 30, "Heartbeat interval in seconds")
 	cmd.Flags().BoolVarP(&continuous, "continuous", "c", false, "Run continuously")
 
 	return cmd
 }
 
-// PASO 5: Lógica de negocio separada (testeable, reutilizable)
+// PASO 6: Lógica de negocio separada (testeable, reutilizable)
 type HeartbeatResult struct {
 	Status  string `json:"status"`
 	Latency int    `json:"latency_ms"`
@@ -244,11 +255,56 @@ func sendHeartbeat(c *core.Core, target string, interval int, continuous bool) (
 | `Use` | ✅ Sí | Define sintaxis y nombre |
 | `Short` | ✅ Sí | Descripción de una línea |
 | `Run` | ✅ Sí | Lógica de ejecución |
+| `Annotations` | ✅ Sí | Metadata del comando (category, json_response) |
 | `Long` | ⚠️ Recomendado | Documentación detallada |
 | `Example` | ⚠️ Recomendado | Casos de uso |
 | `Args` | ⚠️ Recomendado | Validación de argumentos |
 | Flags | ❌ Opcional | Según necesidad |
 | Lógica separada | ⚠️ Recomendado | Para testing |
+
+### 3.2.1 Annotations: Metadata Crítico
+
+**Annotations** es un mapa que contiene metadata esencial para el sistema de help y la integración con Electron.
+
+**Annotations obligatorios:**
+
+```go
+Annotations: map[string]string{
+    "category":      "NOMBRE_CATEGORIA",  // Categoría para help
+    "json_response": `{...}`,             // Ejemplo de respuesta JSON
+},
+```
+
+**¿Por qué son obligatorios?**
+
+1. **`category`**: Sin esto, el comando no aparece en ninguna sección del help
+2. **`json_response`**: Documenta el contrato JSON para Electron y automatización
+
+**Ejemplo completo:**
+
+```go
+cmd := &cobra.Command{
+    Use:   "status",
+    Short: "Check server status",
+    
+    Annotations: map[string]string{
+        "category": "TEMPORAL_SERVER",
+        "json_response": `{
+  "operational": true,
+  "state": "RUNNING",
+  "grpc_port": 7233,
+  "ui_port": 8233
+}`,
+    },
+    
+    Example: `  nucleus temporal status
+  nucleus --json temporal status`,
+    
+    Run: func(cmd *cobra.Command, args []string) {
+        // Lógica...
+    },
+}
+```
 
 ### 3.3 Patrones de Validación de Argumentos
 
@@ -626,7 +682,68 @@ func createStatusCommand(c *core.Core) *cobra.Command {
 | **Reversibilidad** | Poder deshacer operaciones | Diseñar comandos con contrapartes |
 | **Observabilidad** | Logging estructurado | Usar `c.Logger` con niveles apropiados |
 
-### 7.2 Manejo de Archivos Críticos
+### 7.2 Annotations: Reglas y Formato
+
+**Regla de oro**: SIEMPRE incluir `Annotations` con `category` y `json_response`.
+
+```go
+// ✅ CORRECTO: Annotations completo
+Annotations: map[string]string{
+    "category": "TEMPORAL_SERVER",
+    "json_response": `{
+  "success": true,
+  "state": "RUNNING",
+  "pid": 12345
+}`,
+},
+
+// ❌ INCORRECTO: Sin Annotations
+cmd := &cobra.Command{
+    Use:   "status",
+    Short: "Check status",
+    // Falta Annotations - comando no aparecerá en help
+}
+
+// ❌ INCORRECTO: Solo category
+Annotations: map[string]string{
+    "category": "TEMPORAL_SERVER",
+    // Falta json_response - Electron no sabrá qué esperar
+},
+
+// ❌ INCORRECTO: JSON inválido
+Annotations: map[string]string{
+    "category": "TEMPORAL_SERVER",
+    "json_response": `{ success: true }`, // Sin comillas en keys
+},
+```
+
+**Formato del json_response:**
+
+1. **Usar backticks** (`` ` ``) para multilinea
+2. **JSON válido** - probar en jsonlint.com
+3. **Representativo** - debe mostrar caso de éxito típico
+4. **Completo** - incluir todos los campos que el comando puede retornar
+5. **Indentado** - 2 espacios para legibilidad
+
+**Ejemplo real:**
+
+```go
+Annotations: map[string]string{
+    "category": "TEMPORAL_SERVER",
+    "json_response": `{
+  "command": "temporal_cleanup",
+  "port": 7233,
+  "found_process": true,
+  "pid": 19580,
+  "executable": "C:\\Users\\user\\AppData\\Local\\BloomNucleus\\bin\\temporal\\temporal.exe",
+  "action_taken": "killed",
+  "port_free_after": true,
+  "errors": []
+}`,
+},
+```
+
+### 7.3 Manejo de Archivos Críticos
 
 ```go
 // ❌ MAL: Escritura directa a blueprint.json
@@ -802,7 +919,21 @@ Effects: Creates telemetry entries in analytics database`,
 - [ ] El `Use` sigue la convención de naming
 - [ ] El `Short` es claro y conciso (máx 60 caracteres)
 - [ ] El `Long` explica contexto, propósito y efectos
+- [ ] **El `Annotations` incluye `category` y `json_response`**
+- [ ] **El `json_response` es JSON válido y representativo**
 - [ ] El `Example` muestra casos de uso reales con `nucleus` como prefijo
+- [ ] **El `Example` incluye ejemplo con `--json` para modo automatización**
+
+### 8.2.1 Checklist Específico: Annotations
+
+- [ ] `Annotations` está presente en el comando
+- [ ] `Annotations["category"]` coincide con la categoría de registro
+- [ ] `Annotations["json_response"]` contiene JSON válido
+- [ ] El JSON usa backticks (`` ` ``) para multilinea
+- [ ] El JSON está indentado con 2 espacios
+- [ ] El JSON representa el caso de éxito típico
+- [ ] El JSON incluye TODOS los campos que puede retornar el comando
+- [ ] Si hay subcomandos, CADA subcomando tiene sus propios `Annotations`
 
 ### 8.3 Validación y Seguridad
 
@@ -1042,31 +1173,109 @@ func exportReport(c *core.Core, report *AuditReport, format string) error {
 
 ### 9.3 Comando con Subcomandos (Patrón Normal)
 
+**IMPORTANTE**: Cuando creas un comando con subcomandos, SOLO el comando padre se registra. Los subcomandos NO se registran individualmente.
+
 ```go
-// internal/vault/vault.go
-package vault
+// internal/orchestration/temporal/bootstrap/lifecycle.go
+package bootstrap
 
 import (
 	"nucleus/internal/core"
-	"nucleus/internal/governance"
 	"github.com/spf13/cobra"
 )
 
 func init() {
-	core.RegisterCommand("VAULT", createVaultCommand)
+	// SOLO registrar el comando padre
+	core.RegisterCommand("TEMPORAL_SERVER", createTemporalCommand)
 }
 
-func createVaultCommand(c *core.Core) *cobra.Command {
+// Comando padre con Annotations
+func createTemporalCommand(c *core.Core) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "vault",
-		Short: "Manage secure vault",
-		Long:  "Manage the secure credential vault for the organization",
+		Use:   "temporal",
+		Short: "Manage Temporal Server lifecycle",
+		Long:  "Commands to start, stop, monitor and manage the embedded Temporal Server",
+		
+		// CRÍTICO: Annotations en comando padre
+		Annotations: map[string]string{
+			"category": "TEMPORAL_SERVER",
+		},
 	}
 
 	// Agregar subcomandos como funciones locales
+	cmd.AddCommand(createStartSubcommand(c))
+	cmd.AddCommand(createStopSubcommand(c))
 	cmd.AddCommand(createStatusSubcommand(c))
-	cmd.AddCommand(createSealSubcommand(c))
-	cmd.AddCommand(createUnsealSubcommand(c))
+
+	return cmd
+}
+
+// Subcomando con Annotations COMPLETO
+func createStartSubcommand(c *core.Core) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "start",
+		Short: "Start Temporal Server (interactive mode)",
+		Long: `Start Temporal Server in interactive mode.
+
+This command starts the Temporal development server with:
+- gRPC on port 7233 (default)
+- UI on port 8233
+- SQLite database
+- Pretty-formatted logs`,
+		
+		Args: cobra.NoArgs,
+		
+		// CRÍTICO: Annotations en CADA subcomando
+		Annotations: map[string]string{
+			"category": "TEMPORAL_SERVER",
+			"json_response": `{
+  "temporal": {
+    "state": "RUNNING",
+    "pid": 12345,
+    "grpc_port": 7233,
+    "ui_port": 8233,
+    "ui_url": "http://localhost:8233",
+    "grpc_url": "localhost:7233"
+  }
+}`,
+		},
+		
+		// CRÍTICO: Example en subcomandos
+		Example: `  nucleus temporal start
+  nucleus --json temporal start`,
+		
+		Run: func(cmd *cobra.Command, args []string) {
+			runTemporalStart(c)
+		},
+	}
+
+	return cmd
+}
+
+func createStopSubcommand(c *core.Core) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "stop",
+		Short: "Stop running Temporal Server",
+		Long:  "Stop the currently running Temporal Server instance",
+		Args:  cobra.NoArgs,
+		
+		Annotations: map[string]string{
+			"category": "TEMPORAL_SERVER",
+			"json_response": `{
+  "temporal": {
+    "state": "STOPPED",
+    "message": "Temporal Server stopped successfully"
+  }
+}`,
+		},
+		
+		Example: `  nucleus temporal stop
+  nucleus --json temporal stop`,
+		
+		Run: func(cmd *cobra.Command, args []string) {
+			runTemporalStop(c)
+		},
+	}
 
 	return cmd
 }
@@ -1074,74 +1283,53 @@ func createVaultCommand(c *core.Core) *cobra.Command {
 func createStatusSubcommand(c *core.Core) *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
-		Short: "Check vault status",
+		Short: "Check Temporal Server status",
+		Long:  "Check if Temporal Server is running and responding",
 		Args:  cobra.NoArgs,
 		
+		Annotations: map[string]string{
+			"category": "TEMPORAL_SERVER",
+			"json_response": `{
+  "temporal": {
+    "operational": true,
+    "state": "RUNNING",
+    "ui_port": 8233,
+    "grpc_port": 7233,
+    "health_checks": {
+      "grpc": true,
+      "ui": true
+    }
+  }
+}`,
+		},
+		
+		Example: `  nucleus temporal status
+  nucleus --json temporal status`,
+		
 		Run: func(cmd *cobra.Command, args []string) {
-			status := checkVaultStatus(c)
-			
-			if c.Config.OutputJSON {
-				c.OutputJSON(status)
-				return
-			}
-			
-			c.Logger.Info("Vault Status: %s", status.State)
-			c.Logger.Info("Sealed: %v", status.Sealed)
+			// Lógica...
 		},
 	}
 }
 
-func createSealSubcommand(c *core.Core) *cobra.Command {
-	var force bool
-
-	cmd := &cobra.Command{
-		Use:   "seal",
-		Short: "Seal the vault",
-		Long:  "Seal the vault to prevent access to credentials",
-		Args:  cobra.NoArgs,
-
-		Run: func(cmd *cobra.Command, args []string) {
-			if err := governance.RequireMaster(c); err != nil {
-				c.Logger.Error("⛔ Seal requires Master role")
-				return
-			}
-
-			if !force {
-				c.Logger.Warn("⚠️  This will seal the vault. Use --force to confirm")
-				return
-			}
-
-			if err := sealVault(c); err != nil {
-				c.Logger.Error("❌ Failed to seal: %v", err)
-				return
-			}
-
-			c.Logger.Success("✅ Vault sealed")
-		},
-	}
-
-	cmd.Flags().BoolVarP(&force, "force", "f", false, "Force seal without confirmation")
-	return cmd
+// Funciones de lógica separadas
+func runTemporalStart(c *core.Core) {
+	// Implementación...
 }
 
-func createUnsealSubcommand(c *core.Core) *cobra.Command {
-	// Similar a seal...
-	return &cobra.Command{Use: "unseal", Short: "Unseal the vault"}
-}
-
-type VaultStatus struct {
-	State  string `json:"state"`
-	Sealed bool   `json:"sealed"`
-}
-
-func checkVaultStatus(c *core.Core) *VaultStatus {
-	return &VaultStatus{State: "healthy", Sealed: false}
-}
-
-func sealVault(c *core.Core) error {
-	return nil
+func runTemporalStop(c *core.Core) {
+	// Implementación...
 }
 ```
+
+**Reglas importantes para comandos con subcomandos:**
+
+1. ✅ **SOLO registrar comando padre** en `init()`
+2. ✅ **Annotations en comando padre** con `category`
+3. ✅ **Annotations en CADA subcomando** con `category` + `json_response`
+4. ✅ **Example en CADA subcomando** mostrando uso completo
+5. ✅ **json_response debe ser JSON válido** (usar backticks `` ` `` para multilinea)
+6. ❌ **NO registrar subcomandos** individualmente en `init()`
 
 ---
 
@@ -1239,9 +1427,148 @@ go build -o nucleus.exe && nucleus version
 
 2. **La ubicación no importa**: El archivo vive donde tiene sentido por dominio, no por categoría del help.
 
-3. **Synapse es la excepción**: Solo usa el patrón multi-comando cuando hay acoplamiento fuerte (ej: Temporal).
+3. **Annotations es obligatorio**: Sin `category` y `json_response`, el comando no aparece correctamente en el help ni funciona bien con Electron.
 
-4. **Atomicidad es crítica**: NUCLEUS es la fuente de verdad. Operaciones fallidas no deben corromper el estado.
+4. **Subcomandos**: Solo el padre se registra en `init()`. Cada subcomando necesita sus propios `Annotations` completos.
+
+5. **Synapse es la excepción**: Solo usa el patrón multi-comando cuando hay acoplamiento fuerte (ej: Temporal).
+
+6. **Atomicidad es crítica**: NUCLEUS es la fuente de verdad. Operaciones fallidas no deben corromper el estado.
+
+7. **JSON siempre**: Todo comando debe funcionar con `--json` para integración con Electron.
+
+8. **Import ciegos**: Recuerda agregar `_ "nucleus/internal/[paquete]"` en `main.go`.
+
+9. **Roles primero**: Verifica autorización antes de ejecutar operaciones sensibles.
+
+10. **Help es documentación**: Invierte tiempo en `Short`, `Long`, `Example` y `Annotations` - es tu documentación primaria.
+
+---
+
+## 📚 Referencia Rápida: Template Completo
+
+### Comando Simple
+
+```go
+package mypackage
+
+import (
+	"nucleus/internal/core"
+	"github.com/spf13/cobra"
+)
+
+func init() {
+	core.RegisterCommand("CATEGORY_NAME", createMyCommand)
+}
+
+func createMyCommand(c *core.Core) *cobra.Command {
+	return &cobra.Command{
+		Use:   "mycommand [args]",
+		Short: "Brief description",
+		Long:  "Detailed description of what this command does",
+		Args:  cobra.NoArgs,
+		
+		Annotations: map[string]string{
+			"category": "CATEGORY_NAME",
+			"json_response": `{
+  "success": true,
+  "data": "example"
+}`,
+		},
+		
+		Example: `  nucleus mycommand
+  nucleus --json mycommand`,
+		
+		Run: func(cmd *cobra.Command, args []string) {
+			result := doWork(c)
+			
+			if c.Config.OutputJSON {
+				c.OutputJSON(result)
+				return
+			}
+			
+			c.Logger.Success("✅ Done")
+		},
+	}
+}
+
+func doWork(c *core.Core) interface{} {
+	return map[string]interface{}{"success": true}
+}
+```
+
+### Comando con Subcomandos
+
+```go
+package mypackage
+
+import (
+	"nucleus/internal/core"
+	"github.com/spf13/cobra"
+)
+
+func init() {
+	// SOLO registrar padre
+	core.RegisterCommand("CATEGORY_NAME", createParentCommand)
+}
+
+func createParentCommand(c *core.Core) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "parent",
+		Short: "Parent command description",
+		
+		Annotations: map[string]string{
+			"category": "CATEGORY_NAME",
+		},
+	}
+	
+	// Agregar subcomandos
+	cmd.AddCommand(createSubCommand1(c))
+	cmd.AddCommand(createSubCommand2(c))
+	
+	return cmd
+}
+
+func createSubCommand1(c *core.Core) *cobra.Command {
+	return &cobra.Command{
+		Use:   "sub1",
+		Short: "Subcommand 1 description",
+		Args:  cobra.NoArgs,
+		
+		Annotations: map[string]string{
+			"category": "CATEGORY_NAME",
+			"json_response": `{"success": true}`,
+		},
+		
+		Example: `  nucleus parent sub1
+  nucleus --json parent sub1`,
+		
+		Run: func(cmd *cobra.Command, args []string) {
+			// Lógica...
+		},
+	}
+}
+
+func createSubCommand2(c *core.Core) *cobra.Command {
+	return &cobra.Command{
+		Use:   "sub2",
+		Short: "Subcommand 2 description",
+		Args:  cobra.NoArgs,
+		
+		Annotations: map[string]string{
+			"category": "CATEGORY_NAME",
+			"json_response": `{"success": true}`,
+		},
+		
+		Example: `  nucleus parent sub2
+  nucleus --json parent sub2`,
+		
+		Run: func(cmd *cobra.Command, args []string) {
+			// Lógica...
+		},
+	}
+}
+```
 
 5. **JSON siempre**: Todo comando debe funcionar con `--json` para integración con Electron.
 

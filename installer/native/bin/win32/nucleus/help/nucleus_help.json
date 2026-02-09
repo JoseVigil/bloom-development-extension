@@ -24,20 +24,13 @@
   },
   {
     "name": "alfred",
-    "use": "alfred status",
-    "short": "Muestra el reporte de salud administrativa y estado de la Bóveda",
+    "use": "alfred audit",
+    "short": "Ejecuta una verificación de integridad manual sobre el sistema de archivos",
     "category": "GOVERNANCE",
     "args": [
       {
-        "name": "status",
+        "name": "audit",
         "required": true
-      }
-    ],
-    "options": [
-      {
-        "name": "json",
-        "usage": "Salida en formato JSON (para Conductor u otras herramientas)",
-        "default": "false"
       }
     ]
   },
@@ -55,23 +48,22 @@
   },
   {
     "name": "alfred",
-    "use": "alfred audit",
-    "short": "Ejecuta una verificación de integridad manual sobre el sistema de archivos",
+    "use": "alfred status",
+    "short": "Muestra el reporte de salud administrativa y estado de la Bóveda",
     "category": "GOVERNANCE",
     "args": [
       {
-        "name": "audit",
+        "name": "status",
         "required": true
       }
+    ],
+    "options": [
+      {
+        "name": "json",
+        "usage": "Salida en formato JSON (para Conductor u otras herramientas)",
+        "default": "false"
+      }
     ]
-  },
-  {
-    "name": "cleanup",
-    "use": "cleanup",
-    "short": "Clean up zombie Temporal processes on port 7233",
-    "category": "TEMPORAL_SERVER",
-    "example": "    nucleus temporal cleanup\n    nucleus --json temporal cleanup",
-    "json_response": "{\n  \"command\": \"temporal_cleanup\",\n  \"port\": 7233,\n  \"found_process\": true,\n  \"pid\": 19580,\n  \"executable\": \"C:\\\\Users\\\\user\\\\AppData\\\\Local\\\\BloomNucleus\\\\bin\\\\temporal\\\\temporal.exe\",\n  \"action_taken\": \"killed\",\n  \"port_free_after\": true,\n  \"errors\": []\n}"
   },
   {
     "name": "dev-start",
@@ -96,30 +88,6 @@
       }
     ],
     "example": "  nucleus dev-start\n  nucleus dev-start --simulation\n  nucleus dev-start --skip-vault"
-  },
-  {
-    "name": "diagnostics",
-    "use": "diagnostics",
-    "short": "Run comprehensive Temporal diagnostics",
-    "category": "TEMPORAL_SERVER",
-    "example": "  nucleus temporal diagnostics\n  nucleus --json temporal diagnostics",
-    "json_response": "{\n  \"executable\": {\n    \"path\": \"C:\\\\Users\\\\user\\\\AppData\\\\Local\\\\BloomNucleus\\\\bin\\\\temporal\\\\temporal.exe\",\n    \"exists\": true,\n    \"size\": 123456789\n  },\n  \"health\": {\n    \"operational\": true,\n    \"state\": \"RUNNING\",\n    \"grpc_responding\": true,\n    \"ui_responding\": true\n  },\n  \"database\": {\n    \"path\": \"C:\\\\Users\\\\user\\\\AppData\\\\Local\\\\BloomNucleus\\\\logs\\\\temporal\\\\temporal.db\",\n    \"exists\": true,\n    \"size\": 98304\n  },\n  \"pid_file\": {\n    \"path\": \"C:\\\\Users\\\\user\\\\AppData\\\\Local\\\\BloomNucleus\\\\logs\\\\temporal\\\\temporal.pid\",\n    \"exists\": true,\n    \"pid\": 12345\n  },\n  \"overall_status\": \"HEALTHY\"\n}"
-  },
-  {
-    "name": "ensure",
-    "use": "ensure",
-    "short": "Ensure Temporal Server is running (non-interactive, automation-safe)",
-    "category": "TEMPORAL_SERVER",
-    "example": "  nucleus temporal ensure",
-    "json_response": "{\n  \"success\": true,\n  \"state\": \"RUNNING\",\n  \"started\": true,\n  \"pid\": 14192,\n  \"grpc_port\": 7233,\n  \"ui_port\": 8233,\n  \"ui_url\": \"http://localhost:8233\",\n  \"grpc_url\": \"localhost:7233\"\n}"
-  },
-  {
-    "name": "force-stop",
-    "use": "force-stop",
-    "short": "Forcefully stop all Temporal processes",
-    "category": "TEMPORAL_SERVER",
-    "example": "    nucleus temporal force-stop\n    nucleus --json temporal force-stop",
-    "json_response": "{\n  \"command\": \"temporal_force_stop\",\n  \"processes_found\": 2,\n  \"processes_killed\": 2,\n  \"port_7233_free\": true,\n  \"state_cleaned\": true,\n  \"details\": [\n    {\n      \"pid\": 19580,\n      \"executable\": \"C:\\\\Users\\\\user\\\\AppData\\\\Local\\\\BloomNucleus\\\\bin\\\\temporal\\\\temporal.exe\",\n      \"killed\": true\n    }\n  ],\n  \"errors\": []\n}"
   },
   {
     "name": "heartbeat",
