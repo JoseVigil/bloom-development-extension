@@ -1,0 +1,406 @@
+[
+  {
+    "name": "add",
+    "use": "add \u003cgithub-id\u003e",
+    "short": "Add team member",
+    "category": "TEAM",
+    "args": [
+      {
+        "name": "\u003cgithub-id\u003e",
+        "required": true
+      }
+    ],
+    "options": [
+      {
+        "name": "name",
+        "usage": "Display name"
+      },
+      {
+        "name": "role",
+        "usage": "Role",
+        "default": "specialist"
+      }
+    ]
+  },
+  {
+    "name": "alfred",
+    "use": "alfred status",
+    "short": "Muestra el reporte de salud administrativa y estado de la Bóveda",
+    "category": "GOVERNANCE",
+    "args": [
+      {
+        "name": "status",
+        "required": true
+      }
+    ],
+    "options": [
+      {
+        "name": "json",
+        "usage": "Salida en formato JSON (para Conductor u otras herramientas)",
+        "default": "false"
+      }
+    ]
+  },
+  {
+    "name": "alfred",
+    "use": "alfred start",
+    "short": "Inicia el custodio administrativo y los servidores de autoridad",
+    "category": "GOVERNANCE",
+    "args": [
+      {
+        "name": "start",
+        "required": true
+      }
+    ]
+  },
+  {
+    "name": "alfred",
+    "use": "alfred audit",
+    "short": "Ejecuta una verificación de integridad manual sobre el sistema de archivos",
+    "category": "GOVERNANCE",
+    "args": [
+      {
+        "name": "audit",
+        "required": true
+      }
+    ]
+  },
+  {
+    "name": "cleanup",
+    "use": "cleanup",
+    "short": "Clean up zombie Temporal processes on port 7233",
+    "category": "TEMPORAL_SERVER",
+    "example": "    nucleus temporal cleanup\n    nucleus --json temporal cleanup",
+    "json_response": "{\n  \"command\": \"temporal_cleanup\",\n  \"port\": 7233,\n  \"found_process\": true,\n  \"pid\": 19580,\n  \"executable\": \"C:\\\\Users\\\\user\\\\AppData\\\\Local\\\\BloomNucleus\\\\bin\\\\temporal\\\\temporal.exe\",\n  \"action_taken\": \"killed\",\n  \"port_free_after\": true,\n  \"errors\": []\n}"
+  },
+  {
+    "name": "dev-start",
+    "use": "dev-start",
+    "short": "Start Nucleus development environment with full boot sequence",
+    "category": "ORCHESTRATION",
+    "options": [
+      {
+        "name": "json",
+        "usage": "Output result as JSON",
+        "default": "false"
+      },
+      {
+        "name": "simulation",
+        "usage": "Run in simulation mode (use test ownership.json)",
+        "default": "false"
+      },
+      {
+        "name": "skip-vault",
+        "usage": "Skip vault verification (development only)",
+        "default": "false"
+      }
+    ],
+    "example": "  nucleus dev-start\n  nucleus dev-start --simulation\n  nucleus dev-start --skip-vault"
+  },
+  {
+    "name": "diagnostics",
+    "use": "diagnostics",
+    "short": "Run comprehensive Temporal diagnostics",
+    "category": "TEMPORAL_SERVER",
+    "example": "  nucleus temporal diagnostics\n  nucleus --json temporal diagnostics",
+    "json_response": "{\n  \"executable\": {\n    \"path\": \"C:\\\\Users\\\\user\\\\AppData\\\\Local\\\\BloomNucleus\\\\bin\\\\temporal\\\\temporal.exe\",\n    \"exists\": true,\n    \"size\": 123456789\n  },\n  \"health\": {\n    \"operational\": true,\n    \"state\": \"RUNNING\",\n    \"grpc_responding\": true,\n    \"ui_responding\": true\n  },\n  \"database\": {\n    \"path\": \"C:\\\\Users\\\\user\\\\AppData\\\\Local\\\\BloomNucleus\\\\logs\\\\temporal\\\\temporal.db\",\n    \"exists\": true,\n    \"size\": 98304\n  },\n  \"pid_file\": {\n    \"path\": \"C:\\\\Users\\\\user\\\\AppData\\\\Local\\\\BloomNucleus\\\\logs\\\\temporal\\\\temporal.pid\",\n    \"exists\": true,\n    \"pid\": 12345\n  },\n  \"overall_status\": \"HEALTHY\"\n}"
+  },
+  {
+    "name": "ensure",
+    "use": "ensure",
+    "short": "Ensure Temporal Server is running (non-interactive, automation-safe)",
+    "category": "TEMPORAL_SERVER",
+    "example": "  nucleus temporal ensure",
+    "json_response": "{\n  \"success\": true,\n  \"state\": \"RUNNING\",\n  \"started\": true,\n  \"pid\": 14192,\n  \"grpc_port\": 7233,\n  \"ui_port\": 8233,\n  \"ui_url\": \"http://localhost:8233\",\n  \"grpc_url\": \"localhost:7233\"\n}"
+  },
+  {
+    "name": "force-stop",
+    "use": "force-stop",
+    "short": "Forcefully stop all Temporal processes",
+    "category": "TEMPORAL_SERVER",
+    "example": "    nucleus temporal force-stop\n    nucleus --json temporal force-stop",
+    "json_response": "{\n  \"command\": \"temporal_force_stop\",\n  \"processes_found\": 2,\n  \"processes_killed\": 2,\n  \"port_7233_free\": true,\n  \"state_cleaned\": true,\n  \"details\": [\n    {\n      \"pid\": 19580,\n      \"executable\": \"C:\\\\Users\\\\user\\\\AppData\\\\Local\\\\BloomNucleus\\\\bin\\\\temporal\\\\temporal.exe\",\n      \"killed\": true\n    }\n  ],\n  \"errors\": []\n}"
+  },
+  {
+    "name": "heartbeat",
+    "use": "heartbeat",
+    "short": "Send heartbeat to central server",
+    "category": "ANALYTICS",
+    "options": [
+      {
+        "name": "volume",
+        "usage": "Intent volume",
+        "default": "0"
+      },
+      {
+        "name": "workers",
+        "usage": "Active workers count",
+        "default": "0"
+      }
+    ]
+  },
+  {
+    "name": "info",
+    "use": "info",
+    "short": "Display detailed system information",
+    "category": "SYSTEM"
+  },
+  {
+    "name": "init",
+    "use": "init",
+    "short": "Initialize Nucleus organization",
+    "category": "GOVERNANCE",
+    "options": [
+      {
+        "name": "github-id",
+        "usage": "GitHub username"
+      },
+      {
+        "name": "master",
+        "usage": "Initialize as master",
+        "default": "false"
+      },
+      {
+        "name": "name",
+        "usage": "Display name"
+      }
+    ]
+  },
+  {
+    "name": "list",
+    "use": "list",
+    "short": "List team members",
+    "category": "TEAM"
+  },
+  {
+    "name": "remove",
+    "use": "remove \u003cgithub-id\u003e",
+    "short": "Remove team member",
+    "category": "TEAM",
+    "args": [
+      {
+        "name": "\u003cgithub-id\u003e",
+        "required": true
+      }
+    ]
+  },
+  {
+    "name": "launch",
+    "use": "launch [profile_id]",
+    "short": "Launch a browser instance for a profile using Sentinel",
+    "category": "ORCHESTRATION",
+    "args": [
+      {
+        "name": "profile_id",
+        "required": false
+      }
+    ],
+    "options": [
+      {
+        "name": "account",
+        "usage": "Account identifier"
+      },
+      {
+        "name": "alias",
+        "usage": "Profile alias"
+      },
+      {
+        "name": "config",
+        "usage": "JSON config file path or '-' for stdin"
+      },
+      {
+        "name": "email",
+        "usage": "Email address"
+      },
+      {
+        "name": "extension",
+        "usage": "Extension to load"
+      },
+      {
+        "name": "heartbeat",
+        "usage": "Enable heartbeat tracking",
+        "default": "false"
+      },
+      {
+        "name": "mode",
+        "usage": "Launch mode (landing, discovery, etc.)",
+        "default": "landing"
+      },
+      {
+        "name": "register",
+        "usage": "Register new profile",
+        "default": "false"
+      },
+      {
+        "name": "role",
+        "usage": "User role"
+      },
+      {
+        "name": "save",
+        "usage": "Save configuration for future use",
+        "default": "false"
+      },
+      {
+        "name": "service",
+        "usage": "Service identifier"
+      },
+      {
+        "name": "step",
+        "usage": "Execution step"
+      }
+    ],
+    "example": "  nucleus synapse launch profile_001\n  nucleus synapse launch profile_001 --email test@mail.com --service google\n  nucleus synapse launch profile_001 --mode discovery --save\n  nucleus --json synapse launch profile_001 --config launch.json\n\nJSON Output:\n  {\n    \"success\": true,\n    \"profile_id\": \"profile_001\",\n    \"launch_id\": \"launch_abc123\",\n    \"chrome_pid\": 9876,\n    \"debug_port\": 9222,\n    \"extension_loaded\": true,\n    \"state\": \"RUNNING\",\n    \"timestamp\": 1707418080\n  }"
+  },
+  {
+    "name": "shutdown-all",
+    "use": "shutdown-all",
+    "short": "Gracefully shutdown all orchestrated services",
+    "category": "ORCHESTRATION",
+    "example": "  nucleus synapse shutdown-all\n  nucleus --json synapse shutdown-all\n\nJSON Output:\n  {\n    \"success\": true,\n    \"services_shutdown\": [\n      \"browser_instances\",\n      \"ollama_service\",\n      \"temporal_workflows\"\n    ]\n  }"
+  },
+  {
+    "name": "start-ollama",
+    "use": "start-ollama",
+    "short": "Start Ollama service via Temporal workflow",
+    "category": "ORCHESTRATION",
+    "options": [
+      {
+        "name": "simulation",
+        "usage": "Run in simulation mode",
+        "default": "false"
+      }
+    ],
+    "example": "  nucleus synapse start-ollama\n  nucleus --json synapse start-ollama --simulation\n\nJSON Output:\n  {\n    \"success\": true,\n    \"pid\": 12345,\n    \"port\": 11434,\n    \"state\": \"RUNNING\"\n  }"
+  },
+  {
+    "name": "vault-status",
+    "use": "vault-status",
+    "short": "Query Vault lock status via Brain",
+    "category": "ORCHESTRATION",
+    "example": "  nucleus synapse vault-status\n  nucleus --json synapse vault-status\n\nJSON Output:\n  {\n    \"success\": true,\n    \"vault_state\": \"UNLOCKED\",\n    \"master_profile_active\": true,\n    \"state\": \"HEALTHY\"\n  }"
+  },
+  {
+    "name": "sync-pull",
+    "use": "sync-pull",
+    "short": "Pull permissions from central server",
+    "category": "SYNC"
+  },
+  {
+    "name": "sync-push",
+    "use": "sync-push",
+    "short": "Push state to central server",
+    "category": "SYNC"
+  },
+  {
+    "name": "cleanup",
+    "use": "cleanup",
+    "short": "Clean up zombie Temporal processes on port 7233",
+    "category": "TEMPORAL_SERVER",
+    "example": "    nucleus temporal cleanup\n    nucleus --json temporal cleanup",
+    "json_response": "{\n  \"command\": \"temporal_cleanup\",\n  \"port\": 7233,\n  \"found_process\": true,\n  \"pid\": 19580,\n  \"executable\": \"C:\\\\Users\\\\user\\\\AppData\\\\Local\\\\BloomNucleus\\\\bin\\\\temporal\\\\temporal.exe\",\n  \"action_taken\": \"killed\",\n  \"port_free_after\": true,\n  \"errors\": []\n}"
+  },
+  {
+    "name": "diagnostics",
+    "use": "diagnostics",
+    "short": "Run comprehensive Temporal diagnostics",
+    "category": "TEMPORAL_SERVER",
+    "example": "  nucleus temporal diagnostics\n  nucleus --json temporal diagnostics",
+    "json_response": "{\n  \"executable\": {\n    \"path\": \"C:\\\\Users\\\\user\\\\AppData\\\\Local\\\\BloomNucleus\\\\bin\\\\temporal\\\\temporal.exe\",\n    \"exists\": true,\n    \"size\": 123456789\n  },\n  \"health\": {\n    \"operational\": true,\n    \"state\": \"RUNNING\",\n    \"grpc_responding\": true,\n    \"ui_responding\": true\n  },\n  \"database\": {\n    \"path\": \"C:\\\\Users\\\\user\\\\AppData\\\\Local\\\\BloomNucleus\\\\logs\\\\temporal\\\\temporal.db\",\n    \"exists\": true,\n    \"size\": 98304\n  },\n  \"pid_file\": {\n    \"path\": \"C:\\\\Users\\\\user\\\\AppData\\\\Local\\\\BloomNucleus\\\\logs\\\\temporal\\\\temporal.pid\",\n    \"exists\": true,\n    \"pid\": 12345\n  },\n  \"overall_status\": \"HEALTHY\"\n}"
+  },
+  {
+    "name": "ensure",
+    "use": "ensure",
+    "short": "Ensure Temporal Server is running (non-interactive, automation-safe)",
+    "category": "TEMPORAL_SERVER",
+    "example": "  nucleus temporal ensure",
+    "json_response": "{\n  \"success\": true,\n  \"state\": \"RUNNING\",\n  \"started\": true,\n  \"pid\": 14192,\n  \"grpc_port\": 7233,\n  \"ui_port\": 8233,\n  \"ui_url\": \"http://localhost:8233\",\n  \"grpc_url\": \"localhost:7233\"\n}"
+  },
+  {
+    "name": "force-stop",
+    "use": "force-stop",
+    "short": "Forcefully stop all Temporal processes",
+    "category": "TEMPORAL_SERVER",
+    "example": "    nucleus temporal force-stop\n    nucleus --json temporal force-stop",
+    "json_response": "{\n  \"command\": \"temporal_force_stop\",\n  \"processes_found\": 2,\n  \"processes_killed\": 2,\n  \"port_7233_free\": true,\n  \"state_cleaned\": true,\n  \"details\": [\n    {\n      \"pid\": 19580,\n      \"executable\": \"C:\\\\Users\\\\user\\\\AppData\\\\Local\\\\BloomNucleus\\\\bin\\\\temporal\\\\temporal.exe\",\n      \"killed\": true\n    }\n  ],\n  \"errors\": []\n}"
+  },
+  {
+    "name": "start",
+    "use": "start",
+    "short": "Start Temporal Server (interactive mode)",
+    "category": "TEMPORAL_SERVER",
+    "example": "  nucleus temporal start\n  nucleus --json temporal start",
+    "json_response": "{\n  \"temporal\": {\n    \"state\": \"RUNNING\",\n    \"pid\": 12345,\n    \"grpc_port\": 7233,\n    \"ui_port\": 8233,\n    \"ui_url\": \"http://localhost:8233\",\n    \"grpc_url\": \"localhost:7233\"\n  }\n}"
+  },
+  {
+    "name": "status",
+    "use": "status",
+    "short": "Check Temporal Server status",
+    "category": "TEMPORAL_SERVER",
+    "example": "  nucleus temporal status\n  nucleus --json temporal status",
+    "json_response": "{\n  \"temporal\": {\n    \"operational\": true,\n    \"state\": \"RUNNING\",\n    \"ui_port\": 8233,\n    \"grpc_port\": 7233,\n    \"ui_url\": \"http://localhost:8233\",\n    \"grpc_url\": \"localhost:7233\",\n    \"health_checks\": {\n      \"grpc\": true,\n      \"ui\": true\n    }\n  }\n}"
+  },
+  {
+    "name": "stop",
+    "use": "stop",
+    "short": "Stop running Temporal Server",
+    "category": "TEMPORAL_SERVER",
+    "example": "  nucleus temporal stop\n  nucleus --json temporal stop",
+    "json_response": "{\n  \"temporal\": {\n    \"state\": \"STOPPED\",\n    \"message\": \"Temporal Server stopped successfully\"\n  }\n}"
+  },
+  {
+    "name": "vault-lock",
+    "use": "vault-lock",
+    "short": "Lock vault",
+    "category": "VAULT"
+  },
+  {
+    "name": "vault-request",
+    "use": "vault-request \u003ckey-id\u003e",
+    "short": "Request key from vault",
+    "category": "VAULT",
+    "args": [
+      {
+        "name": "\u003ckey-id\u003e",
+        "required": true
+      }
+    ]
+  },
+  {
+    "name": "vault-status",
+    "use": "vault-status",
+    "short": "Display vault status",
+    "category": "VAULT"
+  },
+  {
+    "name": "vault-unlock",
+    "use": "vault-unlock",
+    "short": "Unlock vault",
+    "category": "VAULT"
+  },
+  {
+    "name": "version",
+    "use": "version",
+    "short": "Display version and build information",
+    "category": "SYSTEM"
+  },
+  {
+    "name": "worker",
+    "use": "worker start",
+    "short": "Inicia el worker de Temporal para procesar workflows",
+    "category": "ORCHESTRATION",
+    "args": [
+      {
+        "name": "start",
+        "required": true
+      }
+    ],
+    "options": [
+      {
+        "name": "task-queue",
+        "shorthand": "q",
+        "usage": "Task queue de Temporal",
+        "default": "profile-orchestration"
+      }
+    ]
+  }
+]

@@ -1,0 +1,484 @@
+[
+  {
+    "name": "bridge",
+    "use": "bridge",
+    "short": "Modo Bridge para comunicación JSON-RPC con Electron",
+    "category": "BRIDGE"
+  },
+  {
+    "name": "check",
+    "use": "check [componente]",
+    "short": "Ejecuta un diagnóstico profundo de salud del sistema y procesos",
+    "category": "SYSTEM",
+    "args": [
+      {
+        "name": "componente",
+        "required": false
+      }
+    ],
+    "subcommands": [
+      {
+        "name": "workers",
+        "use": "workers",
+        "short": "Lista todos los workers (Chrome Profiles) activos",
+        "subcommands": [
+          {
+            "name": "health",
+            "use": "health",
+            "short": "Resumen de salud de todos los workers"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "cockpit",
+    "use": "cockpit",
+    "short": "Lanza la interfaz de monitoreo integrada (TUI)",
+    "category": "UI",
+    "options": [
+      {
+        "name": "health",
+        "usage": "Iniciar directamente en modo health",
+        "default": "false"
+      }
+    ],
+    "example": "  sentinel cockpit\n  sentinel cockpit --health",
+    "requires": "  - Archivo telemetry.json en logs/ (se crea automáticamente si no existe)\n  - Terminal con soporte para TUI (tview/tcell)\n  - Comandos disponibles en TUI: 'log', 'health', 'q' o 'exit'"
+  },
+  {
+    "name": "daemon",
+    "use": "daemon",
+    "short": "Inicia Sentinel en modo daemon persistente",
+    "category": "RUNTIME",
+    "options": [
+      {
+        "name": "brain-addr",
+        "usage": "Dirección TCP del Brain (host:puerto)",
+        "default": "127.0.0.1:5678"
+      }
+    ]
+  },
+  {
+    "name": "dev-start",
+    "use": "dev-start",
+    "short": "Inicia el entorno de desarrollo integrado",
+    "category": "DEVELOPMENT",
+    "example": "  sentinel dev-start"
+  },
+  {
+    "name": "health",
+    "use": "health",
+    "short": "Escaneo de integridad del sistema",
+    "category": "SYSTEM",
+    "example": "  sentinel health\n  sentinel --json health | jq '.services[] | select(.active == false)'",
+    "requires": "  - brain.exe debe estar en PATH o en bin/\n  - Puertos 5678, 48215, 5173, 11434, 7233 accesibles para verificación",
+    "output": "JSON (--json):\n  {\"connected\":true,\"port\":5678,\"services\":{\"Core Bridge\":{\"status\":\"running\",\"port\":5678},\"Bloom API (Swagger)\":{\"status\":\"running\",\"port\":48215},\"Svelte Dev\":{\"status\":\"running\",\"port\":5173},\"Ollama Engine\":{\"status\":\"running\",\"port\":11434},\"Worker Manager\":{\"status\":\"running\",\"port\":0},\"Temporal Server\":{\"status\":\"running\",\"port\":7233}},\"profiles_registered\":2}"
+  },
+  {
+    "name": "info",
+    "use": "info",
+    "short": "Display detailed system and runtime information",
+    "category": "SYSTEM"
+  },
+  {
+    "name": "launch",
+    "use": "launch [profile_id]",
+    "short": "Arranca una instancia de navegador para un perfil",
+    "category": "RUNTIME",
+    "args": [
+      {
+        "name": "profile_id",
+        "required": false
+      }
+    ],
+    "options": [
+      {
+        "name": "add-account",
+        "usage": "Agregar linked account (provider,email_or_username,status). Repetible"
+      },
+      {
+        "name": "config-file",
+        "usage": "Cargar overrides desde JSON (@archivo o - para stdin)"
+      },
+      {
+        "name": "mode",
+        "usage": "Modo de lanzamiento (landing o discovery)",
+        "default": "landing"
+      },
+      {
+        "name": "override-alias",
+        "usage": "Sobrescribir alias del perfil"
+      },
+      {
+        "name": "override-email",
+        "usage": "Sobrescribir email"
+      },
+      {
+        "name": "override-extension",
+        "usage": "Sobrescribir extension ID"
+      },
+      {
+        "name": "override-heartbeat",
+        "usage": "Sobrescribir flag de heartbeat",
+        "default": "false"
+      },
+      {
+        "name": "override-register",
+        "usage": "Sobrescribir flag de registro",
+        "default": "false"
+      },
+      {
+        "name": "override-role",
+        "usage": "Sobrescribir rol"
+      },
+      {
+        "name": "override-service",
+        "usage": "Sobrescribir servicio de registro (google, twitter, github, etc)"
+      },
+      {
+        "name": "override-step",
+        "usage": "Sobrescribir step actual",
+        "default": "0"
+      },
+      {
+        "name": "save",
+        "usage": "Persistir overrides en profiles.json",
+        "default": "false"
+      }
+    ]
+  },
+  {
+    "name": "launch-profile",
+    "use": "launch-profile \u003cprofile_id\u003e",
+    "short": "Lanza un perfil de Chrome y monitorea su onboarding",
+    "category": "IGNITION",
+    "args": [
+      {
+        "name": "\u003cprofile_id\u003e",
+        "required": true
+      }
+    ],
+    "options": [
+      {
+        "name": "timeout",
+        "shorthand": "t",
+        "usage": "Timeout en segundos para esperar onboarding (no implementado aún)",
+        "default": "60"
+      },
+      {
+        "name": "wait",
+        "shorthand": "w",
+        "usage": "Esperar a que complete el onboarding (no implementado aún)",
+        "default": "false"
+      }
+    ]
+  },
+  {
+    "name": "listen",
+    "use": "listen",
+    "short": "Escucha eventos del Brain en tiempo real",
+    "category": "BRIDGE",
+    "options": [
+      {
+        "name": "brain-addr",
+        "usage": "Dirección TCP del Brain",
+        "default": "127.0.0.1:5678"
+      },
+      {
+        "name": "filter",
+        "shorthand": "f",
+        "usage": "Filtrar eventos por tipo o profile_id (substring match)"
+      },
+      {
+        "name": "json",
+        "usage": "Salida en JSON puro (sin formateo legible)",
+        "default": "false"
+      }
+    ]
+  },
+  {
+    "name": "ollama",
+    "use": "ollama",
+    "short": "Controlador maestro del runtime de Ollama",
+    "category": "RUNTIME",
+    "subcommands": [
+      {
+        "name": "healthcheck",
+        "use": "healthcheck",
+        "short": "Verificación de conectividad inmediata",
+        "category": "RUNTIME",
+        "example": "    sentinel ollama healthcheck\n    sentinel ollama healthcheck \u0026\u0026 echo \"OK\" || echo \"FAIL\""
+      },
+      {
+        "name": "logs",
+        "use": "logs",
+        "short": "Muestra logs recientes del proceso Ollama",
+        "category": "RUNTIME",
+        "example": "    sentinel ollama logs\n    sentinel ollama logs | tail -n 50",
+        "requires": "- Archivo de logs en logs/ollama/ollama_service_*.log\n- Permisos de lectura en directorio de logs"
+      },
+      {
+        "name": "pull",
+        "use": "pull [modelo]",
+        "short": "Descarga un modelo específico",
+        "category": "RUNTIME",
+        "args": [
+          {
+            "name": "modelo",
+            "required": false
+          }
+        ],
+        "example": "    sentinel ollama pull llama2\n    sentinel ollama pull mistral:7b",
+        "requires": "- Servicio Ollama en ejecución\n- Conexión a internet activa\n- Espacio en disco suficiente en OLLAMA_MODELS"
+      },
+      {
+        "name": "purge",
+        "use": "purge",
+        "short": "Limpia modelos y archivos temporales",
+        "category": "RUNTIME",
+        "example": "    sentinel ollama purge\n    sentinel ollama purge \u0026\u0026 sentinel ollama status"
+      },
+      {
+        "name": "restart",
+        "use": "restart",
+        "short": "Forzar reinicio del runtime",
+        "category": "RUNTIME",
+        "example": "    sentinel ollama restart\n    sentinel ollama restart \u0026\u0026 sentinel ollama status"
+      },
+      {
+        "name": "start",
+        "use": "start",
+        "short": "Inicia el supervisor y el heartbeat de Ollama",
+        "category": "RUNTIME",
+        "example": "    sentinel ollama start\n    sentinel ollama start \u0026\u0026 sentinel ollama status"
+      },
+      {
+        "name": "status",
+        "use": "status",
+        "short": "Muestra el estado actual de la FSM de Ollama",
+        "category": "RUNTIME",
+        "example": "    sentinel ollama status\n    sentinel --json ollama status | jq .",
+        "requires": "- Servicio Ollama debe estar iniciado previamente\n- Puerto 11434 accesible para verificación"
+      },
+      {
+        "name": "stop",
+        "use": "stop",
+        "short": "Detiene el proceso de Ollama y el supervisor",
+        "category": "RUNTIME",
+        "example": "    sentinel ollama stop\n    sentinel ollama stop \u0026\u0026 sleep 2 \u0026\u0026 sentinel ollama start"
+      }
+    ]
+  },
+  {
+    "name": "poll",
+    "use": "poll",
+    "short": "Solicita eventos históricos desde un timestamp",
+    "category": "BRIDGE",
+    "options": [
+      {
+        "name": "brain-addr",
+        "usage": "Dirección TCP del Brain",
+        "default": "127.0.0.1:5678"
+      },
+      {
+        "name": "since",
+        "usage": "Timestamp Unix (segundos o nanosegundos)",
+        "default": "0"
+      },
+      {
+        "name": "since-time",
+        "usage": "Tiempo relativo (ej: 5m, 1h, 30s)"
+      }
+    ]
+  },
+  {
+    "name": "seed",
+    "use": "seed [alias] [is_master]",
+    "short": "Registra una nueva identidad de perfil",
+    "category": "IDENTITY",
+    "args": [
+      {
+        "name": "alias",
+        "required": false
+      },
+      {
+        "name": "is_master",
+        "required": false
+      }
+    ],
+    "example": "  sentinel seed profile_001 true\n  sentinel --json seed burner_temp false | jq .",
+    "requires": "  - brain.exe debe estar disponible en bin/\n  - bloom-cortex.blx en bin/cortex/\n  - Permiso de escritura en HKCU\\Software\\Google\\Chrome\\NativeMessagingHosts\n  - bloom-host.exe en bin/native/\n  - Extension ID válido en configuración"
+  },
+  {
+    "name": "send",
+    "use": "send",
+    "short": "Envía un evento/comando directo al Brain",
+    "category": "BRIDGE",
+    "options": [
+      {
+        "name": "brain-addr",
+        "usage": "Dirección TCP del Brain",
+        "default": "127.0.0.1:5678"
+      },
+      {
+        "name": "data",
+        "shorthand": "d",
+        "usage": "Datos adicionales en formato JSON (opcional)"
+      },
+      {
+        "name": "profile-id",
+        "shorthand": "p",
+        "usage": "ID del perfil (opcional)"
+      },
+      {
+        "name": "type",
+        "shorthand": "t",
+        "usage": "Tipo de evento (LAUNCH_PROFILE, STOP_PROFILE, etc.) [REQUERIDO]"
+      }
+    ]
+  },
+  {
+    "name": "telemetry",
+    "use": "telemetry",
+    "short": "Gestión y diagnóstico de streams de telemetría",
+    "category": "UI",
+    "subcommands": [
+      {
+        "name": "clean",
+        "use": "clean",
+        "short": "Limpia y resetea el archivo de telemetría",
+        "example": "  sentinel telemetry clean",
+        "requires": "  - Permiso de escritura en logs/"
+      },
+      {
+        "name": "status",
+        "use": "status",
+        "short": "Muestra el estado actual del JSON de telemetría",
+        "example": "  sentinel telemetry status",
+        "requires": "  - telemetry.json existente en logs/"
+      }
+    ],
+    "example": "  sentinel telemetry status\n  sentinel telemetry clean"
+  },
+  {
+    "name": "temporal",
+    "use": "temporal",
+    "short": "Controlador maestro del runtime de Temporal",
+    "category": "TEMPORAL",
+    "subcommands": [
+      {
+        "name": "activity",
+        "use": "activity",
+        "short": "Gestión de actividades registradas",
+        "category": "TEMPORAL",
+        "subcommands": [
+          {
+            "name": "list",
+            "use": "list",
+            "short": "Lista todas las actividades registradas",
+            "example": "  sentinel temporal activity list\n  sentinel --json temporal activity list | jq ."
+          }
+        ]
+      },
+      {
+        "name": "health",
+        "use": "health",
+        "short": "Verificación de conectividad y salud del cluster",
+        "category": "TEMPORAL",
+        "example": "  sentinel temporal health\n  sentinel temporal health \u0026\u0026 echo \"OK\" || echo \"FAIL\""
+      },
+      {
+        "name": "start",
+        "use": "start",
+        "short": "Inicia el servidor Temporal",
+        "category": "TEMPORAL",
+        "options": [
+          {
+            "name": "dev",
+            "usage": "Modo desarrollo (servidor embebido)",
+            "default": "true"
+          },
+          {
+            "name": "port",
+            "usage": "Puerto del servidor",
+            "default": "7233"
+          }
+        ],
+        "example": "  sentinel temporal start\n  sentinel temporal start --dev\n  sentinel temporal start --port 7233\n  sentinel temporal start --dev \u0026\u0026 sentinel temporal status",
+        "requires": "- Modo Dev: temporalite.exe en bin/\n- Modo Prod: Servidor Temporal accesible en puerto configurado\n- Permisos de escritura en AppData/Bloom/temporal/"
+      },
+      {
+        "name": "status",
+        "use": "status",
+        "short": "Muestra el estado actual del servidor Temporal",
+        "category": "TEMPORAL",
+        "example": "  sentinel temporal status\n  sentinel --json temporal status | jq .\n  sentinel temporal status \u0026\u0026 sentinel temporal workflow list",
+        "requires": "- Servidor Temporal debe estar iniciado previamente\n- Puerto 7233 accesible para verificación"
+      },
+      {
+        "name": "stop",
+        "use": "stop",
+        "short": "Detiene el servidor Temporal y todos los workers",
+        "category": "TEMPORAL",
+        "example": "  sentinel temporal stop\n  sentinel temporal stop \u0026\u0026 sleep 2 \u0026\u0026 sentinel temporal start"
+      },
+      {
+        "name": "workflow",
+        "use": "workflow",
+        "short": "Gestión de workflows de Temporal",
+        "category": "TEMPORAL",
+        "subcommands": [
+          {
+            "name": "describe",
+            "use": "describe \u003cworkflow_id\u003e",
+            "short": "Describe el estado de un workflow",
+            "args": [
+              {
+                "name": "\u003cworkflow_id\u003e",
+                "required": true
+              }
+            ],
+            "example": "  sentinel temporal workflow describe profile-onboarding-001\n  sentinel --json temporal workflow describe task-001 | jq ."
+          },
+          {
+            "name": "execute",
+            "use": "execute \u003cworkflow_id\u003e",
+            "short": "Ejecuta un workflow específico",
+            "args": [
+              {
+                "name": "\u003cworkflow_id\u003e",
+                "required": true
+              }
+            ],
+            "example": "  sentinel temporal workflow execute profile-onboarding-001\n  sentinel temporal workflow execute scheduled-task-daily"
+          },
+          {
+            "name": "list",
+            "use": "list",
+            "short": "Lista todos los workflows activos",
+            "example": "  sentinel temporal workflow list\n  sentinel --json temporal workflow list | jq '.[]'"
+          },
+          {
+            "name": "terminate",
+            "use": "terminate \u003cworkflow_id\u003e",
+            "short": "Termina un workflow en ejecución",
+            "args": [
+              {
+                "name": "\u003cworkflow_id\u003e",
+                "required": true
+              }
+            ],
+            "example": "  sentinel temporal workflow terminate profile-onboarding-001"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "version",
+    "use": "version",
+    "short": "Display version and build information",
+    "category": "SYSTEM"
+  }
+]

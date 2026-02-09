@@ -1,0 +1,90 @@
+BRAIN CLI ─── Modular System for Bloom (Executable)                                   
+                              ────────────────────────────────────────────────────────────                              
+
+═══┫ USAGE ┣═══
+
+  brain [GLOBAL_OPTIONS] <category> <command> [OPTIONS] [ARGS]
+
+  • Global options (--json, --verbose) must precede <category>
+
+  → View all commands: brain --help --full
+  → Category help: brain <category> --help
+
+═══┫ GLOBAL OPTIONS ┣═══
+
+  • --json         Output in JSON format
+  • --verbose      Enable detailed logging
+  • --help         Show help information
+  • --version      Brain Version Number
+  • --info         Technicall System Information
+
+═══┫ CATEGORIES ┣═══
+
+  ▸ chrome         Chrome profile debugging and network log analysis        3 cmds
+  ▸ context        AI context generation and management                     1 cmd
+  ▸ extension      Chrome extension lifecycle management                    3 cmds
+  ▸ filesystem     File operations and directory analysis                   3 cmds
+  ▸ gemini         Gemini AI key management and operations                  5 cmds
+  ▸ github         GitHub integration and repository management             6 cmds
+  ▸ health         System health checks and diagnostics                     5 cmds
+  ▸ intent         Intent execution system and context planning             19 cmds
+  ▸ nucleus        Nucleus project management and lifecycle                 14 cmds
+  ▸ profile        Chrome profile and AI account management                 8 cmds
+  ▸ project        Project lifecycle and scaffolding                        4 cmds
+  ▸ runtime        Non-interactive system runtime operations                1 cmd
+  ▸ service        Background connection multiplexer and task runner        3 cmds
+  ▸ synapse        Chrome Native Messaging Bridge and protocol management   2 cmds
+  ▸ system         Runtime and system introspection                         5 cmds
+  ▸ twitter        Twitter/X integration and social data analysis           2 cmds
+
+  ──────────────────────────────────────────────────────────────────────
+  ✓ TOTAL: 16 categories • 84 commands
+
+
+  → To see all detailed commands: brain --help --full
+
+
+                                  BRAIN CLI ─── Modular System for Bloom (Executable)                                   
+                              ────────────────────────────────────────────────────────────                              
+
+═══┫ USAGE ┣═══
+
+  brain [GLOBAL_OPTIONS] <category> <command> [OPTIONS] [ARGS]
+
+  • Global options (--json, --verbose) must precede <category>
+
+  → View all commands: brain --help --full
+  → Category help: brain <category> --help
+
+═══┫ GLOBAL OPTIONS ┣═══
+
+  • --json         Output in JSON format
+  • --verbose      Enable detailed logging
+  • --help         Show help information
+  • --version      Brain Version Number
+  • --info         Technicall System Information
+
+═══┫ CATEGORIES ┣═══
+
+  ▸ chrome         Chrome profile debugging and network log analysis        3 cmds
+  ▸ context        AI context generation and management                     1 cmd
+  ▸ extension      Chrome extension lifecycle management                    3 cmds
+  ▸ filesystem     File operations and directory analysis                   3 cmds
+  ▸ gemini         Gemini AI key management and operations                  5 cmds
+  ▸ github         GitHub integration and repository management             6 cmds
+  ▸ health         System health checks and diagnostics                     5 cmds
+  ▸ intent         Intent execution system and context planning             19 cmds
+  ▸ nucleus        Nucleus project management and lifecycle                 14 cmds
+  ▸ profile        Chrome profile and AI account management                 8 cmds
+  ▸ project        Project lifecycle and scaffolding                        4 cmds
+  ▸ runtime        Non-interactive system runtime operations                1 cmd
+  ▸ service        Background connection multiplexer and task runner        3 cmds
+  ▸ synapse        Chrome Native Messaging Bridge and protocol management   2 cmds
+  ▸ system         Runtime and system introspection                         5 cmds
+  ▸ twitter        Twitter/X integration and social data analysis           2 cmds
+
+  ──────────────────────────────────────────────────────────────────────
+  ✓ TOTAL: 16 categories • 84 commands
+
+
+  → To see all detailed commands: brain --help --full
