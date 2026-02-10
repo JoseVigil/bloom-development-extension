@@ -84,7 +84,7 @@ PROJECT_ROOT="$SCRIPT_DIR/../.."
 OUT_DIR="$PROJECT_ROOT/installer/native/bin"
 
 # Crear carpetas separadas por arquitectura
-mkdir -p "$OUT_DIR/win32/host" \
+mkdir -p "$OUT_DIR/win64/host" \
          "$OUT_DIR/linux/host" \
          "$OUT_DIR/darwin/arm64/host" \
          "$OUT_DIR/darwin/x64/host"
@@ -116,7 +116,7 @@ if command -v x86_64-w64-mingw32-g++ &> /dev/null; then
         # Intentar lib64 primero, luego lib
         if [ -d "$LOCAL_OPENSSL/lib64" ] && [ -f "$LOCAL_OPENSSL/lib64/libssl.a" ]; then
             OPENSSL_LIB="$LOCAL_OPENSSL/lib64"
-        elif [ -d "$LOCAL_OPENSSL/lib" ] && [ -f "$LOCAL_OPENSSL/lib/libssl.a" ]; then
+        elif [ -d "$LOCAL_OPENSSL/lib" ] && [ -f "$LOCAL_OPENSSL/lib/lib.a" ]; then
             OPENSSL_LIB="$LOCAL_OPENSSL/lib"
         fi
         if [ -n "$OPENSSL_LIB" ]; then
@@ -179,7 +179,7 @@ if command -v x86_64-w64-mingw32-g++ &> /dev/null; then
     
     x86_64-w64-mingw32-g++ -std=c++20 -O2 -I. -I"$OPENSSL_INCLUDE" \
         "${SOURCE_FILES[@]}" \
-        -o "$OUT_DIR/win32/host/bloom-host.exe" \
+        -o "$OUT_DIR/win64/host/bloom-host.exe" \
         -L"$OPENSSL_LIB" \
         "$OPENSSL_LIB/libssl.a" "$OPENSSL_LIB/libcrypto.a" \
         -lws2_32 -lshell32 -lcrypt32 -luser32 -lgdi32 \
@@ -206,91 +206,71 @@ if command -v x86_64-w64-mingw32-g++ &> /dev/null; then
     # Intentar cada ubicación
     for path in "${POSSIBLE_PATHS[@]}"; do
         # Expandir wildcards si existen
-        expanded_paths=($path)
-        for expanded in "${expanded_paths[@]}"; do
-            if [ -d "$expanded" ] && [ -f "$expanded/libwinpthread-1.dll" ]; then
-                MINGW_BIN="$expanded"
+        for expanded_path in $path; do
+            if [ -d "$expanded_path" ]; then
+                MINGW_BIN="$expanded_path"
                 break 2
             fi
         done
     done
     
-    # Si no se encontró, buscar con find en todo el sistema
-    if [ -z "$MINGW_BIN" ]; then
-        echo -e "${YELLOW}  Searching for libwinpthread-1.dll...${NC}"
-        FOUND_DLL=$(find /usr /opt 2>/dev/null | grep -m 1 "x86_64-w64-mingw32.*libwinpthread-1.dll$")
-        if [ -n "$FOUND_DLL" ]; then
-            MINGW_BIN=$(dirname "$FOUND_DLL")
-        fi
+    # Buscar y copiar DLLs necesarias de MinGW
+    echo -e "${YELLOW}🔍 Searching for required MinGW DLLs...${NC}"
+    
+    # Ubicaciones posibles para cada DLL
+    DLL_PATHS=(
+        # libwinpthread-1.dll
+        "/usr/x86_64-w64-mingw32/lib/libwinpthread-1.dll"
+        "/usr/lib/gcc/x86_64-w64-mingw32/*/libwinpthread-1.dll"
+        
+        # libgcc_s_seh-1.dll
+        "/usr/lib/gcc/x86_64-w64-mingw32/*/libgcc_s_seh-1.dll"
+        
+        # libstdc++-6.dll
+        "/usr/lib/gcc/x86_64-w64-mingw32/*/libstdc++-6.dll"
+    )
+    
+    COPIED_COUNT=0
+    
+    # Buscar y copiar libwinpthread-1.dll
+    PTHREAD_DLL=$(find /usr -path "*/x86_64-w64-mingw32/lib/libwinpthread-1.dll" 2>/dev/null | head -1)
+    if [ -n "$PTHREAD_DLL" ] && [ -f "$PTHREAD_DLL" ]; then
+        cp "$PTHREAD_DLL" "$OUT_DIR/win64/host/"
+        echo -e "${GREEN}  ✓ Copied: libwinpthread-1.dll (from $(dirname $PTHREAD_DLL))${NC}"
+        ((COPIED_COUNT++))
     fi
     
-    if [ -n "$MINGW_BIN" ] && [ -d "$MINGW_BIN" ]; then
-        echo -e "${GREEN}✓ Found MinGW bin: $MINGW_BIN${NC}"
-        
-        # Detectar qué DLLs necesita el ejecutable
-        REQUIRED_DLLS=$(x86_64-w64-mingw32-objdump -p "$OUT_DIR/win32/host/bloom-host.exe" 2>/dev/null | \
-            grep "DLL Name:" | \
-            grep -v "KERNEL32\|api-ms-win\|SHELL32\|WS2_32\|CRYPT32\|ADVAPI32\|USER32\|GDI32" | \
-            awk '{print $3}')
-        
-        # Lista de DLLs comunes de MinGW que siempre deben incluirse
-        COMMON_DLLS=(
-            "libwinpthread-1.dll"
-            "libgcc_s_seh-1.dll"
-            "libstdc++-6.dll"
-        )
-        
-        # Combinar DLLs detectadas con DLLs comunes
-        ALL_DLLS=$(echo -e "$REQUIRED_DLLS\n${COMMON_DLLS[@]}" | sort -u)
-        
-        if [ -n "$ALL_DLLS" ]; then
-            echo -e "${YELLOW}Copying DLLs:${NC}"
-            
-            # Copiar cada DLL
-            COPIED_COUNT=0
-            for DLL in $ALL_DLLS; do
-                [ -z "$DLL" ] && continue
-                DLL_PATH="$MINGW_BIN/$DLL"
-                if [ -f "$DLL_PATH" ]; then
-                    cp "$DLL_PATH" "$OUT_DIR/win32/host/"
-                    echo -e "${GREEN}  ✓ Copied: $DLL${NC}"
-                    ((COPIED_COUNT++))
-                fi
-            done
-            
-            if [ $COPIED_COUNT -eq 0 ]; then
-                echo -e "${YELLOW}  ⚠ No DLLs copied (may be statically linked)${NC}"
-            else
-                echo -e "${GREEN}✓ Copied $COPIED_COUNT DLL(s)${NC}"
-            fi
-        else
-            echo -e "${GREEN}✓ No external DLLs required (fully static)${NC}"
-        fi
+    # Buscar y copiar libgcc_s_seh-1.dll (preferir posix sobre win32)
+    GCC_DLL=$(find /usr/lib/gcc/x86_64-w64-mingw32 -name "libgcc_s_seh-1.dll" 2>/dev/null | grep -E "posix|10-posix" | head -1)
+    if [ -z "$GCC_DLL" ]; then
+        GCC_DLL=$(find /usr/lib/gcc/x86_64-w64-mingw32 -name "libgcc_s_seh-1.dll" 2>/dev/null | head -1)
+    fi
+    if [ -n "$GCC_DLL" ] && [ -f "$GCC_DLL" ]; then
+        cp "$GCC_DLL" "$OUT_DIR/win64/host/"
+        echo -e "${GREEN}  ✓ Copied: libgcc_s_seh-1.dll (from $(dirname $GCC_DLL))${NC}"
+        ((COPIED_COUNT++))
+    fi
+    
+    # Buscar y copiar libstdc++-6.dll (preferir posix sobre win32)
+    STDCPP_DLL=$(find /usr/lib/gcc/x86_64-w64-mingw32 -name "libstdc++-6.dll" 2>/dev/null | grep -E "posix|10-posix" | head -1)
+    if [ -z "$STDCPP_DLL" ]; then
+        STDCPP_DLL=$(find /usr/lib/gcc/x86_64-w64-mingw32 -name "libstdc++-6.dll" 2>/dev/null | head -1)
+    fi
+    if [ -n "$STDCPP_DLL" ] && [ -f "$STDCPP_DLL" ]; then
+        cp "$STDCPP_DLL" "$OUT_DIR/win64/host/"
+        echo -e "${GREEN}  ✓ Copied: libstdc++-6.dll (from $(dirname $STDCPP_DLL))${NC}"
+        ((COPIED_COUNT++))
+    fi
+    
+    if [ $COPIED_COUNT -eq 0 ]; then
+        echo -e "${RED}✗ No DLLs found${NC}"
     else
-        echo -e "${YELLOW}⚠  Could not find MinGW bin directory${NC}"
-        echo -e "${YELLOW}  Searching for DLLs in alternative locations...${NC}"
-        
-        # Buscar DLLs individuales en el sistema
-        COMMON_DLLS=(
-            "libwinpthread-1.dll"
-            "libgcc_s_seh-1.dll"
-            "libstdc++-6.dll"
-        )
-        
-        COPIED_COUNT=0
-        for DLL in "${COMMON_DLLS[@]}"; do
-            FOUND_DLL=$(find /usr 2>/dev/null | grep -m 1 "x86_64-w64-mingw32.*/$DLL$")
-            if [ -n "$FOUND_DLL" ] && [ -f "$FOUND_DLL" ]; then
-                cp "$FOUND_DLL" "$OUT_DIR/win32/host/"
-                echo -e "${GREEN}  ✓ Found and copied: $DLL${NC}"
-                ((COPIED_COUNT++))
-            fi
-        done
-        
-        if [ $COPIED_COUNT -eq 0 ]; then
-            echo -e "${YELLOW}  ⚠ No DLLs found. If the executable doesn't run on Windows,${NC}"
-            echo -e "${YELLOW}     you may need to install mingw-w64 runtime libraries.${NC}"
-        fi
+        echo -e "${GREEN}✓ Successfully copied $COPIED_COUNT DLL(s)${NC}"
+    fi
+    
+    # Información del toolchain MinGW
+    if [ -n "$MINGW_BIN" ]; then
+        echo -e "${GREEN}✓ MinGW toolchain: $MINGW_BIN${NC}"
     fi
 fi
 
@@ -420,9 +400,9 @@ echo -e "${YELLOW}📁 Output directory: $OUT_DIR/${NC}"
 echo ""
 
 # Mostrar contenido de cada plataforma
-if [ -d "$OUT_DIR/win32/host" ] && [ "$(ls -A $OUT_DIR/win32/host 2>/dev/null)" ]; then
+if [ -d "$OUT_DIR/win64/host" ] && [ "$(ls -A $OUT_DIR/win64/host 2>/dev/null)" ]; then
     echo -e "${YELLOW}🪟 Windows build:${NC}"
-    ls -lh "$OUT_DIR/win32/host/"
+    ls -lh "$OUT_DIR/win64/host/"
     echo ""
 fi
 
