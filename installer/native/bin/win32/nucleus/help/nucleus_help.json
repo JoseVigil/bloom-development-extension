@@ -283,6 +283,33 @@
     "category": "SYNC"
   },
   {
+    "name": "register",
+    "use": "register",
+    "short": "Register or update a telemetry stream",
+    "category": "TELEMETRY",
+    "options": [
+      {
+        "name": "label",
+        "usage": "Display label with emoji (required)"
+      },
+      {
+        "name": "path",
+        "usage": "Absolute path to log file (required)"
+      },
+      {
+        "name": "priority",
+        "usage": "Priority level: 1=critical, 2=important, 3=informational",
+        "default": "2"
+      },
+      {
+        "name": "stream",
+        "usage": "Stream identifier (required)"
+      }
+    ],
+    "example": "  nucleus telemetry register --stream test --label \"🧪 TEST\" --path \"C:/logs/test.log\" --priority 3\n  nucleus --json telemetry register --stream worker --label \"🧠 WORKER\" --path \"C:/logs/worker.log\"",
+    "json_response": "{\n  \"success\": true,\n  \"stream_id\": \"electron_install\",\n  \"message\": \"Stream registered successfully\"\n}"
+  },
+  {
     "name": "cleanup",
     "use": "cleanup",
     "short": "Clean up zombie Temporal processes on port 7233",

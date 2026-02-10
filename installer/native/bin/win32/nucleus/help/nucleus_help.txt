@@ -35,9 +35,10 @@
   VAULT              Secure key and credential management                     4 cmds
   SYNC               State synchronization with central server                2 cmds
   ANALYTICS          System monitoring and telemetry                          1 cmd
+  TELEMETRY          Centralized log stream registration                      1 cmd
   TEMPORAL_SERVER    Temporal server management and diagnostics               1 cmd
   ORCHESTRATION      Workflow orchestration and automation                    3 cmds
-  ---------------------------------------------------------------------------  Total: 21 commands
+  ---------------------------------------------------------------------------  Total: 22 commands
 
 
 =======================================================[ SYSTEM ]=======================================================
@@ -221,6 +222,46 @@
     Flags:
       --volume                   Intent volume [default: 0]
       --workers                  Active workers count [default: 0]
+
+    --------------------------------------------------------------------------------
+
+
+=====================================================[ TELEMETRY ]======================================================
+
+  > TELEMETRY
+    Centralized log stream registration
+
+    Usage: nucleus telemetry
+
+    Subcommands:
+      register              Register or update a telemetry stream
+        nucleus telemetry register
+
+    Subcommand Details:
+
+      └─ REGISTER
+        Register or update a telemetry stream
+
+        Usage: nucleus telemetry register
+
+        Flags:
+          --label                    Display label with emoji (required)
+          --path                     Absolute path to log file (required)
+          --priority                 Priority level: 1=critical, 2=important, 3=informational [default: 2]
+          --stream                   Stream identifier (required)
+
+        Example:
+            nucleus telemetry register --stream test --label "🧪 TEST" --path "C:/logs/test.log" --priority 3
+            nucleus --json telemetry register --stream worker --label "🧠 WORKER" --path "C:/logs/worker.log"
+
+        JSON Response:
+          {
+            "success": true,
+            "stream_id": "electron_install",
+            "message": "Stream registered successfully"
+          }
+
+        ----------------------------------------------------------------------
 
     --------------------------------------------------------------------------------
 

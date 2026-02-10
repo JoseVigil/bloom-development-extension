@@ -7,13 +7,18 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/gofrs/flock"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 // ProcessState represents the lifecycle state of a managed process
@@ -76,6 +81,179 @@ type StartOllamaResult struct {
 	Error     string `json:"error,omitempty"`
 	Timestamp int64  `json:"timestamp"`
 }
+
+// ============================================================================
+// TEMPORAL SERVER MANAGEMENT
+// ============================================================================
+
+// startTemporalServer starts Temporal Server as a subprocess
+func (s *Supervisor) startTemporalServer(ctx context.Context) (*ManagedProcess, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Check if already running
+	if proc, exists := s.processes["temporal_server"]; exists {
+		if proc.State == StateReady {
+			return proc, nil
+		}
+	}
+
+	// Find Temporal binary
+	temporalBin := filepath.Join(s.binDir, "temporal", "temporal.exe")
+	if _, err := os.Stat(temporalBin); err != nil {
+		// Fallback to system PATH
+		if binPath, err := exec.LookPath("temporal"); err == nil {
+			temporalBin = binPath
+		} else {
+			return nil, fmt.Errorf("temporal binary not found at %s or in PATH", temporalBin)
+		}
+	}
+
+	// Generate log filename with date
+	today := time.Now()
+	dateStr := fmt.Sprintf("%04d%02d%02d", today.Year(), today.Month(), today.Day())
+	logPath := filepath.Join(s.logsDir, "temporal", "server", fmt.Sprintf("temporal_server_%s.log", dateStr))
+	
+	if err := os.MkdirAll(filepath.Dir(logPath), 0755); err != nil {
+		return nil, fmt.Errorf("failed to create temporal log directory: %w", err)
+	}
+
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create temporal log file: %w", err)
+	}
+
+	// Create command: temporal server start-dev
+	cmd := exec.CommandContext(ctx, temporalBin, "server", "start-dev")
+	cmd.Stdout = logFile
+	cmd.Stderr = logFile
+	cmd.Dir = filepath.Dir(temporalBin) // Set working directory
+
+	// Start Temporal Server
+	if err := cmd.Start(); err != nil {
+		logFile.Close()
+		return nil, fmt.Errorf("failed to start temporal server: %w", err)
+	}
+
+	proc := &ManagedProcess{
+		Name:      "temporal_server",
+		Cmd:       cmd,
+		PID:       cmd.Process.Pid,
+		State:     StateStarting,
+		LogPath:   logPath,
+		StartedAt: time.Now(),
+	}
+
+	s.processes["temporal_server"] = proc
+
+	// Monitor process in background
+	go s.monitorProcess(proc, logFile)
+
+	return proc, nil
+}
+
+// waitForTemporalReady waits for Temporal Server to be ready via gRPC health check
+func (s *Supervisor) waitForTemporalReady(ctx context.Context, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	hostPort := "localhost:7233"
+
+	for time.Now().Before(deadline) {
+		// Try to dial with a short timeout
+		dialCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		conn, err := grpc.DialContext(dialCtx, hostPort,
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithBlock(),
+		)
+		cancel()
+
+		if err == nil {
+			// Connection successful, try health check
+			healthClient := healthpb.NewHealthClient(conn)
+			checkCtx, checkCancel := context.WithTimeout(ctx, 2*time.Second)
+			resp, err := healthClient.Check(checkCtx, &healthpb.HealthCheckRequest{})
+			checkCancel()
+			conn.Close()
+
+			if err == nil && resp.Status == healthpb.HealthCheckResponse_SERVING {
+				// Update process state and telemetry
+				if proc, exists := s.processes["temporal_server"]; exists {
+					proc.mu.Lock()
+					proc.State = StateReady
+					proc.mu.Unlock()
+					s.updateTemporalTelemetry(proc)
+				}
+				return nil
+			}
+		}
+
+		// Wait before retrying
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(500 * time.Millisecond):
+			// Continue retry loop
+		}
+	}
+
+	return fmt.Errorf("temporal server not ready after %v", timeout)
+}
+
+// updateTemporalTelemetry updates telemetry.json with Temporal Server info
+func (s *Supervisor) updateTemporalTelemetry(proc *ManagedProcess) {
+	telemetryPath := filepath.Join(s.logsDir, "telemetry.json")
+	lockPath := telemetryPath + ".lock"
+
+	lock := flock.New(lockPath)
+
+	// Retry with backoff
+	for i := 0; i < 5; i++ {
+		locked, err := lock.TryLock()
+		if err == nil && locked {
+			defer lock.Unlock()
+			break
+		}
+		time.Sleep(time.Duration(50+i*30) * time.Millisecond)
+	}
+
+	// Read existing telemetry
+	var telemetry map[string]interface{}
+	data, err := os.ReadFile(telemetryPath)
+	if err == nil {
+		json.Unmarshal(data, &telemetry)
+	}
+	if telemetry == nil {
+		telemetry = make(map[string]interface{})
+	}
+
+	streams, ok := telemetry["active_streams"].(map[string]interface{})
+	if !ok {
+		streams = make(map[string]interface{})
+		telemetry["active_streams"] = streams
+	}
+
+	// Normalize path to forward slashes
+	normalizedPath := strings.ReplaceAll(proc.LogPath, "\\", "/")
+
+	// Update stream with Temporal Server info
+	streams["temporal_server"] = map[string]interface{}{
+		"label":       "⏱️ TEMPORAL SERVER",
+		"path":        normalizedPath,
+		"priority":    1, // Critical
+		"pid":         proc.PID,
+		"state":       string(proc.State),
+		"last_update": time.Now().UTC().Format(time.RFC3339),
+	}
+
+	// Write atomically
+	tmpPath := telemetryPath + ".tmp"
+	newData, _ := json.MarshalIndent(telemetry, "", "  ")
+	os.WriteFile(tmpPath, newData, 0644)
+	os.Rename(tmpPath, telemetryPath)
+}
+
+// ============================================================================
+// EXISTING METHODS (unchanged)
+// ============================================================================
 
 // CheckVaultStatus queries the vault status via Synapse
 func (s *Supervisor) CheckVaultStatus(ctx context.Context) (*VaultStatusResult, error) {
@@ -236,10 +414,13 @@ func (s *Supervisor) updateTelemetry(proc *ManagedProcess) {
 		telemetry["active_streams"] = streams
 	}
 
+	// Normalize path to forward slashes
+	normalizedPath := strings.ReplaceAll(proc.LogPath, "\\", "/")
+
 	// Update stream
 	streams[proc.Name] = map[string]interface{}{
 		"label":       fmt.Sprintf("🔧 %s", proc.Name),
-		"path":        proc.LogPath,
+		"path":        normalizedPath,
 		"priority":    2,
 		"pid":         proc.PID,
 		"state":       string(proc.State),
@@ -290,15 +471,25 @@ func (s *Supervisor) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-// Boot sequence helper methods
+// ============================================================================
+// BOOT SEQUENCE HELPER METHODS
+// ============================================================================
 
+// verifyTemporalServer checks if Temporal Server is reachable on port 7233
 func (s *Supervisor) verifyTemporalServer(ctx context.Context) error {
-	// TODO: Implement port 7233 check
+	// Try to establish TCP connection to port 7233
+	conn, err := net.DialTimeout("tcp", "localhost:7233", 2*time.Second)
+	if err != nil {
+		return fmt.Errorf("temporal server not reachable on port 7233: %w", err)
+	}
+	conn.Close()
 	return nil
 }
 
+// verifyWorkerRunning checks if worker is operational (placeholder)
 func (s *Supervisor) verifyWorkerRunning(ctx context.Context) error {
-	// TODO: Implement worker status check
+	// TODO: Implement actual worker status check
+	// For now, just return nil as worker is internal goroutine
 	return nil
 }
 
