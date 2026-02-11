@@ -33,7 +33,9 @@
       "requestedExecutionLevel": "requireAdministrator",
       "artifactName": "bloom-setup-${version}.${ext}",
       "publisherName": "BTIP Studio",
-      "verifyUpdateCodeSignature": false
+      "verifyUpdateCodeSignature": false,
+      "signAndEditExecutable": false,
+      "manifest": "app.manifest"
     },
     "nsis": {
       "oneClick": false,
@@ -65,6 +67,7 @@
       "scripts/**/*",
       "registry-scripts/**/*",
       "assets/**/*",
+      "app.manifest",
       "package.json",
       "!node_modules/**/*",
       "!**/*.map"
@@ -75,23 +78,23 @@
         "to": "runtime"
       },
       {
-        "from": "../../native/bin/win32/nucleus",
+        "from": "../../native/bin/win64/nucleus",
         "to": "nucleus"
       },
       {
-        "from": "../../native/bin/win32/sentinel",
+        "from": "../../native/bin/win64/sentinel",
         "to": "sentinel"
       },
       {
-        "from": "../../native/bin/win32/brain",
+        "from": "../../native/bin/win64/brain",
         "to": "brain"
       },
       {
-        "from": "../../native/bin/win32/host",
+        "from": "../../native/bin/win64/host",
         "to": "native"
       },
       {
-        "from": "../../native/bin/win32/ollama",
+        "from": "../../native/bin/win64/ollama",
         "to": "ollama"
       },
       {
@@ -99,7 +102,7 @@
         "to": "cortex"
       },
       {
-        "from": "../../native/nssm/win32",
+        "from": "../../native/nssm/win64",
         "to": "nssm"
       },
       {

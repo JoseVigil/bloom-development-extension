@@ -244,11 +244,11 @@ async function atomicWrite(filepath, data) {
  */
 async function readNucleus() {
   try {
-    if (!await fs.pathExists(NUCLEUS_PATH)) {
+    if (!await fs.pathExists(paths.configFile)) {
       return null;
     }
 
-    const raw = await fs.readJson(NUCLEUS_PATH);
+    const raw = await fs.readJson(paths.configFile);
     
     // MIGRACIÓN: Detectar esquema viejo (sin campo "version")
     if (!raw.version) {

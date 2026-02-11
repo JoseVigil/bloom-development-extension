@@ -1,6 +1,19 @@
 // shared/logger.js
 // Sistema de logging unificado para installer y conductor
 // Logs se guardan en: C:\Users\{user}\AppData\Local\BloomNucleus\logs\
+//
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 🟢 TELEMETRY POLICY — FINAL
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//
+// ✅ THIS MODULE ONLY WRITES .log FILES
+//
+// Telemetry registration:
+//    - Applications invoke: nucleus telemetry register <stream_id> <log_path>
+//    - Nucleus is the ONLY writer to telemetry.json
+//    - Logger never touches telemetry.json
+//
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 const fs = require('fs-extra');
 const path = require('path');
@@ -22,47 +35,10 @@ class Logger {
     this.category = category;
     this.logFile = null;
     this.initialized = false;
+    this.telemetryRegistered = false;
+    this.streamId = null;
+    this.streamLabel = null;
     this.basePath = basePath || path.join(process.env.LOCALAPPDATA, 'BloomNucleus', 'logs');
-    this.telemetryPath = path.join(this.basePath, 'telemetry.json');
-  }
-
-  /**
-   * Actualiza el archivo telemetry.json con la información del stream actual
-   */
-  async _updateTelemetry() {
-    try {
-      let telemetry = { active_streams: {} };
-      
-      if (await fs.pathExists(this.telemetryPath)) {
-        telemetry = await fs.readJson(this.telemetryPath);
-      }
-
-      if (!telemetry.active_streams) telemetry.active_streams = {};
-
-      let key, label;
-      
-      if (this.category === 'installer') {
-        key = 'electron_install';
-        label = '📥 ELECTRON INSTALL';
-      } else if (this.category === 'conductor') {
-        key = 'electron_conductor';
-        label = '🎯 CONDUCTOR';
-      } else {
-        key = 'electron_launch';
-        label = '⚡ ELECTRON LAUNCH';
-      }
-      
-      telemetry.active_streams[key] = {
-        label: label,
-        path: this.logFile,
-        priority: 2,
-        last_update: new Date().toISOString()
-      };
-
-      await fs.writeJson(this.telemetryPath, telemetry, { spaces: 2 });
-    } catch (error) {
-      // Silently fail telemetry update to not interrupt logging
-    }
   }
 
   /**
@@ -85,18 +61,28 @@ class Logger {
     try {
       let targetDir = this.basePath;
       let filename;
+      this.streamId = null;
+      this.streamLabel = null;
 
       if (this.category === 'installer') {
         targetDir = path.join(this.basePath, 'install');
-        filename = 'electron_install.log';
+        const timestamp = this._getTimestamp();
+        filename = `electron_install_${timestamp}.log`;
+        this.streamId = `electron_install_${timestamp}`;
+        this.streamLabel = '🔥 ELECTRON INSTALL';
       } else if (this.category === 'conductor') {
-        // ✅ Conductor con timestamp para evitar archivos grandes
         targetDir = path.join(this.basePath, 'conductor');
         const timestamp = this._getTimestamp();
-        filename = `conductor_${timestamp}.log`;
+        filename = `conductor_launch_${timestamp}.log`;
+        this.streamId = `conductor_launch_${timestamp}`;
+        this.streamLabel = '🚀 CONDUCTOR LAUNCH';
       } else {
-        // Por defecto para launcher o general
-        filename = 'electron_launch.log';
+        // Por defecto para launcher
+        targetDir = path.join(this.basePath, 'conductor');
+        const timestamp = this._getTimestamp();
+        filename = `conductor_launch_${timestamp}.log`;
+        this.streamId = `conductor_launch_${timestamp}`;
+        this.streamLabel = '🚀 CONDUCTOR LAUNCH';
       }
 
       // Asegurar que el directorio existe
@@ -114,12 +100,64 @@ Log File: ${this.logFile}
       await fs.appendFile(this.logFile, header);
       this.initialized = true;
 
-      // Primera actualización de telemetría
-      await this._updateTelemetry();
-
       console.log(`${COLORS.cyan}[Logger]${COLORS.reset} Initialized: ${this.logFile}`);
+
+      // NO registrar telemetría aquí - se hará en el primer writeLog
+
     } catch (error) {
       console.error(`${COLORS.red}[Logger]${COLORS.reset} Failed to initialize:`, error.message);
+    }
+  }
+
+  /**
+   * Registra el stream en telemetry.json vía Nucleus CLI
+   * NOTA: Esta operación es OPCIONAL y falla silenciosamente si nucleus.exe no existe
+   */
+  async _registerTelemetry(streamId, label) {
+    try {
+      const nucleusExe = path.join(
+        process.env.LOCALAPPDATA,
+        'BloomNucleus',
+        'bin',
+        'nucleus',
+        'nucleus.exe'
+      );
+
+      // Si nucleus.exe no existe, simplemente retornar sin error
+      if (!fs.existsSync(nucleusExe)) {
+        console.log(`${COLORS.gray}[Logger]${COLORS.reset} Nucleus not available yet, skipping telemetry registration`);
+        return;
+      }
+
+      const { spawn } = require('child_process');
+      
+      const child = spawn(nucleusExe, [
+        'telemetry',
+        'register',
+        '--stream', streamId,
+        '--label', label,
+        '--path', this.logFile,
+        '--priority', '2'
+      ], {
+        windowsHide: true,
+        timeout: 5000
+      });
+
+      child.on('close', (code) => {
+        if (code === 0) {
+          console.log(`${COLORS.green}[Logger]${COLORS.reset} Telemetry registered: ${streamId}`);
+        } else {
+          console.log(`${COLORS.gray}[Logger]${COLORS.reset} Telemetry registration failed (code ${code}), continuing anyway`);
+        }
+      });
+
+      child.on('error', (err) => {
+        console.log(`${COLORS.gray}[Logger]${COLORS.reset} Telemetry registration error (expected if nucleus not ready):`, err.message);
+      });
+
+    } catch (error) {
+      // Silenciar cualquier error - la telemetría es opcional
+      console.log(`${COLORS.gray}[Logger]${COLORS.reset} Could not register telemetry (continuing anyway):`, error.message);
     }
   }
 
@@ -146,20 +184,24 @@ Log File: ${this.logFile}
         const fileMsg = `[${timestamp}] [${level}] ${prefix} ${message}\n`;
         await fs.appendFile(this.logFile, fileMsg);
         
-        // Actualizar telemetría periódicamente (en cada escritura importante)
-        await this._updateTelemetry();
+        // Intentar registrar telemetría SOLO la primera vez que se escribe un log
+        // y SOLO si tenemos streamId configurado
+        if (!this.telemetryRegistered && this.streamId && this.streamLabel) {
+          this.telemetryRegistered = true;
+          await this._registerTelemetry(this.streamId, this.streamLabel);
+        }
       } catch (error) {
         console.error(`${COLORS.red}[Logger]${COLORS.reset} Failed to write to file:`, error.message);
       }
     }
   }
 
-  info(...args) { return this.writeLog('INFO', '📋', COLORS.blue, ...args); }
-  success(...args) { return this.writeLog('SUCCESS', '✅', COLORS.green, ...args); }
-  warn(...args) { return this.writeLog('WARN', '⚠️', COLORS.yellow, ...args); }
-  error(...args) { return this.writeLog('ERROR', '❌', COLORS.red, ...args); }
-  debug(...args) { return this.writeLog('DEBUG', '🔍', COLORS.gray, ...args); }
-  step(...args) { return this.writeLog('STEP', '🔹', COLORS.magenta, ...args); }
+  info(...args) { return this.writeLog('INFO', '[INFO]', COLORS.blue, ...args); }
+  success(...args) { return this.writeLog('SUCCESS', '[OK]', COLORS.green, ...args); }
+  warn(...args) { return this.writeLog('WARN', '[WARN]', COLORS.yellow, ...args); }
+  error(...args) { return this.writeLog('ERROR', '[ERROR]', COLORS.red, ...args); }
+  debug(...args) { return this.writeLog('DEBUG', '[DEBUG]', COLORS.gray, ...args); }
+  step(...args) { return this.writeLog('STEP', '[STEP]', COLORS.magenta, ...args); }
 
   async separator(title = '') {
     if (!this.initialized) await this.initialize();
@@ -169,7 +211,6 @@ Log File: ${this.logFile}
     if (this.logFile) {
       try {
         await fs.appendFile(this.logFile, msg + '\n');
-        await this._updateTelemetry();
       } catch (error) {}
     }
   }
@@ -193,7 +234,6 @@ async function closeAllLoggers() {
       try {
         const footer = `\n[${new Date().toISOString()}] Logger closed\n\n`;
         await fs.appendFile(logger.logFile, footer);
-        await logger._updateTelemetry();
       } catch (error) {}
     }
   }

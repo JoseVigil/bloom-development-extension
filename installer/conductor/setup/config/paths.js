@@ -4,6 +4,7 @@ const os = require('os');
 
 const platform = os.platform();
 const homeDir = os.homedir();
+const arch = os.arch() === 'x64' ? 'win64' : 'win32';
 
 // ============================================================================
 // BASE DIRECTORY - Cross-platform (Windows, macOS, Linux)
@@ -50,21 +51,21 @@ const getResourcePath = (resourceName) => {
     case 'runtime':
       return path.join(workspaceRoot, '..', 'resources', 'runtime');
     case 'nucleus':
-      return path.join(workspaceRoot, '..', 'native', 'bin', 'win32', 'nucleus');
+      return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'nucleus');
     case 'sentinel':
-      return path.join(workspaceRoot, '..', 'native', 'bin', 'win32', 'sentinel');
+      return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'sentinel');
     case 'brain':
-      return path.join(workspaceRoot, '..', 'native', 'bin', 'win32', 'brain');
+      return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'brain');
     case 'native':
-      return path.join(workspaceRoot, '..', 'native', 'bin', 'win32', 'host');
+      return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'host');
     case 'nssm':
-      return path.join(workspaceRoot, '..', 'native', 'nssm', 'win32', 'nssm.exe');
+      return path.join(workspaceRoot, '..', 'native', 'nssm', arch);
     case 'ollama':
       return path.join(workspaceRoot, '..', 'ollama');
     case 'node':
       return path.join(workspaceRoot, '..', 'installer', 'node');
     case 'conductor':
-      return path.join(workspaceRoot, '..', 'native', 'bin', 'win32', 'conductor');
+      return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'conductor');
     case 'cortex':
       return path.join(workspaceRoot, '..', 'native', 'bin', 'cortex');
     case 'temporal':
@@ -175,8 +176,9 @@ const paths = {
   // Native Host + NSSM
   nativeDir: path.join(baseDir, 'bin', 'native'),
   hostBinary,
+  nssmDir: path.join(baseDir, 'bin', 'nssm'),
   nssmExe: platform === 'win32'
-    ? path.join(baseDir, 'bin', 'native', 'nssm.exe')
+    ? path.join(baseDir, 'bin', 'nssm', 'nssm.exe')
     : null,
   
   // Ollama (LLM Runtime)
@@ -312,6 +314,7 @@ const criticalPaths = [
   'sentinelDir', 'sentinelExe',
   'brainDir', 'brainExe',
   'nativeDir', 'hostBinary',
+  'nssmDir',
   'ollamaDir', 'ollamaExe',
   'nodeDir', 'nodeExe',
   'temporalDir', 'temporalExe',

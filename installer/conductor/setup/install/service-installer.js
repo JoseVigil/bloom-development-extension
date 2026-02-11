@@ -101,8 +101,8 @@ async function rotateLogIfNeeded(logPath) {
 async function installWindowsService() {
   console.log('\n📦 INSTALANDO SERVICIO: BloomBrainService\n');
   
-  const nssmPath = path.join(paths.nativeDir, 'nssm.exe');
-  const binaryPath = paths.brainExe; // .../bin/brain/brain.exe
+  const nssmPath = paths.nssmExe;
+  const binaryPath = paths.brainExe;
   const workDir = path.dirname(binaryPath);
   
   // 1. Validaciones
@@ -202,7 +202,7 @@ async function startService() {
 
 async function removeService(name) {
   try {
-    const nssmPath = path.join(paths.nativeDir, 'nssm.exe');
+    const nssmPath = paths.nssmExe;
     await runCommand(`"${nssmPath}" stop "${name}"`);
     await runCommand(`"${nssmPath}" remove "${name}" confirm`);
   } catch (e) { /* Ignorar */ }

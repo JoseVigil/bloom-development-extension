@@ -1,6 +1,26 @@
 // install/installer.js
 // Integrated with Nucleus Manager - Atomic Milestones
 // FIXED: Temporal initialization with correct PATH
+//
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 🔴 TELEMETRY POLICY — CRITICAL
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//
+// ❌ FORBIDDEN in Electron:
+//    - Writing telemetry.json directly
+//    - Creating telemetry.json.tmp
+//    - Using TelemetryManager/TelemetryWriter
+//    - Atomic writes with rename()
+//    - ANY direct manipulation of telemetry.json
+//
+// ✅ REQUIRED:
+//    - Create .log files in logs/electron/
+//    - Register streams via: nucleus telemetry register
+//    - Nucleus is the ONLY writer to telemetry.json
+//
+// If logs show "telemetry.json.tmp" or "rename telemetry" → IMPLEMENTATION IS INVALID
+//
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 const path = require('path');
 const fs = require('fs-extra');
@@ -15,7 +35,8 @@ const logger = getLogger('installer');
 const {
   cleanupOldServices,
   installWindowsService,
-  startService
+  startService,
+  NEW_SERVICE_NAME
 } = require('./service-installer');
 
 const { installRuntime } = require('./runtime-installer');
@@ -27,7 +48,8 @@ const {
   nucleusHealth,
   executeNucleusCommand,
   executeSentinelCommand,
-  getNucleusExecutablePath
+  getNucleusExecutablePath,
+  registerTelemetryStream
 } = require('./installer_nucleus');
 
 // ============================================================================
@@ -130,8 +152,8 @@ async function runRuntimeInstall(win) {
   emitProgress(win, 3, 9, 'Installing Python Runtime...');
 
   try {
-    // ✅ PARAR Y REMOVER EL SERVICIO ANTES DE INSTALAR RUNTIME
-    const { cleanupOldServices, removeService, NEW_SERVICE_NAME } = require('./service-installer');
+    // Remover servicio antes de instalar runtime (si existe)
+    const { removeService } = require('./service-installer');
     
     logger.info('Stopping Brain Service before runtime install...');
     await removeService(NEW_SERVICE_NAME);
@@ -199,12 +221,39 @@ async function installBrainService(win) {
   try {
     logger.separator('INSTALLING BRAIN SERVICE');
 
-    await cleanupOldServices();
-    await installWindowsService();
-    await startService();
+    // Ejecutar install-brain-service.bat desde el repo
+    // __dirname = installer/conductor/setup/install/
+    // scriptPath = installer/conductor/setup/scripts/install-brain-service.bat
+    const scriptPath = path.join(__dirname, '..', 'scripts', 'install-brain-service.bat');
+    
+    if (!fs.existsSync(scriptPath)) {
+      throw new Error(`Script not found: ${scriptPath}`);
+    }
+
+    logger.info(`Executing: ${scriptPath}`);
+
+    // Ejecutar con spawn (Electron ya tiene permisos elevados)
+    const result = await new Promise((resolve, reject) => {
+      const proc = spawn(scriptPath, [], {
+        stdio: 'inherit',
+        windowsVerbatimArguments: true
+      });
+
+      proc.on('close', (code) => {
+        if (code === 0) {
+          resolve({ success: true });
+        } else {
+          reject(new Error(`Brain Service installation failed with code ${code}`));
+        }
+      });
+
+      proc.on('error', (err) => {
+        reject(new Error(`Failed to execute script: ${err.message}`));
+      });
+    });
 
     await nucleusManager.completeMilestone(MILESTONE, { service_running: true });
-    return { success: true };
+    return result;
 
   } catch (error) {
     await nucleusManager.failMilestone(MILESTONE, error.message);
@@ -213,11 +262,11 @@ async function installBrainService(win) {
 }
 
 // ============================================================================
-// TEMPORAL INITIALIZATION - FIXED WITH CORRECT PATH
+// NUCLEUS SERVICE BOOT SEQUENCE
 // ============================================================================
 
-async function initOrchestration(win) {
-  const MILESTONE = 'orchestration_init';
+async function waitForNucleusReady(win) {
+  const MILESTONE = 'nucleus_ready';
   
   if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
     logger.info(`⭐️ ${MILESTONE} completed, skipping`);
@@ -225,111 +274,96 @@ async function initOrchestration(win) {
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 7, 10, 'Initializing Temporal...');
+  emitProgress(win, 8, 10, 'Waiting for Nucleus Service to initialize...');
 
   try {
-    logger.separator('INITIALIZING TEMPORAL SERVER');
+    logger.separator('WAITING FOR NUCLEUS BOOT SEQUENCE');
+    logger.info('Nucleus Service is starting:');
+    logger.info('  Phase 1: Temporal Server');
+    logger.info('  Phase 2: Worker Manager');
+    logger.info('  Phase 3: Ollama (via synapse)');
+    logger.info('  Phase 4: Governance');
+    logger.info('  Phase 5: Vault');
+    logger.info('  Phase 6: Control Plane');
 
-    const temporalExe = paths.temporalExe || path.join(paths.binDir, 'temporal', 'temporal.exe');
-    const temporalDir = path.dirname(temporalExe);
-
-    // ✅ CRITICAL: Verificar que temporal.exe existe
-    if (!fs.existsSync(temporalExe)) {
-      throw new Error(`Temporal executable not found at: ${temporalExe}`);
-    }
-
-    logger.info(`✓ Temporal.exe found at: ${temporalExe}`);
-
-    // ✅ CRITICAL: Añadir temporal directory al PATH
-    const currentPath = process.env.PATH || '';
-    const newPath = `${temporalDir};${currentPath}`;
+    const maxAttempts = 90; // 90 segundos para boot completo
+    let attempts = 0;
     
-    logger.info('Executing: nucleus --json temporal ensure');
-    logger.debug(`Temporal dir added to PATH: ${temporalDir}`);
-
-    // ✅ USAR 'temporal ensure' - comando no bloqueante para automatización
-    const result = await executeNucleusCommand(['--json', 'temporal', 'ensure']);
-
-    // ✅ Verificar resultado según contrato de temporal ensure
-    if (!result.success) {
-      throw new Error(`Temporal ensure returned success=false: ${JSON.stringify(result)}`);
-    }
-
-    if (result.state !== 'RUNNING') {
-      throw new Error(`Temporal not running after ensure: state=${result.state}`);
-    }
-
-    // Log diferenciado según si se inició o ya estaba corriendo
-    if (result.started === false && result.reason === 'already_running') {
-      logger.success('✔ Temporal already running (no action needed)');
-    } else {
-      logger.success('✔ Temporal started successfully');
+    while (attempts < maxAttempts) {
+      attempts++;
+      
+      try {
+        const health = await nucleusHealth();
+        
+        // Verificar componentes críticos
+        const temporal = health.components?.temporal;
+        const worker = health.components?.worker_manager;
+        const ollama = health.components?.ollama;
+        const controlPlane = health.components?.control_plane;
+        
+        const allReady = temporal?.healthy && 
+                        worker?.healthy && 
+                        ollama?.healthy && 
+                        controlPlane?.healthy;
+        
+        if (allReady) {
+          logger.success('✔ Nucleus Service fully operational');
+          logger.info(`  ✓ Temporal: ${temporal.state} (port 7233)`);
+          logger.info(`  ✓ Worker: ${worker.state}`);
+          logger.info(`  ✓ Ollama: ${ollama.state}`);
+          logger.info(`  ✓ Control Plane: ${controlPlane.state}`);
+          
+          await nucleusManager.completeMilestone(MILESTONE, health);
+          return { success: true };
+        }
+        
+        // Log progreso cada 5 intentos
+        if (attempts % 5 === 0) {
+          logger.info(`[${attempts}/${maxAttempts}] Boot in progress...`);
+          logger.debug(`  Temporal: ${temporal?.state || 'pending'}`);
+          logger.debug(`  Worker: ${worker?.state || 'pending'}`);
+          logger.debug(`  Ollama: ${ollama?.state || 'pending'}`);
+          logger.debug(`  Control Plane: ${controlPlane?.state || 'pending'}`);
+        }
+        
+      } catch (err) {
+        // Health check aún no disponible
+        if (attempts % 10 === 0) {
+          logger.debug(`Health endpoint not ready yet (attempt ${attempts})`);
+        }
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, 1000));
     }
     
-    logger.info(`  UI URL: ${result.ui_url || 'http://localhost:8233'}`);
-    logger.info(`  gRPC URL: ${result.grpc_url || 'localhost:7233'}`);
-    logger.info(`  State: ${result.state}`);
-
-    await nucleusManager.completeMilestone(MILESTONE, result);
-    return { success: true, temporal: result };
+    throw new Error('Nucleus Service boot sequence timeout after 90 seconds');
 
   } catch (error) {
-    logger.error('Temporal initialization failed:', error.message);
+    logger.error('Nucleus boot failed:', error.message);
+    
+    // Intentar obtener logs del servicio para diagnóstico
+    try {
+      const serviceLog = path.join(paths.logsDir, 'nucleus', 'service', `nucleus_service_${getDateStamp()}.log`);
+      if (fs.existsSync(serviceLog)) {
+        const lastLines = await fs.readFile(serviceLog, 'utf8');
+        logger.error('Last service log output:');
+        logger.error(lastLines.split('\n').slice(-20).join('\n'));
+      }
+    } catch (logErr) {
+      // Ignorar errores al leer log
+    }
+    
     await nucleusManager.failMilestone(MILESTONE, error.message);
     throw error;
   }
 }
 
-async function initOllama(win) {
-  const MILESTONE = 'ollama_init';
-  
-  if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
-    logger.info(`⭐️ ${MILESTONE} completed, skipping`);
-    return { success: true, skipped: true };
-  }
-
-  await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 8, 10, 'Initializing Ollama...');
-
-  try {
-    logger.separator('INITIALIZING OLLAMA');
-
-    // ✅ PRIMERO: Iniciar el worker en BACKGROUND
-    logger.info('Starting Nucleus worker in background...');
-    const nucleusExe = getNucleusExecutablePath();
-    
-    const workerProcess = spawn(nucleusExe, ['worker', 'start', '--task-queue', 'nucleus-task-queue'], {
-        detached: true,
-        stdio: 'ignore',
-        windowsHide: true
-    });
-    
-    workerProcess.unref(); // Permitir que continúe sin bloquear
-    logger.success('✔ Worker process spawned (PID: ' + workerProcess.pid + ')');
-    
-    // Esperar 5 segundos a que el worker esté completamente listo
-    await new Promise(resolve => setTimeout(resolve, 15000));
-
-    // ✅ SEGUNDO: Ejecutar workflow (ahora con timeout de 10s)
-    logger.info('Executing start-ollama workflow...');
-    await executeNucleusCommand(['--json', 'synapse', 'start-ollama']);
-    logger.success('✔ Ollama workflow ejecutado');
-
-    // Wait 5 seconds for Ollama to boot
-    await new Promise(resolve => setTimeout(resolve, 15000));
-
-    // Check health via Sentinel
-    const health = await executeSentinelCommand(['--json', 'ollama', 'healthcheck']);
-    
-    logger.success('✔ Ollama initialized');
-
-    await nucleusManager.completeMilestone(MILESTONE, health);
-    return { success: true };
-
-  } catch (error) {
-    await nucleusManager.failMilestone(MILESTONE, error.message);
-    throw error;
-  }
+function getDateStamp() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}${month}${day}`;
 }
 
 async function seedMasterProfile(win) {
@@ -368,6 +402,60 @@ async function seedMasterProfile(win) {
     await nucleusManager.completeMilestone(MILESTONE, result);
 
     return { success: true, profile_id: profileId };
+
+  } catch (error) {
+    await nucleusManager.failMilestone(MILESTONE, error.message);
+    throw error;
+  }
+}
+
+async function installNucleusService(win) {
+  const MILESTONE = 'nucleus_service_install';
+  
+  if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
+    logger.info(`⭐️ ${MILESTONE} completed, skipping`);
+    return { success: true, skipped: true };
+  }
+
+  await nucleusManager.startMilestone(MILESTONE);
+  emitProgress(win, 9.5, 10, 'Installing Nucleus Service...');
+
+  try {
+    logger.separator('INSTALLING NUCLEUS SERVICE');
+
+    // Ejecutar install-nucleus-service.bat desde el repo
+    // __dirname = installer/conductor/setup/install/
+    // scriptPath = installer/conductor/setup/scripts/install-nucleus-service.bat
+    const scriptPath = path.join(__dirname, '..', 'scripts', 'install-nucleus-service.bat');
+    
+    if (!fs.existsSync(scriptPath)) {
+      throw new Error(`Script not found: ${scriptPath}`);
+    }
+
+    logger.info(`Executing: ${scriptPath}`);
+
+    // Ejecutar con spawn (Electron ya tiene permisos elevados)
+    const result = await new Promise((resolve, reject) => {
+      const proc = spawn(scriptPath, [], {
+        stdio: 'inherit',
+        windowsVerbatimArguments: true
+      });
+
+      proc.on('close', (code) => {
+        if (code === 0) {
+          resolve({ success: true });
+        } else {
+          reject(new Error(`Nucleus Service installation failed with code ${code}`));
+        }
+      });
+
+      proc.on('error', (err) => {
+        reject(new Error(`Failed to execute script: ${err.message}`));
+      });
+    });
+
+    await nucleusManager.completeMilestone(MILESTONE, { service_running: true });
+    return result;
 
   } catch (error) {
     await nucleusManager.failMilestone(MILESTONE, error.message);
@@ -456,8 +544,8 @@ async function installService(win) {
     await runBinariesDeploy(win);
     await runConductorDeploy(win);
     await installBrainService(win);
-    await initOrchestration(win);
-    await initOllama(win);
+    await installNucleusService(win);
+    await waitForNucleusReady(win);
     await seedMasterProfile(win);
     await runCertification(win);
 
