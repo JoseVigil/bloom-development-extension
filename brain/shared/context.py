@@ -7,6 +7,16 @@ from typing import Any, Callable, Optional
 import typer
 import json
 import sys
+import io
+
+# FIX: UTF-8 wrapper para Windows Service
+if sys.platform == 'win32' and not sys.stdout.isatty():
+    try:
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace', line_buffering=True)
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace', line_buffering=True)
+    except:
+        pass
+
 
 @dataclass
 class GlobalContext:
@@ -76,11 +86,11 @@ class GlobalContext:
             # En modo normal, usar typer.echo con err=True para logs
             if self.verbose or level in ["error", "warning"]:
                 prefix = {
-                    "info": "ℹ️",
-                    "warning": "⚠️",
-                    "error": "❌",
-                    "debug": "🔍"
-                }.get(level, "•")
+                    "info": "[INFO]",
+                    "warning": "[WARN]",
+                    "error": "[ERROR]",
+                    "debug": "[DEBUG]"
+                }.get(level, "")
                 typer.echo(f"{prefix} {message}", err=True)
     
     def error(self, message: str, exit_code: int = 1):
@@ -105,6 +115,6 @@ class GlobalContext:
             sys.stdout.flush()
         else:
             # Error para humanos
-            typer.echo(f"❌ {message}", err=True)
+            typer.echo(f"ERROR: {message}", err=True)
         
         raise typer.Exit(code=exit_code)

@@ -773,7 +773,11 @@ def render_help(registry: CommandRegistry, json_mode: bool = False, ai_native: b
         sys.stdout.flush()
         return
     
-    is_file_output = not sys.stdout.isatty()
+    try:
+        is_file_output = not sys.stdout.isatty()
+    except (ValueError, AttributeError):
+        # Si stdout está cerrado o no disponible (ej: capturado por subprocess), asumir redirección
+        is_file_output = True
     
     if is_file_output:
         console = Console(

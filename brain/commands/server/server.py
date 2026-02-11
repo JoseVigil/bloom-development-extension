@@ -32,11 +32,11 @@ def validate_service_environment():
         import asyncio
         import socket
         
-        logger.info("✅ Dependencias críticas OK")
+        logger.info("OK Dependencias criticas OK")
         return True
         
     except ImportError as e:
-        logger.error(f"❌ FALTA DEPENDENCIA: {e}")
+        logger.error(f"ERROR Puerto {port} no disponible: {e}")
         logger.error("   -> Recompilar con: --hidden-import=asyncio")
         return False
 
@@ -54,7 +54,7 @@ def is_port_available(port: int, host: str = "127.0.0.1") -> bool:
             s.bind((host, port))
             return True
     except OSError as e:
-        logger.error(f"❌ Puerto {port} no disponible: {e}")
+        logger.error(f"ERROR Puerto {port} no disponible: {e}")
         return False
 
 
@@ -106,17 +106,17 @@ class ServerCommand(BaseCommand):
             # ================================================================
             # VALIDACIONES ANTES DE ARRANCAR
             # ================================================================
-            logger.info("🚀 Brain Server Starting...")
+            logger.info("Brain Server Starting...")
             logger.info(f"   Host: {host}, Port: {port}, Daemon: {daemon}")
             
             # Validar entorno
             if not validate_service_environment():
-                logger.error("❌ Environment validation failed")
+                logger.error("ERROR Environment validation failed")
                 sys.exit(1)
             
             # Validar puerto disponible
             if not is_port_available(port, host):
-                logger.error(f"❌ Puerto {port} ya está en uso")
+                logger.error(f"ERROR Puerto {port} ya esta en uso")
                 logger.error("   Solución: matar proceso o cambiar puerto")
                 sys.exit(1)
             
@@ -127,45 +127,45 @@ class ServerCommand(BaseCommand):
                 # 1. Recuperar GlobalContext
                 gc = ctx.obj
                 if gc is None:
-                    logger.warning("⚠️ No GlobalContext, creando uno nuevo...")
+                    logger.warning("WARN No GlobalContext, creando uno nuevo...")
                     from brain.shared.context import GlobalContext
                     gc = GlobalContext()
                 
                 # 2. Lazy Import del Core
-                logger.info("📦 Importando ServerManager...")
+                logger.info("Importando ServerManager...")
                 from brain.core.server.server_manager import ServerManager
                 
                 # 3. Verbose logging
                 if gc.verbose:
-                    typer.echo(f"🔌 Starting TCP server on {host}:{port}...", err=True)
+                    typer.echo(f"[START] Starting TCP server on {host}:{port}...", err=True)
                 
                 # 4. Ejecutar lógica del Core
-                logger.info("🔧 Creando ServerManager...")
+                logger.info("Creando ServerManager...")
                 manager = ServerManager(host=host, port=port)
                 
                 if daemon:
                     # Daemon mode (background process)
-                    logger.info("🌙 Starting in daemon mode...")
+                    logger.info("Starting in daemon mode...")
                     result = manager.start_daemon()
                     gc.output(result, self._render_daemon_start)
                 else:
                     # Foreground mode (blocking)
                     if gc.verbose:
-                        typer.echo("ℹ️  Press Ctrl+C to stop the server", err=True)
+                        typer.echo("[INFO]  Press Ctrl+C to stop the server", err=True)
                     
-                    logger.info("▶️ Starting in foreground mode (blocking)...")
+                    logger.info("Starting in foreground mode (blocking)...")
                     result = manager.start_blocking()
                     
                     # This will only be reached after server stops
                     gc.output(result, self._render_stop)
                 
-                logger.info("✅ Server started successfully")
+                logger.info("OK Server started successfully")
                 
             except KeyboardInterrupt:
-                logger.info("🛑 Received Ctrl+C, shutting down...")
+                logger.info("STOP Received Ctrl+C, shutting down...")
                 
                 if gc.verbose:
-                    typer.echo("\n🛑 Received shutdown signal...", err=True)
+                    typer.echo("\n[STOP] Received shutdown signal...", err=True)
                 
                 result = {
                     "status": "success",
@@ -179,7 +179,7 @@ class ServerCommand(BaseCommand):
                 # CATCH-ALL CON TRACEBACK COMPLETO
                 # ============================================================
                 import traceback
-                logger.critical("❌ FATAL ERROR EN SERVER START:", exc_info=True)
+                logger.critical("FATAL ERROR EN SERVER START:", exc_info=True)
                 logger.debug(f"   Python: {sys.version}")
                 logger.debug(f"   CWD: {os.getcwd()}")
                 logger.debug(f"   Executable: {sys.executable}")
@@ -198,11 +198,11 @@ class ServerCommand(BaseCommand):
                 gc = GlobalContext()
             
             try:
-                logger.info("🔍 Checking server status...")
+                logger.info("Checking server status...")
                 from brain.core.server.server_manager import ServerManager
                 
                 if gc.verbose:
-                    typer.echo("🔍 Checking server status...", err=True)
+                    typer.echo("Checking server status...", err=True)
                 
                 manager = ServerManager()
                 result = manager.get_status()
@@ -210,7 +210,7 @@ class ServerCommand(BaseCommand):
                 gc.output(result, self._render_status)
                 
             except Exception as e:
-                logger.error(f"❌ Status check failed: {e}", exc_info=True)
+                logger.error(f"ERROR Status check failed: {e}", exc_info=True)
                 self._handle_error(gc, f"Failed to check status: {e}")
         
         @app.command(name="stop")
@@ -225,11 +225,11 @@ class ServerCommand(BaseCommand):
                 gc = GlobalContext()
             
             try:
-                logger.info("🛑 Stopping server...")
+                logger.info("STOP Stopping server...")
                 from brain.core.server.server_manager import ServerManager
                 
                 if gc.verbose:
-                    typer.echo("🛑 Stopping server...", err=True)
+                    typer.echo("[STOP] Stopping server...", err=True)
                 
                 manager = ServerManager()
                 result = manager.stop()
@@ -237,12 +237,12 @@ class ServerCommand(BaseCommand):
                 gc.output(result, self._render_stop)
                 
             except Exception as e:
-                logger.error(f"❌ Stop failed: {e}", exc_info=True)
+                logger.error(f"ERROR Stop failed: {e}", exc_info=True)
                 self._handle_error(gc, f"Failed to stop server: {e}")
     
     def _render_daemon_start(self, data: dict):
         """Output humano para inicio en modo daemon."""
-        typer.echo(f"✅ Server started in background")
+        typer.echo(f"[OK] Server started in background")
         typer.echo(f"   PID: {data.get('data', {}).get('pid', 'unknown')}")
         typer.echo(f"   Port: {data.get('data', {}).get('port', 5678)}")
         typer.echo(f"   Log: {data.get('data', {}).get('log_file', 'N/A')}")
@@ -255,12 +255,12 @@ class ServerCommand(BaseCommand):
         """
         # GUARDA 1: Validar que data no sea None
         if data is None:
-            typer.echo("⚠️  Server stopped (no status data available)")
+            typer.echo("[WARN]  Server stopped (no status data available)")
             return
         
         # GUARDA 2: Validar que 'data' key exista
         if 'data' not in data:
-            typer.echo("⚠️  Server stopped (incomplete status data)")
+            typer.echo("[WARN]  Server stopped (incomplete status data)")
             return
         
         # GUARDA 3: Extraer data_dict de forma segura
@@ -272,12 +272,12 @@ class ServerCommand(BaseCommand):
         
         # Ahora sí, extracción segura
         reason = data_dict.get('reason', 'unknown')
-        typer.echo(f"✅ Server stopped ({reason})")
+        typer.echo(f"[OK] Server stopped ({reason})")
         
         # GUARDA 5: Stats puede no existir
         stats = data_dict.get('stats')
         if stats and isinstance(stats, dict):
-            typer.echo(f"\n📊 Session Statistics:")
+            typer.echo(f"\n[STATS] Session Statistics:")
             typer.echo(f"   Total connections: {stats.get('total_connections', 0)}")
             typer.echo(f"   Messages processed: {stats.get('messages_processed', 0)}")
             typer.echo(f"   Uptime: {stats.get('uptime', 'N/A')}")
@@ -290,7 +290,7 @@ class ServerCommand(BaseCommand):
         """
         # GUARDA 1: Validar data
         if data is None or 'data' not in data:
-            typer.echo("⚠️  Cannot determine server status")
+            typer.echo("[WARN]  Cannot determine server status")
             return
         
         status_data = data.get('data', {})
@@ -302,14 +302,14 @@ class ServerCommand(BaseCommand):
         running = status_data.get('running', False)
         
         if running:
-            typer.echo(f"✅ Server is running")
+            typer.echo(f"[OK] Server is running")
             typer.echo(f"   Host: {status_data.get('host', 'N/A')}")
             typer.echo(f"   Port: {status_data.get('port', 'N/A')}")
             typer.echo(f"   PID: {status_data.get('pid', 'N/A')}")
             typer.echo(f"   Uptime: {status_data.get('uptime', 'N/A')}")
             typer.echo(f"   Active clients: {status_data.get('active_clients', 0)}")
         else:
-            typer.echo(f"⚠️  Server is not running")
+            typer.echo(f"[WARN]  Server is not running")
     
     def _handle_error(self, gc, message: str):
         """Manejo unificado de errores."""
@@ -317,5 +317,5 @@ class ServerCommand(BaseCommand):
             import json
             typer.echo(json.dumps({"status": "error", "message": message}))
         else:
-            typer.echo(f"❌ {message}", err=True)
+            typer.echo(f"[ERROR] {message}", err=True)
         raise typer.Exit(code=1)

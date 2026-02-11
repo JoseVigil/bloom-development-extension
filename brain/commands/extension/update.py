@@ -138,5 +138,5 @@ class UpdateCommand(BaseCommand):
                 "message": message
             }))
         else:
-            typer.echo(f"❌ Update failed: {message}", err=True)
+            typer.echo(f"Update failed: {message}", err=True)
         raise typer.Exit(code=1)
