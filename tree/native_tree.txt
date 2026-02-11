@@ -4,6 +4,8 @@ bloom-development-extension/
     ├── bin/
     │   ├── .DS_Store
     │   ├── bin/
+    │   ├── bootstrap/
+    │   │   └── server-bootstrap.js
     │   ├── config/
     │   │   └── profiles.json
     │   ├── cortex/
@@ -16,16 +18,109 @@ bloom-development-extension/
     │   │   └── host/
     │   │       └── bloom-host
     │   ├── profiles/
-    │   └── win32/
+    │   ├── win32/
+    │   │   ├── brain/
+    │   │   │   ├── _internal/ [... dependencies]
+    │   │   │   └── brain.exe
+    │   │   ├── conductor/
+    │   │   │   ├── bloom-conductor.exe
+    │   │   │   ├── builder-debug.yml
+    │   │   │   ├── builder-effective-config.yaml
+    │   │   │   └── win-unpacked/
+    │   │   │       ├── Bloom Nucleus Launcher.exe
+    │   │   │       ├── LICENSE.electron.txt
+    │   │   │       ├── LICENSES.chromium.html
+    │   │   │       ├── chrome_100_percent.pak
+    │   │   │       ├── chrome_200_percent.pak
+    │   │   │       ├── d3dcompiler_47.dll
+    │   │   │       ├── ffmpeg.dll
+    │   │   │       ├── icudtl.dat
+    │   │   │       ├── libEGL.dll
+    │   │   │       ├── libGLESv2.dll
+    │   │   │       ├── locales/
+    │   │   │       │   ├── af.pak
+    │   │   │       │   ├── am.pak
+    │   │   │       │   ├── ar.pak
+    │   │   │       │   ├── bg.pak
+    │   │   │       │   ├── bn.pak
+    │   │   │       │   ├── ca.pak
+    │   │   │       │   ├── cs.pak
+    │   │   │       │   ├── da.pak
+    │   │   │       │   ├── de.pak
+    │   │   │       │   ├── el.pak
+    │   │   │       │   ├── en-GB.pak
+    │   │   │       │   ├── en-US.pak
+    │   │   │       │   ├── es-419.pak
+    │   │   │       │   ├── es.pak
+    │   │   │       │   ├── et.pak
+    │   │   │       │   ├── fa.pak
+    │   │   │       │   ├── fi.pak
+    │   │   │       │   ├── fil.pak
+    │   │   │       │   ├── fr.pak
+    │   │   │       │   ├── gu.pak
+    │   │   │       │   ├── he.pak
+    │   │   │       │   ├── hi.pak
+    │   │   │       │   ├── hr.pak
+    │   │   │       │   ├── hu.pak
+    │   │   │       │   ├── id.pak
+    │   │   │       │   ├── it.pak
+    │   │   │       │   ├── ja.pak
+    │   │   │       │   ├── kn.pak
+    │   │   │       │   ├── ko.pak
+    │   │   │       │   ├── lt.pak
+    │   │   │       │   ├── lv.pak
+    │   │   │       │   ├── ml.pak
+    │   │   │       │   ├── mr.pak
+    │   │   │       │   ├── ms.pak
+    │   │   │       │   ├── nb.pak
+    │   │   │       │   ├── nl.pak
+    │   │   │       │   ├── pl.pak
+    │   │   │       │   ├── pt-BR.pak
+    │   │   │       │   ├── pt-PT.pak
+    │   │   │       │   ├── ro.pak
+    │   │   │       │   ├── ru.pak
+    │   │   │       │   ├── sk.pak
+    │   │   │       │   ├── sl.pak
+    │   │   │       │   ├── sr.pak
+    │   │   │       │   ├── sv.pak
+    │   │   │       │   ├── sw.pak
+    │   │   │       │   ├── ta.pak
+    │   │   │       │   ├── te.pak
+    │   │   │       │   ├── th.pak
+    │   │   │       │   ├── tr.pak
+    │   │   │       │   ├── uk.pak
+    │   │   │       │   ├── ur.pak
+    │   │   │       │   ├── vi.pak
+    │   │   │       │   ├── zh-CN.pak
+    │   │   │       │   └── zh-TW.pak
+    │   │   │       ├── resources/
+    │   │   │       │   ├── app.asar
+    │   │   │       │   └── elevate.exe
+    │   │   │       ├── resources.pak
+    │   │   │       ├── snapshot_blob.bin
+    │   │   │       ├── v8_context_snapshot.bin
+    │   │   │       ├── vk_swiftshader.dll
+    │   │   │       ├── vk_swiftshader_icd.json
+    │   │   │       └── vulkan-1.dll
+    │   │   ├── host/
+    │   │   │   ├── bloom-host.exe
+    │   │   │   └── libwinpthread-1.dll
+    │   │   ├── nucleus/
+    │   │   │   ├── help/
+    │   │   │   │   ├── nucleus_help.json
+    │   │   │   │   └── nucleus_help.txt
+    │   │   │   ├── nucleus-governance.json
+    │   │   │   └── nucleus.exe
+    │   │   └── sentinel/
+    │   │       ├── help/
+    │   │       │   ├── sentinel_help.json
+    │   │       │   └── sentinel_help.txt
+    │   │       ├── sentinel-config.json
+    │   │       └── sentinel.exe
+    │   └── win64/
     │       ├── brain/
     │       │   ├── _internal/ [... dependencies]
-    │       │   ├── brain.exe
-    │       │   └── help/
-    │       │       ├── brain-ai-full.json
-    │       │       ├── brain-ai-schema.json
-    │       │       ├── brain-legacy.json
-    │       │       ├── help-full.txt
-    │       │       └── help.txt
+    │       │   └── brain.exe
     │       ├── host/
     │       │   ├── bloom-host.exe
     │       │   └── libwinpthread-1.dll

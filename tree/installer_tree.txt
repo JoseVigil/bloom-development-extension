@@ -2,82 +2,130 @@ bloom-development-extension/
 └── installer/
     ├── .DS_Store
     ├── README.md
+    ├── batcave/
+    │   ├── .gitignore
+    │   ├── DEPLOY.md
+    │   ├── README.md
+    │   ├── config/
+    │   │   └── deploy_config.json
+    │   ├── docs/
+    │   │   └── BATCAVE_DYNAMIC_ARCHITECTURE.md
+    │   ├── scripts/
+    │   │   ├── VERSION
+    │   │   ├── build_number.txt
+    │   │   └── deploy_batcave.py
+    │   └── src/
+    │       ├── .gitignore
+    │       ├── config/
+    │       │   ├── loader.ts
+    │       │   └── paths.ts
+    │       ├── core/
+    │       │   ├── git-integration.ts
+    │       │   └── workspace-manager.ts
+    │       ├── dynamic/
+    │       │   ├── bloom-creator.ts
+    │       │   └── nucleus-setup.ts
+    │       ├── main.ts
+    │       ├── package.json
+    │       ├── tsconfig.json
+    │       └── utils/
+    │           ├── file-utils.ts
+    │           ├── org-resolver.ts
+    │           └── validators.ts
     ├── chrome/
     │   ├── chrome-mac.zip
     │   └── chrome-win.zip
     ├── conductor/
     │   ├── .gitignore
     │   ├── app.manifest
-    │   ├── assets/
-    │   │   ├── bloom.ico
-    │   │   └── installer.gif
-    │   ├── check-admin.ps1
-    │   ├── config/
-    │   │   ├── constants.js
-    │   │   └── paths.js
     │   ├── config-loader.js
-    │   ├── core/
-    │   │   ├── admin-utils.js
-    │   │   ├── menu-builder.js
-    │   │   └── window-manager.js
-    │   ├── dist/ [... build output]
-    │   ├── electron-readme.md
     │   ├── entitlements.plist
     │   ├── forge.config.js
-    │   ├── install/
-    │   │   ├── chromium-installer.js
-    │   │   ├── diagnose/
-    │   │   │   ├── diagnose-service.js
-    │   │   │   └── service-diagnostics.js
-    │   │   ├── installer.js
-    │   │   ├── launcher-creator.js
-    │   │   ├── native-host-installer.js
-    │   │   ├── runtime-installer.js
-    │   │   ├── service-installer.js
-    │   │   ├── service-manager.js
-    │   │   └── shortcut-installer.js
-    │   ├── installHelpers.js
     │   ├── installer-config.json
-    │   ├── ipc/
-    │   │   ├── install-handlers.js
-    │   │   ├── launch-handlers.js
-    │   │   └── shared-handlers.js
-    │   ├── launch/
-    │   │   ├── brain-commands.js
-    │   │   ├── health-monitor.js
-    │   │   ├── launcher.js
-    │   │   ├── preload_launch.js
-    │   │   └── profile-manager.js
+    │   ├── launcher/
+    │   │   ├── assets/
+    │   │   │   └── bloom.ico
+    │   │   ├── main_conductor.js
+    │   │   ├── node_modules/ [... dependencies]
+    │   │   ├── package-lock.json
+    │   │   ├── package.json
+    │   │   ├── preload_conductor.js
+    │   │   └── src/
+    │   │       └── conductor.html
     │   ├── main.js
     │   ├── node_modules/ [... dependencies]
     │   ├── package-lock.json
     │   ├── package.json
     │   ├── preload.js
-    │   ├── registry-scripts/
-    │   │   ├── cleanup.ps1
-    │   │   └── hkcu.ps1
-    │   ├── run-admin.bat
-    │   ├── run-dev.bat
-    │   ├── run-elevated.bat
-    │   ├── run-elevated.js
     │   ├── scripts/
-    │   │   ├── check-status.bat
     │   │   ├── clean_chrome_cache.ps1
     │   │   ├── cleanup_zombies.ps1
-    │   │   ├── emergency-cleanup.bat
     │   │   ├── fix_bridge_id.py
     │   │   └── sanitize_manifest.py
-    │   ├── src/
-    │   │   ├── index.html
-    │   │   ├── installation_manager.js
-    │   │   ├── launch/
-    │   │   │   ├── index_launch.html
-    │   │   │   └── renderer_launch.js
-    │   │   ├── logger.js
-    │   │   ├── renderer.js
-    │   │   ├── styles.css
-    │   │   └── ui_manager.js
-    │   ├── test-installation.js
+    │   ├── setup/
+    │   │   ├── app.manifest
+    │   │   ├── assets/
+    │   │   │   ├── bloom.ico
+    │   │   │   └── installer.gif
+    │   │   ├── config/
+    │   │   │   ├── constants.js
+    │   │   │   └── paths.js
+    │   │   ├── core/
+    │   │   │   ├── admin-utils.js
+    │   │   │   ├── menu-builder.js
+    │   │   │   └── window-manager.js
+    │   │   ├── dist/ [... build output]
+    │   │   ├── install/
+    │   │   │   ├── chromium-installer.js
+    │   │   │   ├── diagnose/
+    │   │   │   │   ├── diagnose-service.js
+    │   │   │   │   └── service-diagnostics.js
+    │   │   │   ├── installer.js
+    │   │   │   ├── installer_nucleus.js
+    │   │   │   ├── launcher-creator.js
+    │   │   │   ├── native-host-installer.js
+    │   │   │   ├── nucleus_manager.js
+    │   │   │   ├── runtime-installer.js
+    │   │   │   ├── service-installer.js
+    │   │   │   ├── service-manager.js
+    │   │   │   └── shortcut-installer.js
+    │   │   ├── ipc/
+    │   │   │   ├── install-handlers.js
+    │   │   │   ├── launch-handlers.js
+    │   │   │   └── shared-handlers.js
+    │   │   ├── main.js
+    │   │   ├── node_modules/ [... dependencies]
+    │   │   ├── package-lock.json
+    │   │   ├── package.json
+    │   │   ├── preload.js
+    │   │   ├── registry-scripts/
+    │   │   │   ├── cleanup.ps1
+    │   │   │   └── hkcu.ps1
+    │   │   ├── run-admin.bat
+    │   │   ├── scripts/
+    │   │   │   ├── check-status.bat
+    │   │   │   ├── clean_chrome_cache.ps1
+    │   │   │   ├── cleanup_zombies.ps1
+    │   │   │   ├── emergency-cleanup.bat
+    │   │   │   ├── fix_bridge_id.py
+    │   │   │   ├── install-brain-service.bat
+    │   │   │   ├── install-nucleus-service.bat
+    │   │   │   ├── reinstall-brain-service.bat
+    │   │   │   ├── reinstall-nucleus-service.bat
+    │   │   │   ├── sanitize_manifest.py
+    │   │   │   ├── uninstall-brain-service.bat
+    │   │   │   └── uninstall-nucleus-service.bat
+    │   │   ├── src/
+    │   │   │   ├── index.html
+    │   │   │   ├── installation_manager.js
+    │   │   │   ├── renderer.js
+    │   │   │   ├── styles.css
+    │   │   │   └── ui_manager.js
+    │   │   └── utils/
+    │   │       ├── exec-helper.js
+    │   │       └── repair-tools.js
+    │   ├── shared/
+    │   │   └── logger.js
     │   └── utils/
     │       ├── exec-helper.js
     │       └── repair-tools.js
@@ -105,11 +153,30 @@ bloom-development-extension/
     │           ├── key_generation_extesion.crx
     │           └── key_generation_extesion.pem
     ├── create_installer.py
+    ├── mobile/
+    │   ├── .env.local
+    │   ├── .gitignore
+    │   ├── App.tsx
+    │   ├── README.md
+    │   ├── components/
+    │   │   ├── FeatureCard.tsx
+    │   │   └── RoadmapView.tsx
+    │   ├── index.html
+    │   ├── index.tsx
+    │   ├── metadata.json
+    │   ├── package.json
+    │   ├── services/
+    │   │   └── geminiService.ts
+    │   ├── tsconfig.json
+    │   ├── types.ts
+    │   └── vite.config.ts
     ├── native/
     │   ├── .DS_Store
     │   ├── bin/
     │   │   ├── .DS_Store
     │   │   ├── bin/
+    │   │   ├── bootstrap/
+    │   │   │   └── server-bootstrap.js
     │   │   ├── config/
     │   │   │   └── profiles.json
     │   │   ├── cortex/
@@ -127,41 +194,115 @@ bloom-development-extension/
     │   │       │   ├── _internal/ [... dependencies]
     │   │       │   ├── brain.exe
     │   │       │   └── help/
-    │   │       │       ├── brain-ai-full.json
-    │   │       │       ├── brain-ai-schema.json
-    │   │       │       ├── brain-legacy.json
-    │   │       │       ├── help-full.txt
-    │   │       │       └── help.txt
+    │   │       ├── conductor/
+    │   │       │   ├── bloom-conductor.exe
+    │   │       │   ├── builder-debug.yml
+    │   │       │   ├── builder-effective-config.yaml
+    │   │       │   └── win-unpacked/
+    │   │       │       ├── Bloom Nucleus Launcher.exe
+    │   │       │       ├── LICENSE.electron.txt
+    │   │       │       ├── LICENSES.chromium.html
+    │   │       │       ├── chrome_100_percent.pak
+    │   │       │       ├── chrome_200_percent.pak
+    │   │       │       ├── d3dcompiler_47.dll
+    │   │       │       ├── ffmpeg.dll
+    │   │       │       ├── icudtl.dat
+    │   │       │       ├── libEGL.dll
+    │   │       │       ├── libGLESv2.dll
+    │   │       │       ├── locales/
+    │   │       │       │   ├── af.pak
+    │   │       │       │   ├── am.pak
+    │   │       │       │   ├── ar.pak
+    │   │       │       │   ├── bg.pak
+    │   │       │       │   ├── bn.pak
+    │   │       │       │   ├── ca.pak
+    │   │       │       │   ├── cs.pak
+    │   │       │       │   ├── da.pak
+    │   │       │       │   ├── de.pak
+    │   │       │       │   ├── el.pak
+    │   │       │       │   ├── en-GB.pak
+    │   │       │       │   ├── en-US.pak
+    │   │       │       │   ├── es-419.pak
+    │   │       │       │   ├── es.pak
+    │   │       │       │   ├── et.pak
+    │   │       │       │   ├── fa.pak
+    │   │       │       │   ├── fi.pak
+    │   │       │       │   ├── fil.pak
+    │   │       │       │   ├── fr.pak
+    │   │       │       │   ├── gu.pak
+    │   │       │       │   ├── he.pak
+    │   │       │       │   ├── hi.pak
+    │   │       │       │   ├── hr.pak
+    │   │       │       │   ├── hu.pak
+    │   │       │       │   ├── id.pak
+    │   │       │       │   ├── it.pak
+    │   │       │       │   ├── ja.pak
+    │   │       │       │   ├── kn.pak
+    │   │       │       │   ├── ko.pak
+    │   │       │       │   ├── lt.pak
+    │   │       │       │   ├── lv.pak
+    │   │       │       │   ├── ml.pak
+    │   │       │       │   ├── mr.pak
+    │   │       │       │   ├── ms.pak
+    │   │       │       │   ├── nb.pak
+    │   │       │       │   ├── nl.pak
+    │   │       │       │   ├── pl.pak
+    │   │       │       │   ├── pt-BR.pak
+    │   │       │       │   ├── pt-PT.pak
+    │   │       │       │   ├── ro.pak
+    │   │       │       │   ├── ru.pak
+    │   │       │       │   ├── sk.pak
+    │   │       │       │   ├── sl.pak
+    │   │       │       │   ├── sr.pak
+    │   │       │       │   ├── sv.pak
+    │   │       │       │   ├── sw.pak
+    │   │       │       │   ├── ta.pak
+    │   │       │       │   ├── te.pak
+    │   │       │       │   ├── th.pak
+    │   │       │       │   ├── tr.pak
+    │   │       │       │   ├── uk.pak
+    │   │       │       │   ├── ur.pak
+    │   │       │       │   ├── vi.pak
+    │   │       │       │   ├── zh-CN.pak
+    │   │       │       │   └── zh-TW.pak
+    │   │       │       ├── resources/
+    │   │       │       │   ├── app.asar
+    │   │       │       │   └── elevate.exe
+    │   │       │       ├── resources.pak
+    │   │       │       ├── snapshot_blob.bin
+    │   │       │       ├── v8_context_snapshot.bin
+    │   │       │       ├── vk_swiftshader.dll
+    │   │       │       ├── vk_swiftshader_icd.json
+    │   │       │       └── vulkan-1.dll
     │   │       ├── host/
     │   │       │   ├── bloom-host.exe
     │   │       │   └── libwinpthread-1.dll
     │   │       ├── nucleus/
-    │   │       │   ├── blueprint.json
     │   │       │   ├── help/
     │   │       │   │   ├── nucleus_help.json
     │   │       │   │   └── nucleus_help.txt
+    │   │       │   ├── nucleus-governance.json
     │   │       │   └── nucleus.exe
     │   │       └── sentinel/
-    │   │           ├── blueprint.json
     │   │           ├── help/
     │   │           │   ├── sentinel_help.json
     │   │           │   └── sentinel_help.txt
+    │   │           ├── sentinel-config.json
     │   │           └── sentinel.exe
     │   └── nssm/
     │       ├── win32/
     │       │   └── nssm.exe
     │       └── win64/
     │           └── nssm.exe
+    ├── node/
+    │   └── node.exe
     ├── node_modules/ [... dependencies]
     ├── nucleus/
     │   ├── .gitignore
     │   ├── README.md
     │   ├── VERSION
-    │   ├── blueprint.json
     │   ├── build_number.txt
-    │   ├── cmd/
-    │   │   └── nucleus/
-    │   │       └── main.go
+    │   ├── codebase/
     │   ├── docs/
     │   │   ├── EXECUTIVE_SUMMARY.md
     │   │   ├── GOVERNANCE.md
@@ -170,47 +311,110 @@ bloom-development-extension/
     │   ├── go.sum
     │   ├── internal/
     │   │   ├── analytics/
-    │   │   │   └── client.go
+    │   │   │   └── heartbeat.go
     │   │   ├── cli/
     │   │   │   ├── config.go
     │   │   │   └── help_renderer.go
-    │   │   ├── commands/
-    │   │   │   ├── analytics/
-    │   │   │   │   └── heartbeat.go
-    │   │   │   ├── governance/
-    │   │   │   │   └── init.go
-    │   │   │   ├── sync/
-    │   │   │   │   ├── pull.go
-    │   │   │   │   └── push.go
-    │   │   │   ├── system/
-    │   │   │   │   ├── info.go
-    │   │   │   │   └── version.go
-    │   │   │   ├── team/
-    │   │   │   │   ├── add.go
-    │   │   │   │   ├── list.go
-    │   │   │   │   └── remove.go
-    │   │   │   └── vault/
-    │   │   │       ├── lock.go
-    │   │   │       ├── request.go
-    │   │   │       ├── status.go
-    │   │   │       └── unlock.go
+    │   │   ├── client/
+    │   │   │   └── client.go
     │   │   ├── core/
     │   │   │   ├── build_info.go
     │   │   │   ├── core.go
+    │   │   │   ├── logger.go
     │   │   │   ├── metadata.go
+    │   │   │   ├── paths.go
     │   │   │   ├── registry.go
+    │   │   │   ├── telemetry.go
     │   │   │   └── version.go
     │   │   ├── governance/
+    │   │   │   ├── alfred.go
+    │   │   │   ├── alfred_server.go
+    │   │   │   ├── audit.go
     │   │   │   ├── blueprint.go
-    │   │   │   ├── init.go
-    │   │   │   └── roles.go
+    │   │   │   ├── ollama_client.go
+    │   │   │   └── ownership.go
+    │   │   ├── orchestration/
+    │   │   │   ├── activities/
+    │   │   │   │   ├── sentinel_intent.go
+    │   │   │   │   ├── sentinel_launch.go
+    │   │   │   │   ├── sentinel_ollama.go
+    │   │   │   │   └── sentinel_stop.go
+    │   │   │   ├── commands/
+    │   │   │   │   └── synapse.go
+    │   │   │   ├── queries/
+    │   │   │   │   └── status.go
+    │   │   │   ├── signals/
+    │   │   │   │   ├── brain_events.go
+    │   │   │   │   └── system_events.go
+    │   │   │   ├── temporal/
+    │   │   │   │   ├── bootstrap/
+    │   │   │   │   │   ├── bootstrap.go
+    │   │   │   │   │   ├── cleanup.go
+    │   │   │   │   │   ├── diagnostics.go
+    │   │   │   │   │   ├── ensure.go
+    │   │   │   │   │   ├── force_stop.go
+    │   │   │   │   │   ├── health.go
+    │   │   │   │   │   ├── helpers.go
+    │   │   │   │   │   ├── lifecycle.go
+    │   │   │   │   │   ├── pid.go
+    │   │   │   │   │   ├── ports.go
+    │   │   │   │   │   └── process.go
+    │   │   │   │   ├── client.go
+    │   │   │   │   ├── worker.go
+    │   │   │   │   └── workflows/
+    │   │   │   │       └── system_workflows.go
+    │   │   │   ├── types/
+    │   │   │   │   └── orchestration.go
+    │   │   │   └── workflows/
+    │   │   │       ├── profile_lifecycle.go
+    │   │   │       ├── recovery_flow.go
+    │   │   │       └── system_gate.go
+    │   │   ├── supervisor/
+    │   │   │   ├── dev_start.go
+    │   │   │   ├── health.go
+    │   │   │   └── supervisor.go
+    │   │   ├── synapse/
+    │   │   │   └── commands.go
+    │   │   ├── system/
+    │   │   │   ├── info.go
+    │   │   │   └── version.go
     │   │   └── vault/
     │   │       └── vault.go
+    │   ├── main.go
+    │   ├── nucleus-governance.json
+    │   ├── nucleus.exe
     │   └── scripts/
     │       ├── build-darwin.sh
     │       ├── build-linux.sh
     │       ├── build.bat
-    │       └── build_number.txt
+    │       ├── build_number.txt
+    │       ├── extract_go_files.py
+    │       ├── simulate_environment.py
+    │       └── simulation_env/
+    │           └── .bloom/
+    │               └── .nucleus-bloom-labs/
+    │                   ├── .cache/
+    │                   ├── .core/
+    │                   │   ├── .ai_bot.governance.bl
+    │                   │   ├── .ai_bot.plane.bl
+    │                   │   ├── .ai_bot.sovereign.bl
+    │                   │   ├── .rules.bl
+    │                   │   └── nucleus-config.json
+    │                   ├── .governance/
+    │                   │   ├── .architecture/
+    │                   │   │   ├── .patterns.bl
+    │                   │   │   └── .principles.bl
+    │                   │   ├── .quality/
+    │                   │   │   └── .code-standards.bl
+    │                   │   └── .security/
+    │                   │       └── .security-standards.bl
+    │                   ├── .intents/
+    │                   │   ├── .cor/
+    │                   │   └── .exp/
+    │                   ├── .ownership.json
+    │                   ├── .relations/
+    │                   └── reports/
+    │                       └── exports/
     ├── ollama/
     │   ├── lib/
     │   │   └── ollama/
@@ -284,82 +488,80 @@ bloom-development-extension/
     │   ├── setup-dev.js
     │   ├── setup_runtime.js
     │   └── validate.js
-    └── sentinel/
-        ├── VERSION
-        ├── blueprint.json
-        ├── cli/
-        │   └── help_renderer.go
-        ├── codebase/
-        ├── docs/
-        │   ├── Sentinel - Fase 2 Discovery - Health Modular.md
-        │   ├── Sentinel Base.md
-        │   └── research/
-        │       ├── CHROMIUM PATH FIX - Arquitectura de Rutas.md
-        │       ├── SENTINEL v1.2 - Estructura de Archivos.md
-        │       └── SENTINEL v1.2 Deployment & Testing Guide.md
-        ├── extract_go_files.py
-        ├── go.mod
-        ├── go.sum
-        ├── help/
-        │   ├── sentinel_help.json
-        │   └── sentinel_help.txt
-        ├── internal/
-        │   ├── boot/
-        │   │   ├── dev.go
-        │   │   ├── npm.go
-        │   │   ├── reaper.go
-        │   │   └── vscode.go
-        │   ├── bridge/
-        │   │   └── bridge.go
-        │   ├── core/
-        │   │   ├── build_info.go
-        │   │   ├── config.go
-        │   │   ├── core.go
-        │   │   ├── logger.go
-        │   │   ├── metadata.go
-        │   │   ├── paths.go
-        │   │   ├── telemetry.go
-        │   │   └── version_reader.go
-        │   ├── discovery/
-        │   │   └── discovery.go
-        │   ├── eventbus/
-        │   │   ├── daemon.go
-        │   │   ├── eventbus.go
-        │   │   ├── protocol.go
-        │   │   ├── sentinel_client.go
-        │   │   └── synapse_handshake.go
-        │   ├── health/
-        │   │   ├── guardian.go
-        │   │   └── health.go
-        │   ├── ignition/
-        │   │   ├── ignition.go
-        │   │   ├── ignition_identity.go
-        │   │   ├── ignition_lifecycle.go
-        │   │   ├── ignition_spec.go
-        │   │   ├── launch_commands.go
-        │   │   ├── monitor.go
-        │   │   └── reaper.go
-        │   ├── ollama/
-        │   │   ├── ollama_controller.go
-        │   │   └── ollama_manager.go
-        │   ├── process/
-        │   │   └── hygiene.go
-        │   ├── seed/
-        │   │   └── seed.go
-        │   ├── startup/
-        │   │   └── startup.go
-        │   ├── system/
-        │   │   ├── cmd_info.go
-        │   │   └── cmd_version.go
-        │   └── ui/
-        │       ├── cockpit.go
-        │       ├── dashboard.go
-        │       ├── health_station.go
-        │       ├── log_station.go
-        │       └── refresher.go
-        ├── main.go
-        └── scripts/
-            ├── build-darwin.sh
-            ├── build-linux.sh
-            ├── build.bat
-            └── build_number.txt
+    ├── sentinel/
+    │   ├── VERSION
+    │   ├── cli/
+    │   │   └── help_renderer.go
+    │   ├── codebase/
+    │   ├── docs/
+    │   │   ├── Sentinel - Fase 2 Discovery - Health Modular.md
+    │   │   ├── Sentinel Base.md
+    │   │   └── research/
+    │   │       ├── CHROMIUM PATH FIX - Arquitectura de Rutas.md
+    │   │       ├── SENTINEL v1.2 - Estructura de Archivos.md
+    │   │       └── SENTINEL v1.2 Deployment & Testing Guide.md
+    │   ├── go.mod
+    │   ├── go.sum
+    │   ├── internal/
+    │   │   ├── boot/
+    │   │   │   ├── dev.go
+    │   │   │   ├── npm.go
+    │   │   │   ├── reaper.go
+    │   │   │   └── vscode.go
+    │   │   ├── bridge/
+    │   │   │   └── bridge.go
+    │   │   ├── core/
+    │   │   │   ├── build_info.go
+    │   │   │   ├── config.go
+    │   │   │   ├── core.go
+    │   │   │   ├── logger.go
+    │   │   │   ├── metadata.go
+    │   │   │   ├── paths.go
+    │   │   │   ├── telemetry.go
+    │   │   │   └── version_reader.go
+    │   │   ├── discovery/
+    │   │   │   └── discovery.go
+    │   │   ├── eventbus/
+    │   │   │   ├── daemon.go
+    │   │   │   ├── eventbus.go
+    │   │   │   ├── protocol.go
+    │   │   │   ├── sentinel_client.go
+    │   │   │   └── synapse_handshake.go
+    │   │   ├── ignition/
+    │   │   │   ├── ignition.go
+    │   │   │   ├── ignition_identity.go
+    │   │   │   ├── ignition_lifecycle.go
+    │   │   │   ├── ignition_spec.go
+    │   │   │   ├── launch_commands.go
+    │   │   │   ├── monitor.go
+    │   │   │   └── reaper.go
+    │   │   ├── ollama/
+    │   │   │   ├── ollama_controller.go
+    │   │   │   └── ollama_manager.go
+    │   │   ├── process/
+    │   │   │   └── hygiene.go
+    │   │   ├── seed/
+    │   │   │   └── seed.go
+    │   │   ├── startup/
+    │   │   │   └── startup.go
+    │   │   ├── system/
+    │   │   │   ├── cmd_info.go
+    │   │   │   └── cmd_version.go
+    │   │   ├── temporal/
+    │   │   │   ├── temporal_commands.go
+    │   │   │   └── temporal_manager.go
+    │   │   └── ui/
+    │   │       ├── cockpit.go
+    │   │       ├── dashboard.go
+    │   │       ├── log_station.go
+    │   │       └── refresher.go
+    │   ├── main.go
+    │   ├── scripts/
+    │   │   ├── build-darwin.sh
+    │   │   ├── build-linux.sh
+    │   │   ├── build.bat
+    │   │   ├── build_number.txt
+    │   │   └── extract_go_files.py
+    │   └── sentinel-config.json
+    └── temporal/
+        └── temporal.exe

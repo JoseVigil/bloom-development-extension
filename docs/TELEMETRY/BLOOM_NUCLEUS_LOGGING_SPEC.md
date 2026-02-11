@@ -45,6 +45,161 @@ brain_core.txt          # wrong extension
 braincore20260209.log   # missing separators
 ```
 
+---
+
+## Telemetry Registration Architecture
+
+### Centralized Write Model
+
+**ARCHITECTURE CHANGE**: Previously, multiple processes could write to `telemetry.json` directly. This caused:
+- File lock collisions
+- JSON corruption
+- Race conditions
+- Inconsistent metadata
+
+**NEW MODEL**: Single writer pattern enforced through Nucleus CLI.
+
+### Critical Rules
+
+**❌ FORBIDDEN**:
+- Applications MUST NOT open `telemetry.json` directly
+- Applications MUST NOT lock `telemetry.json`
+- Applications MUST NOT modify `telemetry.json` manually
+- Applications MUST NOT write `last_update` field
+
+**✅ REQUIRED**:
+- All telemetry registration through `nucleus telemetry register` command
+- Nucleus is the ONLY writer to `telemetry.json`
+- Applications create and write their own `.log` files
+- Nucleus generates `last_update` automatically in UTC
+
+### Responsibility Separation
+
+| Component | Responsibility |
+|-----------|---------------|
+| **Application** | Create log directory structure |
+| **Application** | Create and write `.log` file |
+| **Application** | Call `nucleus telemetry register` CLI |
+| **Nucleus CLI** | Lock and update `telemetry.json` |
+| **Nucleus CLI** | Generate `last_update` timestamp |
+| **Nucleus CLI** | Ensure atomic write operations |
+
+**The responsibility of creating and writing the log file belongs exclusively to the application.**
+
+---
+
+## Telemetry Registration Command
+
+### Command Syntax
+
+```bash
+nucleus telemetry register \
+  --stream <stream_id> \
+  --label <display_label> \
+  --path <absolute_log_path> \
+  --priority <1|2|3>
+```
+
+### Parameters
+
+| Flag | Type | Required | Description |
+|------|------|----------|-------------|
+| `--stream` | string | Yes | Unique stream identifier (see naming contract) |
+| `--label` | string | Yes | Display label with emoji |
+| `--path` | string | Yes | Absolute path to log file |
+| `--priority` | integer | Yes | Priority level (1, 2, or 3) |
+
+**NOTE**: `last_update` is NOT a parameter. It is generated automatically by the command in UTC format.
+
+### Behavior
+
+- **Idempotent**: Running the same command multiple times is safe
+- **Overwrite by stream_id**: If `stream_id` already exists, entry is updated
+- **Atomic operation**: File locking handled internally by Nucleus
+- **Automatic timestamp**: `last_update` generated at registration time
+
+### Complete Example
+
+```bash
+nucleus telemetry register \
+  --stream electron_install \
+  --label "🔥 ELECTRON INSTALL" \
+  --path "C:/Users/josev/AppData/Local/BloomNucleus/logs/install/electron_install.log" \
+  --priority 2
+```
+
+This command:
+1. Locks `telemetry.json`
+2. Reads current content
+3. Adds/updates entry for `electron_install`
+4. Generates `last_update` timestamp
+5. Writes updated JSON atomically
+6. Releases lock
+
+### Multi-Module Registration
+
+Applications with multiple log files call the command once per log file:
+
+```bash
+# Brain application with 3 modules
+nucleus telemetry register \
+  --stream brain_core \
+  --label "🧠 BRAIN CORE" \
+  --path "C:/Users/josev/AppData/Local/BloomNucleus/logs/brain/core/brain_core_20260209.log" \
+  --priority 2
+
+nucleus telemetry register \
+  --stream brain_server \
+  --label "⚡ BRAIN SERVER" \
+  --path "C:/Users/josev/AppData/Local/BloomNucleus/logs/brain/server/brain_server_20260209.log" \
+  --priority 2
+
+nucleus telemetry register \
+  --stream brain_profile \
+  --label "👤 BRAIN PROFILE" \
+  --path "C:/Users/josev/AppData/Local/BloomNucleus/logs/brain/profile/brain_profile_20260209.log" \
+  --priority 3
+```
+
+---
+
+## Stream ID Naming Contract
+
+### Mandatory Format
+
+**RULES**:
+- **lowercase only**: No uppercase letters
+- **snake_case**: Use underscore `_` as separator
+- **stable**: A `stream_id` should never be renamed
+- **unique**: No collisions across the system
+
+### Recommended Structure
+
+```
+<application>_<context>
+```
+
+**Examples**:
+```
+brain_core
+brain_server
+brain_profile
+electron_install
+nucleus_build
+temporal_server
+```
+
+### Purpose
+
+- Prevent semantic collisions
+- Enable predictable lookups
+- Maintain long-term stability
+- Simplify debugging and monitoring
+
+**NOTE**: This is a **documentation contract**. There is no automatic enforcement or validation. Developers are responsible for compliance.
+
+---
+
 ## Telemetry System
 
 ### File Location
@@ -53,7 +208,7 @@ C:\Users\josev\AppData\Local\BloomNucleus\logs\telemetry.json
 ```
 
 ### Purpose
-Central registry tracking all active log files. **MULTI-ACCESS**: Multiple applications write to this file simultaneously.
+Central registry tracking all active log files. **SINGLE WRITER**: Only Nucleus modifies this file.
 
 ### JSON Structure
 
@@ -72,13 +227,13 @@ Central registry tracking all active log files. **MULTI-ACCESS**: Multiple appli
 
 ### Field Specifications
 
-| Field | Type | Description | Constraints |
-|-------|------|-------------|-------------|
-| `stream_identifier` | string | Unique stream key | Use underscore separators (e.g., `brain_server_event_bus`) |
-| `label` | string | Display label with emoji | Format: `"🔥 DESCRIPTION"` |
-| `path` | string | Full log file path | Use forward slashes `/` for cross-platform compatibility |
-| `priority` | integer | Importance level | 1 (critical), 2 (important), 3 (informational) |
-| `last_update` | string | ISO 8601 timestamp | Must update on every log write |
+| Field | Type | Description | Generated By |
+|-------|------|-------------|--------------|
+| `stream_identifier` | string | Unique stream key | Developer (via CLI) |
+| `label` | string | Display label with emoji | Developer (via CLI) |
+| `path` | string | Full log file path | Developer (via CLI) |
+| `priority` | integer | Importance level | Developer (via CLI) |
+| `last_update` | string | ISO 8601 UTC timestamp | **Nucleus (automatic)** |
 
 ### Priority Levels
 
@@ -101,66 +256,57 @@ Central registry tracking all active log files. **MULTI-ACCESS**: Multiple appli
       "label": "📡 EVENT BUS",
       "path": "C:/Users/josev/AppData/Local/BloomNucleus/logs/brain/server/brain_server_event_bus_20260209.log",
       "priority": 2,
-      "last_update": "2026-02-09T08:57:43.108119"
+      "last_update": "2026-02-09T08:57:43.108119Z"
     },
     "brain_core": {
       "label": "🧠 BRAIN CORE",
       "path": "C:/Users/josev/AppData/Local/BloomNucleus/logs/brain/core/brain_core_20260209.log",
       "priority": 2,
-      "last_update": "2026-02-09T08:57:43.028464"
+      "last_update": "2026-02-09T08:57:43.028464Z"
     },
     "nucleus_build": {
       "label": "📦 NUCLEUS BUILD",
       "path": "C:/Users/josev/AppData/Local/BloomNucleus/logs/build/nucleus.build.log",
       "priority": 3,
-      "last_update": "2026-02-09T09:11:32.818026"
+      "last_update": "2026-02-09T09:11:32.818026Z"
     }
   }
 }
 ```
 
+---
+
 ## Implementation Protocol
 
-### Creating a New Log File
+### Creating a New Log Stream
 
 ```
+APPLICATION SIDE:
 1. Determine directory structure within logs/
 2. Create folders if they don't exist
 3. Generate filename: executable_module_timestamp.log
 4. Create log file at target location
-5. Update telemetry.json atomically
-```
+5. Write log content freely to the file
 
-### Updating telemetry.json
-
-**CRITICAL**: File locking required for multi-access safety.
-
-```
-PROCEDURE:
-1. Acquire exclusive lock on telemetry.json
-2. Read current JSON content
-3. Parse JSON
-4. Add/update entry in active_streams
-5. Update last_update to current ISO 8601 timestamp
-6. Write updated JSON back to file
-7. Release lock
-
-TIMEOUT: Implement retry logic with exponential backoff
-ERROR HANDLING: Log failures to stderr/error log, do not crash
+REGISTRATION SIDE:
+6. Call `nucleus telemetry register` with correct parameters
+7. Nucleus handles telemetry.json update atomically
 ```
 
 ### Multi-Module Applications
 
-**RULE**: Applications creating multiple log files MUST create multiple telemetry.json entries.
+**RULE**: Applications creating multiple log files MUST register each one separately.
 
 **Example**: `brain` application with modules:
 ```
-brain/core/brain_core_20260209.log        → entry: "brain_core"
-brain/server/brain_server_20260209.log    → entry: "brain_server"
-brain/profile/brain_profile_20260209.log  → entry: "brain_profile"
+brain/core/brain_core_20260209.log        → register as "brain_core"
+brain/server/brain_server_20260209.log    → register as "brain_server"
+brain/profile/brain_profile_20260209.log  → register as "brain_profile"
 ```
 
-Each log file = one telemetry.json entry. NO exceptions.
+Each log file = one registration call. NO exceptions.
+
+---
 
 ## Log Content Format
 
@@ -176,11 +322,14 @@ Each log file = one telemetry.json entry. NO exceptions.
 
 **FUTURE**: Standardized template will be enforced across all applications.
 
+---
+
 ## File System Operations
 
 ### Path Format
 - Internal code: Use OS-native separators (`\` for Windows, `/` for Unix)
 - telemetry.json paths: Use forward slash `/` for cross-platform compatibility
+- CLI `--path` parameter: Use OS-native separators or forward slashes (CLI normalizes)
 
 ### Folder Creation
 ```python
@@ -190,56 +339,19 @@ log_dir = "C:/Users/josev/AppData/Local/BloomNucleus/logs/brain/server"
 os.makedirs(log_dir, exist_ok=True)
 ```
 
-### File Locking Examples
-
-**Python**:
+### Log File Writing
 ```python
-import fcntl
-import json
+# Pseudocode - Application responsibility
+log_path = "C:/Users/josev/AppData/Local/BloomNucleus/logs/brain/core/brain_core_20260209.log"
 
-def update_telemetry(stream_id, label, path, priority):
-    telemetry_path = "C:/Users/josev/AppData/Local/BloomNucleus/logs/telemetry.json"
-    
-    with open(telemetry_path, 'r+') as f:
-        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
-        try:
-            data = json.load(f)
-            data['active_streams'][stream_id] = {
-                'label': label,
-                'path': path.replace('\\', '/'),
-                'priority': priority,
-                'last_update': datetime.utcnow().isoformat() + 'Z'
-            }
-            f.seek(0)
-            f.truncate()
-            json.dump(data, f, indent=2)
-        finally:
-            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+with open(log_path, 'a') as log_file:
+    log_file.write(f"[{timestamp}] INFO: Application started\n")
+    log_file.write(f"[{timestamp}] DEBUG: Configuration loaded\n")
 ```
 
-**Node.js**:
-```javascript
-const fs = require('fs');
-const lockfile = require('proper-lockfile');
+**Applications write to their log files freely. Nucleus does NOT write log content.**
 
-async function updateTelemetry(streamId, label, path, priority) {
-  const telemetryPath = 'C:/Users/josev/AppData/Local/BloomNucleus/logs/telemetry.json';
-  
-  const release = await lockfile.lock(telemetryPath);
-  try {
-    const data = JSON.parse(fs.readFileSync(telemetryPath, 'utf8'));
-    data.active_streams[streamId] = {
-      label: label,
-      path: path.replace(/\\/g, '/'),
-      priority: priority,
-      last_update: new Date().toISOString()
-    };
-    fs.writeFileSync(telemetryPath, JSON.stringify(data, null, 2));
-  } finally {
-    await release();
-  }
-}
-```
+---
 
 ## Validation Checklist
 
@@ -249,25 +361,30 @@ When implementing logging for any application:
 - [ ] Filenames all lowercase
 - [ ] Filenames follow `executable_module_timestamp.log` format
 - [ ] All files have `.log` extension
-- [ ] File locking implemented for telemetry.json
-- [ ] Each log file has corresponding telemetry.json entry
-- [ ] All required fields present (label, path, priority, last_update)
-- [ ] last_update updates on every log write
+- [ ] Log file created and written by application
+- [ ] `nucleus telemetry register` called for each log file
+- [ ] `stream_id` follows naming contract (lowercase, snake_case)
+- [ ] All required CLI parameters provided
+- [ ] **NOT** writing to `telemetry.json` directly
+- [ ] **NOT** providing `last_update` manually
 - [ ] Priority level appropriate for log type
-- [ ] Timestamps in ISO 8601 format
+- [ ] Paths use forward slashes in final telemetry.json
 - [ ] Log rotation implemented (no giant single files)
-- [ ] Paths in telemetry.json use forward slashes
+
+---
 
 ## Common Errors to Avoid
 
 1. **Uppercase in filenames**: Always lowercase
-2. **Missing telemetry.json entry**: Every log file needs an entry
-3. **Single entry for multi-module app**: Each module needs separate entry
-4. **Wrong path separator**: Use `/` in telemetry.json
-5. **No file locking**: Race conditions will corrupt telemetry.json
-6. **Forgetting last_update**: Must update timestamp on every write
-7. **Log files in root**: Must be in subfolders
-8. **Giant accumulated files**: Implement rotation with timestamps
+2. **Missing registration call**: Every log file needs `nucleus telemetry register`
+3. **Single registration for multi-module app**: Each module needs separate registration
+4. **Direct telemetry.json modification**: Use CLI only
+5. **Providing last_update manually**: Nucleus generates it automatically
+6. **Log files in root**: Must be in subfolders
+7. **Giant accumulated files**: Implement rotation with timestamps
+8. **Wrong stream_id format**: Use lowercase and snake_case
+
+---
 
 ## Integration Pattern
 
@@ -276,19 +393,22 @@ APPLICATION STARTUP:
 ├── Check/create log directory structure
 ├── Determine log filename with timestamp
 ├── Initialize log file
-├── Lock telemetry.json
-├── Add/update entry in active_streams
-├── Unlock telemetry.json
-└── Begin logging
+├── Execute `nucleus telemetry register` command
+│   ├── Nucleus locks telemetry.json
+│   ├── Nucleus adds/updates entry in active_streams
+│   ├── Nucleus generates last_update timestamp
+│   └── Nucleus unlocks telemetry.json
+└── Begin logging to file
 
 DURING EXECUTION:
-├── Write log entries to file
-└── Update last_update in telemetry.json (periodically or on flush)
+└── Write log entries to file (no telemetry.json interaction)
 
 APPLICATION SHUTDOWN:
 ├── Flush logs
-└── Final telemetry.json update (optional)
+└── (Optional) Re-register to update last_update if needed
 ```
+
+---
 
 ## Reference Implementation
 
@@ -299,7 +419,6 @@ logs/
 ├── telemetry.json
 ├── install/
 │   └── electron_install.log
-├── electron_launch.log (NOTE: This breaks the rule - should be in subfolder)
 ├── brain/
 │   ├── service/
 │   │   └── brain_service.log
@@ -317,16 +436,67 @@ logs/
     └── nucleus_temporal_server_2026-02-09.log
 ```
 
-## Notes for AI Implementation
+Each `.log` file has a corresponding entry in `telemetry.json` registered via CLI.
+
+---
+
+## Notes for Implementation
 
 - Treat this as a strict specification
 - All rules are mandatory unless explicitly marked as recommendations
-- Multi-access to telemetry.json requires atomic operations
+- **Never modify telemetry.json directly from application code**
+- Use `nucleus telemetry register` for all registrations
 - Log rotation strategy is application-specific
 - Content format will be standardized later - use structured logging now
 - Priority assignment should be consistent within an application ecosystem
-- Timestamp format: ISO 8601 UTC (e.g., `2026-02-09T12:34:24.577Z`)
-- Path normalization: Always use forward slashes in telemetry.json
+- Timestamp format in telemetry.json: ISO 8601 UTC (e.g., `2026-02-09T12:34:24.577Z`)
+- Path normalization: Nucleus CLI handles conversion to forward slashes
+
+---
+
+## Migration Guide
+
+### Old Pattern (DEPRECATED)
+
+```python
+# ❌ DO NOT USE
+import fcntl
+import json
+
+def update_telemetry(stream_id, label, path, priority):
+    with open(telemetry_path, 'r+') as f:
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+        data = json.load(f)
+        data['active_streams'][stream_id] = {
+            'label': label,
+            'path': path,
+            'priority': priority,
+            'last_update': datetime.utcnow().isoformat() + 'Z'  # ❌ Manual timestamp
+        }
+        f.seek(0)
+        f.truncate()
+        json.dump(data, f, indent=2)
+        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+```
+
+### New Pattern (REQUIRED)
+
+```python
+# ✅ CORRECT
+import subprocess
+
+def register_log_stream(stream_id, label, path, priority):
+    """Register a log stream via Nucleus CLI"""
+    subprocess.run([
+        'nucleus', 'telemetry', 'register',
+        '--stream', stream_id,
+        '--label', label,
+        '--path', path,
+        '--priority', str(priority)
+    ], check=True)
+```
+
+---
 
 ## Questions to Clarify
 
@@ -342,3 +512,5 @@ If implementing this system, consider asking:
 8. What emoji/icons are preferred for different log types?
 9. Should log levels within files match telemetry.json priority?
 10. Is there a centralized log viewer that consumes telemetry.json?
+11. How does `nucleus telemetry register` handle errors (missing paths, invalid priority)?
+12. Should applications verify CLI execution success before continuing?

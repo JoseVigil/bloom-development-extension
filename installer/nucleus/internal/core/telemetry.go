@@ -152,6 +152,8 @@ func newTelemetryRegisterCommand(c *Core) *cobra.Command {
 This command is the ONLY way to write to telemetry.json. External applications
 must invoke this command instead of writing the file directly.
 
+If telemetry.json does not exist, it will be created automatically.
+
 USAGE EXAMPLES:
 
   # Basic registration

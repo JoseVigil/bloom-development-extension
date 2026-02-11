@@ -73,6 +73,7 @@ bloom-development-extension/
     │   │       └── system_gate.go
     │   ├── supervisor/
     │   │   ├── dev_start.go
+    │   │   ├── health.go
     │   │   └── supervisor.go
     │   ├── synapse/
     │   │   └── commands.go

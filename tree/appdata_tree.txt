@@ -1,266 +1,9 @@
 BloomNucleus/
 ├── bin/
 │   ├── brain/
+│   │   ├── _internal/ [... dependencies]
+│   │   └── brain.exe
 │   ├── chrome-win/
-│   │   ├── 146.0.7635.0.manifest
-│   │   ├── D3DCompiler_47.dll
-│   │   ├── First Run
-│   │   ├── IwaKeyDistribution/
-│   │   │   ├── iwa-key-distribution.pb
-│   │   │   └── manifest.json
-│   │   ├── MEIPreload/
-│   │   │   ├── manifest.json
-│   │   │   └── preloaded_data.pb
-│   │   ├── PrivacySandboxAttestationsPreloaded/
-│   │   │   ├── manifest.json
-│   │   │   └── privacy-sandbox-attestations.dat
-│   │   ├── chrome.dll
-│   │   ├── chrome.exe
-│   │   ├── chrome_100_percent.pak
-│   │   ├── chrome_200_percent.pak
-│   │   ├── chrome_elf.dll
-│   │   ├── chrome_proxy.exe
-│   │   ├── chrome_pwa_launcher.exe
-│   │   ├── chrome_wer.dll
-│   │   ├── debug.log
-│   │   ├── dxcompiler.dll
-│   │   ├── dxil.dll
-│   │   ├── elevated_tracing_service.exe
-│   │   ├── elevation_service.exe
-│   │   ├── eventlog_provider.dll
-│   │   ├── icudtl.dat
-│   │   ├── interactive_ui_tests.exe
-│   │   ├── libEGL.dll
-│   │   ├── libGLESv2.dll
-│   │   ├── locales/
-│   │   │   ├── af.pak
-│   │   │   ├── af_FEMININE.pak
-│   │   │   ├── af_MASCULINE.pak
-│   │   │   ├── af_NEUTER.pak
-│   │   │   ├── am.pak
-│   │   │   ├── am_FEMININE.pak
-│   │   │   ├── am_MASCULINE.pak
-│   │   │   ├── am_NEUTER.pak
-│   │   │   ├── ar-XB.pak
-│   │   │   ├── ar-XB_FEMININE.pak
-│   │   │   ├── ar-XB_MASCULINE.pak
-│   │   │   ├── ar-XB_NEUTER.pak
-│   │   │   ├── ar.pak
-│   │   │   ├── ar_FEMININE.pak
-│   │   │   ├── ar_MASCULINE.pak
-│   │   │   ├── ar_NEUTER.pak
-│   │   │   ├── bg.pak
-│   │   │   ├── bg_FEMININE.pak
-│   │   │   ├── bg_MASCULINE.pak
-│   │   │   ├── bg_NEUTER.pak
-│   │   │   ├── bn.pak
-│   │   │   ├── bn_FEMININE.pak
-│   │   │   ├── bn_MASCULINE.pak
-│   │   │   ├── bn_NEUTER.pak
-│   │   │   ├── ca.pak
-│   │   │   ├── ca_FEMININE.pak
-│   │   │   ├── ca_MASCULINE.pak
-│   │   │   ├── ca_NEUTER.pak
-│   │   │   ├── cs.pak
-│   │   │   ├── cs_FEMININE.pak
-│   │   │   ├── cs_MASCULINE.pak
-│   │   │   ├── cs_NEUTER.pak
-│   │   │   ├── da.pak
-│   │   │   ├── da_FEMININE.pak
-│   │   │   ├── da_MASCULINE.pak
-│   │   │   ├── da_NEUTER.pak
-│   │   │   ├── de.pak
-│   │   │   ├── de_FEMININE.pak
-│   │   │   ├── de_MASCULINE.pak
-│   │   │   ├── de_NEUTER.pak
-│   │   │   ├── el.pak
-│   │   │   ├── el_FEMININE.pak
-│   │   │   ├── el_MASCULINE.pak
-│   │   │   ├── el_NEUTER.pak
-│   │   │   ├── en-GB.pak
-│   │   │   ├── en-GB_FEMININE.pak
-│   │   │   ├── en-GB_MASCULINE.pak
-│   │   │   ├── en-GB_NEUTER.pak
-│   │   │   ├── en-US.pak
-│   │   │   ├── en-US_FEMININE.pak
-│   │   │   ├── en-US_MASCULINE.pak
-│   │   │   ├── en-US_NEUTER.pak
-│   │   │   ├── en-XA.pak
-│   │   │   ├── en-XA_FEMININE.pak
-│   │   │   ├── en-XA_MASCULINE.pak
-│   │   │   ├── en-XA_NEUTER.pak
-│   │   │   ├── es-419.pak
-│   │   │   ├── es-419_FEMININE.pak
-│   │   │   ├── es-419_MASCULINE.pak
-│   │   │   ├── es-419_NEUTER.pak
-│   │   │   ├── es.pak
-│   │   │   ├── es_FEMININE.pak
-│   │   │   ├── es_MASCULINE.pak
-│   │   │   ├── es_NEUTER.pak
-│   │   │   ├── et.pak
-│   │   │   ├── et_FEMININE.pak
-│   │   │   ├── et_MASCULINE.pak
-│   │   │   ├── et_NEUTER.pak
-│   │   │   ├── fa.pak
-│   │   │   ├── fa_FEMININE.pak
-│   │   │   ├── fa_MASCULINE.pak
-│   │   │   ├── fa_NEUTER.pak
-│   │   │   ├── fi.pak
-│   │   │   ├── fi_FEMININE.pak
-│   │   │   ├── fi_MASCULINE.pak
-│   │   │   ├── fi_NEUTER.pak
-│   │   │   ├── fil.pak
-│   │   │   ├── fil_FEMININE.pak
-│   │   │   ├── fil_MASCULINE.pak
-│   │   │   ├── fil_NEUTER.pak
-│   │   │   ├── fr.pak
-│   │   │   ├── fr_FEMININE.pak
-│   │   │   ├── fr_MASCULINE.pak
-│   │   │   ├── fr_NEUTER.pak
-│   │   │   ├── gu.pak
-│   │   │   ├── gu_FEMININE.pak
-│   │   │   ├── gu_MASCULINE.pak
-│   │   │   ├── gu_NEUTER.pak
-│   │   │   ├── he.pak
-│   │   │   ├── he_FEMININE.pak
-│   │   │   ├── he_MASCULINE.pak
-│   │   │   ├── he_NEUTER.pak
-│   │   │   ├── hi.pak
-│   │   │   ├── hi_FEMININE.pak
-│   │   │   ├── hi_MASCULINE.pak
-│   │   │   ├── hi_NEUTER.pak
-│   │   │   ├── hr.pak
-│   │   │   ├── hr_FEMININE.pak
-│   │   │   ├── hr_MASCULINE.pak
-│   │   │   ├── hr_NEUTER.pak
-│   │   │   ├── hu.pak
-│   │   │   ├── hu_FEMININE.pak
-│   │   │   ├── hu_MASCULINE.pak
-│   │   │   ├── hu_NEUTER.pak
-│   │   │   ├── id.pak
-│   │   │   ├── id_FEMININE.pak
-│   │   │   ├── id_MASCULINE.pak
-│   │   │   ├── id_NEUTER.pak
-│   │   │   ├── it.pak
-│   │   │   ├── it_FEMININE.pak
-│   │   │   ├── it_MASCULINE.pak
-│   │   │   ├── it_NEUTER.pak
-│   │   │   ├── ja.pak
-│   │   │   ├── ja_FEMININE.pak
-│   │   │   ├── ja_MASCULINE.pak
-│   │   │   ├── ja_NEUTER.pak
-│   │   │   ├── kn.pak
-│   │   │   ├── kn_FEMININE.pak
-│   │   │   ├── kn_MASCULINE.pak
-│   │   │   ├── kn_NEUTER.pak
-│   │   │   ├── ko.pak
-│   │   │   ├── ko_FEMININE.pak
-│   │   │   ├── ko_MASCULINE.pak
-│   │   │   ├── ko_NEUTER.pak
-│   │   │   ├── lt.pak
-│   │   │   ├── lt_FEMININE.pak
-│   │   │   ├── lt_MASCULINE.pak
-│   │   │   ├── lt_NEUTER.pak
-│   │   │   ├── lv.pak
-│   │   │   ├── lv_FEMININE.pak
-│   │   │   ├── lv_MASCULINE.pak
-│   │   │   ├── lv_NEUTER.pak
-│   │   │   ├── ml.pak
-│   │   │   ├── ml_FEMININE.pak
-│   │   │   ├── ml_MASCULINE.pak
-│   │   │   ├── ml_NEUTER.pak
-│   │   │   ├── mr.pak
-│   │   │   ├── mr_FEMININE.pak
-│   │   │   ├── mr_MASCULINE.pak
-│   │   │   ├── mr_NEUTER.pak
-│   │   │   ├── ms.pak
-│   │   │   ├── ms_FEMININE.pak
-│   │   │   ├── ms_MASCULINE.pak
-│   │   │   ├── ms_NEUTER.pak
-│   │   │   ├── nb.pak
-│   │   │   ├── nb_FEMININE.pak
-│   │   │   ├── nb_MASCULINE.pak
-│   │   │   ├── nb_NEUTER.pak
-│   │   │   ├── nl.pak
-│   │   │   ├── nl_FEMININE.pak
-│   │   │   ├── nl_MASCULINE.pak
-│   │   │   ├── nl_NEUTER.pak
-│   │   │   ├── pl.pak
-│   │   │   ├── pl_FEMININE.pak
-│   │   │   ├── pl_MASCULINE.pak
-│   │   │   ├── pl_NEUTER.pak
-│   │   │   ├── pt-BR.pak
-│   │   │   ├── pt-BR_FEMININE.pak
-│   │   │   ├── pt-BR_MASCULINE.pak
-│   │   │   ├── pt-BR_NEUTER.pak
-│   │   │   ├── pt-PT.pak
-│   │   │   ├── pt-PT_FEMININE.pak
-│   │   │   ├── pt-PT_MASCULINE.pak
-│   │   │   ├── pt-PT_NEUTER.pak
-│   │   │   ├── ro.pak
-│   │   │   ├── ro_FEMININE.pak
-│   │   │   ├── ro_MASCULINE.pak
-│   │   │   ├── ro_NEUTER.pak
-│   │   │   ├── ru.pak
-│   │   │   ├── ru_FEMININE.pak
-│   │   │   ├── ru_MASCULINE.pak
-│   │   │   ├── ru_NEUTER.pak
-│   │   │   ├── sk.pak
-│   │   │   ├── sk_FEMININE.pak
-│   │   │   ├── sk_MASCULINE.pak
-│   │   │   ├── sk_NEUTER.pak
-│   │   │   ├── sl.pak
-│   │   │   ├── sl_FEMININE.pak
-│   │   │   ├── sl_MASCULINE.pak
-│   │   │   ├── sl_NEUTER.pak
-│   │   │   ├── sr.pak
-│   │   │   ├── sr_FEMININE.pak
-│   │   │   ├── sr_MASCULINE.pak
-│   │   │   ├── sr_NEUTER.pak
-│   │   │   ├── sv.pak
-│   │   │   ├── sv_FEMININE.pak
-│   │   │   ├── sv_MASCULINE.pak
-│   │   │   ├── sv_NEUTER.pak
-│   │   │   ├── sw.pak
-│   │   │   ├── sw_FEMININE.pak
-│   │   │   ├── sw_MASCULINE.pak
-│   │   │   ├── sw_NEUTER.pak
-│   │   │   ├── ta.pak
-│   │   │   ├── ta_FEMININE.pak
-│   │   │   ├── ta_MASCULINE.pak
-│   │   │   ├── ta_NEUTER.pak
-│   │   │   ├── te.pak
-│   │   │   ├── te_FEMININE.pak
-│   │   │   ├── te_MASCULINE.pak
-│   │   │   ├── te_NEUTER.pak
-│   │   │   ├── th.pak
-│   │   │   ├── th_FEMININE.pak
-│   │   │   ├── th_MASCULINE.pak
-│   │   │   ├── th_NEUTER.pak
-│   │   │   ├── tr.pak
-│   │   │   ├── tr_FEMININE.pak
-│   │   │   ├── tr_MASCULINE.pak
-│   │   │   ├── tr_NEUTER.pak
-│   │   │   ├── uk.pak
-│   │   │   ├── uk_FEMININE.pak
-│   │   │   ├── uk_MASCULINE.pak
-│   │   │   ├── uk_NEUTER.pak
-│   │   │   ├── ur.pak
-│   │   │   ├── ur_FEMININE.pak
-│   │   │   ├── ur_MASCULINE.pak
-│   │   │   ├── ur_NEUTER.pak
-│   │   │   ├── vi.pak
-│   │   │   ├── vi_FEMININE.pak
-│   │   │   ├── vi_MASCULINE.pak
-│   │   │   ├── vi_NEUTER.pak
-│   │   │   ├── zh-CN.pak
-│   │   │   ├── zh-CN_FEMININE.pak
-│   │   │   ├── zh-CN_MASCULINE.pak
-│   │   │   ├── zh-CN_NEUTER.pak
-│   │   │   ├── zh-TW.pak
-│   │   │   ├── zh-TW_FEMININE.pak
-│   │   │   ├── zh-TW_MASCULINE.pak
-│   │   │   └── zh-TW_NEUTER.pak
 │   │   ├── notification_helper.exe
 │   │   ├── resources.pak
 │   │   ├── setup.exe
@@ -268,27 +11,44 @@ BloomNucleus/
 │   │   ├── vk_swiftshader.dll
 │   │   ├── vk_swiftshader_icd.json
 │   │   └── vulkan-1.dll
+│   ├── conductor/
 │   ├── cortex/
-│   ├── extension/
+│   ├── cortex.exe/
+│   │   └── bloom-cortex.blx
 │   ├── native/
-│   └── sentinel/
+│   ├── nucleus/
+│   ├── nucleus.exe/
+│   │   ├── help/
+│   │   │   ├── nucleus_help.json
+│   │   │   └── nucleus_help.txt
+│   │   ├── nucleus-governance.json
+│   │   └── nucleus.exe
+│   ├── ollama/
+│   ├── sentinel/
+│   ├── sentinel.exe/
+│   │   ├── help/
+│   │   │   ├── sentinel_help.json
+│   │   │   └── sentinel_help.txt
+│   │   ├── sentinel-config.json
+│   │   └── sentinel.exe
+│   └── temporal/
 ├── config/
+│   └── nucleus.json
 ├── engine/
 │   └── runtime/
 ├── logs/
 │   ├── brain/
 │   │   ├── core/
-│   │   │   └── brain_core_20260203.log
+│   │   │   └── brain_core_20260210.log
 │   │   ├── profile/
-│   │   │   └── brain_profile_20260203.log
+│   │   │   └── brain_profile_20260210.log
 │   │   └── server/
-│   │       ├── brain_server_20260203.log
-│   │       ├── brain_server_event_bus_20260203.log
-│   │       └── brain_server_manager_20260203.log
-│   ├── build/ [... build output]
+│   │       ├── brain_server_20260210.log
+│   │       ├── brain_server_event_bus_20260210.log
+│   │       └── brain_server_manager_20260210.log
+│   ├── conductor/
+│   │   └── conductor_launch_2026-02-10_18-58-02.log
 │   ├── install/
-│   │   └── electron_install.log
-│   ├── sentinel/
-│   │   └── sentinel_core_2026-02-02.log
+│   │   └── electron_install_2026-02-10_18-58-02.log
 │   └── telemetry.json
 └── profiles/

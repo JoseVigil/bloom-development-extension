@@ -1,7 +1,6 @@
 bloom-development-extension/
 └── sentinel/
     ├── VERSION
-    ├── blueprint.json
     ├── cli/
     │   └── help_renderer.go
     ├── codebase/
@@ -12,12 +11,8 @@ bloom-development-extension/
     │       ├── CHROMIUM PATH FIX - Arquitectura de Rutas.md
     │       ├── SENTINEL v1.2 - Estructura de Archivos.md
     │       └── SENTINEL v1.2 Deployment & Testing Guide.md
-    ├── extract_go_files.py
     ├── go.mod
     ├── go.sum
-    ├── help/
-    │   ├── sentinel_help.json
-    │   └── sentinel_help.txt
     ├── internal/
     │   ├── boot/
     │   │   ├── dev.go
@@ -43,9 +38,6 @@ bloom-development-extension/
     │   │   ├── protocol.go
     │   │   ├── sentinel_client.go
     │   │   └── synapse_handshake.go
-    │   ├── health/
-    │   │   ├── guardian.go
-    │   │   └── health.go
     │   ├── ignition/
     │   │   ├── ignition.go
     │   │   ├── ignition_identity.go
@@ -66,15 +58,19 @@ bloom-development-extension/
     │   ├── system/
     │   │   ├── cmd_info.go
     │   │   └── cmd_version.go
+    │   ├── temporal/
+    │   │   ├── temporal_commands.go
+    │   │   └── temporal_manager.go
     │   └── ui/
     │       ├── cockpit.go
     │       ├── dashboard.go
-    │       ├── health_station.go
     │       ├── log_station.go
     │       └── refresher.go
     ├── main.go
-    └── scripts/
-        ├── build-darwin.sh
-        ├── build-linux.sh
-        ├── build.bat
-        └── build_number.txt
+    ├── scripts/
+    │   ├── build-darwin.sh
+    │   ├── build-linux.sh
+    │   ├── build.bat
+    │   ├── build_number.txt
+    │   └── extract_go_files.py
+    └── sentinel-config.json
