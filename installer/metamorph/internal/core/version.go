@@ -4,5 +4,5 @@ package core
 const Version = "1.0.0"
 
 // App información de la aplicación
-const AppName = "metamorph"
+const AppName = "Metamorph"
 const AppDescription = "System State Reconciler"

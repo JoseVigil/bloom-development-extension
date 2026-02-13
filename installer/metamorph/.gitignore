@@ -20,6 +20,7 @@ metamorph.exe
 
 # Build info (auto-generated)
 internal/core/build_info.go
+scripts/build_number.txt
 
 # IDE
 .vscode/
