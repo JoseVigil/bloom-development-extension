@@ -80,7 +80,7 @@ done
 echo -e "${GREEN}✓ All source files present${NC}"
 
 # Destino: installer/native/bin/
-PROJECT_ROOT="$SCRIPT_DIR/../../.."
+PROJECT_ROOT="$SCRIPT_DIR/../.."
 OUT_DIR="$PROJECT_ROOT/installer/native/bin"
 
 # Crear carpetas separadas por arquitectura
