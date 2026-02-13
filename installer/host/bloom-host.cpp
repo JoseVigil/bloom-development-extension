@@ -14,6 +14,7 @@
 #include "platform_utils.h"
 #include "cli_handler.h"
 #include "build_info.h"
+#include "cli_parser.h"
 
 using json = nlohmann::json;
 
@@ -713,6 +714,13 @@ void tcp_client_loop() {
 
 int main(int argc, char* argv[]) {
     try {
+	// ========== Manejar CLI commands ==========
+        auto cli_result = CLIParser::parse_and_execute(argc, argv);
+        if (cli_result.handled) {
+            return cli_result.exit_code;
+        }
+        // ================================================
+
         // Manejar comandos CLI primero
         if (handle_cli_args(argc, argv)) {
             return 0;

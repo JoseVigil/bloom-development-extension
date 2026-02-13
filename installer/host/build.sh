@@ -424,4 +424,47 @@ if [ -d "$OUT_DIR/linux/host" ] && [ "$(ls -A $OUT_DIR/linux/host 2>/dev/null)" 
     echo ""
 fi
 
+# ============================================================================
+# GENERATE HELP FILES
+# ============================================================================
+echo ""
+echo -e "${YELLOW}📄 Generating help documentation...${NC}"
+
+# Windows
+if [ -f "$OUT_DIR/win64/host/bloom-host.exe" ]; then
+    mkdir -p "$OUT_DIR/win64/host/help"
+    if wine "$OUT_DIR/win64/host/bloom-host.exe" --help > "$OUT_DIR/win64/host/help/host-help.txt" 2>/dev/null; then
+        echo -e "${GREEN}✓ Windows help generated${NC}"
+    else
+        echo -e "${YELLOW}⚠  Wine not available - skipping Windows help${NC}"
+    fi
+fi
+
+# macOS ARM64
+if [ -f "$OUT_DIR/darwin/arm64/host/bloom-host" ]; then
+    mkdir -p "$OUT_DIR/darwin/arm64/host/help"
+    "$OUT_DIR/darwin/arm64/host/bloom-host" --help > "$OUT_DIR/darwin/arm64/host/help/host-help.txt" 2>/dev/null || true
+    if [ -f "$OUT_DIR/darwin/arm64/host/help/host-help.txt" ]; then
+        echo -e "${GREEN}✓ macOS ARM64 help generated${NC}"
+    fi
+fi
+
+# macOS x86_64
+if [ -f "$OUT_DIR/darwin/x64/host/bloom-host" ]; then
+    mkdir -p "$OUT_DIR/darwin/x64/host/help"
+    "$OUT_DIR/darwin/x64/host/bloom-host" --help > "$OUT_DIR/darwin/x64/host/help/host-help.txt" 2>/dev/null || true
+    if [ -f "$OUT_DIR/darwin/x64/host/help/host-help.txt" ]; then
+        echo -e "${GREEN}✓ macOS x86_64 help generated${NC}"
+    fi
+fi
+
+# Linux
+if [ -f "$OUT_DIR/linux/host/bloom-host" ]; then
+    mkdir -p "$OUT_DIR/linux/host/help"
+    "$OUT_DIR/linux/host/bloom-host" --help > "$OUT_DIR/linux/host/help/host-help.txt" 2>/dev/null || true
+    if [ -f "$OUT_DIR/linux/host/help/host-help.txt" ]; then
+        echo -e "${GREEN}✓ Linux help generated${NC}"
+    fi
+fi
+
 echo -e "${YELLOW}🚀 Ready for Electron installer${NC}"
