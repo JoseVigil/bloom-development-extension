@@ -750,6 +750,42 @@ def render_help(registry: CommandRegistry, json_mode: bool = False, ai_native: b
     """
     
     import io
+    
+    # CRÍTICO: Proteger contra stdout/stderr cerrados en PyInstaller
+    # Esto puede pasar cuando subprocess captura la salida
+    try:
+        # Intentar acceder a stdout para verificar que funciona
+        _ = sys.stdout.fileno()
+    except (ValueError, AttributeError, OSError):
+        # stdout está cerrado o inválido - recrear
+        try:
+            sys.stdout = io.TextIOWrapper(
+                open(1, 'wb', buffering=0),
+                encoding='utf-8',
+                errors='replace',
+                write_through=True
+            )
+        except:
+            # Si todo falla, crear un StringIO temporal
+            sys.stdout = io.StringIO()
+    
+    try:
+        _ = sys.stderr.fileno()
+    except (ValueError, AttributeError, OSError):
+        try:
+            sys.stderr = io.TextIOWrapper(
+                open(2, 'wb', buffering=0),
+                encoding='utf-8',
+                errors='replace',
+                write_through=True
+            )
+        except:
+            sys.stderr = io.StringIO()
+    
+    # Guardar referencia al stdout original ANTES de modificarlo
+    original_stdout = sys.stdout
+    original_buffer = sys.stdout.buffer if hasattr(sys.stdout, 'buffer') else None
+    
     if not sys.stdout.isatty():
         if hasattr(sys.stdout, 'buffer'):
             sys.stdout = io.TextIOWrapper(
@@ -831,9 +867,17 @@ def render_help(registry: CommandRegistry, json_mode: bool = False, ai_native: b
     if is_file_output:
         full_output = console.export_text()
         
-        if hasattr(sys.stdout, 'buffer'):
-            sys.stdout.buffer.write(full_output.encode('utf-8'))
-            sys.stdout.buffer.flush()
-        else:
-            sys.stdout.write(full_output)
-            sys.stdout.flush()
+        # Usar el buffer original guardado al inicio
+        try:
+            if original_buffer:
+                original_buffer.write(full_output.encode('utf-8'))
+                original_buffer.flush()
+            elif hasattr(original_stdout, 'buffer'):
+                original_stdout.buffer.write(full_output.encode('utf-8'))
+                original_stdout.buffer.flush()
+            else:
+                original_stdout.write(full_output)
+                original_stdout.flush()
+        except (ValueError, OSError) as e:
+            # Si el buffer está cerrado, intentar con print directo
+            print(full_output, file=original_stdout, flush=True)

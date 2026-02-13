@@ -432,12 +432,21 @@ def main():
         console_print("  Ejecutable funcional", indent=2)
     
     # ========================================
-    # 4. GENERAR DOCUMENTACIÓN (OPCIONAL)
+    # 4. GENERAR DOCUMENTACIÓN (OBLIGATORIA)
     # ========================================
-    if not IS_WINDOWS:  # En Unix generamos la documentación aquí
-        console_print(f"\nGenerando documentación → {brain_exe.parent.name}/help/")
-        generate_help_files(brain_exe)
-        # generate_tree_files(brain_exe)  # Descomentar si se necesita
+    console_print(f"\n{Icons.DOC} Generando documentación → {brain_exe.parent.name}/help/")
+    
+    help_success = generate_help_files(brain_exe)
+    if help_success:
+        console_print(f"  {Icons.SUCCESS} Archivos de ayuda generados", indent=2)
+    else:
+        console_print(f"  {Icons.WARNING} No se pudieron generar archivos de ayuda", indent=2)
+        log_to_file("Warning: Generación de archivos de ayuda falló", level="WARN")
+    
+    # Generar árboles de directorios (opcional)
+    # tree_success = generate_tree_files(brain_exe)
+    # if tree_success:
+    #     console_print(f"  {Icons.SUCCESS} Árboles de directorios generados", indent=2)
     
     # ========================================
     # 5. REGISTRAR TELEMETRÍA
