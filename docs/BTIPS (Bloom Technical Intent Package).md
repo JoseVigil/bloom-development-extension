@@ -57,6 +57,9 @@ flowchart LR
         NucleusExe[⚖️ Nucleus
         Gobernanza]
 
+        Metamorph[🔄 Metamorph
+        State Reconciler]
+
         Sentinel[🛡️ Sentinel
         Sidecar / Event Bus]
 
@@ -112,6 +115,12 @@ flowchart LR
         Sentinel <--> NucleusExe
         Sentinel <--> Brain
 
+        NucleusExe --> Metamorph
+        Metamorph -.actualiza.-> Brain
+        Metamorph -.actualiza.-> Host
+        Metamorph -.actualiza.-> Sentinel
+        Metamorph -.actualiza.-> Launcher
+
         VS --> Brain
 
         Brain <--> Host
@@ -151,6 +160,7 @@ Nucleus es la autoridad de mando y el árbitro de identidad del sistema. Actúa 
 *   **Identity & Role Management:** Gestiona la jerarquía de poder (Master/Architect/Specialist), validando quién tiene permiso para ejecutar acciones sensibles.
 *   **Vault Authority:** Es el único componente capaz de autorizar el flujo de llaves (API Keys/OAuth) desde el almacenamiento seguro de Chrome hacia el motor de ejecución.
 *   **Organizacional Truth:** Nucleus firma digitalmente el estado de los proyectos en el filesystem, asegurando que la configuración de la organización sea inalterable para colaboradores no autorizados.
+*   **System State Authority:** Único componente autorizado para invocar actualizaciones de binarios del sistema vía Metamorph, validando manifests firmados provenientes de Bartcave.
 
 ---
 
@@ -202,165 +212,61 @@ Esto convierte conflictos técnicos en **decisiones asistidas por IA**, no en ba
 
 ### 2.5️⃣ Brain (Python Engine)
 
-**Brain** es el motor de ejecución cognitiva de Bloom. Su nombre no es metafórico: realmente actúa como el cerebro que interpreta intenciones humanas formalizadas (intents), las traduce a operaciones técnicas concretas y coordina su ejecución con el mundo exterior.
+**Brain** es el motor de ejecución Python que materializa las intenciones técnicas en acciones concretas. Opera como un servidor TCP persistente que acepta comandos del Event Bus (Sentinel) y ejecuta pipelines declarativos en el contexto de Projects y Nucleus.
 
-#### Por Qué Python
+#### Responsabilidades Principales
 
-La elección de Python no fue casual. Brain necesita:
-* Integrarse fácilmente con APIs de IA (Gemini, OpenAI, Anthropic)
-* Manipular archivos, parsear código, ejecutar scripts
-* Mantener lógica compleja sin sacrificar legibilidad
-* Iterar rápido en nuevas capacidades
+* **Pipeline Execution:** Ejecuta secuencias de acciones definidas en archivos `.json` (intents)
+* **Context Management:** Mantiene el estado de cada intent (inputs, outputs, errores, progreso)
+* **AI Provider Integration:** Se comunica con modelos de IA (Gemini, Claude, GPT) para razonamiento asistido
+* **File System Operations:** Lee, escribe y transforma archivos siguiendo las instrucciones de cada intent
+* **Event Broadcasting:** Publica eventos de progreso al Event Bus para observabilidad en tiempo real
 
-Python cumple todo esto mientras mantiene un balance entre performance y expresividad.
+#### Arquitectura Interna
 
-#### El Ciclo de Vida de un Intent
+Brain opera con un diseño modular:
 
-Cuando Nucleus decide que es momento de ejecutar un intent (por ejemplo, `dev_intent_abc123.json`), envía un comando a Sentinel, que lo reenvía a Brain. Brain entonces:
-
-1. **Lee el intent** desde el filesystem (`.bloom/.intents/.dev/intent_abc123.json`)
-2. **Valida dependencias**: ¿Necesita una API key? → Solicita al Vault
-3. **Ejecuta la lógica**: Llama a Gemini para generar código, parsea respuesta, valida sintaxis
-4. **Escribe resultados**: Crea archivos en el proyecto, actualiza el intent con el output
-5. **Emite eventos**: Informa progreso a Nucleus vía Sentinel (Event Bus)
-6. **Limpia memoria**: Si usó llaves del Vault, las sobrescribe con zeros y libera
-
-Todo esto sucede de forma **idempotente**: si el proceso falla a mitad de camino, puede reiniciarse sin corromper el estado.
-
-#### Memoria Volátil: El Principio de Confianza Cero
-
-Brain nunca almacena secretos en disco. Cuando necesita una API key:
-* La solicita al Vault vía Host → Cortex
-* La mantiene en una variable Python (`_volatile_key`) **solo durante la transacción**
-* La usa para el API call
-* La sobrescribe con "0000..." y la libera inmediatamente
-
-Si Brain crashea, la llave desaparece de la RAM. Si alguien inspecciona el disco, no encontrará nada.
-
-#### Relación con Host C++
-
-Brain no puede hablar directamente con Chrome. Necesita a Host como intérprete. Brain envía comandos JSON vía socket TCP (puerto 5678), Host los traduce al protocolo Chrome Native Messaging, y viceversa.
-
-Esto crea una **frontera de seguridad**: Host valida tamaños de mensaje, previene payloads maliciosos y actúa como firewall entre el navegador y el motor de ejecución.
-
----
-
-### 2.6️⃣ Host Service (C++)
-
-**Host** es el puente invisible pero crítico entre dos mundos que no deberían poder hablarse: Chrome (sandboxed, aislado por seguridad) y el runtime local de Python. Implementado en C++ por razones de performance y control de bajo nivel, Host es la única pieza del sistema que realmente "toca" ambos lados de la frontera.
-
-#### La Dualidad del Host
-
-Host vive en un estado permanente de traducción simultánea:
-
-* **Hacia Chrome**: Habla Chrome Native Messaging Protocol (stdin/stdout, LittleEndian)
-* **Hacia Brain**: Habla TCP Socket Protocol (BigEndian, puerto 5678)
-
-Cada mensaje que pasa por Host es convertido, validado y reenviado. Si un mensaje es demasiado grande para Chrome (>1MB), Host lo rechaza y notifica el error a Brain vía TCP.
-
-#### El Handshake de 3 Fases
-
-Antes de permitir cualquier comunicación, Host ejecuta un ritual de validación:
-
-**Fase 1**: Extension envía `extension_ready` con su identidad (profile_id, launch_id)  
-**Fase 2**: Host responde `host_ready` con sus capacidades  
-**Fase 3**: Host notifica a Brain `PROFILE_CONNECTED`, y solo entonces el sistema está "listo"
-
-Este handshake previene condiciones de carrera. Sin él, Brain podría enviar comandos a una Extension que aún no cargó, o Extension podría enviar datos a un Brain que aún no existe.
-
-#### El Muro de 1MB
-
-Chrome tiene un límite físico: mensajes de Native Messaging no pueden superar ~1MB. Host implementa un **muro de validación** que rechaza cualquier payload que exceda este límite ANTES de intentar enviarlo.
-
-Si Brain intenta enviar un JSON de 5MB a la Extension, Host:
-1. Detecta el tamaño excesivo
-2. Aborta el envío
-3. Construye un mensaje de error
-4. Lo envía a Brain vía TCP
-5. Brain puede entonces fragmentar el payload o usar otra estrategia
-
-Esto convierte un crash silencioso en un error manejable.
-
-#### Seguridad del Vault: El Canal Cifrado
-
-Cuando Brain solicita una llave del Vault, Host no solo reenvía el mensaje. Agrega un **nonce** (número aleatorio único) que la Extension debe incluir en su firma criptográfica. Esto previene replay attacks: nadie puede interceptar una respuesta antigua y reusarla.
-
----
-
-### 2.7️⃣ Synapse Protocol (Implementación)
-
-**Synapse** es el lenguaje común que todos los componentes de Bloom hablan. No es solo un "protocolo de mensajes" — es el sistema nervioso que permite que piezas escritas en lenguajes diferentes (JavaScript, C++, Python, Go) colaboren como un organismo único.
-
-#### El Problema que Resuelve
-
-Sin Synapse, tendríamos:
-* Chrome hablando su dialecto propietario
-* Python usando su serialización
-* Go con sus propias convenciones
-* Cada uno asumiendo cosas diferentes sobre endianness, formato, validación
-
-Synapse **estandariza todo**:
-* Formato: JSON siempre
-* Transporte: Length-prefixed binary (4 bytes antes del payload)
-* Validación: Handshake de 3 fases obligatorio
-* Trazabilidad: Sequence numbers y timestamps en cada mensaje
-
-#### Endianness: El Detalle que Importa
-
-Chrome Native Messaging usa **LittleEndian** (byte menos significativo primero).  
-Brain/Sentinel usan **BigEndian** (byte más significativo primero).
-
-Host traduce entre ambos. Sin esta traducción, un mensaje que dice "longitud: 256 bytes" podría interpretarse como "longitud: 65536 bytes" y causar corrupción de memoria.
-
-#### El Handshake: Más que Cortesía
-
-El handshake de 3 fases no es opcional. Garantiza que:
-* Extension sabe quién es (profile_id, launch_id)
-* Host conoce las capacidades de Extension
-* Brain confirma que el perfil es válido antes de aceptar comandos
-
-Sin este ritual, el sistema podría entrar en estados imposibles (ej: Brain enviando comandos a un perfil que aún no existe).
-
-#### Heartbeats: Detectar Muerte Silenciosa
-
-Cada 30 segundos, Host envía un `HEARTBEAT` a Brain. Si Brain no responde después de 3 intentos, Host asume que crasheó y cierra la conexión limpiamente.
-
-Esto previene "conexiones zombie" donde Host cree que Brain está vivo pero en realidad murió hace 10 minutos.
-
----
-
-### 2.8️⃣ Event Bus (Arquitectura)
-
-**Event Bus** es el sistema nervioso central de Bloom. Es el canal TCP persistente y bidireccional que conecta Sentinel (sidecar) con Brain (motor de ejecución), permitiendo que eventos fluyan en tiempo real sin bloquear la ejecución principal.
-
-#### Por Qué un Event Bus y No HTTP
-
-HTTP es request-response: haces una pregunta, esperas la respuesta, continúas. Pero Bloom ejecuta intents que pueden tardar minutos. Si usáramos HTTP, el cliente quedaría bloqueado esperando.
-
-El Event Bus es **asíncrono y full-duplex**:
-* Sentinel puede enviar comandos a Brain sin esperar respuesta inmediata
-* Brain puede emitir eventos de progreso mientras ejecuta (25%... 50%... 75%...)
-* Nucleus puede suscribirse a estos eventos vía Sentinel
-* Conductor recibe actualizaciones en tiempo real sin hacer polling
-
-#### Arquitectura del Bus
 ```
-Nucleus (Temporal Worker) 
-    ↕ TCP (BigEndian, puerto configurable)
-Sentinel (Event Bus Client)
-    ↕ TCP (BigEndian, puerto 5678)
-Brain (Event Bus Server)
+Brain
+├── Pipeline Engine (ejecuta intents)
+├── Provider Adapters (Gemini, Claude, GPT)
+├── File System Manager (operaciones seguras)
+├── Event Publisher (broadcast al Event Bus)
+└── Vault Client (obtiene credenciales de Nucleus)
 ```
 
-Brain levanta un servidor TCP y espera conexiones. Cuando Sentinel arranca, se conecta a Brain y mantiene esa conexión abierta. Todos los mensajes fluyen por este socket.
+#### Ciclo de Vida de un Intent
 
-#### El Protocolo: 4 Bytes + JSON
+1. **Recepción:** Sentinel envía `EXECUTE_INTENT` con path al archivo `.json`
+2. **Parsing:** Brain lee el intent y valida su estructura
+3. **Contexto:** Carga inputs, archivos relacionados y estado previo
+4. **Ejecución:** Procesa el pipeline paso a paso
+5. **Progreso:** Publica eventos `INTENT_PROGRESS` periódicamente
+6. **Finalización:** Emite `INTENT_COMPLETED` o `INTENT_FAILED`
+7. **Persistencia:** Guarda outputs y actualiza el filesystem
+
+#### Integración con AI Providers
+
+Brain no mantiene llaves de API en memoria ni en disco. Cuando necesita comunicarse con un provider:
+
+1. Solicita la llave a Nucleus vía `VAULT_GET_KEY`
+2. Nucleus valida la autorización (rol del usuario, scope del intent)
+3. Si aprueba, descifra la llave del Chrome Storage y la envía a Brain
+4. Brain usa la llave temporalmente y la descarta al finalizar
+
+Este modelo garantiza que las credenciales nunca persistan fuera del vault controlado por Nucleus.
+
+#### Event Bus Protocol
+
+Brain actúa como servidor TCP en el Event Bus. Cuando Sentinel arranca, se conecta a Brain y mantiene esa conexión abierta. Todos los mensajes fluyen por este socket.
+
+##### El Protocolo: 4 Bytes + JSON
 
 Cada mensaje tiene:
 1. **Header**: 4 bytes (BigEndian) indicando longitud del payload
 2. **Payload**: JSON con estructura estándar
 
-#### Eventos Típicos
+##### Eventos Típicos
 
 **Sentinel → Brain**:
 * `EXECUTE_INTENT`: Ejecuta un intent específico
@@ -374,7 +280,7 @@ Cada mensaje tiene:
 * `INTENT_FAILED`: Intent falló con error
 * `VAULT_KEY_RECEIVED`: Llave obtenida del vault
 
-#### Resiliencia: Reconexión Automática
+##### Resiliencia: Reconexión Automática
 
 Si la conexión se cae (Brain crashea, red se cae), Sentinel:
 1. Detecta la desconexión
@@ -385,7 +291,7 @@ Si la conexión se cae (Brain crashea, red se cae), Sentinel:
 
 Cuando reconecta, Sentinel envía `POLL_EVENTS` para recuperar cualquier evento perdido durante la desconexión.
 
-#### Sequence Numbers: Detectar Pérdida de Mensajes
+##### Sequence Numbers: Detectar Pérdida de Mensajes
 
 Cada evento tiene un `sequence` number incremental. Si Sentinel recibe:
 * Evento seq=42
@@ -395,6 +301,163 @@ Sabe que perdió los eventos 43 y 44, y puede solicitarlos explícitamente a Bra
 
 ---
 
+### 2.6️⃣ Metamorph (Declarative State Reconciler)
+
+**Metamorph** es el reconciliador declarativo de estado que gobierna las actualizaciones del sistema Bloom. A diferencia de updaters tradicionales que ejecutan comandos imperativos, Metamorph opera mediante **reconciliación continua**: compara el estado actual del sistema con el estado deseado (declarado en manifests) y converge atómicamente hacia él.
+
+#### Principios Fundamentales
+
+**Declarativo vs Imperativo:**
+* **Imperativo:** "Descarga brain.exe, detén el servicio, reemplaza el binario, reinicia"
+* **Declarativo:** "El sistema debe tener Brain v2.5.0 en canal stable"
+
+Metamorph detecta la diferencia y ejecuta las acciones necesarias automáticamente.
+
+**Atomicidad Total:**
+Cada reconciliación es una transacción atómica. Si algún paso falla:
+* Se restauran los binarios anteriores desde backup
+* Se reinician servicios con versiones previas
+* El sistema nunca queda en estado inconsistente
+
+**Zero Trust Networking:**
+Metamorph **jamás se conecta a internet**. Solo opera sobre manifests pre-validados por Nucleus. Este diseño de seguridad garantiza que actualizaciones maliciosas no puedan ejecutarse incluso si el sistema es comprometido.
+
+#### Arquitectura de Seguridad
+
+El flujo de actualización sigue una cadena de validación estricta:
+
+```
+Bartcave (Backend Remoto)
+    ↓ genera manifest firmado
+Nucleus (Governance Local)
+    ↓ valida firma digital + ACL
+Metamorph (State Reconciler)
+    ↓ reconcilia estado local
+Sistema Actualizado
+```
+
+**Responsabilidades por Componente:**
+
+1. **Bartcave:** Genera manifests firmados digitalmente con información de versiones, hashes SHA256 y URLs de descarga
+2. **Nucleus:** Valida la firma, verifica ACL (quién puede actualizar qué), y autoriza la invocación de Metamorph
+3. **Metamorph:** Ejecuta la reconciliación sin validar firmas (confía en Nucleus como autoridad upstream)
+
+Este modelo sigue el principio de **Zero Trust interno**: cada capa valida solo lo que le corresponde, delegando autoridad explícitamente.
+
+#### Capacidades de Inspección
+
+Metamorph interroga todos los binarios del sistema usando contratos estandarizados:
+
+**`--version`**: Versión simple parseables
+```
+brain 2.5.0
+```
+
+**`--info`**: Metadata estructurada en JSON
+```json
+{
+  "name": "brain",
+  "version": "2.5.0",
+  "build_date": "2026-02-10",
+  "channel": "stable",
+  "capabilities": ["pipeline_v3", "temporal_workflows"],
+  "requires": {
+    "host": ">=2.0.0",
+    "sentinel": ">=1.5.0"
+  }
+}
+```
+
+Con esta información, Metamorph construye un **mapa completo del estado del sistema** antes de cualquier operación.
+
+#### Proceso de Reconciliación
+
+Cuando Nucleus invoca Metamorph con un manifest validado, se ejecuta el siguiente flujo:
+
+1. **Inspección:** Metamorph interroga todos los binarios (`--info`) y construye el estado actual
+2. **Comparación:** Detecta diferencias entre estado actual y estado deseado (manifest)
+   * Versiones desactualizadas
+   * Canales divergentes (stable vs beta)
+   * Dependencias faltantes
+   * Capabilities incompatibles
+3. **Descarga:** Obtiene artefactos necesarios en área de staging
+4. **Validación:** Verifica hashes SHA256 contra manifest
+5. **Detención Segura:** Detiene servicios Windows dependientes con timeout configurado
+6. **Swap Atómico:** Reemplaza binarios en una sola operación transaccional
+7. **Reinicio:** Levanta servicios con nuevas versiones
+8. **Verificación:** Ejecuta `--info` nuevamente para confirmar reconciliación exitosa
+9. **Reporte:** Notifica a Nucleus el resultado (éxito o fallo con detalles)
+
+#### Rollback Automático
+
+Si cualquier paso falla:
+
+* **Antes del swap:** Se aborta sin modificar el sistema
+* **Durante/después del swap:** Se restauran binarios previos desde snapshot automático
+* **Servicios caídos:** Se reinician con versiones anteriores
+* **Estado inconsistente:** Imposible por diseño (atomicidad)
+
+#### Formato de Manifest
+
+Metamorph espera manifests con esta estructura (ya validados por Nucleus):
+
+```json
+{
+  "manifest_version": "1.1",
+  "system_version": "2.5.0",
+  "release_channel": "stable",
+  "artifacts": [
+    {
+      "name": "brain",
+      "binary": "brain.exe",
+      "version": "2.5.0",
+      "sha256": "abc123...",
+      "channel": "stable",
+      "capabilities": ["pipeline_v3"],
+      "requires": {
+        "host": ">=2.0.0"
+      }
+    },
+    {
+      "name": "sentinel",
+      "binary": "sentinel.exe",
+      "version": "1.5.0",
+      "sha256": "def456...",
+      "channel": "stable"
+    }
+  ]
+}
+```
+
+#### Relación con el Ecosistema
+
+**Metamorph NO participa del Event Bus.** Es un componente invocado bajo demanda por Nucleus cuando:
+
+* El usuario solicita explícitamente una actualización desde el Conductor
+* Nucleus detecta actualizaciones críticas de seguridad
+* Un proyecto requiere una versión específica de un binario
+
+Metamorph actualiza los siguientes componentes:
+* **Brain** (motor Python)
+* **Host** (bridge C++)
+* **Sentinel** (Event Bus daemon)
+* **Conductor** (Electron UI)
+* **Cortex** (Chrome Extension, empaquetada como `.blx`)
+
+**NO actualiza:**
+* Nucleus mismo (requiere proceso especial)
+* Proyectos individuales (gestionados por intents `dev`)
+
+#### Filosofía de Diseño
+
+Metamorph cierra el ciclo de gobernanza técnica:
+
+* **Nucleus gobierna la intención organizacional** (qué intents ejecutar, quién puede hacerlo)
+* **Metamorph gobierna el estado binario del sistema** (qué versiones deben estar instaladas)
+
+Ambos operan bajo el principio de **reconciliación declarativa vs comandos imperativos**, garantizando que el sistema converja hacia un estado conocido y reproducible sin importar el estado inicial.
+
+---
 
 ## 3️⃣ Nucleus — Documentación Básica (oficial)
 
@@ -465,27 +528,6 @@ Basado en tu árbol real:
    (dev / doc)      (dev / doc)
 ```
 
-## 2.1️⃣ Bloom Runtime Infrastructure
-
-La ejecución de BTIPS se apoya en una infraestructura de **Sidecar** que garantiza que la lógica de la organización sea independiente de la interfaz visual.
-
-### 🛡️ Sentinel Sidecar (The Orchestrator)
-Sentinel opera como un proceso **Daemon (Sidecar)** persistente. Su función no es solo ejecutar comandos, sino mantener el **Event Bus** activo entre el cerebro (Brain) y la interfaz (Electron). 
-*   **Persistent Execution:** Sentinel sobrevive al cierre de la UI de Electron, permitiendo que tareas largas finalicen y se registren sin intervención del usuario.
-*   **Event Bus TCP:** Canal bidireccional asíncrono que transporta eventos de sistema y resultados de intents en tiempo real.
-
-### 🔌 Synapse Protocol (Handshake de 3 Fases)
-Para garantizar una ejecución técnica infalible, el runtime implementa un saludo de tres vías antes de cada operación:
-1.  **Extension → Host:** La extensión notifica su disponibilidad.
-2.  **Host → Extension:** El Bridge C++ valida capacidades y versión.
-3.  **Host → Brain:** El canal se declara oficialmente "Conectado" y listo para recibir intents.
-
-### 🗄️ Stateless UI & Data Persistence
-Bajo esta arquitectura, el **Electron Launcher es una "Stateless UI"**. 
-*   **Single Source of Truth:** La verdad no reside en la memoria de la aplicación, sino en el **Bloom File System** (archivos `.json` en cada proyecto).
-*   **Rehydration:** Al abrirse, Electron reconstruye su estado escaneando los archivos de intents y solicitando al Sentinel los eventos perdidos vía *polling* histórico al bus. Esto asegura que el usuario siempre vea el estado real de la organización, sin importar cortes de energía o cierres de la aplicación.
-
-
 ### Reglas de oro
 
 * Un **Project** puede:
@@ -503,13 +545,10 @@ Bajo esta arquitectura, el **Electron Launcher es una "Stateless UI"**.
 > 👉 **sube al Nucleus**
 
 ---
-Perfecto.
-Voy **directo, corto y técnico**.
-**Tres líneas por intent**: qué es, para qué se usa y dónde vive.
 
----
+## 6️⃣ Definición de Intents — Tipos y Ubicaciones
 
-## `dev` — Development Intent
+### `dev` — Development Intent
 
 Produce o modifica **código ejecutable** del sistema o del producto.
 Se usa para features, fixes, refactors e integración técnica.
@@ -517,7 +556,7 @@ Se ejecuta **en Projects**, dentro de `.bloom/.intents/.dev/`.
 
 ---
 
-## `doc` — Documentation Intent
+### `doc` — Documentation Intent
 
 Genera o actualiza **documentación viva y verificable**.
 Se usa para explicar decisiones, estado real y evolución del sistema.
@@ -525,7 +564,7 @@ Se ejecuta **en Projects y en Nucleus**, dentro de `.bloom/.intents/.doc/`.
 
 ---
 
-## `exp` — Exploration Intent
+### `exp` — Exploration Intent
 
 Explora **alternativas, hipótesis y escenarios posibles**.
 Se usa para reducir incertidumbre y tomar decisiones informadas.
@@ -533,7 +572,7 @@ Se ejecuta **principalmente en Nucleus**, dentro de `.bloom/.intents/.exp/`.
 
 ---
 
-## `inf` — Information Intent
+### `inf` — Information Intent
 
 Recopila **información factual** sin transformarla ni decidir.
 Se usa para validar supuestos y alimentar otros intents.
@@ -541,15 +580,10 @@ Se ejecuta **en Projects o Nucleus**, como input pasivo.
 
 ---
 
-## `cor` — Coordination Intent
+### `cor` — Coordination Intent
 
 Coordina y gobierna **acciones humanas y sistémicas**.
 Se usa para merges cognitivos, orden de trabajo y control de impacto.
 Se ejecuta **en Nucleus o en Projects complejos**, como autoridad.
 
 ---
-
-
-
-
-
