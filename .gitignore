@@ -62,7 +62,7 @@ installer/resources/runtime/
 .cache/
 
 # Host dependencies
-src/host/mingw-deps
+installer/host/mingw-deps
 
 # SvelteKit
 **/.svelte-kit/
