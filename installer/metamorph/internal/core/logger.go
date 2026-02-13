@@ -26,6 +26,16 @@ type Logger struct {
 	category   string
 }
 
+// NewLogger crea un logger simple para Core (sin archivo)
+func NewLogger(output io.Writer) *Logger {
+	return &Logger{
+		logger:     log.New(output, "", log.Ldate|log.Ltime),
+		isJSONMode: false,
+		silentMode: false,
+		category:   "CORE",
+	}
+}
+
 // InitLogger crea un logger que escribe a archivo y consola
 // En modo JSON, los logs van a stderr; en modo normal, a stdout
 func InitLogger(paths *PathConfig, category string, jsonMode bool) (*Logger, error) {
