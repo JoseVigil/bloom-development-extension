@@ -5,19 +5,18 @@
 #include <chrono>
 #include <iomanip>
 #include <sstream>
-#include "build_info.h"  // Para BUILD_NUMBER
+#include <vector>
+#include <map>
+#include <algorithm>
+#include <cstdio>
+#include "build_info.h"  // For BUILD_NUMBER
 
 #ifdef _WIN32
 #include <windows.h>
 #else
 #include <sys/utsname.h>
+#include <unistd.h>
 #endif
-
-// ============================================================================
-// BUILD INFO - Use existing defines if available
-// ============================================================================
-// No definir VERSION ni BUILD_NUMBER - usar los que ya existen en bloom-host.cpp
-// Solo usamos __DATE__ y __TIME__ que son macros del compilador
 
 // ============================================================================
 // SYSTEM INFO UTILITIES
@@ -45,7 +44,7 @@ namespace SystemInfo {
         osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
         
         #pragma warning(push)
-        #pragma warning(disable: 4996) // Disable deprecation warning
+        #pragma warning(disable: 4996)
         if (GetVersionEx((OSVERSIONINFO*)&osvi)) {
             std::ostringstream oss;
             oss << osvi.dwMajorVersion << "." << osvi.dwMinorVersion 
@@ -79,8 +78,19 @@ namespace SystemInfo {
         }
 #endif
         
+        // Detect compiler
+#ifdef __GNUC__
+        info.runtime = "C++/GCC";
+        info.runtime_version = std::to_string(__GNUC__) + "." + 
+                              std::to_string(__GNUC_MINOR__) + "." + 
+                              std::to_string(__GNUC_PATCHLEVEL__);
+#elif defined(_MSC_VER)
+        info.runtime = "C++/MSVC";
+        info.runtime_version = std::to_string(_MSC_VER);
+#else
         info.runtime = "C++";
         info.runtime_version = std::to_string(__cplusplus);
+#endif
         
         return info;
     }
@@ -96,6 +106,184 @@ namespace SystemInfo {
     inline std::string get_build_timestamp() {
         return std::string(__DATE__) + " " + std::string(__TIME__);
     }
+    
+    inline std::string get_executable_path() {
+#ifdef _WIN32
+        char buffer[MAX_PATH];
+        GetModuleFileNameA(NULL, buffer, MAX_PATH);
+        return std::string(buffer);
+#else
+        char buffer[1024];
+        ssize_t len = readlink("/proc/self/exe", buffer, sizeof(buffer) - 1);
+        if (len != -1) {
+            buffer[len] = '\0';
+            return std::string(buffer);
+        }
+        return "";
+#endif
+    }
+    
+    inline std::string exec_command(const std::string& cmd) {
+        std::string result;
+#ifdef _WIN32
+        FILE* pipe = _popen(cmd.c_str(), "r");
+#else
+        FILE* pipe = popen(cmd.c_str(), "r");
+#endif
+        if (!pipe) return "";
+        
+        char buffer[256];
+        while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+            result += buffer;
+        }
+        
+#ifdef _WIN32
+        _pclose(pipe);
+#else
+        pclose(pipe);
+#endif
+        return result;
+    }
+    
+    inline std::string detect_dependencies() {
+        std::string exe_path = get_executable_path();
+        if (exe_path.empty()) return "unknown";
+        
+        std::vector<std::string> libs;
+        
+#ifdef _WIN32
+        // Windows: Use dumpbin if available
+        std::string cmd = "dumpbin /dependents \"" + exe_path + "\" 2>nul";
+        std::string output = exec_command(cmd);
+        
+        if (output.empty()) {
+            return "dumpbin_not_available";
+        }
+        
+        std::istringstream stream(output);
+        std::string line;
+        bool in_deps = false;
+        
+        while (std::getline(stream, line)) {
+            if (line.find("dependencies") != std::string::npos) {
+                in_deps = true;
+                continue;
+            }
+            
+            if (in_deps && line.find(".dll") != std::string::npos) {
+                size_t start = line.find_first_not_of(" \t");
+                if (start != std::string::npos) {
+                    std::string dll_name = line.substr(start);
+                    dll_name.erase(dll_name.find_last_not_of(" \t\r\n") + 1);
+                    
+                    // Filter system DLLs
+                    std::string lower = dll_name;
+                    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+                    if (lower.find("kernel32") == std::string::npos &&
+                        lower.find("msvcr") == std::string::npos &&
+                        lower.find("ucrtbase") == std::string::npos &&
+                        lower.find("vcruntime") == std::string::npos &&
+                        lower.find("api-ms-win") == std::string::npos) {
+                        libs.push_back(dll_name);
+                    }
+                }
+            }
+            
+            if (in_deps && line.find("Summary") != std::string::npos) {
+                break;
+            }
+        }
+        
+#elif defined(__APPLE__)
+        // macOS: Use otool
+        std::string cmd = "otool -L \"" + exe_path + "\" 2>/dev/null";
+        std::string output = exec_command(cmd);
+        
+        std::istringstream stream(output);
+        std::string line;
+        bool first_line = true;
+        
+        while (std::getline(stream, line)) {
+            if (first_line) {
+                first_line = false;
+                continue;
+            }
+            
+            size_t dylib_pos = line.find(".dylib");
+            if (dylib_pos != std::string::npos) {
+                size_t start = line.find_first_not_of(" \t");
+                if (start != std::string::npos) {
+                    std::string lib_path = line.substr(start);
+                    size_t space = lib_path.find(" ");
+                    if (space != std::string::npos) {
+                        lib_path = lib_path.substr(0, space);
+                    }
+                    
+                    // Extract only the name
+                    size_t last_slash = lib_path.find_last_of("/");
+                    std::string lib_name = (last_slash != std::string::npos) ? 
+                                          lib_path.substr(last_slash + 1) : lib_path;
+                    
+                    // Filter system libs
+                    if (lib_path.find("/usr/lib/") == std::string::npos &&
+                        lib_path.find("/System/") == std::string::npos) {
+                        libs.push_back(lib_name);
+                    }
+                }
+            }
+        }
+        
+#else
+        // Linux: Use ldd
+        std::string cmd = "ldd \"" + exe_path + "\" 2>/dev/null";
+        std::string output = exec_command(cmd);
+        
+        std::istringstream stream(output);
+        std::string line;
+        
+        while (std::getline(stream, line)) {
+            size_t so_pos = line.find(".so");
+            if (so_pos != std::string::npos) {
+                size_t start = line.find_first_not_of(" \t");
+                if (start != std::string::npos) {
+                    std::string lib_name = line.substr(start);
+                    size_t arrow = lib_name.find("=>");
+                    if (arrow != std::string::npos) {
+                        lib_name = lib_name.substr(0, arrow);
+                    }
+                    size_t end = lib_name.find(".so");
+                    if (end != std::string::npos) {
+                        lib_name = lib_name.substr(0, end + 3);
+                    }
+                    
+                    lib_name.erase(lib_name.find_last_not_of(" \t") + 1);
+                    
+                    // Filter common system libs
+                    if (lib_name.find("libc.so") == std::string::npos &&
+                        lib_name.find("libm.so") == std::string::npos &&
+                        lib_name.find("libpthread.so") == std::string::npos &&
+                        lib_name.find("libdl.so") == std::string::npos &&
+                        lib_name.find("ld-linux") == std::string::npos) {
+                        libs.push_back(lib_name);
+                    }
+                }
+            }
+        }
+#endif
+        
+        if (libs.empty()) {
+            return "none";
+        }
+        
+        // Sort and join
+        std::sort(libs.begin(), libs.end());
+        std::string result;
+        for (size_t i = 0; i < libs.size(); i++) {
+            if (i > 0) result += ", ";
+            result += libs[i];
+        }
+        return result;
+    }
 }
 
 // ============================================================================
@@ -104,38 +292,41 @@ namespace SystemInfo {
 
 namespace CLICommands {
     
-    // Forward declare para acceder a las constantes globales
-    // Nota: Estas deben estar definidas en bloom-host.cpp como:
-    // const std::string VERSION = "2.1.0";
-    // const int BUILD = BUILD_NUMBER;
-    
     inline void print_version() {
-        // Hardcoded version - will match build_info.h
         std::cout << "bloom-host version 2.1.0 build " << BUILD_NUMBER << std::endl;
     }
     
     inline void print_info() {
         auto platform = SystemInfo::get_platform_info();
         
-        std::cout << "app_name: bloom-host" << std::endl;
-        std::cout << "app_version: 2.1.0" << std::endl;
-        std::cout << "build_number: " << BUILD_NUMBER << std::endl;
-        std::cout << "build_date: " << SystemInfo::get_build_timestamp() << std::endl;
-        std::cout << "current_time: " << SystemInfo::get_current_timestamp() << std::endl;
-        std::cout << "platform_os: " << platform.os_name << std::endl;
-        std::cout << "platform_version: " << platform.os_version << std::endl;
-        std::cout << "platform_arch: " << platform.arch << std::endl;
-        std::cout << "runtime_engine: " << platform.runtime << std::endl;
-        std::cout << "runtime_version: " << platform.runtime_version << std::endl;
-        std::cout << "protocol: Synapse Native Messaging" << std::endl;
-        std::cout << "service_port: 5678" << std::endl;
-        std::cout << "max_message_size: 1020000 bytes" << std::endl;
+        // Build info map for alphabetical sorting
+        std::map<std::string, std::string> info;
+        
+        info["application_name"] = "bloom-host";
+        info["application_version"] = "2.1.0";
+        info["architecture"] = platform.arch;
+        info["build_date"] = SystemInfo::get_build_timestamp();
+        info["build_number"] = std::to_string(BUILD_NUMBER);
+        info["current_time"] = SystemInfo::get_current_timestamp();
+        info["dependencies"] = SystemInfo::detect_dependencies();
+        info["max_message_size"] = "1020000";
+        info["os"] = platform.os_name;
+        info["os_version"] = platform.os_version;
+        info["protocol"] = "Synapse Native Messaging v2.1";
+        info["runtime_engine"] = platform.runtime;
+        info["runtime_version"] = platform.runtime_version;
+        info["service_port"] = "5678";
+        
+        // Print alphabetically
+        for (const auto& pair : info) {
+            std::cout << pair.first << ": " << pair.second << std::endl;
+        }
     }
     
     inline void print_help() {
         std::cout << R"(
-BLOOM-HOST ─── Native Messaging Bridge for Chrome Extension
-────────────────────────────────────────────────────────────
+BLOOM-HOST --- Native Messaging Bridge for Chrome Extension
+================================================================
 
 DESCRIPTION:
   bloom-host is a native messaging bridge that facilitates bidirectional
@@ -167,19 +358,19 @@ OPTIONS:
 
 PROTOCOL:
   Synapse Native Messaging Protocol v2.1
-  - Chrome → Host: Little Endian (4-byte length + JSON payload)
-  - Host → Brain: Big Endian over TCP (localhost:5678)
+  - Chrome -> Host: Little Endian (4-byte length + JSON payload)
+  - Host -> Brain: Big Endian over TCP (localhost:5678)
   - Max message size: 1MB (1,020,000 bytes)
 
 HANDSHAKE PHASES:
-  Phase 1: extension_ready  → Extension signals readiness
-  Phase 2: host_ready       → Host confirms connection
-  Phase 3: PROFILE_CONNECTED → Brain acknowledges session
+  Phase 1: extension_ready  -> Extension signals readiness
+  Phase 2: host_ready       -> Host confirms connection
+  Phase 3: PROFILE_CONNECTED -> Brain acknowledges session
 
 DEPENDENCIES:
-  • TCP connection to Brain service (localhost:5678)
-  • STDIN/STDOUT available for Chrome communication
-  • Write permissions for log files (optional)
+  * TCP connection to Brain service (localhost:5678)
+  * STDIN/STDOUT available for Chrome communication
+  * Write permissions for log files (optional)
 
 TELEMETRY:
   When profile/launch IDs are provided, bloom-host streams telemetry
@@ -218,21 +409,21 @@ FOR MORE INFORMATION:
         // Check 1: Platform info
         std::cout << "[1/4] Platform Detection..." << std::endl;
         auto platform = SystemInfo::get_platform_info();
-        std::cout << "  ✓ OS: " << platform.os_name << " " << platform.os_version << std::endl;
-        std::cout << "  ✓ Arch: " << platform.arch << std::endl;
+        std::cout << "  [OK] OS: " << platform.os_name << " " << platform.os_version << std::endl;
+        std::cout << "  [OK] Arch: " << platform.arch << std::endl;
         std::cout << std::endl;
         
         // Check 2: STDIN/STDOUT availability
         std::cout << "[2/4] STDIO Availability..." << std::endl;
         try {
             if (std::cin.good() && std::cout.good()) {
-                std::cout << "  ✓ STDIN/STDOUT available" << std::endl;
+                std::cout << "  [OK] STDIN/STDOUT available" << std::endl;
             } else {
-                std::cout << "  ✗ STDIO not properly configured" << std::endl;
+                std::cout << "  [FAIL] STDIO not properly configured" << std::endl;
                 exit_code = 1;
             }
         } catch (...) {
-            std::cout << "  ✗ STDIO check failed" << std::endl;
+            std::cout << "  [FAIL] STDIO check failed" << std::endl;
             exit_code = 1;
         }
         std::cout << std::endl;
@@ -242,29 +433,29 @@ FOR MORE INFORMATION:
 #ifdef _WIN32
         WSADATA wsaData;
         if (WSAStartup(MAKEWORD(2, 2), &wsaData) == 0) {
-            std::cout << "  ✓ Winsock initialized" << std::endl;
+            std::cout << "  [OK] Winsock initialized" << std::endl;
             WSACleanup();
         } else {
-            std::cout << "  ✗ Winsock initialization failed" << std::endl;
+            std::cout << "  [FAIL] Winsock initialization failed" << std::endl;
             exit_code = 1;
         }
 #else
-        std::cout << "  ✓ POSIX sockets available" << std::endl;
+        std::cout << "  [OK] POSIX sockets available" << std::endl;
 #endif
         std::cout << std::endl;
         
         // Check 4: Configuration
         std::cout << "[4/4] Configuration..." << std::endl;
-        std::cout << "  ✓ Version: 2.1.0" << std::endl;
-        std::cout << "  ✓ Build: " << BUILD_NUMBER << std::endl;
-        std::cout << "  ✓ Target Port: 5678" << std::endl;
-        std::cout << "  ✓ Max Message: 1020000 bytes" << std::endl;
+        std::cout << "  [OK] Version: 2.1.0" << std::endl;
+        std::cout << "  [OK] Build: " << BUILD_NUMBER << std::endl;
+        std::cout << "  [OK] Target Port: 5678" << std::endl;
+        std::cout << "  [OK] Max Message: 1020000 bytes" << std::endl;
         std::cout << std::endl;
         
         if (exit_code == 0) {
-            std::cout << "✓ All health checks passed" << std::endl;
+            std::cout << "[OK] All health checks passed" << std::endl;
         } else {
-            std::cout << "✗ Some health checks failed" << std::endl;
+            std::cout << "[FAIL] Some health checks failed" << std::endl;
         }
         
         return exit_code;
@@ -272,7 +463,7 @@ FOR MORE INFORMATION:
 }
 
 // ============================================================================
-// CLI ARGUMENT PARSER (Lightweight, no external deps)
+// CLI ARGUMENT PARSER
 // ============================================================================
 
 namespace CLIParser {
@@ -320,7 +511,7 @@ namespace CLIParser {
         }
         
         // Priority 2: Info
-        if (has_flag(argc, argv, "--info")) {
+        if (has_flag(argc, argv, "--info") || has_flag(argc, argv, "-i")) {
             CLICommands::print_info();
             result.handled = true;
             result.exit_code = 0;

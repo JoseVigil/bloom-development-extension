@@ -12,7 +12,6 @@
 #include "synapse_logger.h"
 #include "chunked_buffer.h"
 #include "platform_utils.h"
-#include "cli_handler.h"
 #include "build_info.h"
 #include "cli_parser.h"
 
@@ -714,17 +713,12 @@ void tcp_client_loop() {
 
 int main(int argc, char* argv[]) {
     try {
-	// ========== Manejar CLI commands ==========
+        // ========== CLI Command Handling ==========
         auto cli_result = CLIParser::parse_and_execute(argc, argv);
         if (cli_result.handled) {
             return cli_result.exit_code;
         }
-        // ================================================
-
-        // Manejar comandos CLI primero
-        if (handle_cli_args(argc, argv)) {
-            return 0;
-        }
+        // ==========================================
 
         PlatformUtils::initialize_networking();
         PlatformUtils::setup_binary_io();
