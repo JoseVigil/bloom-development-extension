@@ -76,10 +76,6 @@ dist/
 # Runtime Libs
 brain/runtime_libs
 
-# Compiled executable and dependencies
-installer/native/bin/win32/brain/
-!installer/native/bin/win32/brain/.gitkeep
-
 # Python cache
 __pycache__/
 *.py[cod]
@@ -103,6 +99,12 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Compiled executable and dependencies
+installer/native/bin/win32/brain/_internal
+!installer/native/bin/win32/brain/.gitkeep
+installer/native/bin/win64/brain/_internal
+!installer/native/bin/win64/brain/.gitkeep
 
 # Chrome Installer
 installer/chrome/chrome-win.zip  
