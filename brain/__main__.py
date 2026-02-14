@@ -199,13 +199,16 @@ def main():
                 registry = load_commands()
                 render_help(registry, json_mode=json_mode, ai_native=ai_native, full_help=full_help)
                 sys.exit(0)
+        except SystemExit:
+            # Salida normal del interceptor - propagar para terminar
+            raise
         except Exception as e:
             # Si falla renderizar help custom, dejar que Typer maneje el fallback
             if not json_mode:
                 logger.warning(f"⚠️ Error en help renderer, usando fallback de Typer: {e}")
                 import traceback
                 traceback.print_exc()
-            pass
+            # NO hacer pass - dejar que continúe a Typer como fallback
     
     # ========================================================================
     # INTERCEPT --version, --info (ANTES DE TYPER)

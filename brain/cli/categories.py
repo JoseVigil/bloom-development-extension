@@ -14,10 +14,10 @@ class CommandCategory(Enum):
     """
     
     # Core system categories
-    CHROME = ("chrome", "Chrome profile debugging and network log analysis")  # ðŸ"¥ AGREGAR ESTA LÃ�NEA
+    CHROME = ("chrome", "Chrome profile debugging and network log analysis")
     CONTEXT = ("context", "AI context generation and management")
     FILESYSTEM = ("filesystem", "File operations and directory analysis")
-    GEMINI = ("gemini", "Gemini AI key management and operations")
+    AI = ("ai", "AI providers key management and operations")
     GITHUB = ("github", "GitHub integration and repository management")
     INTENT = ("intent", "Intent execution system and context planning")
     NUCLEUS = ("nucleus", "Nucleus project management and lifecycle")
@@ -68,7 +68,7 @@ class CommandCategory(Enum):
 CHROME = CommandCategory.CHROME  
 CONTEXT = CommandCategory.CONTEXT
 FILESYSTEM = CommandCategory.FILESYSTEM
-GEMINI = CommandCategory.GEMINI
+AI = CommandCategory.AI
 GITHUB = CommandCategory.GITHUB
 INTENT = CommandCategory.INTENT
 NUCLEUS = CommandCategory.NUCLEUS

@@ -820,7 +820,8 @@ def render_help(registry: CommandRegistry, json_mode: bool = False, ai_native: b
             record=True,
             width=120,  
             force_terminal=False,
-            legacy_windows=False
+            legacy_windows=False,
+            file=io.StringIO()  
         )
     else:
         console = Console(width=120)  
@@ -845,9 +846,12 @@ def render_help(registry: CommandRegistry, json_mode: bool = False, ai_native: b
             CommandCategory.PROJECT, CommandCategory.PROFILE, CommandCategory.EXTENSION,
             CommandCategory.SYNAPSE, CommandCategory.SERVICE, CommandCategory.RUNTIME,
             CommandCategory.CONTEXT, CommandCategory.INTENT, CommandCategory.FILESYSTEM,
-            CommandCategory.GITHUB, CommandCategory.GEMINI, CommandCategory.TWITTER,
+            CommandCategory.GITHUB, CommandCategory.AI, CommandCategory.TWITTER,
             CommandCategory.CHROME,
         ]
+        
+        # Convertir a set para búsqueda eficiente
+        priority_set = set(priority_order)
         
         for category in priority_order:
             if category in structure.commands_by_category:
@@ -855,7 +859,7 @@ def render_help(registry: CommandRegistry, json_mode: bool = False, ai_native: b
                 _render_category_panel(console, category, commands)
         
         for category in structure.commands_by_category:
-            if category not in priority_order:
+            if category not in priority_set:
                 _render_category_panel(console, category, structure.commands_by_category[category])
     else:
         footer = Text()

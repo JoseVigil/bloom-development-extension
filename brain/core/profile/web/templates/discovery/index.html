@@ -52,6 +52,93 @@
       </div>
     </div>
 
+    <!-- MULTI-PROVIDER SELECTOR SCREENS -->
+    
+    <!-- Provider Selection Screen (Step 2) -->
+    <div id="screen-provider-select" class="screen">
+      <div class="progress-bar"><div class="progress-fill" style="width: 40%"></div></div>
+      <div class="step-indicator">Paso 2 de 4</div>
+      <div class="status-icon">🔑</div>
+      <h1>Selecciona tu AI Provider</h1>
+      <p>¿Qué servicio de IA deseas configurar?</p>
+      
+      <div class="provider-grid">
+        <button class="provider-card" data-provider="gemini">
+          <div class="provider-icon">🔷</div>
+          <h3>Gemini</h3>
+          <p>Google AI Studio</p>
+          <span class="provider-badge">Gratis</span>
+        </button>
+        
+        <button class="provider-card" data-provider="claude">
+          <div class="provider-icon">🟠</div>
+          <h3>Claude</h3>
+          <p>Anthropic Console</p>
+          <span class="provider-badge">Desde $5/mes</span>
+        </button>
+        
+        <button class="provider-card" data-provider="openai">
+          <div class="provider-icon">🟢</div>
+          <h3>ChatGPT</h3>
+          <p>OpenAI Platform</p>
+          <span class="provider-badge">Pay-as-you-go</span>
+        </button>
+        
+        <button class="provider-card" data-provider="xai">
+          <div class="provider-icon">⚡</div>
+          <h3>Grok</h3>
+          <p>xAI Console</p>
+          <span class="provider-badge">Beta</span>
+        </button>
+      </div>
+      
+      <button class="btn-secondary" id="btn-skip-provider">Configurar después</button>
+    </div>
+
+    <!-- API Key Waiting Screen (Step 3) -->
+    <div id="screen-api-waiting" class="screen">
+      <div class="progress-bar"><div class="progress-fill" style="width: 66%"></div></div>
+      <div class="step-indicator">Paso 3 de 4</div>
+      <div class="spinner"></div>
+      <h1>Esperando API Key...</h1>
+      <p>Crea y copia tu API Key de <strong id="provider-name-display">Gemini</strong>.<br>La detectaremos automáticamente cuando la copies.</p>
+      
+      <div class="info-box">
+        <h3 id="instructions-title">Instrucciones:</h3>
+        <ol id="instructions-list">
+          <li>Haz clic en "Crear API Key"</li>
+          <li>Copia la clave generada</li>
+          <li>Vuelve a esta ventana</li>
+        </ol>
+      </div>
+      
+      <div class="key-format-hint" id="key-format-hint">
+        <strong>Formato esperado:</strong> <code id="key-format-example">AIzaSy...</code>
+      </div>
+      
+      <button class="btn" id="btn-open-console">Ir a Console</button>
+      <button class="btn-secondary" id="btn-back-to-providers">Elegir otro provider</button>
+    </div>
+
+    <!-- API Key Success Screen (Step 4) -->
+    <div id="screen-api-success" class="screen">
+      <div class="progress-bar"><div class="progress-fill" style="width: 100%"></div></div>
+      <div class="success-checkmark">✓</div>
+      <h1>¡API Key Registrada!</h1>
+      <p>Tu clave de <strong id="success-provider-name">Gemini</strong> ha sido guardada de forma segura.</p>
+      
+      <div class="info-box">
+        <p><strong>Provider:</strong> <span id="success-provider-display">Gemini</span></p>
+        <p><strong>Profile:</strong> <span id="success-profile-name">Personal</span></p>
+        <p><strong>Estado:</strong> ✓ Validada y activa</p>
+      </div>
+      
+      <div class="action-buttons">
+        <button class="btn" id="btn-add-another-key">Agregar otra clave</button>
+        <button class="btn-secondary" id="btn-finish-setup">Finalizar configuración</button>
+      </div>
+    </div>
+
     <!-- ONBOARDING SCREENS -->
     <div id="screen-onboarding-welcome" class="screen">
       <div class="progress-bar"><div class="progress-fill" style="width: 0%"></div></div>

@@ -688,3 +688,171 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 console.log('[Discovery] 🚀 Script loaded:', new Date().toISOString());
+
+// ============================================================================
+// MULTI-PROVIDER JAVASCRIPT
+// ============================================================================
+
+// Provider configuration
+const PROVIDER_CONFIG = {
+  gemini: {
+    name: 'Gemini',
+    displayName: 'Gemini (Google)',
+    consoleUrl: 'https://aistudio.google.com/app/apikey',
+    keyFormat: 'AIzaSy...',
+    instructions: [
+      'Haz clic en "Create API Key"',
+      'Selecciona tu proyecto de Google Cloud',
+      'Copia la key generada (comienza con AIzaSy)'
+    ]
+  },
+  claude: {
+    name: 'Claude',
+    displayName: 'Claude (Anthropic)',
+    consoleUrl: 'https://console.anthropic.com/settings/keys',
+    keyFormat: 'sk-ant-api03-...',
+    instructions: [
+      'Haz clic en "+ Create Key"',
+      'Asigna un nombre (ej: "Bloom")',
+      'Copia la key generada (comienza con sk-ant-)'
+    ]
+  },
+  openai: {
+    name: 'ChatGPT',
+    displayName: 'ChatGPT (OpenAI)',
+    consoleUrl: 'https://platform.openai.com/api-keys',
+    keyFormat: 'sk-...',
+    instructions: [
+      'Haz clic en "+ Create new secret key"',
+      'Asigna un nombre descriptivo',
+      'Copia la key (comienza con sk-)'
+    ]
+  },
+  xai: {
+    name: 'Grok',
+    displayName: 'Grok (xAI)',
+    consoleUrl: 'https://console.x.ai/keys',
+    keyFormat: 'xai-...',
+    instructions: [
+      'Haz clic en "New API Key"',
+      'Asigna permisos necesarios',
+      'Copia la key generada (comienza con xai-)'
+    ]
+  }
+};
+
+class MultiProviderOnboarding extends OnboardingFlow {
+  constructor() {
+    super();
+    this.selectedProvider = null;
+    this.setupProviderSelection();
+    this.setupAPIKeyListeners();
+  }
+
+  setupProviderSelection() {
+    // Provider cards click handlers
+    document.querySelectorAll('.provider-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const provider = card.dataset.provider;
+        this.selectProvider(provider);
+      });
+    });
+
+    // Skip button
+    const btnSkip = document.getElementById('btn-skip-provider');
+    if (btnSkip) {
+      btnSkip.addEventListener('click', () => {
+        // Skip to completion
+        this.showScreen('onboarding-success');
+      });
+    }
+
+    // Back button
+    const btnBack = document.getElementById('btn-back-to-providers');
+    if (btnBack) {
+      btnBack.addEventListener('click', () => {
+        this.showScreen('provider-select');
+      });
+    }
+  }
+
+  setupAPIKeyListeners() {
+    // Listen for API_KEY_REGISTERED from background.js
+    chrome.runtime.onMessage.addListener((msg) => {
+      if (msg.event === 'API_KEY_REGISTERED') {
+        this.handleAPIKeyRegistered(msg);
+      }
+    });
+  }
+
+  selectProvider(provider) {
+    this.selectedProvider = provider;
+    const config = PROVIDER_CONFIG[provider];
+
+    // Update UI
+    document.getElementById('provider-name-display').textContent = config.displayName;
+    document.getElementById('instructions-title').textContent = `Instrucciones para ${config.name}:`;
+    
+    const instructionsList = document.getElementById('instructions-list');
+    instructionsList.innerHTML = config.instructions
+      .map(step => `<li>${step}</li>`)
+      .join('');
+
+    document.getElementById('key-format-example').textContent = config.keyFormat;
+
+    // Setup console button
+    const btnConsole = document.getElementById('btn-open-console');
+    btnConsole.onclick = () => {
+      chrome.tabs.create({ url: config.consoleUrl });
+    };
+
+    // Start clipboard monitoring
+    chrome.runtime.sendMessage({ action: 'startClipboardMonitoring' });
+
+    // Transition to waiting screen
+    this.showScreen('api-waiting');
+  }
+
+  handleAPIKeyRegistered(message) {
+    const { provider, profile_name } = message;
+    const config = PROVIDER_CONFIG[provider];
+
+    // Stop clipboard monitoring
+    chrome.runtime.sendMessage({ action: 'stopClipboardMonitoring' });
+
+    // Update success screen
+    document.getElementById('success-provider-name').textContent = config.displayName;
+    document.getElementById('success-provider-display').textContent = config.displayName;
+    document.getElementById('success-profile-name').textContent = profile_name;
+
+    // Setup action buttons
+    document.getElementById('btn-add-another-key').onclick = () => {
+      this.showScreen('provider-select');
+    };
+
+    document.getElementById('btn-finish-setup').onclick = () => {
+      window.close();
+    };
+
+    // Show success
+    this.showScreen('api-success');
+  }
+}
+
+// Update initialization to use MultiProviderOnboarding
+if (typeof document !== 'undefined') {
+  const originalDOMContentLoaded = document.addEventListener;
+  document.addEventListener = function(event, handler, ...args) {
+    if (event === 'DOMContentLoaded') {
+      const wrappedHandler = async function(e) {
+        await handler(e);
+        // Replace OnboardingFlow with MultiProviderOnboarding after initialization
+        if (window.ONBOARDING instanceof OnboardingFlow && !(window.ONBOARDING instanceof MultiProviderOnboarding)) {
+          window.ONBOARDING = new MultiProviderOnboarding();
+        }
+      };
+      return originalDOMContentLoaded.call(this, event, wrappedHandler, ...args);
+    }
+    return originalDOMContentLoaded.call(this, event, handler, ...args);
+  };
+}

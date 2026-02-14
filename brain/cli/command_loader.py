@@ -86,39 +86,6 @@ def load_all_commands_explicit() -> CommandRegistry:
         print(f"Warning: Could not load TreeCommand: {e}")
     
     # =================================================================
-    # GEMINI
-    # =================================================================
-    try:
-        from brain.commands.gemini.keys_add import GeminiKeysAddCommand
-        registry.register(GeminiKeysAddCommand())
-    except ImportError as e:
-        print(f"Warning: Could not load GeminiKeysAddCommand: {e}")
-    
-    try:
-        from brain.commands.gemini.keys_delete import GeminiKeysDeleteCommand
-        registry.register(GeminiKeysDeleteCommand())
-    except ImportError as e:
-        print(f"Warning: Could not load GeminiKeysDeleteCommand: {e}")
-    
-    try:
-        from brain.commands.gemini.keys_list import GeminiKeysListCommand
-        registry.register(GeminiKeysListCommand())
-    except ImportError as e:
-        print(f"Warning: Could not load GeminiKeysListCommand: {e}")
-    
-    try:
-        from brain.commands.gemini.keys_stats import GeminiKeysStatsCommand
-        registry.register(GeminiKeysStatsCommand())
-    except ImportError as e:
-        print(f"Warning: Could not load GeminiKeysStatsCommand: {e}")
-    
-    try:
-        from brain.commands.gemini.keys_validate import GeminiKeysValidateCommand
-        registry.register(GeminiKeysValidateCommand())
-    except ImportError as e:
-        print(f"Warning: Could not load GeminiKeysValidateCommand: {e}")
-    
-    # =================================================================
     # GITHUB
     # =================================================================
     try:
@@ -633,11 +600,6 @@ def get_hiddenimports_list():
         'brain.commands.filesystem.compress',
         'brain.commands.filesystem.compress',
         'brain.commands.filesystem.tree',
-        'brain.commands.gemini.keys_add',
-        'brain.commands.gemini.keys_delete',
-        'brain.commands.gemini.keys_list',
-        'brain.commands.gemini.keys_stats',
-        'brain.commands.gemini.keys_validate',
         'brain.commands.github.auth',
         'brain.commands.github.auth_login',
         'brain.commands.github.auth_logout',
