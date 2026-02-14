@@ -34,8 +34,7 @@
       "artifactName": "bloom-setup-${version}.${ext}",
       "publisherName": "BTIP Studio",
       "verifyUpdateCodeSignature": false,
-      "signAndEditExecutable": false,
-      "manifest": "app.manifest"
+      "signAndEditExecutable": false
     },
     "nsis": {
       "oneClick": false,
@@ -86,6 +85,10 @@
         "to": "sentinel"
       },
       {
+        "from": "../../native/bin/win64/metamorph",
+        "to": "metamorph"
+      },
+      {
         "from": "../../native/bin/win64/brain",
         "to": "brain"
       },
@@ -120,6 +123,7 @@
       "**/*.node",
       "**/nucleus/**/*",
       "**/sentinel/**/*",
+      "**/metamorph/**/*",
       "**/brain/**/*",
       "**/runtime/**/*",
       "**/native/**/*",

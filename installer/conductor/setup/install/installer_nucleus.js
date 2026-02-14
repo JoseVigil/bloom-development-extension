@@ -9,6 +9,7 @@ const { spawn } = require('child_process');
 const { paths } = require('../config/paths');
 const { getLogger } = require('../../shared/logger');
 const { nucleusManager } = require('./nucleus_manager');
+const { safeCopyFile } = require('./pre-install-cleanup.js');
 
 // ⚠️ LAZY INITIALIZATION - No inicializar logger hasta que paths esté configurado
 let logger = null;
@@ -162,45 +163,156 @@ async function executeSentinelCommand(args) {
 // DEPLOYMENT FUNCTIONS
 // ============================================================================
 
+async function stopServicesBeforeDeploy() {
+  const log = ensureLogger();
+  
+  log.info('Stopping services before binary deployment...');
+  
+  const services = ['BloomBrain', 'BloomNucleus'];
+  
+  for (const serviceName of services) {
+    try {
+      await new Promise((resolve) => {
+        const child = spawn('net', ['stop', serviceName], {
+          windowsHide: true,
+          timeout: 10000
+        });
+        
+        child.on('close', () => {
+          log.info(`✓ ${serviceName} stopped (or not running)`);
+          resolve();
+        });
+        
+        child.on('error', () => {
+          log.info(`  ${serviceName} not found or already stopped`);
+          resolve();
+        });
+      });
+    } catch (err) {
+      log.info(`  ${serviceName}: ${err.message}`);
+    }
+  }
+  
+  // Wait 2s for services to fully release files
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  log.success('✓ Services stopped');
+}
+
 async function deployAllBinaries() {
   const log = ensureLogger();
   
   log.separator('DEPLOYING BINARIES');
 
-  const binaries = [
-    { name: 'nucleus.exe', source: paths.nucleusSource },
-    { name: 'sentinel.exe', source: paths.sentinelSource },
-    { name: 'cortex.exe', source: paths.cortexSource }
-  ];
-
-  for (const bin of binaries) {
-    const targetPath = path.join(paths.binDir, bin.name);
-    
-    if (fs.existsSync(targetPath)) {
-      log.info(`✓ ${bin.name} already exists, skipping`);
-      continue;
-    }
-
-    if (!fs.existsSync(bin.source)) {
-      throw new Error(`Source not found: ${bin.source}`);
-    }
-
-    log.info(`Copying ${bin.name}...`);
-    await fs.copy(bin.source, targetPath);
-    log.success(`✓ ${bin.name} deployed`);
+  // ============================================================================
+  // NUCLEUS.EXE - PRIMERO: Necesario para comandos de telemetría
+  // ============================================================================
+  const nucleusSource = paths.nucleusSource;
+  const nucleusTargetDir = path.join(paths.binDir, 'nucleus');
+  
+  if (!fs.existsSync(nucleusSource)) {
+    throw new Error(`Nucleus source not found: ${nucleusSource}`);
+  }
+  
+  log.info('Copying nucleus directory...');
+  await fs.copy(nucleusSource, nucleusTargetDir, { overwrite: true });
+  log.success('✓ nucleus deployed');
+  
+  // Verificar que el ejecutable existe después de la copia
+  const nucleusExePath = path.join(nucleusTargetDir, 'nucleus.exe');
+  if (!fs.existsSync(nucleusExePath)) {
+    throw new Error(`Nucleus executable not found after deployment: ${nucleusExePath}`);
   }
 
-  // Deploy NSSM
-  const arch = process.arch === 'x64' ? 'win64' : 'win32';
-  const nssmSource = path.join(__dirname, '..', '..', 'native', 'nssm', arch, 'nssm.exe');
+  // Ahora sí, detener servicios (nucleus.exe ya está disponible)
+  await stopServicesBeforeDeploy();
+
+  // ============================================================================
+  // SENTINEL.EXE
+  // ============================================================================
+  const sentinelSource = paths.sentinelSource;
+  const sentinelTarget = path.join(paths.binDir, 'sentinel', 'sentinel.exe');
+  
+  if (!fs.existsSync(sentinelSource)) {
+    throw new Error(`Sentinel source not found: ${sentinelSource}`);
+  }
+  
+  log.info('Copying sentinel.exe...');
+  await fs.copy(sentinelSource, sentinelTarget, { overwrite: true });
+  log.success('✓ sentinel.exe deployed');
+
+  // ============================================================================
+  // CORTEX
+  // ============================================================================
+  log.info('Copying cortex...');
+  if (!fs.existsSync(paths.cortexSource)) {
+    throw new Error(`Cortex not found: ${paths.cortexSource}`);
+  }
+  await fs.copy(paths.cortexSource, paths.cortexDir, { overwrite: true });
+  log.success('✓ cortex deployed');
+
+  // ============================================================================
+  // NSSM.EXE
+  // ============================================================================
+  const nssmSource = path.join(paths.nssmSource, 'nssm.exe');
   
   if (!fs.existsSync(nssmSource)) {
     throw new Error(`NSSM not found: ${nssmSource}`);
   }
   
   log.info('Copying NSSM...');
-  await fs.copy(nssmSource, paths.nssmExe);
-  log.success('✓ NSSM deployed');
+  const nssmResult = await safeCopyFile(nssmSource, paths.nssmExe, log, {
+    skipIfBlocked: true,   // Si está bloqueado, usar el existente
+    maxRetries: 3,
+    retryDelay: 1000
+  });
+  
+  if (nssmResult.skipped) {
+    log.info('  ✓ NSSM (using existing file)');
+  } else {
+    log.success('  ✓ NSSM deployed');
+  }
+
+  // ============================================================================
+  // TEMPORAL
+  // ============================================================================
+  const temporalSource = paths.temporalSource;
+  const temporalTarget = paths.temporalDir;
+  
+  if (!fs.existsSync(temporalSource)) {
+    throw new Error(`Temporal source not found: ${temporalSource}`);
+  }
+  
+  log.info('Copying temporal...');
+  await fs.copy(temporalSource, temporalTarget, { overwrite: true });
+  log.success('✓ temporal deployed');
+
+  // ============================================================================
+  // OLLAMA
+  // ============================================================================
+  const ollamaSource = paths.ollamaSource;
+  const ollamaTarget = paths.ollamaDir;
+  
+  if (!fs.existsSync(ollamaSource)) {
+    throw new Error(`Ollama source not found: ${ollamaSource}`);
+  }
+  
+  log.info('Copying ollama...');
+  await fs.copy(ollamaSource, ollamaTarget, { overwrite: true });
+  log.success('✓ ollama deployed');
+
+  // ============================================================================
+  // NODE.JS
+  // ============================================================================
+  const nodeSource = paths.nodeSource;
+  const nodeTarget = paths.nodeDir;
+  
+  if (!fs.existsSync(nodeSource)) {
+    throw new Error(`Node source not found: ${nodeSource}`);
+  }
+  
+  log.info('Copying node...');
+  await fs.copy(nodeSource, nodeTarget, { overwrite: true });
+  log.success('✓ node deployed');
 
   log.success('All binaries deployed');
 }

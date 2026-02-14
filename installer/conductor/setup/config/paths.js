@@ -54,6 +54,8 @@ const getResourcePath = (resourceName) => {
       return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'nucleus');
     case 'sentinel':
       return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'sentinel');
+    case 'metamorph':
+      return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'metamorph');
     case 'brain':
       return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'brain');
     case 'native':
@@ -169,6 +171,13 @@ const paths = {
     : path.join(baseDir, 'bin', 'sentinel', 'sentinel'),
   sentinelConfig: path.join(baseDir, 'bin', 'sentinel', 'sentinel-config.json'),
   
+  // Metamorph (System Reconciliation)
+  metamorphDir: path.join(baseDir, 'bin', 'metamorph'),
+  metamorphExe: platform === 'win32'
+    ? path.join(baseDir, 'bin', 'metamorph', 'metamorph.exe')
+    : path.join(baseDir, 'bin', 'metamorph', 'metamorph'),
+  metamorphConfig: path.join(baseDir, 'bin', 'metamorph', 'metamorph-config.json'),
+  
   // Brain (AI Engine)
   brainDir: path.join(baseDir, 'bin', 'brain'),
   brainExe,
@@ -251,6 +260,7 @@ const paths = {
   runtimeSource: getResourcePath('runtime'),
   nucleusSource: getResourcePath('nucleus'),
   sentinelSource: getResourcePath('sentinel'),
+  metamorphSource: getResourcePath('metamorph'),
   brainSource: getResourcePath('brain'),
   nativeSource: getResourcePath('native'),
   nssmSource: getResourcePath('nssm'),
@@ -312,6 +322,7 @@ const criticalPaths = [
   'baseDir', 'bloomBase', 'binDir',
   'nucleusDir', 'nucleusExe',
   'sentinelDir', 'sentinelExe',
+  'metamorphDir', 'metamorphExe',
   'brainDir', 'brainExe',
   'nativeDir', 'hostBinary',
   'nssmDir',

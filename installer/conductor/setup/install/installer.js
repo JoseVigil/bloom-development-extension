@@ -32,6 +32,8 @@ const { getLogger } = require('../../shared/logger');
 const { nucleusManager } = require('./nucleus_manager');
 const logger = getLogger('installer');
 
+const { preInstallCleanup } = require('./pre-install-cleanup.js');
+
 const {
   cleanupOldServices,
   installWindowsService,
@@ -51,6 +53,8 @@ const {
   getNucleusExecutablePath,
   registerTelemetryStream
 } = require('./installer_nucleus');
+
+const { deployMetamorph } = require('./installer_metamorph');
 
 // ============================================================================
 // PROGRESS REPORTING
@@ -81,7 +85,7 @@ async function createDirectories(win) {
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 1, 9, 'Creating directories...');
+  emitProgress(win, 1, 10, 'Creating directories...');
 
   try {
     logger.separator('CREATING DIRECTORIES');
@@ -101,7 +105,7 @@ async function createDirectories(win) {
       paths.runtimeDir,
       paths.profilesDir,
       paths.logsDir,
-      paths.temporalDir  // ✅ Asegurar que temporal dir exista
+      paths.temporalDir  
     ];
 
     for (const dir of dirs) {
@@ -127,7 +131,7 @@ async function runChromiumInstall(win) {
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 2, 9, 'Installing Chromium...');
+  emitProgress(win, 2, 10, 'Installing Chromium...');
 
   try {
     const result = await installChromium(win);
@@ -149,7 +153,7 @@ async function runRuntimeInstall(win) {
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 3, 9, 'Installing Python Runtime...');
+  emitProgress(win, 3, 10, 'Installing Python Runtime...');
 
   try {
     // Remover servicio antes de instalar runtime (si existe)
@@ -177,9 +181,13 @@ async function runBinariesDeploy(win) {
     return { success: true, skipped: true };
   }
 
-  emitProgress(win, 4, 9, 'Deploying binaries (Nucleus, Sentinel, Brain, Alfred)...');
+  emitProgress(win, 4, 10, 'Deploying binaries (Nucleus, Sentinel, Brain, Alfred)...');
 
   try {
+    // CRÍTICO: Limpieza automática ANTES de copiar binarios
+    // Esto previene errores EPERM con archivos bloqueados (nssm.exe, etc)
+    await preInstallCleanup(logger);
+    
     const result = await deployAllBinaries(win);
     return result;
 
@@ -196,10 +204,29 @@ async function runConductorDeploy(win) {
     return { success: true, skipped: true };
   }
 
-  emitProgress(win, 5, 9, 'Deploying Conductor...');
+  emitProgress(win, 5, 10, 'Deploying Conductor...');
 
   try {
     const result = await deployConductor(win);
+    return result;
+
+  } catch (error) {
+    throw error;
+  }
+}
+
+async function runMetamorphDeploy(win) {
+  const MILESTONE = 'metamorph';
+  
+  if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
+    logger.info(`⭐️ ${MILESTONE} completed, skipping`);
+    return { success: true, skipped: true };
+  }
+
+  emitProgress(win, 6, 10, 'Deploying Metamorph...');
+
+  try {
+    const result = await deployMetamorph(win);
     return result;
 
   } catch (error) {
@@ -216,44 +243,23 @@ async function installBrainService(win) {
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 6, 10, 'Installing Brain Service...');
+  emitProgress(win, 7, 10, 'Installing Brain Service...');
 
   try {
     logger.separator('INSTALLING BRAIN SERVICE');
 
-    // Ejecutar install-brain-service.bat desde el repo
-    // __dirname = installer/conductor/setup/install/
-    // scriptPath = installer/conductor/setup/scripts/install-brain-service.bat
-    const scriptPath = path.join(__dirname, '..', 'scripts', 'install-brain-service.bat');
+    // Usar el método JavaScript puro que funcionaba antes
+    await installWindowsService();
+    const started = await startService();
     
-    if (!fs.existsSync(scriptPath)) {
-      throw new Error(`Script not found: ${scriptPath}`);
+    if (!started) {
+      throw new Error('Brain Service failed to start');
     }
 
-    logger.info(`Executing: ${scriptPath}`);
-
-    // Ejecutar con spawn (Electron ya tiene permisos elevados)
-    const result = await new Promise((resolve, reject) => {
-      const proc = spawn(scriptPath, [], {
-        stdio: 'inherit',
-        windowsVerbatimArguments: true
-      });
-
-      proc.on('close', (code) => {
-        if (code === 0) {
-          resolve({ success: true });
-        } else {
-          reject(new Error(`Brain Service installation failed with code ${code}`));
-        }
-      });
-
-      proc.on('error', (err) => {
-        reject(new Error(`Failed to execute script: ${err.message}`));
-      });
-    });
+    logger.success('✅ Brain Service installed and running');
 
     await nucleusManager.completeMilestone(MILESTONE, { service_running: true });
-    return result;
+    return { success: true };
 
   } catch (error) {
     await nucleusManager.failMilestone(MILESTONE, error.message);
@@ -265,107 +271,6 @@ async function installBrainService(win) {
 // NUCLEUS SERVICE BOOT SEQUENCE
 // ============================================================================
 
-async function waitForNucleusReady(win) {
-  const MILESTONE = 'nucleus_ready';
-  
-  if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
-    logger.info(`⭐️ ${MILESTONE} completed, skipping`);
-    return { success: true, skipped: true };
-  }
-
-  await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 8, 10, 'Waiting for Nucleus Service to initialize...');
-
-  try {
-    logger.separator('WAITING FOR NUCLEUS BOOT SEQUENCE');
-    logger.info('Nucleus Service is starting:');
-    logger.info('  Phase 1: Temporal Server');
-    logger.info('  Phase 2: Worker Manager');
-    logger.info('  Phase 3: Ollama (via synapse)');
-    logger.info('  Phase 4: Governance');
-    logger.info('  Phase 5: Vault');
-    logger.info('  Phase 6: Control Plane');
-
-    const maxAttempts = 90; // 90 segundos para boot completo
-    let attempts = 0;
-    
-    while (attempts < maxAttempts) {
-      attempts++;
-      
-      try {
-        const health = await nucleusHealth();
-        
-        // Verificar componentes críticos
-        const temporal = health.components?.temporal;
-        const worker = health.components?.worker_manager;
-        const ollama = health.components?.ollama;
-        const controlPlane = health.components?.control_plane;
-        
-        const allReady = temporal?.healthy && 
-                        worker?.healthy && 
-                        ollama?.healthy && 
-                        controlPlane?.healthy;
-        
-        if (allReady) {
-          logger.success('✔ Nucleus Service fully operational');
-          logger.info(`  ✓ Temporal: ${temporal.state} (port 7233)`);
-          logger.info(`  ✓ Worker: ${worker.state}`);
-          logger.info(`  ✓ Ollama: ${ollama.state}`);
-          logger.info(`  ✓ Control Plane: ${controlPlane.state}`);
-          
-          await nucleusManager.completeMilestone(MILESTONE, health);
-          return { success: true };
-        }
-        
-        // Log progreso cada 5 intentos
-        if (attempts % 5 === 0) {
-          logger.info(`[${attempts}/${maxAttempts}] Boot in progress...`);
-          logger.debug(`  Temporal: ${temporal?.state || 'pending'}`);
-          logger.debug(`  Worker: ${worker?.state || 'pending'}`);
-          logger.debug(`  Ollama: ${ollama?.state || 'pending'}`);
-          logger.debug(`  Control Plane: ${controlPlane?.state || 'pending'}`);
-        }
-        
-      } catch (err) {
-        // Health check aún no disponible
-        if (attempts % 10 === 0) {
-          logger.debug(`Health endpoint not ready yet (attempt ${attempts})`);
-        }
-      }
-      
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    }
-    
-    throw new Error('Nucleus Service boot sequence timeout after 90 seconds');
-
-  } catch (error) {
-    logger.error('Nucleus boot failed:', error.message);
-    
-    // Intentar obtener logs del servicio para diagnóstico
-    try {
-      const serviceLog = path.join(paths.logsDir, 'nucleus', 'service', `nucleus_service_${getDateStamp()}.log`);
-      if (fs.existsSync(serviceLog)) {
-        const lastLines = await fs.readFile(serviceLog, 'utf8');
-        logger.error('Last service log output:');
-        logger.error(lastLines.split('\n').slice(-20).join('\n'));
-      }
-    } catch (logErr) {
-      // Ignorar errores al leer log
-    }
-    
-    await nucleusManager.failMilestone(MILESTONE, error.message);
-    throw error;
-  }
-}
-
-function getDateStamp() {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  return `${year}${month}${day}`;
-}
-
 async function seedMasterProfile(win) {
   const MILESTONE = 'nucleus_seed';
   
@@ -375,7 +280,7 @@ async function seedMasterProfile(win) {
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 9, 10, 'Seeding Master Profile...');
+  emitProgress(win, 8, 10, 'Seeding Master Profile...');
 
   try {
     logger.separator('SEEDING MASTER PROFILE');
@@ -418,44 +323,38 @@ async function installNucleusService(win) {
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 9.5, 10, 'Installing Nucleus Service...');
+  emitProgress(win, 9, 10, 'Installing Nucleus Service...');
 
   try {
-    logger.separator('INSTALLING NUCLEUS SERVICE');
+    logger.separator('INSTALLING NUCLEUS SERVICE (CRITICAL 24/7)');
 
-    // Ejecutar install-nucleus-service.bat desde el repo
-    // __dirname = installer/conductor/setup/install/
-    // scriptPath = installer/conductor/setup/scripts/install-nucleus-service.bat
-    const scriptPath = path.join(__dirname, '..', 'scripts', 'install-nucleus-service.bat');
+    const { 
+      installNucleusService: installNucleus,
+      startNucleusService
+    } = require('./service-installer-nucleus');
+
+    // Instalar servicio Windows con NSSM
+    logger.info('Installing Windows service via NSSM...');
+    await installNucleus();
     
-    if (!fs.existsSync(scriptPath)) {
-      throw new Error(`Script not found: ${scriptPath}`);
+    // Iniciar servicio (internamente ejecuta: nucleus service start)
+    // service start internamente ejecuta dev-start para arrancar componentes
+    logger.info('Starting Nucleus Service...');
+    const started = await startNucleusService();
+    
+    if (!started) {
+      throw new Error('Nucleus Service failed to start');
     }
 
-    logger.info(`Executing: ${scriptPath}`);
+    logger.success('✅ Nucleus Service started (initializing components...)');
+    logger.info('   Service will boot: Temporal, Ollama, Worker, Control Plane');
+    logger.info('   Health verification will occur in certification step');
 
-    // Ejecutar con spawn (Electron ya tiene permisos elevados)
-    const result = await new Promise((resolve, reject) => {
-      const proc = spawn(scriptPath, [], {
-        stdio: 'inherit',
-        windowsVerbatimArguments: true
-      });
-
-      proc.on('close', (code) => {
-        if (code === 0) {
-          resolve({ success: true });
-        } else {
-          reject(new Error(`Nucleus Service installation failed with code ${code}`));
-        }
-      });
-
-      proc.on('error', (err) => {
-        reject(new Error(`Failed to execute script: ${err.message}`));
-      });
+    await nucleusManager.completeMilestone(MILESTONE, { 
+      service_running: true
     });
-
-    await nucleusManager.completeMilestone(MILESTONE, { service_running: true });
-    return result;
+    
+    return { success: true };
 
   } catch (error) {
     await nucleusManager.failMilestone(MILESTONE, error.message);
@@ -476,7 +375,19 @@ async function runCertification(win) {
 
   try {
     logger.separator('CERTIFICATION - NUCLEUS HEALTH CHECK');
+    logger.info('Waiting for Nucleus Service to complete component initialization...');
+    logger.info('Service is booting: Temporal, Ollama, Worker, Control Plane');
+    
+    // Esperar 30 segundos para que service start complete el boot de componentes
+    const bootWaitTime = 30;
+    for (let i = 1; i <= bootWaitTime; i++) {
+      if (i % 5 === 0) {
+        logger.info(`  Waiting... ${i}/${bootWaitTime}s`);
+      }
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
 
+    logger.info('Running health check...');
     const healthResult = await nucleusHealth();
 
     // Nuevo formato: { success: boolean, state: string, components: {...} }
@@ -543,10 +454,10 @@ async function installService(win) {
     await runRuntimeInstall(win);
     await runBinariesDeploy(win);
     await runConductorDeploy(win);
+    await runMetamorphDeploy(win);
     await installBrainService(win);
-    await installNucleusService(win);
-    await waitForNucleusReady(win);
     await seedMasterProfile(win);
+    await installNucleusService(win);
     await runCertification(win);
 
     await nucleusManager.markInstallationComplete();

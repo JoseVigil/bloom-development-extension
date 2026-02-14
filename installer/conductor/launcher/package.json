@@ -40,7 +40,7 @@
       "package.json"
     ],
     "directories": {
-      "output": "../../native/bin/win32/conductor",
+      "output": "../../native/bin/win64/conductor",
       "buildResources": "assets"
     },
     "compression": "maximum",

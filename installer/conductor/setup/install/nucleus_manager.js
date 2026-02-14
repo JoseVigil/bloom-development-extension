@@ -127,6 +127,18 @@ const EMPTY_NUCLEUS = {
       error: null
     },
 
+    metamorph: {
+      status: 'pending',
+      started_at: null,
+      completed_at: null,
+      verification: {
+        method: 'file_exists',
+        targets: ['bin/metamorph/metamorph.exe', 'bin/metamorph/help'],
+        result: null
+      },
+      error: null
+    },
+
     brain_service_install: {
       status: 'pending',
       started_at: null,
@@ -134,6 +146,19 @@ const EMPTY_NUCLEUS = {
       verification: {
         method: 'nssm_service_check',
         service_name: 'BloomBrain',
+        expected_state: 'SERVICE_RUNNING',
+        result: null
+      },
+      error: null
+    },
+
+    nucleus_service_install: {
+      status: 'pending',
+      started_at: null,
+      completed_at: null,
+      verification: {
+        method: 'nssm_service_check',
+        service_name: 'BloomNucleusService',
         expected_state: 'SERVICE_RUNNING',
         result: null
       },
@@ -264,7 +289,7 @@ async function readNucleus() {
           completed_at: null,
           force_reinstall: false
         },
-        milestones: EMPTY_NUCLEUS.milestones, // 10 milestones en "pending"
+        milestones: EMPTY_NUCLEUS.milestones, // 13 milestones en "pending"
         master_profile: null,
         // PRESERVAR info útil del esquema viejo
         legacy_data: {
@@ -497,9 +522,11 @@ class NucleusManager {
       'brain_runtime',
       'binaries',
       'conductor',
+      'metamorph',
       'brain_service_install',
-      'orchestration_init',
       'nucleus_seed',
+      'nucleus_service_install',
+      'orchestration_init',
       'ollama_init',
       'shortcuts',
       'certification'

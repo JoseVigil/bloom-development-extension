@@ -15,12 +15,15 @@ const OLD_SERVICE_NAME = 'BloomNucleusHost';
 
 function runCommand(cmd) {
   return new Promise((resolve, reject) => {
-    // Aumentamos el buffer para evitar cortes
     exec(cmd, { maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
-      // NSSM a veces escribe en stderr aunque funcione.
-      // Solo fallamos si el stdout está vacío y hay error real.
-      if (error && !stderr.includes('successfully')) {
-        console.warn(`⚠️ Command warning: ${cmd}\n   ${stderr}`);
+      // NSSM puede escribir en stderr aunque funcione
+      if (error) {
+        // Solo ignorar si stderr contiene "successfully"
+        if (stderr.includes('successfully')) {
+          return resolve(stdout || '');
+        }
+        // Error real - rechazar
+        return reject(new Error(`Command failed: ${cmd}\nError: ${stderr || error.message}`));
       }
       resolve(stdout || '');
     });
@@ -38,34 +41,34 @@ function serviceExists(serviceName) {
 }
 
 // ============================================================================
-// TELEMETRY
+// TELEMETRY REGISTRATION
 // ============================================================================
 
-async function updateTelemetry(logPath) {
-  const telemetryPath = path.join(paths.logsDir, 'telemetry.json');
-  
-  let telemetry = { active_streams: {} };
-  
-  // Leer telemetry existente
-  if (fs.existsSync(telemetryPath)) {
-    try {
-      telemetry = await fs.readJson(telemetryPath);
-    } catch (e) {
-      console.warn('⚠️ Could not read telemetry.json, creating new one');
+async function registerTelemetryStream(logPath) {
+  try {
+    const { execSync } = require('child_process');
+    const nucleusExe = paths.nucleusExe || path.join(paths.binDir, 'nucleus', 'nucleus.exe');
+    
+    // Registrar stream usando nucleus telemetry register
+    const cmd = `"${nucleusExe}" --json telemetry register --stream brain_service --label "⚙️ BRAIN SERVICE" --path "${logPath}" --priority 3`;
+    
+    const result = execSync(cmd, { 
+      encoding: 'utf8',
+      stdio: 'pipe',
+      timeout: 5000
+    });
+    
+    const jsonResult = JSON.parse(result);
+    
+    if (jsonResult.success) {
+      console.log('📊 Telemetry stream registered:', jsonResult.stream_id);
+    } else {
+      console.warn('⚠️ Telemetry registration warning:', jsonResult.message);
     }
+  } catch (error) {
+    console.warn('⚠️ Failed to register telemetry stream:', error.message);
+    // No es crítico, continuar
   }
-  
-  // Actualizar entrada del servicio
-  telemetry.active_streams.brain_service = {
-    label: "⚙️ BRAIN SERVICE",
-    path: logPath.replace(/\\/g, '/'), // Normalizar a forward slashes
-    priority: 3,
-    last_update: new Date().toISOString()
-  };
-  
-  // Escribir telemetry actualizado
-  await fs.writeJson(telemetryPath, telemetry, { spaces: 2 });
-  console.log('📊 Telemetry updated');
 }
 
 // ============================================================================
@@ -160,8 +163,8 @@ async function installWindowsService() {
   await runCommand(`"${nssmPath}" set "${NEW_SERVICE_NAME}" AppExit Default Restart`);
   await runCommand(`"${nssmPath}" set "${NEW_SERVICE_NAME}" DisplayName "Bloom Brain Service"`);
 
-  // G. Actualizar telemetry
-  await updateTelemetry(serviceLog);
+  // G. Actualizar telemetry usando nucleus CLI
+  await registerTelemetryStream(serviceLog);
 
   console.log('✅ Service registered.');
 }
