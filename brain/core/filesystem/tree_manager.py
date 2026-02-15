@@ -31,7 +31,8 @@ class TreeManager:
         '.venv': '[... virtual env]',
         'venv': '[... virtual env]',
         '.idea': '[... ide]',
-        '.vscode': '[... ide]'
+        '.vscode': '[... ide]',
+        'locales': '[... localization files]'
     }
 
     def __init__(self, root_path: Path):
