@@ -7,7 +7,11 @@ const { nucleusManager } = require('./nucleus_manager');
 
 const logger = getLogger('installer-metamorph');
 
-async function deployMetamorph(win) {
+/**
+ * 
+ * @deprecated Use deployAllSystemBinaries() in installer.js instead
+ */
+async function deployMetamorph_DEPRECATED(win) {
   const MILESTONE = 'metamorph';
   
   if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
@@ -70,6 +74,6 @@ async function deployMetamorph(win) {
   }
 }
 
-module.exports = {
-  deployMetamorph
+module.exports = { 
+  // Mantener export vacío para evitar errores de import
 };

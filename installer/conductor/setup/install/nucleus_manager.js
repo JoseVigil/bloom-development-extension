@@ -103,18 +103,25 @@ const EMPTY_NUCLEUS = {
       verification: {
         method: 'sovereign_manifest',
         components: {
-          nucleus:  ['nucleus.exe', 'nucleus-governance.json', 'help'],
-          sentinel: ['sentinel.exe', 'sentinel-config.json', 'help'],
-          brain:    ['brain.exe', '_internal'],
-          host:     ['bloom-host.exe', 'libwinpthread-1.dll'],
-          cortex:   ['bloom-cortex.blx'],
-          ollama:   ['ollama.exe', 'lib']
+          runtime:   ['python.exe', 'Lib', 'python310._pth'],
+          brain:     ['brain.exe', '_internal'],
+          host:      ['bloom-host.exe', 'libwinpthread-1.dll'],
+          nssm:      ['nssm.exe'],
+          nucleus:   ['nucleus.exe', 'nucleus-governance.json', 'help'],
+          sentinel:  ['sentinel.exe', 'sentinel-config.json', 'help'],
+          metamorph: ['metamorph.exe', 'help', 'metamorph-config.json'],
+          cortex:    ['bloom-cortex.blx'],
+          ollama:    ['ollama.exe', 'lib'],
+          node:      ['node.exe', 'npm.cmd'],
+          temporal:  ['temporal.exe'],
+          conductor: ['bloom-conductor.exe']
         },
         result: null
       },
       error: null
     },
 
+    // ⚠️ DEPRECADO - Conductor ahora se verifica en milestone 'binaries'
     conductor: {
       status: 'pending',
       started_at: null,
@@ -124,9 +131,11 @@ const EMPTY_NUCLEUS = {
         targets: ['bin/conductor/bloom-conductor.exe'],
         result: null
       },
-      error: null
+      error: null,
+      deprecated: true  // ✅ Marcado como deprecado
     },
 
+    // ⚠️ DEPRECADO - Metamorph ahora se verifica en milestone 'binaries'
     metamorph: {
       status: 'pending',
       started_at: null,
@@ -136,7 +145,8 @@ const EMPTY_NUCLEUS = {
         targets: ['bin/metamorph/metamorph.exe', 'bin/metamorph/help'],
         result: null
       },
-      error: null
+      error: null,
+      deprecated: true  // ✅ Marcado como deprecado
     },
 
     brain_service_install: {
@@ -226,6 +236,20 @@ const EMPTY_NUCLEUS = {
         command: 'nucleus --json health',
         expected_status: 'healthy',
         expected_all_services_ok: true,
+        result: null
+      },
+      error: null
+    },
+
+    nucleus_launch: {
+      status: 'pending',
+      started_at: null,
+      completed_at: null,
+      verification: {
+        method: 'nucleus_command',
+        command: 'nucleus --json synapse launch [uuid] --mode discovery --heartbeat',
+        expected_success: true,
+        expected_extension_loaded: true,
         result: null
       },
       error: null
@@ -517,19 +541,18 @@ class NucleusManager {
    */
   getNextPendingMilestone() {
     const milestoneOrder = [
-      'directories',
-      'chromium',
-      'brain_runtime',
-      'binaries',
-      'conductor',
-      'metamorph',
-      'brain_service_install',
-      'nucleus_seed',
-      'nucleus_service_install',
-      'orchestration_init',
-      'ollama_init',
-      'shortcuts',
-      'certification'
+      'directories',               // 1/9
+      'chromium',                  // 2/9
+      'brain_runtime',             // 3/9
+      'binaries',                  // 4/9
+      'brain_service_install',     // 5/9
+      'nucleus_service_install',   // 6/9 - Arranca Temporal
+      'certification',             // 7/9 - Verifica Temporal ready
+      'nucleus_seed',              // 8/9 - Usa Temporal
+      'nucleus_launch',            // 9/9 - Heartbeat final
+      'orchestration_init',        // (opcional, post-instalación)
+      'ollama_init',               // (opcional, post-instalación)
+      'shortcuts'                  // (opcional, post-instalación)
     ];
 
     for (const name of milestoneOrder) {

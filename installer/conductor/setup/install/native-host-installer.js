@@ -355,16 +355,7 @@ async function getBinaryInfo() {
 // ============================================================================
 
 module.exports = {
-  // Main functions
-  installNativeHost,
   verifyBinaries,
   getBinaryInfo,
-  
-  // Individual deployment functions (for granular control)
-  deployBrain,
-  deployNativeHost,
-  deployNSSM,
-  
-  // Utilities
   copyWithRetry
 };

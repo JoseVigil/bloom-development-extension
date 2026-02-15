@@ -1,4 +1,9 @@
-const { app } = require('electron');
+let app;
+try {
+  app = require('electron').app;
+} catch (e) {
+  app = null;
+}
 const path = require('path');
 const os = require('os');
 
@@ -29,7 +34,7 @@ const repoRoot = path.join(__dirname, '..', '..', '..');
 // RESOURCE PATH RESOLUTION
 // ============================================================================
 const getResourcePath = (resourceName) => {
-  if (app.isPackaged) {
+  if (app && app?.isPackaged) {
     const resourcePath = path.join(process.resourcesPath, resourceName);
     
     const fs = require('fs');
@@ -133,7 +138,7 @@ const hostBinary = platform === 'win32'
   : path.join(baseDir, 'bin', 'native', 'bloom-host');
 
 const assetsDir = (() => {
-  if (app.isPackaged) {
+  if (app?.isPackaged) {
     const unpackedAssets = path.join(process.resourcesPath, 'app.asar.unpacked', 'assets');
     const fs = require('fs');
     if (fs.existsSync(unpackedAssets)) {

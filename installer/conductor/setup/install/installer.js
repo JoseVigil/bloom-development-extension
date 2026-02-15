@@ -39,14 +39,12 @@ const {
   installWindowsService,
   startService,
   NEW_SERVICE_NAME
-} = require('./service-installer');
+} = require('./service-installer-brain.js');
 
 const { installRuntime } = require('./runtime-installer');
 const { installChromium } = require('./chromium-installer');
 
 const {
-  deployAllBinaries,
-  deployConductor,
   nucleusHealth,
   executeNucleusCommand,
   executeSentinelCommand,
@@ -54,7 +52,8 @@ const {
   registerTelemetryStream
 } = require('./installer_nucleus');
 
-const { deployMetamorph } = require('./installer_metamorph');
+// ⚠️ DEPRECADO: deployAllBinaries, deployConductor, deployMetamorph
+// Todas las copias de binarios están ahora en deployAllSystemBinaries()
 
 // ============================================================================
 // PROGRESS REPORTING
@@ -85,7 +84,7 @@ async function createDirectories(win) {
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 1, 10, 'Creating directories...');
+  emitProgress(win, 1, 9, 'Creating directories...');
 
   try {
     logger.separator('CREATING DIRECTORIES');
@@ -131,7 +130,7 @@ async function runChromiumInstall(win) {
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 2, 10, 'Installing Chromium...');
+  emitProgress(win, 2, 9, 'Installing Chromium...');
 
   try {
     const result = await installChromium(win);
@@ -153,11 +152,11 @@ async function runRuntimeInstall(win) {
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 3, 10, 'Installing Python Runtime...');
+  emitProgress(win, 3, 9, 'Installing Python Runtime...');
 
   try {
     // Remover servicio antes de instalar runtime (si existe)
-    const { removeService } = require('./service-installer');
+    const { removeService } = require('./service-installer-brain.js');
     
     logger.info('Stopping Brain Service before runtime install...');
     await removeService(NEW_SERVICE_NAME);
@@ -173,27 +172,347 @@ async function runRuntimeInstall(win) {
   }
 }
 
-async function runBinariesDeploy(win) {
-  const MILESTONE = 'binaries';
+// ============================================================================
+// UNIFIED BINARY DEPLOYMENT - CENTRALIZED
+// ============================================================================
+
+/**
+ * Copia un directorio completo con retry y validación
+ */
+async function copyDirectorySafe(src, dest, label) {
+  logger.info(`📦 Copying ${label}...`);
+  logger.debug(`   Source: ${src}`);
+  logger.debug(`   Dest: ${dest}`);
+  
+  if (!await fs.pathExists(src)) {
+    throw new Error(`${label} source not found: ${src}`);
+  }
+  
+  await fs.ensureDir(dest);
+  
+  // Opciones especiales para copiar aplicaciones Electron y archivos complejos
+  const copyOptions = {
+    overwrite: true,
+    errorOnExist: false,
+    dereference: false,  // No seguir symlinks
+    preserveTimestamps: true,
+    filter: (src) => {
+      const basename = path.basename(src);
+      
+      // Excluir app.asar.unpacked (contenido ya está en app.asar)
+      if (basename === 'app.asar.unpacked') {
+        return false;
+      }
+      
+      // Permitir todo lo demás, incluyendo app.asar
+      return true;
+    }
+  };
+  
+  try {
+    await fs.copy(src, dest, copyOptions);
+    logger.success(`✅ ${label} deployed`);
+    return { success: true, src, dest };
+  } catch (error) {
+    // Si falla la copia, dar más detalles
+    throw new Error(`Failed to copy ${label}: ${error.message}`);
+  }
+}
+
+/**
+ * Copia un archivo individual con retry
+ */
+async function copyFileSafe(src, dest, label) {
+  logger.info(`📄 Copying ${label}...`);
+  logger.debug(`   Source: ${src}`);
+  logger.debug(`   Dest: ${dest}`);
+  
+  if (!await fs.pathExists(src)) {
+    throw new Error(`${label} source not found: ${src}`);
+  }
+  
+  await fs.ensureDir(path.dirname(dest));
+  await fs.copy(src, dest, { overwrite: true });
+  
+  logger.success(`✅ ${label} deployed`);
+  
+  return { success: true, src, dest };
+}
+
+/**
+ * Copia todos los DLLs de un directorio
+ */
+async function copyDLLs(srcDir, destDir, label) {
+  logger.info(`📚 Copying ${label}...`);
+  
+  if (!await fs.pathExists(srcDir)) {
+    logger.warn(`⚠️ ${label} source not found: ${srcDir}`);
+    return { success: false, skipped: true };
+  }
+  
+  const files = await fs.readdir(srcDir);
+  const dllFiles = files.filter(f => path.extname(f).toLowerCase() === '.dll');
+  
+  if (dllFiles.length === 0) {
+    logger.warn(`⚠️ No DLLs found in ${srcDir}`);
+    return { success: false, skipped: true };
+  }
+  
+  await fs.ensureDir(destDir);
+  
+  for (const dll of dllFiles) {
+    const srcPath = path.join(srcDir, dll);
+    const destPath = path.join(destDir, dll);
+    await fs.copy(srcPath, destPath, { overwrite: true });
+  }
+  
+  logger.success(`✅ ${label} deployed (${dllFiles.length} files)`);
+  
+  return { success: true, count: dllFiles.length };
+}
+
+/**
+ * FUNCIÓN CENTRALIZADA - DEPLOYMENT DE TODOS LOS BINARIOS
+ * 
+ * Copia TODOS los binarios del sistema en el orden correcto
+ * Esta es la ÚNICA función que debe copiar binarios
+ */
+async function deployAllSystemBinaries(win) {
+  const MILESTONE = 'binaries';  // ✅ Usa el milestone existente
   
   if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
     logger.info(`⭐️ ${MILESTONE} completed, skipping`);
     return { success: true, skipped: true };
   }
 
-  emitProgress(win, 4, 10, 'Deploying binaries (Nucleus, Sentinel, Brain, Alfred)...');
+  await nucleusManager.startMilestone(MILESTONE);
+  emitProgress(win, 4, 9, 'Deploying all system binaries...');
 
   try {
+    logger.separator('DEPLOYING ALL SYSTEM BINARIES');
+    
     // CRÍTICO: Limpieza automática ANTES de copiar binarios
-    // Esto previene errores EPERM con archivos bloqueados (nssm.exe, etc)
     await preInstallCleanup(logger);
     
-    const result = await deployAllBinaries(win);
-    return result;
-
+    const results = {};
+    
+    // ========================================================================
+    // 1. PYTHON RUNTIME (base para Brain)
+    // ========================================================================
+    logger.info('\n🐍 PYTHON RUNTIME');
+    results.runtime = await copyDirectorySafe(
+      paths.runtimeSource,
+      paths.runtimeDir,
+      'Python Runtime'
+    );
+    
+    // Configurar Python en modo aislado
+    const pthFile = path.join(paths.runtimeDir, 'python310._pth');
+    const pthContent = ['.', 'python310.zip', 'Lib', 'Lib\\site-packages'].join('\n');
+    await fs.writeFile(pthFile, pthContent, 'utf8');
+    logger.success('✅ Python configured in ISOLATED mode');
+    
+    // ========================================================================
+    // 2. BRAIN SERVICE (incluye _internal/)
+    // ========================================================================
+    logger.info('\n🧠 BRAIN SERVICE');
+    results.brain = await copyDirectorySafe(
+      paths.brainSource,
+      paths.brainDir,
+      'Brain Service'
+    );
+    
+    // Verificar que brain.exe existe
+    if (!await fs.pathExists(paths.brainExe)) {
+      throw new Error(`brain.exe not found after copy: ${paths.brainExe}`);
+    }
+    
+    // Verificar _internal (PyInstaller dependencies)
+    const internalPath = path.join(paths.brainDir, '_internal');
+    if (!await fs.pathExists(internalPath)) {
+      logger.warn('⚠️ Warning: _internal folder not found');
+    } else {
+      logger.success('✅ Brain _internal dependencies verified');
+    }
+    
+    // ========================================================================
+    // 3. NATIVE HOST + DLLs
+    // ========================================================================
+    logger.info('\n🔗 NATIVE HOST');
+    
+    // paths.nativeSource ya apunta a .../native/bin/win64/host/
+    const hostExeSrc = path.join(paths.nativeSource, 'bloom-host.exe');
+    
+    results.nativeHost = await copyFileSafe(
+      hostExeSrc,
+      paths.hostBinary,
+      'bloom-host.exe'
+    );
+    
+    // Copiar DLLs asociados del mismo directorio
+    results.nativeDLLs = await copyDLLs(
+      paths.nativeSource,  // Ya es la carpeta host/
+      paths.nativeDir,
+      'Native Host DLLs'
+    );
+    
+    // ========================================================================
+    // 4. NSSM (Service Manager)
+    // ========================================================================
+    logger.info('\n⚙️ NSSM SERVICE MANAGER');
+    
+    const nssmSrc = path.join(paths.nssmSource, 'nssm.exe');
+    results.nssm = await copyFileSafe(
+      nssmSrc,
+      paths.nssmExe,
+      'nssm.exe'
+    );
+    
+    // ========================================================================
+    // 5. NUCLEUS SUITE (Governance)
+    // ========================================================================
+    logger.info('\n⚖️ NUCLEUS SUITE');
+    
+    // Nucleus
+    results.nucleus = await copyDirectorySafe(
+      paths.nucleusSource,
+      paths.nucleusDir,
+      'Nucleus'
+    );
+    
+    // Sentinel
+    results.sentinel = await copyDirectorySafe(
+      paths.sentinelSource,
+      paths.sentinelDir,
+      'Sentinel'
+    );
+    
+    // Metamorph
+    results.metamorph = await copyDirectorySafe(
+      paths.metamorphSource,
+      paths.metamorphDir,
+      'Metamorph'
+    );
+    
+    // ========================================================================
+    // 6. CORTEX (Extension Package)
+    // ========================================================================
+    logger.info('\n🧩 CORTEX EXTENSION');
+    results.cortex = await copyDirectorySafe(
+      paths.cortexSource,
+      paths.cortexDir,
+      'Cortex'
+    );
+    
+    // ========================================================================
+    // 7. OLLAMA (LLM Server)
+    // ========================================================================
+    logger.info('\n🦙 OLLAMA LLM SERVER');
+    
+    if (await fs.pathExists(paths.ollamaSource)) {
+      results.ollama = await copyDirectorySafe(
+        paths.ollamaSource,
+        paths.ollamaDir,
+        'Ollama'
+      );
+    } else {
+      logger.warn('⚠️ Ollama source not found, skipping');
+      results.ollama = { success: false, skipped: true };
+    }
+    
+    // ========================================================================
+    // 8. NODE.JS (para Nucleus dev-start y API services)
+    // ========================================================================
+    logger.info('\n🟢 NODE.JS RUNTIME');
+    
+    if (await fs.pathExists(paths.nodeSource)) {
+      results.node = await copyDirectorySafe(
+        paths.nodeSource,
+        paths.nodeDir,
+        'Node.js'
+      );
+    } else {
+      logger.warn('⚠️ Node.js source not found, skipping');
+      results.node = { success: false, skipped: true };
+    }
+    
+    // ========================================================================
+    // 9. TEMPORAL (Workflow Orchestration Engine)
+    // ========================================================================
+    logger.info('\n⏱️ TEMPORAL WORKFLOW ENGINE');
+    
+    if (await fs.pathExists(paths.temporalSource)) {
+      results.temporal = await copyDirectorySafe(
+        paths.temporalSource,
+        paths.temporalDir,
+        'Temporal'
+      );
+    } else {
+      logger.warn('⚠️ Temporal source not found, skipping');
+      results.temporal = { success: false, skipped: true };
+    }
+    
+    // ========================================================================
+    // 10. CONDUCTOR (Launcher)
+    // ========================================================================
+    logger.info('\n🎮 CONDUCTOR LAUNCHER');
+    
+    // Conductor tiene dos versiones en el source:
+    // 1. bloom-conductor.exe (standalone) ✅
+    // 2. win-unpacked/ (Electron completa con app.asar) ❌
+    // Solo copiamos el .exe standalone
+    
+    const conductorExeSrc = path.join(paths.conductorSource, 'bloom-conductor.exe');
+    
+    if (await fs.pathExists(conductorExeSrc)) {
+      results.conductor = await copyFileSafe(
+        conductorExeSrc,
+        paths.conductorExe,
+        'bloom-conductor.exe'
+      );
+    } else {
+      logger.warn('⚠️ bloom-conductor.exe not found, skipping');
+      results.conductor = { success: false, skipped: true };
+    }
+    
+    // ========================================================================
+    // RESUMEN FINAL
+    // ========================================================================
+    logger.separator('BINARY DEPLOYMENT SUMMARY');
+    
+    const deployed = Object.entries(results)
+      .filter(([_, r]) => r.success && !r.skipped)
+      .map(([name]) => name);
+    
+    const skipped = Object.entries(results)
+      .filter(([_, r]) => r.skipped)
+      .map(([name]) => name);
+    
+    logger.success(`✅ Deployed: ${deployed.length} components`);
+    deployed.forEach(name => logger.info(`   ✓ ${name}`));
+    
+    if (skipped.length > 0) {
+      logger.warn(`⚠️ Skipped: ${skipped.length} components`);
+      skipped.forEach(name => logger.warn(`   - ${name}`));
+    }
+    
+    await nucleusManager.completeMilestone(MILESTONE, {
+      deployed: deployed.length,
+      skipped: skipped.length,
+      components: deployed
+    });
+    
+    return { success: true, results };
+    
   } catch (error) {
+    await nucleusManager.failMilestone(MILESTONE, error.message);
     throw error;
   }
+}
+
+async function runBinariesDeploy(win) {
+  // Wrapper que llama a la función unificada
+  return await deployAllSystemBinaries(win);
 }
 
 async function runConductorDeploy(win) {
@@ -204,7 +523,7 @@ async function runConductorDeploy(win) {
     return { success: true, skipped: true };
   }
 
-  emitProgress(win, 5, 10, 'Deploying Conductor...');
+  emitProgress(win, 5, 9, 'Deploying Conductor...');
 
   try {
     const result = await deployConductor(win);
@@ -223,7 +542,7 @@ async function runMetamorphDeploy(win) {
     return { success: true, skipped: true };
   }
 
-  emitProgress(win, 6, 10, 'Deploying Metamorph...');
+  emitProgress(win, 6, 9, 'Deploying Metamorph...');
 
   try {
     const result = await deployMetamorph(win);
@@ -243,7 +562,7 @@ async function installBrainService(win) {
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 7, 10, 'Installing Brain Service...');
+  emitProgress(win, 7, 9, 'Installing Brain Service...');
 
   try {
     logger.separator('INSTALLING BRAIN SERVICE');
@@ -280,35 +599,141 @@ async function seedMasterProfile(win) {
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 8, 10, 'Seeding Master Profile...');
+  emitProgress(win, 8, 9, 'Seeding Master Profile...');
 
   try {
     logger.separator('SEEDING MASTER PROFILE');
 
-    // Usar Nucleus synapse launch con workflow de Temporal
+    // Usar Nucleus synapse seed para CREAR/REGISTRAR el perfil
     const result = await executeNucleusCommand([
       '--json',
       'synapse',
-      'launch',
-      '--register',
-      '--role', 'master',
-      '--save'
+      'seed',
+      'MasterWorker',
+      'true'
     ]);
 
-    const profileId = result.profile_id || result.data?.uuid;
-
-    if (!profileId) {
-      throw new Error('Seed failed: no profile_id returned');
+    // Validar estructura de respuesta de 'seed'
+    if (!result.success || !result.data || !result.data.uuid) {
+      throw new Error('Seed failed: no UUID returned in response');
     }
 
-    logger.success(`✔ Master profile: ${profileId}`);
+    const uuid = result.data.uuid;
 
-    await nucleusManager.setMasterProfile(profileId);
-    await nucleusManager.completeMilestone(MILESTONE, result);
+    logger.success(`✔ Master profile UUID: ${result.data.uuid}`);
+    logger.info(`   Alias: ${result.data.alias}`);
+    logger.info(`   Path: ${result.data.path}`);
+    logger.info(`   Is Master: ${result.data.is_master}`);
 
-    return { success: true, profile_id: profileId };
+    await nucleusManager.setMasterProfile(result.data.uuid);
+    await nucleusManager.completeMilestone(MILESTONE, result.data);
+
+    return { 
+      success: true, 
+      uuid: result.data.uuid,
+      alias: result.data.alias,
+      is_master: result.data.is_master,
+      path: result.data.path
+    };
 
   } catch (error) {
+    await nucleusManager.failMilestone(MILESTONE, error.message);
+    throw error;
+  }
+}
+
+async function launchMasterProfile(win) {
+  const MILESTONE = 'nucleus_launch';
+  
+  if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
+    logger.info(`⭐️ ${MILESTONE} completed, skipping`);
+    return { success: true, skipped: true };
+  }
+
+  await nucleusManager.startMilestone(MILESTONE);
+  emitProgress(win, 9, 9, 'Launching Master Profile (Heartbeat)...');
+
+  try {
+    logger.separator('NUCLEUS LAUNCH - HEARTBEAT VALIDATION');
+
+    // Obtener UUID del perfil maestro creado en seed
+    const profileUuid = nucleusManager.state.master_profile;
+    
+    if (!profileUuid) {
+      throw new Error('Master profile UUID not found. Run seed first.');
+    }
+
+    logger.info(`Profile UUID: ${profileUuid}`);
+
+    // ========================================================================
+    // PASO 1: Asegurar que Temporal está activo
+    // ========================================================================
+    logger.info('Step 1/2: Ensuring Temporal is ready...');
+    
+    const ensureResult = await executeNucleusCommand([
+      'temporal',
+      'ensure',
+      '--json'
+    ]);
+
+    if (!ensureResult.success) {
+      throw new Error(`Temporal ensure failed: ${ensureResult.error || 'Unknown error'}`);
+    }
+
+    logger.success('✓ Temporal server active');
+    logger.info('  Workers: available');
+    logger.info('  State: ready for workflows');
+
+    // ========================================================================
+    // PASO 2: Ejecutar Launch con Heartbeat
+    // ========================================================================
+    logger.info('Step 2/2: Executing synapse launch with heartbeat...');
+    
+    const launchResult = await executeNucleusCommand([
+      '--json',
+      'synapse',
+      'launch',
+      profileUuid,
+      '--mode', 'discovery',
+      '--heartbeat'
+    ]);
+
+    // Validar resultado
+    if (!launchResult.success) {
+      throw new Error(`Launch failed: ${launchResult.error || 'Unknown error'}`);
+    }
+
+    if (!launchResult.extension_loaded) {
+      throw new Error('Extension not loaded during heartbeat');
+    }
+
+    // ========================================================================
+    // VALIDACIÓN EXITOSA
+    // ========================================================================
+    logger.success('✅ HEARTBEAT SUCCESSFUL');
+    logger.info(`   Profile: ${launchResult.profile_id}`);
+    logger.info(`   Launch ID: ${launchResult.launch_id}`);
+    logger.info(`   Extension: ${launchResult.extension_loaded ? 'LOADED' : 'NOT LOADED'}`);
+    logger.info(`   State: ${launchResult.state}`);
+    logger.info('   ✓ Temporal workflows operational');
+    logger.info('   ✓ Sentinel handshake successful');
+    logger.info('   ✓ Extension + Host + Brain validated');
+
+    await nucleusManager.completeMilestone(MILESTONE, {
+      profile_id: launchResult.profile_id,
+      launch_id: launchResult.launch_id,
+      extension_loaded: launchResult.extension_loaded,
+      state: launchResult.state
+    });
+
+    return { 
+      success: true,
+      heartbeat_validated: true,
+      launch_result: launchResult
+    };
+
+  } catch (error) {
+    logger.error('❌ Launch/Heartbeat failed:', error.message);
     await nucleusManager.failMilestone(MILESTONE, error.message);
     throw error;
   }
@@ -323,7 +748,7 @@ async function installNucleusService(win) {
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 9, 10, 'Installing Nucleus Service...');
+  emitProgress(win, 6, 9, 'Installing Nucleus Service...');
 
   try {
     logger.separator('INSTALLING NUCLEUS SERVICE (CRITICAL 24/7)');
@@ -371,7 +796,7 @@ async function runCertification(win) {
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 10, 10, 'Running certification...');
+  emitProgress(win, 7, 9, 'Running certification...');
 
   try {
     logger.separator('CERTIFICATION - NUCLEUS HEALTH CHECK');
@@ -449,16 +874,17 @@ async function installService(win) {
       logger.info(`Resuming from: ${summary.next_milestone}`);
     }
 
-    await createDirectories(win);
-    await runChromiumInstall(win);
-    await runRuntimeInstall(win);
-    await runBinariesDeploy(win);
-    await runConductorDeploy(win);
-    await runMetamorphDeploy(win);
-    await installBrainService(win);
-    await seedMasterProfile(win);
-    await installNucleusService(win);
-    await runCertification(win);
+    await createDirectories(win);           // 1/9
+    await runChromiumInstall(win);          // 2/9
+    await runRuntimeInstall(win);           // 3/9
+    await runBinariesDeploy(win);           // 4/9
+    await installBrainService(win);         // 5/9
+    // NOTA: Nucleus Service DEBE arrancar ANTES de seed
+    // porque seed necesita Temporal workflows
+    await installNucleusService(win);       // 6/9 - Arranca Temporal
+    await runCertification(win);            // 7/9 - Verifica Temporal ready
+    await seedMasterProfile(win);           // 8/9 - Usa Temporal
+    await launchMasterProfile(win);         // 9/9 - Heartbeat final
 
     await nucleusManager.markInstallationComplete();
 

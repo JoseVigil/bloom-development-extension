@@ -3,51 +3,18 @@ const path = require('path');
 const { execPromise } = require('../utils/exec-helper');
 const { paths } = require('../config/paths');
 
+/**
+ * 
+ * Esta función SOLO configura Python en modo aislado
+ */
 async function installRuntime() {
-  console.log("📦 Installing AI Engine (Runtime + Brain)...");
+  console.log("🐍 Configuring Python Runtime...");
 
-  // Kill brain.exe if running
-  const { execSync } = require('child_process');
-  try {
-    execSync('taskkill /F /IM brain.exe', { 
-      windowsHide: true,
-      stdio: 'ignore'
-    });
-    console.log(" 🛑 Stopped running brain.exe");
-    await new Promise(resolve => setTimeout(resolve, 1000));
-  } catch (e) {
-    // No problem if it wasn't running
-  }
-
-  // 1. Instalar Python runtime
-  console.log(" 📦 Installing Python runtime...");
-  await fs.copy(paths.runtimeSource, paths.runtimeDir, {
-    overwrite: true
-  });
-  console.log(" ✅ Python runtime installed");
-
-  // 2. Copiar brain.exe a bin/brain/
-  console.log(" 📦 Installing Brain executable...");
-  const brainExeSrc = path.join(paths.brainSource, 'brain.exe');
-  const brainExeDest = paths.brainExe;
-  
-  await fs.ensureDir(path.dirname(brainExeDest));
-  await fs.copy(brainExeSrc, brainExeDest, { overwrite: true });
-  console.log(` ✅ Brain.exe installed to: ${brainExeDest}`);
-
-  // 3. Copiar _internal a bin/brain/_internal/
-  const internalSrc = path.join(paths.brainSource, '_internal');
-  const internalDest = path.join(path.dirname(brainExeDest), '_internal');
-  
-  if (fs.existsSync(internalSrc)) {
-    await fs.copy(internalSrc, internalDest, { overwrite: true });
-    console.log(` ✅ Brain _internal copied`);
-  }
-
-  // 4. Configurar Python path
+  // NOTA: runtime/ y brain/ ya fueron copiados en deployAllSystemBinaries()
+  // Aquí solo configuramos Python
   await configurePythonPath();
 
-  console.log(" ✅ AI Engine installation complete");
+  console.log(" ✅ Python Runtime configured");
 }
 
 async function configurePythonPath() {

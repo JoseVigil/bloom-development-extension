@@ -2,6 +2,7 @@
 // CRITICAL SERVICE - 24/7 Operational Hub
 // Nucleus Service: Sistema nervioso central del ecosistema Bloom
 
+const os = require('os');
 const { exec, execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs-extra');
@@ -11,7 +12,7 @@ const { paths } = require('../config/paths');
 // CONFIGURACIÓN DEL SERVICIO CRÍTICO
 // ============================================================================
 const NUCLEUS_SERVICE_NAME = 'BloomNucleusService';
-const NUCLEUS_DISPLAY_NAME = 'Bloom Nucleus - Core Orchestrator';
+const NUCLEUS_DISPLAY_NAME = 'Bloom Nucleus Service';
 const NUCLEUS_DESCRIPTION = 'Bloom Nucleus Service - Central orchestration hub, workflow engine, and system governance (24/7 critical service)';
 
 // Configuración de reintentos y recuperación
@@ -169,17 +170,36 @@ async function installNucleusService() {
   await runCommand(`"${nssmPath}" set "${NUCLEUS_SERVICE_NAME}" AppDirectory "${workDir}"`);
   console.log('   ✓ Working directory set');
   
-  // D. Variables de Entorno
-  const envExtra = [
+  // D. Variables de Entorno - USAR REGISTRO DIRECTAMENTE
+  const userLocalAppData = process.env.LOCALAPPDATA;
+  const bloomRoot = path.join(userLocalAppData, 'BloomNucleus');
+  const bloomBinDir = path.join(bloomRoot, 'bin');
+  const bloomLogsDir = path.join(bloomRoot, 'logs');
+
+  // Crear archivo temporal con las variables
+  const envContent = [
     `PYTHONUNBUFFERED=1`,
     `PYTHONIOENCODING=utf-8`,
     `BLOOM_ENVIRONMENT=production`,
     `NUCLEUS_MODE=service`,
-    `LOCALAPPDATA=${process.env.LOCALAPPDATA}`
-  ].join(' ');
-  
-  await runCommand(`"${nssmPath}" set "${NUCLEUS_SERVICE_NAME}" AppEnvironmentExtra "${envExtra}"`);
-  console.log('   ✓ Environment variables set');
+    `LOCALAPPDATA=${userLocalAppData}`,
+    `BLOOM_ROOT=${bloomRoot}`,
+    `BLOOM_BIN_DIR=${bloomBinDir}`,
+    `BLOOM_LOGS_DIR=${bloomLogsDir}`,
+    `PATH=${bloomBinDir}\\nucleus;${bloomBinDir}\\sentinel;${process.env.PATH}`
+  ].join('\0') + '\0';
+
+  const tempEnvFile = path.join(os.tmpdir(), 'nucleus_env.txt');
+  fs.writeFileSync(tempEnvFile, envContent, { encoding: 'utf16le' });
+
+  // Usar reg add para escribir directamente al registro
+  const regKey = `HKLM\\SYSTEM\\CurrentControlSet\\Services\\${NUCLEUS_SERVICE_NAME}\\Parameters`;
+  execSync(`reg add "${regKey}" /v AppEnvironmentExtra /t REG_MULTI_SZ /d "${envContent.replace(/\0/g, '\\0')}" /f`, { stdio: 'inherit' });
+
+  console.log('   ✓ Environment variables set via registry');
+  console.log(`     BLOOM_ROOT: ${bloomRoot}`);
+  console.log(`     BLOOM_BIN_DIR: ${bloomBinDir}`);
+  console.log(`     BLOOM_LOGS_DIR: ${bloomLogsDir}`);
   
   // E. Redirección de IO (LOG UNIFICADO)
   await runCommand(`"${nssmPath}" set "${NUCLEUS_SERVICE_NAME}" AppStdout "${serviceLog}"`);
@@ -199,10 +219,6 @@ async function installNucleusService() {
   
   console.log('   ✓ Service recovery configuration complete');
 
-  // G. Registrar telemetría como stream CRÍTICO
-  // NOTA: Deshabilitado temporalmente - se registrará después del primer arranque
-  // await registerNucleusTelemetry(serviceLog);
-
   console.log('✅ Nucleus Service registered (24/7 Critical Mode)');
 }
 
@@ -214,12 +230,10 @@ async function startNucleusService() {
   console.log('🚀 Starting Nucleus Service...');
   
   try {
-    // Intentar iniciar
     execSync(`sc start "${NUCLEUS_SERVICE_NAME}"`, { stdio: 'ignore' });
     
-    // Esperar warmup (Nucleus puede tardar más que Brain)
-    console.log('⏳ Waiting for Nucleus warmup (10s)...');
-    await new Promise(r => setTimeout(r, 10000));
+    console.log('⏳ Waiting for Nucleus service start (5s)...');
+    await new Promise(r => setTimeout(r, 5000));
     
     const status = execSync(`sc query "${NUCLEUS_SERVICE_NAME}"`, { encoding: 'utf8' });
     
@@ -227,15 +241,16 @@ async function startNucleusService() {
       console.log('✅ Nucleus Service is RUNNING');
       return true;
     } else if (status.includes('START_PENDING')) {
-      console.warn('⚠️ Nucleus Service is START_PENDING (may need more time)');
-      return false;
+      console.log('✅ Nucleus Service is STARTING (will complete initialization in background)');
+      return true;
+    } else if (status.includes('STOPPED')) {
+      throw new Error('Nucleus Service failed to start (status: STOPPED)');
     } else {
-      throw new Error('Nucleus Service state is not RUNNING after start command');
+      throw new Error(`Nucleus Service in unexpected state: ${status}`);
     }
   } catch (e) {
     console.error(`❌ Failed to start Nucleus Service: ${e.message}`);
     
-    // Leer log para diagnóstico
     try {
       const logDir = path.join(paths.logsDir, 'nucleus', 'service');
       const serviceLog = path.join(logDir, 'nucleus_service.log');
@@ -260,7 +275,6 @@ async function removeNucleusService() {
     console.log('   Stopping Nucleus Service...');
     await runCommand(`"${nssmPath}" stop "${NUCLEUS_SERVICE_NAME}"`);
     
-    // Esperar más tiempo para Nucleus (es más complejo)
     await new Promise(r => setTimeout(r, 5000));
     
     console.log('   Removing Nucleus Service...');

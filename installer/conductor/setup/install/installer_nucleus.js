@@ -712,8 +712,6 @@ async function registerTelemetryStream(streamId, label, logPath, priority = 2) {
 // ============================================================================
 
 module.exports = {
-  deployAllBinaries,
-  deployConductor,
   nucleusHealth,
   checkOllamaInstalled,
   installOllama,
