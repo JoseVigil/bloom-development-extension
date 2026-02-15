@@ -1,0 +1,26 @@
+{
+  "build_date": "2026 -Sun 02-15",
+  "build_number": 8,
+  "capabilities": [
+    "state_inspection",
+    "manifest_reconciliation",
+    "atomic_updates",
+    "service_management",
+    "rollback"
+  ],
+  "channel": "stable",
+  "name": "Metamorph",
+  "paths": {
+    "bin": "C:\\Users\\josev\\AppData\\Local\\BloomNucleus\\bin",
+    "config": "C:\\Users\\josev\\AppData\\Local\\BloomNucleus\\config",
+    "logs": "C:\\Users\\josev\\AppData\\Local\\BloomNucleus\\logs",
+    "root": "C:\\Users\\josev\\AppData\\Local\\BloomNucleus",
+    "staging": "C:\\Users\\josev\\AppData\\Local\\BloomNucleus\\staging"
+  },
+  "requires": {},
+  "runtime": {
+    "arch": "amd64",
+    "os": "windows"
+  },
+  "version": "1.0.0"
+}

@@ -1,0 +1,81 @@
+[
+  {
+    "name": "cleanup",
+    "use": "cleanup",
+    "short": "Clean up staging and old snapshots",
+    "category": "MAINTENANCE",
+    "example": "  metamorph cleanup\n  metamorph --json cleanup",
+    "json_response": "{\"cleaned\": 0, \"freed_bytes\": 0}"
+  },
+  {
+    "name": "generate-manifest",
+    "use": "generate-manifest",
+    "short": "Generate manifest from current state",
+    "category": "RECONCILIATION",
+    "example": "  metamorph generate-manifest\n  metamorph --json generate-manifest",
+    "json_response": "{\"manifest\": {...}}"
+  },
+  {
+    "name": "info",
+    "use": "info",
+    "short": "Display detailed system information",
+    "category": "SYSTEM",
+    "example": "  metamorph info\n  metamorph --json info",
+    "json_response": "{\n  \"name\": \"Metamorph\",\n  \"version\": \"1.0.0\",\n  \"build_number\": 2,\n  \"capabilities\": [\"state_inspection\", \"manifest_reconciliation\"],\n  \"paths\": {...}\n}"
+  },
+  {
+    "name": "inspect",
+    "use": "inspect",
+    "short": "Inspect all binaries and show detailed info",
+    "category": "INSPECTION",
+    "options": [
+      {
+        "name": "all",
+        "shorthand": "a",
+        "usage": "Include external binaries (Temporal, Ollama, Chromium, Node)",
+        "default": "false"
+      }
+    ],
+    "example": "  metamorph inspect\n  metamorph inspect --all\n  metamorph --json inspect\n  metamorph --json inspect --all",
+    "json_response": "{\n  \"managed_binaries\": [\n    {\n      \"name\": \"Brain\",\n      \"version\": \"3.2.0\",\n      \"status\": \"healthy\"\n    }\n  ],\n  \"summary\": {\n    \"total_binaries\": 7,\n    \"healthy_count\": 7\n  }\n}"
+  },
+  {
+    "name": "reconcile",
+    "use": "reconcile",
+    "short": "Reconcile system against manifest",
+    "category": "RECONCILIATION",
+    "options": [
+      {
+        "name": "manifest",
+        "shorthand": "m",
+        "usage": "Path to manifest file"
+      }
+    ],
+    "example": "  metamorph reconcile --manifest manifest.json\n  metamorph --json reconcile --manifest manifest.json",
+    "json_response": "{\"status\": \"success\", \"changes\": []}"
+  },
+  {
+    "name": "rollback",
+    "use": "rollback",
+    "short": "Rollback to previous snapshot",
+    "category": "ROLLBACK",
+    "example": "  metamorph rollback\n  metamorph --json rollback",
+    "json_response": "{\"status\": \"success\", \"snapshot\": \"...\"}"
+  },
+  {
+    "name": "status",
+    "use": "status",
+    "short": "Display current system state",
+    "category": "INSPECTION",
+    "example": "  metamorph status\n  metamorph --json status",
+    "json_response": "{\n  \"timestamp\": \"2026-02-15T10:00:00Z\",\n  \"system_healthy\": true,\n  \"status\": \"operational\",\n  \"summary\": {\n    \"total_binaries\": 7,\n    \"healthy_count\": 7,\n    \"missing_count\": 0\n  }\n}"
+  },
+  {
+    "name": "version",
+    "use": "version",
+    "short": "Display version and build information",
+    "category": "SYSTEM",
+    "example": "  metamorph version\n  metamorph --json version",
+    "json_response": "{\n  \"name\": \"Metamorph\",\n  \"version\": \"1.0.0\",\n  \"build_number\": 2,\n  \"build_date\": \"2026-02-13\",\n  \"build_time\": \"11:29:00\",\n  \"full_version\": \"v1.0.0-build.2\"\n}"
+  }
+]

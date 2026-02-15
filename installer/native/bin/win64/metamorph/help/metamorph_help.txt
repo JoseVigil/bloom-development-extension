@@ -1,0 +1,210 @@
+
+                                                       METAMORPH
+                                                System State Reconciler
+
+
+------------------------------------------------------------------------------------------------------------------------
+  USAGE
+------------------------------------------------------------------------------------------------------------------------
+
+  metamorph [OPTIONS] <command> [args]
+
+  Quick examples:
+    metamorph version                    # Display version information
+    metamorph info                       # Show system information
+    metamorph --json info              # JSON output for automation
+
+
+------------------------------------------------------------------------------------------------------------------------
+  GLOBAL OPTIONS
+------------------------------------------------------------------------------------------------------------------------
+
+  --json           Output in JSON format (machine-readable)
+  --verbose        Enable detailed logging for debugging
+  --help           Show this help message
+
+
+------------------------------------------------------------------------------------------------------------------------
+  COMMAND CATEGORIES
+------------------------------------------------------------------------------------------------------------------------
+
+  SYSTEM            System information and version details                   2 cmds
+  INSPECTION        Binary and state inspection tools                        2 cmds
+  RECONCILIATION    Manifest-driven state reconciliation                     2 cmds
+  ROLLBACK          Snapshot restoration and rollback                        1 cmd
+  MAINTENANCE       System cleanup and maintenance                           1 cmd
+  --------------------------------------------------------------------------  Total: 8 commands
+
+
+=======================================================[ SYSTEM ]=======================================================
+
+  > INFO
+    Display detailed system information
+
+    Usage: metamorph info
+
+    Example:
+        metamorph info
+        metamorph --json info
+
+    JSON Response:
+      {
+        "name": "Metamorph",
+        "version": "1.0.0",
+        "build_number": 2,
+        "capabilities": ["state_inspection", "manifest_reconciliation"],
+        "paths": {...}
+      }
+
+    --------------------------------------------------------------------------------
+
+  > VERSION
+    Display version and build information
+
+    Usage: metamorph version
+
+    Example:
+        metamorph version
+        metamorph --json version
+
+    JSON Response:
+      {
+        "name": "Metamorph",
+        "version": "1.0.0",
+        "build_number": 2,
+        "build_date": "2026-02-13",
+        "build_time": "11:29:00",
+        "full_version": "v1.0.0-build.2"
+      }
+
+    --------------------------------------------------------------------------------
+
+
+=====================================================[ INSPECTION ]=====================================================
+
+  > INSPECT
+    Inspect all binaries and show detailed info
+
+    Usage: metamorph inspect
+
+    Flags:
+      --all, -a                  Include external binaries (Temporal, Ollama, Chromium, Node)
+
+    Example:
+        metamorph inspect
+        metamorph inspect --all
+        metamorph --json inspect
+        metamorph --json inspect --all
+
+    JSON Response:
+      {
+        "managed_binaries": [
+          {
+            "name": "Brain",
+            "version": "3.2.0",
+            "status": "healthy"
+          }
+        ],
+        "summary": {
+          "total_binaries": 7,
+          "healthy_count": 7
+        }
+      }
+
+    --------------------------------------------------------------------------------
+
+  > STATUS
+    Display current system state
+
+    Usage: metamorph status
+
+    Example:
+        metamorph status
+        metamorph --json status
+
+    JSON Response:
+      {
+        "timestamp": "2026-02-15T10:00:00Z",
+        "system_healthy": true,
+        "status": "operational",
+        "summary": {
+          "total_binaries": 7,
+          "healthy_count": 7,
+          "missing_count": 0
+        }
+      }
+
+    --------------------------------------------------------------------------------
+
+
+===================================================[ RECONCILIATION ]===================================================
+
+  > GENERATE-MANIFEST
+    Generate manifest from current state
+
+    Usage: metamorph generate-manifest
+
+    Example:
+        metamorph generate-manifest
+        metamorph --json generate-manifest
+
+    JSON Response:
+      {"manifest": {...}}
+
+    --------------------------------------------------------------------------------
+
+  > RECONCILE
+    Reconcile system against manifest
+
+    Usage: metamorph reconcile
+
+    Flags:
+      --manifest, -m             Path to manifest file
+
+    Example:
+        metamorph reconcile --manifest manifest.json
+        metamorph --json reconcile --manifest manifest.json
+
+    JSON Response:
+      {"status": "success", "changes": []}
+
+    --------------------------------------------------------------------------------
+
+
+======================================================[ ROLLBACK ]======================================================
+
+  > ROLLBACK
+    Rollback to previous snapshot
+
+    Usage: metamorph rollback
+
+    Example:
+        metamorph rollback
+        metamorph --json rollback
+
+    JSON Response:
+      {"status": "success", "snapshot": "..."}
+
+    --------------------------------------------------------------------------------
+
+
+====================================================[ MAINTENANCE ]=====================================================
+
+  > CLEANUP
+    Clean up staging and old snapshots
+
+    Usage: metamorph cleanup
+
+    Example:
+        metamorph cleanup
+        metamorph --json cleanup
+
+    JSON Response:
+      {"cleaned": 0, "freed_bytes": 0}
+
+    --------------------------------------------------------------------------------
+
+
+                                 [!] Metamorph: Governance Layer for Bloom Organization
+                           Use 'metamorph <command> --help' for detailed command information
+
