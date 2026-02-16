@@ -52,20 +52,8 @@ async function executeNucleusCommand(args) {
     child.stderr.on('data', (data) => { stderr += data.toString(); });
 
     child.on('close', (code) => {
-      if (code !== 0) {
-        // Include both stdout and stderr in error message for better debugging
-        const errorDetails = [];
-        if (stderr.trim()) errorDetails.push(`stderr: ${stderr.trim()}`);
-        if (stdout.trim()) errorDetails.push(`stdout: ${stdout.trim()}`);
-        
-        const errorMsg = errorDetails.length > 0 
-          ? errorDetails.join('\n') 
-          : 'No error message provided';
-          
-        return reject(new Error(`Nucleus exited ${code}: ${errorMsg}`));
-      }
-      
-      // Si es --json, parsear extrayendo solo el JSON válido
+      // CRÍTICO: Para comandos --json, intentar parsear SIEMPRE el JSON,
+      // independientemente del exit code
       if (args.includes('--json')) {
         try {
           // Extraer solo el JSON válido usando un parser incremental
@@ -106,6 +94,10 @@ async function executeNucleusCommand(args) {
           
           const jsonText = jsonLines.join('\n');
           const parsed = JSON.parse(jsonText);
+          
+          // CRÍTICO: Devolver el objeto parseado incluso si exit code != 0
+          // El código de salida solo indica el estado general, pero el JSON
+          // contiene la información detallada que necesitamos
           resolve(parsed);
           
         } catch (parseError) {
@@ -114,12 +106,25 @@ async function executeNucleusCommand(args) {
           reject(new Error(`JSON parse failed: ${parseError.message}`));
         }
       } else {
+        // Para comandos sin --json, verificar exit code normalmente
+        if (code !== 0) {
+          const errorDetails = [];
+          if (stderr.trim()) errorDetails.push(`stderr: ${stderr.trim()}`);
+          if (stdout.trim()) errorDetails.push(`stdout: ${stdout.trim()}`);
+          
+          const errorMsg = errorDetails.length > 0 
+            ? errorDetails.join('\n') 
+            : 'No error message provided';
+            
+          return reject(new Error(`Nucleus exited ${code}: ${errorMsg}`));
+        }
+        
         resolve({ stdout: stdout.trim(), stderr: stderr.trim() });
       }
     });
 
-    child.on('error', (err) => {
-      reject(new Error(`Failed to spawn nucleus: ${err.message}`));
+    child.on('error', (error) => {
+      reject(new Error(`Failed to spawn nucleus: ${error.message}`));
     });
   });
 }
@@ -359,12 +364,40 @@ async function nucleusHealth() {
   log.info('Checking Nucleus health...');
 
   try {
-    const result = await executeNucleusCommand(['health']);
-    log.success('✓ Nucleus health check passed');
+    // CRÍTICO: Usar --json para obtener respuesta estructurada
+    const result = await executeNucleusCommand(['health', '--json']);
+    
+    // El resultado debe tener la estructura:
+    // { success: boolean, state: string, components: {...}, timestamp: number }
+    
+    if (!result) {
+      throw new Error('No health data returned from nucleus');
+    }
+    
+    // Log el estado general
+    if (result.success) {
+      log.success(`✓ Nucleus health: ${result.state}`);
+    } else {
+      log.warn(`⚠️ Nucleus health: ${result.state}`);
+      if (result.error) {
+        log.warn(`   Error: ${result.error}`);
+      }
+    }
+    
     return result;
+    
   } catch (error) {
     log.error('❌ Nucleus health check failed:', error.message);
-    throw error;
+    
+    // Return a failed health result instead of throwing
+    // This allows the installer to make decisions based on which components failed
+    return {
+      success: false,
+      state: 'FAILED',
+      error: error.message,
+      components: {},
+      timestamp: Date.now()
+    };
   }
 }
 

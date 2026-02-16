@@ -6,7 +6,7 @@
 import * as vscode from 'vscode';
 import { BloomApiServer } from '../api/server';
 import { WebSocketManager } from './WebSocketManager';
-import { HostExecutor } from '../host/HostExecutor';
+import { HostExecutor } from '../../installer/host/HostExecutor';
 import { BTIPExplorerController } from './BTIPExplorerController';
 import { UserManager } from '../managers/userManager';
 

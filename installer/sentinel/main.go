@@ -28,9 +28,13 @@ func main() {
 		// Modo Help: mostrar ayuda sin inicialización completa
 		runHelpMode()
 		
+	case "daemon":
+		// Modo Daemon: inicialización completa con startup
+		runDaemonMode()
+		
 	default:
-		// Modo Normal: ejecución estándar de comandos CLI
-		runNormalMode()
+		// Modo Command: ejecución de comandos CLI sin startup
+		runCommandMode()
 	}
 }
 
@@ -40,8 +44,11 @@ func detectOperationMode() string {
 		if arg == "--help" || arg == "-h" || arg == "--json-help" {
 			return "help"
 		}
+		if arg == "daemon" {
+			return "daemon"
+		}
 	}
-	return "normal"
+	return "command"
 }
 
 // runHelpMode muestra la ayuda sin inicialización completa
@@ -73,9 +80,9 @@ func runHelpMode() {
 	}
 }
 
-// runNormalMode ejecuta Sentinel en modo CLI estándar
-func runNormalMode() {
-	// Modo normal: inicialización completa con logs
+// runDaemonMode ejecuta Sentinel como proceso persistente
+func runDaemonMode() {
+	// Modo daemon: inicialización completa con logs Y startup
 	c, err := core.Initialize()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error inicializando core: %v\n", err)
@@ -83,7 +90,7 @@ func runNormalMode() {
 	}
 	defer c.Close()
 	
-	// FASE STARTUP (solo en modo normal)
+	// FASE STARTUP (solo en modo daemon)
 	if err := startup.Initialize(c); err != nil {
 		c.Logger.Error("Fallo crítico en fase Startup: %v", err)
 		os.Exit(1)
@@ -92,13 +99,41 @@ func runNormalMode() {
 	// Construir comando raíz
 	rootCmd := buildRootCommand(c)
 	
-	// Intercepción de flags globales antes de la ejecución
+	// Intercepción de flags globales
 	var jsonOutput bool
-	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output en formato JSON para integración programática")
-	
+	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output en formato JSON")
 	_ = rootCmd.ParseFlags(os.Args)
 	
-	// Inyectar modo JSON en Core si está activo
+	if jsonOutput {
+		c.SetJSONMode(true)
+	}
+	
+	// Ejecución del motor CLI
+	if err := rootCmd.Execute(); err != nil {
+		os.Exit(1)
+	}
+}
+
+// runCommandMode ejecuta comandos CLI SIN startup
+func runCommandMode() {
+	// Modo command: inicialización básica SIN startup
+	c, err := core.Initialize()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error inicializando core: %v\n", err)
+		os.Exit(1)
+	}
+	defer c.Close()
+	
+	// NO ejecutar startup.Initialize() - solo comandos CLI
+	
+	// Construir comando raíz
+	rootCmd := buildRootCommand(c)
+	
+	// Intercepción de flags globales
+	var jsonOutput bool
+	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output en formato JSON")
+	_ = rootCmd.ParseFlags(os.Args)
+	
 	if jsonOutput {
 		c.SetJSONMode(true)
 	}
@@ -118,7 +153,7 @@ func buildRootCommand(c *core.Core) *cobra.Command {
 		
 Modos de operación:
   sentinel <command>           Ejecuta un comando específico (modo CLI)
-  sentinel --mode daemon       Inicia como proceso persistente (Sidecar)
+  sentinel daemon              Inicia como proceso persistente (Sidecar)
   sentinel --help              Muestra esta ayuda
 
 Modo Daemon (Sidecar):
@@ -135,7 +170,7 @@ Modo Daemon (Sidecar):
 	
 	// Flags Globales (Persistent Flags)
 	var jsonHelp bool
-	rootCmd.PersistentFlags().BoolVar(&jsonHelp, "json-help", false, "Exporta el help en formato JSON para integración con Electron")
+	rootCmd.PersistentFlags().BoolVar(&jsonHelp, "json-help", false, "Exporta el help en formato JSON")
 	
 	// Configuración del Help Renderer
 	rootCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
@@ -146,12 +181,11 @@ Modo Daemon (Sidecar):
 		}
 	})
 	
-	// Integración de comandos registrados en los paquetes internos
-	// El DEBUG nos confirmará si la eliminación del import duplicado resolvió la carga
+	// Integración de comandos registrados
 	for _, reg := range core.CommandRegistry {
 		cmd := reg.Factory(c)
 		
-		// Inyectar metadatos de categoría para el renderizador visual
+		// Inyectar metadatos de categoría
 		if cmd.Annotations == nil {
 			cmd.Annotations = make(map[string]string)
 		}

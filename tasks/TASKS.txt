@@ -412,5 +412,28 @@ https://grok.com/c/ce3cc729-fd3a-4836-a256-634160392198?rid=695099e6-5d0b-4c0e-9
 elias Codespace Phone API 
 https://chatgpt.com/c/6982aa2e-8248-832a-b945-e32c4343be6c
 
+elias Alfred 
+https://aistudio.google.com/prompts/1Qgy2N1fMBtBwKIV3wJqxjCr72zyanU7F
 
+roamtouch temporal on nucleus
+https://chatgpt.com/c/6983f2ed-d938-8333-81cd-ac4ad33f97c4
+
+uitool Bóveda Volátil con Arquitectura Nucleus/Temporal 
+https://claude.ai/chat/5ab0e892-5bd0-4490-81ee-c9b74f99b1dd
+
+elias batcave
+https://chatgpt.com/c/69872ad9-7570-8326-a3ed-bbfe61cebf63
+
+https://aistudio.google.com/apps/drive/14T8bNIQB68E66Ru1ZcW3SxCsEo7tttYA?showAssistant=true&resourceKey=&showCode=true
+jose gmail App mobile
+
+nenes sergio pedro 
+https://chatgpt.com/c/69852f63-4e24-8330-86bf-ce52c4e2d251
+https://chatgpt.com/c/69853046-501c-8330-8a23-c0c84745b2d4
+
+btips metamorph
+https://aistudio.google.com/prompts/1rngXBOs04eUqP_3VcsS9_pC4G6hHV-Hk
+
+uitool claude, chatgpt, grok keys storage in vault 
+https://claude.ai/chat/58da5e22-4657-4b9d-a6ec-0d15cb62b85a
 

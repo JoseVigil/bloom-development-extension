@@ -21,6 +21,15 @@ bloom-development-extension/
     │   ├── update_spec_metadata.py
     │   ├── update_version.py
     │   └── versions.json
+    ├── build_multiplatform/
+    │   ├── __init__.py
+    │   ├── __pycache__/ [... cache]
+    │   ├── build.py
+    │   └── shared/
+    │       ├── __init__.py
+    │       ├── __pycache__/ [... cache]
+    │       ├── platform_detector.py
+    │       └── telemetry_helper.py
     ├── build_number.txt
     ├── cli/
     │   ├── __init__.py
@@ -33,6 +42,37 @@ bloom-development-extension/
     ├── commands/
     │   ├── __init__.py
     │   ├── __pycache__/ [... cache]
+    │   ├── ai/
+    │   │   ├── __init__.py
+    │   │   ├── claude/
+    │   │   │   ├── __init__.py
+    │   │   │   ├── claude_keys_add.py
+    │   │   │   ├── claude_keys_delete.py
+    │   │   │   ├── claude_keys_list.py
+    │   │   │   ├── claude_keys_stats.py
+    │   │   │   └── claude_keys_validate.py
+    │   │   ├── gemini/
+    │   │   │   ├── __init__.py
+    │   │   │   ├── __pycache__/ [... cache]
+    │   │   │   ├── gemini_keys_add.py
+    │   │   │   ├── gemini_keys_delete.py
+    │   │   │   ├── gemini_keys_list.py
+    │   │   │   ├── gemini_keys_stats.py
+    │   │   │   └── gemini_keys_validate.py
+    │   │   ├── openai/
+    │   │   │   ├── __init__.py
+    │   │   │   ├── openai_keys_add.py
+    │   │   │   ├── openai_keys_delete.py
+    │   │   │   ├── openai_keys_list.py
+    │   │   │   ├── openai_keys_stats.py
+    │   │   │   └── openai_keys_validate.py
+    │   │   └── xai/
+    │   │       ├── __init__.py
+    │   │       ├── xai_keys_add.py
+    │   │       ├── xai_keys_delete.py
+    │   │       ├── xai_keys_list.py
+    │   │       ├── xai_keys_stats.py
+    │   │       └── xai_keys_validate.py
     │   ├── chrome/
     │   │   └── chrome.py
     │   ├── context/
@@ -49,14 +89,6 @@ bloom-development-extension/
     │   │   ├── __pycache__/ [... cache]
     │   │   ├── compress.py
     │   │   └── tree.py
-    │   ├── gemini/
-    │   │   ├── __init__.py
-    │   │   ├── __pycache__/ [... cache]
-    │   │   ├── keys_add.py
-    │   │   ├── keys_delete.py
-    │   │   ├── keys_list.py
-    │   │   ├── keys_stats.py
-    │   │   └── keys_validate.py
     │   ├── github/
     │   │   ├── __init__.py
     │   │   ├── __pycache__/ [... cache]
@@ -291,6 +323,8 @@ bloom-development-extension/
     │   ├── synapse/
     │   │   ├── __init__.py
     │   │   ├── __pycache__/ [... cache]
+    │   │   ├── handlers/
+    │   │   │   └── api_key_handler.py
     │   │   ├── synapse_exceptions.py
     │   │   ├── synapse_manager.py
     │   │   └── synapse_protocol.py
@@ -309,6 +343,14 @@ bloom-development-extension/
         ├── __init__.py
         ├── __pycache__/ [... cache]
         ├── context.py
+        ├── credentials/
+        │   ├── __init__.py
+        │   ├── __pycache__/ [... cache]
+        │   ├── base.py
+        │   ├── claude_manager.py
+        │   ├── openai_manager.py
+        │   ├── unified_manager.py
+        │   └── xai_manager.py
         ├── credentials.py
         ├── environment.py
         ├── github_types.py

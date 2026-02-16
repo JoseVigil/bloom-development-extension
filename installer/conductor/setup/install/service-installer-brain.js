@@ -8,6 +8,8 @@ const { paths } = require('../config/paths');
 // ============================================================================
 const NEW_SERVICE_NAME = 'BloomBrainService';
 const OLD_SERVICE_NAME = 'BloomNucleusHost';
+const BRAIN_DISPLAY_NAME = 'Bloom Brain Service';
+const BRAIN_DESCRIPTION = 'Bloom Brain Service - AI orchestration engine, LLM interface, and intelligent task processing (autonomous service)';
 
 // ============================================================================
 // HELPERS
@@ -102,7 +104,7 @@ async function rotateLogIfNeeded(logPath) {
 // ============================================================================
 
 async function installWindowsService() {
-  console.log('\n📦 INSTALANDO SERVICIO: BloomBrainService\n');
+  console.log('\n🤖 INSTALANDO SERVICIO DE IA: Bloom Brain Service\n');
   
   const nssmPath = paths.nssmExe;
   const binaryPath = paths.brainExe;
@@ -135,8 +137,32 @@ async function installWindowsService() {
   // SECUENCIA DE COMANDOS NSSM
   // ---------------------------------------------------------
   
-  // A. Instalar
-  await runCommand(`"${nssmPath}" install "${NEW_SERVICE_NAME}" "${binaryPath}"`);
+  // A. Instalar con reintento (manejar "marked for deletion")
+  let installAttempts = 0;
+  const MAX_INSTALL_ATTEMPTS = 5;
+  let installed = false;
+  
+  while (!installed && installAttempts < MAX_INSTALL_ATTEMPTS) {
+    try {
+      await runCommand(`"${nssmPath}" install "${NEW_SERVICE_NAME}" "${binaryPath}"`);
+      installed = true;
+    } catch (error) {
+      installAttempts++;
+      
+      if (error.message.includes('marked for deletion')) {
+        if (installAttempts < MAX_INSTALL_ATTEMPTS) {
+          const waitTime = installAttempts * 1000; // Backoff: 1s, 2s, 3s, 4s
+          console.log(`⚠️  Service marked for deletion, retrying in ${waitTime/1000}s... (attempt ${installAttempts}/${MAX_INSTALL_ATTEMPTS})`);
+          await new Promise(r => setTimeout(r, waitTime));
+        } else {
+          throw new Error(`Failed to install service after ${MAX_INSTALL_ATTEMPTS} attempts. Service is still marked for deletion. Try rebooting or wait a few minutes.`);
+        }
+      } else {
+        // Otro tipo de error, propagarlo inmediatamente
+        throw error;
+      }
+    }
+  }
   
   // B. Argumentos (Service Start)
   await runCommand(`"${nssmPath}" set "${NEW_SERVICE_NAME}" AppParameters "service start"`);
@@ -161,12 +187,14 @@ async function installWindowsService() {
   // F. Configuración de Inicio
   await runCommand(`"${nssmPath}" set "${NEW_SERVICE_NAME}" Start SERVICE_AUTO_START`);
   await runCommand(`"${nssmPath}" set "${NEW_SERVICE_NAME}" AppExit Default Restart`);
-  await runCommand(`"${nssmPath}" set "${NEW_SERVICE_NAME}" DisplayName "Bloom Brain Service"`);
+  await runCommand(`"${nssmPath}" set "${NEW_SERVICE_NAME}" DisplayName "${BRAIN_DISPLAY_NAME}"`);
+  await runCommand(`"${nssmPath}" set "${NEW_SERVICE_NAME}" Description "${BRAIN_DESCRIPTION}"`);
+  console.log('   ✓ Service recovery configuration complete');
 
-  // G. Actualizar telemetry usando nucleus CLI
+  // G. Registrar telemetry usando nucleus CLI
   await registerTelemetryStream(serviceLog);
 
-  console.log('✅ Service registered.');
+  console.log('✅ Brain Service registered (Autonomous AI Mode)');
 }
 
 async function startService() {
@@ -208,6 +236,20 @@ async function removeService(name) {
     const nssmPath = paths.nssmExe;
     await runCommand(`"${nssmPath}" stop "${name}"`);
     await runCommand(`"${nssmPath}" remove "${name}" confirm`);
+    
+    // Wait for Windows to fully release the service
+    console.log('⏳ Waiting for service deletion to complete...');
+    await new Promise(r => setTimeout(r, 2000));
+    
+    // Verificar que se haya eliminado completamente
+    if (serviceExists(name)) {
+      console.log('⚠️  Service still exists, forcing removal with sc delete...');
+      const { execSync } = require('child_process');
+      try {
+        execSync(`sc delete "${name}"`, { stdio: 'ignore' });
+        await new Promise(r => setTimeout(r, 2000));
+      } catch (e) { /* Ignorar */ }
+    }
   } catch (e) { /* Ignorar */ }
 }
 

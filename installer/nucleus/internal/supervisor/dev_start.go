@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"time"
 
@@ -126,38 +127,102 @@ func executeBootSequence(ctx context.Context, s *Supervisor, simulation, skipVau
 		Timestamp: time.Now().Unix(),
 	}
 
-	// Phase 1: Verify Temporal Core
-	if err := s.verifyTemporalServer(ctx); err != nil {
-		result.Success = false
-		result.FailedStage = "temporal_core"
-		return result, fmt.Errorf("temporal core verification failed: %w", err)
-	}
+	// ========================================================================
+	// Phase 1: Ensure Temporal Server is running (auto-start if needed)
+	// ========================================================================
+	fmt.Println("[INFO] Ensuring Temporal Server is running...")
 
-	// Phase 2: Verify Worker
-	if err := s.verifyWorkerRunning(ctx); err != nil {
-		result.Success = false
-		result.FailedStage = "worker_init"
-		return result, fmt.Errorf("worker verification failed: %w", err)
-	}
-
-	// Phase 3: Start Ollama
-	ollamaResult, err := s.StartOllama(ctx)
+	nucleusExe, err := getNucleusExecutablePath()
 	if err != nil {
 		result.Success = false
-		result.FailedStage = "heavy_infra"
-		return result, fmt.Errorf("ollama start failed: %w", err)
+		result.FailedStage = "nucleus_not_found"
+		return result, fmt.Errorf("nucleus executable not found: %w", err)
 	}
-	result.OllamaPID = ollamaResult.PID
-	result.OllamaPort = ollamaResult.Port
 
+	// Execute: nucleus temporal ensure
+	cmd := exec.CommandContext(ctx, nucleusExe, "temporal", "ensure")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		result.Success = false
+		result.FailedStage = "temporal_ensure_failed"
+		return result, fmt.Errorf("temporal ensure command failed: %w (output: %s)", err, string(output))
+	}
+
+	// Parse JSON response
+	var temporalResult struct {
+		Success  bool   `json:"success"`
+		State    string `json:"state"`
+		Started  bool   `json:"started"`
+		PID      int    `json:"pid,omitempty"`
+		GRPCPort int    `json:"grpc_port"`
+		UIPort   int    `json:"ui_port"`
+	}
+
+	if err := json.Unmarshal(output, &temporalResult); err != nil {
+		result.Success = false
+		result.FailedStage = "temporal_response_parse"
+		return result, fmt.Errorf("failed to parse temporal ensure response: %w (output: %s)", err, string(output))
+	}
+
+	if !temporalResult.Success {
+		result.Success = false
+		result.FailedStage = "temporal_not_running"
+		return result, fmt.Errorf("temporal ensure reported failure: state=%s", temporalResult.State)
+	}
+
+	if temporalResult.Started {
+		fmt.Printf("[INFO] ✓ Temporal Server started: PID %d (port %d)\n", temporalResult.PID, temporalResult.GRPCPort)
+	} else {
+		fmt.Printf("[INFO] ✓ Temporal Server already running (port %d)\n", temporalResult.GRPCPort)
+	}
+
+	// ========================================================================
+	// Phase 2: Start Worker Manager
+	// ========================================================================
+	fmt.Println("[INFO] Starting Worker Manager...")
+
+	workerProc, err := s.startWorkerManager(ctx)
+	if err != nil {
+		result.Success = false
+		result.FailedStage = "worker_start"
+		return result, fmt.Errorf("worker manager start failed: %w", err)
+	}
+
+	fmt.Printf("[INFO] ✓ Worker Manager started: PID %d\n", workerProc.PID)
+
+	// ========================================================================
+	// Phase 3: Start Ollama (NON-BLOCKING)
+	// ========================================================================
+	fmt.Println("[INFO] Starting Ollama (non-blocking)...")
+	
+	// Start Ollama in background - don't fail boot if it doesn't start
+	go func() {
+		ollamaResult, err := s.StartOllama(ctx)
+		if err != nil {
+			fmt.Printf("[WARN] ⚠️  Ollama start failed (non-critical): %v\n", err)
+			fmt.Println("[INFO] Ollama can be started manually later via: sentinel ollama start")
+		} else {
+			fmt.Printf("[INFO] ✓ Ollama started: PID %d (port %d)\n", ollamaResult.PID, ollamaResult.Port)
+		}
+	}()
+	
+	// Don't block - continue boot sequence immediately
+	result.OllamaPID = 0  // Will be populated asynchronously
+	result.OllamaPort = 11434
+	fmt.Println("[INFO] ✓ Ollama startup initiated in background")
+
+	// ========================================================================
 	// Phase 4: Governance validation
+	// ========================================================================
 	if err := s.bootGovernance(ctx, simulation); err != nil {
 		result.Success = false
 		result.FailedStage = "governance"
 		return result, fmt.Errorf("governance validation failed: %w", err)
 	}
 
+	// ========================================================================
 	// Phase 5: Vault check (optional)
+	// ========================================================================
 	if !skipVault {
 		vaultResult, err := s.CheckVaultStatus(ctx)
 		if err != nil {
@@ -170,7 +235,9 @@ func executeBootSequence(ctx context.Context, s *Supervisor, simulation, skipVau
 		result.VaultState = "SKIPPED"
 	}
 
+	// ========================================================================
 	// Phase 6: Control Plane
+	// ========================================================================
 	proc, err := s.bootControlPlane(ctx, simulation)
 	if err != nil {
 		result.Success = false
@@ -213,4 +280,32 @@ func outputJSONResult(v interface{}) {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	enc.Encode(v)
+}
+
+// getNucleusExecutablePath finds the nucleus executable
+func getNucleusExecutablePath() (string, error) {
+	// 1. Check BLOOM_BIN_DIR environment variable
+	if binDir := os.Getenv("BLOOM_BIN_DIR"); binDir != "" {
+		nucleusPath := filepath.Join(binDir, "nucleus", "nucleus.exe")
+		if _, err := os.Stat(nucleusPath); err == nil {
+			return nucleusPath, nil
+		}
+	}
+	
+	// 2. Check LOCALAPPDATA\BloomNucleus\bin\nucleus
+	localAppData := os.Getenv("LOCALAPPDATA")
+	if localAppData != "" {
+		nucleusPath := filepath.Join(localAppData, "BloomNucleus", "bin", "nucleus", "nucleus.exe")
+		if _, err := os.Stat(nucleusPath); err == nil {
+			return nucleusPath, nil
+		}
+	}
+	
+	// 3. Try PATH
+	nucleusPath, err := exec.LookPath("nucleus")
+	if err == nil {
+		return nucleusPath, nil
+	}
+	
+	return "", fmt.Errorf("nucleus.exe not found in BLOOM_BIN_DIR, LOCALAPPDATA, or PATH")
 }

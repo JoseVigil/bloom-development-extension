@@ -58,6 +58,15 @@ func init() {
   - Permiso de escritura en HKCU\Software\Google\Chrome\NativeMessagingHosts
   - bloom-host.exe en bin/native/
   - Extension ID válido en configuración`
+		cmd.Annotations["output"] = `{
+  "success": true,
+  "data": {
+    "uuid": "550e8400-e29b-41d4-a716-446655440000",
+    "alias": "profile_001",
+    "path": "C:\\Users\\User\\AppData\\Local\\BloomNucleus\\profiles\\550e8400-e29b-41d4-a716-446655440000",
+    "is_master": true
+  }
+}`
 
 		return cmd
 	})
@@ -120,7 +129,6 @@ type CortexMetadata struct {
 }
 
 func HandleSeed(c *core.Core, alias string, isMaster bool) (string, string, error) {
-	// Verificar alias duplicado
 	registry_data := loadProfilesRegistry(c)
 	for _, p := range registry_data.Profiles {
 		if p.Alias == alias {
@@ -130,9 +138,6 @@ func HandleSeed(c *core.Core, alias string, isMaster bool) (string, string, erro
 
 	sm, _ := discovery.DiscoverSystem(c.Paths.BinDir)
 
-	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-	// 1️⃣ PRECONDICIÓN: Verificar existencia del .blx
-	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 	bloomBaseDir := filepath.Join(os.Getenv("LOCALAPPDATA"), "BloomNucleus")
 	blxPath := filepath.Join(bloomBaseDir, "bin", "cortex", "bloom-cortex.blx")
 	if _, err := os.Stat(blxPath); os.IsNotExist(err) {
@@ -141,9 +146,6 @@ func HandleSeed(c *core.Core, alias string, isMaster bool) (string, string, erro
 
 	c.Logger.Info("[SEED] ✓ Cortex package found: %s", blxPath)
 
-	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-	// 2️⃣ INSPECCIÓN: Leer metadatos sin desplegar
-	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 	metadata, err := inspectCortexPackage(blxPath, c)
 	if err != nil {
 		return "", "", fmt.Errorf("cortex_inspection_failed: %v", err)
@@ -151,14 +153,10 @@ func HandleSeed(c *core.Core, alias string, isMaster bool) (string, string, erro
 
 	c.Logger.Info("[SEED] Cortex version: %s (build: %s)", metadata.Version, metadata.BuildDate)
 
-	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-	// 🔧 NUEVO: Desempaquetar .blx a bin/extension ANTES de llamar a brain
-	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 	baseExtensionDir := filepath.Join(bloomBaseDir, "bin", "extension")
 	
 	c.Logger.Info("[SEED] Deploying base extension to: %s", baseExtensionDir)
 	
-	// Limpiar directorio si existe
 	if _, err := os.Stat(baseExtensionDir); err == nil {
 		c.Logger.Info("[SEED] Removing existing base extension directory")
 		if err := os.RemoveAll(baseExtensionDir); err != nil {
@@ -166,21 +164,16 @@ func HandleSeed(c *core.Core, alias string, isMaster bool) (string, string, erro
 		}
 	}
 	
-	// Crear directorio
 	if err := os.MkdirAll(baseExtensionDir, 0755); err != nil {
 		return "", "", fmt.Errorf("failed to create base extension dir: %v", err)
 	}
 	
-	// Desempaquetar cortex a bin/extension
 	if err := deployCortexPackage(blxPath, baseExtensionDir, c); err != nil {
 		return "", "", fmt.Errorf("failed to deploy base extension: %v", err)
 	}
 	
 	c.Logger.Info("[SEED] ✓ Base extension deployed to bin/extension")
 
-	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-	// 3️⃣ CREACIÓN DEL PERFIL (ahora brain puede copiar desde bin/extension)
-	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 	args := []string{"--json", "profile", "create", alias}
 	if isMaster {
 		args = append(args, "--master")
@@ -220,11 +213,9 @@ func HandleSeed(c *core.Core, alias string, isMaster bool) (string, string, erro
 	configDir := filepath.Join(c.Paths.AppDataDir, "config", "profile", uuid)
 	specPath := filepath.Join(configDir, "ignition_spec.json")
 
-	// Asegurar que los directorios existen (brain debería crearlos, pero por si acaso)
 	_ = os.MkdirAll(configDir, 0755)
 	_ = os.MkdirAll(logsDir, 0755)
 
-	// Verificar que brain creó el directorio de extensión
 	if _, err := os.Stat(extDir); os.IsNotExist(err) {
 		c.Logger.Error("[SEED] Brain failed to create extension directory at: %s", extDir)
 		return "", "", fmt.Errorf("brain did not create extension directory")
@@ -232,9 +223,6 @@ func HandleSeed(c *core.Core, alias string, isMaster bool) (string, string, erro
 
 	c.Logger.Info("[SEED] ✓ Profile created by brain with extension at: %s", extDir)
 
-	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-	// 4️⃣ POSTCONDICIÓN: Configuración y registro
-	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 	shortID := uuid[:8]
 	hostName := fmt.Sprintf("com.bloom.synapse.%s", shortID)
 	manifestPath := filepath.Join(configDir, hostName+".json")
@@ -259,9 +247,6 @@ func HandleSeed(c *core.Core, alias string, isMaster bool) (string, string, erro
 	return uuid, profileDir, nil
 }
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// inspectCortexPackage - Lee metadatos del .blx SIN extraer
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 func inspectCortexPackage(blxPath string, c *core.Core) (*CortexMetadata, error) {
 	reader, err := zip.OpenReader(blxPath)
 	if err != nil {
@@ -269,7 +254,6 @@ func inspectCortexPackage(blxPath string, c *core.Core) (*CortexMetadata, error)
 	}
 	defer reader.Close()
 
-	// Buscar cortex.meta.json
 	var metaFile *zip.File
 	for _, f := range reader.File {
 		if f.Name == "cortex.meta.json" {
@@ -296,9 +280,6 @@ func inspectCortexPackage(blxPath string, c *core.Core) (*CortexMetadata, error)
 	return &metadata, nil
 }
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// deployCortexPackage - Extrae COMPLETO el .blx a destDir
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 func deployCortexPackage(blxPath, destDir string, c *core.Core) error {
 	reader, err := zip.OpenReader(blxPath)
 	if err != nil {
@@ -307,7 +288,6 @@ func deployCortexPackage(blxPath, destDir string, c *core.Core) error {
 	defer reader.Close()
 
 	for _, f := range reader.File {
-		// Ignorar archivos de metadata que no son parte de la extensión
 		if strings.HasPrefix(f.Name, "__") || f.Name == "cortex.meta.json" {
 			continue
 		}
@@ -319,12 +299,10 @@ func deployCortexPackage(blxPath, destDir string, c *core.Core) error {
 			continue
 		}
 
-		// Crear directorios padre si no existen
 		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
 			return fmt.Errorf("failed to create dir: %v", err)
 		}
 
-		// Extraer archivo
 		rc, err := f.Open()
 		if err != nil {
 			return fmt.Errorf("failed to open file in zip: %v", err)

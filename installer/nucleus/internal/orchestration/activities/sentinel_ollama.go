@@ -2,6 +2,8 @@
 package activities
 
 import (
+	"os"
+    "path/filepath"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -33,7 +35,8 @@ func (a *SentinelActivities) StartOllama(ctx context.Context, input StartOllamaI
 	})
 
 	// Ejecutar: sentinel --json ollama start
-	cmd := exec.CommandContext(ctx, a.sentinelPath, "--json", "ollama", "start")
+	sentinelPath := filepath.Join(os.Getenv("BLOOM_BIN_DIR"), "sentinel", "sentinel.exe")
+	cmd := exec.CommandContext(ctx, sentinelPath, "--json", "ollama", "start")
 	
 	output, err := cmd.CombinedOutput()
 	if err != nil {

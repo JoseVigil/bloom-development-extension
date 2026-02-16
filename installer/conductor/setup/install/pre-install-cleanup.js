@@ -45,12 +45,12 @@ async function stopAllBloomServices(logger) {
  * Remueve todos los servicios Bloom usando NSSM
  */
 async function removeAllBloomServices(logger) {
-  logger.info('🗑️  Removing Bloom services...');
+  logger.info('🗑️ Removing Bloom services...');
   
   const nssmPath = paths.nssmExe || path.join(paths.binDir, 'nssm', 'nssm.exe');
   
   if (!fs.existsSync(nssmPath)) {
-    logger.warn('  ⚠️  NSSM not found, skipping service removal');
+    logger.warn('  ⚠️ NSSM not found, skipping service removal');
     return;
   }
   
@@ -80,42 +80,53 @@ async function removeAllBloomServices(logger) {
 
 /**
  * Mata procesos Bloom que puedan estar bloqueando archivos
+ * IMPORTANTE: NO mata node.exe porque el instalador mismo es Electron/Node
  */
 async function killBloomProcesses(logger) {
   logger.info('💀 Killing Bloom processes...');
   
   const processes = [
-    'nssm.exe',      // CRÍTICO: liberar nssm.exe
     'brain.exe',
     'nucleus.exe',
     'sentinel.exe',
     'bloom-host.exe',
     'bloom-conductor.exe',
-    'cortex.exe'
+    'cortex.exe',
+    'temporal.exe',  // CRÍTICO: liberar temporal.exe
+    'ollama.exe'     // CRÍTICO: liberar ollama.exe
+    // ❌ NO INCLUIR node.exe - el instalador Electron lo usa
+    // ❌ NO INCLUIR nssm.exe - puede causar problemas si servicios están activos
   ];
   
   for (const proc of processes) {
     try {
-      execSync(`taskkill /F /IM ${proc} /T`, { 
-        stdio: 'pipe',
-        timeout: 3000
-      });
-      logger.info(`  ✓ ${proc} killed`);
-    } catch (e) {
-      // Process not running
-      logger.debug(`  - ${proc} not running`);
+      // CRÍTICO: Envolver con manejo de errores robusto
+      try {
+        execSync(`taskkill /F /IM ${proc} /T`, { 
+          stdio: 'pipe',
+          timeout: 3000,
+          windowsHide: true  // Prevenir popups
+        });
+        logger.info(`  ✓ ${proc} killed`);
+      } catch (killError) {
+        // Process not running o error no crítico
+        logger.debug(`  - ${proc} not running`);
+      }
+    } catch (outerError) {
+      // Catch absoluto para prevenir crash del loop
+      logger.debug(`  - ${proc} error ignored`);
     }
   }
   
   // Wait for processes to die and files to unlock
-  await sleep(2000);
+  await sleep(3000); // Aumentado a 3 segundos para dar más tiempo
 }
 
 /**
  * Resetea nucleus.json si tiene milestones desactualizados
  */
 async function ensureNucleusJsonValid(logger) {
-  logger.info('🔍 Checking nucleus.json validity...');
+  logger.info('📋 Checking nucleus.json validity...');
   
   const nucleusPath = paths.configFile || path.join(paths.configDir, 'nucleus.json');
   
@@ -129,7 +140,7 @@ async function ensureNucleusJsonValid(logger) {
     
     // Verificar si tiene el milestone nucleus_service_install
     if (!nucleus.milestones?.nucleus_service_install) {
-      logger.warn('  ⚠️  nucleus.json has outdated milestone schema');
+      logger.warn('  ⚠️ nucleus.json has outdated milestone schema');
       logger.info('  🔄 Setting force_reinstall=true');
       
       nucleus.installation = nucleus.installation || {};
@@ -153,26 +164,43 @@ async function ensureNucleusJsonValid(logger) {
  * Se ejecuta ANTES de deployAllBinaries para evitar archivos bloqueados
  */
 async function preInstallCleanup(logger) {
-  logger.separator('PRE-INSTALL CLEANUP');
-  
   try {
-    // Paso 1: Verificar y actualizar nucleus.json
-    await ensureNucleusJsonValid(logger);
+    logger.separator('PRE-INSTALL CLEANUP');
     
-    // Paso 2: Detener servicios
-    await stopAllBloomServices(logger);
+    try {
+      // Paso 1: Verificar y actualizar nucleus.json
+      await ensureNucleusJsonValid(logger);
+    } catch (e) {
+      logger.warn('⚠️ nucleus.json check failed, continuing:', e.message);
+    }
     
-    // Paso 3: Remover servicios
-    await removeAllBloomServices(logger);
+    try {
+      // Paso 2: Detener servicios
+      await stopAllBloomServices(logger);
+    } catch (e) {
+      logger.warn('⚠️ Stop services failed, continuing:', e.message);
+    }
     
-    // Paso 4: Matar procesos
-    await killBloomProcesses(logger);
+    try {
+      // Paso 3: Remover servicios
+      await removeAllBloomServices(logger);
+    } catch (e) {
+      logger.warn('⚠️ Remove services failed, continuing:', e.message);
+    }
+    
+    try {
+      // Paso 4: Matar procesos (excepto node.exe del instalador)
+      await killBloomProcesses(logger);
+    } catch (e) {
+      logger.warn('⚠️ Kill processes failed, continuing:', e.message);
+    }
     
     logger.success('✅ Pre-install cleanup completed');
     return { success: true };
     
   } catch (error) {
     logger.error('❌ Pre-install cleanup failed:', error.message);
+    logger.error('Stack:', error.stack);
     // No es crítico, el safe-file-copy puede manejar algunos casos
     return { success: false, error: error.message };
   }
@@ -201,10 +229,10 @@ async function safeCopyFile(src, dest, logger, options = {}) {
       await fs.remove(dest);
     } catch (error) {
       if (error.code === 'EPERM' || error.code === 'EBUSY') {
-        logger.warn(`  ⚠️  ${filename} is locked`);
+        logger.warn(`  ⚠️ ${filename} is locked`);
         
         if (skipIfBlocked) {
-          logger.info(`  ⏭️  Skipping ${filename} (using existing file)`);
+          logger.info(`  ⏭️ Skipping ${filename} (using existing file)`);
           return { skipped: true, reason: 'locked' };
         }
         
@@ -237,7 +265,7 @@ async function safeCopyFile(src, dest, logger, options = {}) {
       lastError = error;
       
       if (attempt < maxRetries) {
-        logger.warn(`  ⚠️  Copy failed (attempt ${attempt}/${maxRetries})`);
+        logger.warn(`  ⚠️ Copy failed (attempt ${attempt}/${maxRetries})`);
         await sleep(retryDelay);
       }
     }
@@ -251,10 +279,12 @@ async function safeCopyFile(src, dest, logger, options = {}) {
  */
 async function killSpecificProcess(filename, logger) {
   const processMap = {
-    'nssm.exe': 'nssm.exe',
     'brain.exe': 'brain.exe',
     'nucleus.exe': 'nucleus.exe',
-    'sentinel.exe': 'sentinel.exe'
+    'sentinel.exe': 'sentinel.exe',
+    'temporal.exe': 'temporal.exe',
+    'ollama.exe': 'ollama.exe'
+    // NO incluir node.exe - el instalador lo usa
   };
   
   const processName = processMap[filename];

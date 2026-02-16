@@ -13,7 +13,7 @@ const { paths } = require('../config/paths');
 // ============================================================================
 const NUCLEUS_SERVICE_NAME = 'BloomNucleusService';
 const NUCLEUS_DISPLAY_NAME = 'Bloom Nucleus Service';
-const NUCLEUS_DESCRIPTION = 'Bloom Nucleus Service - Central orchestration hub, workflow engine, and system governance (24/7 critical service)';
+const NUCLEUS_DESCRIPTION = 'Bloom Nucleus Service - Central orchestration hub, workflow engine, and system governance (24/7 critical operational service)';
 
 // Configuración de reintentos y recuperación
 const SERVICE_CONFIG = {
@@ -186,6 +186,7 @@ async function installNucleusService() {
     `BLOOM_ROOT=${bloomRoot}`,
     `BLOOM_BIN_DIR=${bloomBinDir}`,
     `BLOOM_LOGS_DIR=${bloomLogsDir}`,
+    `BLOOM_DIR=${bloomRoot}`,  // ← AGREGAR ESTA LÍNEA
     `PATH=${bloomBinDir}\\nucleus;${bloomBinDir}\\sentinel;${process.env.PATH}`
   ].join('\0') + '\0';
 
@@ -219,7 +220,7 @@ async function installNucleusService() {
   
   console.log('   ✓ Service recovery configuration complete');
 
-  console.log('✅ Nucleus Service registered (24/7 Critical Mode)');
+  console.log('✅ Nucleus Service registered (24/7 Critical Operational Mode)');
 }
 
 // ============================================================================

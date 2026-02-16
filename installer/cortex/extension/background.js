@@ -270,15 +270,12 @@ function connectNative() {
 
 function handleDisconnect() {
   const error = chrome.runtime.lastError;
-  
-  console.warn('[Synapse] ⚠ Native host disconnected:', error?.message || 'No error');
-  console.log('[Synapse] Connection state was:', connectionState);
-  console.log('[Synapse] Handshake state was:', handshakeState);
-  
+  console.warn('[Synapse] ⚠️ Native host disconnected:', error?.message || 'Unknown');
+
   connectionState = 'DISCONNECTED';
   handshakeState = 'NONE';
   nativePort = null;
-  
+
   scheduleReconnect();
 }
 
@@ -288,167 +285,150 @@ function scheduleReconnect() {
     return;
   }
 
+  const delay = BASE_DELAY * Math.pow(1.5, reconnectAttempts);
   reconnectAttempts++;
-  const delay = BASE_DELAY * Math.min(reconnectAttempts, 5);
 
-  console.log(`[Synapse] Reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT})`);
+  console.log(`[Synapse] ⏱️ Reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT})`);
 
   setTimeout(() => {
-    if (connectionState === 'DISCONNECTED') {
-      connectNative();
-    }
+    console.log('[Synapse] 🔄 Attempting reconnect...');
+    connectNative();
   }, delay);
 }
 
 // ============================================================================
-// HOST MESSAGE HANDLER
+// HOST MESSAGE HANDLING - CON HANDSHAKE DE 3 FASES
 // ============================================================================
 
 function handleHostMessage(msg) {
-  const { type, command, id, payload, target } = msg;
-
-  console.log(`[Synapse] ⬅ Host message:`, { type, command, id, target });
+  console.log('[Synapse] ← Host message received:', msg);
 
   // 🔒 FASE 2: Host → Extension (host_ready)
-  if (command === 'host_ready') {
-    console.log('[HANDSHAKE] FASE 2: Host → Extension (host_ready)');
-    console.log('[HANDSHAKE] Host capabilities:', msg.capabilities);
-    console.log('[HANDSHAKE] Host version:', msg.version);
-    console.log('[HANDSHAKE] Max message size:', msg.max_message_size);
-    
+  if (msg.event === 'host_ready') {
+    console.log('[HANDSHAKE] FASE 2: Host → Extension (host_ready) ✓');
     handshakeState = 'HOST_READY';
     
-    // La Fase 3 la maneja el Host automáticamente (envía PROFILE_CONNECTED al Brain)
-    // Nosotros solo actualizamos estado local
+    // 🔒 FASE 3: Extension → Host (handshake_confirm)
+    console.log('[HANDSHAKE] FASE 3: Extension → Host (handshake_confirm)');
     
-    setTimeout(() => {
-      if (handshakeState === 'HOST_READY') {
-        console.log('[HANDSHAKE] FASE 3: Asumiendo handshake confirmado');
-        handshakeState = 'CONFIRMED';
-        
-        console.log('[HANDSHAKE] ✓ COMPLETO - Sistema listo para comandos');
-        
-        // Notificar a UI si está activa
-        chrome.storage.local.set({
-          handshakeState: 'CONFIRMED',
-          handshakeTimestamp: Date.now()
-        });
-      }
-    }, 500);
+    nativePort.postMessage({
+      command: "handshake_confirm",
+      profile_id: config.profileId,
+      launch_id: config.launchId,
+      extension_id: config.extension_id || chrome.runtime.id,
+      timestamp: Date.now()
+    });
+    
+    handshakeState = 'CONFIRMED';
+    console.log('[HANDSHAKE] ✓✓✓ HANDSHAKE COMPLETADO - Canal seguro establecido');
+    
+    // Notificar a discovery/landing que el handshake está completo
+    chrome.runtime.sendMessage({
+      event: 'HANDSHAKE_CONFIRMED',
+      timestamp: Date.now()
+    }).catch(() => {
+      // Silently fail if no listeners
+    });
     
     return;
   }
 
-  // Heartbeat
-  if (type === 'HEARTBEAT') {
-    handleHeartbeat(msg);
-    return;
-  }
-
-  // System ready
-  if (type === 'SYSTEM_READY') {
-    console.log('[Synapse] 🟢 System ready');
-    handleSystemReady(msg);
-    return;
-  }
-
-  // 🔒 VALIDACIÓN: Solo procesar comandos si handshake confirmado
+  // Bloquear mensajes antes de confirmar handshake
   if (handshakeState !== 'CONFIRMED' && handshakeState !== 'HOST_READY') {
-    console.warn('[Synapse] ⚠️ Mensaje ignorado - Handshake no confirmado:', handshakeState);
-    console.warn('[Synapse] Mensaje:', { type, command, id });
+    console.warn('[Synapse] ⚠️ Message blocked - Handshake not confirmed');
     return;
   }
 
-  // Commands routing
-  if (type === 'COMMAND') {
-    switch (command) {
-      case 'TAB_CLOSE':
-        executeTabClose(target, id);
-        break;
-      case 'TAB_OPEN':
-        executeTabOpen(payload, id);
-        break;
-      case 'TAB_NAVIGATE':
-        executeTabNavigate(target, payload, id);
-        break;
-      case 'TAB_QUERY':
-        executeTabQuery(payload, id);
-        break;
-      case 'WINDOW_CLOSE':
-        executeWindowClose(id);
-        break;
-      default:
-        console.warn('[Synapse] ⚠ Unknown command:', command);
-    }
+  // API Key responses
+  if (msg.event === 'API_KEY_REGISTERED' || 
+      msg.event === 'API_KEY_REGISTRATION_FAILED') {
+    handleAPIKeyResponse(msg);
     return;
   }
 
-  // DOM commands (forward to content script)
-  const domCommands = [
-    'LOCK_UI', 'UNLOCK_UI',
-    'DOM_CLICK', 'DOM_TYPE', 'DOM_READ', 
-    'DOM_UPLOAD', 'DOM_SCROLL', 'DOM_WAIT', 'DOM_SNAPSHOT'
-  ];
+  // Navigation command
+  if (msg.type === 'NAVIGATE' && msg.payload?.url) {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (tabs[0]) {
+        chrome.tabs.update(tabs[0].id, { url: msg.payload.url });
+      }
+    });
+    return;
+  }
 
-  if (domCommands.includes(command)) {
+  // Message routing
+  if (msg.target) {
     forwardToContent(msg);
     return;
   }
 
-  console.log('[Synapse] Unhandled message:', msg);
+  // Generic commands
+  if (msg.command) {
+    executeCommand(msg);
+    return;
+  }
+
+  // Broadcast to all tabs
+  if (msg.event) {
+    chrome.tabs.query({}, (tabs) => {
+      tabs.forEach(tab => {
+        chrome.tabs.sendMessage(tab.id, msg).catch(() => {});
+      });
+    });
+  }
 }
 
-function handleSystemReady(msg) {
-  console.log('[Synapse] System ready notification:', msg.payload);
-  
-  chrome.storage.local.get(['synapseStatus'], (result) => {
-    if (!result.synapseStatus) {
-      chrome.storage.local.set({
-        synapseStatus: {
-          command: 'system_ready',
-          payload: {
-            profile_id: config.profileId,
-            profile_alias: config.profile_alias,
-            launch_id: config.launchId,
-            timestamp: Date.now()
-          }
-        }
+// ============================================================================
+// COMMAND EXECUTION
+// ============================================================================
+
+function executeCommand(msg) {
+  const { command, payload, id: msgId } = msg;
+
+  switch (command) {
+    case 'tab.create':
+      executeTabCreate(payload, msgId);
+      break;
+
+    case 'tab.close':
+      executeTabClose(payload.tab_id, msgId);
+      break;
+
+    case 'tab.navigate':
+      executeTabNavigate(payload.tab_id, payload, msgId);
+      break;
+
+    case 'tab.query':
+      executeTabQuery(payload, msgId);
+      break;
+
+    case 'window.close':
+      executeWindowClose(msgId);
+      break;
+
+    default:
+      console.warn('[Synapse] ⚠ Unknown command:', command);
+      respondToHost(msgId, { success: false, error: 'Unknown command' });
+  }
+}
+
+function executeTabCreate(payload, msgId) {
+  chrome.tabs.create(
+    { url: payload.url, active: payload.active !== false },
+    (tab) => {
+      respondToHost(msgId, {
+        success: !chrome.runtime.lastError,
+        tab_id: tab?.id,
+        error: chrome.runtime.lastError?.message
       });
     }
-  });
+  );
 }
-
-function handleHeartbeat(msg) {
-  const payload = msg.payload || {};
-  const stats = payload.stats || {};
-  
-  if (stats.pending_queue && parseInt(stats.pending_queue) > 0) {
-    console.log('[Synapse] ⚡ Heartbeat - Pending:', stats.pending_queue);
-  }
-  
-  if (stats.handshake_state !== undefined) {
-    console.log('[Synapse] ⚡ Heartbeat - Handshake state:', stats.handshake_state);
-  }
-}
-
-// ============================================================================
-// COMMAND EXECUTORS
-// ============================================================================
 
 function executeTabClose(tabId, msgId) {
   chrome.tabs.remove(tabId, () => {
     respondToHost(msgId, {
       success: !chrome.runtime.lastError,
-      error: chrome.runtime.lastError?.message
-    });
-  });
-}
-
-function executeTabOpen(payload, msgId) {
-  chrome.tabs.create(payload, (tab) => {
-    respondToHost(msgId, {
-      success: !chrome.runtime.lastError,
-      tab_id: tab?.id,
       error: chrome.runtime.lastError?.message
     });
   });
@@ -641,6 +621,30 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
     return true;
   }
 
+  // Manual clipboard check
+  if (msg.action === 'checkClipboard') {
+    navigator.clipboard.readText().then(text => {
+      const detected = detectAPIKeyProvider(text);
+      sendResp({ detected: detected });
+    }).catch(error => {
+      sendResp({ error: error.message });
+    });
+    return true;
+  }
+
+  // Manual start/stop monitoring
+  if (msg.action === 'startClipboardMonitoring') {
+    startClipboardMonitoring();
+    sendResp({ monitoring: true });
+    return true;
+  }
+
+  if (msg.action === 'stopClipboardMonitoring') {
+    stopClipboardMonitoring();
+    sendResp({ monitoring: false });
+    return true;
+  }
+
   return false;
 });
 
@@ -723,3 +727,207 @@ if (typeof self !== 'undefined' && self.location?.href?.includes('debug=true')) 
     }
   };
 }
+
+// ============================================================================
+// CLIPBOARD API KEY DETECTOR
+// ============================================================================
+
+/**
+ * API Key pattern matchers for all supported providers
+ */
+const API_KEY_PATTERNS = {
+  gemini: {
+    regex: /^AIzaSy[A-Za-z0-9_-]{33}$/,
+    name: 'Gemini',
+    console_url: 'https://aistudio.google.com/app/apikey'
+  },
+  claude: {
+    regex: /^sk-ant-api\d{2}-[A-Za-z0-9_-]{95,}$/,
+    name: 'Claude',
+    console_url: 'https://console.anthropic.com/settings/keys'
+  },
+  openai: {
+    regex: /^sk-[A-Za-z0-9]{48}$/,
+    name: 'ChatGPT',
+    console_url: 'https://platform.openai.com/api-keys'
+  },
+  xai: {
+    regex: /^xai-[A-Za-z0-9_-]{32,}$/,
+    name: 'Grok',
+    console_url: 'https://console.x.ai/keys'
+  }
+};
+
+/**
+ * Detect which provider an API key belongs to
+ */
+function detectAPIKeyProvider(text) {
+  if (!text || typeof text !== 'string') {
+    return null;
+  }
+
+  // Clean whitespace
+  const cleaned = text.trim();
+
+  // Test against each provider
+  for (const [provider, config] of Object.entries(API_KEY_PATTERNS)) {
+    if (config.regex.test(cleaned)) {
+      return {
+        provider: provider,
+        name: config.name,
+        key: cleaned,
+        matched: true
+      };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * State management for clipboard monitoring
+ */
+let clipboardMonitor = {
+  isMonitoring: false,
+  intervalId: null,
+  lastClipboard: '',
+  detectedKeys: new Set()
+};
+
+/**
+ * Start monitoring clipboard for API keys
+ */
+function startClipboardMonitoring() {
+  if (clipboardMonitor.isMonitoring) {
+    console.log('[Clipboard] Already monitoring');
+    return;
+  }
+
+  console.log('[Clipboard] Starting monitoring...');
+  clipboardMonitor.isMonitoring = true;
+
+  // Poll clipboard every 1 second
+  clipboardMonitor.intervalId = setInterval(async () => {
+    try {
+      // Read clipboard (requires clipboardRead permission in manifest)
+      const text = await navigator.clipboard.readText();
+
+      // Skip if clipboard hasn't changed
+      if (text === clipboardMonitor.lastClipboard) {
+        return;
+      }
+
+      clipboardMonitor.lastClipboard = text;
+
+      // Detect provider
+      const detected = detectAPIKeyProvider(text);
+
+      if (detected) {
+        // Avoid duplicate detections
+        const keyHash = detected.key.substring(0, 20); // First 20 chars as hash
+        if (clipboardMonitor.detectedKeys.has(keyHash)) {
+          console.log('[Clipboard] Key already detected, skipping');
+          return;
+        }
+
+        clipboardMonitor.detectedKeys.add(keyHash);
+        console.log('[Clipboard] ✓ API Key detected:', detected.name);
+
+        // Send to host via Native Messaging
+        sendToHost({
+          event: 'API_KEY_DETECTED',
+          provider: detected.provider,
+          key: detected.key,
+          timestamp: Date.now()
+        });
+
+        // Show notification to user
+        chrome.notifications.create({
+          type: 'basic',
+          iconUrl: 'icons/icon128.png',
+          title: `${detected.name} API Key Detected`,
+          message: 'Registering key in Bloom Vault...',
+          priority: 2
+        });
+      }
+    } catch (error) {
+      // Silently fail (clipboard API can throw if no permission)
+      if (error.message.includes('clipboard-read')) {
+        console.error('[Clipboard] Missing clipboard-read permission');
+        stopClipboardMonitoring();
+      }
+    }
+  }, 1000); // Poll every second
+}
+
+/**
+ * Stop monitoring clipboard
+ */
+function stopClipboardMonitoring() {
+  if (!clipboardMonitor.isMonitoring) {
+    return;
+  }
+
+  console.log('[Clipboard] Stopping monitoring');
+  clearInterval(clipboardMonitor.intervalId);
+  clipboardMonitor.isMonitoring = false;
+  clipboardMonitor.intervalId = null;
+}
+
+/**
+ * Handle API key registration response from host
+ */
+function handleAPIKeyResponse(message) {
+  const { event, provider, profile_name, error, status } = message;
+
+  if (event === 'API_KEY_REGISTERED' && status === 'success') {
+    console.log('[Clipboard] ✓ Key registered:', provider, profile_name);
+
+    // Show success notification
+    chrome.notifications.create({
+      type: 'basic',
+      iconUrl: 'icons/icon128.png',
+      title: 'API Key Registered',
+      message: `${provider.toUpperCase()} key saved as "${profile_name}"`,
+      priority: 2
+    });
+
+    // Notify discovery page if open
+    chrome.runtime.sendMessage({
+      event: 'API_KEY_REGISTERED',
+      provider: provider,
+      profile_name: profile_name
+    });
+  } 
+  else if (event === 'API_KEY_REGISTRATION_FAILED') {
+    console.error('[Clipboard] ✗ Registration failed:', error);
+
+    // Show error notification
+    chrome.notifications.create({
+      type: 'basic',
+      iconUrl: 'icons/icon128.png',
+      title: 'API Key Registration Failed',
+      message: `${provider.toUpperCase()}: ${error}`,
+      priority: 2
+    });
+  }
+}
+
+/**
+ * Listen for onboarding state changes to start/stop monitoring
+ */
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes.onboarding_state) {
+    const state = changes.onboarding_state.newValue;
+
+    // Start monitoring when user is waiting for API key
+    if (state?.currentStep?.includes('api_waiting') || 
+        state?.currentStep?.includes('gemini_api_waiting')) {
+      startClipboardMonitoring();
+    }
+    // Stop monitoring when onboarding is complete
+    else if (state?.completed === true) {
+      stopClipboardMonitoring();
+    }
+  }
+});

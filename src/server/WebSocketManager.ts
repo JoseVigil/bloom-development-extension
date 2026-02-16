@@ -10,7 +10,7 @@ import OllamaNativeAdapter from '../ai/adapters/OllamaNativeAdapter';
 import { AIRuntimeAdapter } from '../api/adapters/AIRuntimeAdapter';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { HostExecutor } from '../host/HostExecutor';
+import { HostExecutor } from '../../installer/host/HostExecutor';
 
 interface ExtendedWebSocket extends WebSocket {
   isAlive: boolean;

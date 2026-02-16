@@ -7,7 +7,7 @@ import * as vscode from 'vscode';
 import { Logger } from '../utils/logger';
 import { BloomApiServer } from '../api/server';
 import { WebSocketManager } from '../server/WebSocketManager';
-import { HostExecutor } from '../host/HostExecutor';
+import { HostExecutor } from '../../installer/host/HostExecutor';
 import { BTIPExplorerController } from '../server/BTIPExplorerController';
 import { registerStartGithubOAuthCommand, stopGithubOAuthServer } from '../commands/auth/startGithubOAuth';
 import { Managers } from './managersInitializer';

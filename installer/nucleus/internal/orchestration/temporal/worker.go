@@ -134,6 +134,7 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 			w.RegisterWorkflow(workflows.StartOllamaWorkflow)
 			w.RegisterWorkflow(workflows.VaultStatusWorkflow)
 			w.RegisterWorkflow(workflows.ShutdownAllWorkflow)
+			w.RegisterWorkflow(workflows.SeedWorkflow)
 			
 			// ✅ REGISTRAR ACTIVITIES
 			logger.Info("Registrando activities...")
@@ -157,6 +158,10 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 			
 			w.RegisterActivityWithOptions(sentinelAct.StopSentinel, activity.RegisterOptions{
 				Name: "sentinel.StopOllama",
+			})
+			
+			w.RegisterActivityWithOptions(sentinelAct.SeedProfile, activity.RegisterOptions{
+				Name: "sentinel.SeedProfile",
 			})
 			
 			logger.Success("✅ Workflows y activities registrados")

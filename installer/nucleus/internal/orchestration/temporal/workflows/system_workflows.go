@@ -131,3 +131,51 @@ func ShutdownAllWorkflow(ctx workflow.Context) (*ShutdownAllResult, error) {
 
 	return result, nil
 }
+
+// ============================================
+// SEED PROFILE WORKFLOW
+// ============================================
+
+// SeedInput represents input for profile seeding
+type SeedInput struct {
+	Alias    string `json:"alias"`
+	IsMaster bool   `json:"is_master"`
+}
+
+// SeedResult represents the result of profile seeding
+type SeedResult struct {
+	Success bool     `json:"success"`
+	Data    SeedData `json:"data"`
+	Error   string   `json:"error,omitempty"`
+}
+
+// SeedData contains profile creation details
+type SeedData struct {
+	UUID     string `json:"uuid"`
+	Alias    string `json:"alias"`
+	Path     string `json:"path"`
+	IsMaster bool   `json:"is_master"`
+}
+
+// SeedWorkflow creates a new profile via Sentinel
+func SeedWorkflow(ctx workflow.Context, input SeedInput) (*SeedResult, error) {
+	ao := workflow.ActivityOptions{
+		StartToCloseTimeout: 2 * time.Minute, // Profile creation can take time
+		RetryPolicy: &temporal.RetryPolicy{
+			MaximumAttempts: 3,
+		},
+	}
+	ctx = workflow.WithActivityOptions(ctx, ao)
+
+	var result SeedResult
+	err := workflow.ExecuteActivity(ctx, "sentinel.SeedProfile", input).Get(ctx, &result)
+
+	if err != nil {
+		return &SeedResult{
+			Success: false,
+			Error:   err.Error(),
+		}, err
+	}
+
+	return &result, nil
+}

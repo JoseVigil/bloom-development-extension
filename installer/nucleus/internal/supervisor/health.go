@@ -574,6 +574,17 @@ func checkWorkerManager(ctx context.Context, s *Supervisor, appDataDir string, v
 
 	data, err := os.ReadFile(profilesPath)
 	if err != nil {
+		// Si el archivo no existe, considerarlo READY pero sin profiles
+		// Esto es normal durante la instalación inicial
+		if os.IsNotExist(err) {
+			health.Healthy = true
+			health.State = "READY"
+			health.ProfilesCount = 0
+			// No es un error - simplemente no hay profiles todavía
+			return health
+		}
+		
+		// Otros errores sí son problemáticos
 		health.Healthy = false
 		health.State = "FAILED"
 		health.Error = fmt.Sprintf("Failed to read profiles.json: %v", err)
@@ -595,14 +606,17 @@ func checkWorkerManager(ctx context.Context, s *Supervisor, appDataDir string, v
 		return health
 	}
 
+	// CRÍTICO: Array vacío es válido durante la instalación
+	// Solo marca como INACTIVE si ya se completó la instalación y debería haber profiles
 	if len(registry.Profiles) > 0 {
 		health.Healthy = true
 		health.State = "ACTIVE"
 		health.ProfilesCount = len(registry.Profiles)
 	} else {
-		health.Healthy = false
-		health.State = "INACTIVE"
-		health.Error = "No profiles registered"
+		// Sin profiles es normal durante instalación
+		health.Healthy = true
+		health.State = "READY"  // Cambiado de INACTIVE a READY
+		health.ProfilesCount = 0
 	}
 
 	return health

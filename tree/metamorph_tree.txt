@@ -1,0 +1,36 @@
+bloom-development-extension/
+└── metamorph/
+    ├── README.md
+    ├── VERSION
+    ├── go.mod
+    ├── go.sum
+    ├── internal/
+    │   ├── cli/
+    │   │   ├── config.go
+    │   │   ├── help_renderer.go
+    │   │   └── root.go
+    │   ├── core/
+    │   │   ├── build_info.go
+    │   │   ├── core.go
+    │   │   ├── logger.go
+    │   │   ├── paths.go
+    │   │   ├── registry.go
+    │   │   └── version.go
+    │   ├── inspection/
+    │   │   ├── inspect.go
+    │   │   └── status.go
+    │   ├── maintenance/
+    │   │   └── cleanup.go
+    │   ├── reconciliation/
+    │   │   ├── generate_manifest.go
+    │   │   └── reconcile.go
+    │   ├── rollback/
+    │   │   └── rollback.go
+    │   └── system/
+    │       ├── info.go
+    │       └── version.go
+    ├── main.go
+    ├── metamorph-config.json
+    └── scripts/
+        ├── build.bat
+        └── build_number.txt

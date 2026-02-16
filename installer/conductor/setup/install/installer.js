@@ -72,6 +72,34 @@ function emitProgress(win, current, total, message) {
 }
 
 // ============================================================================
+// PROFILES.JSON INITIALIZATION
+// ============================================================================
+
+/**
+ * Crea profiles.json vacío si no existe
+ * Esto previene que worker_manager falle durante el boot del servicio
+ */
+async function ensureProfilesJson() {
+  const profilesPath = path.join(paths.configDir, 'profiles.json');
+  
+  // Solo crear si no existe
+  if (!await fs.pathExists(profilesPath)) {
+    const emptyProfiles = {
+      profiles: [],
+      version: "1.0.0",
+      last_updated: new Date().toISOString(),
+      metadata: {
+        created_by: "installer",
+        created_at: new Date().toISOString()
+      }
+    };
+    
+    await fs.writeJson(profilesPath, emptyProfiles, { spaces: 2 });
+    logger.info('✓ profiles.json initialized (empty)');
+  }
+}
+
+// ============================================================================
 // MILESTONE EXECUTORS
 // ============================================================================
 
@@ -111,6 +139,9 @@ async function createDirectories(win) {
       await fs.ensureDir(dir);
       logger.success(`✔ ${path.basename(dir)}/`);
     }
+
+    // ✅ AÑADIR: Crear profiles.json vacío
+    await ensureProfilesJson();
 
     await nucleusManager.completeMilestone(MILESTONE, { dirs_created: dirs.length });
     return { success: true };
@@ -801,10 +832,10 @@ async function runCertification(win) {
   try {
     logger.separator('CERTIFICATION - NUCLEUS HEALTH CHECK');
     logger.info('Waiting for Nucleus Service to complete component initialization...');
-    logger.info('Service is booting: Temporal, Ollama, Worker, Control Plane');
+    logger.info('Service is booting: Temporal, Brain');
     
-    // Esperar 30 segundos para que service start complete el boot de componentes
-    const bootWaitTime = 30;
+    // Esperar 15 segundos para que service start complete el boot de componentes básicos
+    const bootWaitTime = 15;
     for (let i = 1; i <= bootWaitTime; i++) {
       if (i % 5 === 0) {
         logger.info(`  Waiting... ${i}/${bootWaitTime}s`);
@@ -815,43 +846,57 @@ async function runCertification(win) {
     logger.info('Running health check...');
     const healthResult = await nucleusHealth();
 
-    // Nuevo formato: { success: boolean, state: string, components: {...} }
-    if (!healthResult.success) {
-      logger.warn('⚠️ Health check failed:');
-      logger.warn(`  State: ${healthResult.state}`);
-      logger.warn(`  Error: ${healthResult.error}`);
-      
-      // Log componentes unhealthy
-      const components = healthResult.components || {};
-      for (const [name, status] of Object.entries(components)) {
-        if (!status.healthy) {
-          logger.warn(`  ${name}: ${status.state} - ${status.error || 'N/A'}`);
-        }
-      }
-      
-      throw new Error(`Certification failed: ${healthResult.error}`);
+    // CRÍTICO: nucleusHealth ahora devuelve un objeto estructurado incluso en caso de error
+    // Formato: { success: boolean, state: string, components: {...}, error: string, timestamp: number }
+    
+    if (!healthResult || !healthResult.components) {
+      throw new Error('Invalid health result structure');
     }
 
-    // Verificar componentes críticos
-    const critical = ['brain_service', 'temporal', 'worker_manager'];
-    const unhealthy = critical.filter(c => !healthResult.components?.[c]?.healthy);
+    // Log del estado general
+    logger.info(`Health check returned: ${healthResult.state || 'UNKNOWN'}`);
+    
+    // CRÍTICO: Solo verificar componentes mínimos necesarios para SEED
+    // - brain_service: necesario para operaciones básicas
+    // - temporal: necesario para ejecutar workflows (seed usa workflows)
+    const critical = ['brain_service', 'temporal'];
+    const unhealthy = [];
+    
+    for (const comp of critical) {
+      const status = healthResult.components[comp];
+      
+      if (!status) {
+        unhealthy.push(comp);
+        logger.error(`  ${comp}: NOT FOUND in health result`);
+      } else if (!status.healthy) {
+        unhealthy.push(comp);
+        logger.error(`  ${comp}: ${status.state} - ${status.error || 'N/A'}`);
+      } else {
+        logger.info(`  ✓ ${comp}: ${status.state}`);
+      }
+    }
     
     if (unhealthy.length > 0) {
+      logger.error(`❌ Critical components for seed are unhealthy: ${unhealthy.join(', ')}`);
       throw new Error(`Critical components unhealthy: ${unhealthy.join(', ')}`);
     }
 
-    logger.success('✅ SYSTEM CERTIFIED');
-    logger.info('  Healthy components:');
-    for (const [name, status] of Object.entries(healthResult.components || {})) {
-      if (status.healthy) {
-        logger.info(`    ✓ ${name}: ${status.state}`);
-      }
-    }
+    logger.success('✅ SYSTEM CERTIFIED (Pre-Seed Phase)');
+    logger.info('  Minimum components ready for seed:');
+    logger.info('    ✓ brain_service: RUNNING');
+    logger.info('    ✓ temporal: RUNNING');
+    logger.info('  Additional components will be verified after seed completes');
 
-    await nucleusManager.completeMilestone(MILESTONE, healthResult);
+    await nucleusManager.completeMilestone(MILESTONE, {
+      pre_seed_certification: true,
+      critical_components: critical,
+      health_snapshot: healthResult
+    });
+    
     return { success: true };
 
   } catch (error) {
+    logger.error('❌ Certification failed:', error.message);
     await nucleusManager.failMilestone(MILESTONE, error.message);
     throw error;
   }

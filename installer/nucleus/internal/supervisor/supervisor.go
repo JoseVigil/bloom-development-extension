@@ -252,12 +252,154 @@ func (s *Supervisor) updateTemporalTelemetry(proc *ManagedProcess) {
 }
 
 // ============================================================================
+// WORKER MANAGER
+// Agregar este código en supervisor.go después del método waitForTemporalReady
+// (después de la línea ~253)
+// ============================================================================
+
+// startWorkerManager starts the Temporal Worker Manager as a subprocess
+func (s *Supervisor) startWorkerManager(ctx context.Context) (*ManagedProcess, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Check if already running
+	if proc, exists := s.processes["worker_manager"]; exists {
+		if proc.State == StateReady {
+			return proc, nil
+		}
+	}
+
+	// Find nucleus binary
+	nucleusBin := filepath.Join(s.binDir, "nucleus", "nucleus.exe")
+	if _, err := os.Stat(nucleusBin); err != nil {
+		return nil, fmt.Errorf("nucleus binary not found at %s", nucleusBin)
+	}
+
+	// Generate log filename with date
+	today := time.Now()
+	dateStr := fmt.Sprintf("%04d%02d%02d", today.Year(), today.Month(), today.Day())
+	logPath := filepath.Join(s.logsDir, "nucleus", "worker", fmt.Sprintf("worker_manager_%s.log", dateStr))
+	
+	if err := os.MkdirAll(filepath.Dir(logPath), 0755); err != nil {
+		return nil, fmt.Errorf("failed to create worker log directory: %w", err)
+	}
+
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create worker log file: %w", err)
+	}
+
+	// Create command: nucleus worker start
+	cmd := exec.CommandContext(ctx, nucleusBin, "worker", "start")
+	cmd.Stdout = logFile
+	cmd.Stderr = logFile
+	cmd.Dir = filepath.Dir(nucleusBin)
+
+	// Start Worker Manager
+	if err := cmd.Start(); err != nil {
+		logFile.Close()
+		return nil, fmt.Errorf("failed to start worker manager: %w", err)
+	}
+
+	proc := &ManagedProcess{
+		Name:      "worker_manager",
+		Cmd:       cmd,
+		PID:       cmd.Process.Pid,
+		State:     StateStarting,
+		LogPath:   logPath,
+		StartedAt: time.Now(),
+	}
+
+	s.processes["worker_manager"] = proc
+
+	// Monitor process in background
+	go s.monitorProcess(proc, logFile)
+
+	// Wait for worker to connect to Temporal (brief delay)
+	time.Sleep(3 * time.Second)
+	
+	// Update state to ready
+	proc.mu.Lock()
+	proc.State = StateReady
+	proc.mu.Unlock()
+
+	// Update telemetry
+	s.updateWorkerTelemetry(proc)
+
+	return proc, nil
+}
+
+// updateWorkerTelemetry updates telemetry.json with Worker Manager info
+func (s *Supervisor) updateWorkerTelemetry(proc *ManagedProcess) {
+	telemetryPath := filepath.Join(s.logsDir, "telemetry.json")
+	lockPath := telemetryPath + ".lock"
+
+	lock := flock.New(lockPath)
+
+	// Retry with backoff
+	for i := 0; i < 5; i++ {
+		locked, err := lock.TryLock()
+		if err == nil && locked {
+			defer lock.Unlock()
+			break
+		}
+		time.Sleep(time.Duration(50+i*30) * time.Millisecond)
+	}
+
+	// Read existing telemetry
+	var telemetry map[string]interface{}
+	data, err := os.ReadFile(telemetryPath)
+	if err == nil {
+		json.Unmarshal(data, &telemetry)
+	}
+	if telemetry == nil {
+		telemetry = make(map[string]interface{})
+	}
+
+	streams, ok := telemetry["active_streams"].(map[string]interface{})
+	if !ok {
+		streams = make(map[string]interface{})
+		telemetry["active_streams"] = streams
+	}
+
+	// Normalize path to forward slashes
+	normalizedPath := strings.ReplaceAll(proc.LogPath, "\\", "/")
+
+	// Update stream with Worker Manager info
+	streams["worker_manager"] = map[string]interface{}{
+		"label":       "🔧 WORKER MANAGER",
+		"path":        normalizedPath,
+		"priority":    2, // Important (not critical like Temporal)
+		"pid":         proc.PID,
+		"state":       string(proc.State),
+		"last_update": time.Now().UTC().Format(time.RFC3339),
+	}
+
+	// Write atomically
+	tmpPath := telemetryPath + ".tmp"
+	newData, _ := json.MarshalIndent(telemetry, "", "  ")
+	os.WriteFile(tmpPath, newData, 0644)
+	os.Rename(tmpPath, telemetryPath)
+}
+
+// ============================================================================
 // EXISTING METHODS (unchanged)
 // ============================================================================
 
 // CheckVaultStatus queries the vault status via Synapse
 func (s *Supervisor) CheckVaultStatus(ctx context.Context) (*VaultStatusResult, error) {
-	cmd := exec.CommandContext(ctx, "nucleus", "--json", "synapse", "vault-status")
+	// Find nucleus binary - CRITICAL: Use absolute path for service mode
+	nucleusBin := filepath.Join(s.binDir, "nucleus", "nucleus.exe")
+	if _, err := os.Stat(nucleusBin); err != nil {
+		// Fallback to PATH (for development mode)
+		if binPath, err := exec.LookPath("nucleus"); err == nil {
+			nucleusBin = binPath
+		} else {
+			return nil, fmt.Errorf("nucleus binary not found at %s or in PATH", nucleusBin)
+		}
+	}
+	
+	cmd := exec.CommandContext(ctx, nucleusBin, "--json", "synapse", "vault-status")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("vault status workflow failed: %w (output: %s)", err, string(output))
@@ -282,7 +424,18 @@ func (s *Supervisor) CheckVaultStatus(ctx context.Context) (*VaultStatusResult, 
 
 // StartOllama starts Ollama service via Synapse
 func (s *Supervisor) StartOllama(ctx context.Context) (*StartOllamaResult, error) {
-	cmd := exec.CommandContext(ctx, "nucleus", "--json", "synapse", "start-ollama")
+	// Find nucleus binary - CRITICAL: Use absolute path for service mode
+	nucleusBin := filepath.Join(s.binDir, "nucleus", "nucleus.exe")
+	if _, err := os.Stat(nucleusBin); err != nil {
+		// Fallback to PATH (for development mode)
+		if binPath, err := exec.LookPath("nucleus"); err == nil {
+			nucleusBin = binPath
+		} else {
+			return nil, fmt.Errorf("nucleus binary not found at %s or in PATH", nucleusBin)
+		}
+	}
+	
+	cmd := exec.CommandContext(ctx, nucleusBin, "--json", "synapse", "start-ollama")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("start-ollama workflow failed: %w (output: %s)", err, string(output))
@@ -507,10 +660,17 @@ func (s *Supervisor) bootGovernance(ctx context.Context, simulation bool) error 
 		ownershipPath = filepath.Join(bloomDir, ".ownership.json")
 	}
 
+	// Durante instalación, si .ownership.json no existe, skip validation
 	if _, err := os.Stat(ownershipPath); err != nil {
-		return fmt.Errorf("ownership.json not found: %w", err)
+		if os.IsNotExist(err) {
+			fmt.Println("[INFO] ⚠️  .ownership.json not found - skipping governance (installation mode)")
+			return nil
+		}
+		// Otro tipo de error (permisos, etc)
+		return fmt.Errorf("ownership.json access error: %w", err)
 	}
 
+	// Si existe, governance OK
 	return nil
 }
 

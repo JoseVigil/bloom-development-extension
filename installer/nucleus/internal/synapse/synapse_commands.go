@@ -37,6 +37,7 @@ func NewSynapseCommand(c *core.Core) *cobra.Command {
 	cmd.AddCommand(newStartOllamaCommand(c))
 	cmd.AddCommand(newVaultStatusCommand(c))
 	cmd.AddCommand(newShutdownAllCommand(c))
+	cmd.AddCommand(newSeedCommand(c))
 
 	return cmd
 }
@@ -262,6 +263,7 @@ JSON Output:
     "state": "HEALTHY"
   }`,
 		Run: func(cmd *cobra.Command, args []string) {
+			// ✅ 1. Inicializar logger con modo JSON correcto
 			logger, err := core.InitLogger(&c.Paths, "ORCHESTRATION", c.IsJSON)
 			if err != nil {
 				emitError(c, nil, "nucleus", "synapse vault-status", fmt.Sprintf("Failed to initialize logger: %v", err))
@@ -269,13 +271,15 @@ JSON Output:
 			}
 			defer logger.Close()
 
-			logger.Info("Querying Vault status via Brain workflow")
+			logger.Info("Querying Vault status via Brain")
 
+			// ✅ 2. Ejecutar workflow
 			ctx := context.Background()
 			result, err := executeVaultStatusWorkflow(ctx, c, logger)
 			if err != nil {
 				logger.Error("Vault status query failed: %v", err)
 				
+				// ✅ Error output según modo
 				if err := logger.OutputResult(
 					map[string]interface{}{
 						"success": false,
@@ -289,13 +293,14 @@ JSON Output:
 				os.Exit(1)
 			}
 
-			logger.Success("Vault status retrieved - State: %s, Master Profile: %v", 
+			// ✅ 3. Success output según modo
+			logger.Success("Vault status retrieved - State: %s, Master Active: %v", 
 				result.VaultState, result.MasterProfileActive)
 			
 			if err := logger.OutputResult(
-				result,
-				fmt.Sprintf("✅ Vault Status\n   State: %s\n   Master Profile Active: %v\n   Overall State: %s", 
-					result.VaultState, result.MasterProfileActive, result.State),
+				result, // JSON data
+				fmt.Sprintf("🔐 Vault Status\n   State: %s\n   Master Profile: %v\n   Health: %s", 
+					result.VaultState, result.MasterProfileActive, result.State), // Interactive message
 			); err != nil {
 				fmt.Fprintf(os.Stderr, "Failed to output result: %v\n", err)
 			}
@@ -312,14 +317,14 @@ JSON Output:
 func newShutdownAllCommand(c *core.Core) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "shutdown-all",
-		Short: "Gracefully shutdown all running services",
-		Long: `Executes a coordinated shutdown of all Nucleus-managed services.
+		Short: "Shutdown all active services via Temporal workflow",
+		Long: `Gracefully shutdown all active Sentinel services.
 
-This includes:
-- All running Chrome instances
-- Ollama service
-- Brain component
-- Temporal workers`,
+This command executes a Temporal workflow that:
+1. Queries all active services (ollama, chrome instances, etc.)
+2. Sends shutdown signals
+3. Verifies clean termination
+4. Returns list of shut down services`,
 		Args: cobra.NoArgs,
 		Example: `  nucleus synapse shutdown-all
   nucleus --json synapse shutdown-all
@@ -327,9 +332,10 @@ This includes:
 JSON Output:
   {
     "success": true,
-    "services_shutdown": ["chrome", "ollama", "brain", "temporal"]
+    "services_shutdown": ["ollama", "chrome_9876"]
   }`,
 		Run: func(cmd *cobra.Command, args []string) {
+			// ✅ 1. Inicializar logger con modo JSON correcto
 			logger, err := core.InitLogger(&c.Paths, "ORCHESTRATION", c.IsJSON)
 			if err != nil {
 				emitError(c, nil, "nucleus", "synapse shutdown-all", fmt.Sprintf("Failed to initialize logger: %v", err))
@@ -337,13 +343,15 @@ JSON Output:
 			}
 			defer logger.Close()
 
-			logger.Info("Initiating graceful shutdown of all services")
+			logger.Info("Initiating shutdown of all services")
 
+			// ✅ 2. Ejecutar workflow
 			ctx := context.Background()
 			result, err := executeShutdownAllWorkflow(ctx, c, logger)
 			if err != nil {
 				logger.Error("Shutdown failed: %v", err)
 				
+				// ✅ Error output según modo
 				if err := logger.OutputResult(
 					map[string]interface{}{
 						"success": false,
@@ -356,11 +364,13 @@ JSON Output:
 				os.Exit(1)
 			}
 
-			logger.Success("All services shutdown successfully")
+			// ✅ 3. Success output según modo
+			logger.Success("All services shut down successfully")
 			
 			if err := logger.OutputResult(
-				result,
-				fmt.Sprintf("✅ Shutdown Complete\n   Services: %v", result.ServicesShutdown),
+				result, // JSON data
+				fmt.Sprintf("🛑 Shutdown Complete\n   Services: %s", 
+					strings.Join(result.ServicesShutdown, ", ")), // Interactive message
 			); err != nil {
 				fmt.Fprintf(os.Stderr, "Failed to output result: %v\n", err)
 			}
@@ -371,10 +381,111 @@ JSON Output:
 }
 
 // ============================================
-// DATA STRUCTURES
+// SUBCOMMAND: seed
 // ============================================
 
-// LaunchConfig holds all launch parameters
+func newSeedCommand(c *core.Core) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "seed [alias] [is_master]",
+		Short: "Register a new profile identity via Sentinel",
+		Long: `Register a new profile identity through Sentinel orchestration.
+
+This command executes a Temporal workflow that:
+1. Validates system prerequisites (brain.exe, bloom-cortex.blx, etc.)
+2. Creates a new profile with unique UUID
+3. Configures Native Messaging Host for Chrome extension
+4. Registers the profile in the vault
+5. Returns profile details including UUID, alias, and path
+
+Requirements:
+- brain.exe must be available in bin/
+- bloom-cortex.blx in bin/cortex/
+- Write permission in HKCU\Software\Google\Chrome\NativeMessagingHosts
+- bloom-host.exe in bin/native/
+- Valid Extension ID in configuration`,
+		Args: cobra.MaximumNArgs(2),
+		Annotations: map[string]string{
+			"responde": "sentinel",
+		},
+		Example: `  nucleus synapse seed profile_001 true
+  nucleus synapse seed burner_temp false
+  nucleus synapse seed
+  nucleus --json synapse seed profile_001 true | jq .
+
+JSON Output:
+  {
+    "success": true,
+    "data": {
+      "uuid": "550e8400-e29b-41d4-a716-446655440000",
+      "alias": "profile_001",
+      "path": "C:\\Users\\User\\AppData\\Local\\BloomNucleus\\profiles\\550e8400-e29b-41d4-a716-446655440000",
+      "is_master": true
+    }
+  }`,
+		Run: func(cmd *cobra.Command, args []string) {
+			// Parse arguments
+			var alias string
+			var isMaster bool
+			
+			if len(args) > 0 {
+				alias = args[0]
+			}
+			
+			if len(args) > 1 {
+				// Parse is_master as boolean
+				isMasterStr := strings.ToLower(args[1])
+				isMaster = isMasterStr == "true" || isMasterStr == "1" || isMasterStr == "yes"
+			}
+
+			// ✅ Inicializar logger con modo JSON correcto
+			logger, err := core.InitLogger(&c.Paths, "ORCHESTRATION", c.IsJSON)
+			if err != nil {
+				emitError(c, nil, "nucleus", "synapse seed", fmt.Sprintf("Failed to initialize logger: %v", err))
+				os.Exit(1)
+			}
+			defer logger.Close()
+
+			logger.Info("Starting profile seed - alias: %s, is_master: %v", alias, isMaster)
+
+			// Execute seed via Temporal workflow
+			ctx := context.Background()
+			result, err := executeSeedWorkflow(ctx, c, logger, alias, isMaster)
+			if err != nil {
+				logger.Error("Seed failed: %v", err)
+				
+				// ✅ Error output según modo
+				if err := logger.OutputResult(
+					map[string]interface{}{
+						"success": false,
+						"error":   err.Error(),
+					},
+					fmt.Sprintf("❌ Seed failed: %v", err),
+				); err != nil {
+					fmt.Fprintf(os.Stderr, "Failed to output result: %v\n", err)
+				}
+				os.Exit(1)
+			}
+
+			// ✅ Success output según modo
+			logger.Success("Profile registered successfully - UUID: %s", result.Data.UUID)
+			
+			if err := logger.OutputResult(
+				result, // JSON data
+				fmt.Sprintf("✅ Profile Registered\n   UUID: %s\n   Alias: %s\n   Master: %v\n   Path: %s", 
+					result.Data.UUID, result.Data.Alias, result.Data.IsMaster, result.Data.Path), // Interactive message
+			); err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to output result: %v\n", err)
+			}
+		},
+	}
+
+	return cmd
+}
+
+// ============================================
+// DATA TYPES
+// ============================================
+
 type LaunchConfig struct {
 	ProfileID  string
 	Account    string
@@ -391,7 +502,6 @@ type LaunchConfig struct {
 	Save       bool
 }
 
-// LaunchResult represents the final result of a launch operation
 type LaunchResult struct {
 	Success         bool                   `json:"success"`
 	ProfileID       string                 `json:"profile_id"`
@@ -434,6 +544,20 @@ type VaultStatusResult struct {
 type ShutdownAllResult struct {
 	Success          bool     `json:"success"`
 	ServicesShutdown []string `json:"services_shutdown"`
+}
+
+// SeedResult representa el resultado del workflow de seed
+type SeedResult struct {
+	Success bool     `json:"success"`
+	Data    SeedData `json:"data"`
+}
+
+// SeedData contiene los detalles del perfil creado
+type SeedData struct {
+	UUID     string `json:"uuid"`
+	Alias    string `json:"alias"`
+	Path     string `json:"path"`
+	IsMaster bool   `json:"is_master"`
 }
 
 // ============================================
@@ -518,8 +642,8 @@ func executeStartOllamaWorkflow(ctx context.Context, c *core.Core, logger *core.
 	}
 
 	workflowOptions := client.StartWorkflowOptions{
-		ID:        fmt.Sprintf("start_ollama_%d", time.Now().Unix()),
-		TaskQueue: "nucleus-task-queue",
+		ID:        fmt.Sprintf("seed_profile_%d", time.Now().Unix()),
+		TaskQueue: "profile-orchestration",  
 	}
 
 	// ────────────────────────────────────────────────
@@ -613,6 +737,58 @@ func executeShutdownAllWorkflow(ctx context.Context, c *core.Core, logger *core.
 		return nil, fmt.Errorf("failed to get workflow result: %w", err)
 	}
 	
+	return &result, nil
+}
+
+func executeSeedWorkflow(ctx context.Context, c *core.Core, logger *core.Logger, alias string, isMaster bool) (*SeedResult, error) {
+	// ✅ Usar temporalclient.NewClient con PathConfig
+	temporalClient, err := temporalclient.NewClient(ctx, &c.Paths, c.IsJSON)
+	if err != nil {
+		return nil, err
+	}
+	defer temporalClient.Close()
+	
+	tc := temporalClient.GetClient()
+
+	logger.Info("Executing SeedWorkflow (alias: %s, is_master: %v)", alias, isMaster)
+
+	input := map[string]interface{}{
+		"alias":     alias,
+		"is_master": isMaster,
+	}
+
+	workflowOptions := client.StartWorkflowOptions{
+		ID:        fmt.Sprintf("seed_profile_%d", time.Now().Unix()),
+		TaskQueue: "profile-orchestration",  // ← FIX: Debe coincidir con el worker
+	}
+
+	// Timeout al contexto - 2 minutos para creación de perfil
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+
+	we, err := tc.ExecuteWorkflow(ctx, workflowOptions, "SeedWorkflow", input)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute workflow: %w", err)
+	}
+
+	var result SeedResult
+
+	// Usamos el mismo ctx con timeout también en Get
+	err = we.Get(ctx, &result)
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			return nil, fmt.Errorf("workflow timeout después de 2 minutos – probablemente no hay workers corriendo. Ejecutá: nucleus worker start")
+		}
+		
+		// Si el error contiene "no poller" o "no worker", también indicarlo
+		errStr := err.Error()
+		if strings.Contains(errStr, "no worker") || strings.Contains(errStr, "no poller") {
+			return nil, fmt.Errorf("no hay workers disponibles. Ejecutá: nucleus worker start")
+		}
+		
+		return nil, fmt.Errorf("failed to get workflow result: %w", err)
+	}
+
 	return &result, nil
 }
 

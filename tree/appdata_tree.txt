@@ -2,8 +2,44 @@ BloomNucleus/
 ├── bin/
 │   ├── brain/
 │   │   ├── _internal/ [... dependencies]
-│   │   └── brain.exe
+│   │   ├── brain.exe
+│   │   └── help/
+│   │       ├── brain-ai-full.json
+│   │       ├── brain-ai-schema.json
+│   │       ├── brain-legacy.json
+│   │       ├── help-full.txt
+│   │       └── help.txt
 │   ├── chrome-win/
+│   │   ├── 146.0.7635.0.manifest
+│   │   ├── D3DCompiler_47.dll
+│   │   ├── First Run
+│   │   ├── IwaKeyDistribution/
+│   │   │   ├── iwa-key-distribution.pb
+│   │   │   └── manifest.json
+│   │   ├── MEIPreload/
+│   │   │   ├── manifest.json
+│   │   │   └── preloaded_data.pb
+│   │   ├── PrivacySandboxAttestationsPreloaded/
+│   │   │   ├── manifest.json
+│   │   │   └── privacy-sandbox-attestations.dat
+│   │   ├── chrome.dll
+│   │   ├── chrome.exe
+│   │   ├── chrome_100_percent.pak
+│   │   ├── chrome_200_percent.pak
+│   │   ├── chrome_elf.dll
+│   │   ├── chrome_proxy.exe
+│   │   ├── chrome_pwa_launcher.exe
+│   │   ├── chrome_wer.dll
+│   │   ├── dxcompiler.dll
+│   │   ├── dxil.dll
+│   │   ├── elevated_tracing_service.exe
+│   │   ├── elevation_service.exe
+│   │   ├── eventlog_provider.dll
+│   │   ├── icudtl.dat
+│   │   ├── interactive_ui_tests.exe
+│   │   ├── libEGL.dll
+│   │   ├── libGLESv2.dll
+│   │   ├── locales/ [... localization files]
 │   │   ├── notification_helper.exe
 │   │   ├── resources.pak
 │   │   ├── setup.exe
@@ -12,43 +48,168 @@ BloomNucleus/
 │   │   ├── vk_swiftshader_icd.json
 │   │   └── vulkan-1.dll
 │   ├── conductor/
+│   │   └── bloom-conductor.exe
 │   ├── cortex/
-│   ├── cortex.exe/
 │   │   └── bloom-cortex.blx
+│   ├── extension/
+│   │   ├── assets/
+│   │   │   ├── 128x128.png
+│   │   │   ├── icon128.png
+│   │   │   └── icon16.png
+│   │   ├── background.js
+│   │   ├── content.js
+│   │   ├── manifest.json
+│   │   └── synapse/
+│   │       ├── discovery.synapse.config.js
+│   │       └── landing.synapse.config.js
+│   ├── metamorph/
+│   │   ├── help/
+│   │   │   ├── metamorph_help.json
+│   │   │   ├── metamorph_help.txt
+│   │   │   └── metamorph_info.json
+│   │   ├── metamorph-config.json
+│   │   └── metamorph.exe
 │   ├── native/
+│   │   ├── bloom-host.exe
+│   │   └── libwinpthread-1.dll
+│   ├── node/
+│   │   └── node.exe
+│   ├── nssm/
+│   │   └── nssm.exe
 │   ├── nucleus/
-│   ├── nucleus.exe/
 │   │   ├── help/
 │   │   │   ├── nucleus_help.json
 │   │   │   └── nucleus_help.txt
 │   │   ├── nucleus-governance.json
 │   │   └── nucleus.exe
 │   ├── ollama/
+│   │   ├── lib/
+│   │   │   └── ollama/
+│   │   │       ├── cuda_v12/
+│   │   │       │   ├── cublas64_12.dll
+│   │   │       │   ├── cublasLt64_12.dll
+│   │   │       │   ├── cudart64_12.dll
+│   │   │       │   └── ggml-cuda.dll
+│   │   │       ├── cuda_v13/
+│   │   │       │   ├── cublas64_13.dll
+│   │   │       │   ├── cublasLt64_13.dll
+│   │   │       │   └── ggml-cuda.dll
+│   │   │       ├── ggml-base.dll
+│   │   │       ├── ggml-cpu-alderlake.dll
+│   │   │       ├── ggml-cpu-haswell.dll
+│   │   │       ├── ggml-cpu-icelake.dll
+│   │   │       ├── ggml-cpu-sandybridge.dll
+│   │   │       ├── ggml-cpu-skylakex.dll
+│   │   │       ├── ggml-cpu-sse42.dll
+│   │   │       ├── ggml-cpu-x64.dll
+│   │   │       └── vulkan/
+│   │   │           ├── ggml-vulkan.dll
+│   │   │           └── vulkan-1.dll
+│   │   └── ollama.exe
 │   ├── sentinel/
-│   ├── sentinel.exe/
 │   │   ├── help/
 │   │   │   ├── sentinel_help.json
 │   │   │   └── sentinel_help.txt
 │   │   ├── sentinel-config.json
 │   │   └── sentinel.exe
 │   └── temporal/
+│       └── temporal.exe
 ├── config/
-│   └── nucleus.json
+│   ├── nucleus.json
+│   ├── profile/
+│   │   └── bd467c61-25bc-4a1e-8b6f-9734872e044e/
+│   │       ├── com.bloom.synapse.bd467c61.json
+│   │       └── ignition_spec.json
+│   └── profiles.json
 ├── engine/
 │   └── runtime/
+│       ├── LICENSE.txt
+│       ├── _asyncio.pyd
+│       ├── _bz2.pyd
+│       ├── _ctypes.pyd
+│       ├── _decimal.pyd
+│       ├── _elementtree.pyd
+│       ├── _hashlib.pyd
+│       ├── _lzma.pyd
+│       ├── _msi.pyd
+│       ├── _multiprocessing.pyd
+│       ├── _overlapped.pyd
+│       ├── _queue.pyd
+│       ├── _socket.pyd
+│       ├── _sqlite3.pyd
+│       ├── _ssl.pyd
+│       ├── _uuid.pyd
+│       ├── _zoneinfo.pyd
+│       ├── libcrypto-1_1.dll
+│       ├── libffi-7.dll
+│       ├── libssl-1_1.dll
+│       ├── pyexpat.pyd
+│       ├── python.cat
+│       ├── python.exe
+│       ├── python3.dll
+│       ├── python310._pth
+│       ├── python310.dll
+│       ├── python310.zip
+│       ├── pythonw.exe
+│       ├── select.pyd
+│       ├── sqlite3.dll
+│       ├── unicodedata.pyd
+│       ├── vcruntime140.dll
+│       ├── vcruntime140_1.dll
+│       └── winsound.pyd
 ├── logs/
 │   ├── brain/
 │   │   ├── core/
-│   │   │   └── brain_core_20260210.log
+│   │   │   └── brain_core_20260215.log
 │   │   ├── profile/
-│   │   │   └── brain_profile_20260210.log
-│   │   └── server/
-│   │       ├── brain_server_20260210.log
-│   │       ├── brain_server_event_bus_20260210.log
-│   │       └── brain_server_manager_20260210.log
+│   │   │   └── brain_profile_20260215.log
+│   │   ├── server/
+│   │   │   ├── brain_server_20260215.log
+│   │   │   ├── brain_server_event_bus_20260215.log
+│   │   │   └── brain_server_manager_20260215.log
+│   │   └── service/
+│   │       └── brain_service.log
 │   ├── conductor/
-│   │   └── conductor_launch_2026-02-10_18-58-02.log
+│   │   └── conductor_launch_2026-02-16_00-12-45.log
 │   ├── install/
-│   │   └── electron_install_2026-02-10_18-58-02.log
-│   └── telemetry.json
-└── profiles/
+│   │   └── electron_install_2026-02-16_00-12-45.log
+│   ├── nucleus/
+│   │   ├── nucleus_orchestration_20260215.log
+│   │   ├── nucleus_temporal_20260215.log
+│   │   ├── service/
+│   │   │   └── nucleus_service.log
+│   │   └── worker/
+│   │       └── worker_manager_20260215.log
+│   ├── sentinel/
+│   │   ├── ollama_service_2026-02-15.log
+│   │   ├── profiles/
+│   │   │   └── bd467c61-25bc-4a1e-8b6f-9734872e044e/
+│   │   └── sentinel_core_2026-02-15.log
+│   ├── telemetry.json
+│   ├── telemetry.json.lock
+│   └── temporal/
+│       ├── temporal.db
+│       └── temporal.pid
+├── profiles/
+│   └── bd467c61-25bc-4a1e-8b6f-9734872e044e/
+│       └── extension/
+│           ├── assets/
+│           │   ├── 128x128.png
+│           │   ├── icon128.png
+│           │   └── icon16.png
+│           ├── background.js
+│           ├── content.js
+│           ├── discovery/
+│           │   ├── content-aistudio.js
+│           │   ├── discovery.js
+│           │   ├── discoveryProtocol.js
+│           │   ├── index.html
+│           │   ├── onboarding.js
+│           │   ├── script.js
+│           │   └── styles.css
+│           ├── landing/
+│           ├── manifest.json
+│           └── synapse/
+│               ├── discovery.synapse.config.js
+│               └── landing.synapse.config.js
+└── telemetry.json

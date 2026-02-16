@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Bloom Nucleus Bridge",
-  "version": "1.0.0",
-  "description": "Native messaging bridge for browser automation",
+  "version": "2.0.0",
+  "description": "Multi-provider AI key management for Bloom",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvpLkwKzeLGXF3Me4LckWSMQO6ktiL7gbLC3E8d3jpKfZLTL+lhCOXULTygRUi4vSvWQyy0KrI1eVTUYPrvA6s3pYGhn7GFfmCDXA6JvZjANc+4pq3hcxdVZdMa02E4f1UsIJm17qKBlk5Z6Jv1wD1LtXi2yk+lI/NcAq0XsQSTBDVElDp4/t8QpxRRHGm1WuaoN7DCu7Tmmzq1ztMC434+nmnjqkfMrxG6uC/iC+z+qDLUvolC1eWNPnMFbi2NG+KiZo/ZXEnTpc17OOo3VewOt2/ogTdHp8kpcK1OwXM9d+RUdls9DEUB5QdyWX7uUDsGKISsSawb+j5NiQbgACcQIDAQAB",
   
   "permissions": [
@@ -15,13 +15,18 @@
     "identity",
     "identity.email",
     "cookies",
-    "webNavigation"
+    "webNavigation",
+    "clipboardRead",
+    "notifications"
   ],
   
   "host_permissions": [
     "<all_urls>",
     "*://*.google.com/*",
-    "*://aistudio.google.com/*"
+    "*://aistudio.google.com/*",
+    "https://console.anthropic.com/*",
+    "https://platform.openai.com/*",
+    "https://console.x.ai/*"
   ],
   
   "background": {
@@ -41,19 +46,35 @@
       "all_frames": true
     },
     {
-      "matches": ["*://aistudio.google.com/app/apikey*"],
+      "matches": [
+        "*://aistudio.google.com/app/apikey*",
+        "https://console.anthropic.com/*",
+        "https://platform.openai.com/*",
+        "https://console.x.ai/*"
+      ],
       "js": ["discovery/content-aistudio.js"],
       "run_at": "document_idle"
     }
   ],
 
-  "web_accessible_resources": [{
-    "matches": ["<all_urls>"],
-    "resources": [
-      "discovery/*",
-      "landing/*",
-      "discovery.synapse.config.js",
-      "landing.synapse.config.js"
-    ]
-  }]
+  "web_accessible_resources": [
+    {
+      "matches": ["<all_urls>"],
+      "resources": [
+        "discovery/*",
+        "landing/*",
+        "discovery.synapse.config.js",
+        "landing.synapse.config.js",
+        "web/discovery/index.html",
+        "web/discovery/styles.css",
+        "web/discovery/discovery.js"
+      ]
+    }
+  ],
+
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
 }

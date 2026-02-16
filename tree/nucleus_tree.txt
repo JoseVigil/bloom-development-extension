@@ -40,6 +40,7 @@ bloom-development-extension/
     │   │   │   ├── sentinel_intent.go
     │   │   │   ├── sentinel_launch.go
     │   │   │   ├── sentinel_ollama.go
+    │   │   │   ├── sentinel_seed.go
     │   │   │   └── sentinel_stop.go
     │   │   ├── commands/
     │   │   │   └── synapse.go
@@ -55,12 +56,12 @@ bloom-development-extension/
     │   │   │   │   ├── diagnostics.go
     │   │   │   │   ├── ensure.go
     │   │   │   │   ├── force_stop.go
-    │   │   │   │   ├── health.go
     │   │   │   │   ├── helpers.go
     │   │   │   │   ├── lifecycle.go
     │   │   │   │   ├── pid.go
     │   │   │   │   ├── ports.go
-    │   │   │   │   └── process.go
+    │   │   │   │   ├── process.go
+    │   │   │   │   └── temporal_health.go
     │   │   │   ├── client.go
     │   │   │   ├── worker.go
     │   │   │   └── workflows/
@@ -74,9 +75,10 @@ bloom-development-extension/
     │   ├── supervisor/
     │   │   ├── dev_start.go
     │   │   ├── health.go
+    │   │   ├── service.go
     │   │   └── supervisor.go
     │   ├── synapse/
-    │   │   └── commands.go
+    │   │   └── synapse_commands.go
     │   ├── system/
     │   │   ├── info.go
     │   │   └── version.go

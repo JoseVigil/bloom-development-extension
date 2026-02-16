@@ -70,7 +70,7 @@ const getResourcePath = (resourceName) => {
     case 'ollama':
       return path.join(workspaceRoot, '..', 'ollama');
     case 'node':
-      return path.join(workspaceRoot, '..', 'installer', 'node');
+      return path.join(workspaceRoot, '..', 'node');
     case 'conductor':
       return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'conductor');
     case 'cortex':
