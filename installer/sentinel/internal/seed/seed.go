@@ -32,6 +32,12 @@ func init() {
 				alias := args[0]
 				isMaster, _ := strconv.ParseBool(args[1])
 
+				// ✅ FIX: Configurar logger en modo JSON si el flag está activo
+				// Esto hace que todos los logs vayan a stderr en vez de stdout
+				if c.IsJSON {
+					c.Logger.SetJSONMode(true)
+				}
+
 				uuid, profilePath, err := HandleSeed(c, alias, isMaster)
 				if err != nil {
 					if c.IsJSON {
@@ -130,9 +136,13 @@ type CortexMetadata struct {
 
 func HandleSeed(c *core.Core, alias string, isMaster bool) (string, string, error) {
 	registry_data := loadProfilesRegistry(c)
+	
+	// ✅ IDEMPOTENCIA: En vez de error, retornar el perfil existente
 	for _, p := range registry_data.Profiles {
 		if p.Alias == alias {
-			return "", "", fmt.Errorf("alias_duplicado: %s", alias)
+			// Si el perfil ya existe, retornamos su información
+			// Esto hace que la operación sea idempotente
+			return p.ID, p.Path, nil
 		}
 	}
 

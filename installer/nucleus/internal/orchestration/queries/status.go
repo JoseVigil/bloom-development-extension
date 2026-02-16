@@ -1,9 +1,12 @@
 package queries
 
 const (
-	// QueryStatus es el nombre de la query para obtener estado
+	// QueryStatus es el nombre de la query para obtener estado básico del perfil
 	QueryStatus = "status"
-	
-	// QueryProgress es el nombre de la query para obtener progreso
+
+	// QuerySentinelDetails es el nombre de la query para obtener detalles completos de Sentinel
+	QuerySentinelDetails = "sentinel-details"
+
+	// QueryProgress es el nombre de la query para obtener progreso de operaciones
 	QueryProgress = "progress"
 )

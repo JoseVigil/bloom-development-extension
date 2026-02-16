@@ -11,10 +11,10 @@ import (
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
-	
+
 	"nucleus/internal/core"
-	"nucleus/internal/orchestration/temporal/workflows"
 	"nucleus/internal/orchestration/activities"
+	temporalworkflows "nucleus/internal/orchestration/temporal/workflows"
 	"github.com/spf13/cobra"
 )
 
@@ -92,9 +92,9 @@ func (wm *WorkerManager) StopAll() {
 	}
 }
 
-// ────────────────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────────────────
 // CLI COMMANDS
-// ────────────────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────────────────
 
 func init() {
 	core.RegisterCommand("ORCHESTRATION", workerStartCmd)
@@ -131,59 +131,81 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 
 			// ✅ REGISTRAR WORKFLOWS
 			logger.Info("Registrando workflows...")
-			w.RegisterWorkflow(workflows.StartOllamaWorkflow)
-			w.RegisterWorkflow(workflows.VaultStatusWorkflow)
-			w.RegisterWorkflow(workflows.ShutdownAllWorkflow)
-			w.RegisterWorkflow(workflows.SeedWorkflow)
 			
+			// Workflow principal de ciclo de vida del perfil
+			w.RegisterWorkflow(temporalworkflows.ProfileLifecycleWorkflow)
+			
+			// Recovery workflow
+			w.RegisterWorkflow(temporalworkflows.RecoveryFlowWorkflow)
+			
+			// Workflows adicionales existentes
+			w.RegisterWorkflow(temporalworkflows.StartOllamaWorkflow)
+			w.RegisterWorkflow(temporalworkflows.VaultStatusWorkflow)
+			w.RegisterWorkflow(temporalworkflows.ShutdownAllWorkflow)
+			w.RegisterWorkflow(temporalworkflows.SeedWorkflow)
+
+			logger.Success("✅ Workflows registrados")
+
 			// ✅ REGISTRAR ACTIVITIES
 			logger.Info("Registrando activities...")
-			
+
 			// Construir paths usando PathConfig disponible
 			logsDir := c.Paths.Logs
 			telemetryPath := filepath.Join(c.Paths.Root, "telemetry.json")
 			sentinelExe := filepath.Join(c.Paths.Bin, "sentinel", "sentinel.exe")
-			
+
+			// Verificar que sentinel existe
+			if _, err := os.Stat(sentinelExe); os.IsNotExist(err) {
+				logger.Warning("⚠️  Sentinel executable not found at: %s", sentinelExe)
+				logger.Info("Worker will start but activities will fail without sentinel")
+			}
+
 			// Crear instancia de SentinelActivities
 			sentinelAct := activities.NewSentinelActivities(
 				logsDir,
 				telemetryPath,
 				sentinelExe,
 			)
-			
-			// Registrar con nombres específicos que usa el workflow
+
+			// Registrar activities con nombres consistentes que usa el workflow
+			w.RegisterActivityWithOptions(sentinelAct.LaunchSentinel, activity.RegisterOptions{
+				Name: "sentinel.LaunchSentinel",
+			})
+
+			w.RegisterActivityWithOptions(sentinelAct.StopSentinel, activity.RegisterOptions{
+				Name: "sentinel.StopSentinel",
+			})
+
 			w.RegisterActivityWithOptions(sentinelAct.StartOllama, activity.RegisterOptions{
 				Name: "sentinel.StartOllama",
 			})
-			
-			w.RegisterActivityWithOptions(sentinelAct.StopSentinel, activity.RegisterOptions{
-				Name: "sentinel.StopOllama",
-			})
-			
+
 			w.RegisterActivityWithOptions(sentinelAct.SeedProfile, activity.RegisterOptions{
 				Name: "sentinel.SeedProfile",
 			})
-			
-			logger.Success("✅ Workflows y activities registrados")
+
+			logger.Success("✅ Activities registradas")
 
 			// Iniciar worker
+			logger.Info("Iniciando worker...")
 			if err := w.Start(); err != nil {
 				logger.Error("Fallo al iniciar worker: %v", err)
 				os.Exit(1)
 			}
 
-			logger.Success("Worker iniciado exitosamente")
+			logger.Success("✅ Worker iniciado exitosamente")
 			logger.Info("Escuchando en task queue: %s", taskQueue)
 			logger.Info("Presione Ctrl+C para detener")
 
+			// Esperar señal de interrupción
 			sigChan := make(chan os.Signal, 1)
 			signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
 			<-sigChan
-			logger.Info("Deteniendo Worker...")
+			logger.Info("Señal de interrupción recibida, deteniendo worker...")
 
 			w.Stop()
-			logger.Success("Worker detenido exitosamente")
+			logger.Success("✅ Worker detenido exitosamente")
 		},
 	}
 

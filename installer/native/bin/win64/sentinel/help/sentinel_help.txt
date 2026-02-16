@@ -1,0 +1,282 @@
+
+                                                        SENTINEL
+                                             Modular Orchestrator for Bloom
+
+
+------------------------------------------------------------------------------------------------------------------------
+  USAGE
+------------------------------------------------------------------------------------------------------------------------
+
+  sentinel [OPTIONS] <command> [args]
+
+  Quick examples:
+    sentinel health                    # System integrity scan
+    sentinel launch profile_001     # Launch browser instance
+    sentinel cockpit --health       # Monitoring UI with health view
+
+
+------------------------------------------------------------------------------------------------------------------------
+  GLOBAL OPTIONS
+------------------------------------------------------------------------------------------------------------------------
+
+  --json           Output in JSON format (machine-readable)
+
+           ⚠️  CRITICAL: Flag MUST be placed BEFORE the command
+           ✅ CORRECT:   sentinel --json seed profile true
+           ❌ WRONG:     sentinel seed profile true --json
+
+           When using --json, logs go to stderr and JSON to stdout.
+           For clean JSON output in scripts, redirect stderr:
+             PowerShell:  sentinel --json seed profile true 2>$null
+             Bash:        sentinel --json seed profile true 2>/dev/null
+
+  --verbose        Enable detailed logging for debugging
+  --help           Show this help message
+
+
+------------------------------------------------------------------------------------------------------------------------
+  COMMAND CATEGORIES
+------------------------------------------------------------------------------------------------------------------------
+
+  SYSTEM      Health checks and system diagnostics                     2 cmds
+  IDENTITY    Profile identity and seed management                     1 cmd
+  RUNTIME     Browser instance lifecycle control                       3 cmds
+  TEMPORAL    Workflow orchestration and task execution                1 cmd
+  BRIDGE      JSON-RPC communication with Electron                     4 cmds
+  UI          Monitoring and telemetry interfaces                      2 cmds
+  --------------------------------------------------------------------  Total: 13 commands
+
+
+=======================================================[ SYSTEM ]=======================================================
+
+  > INFO
+    Display detailed system and runtime information
+
+    Usage: sentinel info
+
+    --------------------------------------------------------------------------------
+
+  > VERSION
+    Display version and build information
+
+    Usage: sentinel version
+
+    --------------------------------------------------------------------------------
+
+
+======================================================[ IDENTITY ]======================================================
+
+  > SEED
+    Registra una nueva identidad de perfil
+
+    Usage: sentinel seed [alias] [is_master]
+
+    Arguments:
+      alias                 optional
+      is_master             optional
+
+    Example:
+        sentinel seed profile_001 true
+        sentinel --json seed burner_temp false | jq .
+
+    Requirements:
+      * brain.exe debe estar disponible en bin/
+      * bloom-cortex.blx en bin/cortex/
+      * Permiso de escritura en HKCU\Software\Google\Chrome\NativeMessagingHosts
+      * bloom-host.exe en bin/native/
+      * Extension ID válido en configuración
+
+    Output:
+      {
+      "success": true,
+      "data": {
+      "uuid": "550e8400-e29b-41d4-a716-446655440000",
+      "alias": "profile_001",
+      "path": "C:\\Users\\User\\AppData\\Local\\BloomNucleus\\profiles\\550e8400-e29b-41d4-a716-446655440000",
+      "is_master": true
+      }
+      }
+
+    --------------------------------------------------------------------------------
+
+
+======================================================[ RUNTIME ]=======================================================
+
+  > DAEMON
+    Inicia Sentinel en modo daemon persistente
+
+    Usage: sentinel daemon
+
+    Flags:
+      --brain-addr               Dirección TCP del Brain (host:puerto) [default: 127.0.0.1:5678]
+
+    --------------------------------------------------------------------------------
+
+  > LAUNCH
+    Arranca una instancia de navegador para un perfil
+
+    Usage: sentinel launch [profile_id]
+
+    Arguments:
+      profile_id            optional
+
+    Flags:
+      --add-account              Agregar linked account (provider,email_or_username,status). Repetible
+      --config-file              Cargar overrides desde JSON (@archivo o - para stdin)
+      --mode                     Modo de lanzamiento (landing o discovery) [default: landing]
+      --override-alias           Sobrescribir alias del perfil
+      --override-email           Sobrescribir email
+      --override-extension       Sobrescribir extension ID
+      --override-heartbeat       Sobrescribir flag de heartbeat
+      --override-register        Sobrescribir flag de registro
+      --override-role            Sobrescribir rol
+      --override-service         Sobrescribir servicio de registro (google, twitter, github, etc)
+      --override-step            Sobrescribir step actual [default: 0]
+      --save                     Persistir overrides en profiles.json
+
+    --------------------------------------------------------------------------------
+
+  > OLLAMA
+    Controlador maestro del runtime de Ollama
+
+    Usage: sentinel ollama
+
+    Subcommands:
+      healthcheck           Verificación de conectividad inmediata
+      logs                  Muestra logs recientes del proceso Ollama
+      pull                  Descarga un modelo específico
+      purge                 Limpia modelos y archivos temporales
+      restart               Forzar reinicio del runtime
+      start                 Inicia el supervisor y el heartbeat de Ollama
+      status                Muestra el estado actual de la FSM de Ollama
+      stop                  Detiene el proceso de Ollama y el supervisor
+
+    --------------------------------------------------------------------------------
+
+
+======================================================[ TEMPORAL ]======================================================
+
+  > TEMPORAL
+    Controlador maestro del runtime de Temporal
+
+    Usage: sentinel temporal
+
+    Subcommands:
+      activity              Gestión de actividades registradas
+      health                Verificación de conectividad y salud del cluster
+      start                 Inicia el servidor Temporal
+      status                Muestra el estado actual del servidor Temporal
+      stop                  Detiene el servidor Temporal y todos los workers
+      workflow              Gestión de workflows de Temporal
+
+    --------------------------------------------------------------------------------
+
+
+=======================================================[ BRIDGE ]=======================================================
+
+  > BRIDGE
+    Modo Bridge para comunicación JSON-RPC con Electron
+
+    Usage: sentinel bridge
+
+    --------------------------------------------------------------------------------
+
+  > LISTEN
+    Escucha eventos del Brain en tiempo real
+
+    Usage: sentinel listen
+
+    Flags:
+      --brain-addr               Dirección TCP del Brain [default: 127.0.0.1:5678]
+      --filter, -f               Filtrar eventos por tipo o profile_id (substring match)
+      --json                     Salida en JSON puro (sin formateo legible)
+
+    --------------------------------------------------------------------------------
+
+  > POLL
+    Solicita eventos históricos desde un timestamp
+
+    Usage: sentinel poll
+
+    Flags:
+      --brain-addr               Dirección TCP del Brain [default: 127.0.0.1:5678]
+      --since                    Timestamp Unix (segundos o nanosegundos) [default: 0]
+      --since-time               Tiempo relativo (ej: 5m, 1h, 30s)
+
+    --------------------------------------------------------------------------------
+
+  > SEND
+    Envía un evento/comando directo al Brain
+
+    Usage: sentinel send
+
+    Flags:
+      --brain-addr               Dirección TCP del Brain [default: 127.0.0.1:5678]
+      --data, -d                 Datos adicionales en formato JSON (opcional)
+      --profile-id, -p           ID del perfil (opcional)
+      --type, -t                 Tipo de evento (LAUNCH_PROFILE, STOP_PROFILE, etc.) [REQUERIDO]
+
+    --------------------------------------------------------------------------------
+
+
+=========================================================[ UI ]=========================================================
+
+  > COCKPIT
+    Lanza la interfaz de monitoreo integrada (TUI)
+
+    Usage: sentinel cockpit
+
+    Flags:
+      --health                   Iniciar directamente en modo health
+
+    Example:
+        sentinel cockpit
+        sentinel cockpit --health
+
+    Requirements:
+      * Archivo telemetry.json en logs/ (se crea automáticamente si no existe)
+      * Terminal con soporte para TUI (tview/tcell)
+      * Comandos disponibles en TUI: 'log', 'health', 'q' o 'exit'
+
+    --------------------------------------------------------------------------------
+
+  > TELEMETRY
+    Gestión y diagnóstico de streams de telemetría
+
+    Usage: sentinel telemetry
+
+    Subcommands:
+      clean                 Limpia y resetea el archivo de telemetría
+      status                Muestra el estado actual del JSON de telemetría
+
+    Example:
+        sentinel telemetry status
+        sentinel telemetry clean
+
+    --------------------------------------------------------------------------------
+
+
+
+------------------------------------------------------------------------------------------------------------------------
+  💡 COMMON MISTAKES & TIPS
+------------------------------------------------------------------------------------------------------------------------
+
+  X MISTAKE #1: Placing --json flag after the command
+     Wrong:   sentinel seed profile true --json
+     Correct: sentinel --json seed profile true
+
+  X MISTAKE #2: Expecting clean JSON without redirecting stderr
+     Issue:   Logs appear mixed with JSON in console
+     Fix:     Use 2>$null (PowerShell) or 2>/dev/null (Bash)
+     Example: sentinel --json seed profile true 2>$null
+
+  * TIP: When integrating with scripts/automation
+     √ Always use --json flag for parseable output
+     √ Always redirect stderr (2>$null) for clean JSON
+     √ stdout will contain ONLY valid JSON
+     √ stderr will contain human-readable logs
+
+
+                                  [!] All commands support active telemetry streaming
+                            Use 'sentinel <command> --help' for detailed command information
+

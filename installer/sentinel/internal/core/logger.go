@@ -16,7 +16,9 @@ type Logger struct {
 	silentMode bool
 }
 
-func InitLogger(paths *Paths, componentID, label string, priority int) (*Logger, error) {
+// ✅ SOLUCIÓN: Función con parámetro opcional usando variadic
+// Mantiene retrocompatibilidad con código existente
+func InitLogger(paths *Paths, componentID, label string, priority int, jsonMode ...bool) (*Logger, error) {
 	// 1. Crear directorio de logs si no existe
 	targetDir := paths.LogsDir
 	if err := os.MkdirAll(targetDir, 0755); err != nil {
@@ -33,7 +35,23 @@ func InitLogger(paths *Paths, componentID, label string, priority int) (*Logger,
 		return nil, fmt.Errorf("error al abrir log: %w", err)
 	}
 
-	multiWriter := io.MultiWriter(os.Stdout, file)
+	// ✅ Detectar si se pasó el parámetro jsonMode
+	isJSON := false
+	if len(jsonMode) > 0 {
+		isJSON = jsonMode[0]
+	}
+
+	// ✅ Configurar output según modo JSON
+	var consoleWriter io.Writer
+	if isJSON {
+		// Modo JSON: logs van a stderr para no contaminar stdout
+		consoleWriter = os.Stderr
+	} else {
+		// Modo normal: logs van a stdout
+		consoleWriter = os.Stdout
+	}
+
+	multiWriter := io.MultiWriter(consoleWriter, file)
 	l := log.New(multiWriter, "", log.Ldate|log.Ltime)
 
 	// 3. Registro en telemetría (con icono según prioridad)
@@ -44,7 +62,7 @@ func InitLogger(paths *Paths, componentID, label string, priority int) (*Logger,
 	return &Logger{
 		file:       file,
 		logger:     l,
-		isJSONMode: false,
+		isJSONMode: isJSON,
 		silentMode: false,
 	}, nil
 }

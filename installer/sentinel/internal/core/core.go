@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"os"
 	"github.com/spf13/cobra"
 )
 
@@ -30,14 +31,27 @@ type Core struct {
 	TemporalManager  any 
 }
 
+// ✅ FIX: Nueva función que detecta --json ANTES de inicializar
+func detectJSONMode() bool {
+	for _, arg := range os.Args {
+		if arg == "--json" {
+			return true
+		}
+	}
+	return false
+}
+
 func Initialize() (*Core, error) {
 	paths, err := InitPaths()
 	if err != nil {
 		return nil, fmt.Errorf("error al inicializar rutas: %w", err)
 	}
 
-	// Sincronizado con la firma de InitLogger en logger.go
-	logger, err := InitLogger(paths, "sentinel_core", "SENTINEL CORE", 1)
+	// ✅ FIX: Detectar modo JSON ANTES de crear el logger
+	jsonMode := detectJSONMode()
+
+	// ✅ FIX: Pasar jsonMode al logger
+	logger, err := InitLogger(paths, "sentinel_core", "SENTINEL CORE", 1, jsonMode)
 	if err != nil {
 		return nil, fmt.Errorf("error al inicializar logger: %w", err)
 	}
@@ -52,7 +66,7 @@ func Initialize() (*Core, error) {
 		Paths:  paths,
 		Config: config,
 		Logger: logger,
-		IsJSON: false,
+		IsJSON: jsonMode, // ✅ FIX: Guardar el modo detectado
 	}, nil
 }
 

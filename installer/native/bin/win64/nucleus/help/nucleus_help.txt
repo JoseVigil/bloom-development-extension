@@ -1,0 +1,777 @@
+
+                                                        NUCLEUS
+                                                 Governance Magistrate
+
+
+------------------------------------------------------------------------------------------------------------------------
+  USAGE
+------------------------------------------------------------------------------------------------------------------------
+
+  nucleus [OPTIONS] <command> [args]
+
+  Quick examples:
+    nucleus version                    # Display version information
+    nucleus info                       # Show system information
+    nucleus --json info              # JSON output for automation
+
+
+------------------------------------------------------------------------------------------------------------------------
+  GLOBAL OPTIONS
+------------------------------------------------------------------------------------------------------------------------
+
+  --json           Output in JSON format (machine-readable)
+
+           ⚠️  CRITICAL: Flag MUST be placed BEFORE the command
+           ✅ CORRECT:   nucleus --json synapse seed profile
+           ❌ WRONG:     nucleus synapse seed profile --json
+
+           When using --json, logs go to stderr and JSON to stdout.
+           For clean JSON output in scripts, redirect stderr:
+             PowerShell:  nucleus --json info 2>$null
+             Bash:        nucleus --json info 2>/dev/null
+
+  --verbose        Enable detailed logging for debugging
+  --help           Show this help message
+
+
+------------------------------------------------------------------------------------------------------------------------
+  COMMAND CATEGORIES
+------------------------------------------------------------------------------------------------------------------------
+
+  SYSTEM             System information and diagnostics                       2 cmds
+  DIAGNOSTICS        Health checks and system diagnostics                     1 cmd
+  GOVERNANCE         Organization initialization and authority                4 cmds
+  TEAM               Team and collaboration management                        3 cmds
+  VAULT              Secure key and credential management                     4 cmds
+  SYNC               State synchronization with central server                2 cmds
+  ANALYTICS          System monitoring and telemetry                          1 cmd
+  TELEMETRY          Centralized log stream registration                      1 cmd
+  TEMPORAL_SERVER    Temporal server management and diagnostics               1 cmd
+  ORCHESTRATION      Workflow orchestration and automation                    4 cmds
+  ---------------------------------------------------------------------------  Total: 23 commands
+
+
+=======================================================[ SYSTEM ]=======================================================
+
+  > INFO
+    Display detailed system information
+
+    Usage: nucleus info
+
+    --------------------------------------------------------------------------------
+
+  > VERSION
+    Display version and build information
+
+    Usage: nucleus version
+
+    --------------------------------------------------------------------------------
+
+
+====================================================[ DIAGNOSTICS ]=====================================================
+
+  > HEALTH
+    System integrity check - validates all Nucleus components
+
+    Usage: nucleus health
+
+    Flags:
+      --component                Check only specific component (temporal, worker, ollama, etc.)
+      --json                     Output result as JSON (one-line compact)
+      --validate                 Deep validation checks (slower)
+
+    Example:
+        nucleus health
+        nucleus health --json
+        nucleus health --json --validate
+        nucleus health --component temporal
+
+    --------------------------------------------------------------------------------
+
+
+=====================================================[ GOVERNANCE ]=====================================================
+
+  > ALFRED
+    Muestra el reporte de salud administrativa y estado de la Bóveda
+
+    Usage: nucleus alfred status
+
+    Arguments:
+      status                required
+
+    Flags:
+      --json                     Salida en formato JSON (para Conductor u otras herramientas)
+
+    --------------------------------------------------------------------------------
+
+  > ALFRED
+    Inicia el custodio administrativo y los servidores de autoridad
+
+    Usage: nucleus alfred start
+
+    Arguments:
+      start                 required
+
+    --------------------------------------------------------------------------------
+
+  > ALFRED
+    Ejecuta una verificación de integridad manual sobre el sistema de archivos
+
+    Usage: nucleus alfred audit
+
+    Arguments:
+      audit                 required
+
+    --------------------------------------------------------------------------------
+
+  > INIT
+    Initialize Nucleus organization
+
+    Usage: nucleus init
+
+    Flags:
+      --github-id                GitHub username
+      --master                   Initialize as master
+      --name                     Display name
+
+    --------------------------------------------------------------------------------
+
+
+========================================================[ TEAM ]========================================================
+
+  > ADD
+    Add team member
+
+    Usage: nucleus add <github-id>
+
+    Arguments:
+      <github-id>           required
+
+    Flags:
+      --name                     Display name
+      --role                     Role [default: specialist]
+
+    --------------------------------------------------------------------------------
+
+  > LIST
+    List team members
+
+    Usage: nucleus list
+
+    --------------------------------------------------------------------------------
+
+  > REMOVE
+    Remove team member
+
+    Usage: nucleus remove <github-id>
+
+    Arguments:
+      <github-id>           required
+
+    --------------------------------------------------------------------------------
+
+
+=======================================================[ VAULT ]========================================================
+
+  > VAULT-LOCK
+    Lock vault
+
+    Usage: nucleus vault-lock
+
+    --------------------------------------------------------------------------------
+
+  > VAULT-REQUEST
+    Request key from vault
+
+    Usage: nucleus vault-request <key-id>
+
+    Arguments:
+      <key-id>              required
+
+    --------------------------------------------------------------------------------
+
+  > VAULT-STATUS
+    Display vault status
+
+    Usage: nucleus vault-status
+
+    --------------------------------------------------------------------------------
+
+  > VAULT-UNLOCK
+    Unlock vault
+
+    Usage: nucleus vault-unlock
+
+    --------------------------------------------------------------------------------
+
+
+========================================================[ SYNC ]========================================================
+
+  > SYNC-PULL
+    Pull permissions from central server
+
+    Usage: nucleus sync-pull
+
+    --------------------------------------------------------------------------------
+
+  > SYNC-PUSH
+    Push state to central server
+
+    Usage: nucleus sync-push
+
+    --------------------------------------------------------------------------------
+
+
+=====================================================[ ANALYTICS ]======================================================
+
+  > HEARTBEAT
+    Send heartbeat to central server
+
+    Usage: nucleus heartbeat
+
+    Flags:
+      --volume                   Intent volume [default: 0]
+      --workers                  Active workers count [default: 0]
+
+    --------------------------------------------------------------------------------
+
+
+=====================================================[ TELEMETRY ]======================================================
+
+  > TELEMETRY
+    Centralized log stream registration
+
+    Usage: nucleus telemetry
+
+    Subcommands:
+      register              Register or update a telemetry stream
+        nucleus telemetry register
+
+    Subcommand Details:
+
+      └─ REGISTER
+        Register or update a telemetry stream
+
+        Usage: nucleus telemetry register
+
+        Flags:
+          --label                    Display label with emoji (required)
+          --path                     Absolute path to log file (required)
+          --priority                 Priority level: 1=critical, 2=important, 3=informational [default: 2]
+          --stream                   Stream identifier (required)
+
+        Example:
+            nucleus telemetry register --stream test --label "🧪 TEST" --path "C:/logs/test.log" --priority 3
+            nucleus --json telemetry register --stream worker --label "🧠 WORKER" --path "C:/logs/worker.log"
+
+        JSON Response:
+          {
+            "success": true,
+            "stream_id": "electron_install",
+            "message": "Stream registered successfully"
+          }
+
+        ----------------------------------------------------------------------
+
+    --------------------------------------------------------------------------------
+
+
+==================================================[ TEMPORAL_SERVER ]===================================================
+
+  > TEMPORAL
+    Manage Temporal Server lifecycle
+
+    Usage: nucleus temporal
+
+    Subcommands:
+      cleanup               Clean up zombie Temporal processes on port 7233
+        nucleus temporal cleanup
+      diagnostics           Run comprehensive Temporal diagnostics
+        nucleus temporal diagnostics
+      ensure                Ensure Temporal Server is running (non-interactive, automation-safe)
+        nucleus temporal ensure
+      force-stop            Forcefully stop all Temporal processes
+        nucleus temporal force-stop
+      start                 Start Temporal Server (interactive mode)
+        nucleus temporal start
+      status                Check Temporal Server status
+        nucleus temporal status
+      stop                  Stop running Temporal Server
+        nucleus temporal stop
+
+    Subcommand Details:
+
+      └─ CLEANUP
+        Clean up zombie Temporal processes on port 7233
+
+        Usage: nucleus temporal cleanup
+
+        Example:
+              nucleus temporal cleanup
+              nucleus --json temporal cleanup
+
+        JSON Response:
+          {
+            "command": "temporal_cleanup",
+            "port": 7233,
+            "found_process": true,
+            "pid": 19580,
+            "executable": "C:\\Users\\user\\AppData\\Local\\BloomNucleus\\bin\\temporal\\temporal.exe",
+            "action_taken": "killed",
+            "port_free_after": true,
+            "errors": []
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ DIAGNOSTICS
+        Run comprehensive Temporal diagnostics
+
+        Usage: nucleus temporal diagnostics
+
+        Example:
+            nucleus temporal diagnostics
+            nucleus --json temporal diagnostics
+
+        JSON Response:
+          {
+            "executable": {
+              "path": "C:\\Users\\user\\AppData\\Local\\BloomNucleus\\bin\\temporal\\temporal.exe",
+              "exists": true,
+              "size": 123456789
+            },
+            "health": {
+              "operational": true,
+              "state": "RUNNING",
+              "grpc_responding": true,
+              "ui_responding": true
+            },
+            "database": {
+              "path": "C:\\Users\\user\\AppData\\Local\\BloomNucleus\\logs\\temporal\\temporal.db",
+              "exists": true,
+              "size": 98304
+            },
+            "pid_file": {
+              "path": "C:\\Users\\user\\AppData\\Local\\BloomNucleus\\logs\\temporal\\temporal.pid",
+              "exists": true,
+              "pid": 12345
+            },
+            "overall_status": "HEALTHY"
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ ENSURE
+        Ensure Temporal Server is running (non-interactive, automation-safe)
+
+        Usage: nucleus temporal ensure
+
+        Example:
+            nucleus temporal ensure
+
+        JSON Response:
+          {
+            "success": true,
+            "state": "RUNNING",
+            "started": true,
+            "pid": 14192,
+            "grpc_port": 7233,
+            "ui_port": 8233,
+            "ui_url": "http://localhost:8233",
+            "grpc_url": "localhost:7233"
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ FORCE-STOP
+        Forcefully stop all Temporal processes
+
+        Usage: nucleus temporal force-stop
+
+        Example:
+              nucleus temporal force-stop
+              nucleus --json temporal force-stop
+
+        JSON Response:
+          {
+            "command": "temporal_force_stop",
+            "processes_found": 2,
+            "processes_killed": 2,
+            "port_7233_free": true,
+            "state_cleaned": true,
+            "details": [
+              {
+                "pid": 19580,
+                "executable": "C:\\Users\\user\\AppData\\Local\\BloomNucleus\\bin\\temporal\\temporal.exe",
+                "killed": true
+              }
+            ],
+            "errors": []
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ START
+        Start Temporal Server (interactive mode)
+
+        Usage: nucleus temporal start
+
+        Example:
+            nucleus temporal start
+            nucleus --json temporal start
+
+        JSON Response:
+          {
+            "temporal": {
+              "state": "RUNNING",
+              "pid": 12345,
+              "grpc_port": 7233,
+              "ui_port": 8233,
+              "ui_url": "http://localhost:8233",
+              "grpc_url": "localhost:7233"
+            }
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ STATUS
+        Check Temporal Server status
+
+        Usage: nucleus temporal status
+
+        Example:
+            nucleus temporal status
+            nucleus --json temporal status
+
+        JSON Response:
+          {
+            "temporal": {
+              "operational": true,
+              "state": "RUNNING",
+              "ui_port": 8233,
+              "grpc_port": 7233,
+              "ui_url": "http://localhost:8233",
+              "grpc_url": "localhost:7233",
+              "health_checks": {
+                "grpc": true,
+                "ui": true
+              }
+            }
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ STOP
+        Stop running Temporal Server
+
+        Usage: nucleus temporal stop
+
+        Example:
+            nucleus temporal stop
+            nucleus --json temporal stop
+
+        JSON Response:
+          {
+            "temporal": {
+              "state": "STOPPED",
+              "message": "Temporal Server stopped successfully"
+            }
+          }
+
+        ----------------------------------------------------------------------
+
+    --------------------------------------------------------------------------------
+
+
+===================================================[ ORCHESTRATION ]====================================================
+
+  > DEV-START
+    Start Nucleus development environment with full boot sequence
+
+    Usage: nucleus dev-start
+
+    Flags:
+      --json                     Output result as JSON
+      --simulation               Run in simulation mode (use test ownership.json)
+      --skip-vault               Skip vault verification (development only)
+
+    Example:
+        nucleus dev-start
+        nucleus dev-start --simulation
+        nucleus dev-start --skip-vault
+
+    --------------------------------------------------------------------------------
+
+  > SERVICE
+    Service lifecycle management for Windows (NSSM)
+
+    Usage: nucleus service
+
+    Subcommands:
+      start                 Start Nucleus as Windows service (daemon mode)
+        nucleus service start
+      status                Check Nucleus service status
+        nucleus service status
+      stop                  Stop running Nucleus service gracefully
+        nucleus service stop
+
+    Subcommand Details:
+
+      └─ START
+        Start Nucleus as Windows service (daemon mode)
+
+        Usage: nucleus service start
+
+        Flags:
+          --json                     Output result as JSON
+          --skip-vault               Skip vault verification (development only)
+
+        Example:
+            nucleus service start
+            nucleus service start --skip-vault
+            nucleus --json service start
+
+        JSON Response:
+          {
+            "success": true,
+            "pid": 12345,
+            "boot_time_seconds": 8.5,
+            "components": {
+              "temporal": "running",
+              "worker": "running",
+              "ollama": "running",
+              "control_plane": "running",
+              "vault": "unlocked"
+            },
+            "ollama_pid": 12346,
+            "ollama_port": 11434,
+            "control_plane_pid": 12347,
+            "vault_state": "unlocked",
+            "timestamp": 1708012800
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ STATUS
+        Check Nucleus service status
+
+        Usage: nucleus service status
+
+        Flags:
+          --json                     Output result as JSON
+
+        Example:
+            nucleus service status
+            nucleus --json service status
+
+        JSON Response:
+          {
+            "success": true,
+            "running": true,
+            "pid": 12345,
+            "components": {
+              "temporal": "healthy",
+              "worker": "healthy",
+              "ollama": "healthy",
+              "control_plane": "healthy"
+            },
+            "timestamp": 1708012800
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ STOP
+        Stop running Nucleus service gracefully
+
+        Usage: nucleus service stop
+
+        Flags:
+          --json                     Output result as JSON
+
+        Example:
+            nucleus service stop
+            nucleus --json service stop
+
+        JSON Response:
+          {
+            "success": true,
+            "message": "Service stopped gracefully",
+            "timestamp": 1708012800
+          }
+
+        ----------------------------------------------------------------------
+
+    --------------------------------------------------------------------------------
+
+  > SYNAPSE
+    Temporal workflow orchestration via Sentinel
+
+    Usage: nucleus synapse
+
+    Subcommands:
+      launch                Launch Sentinel for a profile
+        nucleus synapse launch <profile_id>
+      seed                  Create new persistent profile
+        nucleus synapse seed <alias> [is_master]
+      shutdown              Shutdown profile workflow
+        nucleus synapse shutdown <profile_id>
+      shutdown-all          Shutdown all orchestrated services
+        nucleus synapse shutdown-all
+      start-ollama          Start Ollama service via Temporal workflow
+        nucleus synapse start-ollama
+      status                Query profile status
+        nucleus synapse status <profile_id>
+      vault-status          Query Vault lock status via Brain
+        nucleus synapse vault-status
+
+    Subcommand Details:
+
+      └─ LAUNCH
+        Launch Sentinel for a profile
+
+        Usage: nucleus synapse launch <profile_id>
+
+        Arguments:
+          <profile_id>          required
+
+        Flags:
+          --json                     Output in JSON format
+          --mode                     Launch mode (landing, discovery) [default: landing]
+
+        Example:
+            nucleus synapse launch profile-123
+            nucleus synapse launch profile-123 --mode discovery
+            nucleus --json synapse launch profile-123
+
+        ----------------------------------------------------------------------
+
+      └─ SEED
+        Create new persistent profile
+
+        Usage: nucleus synapse seed <alias> [is_master]
+
+        Arguments:
+          <alias>               required
+          is_master             optional
+
+        Flags:
+          --json                     Output in JSON format
+          --master                   Create as master profile
+
+        Example:
+            nucleus synapse seed my-profile
+            nucleus synapse seed my-profile --master
+            nucleus --json synapse seed my-profile
+
+        ----------------------------------------------------------------------
+
+      └─ SHUTDOWN
+        Shutdown profile workflow
+
+        Usage: nucleus synapse shutdown <profile_id>
+
+        Arguments:
+          <profile_id>          required
+
+        Flags:
+          --json                     Output in JSON format
+
+        Example:
+            nucleus synapse shutdown profile-123
+            nucleus --json synapse shutdown profile-123
+
+        ----------------------------------------------------------------------
+
+      └─ SHUTDOWN-ALL
+        Shutdown all orchestrated services
+
+        Usage: nucleus synapse shutdown-all
+
+        Example:
+            nucleus --json synapse shutdown-all
+            nucleus synapse shutdown-all
+
+        ----------------------------------------------------------------------
+
+      └─ START-OLLAMA
+        Start Ollama service via Temporal workflow
+
+        Usage: nucleus synapse start-ollama
+
+        Flags:
+          --simulation               Run in simulation mode
+
+        Example:
+            nucleus --json synapse start-ollama
+            nucleus synapse start-ollama --simulation
+
+        ----------------------------------------------------------------------
+
+      └─ STATUS
+        Query profile status
+
+        Usage: nucleus synapse status <profile_id>
+
+        Arguments:
+          <profile_id>          required
+
+        Flags:
+          --json                     Output in JSON format
+
+        Example:
+            nucleus synapse status profile-123
+            nucleus --json synapse status profile-123
+
+        ----------------------------------------------------------------------
+
+      └─ VAULT-STATUS
+        Query Vault lock status via Brain
+
+        Usage: nucleus synapse vault-status
+
+        Example:
+            nucleus --json synapse vault-status
+            nucleus synapse vault-status
+
+        ----------------------------------------------------------------------
+
+    --------------------------------------------------------------------------------
+
+  > WORKER
+    Inicia el worker de Temporal para procesar workflows
+
+    Usage: nucleus worker start
+
+    Arguments:
+      start                 required
+
+    Flags:
+      --task-queue, -q           Task queue de Temporal [default: profile-orchestration]
+
+    --------------------------------------------------------------------------------
+
+
+
+------------------------------------------------------------------------------------------------------------------------
+  💡 COMMON MISTAKES & TIPS
+------------------------------------------------------------------------------------------------------------------------
+
+  X MISTAKE #1: Placing --json flag after the command
+     Wrong:   nucleus synapse seed profile --json
+     Correct: nucleus --json synapse seed profile
+
+  X MISTAKE #2: Expecting clean JSON without redirecting stderr
+     Issue:   Logs appear mixed with JSON in console
+     Fix:     Use 2>$null (PowerShell) or 2>/dev/null (Bash)
+     Example: nucleus --json info 2>$null
+
+  * TIP: When integrating with scripts/automation
+     √ Always use --json flag for parseable output
+     √ Always redirect stderr (2>$null) for clean JSON
+     √ stdout will contain ONLY valid JSON
+     √ stderr will contain human-readable logs
+
+
+                                  [!] Nucleus: Governance Layer for Bloom Organization
+                            Use 'nucleus <command> --help' for detailed command information
+

@@ -121,16 +121,31 @@ func (r *ModernHelpRenderer) printUsageSection() {
 func (r *ModernHelpRenderer) printGlobalOptions() {
 	r.printSectionHeader("GLOBAL OPTIONS", BrightYellow)
 	
-	options := []struct {
+	// --json flag with prominent warning
+	r.writeln(fmt.Sprintf("  %s  %s",
+		Yellow.Apply(r.padRight("--json", 15), r.useColors),
+		"Output in JSON format (machine-readable)"))
+	r.writeln("")
+	r.writeln("           " + BrightYellow.Apply("⚠️  CRITICAL:", r.useColors) + " Flag MUST be placed " + Bold.Apply("BEFORE", r.useColors) + " the command")
+	r.writeln("           " + Green.Apply("✅ CORRECT:", r.useColors) + "   sentinel " + Bold.Apply("--json", r.useColors) + " seed profile true")
+	r.writeln("           " + Yellow.Apply("❌ WRONG:", r.useColors) + "     sentinel seed profile true --json")
+	r.writeln("")
+	r.writeln("           " + Dim.Apply("When using --json, logs go to stderr and JSON to stdout.", r.useColors))
+	r.writeln("           " + Dim.Apply("For clean JSON output in scripts, redirect stderr:", r.useColors))
+	r.writeln("             " + Cyan.Apply("PowerShell:", r.useColors) + "  sentinel --json seed profile true " + Bold.Apply("2>$null", r.useColors))
+	r.writeln("             " + Cyan.Apply("Bash:", r.useColors) + "        sentinel --json seed profile true " + Bold.Apply("2>/dev/null", r.useColors))
+	r.writeln("")
+	
+	// Other flags
+	otherOptions := []struct {
 		flag string
 		desc string
 	}{
-		{"--json", "Output in JSON format (machine-readable)"},
 		{"--verbose", "Enable detailed logging for debugging"},
 		{"--help", "Show this help message"},
 	}
 	
-	for _, opt := range options {
+	for _, opt := range otherOptions {
 		r.writeln(fmt.Sprintf("  %s  %s",
 			Yellow.Apply(r.padRight(opt.flag, 15), r.useColors),
 			Dim.Apply(opt.desc, r.useColors)))
@@ -342,6 +357,9 @@ func (r *ModernHelpRenderer) printCommandDetail(cmd *cobra.Command) {
 }
 
 func (r *ModernHelpRenderer) printFooter() {
+	// Add common mistakes section before footer
+	r.printCommonMistakes()
+	
 	r.writeln("")
 	
 	var emoji string
@@ -357,6 +375,53 @@ func (r *ModernHelpRenderer) printFooter() {
 	r.writeln(r.centerText(
 		Dim.Apply("Use 'sentinel <command> --help' for detailed command information", r.useColors),
 		r.width))
+	r.writeln("")
+}
+
+func (r *ModernHelpRenderer) printCommonMistakes() {
+	r.writeln("")
+	r.printSectionHeader("💡 COMMON MISTAKES & TIPS", BrightMagenta)
+	
+	var bullet string
+	if r.isRedirected() {
+		bullet = "X "
+	} else {
+		bullet = "❌ "
+	}
+	
+	var checkmark string
+	if r.isRedirected() {
+		checkmark = "√ "
+	} else {
+		checkmark = "✅ "
+	}
+	
+	var lightbulb string
+	if r.isRedirected() {
+		lightbulb = "* "
+	} else {
+		lightbulb = "💡 "
+	}
+	
+	// Mistake 1
+	r.writeln("  " + Yellow.Apply(bullet+"MISTAKE #1:", r.useColors) + " Placing --json flag after the command")
+	r.writeln("     " + Dim.Apply("Wrong:", r.useColors) + "   sentinel seed profile true --json")
+	r.writeln("     " + Green.Apply("Correct:", r.useColors) + " sentinel " + Bold.Apply("--json", r.useColors) + " seed profile true")
+	r.writeln("")
+	
+	// Mistake 2
+	r.writeln("  " + Yellow.Apply(bullet+"MISTAKE #2:", r.useColors) + " Expecting clean JSON without redirecting stderr")
+	r.writeln("     " + Dim.Apply("Issue:", r.useColors) + "   Logs appear mixed with JSON in console")
+	r.writeln("     " + Green.Apply("Fix:", r.useColors) + "     Use " + Bold.Apply("2>$null", r.useColors) + " (PowerShell) or " + Bold.Apply("2>/dev/null", r.useColors) + " (Bash)")
+	r.writeln("     " + Cyan.Apply("Example:", r.useColors) + " sentinel --json seed profile true " + Bold.Apply("2>$null", r.useColors))
+	r.writeln("")
+	
+	// Tip
+	r.writeln("  " + BrightCyan.Apply(lightbulb+"TIP:", r.useColors) + " When integrating with scripts/automation")
+	r.writeln("     " + Green.Apply(checkmark, r.useColors) + "Always use --json flag for parseable output")
+	r.writeln("     " + Green.Apply(checkmark, r.useColors) + "Always redirect stderr (" + Bold.Apply("2>$null", r.useColors) + ") for clean JSON")
+	r.writeln("     " + Green.Apply(checkmark, r.useColors) + "stdout will contain ONLY valid JSON")
+	r.writeln("     " + Green.Apply(checkmark, r.useColors) + "stderr will contain human-readable logs")
 	r.writeln("")
 }
 

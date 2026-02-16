@@ -12,6 +12,7 @@ import (
 
 	"nucleus/internal/core"
 	"nucleus/internal/orchestration/temporal/workflows"
+	temporalclient "nucleus/internal/orchestration/temporal"
 
 	"github.com/spf13/cobra"
 	"go.temporal.io/sdk/client"
@@ -34,15 +35,375 @@ retry, state tracking, and JSON responses. All operations follow
 the architecture: Nucleus → Synapse → Sentinel → Brain
 
 Available subcommands:
+  seed             Create new persistent profile
+  launch           Launch Sentinel for a profile
+  status           Query profile status
+  shutdown         Shutdown profile workflow
   start-ollama     Start Ollama AI service via Temporal workflow
   vault-status     Query Vault lock status via Brain component  
   shutdown-all     Shutdown all orchestrated services gracefully`,
 	}
 
 	// Add all synapse subcommands
+	cmd.AddCommand(createSeedSubcommand(c))
+	cmd.AddCommand(createLaunchSubcommand(c))
+	cmd.AddCommand(createStatusSubcommand(c))
+	cmd.AddCommand(createShutdownSubcommand(c))
 	cmd.AddCommand(createStartOllamaSubcommand(c))
 	cmd.AddCommand(createVaultStatusSubcommand(c))
 	cmd.AddCommand(createShutdownAllSubcommand(c))
+
+	return cmd
+}
+
+// ============================================
+// SEED SUBCOMMAND
+// ============================================
+
+func createSeedSubcommand(c *core.Core) *cobra.Command {
+	var jsonOutput bool
+	var isMaster bool
+
+	cmd := &cobra.Command{
+		Use:   "seed <alias> [is_master]",
+		Short: "Create new persistent profile",
+		Long: `Execute seed process to create a new profile.
+Profile remains as long-running workflow waiting for commands.`,
+		Args: cobra.RangeArgs(1, 2),
+
+		Annotations: map[string]string{
+			"category": "ORCHESTRATION",
+		},
+
+		Example: `  nucleus synapse seed my-profile
+  nucleus synapse seed my-profile --master
+  nucleus --json synapse seed my-profile`,
+
+		Run: func(cmd *cobra.Command, args []string) {
+			alias := args[0]
+
+			// Si hay segundo arg, usar como is_master
+			if len(args) > 1 {
+				isMaster = args[1] == "true"
+			}
+
+			// Crear logger
+			logger, err := core.InitLogger(&c.Paths, "SYNAPSE", jsonOutput)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "[ERROR] Failed to initialize logger: %v\n", err)
+				os.Exit(1)
+			}
+			defer logger.Close()
+
+			if !jsonOutput {
+				logger.Info("Creating profile: %s (master: %v)", alias, isMaster)
+			}
+
+			// Crear cliente Temporal
+			ctx := context.Background()
+			tc, err := temporalclient.NewClient(ctx, &c.Paths, jsonOutput)
+			if err != nil {
+				if jsonOutput {
+					outputJSON(map[string]interface{}{
+						"success": false,
+						"error":   fmt.Sprintf("failed to connect to Temporal: %v", err),
+					})
+				} else {
+					logger.Error("Failed to connect to Temporal: %v", err)
+				}
+				os.Exit(1)
+			}
+			defer tc.Close()
+
+			// Ejecutar seed workflow
+			result, err := tc.ExecuteSeedWorkflow(ctx, logger, alias, isMaster)
+			if err != nil {
+				if jsonOutput {
+					outputJSON(map[string]interface{}{
+						"success": false,
+						"error":   err.Error(),
+					})
+				} else {
+					logger.Error("Seed failed: %v", err)
+				}
+				os.Exit(1)
+			}
+
+			// Output
+			if jsonOutput {
+				outputJSON(result)
+			} else {
+				logger.Success("✅ Profile created successfully")
+				logger.Info("Profile ID: %s", result.ProfileID)
+				logger.Info("Alias: %s", result.Alias)
+				logger.Info("Workflow ID: %s", result.WorkflowID)
+				logger.Info("State: SEEDED (waiting for launch)")
+			}
+		},
+	}
+
+	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
+	cmd.Flags().BoolVar(&isMaster, "master", false, "Create as master profile")
+
+	return cmd
+}
+
+// ============================================
+// LAUNCH SUBCOMMAND
+// ============================================
+
+func createLaunchSubcommand(c *core.Core) *cobra.Command {
+	var jsonOutput bool
+	var mode string
+
+	cmd := &cobra.Command{
+		Use:   "launch <profile_id>",
+		Short: "Launch Sentinel for a profile",
+		Long: `Send launch signal to profile workflow.
+Sentinel starts Chrome with loaded extension.`,
+		Args: cobra.ExactArgs(1),
+
+		Annotations: map[string]string{
+			"category": "ORCHESTRATION",
+		},
+
+		Example: `  nucleus synapse launch profile-123
+  nucleus synapse launch profile-123 --mode discovery
+  nucleus --json synapse launch profile-123`,
+
+		Run: func(cmd *cobra.Command, args []string) {
+			profileID := args[0]
+
+			// Crear logger
+			logger, err := core.InitLogger(&c.Paths, "SYNAPSE", jsonOutput)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "[ERROR] Failed to initialize logger: %v\n", err)
+				os.Exit(1)
+			}
+			defer logger.Close()
+
+			if !jsonOutput {
+				logger.Info("Launching profile: %s (mode: %s)", profileID, mode)
+			}
+
+			// Crear cliente Temporal
+			ctx := context.Background()
+			tc, err := temporalclient.NewClient(ctx, &c.Paths, jsonOutput)
+			if err != nil {
+				if jsonOutput {
+					outputJSON(map[string]interface{}{
+						"success": false,
+						"error":   fmt.Sprintf("failed to connect to Temporal: %v", err),
+					})
+				} else {
+					logger.Error("Failed to connect to Temporal: %v", err)
+				}
+				os.Exit(1)
+			}
+			defer tc.Close()
+
+			// Ejecutar launch
+			result, err := tc.ExecuteLaunchWorkflow(ctx, logger, profileID, mode)
+			if err != nil {
+				if jsonOutput {
+					outputJSON(map[string]interface{}{
+						"success":    false,
+						"profile_id": profileID,
+						"error":      err.Error(),
+						"timestamp":  time.Now().Unix(),
+					})
+				} else {
+					logger.Error("Launch failed: %v", err)
+				}
+				os.Exit(1)
+			}
+
+			// Output
+			if jsonOutput {
+				outputJSON(result)
+			} else {
+				logger.Success("✅ Sentinel launched successfully")
+				logger.Info("Profile ID: %s", result.ProfileID)
+				logger.Info("Chrome PID: %d", result.ChromePID)
+				logger.Info("Debug Port: %d", result.DebugPort)
+				logger.Info("Extension Loaded: %v", result.ExtensionLoaded)
+				logger.Info("State: %s", result.State)
+			}
+		},
+	}
+
+	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
+	cmd.Flags().StringVar(&mode, "mode", "landing", "Launch mode (landing, discovery)")
+
+	return cmd
+}
+
+// ============================================
+// STATUS SUBCOMMAND
+// ============================================
+
+func createStatusSubcommand(c *core.Core) *cobra.Command {
+	var jsonOutput bool
+
+	cmd := &cobra.Command{
+		Use:   "status <profile_id>",
+		Short: "Query profile status",
+		Long:  "Execute query on workflow to get current ProfileStatus",
+		Args:  cobra.ExactArgs(1),
+
+		Annotations: map[string]string{
+			"category": "ORCHESTRATION",
+		},
+
+		Example: `  nucleus synapse status profile-123
+  nucleus --json synapse status profile-123`,
+
+		Run: func(cmd *cobra.Command, args []string) {
+			profileID := args[0]
+
+			// Crear logger
+			logger, err := core.InitLogger(&c.Paths, "SYNAPSE", jsonOutput)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "[ERROR] Failed to initialize logger: %v\n", err)
+				os.Exit(1)
+			}
+			defer logger.Close()
+
+			// Crear cliente Temporal
+			ctx := context.Background()
+			tc, err := temporalclient.NewClient(ctx, &c.Paths, jsonOutput)
+			if err != nil {
+				if jsonOutput {
+					outputJSON(map[string]interface{}{
+						"success": false,
+						"error":   fmt.Sprintf("failed to connect to Temporal: %v", err),
+					})
+				} else {
+					logger.Error("Failed to connect to Temporal: %v", err)
+				}
+				os.Exit(1)
+			}
+			defer tc.Close()
+
+			// Obtener estado
+			status, err := tc.GetProfileStatus(ctx, profileID)
+			if err != nil {
+				if jsonOutput {
+					outputJSON(map[string]interface{}{
+						"success":    false,
+						"profile_id": profileID,
+						"error":      err.Error(),
+					})
+				} else {
+					logger.Error("Failed to query status: %v", err)
+				}
+				os.Exit(1)
+			}
+
+			// Output
+			if jsonOutput {
+				outputJSON(map[string]interface{}{
+					"success": true,
+					"status":  status,
+				})
+			} else {
+				logger.Info("╔═══════════════════════════════════╗")
+				logger.Info("Profile ID: %s", status.ProfileID)
+				logger.Info("State: %s", status.State)
+				logger.Info("Sentinel Running: %v", status.SentinelRunning)
+				logger.Info("Last Update: %s", status.LastUpdate.Format(time.RFC3339))
+				if status.ErrorMessage != "" {
+					logger.Warning("Error: %s", status.ErrorMessage)
+				}
+				logger.Info("╚═══════════════════════════════════╝")
+			}
+		},
+	}
+
+	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
+
+	return cmd
+}
+
+// ============================================
+// SHUTDOWN SUBCOMMAND
+// ============================================
+
+func createShutdownSubcommand(c *core.Core) *cobra.Command {
+	var jsonOutput bool
+
+	cmd := &cobra.Command{
+		Use:   "shutdown <profile_id>",
+		Short: "Shutdown profile workflow",
+		Long:  "Stop Sentinel and terminate profile workflow",
+		Args:  cobra.ExactArgs(1),
+
+		Annotations: map[string]string{
+			"category": "ORCHESTRATION",
+		},
+
+		Example: `  nucleus synapse shutdown profile-123
+  nucleus --json synapse shutdown profile-123`,
+
+		Run: func(cmd *cobra.Command, args []string) {
+			profileID := args[0]
+
+			// Crear logger
+			logger, err := core.InitLogger(&c.Paths, "SYNAPSE", jsonOutput)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "[ERROR] Failed to initialize logger: %v\n", err)
+				os.Exit(1)
+			}
+			defer logger.Close()
+
+			if !jsonOutput {
+				logger.Info("Shutting down profile: %s", profileID)
+			}
+
+			// Crear cliente Temporal
+			ctx := context.Background()
+			tc, err := temporalclient.NewClient(ctx, &c.Paths, jsonOutput)
+			if err != nil {
+				if jsonOutput {
+					outputJSON(map[string]interface{}{
+						"success": false,
+						"error":   fmt.Sprintf("failed to connect to Temporal: %v", err),
+					})
+				} else {
+					logger.Error("Failed to connect to Temporal: %v", err)
+				}
+				os.Exit(1)
+			}
+			defer tc.Close()
+
+			// Enviar shutdown
+			if err := tc.ShutdownProfile(ctx, logger, profileID); err != nil {
+				if jsonOutput {
+					outputJSON(map[string]interface{}{
+						"success":    false,
+						"profile_id": profileID,
+						"error":      err.Error(),
+					})
+				} else {
+					logger.Error("Shutdown failed: %v", err)
+				}
+				os.Exit(1)
+			}
+
+			// Output
+			if jsonOutput {
+				outputJSON(map[string]interface{}{
+					"success":    true,
+					"profile_id": profileID,
+					"message":    "shutdown signal sent",
+				})
+			} else {
+				logger.Success("✅ Shutdown signal sent successfully")
+			}
+		},
+	}
+
+	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
 
 	return cmd
 }
@@ -311,4 +672,14 @@ func getTemporalClient(ctx context.Context) (client.Client, error) {
 	return client.Dial(client.Options{
 		HostPort: "localhost:7233",
 	})
+}
+
+// outputJSON helper para imprimir JSON
+func outputJSON(v interface{}) {
+	data, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, `{"success":false,"error":"failed to marshal JSON: %v"}`+"\n", err)
+		return
+	}
+	fmt.Println(string(data))
 }
