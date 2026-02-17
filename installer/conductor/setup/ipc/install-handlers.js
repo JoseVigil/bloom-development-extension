@@ -32,18 +32,18 @@ async function checkVCRedistInstalled() {
 
 
 
-/**
- * Configura los handlers IPC para el modo instalación
- */
-function setupInstallHandlers() {
-  console.log('📡 Setting up Install Mode IPC handlers...');
-  
+  /**
+   * Configura los handlers IPC para el modo instalación
+   */
+  function setupInstallHandlers() {
+    console.log('📡 Setting up Install Mode IPC handlers...');
+    
 
-  // Handler principal de instalación
-  ipcMain.handle('brain:install-extension', async () => {
-  const mainWindow = BrowserWindow.getFocusedWindow();
-  return await installService(mainWindow);
-});
+    // Handler principal de instalación
+    ipcMain.handle('brain:install-extension', async () => {
+    const mainWindow = BrowserWindow.getFocusedWindow();
+    return await installService(mainWindow);
+  });
 
   // Handler para lanzar el perfil maestro después de la instalación
   ipcMain.handle('brain:launch', async () => {
@@ -55,27 +55,37 @@ function setupInstallHandlers() {
         throw new Error("No master profile found");
       }
 
-      // 🆕 Launch with landing page (no --url flag = uses landing by default)
-      const brainMainPy = path.join(paths.brainDir, '__main__.py');
-      const cmd = `"${paths.pythonExe}" "${brainMainPy}" profile launch "${profileId}"`;
+      // ✅ Verificar si el perfil necesita seed
+      const synapseManifest = path.join(
+        paths.profilesDir, 
+        profileId, 
+        'synapse', 
+        `com.bloom.synapse.${profileId}.json`
+      );
 
-      console.log("🚀 LAUNCHING WITH LANDING:", cmd);
+      if (!await fs.pathExists(synapseManifest)) {
+        console.log("🌱 Profile needs seeding first");
+        
+        // Ejecutar seed
+        const seedCmd = `"${paths.nucleusExe}" seed --profile "${profileId}"`;
+        execSync(seedCmd, { 
+          encoding: 'utf8',
+          timeout: 30000 
+        });
+        
+        console.log("✅ Seed completed");
+      }
 
-      const output = execSync(cmd, {
-        cwd: paths.brainDir,
+      // Solo ahora ejecutar launch
+      const launchCmd = `"${paths.nucleusExe}" launch --profile "${profileId}"`;
+      const output = execSync(launchCmd, {
         encoding: 'utf8',
-        timeout: 10000,
-        env: {
-          ...process.env,
-          PYTHONNOUSERSITE: '1'
-        }
+        timeout: 10000
       });
 
-      console.log("✅ CHROME LAUNCHED:", output);
       return { success: true, output };
 
     } catch (error) {
-      console.error("❌ LAUNCH ERROR:", error.message);
       return { success: false, error: error.message };
     }
   });

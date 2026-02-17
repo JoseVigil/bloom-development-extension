@@ -536,12 +536,12 @@ async function seedMasterProfile() {
   log.info('Initializing master profile via Nucleus...');
 
   try {
-    const result = await executeNucleusCommand(['profile', 'seed', 'master', '--json']);
+    const result = await executeNucleusCommand(['--json', 'synapse', 'seed', 'MasterWorker', 'true']);
     
     if (result && result.success) {
       log.success('✓ Master profile seeded');
       log.info(`   Profile ID: ${result.profile_id || 'unknown'}`);
-      log.info(`   Location: ${result.path || 'unknown'}`);
+      log.info(`   Alias: ${result.alias || 'MasterWorker'}`);
       return result;
     } else {
       throw new Error(result?.error || 'Seed operation failed');

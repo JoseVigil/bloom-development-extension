@@ -644,27 +644,32 @@ async function seedMasterProfile(win) {
       'true'
     ]);
 
-    // Validar estructura de respuesta de 'seed'
-    if (!result.success || !result.data || !result.data.uuid) {
+    // Validar estructura de respuesta de nucleus synapse seed
+    // Nucleus retorna: { success, profile_id, alias, is_master, workflow_id, ... }
+    if (!result.success || !result.profile_id) {
       throw new Error('Seed failed: no UUID returned in response');
     }
 
-    const uuid = result.data.uuid;
+    const uuid = result.profile_id;
 
-    logger.success(`✔ Master profile UUID: ${result.data.uuid}`);
-    logger.info(`   Alias: ${result.data.alias}`);
-    logger.info(`   Path: ${result.data.path}`);
-    logger.info(`   Is Master: ${result.data.is_master}`);
+    logger.success(`✔ Master profile UUID: ${uuid}`);
+    logger.info(`   Alias: ${result.alias}`);
+    logger.info(`   Is Master: ${result.is_master}`);
+    logger.info(`   Workflow: ${result.workflow_id}`);
 
-    await nucleusManager.setMasterProfile(result.data.uuid);
-    await nucleusManager.completeMilestone(MILESTONE, result.data);
+    await nucleusManager.setMasterProfile(uuid);
+    await nucleusManager.completeMilestone(MILESTONE, { 
+      uuid,
+      alias: result.alias,
+      is_master: result.is_master,
+      workflow_id: result.workflow_id
+    });
 
     return { 
       success: true, 
-      uuid: result.data.uuid,
-      alias: result.data.alias,
-      is_master: result.data.is_master,
-      path: result.data.path
+      uuid,
+      alias: result.alias,
+      is_master: result.is_master
     };
 
   } catch (error) {
