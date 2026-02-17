@@ -3,6 +3,7 @@ package temporal
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"go.temporal.io/sdk/client"
@@ -80,7 +81,7 @@ func (c *Client) CancelWorkflow(ctx context.Context, workflowID string, runID st
 func (c *Client) ExecuteSeedWorkflow(ctx context.Context, logger *core.Logger, alias string, isMaster bool) (*SeedResult, error) {
 	workflowID := fmt.Sprintf("seed-%s-%d", alias, time.Now().UnixNano())
 
-	logger.Info("Executing seed workflow: %s", workflowID)
+	fmt.Fprintf(os.Stderr, "[INFO] Executing seed workflow: %s\n", workflowID)
 
 	workflowOptions := client.StartWorkflowOptions{
 		ID:        workflowID,

@@ -260,7 +260,6 @@ func (a *SentinelActivities) StartOllama(ctx context.Context, input types.Ollama
 	cmd := exec.CommandContext(ctx, a.sentinelPath, args...)
 
 	output, err := cmd.CombinedOutput()
-	outputStr := string(output)
 	if err != nil {
 		errorMsg := fmt.Sprintf("failed to start ollama: %v", err)
 		a.logEvent(eventID, "ollama_start", "failed", map[string]interface{}{
@@ -327,9 +326,18 @@ func (a *SentinelActivities) SeedProfile(ctx context.Context, input types.SeedPr
 	// Ejecutar comando
 	err := cmd.Run()
 	
-	// ✅ Capturar outputs separados
-	stdoutStr := stdout.String()
+	// ✅ Capturar outputs separados y limpiar espacios
+	stdoutStr := strings.TrimSpace(stdout.String())
 	stderrStr := stderr.String()
+	
+	// 🔍 DEBUG: Ver exactamente qué recibimos
+	a.logEvent(eventID, "seed_raw_output", "debug", map[string]interface{}{
+		"stdout_length": len(stdoutStr),
+		"stderr_length": len(stderrStr),
+		"stdout_first_100": truncateString(stdoutStr, 100),
+		"has_json_start": strings.HasPrefix(stdoutStr, "{"),
+		"has_json_end": strings.HasSuffix(stdoutStr, "}"),
+	})
 	
 	// Loggear stderr para debugging (logs de Sentinel)
 	if stderrStr != "" {
@@ -372,21 +380,24 @@ func (a *SentinelActivities) SeedProfile(ctx context.Context, input types.SeedPr
 		}, fmt.Errorf("seed failed: %s", sentinelResult.Error)
 	}
 
-	// Extraer UUID del campo data
+	// Extraer UUID — buscar en profile_id directo (formato nucleus) o en data.uuid (formato sentinel)
 	var profileUUID string
-	if sentinelResult.Data != nil {
+	if sentinelResult.ProfileID != "" {
+		profileUUID = sentinelResult.ProfileID
+	} else if sentinelResult.Data != nil {
 		if uuid, ok := sentinelResult.Data["uuid"].(string); ok {
 			profileUUID = uuid
 		}
 	}
-	
+
 	// Validar que recibimos el UUID
 	if profileUUID == "" {
-		errorMsg := fmt.Sprintf("seed failed: no UUID returned in response (data: %v)", sentinelResult.Data)
+		errorMsg := fmt.Sprintf("seed failed: no UUID returned in response (profile_id empty, data: %v)", sentinelResult.Data)
 		a.logEvent(eventID, "seed_profile", "failed", map[string]interface{}{
-			"error":          errorMsg,
-			"sentinel_data":  sentinelResult.Data,
-			"full_response":  sentinelResult,
+			"error":         errorMsg,
+			"sentinel_data": sentinelResult.Data,
+			"profile_id":    sentinelResult.ProfileID,
+			"full_response": sentinelResult,
 		})
 		return types.SeedProfileResult{
 			Success: false,
@@ -530,4 +541,19 @@ func (a *SentinelActivities) appendTelemetry(event map[string]interface{}) {
 	// Escribir línea
 	f.Write(data)
 	f.WriteString("\n")
+}
+
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
+}
+
+func reverseString(s string) string {
+	runes := []rune(s)
+	for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
+		runes[i], runes[j] = runes[j], runes[i]
+	}
+	return string(runes)
 }

@@ -6,6 +6,8 @@ package workflows
 import (
 	"time"
 
+	"nucleus/internal/orchestration/types"
+
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 )
@@ -142,36 +144,26 @@ type SeedInput struct {
 	IsMaster bool   `json:"is_master"`
 }
 
-// SeedResult represents the result of profile seeding
-type SeedResult struct {
-	Success bool     `json:"success"`
-	Data    SeedData `json:"data"`
-	Error   string   `json:"error,omitempty"`
-}
-
-// SeedData contains profile creation details
-type SeedData struct {
-	UUID     string `json:"uuid"`
-	Alias    string `json:"alias"`
-	Path     string `json:"path"`
-	IsMaster bool   `json:"is_master"`
-}
-
 // SeedWorkflow creates a new profile via Sentinel
-func SeedWorkflow(ctx workflow.Context, input SeedInput) (*SeedResult, error) {
+func SeedWorkflow(ctx workflow.Context, input SeedInput) (*types.SeedProfileResult, error) {
 	ao := workflow.ActivityOptions{
-		StartToCloseTimeout: 2 * time.Minute, // Profile creation can take time
+		StartToCloseTimeout: 2 * time.Minute,
 		RetryPolicy: &temporal.RetryPolicy{
 			MaximumAttempts: 3,
 		},
 	}
 	ctx = workflow.WithActivityOptions(ctx, ao)
 
-	var result SeedResult
-	err := workflow.ExecuteActivity(ctx, "sentinel.SeedProfile", input).Get(ctx, &result)
+	activityInput := types.SeedProfileInput{
+		Alias:    input.Alias,
+		IsMaster: input.IsMaster,
+	}
+
+	var result types.SeedProfileResult
+	err := workflow.ExecuteActivity(ctx, "sentinel.SeedProfile", activityInput).Get(ctx, &result)
 
 	if err != nil {
-		return &SeedResult{
+		return &types.SeedProfileResult{
 			Success: false,
 			Error:   err.Error(),
 		}, err
