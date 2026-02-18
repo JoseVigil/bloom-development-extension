@@ -308,59 +308,81 @@ def verify_executable(brain_exe):
 # GENERACIÓN DE DOCUMENTACIÓN
 # ========================================
 def generate_help_files(brain_exe):
-    """Genera archivos de ayuda."""
-    help_script = PROJECT_ROOT / "scripts/python/generate_help_files.py"
-    if not help_script.exists():
-        log_to_file(f"Script no encontrado: {help_script}", level="WARN")
-        return False
-    
+    """
+    Genera archivos de ayuda invocando brain.exe compilado via subprocess.
+    Output: installer/native/bin/<platform>/brain/help/
+    """
     console_print("Generando archivos de ayuda...")
-    log_to_file("Generando archivos de ayuda...", level="INFO")
-    
-    # Carpeta help/ junto al ejecutable final
-    deploy_dir = brain_exe.parent.resolve()
-    help_output_dir = deploy_dir / "help"
+    log_to_file("Generando archivos de ayuda via brain.exe...", level="INFO")
+
+    help_output_dir = brain_exe.parent.resolve() / "help"
     help_output_dir.mkdir(parents=True, exist_ok=True)
-    
-    code, stdout, stderr = safe_subprocess_run(
-        [
-            sys.executable,
-            str(help_script),
-            str(brain_exe),
-            "--output-dir", str(help_output_dir)
-        ],
-        timeout=90,
-        desc="Generacion de ayuda"
-    )
-    
-    return code == 0
+
+    variants = [
+        ("help.txt",             ["--help"]),
+        ("help-full.txt",        ["--help", "--full"]),
+        ("brain-legacy.json",    ["--json", "--help"]),
+        ("brain-ai-schema.json", ["--ai",   "--help"]),
+        ("brain-ai-full.json",   ["--ai",   "--help", "--full"]),
+    ]
+
+    ok_count = 0
+    for filename, args in variants:
+        out_file = help_output_dir / filename
+        cmd = [str(brain_exe)] + args
+        code, stdout, stderr = safe_subprocess_run(cmd, timeout=30, desc=f"Help: {filename}")
+        output = stdout or stderr
+        if output and output.strip():
+            try:
+                out_file.write_text(output, encoding="utf-8", errors="replace")
+                log_to_file(f"  OK {filename} ({len(output)} bytes)", level="INFO")
+                ok_count += 1
+            except Exception as e:
+                log_to_file(f"  FAILED write {filename}: {e}", level="ERROR")
+        else:
+            log_to_file(f"  FAILED {filename}: output vacio (codigo {code})", level="ERROR")
+
+    log_to_file(f"Help docs: {ok_count}/{len(variants)} generados", level="INFO")
+    return ok_count > 0
 
 def generate_tree_files(brain_exe):
-    """Genera árboles de directorios."""
-    tree_script = PROJECT_ROOT / "scripts/python/generate_tree_files.py"
-    if not tree_script.exists():
-        log_to_file(f"Script no encontrado: {tree_script}", level="WARN")
-        return False
-    
+    """
+    Genera arboles de directorios en-proceso usando TreeAllManager.
+    Output: AppData/BloomNucleus/tree/ (configurado en brain.config.json)
+    """
     console_print("Generando arboles de directorios...")
-    log_to_file("Generando arboles de directorios...", level="INFO")
-    
-    deploy_dir = brain_exe.parent.resolve()
-    tree_output_dir = deploy_dir / "help"
-    tree_output_dir.mkdir(parents=True, exist_ok=True)
-    
-    code, stdout, stderr = safe_subprocess_run(
-        [
-            sys.executable,
-            str(tree_script),
-            str(brain_exe),
-            "--output-dir", str(tree_output_dir)
-        ],
-        timeout=180,
-        desc="Generacion de arboles"
-    )
-    
-    return code == 0
+    log_to_file("Generando arboles de directorios via TreeAllManager...", level="INFO")
+
+    try:
+        if str(PROJECT_ROOT) not in sys.path:
+            sys.path.insert(0, str(PROJECT_ROOT))
+
+        from brain.core.filesystem.tree_all_manager import TreeAllManager
+
+        config_path = PROJECT_ROOT / "brain.config.json"
+        manager = TreeAllManager(config_path=config_path, project_root=PROJECT_ROOT)
+        result = manager.generate_all()
+
+        ok     = result.get("targets_ok", 0)
+        total  = result.get("targets_total", 0)
+        failed = result.get("targets_failed", 0)
+        out    = result.get("output_dir", "?")
+
+        log_to_file(f"Tree files: {ok}/{total} generados -> {out}",
+                    level="INFO" if failed == 0 else "WARN")
+
+        if failed > 0:
+            for r in result.get("results", []):
+                if r["status"] == "error":
+                    log_to_file(f"  FAILED {r['file']}: {r.get('error')}", level="ERROR")
+
+        return result["status"] in ("success", "partial")
+
+    except Exception as e:
+        log_to_file(f"generate_tree_files fallo: {e}", level="ERROR")
+        import traceback
+        log_to_file(traceback.format_exc(), level="ERROR")
+        return False
 
 # ========================================
 # FUNCIÓN PRINCIPAL
@@ -443,10 +465,13 @@ def main():
         console_print(f"  {Icons.WARNING} No se pudieron generar archivos de ayuda", indent=2)
         log_to_file("Warning: Generación de archivos de ayuda falló", level="WARN")
     
-    # Generar árboles de directorios (opcional)
-    # tree_success = generate_tree_files(brain_exe)
-    # if tree_success:
-    #     console_print(f"  {Icons.SUCCESS} Árboles de directorios generados", indent=2)
+    # Generar árboles de directorios
+    tree_success = generate_tree_files(brain_exe)
+    if tree_success:
+        console_print(f"  {Icons.SUCCESS} Arboles de directorios generados", indent=2)
+    else:
+        console_print(f"  {Icons.WARNING} No se pudieron generar arboles de directorios", indent=2)
+        log_to_file("Warning: Generacion de arboles fallo", level="WARN")
     
     # ========================================
     # 5. REGISTRAR TELEMETRÍA

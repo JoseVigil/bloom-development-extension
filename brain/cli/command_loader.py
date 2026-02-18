@@ -524,6 +524,12 @@ def load_all_commands_explicit() -> CommandRegistry:
     # SYSTEM
     # =================================================================
     try:
+        from brain.commands.system.help_docs import HelpDocsCommand
+        registry.register(HelpDocsCommand())
+    except ImportError as e:
+        print(f"Warning: Could not load HelpDocsCommand: {e}")
+    
+    try:
         from brain.commands.system.info import SystemInfoCommand
         registry.register(SystemInfoCommand())
     except ImportError as e:
@@ -668,6 +674,7 @@ def get_hiddenimports_list():
         'brain.commands.runtime.run',
         'brain.commands.server.server',
         'brain.commands.synapse.synapse_host_cli',
+        'brain.commands.system.help_docs',
         'brain.commands.system.info',
         'brain.commands.system.info',
         'brain.commands.system.info',

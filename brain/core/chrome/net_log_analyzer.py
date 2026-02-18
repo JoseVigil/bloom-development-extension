@@ -45,7 +45,31 @@ class NetLogAnalyzer:
         from brain.core.profile.path_resolver import PathResolver
         self.paths = PathResolver()
         logger.debug(f"Initialized NetLogAnalyzer with base_dir: {self.paths.base_dir}")
-    
+
+    def _resolve_latest_log(self, logs_dir: Path, glob_pattern: str) -> Path:
+        """
+        Resolve the most recent log file in logs_dir matching the given glob pattern.
+        Files are sorted by name descending (timestamp-prefixed names sort correctly).
+
+        Args:
+            logs_dir: Directory to search in
+            glob_pattern: Glob pattern, e.g. '*_netlog.json'
+
+        Returns:
+            Path to the most recent matching file
+
+        Raises:
+            FileNotFoundError: If no matching file is found
+        """
+        matches = sorted(logs_dir.glob(glob_pattern), reverse=True)
+        if not matches:
+            raise FileNotFoundError(
+                f"No files matching '{glob_pattern}' found in: {logs_dir}"
+            )
+        latest = matches[0]
+        logger.debug(f"Resolved latest log ({glob_pattern}): {latest}")
+        return latest
+
     def analyze(
         self,
         profile_id: str,
@@ -76,7 +100,7 @@ class NetLogAnalyzer:
         if not profile_id or not profile_id.strip():
             raise ValueError("profile_id cannot be empty")
         
-        # Load profiles.json to get net_log path
+        # Load profiles.json
         profiles_json = Path(self.paths.base_dir) / "config" / "profiles.json"
         
         if not profiles_json.exists():
@@ -95,12 +119,18 @@ class NetLogAnalyzer:
         if not profile:
             raise ValueError(f"Profile {profile_id} not found in profiles.json")
         
-        # Get net_log path
+        # ✅ Resolve source file dynamically from logs_dir
+        # Supports both legacy 'log_files.net_log' and new 'logs_dir' structures
         net_log_path = profile.get('log_files', {}).get('net_log')
-        if not net_log_path:
-            raise ValueError(f"net_log not found for profile {profile_id}")
-        
-        source_file = Path(net_log_path)
+        if net_log_path:
+            source_file = Path(net_log_path)
+        else:
+            raw_logs_dir = profile.get('logs_dir')
+            if not raw_logs_dir:
+                raise ValueError(
+                    f"Neither 'log_files.net_log' nor 'logs_dir' found for profile {profile_id}"
+                )
+            source_file = self._resolve_latest_log(Path(raw_logs_dir), '*_netlog.json')
 
         logger.debug(f"Source file: {source_file}")
         
@@ -108,8 +138,12 @@ class NetLogAnalyzer:
             logger.error(f"Network log file not found: {source_file}")
             raise FileNotFoundError(f"Chrome network log not found: {source_file}")
         
-        # Construct output directory and file
-        output_dir = Path(self.paths.base_dir) / "logs" / "profiles" / profile_id
+        # Output directory — use logs_dir from profile if available, else fallback
+        raw_logs_dir = profile.get('logs_dir')
+        if raw_logs_dir:
+            output_dir = Path(raw_logs_dir)
+        else:
+            output_dir = Path(self.paths.base_dir) / "logs" / "profiles" / profile_id
         output_dir.mkdir(parents=True, exist_ok=True)
 
         # Use launch_id as prefix if provided

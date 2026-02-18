@@ -27,7 +27,31 @@ class MiningLogReader:
         from brain.core.profile.path_resolver import PathResolver
         self.paths = PathResolver()
         logger.debug(f"Initialized MiningLogReader with base_dir: {self.paths.base_dir}")
-    
+
+    def _resolve_latest_log(self, logs_dir: Path, glob_pattern: str) -> Path:
+        """
+        Resolve the most recent log file in logs_dir matching the given glob pattern.
+        Files are sorted by name descending (timestamp-prefixed names sort correctly).
+
+        Args:
+            logs_dir: Directory to search in
+            glob_pattern: Glob pattern, e.g. '*_debug.log'
+
+        Returns:
+            Path to the most recent matching file
+
+        Raises:
+            FileNotFoundError: If no matching file is found
+        """
+        matches = sorted(logs_dir.glob(glob_pattern), reverse=True)
+        if not matches:
+            raise FileNotFoundError(
+                f"No files matching '{glob_pattern}' found in: {logs_dir}"
+            )
+        latest = matches[0]
+        logger.debug(f"Resolved latest log ({glob_pattern}): {latest}")
+        return latest
+
     def read_and_filter(
         self,
         profile_id: str,
@@ -56,7 +80,7 @@ class MiningLogReader:
         if not profile_id or not profile_id.strip():
             raise ValueError("profile_id cannot be empty")
         
-        # Load profiles.json to get debug_log path
+        # Load profiles.json
         profiles_json = Path(self.paths.base_dir) / "config" / "profiles.json"
         
         if not profiles_json.exists():
@@ -75,21 +99,31 @@ class MiningLogReader:
         if not profile:
             raise ValueError(f"Profile {profile_id} not found in profiles.json")
         
-        # Get debug_log path
+        # ✅ Resolve source file dynamically from logs_dir
+        # Supports both legacy 'log_files.debug_log' and new 'logs_dir' structures
         debug_log_path = profile.get('log_files', {}).get('debug_log')
-        if not debug_log_path:
-            raise ValueError(f"debug_log not found for profile {profile_id}")
-        
-        source_file = Path(debug_log_path)
-        
+        if debug_log_path:
+            source_file = Path(debug_log_path)
+        else:
+            raw_logs_dir = profile.get('logs_dir')
+            if not raw_logs_dir:
+                raise ValueError(
+                    f"Neither 'log_files.debug_log' nor 'logs_dir' found for profile {profile_id}"
+                )
+            source_file = self._resolve_latest_log(Path(raw_logs_dir), '*_debug.log')
+
         logger.debug(f"Source file: {source_file}")
         
         if not source_file.exists():
             logger.error(f"Source file not found: {source_file}")
             raise FileNotFoundError(f"Engine mining log not found: {source_file}")
         
-        # Output file in the same directory
-        logs_dir = Path(self.paths.base_dir) / "logs" / "profiles" / profile_id
+        # Output directory — use logs_dir from profile if available, else fallback
+        raw_logs_dir = profile.get('logs_dir')
+        if raw_logs_dir:
+            logs_dir = Path(raw_logs_dir)
+        else:
+            logs_dir = Path(self.paths.base_dir) / "logs" / "profiles" / profile_id
         logs_dir.mkdir(parents=True, exist_ok=True)
         
         # Use launch_id as suffix if provided
