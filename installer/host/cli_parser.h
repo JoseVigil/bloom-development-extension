@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cstdio>
 #include "build_info.h"  // For BUILD_NUMBER
+#include <nlohmann/json.hpp>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -292,13 +293,41 @@ namespace SystemInfo {
 
 namespace CLICommands {
     
-    inline void print_version() {
-        std::cout << "bloom-host version 2.1.0 build " << BUILD_NUMBER << std::endl;
+    inline void print_version(bool as_json = false) {
+        if (as_json) {
+            nlohmann::json out;
+            out["application"] = "bloom-host";
+            out["version"]     = "2.1.0";
+            out["build"]       = BUILD_NUMBER;
+            std::cout << out.dump(2) << std::endl;
+        } else {
+            std::cout << "bloom-host version 2.1.0 build " << BUILD_NUMBER << std::endl;
+        }
     }
     
-    inline void print_info() {
+    inline void print_info(bool as_json = false) {
         auto platform = SystemInfo::get_platform_info();
-        
+
+        if (as_json) {
+            nlohmann::json out;
+            out["application"]      = "bloom-host";
+            out["version"]          = "2.1.0";
+            out["build"]            = BUILD_NUMBER;
+            out["build_date"]       = SystemInfo::get_build_timestamp();
+            out["current_time"]     = SystemInfo::get_current_timestamp();
+            out["os"]               = platform.os_name;
+            out["os_version"]       = platform.os_version;
+            out["architecture"]     = platform.arch;
+            out["runtime_engine"]   = platform.runtime;
+            out["runtime_version"]  = platform.runtime_version;
+            out["service_port"]     = 5678;
+            out["max_message_size"] = 1020000;
+            out["protocol"]         = "Synapse Native Messaging v2.1";
+            out["dependencies"]     = SystemInfo::detect_dependencies();
+            std::cout << out.dump(2) << std::endl;
+            return;
+        }
+
         // Build info map for alphabetical sorting
         std::map<std::string, std::string> info;
         
@@ -501,10 +530,12 @@ namespace CLIParser {
     
     inline ParseResult parse_and_execute(int argc, char* argv[]) {
         ParseResult result;
-        
+
+        bool as_json = has_flag(argc, argv, "--json");
+
         // Priority 1: Version (most common)
         if (has_flag(argc, argv, "--version") || has_flag(argc, argv, "-v")) {
-            CLICommands::print_version();
+            CLICommands::print_version(as_json);
             result.handled = true;
             result.exit_code = 0;
             return result;
@@ -512,7 +543,7 @@ namespace CLIParser {
         
         // Priority 2: Info
         if (has_flag(argc, argv, "--info") || has_flag(argc, argv, "-i")) {
-            CLICommands::print_info();
+            CLICommands::print_info(as_json);
             result.handled = true;
             result.exit_code = 0;
             return result;
