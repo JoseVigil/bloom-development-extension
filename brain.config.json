@@ -1,0 +1,94 @@
+{
+  "_comment": "Brain CLI - Configuration file. Extend this to add/remove tree targets or adjust output paths.",
+  "version": "1.0",
+  "tree": {
+    "output_dir": "appdata://BloomNucleus/tree",
+    "targets": [
+      {
+        "file": "src_tree.txt",
+        "description": "Main source directories (src + installer + brain)",
+        "paths": ["src", "installer", "brain"]
+      },
+      {
+        "file": "installer_tree.txt",
+        "description": "Full installer directory",
+        "paths": ["installer"]
+      },
+      {
+        "file": "brain_tree.txt",
+        "description": "Brain CLI source",
+        "paths": ["brain"]
+      },
+      {
+        "file": "sentinel_tree.txt",
+        "description": "Sentinel module",
+        "paths": ["installer/sentinel"]
+      },
+      {
+        "file": "nucleus_tree.txt",
+        "description": "Nucleus module",
+        "paths": ["installer/nucleus"]
+      },
+      {
+        "file": "native_tree.txt",
+        "description": "Native binaries",
+        "paths": ["installer/native"]
+      },
+      {
+        "file": "webview_tree.txt",
+        "description": "Webview module",
+        "paths": ["webview"]
+      },
+      {
+        "file": "conductor_tree.txt",
+        "description": "Conductor module",
+        "paths": ["installer/conductor"]
+      },
+      {
+        "file": "cortex_tree.txt",
+        "description": "Cortex module",
+        "paths": ["installer/cortex"]
+      },
+      {
+        "file": "appdata_tree.txt",
+        "description": "AppData BloomNucleus installation",
+        "paths": ["appdata://BloomNucleus"]
+      }
+    ]
+  },
+  "help": {
+    "output_dir": "appdata://BloomNucleus/bin/help",
+    "variants": [
+      {
+        "file": "help.txt",
+        "description": "Basic help (terminal UI)",
+        "mode": "text",
+        "full": false
+      },
+      {
+        "file": "help-full.txt",
+        "description": "Full help with all commands",
+        "mode": "text",
+        "full": true
+      },
+      {
+        "file": "brain-legacy.json",
+        "description": "Legacy JSON schema",
+        "mode": "json",
+        "full": false
+      },
+      {
+        "file": "brain-ai-schema.json",
+        "description": "AI-Native JSON schema",
+        "mode": "ai",
+        "full": false
+      },
+      {
+        "file": "brain-ai-full.json",
+        "description": "AI-Native JSON schema (all commands)",
+        "mode": "ai",
+        "full": true
+      }
+    ]
+  }
+}

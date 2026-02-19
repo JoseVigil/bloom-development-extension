@@ -18,7 +18,7 @@ bloom-development-extension/
     │   │   ├── config.go
     │   │   └── help_renderer.go
     │   ├── client/
-    │   │   └── client.go
+    │   │   └── api_client.go
     │   ├── core/
     │   │   ├── build_info.go
     │   │   ├── core.go
@@ -37,11 +37,7 @@ bloom-development-extension/
     │   │   └── ownership.go
     │   ├── orchestration/
     │   │   ├── activities/
-    │   │   │   ├── sentinel_intent.go
-    │   │   │   ├── sentinel_launch.go
-    │   │   │   ├── sentinel_ollama.go
-    │   │   │   ├── sentinel_seed.go
-    │   │   │   └── sentinel_stop.go
+    │   │   │   └── sentinel_activities.go
     │   │   ├── commands/
     │   │   │   └── synapse.go
     │   │   ├── queries/
@@ -62,14 +58,14 @@ bloom-development-extension/
     │   │   │   │   ├── ports.go
     │   │   │   │   ├── process.go
     │   │   │   │   └── temporal_health.go
-    │   │   │   ├── client.go
+    │   │   │   ├── temporal_client.go
     │   │   │   ├── worker.go
     │   │   │   └── workflows/
+    │   │   │       ├── profile_lifecycle.go
     │   │   │       └── system_workflows.go
     │   │   ├── types/
     │   │   │   └── orchestration.go
     │   │   └── workflows/
-    │   │       ├── profile_lifecycle.go
     │   │       ├── recovery_flow.go
     │   │       └── system_gate.go
     │   ├── supervisor/

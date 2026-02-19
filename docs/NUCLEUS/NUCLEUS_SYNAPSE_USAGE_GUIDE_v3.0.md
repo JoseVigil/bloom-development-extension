@@ -1,4 +1,4 @@
-# NUCLEUS SYNAPSE USAGE GUIDE v2.0
+# NUCLEUS SYNAPSE USAGE GUIDE v3.0
 
 ## Resumen Ejecutivo
 
@@ -11,6 +11,9 @@ Comando CLI → Synapse → Temporal Workflow → Worker → Sentinel → Chrome
 
 **Principio Fundamental:**  
 Los perfiles son **actores con estado persistente** orquestados por Temporal. Cada perfil se mapea a un workflow de larga duración con `WorkflowID = profile_<uuid>` que maneja su ciclo de vida completo, incluyendo reintentos y recuperación ante crashes.
+
+**🆕 Cambio Clave v3.0 (Post-Refactor Feb 2026):**  
+Todas las Sentinel Activities fueron **unificadas** en `internal/orchestration/activities/sentinel_activities.go`, eliminando la dispersión anterior en múltiples archivos y simplificando el mantenimiento del código.
 
 ---
 
@@ -119,10 +122,10 @@ nucleus temporal ensure
 nucleus worker start -q profile-orchestration
 
 # 3. Sembrar perfil (crear identidad persistente)
-nucleus synapse seed my_profile_001 true  # true = is_master
+nucleus synapse seed my_profile_001 --master  # --master flag en v3.0
 
 # 4. Lanzar perfil (iniciar Chrome + Sentinel)
-nucleus synapse launch my_profile_001 --mode landing --email user@example.com
+nucleus synapse launch my_profile_001 --mode landing
 ```
 
 ### Atajos de Desarrollo
@@ -147,6 +150,35 @@ Equivalente a:
 
 ---
 
+## ⚠️ IMPORTANTE: Ubicación de Flags Globales
+
+**Los flags `--json` y `--verbose` DEBEN ir después de `nucleus` y ANTES del comando:**
+
+```bash
+# ✅ CORRECTO
+nucleus --json synapse seed alice
+nucleus --verbose synapse launch profile_001
+nucleus --json --verbose synapse status profile_123
+
+# ❌ INCORRECTO
+nucleus synapse seed alice --json
+nucleus synapse launch profile_001 --verbose
+```
+
+**Por qué importa:**  
+- `--json` y `--verbose` son flags **globales** de nucleus
+- Los flags específicos de cada comando (como `--master`, `--mode`) sí van al final
+- Esta es una diferencia crítica que puede romper scripts si se ignora
+
+**Ejemplo combinado:**
+```bash
+# Flags globales ANTES + flags del comando DESPUÉS
+nucleus --json synapse seed alice --master
+nucleus --verbose synapse launch profile_001 --mode discovery
+```
+
+---
+
 ## Comandos Synapse
 
 ### `seed` - Crear Perfil Persistente
@@ -154,12 +186,12 @@ Equivalente a:
 Crea un perfil como entidad persistente en Temporal. El perfil se convierte en un workflow de larga duración que puede ser reanudado después de reiniciar el sistema.
 
 ```bash
-nucleus synapse seed <profile_alias> [is_master]
+nucleus synapse seed <profile_alias> [--master]
 ```
 
 **Parámetros:**
 - `<profile_alias>`: Identificador único del perfil (ej: `my_profile_001`)
-- `[is_master]`: Opcional, `true` o `false` (default: `false`)
+- `--master`: Flag opcional para crear perfil maestro (antes era parámetro posicional `true`)
 
 **Ejemplos:**
 
@@ -167,11 +199,12 @@ nucleus synapse seed <profile_alias> [is_master]
 # Crear perfil básico
 nucleus synapse seed profile_alpha
 
-# Crear perfil maestro
-nucleus synapse seed profile_main true
+# Crear perfil maestro (NUEVA SINTAXIS v3.0)
+nucleus synapse seed profile_main --master
 
-# Con JSON output
-nucleus --json synapse seed profile_beta false
+# Con JSON output (notar posición de --json)
+nucleus --json synapse seed profile_beta
+nucleus --json synapse seed profile_gamma --master
 ```
 
 **Respuesta JSON (éxito):**
@@ -209,23 +242,12 @@ nucleus --json synapse seed profile_beta false
 Lanza el navegador Chrome con el perfil especificado mediante Sentinel.
 
 ```bash
-nucleus synapse launch <profile_id_or_alias> [flags]
+nucleus synapse launch <profile_id_or_alias> [--mode=landing|discovery]
 ```
 
 **Flags disponibles:**
 ```
---mode <string>       Modo de lanzamiento: landing, discovery, headless (default: landing)
---email <string>      Email asociado al perfil
---service <string>    Servicio: google, facebook, twitter, etc.
---account <string>    Identificador de cuenta
---alias <string>      Alias alternativo del perfil
---extension <path>    Ruta a extensión de navegador
---role <string>       Rol del usuario
---step <string>       Paso de ejecución
---heartbeat           Habilitar monitoreo heartbeat
---register            Registrar nuevo perfil en el sistema
---config <path>       Archivo de configuración JSON o '-' para stdin
---save                Guardar configuración para futuros lanzamientos
+--mode <string>       Modo de lanzamiento: landing, discovery (default: landing)
 ```
 
 **Ejemplos:**
@@ -234,35 +256,11 @@ nucleus synapse launch <profile_id_or_alias> [flags]
 # Lanzamiento básico
 nucleus synapse launch profile_001
 
-# Con modo y email
-nucleus synapse launch profile_001 --mode discovery --email user@test.com
+# Con modo específico
+nucleus synapse launch profile_001 --mode discovery
 
-# Con configuración completa
-nucleus synapse launch profile_001 \
-  --mode landing \
-  --email user@example.com \
-  --service google \
-  --extension /path/to/extension \
-  --heartbeat
-
-# Usando archivo de configuración
-nucleus synapse launch --config launch_config.json
-
-# Desde stdin
-echo '{"profile_id":"profile_001","mode":"landing","email":"test@mail.com"}' | \
-  nucleus --json synapse launch --config -
-```
-
-**Archivo de configuración (launch_config.json):**
-```json
-{
-  "profile_id": "profile_001",
-  "mode": "landing",
-  "email": "user@example.com",
-  "service": "google",
-  "extension": "/opt/extensions/my_extension",
-  "heartbeat": true
-}
+# Con JSON output (notar posición de --json)
+nucleus --json synapse launch profile_001 --mode landing
 ```
 
 **Respuesta JSON (éxito):**
@@ -452,9 +450,10 @@ type LaunchResult struct {
 
 // SeedProfile crea un nuevo perfil persistente
 func SeedProfile(ctx context.Context, alias string, isMaster bool) (*SeedResult, error) {
+    // v3.0: --json va ANTES del comando, --master es flag no parámetro posicional
     args := []string{"--json", "synapse", "seed", alias}
     if isMaster {
-        args = append(args, "true")
+        args = append(args, "--master")  // v3.0: flag en lugar de "true"
     }
     
     cmd := exec.CommandContext(ctx, "nucleus", args...)
@@ -476,10 +475,10 @@ func SeedProfile(ctx context.Context, alias string, isMaster bool) (*SeedResult,
 }
 
 // LaunchProfile inicia un perfil previamente seeded
-func LaunchProfile(ctx context.Context, profileID, mode, email string) (*LaunchResult, error) {
+func LaunchProfile(ctx context.Context, profileID, mode string) (*LaunchResult, error) {
+    // v3.0: --json va PRIMERO, solo --mode disponible
     cmd := exec.CommandContext(ctx, "nucleus", "--json", "synapse", "launch", profileID,
-        "--mode", mode,
-        "--email", email)
+        "--mode", mode)
     
     output, err := cmd.CombinedOutput()
     if err != nil {
@@ -511,7 +510,7 @@ func main() {
         seedResult.ProfileID, seedResult.WorkflowID)
     
     // 2. Launch profile
-    launchResult, err := LaunchProfile(ctx, seedResult.ProfileID, "landing", "user@test.com")
+    launchResult, err := LaunchProfile(ctx, seedResult.ProfileID, "landing")
     if err != nil {
         log.Fatalf("Launch failed: %v", err)
     }
@@ -573,9 +572,10 @@ class NucleusSynapseClient {
    * Crea un perfil persistente
    */
   async seedProfile(alias, isMaster = false) {
+    // v3.0: --master es flag, no parámetro posicional
     const args = ['seed', alias];
     if (isMaster) {
-      args.push('true');
+      args.push('--master');  // v3.0: flag en lugar de 'true'
     }
     return this.executeCommand(args);
   }
@@ -584,22 +584,11 @@ class NucleusSynapseClient {
    * Lanza un perfil
    */
   async launchProfile(profileId, options = {}) {
+    // v3.0: solo --mode disponible
     const args = ['launch', profileId];
     
     if (options.mode) {
       args.push('--mode', options.mode);
-    }
-    if (options.email) {
-      args.push('--email', options.email);
-    }
-    if (options.service) {
-      args.push('--service', options.service);
-    }
-    if (options.extension) {
-      args.push('--extension', options.extension);
-    }
-    if (options.heartbeat) {
-      args.push('--heartbeat');
     }
     
     return this.executeCommand(args);
@@ -722,7 +711,12 @@ seed_profile() {
     log_info "Seeding profile: $alias (master: $is_master)"
     
     local result
-    result=$(nucleus --json synapse seed "$alias" "$is_master" 2>&1)
+    # v3.0: --master como flag, no parámetro posicional
+    if [ "$is_master" = "true" ]; then
+        result=$(nucleus --json synapse seed "$alias" --master 2>&1)
+    else
+        result=$(nucleus --json synapse seed "$alias" 2>&1)
+    fi
     
     if [ $? -eq 0 ]; then
         local profile_id
@@ -747,15 +741,11 @@ seed_profile() {
 launch_profile() {
     local profile_id=$1
     local mode=${2:-landing}
-    local email=${3:-""}
     
     log_info "Launching profile: $profile_id (mode: $mode)"
     
+    # v3.0: solo --mode disponible
     local args=(--json synapse launch "$profile_id" --mode "$mode")
-    
-    if [ -n "$email" ]; then
-        args+=(--email "$email")
-    fi
     
     local result
     result=$(nucleus "${args[@]}" 2>&1)
@@ -819,7 +809,7 @@ run_full_workflow() {
     profile_id=$(seed_profile "$profile_alias" false) || exit 1
     
     # 3. Launch profile
-    launch_profile "$profile_id" "landing" "user@example.com" || exit 1
+    launch_profile "$profile_id" "landing" || exit 1
     
     log_info "=== Workflow Completed Successfully ==="
 }
@@ -939,9 +929,10 @@ function New-NucleusProfile {
     
     Write-ColorOutput "Seeding profile: $Alias (master: $IsMaster)" "Info"
     
+    # v3.0: --master es flag, no parámetro posicional
     $args = @("seed", $Alias)
     if ($IsMaster) {
-        $args += "true"
+        $args += "--master"  # v3.0: flag en lugar de "true"
     }
     
     try {
@@ -963,21 +954,13 @@ function Start-NucleusProfile {
         [Parameter(Mandatory=$true)]
         [string]$ProfileId,
         
-        [string]$Mode = "landing",
-        [string]$Email = "",
-        [string]$Service = "",
-        [string]$Extension = "",
-        [switch]$Heartbeat
+        [string]$Mode = "landing"
     )
     
     Write-ColorOutput "Launching profile: $ProfileId (mode: $Mode)" "Info"
     
+    # v3.0: solo --mode disponible
     $args = @("launch", $ProfileId, "--mode", $Mode)
-    
-    if ($Email) { $args += @("--email", $Email) }
-    if ($Service) { $args += @("--service", $Service) }
-    if ($Extension) { $args += @("--extension", $Extension) }
-    if ($Heartbeat) { $args += "--heartbeat" }
     
     try {
         $result = Invoke-NucleusCommand -Arguments $args
@@ -1340,6 +1323,104 @@ nucleus worker start -q profile-orchestration
 # Opcionalmente, usar systemd para control
 sudo systemctl start nucleus-worker
 ```
+
+---
+
+## 🆕 Estructura de Archivos Post-Refactor (v3.0)
+
+### Cambio Clave: Unificación de Sentinel Activities
+
+**Antes del refactor (v2.0 y anteriores):**
+```
+internal/orchestration/
+├── activities/
+│   ├── launch_sentinel.go      # Disperso
+│   ├── monitor_sentinel.go     # Disperso
+│   ├── shutdown_sentinel.go    # Disperso
+│   └── status_sentinel.go      # Disperso
+```
+
+**Después del refactor (v3.0 - Febrero 2026):**
+```
+internal/orchestration/
+└── activities/
+    └── sentinel_activities.go     # ✅ TODO unificado aquí
+```
+
+**Activities disponibles en el archivo unificado:**
+- `LaunchSentinel`: Inicia Chrome con extensión cargada
+- `MonitorSentinel`: Supervisa el proceso y heartbeat
+- `ShutdownSentinel`: Cierra Chrome de forma limpia
+- `GetSentinelStatus`: Query de estado actual
+
+**Beneficios de la unificación:**
+- ✅ Una única fuente de verdad para todas las Sentinel Activities
+- ✅ Más fácil de mantener y actualizar
+- ✅ Reduce la duplicación de código
+- ✅ Simplifica el debugging y testing
+- ✅ Mejor cohesión lógica
+
+### Estructura Completa Actualizada
+
+```
+nucleus/
+├── internal/
+│   ├── orchestration/
+│   │   ├── activities/
+│   │   │   └── sentinel_activities.go        # ✅ Activities unificadas
+│   │   ├── commands/
+│   │   │   └── synapse.go                    # Comandos CLI
+│   │   ├── queries/
+│   │   │   └── status.go
+│   │   ├── signals/
+│   │   │   ├── brain_events.go
+│   │   │   └── system_events.go
+│   │   ├── temporal/
+│   │   │   ├── bootstrap/
+│   │   │   │   ├── ensure.go              # ✅ Comando ensure
+│   │   │   │   ├── cleanup.go
+│   │   │   │   ├── diagnostics.go
+│   │   │   │   └── ... (otros helpers)
+│   │   │   ├── temporal_client.go
+│   │   │   ├── worker.go
+│   │   │   └── workflows/
+│   │   │       ├── profile_lifecycle.go
+│   │   │       └── system_workflows.go
+│   │   ├── types/
+│   │   │   └── orchestration.go
+│   │   └── workflows/
+│   │       ├── recovery_flow.go
+│   │       └── system_gate.go
+│   ├── synapse/
+│   │   └── synapse_commands.go            # ✅ CLI synapse
+│   ├── supervisor/
+│   │   ├── dev_start.go
+│   │   ├── health.go
+│   │   ├── service.go
+│   │   └── supervisor.go
+│   ├── core/
+│   │   ├── build_info.go
+│   │   ├── core.go
+│   │   ├── logger.go
+│   │   └── ... (otros core files)
+│   ├── governance/
+│   │   ├── alfred.go
+│   │   ├── ollama_client.go
+│   │   └── ... (otros governance files)
+│   └── vault/
+│       └── vault.go
+└── main.go
+```
+
+### Ubicación de Archivos Clave
+
+| Componente | Ubicación | Descripción |
+|------------|-----------|-------------|
+| **Sentinel Activities** | `internal/orchestration/activities/sentinel_activities.go` | Todas las activities unificadas |
+| **Synapse Commands** | `internal/synapse/synapse_commands.go` | CLI commands (seed, launch, etc.) |
+| **Temporal Ensure** | `internal/orchestration/temporal/bootstrap/ensure.go` | Comando idempotente para asegurar Temporal |
+| **Profile Lifecycle** | `internal/orchestration/temporal/workflows/profile_lifecycle.go` | Workflow principal de perfiles |
+| **Temporal Client** | `internal/orchestration/temporal/temporal_client.go` | Cliente para interactuar con Temporal |
 
 ---
 
@@ -1962,6 +2043,16 @@ Depende de tus recursos (RAM, CPU). Un perfil Chrome consume ~300-500 MB de RAM.
 
 ## Changelog
 
+### v3.0.0 (2026-02-16) - Post-Refactor Release
+- 🆕 **Unificación de Activities**: Todas las Sentinel Activities consolidadas en `sentinel_activities.go`
+- 🆕 **Sintaxis actualizada**: `seed` usa flag `--master` en lugar de parámetro posicional
+- 🆕 **Simplificación de `launch`**: Solo flag `--mode` disponible (landing, discovery)
+- 🆕 **Comando `shutdown-all`**: Nuevo comando para detener todos los perfiles de una vez
+- 🆕 **Documentación de flags globales**: Sección dedicada sobre ubicación correcta de `--json` y `--verbose`
+- ✅ Actualización completa de ejemplos (Go, Node.js, Bash, PowerShell)
+- ✅ Nueva sección de estructura de archivos post-refactor
+- ✅ Paths actualizados según tree del proyecto
+
 ### v2.0.0 (2026-02-16)
 - ✅ Actualizada secuencia de boot con `temporal ensure`
 - ✅ Deprecado `temporal start` para automation
@@ -1987,7 +2078,8 @@ Depende de tus recursos (RAM, CPU). Un perfil Chrome consume ~300-500 MB de RAM.
 
 ---
 
-**Versión:** 2.0.0  
+**Versión:** 3.0.0  
 **Fecha:** 2026-02-16  
 **Autor:** Platform Engineering Team  
-**Estado:** Production Ready
+**Estado:** Production Ready  
+**Cambios v3.0:** Activities unificadas, sintaxis de comandos actualizada, documentación ampliada

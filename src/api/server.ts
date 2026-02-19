@@ -62,13 +62,28 @@ export async function createAPIServer(config: BloomApiServerConfig): Promise<Fas
     githubOAuthServer // ✅ Now properly initialized
   });
 
-  // CORS - Allow VSCode webviews and localhost
+  // CORS - Allow VSCode webviews, localhost, and Electron static builds (file:// / null origin)
   await fastify.register(cors, {
-    origin: [
-      'http://localhost:5173',
-      'http://localhost:3000',
-      /^vscode-webview:\/\/.*/
-    ],
+    origin: (origin, cb) => {
+      // Allow no origin (file://, Electron static, curl, NSSM health checks)
+      if (!origin) return cb(null, true);
+      
+      const allowed = [
+        'http://localhost:5173',
+        'http://localhost:3000',
+      ];
+      
+      if (
+        allowed.includes(origin) ||
+        /^vscode-webview:\/\//.test(origin) ||
+        /^file:\/\//.test(origin) ||
+        origin === 'null'  // Electron adapter-static reports 'null' as string
+      ) {
+        return cb(null, true);
+      }
+      
+      cb(new Error(`CORS: Origin not allowed: ${origin}`), false);
+    },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     credentials: true
   });

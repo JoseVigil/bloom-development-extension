@@ -1,0 +1,151 @@
+COMPILE & RUN:
+
+brain libs
+git clone
+cd brain
+pip install google-generativeai -t libs/google-generativeai
+python prepare_runtime_libs.py
+cd installer/electron-app/install
+node diagnose-service.js
+
+#Agragar librerias python en brain.specs despues de pip install local.
+
+brain build
+C:\repos\bloom-videos\bloom-development-extension
+.\build.ps1 -Clean (powershell admin)
+brain system version --increase --desc "Versioning and info"
+
+taskkill /F /IM chrome.exe /T
+
+cd conductor
+npm run build:all
+
+cd conductor/launcher     
+npm run build
+
+cd conductor/setu     
+npm run build
+
+
+Plugin
+/c/repos/bloom-videos/bloom-development-extension
+npm run compile
+F5
+
+Electron
+/c/repos/bloom-videos/bloom-development-extension/installer/electron-app
+npm run build
+npm run dev
+npx electron main.js --mode=launch --launch 
+npx electron main.js --mode=launch --launch --dev
+npx electron main.js --mode=launch --onboarding
+npx electron main.js --mode=launch --onboarding --dev
+
+DEV Web server port 5173
+/c/repos/bloom-videos/bloom-development-extension/webview/app
+npm run build
+npm run dev
+
+Sentinel 
+.\build.bat
+.\sentinel.exe dev-start
+.\sentinel.exe health
+.\sentinel.exe seed "MasterWorker" true
+.\sentinel.exe launch 14c11dbf-7f2a-43be-beba-7ae757cc7486 --discovery.\build.bat
+
+.\sentinel.exe --help > C:\repos\bloom-videos\bloom-development-extension\installer\sentinel\help\sentinel_help.txt
+.\sentinel.exe --json-help > C:\repos\bloom-videos\bloom-development-extension\installer\sentinel\help\sentinel_help.json
+
+Nucleus
+cd \installer\nucleus\scripts
+
+
+tree commands
+brain filesystem tree src installer webview brain contracts package.json tsconfig.json -o tree/btips_tree.txt
+
+brain filesystem tree installer -o tree/installer_tree.txt
+
+brain filesystem tree conductor -o tree/conductor_tree.txt
+
+brain filesystem tree brain -o tree/brain_tree.txt
+
+brain filesystem tree webview -o tree/webview_tree.txt
+
+brain filesystem tree installer/electron-app -o tree/electron_tree.txt
+
+brain filesystem tree installer/native -o tree/native_tree.txt
+
+brain filesystem tree installer/nucleus -o tree/nucleus_tree.txt
+
+brain filesystem tree installer/sentinel -o tree/sentinel_tree.txt
+
+brain filesystem tree installer/metamorph -o tree/metamorph_tree.txt
+
+brain filesystem tree installer/chrome-extension/src -o tree/chrome_extension_src_tree.txt
+
+brain filesystem tree C:\Users\josev\AppData\Local\BloomNucleus -o tree/appdata_tree.txt
+
+Push help
+git add -f installer/native/bin/win64/nucleus/help
+git add -f installer/native/bin/win64/sentinel/help
+git add -f installer/native/bin/win64/brain/help
+git add -f installer/native/bin/win64/metamorph/help
+git add -f installer/native/bin/win64/host
+
+Push Host
+git add -f installer/native/bin/win64/host/bloom-host.exe
+git add -f installer/native/bin/win64/host/libwinpthread-1.dll
+
+Asterisk
+sudo asterisk -rvvv
+
+Servidores
+API REST: PluginApiServer.ts → Puerto 48215
+WebSocket: WebSocketManager.ts → Puerto 4124
+
+Webview (Frontend)
+Ubicación: webview/app/
+Dev Server: Puerto 5173 (Vite)
+Conecta a: API 48215 + WS 4124
+
+Borrar todas las keys 
+Get-ChildItem "HKCU:\Software\Google\Chrome\NativeMessagingHosts" | Where-Object { $_.PSChildName -like "com.bloom.synapse*" } | Remove-Item -Recurse -Force -Verbose
+
+
+& "C:\Users\josev\AppData\Local\BloomNucleus\bin\chrome-win\chrome.exe" --user-data-dir="C:\Users\josev\AppData\Local\BloomNucleus\profiles\14c11dbf-7f2a-43be-beba-7ae757cc7486" --profile-directory=Default --no-first-run --no-default-browser-check --disable-default-apps --disable-session-crashed-bubble --disable-features=ChromeWhatsNewUI --load-extension="C:\Users\josev\AppData\Local\BloomNucleus\profiles\14c11dbf-7f2a-43be-beba-7ae757cc7486\extension" "chrome-extension://hpblclepliicmihaplldignhjdggnkdh/discovery/index.html"
+
+& "C:\Users\josev\AppData\Local\BloomNucleus\bin\chrome-win\chrome.exe" --user-data-dir="C:\Users\josev\AppData\Local\BloomNucleus\profiles\14c11dbf-7f2a-43be-beba-7ae757cc7486" --profile-directory=Default --no-first-run --no-default-browser-check --disable-default-apps --disable-session-crashed-bubble --disable-features=ChromeWhatsNewUI --load-extension="C:\Users\josev\AppData\Local\BloomNucleus\profiles\14c11dbf-7f2a-43be-beba-7ae757cc7486\extension" "chrome-extension://hpblclepliicmihaplldignhjdggnkdh/landing/index.html"
+
+Kill
+taskkill /IM brain.exe /F
+
+\sentinel.exe --json launch ecdeed9b-222f-4919-b4cb-dbf55a4f32ef --mode discovery --override-register=false
+
+.\sentinel.exe --json launch ecdeed9b-222f-4919-b4cb-dbf55a4f32ef --mode discovery --override-register=true  --override-email="josevigil@gmail.com"
+
+.\sentinel.exe --json launch ecdeed9b-222f-4919-b4cb-dbf55a4f32ef --mode landing
+
+
+CLAUDE - COPY CODE FROM DOWNLOAD FILE 
+
+Decime esto al final de tus pedidos:
+
+"Cuando presentes los archivos, usa las rutas reales como nombres (ej: internal/core/version_reader.go en lugar de nombres generados)"
+
+O más corto:
+
+"Present files con rutas reales como nombres"
+
+SINO Hard-Way
+
+F12 → Network tab → Click download button → Ve el filename en la request/response headers
+O más fácil:
+Hover sobre el botón → Bottom left de Chrome muestra la URL → contiene el nombre real del archivo
+O:
+Right-click en el botón → "Copy link address" → pégalo en notepad → verás el nombre del archivo en la URL
+
+Sí:
+Right-click en el área del archivo → Inspect Element → busca el atributo data-filename o similar en el HTML
+O más directo:
+F12 → Console → pega esto:
+document.querySelectorAll('[download]').forEach(el => console.log(el.download || el.href))
