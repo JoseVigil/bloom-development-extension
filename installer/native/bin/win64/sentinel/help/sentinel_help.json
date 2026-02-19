@@ -300,16 +300,9 @@
   {
     "name": "telemetry",
     "use": "telemetry",
-    "short": "Gestión y diagnóstico de streams de telemetría",
+    "short": "Diagnóstico de streams de telemetría",
     "category": "UI",
     "subcommands": [
-      {
-        "name": "clean",
-        "use": "clean",
-        "short": "Limpia y resetea el archivo de telemetría",
-        "example": "  sentinel telemetry clean",
-        "requires": "  - Permiso de escritura en logs/"
-      },
       {
         "name": "status",
         "use": "status",
@@ -318,7 +311,7 @@
         "requires": "  - telemetry.json existente en logs/"
       }
     ],
-    "example": "  sentinel telemetry status\n  sentinel telemetry clean"
+    "example": "  sentinel telemetry status"
   },
   {
     "name": "temporal",

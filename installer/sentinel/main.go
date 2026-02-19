@@ -102,10 +102,10 @@ func runDaemonMode() {
 	// Intercepción de flags globales
 	var jsonOutput bool
 	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output en formato JSON")
-	_ = rootCmd.ParseFlags(os.Args)
+	_ = rootCmd.ParseFlags(os.Args[1:]) // Args[0] es el binario, no un flag
 	
 	if jsonOutput {
-		c.SetJSONMode(true)
+		c.Logger.SetSilentMode(true)
 	}
 	
 	// Ejecución del motor CLI
@@ -132,10 +132,10 @@ func runCommandMode() {
 	// Intercepción de flags globales
 	var jsonOutput bool
 	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output en formato JSON")
-	_ = rootCmd.ParseFlags(os.Args)
+	_ = rootCmd.ParseFlags(os.Args[1:]) // Args[0] es el binario, no un flag
 	
 	if jsonOutput {
-		c.SetJSONMode(true)
+		c.Logger.SetSilentMode(true)
 	}
 	
 	// Ejecución del motor CLI

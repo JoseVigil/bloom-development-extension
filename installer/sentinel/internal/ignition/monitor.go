@@ -22,7 +22,7 @@ type MonitorHub struct {
 func NewMonitorHub(c *core.Core) *MonitorHub {
 	return &MonitorHub{
 		Core:        c,
-		NativeLog:   filepath.Join(c.Paths.LogsDir, "synapse_native.log"),
+		NativeLog:   filepath.Join(c.Paths.LogsDir, "profiles", "synapse_native.log"),
 		SuccessChan: make(chan bool, 1),
 		done:        make(chan bool),
 	}
@@ -30,7 +30,7 @@ func NewMonitorHub(c *core.Core) *MonitorHub {
 
 func (th *MonitorHub) StartGranularTelemetry(profileID, launchID string) {
 	th.Core.Logger.Info("[MONITOR] Activando flujos de minería para %s", profileID)
-	
+
 	logDir := filepath.Join(th.Core.Paths.LogsDir, "profiles", profileID)
 	_ = os.MkdirAll(logDir, 0755)
 
@@ -41,13 +41,26 @@ func (th *MonitorHub) StartGranularTelemetry(profileID, launchID string) {
 	_ = os.WriteFile(miningLog, []byte(""), 0644)
 	_ = os.WriteFile(readLog, []byte(""), 0644)
 
-	// REGISTRO PERSISTENTE CON ICONO 📦 (Prioridad 4)
-	tm := core.GetTelemetryManager(
-		th.Core.Paths.LogsDir,
-		th.Core.Paths.TelemetryDir,
+	// Registrar streams via Nucleus CLI — escritor único de telemetry.json.
+	// NUNCA usar GetTelemetryManager ni RegisterStream directamente.
+	shortID := profileID
+	if len(profileID) > 8 {
+		shortID = profileID[:8]
+	}
+	core.RegisterTelemetryStream(
+		th.Core.Paths.NucleusBin,
+		"mining_"+shortID,
+		"📦 MINING ENGINE",
+		miningLog,
+		4,
 	)
-	tm.RegisterStream("mining_"+profileID, "📦 MINING ENGINE", miningLog, 4)
-	tm.RegisterStream("reader_"+profileID, "📖 MINING READER", readLog, 4)
+	core.RegisterTelemetryStream(
+		th.Core.Paths.NucleusBin,
+		"reader_"+shortID,
+		"📖 MINING READER",
+		readLog,
+		4,
+	)
 
 	th.runLogMiner("mining-log", profileID, launchID)
 	th.runLogMiner("read-log", profileID, launchID)
@@ -58,18 +71,22 @@ func (th *MonitorHub) StartGranularTelemetry(profileID, launchID string) {
 func (th *MonitorHub) Setup() error {
 	os.MkdirAll(filepath.Join(th.Core.Paths.LogsDir, "profiles"), 0755)
 	f, _ := os.OpenFile(th.NativeLog, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
-	if f != nil { f.Close() }
+	if f != nil {
+		f.Close()
+	}
 	return nil
 }
 
 func (th *MonitorHub) StartHandshakeMonitor(profileID, launchID string) {
+	// FIX: el log de handshake debe vivir en logs/sentinel/profiles/<profileID>/
+	// NO en logs/sentinel/ directamente (raíz del LogsDir de sentinel).
 	nativeLogName := fmt.Sprintf("synapse_native_%s.log", launchID)
-	nativePath := filepath.Join(th.Core.Paths.LogsDir, nativeLogName)
-	th.Core.Logger.Info("[MONITOR] Vigilando Handshake: %s", nativeLogName)
+	logDir := filepath.Join(th.Core.Paths.LogsDir, "profiles", profileID)
+	_ = os.MkdirAll(logDir, 0755)
+	nativePath := filepath.Join(logDir, nativeLogName)
+	th.Core.Logger.Info("[MONITOR] Vigilando Handshake: %s", nativePath)
 	go th.tailFile(nativePath, "[NATIVE]", false)
 }
-
-
 
 func (th *MonitorHub) runLogMiner(commandType string, profileID string, launchID string) {
 	brainPath := filepath.Join(th.Core.Paths.BinDir, "brain.exe")
@@ -86,30 +103,48 @@ func (th *MonitorHub) runLogMiner(commandType string, profileID string, launchID
 func (th *MonitorHub) tailFile(path string, prefix string, filter bool) {
 	found := false
 	for i := 0; i < 20; i++ {
-		if _, err := os.Stat(path); err == nil { found = true; break }
+		if _, err := os.Stat(path); err == nil {
+			found = true
+			break
+		}
 		time.Sleep(500 * time.Millisecond)
 	}
-	if !found { return }
+	if !found {
+		return
+	}
 
 	file, err := os.OpenFile(path, os.O_RDONLY, 0)
-	if err != nil { return }
+	if err != nil {
+		return
+	}
 	defer file.Close()
-	if prefix == "[BRAIN]" { file.Seek(0, io.SeekEnd) }
+	if prefix == "[BRAIN]" {
+		file.Seek(0, io.SeekEnd)
+	}
 
 	reader := bufio.NewReader(file)
 	for {
 		select {
-		case <-th.done: return
+		case <-th.done:
+			return
 		default:
 			line, err := reader.ReadString('\n')
 			if err != nil {
-				if err == io.EOF { time.Sleep(250 * time.Millisecond); continue }
+				if err == io.EOF {
+					time.Sleep(250 * time.Millisecond)
+					continue
+				}
 				return
 			}
 			cleanLine := strings.TrimSpace(line)
-			if cleanLine == "" { continue }
+			if cleanLine == "" {
+				continue
+			}
 			if strings.Contains(cleanLine, "LATE_BINDING_SUCCESS") {
-				select { case th.SuccessChan <- true: default: }
+				select {
+				case th.SuccessChan <- true:
+				default:
+				}
 			}
 			th.Core.Logger.Info("%s %s", prefix, cleanLine)
 		}

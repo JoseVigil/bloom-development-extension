@@ -3,7 +3,7 @@ package system
 import (
 	"encoding/json"
 	"fmt"
-	
+
 	"sentinel/internal/core"
 	"github.com/spf13/cobra"
 )
@@ -20,16 +20,20 @@ incremental build counter that is automatically updated during compilation.
 
 Example output:
   sentinel release 2.1.0 build 42`,
-			
+
 			Args: cobra.NoArgs,
-			
+
 			Run: func(cmd *cobra.Command, args []string) {
-				c.Logger.Info("Executing %s command", cmd.Name())
-				
+				// Leer el flag PRIMERO y configurar el logger antes de cualquier log
 				jsonOutput, _ := cmd.Flags().GetBool("json")
-				
+				if jsonOutput {
+					c.Logger.SetJSONMode(true) // redirige [INFO] a stderr, stdout queda limpio
+				}
+
+				c.Logger.Info("Executing %s command", cmd.Name())
+
 				info := core.GetVersionInfo()
-				
+
 				if jsonOutput {
 					output, _ := json.MarshalIndent(info, "", "  ")
 					fmt.Println(string(output))
@@ -38,7 +42,7 @@ Example output:
 				}
 			},
 		}
-		
+
 		return cmd
 	})
 }

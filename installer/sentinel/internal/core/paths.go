@@ -7,11 +7,12 @@ import (
 )
 
 type Paths struct {
-	BinDir      string
-	AppDataDir  string
-	ProfilesDir string
-	LogsDir     string
-	TelemetryDir   string
+	BinDir       string
+	AppDataDir   string
+	ProfilesDir  string
+	LogsDir      string
+	TelemetryDir string
+	NucleusBin   string // Ruta absoluta a nucleus.exe — escritor único de telemetry.json
 }
 
 func InitPaths() (*Paths, error) {
@@ -27,12 +28,17 @@ func InitPaths() (*Paths, error) {
 	}
 	appDataDir := filepath.Join(localAppData, "BloomNucleus")
 
+	// BinDir = bin/sentinel/
+	// nucleus.exe está en bin/nucleus/ — subimos un nivel con filepath.Dir
+	nucleusBin := filepath.Join(filepath.Dir(binDir), "nucleus", "nucleus.exe")
+
 	paths := &Paths{
-		BinDir:      binDir,
-		AppDataDir:  appDataDir,
-		ProfilesDir: filepath.Join(appDataDir, "profiles"),
-		LogsDir:     filepath.Join(appDataDir, "logs", "sentinel"),
-		TelemetryDir:   filepath.Join(appDataDir, "logs"),
+		BinDir:       binDir,
+		AppDataDir:   appDataDir,
+		ProfilesDir:  filepath.Join(appDataDir, "profiles"),
+		LogsDir:      filepath.Join(appDataDir, "logs", "sentinel"),
+		TelemetryDir: filepath.Join(appDataDir, "logs"),
+		NucleusBin:   nucleusBin,
 	}
 
 	dirs := []string{paths.AppDataDir, paths.ProfilesDir, paths.LogsDir}
@@ -52,5 +58,6 @@ func (p *Paths) String() string {
 	sb.WriteString("  AppDataDir:  " + p.AppDataDir + "\n")
 	sb.WriteString("  ProfilesDir: " + p.ProfilesDir + "\n")
 	sb.WriteString("  LogsDir:     " + p.LogsDir + "\n")
+	sb.WriteString("  NucleusBin:  " + p.NucleusBin + "\n")
 	return sb.String()
 }

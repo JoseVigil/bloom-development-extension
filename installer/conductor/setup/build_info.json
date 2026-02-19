@@ -1,0 +1,14 @@
+{
+  "name": "bloom-nucleus-installer",
+  "product_name": "Bloom Nucleus Installer",
+  "version": "1.0.0",
+  "build": 7,
+  "full_version": "1.0.0+build.7",
+  "channel": "stable",
+  "built_at": "2026-02-18T22:02:38.781Z",
+  "git_commit": "2758ac3",
+  "platform": "win32",
+  "arch": "win64",
+  "node_version": "v22.11.0",
+  "electron_version": "^28.0.0"
+}

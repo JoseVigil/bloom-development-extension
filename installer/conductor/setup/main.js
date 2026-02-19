@@ -25,6 +25,7 @@ if (process.platform === 'win32') {
 
 // ============================================================================
 // CLI CONTRACT - Salida Temprana (antes de inicializar Electron)
+// bloom-setup.exe --version | --info | --version-json | --binaries | --health
 // ============================================================================
 const path = require('path');
 const fs = require('fs');
@@ -41,68 +42,141 @@ function getBloomBasePathCLI() {
   }
 }
 
-function handleCLICommands() {
-  const args = process.argv.slice(2);
-  
-  // --version
+/**
+ * Carga build_info.json generado por bump-version.js en el prebuild.
+ * Busca en __dirname (dev/asar root), CWD, y resourcesPath.
+ */
+function loadBuildInfo() {
+  const candidates = [
+    path.join(__dirname, 'build_info.json'),
+    path.join(process.cwd(), 'build_info.json'),
+  ];
+  if (process.resourcesPath) {
+    candidates.push(path.join(process.resourcesPath, '..', 'build_info.json'));
+  }
+  for (const c of candidates) {
+    try {
+      if (fs.existsSync(c)) return JSON.parse(fs.readFileSync(c, 'utf8'));
+    } catch { /* try next */ }
+  }
+  // Safe fallback — nunca debería llegar aquí en un build correcto
+  const pkg = (() => { try { return require('./package.json'); } catch { return {}; } })();
+  return {
+    name: pkg.name || 'bloom-nucleus-installer',
+    product_name: pkg.productName || 'Bloom Nucleus Installer',
+    version: pkg.version || '0.0.0',
+    build: 0,
+    full_version: `${pkg.version || '0.0.0'}+build.0`,
+    channel: 'stable',
+    built_at: 'unknown',
+    git_commit: 'unknown',
+    platform: process.platform,
+    arch: process.arch,
+    node_version: process.version,
+    electron_version: 'unknown'
+  };
+}
+
+// ============================================================================
+// CLI CONTRACT
+//
+// PROBLEMA EN ELECTRON EMPAQUETADO:
+//   process.exit() antes de require('electron') no funciona en producción.
+//   Deja procesos GPU huérfanos y no flusha stdout en Windows.
+//
+// SOLUCIÓN: Detectar flags aquí, pero ejecutar output + app.exit(0) dentro
+//   de app.whenReady(). Nunca llamamos createWindow() en modo CLI, por lo que
+//   no aparece ninguna ventana ni instancia visible en el task manager.
+// ============================================================================
+
+const CLI_FLAGS = ['--version', '--info', '--version-json', '--binaries', '--health'];
+const IS_CLI_MODE = process.argv.some(a => CLI_FLAGS.includes(a));
+
+function handleCLIOutput(onDone) {
+  const args = process.argv;
+
   if (args.includes('--version')) {
-    const packageJson = require('../package.json');
-    console.log(JSON.stringify({
-      version: packageJson.version,
-      name: packageJson.name
-    }));
-    process.exit(0);
+    const info = loadBuildInfo();
+    process.stdout.write([
+      `name:            ${info.product_name}`,
+      `version:         ${info.version}`,
+      `build:           ${info.build}`,
+      `full_version:    ${info.full_version}`,
+      `channel:         ${info.channel}`,
+    ].join('\n') + '\n');
+    onDone(0);
+    return;
   }
 
-  // --info
   if (args.includes('--info')) {
+    const info = loadBuildInfo();
     const bloomBase = getBloomBasePathCLI();
-    console.log(JSON.stringify({
+    process.stdout.write([
+      `name:              ${info.product_name}`,
+      `version:           ${info.version}`,
+      `build:             ${info.build}`,
+      `full_version:      ${info.full_version}`,
+      `channel:           ${info.channel}`,
+      `built_at:          ${info.built_at}`,
+      `git_commit:        ${info.git_commit}`,
+      `platform:          ${process.platform}`,
+      `arch:              ${process.arch}`,
+      `executable_path:   ${process.execPath}`,
+      `bloom_base:        ${bloomBase}`,
+      `node_version:      ${process.version}`,
+      `electron_version:  ${info.electron_version}`,
+    ].join('\n') + '\n');
+    onDone(0);
+    return;
+  }
+
+  if (args.includes('--version-json')) {
+    const info = loadBuildInfo();
+    process.stdout.write(JSON.stringify({
+      name: info.name,
+      product_name: info.product_name,
+      version: info.version,
+      build: info.build,
+      full_version: info.full_version,
+      channel: info.channel,
+      built_at: info.built_at,
+      git_commit: info.git_commit,
       platform: process.platform,
       arch: process.arch,
-      bloom_base: bloomBase,
-      node_version: process.version
-    }));
-    process.exit(0);
+    }, null, 2) + '\n');
+    onDone(0);
+    return;
   }
 
-  // --binaries
   if (args.includes('--binaries')) {
     const bloomBase = getBloomBasePathCLI();
     const binaries = {
-      nucleus: path.join(bloomBase, 'bin', 'nucleus', 'nucleus.exe'),
-      sentinel: path.join(bloomBase, 'bin', 'sentinel', 'sentinel.exe'),
-      brain: path.join(bloomBase, 'bin', 'brain', 'brain.exe'),
-      host: path.join(bloomBase, 'bin', 'native', 'bloom-host.exe'),
-      ollama: path.join(bloomBase, 'bin', 'ollama', 'ollama.exe'),
-      conductor: path.join(bloomBase, 'bin', 'conductor', 'bloom-conductor.exe'),
-      chromium: path.join(bloomBase, 'bin', 'chrome-win', 'chrome.exe')
+      nucleus:   path.join(bloomBase, 'bin', 'nucleus',    'nucleus.exe'),
+      sentinel:  path.join(bloomBase, 'bin', 'sentinel',   'sentinel.exe'),
+      brain:     path.join(bloomBase, 'bin', 'brain',      'brain.exe'),
+      host:      path.join(bloomBase, 'bin', 'native',     'bloom-host.exe'),
+      ollama:    path.join(bloomBase, 'bin', 'ollama',     'ollama.exe'),
+      conductor: path.join(bloomBase, 'bin', 'conductor',  'bloom-conductor.exe'),
+      chromium:  path.join(bloomBase, 'bin', 'chrome-win', 'chrome.exe')
     };
-
     const result = {};
     Object.entries(binaries).forEach(([key, filepath]) => {
-      result[key] = {
-        path: filepath,
-        exists: fs.existsSync(filepath)
-      };
+      result[key] = { path: filepath, exists: fs.existsSync(filepath) };
     });
-
-    console.log(JSON.stringify(result));
-    process.exit(0);
+    process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+    onDone(0);
+    return;
   }
 
-  // --health
   if (args.includes('--health')) {
     const { spawn } = require('child_process');
     const bloomBase = getBloomBasePathCLI();
     const nucleusExe = path.join(bloomBase, 'bin', 'nucleus', 'nucleus.exe');
 
     if (!fs.existsSync(nucleusExe)) {
-      console.log(JSON.stringify({
-        error: 'Nucleus executable not found',
-        path: nucleusExe
-      }));
-      process.exit(1);
+      process.stdout.write(JSON.stringify({ error: 'Nucleus executable not found', path: nucleusExe }) + '\n');
+      onDone(1);
+      return;
     }
 
     const child = spawn(nucleusExe, ['--json', 'health'], {
@@ -110,37 +184,45 @@ function handleCLICommands() {
       windowsHide: true
     });
 
-    let stdout = '';
-    child.stdout.on('data', (data) => { stdout += data; });
-
+    let out = '';
+    child.stdout.on('data', (d) => { out += d; });
     child.on('close', (code) => {
       try {
-        const lines = stdout.split('\n');
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (trimmed.startsWith('{')) {
-            console.log(trimmed);
-            process.exit(code);
+        for (const line of out.split('\n')) {
+          const t = line.trim();
+          if (t.startsWith('{')) {
+            process.stdout.write(t + '\n');
+            onDone(code);
             return;
           }
         }
-        console.log(JSON.stringify({ error: 'No JSON output from nucleus health' }));
-        process.exit(1);
+        process.stdout.write(JSON.stringify({ error: 'No JSON output from nucleus health' }) + '\n');
+        onDone(1);
       } catch (err) {
-        console.log(JSON.stringify({ error: err.message }));
-        process.exit(1);
+        process.stdout.write(JSON.stringify({ error: err.message }) + '\n');
+        onDone(1);
       }
     });
-
-    return; // No continuar con inicialización de Electron
+    return;
   }
 }
 
-// Ejecutar CLI contract ANTES de importar Electron
-handleCLICommands();
-
 const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const { spawn } = require('child_process');
+
+// ── CLI MODE gate: salir limpiamente sin crear ninguna ventana ────────────────
+if (IS_CLI_MODE) {
+  app.disableHardwareAcceleration();
+  app.whenReady().then(() => {
+    handleCLIOutput((exitCode) => {
+      app.exit(exitCode);
+    });
+  });
+  app.on('window-all-closed', () => {});
+}
+
+// ── Todo lo que sigue solo corre en modo GUI ──────────────────────────────────
+if (!IS_CLI_MODE) {
 
 // ============================================================================
 // CONSTANTS & MODE DETECTION
@@ -1337,3 +1419,5 @@ process.on('uncaughtException', (error) => {
 process.on('unhandledRejection', (reason, promise) => {
   console.error('💥 Unhandled Rejection at:', promise, 'reason:', reason);
 });
+
+} // end if (!IS_CLI_MODE)

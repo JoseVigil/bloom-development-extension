@@ -241,17 +241,15 @@
     --------------------------------------------------------------------------------
 
   > TELEMETRY
-    Gestión y diagnóstico de streams de telemetría
+    Diagnóstico de streams de telemetría
 
     Usage: sentinel telemetry
 
     Subcommands:
-      clean                 Limpia y resetea el archivo de telemetría
       status                Muestra el estado actual del JSON de telemetría
 
     Example:
         sentinel telemetry status
-        sentinel telemetry clean
 
     --------------------------------------------------------------------------------
 

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
-	
+
 	"sentinel/internal/core"
 	"github.com/spf13/cobra"
 )
@@ -32,26 +32,29 @@ Example output:
   platform_os: windows
   runtime_engine: Go
   runtime_release: go1.22.0`,
-			
+
 			Args: cobra.NoArgs,
-			
+
 			Run: func(cmd *cobra.Command, args []string) {
-				c.Logger.Info("Executing %s command", cmd.Name())
-				
+				// Leer el flag PRIMERO y configurar el logger antes de cualquier log
 				jsonOutput, _ := cmd.Flags().GetBool("json")
-				
+				if jsonOutput {
+					c.Logger.SetJSONMode(true) // redirige [INFO] a stderr, stdout queda limpio
+				}
+
+				c.Logger.Info("Executing %s command", cmd.Name())
+
 				info := core.GetSystemInfo()
-				
+
 				if jsonOutput {
 					output, _ := json.MarshalIndent(info, "", "  ")
 					fmt.Println(string(output))
 				} else {
-					// Imprimir en formato clave:valor ordenado alfabéticamente
 					printSystemInfoText(info)
 				}
 			},
 		}
-		
+
 		return cmd
 	})
 }
@@ -59,7 +62,6 @@ Example output:
 // printSystemInfoText imprime la información del sistema en formato texto
 // con los campos ordenados alfabéticamente
 func printSystemInfoText(info core.SystemInfo) {
-	// Crear slice de pares clave-valor para ordenar
 	fields := []struct {
 		key   string
 		value string
@@ -75,13 +77,11 @@ func printSystemInfoText(info core.SystemInfo) {
 		{"runtime_engine", info.RuntimeEngine},
 		{"runtime_release", info.RuntimeRelease},
 	}
-	
-	// Ordenar alfabéticamente por clave
+
 	sort.Slice(fields, func(i, j int) bool {
 		return fields[i].key < fields[j].key
 	})
-	
-	// Imprimir cada campo
+
 	for _, field := range fields {
 		fmt.Printf("%s: %s\n", field.key, field.value)
 	}
@@ -92,21 +92,21 @@ func intToString(n int) string {
 	if n == 0 {
 		return "0"
 	}
-	
+
 	negative := n < 0
 	if negative {
 		n = -n
 	}
-	
+
 	var digits []byte
 	for n > 0 {
 		digits = append([]byte{byte('0' + n%10)}, digits...)
 		n /= 10
 	}
-	
+
 	if negative {
 		digits = append([]byte{'-'}, digits...)
 	}
-	
+
 	return string(digits)
 }

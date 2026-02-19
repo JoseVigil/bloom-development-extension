@@ -10,9 +10,17 @@
   },
   "license": "MIT",
   "scripts": {
+    "prebuild": "node ../shared/bump-version.js",
+    "build": "electron-builder --win --x64",
+    "build:win32": "node ../shared/bump-version.js && electron-builder --win --ia32",
+    "build:win64": "node ../shared/bump-version.js && electron-builder --win --x64",
     "dev": "run-admin.bat",
     "dev:no-admin": "electron .",
-    "build": "electron-builder --win --x64"
+    "version:bump": "node ../shared/bump-version.js",
+    "version:patch": "node ../shared/bump-version.js --patch",
+    "version:minor": "node ../shared/bump-version.js --minor",
+    "version:major": "node ../shared/bump-version.js --major",
+    "version:info": "node -e \"const i=require('./build_info.json'); console.log(i.product_name, i.full_version, '|', i.built_at);\""
   },
   "build": {
     "appId": "com.bloom.nucleus.installer",
@@ -22,16 +30,20 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         },
         {
           "target": "portable",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "assets/bloom.ico",
       "requestedExecutionLevel": "requireAdministrator",
-      "artifactName": "bloom-setup-${version}.${ext}",
+      "artifactName": "bloom-setup.exe",
       "publisherName": "BTIP Studio",
       "verifyUpdateCodeSignature": false,
       "signAndEditExecutable": false
@@ -66,6 +78,8 @@
       "scripts/**/*",
       "registry-scripts/**/*",
       "assets/**/*",
+      "build_info.json",
+      "version.json",
       "app.manifest",
       "package.json",
       "!node_modules/**/*",
@@ -113,8 +127,14 @@
         "to": "conductor/bloom-conductor.exe"
       }
     ],
+    "extraFiles": [
+      {
+        "from": "bloom-setup-version.ps1",
+        "to": "bloom-setup-version.ps1"
+      }
+    ],
     "directories": {
-      "output": "dist",
+      "output": "../../native/bin/win64/setup",
       "buildResources": "assets"
     },
     "compression": "maximum",
@@ -130,7 +150,8 @@
       "**/ollama/**/*",
       "**/cortex/**/*",
       "**/conductor/**/*",
-      "**/nssm/**/*"
+      "**/nssm/**/*",
+      "build_info.json"
     ]
   },
   "dependencies": {

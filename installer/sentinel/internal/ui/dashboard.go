@@ -24,7 +24,9 @@ func init() {
   sentinel cockpit --health`,
 			Run: func(cmd *cobra.Command, args []string) {
 				mode := "log"
-				if healthMode { mode = "health" }
+				if healthMode {
+					mode = "health"
+				}
 				Launch(c, mode)
 			},
 		}
@@ -40,13 +42,12 @@ func init() {
 		return cmd
 	})
 
-	// --- COMANDO 2: TELEMETRY (Gestión de Datos) ---
+	// --- COMANDO 2: TELEMETRY STATUS ---
 	core.RegisterCommand("UI", func(c *core.Core) *cobra.Command {
 		telCmd := &cobra.Command{
 			Use:   "telemetry",
-			Short: "Gestión y diagnóstico de streams de telemetría",
-			Example: `  sentinel telemetry status
-  sentinel telemetry clean`,
+			Short: "Diagnóstico de streams de telemetría",
+			Example: `  sentinel telemetry status`,
 		}
 
 		// Subcomando: STATUS
@@ -55,7 +56,10 @@ func init() {
 			Short: "Muestra el estado actual del JSON de telemetría",
 			Example: `  sentinel telemetry status`,
 			Run: func(cmd *cobra.Command, args []string) {
-				telPath := filepath.Join(c.Paths.LogsDir, "telemetry.json")
+				// FIX: usar TelemetryDir, no LogsDir
+				// LogsDir  = logs/sentinel/
+				// TelemetryDir = logs/  ← aquí vive telemetry.json
+				telPath := filepath.Join(c.Paths.TelemetryDir, "telemetry.json")
 				data, err := os.ReadFile(telPath)
 				if err != nil {
 					fmt.Printf("Error: No se pudo leer el archivo de telemetría: %v\n", err)
@@ -66,23 +70,11 @@ func init() {
 				fmt.Printf("Streams Activos: %d\n", len(tel.Streams))
 				for id, info := range tel.Streams {
 					status := "[OFFLINE]"
-					if info.Active { status = "[ACTIVE]" }
-					fmt.Printf(" - %-10s %s (%s)\n", id, info.Label, status)
+					if info.Active {
+						status = "[ACTIVE]"
+					}
+					fmt.Printf(" - %-30s %s (%s)\n", id, info.Label, status)
 				}
-			},
-		}
-
-		// Subcomando: CLEAN
-		cleanCmd := &cobra.Command{
-			Use:   "clean",
-			Short: "Limpia y resetea el archivo de telemetría",
-			Example: `  sentinel telemetry clean`,
-			Run: func(cmd *cobra.Command, args []string) {
-				telPath := filepath.Join(c.Paths.LogsDir, "telemetry.json")
-				emptyTel := core.TelemetryData{Streams: make(map[string]core.StreamInfo)}
-				data, _ := json.MarshalIndent(emptyTel, "", "  ")
-				_ = os.WriteFile(telPath, data, 0644)
-				c.Logger.Success("Archivo de telemetría reseteado correctamente.")
 			},
 		}
 
@@ -91,23 +83,17 @@ func init() {
 		}
 		statusCmd.Annotations["requires"] = `  - telemetry.json existente en logs/`
 
-		if cleanCmd.Annotations == nil {
-			cleanCmd.Annotations = make(map[string]string)
-		}
-		cleanCmd.Annotations["requires"] = `  - Permiso de escritura en logs/`
-
 		telCmd.AddCommand(statusCmd)
-		telCmd.AddCommand(cleanCmd)
 
 		return telCmd
 	})
 }
 
 func Launch(c *core.Core, mode string) {
-	telPath := filepath.Join(c.Paths.LogsDir, "telemetry.json")
-	
-	// Limpieza de telemetría (Refresher)
-	CleanTelemetry(telPath)
+	// FIX: usar TelemetryDir, no LogsDir
+	// LogsDir  = logs/sentinel/
+	// TelemetryDir = logs/  ← aquí vive telemetry.json
+	telPath := filepath.Join(c.Paths.TelemetryDir, "telemetry.json")
 
 	app := tview.NewApplication()
 	pages := tview.NewPages()
@@ -120,20 +106,20 @@ func Launch(c *core.Core, mode string) {
 		AddItem(pages, 0, 1, true).
 		AddItem(cmd, 1, 1, false)
 
-	// Manejo de comandos en la línea inferior
 	cmd.SetDoneFunc(func(key tcell.Key) {
 		if key == tcell.KeyEnter {
 			text := cmd.GetText()
 			switch text {
-			case "log": pages.SwitchToPage("log")
-			case "q", "exit": app.Stop()
+			case "log":
+				pages.SwitchToPage("log")
+			case "q", "exit":
+				app.Stop()
 			}
 			cmd.SetText("")
 			app.SetFocus(pages)
 		}
 	})
 
-	// Loop independiente para Logs
 	go func() {
 		for {
 			data, err := os.ReadFile(telPath)

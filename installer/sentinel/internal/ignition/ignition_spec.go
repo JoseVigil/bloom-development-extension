@@ -10,10 +10,18 @@ import (
 	"time"
 )
 
-// loadIgnitionSpec carga la configuración de lanzamiento del perfil
-// Actualmente lee desde un archivo fijo por perfil, pero podría venir de DB en el futuro
+// loadIgnitionSpec carga la configuración de lanzamiento del perfil.
+// Usa ig.SpecPath resuelto desde profiles.json vía getProfileData() —
+// NO reconstruye la ruta desde ProfilesDir para no acoplar esta función
+// a la convención de rutas del runtime de Chromium.
 func (ig *Ignition) loadIgnitionSpec(profileID string) (*IgnitionSpec, error) {
-	specPath := filepath.Join(ig.Core.Paths.ProfilesDir, profileID, "ignition_spec.json")
+	specPath := ig.SpecPath
+	if specPath == "" {
+		return nil, fmt.Errorf(
+			"SpecPath no inicializado para perfil %s — getProfileData() debe ejecutarse antes de execute()",
+			profileID,
+		)
+	}
 
 	data, err := os.ReadFile(specPath)
 	if err != nil {
@@ -43,8 +51,11 @@ func (ig *Ignition) loadIgnitionSpec(profileID string) (*IgnitionSpec, error) {
 		spec.Paths.Extension = filepath.Join(ig.Core.Paths.BinDir, "extensions", "bloom-main")
 	}
 
+	// LogsBase apunta al directorio del perfil: logs/sentinel/profiles/<profileID>
+	// LogsDir ya es logs/sentinel/ — NO agregar "sentinel" de nuevo.
+	// buildSilentLaunchArgs lo usa directamente — NO agrega profileID de nuevo.
 	if spec.Paths.LogsBase == "" {
-		spec.Paths.LogsBase = filepath.Join(ig.Core.Paths.LogsDir, "chromium")
+		spec.Paths.LogsBase = filepath.Join(ig.Core.Paths.LogsDir, "profiles", profileID)
 	}
 
 	spec.ProfileID = profileID
@@ -75,11 +86,11 @@ func (ig *Ignition) buildSilentLaunchArgs(spec *IgnitionSpec, mode string) []str
 		"--disable-sync",
 		"--disable-notifications",
 		"--noerrdialogs",
-		"--disable-gpu",                 // muy común en entornos automatizados
+		"--disable-gpu",
 		"--disable-software-rasterizer",
-		"--mute-audio",                  // opcional, descomentar si se necesita
-		"--remote-debugging-port=9222",  // puerto fijo por ahora
-		"--remote-allow-origins=*",     // necesario para conexiones desde localhost
+		"--mute-audio",
+		"--remote-debugging-port=9222",
+		"--remote-allow-origins=*",
 	}
 
 	if runtime.GOOS == "windows" {
@@ -98,8 +109,11 @@ func (ig *Ignition) buildSilentLaunchArgs(spec *IgnitionSpec, mode string) []str
 		args = append(args, fmt.Sprintf("--load-extension=%s", spec.Paths.Extension))
 	}
 
-	// 4. Logging mejorado
-	logDir := filepath.Join(spec.Paths.LogsBase, spec.ProfileID) // ← CAMBIO AQUÍ: usa spec.ProfileID en lugar de profileID
+	// 4. Logging de Chromium
+	//    spec.Paths.LogsBase ya apunta a logs/sentinel/profiles/<profileID>
+	//    (establecido en seed.go y/o saneado en loadIgnitionSpec).
+	//    NO concatenar spec.ProfileID de nuevo — causaría doble anidamiento.
+	logDir := spec.Paths.LogsBase
 	_ = os.MkdirAll(logDir, 0755)
 	timestamp := time.Now().Format("20060102-150405")
 	logPrefix := filepath.Join(logDir, timestamp)

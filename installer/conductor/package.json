@@ -4,12 +4,15 @@
   "private": true,
   "description": "Bloom Nucleus Workspace - Installer and Launcher",
   "scripts": {
-    "install:all": "npm install --prefix launcher && npm install --prefix setup",
-    "build:launcher": "npm run build --prefix launcher",
-    "build:setup": "npm run build --prefix setup",
-    "build:all": "npm run build:launcher && npm run build:setup",
-    "clean": "rimraf launcher/dist launcher/out setup/dist setup/out",
-    "clean:all": "npm run clean && rimraf launcher/node_modules setup/node_modules"
+    "install:all":      "npm install --prefix launcher && npm install --prefix setup",
+    "build:launcher":   "npm run build --prefix launcher",
+    "build:setup":      "npm run build --prefix setup",
+    "build:all":        "npm run build:launcher && npm run build:setup",
+    "version:launcher": "npm run version:info --prefix launcher",
+    "version:setup":    "npm run version:info --prefix setup",
+    "version:all":      "npm run version:launcher && npm run version:setup",
+    "clean":            "rimraf launcher/dist launcher/out setup/dist setup/out",
+    "clean:all":        "npm run clean && rimraf launcher/node_modules setup/node_modules"
   },
   "devDependencies": {
     "rimraf": "^5.0.5"

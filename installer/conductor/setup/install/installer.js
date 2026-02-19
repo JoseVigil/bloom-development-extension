@@ -680,7 +680,7 @@ async function seedMasterProfile(win) {
 
 async function launchMasterProfile(win) {
   const MILESTONE = 'nucleus_launch';
-  
+
   if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
     logger.info(`⭐️ ${MILESTONE} completed, skipping`);
     return { success: true, skipped: true };
@@ -692,24 +692,22 @@ async function launchMasterProfile(win) {
   try {
     logger.separator('NUCLEUS LAUNCH - HEARTBEAT VALIDATION');
 
-    // Obtener UUID del perfil maestro creado en seed
     const profileUuid = nucleusManager.state.master_profile;
-    
     if (!profileUuid) {
       throw new Error('Master profile UUID not found. Run seed first.');
     }
 
     logger.info(`Profile UUID: ${profileUuid}`);
 
-    // ========================================================================
+    // =========================================================================
     // PASO 1: Asegurar que Temporal está activo
-    // ========================================================================
-    logger.info('Step 1/2: Ensuring Temporal is ready...');
-    
+    // =========================================================================
+    logger.info('Step 1/3: Ensuring Temporal is ready...');
+
     const ensureResult = await executeNucleusCommand([
+      '--json',          // ✅ --json PRIMERO, antes del comando
       'temporal',
-      'ensure',
-      '--json'
+      'ensure'
     ]);
 
     if (!ensureResult.success) {
@@ -717,54 +715,81 @@ async function launchMasterProfile(win) {
     }
 
     logger.success('✓ Temporal server active');
-    logger.info('  Workers: available');
-    logger.info('  State: ready for workflows');
 
-    // ========================================================================
-    // PASO 2: Ejecutar Launch con Heartbeat
-    // ========================================================================
-    logger.info('Step 2/2: Executing synapse launch with heartbeat...');
-    
+    // =========================================================================
+    // PASO 2: synapse launch — lanza Sentinel con Chromium
+    // =========================================================================
+    logger.info('Step 2/3: Launching Sentinel...');
+
     const launchResult = await executeNucleusCommand([
       '--json',
       'synapse',
       'launch',
       profileUuid,
-      '--mode', 'discovery',
-      '--heartbeat'
+      '--mode', 'discovery'
+      // ✅ SIN --heartbeat — ese flag no existe en synapse launch
     ]);
 
-    // Validar resultado
     if (!launchResult.success) {
       throw new Error(`Launch failed: ${launchResult.error || 'Unknown error'}`);
     }
 
     if (!launchResult.extension_loaded) {
-      throw new Error('Extension not loaded during heartbeat');
+      throw new Error('Extension not loaded after launch');
     }
 
-    // ========================================================================
+    logger.success('✓ Sentinel launched');
+    logger.info(`   PID: ${launchResult.chrome_pid}`);
+    logger.info(`   Debug port: ${launchResult.debug_port}`);
+    logger.info(`   Extension loaded: ${launchResult.extension_loaded}`);
+
+    // =========================================================================
+    // PASO 3: synapse status — verifica que el workflow del perfil está READY
+    // NOTA: No usamos `nucleus heartbeat` aquí porque requiere org inicializada,
+    // y durante install la org todavía no existe (se crea en onboarding).
+    // synapse status solo consulta el estado del workflow en Temporal — no requiere org.
+    // =========================================================================
+    logger.info('Step 3/3: Verifying profile status...');
+
+    const statusResult = await executeNucleusCommand([
+      '--json',
+      'synapse',
+      'status',
+      profileUuid
+    ]);
+
+    if (!statusResult.success) {
+      throw new Error(`Profile status check failed: ${statusResult.error || 'Unknown error'}`);
+    }
+
+    const profileState = statusResult.state || statusResult.status;
+    if (profileState !== 'READY') {
+      throw new Error(`Profile not READY after launch (state: ${profileState})`);
+    }
+
+    // =========================================================================
     // VALIDACIÓN EXITOSA
-    // ========================================================================
-    logger.success('✅ HEARTBEAT SUCCESSFUL');
-    logger.info(`   Profile: ${launchResult.profile_id}`);
-    logger.info(`   Launch ID: ${launchResult.launch_id}`);
-    logger.info(`   Extension: ${launchResult.extension_loaded ? 'LOADED' : 'NOT LOADED'}`);
-    logger.info(`   State: ${launchResult.state}`);
-    logger.info('   ✓ Temporal workflows operational');
-    logger.info('   ✓ Sentinel handshake successful');
-    logger.info('   ✓ Extension + Host + Brain validated');
+    // =========================================================================
+    logger.success('\u2705 LAUNCH VALIDATED');
+    logger.info(`   Profile: ${profileUuid}`);
+    logger.info(`   Chrome PID: ${launchResult.chrome_pid}`);
+    logger.info(`   Extension: LOADED`);
+    logger.info(`   Workflow state: ${profileState}`);
+    logger.info('   \u2713 Temporal workflows operational');
+    logger.info('   \u2713 Sentinel launched successfully');
+    logger.info('   \u2713 Profile READY in Temporal');
 
     await nucleusManager.completeMilestone(MILESTONE, {
-      profile_id: launchResult.profile_id,
-      launch_id: launchResult.launch_id,
+      profile_id: profileUuid,
+      chrome_pid: launchResult.chrome_pid,
       extension_loaded: launchResult.extension_loaded,
-      state: launchResult.state
+      debug_port: launchResult.debug_port,
+      profile_state: profileState
     });
 
-    return { 
+    return {
       success: true,
-      heartbeat_validated: true,
+      launch_validated: true,
       launch_result: launchResult
     };
 

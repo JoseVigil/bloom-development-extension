@@ -1,6 +1,10 @@
 package inspection
 
 import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/bloom/metamorph/internal/core"
@@ -25,7 +29,9 @@ The inspection includes:
   • SHA-256 hash calculation
   • File size and modification time
   • Health status verification
-  • Capability discovery (managed binaries only)
+
+Results are always written to:
+  %LOCALAPPDATA%\BloomNucleus\config\metamorph.json
 
 Example:
   metamorph inspect              # Managed binaries only
@@ -61,7 +67,7 @@ Example:
 	return cmd
 }
 
-// runInspection performs the inspection and outputs results
+// runInspection performs the inspection, writes metamorph.json, and outputs results.
 func runInspection(c *core.Core, includeExternal bool) error {
 	basePath := GetBasePath()
 
@@ -88,7 +94,13 @@ func runInspection(c *core.Core, includeExternal bool) error {
 		Timestamp:        time.Now().UTC().Format(time.RFC3339),
 	}
 
-	// Output
+	// Always persist to config/metamorph.json
+	if err := writeMetamorphConfig(result); err != nil {
+		// Non-fatal: log the error but don't stop the command
+		fmt.Fprintf(os.Stderr, "warning: could not write metamorph.json: %v\n", err)
+	}
+
+	// Output to stdout
 	if c.Config.OutputJSON {
 		c.OutputJSON(result)
 	} else {
@@ -96,4 +108,63 @@ func runInspection(c *core.Core, includeExternal bool) error {
 	}
 
 	return nil
+}
+
+// writeMetamorphConfig persists the inspection result to:
+//
+//	%LOCALAPPDATA%\BloomNucleus\config\metamorph.json
+//
+// The file contains the full versioned state of all components and is
+// overwritten on every inspect run. It is the authoritative source of
+// system state for Nucleus and other consumers.
+func writeMetamorphConfig(result InspectionResult) error {
+	configPath, err := resolveMetamorphConfigPath()
+	if err != nil {
+		return fmt.Errorf("could not resolve config path: %w", err)
+	}
+
+	// Ensure the config directory exists
+	if err := os.MkdirAll(filepath.Dir(configPath), 0755); err != nil {
+		return fmt.Errorf("could not create config directory: %w", err)
+	}
+
+	// Marshal with indentation for human readability
+	data, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		return fmt.Errorf("could not marshal inspection result: %w", err)
+	}
+
+	// Write atomically: write to .tmp then rename
+	tmpPath := configPath + ".tmp"
+	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
+		return fmt.Errorf("could not write temp file: %w", err)
+	}
+	if err := os.Rename(tmpPath, configPath); err != nil {
+		_ = os.Remove(tmpPath) // cleanup on failure
+		return fmt.Errorf("could not rename temp file: %w", err)
+	}
+
+	return nil
+}
+
+// resolveMetamorphConfigPath returns the absolute path to metamorph.json.
+// Respects BLOOM_NUCLEUS_HOME if set, otherwise uses the platform default.
+func resolveMetamorphConfigPath() (string, error) {
+	// Check environment override first
+	if home := os.Getenv("BLOOM_NUCLEUS_HOME"); home != "" {
+		return filepath.Join(home, "config", "metamorph.json"), nil
+	}
+
+	// Platform default: %LOCALAPPDATA%\BloomNucleus\config\metamorph.json
+	localAppData := os.Getenv("LOCALAPPDATA")
+	if localAppData == "" {
+		// Fallback for non-Windows or missing env var
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("could not determine home directory: %w", err)
+		}
+		localAppData = filepath.Join(homeDir, "AppData", "Local")
+	}
+
+	return filepath.Join(localAppData, "BloomNucleus", "config", "metamorph.json"), nil
 }
