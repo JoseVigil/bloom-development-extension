@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -30,6 +32,14 @@ type managedBinaryDefinition struct {
 //	Conductor: bloom-conductor-version.ps1 --json → version / build
 //	Metamorph: metamorph.exe --json version → version / build_number
 //	Cortex:    reads cortex.meta.json from inside .blx ZIP (not executable)
+//	Setup:     bloom-setup-version.ps1 --json → version / build
+//
+// NOTE ON PATHS:
+//
+//	Host deploys to bin/native/ in AppData (not bin/host/).
+//	This matches the layout used by the Windows service manager (bloom-host).
+//	Conductor and Setup are Electron apps; their version .ps1 scripts live
+//	inside win-unpacked/ within their respective directories.
 func getManagedBinaries() []managedBinaryDefinition {
 	return []managedBinaryDefinition{
 		{
@@ -57,8 +67,10 @@ func getManagedBinaries() []managedBinaryDefinition {
 			buildField:   "build",
 		},
 		{
+			// Host deploys to bin/native/ — not bin/host/ — to match the
+			// Windows service layout expected by bloom-host and NSSM.
 			name:         "Host",
-			path:         "host/bloom-host.exe",
+			path:         "native/bloom-host.exe",
 			versionArgs:  []string{"--version", "--json"},
 			infoArgs:     []string{"--info", "--json"},
 			versionField: "version",
@@ -87,6 +99,17 @@ func getManagedBinaries() []managedBinaryDefinition {
 			infoArgs:     []string{"--json", "info"},
 			versionField: "version",
 			buildField:   "build_number",
+		},
+		{
+			// Launcher daemon binary.  build_number is a JSON string in its output
+			// ("0"), not a number, so it is handled by inspectLauncher() rather
+			// than the generic extractVersionAndBuild path.
+			name:         "Launcher",
+			path:         "launcher/bloom-launcher.exe",
+			versionArgs:  []string{"--version", "--json"}, // → {"version":"1.0.0","build_number":"0",...}
+			infoArgs:     []string{"info", "--json"},       // → full info JSON with daemon/startup/runtime/pipe
+			versionField: "version",
+			buildField:   "", // not used — handled in inspectLauncher
 		},
 		{
 			name:         "Setup",
@@ -199,6 +222,12 @@ func InspectManagedBinary(name, path string, def managedBinaryDefinition) (*Mana
 		return inspectSetup(binary, path)
 	}
 
+	// Launcher: build_number is a string in its JSON; use a dedicated inspector
+	// that also captures the rich info fields (daemon, startup, runtime, pipe).
+	if name == "Launcher" {
+		return inspectLauncher(binary, path)
+	}
+
 	// Standard executables: version_args first, info_args as fallback
 	if len(def.versionArgs) > 0 {
 		out, err := ExecuteCommandWithTimeout(path, def.versionArgs...)
@@ -280,6 +309,97 @@ func inspectConductor(binary *ManagedBinary, exePath string) (*ManagedBinary, er
 // inspectSetup interrogates the Bloom Nucleus Installer via its companion PowerShell script.
 func inspectSetup(binary *ManagedBinary, exePath string) (*ManagedBinary, error) {
 	return inspectElectronBinary(binary, exePath, "bloom-setup-version.ps1")
+}
+
+// inspectLauncher interrogates bloom-launcher using its native CLI flags.
+//
+// Two-pass strategy:
+//  1. `--version --json` — fast path; captures version + build_number (string).
+//  2. `info --json`      — enriches the result with daemon/startup/runtime/pipe
+//     fields stored in binary.LauncherInfo.
+//
+// build_number is emitted as a JSON string by bloom-launcher (e.g. "0"), so it
+// is parsed explicitly here rather than via the generic extractVersionAndBuild
+// helper (which expects a float64).
+func inspectLauncher(binary *ManagedBinary, exePath string) (*ManagedBinary, error) {
+	// Pass 1: --version --json
+	out, err := ExecuteCommandWithTimeout(exePath, "--version", "--json")
+	if err == nil && out != "" {
+		jsonStart := strings.Index(out, "{")
+		if jsonStart >= 0 {
+			var v map[string]interface{}
+			if json.Unmarshal([]byte(out[jsonStart:]), &v) == nil {
+				if ver, ok := v["version"].(string); ok && ver != "" {
+					binary.Version = ver
+					binary.Status = "healthy"
+				}
+				// build_number is a string in launcher's output
+				if bn, ok := v["build_number"].(string); ok && bn != "" {
+					if n, err := strconv.Atoi(bn); err == nil {
+						binary.BuildNumber = n
+					}
+				}
+			}
+		}
+	}
+
+	// Pass 2: info --json — collect extended metadata
+	infoOut, err := ExecuteCommandWithTimeout(exePath, "info", "--json")
+	if err == nil && infoOut != "" {
+		jsonStart := strings.Index(infoOut, "{")
+		if jsonStart >= 0 {
+			var info struct {
+				Version     string `json:"version"`
+				BuildNumber string `json:"build_number"`
+				BuildDate   string `json:"build_date"`
+				FullVersion string `json:"full_version"`
+				Channel     string `json:"channel"`
+				Daemon      struct {
+					Running bool `json:"running"`
+				} `json:"daemon"`
+				Startup struct {
+					Registered bool `json:"registered"`
+				} `json:"startup"`
+				Runtime struct {
+					Arch string `json:"arch"`
+					Exe  string `json:"exe"`
+					Go   string `json:"go"`
+					OS   string `json:"os"`
+				} `json:"runtime"`
+				Pipe struct {
+					Name string `json:"name"`
+				} `json:"pipe"`
+			}
+			if json.Unmarshal([]byte(infoOut[jsonStart:]), &info) == nil {
+				// Promote version/build from info if not already set
+				if binary.Version == "unknown" && info.Version != "" {
+					binary.Version = info.Version
+					binary.Status = "healthy"
+				}
+				if binary.BuildNumber == 0 && info.BuildNumber != "" {
+					if n, err := strconv.Atoi(info.BuildNumber); err == nil {
+						binary.BuildNumber = n
+					}
+				}
+				binary.LauncherInfo = &LauncherInfo{
+					FullVersion: info.FullVersion,
+					BuildDate:   info.BuildDate,
+					Channel:     info.Channel,
+					Daemon:      LauncherDaemon{Running: info.Daemon.Running},
+					Startup:     LauncherStartup{Registered: info.Startup.Registered},
+					Runtime: LauncherRuntime{
+						Arch: info.Runtime.Arch,
+						Exe:  info.Runtime.Exe,
+						Go:   info.Runtime.Go,
+						OS:   info.Runtime.OS,
+					},
+					Pipe: LauncherPipe{Name: info.Pipe.Name},
+				}
+			}
+		}
+	}
+
+	return binary, nil
 }
 
 // InspectAllManagedBinaries inspects all managed binaries in parallel.

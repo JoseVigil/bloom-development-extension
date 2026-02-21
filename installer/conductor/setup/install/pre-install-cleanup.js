@@ -91,8 +91,9 @@ async function killBloomProcesses(logger) {
     'sentinel.exe',
     'bloom-host.exe',
     'bloom-conductor.exe',
-    'temporal.exe',  // CRÍTICO: liberar temporal.exe
-    'ollama.exe'     // CRÍTICO: liberar ollama.exe
+    'bloom-launcher.exe', // CRÍTICO: liberar antes del deploy de binarios
+    'temporal.exe',       // CRÍTICO: liberar temporal.exe
+    'ollama.exe'          // CRÍTICO: liberar ollama.exe
     // ❌ NO INCLUIR node.exe - el instalador Electron lo usa
     // ❌ NO INCLUIR nssm.exe - puede causar problemas si servicios están activos
   ];

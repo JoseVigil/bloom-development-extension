@@ -42,6 +42,18 @@ func (ig *Ignition) Launch(profileID string, mode string, configOverride string)
 	}
 
 	ig.Session.BrowserPID = chromePID
+	ig.Session.LaunchedAt = time.Now().UTC()
+
+	// ── HISTORY: abrir registro y preparar session log ────────────────────────
+	if err := ig.OpenLaunchRecord(profileID, launchID, mode, chromePID, effectiveConfig); err != nil {
+		ig.Core.Logger.Info("[WARN] No se pudo abrir launch record: %v", err)
+	}
+	if sessionFile, err := ig.EnsureSessionFile(profileID, launchID); err == nil {
+		effectiveConfig["session_log_path"] = sessionFile
+	} else {
+		ig.Core.Logger.Info("[WARN] No se pudo preparar session log: %v", err)
+	}
+	// ─────────────────────────────────────────────────────────────────────────
 
 	if ig.Core.IsJSON {
 		return chromePID, 9222, true, effectiveConfig, nil
@@ -164,6 +176,13 @@ func (ig *Ignition) preFlight(profileID string) {
 			ig.Core.Logger.Info("[WARN] No se pudo eliminar SingletonLock: %v", err)
 		}
 	}
+
+	// ── HISTORY: detectar crashes anteriores y limpiar registros viejos ─────────
+	ig.DetectOrphanedLaunches(profileID)
+	if err := ig.PruneHistory(profileID, 30); err != nil {
+		ig.Core.Logger.Info("[WARN] No se pudo ejecutar pruning de history: %v", err)
+	}
+	// ─────────────────────────────────────────────────────────────────────────
 }
 
 // freePortQuirurgico libera el puerto especificado matando procesos que lo ocupan

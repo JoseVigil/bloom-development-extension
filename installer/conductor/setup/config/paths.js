@@ -73,6 +73,8 @@ const getResourcePath = (resourceName) => {
       return path.join(workspaceRoot, '..', 'node');
     case 'conductor':
       return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'conductor');
+    case 'launcher':
+      return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'launcher');
     case 'cortex':
       return path.join(workspaceRoot, '..', 'native', 'bin', 'cortex');
     case 'temporal':
@@ -206,6 +208,12 @@ const paths = {
   conductorExe: platform === 'win32'
     ? path.join(baseDir, 'bin', 'conductor', 'bloom-conductor.exe')
     : path.join(baseDir, 'bin', 'conductor', 'bloom-conductor'),
+
+  // Bloom Launcher (Session Agent - HKCU\Run, not a service)
+  launcherDir: path.join(baseDir, 'bin', 'launcher'),
+  launcherExe: platform === 'win32'
+    ? path.join(baseDir, 'bin', 'launcher', 'bloom-launcher.exe')
+    : path.join(baseDir, 'bin', 'launcher', 'bloom-launcher'),
   
   // Cortex (Extension Package)
   cortexDir: path.join(baseDir, 'bin', 'cortex'),
@@ -272,6 +280,7 @@ const paths = {
   ollamaSource: getResourcePath('ollama'),
   nodeSource: getResourcePath('node'),
   conductorSource: getResourcePath('conductor'),
+  launcherSource: getResourcePath('launcher'),
   cortexSource: getResourcePath('cortex'),
   temporalSource: getResourcePath('temporal'),
   extensionSource: getResourcePath('extension'),

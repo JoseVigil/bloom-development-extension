@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"golang.org/x/sys/windows/registry"
 )
 
 func (ig *Ignition) generateLogicalLaunchID(profileID string) string {
@@ -83,6 +85,8 @@ func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profi
 		"profile_alias": getStringField(profileData, "alias", "MasterWorker"),
 		"mode":          mode,
 		"extension_id":  ig.Core.Config.Provisioning.ExtensionID,
+		"register":      getBoolField(profileData, "register", false),
+		"heartbeat":     getBoolField(profileData, "heartbeat", true),
 	}
 
 	// === 3. AGREGAR CAMPOS ESPECÍFICOS DE LANDING (desde profiles.json) ===
@@ -170,6 +174,22 @@ func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profi
 	updatedManifest, _ := json.MarshalIndent(manifest, "", "  ")
 	if err := os.WriteFile(manifestPath, updatedManifest, 0644); err != nil {
 		return nil, err
+	}
+
+	// === 6.1 REGISTRAR CLAVE DE WINDOWS ===
+	// HKLM en lugar de HKCU: Sentinel es invocado por Nucleus que corre como servicio
+	// de Windows (SYSTEM). Escribir en CURRENT_USER desde SYSTEM apunta al hive de
+	// SYSTEM, no al del usuario interactivo. LOCAL_MACHINE aplica a todos los usuarios
+	// y es accesible desde cualquier contexto de ejecución.
+	hostName := fmt.Sprintf("com.bloom.synapse.%s", shortID)
+	regKeyPath := `SOFTWARE\Google\Chrome\NativeMessagingHosts\` + hostName
+	k, _, err := registry.CreateKey(registry.LOCAL_MACHINE, regKeyPath, registry.ALL_ACCESS)
+	if err != nil {
+		ig.Core.Logger.Error("[IGNITION] No se pudo registrar Native Messaging en registry: %v", err)
+	} else {
+		k.SetStringValue("", manifestPath)
+		k.Close()
+		ig.Core.Logger.Info("[IGNITION] ✅ Registry key actualizada: %s", regKeyPath)
 	}
 
 	ig.Core.Logger.Info("[IGNITION] 🆔 Identidad [%s] inyectada en Spec, JS y Native Host.", launchID)
@@ -290,6 +310,14 @@ func (ig *Ignition) updateProfilesConfig(profileID string, physicalID string, de
 }
 
 // ========== HELPER FUNCTIONS ==========
+
+// getBoolField obtiene un campo bool con fallback
+func getBoolField(data map[string]interface{}, field string, defaultValue bool) bool {
+	if val, ok := data[field].(bool); ok {
+		return val
+	}
+	return defaultValue
+}
 
 // getStringField obtiene un campo string con fallback
 func getStringField(data map[string]interface{}, field string, defaultValue string) string {

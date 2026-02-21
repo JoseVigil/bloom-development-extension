@@ -87,6 +87,11 @@ Profile remains as long-running workflow waiting for commands.`,
 				isMaster = args[1] == "true"
 			}
 
+			// Inherit global --json flag from Core if local flag not set
+			if c.IsJSON {
+				jsonOutput = true
+			}
+
 			// Crear logger
 			logger, err := core.InitLogger(&c.Paths, "SYNAPSE", jsonOutput)
 			if err != nil {
@@ -173,6 +178,11 @@ Sentinel starts Chrome with loaded extension.`,
 
 		Run: func(cmd *cobra.Command, args []string) {
 			profileID := args[0]
+
+			// Inherit global --json flag from Core if local flag not set
+			if c.IsJSON {
+				jsonOutput = true
+			}
 
 			// Crear logger
 			logger, err := core.InitLogger(&c.Paths, "SYNAPSE", jsonOutput)
@@ -261,6 +271,11 @@ func createStatusSubcommand(c *core.Core) *cobra.Command {
 		Run: func(cmd *cobra.Command, args []string) {
 			profileID := args[0]
 
+			// Inherit global --json flag from Core if local flag not set
+			if c.IsJSON {
+				jsonOutput = true
+			}
+
 			// Crear logger
 			logger, err := core.InitLogger(&c.Paths, "SYNAPSE", jsonOutput)
 			if err != nil {
@@ -347,6 +362,11 @@ func createShutdownSubcommand(c *core.Core) *cobra.Command {
 
 		Run: func(cmd *cobra.Command, args []string) {
 			profileID := args[0]
+
+			// Inherit global --json flag from Core if local flag not set
+			if c.IsJSON {
+				jsonOutput = true
+			}
 
 			// Crear logger
 			logger, err := core.InitLogger(&c.Paths, "SYNAPSE", jsonOutput)

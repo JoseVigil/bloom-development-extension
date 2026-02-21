@@ -32,8 +32,8 @@
   INSPECTION        Binary and state inspection tools                        2 cmds
   RECONCILIATION    Manifest-driven state reconciliation                     2 cmds
   ROLLBACK          Snapshot restoration and rollback                        1 cmd
-  MAINTENANCE       System cleanup and maintenance                           1 cmd
-  --------------------------------------------------------------------------  Total: 8 commands
+  MAINTENANCE       System cleanup and maintenance                           2 cmds
+  --------------------------------------------------------------------------  Total: 9 commands
 
 
 =======================================================[ SYSTEM ]=======================================================
@@ -201,6 +201,32 @@
 
     JSON Response:
       {"cleaned": 0, "freed_bytes": 0}
+
+    --------------------------------------------------------------------------------
+
+  > ROLLOUT
+    Deploy built binaries from repo to AppData
+
+    Usage: metamorph rollout
+
+    Flags:
+      --dry-run                  Preview what would be copied without making changes
+
+    Example:
+        metamorph rollout
+        metamorph rollout --dry-run
+        metamorph --json rollout
+
+    JSON Response:
+      {
+        "status": "success",
+        "deployed": [
+          {"component": "Brain",     "source": "...", "destination": "...", "files_copied": 12},
+          {"component": "Nucleus",   "source": "...", "destination": "...", "files_copied": 4}
+        ],
+        "skipped": [],
+        "errors": []
+      }
 
     --------------------------------------------------------------------------------
 

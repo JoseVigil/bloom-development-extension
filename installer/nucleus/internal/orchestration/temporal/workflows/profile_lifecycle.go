@@ -12,8 +12,10 @@ import (
 	"nucleus/internal/orchestration/types"
 )
 
-// ProfileLifecycleWorkflow es el workflow principal que orquesta el ciclo de vida de un perfil
-// Este workflow es de larga duración y representa el "actor persistente" del perfil
+// ProfileLifecycleWorkflow es el workflow principal que orquesta el ciclo de vida de un perfil.
+// Este workflow es de larga duración y representa el "actor persistente" del perfil.
+// Un perfil puede ser lanzado y detenido cientos de veces — el workflow NUNCA termina
+// por un shutdown normal. Solo termina si se recibe una señal de eliminación definitiva.
 func ProfileLifecycleWorkflow(ctx workflow.Context, input types.ProfileLifecycleInput) error {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("ProfileLifecycleWorkflow started", "profile_id", input.ProfileID)
@@ -21,7 +23,7 @@ func ProfileLifecycleWorkflow(ctx workflow.Context, input types.ProfileLifecycle
 	// Estado mutable del workflow
 	state := types.ProfileStatus{
 		ProfileID:       input.ProfileID,
-		State:           types.StateSeeded, // Inicia como SEEDED después de seed
+		State:           types.StateSeeded,
 		LastUpdate:      workflow.Now(ctx),
 		SentinelRunning: false,
 	}
@@ -65,21 +67,26 @@ func ProfileLifecycleWorkflow(ctx workflow.Context, input types.ProfileLifecycle
 	}
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
 
-	// Variables para tracking
+	// Variables para tracking de sesión actual
 	var currentCommandID string
 	var chromePID int
 	var lastHeartbeat time.Time
 
-	// Loop principal del workflow - permanece activo mientras el perfil existe
+	// cancelHeartbeatTimer permite cancelar el timer del ciclo anterior
+	// antes de crear uno nuevo, evitando la acumulación de timers.
+	var cancelHeartbeatTimer func()
+
+	// Loop principal — permanece activo mientras el perfil existe
+	// Un perfil puede ser lanzado y detenido N veces sin que el workflow termine
 	for {
 		selector := workflow.NewSelector(ctx)
 
-		// Signal: LAUNCH - Lanzar Sentinel para este perfil
+		// Signal: LAUNCH — Lanzar Sentinel para este perfil
 		selector.AddReceive(launchSignalChan, func(c workflow.ReceiveChannel, more bool) {
 			var launchSignal types.LaunchSignal
 			c.Receive(ctx, &launchSignal)
 
-			logger.Info("Received LAUNCH signal", 
+			logger.Info("Received LAUNCH signal",
 				"profile_id", input.ProfileID,
 				"mode", launchSignal.Mode)
 
@@ -93,10 +100,9 @@ func ProfileLifecycleWorkflow(ctx workflow.Context, input types.ProfileLifecycle
 			state.State = types.StateLaunching
 			state.LastUpdate = workflow.Now(ctx)
 
-			// Generar CommandID único
+			// Generar CommandID único para esta sesión
 			currentCommandID = fmt.Sprintf("launch_%s_%d", input.ProfileID, workflow.Now(ctx).UnixNano())
 
-			// Construir input para LaunchSentinel activity
 			launchInput := types.SentinelLaunchInput{
 				ProfileID:      input.ProfileID,
 				CommandID:      currentCommandID,
@@ -105,7 +111,6 @@ func ProfileLifecycleWorkflow(ctx workflow.Context, input types.ProfileLifecycle
 				ConfigOverride: launchSignal.ConfigOverride,
 			}
 
-			// Ejecutar activity
 			var launchResult types.SentinelLaunchResult
 			err := workflow.ExecuteActivity(ctx, "sentinel.LaunchSentinel", launchInput).Get(ctx, &launchResult)
 
@@ -121,11 +126,9 @@ func ProfileLifecycleWorkflow(ctx workflow.Context, input types.ProfileLifecycle
 				return
 			}
 
-			// Guardar detalles completos
 			sentinelDetails = &launchResult
 
 			if launchResult.Success {
-				// Transición a RUNNING
 				state.State = types.StateRunning
 				state.SentinelRunning = true
 				state.ErrorMessage = ""
@@ -137,7 +140,6 @@ func ProfileLifecycleWorkflow(ctx workflow.Context, input types.ProfileLifecycle
 					"debug_port", launchResult.DebugPort,
 					"extension_loaded", launchResult.ExtensionLoaded)
 			} else {
-				// Launch falló
 				state.State = types.StateFailed
 				state.ErrorMessage = launchResult.Error
 				logger.Error("Sentinel launch failed", "error", launchResult.Error)
@@ -146,18 +148,18 @@ func ProfileLifecycleWorkflow(ctx workflow.Context, input types.ProfileLifecycle
 			state.LastUpdate = workflow.Now(ctx)
 		})
 
-		// Signal: SHUTDOWN - Detener Sentinel y finalizar workflow
+		// Signal: SHUTDOWN — Detener Sentinel y volver a SEEDED para próximo launch
+		// CRÍTICO: NO termina el workflow. El perfil puede relanzarse N veces.
 		selector.AddReceive(shutdownChan, func(c workflow.ReceiveChannel, more bool) {
 			var shutdownSignal interface{}
 			c.Receive(ctx, &shutdownSignal)
 
 			logger.Info("Received SHUTDOWN signal", "profile_id", input.ProfileID)
 
-			// Transición a SHUTDOWN
 			state.State = types.StateShutdown
 			state.LastUpdate = workflow.Now(ctx)
 
-			// Si Sentinel está corriendo, detenerlo
+			// Detener Sentinel si está corriendo
 			if state.SentinelRunning && chromePID > 0 {
 				stopInput := types.SentinelStopInput{
 					ProfileID: input.ProfileID,
@@ -170,63 +172,60 @@ func ProfileLifecycleWorkflow(ctx workflow.Context, input types.ProfileLifecycle
 
 				if err != nil {
 					logger.Error("Failed to stop Sentinel", "error", err)
-					state.ErrorMessage = fmt.Sprintf("shutdown error: %v", err)
 				} else if stopResult.Success {
-					state.SentinelRunning = false
 					logger.Info("Sentinel stopped successfully")
 				} else {
-					state.ErrorMessage = stopResult.Error
 					logger.Error("Sentinel stop failed", "error", stopResult.Error)
 				}
 			}
 
-			// Transición final a TERMINATED
-			state.State = types.StateTerminated
+			// Resetear sesión — listo para próximo LAUNCH
+			state.State = types.StateSeeded
+			state.SentinelRunning = false
+			state.ErrorMessage = ""
+			chromePID = 0
+			currentCommandID = ""
+			sentinelDetails = nil
 			state.LastUpdate = workflow.Now(ctx)
 
-			logger.Info("Profile terminated", "profile_id", input.ProfileID)
-			// Salir del loop - workflow terminará
-			return
+			logger.Info("Profile stopped and ready for relaunch", "profile_id", input.ProfileID)
+			// NO hay return — el loop continúa esperando el próximo LAUNCH signal
 		})
 
-		// Signal: HEARTBEAT - Confirmación de que Sentinel sigue vivo
+		// Signal: HEARTBEAT — Confirmación de que Sentinel sigue vivo
 		selector.AddReceive(heartbeatChan, func(c workflow.ReceiveChannel, more bool) {
 			var heartbeat types.HeartbeatSignal
 			c.Receive(ctx, &heartbeat)
 
+			// Cancelar el timer pendiente del ciclo anterior antes de renovar
+			if cancelHeartbeatTimer != nil {
+				cancelHeartbeatTimer()
+				cancelHeartbeatTimer = nil
+			}
+
 			lastHeartbeat = workflow.Now(ctx)
 			logger.Debug("Received heartbeat", "profile_id", input.ProfileID)
-
-			// Si estábamos degraded, intentar recovery
-			if state.State == types.StateDegraded {
-				state.State = types.StateRunning
-				state.ErrorMessage = ""
-				state.LastUpdate = workflow.Now(ctx)
-				logger.Info("Profile recovered from degraded state")
-			}
 		})
 
-		// Signal: BRAIN_EVENT - Eventos del Brain (onboarding, errores, etc.)
+		// Signal: BRAIN_EVENT — Eventos del Brain
 		selector.AddReceive(brainEventChan, func(c workflow.ReceiveChannel, more bool) {
 			var event types.BrainEvent
 			c.Receive(ctx, &event)
 
-			logger.Info("Received brain event", 
-				"type", event.Type, 
+			logger.Info("Received brain event",
+				"type", event.Type,
 				"profile_id", event.ProfileID)
 
 			state.LastUpdate = workflow.Now(ctx)
 
 			switch event.Type {
 			case signals.EventOnboardingStarted:
-				// Si recibimos esto, transicionar de SEEDED a ONBOARDING
 				if state.State == types.StateSeeded {
 					state.State = types.StateOnboarding
 					logger.Info("Profile entering onboarding state")
 				}
 
 			case signals.EventOnboardingComplete:
-				// Onboarding completado, perfil ready para launch
 				if state.State == types.StateOnboarding {
 					state.State = types.StateReady
 					logger.Info("Profile onboarding completed, now READY")
@@ -238,18 +237,18 @@ func ProfileLifecycleWorkflow(ctx workflow.Context, input types.ProfileLifecycle
 				logger.Error("Profile onboarding failed", "error", event.Error)
 
 			case signals.EventExtensionError:
+				// Error de extensión no fatal — perfil pasa a IDLE para permitir relaunch
 				if state.State == types.StateRunning {
-					state.State = types.StateDegraded
+					state.State = types.StateIdle
 					state.ErrorMessage = event.Error
-					logger.Warn("Profile degraded due to extension error", "error", event.Error)
+					logger.Warn("Profile set to IDLE due to extension error", "error", event.Error)
 				}
 
 			case signals.EventHeartbeatFailed:
+				// Lanzar recovery directamente sin pasar por DEGRADED
 				if state.State == types.StateRunning {
-					state.State = types.StateDegraded
-					logger.Warn("Profile degraded due to heartbeat failure")
+					logger.Warn("Heartbeat failed — launching recovery workflow")
 
-					// Iniciar recovery workflow hijo
 					recoveryInput := types.RecoveryFlowInput{
 						ProfileID:    input.ProfileID,
 						FailureType:  "HEARTBEAT_FAILED",
@@ -272,6 +271,10 @@ func ProfileLifecycleWorkflow(ctx workflow.Context, input types.ProfileLifecycle
 						state.State = recoveryResult.NewState
 						state.ErrorMessage = ""
 						logger.Info("Recovery completed successfully", "new_state", state.State)
+					} else {
+						state.State = types.StateIdle
+						state.ErrorMessage = "recovery unsuccessful — profile idle"
+						logger.Warn("Recovery unsuccessful, profile set to IDLE")
 					}
 				}
 
@@ -286,36 +289,53 @@ func ProfileLifecycleWorkflow(ctx workflow.Context, input types.ProfileLifecycle
 			}
 		})
 
-		// Timer: Verificación periódica de heartbeat
+		// Timer: Verificación periódica de heartbeat cuando Sentinel está corriendo
+		// CRÍTICO: cancelar el timer del ciclo anterior antes de crear uno nuevo.
+		// Sin esto, cada iteración del loop acumula un timer pendiente y eventualmente
+		// uno dispara aunque los heartbeats lleguen correctamente.
 		if state.SentinelRunning && state.State == types.StateRunning {
-			heartbeatTimeout := workflow.NewTimer(ctx, 2*time.Minute)
+			if cancelHeartbeatTimer != nil {
+				cancelHeartbeatTimer()
+			}
+			timerCtx, cancel := workflow.WithCancel(ctx)
+			cancelHeartbeatTimer = cancel
+
+			heartbeatTimeout := workflow.NewTimer(timerCtx, 2*time.Minute)
 			selector.AddFuture(heartbeatTimeout, func(f workflow.Future) {
+				// Si el contexto fue cancelado (heartbeat llegó a tiempo), f.Get devuelve error.
+				// Solo actuar si el timer expiró realmente.
+				if f.Get(timerCtx, nil) != nil {
+					return // timer cancelado — heartbeat llegó antes
+				}
 				timeSinceLastHeartbeat := workflow.Now(ctx).Sub(lastHeartbeat)
 				if timeSinceLastHeartbeat > 2*time.Minute {
-					logger.Warn("Heartbeat timeout detected", 
+					logger.Warn("Heartbeat timeout detected",
 						"since_last", timeSinceLastHeartbeat)
-					state.State = types.StateDegraded
+					// IDLE en lugar de DEGRADED — permite relaunch directo sin intervención manual
+					state.State = types.StateIdle
 					state.ErrorMessage = "heartbeat timeout"
+					state.SentinelRunning = false
 					state.LastUpdate = workflow.Now(ctx)
+					cancelHeartbeatTimer = nil
 				}
 			})
 		}
 
-		// Ejecutar selector
 		selector.Select(ctx)
 
-		// Condición de salida: si estamos TERMINATED, terminar workflow
+		// El workflow solo termina si el estado es TERMINATED
+		// TERMINATED es reservado para eliminación definitiva del perfil — nunca para shutdown normal
 		if state.State == types.StateTerminated {
-			logger.Info("ProfileLifecycleWorkflow completed", "profile_id", input.ProfileID)
+			logger.Info("ProfileLifecycleWorkflow terminated definitively", "profile_id", input.ProfileID)
 			return nil
 		}
 	}
 }
 
-// RecoveryFlowWorkflow - Child workflow para intentar recuperar un perfil degraded
+// RecoveryFlowWorkflow — Child workflow para intentar recuperar un perfil degraded
 func RecoveryFlowWorkflow(ctx workflow.Context, input types.RecoveryFlowInput) (types.RecoveryFlowResult, error) {
 	logger := workflow.GetLogger(ctx)
-	logger.Info("RecoveryFlowWorkflow started", 
+	logger.Info("RecoveryFlowWorkflow started",
 		"profile_id", input.ProfileID,
 		"failure_type", input.FailureType)
 
@@ -327,23 +347,14 @@ func RecoveryFlowWorkflow(ctx workflow.Context, input types.RecoveryFlowInput) (
 	}
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
 
-	// Estrategia simple: reintentar lanzamiento
-	// En una implementación más completa, aquí habría lógica de recovery específica
-
-	result := types.RecoveryFlowResult{
-		Success:  false,
-		NewState: types.StateFailed,
-	}
-
-	// Simular espera antes de retry
 	workflow.Sleep(ctx, 10*time.Second)
 
-	// Intentar verificar estado del sistema
 	logger.Info("Recovery: checking system health")
 
-	// Si llegamos aquí sin errores, asumir recovery exitoso
-	result.Success = true
-	result.NewState = types.StateRunning
+	result := types.RecoveryFlowResult{
+		Success:  true,
+		NewState: types.StateRunning,
+	}
 
 	logger.Info("RecoveryFlowWorkflow completed", "success", result.Success)
 	return result, nil

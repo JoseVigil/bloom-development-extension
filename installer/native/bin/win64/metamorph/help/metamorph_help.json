@@ -63,6 +63,21 @@
     "json_response": "{\"status\": \"success\", \"snapshot\": \"...\"}"
   },
   {
+    "name": "rollout",
+    "use": "rollout",
+    "short": "Deploy built binaries from repo to AppData",
+    "category": "MAINTENANCE",
+    "options": [
+      {
+        "name": "dry-run",
+        "usage": "Preview what would be copied without making changes",
+        "default": "false"
+      }
+    ],
+    "example": "  metamorph rollout\n  metamorph rollout --dry-run\n  metamorph --json rollout",
+    "json_response": "{\n  \"status\": \"success\",\n  \"deployed\": [\n    {\"component\": \"Brain\",     \"source\": \"...\", \"destination\": \"...\", \"files_copied\": 12},\n    {\"component\": \"Nucleus\",   \"source\": \"...\", \"destination\": \"...\", \"files_copied\": 4}\n  ],\n  \"skipped\": [],\n  \"errors\": []\n}"
+  },
+  {
     "name": "status",
     "use": "status",
     "short": "Display current system state",

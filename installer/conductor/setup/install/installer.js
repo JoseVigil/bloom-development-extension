@@ -43,6 +43,7 @@ const {
 
 const { installRuntime } = require('./runtime-installer');
 const { installChromium } = require('./chromium-installer');
+const { installLauncher } = require('./service-installer-launcher');
 
 const {
   nucleusHealth,
@@ -54,6 +55,8 @@ const {
 
 // ⚠️ DEPRECADO: deployAllBinaries, deployConductor, deployMetamorph
 // Todas las copias de binarios están ahora en deployAllSystemBinaries()
+
+const LAUNCHER_EXE_NAME = 'bloom-launcher.exe';
 
 // ============================================================================
 // PROGRESS REPORTING
@@ -505,6 +508,24 @@ async function deployAllSystemBinaries(win) {
       logger.warn('⚠️ bloom-conductor.exe not found, skipping');
       results.conductor = { success: false, skipped: true };
     }
+
+    // ========================================================================
+    // 11. BLOOM LAUNCHER (Session Agent)
+    // ========================================================================
+    logger.info('\n🌉 BLOOM LAUNCHER (SESSION AGENT)');
+
+    const launcherExeSrc = path.join(paths.launcherSource, LAUNCHER_EXE_NAME);
+
+    if (await fs.pathExists(launcherExeSrc)) {
+      results.launcher = await copyFileSafe(
+        launcherExeSrc,
+        paths.launcherExe,
+        LAUNCHER_EXE_NAME
+      );
+    } else {
+      logger.warn('⚠️ bloom-launcher.exe not found, skipping');
+      results.launcher = { success: false, skipped: true };
+    }
     
     // ========================================================================
     // RESUMEN FINAL
@@ -705,7 +726,7 @@ async function launchMasterProfile(win) {
     logger.info('Step 1/3: Ensuring Temporal is ready...');
 
     const ensureResult = await executeNucleusCommand([
-      '--json',          // ✅ --json PRIMERO, antes del comando
+      '--json',
       'temporal',
       'ensure'
     ]);
@@ -727,7 +748,6 @@ async function launchMasterProfile(win) {
       'launch',
       profileUuid,
       '--mode', 'discovery'
-      // ✅ SIN --heartbeat — ese flag no existe en synapse launch
     ]);
 
     if (!launchResult.success) {
@@ -745,26 +765,58 @@ async function launchMasterProfile(win) {
 
     // =========================================================================
     // PASO 3: synapse status — verifica que el workflow del perfil está READY
+    // Usa polling con reintentos para dar tiempo a Temporal de procesar el launch.
     // NOTA: No usamos `nucleus heartbeat` aquí porque requiere org inicializada,
     // y durante install la org todavía no existe (se crea en onboarding).
     // synapse status solo consulta el estado del workflow en Temporal — no requiere org.
     // =========================================================================
-    logger.info('Step 3/3: Verifying profile status...');
+    logger.info('Step 3/3: Verifying profile status (polling up to 30s)...');
+    let profileState = null;
+    let lastSentinelRunning = false;  // Track sentinel_running across iterations
+    const maxAttempts = 10;
+    const delayMs = 3000;
 
-    const statusResult = await executeNucleusCommand([
-      '--json',
-      'synapse',
-      'status',
-      profileUuid
-    ]);
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, delayMs));
 
-    if (!statusResult.success) {
-      throw new Error(`Profile status check failed: ${statusResult.error || 'Unknown error'}`);
+      const statusResult = await executeNucleusCommand([
+        '--json',
+        'synapse',
+        'status',
+        profileUuid
+      ]);
+
+      if (!statusResult.success) {
+        throw new Error(`Profile status check failed: ${statusResult.error || 'Unknown error'}`);
+      }
+
+      // nucleus --json synapse status retorna: { success: true, status: { profile_id, state, sentinel_running, ... } }
+      const rawState = statusResult.state || statusResult.status;
+      const stateObj = typeof rawState === 'object' ? rawState : null;
+      const stateName = stateObj?.state || stateObj?.name || (typeof rawState === 'string' ? rawState : JSON.stringify(rawState));
+      const sentinelRunning = stateObj?.sentinel_running ?? statusResult.sentinel_running ?? false;
+      profileState = stateName;
+      lastSentinelRunning = sentinelRunning;  // Persist for post-loop check
+      logger.info(`  Attempt ${attempt}/${maxAttempts}: state = ${JSON.stringify(rawState)}`);
+
+      if (profileState === 'DEGRADED' || profileState === 'FAILED') {
+        throw new Error(`Profile entered terminal state during launch: ${profileState}. Check sentinel logs.`);
+      }
+
+      // READY   = onboarding completado (re-instalaciones / flows post-onboarding)
+      // RUNNING + sentinel_running = Sentinel activo durante instalación fresca.
+      // READY solo lo asigna Brain via EventOnboardingComplete, que ocurre DESPUÉS
+      // de la instalación. En el primer boot, RUNNING+sentinel_running es el éxito correcto.
+      if (profileState === 'READY') { break; }
+      if (profileState === 'RUNNING' && sentinelRunning) { break; }
     }
 
-    const profileState = statusResult.state || statusResult.status;
-    if (profileState !== 'READY') {
-      throw new Error(`Profile not READY after launch (state: ${profileState})`);
+    // Determinar si el estado final es operativo.
+    // lastSentinelRunning se actualizó en el loop con cada respuesta de status.
+    const isProfileOperational = profileState === 'READY' || (profileState === 'RUNNING' && lastSentinelRunning);
+
+    if (!isProfileOperational) {
+      throw new Error(`Profile not operational after launch (state: ${JSON.stringify(profileState)}). Expected RUNNING+sentinel or READY.`);
     }
 
     // =========================================================================
@@ -933,6 +985,40 @@ async function runCertification(win) {
 }
 
 // ============================================================================
+// SESSION LAUNCHER INSTALLER
+// ============================================================================
+
+async function installSessionLauncher(win) {
+  const MILESTONE = 'launcher_install';
+
+  if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
+    logger.info(`⭐️ ${MILESTONE} completed, skipping`);
+    return { success: true, skipped: true };
+  }
+
+  await nucleusManager.startMilestone(MILESTONE);
+  emitProgress(win, 7, 10, 'Installing Session Launcher...');
+
+  try {
+    const started = await installLauncher();
+
+    if (!started) {
+      // No es fatal — el launcher puede no tener sesión interactiva durante CI/install remoto
+      logger.warn('⚠️ bloom-launcher did not confirm RUNNING — may start on next user login');
+    }
+
+    await nucleusManager.completeMilestone(MILESTONE, { launcher_running: started });
+    return { success: true };
+
+  } catch (error) {
+    // No lanzar — launcher no es crítico para completar la instalación
+    logger.warn(`⚠️ Session launcher install warning: ${error.message}`);
+    await nucleusManager.failMilestone(MILESTONE, error.message);
+    return { success: false, non_critical: true };
+  }
+}
+
+// ============================================================================
 // MAIN ORCHESTRATOR
 // ============================================================================
 
@@ -957,6 +1043,7 @@ async function installService(win) {
     // NOTA: Nucleus Service DEBE arrancar ANTES de seed
     // porque seed necesita Temporal workflows
     await installNucleusService(win);       // 6/9 - Arranca Temporal
+    await installSessionLauncher(win);      // Session agent (non-critical)
     await runCertification(win);            // 7/9 - Verifica Temporal ready
     await seedMasterProfile(win);           // 8/9 - Usa Temporal
     await launchMasterProfile(win);         // 9/9 - Heartbeat final

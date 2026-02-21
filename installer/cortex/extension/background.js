@@ -304,7 +304,8 @@ function handleHostMessage(msg) {
   console.log('[Synapse] ← Host message received:', msg);
 
   // 🔒 FASE 2: Host → Extension (host_ready)
-  if (msg.event === 'host_ready') {
+  if (msg.command === 'host_ready' || msg.event === 'host_ready') {
+
     console.log('[HANDSHAKE] FASE 2: Host → Extension (host_ready) ✓');
     handshakeState = 'HOST_READY';
     
@@ -676,10 +677,28 @@ function respondToHost(msgId, payload) {
 }
 
 function setupKeepalive() {
+  // Alarm cada 1 minuto para mantener el service worker vivo
   chrome.alarms.create('keepalive', { periodInMinutes: 1 });
+
   chrome.alarms.onAlarm.addListener((a) => {
-    if (a.name === 'keepalive') {
-      console.log('[Synapse] 💓 Keepalive - Handshake:', handshakeState);
+    if (a.name !== 'keepalive') return;
+
+    console.log('[Synapse] 💓 Keepalive tick - Handshake:', handshakeState, '| Connection:', connectionState);
+
+    // Enviar heartbeat real al host solo si el canal está establecido.
+    // El host (bloom-host / Sentinel) forwardea esto como SignalHeartbeat al workflow de Temporal.
+    // Sin esto, el ProfileLifecycleWorkflow degrada a DEGRADED a los 2 minutos por heartbeat timeout.
+    if (handshakeState === 'CONFIRMED' && connectionState === 'CONNECTED') {
+      sendToHost({
+        event: 'HEARTBEAT',
+        profile_id: config?.profileId,
+        launch_id: config?.launchId,
+        timestamp: Date.now(),
+        status: 'alive'
+      });
+      console.log('[Synapse] 💓 Heartbeat sent to host for profile:', config?.profileId);
+    } else {
+      console.warn('[Synapse] ⚠️ Heartbeat skipped - channel not ready (handshake:', handshakeState, ')');
     }
   });
 }

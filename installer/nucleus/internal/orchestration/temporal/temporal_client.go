@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 
 	"nucleus/internal/core"
@@ -145,18 +146,50 @@ func (c *Client) ExecuteLaunchWorkflow(ctx context.Context, logger *core.Logger,
 	// Verificar que el workflow existe y está corriendo
 	descResp, err := c.client.DescribeWorkflowExecution(ctx, workflowID, "")
 	if err != nil {
+		// Workflow no existe en absoluto — no hay perfil creado
 		return nil, fmt.Errorf("workflow not found (profile may not exist): %w", err)
 	}
 
-	// Verificar que el workflow está en estado RUNNING
-	if descResp.WorkflowExecutionInfo.Status != 1 { // 1 = RUNNING
-		return nil, fmt.Errorf("workflow is not running (status: %v)", descResp.WorkflowExecutionInfo.Status)
+	// Si el workflow NO está RUNNING (ej: Completed por bug previo), reiniciarlo
+	if descResp.WorkflowExecutionInfo.Status != enums.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		logger.Info("Workflow not running (status: %v), restarting lifecycle...", descResp.WorkflowExecutionInfo.Status)
+
+		profileWorkflowOptions := client.StartWorkflowOptions{
+			ID:                    workflowID,
+			TaskQueue:             "profile-orchestration",
+			WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+		}
+		profileInput := types.ProfileLifecycleInput{
+			ProfileID:   profileID,
+			Environment: "production",
+		}
+
+		_, err = c.client.ExecuteWorkflow(ctx, profileWorkflowOptions, "ProfileLifecycleWorkflow", profileInput)
+		if err != nil {
+			return nil, fmt.Errorf("failed to restart lifecycle workflow: %w", err)
+		}
+
+		// Dar tiempo al worker para que registre el workflow y esté listo para recibir signals
+		logger.Info("Lifecycle workflow restarted, waiting for it to be ready...")
+		time.Sleep(2 * time.Second)
 	}
 
 	// Verificar estado actual del perfil
+	// Retry porque un workflow recién arrancado puede tardar un momento en registrar el query handler
 	var currentStatus types.ProfileStatus
-	if err := c.QueryWorkflow(ctx, workflowID, "", queries.QueryStatus, &currentStatus); err != nil {
-		return nil, fmt.Errorf("failed to query profile status: %w", err)
+	var queryErr error
+	for attempt := 0; attempt < 5; attempt++ {
+		if attempt > 0 {
+			time.Sleep(500 * time.Millisecond)
+		}
+		queryErr = c.QueryWorkflow(ctx, workflowID, "", queries.QueryStatus, &currentStatus)
+		if queryErr == nil {
+			break
+		}
+		logger.Warning("Query status attempt %d/5 failed: %v", attempt+1, queryErr)
+	}
+	if queryErr != nil {
+		return nil, fmt.Errorf("failed to query profile status after retries: %w", queryErr)
 	}
 
 	// Validar que el perfil está en estado apropiado para launch

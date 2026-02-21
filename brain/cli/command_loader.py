@@ -460,6 +460,12 @@ def load_all_commands_explicit() -> CommandRegistry:
     except ImportError as e:
         print(f"Warning: Could not load ProfilesUnlinkCommand: {e}")
     
+    try:
+        from brain.commands.profile.profiles_launches_command import ProfileLaunchesCommand
+        registry.register(ProfileLaunchesCommand())
+    except ImportError as e:
+        print(f"Warning: Could not load ProfileLaunchesCommand: {e}")
+    
     # =================================================================
     # PROJECT
     # =================================================================
@@ -666,6 +672,7 @@ def get_hiddenimports_list():
         'brain.commands.profile.profiles',
         'brain.commands.profile.profiles',
         'brain.commands.profile.profiles',
+        'brain.commands.profile.profiles_launches_command',
         'brain.commands.project.add',
         'brain.commands.project.clone_and_add',
         'brain.commands.project.detect',

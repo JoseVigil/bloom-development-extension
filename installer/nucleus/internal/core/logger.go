@@ -78,7 +78,7 @@ func InitLogger(paths *PathConfig, category string, jsonMode bool) (*Logger, err
 	file.Sync()
 
 	// Registrar stream en telemetry
-	tm := GetTelemetryManager(paths.Logs, paths.Root)
+	tm := GetTelemetryManager(paths.Logs, paths.Logs)
 	streamID := "nucleus-" + strings.ToLower(category)
 	streamLabel := icon + " " + category
 	tm.RegisterStream(streamID, streamLabel, filepath.ToSlash(logPath), 2)
@@ -113,6 +113,15 @@ func (l *Logger) SetSilentMode(e bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.silentMode = e
+	l.reconfigure()
+}
+
+// SetJSONMode reconfigures the logger to route console output to stderr (JSON mode)
+// or stdout (interactive mode). Call this after InitLogger if the JSON flag is global.
+func (l *Logger) SetJSONMode(enabled bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.isJSONMode = enabled
 	l.reconfigure()
 }
 

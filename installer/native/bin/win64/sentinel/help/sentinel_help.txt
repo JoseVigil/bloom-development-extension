@@ -86,17 +86,6 @@
       * bloom-host.exe en bin/native/
       * Extension ID válido en configuración
 
-    Output:
-      {
-      "success": true,
-      "data": {
-      "uuid": "550e8400-e29b-41d4-a716-446655440000",
-      "alias": "profile_001",
-      "path": "C:\\Users\\User\\AppData\\Local\\BloomNucleus\\profiles\\550e8400-e29b-41d4-a716-446655440000",
-      "is_master": true
-      }
-      }
-
     --------------------------------------------------------------------------------
 
 

@@ -61,20 +61,25 @@
     {
       "matches": ["<all_urls>"],
       "resources": [
+        "discovery.synapse.config.js",
+        "landing.synapse.config.js",
         "discovery/*",
         "landing/*",
         "discovery.synapse.config.js",
         "landing.synapse.config.js",
-        "web/discovery/index.html",
-        "web/discovery/styles.css",
-        "web/discovery/discovery.js"
+        "discovery/index.html",
+        "discovery/styles.css",
+        "discovery/discovery.js",
+        "landing/index.html",
+        "landing/styles.css",
+        "landing/landing.js"
       ]
     }
   ],
 
   "icons": {
-    "16": "icons/icon16.png",
-    "48": "icons/icon48.png",
-    "128": "icons/icon128.png"
+    "16": "assets/icon16.png",
+    "48": "assets/128x128.png",
+    "128": "assets/icon128.png"
   }
 }

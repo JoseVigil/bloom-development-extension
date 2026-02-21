@@ -38,6 +38,7 @@ const EMPTY_NUCLEUS = {
     brain_exe: paths.brainExe,
     chromium_exe: paths.chromeExe,
     conductor_exe: paths.conductorExe,
+    launcher_exe: paths.launcherExe,
     cortex_blx: paths.cortexBlx,
     ollama_exe: paths.ollamaExe,
     host_exe: paths.hostBinary
@@ -250,6 +251,20 @@ const EMPTY_NUCLEUS = {
         command: 'nucleus --json synapse launch [uuid] --mode discovery --heartbeat',
         expected_success: true,
         expected_extension_loaded: true,
+        result: null
+      },
+      error: null
+    },
+
+    launcher_install: {
+      status: 'pending',
+      started_at: null,
+      completed_at: null,
+      verification: {
+        method: 'process_running',
+        target: 'bloom-launcher.exe',
+        registry_key: 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run',
+        registry_value: 'BloomLauncher',
         result: null
       },
       error: null
@@ -541,15 +556,16 @@ class NucleusManager {
    */
   getNextPendingMilestone() {
     const milestoneOrder = [
-      'directories',               // 1/9
-      'chromium',                  // 2/9
-      'brain_runtime',             // 3/9
-      'binaries',                  // 4/9
-      'brain_service_install',     // 5/9
-      'nucleus_service_install',   // 6/9 - Arranca Temporal
-      'certification',             // 7/9 - Verifica Temporal ready
-      'nucleus_seed',              // 8/9 - Usa Temporal
-      'nucleus_launch',            // 9/9 - Heartbeat final
+      'directories',               // 1/10
+      'chromium',                  // 2/10
+      'brain_runtime',             // 3/10
+      'binaries',                  // 4/10
+      'brain_service_install',     // 5/10
+      'nucleus_service_install',   // 6/10 - Arranca Temporal
+      'launcher_install',          // 7/10 - Session agent (non-critical)
+      'certification',             // 8/10 - Verifica Temporal ready
+      'nucleus_seed',              // 9/10 - Usa Temporal
+      'nucleus_launch',            // 10/10 - Heartbeat final
       'orchestration_init',        // (opcional, post-instalación)
       'ollama_init',               // (opcional, post-instalación)
       'shortcuts'                  // (opcional, post-instalación)

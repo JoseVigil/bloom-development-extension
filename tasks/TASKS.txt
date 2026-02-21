@@ -467,3 +467,6 @@ https://aistudio.google.com/prompts/new_chat
 
 roamtouch onboarding research
 https://claude.ai/chat/1188b8cc-37bd-44a9-9835-34abaad4a716
+
+roamtouch workspace
+https://chatgpt.com/c/6997080d-77a4-832c-80a2-00f0040193d0

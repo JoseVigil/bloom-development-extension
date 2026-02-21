@@ -32,12 +32,6 @@ func init() {
 				alias := args[0]
 				isMaster, _ := strconv.ParseBool(args[1])
 
-				// Configurar logger en modo JSON si el flag está activo
-				// Esto hace que todos los logs vayan a stderr en vez de stdout
-				if c.IsJSON {
-					c.Logger.SetJSONMode(true)
-				}
-
 				uuid, profilePath, err := HandleSeed(c, alias, isMaster)
 				if err != nil {
 					if c.IsJSON {
@@ -64,15 +58,6 @@ func init() {
   - Permiso de escritura en HKCU\Software\Google\Chrome\NativeMessagingHosts
   - bloom-host.exe en bin/native/
   - Extension ID válido en configuración`
-		cmd.Annotations["output"] = `{
-  "success": true,
-  "data": {
-    "uuid": "550e8400-e29b-41d4-a716-446655440000",
-    "alias": "profile_001",
-    "path": "C:\\Users\\User\\AppData\\Local\\BloomNucleus\\profiles\\550e8400-e29b-41d4-a716-446655440000",
-    "is_master": true
-  }
-}`
 
 		return cmd
 	})
@@ -129,23 +114,25 @@ type ProfilesRegistry struct {
 }
 
 type CortexMetadata struct {
-	Version       string `json:"version"`
-	BuildDate     string `json:"build_date"`
+	Version      string `json:"version"`
+	BuildDate    string `json:"build_date"`
 	Compatibility string `json:"compatibility"`
 }
 
 func HandleSeed(c *core.Core, alias string, isMaster bool) (string, string, error) {
+	// Verificar alias duplicado
 	registry_data := loadProfilesRegistry(c)
-
-	// IDEMPOTENCIA: si el perfil ya existe, retornar su información
 	for _, p := range registry_data.Profiles {
 		if p.Alias == alias {
-			return p.ID, p.Path, nil
+			return "", "", fmt.Errorf("alias_duplicado: %s", alias)
 		}
 	}
 
 	sm, _ := discovery.DiscoverSystem(c.Paths.BinDir)
 
+	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+	// 1️⃣ PRECONDICIÓN: Verificar existencia del .blx
+	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 	bloomBaseDir := filepath.Join(os.Getenv("LOCALAPPDATA"), "BloomNucleus")
 	blxPath := filepath.Join(bloomBaseDir, "bin", "cortex", "bloom-cortex.blx")
 	if _, err := os.Stat(blxPath); os.IsNotExist(err) {
@@ -154,6 +141,9 @@ func HandleSeed(c *core.Core, alias string, isMaster bool) (string, string, erro
 
 	c.Logger.Info("[SEED] ✓ Cortex package found: %s", blxPath)
 
+	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+	// 2️⃣ INSPECCIÓN: Leer metadatos sin desplegar
+	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 	metadata, err := inspectCortexPackage(blxPath, c)
 	if err != nil {
 		return "", "", fmt.Errorf("cortex_inspection_failed: %v", err)
@@ -161,27 +151,36 @@ func HandleSeed(c *core.Core, alias string, isMaster bool) (string, string, erro
 
 	c.Logger.Info("[SEED] Cortex version: %s (build: %s)", metadata.Version, metadata.BuildDate)
 
+	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+	// 🔧 NUEVO: Desempaquetar .blx a bin/extension ANTES de llamar a brain
+	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 	baseExtensionDir := filepath.Join(bloomBaseDir, "bin", "extension")
-
+	
 	c.Logger.Info("[SEED] Deploying base extension to: %s", baseExtensionDir)
-
+	
+	// Limpiar directorio si existe
 	if _, err := os.Stat(baseExtensionDir); err == nil {
 		c.Logger.Info("[SEED] Removing existing base extension directory")
 		if err := os.RemoveAll(baseExtensionDir); err != nil {
 			return "", "", fmt.Errorf("failed to remove existing extension: %v", err)
 		}
 	}
-
+	
+	// Crear directorio
 	if err := os.MkdirAll(baseExtensionDir, 0755); err != nil {
 		return "", "", fmt.Errorf("failed to create base extension dir: %v", err)
 	}
-
+	
+	// Desempaquetar cortex a bin/extension
 	if err := deployCortexPackage(blxPath, baseExtensionDir, c); err != nil {
 		return "", "", fmt.Errorf("failed to deploy base extension: %v", err)
 	}
-
+	
 	c.Logger.Info("[SEED] ✓ Base extension deployed to bin/extension")
 
+	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+	// 3️⃣ CREACIÓN DEL PERFIL (ahora brain puede copiar desde bin/extension)
+	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 	args := []string{"--json", "profile", "create", alias}
 	if isMaster {
 		args = append(args, "--master")
@@ -208,9 +207,7 @@ func HandleSeed(c *core.Core, alias string, isMaster bool) (string, string, erro
 		return "", "", fmt.Errorf("formato_invalido: %s", rawOut)
 	}
 
-	var brainRes struct {
-		UUID string `json:"uuid"`
-	}
+	var brainRes struct{ UUID string `json:"uuid"` }
 	if err := json.Unmarshal([]byte(rawOut[jsonStart:jsonEnd+1]), &brainRes); err != nil {
 		c.Logger.Error("[SEED] Failed to parse brain response: %s", rawOut[jsonStart:jsonEnd+1])
 		return "", "", err
@@ -219,16 +216,15 @@ func HandleSeed(c *core.Core, alias string, isMaster bool) (string, string, erro
 
 	profileDir := filepath.Join(c.Paths.ProfilesDir, uuid)
 	extDir := filepath.Join(profileDir, "extension")
-	// logsDir apunta al directorio del perfil dentro de sentinel/profiles.
-	// LogsDir ya es logs/sentinel/ — NO agregar "sentinel" de nuevo.
-	// buildSilentLaunchArgs lo usa directamente sin concatenar uuid de nuevo.
 	logsDir := filepath.Join(c.Paths.LogsDir, "profiles", uuid)
 	configDir := filepath.Join(c.Paths.AppDataDir, "config", "profile", uuid)
 	specPath := filepath.Join(configDir, "ignition_spec.json")
 
+	// Asegurar que los directorios existen (brain debería crearlos, pero por si acaso)
 	_ = os.MkdirAll(configDir, 0755)
 	_ = os.MkdirAll(logsDir, 0755)
 
+	// Verificar que brain creó el directorio de extensión
 	if _, err := os.Stat(extDir); os.IsNotExist(err) {
 		c.Logger.Error("[SEED] Brain failed to create extension directory at: %s", extDir)
 		return "", "", fmt.Errorf("brain did not create extension directory")
@@ -236,40 +232,9 @@ func HandleSeed(c *core.Core, alias string, isMaster bool) (string, string, erro
 
 	c.Logger.Info("[SEED] ✓ Profile created by brain with extension at: %s", extDir)
 
-	// ── Logger dedicado al seed de este perfil ────────────────────────────
-	// El log de seed debe vivir en logs/sentinel/profiles/<uuid>/ según la spec.
-	// Creamos un Paths derivado que apunte al subdirectorio correcto.
-	seedPaths := *c.Paths
-	seedPaths.LogsDir = logsDir
-
-	now := time.Now()
-	seedLogName := fmt.Sprintf("sentinel_seed_%s.log", now.Format("20060102"))
-	seedLogPath := filepath.Join(logsDir, seedLogName)
-
-	seedLogFile, err := os.OpenFile(seedLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		// Si no podemos abrir el log de seed usamos el logger global como fallback
-		c.Logger.Warning("[SEED] No se pudo crear log de perfil %s: %v — usando logger global", uuid, err)
-	} else {
-		// Redirigir el logger del core a este archivo para el resto del HandleSeed
-		// Nota: esto es temporal para este invocation. El logger global del core
-		// sigue intacto para otros comandos que corran en paralelo.
-		profileLogger, logErr := core.InitLoggerFromFile(seedLogFile, c.IsJSON)
-		if logErr == nil {
-			c.Logger = profileLogger
-		}
-
-		// Registrar el stream en telemetry.json vía nucleus CLI
-		core.RegisterTelemetryStream(
-			c.Paths.NucleusBin,
-			fmt.Sprintf("sentinel_seed_%s", uuid[:8]),
-			"⚙️ SENTINEL SEED",
-			seedLogPath,
-			3,
-		)
-	}
-	// ─────────────────────────────────────────────────────────────────────
-
+	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+	// 4️⃣ POSTCONDICIÓN: Configuración y registro
+	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 	shortID := uuid[:8]
 	hostName := fmt.Sprintf("com.bloom.synapse.%s", shortID)
 	manifestPath := filepath.Join(configDir, hostName+".json")
@@ -294,6 +259,9 @@ func HandleSeed(c *core.Core, alias string, isMaster bool) (string, string, erro
 	return uuid, profileDir, nil
 }
 
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// inspectCortexPackage - Lee metadatos del .blx SIN extraer
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 func inspectCortexPackage(blxPath string, c *core.Core) (*CortexMetadata, error) {
 	reader, err := zip.OpenReader(blxPath)
 	if err != nil {
@@ -301,6 +269,7 @@ func inspectCortexPackage(blxPath string, c *core.Core) (*CortexMetadata, error)
 	}
 	defer reader.Close()
 
+	// Buscar cortex.meta.json
 	var metaFile *zip.File
 	for _, f := range reader.File {
 		if f.Name == "cortex.meta.json" {
@@ -327,6 +296,13 @@ func inspectCortexPackage(blxPath string, c *core.Core) (*CortexMetadata, error)
 	return &metadata, nil
 }
 
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// deployCortexPackage - Extrae el .blx a destDir
+// El .blx empaqueta el contenido dentro de extension/ — se stripea
+// ese prefijo para volcar el contenido directamente en destDir.
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+const blxExtensionPrefix = "extension/"
+
 func deployCortexPackage(blxPath, destDir string, c *core.Core) error {
 	reader, err := zip.OpenReader(blxPath)
 	if err != nil {
@@ -335,19 +311,24 @@ func deployCortexPackage(blxPath, destDir string, c *core.Core) error {
 	defer reader.Close()
 
 	for _, f := range reader.File {
+		// Ignorar metadata
 		if strings.HasPrefix(f.Name, "__") || f.Name == "cortex.meta.json" {
 			continue
 		}
 
-		// No extraer configs de synapse — ignition los genera frescos en cada launch.
-		// Previene que placeholders o configs de lanzamientos anteriores queden
-		// en el árbol de la extensión y confundan a background.js.
-		if strings.HasSuffix(f.Name, ".synapse.config.js") {
-			c.Logger.Info("[SEED] Skipping stale synapse config from cortex package: %s", f.Name)
+		// Solo procesar entradas que estén dentro de extension/
+		if !strings.HasPrefix(f.Name, blxExtensionPrefix) {
 			continue
 		}
 
-		targetPath := filepath.Join(destDir, f.Name)
+		// Stripear el prefijo extension/ para volcar contenido directo en destDir
+		relativePath := strings.TrimPrefix(f.Name, blxExtensionPrefix)
+		if relativePath == "" {
+			// Entrada del directorio extension/ en sí mismo, ignorar
+			continue
+		}
+
+		targetPath := filepath.Join(destDir, relativePath)
 
 		if f.FileInfo().IsDir() {
 			_ = os.MkdirAll(targetPath, f.Mode())
@@ -378,17 +359,6 @@ func deployCortexPackage(blxPath, destDir string, c *core.Core) error {
 		}
 	}
 
-	// Limpiar directorio synapse/ si quedó de un deploy anterior del .blx.
-	// Este directorio no tiene utilidad funcional — background.js siempre
-	// lee el config desde la raíz de la extensión, no desde synapse/.
-	synapseDir := filepath.Join(destDir, "synapse")
-	if _, err := os.Stat(synapseDir); err == nil {
-		c.Logger.Info("[SEED] Removing stale synapse/ directory from extension")
-		if err := os.RemoveAll(synapseDir); err != nil {
-			c.Logger.Warning("[SEED] No se pudo eliminar synapse/: %v", err)
-		}
-	}
-
 	return nil
 }
 
@@ -411,8 +381,12 @@ func writeNativeManifest(c *core.Core, path, hostName, uuid string) error {
 }
 
 func registerInWindows(hostName, manifestPath string) error {
-	keyPath := `Software\Google\Chrome\NativeMessagingHosts\` + hostName
-	k, _, err := registry.CreateKey(registry.CURRENT_USER, keyPath, registry.ALL_ACCESS)
+	// HKLM en lugar de HKCU: Sentinel es invocado por Nucleus que corre como servicio
+	// de Windows (SYSTEM). Escribir en CURRENT_USER desde SYSTEM apunta al hive de
+	// SYSTEM, no al del usuario interactivo. LOCAL_MACHINE aplica a todos los usuarios
+	// y es accesible desde cualquier contexto de ejecución.
+	keyPath := `SOFTWARE\Google\Chrome\NativeMessagingHosts\` + hostName
+	k, _, err := registry.CreateKey(registry.LOCAL_MACHINE, keyPath, registry.ALL_ACCESS)
 	if err != nil {
 		return err
 	}
@@ -421,8 +395,6 @@ func registerInWindows(hostName, manifestPath string) error {
 }
 
 func writeIgnitionSpec(c *core.Core, sm *discovery.SystemMap, uuid, profileDir, extDir, logsDir, specPath string) error {
-	// logsDir = logs/sentinel/profiles/<uuid>  (sin uuid extra al final)
-	// buildSilentLaunchArgs usará este valor directamente como logDir
 	spec := map[string]interface{}{
 		"engine": map[string]string{
 			"executable": sm.ChromePath,
@@ -444,7 +416,7 @@ func writeIgnitionSpec(c *core.Core, sm *discovery.SystemMap, uuid, profileDir, 
 		},
 		"paths": map[string]string{
 			"extension": extDir,
-			"logs_base": logsDir, // logs/sentinel/profiles/<uuid> — sin profileID adicional
+			"logs_base": logsDir,
 			"user_data": profileDir,
 		},
 		"target_url":   fmt.Sprintf("chrome-extension://%s/discovery/index.html", c.Config.Provisioning.ExtensionID),

@@ -4,16 +4,52 @@ import "time"
 
 // ManagedBinary represents a BTIPS component managed by Metamorph
 type ManagedBinary struct {
-	Name                 string      `json:"name"`
-	Path                 string      `json:"path"`
-	Version              string      `json:"version"`
-	BuildNumber          int         `json:"build_number,omitempty"`
-	Hash                 string      `json:"hash"`
-	SizeBytes            int64       `json:"size_bytes"`
-	LastModified         string      `json:"last_modified"`
-	Status               string      `json:"status"` // "healthy", "missing", "corrupted", "unknown"
-	UpdatableByMetamorph bool        `json:"updatable_by_metamorph"`
-	CortexMeta           *CortexMeta `json:"cortex_meta,omitempty"` // populated only for .blx
+	Name                 string        `json:"name"`
+	Path                 string        `json:"path"`
+	Version              string        `json:"version"`
+	BuildNumber          int           `json:"build_number,omitempty"`
+	Hash                 string        `json:"hash"`
+	SizeBytes            int64         `json:"size_bytes"`
+	LastModified         string        `json:"last_modified"`
+	Status               string        `json:"status"` // "healthy", "missing", "corrupted", "unknown"
+	UpdatableByMetamorph bool          `json:"updatable_by_metamorph"`
+	CortexMeta           *CortexMeta   `json:"cortex_meta,omitempty"`   // populated only for .blx
+	LauncherInfo         *LauncherInfo `json:"launcher_info,omitempty"` // populated only for bloom-launcher
+}
+
+// LauncherInfo contains the extended runtime metadata reported by bloom-launcher's
+// `info --json` command. Fields mirror the launcher's JSON output exactly.
+type LauncherInfo struct {
+	FullVersion string             `json:"full_version"`
+	BuildDate   string             `json:"build_date"`
+	Channel     string             `json:"channel"`
+	Daemon      LauncherDaemon     `json:"daemon"`
+	Startup     LauncherStartup    `json:"startup"`
+	Runtime     LauncherRuntime    `json:"runtime"`
+	Pipe        LauncherPipe       `json:"pipe"`
+}
+
+// LauncherDaemon reflects the daemon sub-object from launcher's info output.
+type LauncherDaemon struct {
+	Running bool `json:"running"`
+}
+
+// LauncherStartup reflects the startup sub-object from launcher's info output.
+type LauncherStartup struct {
+	Registered bool `json:"registered"`
+}
+
+// LauncherRuntime reflects the runtime sub-object from launcher's info output.
+type LauncherRuntime struct {
+	Arch string `json:"arch"`
+	Exe  string `json:"exe"`
+	Go   string `json:"go"`
+	OS   string `json:"os"`
+}
+
+// LauncherPipe reflects the pipe sub-object from launcher's info output.
+type LauncherPipe struct {
+	Name string `json:"name"`
 }
 
 // ExternalBinary represents a third-party binary audited but not updated by Metamorph

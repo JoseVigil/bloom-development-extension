@@ -41,6 +41,8 @@ from typing import Dict, Any, Optional
 from datetime import datetime
 
 from brain.shared.logger import get_logger
+from brain.core.profile.bloom_launcher_client import LauncherClient, LauncherUnavailableError
+
 logger = get_logger("brain.profile.launcher")
 
 
@@ -78,6 +80,7 @@ class ProfileLauncher:
         """
         self.paths = paths
         self.resolver = chrome_resolver
+        self.launcher_client = LauncherClient(paths.base_dir)
         logger.debug("ProfileLauncher inicializado (spec-driven only)")
     
     def launch(
@@ -473,18 +476,46 @@ class ProfileLauncher:
             # ======================================================
             # 2. LANZAMIENTO DESACOPLADO
             # ======================================================
-            flags = 0x00000008 | 0x00000200 if platform.system() == 'Windows' else 0
-
             logger.info("🚀 Spawning proceso desacoplado...")
-            proc = subprocess.Popen(
-                args,
-                creationflags=flags,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                stdin=subprocess.DEVNULL,
-                close_fds=True,
-                shell=False
-            )
+
+            if platform.system() == 'Windows':
+                # Windows: delegar a bloom-launcher (Session 1) via named pipe.
+                # Razón: Brain corre en Session 0 (NSSM service) sin acceso al
+                # compositor de ventanas (DComposition). bloom-launcher corre en
+                # Session 1 (sesión interactiva del usuario) y puede crear
+                # ventanas de Chromium visibles.
+                try:
+                    logger.info("🌉 Delegando a bloom-launcher (Session 1)...")
+                    chrome_pid = self.launcher_client.launch_chrome(args, profile_id)
+                    logger.info(f"✅ Chrome lanzado via bloom-launcher PID={chrome_pid}")
+
+                    class _FakeProc:
+                        """Shim que expone .pid igual que subprocess.Popen."""
+                        def __init__(self, pid: int):
+                            self.pid = pid
+
+                    proc = _FakeProc(chrome_pid)
+
+                except LauncherUnavailableError as exc:
+                    logger.error(f"❌ bloom-launcher no disponible: {exc}")
+                    raise LaunchError(
+                        f"Launcher de sesión no disponible: {exc}. "
+                        "Asegúrese de que bloom-launcher.exe esté corriendo "
+                        "en la sesión del usuario.",
+                        self.ERROR_LAUNCH_FAILED,
+                        {"stage": "session_launcher", "error": str(exc)},
+                    )
+            else:
+                # macOS / Linux: Popen directo (no tienen Session 0 isolation).
+                proc = subprocess.Popen(
+                    args,
+                    creationflags=0,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    stdin=subprocess.DEVNULL,
+                    close_fds=True,
+                    shell=False,
+                )
 
             # ======================================================
             # 3. CONTRATO JSON

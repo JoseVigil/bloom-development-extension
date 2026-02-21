@@ -11,6 +11,7 @@ import (
 	"sentinel/internal/core"
 	"sentinel/internal/process"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -22,6 +23,7 @@ type Ignition struct {
 		ServicePID int
 		BrowserPID int
 		LaunchID   string
+		LaunchedAt time.Time
 	}
 	SpecPath  string
 }
@@ -295,7 +297,22 @@ func (ig *Ignition) Stop(profileID string) error {
 	if !ig.isBloomProcess(pid) {
 		return fmt.Errorf("PID %d no pertenece a Bloom/Chromium controlado", pid)
 	}
-	return process.KillProcessTree(pid)
+
+	err := process.KillProcessTree(pid)
+
+	// ── HISTORY: cerrar registro con resultado final ───────────────────────────
+	result := LaunchResultCleanExit
+	if err != nil {
+		result = LaunchResultKilled
+	}
+	if ig.Session.LaunchID != "" {
+		if closeErr := ig.CloseLaunchRecord(profileID, ig.Session.LaunchID, result, ig.Session.LaunchedAt); closeErr != nil {
+			ig.Core.Logger.Info("[WARN] No se pudo cerrar launch record: %v", closeErr)
+		}
+	}
+	// ─────────────────────────────────────────────────────────────────────────
+
+	return err
 }
 
 func (ig *Ignition) isBloomProcess(pid int) bool {

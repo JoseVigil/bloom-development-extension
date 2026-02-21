@@ -1,0 +1,16 @@
+bloom-development-extension/
+└── launcher/
+    ├── README.md
+    ├── cmd/
+    │   └── main.go
+    ├── go.mod
+    ├── internal/
+    │   ├── executor/
+    │   │   └── launch.go
+    │   ├── logger/
+    │   │   └── logger.go
+    │   ├── pipe/
+    │   │   └── server.go
+    │   └── startup/
+    │       └── startup_windows.go
+    └── scripts/

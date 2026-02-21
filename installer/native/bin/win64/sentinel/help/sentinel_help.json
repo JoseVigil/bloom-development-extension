@@ -266,8 +266,7 @@
       }
     ],
     "example": "  sentinel seed profile_001 true\n  sentinel --json seed burner_temp false | jq .",
-    "requires": "  - brain.exe debe estar disponible en bin/\n  - bloom-cortex.blx en bin/cortex/\n  - Permiso de escritura en HKCU\\Software\\Google\\Chrome\\NativeMessagingHosts\n  - bloom-host.exe en bin/native/\n  - Extension ID válido en configuración",
-    "output": "{\n  \"success\": true,\n  \"data\": {\n    \"uuid\": \"550e8400-e29b-41d4-a716-446655440000\",\n    \"alias\": \"profile_001\",\n    \"path\": \"C:\\\\Users\\\\User\\\\AppData\\\\Local\\\\BloomNucleus\\\\profiles\\\\550e8400-e29b-41d4-a716-446655440000\",\n    \"is_master\": true\n  }\n}"
+    "requires": "  - brain.exe debe estar disponible en bin/\n  - bloom-cortex.blx en bin/cortex/\n  - Permiso de escritura en HKCU\\Software\\Google\\Chrome\\NativeMessagingHosts\n  - bloom-host.exe en bin/native/\n  - Extension ID válido en configuración"
   },
   {
     "name": "send",

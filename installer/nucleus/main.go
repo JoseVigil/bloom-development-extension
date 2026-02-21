@@ -12,8 +12,8 @@ import (
 	_ "nucleus/internal/governance"
 	_ "nucleus/internal/orchestration/commands"
 	_ "nucleus/internal/orchestration/temporal"
-	_ "nucleus/internal/orchestration/temporal/bootstrap"  
-	_ "nucleus/internal/supervisor"  
+	_ "nucleus/internal/orchestration/temporal/bootstrap"
+	_ "nucleus/internal/supervisor"
 	_ "nucleus/internal/system"
 	_ "nucleus/internal/vault"
 
@@ -21,8 +21,9 @@ import (
 )
 
 func main() {
-	// Detectar si se está solicitando ayuda
+	// Pre-detectar flags antes de inicializar Core
 	isHelp := false
+	isJSON := false
 	jsonHelp := false
 	for _, arg := range os.Args[1:] {
 		if arg == "--help" || arg == "-h" {
@@ -32,9 +33,12 @@ func main() {
 			jsonHelp = true
 			isHelp = true
 		}
+		if arg == "--json" {
+			isJSON = true
+		}
 	}
 
-	// Inicializar Core (silencioso si es help)
+	// Inicializar Core
 	var c *core.Core
 	var err error
 
@@ -50,12 +54,16 @@ func main() {
 	}
 	defer c.Close()
 
+	// Activar JSON mode antes de que cualquier comando corra
+	if isJSON {
+		c.SetJSONMode(true)
+	}
+
 	rootCmd := &cobra.Command{
 		Use:   "nucleus",
 		Short: "Core CLI for Bloom Ecosystem",
 		Long:  "Nucleus is the governance layer for the Bloom organization, managing roles, identity, and authority.",
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
-			// Configurar modo JSON si el flag está presente
 			if jsonFlag, _ := cmd.Flags().GetBool("json"); jsonFlag {
 				c.SetJSONMode(true)
 			}

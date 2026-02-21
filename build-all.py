@@ -8,9 +8,11 @@ Secuencia de ejecución:
   2. Nucleus      → installer/nucleus/scripts/build.bat
   3. Sentinel     → installer/sentinel/scripts/build.bat
   4. Host         → skipped on Windows (Linux build via installer/host/build.sh)
-  5. Conductor    → cd installer/conductor && npm run build:launcher
+  5. Conductor    → cd installer/conductor && npm run build:all
+                    (buildea launcher + setup en un solo paso)
   6. Metamorph    → installer/metamorph/scripts/build.bat
-  7. Cortex       → installer/cortex/build-cortex/package.py
+  7. Launcher     → installer/launcher/scripts/build.bat
+  8. Cortex       → installer/cortex/build-cortex/package.py
                     (lee cortex.meta.json, incrementa build_number, produce .blx)
 
 Luego de buildear los ejecutables, interroga cada uno para verificar versión
@@ -152,6 +154,7 @@ BUILDS = {
     "sentinel":   ROOT / "installer/sentinel/scripts/build.bat",
     "metamorph":  ROOT / "installer/metamorph/scripts/build.bat",
     "conductor":  ROOT / "installer/conductor",          # cwd para npm
+    "launcher":   ROOT / "installer/launcher/scripts/build.bat",
     "cortex":     ROOT / "installer/cortex/build-cortex/package.py",
 }
 
@@ -209,6 +212,7 @@ def get_contracts(verify_env: str) -> list[BinaryContract]:
     sentinel  = str(b / "sentinel/sentinel.exe")
     host      = str(b / "host/bloom-host.exe")
     metamorph = str(b / "metamorph/metamorph.exe")
+    launcher  = str(b / "launcher/bloom-launcher.exe")
     ps1       = str(b / "conductor/win-unpacked/bloom-conductor-version.ps1")
     ps1_setup = str(b / "setup/win-unpacked/bloom-setup-version.ps1")
 
@@ -258,6 +262,16 @@ def get_contracts(verify_env: str) -> list[BinaryContract]:
             bin_path     = b / "metamorph/metamorph.exe",
             version_cmd  = [metamorph, "--json", "version"],
             info_cmd     = [metamorph, "--json", "info"],
+            version_field= "version",
+            build_field  = "build_number",
+        ),
+        BinaryContract(
+            # build_number es string en la salida de launcher (ej: "0"),
+            # verify_binary lo maneja via _parse_build() que acepta str y float.
+            name         = "Launcher",
+            bin_path     = b / "launcher/bloom-launcher.exe",
+            version_cmd  = [launcher, "--version", "--json"],
+            info_cmd     = [launcher, "info", "--json"],
             version_field= "version",
             build_field  = "build_number",
         ),
@@ -401,16 +415,27 @@ def build_conductor() -> StepResult:
     conductor_dir = BUILDS["conductor"]
     if not conductor_dir.is_dir():
         return StepResult("Conductor", False, error=f"Directorio no encontrado: {conductor_dir}")
-    log("Ejecutando npm run build:launcher ...")
+    log("Ejecutando npm run build:all (launcher + setup) ...")
     # En Windows npm es npm.cmd, no un ejecutable directo
     npm_cmd = "npm.cmd" if sys.platform == "win32" else "npm"
     code, out, err = run(
-        [npm_cmd, "run", "build:launcher"],
+        [npm_cmd, "run", "build:all"],
         cwd=conductor_dir,
     )
     if code != 0:
         return StepResult("Conductor", False, error=err or out)
     return StepResult("Conductor", True)
+
+
+def build_launcher() -> StepResult:
+    launcher_bat = BUILDS["launcher"]
+    if not launcher_bat.exists():
+        return StepResult("Launcher", False, error=f"Script no encontrado: {launcher_bat}")
+    log("Ejecutando build.bat ...")
+    code, out, err = run(["cmd", "/c", launcher_bat.name], cwd=launcher_bat.parent)
+    if code != 0:
+        return StepResult("Launcher", False, error=err or out)
+    return StepResult("Launcher", True)
 
 
 def ensure_cortex_meta(meta_path: Path, channel: str) -> None:
@@ -470,6 +495,18 @@ def build_cortex(channel: str, production: bool) -> StepResult:
 # Verificación post-build: interroga cada binario
 # ---------------------------------------------------------------------------
 
+def _parse_build(val) -> Optional[int]:
+    """Convierte build_number a int de forma segura.
+    Acepta int, float (JSON estándar) y string (ej: bloom-launcher emite "0").
+    """
+    if val is None:
+        return None
+    try:
+        return int(val)
+    except (ValueError, TypeError):
+        return None
+
+
 def verify_binary(contract: BinaryContract) -> StepResult:
     """Interroga el binario instalado y extrae versión y build."""
     bin_path = contract.bin_path
@@ -493,7 +530,7 @@ def verify_binary(contract: BinaryContract) -> StepResult:
                 return StepResult(
                     contract.name, True,
                     version=str(version),
-                    build=int(build) if build is not None else None,
+                    build=_parse_build(build),
                 )
     except Exception as e:
         pass  # fallback a info_cmd
@@ -513,7 +550,7 @@ def verify_binary(contract: BinaryContract) -> StepResult:
                 return StepResult(
                     contract.name, True,
                     version=str(version),
-                    build=int(build) if build is not None else None,
+                    build=_parse_build(build),
                 )
     except Exception as e:
         pass
@@ -628,6 +665,7 @@ def main() -> None:
         ("Conductor", lambda: build_conductor()),
         ("Host",      lambda: StepResult("Host", True, skipped=True,
                                          skip_reason="Build en Linux — installer/host/build.sh")),
+        ("Launcher",  lambda: build_launcher()),
     ]
 
     for name, fn in steps:
