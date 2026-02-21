@@ -29,7 +29,7 @@ func DefaultNucleusConfig() HelpConfig {
 		},
 		CategoryDescs: map[string]string{
 			"SYSTEM":          "System information and diagnostics",
-			"DIAGNOSTICS":     "Health checks and system diagnostics",
+			"DIAGNOSTICS":     "Health checks, log inspection and system diagnostics",
 			"GOVERNANCE":      "Organization initialization and authority",
 			"TEAM":            "Team and collaboration management",
 			"VAULT":           "Secure key and credential management",

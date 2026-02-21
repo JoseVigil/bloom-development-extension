@@ -39,7 +39,7 @@
 ------------------------------------------------------------------------------------------------------------------------
 
   SYSTEM             System information and diagnostics                       2 cmds
-  DIAGNOSTICS        Health checks and system diagnostics                     1 cmd
+  DIAGNOSTICS        Health checks, log inspection and system diagnostics     2 cmds
   GOVERNANCE         Organization initialization and authority                4 cmds
   TEAM               Team and collaboration management                        3 cmds
   VAULT              Secure key and credential management                     4 cmds
@@ -48,7 +48,7 @@
   TELEMETRY          Centralized log stream registration                      1 cmd
   TEMPORAL_SERVER    Temporal server management and diagnostics               1 cmd
   ORCHESTRATION      Workflow orchestration and automation                    4 cmds
-  ---------------------------------------------------------------------------  Total: 23 commands
+  ---------------------------------------------------------------------------  Total: 24 commands
 
 
 =======================================================[ SYSTEM ]=======================================================
@@ -71,20 +71,83 @@
 ====================================================[ DIAGNOSTICS ]=====================================================
 
   > HEALTH
-    System integrity check - validates all Nucleus components
+    System integrity check — all components in parallel (<3s)
 
     Usage: nucleus health
 
     Flags:
-      --component                Check only specific component (temporal, worker, ollama, etc.)
-      --json                     Output result as JSON (one-line compact)
+      --component                Check only one component (temporal, worker, brain_service, etc.)
+      --fix                      Attempt automated remediation of known failures
+      --json                     Output result as JSON
       --validate                 Deep validation checks (slower)
 
     Example:
         nucleus health
-        nucleus health --json
-        nucleus health --json --validate
-        nucleus health --component temporal
+        nucleus health --fix
+        nucleus health --component brain_service
+        nucleus --json health
+        nucleus --json health --fix
+        nucleus health --validate
+
+    JSON Response:
+      {
+        "success": false,
+        "state": "DEGRADED",
+        "error": "2 non-critical components unhealthy",
+        "timestamp": 1740000000,
+        "components": {
+          "temporal":       { "healthy": true,  "state": "RUNNING",      "port": 7233,  "latency_ms": 4  },
+          "worker":         { "healthy": false, "state": "DISCONNECTED",  "error": "Worker process not found in supervisor" },
+          "ollama":         { "healthy": true,  "state": "RUNNING",       "port": 11434, "latency_ms": 3  },
+          "control_plane":  { "healthy": true,  "state": "RUNNING",       "pid": 9821   },
+          "vault":          { "healthy": true,  "state": "UNLOCKED"       },
+          "governance":     { "healthy": true,  "state": "VALID"          },
+          "brain_service":  { "healthy": false, "state": "UNREACHABLE",   "port": 5678,  "error": "Port 5678 not accessible" },
+          "bloom_api":      { "healthy": true,  "state": "RUNNING",       "port": 48215, "latency_ms": 12 },
+          "svelte_dev":     { "healthy": true,  "state": "RUNNING",       "port": 5173,  "latency_ms": 5  },
+          "worker_manager": { "healthy": true,  "state": "ACTIVE",        "profiles_count": 1 }
+        },
+        "brain_last_errors": {
+          "brain_service_log":   ["2026-02-20 22:50:09 ERROR Connection reset by peer"],
+          "brain_event_bus_log": ["2026-02-20 22:50:09 ERROR WinError 64: pipe broken"]
+        }
+      }
+
+    --------------------------------------------------------------------------------
+
+  > LOGS
+    Read and filter component logs via telemetry.json index
+
+    Usage: nucleus logs [component]
+
+    Arguments:
+      component             optional
+
+    Flags:
+      --errors-only              Show only WARNING and ERROR lines
+      --json                     Output result as JSON
+      --launch                   Correlate all logs for a launch ID (e.g. 001_7a30f1a6_195107)
+      --no-startup               Exclude initialization/startup noise lines
+      --since                    Show lines from the last X duration (e.g. 5m, 2h, 30s)
+
+    Example:
+        nucleus logs brain_server
+        nucleus logs brain_server --since 10m --errors-only --no-startup
+        nucleus logs sentinel_core --since 1h
+        nucleus logs brain_service --errors-only
+        nucleus logs --launch 001_7a30f1a6_195107
+        nucleus --json logs brain_server --since 5m --errors-only
+
+    JSON Response:
+      {
+        "success": true,
+        "component": "brain_server",
+        "lines": [
+          "2026-02-20 22:50:09 ERROR WinError 64: The specified network name is no longer available",
+          "2026-02-20 22:50:09 ERROR Connection reset by peer"
+        ],
+        "count": 2
+      }
 
     --------------------------------------------------------------------------------
 
@@ -609,25 +672,25 @@
     Usage: nucleus synapse
 
     Subcommands:
-      launch                Launch Sentinel for a profile
+      launch                Launch Sentinel for a profile (with pre-flight check)
         nucleus synapse launch <profile_id>
-      seed                  Create new persistent profile
-        nucleus synapse seed <alias> [is_master]
-      shutdown              Shutdown profile workflow
+      seed                  Create new persistent profile workflow
+        nucleus synapse seed <alias>
+      shutdown              Shutdown a profile workflow gracefully
         nucleus synapse shutdown <profile_id>
-      shutdown-all          Shutdown all orchestrated services
+      shutdown-all          Shutdown all orchestrated services gracefully
         nucleus synapse shutdown-all
-      start-ollama          Start Ollama service via Temporal workflow
+      start-ollama          Start Ollama AI service via Temporal workflow
         nucleus synapse start-ollama
-      status                Query profile status
+      status                Query current profile workflow status
         nucleus synapse status <profile_id>
-      vault-status          Query Vault lock status via Brain
+      vault-status          Query Vault lock state via Brain
         nucleus synapse vault-status
 
     Subcommand Details:
 
       └─ LAUNCH
-        Launch Sentinel for a profile
+        Launch Sentinel for a profile (with pre-flight check)
 
         Usage: nucleus synapse launch <profile_id>
 
@@ -637,22 +700,33 @@
         Flags:
           --json                     Output in JSON format
           --mode                     Launch mode (landing, discovery) [default: landing]
+          --skip-preflight           Skip Brain/launcher pre-flight check
 
         Example:
-            nucleus synapse launch profile-123
-            nucleus synapse launch profile-123 --mode discovery
-            nucleus --json synapse launch profile-123
+            nucleus synapse launch prf_a1b2c3d4
+            nucleus synapse launch prf_a1b2c3d4 --mode discovery
+            nucleus synapse launch prf_a1b2c3d4 --skip-preflight
+            nucleus --json synapse launch prf_a1b2c3d4
+
+        JSON Response:
+          {
+            "success": true,
+            "profile_id": "prf_a1b2c3d4",
+            "chrome_pid": 14832,
+            "debug_port": 9222,
+            "extension_loaded": true,
+            "state": "RUNNING"
+          }
 
         ----------------------------------------------------------------------
 
       └─ SEED
-        Create new persistent profile
+        Create new persistent profile workflow
 
-        Usage: nucleus synapse seed <alias> [is_master]
+        Usage: nucleus synapse seed <alias>
 
         Arguments:
           <alias>               required
-          is_master             optional
 
         Flags:
           --json                     Output in JSON format
@@ -663,10 +737,19 @@
             nucleus synapse seed my-profile --master
             nucleus --json synapse seed my-profile
 
+        JSON Response:
+          {
+            "success": true,
+            "profile_id": "prf_a1b2c3d4",
+            "alias": "my-profile",
+            "workflow_id": "seed_my-profile_1740000000",
+            "state": "SEEDED"
+          }
+
         ----------------------------------------------------------------------
 
       └─ SHUTDOWN
-        Shutdown profile workflow
+        Shutdown a profile workflow gracefully
 
         Usage: nucleus synapse shutdown <profile_id>
 
@@ -677,38 +760,61 @@
           --json                     Output in JSON format
 
         Example:
-            nucleus synapse shutdown profile-123
-            nucleus --json synapse shutdown profile-123
+            nucleus synapse shutdown prf_a1b2c3d4
+            nucleus --json synapse shutdown prf_a1b2c3d4
+
+        JSON Response:
+          {
+            "success": true,
+            "profile_id": "prf_a1b2c3d4",
+            "message": "shutdown signal sent"
+          }
 
         ----------------------------------------------------------------------
 
       └─ SHUTDOWN-ALL
-        Shutdown all orchestrated services
+        Shutdown all orchestrated services gracefully
 
         Usage: nucleus synapse shutdown-all
 
         Example:
-            nucleus --json synapse shutdown-all
             nucleus synapse shutdown-all
+            nucleus --json synapse shutdown-all
+
+        JSON Response:
+          {
+            "success": true,
+            "services_shutdown": ["ollama", "profile_prf_a1b2c3d4"],
+            "count": 2
+          }
 
         ----------------------------------------------------------------------
 
       └─ START-OLLAMA
-        Start Ollama service via Temporal workflow
+        Start Ollama AI service via Temporal workflow
 
         Usage: nucleus synapse start-ollama
 
         Flags:
-          --simulation               Run in simulation mode
+          --simulation               Run in simulation mode (no real process)
 
         Example:
-            nucleus --json synapse start-ollama
+            nucleus synapse start-ollama
             nucleus synapse start-ollama --simulation
+            nucleus --json synapse start-ollama
+
+        JSON Response:
+          {
+            "success": true,
+            "pid": 18340,
+            "port": 11434,
+            "state": "RUNNING"
+          }
 
         ----------------------------------------------------------------------
 
       └─ STATUS
-        Query profile status
+        Query current profile workflow status
 
         Usage: nucleus synapse status <profile_id>
 
@@ -719,19 +825,40 @@
           --json                     Output in JSON format
 
         Example:
-            nucleus synapse status profile-123
-            nucleus --json synapse status profile-123
+            nucleus synapse status prf_a1b2c3d4
+            nucleus --json synapse status prf_a1b2c3d4
+
+        JSON Response:
+          {
+            "success": true,
+            "status": {
+              "profile_id": "prf_a1b2c3d4",
+              "state": "RUNNING",
+              "sentinel_running": true,
+              "last_update": "2026-02-21T19:51:07Z",
+              "error_message": ""
+            }
+          }
 
         ----------------------------------------------------------------------
 
       └─ VAULT-STATUS
-        Query Vault lock status via Brain
+        Query Vault lock state via Brain
 
         Usage: nucleus synapse vault-status
 
         Example:
-            nucleus --json synapse vault-status
             nucleus synapse vault-status
+            nucleus --json synapse vault-status
+
+        JSON Response:
+          {
+            "success": true,
+            "vault_state": "UNLOCKED",
+            "master_profile_active": true,
+            "state": "HEALTHY",
+            "timestamp": 1740000000
+          }
 
         ----------------------------------------------------------------------
 

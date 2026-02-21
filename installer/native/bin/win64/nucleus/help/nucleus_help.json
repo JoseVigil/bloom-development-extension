@@ -92,16 +92,21 @@
   {
     "name": "health",
     "use": "health",
-    "short": "System integrity check - validates all Nucleus components",
+    "short": "System integrity check — all components in parallel (\u003c3s)",
     "category": "DIAGNOSTICS",
     "options": [
       {
         "name": "component",
-        "usage": "Check only specific component (temporal, worker, ollama, etc.)"
+        "usage": "Check only one component (temporal, worker, brain_service, etc.)"
+      },
+      {
+        "name": "fix",
+        "usage": "Attempt automated remediation of known failures",
+        "default": "false"
       },
       {
         "name": "json",
-        "usage": "Output result as JSON (one-line compact)",
+        "usage": "Output result as JSON",
         "default": "false"
       },
       {
@@ -110,7 +115,8 @@
         "default": "false"
       }
     ],
-    "example": "  nucleus health\n  nucleus health --json\n  nucleus health --json --validate\n  nucleus health --component temporal"
+    "example": "  nucleus health\n  nucleus health --fix\n  nucleus health --component brain_service\n  nucleus --json health\n  nucleus --json health --fix\n  nucleus health --validate",
+    "json_response": "{\n  \"success\": false,\n  \"state\": \"DEGRADED\",\n  \"error\": \"2 non-critical components unhealthy\",\n  \"timestamp\": 1740000000,\n  \"components\": {\n    \"temporal\":       { \"healthy\": true,  \"state\": \"RUNNING\",      \"port\": 7233,  \"latency_ms\": 4  },\n    \"worker\":         { \"healthy\": false, \"state\": \"DISCONNECTED\",  \"error\": \"Worker process not found in supervisor\" },\n    \"ollama\":         { \"healthy\": true,  \"state\": \"RUNNING\",       \"port\": 11434, \"latency_ms\": 3  },\n    \"control_plane\":  { \"healthy\": true,  \"state\": \"RUNNING\",       \"pid\": 9821   },\n    \"vault\":          { \"healthy\": true,  \"state\": \"UNLOCKED\"       },\n    \"governance\":     { \"healthy\": true,  \"state\": \"VALID\"          },\n    \"brain_service\":  { \"healthy\": false, \"state\": \"UNREACHABLE\",   \"port\": 5678,  \"error\": \"Port 5678 not accessible\" },\n    \"bloom_api\":      { \"healthy\": true,  \"state\": \"RUNNING\",       \"port\": 48215, \"latency_ms\": 12 },\n    \"svelte_dev\":     { \"healthy\": true,  \"state\": \"RUNNING\",       \"port\": 5173,  \"latency_ms\": 5  },\n    \"worker_manager\": { \"healthy\": true,  \"state\": \"ACTIVE\",        \"profiles_count\": 1 }\n  },\n  \"brain_last_errors\": {\n    \"brain_service_log\":   [\"2026-02-20 22:50:09 ERROR Connection reset by peer\"],\n    \"brain_event_bus_log\": [\"2026-02-20 22:50:09 ERROR WinError 64: pipe broken\"]\n  }\n}"
   },
   {
     "name": "heartbeat",
@@ -162,6 +168,45 @@
     "use": "list",
     "short": "List team members",
     "category": "TEAM"
+  },
+  {
+    "name": "logs",
+    "use": "logs [component]",
+    "short": "Read and filter component logs via telemetry.json index",
+    "category": "DIAGNOSTICS",
+    "args": [
+      {
+        "name": "component",
+        "required": false
+      }
+    ],
+    "options": [
+      {
+        "name": "errors-only",
+        "usage": "Show only WARNING and ERROR lines",
+        "default": "false"
+      },
+      {
+        "name": "json",
+        "usage": "Output result as JSON",
+        "default": "false"
+      },
+      {
+        "name": "launch",
+        "usage": "Correlate all logs for a launch ID (e.g. 001_7a30f1a6_195107)"
+      },
+      {
+        "name": "no-startup",
+        "usage": "Exclude initialization/startup noise lines",
+        "default": "false"
+      },
+      {
+        "name": "since",
+        "usage": "Show lines from the last X duration (e.g. 5m, 2h, 30s)"
+      }
+    ],
+    "example": "  nucleus logs brain_server\n  nucleus logs brain_server --since 10m --errors-only --no-startup\n  nucleus logs sentinel_core --since 1h\n  nucleus logs brain_service --errors-only\n  nucleus logs --launch 001_7a30f1a6_195107\n  nucleus --json logs brain_server --since 5m --errors-only",
+    "json_response": "{\n  \"success\": true,\n  \"component\": \"brain_server\",\n  \"lines\": [\n    \"2026-02-20 22:50:09 ERROR WinError 64: The specified network name is no longer available\",\n    \"2026-02-20 22:50:09 ERROR Connection reset by peer\"\n  ],\n  \"count\": 2\n}"
   },
   {
     "name": "remove",
@@ -228,7 +273,7 @@
   {
     "name": "launch",
     "use": "launch \u003cprofile_id\u003e",
-    "short": "Launch Sentinel for a profile",
+    "short": "Launch Sentinel for a profile (with pre-flight check)",
     "category": "ORCHESTRATION",
     "args": [
       {
@@ -246,23 +291,25 @@
         "name": "mode",
         "usage": "Launch mode (landing, discovery)",
         "default": "landing"
+      },
+      {
+        "name": "skip-preflight",
+        "usage": "Skip Brain/launcher pre-flight check",
+        "default": "false"
       }
     ],
-    "example": "  nucleus synapse launch profile-123\n  nucleus synapse launch profile-123 --mode discovery\n  nucleus --json synapse launch profile-123"
+    "example": "  nucleus synapse launch prf_a1b2c3d4\n  nucleus synapse launch prf_a1b2c3d4 --mode discovery\n  nucleus synapse launch prf_a1b2c3d4 --skip-preflight\n  nucleus --json synapse launch prf_a1b2c3d4",
+    "json_response": "{\n  \"success\": true,\n  \"profile_id\": \"prf_a1b2c3d4\",\n  \"chrome_pid\": 14832,\n  \"debug_port\": 9222,\n  \"extension_loaded\": true,\n  \"state\": \"RUNNING\"\n}"
   },
   {
     "name": "seed",
-    "use": "seed \u003calias\u003e [is_master]",
-    "short": "Create new persistent profile",
+    "use": "seed \u003calias\u003e",
+    "short": "Create new persistent profile workflow",
     "category": "ORCHESTRATION",
     "args": [
       {
         "name": "\u003calias\u003e",
         "required": true
-      },
-      {
-        "name": "is_master",
-        "required": false
       }
     ],
     "options": [
@@ -277,12 +324,13 @@
         "default": "false"
       }
     ],
-    "example": "  nucleus synapse seed my-profile\n  nucleus synapse seed my-profile --master\n  nucleus --json synapse seed my-profile"
+    "example": "  nucleus synapse seed my-profile\n  nucleus synapse seed my-profile --master\n  nucleus --json synapse seed my-profile",
+    "json_response": "{\n  \"success\": true,\n  \"profile_id\": \"prf_a1b2c3d4\",\n  \"alias\": \"my-profile\",\n  \"workflow_id\": \"seed_my-profile_1740000000\",\n  \"state\": \"SEEDED\"\n}"
   },
   {
     "name": "shutdown",
     "use": "shutdown \u003cprofile_id\u003e",
-    "short": "Shutdown profile workflow",
+    "short": "Shutdown a profile workflow gracefully",
     "category": "ORCHESTRATION",
     "args": [
       {
@@ -297,33 +345,36 @@
         "default": "false"
       }
     ],
-    "example": "  nucleus synapse shutdown profile-123\n  nucleus --json synapse shutdown profile-123"
+    "example": "  nucleus synapse shutdown prf_a1b2c3d4\n  nucleus --json synapse shutdown prf_a1b2c3d4",
+    "json_response": "{\n  \"success\": true,\n  \"profile_id\": \"prf_a1b2c3d4\",\n  \"message\": \"shutdown signal sent\"\n}"
   },
   {
     "name": "shutdown-all",
     "use": "shutdown-all",
-    "short": "Shutdown all orchestrated services",
+    "short": "Shutdown all orchestrated services gracefully",
     "category": "ORCHESTRATION",
-    "example": "  nucleus --json synapse shutdown-all\n  nucleus synapse shutdown-all"
+    "example": "  nucleus synapse shutdown-all\n  nucleus --json synapse shutdown-all",
+    "json_response": "{\n  \"success\": true,\n  \"services_shutdown\": [\"ollama\", \"profile_prf_a1b2c3d4\"],\n  \"count\": 2\n}"
   },
   {
     "name": "start-ollama",
     "use": "start-ollama",
-    "short": "Start Ollama service via Temporal workflow",
+    "short": "Start Ollama AI service via Temporal workflow",
     "category": "ORCHESTRATION",
     "options": [
       {
         "name": "simulation",
-        "usage": "Run in simulation mode",
+        "usage": "Run in simulation mode (no real process)",
         "default": "false"
       }
     ],
-    "example": "  nucleus --json synapse start-ollama\n  nucleus synapse start-ollama --simulation"
+    "example": "  nucleus synapse start-ollama\n  nucleus synapse start-ollama --simulation\n  nucleus --json synapse start-ollama",
+    "json_response": "{\n  \"success\": true,\n  \"pid\": 18340,\n  \"port\": 11434,\n  \"state\": \"RUNNING\"\n}"
   },
   {
     "name": "status",
     "use": "status \u003cprofile_id\u003e",
-    "short": "Query profile status",
+    "short": "Query current profile workflow status",
     "category": "ORCHESTRATION",
     "args": [
       {
@@ -338,14 +389,16 @@
         "default": "false"
       }
     ],
-    "example": "  nucleus synapse status profile-123\n  nucleus --json synapse status profile-123"
+    "example": "  nucleus synapse status prf_a1b2c3d4\n  nucleus --json synapse status prf_a1b2c3d4",
+    "json_response": "{\n  \"success\": true,\n  \"status\": {\n    \"profile_id\": \"prf_a1b2c3d4\",\n    \"state\": \"RUNNING\",\n    \"sentinel_running\": true,\n    \"last_update\": \"2026-02-21T19:51:07Z\",\n    \"error_message\": \"\"\n  }\n}"
   },
   {
     "name": "vault-status",
     "use": "vault-status",
-    "short": "Query Vault lock status via Brain",
+    "short": "Query Vault lock state via Brain",
     "category": "ORCHESTRATION",
-    "example": "  nucleus --json synapse vault-status\n  nucleus synapse vault-status"
+    "example": "  nucleus synapse vault-status\n  nucleus --json synapse vault-status",
+    "json_response": "{\n  \"success\": true,\n  \"vault_state\": \"UNLOCKED\",\n  \"master_profile_active\": true,\n  \"state\": \"HEALTHY\",\n  \"timestamp\": 1740000000\n}"
   },
   {
     "name": "sync-pull",
