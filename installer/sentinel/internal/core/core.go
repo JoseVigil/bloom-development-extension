@@ -50,8 +50,12 @@ func Initialize() (*Core, error) {
 	// ✅ FIX: Detectar modo JSON ANTES de crear el logger
 	jsonMode := detectJSONMode()
 
-	// ✅ FIX: Pasar jsonMode al logger
-	logger, err := InitLogger(paths, "sentinel_core", "SENTINEL CORE", 1, jsonMode)
+	// ✅ FIX: Pasar jsonMode al logger + registrar category y description obligatorios (spec)
+	logger, err := InitLogger(paths, "sentinel_core", "SENTINEL CORE", 1, &LoggerOptions{
+		Categories:  []string{"sentinel"},
+		Description: "Sentinel core log — system-critical log tracking browser process management, crashes and security events",
+		JSONMode:    jsonMode,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("error al inicializar logger: %w", err)
 	}

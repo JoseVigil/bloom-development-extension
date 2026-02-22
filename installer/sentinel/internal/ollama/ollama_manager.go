@@ -56,6 +56,11 @@ func NewSupervisor(c *core.Core) *Supervisor {
 		"ollama_service", // ID del componente
 		"OLLAMA ENGINE",  // Label descriptivo
 		3,                // Priority (⚙️)
+		&core.LoggerOptions{
+			Categories:  []string{"sentinel"},
+			Description: "Ollama engine log — tracks process lifecycle, health checks, restarts and FSM state transitions",
+			JSONMode:    c.IsJSON,
+		},
 	)
 	if err != nil {
 		c.Logger.Error("Error creando logger de Ollama: %v", err)

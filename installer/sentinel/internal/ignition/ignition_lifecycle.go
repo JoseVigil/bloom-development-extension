@@ -9,6 +9,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"sentinel/internal/core"
 )
 
 // Launch ejecuta la secuencia de lanzamiento del perfil
@@ -101,7 +103,7 @@ func (ig *Ignition) execute(profileID string, mode string, profileData map[strin
 
 	ig.applyMissionTargetURL(spec, profileData)
 
-	args := ig.buildSilentLaunchArgs(spec, mode)
+	args := ig.buildSilentLaunchArgs(spec, mode, ig.Session.LaunchID)
 
 	cmd := exec.Command(spec.Engine.Executable, args...)
 
@@ -146,6 +148,41 @@ func (ig *Ignition) execute(profileID string, mode string, profileData map[strin
 	}
 
 	ig.Core.Logger.Info("[EXECUTE] Motor Chromium iniciado → PID: %d | Log: %s", pid, logFilePath)
+
+	// Registrar streams de telemetría generados como consecuencia del launch (spec §8).
+	// Responsabilidad de sentinel/ignition: es aquí donde se conocen los paths
+	// reales y el profileID en el momento exacto del lanzamiento.
+	shortID := profileID
+	if len(profileID) > 8 {
+		shortID = profileID[:8]
+	}
+
+	// sentinel/profiles — log por perfil
+	profileLogPath := filepath.Join(ig.Core.Paths.AppDataDir, "logs", "sentinel", "profiles",
+		fmt.Sprintf("sentinel_%s_%s.log", profileID, time.Now().Format("20060102")))
+	core.RegisterExternalStream(ig.Core.Paths,
+		"sentinel_profile_"+shortID,
+		"SENTINEL PROFILE ("+shortID+")",
+		profileLogPath,
+		2,
+		&core.LoggerOptions{
+			Categories:  []string{"synapse"},
+			Description: "Per-profile Sentinel log — tracks browser profile lifecycle for the profile launched by this Synapse session",
+		},
+	)
+
+	// chromium/debug — log de chromium para ese perfil (archivo ya creado arriba)
+	core.RegisterExternalStream(ig.Core.Paths,
+		"chromium_debug_"+shortID,
+		"CHROMIUM DEBUG ("+shortID+")",
+		logFilePath,
+		3,
+		&core.LoggerOptions{
+			Categories:  []string{"synapse"},
+			Description: "Chromium debug log for profile "+shortID+" — low-level browser internals generated as a consequence of the Synapse-initiated launch",
+		},
+	)
+
 	return pid, nil
 }
 

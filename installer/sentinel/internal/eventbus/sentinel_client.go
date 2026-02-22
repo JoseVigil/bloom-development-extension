@@ -63,6 +63,11 @@ Ejemplos:
 					"sentinel_event_bus",
 					"🚌 SENTINEL EVENT BUS",
 					2,
+					&core.LoggerOptions{
+						Categories:  []string{"sentinel"},
+						Description: "Sentinel event bus log — tracks direct event sends from CLI to Brain",
+						JSONMode:    c.IsJSON,
+					},
 				)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "[ERROR] No se pudo inicializar logger: %v\n", err)
@@ -168,6 +173,11 @@ Ejemplos:
 					"sentinel_event_bus",
 					"🚌 SENTINEL EVENT BUS",
 					2,
+					&core.LoggerOptions{
+						Categories:  []string{"sentinel"},
+						Description: "Sentinel event bus log — tracks real-time event listening from Brain",
+						JSONMode:    c.IsJSON,
+					},
 				)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "[ERROR] No se pudo inicializar logger: %v\n", err)
@@ -312,6 +322,11 @@ Ejemplos:
 					"sentinel_event_bus",
 					"🚌 SENTINEL EVENT BUS",
 					2,
+					&core.LoggerOptions{
+						Categories:  []string{"sentinel"},
+						Description: "Sentinel event bus log — tracks historical event polling from Brain",
+						JSONMode:    c.IsJSON,
+					},
 				)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "[ERROR] No se pudo inicializar logger: %v\n", err)

@@ -46,10 +46,12 @@ func New() *Logger {
 
 	// Registrar el stream de telemetría (no-fatal si nucleus no está disponible)
 	go registerTelemetry(
-		"launcher_runtime",
-		"🚀 LAUNCHER RUNTIME",
+		"launcher",
+		"🚀 LAUNCHER",
 		filepath.ToSlash(logPath),
 		2,
+		[]string{"launcher"},
+		"Native launcher log — records the initial app bootstrap, environment checks and handoff to Conductor",
 	)
 
 	return l
@@ -57,14 +59,19 @@ func New() *Logger {
 
 // registerTelemetry llama a nucleus CLI para registrar el log como stream
 // de telemetría. Se ejecuta en goroutine para no bloquear el arranque.
-func registerTelemetry(streamID, label, path string, priority int) {
-	cmd := exec.Command(
-		"nucleus", "telemetry", "register",
+func registerTelemetry(streamID, label, path string, priority int, categories []string, description string) {
+	args := []string{
+		"telemetry", "register",
 		"--stream", streamID,
 		"--label", label,
 		"--path", path,
 		"--priority", fmt.Sprintf("%d", priority),
-	)
+		"--description", description,
+	}
+	for _, cat := range categories {
+		args = append(args, "--category", cat)
+	}
+	cmd := exec.Command("nucleus", args...)
 	// Ignoramos el error; si nucleus no está disponible simplemente no se registra.
 	_ = cmd.Run()
 }

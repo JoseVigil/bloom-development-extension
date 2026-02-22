@@ -119,10 +119,12 @@ def register_telemetry(log_path: Path) -> None:
     cmd = [
         str(NUCLEUS_EXE),
         "telemetry", "register",
-        "--stream",   BUILD_ALL_STREAM,
-        "--label",    BUILD_ALL_LABEL,
-        "--path",     str(log_path).replace(chr(92), "/"),
-        "--priority", str(BUILD_ALL_PRIORITY),
+        "--stream",      BUILD_ALL_STREAM,
+        "--label",       BUILD_ALL_LABEL,
+        "--path",        str(log_path).replace(chr(92), "/"),
+        "--priority",    str(BUILD_ALL_PRIORITY),
+        "--category",    "build",
+        "--description", "Full build pipeline log — aggregates output from all module builds in a single run",
     ]
 
     try:
@@ -140,7 +142,6 @@ def register_telemetry(log_path: Path) -> None:
             print(f"  {YELLOW}[telemetry] registro fallido (code {result.returncode}): {result.stderr.strip()}{RESET}", flush=True)
     except Exception as e:
         print(f"  {YELLOW}[telemetry] error al registrar: {e}{RESET}", flush=True)
-
 
 # ---------------------------------------------------------------------------
 # Rutas — relativas a la raíz del repositorio (donde vive este script)

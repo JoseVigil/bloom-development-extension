@@ -3,7 +3,7 @@ package core
 import (
 	"encoding/json"
 	"fmt"
-	"io"
+	"os"
 )
 
 // Core es la estructura central de la aplicación
@@ -11,7 +11,6 @@ type Core struct {
 	Config *Config
 	Logger *Logger
 	Paths  *PathConfig
-	output io.Writer
 }
 
 // Config estructura de configuración
@@ -20,40 +19,54 @@ type Config struct {
 	Verbose    bool
 }
 
-// NewCore crea una nueva instancia de Core
-func NewCore(output io.Writer) (*Core, error) {
+// NewCore crea una nueva instancia de Core.
+// jsonMode debe detectarse en main.go antes de llamar esta función,
+// igual que en sentinel, para que el logger arranque en el modo correcto.
+func NewCore(jsonMode bool) (*Core, error) {
 	paths, err := InitPaths()
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize paths: %w", err)
 	}
 
-	logger := NewLogger(output)
+	logger, err := InitLogger(paths, "CORE", jsonMode)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize logger: %w", err)
+	}
 
 	return &Core{
 		Config: &Config{
-			OutputJSON: false,
+			OutputJSON: jsonMode,
 			Verbose:    false,
 		},
 		Logger: logger,
 		Paths:  paths,
-		output: output,
 	}, nil
 }
 
-// NewCoreSilent crea Core sin output (para help)
+// NewCoreSilent crea Core sin logger (para --help)
 func NewCoreSilent() (*Core, error) {
-	return NewCore(io.Discard)
+	paths, err := InitPaths()
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize paths: %w", err)
+	}
+	return &Core{
+		Config: &Config{},
+		Logger: &Logger{},
+		Paths:  paths,
+	}, nil
 }
 
 // Close cierra recursos
 func (c *Core) Close() {
-	// Cleanup si es necesario
+	if c.Logger != nil {
+		c.Logger.Close()
+	}
 }
 
 // OutputJSON imprime JSON al output
 func (c *Core) OutputJSON(data interface{}) {
 	bytes, _ := json.MarshalIndent(data, "", "  ")
-	fmt.Fprintln(c.output, string(bytes))
+	fmt.Fprintln(os.Stdout, string(bytes))
 }
 
 // SetJSONMode activa modo JSON

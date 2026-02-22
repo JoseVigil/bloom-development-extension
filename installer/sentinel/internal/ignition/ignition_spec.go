@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"time"
 )
 
 // loadIgnitionSpec carga la configuración de lanzamiento del perfil.
@@ -67,7 +66,7 @@ func (ig *Ignition) loadIgnitionSpec(profileID string) (*IgnitionSpec, error) {
 }
 
 // buildSilentLaunchArgs arma la lista completa de argumentos para Chromium en modo silencioso/controlado
-func (ig *Ignition) buildSilentLaunchArgs(spec *IgnitionSpec, mode string) []string {
+func (ig *Ignition) buildSilentLaunchArgs(spec *IgnitionSpec, mode string, launchID string) []string {
 	var args []string
 
 	// 1. Flags definidos en la spec (si existen)
@@ -115,14 +114,15 @@ func (ig *Ignition) buildSilentLaunchArgs(spec *IgnitionSpec, mode string) []str
 	//    NO concatenar spec.ProfileID de nuevo — causaría doble anidamiento.
 	logDir := spec.Paths.LogsBase
 	_ = os.MkdirAll(logDir, 0755)
-	timestamp := time.Now().Format("20060102-150405")
-	logPrefix := filepath.Join(logDir, timestamp)
+
+	logPrefix := filepath.Join(logDir, launchID)
+    chromeLogPrefix := "chrome_" + logPrefix
 
 	args = append(args,
-		fmt.Sprintf("--log-net-log=%s_netlog.json", logPrefix),
-		"--net-log-capture-mode=IncludeAll",
-		fmt.Sprintf("--log-file=%s_debug.log", logPrefix),
-	)
+        fmt.Sprintf("--log-net-log=%s_netlog.json", chromeLogPrefix),
+        "--net-log-capture-mode=IncludeAll",
+        fmt.Sprintf("--log-file=%s_debug.log", chromeLogPrefix),
+    )
 
 	// 5. URL de destino (ya debería estar seteada en prepareSessionFiles)
 	if spec.TargetURL != "" {

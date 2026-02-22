@@ -17,10 +17,32 @@ type Logger struct {
 	silentMode bool
 }
 
-// InitLogger crea el archivo de log en targetDir y registra el stream
+// LoggerOptions agrupa los campos obligatorios del spec que antes no existían.
+// Se usa en InitLogger y en RegisterExternalStream.
+type LoggerOptions struct {
+	// Categories es la lista de categorías válidas del spec:
+	// brain · build · conductor · launcher · nucleus · sentinel · synapse
+	// Debe tener al menos un elemento.
+	Categories []string
+
+	// Description describe quién escribe el log y qué captura.
+	// Campo obligatorio según el spec (--description).
+	Description string
+
+	// JSONMode redirige la salida de consola a stderr para no contaminar stdout.
+	JSONMode bool
+}
+
+// InitLogger crea el archivo de log en paths.LogsDir y registra el stream
 // en telemetry.json invocando `nucleus telemetry register` (escritor único).
-// La firma es retrocompatible: jsonMode es variadic opcional.
-func InitLogger(paths *Paths, componentID, label string, priority int, jsonMode ...bool) (*Logger, error) {
+//
+// El stream_id resultante es componentID; el path se genera automáticamente
+// como <LogsDir>/<componentID>_<YYYYMMDD>.log.
+//
+// opts.Categories y opts.Description son obligatorios según el spec.
+// Si opts es nil se registra sin --category ni --description (modo legacy,
+// solo para compatibilidad transitoria — migrar lo antes posible).
+func InitLogger(paths *Paths, componentID, label string, priority int, opts *LoggerOptions) (*Logger, error) {
 	// 1. Crear directorio de logs si no existe
 	targetDir := paths.LogsDir
 	if err := os.MkdirAll(targetDir, 0755); err != nil {
@@ -38,10 +60,7 @@ func InitLogger(paths *Paths, componentID, label string, priority int, jsonMode 
 	}
 
 	// 3. Detectar modo JSON
-	isJSON := false
-	if len(jsonMode) > 0 {
-		isJSON = jsonMode[0]
-	}
+	isJSON := opts != nil && opts.JSONMode
 
 	// 4. Configurar output según modo JSON
 	var consoleWriter io.Writer
@@ -59,7 +78,13 @@ func InitLogger(paths *Paths, componentID, label string, priority int, jsonMode 
 	// 5. Registrar stream en telemetry.json via nucleus CLI (escritor único).
 	//    Best-effort: si nucleus no está disponible no bloquea el arranque.
 	icon := getPriorityIcon(priority)
-	registerTelemetryStream(paths.NucleusBin, componentID, icon+" "+label, logPath, priority)
+	var categories []string
+	var description string
+	if opts != nil {
+		categories = opts.Categories
+		description = opts.Description
+	}
+	registerTelemetryStream(paths.NucleusBin, componentID, icon+" "+label, logPath, priority, categories, description)
 
 	return &Logger{
 		file:       file,
@@ -69,22 +94,58 @@ func InitLogger(paths *Paths, componentID, label string, priority int, jsonMode 
 	}, nil
 }
 
+// RegisterExternalStream registra en telemetry.json un stream cuyo archivo de log
+// NO es creado por InitLogger — por ejemplo, los logs de sentinel/startup,
+// sentinel/profiles y chromium/debug que son disparados por synapse pero cuyo
+// path y stream_id se conocen en el momento del launch.
+//
+// Esta función NO abre ni escribe el archivo; solo lo registra en telemetry.
+// El caller es responsable de que el archivo exista o vaya a existir en logPath.
+//
+// Ejemplo de uso desde synapse, justo después de disparar el launch del perfil:
+//
+//	core.RegisterExternalStream(paths, "sentinel_startup",    "🟢 SENTINEL STARTUP",    startupLogPath,  2, &LoggerOptions{Categories: []string{"synapse"}, Description: "..."})
+//	core.RegisterExternalStream(paths, "sentinel_profile_"+shortID, "👤 SENTINEL PROFILE ("+shortID+")", profileLogPath, 2, &LoggerOptions{Categories: []string{"synapse"}, Description: "..."})
+//	core.RegisterExternalStream(paths, "chromium_debug_"+shortID,   "🌐 CHROMIUM DEBUG ("+shortID+")",  debugLogPath,   3, &LoggerOptions{Categories: []string{"synapse"}, Description: "..."})
+func RegisterExternalStream(paths *Paths, streamID, label, logPath string, priority int, opts *LoggerOptions) {
+	icon := getPriorityIcon(priority)
+	var categories []string
+	var description string
+	if opts != nil {
+		categories = opts.Categories
+		description = opts.Description
+	}
+	registerTelemetryStream(paths.NucleusBin, streamID, icon+" "+label, logPath, priority, categories, description)
+}
+
 // registerTelemetryStream invoca `nucleus telemetry register` de forma
-// asíncrona y best-effort. Nunca bloquea ni falla silenciosamente el caller.
-func registerTelemetryStream(nucleusBin, streamID, label, logPath string, priority int) {
+// asíncrona y best-effort. Nunca bloquea ni falla el caller.
+// categories y description son opcionales a nivel de función pero obligatorios
+// según el spec — los callers deben siempre proveerlos.
+func registerTelemetryStream(nucleusBin, streamID, label, logPath string, priority int, categories []string, description string) {
 	if nucleusBin == "" {
 		return
 	}
-	// Ejecutar en goroutine para no bloquear el inicio de la aplicación
 	go func() {
-		cmd := exec.Command(
-			nucleusBin,
+		args := []string{
 			"telemetry", "register",
 			"--stream", streamID,
 			"--label", label,
 			"--path", filepath.ToSlash(logPath),
 			"--priority", fmt.Sprintf("%d", priority),
-		)
+		}
+
+		// --category es repetible; pasar uno por categoría
+		for _, cat := range categories {
+			args = append(args, "--category", cat)
+		}
+
+		// --description es obligatorio según el spec
+		if description != "" {
+			args = append(args, "--description", description)
+		}
+
+		cmd := exec.Command(nucleusBin, args...)
 		// Los errores de registro de telemetría no deben interrumpir la aplicación
 		_ = cmd.Run()
 	}()

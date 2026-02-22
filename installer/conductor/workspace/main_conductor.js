@@ -64,7 +64,7 @@ function loadBuildInfo() {
   const pkg = (() => { try { return require('./package.json'); } catch { return {}; } })();
   return {
     name: pkg.name || 'bloom-conductor',
-    product_name: pkg.productName || 'Bloom Nucleus Launcher',
+    product_name: pkg.productName || 'Bloom Nucleus Workspace',
     version: pkg.version || '0.0.0',
     build: 0,
     full_version: `${pkg.version || '0.0.0'}+build.0`,
@@ -185,7 +185,7 @@ function startGUI() {
         preload: path.join(__dirname, 'preload_conductor.js')
       },
       icon: path.join(__dirname, 'assets', 'bloom.ico'),
-      title: 'Bloom Nucleus Launcher',
+      title: 'Bloom Nucleus Workspace',
       backgroundColor: '#0f0f1e',
       show: false
     });

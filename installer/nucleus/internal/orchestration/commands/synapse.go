@@ -203,7 +203,7 @@ Effects:  Creates a new Temporal workflow and profile record`,
 				jsonOutput = true
 			}
 
-			logger, err := core.InitLogger(&c.Paths, "SYNAPSE", jsonOutput)
+			logger, err := core.InitLogger(&c.Paths, "SYNAPSE", jsonOutput, "synapse")
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "[ERROR] Failed to initialize logger: %v\n", err)
 				os.Exit(1)
@@ -308,7 +308,7 @@ Effects:  Starts Chrome via Sentinel; creates Temporal workflow signals`,
 				jsonOutput = true
 			}
 
-			logger, err := core.InitLogger(&c.Paths, "SYNAPSE", jsonOutput)
+			logger, err := core.InitLogger(&c.Paths, "SYNAPSE", jsonOutput, "synapse")
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "[ERROR] Failed to initialize logger: %v\n", err)
 				os.Exit(1)
@@ -447,7 +447,7 @@ Effects:  Read-only`,
 				jsonOutput = true
 			}
 
-			logger, err := core.InitLogger(&c.Paths, "SYNAPSE", jsonOutput)
+			logger, err := core.InitLogger(&c.Paths, "SYNAPSE", jsonOutput, "synapse")
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "[ERROR] Failed to initialize logger: %v\n", err)
 				os.Exit(1)
@@ -532,7 +532,7 @@ Effects:  Terminates Chrome process and stops the Temporal workflow`,
 				jsonOutput = true
 			}
 
-			logger, err := core.InitLogger(&c.Paths, "SYNAPSE", jsonOutput)
+			logger, err := core.InitLogger(&c.Paths, "SYNAPSE", jsonOutput, "synapse")
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "[ERROR] Failed to initialize logger: %v\n", err)
 				os.Exit(1)

@@ -227,10 +227,12 @@ set "NORM_LOG_PATH=%LOG_FILE:\=/%"
 
 :: Ejecutar el comando de registro usando Nucleus CLI
 nucleus telemetry register ^
-    --stream metamorph_build ^
-    --label "📦 METAMORPH BUILD" ^
-    --path "!NORM_LOG_PATH!" ^
-    --priority 3 >> "%LOG_FILE%" 2>&1
+    --stream      metamorph_build ^
+    --label       "📦 METAMORPH BUILD" ^
+    --path        "!NORM_LOG_PATH!" ^
+    --priority    3 ^
+    --category    build ^
+    --description "Metamorph build pipeline output — compiler and bundler logs for the Metamorph module" >> "%LOG_FILE%" 2>&1
 
 if %ERRORLEVEL% EQU 0 (
     echo ✅ Telemetry registered via Nucleus CLI

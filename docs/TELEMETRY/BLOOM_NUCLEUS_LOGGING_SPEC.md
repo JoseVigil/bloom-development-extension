@@ -97,7 +97,8 @@ nucleus telemetry register \
   --stream <stream_id> \
   --label <display_label> \
   --path <absolute_log_path> \
-  --priority <1|2|3>
+  --priority <1|2|3> \
+  --category <category> [--category <category> ...]
 ```
 
 ### Parameters
@@ -108,6 +109,15 @@ nucleus telemetry register \
 | `--label` | string | Yes | Display label with emoji |
 | `--path` | string | Yes | Absolute path to log file |
 | `--priority` | integer | Yes | Priority level (1, 2, or 3) |
+| `--category` | string | Yes | Subsystem category — repeatable for multi-category streams |
+| `--description` | string | Yes | Who writes this log and what it captures |
+
+**Valid categories**: `brain` · `build` · `conductor` · `launcher` · `nucleus` · `sentinel` · `synapse`
+
+A stream can belong to multiple categories. Pass `--category` once per category:
+```bash
+--category nucleus --category synapse
+```
 
 **NOTE**: `last_update` is NOT a parameter. It is generated automatically by the command in UTC format.
 
@@ -122,10 +132,12 @@ nucleus telemetry register \
 
 ```bash
 nucleus telemetry register \
-  --stream electron_install \
-  --label "🔥 ELECTRON INSTALL" \
-  --path "C:/Users/josev/AppData/Local/BloomNucleus/logs/install/electron_install.log" \
-  --priority 2
+  --stream conductor_setup \
+  --label "🔥 CONDUCTOR SETUP" \
+  --path "C:/Users/josev/AppData/Local/BloomNucleus/logs/conductor/conductor_setup.log" \
+  --priority 2 \
+  --category conductor \
+  --description "Conductor setup/install session log — one file per install attempt"
 ```
 
 This command:
@@ -146,19 +158,25 @@ nucleus telemetry register \
   --stream brain_core \
   --label "🧠 BRAIN CORE" \
   --path "C:/Users/josev/AppData/Local/BloomNucleus/logs/brain/core/brain_core_20260209.log" \
-  --priority 2
+  --priority 2 \
+  --category brain \
+  --description "Runtime log of the Brain core module — captures initialization, state transitions and errors"
 
 nucleus telemetry register \
   --stream brain_server \
   --label "⚡ BRAIN SERVER" \
   --path "C:/Users/josev/AppData/Local/BloomNucleus/logs/brain/server/brain_server_20260209.log" \
-  --priority 2
+  --priority 2 \
+  --category brain \
+  --description "Brain HTTP server log — captures incoming requests, responses and connection lifecycle"
 
 nucleus telemetry register \
   --stream brain_profile \
   --label "👤 BRAIN PROFILE" \
   --path "C:/Users/josev/AppData/Local/BloomNucleus/logs/brain/profile/brain_profile_20260209.log" \
-  --priority 3
+  --priority 3 \
+  --category brain \
+  --description "Brain profile management log — tracks profile load, save and sync operations"
 ```
 
 ---
@@ -219,7 +237,11 @@ Central registry tracking all active log files. **SINGLE WRITER**: Only Nucleus 
       "label": "🔥 VISUAL LABEL",
       "path": "C:/Users/josev/AppData/Local/BloomNucleus/logs/app/module/file.log",
       "priority": 2,
-      "last_update": "2026-02-09T12:34:24.577Z"
+      "categories": ["subsystem"],
+      "description": "Who writes this log and what it captures",
+      "first_seen": "2026-02-09T12:34:24.577Z",
+      "last_update": "2026-02-09T12:34:24.577Z",
+      "active": true
     }
   }
 }
@@ -233,7 +255,11 @@ Central registry tracking all active log files. **SINGLE WRITER**: Only Nucleus 
 | `label` | string | Display label with emoji | Developer (via CLI) |
 | `path` | string | Full log file path | Developer (via CLI) |
 | `priority` | integer | Importance level | Developer (via CLI) |
-| `last_update` | string | ISO 8601 UTC timestamp | **Nucleus (automatic)** |
+| `categories` | []string | Subsystem categories — a stream can belong to more than one | Developer (via CLI) |
+| `description` | string | Who writes this log and what it captures | Developer (via CLI) |
+| `first_seen` | string | ISO 8601 UTC timestamp — set on first registration, preserved on updates | **Nucleus (automatic)** |
+| `last_update` | string | ISO 8601 UTC timestamp — updated on every registration | **Nucleus (automatic)** |
+| `active` | bool | Always `true` when registered via CLI | **Nucleus (automatic)** |
 
 ### Priority Levels
 
@@ -246,29 +272,45 @@ Central registry tracking all active log files. **SINGLE WRITER**: Only Nucleus 
 ```json
 {
   "active_streams": {
-    "electron_install": {
-      "label": "🔥 ELECTRON INSTALL",
-      "path": "C:/Users/josev/AppData/Local/BloomNucleus/logs/install/electron_install.log",
+    "conductor_setup": {
+      "label": "🔥 CONDUCTOR SETUP",
+      "path": "C:/Users/josev/AppData/Local/BloomNucleus/logs/conductor/conductor_setup.log",
       "priority": 2,
-      "last_update": "2026-02-09T12:34:24.577Z"
+      "categories": ["conductor"],
+      "description": "Conductor setup/install session log — one file per install attempt",
+      "first_seen": "2026-02-09T12:34:24.577Z",
+      "last_update": "2026-02-09T12:34:24.577Z",
+      "active": true
     },
     "brain_server_event_bus": {
       "label": "📡 EVENT BUS",
       "path": "C:/Users/josev/AppData/Local/BloomNucleus/logs/brain/server/brain_server_event_bus_20260209.log",
       "priority": 2,
-      "last_update": "2026-02-09T08:57:43.108119Z"
+      "categories": ["brain"],
+      "description": "Brain event bus log — records all inter-module events and delivery confirmations",
+      "first_seen": "2026-02-09T08:57:43.108119Z",
+      "last_update": "2026-02-09T08:57:43.108119Z",
+      "active": true
     },
     "brain_core": {
       "label": "🧠 BRAIN CORE",
       "path": "C:/Users/josev/AppData/Local/BloomNucleus/logs/brain/core/brain_core_20260209.log",
       "priority": 2,
-      "last_update": "2026-02-09T08:57:43.028464Z"
+      "categories": ["brain"],
+      "description": "Runtime log of the Brain core module — captures initialization, state transitions and errors",
+      "first_seen": "2026-02-09T08:57:43.028464Z",
+      "last_update": "2026-02-09T08:57:43.028464Z",
+      "active": true
     },
-    "nucleus_build": {
-      "label": "📦 NUCLEUS BUILD",
-      "path": "C:/Users/josev/AppData/Local/BloomNucleus/logs/build/nucleus.build.log",
-      "priority": 3,
-      "last_update": "2026-02-09T09:11:32.818026Z"
+    "nucleus_synapse": {
+      "label": "⚙️ SYNAPSE",
+      "path": "C:/Users/josev/AppData/Local/BloomNucleus/logs/nucleus/nucleus_synapse_20260209.log",
+      "priority": 2,
+      "categories": ["nucleus", "synapse"],
+      "description": "Synapse orchestration log — records the full launch chain for a browser profile",
+      "first_seen": "2026-02-09T09:11:32.818026Z",
+      "last_update": "2026-02-09T09:11:32.818026Z",
+      "active": true
     }
   }
 }
@@ -365,6 +407,9 @@ When implementing logging for any application:
 - [ ] `nucleus telemetry register` called for each log file
 - [ ] `stream_id` follows naming contract (lowercase, snake_case)
 - [ ] All required CLI parameters provided
+- [ ] At least one `--category` provided per registration
+- [ ] Multi-category streams use `--category` flag repeated (e.g. `--category nucleus --category synapse`)
+- [ ] `--description` provided — describes who writes the log and what it captures
 - [ ] **NOT** writing to `telemetry.json` directly
 - [ ] **NOT** providing `last_update` manually
 - [ ] Priority level appropriate for log type
@@ -382,7 +427,10 @@ When implementing logging for any application:
 5. **Providing last_update manually**: Nucleus generates it automatically
 6. **Log files in root**: Must be in subfolders
 7. **Giant accumulated files**: Implement rotation with timestamps
-8. **Wrong stream_id format**: Use lowercase and snake_case
+8. **Wrong stream_id format**: Use lowercase and snake_case — kebab-case (`nucleus-synapse`) is invalid
+9. **Missing --category**: Every registration requires at least one `--category`
+10. **Single category for cross-subsystem streams**: Streams that participate in multiple subsystems (e.g. `nucleus_synapse`) must declare all categories with repeated `--category` flags
+11. **Missing --description**: Every registration requires a description of who writes the log and what it captures
 
 ---
 
@@ -485,15 +533,18 @@ def update_telemetry(stream_id, label, path, priority):
 # ✅ CORRECT
 import subprocess
 
-def register_log_stream(stream_id, label, path, priority):
+def register_log_stream(stream_id, label, path, priority, categories):
     """Register a log stream via Nucleus CLI"""
-    subprocess.run([
+    args = [
         'nucleus', 'telemetry', 'register',
         '--stream', stream_id,
         '--label', label,
         '--path', path,
-        '--priority', str(priority)
-    ], check=True)
+        '--priority', str(priority),
+    ]
+    for category in categories:
+        args += ['--category', category]
+    subprocess.run(args, check=True)
 ```
 
 ---

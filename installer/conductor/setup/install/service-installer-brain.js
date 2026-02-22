@@ -52,7 +52,7 @@ async function registerTelemetryStream(logPath) {
     const nucleusExe = paths.nucleusExe || path.join(paths.binDir, 'nucleus', 'nucleus.exe');
     
     // Registrar stream usando nucleus telemetry register
-    const cmd = `"${nucleusExe}" --json telemetry register --stream brain_service --label "⚙️ BRAIN SERVICE" --path "${logPath}" --priority 3`;
+    const cmd = `"${nucleusExe}" --json telemetry register --stream brain_service --label "⚙️ BRAIN SERVICE" --path "${logPath}" --priority 3 --category brain --description "Brain background service log — records service startup, heartbeat and shutdown events"`;
     
     const result = execSync(cmd, { 
       encoding: 'utf8',

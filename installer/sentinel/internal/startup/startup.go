@@ -45,8 +45,11 @@ func Initialize(c *core.Core) error {
 	startupPaths := *c.Paths
 	startupPaths.LogsDir = startupLogDir
 
-	// Inicializar logger de Sentinel Startup (prioridad 3)
-	logger, err := core.InitLogger(&startupPaths, "sentinel_startup", "▶️ SENTINEL STARTUP", 3)
+	// Inicializar logger de Sentinel Startup (prioridad 2 — spec §8)
+	logger, err := core.InitLogger(&startupPaths, "sentinel_startup", "SENTINEL STARTUP", 2, &core.LoggerOptions{
+		Categories:  []string{"synapse"},
+		Description: "Sentinel startup log — captures the boot sequence of Sentinel as triggered by Synapse's launch signal",
+	})
 	if err != nil {
 		return fmt.Errorf("fallo fatal en logger startup: %w", err)
 	}

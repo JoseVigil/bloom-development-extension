@@ -121,6 +121,7 @@ def generate_tree_files(brain_exe):
         {"args": ["filesystem", "tree", "installer/native", "-o", "tree/native_tree.txt"], "file": "native_tree.txt"},
         {"args": ["filesystem", "tree", "webview", "-o", "tree/webview_tree.txt"], "file": "webview_tree.txt"},
         {"args": ["filesystem", "tree", "installer/conductor", "-o", "tree/conductor_tree.txt"], "file": "conductor_tree.txt"},
+        {"args": ["filesystem", "tree", "installer/metamorph", "-o", "tree/metamorph_tree.txt"], "file": "metamorph_tree.txt"}, 
         {"args": ["filesystem", "tree", "installer/cortex", "-o", "tree/cortex_tree.txt"], "file": "cortex_tree.txt"},        
         {"args": ["filesystem", "tree", "C:/Users/josev/AppData/Local/BloomNucleus", "-o", "tree/appdata_tree.txt"], "file": "appdata_tree.txt"}
     ]

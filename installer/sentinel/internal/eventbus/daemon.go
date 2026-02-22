@@ -69,6 +69,11 @@ Comandos disponibles vía stdin (JSON):
 					"sentinel_event_bus",
 					"🚌 SENTINEL EVENT BUS",
 					2,
+					&core.LoggerOptions{
+						Categories:  []string{"sentinel"},
+						Description: "Sentinel event bus log — tracks bidirectional communication between Sentinel daemon and Brain/Electron",
+						JSONMode:    c.IsJSON,
+					},
 				)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "[ERROR] No se pudo inicializar logger: %v\n", err)

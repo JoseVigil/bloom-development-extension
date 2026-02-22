@@ -690,7 +690,7 @@ async function startBrainService() {
 // TELEMETRY REGISTRATION
 // ============================================================================
 
-async function registerTelemetryStream(streamId, label, logPath, priority = 2) {
+async function registerTelemetryStream(streamId, label, logPath, priority = 2, categories = [], description = '') {
   const log = ensureLogger();
   
   log.info(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
@@ -699,6 +699,8 @@ async function registerTelemetryStream(streamId, label, logPath, priority = 2) {
   log.info(`  Label: ${label}`);
   log.info(`  Log Path: ${logPath}`);
   log.info(`  Priority: ${priority}`);
+  log.info(`  Categories: ${categories.join(', ') || '(none)'}`);
+  log.info(`  Description: ${description || '(none)'}`);
   log.info(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
   // Validar que el archivo .log exista
@@ -717,15 +719,28 @@ async function registerTelemetryStream(streamId, label, logPath, priority = 2) {
   }
 
   try {
-    // Ejecutar comando de registro
-    const result = await executeNucleusCommand([
+    // Construir argumentos del comando
+    const args = [
       'telemetry',
       'register',
       '--stream', streamId,
       '--label', label,
       '--path', logPath,
       '--priority', String(priority)
-    ]);
+    ];
+
+    // Agregar --category (repetido por cada categoría)
+    for (const cat of categories) {
+      args.push('--category', cat);
+    }
+
+    // Agregar --description si se proporcionó
+    if (description) {
+      args.push('--description', description);
+    }
+
+    // Ejecutar comando de registro
+    const result = await executeNucleusCommand(args);
 
     log.success(`✅ Stream registered successfully: ${streamId}`);
     log.info(`   Nucleus updated telemetry.json atomically`);

@@ -6,10 +6,11 @@ Maintains registry integrity and coordinates creation, launching, and accounts.
 import shutil
 import json
 from typing import List, Dict, Any, Optional
-from brain.core.profile.path_resolver import PathResolver
+from brain.shared.paths import Paths
 from brain.core.profile.profile_create import ProfileCreator
 from brain.core.profile.profile_launcher import ProfileLauncher
 from brain.core.profile.profile_accounts import ProfileAccountManager
+
 
 class ProfileManager:
     """
@@ -18,8 +19,8 @@ class ProfileManager:
     """
 
     def __init__(self):
-        """Initialize PathResolver and specialized sub-managers."""
-        self.paths = PathResolver()
+        """Initialize Paths and specialized sub-managers."""
+        self.paths = Paths()
         self.creator = ProfileCreator(self.paths)
         self.launcher = ProfileLauncher(self.paths, None)
         self.accounts = ProfileAccountManager(self.paths)
@@ -33,11 +34,11 @@ class ProfileManager:
         """
         if not self.paths.profiles_json.exists():
             return []
-            
+
         with open(self.paths.profiles_json, 'r', encoding='utf-8') as f:
             data = json.load(f)
             profiles = data.get('profiles', [])
-            
+
             for p in profiles:
                 p_dir = self.paths.profiles_dir / p['id']
                 p['exists'] = p_dir.exists()
@@ -47,15 +48,13 @@ class ProfileManager:
             return profiles
 
     def launch_profile(
-        self, 
-        profile_id: str, 
+        self,
+        profile_id: str,
         url: Optional[str] = None,
         spec_data: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Launch Chrome with specified profile.
-        
-        Delegates to ProfileLauncher component.
 
         Args:
             profile_id: Profile identifier to launch
@@ -73,14 +72,12 @@ class ProfileManager:
         profile = next((p for p in profiles if p['id'] == profile_id), None)
         if not profile:
             raise ValueError(f"Profile {profile_id} not found")
-        
+
         return self.launcher.launch(profile, spec_data=spec_data)
 
     def create_profile(self, name: str, master: bool = False) -> Dict[str, Any]:
         """
         Creates a new isolated Chrome profile.
-
-        Delegates to ProfileCreator.
 
         Args:
             name: Descriptive alias for the profile.
@@ -107,21 +104,19 @@ class ProfileManager:
         Returns:
             Operation confirmation status.
         """
-        # 1. Registry removal
         profiles = self.list_profiles()
         updated_profiles = [p for p in profiles if p['id'] != profile_id]
-        
+
         with open(self.paths.profiles_json, 'w', encoding='utf-8') as f:
             json.dump({"profiles": updated_profiles}, f, indent=2, ensure_ascii=False)
 
-        # 2. Filesystem cleanup
         profile_dir = self.paths.profiles_dir / profile_id
         if profile_dir.exists():
             shutil.rmtree(profile_dir)
-            
+
         return {"profile_id": profile_id, "status": "destroyed"}
 
-    # --- Delegated Account Methods (Maintaining original Docstrings) ---
+    # --- Delegated Account Methods ---
 
     def link_account(self, profile_id: str, email: str) -> Dict[str, Any]:
         """Links a primary email account to a profile."""

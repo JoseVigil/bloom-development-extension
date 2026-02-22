@@ -47,8 +47,8 @@
   ANALYTICS          System monitoring and telemetry                          1 cmd
   TELEMETRY          Centralized log stream registration                      1 cmd
   TEMPORAL_SERVER    Temporal server management and diagnostics               1 cmd
-  ORCHESTRATION      Workflow orchestration and automation                    4 cmds
-  ---------------------------------------------------------------------------  Total: 24 commands
+  ORCHESTRATION      Workflow orchestration and automation                    5 cmds
+  ---------------------------------------------------------------------------  Total: 25 commands
 
 
 =======================================================[ SYSTEM ]=======================================================
@@ -307,10 +307,22 @@
     Usage: nucleus telemetry
 
     Subcommands:
+      list                  List registered telemetry streams, optionally filtered by category
+        nucleus telemetry list
       register              Register or update a telemetry stream
         nucleus telemetry register
 
     Subcommand Details:
+
+      └─ LIST
+        List registered telemetry streams, optionally filtered by category
+
+        Usage: nucleus telemetry list
+
+        Flags:
+          --category                 Filter by category: brain|build|conductor|launcher|nucleus|sentinel|synapse
+
+        ----------------------------------------------------------------------
 
       └─ REGISTER
         Register or update a telemetry stream
@@ -318,21 +330,12 @@
         Usage: nucleus telemetry register
 
         Flags:
+          --category                 Subsystem category (repeatable): brain|build|conductor|launcher|nucleus|sentinel|synapse [default: []]
+          --description              Who writes this log and what it captures (required)
           --label                    Display label with emoji (required)
           --path                     Absolute path to log file (required)
-          --priority                 Priority level: 1=critical, 2=important, 3=informational [default: 2]
-          --stream                   Stream identifier (required)
-
-        Example:
-            nucleus telemetry register --stream test --label "🧪 TEST" --path "C:/logs/test.log" --priority 3
-            nucleus --json telemetry register --stream worker --label "🧠 WORKER" --path "C:/logs/worker.log"
-
-        JSON Response:
-          {
-            "success": true,
-            "stream_id": "electron_install",
-            "message": "Stream registered successfully"
-          }
+          --priority                 Priority: 1=critical 2=important 3=informational [default: 2]
+          --stream                   Stream identifier — lowercase snake_case (required)
 
         ----------------------------------------------------------------------
 
@@ -562,6 +565,42 @@
         nucleus dev-start
         nucleus dev-start --simulation
         nucleus dev-start --skip-vault
+
+    --------------------------------------------------------------------------------
+
+  > LOGS
+    Read, trace and analyze Nucleus log streams
+
+    Usage: nucleus logs [stream]
+
+    Arguments:
+      stream                optional
+
+    Flags:
+      --errors-only              Only show WARNING or ERROR lines
+      --json                     Output in JSON format
+      --launch                   Launch ID to produce a full synapse trace
+      --no-startup               Exclude Brain startup noise patterns
+      --out                      Output file path (default: logs/synapse/trace_<launch_id>.log)
+      --profile                  Profile ID (required for Chrome log analysis with --launch)
+      --since                    Only show lines from last X minutes/hours (e.g. 5m, 2h)
+      --summary                  Show dashboard of all streams
+      --tail                     Live tail mode (follow file)
+
+    Example:
+        nucleus logs nucleus_synapse --since 5m
+        nucleus logs sentinel_core --errors-only --no-startup
+        nucleus logs --launch 001_0b31f2fa_033803 --profile 0b31f2fa-1463-4919-b63e-96db6e36744c
+        nucleus logs --summary --since 10m
+        nucleus --json logs --launch 001_0b31f2fa_033803 --profile 0b31f2fa-1463-4919-b63e-96db6e36744c
+
+    JSON Response:
+      {
+        "success": true,
+        "mode": "stream|launch|summary",
+        "lines": 42,
+        "output_file": "logs/synapse_trace/trace_001_0b31f2fa_033803.log"
+      }
 
     --------------------------------------------------------------------------------
 

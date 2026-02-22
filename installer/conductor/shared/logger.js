@@ -131,13 +131,21 @@ Log File: ${this.logFile}
 
       const { spawn } = require('child_process');
       
+      const categoryMap = {
+        installer: { category: 'conductor', description: 'Electron installer session log — one file per install attempt, captures full install flow' },
+        conductor: { category: 'conductor', description: 'Conductor launch session log — captures Electron main process startup and lifecycle events' }
+      };
+      const meta = categoryMap[this.category] || { category: 'conductor', description: 'Conductor log' };
+
       const child = spawn(nucleusExe, [
         'telemetry',
         'register',
         '--stream', streamId,
         '--label', label,
         '--path', this.logFile,
-        '--priority', '2'
+        '--priority', '2',
+        '--category', meta.category,
+        '--description', meta.description
       ], {
         windowsHide: true,
         timeout: 5000

@@ -5,25 +5,34 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
 )
 
+// StreamInfo holds metadata for a single log stream.
+// Categories is a slice so a stream can belong to multiple subsystems
+// (e.g. nucleus_synapse belongs to both "nucleus" and "synapse").
 type StreamInfo struct {
-	Label      string `json:"label"`
-	Path       string `json:"path"`
-	Priority   int    `json:"priority"`
-	FirstSeen  string `json:"first_seen"`
-	LastUpdate string `json:"last_update"`
-	Active     bool   `json:"active"`
+	Label       string   `json:"label"`
+	Path        string   `json:"path"`
+	Priority    int      `json:"priority"`
+	Categories  []string `json:"categories"`
+	Description string   `json:"description"`
+	FirstSeen   string   `json:"first_seen"`
+	LastUpdate  string   `json:"last_update"`
+	Active      bool     `json:"active"`
 }
 
+// TelemetryData is the root object written to telemetry.json.
 type TelemetryData struct {
 	Streams map[string]StreamInfo `json:"active_streams"`
 }
 
+// TelemetryManager is a long-running in-process writer used by nucleus itself.
+// External processes MUST use the CLI command instead.
 type TelemetryManager struct {
 	mu    sync.RWMutex
 	data  TelemetryData
@@ -41,6 +50,7 @@ func init() {
 	RegisterCommand("TELEMETRY", NewTelemetryCommand)
 }
 
+// GetTelemetryManager returns the singleton in-process manager.
 func GetTelemetryManager(logsDir, telemetryDir string) *TelemetryManager {
 	once.Do(func() {
 		telemetryInstance = &TelemetryManager{
@@ -57,42 +67,63 @@ func (tm *TelemetryManager) load() {
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
 	if data, err := os.ReadFile(tm.path); err == nil {
-		json.Unmarshal(data, &tm.data)
+		_ = json.Unmarshal(data, &tm.data)
 	}
 	if tm.data.Streams == nil {
 		tm.data.Streams = make(map[string]StreamInfo)
 	}
 }
 
-func (tm *TelemetryManager) RegisterStream(id, label, path string, priority int) {
+// RegisterStream registers or updates a stream from within the nucleus process.
+// categories is a slice like []string{"nucleus", "synapse"}.
+func (tm *TelemetryManager) RegisterStream(id, label, path string, priority int, categories []string, description string) {
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
 
-	now := time.Now().Format(time.RFC3339)
+	now := time.Now().UTC().Format(time.RFC3339)
 	firstSeen := now
 	if existing, exists := tm.data.Streams[id]; exists {
 		firstSeen = existing.FirstSeen
 	}
 
 	tm.data.Streams[id] = StreamInfo{
-		Label:      label,
-		Path:       filepath.ToSlash(path),
-		Priority:   priority,
-		FirstSeen:  firstSeen,
-		LastUpdate: now,
-		Active:     true,
+		Label:       label,
+		Path:        filepath.ToSlash(path),
+		Priority:    priority,
+		Categories:  categories,
+		Description: description,
+		FirstSeen:   firstSeen,
+		LastUpdate:  now,
+		Active:      true,
 	}
 	tm.dirty = true
 }
 
+// GetData returns a safe copy of the current telemetry data.
 func (tm *TelemetryManager) GetData() TelemetryData {
 	tm.mu.RLock()
 	defer tm.mu.RUnlock()
-	copyStreams := make(map[string]StreamInfo)
+	copyStreams := make(map[string]StreamInfo, len(tm.data.Streams))
 	for k, v := range tm.data.Streams {
 		copyStreams[k] = v
 	}
 	return TelemetryData{Streams: copyStreams}
+}
+
+// GetStreamsByCategory returns all streams that contain the given category.
+func (tm *TelemetryManager) GetStreamsByCategory(category string) map[string]StreamInfo {
+	tm.mu.RLock()
+	defer tm.mu.RUnlock()
+	result := make(map[string]StreamInfo)
+	for id, s := range tm.data.Streams {
+		for _, c := range s.Categories {
+			if c == category {
+				result[id] = s
+				break
+			}
+		}
+	}
+	return result
 }
 
 func (tm *TelemetryManager) autoSaveLoop() {
@@ -118,30 +149,33 @@ func (tm *TelemetryManager) save() {
 // CLI COMMAND
 // ============================================================================
 
-// NewTelemetryCommand creates the telemetry command
+// NewTelemetryCommand creates the top-level `nucleus telemetry` command.
 func NewTelemetryCommand(c *Core) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "telemetry",
 		Short: "Centralized log stream registration",
-		Long:  "Manage telemetry streams in the central telemetry.json file",
-		
+		Long:  "Manage telemetry streams in the central telemetry.json file.",
 		Annotations: map[string]string{
 			"category": "TELEMETRY",
 		},
 	}
 
 	cmd.AddCommand(newTelemetryRegisterCommand(c))
+	cmd.AddCommand(newTelemetryListCommand(c))
 
 	return cmd
 }
 
-// newTelemetryRegisterCommand creates the register subcommand
+// newTelemetryRegisterCommand creates `nucleus telemetry register`.
+// --category can be repeated: --category nucleus --category synapse
 func newTelemetryRegisterCommand(c *Core) *cobra.Command {
 	var (
-		streamID string
-		label    string
-		logPath  string
-		priority int
+		streamID    string
+		label       string
+		logPath     string
+		priority    int
+		categories  []string
+		description string
 	)
 
 	cmd := &cobra.Command{
@@ -152,181 +186,247 @@ func newTelemetryRegisterCommand(c *Core) *cobra.Command {
 This command is the ONLY way to write to telemetry.json. External applications
 must invoke this command instead of writing the file directly.
 
-If telemetry.json does not exist, it will be created automatically.
+CATEGORIES
+  A stream can belong to one or more categories. Pass --category once per category.
+  Valid categories: brain | build | conductor | launcher | nucleus | sentinel | synapse
 
-USAGE EXAMPLES:
+  conductor has two stream types:
+    conductor        — the main Conductor executable log
+    conductor_setup  — the setup/install log
 
-  # Basic registration
+  nucleus_synapse belongs to both "nucleus" and "synapse":
+    --category nucleus --category synapse
+
+DESCRIPTION
+  Free-text description of who writes this log and what it captures.
+  Required — forces every process to document the purpose of its log.
+
+  Examples:
+    "Runtime log of the Brain core module — captures initialization, state transitions and errors"
+    "Conductor setup/install session log — one file per install attempt"
+    "Synapse orchestration log — records the full launch chain for a browser profile"
+
+USAGE EXAMPLES
+
+  # Single category
   nucleus telemetry register \
-    --stream electron_install \
-    --label "📥 ELECTRON INSTALL" \
-    --path "C:/Users/josev/AppData/Local/BloomNucleus/logs/install/electron_install.log" \
-    --priority 2
+    --stream brain_core \
+    --label "🧠 BRAIN CORE" \
+    --path "C:/Users/josev/AppData/Local/BloomNucleus/logs/brain/core/brain_core_20260221.log" \
+    --priority 2 \
+    --category brain \
+    --description "Runtime log of the Brain core module — captures initialization, state transitions and errors"
 
-  # From Node.js/Electron
+  # Multi-category (nucleus_synapse participates in both subsystems)
+  nucleus telemetry register \
+    --stream nucleus_synapse \
+    --label "⚙️ SYNAPSE" \
+    --path "C:/Users/josev/AppData/Local/BloomNucleus/logs/nucleus/nucleus_synapse_20260221.log" \
+    --priority 2 \
+    --category nucleus \
+    --category synapse \
+    --description "Synapse orchestration log — records the full launch chain for a browser profile"
+
+  # From Node.js
   execFileSync('nucleus', [
     'telemetry', 'register',
-    '--stream', 'electron_launch',
-    '--label', '🚀 ELECTRON LAUNCH',
+    '--stream', 'conductor_setup_2026-02-21_13-26-59',
+    '--label', '🔥 CONDUCTOR SETUP',
     '--path', logPath,
-    '--priority', '2'
+    '--priority', '2',
+    '--category', 'conductor',
+    '--description', 'Conductor setup/install session log — one file per install attempt',
   ]);
 
-  # From PowerShell
-  nucleus telemetry register ` + "`" + `
-    --stream worker ` + "`" + `
-    --label "🧠 WORKER" ` + "`" + `
-    --path "C:/logs/worker.log" ` + "`" + `
-    --priority 3
+RESULTING JSON ENTRY
 
-RESULTING JSON STRUCTURE:
-
-  {
-    "active_streams": {
-      "electron_install": {
-        "label": "📥 ELECTRON INSTALL",
-        "path": "C:/Users/josev/AppData/Local/BloomNucleus/logs/install/electron_install.log",
-        "priority": 2,
-        "last_update": "2026-02-10T13:42:11Z"
-      }
-    }
+  "nucleus_synapse": {
+    "label": "⚙️ SYNAPSE",
+    "path": "C:/.../nucleus/nucleus_synapse_20260221.log",
+    "priority": 2,
+    "categories": ["nucleus", "synapse"],
+    "description": "Synapse orchestration log — records the full launch chain for a browser profile",
+    "first_seen": "2026-02-21T10:28:45Z",
+    "last_update": "2026-02-21T10:28:45Z",
+    "active": true
   }
 
-PRIORITY LEVELS:
-  1 = Critical   (system-critical, fatal errors, security)
-  2 = Important  (main operations, significant events, warnings)
-  3 = Informational (debug logs, build info, informational messages)
+PRIORITY LEVELS
+  1 = Critical       system-critical components, fatal errors, security
+  2 = Important      main operations, significant events, warnings
+  3 = Informational  debug logs, build info, informational messages
 
-NOTES:
-  - last_update is automatically generated in UTC ISO 8601 format
-  - If stream exists, it will be overwritten
-  - Command is silent on success (exit code 0)
-  - Errors are printed to stderr (exit code != 0)
+NOTES
+  - last_update is automatically generated in UTC ISO 8601
+  - first_seen is preserved on updates
+  - Idempotent: safe to call multiple times with the same stream_id
+  - Silent on success (exit 0); errors go to stderr (exit != 0)
 `,
 		Args: cobra.NoArgs,
-		
 		Annotations: map[string]string{
 			"category": "TELEMETRY",
-			"json_response": `{
-  "success": true,
-  "stream_id": "electron_install",
-  "message": "Stream registered successfully"
-}`,
 		},
-		
-		Example: `  nucleus telemetry register --stream test --label "🧪 TEST" --path "C:/logs/test.log" --priority 3
-  nucleus --json telemetry register --stream worker --label "🧠 WORKER" --path "C:/logs/worker.log"`,
-		
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Validate required flags
-			if streamID == "" {
-				return fmt.Errorf("--stream is required")
-			}
-			if label == "" {
-				return fmt.Errorf("--label is required")
-			}
-			if logPath == "" {
-				return fmt.Errorf("--path is required")
-			}
 			if priority < 1 || priority > 3 {
 				return fmt.Errorf("--priority must be 1, 2, or 3")
 			}
+			if len(categories) == 0 {
+				return fmt.Errorf("at least one --category is required")
+			}
 
-			// Get telemetry path from Core.Paths
 			telemetryPath := filepath.Join(c.Paths.Logs, "telemetry.json")
 
-			// Register the stream
-			if err := registerStreamCLI(telemetryPath, streamID, label, logPath, priority); err != nil {
+			if err := registerStreamCLI(telemetryPath, streamID, label, logPath, description, priority, categories); err != nil {
 				return fmt.Errorf("failed to register stream: %w", err)
 			}
 
-			// Output based on mode
 			if c.IsJSON {
 				result := map[string]interface{}{
-					"success":   true,
-					"stream_id": streamID,
-					"message":   "Stream registered successfully",
+					"success":    true,
+					"stream_id":  streamID,
+					"categories": categories,
+					"message":    "Stream registered successfully",
 				}
 				data, _ := json.MarshalIndent(result, "", "  ")
 				fmt.Println(string(data))
-				return nil
 			}
-
-			// Success - no output in normal mode (silent on success)
 			return nil
 		},
 	}
 
-	// Flags
-	cmd.Flags().StringVar(&streamID, "stream", "", "Stream identifier (required)")
+	cmd.Flags().StringVar(&streamID, "stream", "", "Stream identifier — lowercase snake_case (required)")
 	cmd.Flags().StringVar(&label, "label", "", "Display label with emoji (required)")
 	cmd.Flags().StringVar(&logPath, "path", "", "Absolute path to log file (required)")
-	cmd.Flags().IntVar(&priority, "priority", 2, "Priority level: 1=critical, 2=important, 3=informational")
+	cmd.Flags().IntVar(&priority, "priority", 2, "Priority: 1=critical 2=important 3=informational")
+	cmd.Flags().StringArrayVar(&categories, "category", []string{}, "Subsystem category (repeatable): brain|build|conductor|launcher|nucleus|sentinel|synapse")
+	cmd.Flags().StringVar(&description, "description", "", "Who writes this log and what it captures (required)")
 
-	cmd.MarkFlagRequired("stream")
-	cmd.MarkFlagRequired("label")
-	cmd.MarkFlagRequired("path")
+	_ = cmd.MarkFlagRequired("stream")
+	_ = cmd.MarkFlagRequired("label")
+	_ = cmd.MarkFlagRequired("path")
+	_ = cmd.MarkFlagRequired("description")
 
 	return cmd
 }
 
-// registerStreamCLI registers a stream in telemetry.json (CLI version - standalone)
-func registerStreamCLI(telemetryPath, streamID, label, logPath string, priority int) error {
-	// Create directory if it doesn't exist
+// newTelemetryListCommand creates `nucleus telemetry list [--category <n>]`.
+func newTelemetryListCommand(c *Core) *cobra.Command {
+	var filterCategory string
+
+	cmd := &cobra.Command{
+		Use:   "list",
+		Short: "List registered telemetry streams, optionally filtered by category",
+		Long: `Print all registered streams, optionally filtered by category.
+
+  nucleus telemetry list
+  nucleus telemetry list --category synapse
+  nucleus --json telemetry list --category build
+`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			telemetryPath := filepath.Join(c.Paths.Logs, "telemetry.json")
+
+			raw, err := os.ReadFile(telemetryPath)
+			if err != nil {
+				return fmt.Errorf("cannot read telemetry.json: %w", err)
+			}
+			var telemetry TelemetryData
+			if err := json.Unmarshal(raw, &telemetry); err != nil {
+				return fmt.Errorf("cannot parse telemetry.json: %w", err)
+			}
+
+			result := make(map[string]StreamInfo)
+			for id, s := range telemetry.Streams {
+				if filterCategory == "" {
+					result[id] = s
+					continue
+				}
+				for _, cat := range s.Categories {
+					if cat == filterCategory {
+						result[id] = s
+						break
+					}
+				}
+			}
+
+			if c.IsJSON {
+				out, _ := json.MarshalIndent(map[string]interface{}{"active_streams": result}, "", "  ")
+				fmt.Println(string(out))
+				return nil
+			}
+
+			fmt.Printf("%-42s %-30s %-3s  %s\n", "STREAM", "CATEGORIES", "PRI", "LABEL")
+			fmt.Printf("%-42s %-30s %-3s  %s\n",
+				strings.Repeat("-", 42), strings.Repeat("-", 30), "---", "-----")
+			for id, s := range result {
+				fmt.Printf("%-42s %-30s %-3d  %s\n",
+					id, strings.Join(s.Categories, ", "), s.Priority, s.Label)
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&filterCategory, "category", "", "Filter by category: brain|build|conductor|launcher|nucleus|sentinel|synapse")
+	return cmd
+}
+
+// ============================================================================
+// INTERNAL HELPER
+// ============================================================================
+
+// registerStreamCLI is the standalone atomic writer called by the CLI.
+func registerStreamCLI(telemetryPath, streamID, label, logPath, description string, priority int, categories []string) error {
 	logsDir := filepath.Dir(telemetryPath)
 	if err := os.MkdirAll(logsDir, 0755); err != nil {
 		return fmt.Errorf("failed to create logs directory: %w", err)
 	}
 
-	// Read existing file or create empty structure
 	var telemetry TelemetryData
-	data, err := os.ReadFile(telemetryPath)
+	raw, err := os.ReadFile(telemetryPath)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			return fmt.Errorf("failed to read telemetry file: %w", err)
 		}
-		// File doesn't exist - create empty structure
 		telemetry.Streams = make(map[string]StreamInfo)
 	} else {
-		// Parse existing JSON
-		if err := json.Unmarshal(data, &telemetry); err != nil {
+		if err := json.Unmarshal(raw, &telemetry); err != nil {
 			return fmt.Errorf("failed to parse telemetry JSON: %w", err)
 		}
-		// Ensure map exists
 		if telemetry.Streams == nil {
 			telemetry.Streams = make(map[string]StreamInfo)
 		}
 	}
 
-	// Normalize path (use forward slashes for cross-platform)
-	normalizedPath := filepath.ToSlash(logPath)
-
-	// Get first_seen (preserve if updating existing stream)
 	now := time.Now().UTC().Format(time.RFC3339)
 	firstSeen := now
 	if existing, exists := telemetry.Streams[streamID]; exists {
 		firstSeen = existing.FirstSeen
 	}
 
-	// Create or update entry
 	telemetry.Streams[streamID] = StreamInfo{
-		Label:      label,
-		Path:       normalizedPath,
-		Priority:   priority,
-		FirstSeen:  firstSeen,
-		LastUpdate: now,
-		Active:     true,
+		Label:       label,
+		Path:        filepath.ToSlash(logPath),
+		Priority:    priority,
+		Categories:  categories,
+		Description: description,
+		FirstSeen:   firstSeen,
+		LastUpdate:  now,
+		Active:      true,
 	}
 
-	// Serialize to JSON with indentation
 	output, err := json.MarshalIndent(telemetry, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal JSON: %w", err)
 	}
 
-	// Write file (atomic overwrite)
-	if err := os.WriteFile(telemetryPath, output, 0644); err != nil {
-		return fmt.Errorf("failed to write telemetry file: %w", err)
+	// Atomic write: temp file + rename
+	tmpPath := telemetryPath + ".tmp"
+	if err := os.WriteFile(tmpPath, output, 0644); err != nil {
+		return fmt.Errorf("failed to write temp file: %w", err)
+	}
+	if err := os.Rename(tmpPath, telemetryPath); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("failed to rename temp file: %w", err)
 	}
 
 	return nil

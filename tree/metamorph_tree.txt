@@ -17,10 +17,18 @@ bloom-development-extension/
     │   │   ├── registry.go
     │   │   └── version.go
     │   ├── inspection/
+    │   │   ├── cortex.go
+    │   │   ├── external.go
+    │   │   ├── formatting.go
     │   │   ├── inspect.go
-    │   │   └── status.go
+    │   │   ├── inspection_test.go
+    │   │   ├── managed.go
+    │   │   ├── status.go
+    │   │   ├── types.go
+    │   │   └── utils.go
     │   ├── maintenance/
-    │   │   └── cleanup.go
+    │   │   ├── cleanup.go
+    │   │   └── rollout.go
     │   ├── reconciliation/
     │   │   ├── generate_manifest.go
     │   │   └── reconcile.go

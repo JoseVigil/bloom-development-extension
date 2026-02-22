@@ -12,7 +12,6 @@ import (
 	"sentinel/internal/process"
 	"strings"
 	"time"
-
 	"github.com/spf13/cobra"
 )
 

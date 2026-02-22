@@ -104,12 +104,9 @@ const getResourcePath = (resourceName) => {
 // │   ├── native/
 // │   │   ├── bloom-host.exe      (single binary for all profiles)
 // │   │   └── nssm.exe
+// │   ├── engine/
+// │   │   └── runtime/            (embedded Python)
 // │   └── extension/              (template - copied per profile by Brain)
-// ├── config/
-// │   ├── nucleus.json            (installer metadata)
-// │   └── profiles.json           (managed by Brain CLI)
-// ├── engine/
-// │   └── runtime/                (embedded Python)
 // ├── profiles/
 // │   └── [UUID]/                 (created by Brain per profile)
 // │       ├── extension/          (private extension copy)
@@ -128,8 +125,8 @@ const getResourcePath = (resourceName) => {
 // COMPUTED PATHS
 // ============================================================================
 const pythonExe = platform === 'win32'
-  ? path.join(baseDir, 'engine', 'runtime', 'python.exe')
-  : path.join(baseDir, 'engine', 'runtime', 'bin', 'python3');
+  ? path.join(baseDir, 'bin', 'engine', 'runtime', 'python.exe')
+  : path.join(baseDir, 'bin', 'engine', 'runtime', 'bin', 'python3');
 
 const brainExe = platform === 'win32'
   ? path.join(baseDir, 'bin', 'brain', 'brain.exe')
@@ -242,8 +239,8 @@ const paths = {
   extensionTemplateDir: path.join(baseDir, 'bin', 'extension'),
 
   // Engine & Runtime Python
-  engineDir: path.join(baseDir, 'engine'),
-  runtimeDir: path.join(baseDir, 'engine', 'runtime'),
+  engineDir: path.join(baseDir, 'bin', 'engine'),
+  runtimeDir: path.join(baseDir, 'bin', 'engine', 'runtime'),
   pythonExe,
 
   // Profiles directory (managed by Brain)

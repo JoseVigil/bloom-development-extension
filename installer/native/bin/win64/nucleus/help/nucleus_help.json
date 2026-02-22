@@ -209,6 +209,63 @@
     "json_response": "{\n  \"success\": true,\n  \"component\": \"brain_server\",\n  \"lines\": [\n    \"2026-02-20 22:50:09 ERROR WinError 64: The specified network name is no longer available\",\n    \"2026-02-20 22:50:09 ERROR Connection reset by peer\"\n  ],\n  \"count\": 2\n}"
   },
   {
+    "name": "logs",
+    "use": "logs [stream]",
+    "short": "Read, trace and analyze Nucleus log streams",
+    "category": "ORCHESTRATION",
+    "args": [
+      {
+        "name": "stream",
+        "required": false
+      }
+    ],
+    "options": [
+      {
+        "name": "errors-only",
+        "usage": "Only show WARNING or ERROR lines",
+        "default": "false"
+      },
+      {
+        "name": "json",
+        "usage": "Output in JSON format",
+        "default": "false"
+      },
+      {
+        "name": "launch",
+        "usage": "Launch ID to produce a full synapse trace"
+      },
+      {
+        "name": "no-startup",
+        "usage": "Exclude Brain startup noise patterns",
+        "default": "false"
+      },
+      {
+        "name": "out",
+        "usage": "Output file path (default: logs/synapse/trace_\u003claunch_id\u003e.log)"
+      },
+      {
+        "name": "profile",
+        "usage": "Profile ID (required for Chrome log analysis with --launch)"
+      },
+      {
+        "name": "since",
+        "usage": "Only show lines from last X minutes/hours (e.g. 5m, 2h)"
+      },
+      {
+        "name": "summary",
+        "usage": "Show dashboard of all streams",
+        "default": "false"
+      },
+      {
+        "name": "tail",
+        "usage": "Live tail mode (follow file)",
+        "default": "false"
+      }
+    ],
+    "example": "  nucleus logs nucleus_synapse --since 5m\n  nucleus logs sentinel_core --errors-only --no-startup\n  nucleus logs --launch 001_0b31f2fa_033803 --profile 0b31f2fa-1463-4919-b63e-96db6e36744c\n  nucleus logs --summary --since 10m\n  nucleus --json logs --launch 001_0b31f2fa_033803 --profile 0b31f2fa-1463-4919-b63e-96db6e36744c",
+    "json_response": "{\n  \"success\": true,\n  \"mode\": \"stream|launch|summary\",\n  \"lines\": 42,\n  \"output_file\": \"logs/synapse_trace/trace_001_0b31f2fa_033803.log\"\n}"
+  },
+  {
     "name": "remove",
     "use": "remove \u003cgithub-id\u003e",
     "short": "Remove team member",
@@ -413,11 +470,32 @@
     "category": "SYNC"
   },
   {
+    "name": "list",
+    "use": "list",
+    "short": "List registered telemetry streams, optionally filtered by category",
+    "category": "TELEMETRY",
+    "options": [
+      {
+        "name": "category",
+        "usage": "Filter by category: brain|build|conductor|launcher|nucleus|sentinel|synapse"
+      }
+    ]
+  },
+  {
     "name": "register",
     "use": "register",
     "short": "Register or update a telemetry stream",
     "category": "TELEMETRY",
     "options": [
+      {
+        "name": "category",
+        "usage": "Subsystem category (repeatable): brain|build|conductor|launcher|nucleus|sentinel|synapse",
+        "default": "[]"
+      },
+      {
+        "name": "description",
+        "usage": "Who writes this log and what it captures (required)"
+      },
       {
         "name": "label",
         "usage": "Display label with emoji (required)"
@@ -428,16 +506,14 @@
       },
       {
         "name": "priority",
-        "usage": "Priority level: 1=critical, 2=important, 3=informational",
+        "usage": "Priority: 1=critical 2=important 3=informational",
         "default": "2"
       },
       {
         "name": "stream",
-        "usage": "Stream identifier (required)"
+        "usage": "Stream identifier — lowercase snake_case (required)"
       }
-    ],
-    "example": "  nucleus telemetry register --stream test --label \"🧪 TEST\" --path \"C:/logs/test.log\" --priority 3\n  nucleus --json telemetry register --stream worker --label \"🧠 WORKER\" --path \"C:/logs/worker.log\"",
-    "json_response": "{\n  \"success\": true,\n  \"stream_id\": \"electron_install\",\n  \"message\": \"Stream registered successfully\"\n}"
+    ]
   },
   {
     "name": "cleanup",

@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+# Requires -Version 5.1
 # =========================================
 # BLOOM BRAIN - BUILD SCRIPT
 # =========================================
@@ -300,43 +300,39 @@ Write-Host "         $logFile" -ForegroundColor Yellow
 Write-Host ""
 
 # =========================================
-# ACTUALIZAR TELEMETRY.JSON
+# REGISTRAR STREAM EN TELEMETRY
 # =========================================
-Write-Step "Actualizando telemetry..."
+Write-Step "Registrando stream de telemetry..."
 
-$pythonExe = (Get-Command python -ErrorAction SilentlyContinue).Source
-if (-not $pythonExe) {
-    Write-Warning "Python no encontrado en el PATH. Telemetry no se actualizó."
+$nucleusExe = (Get-Command nucleus -ErrorAction SilentlyContinue).Source
+if (-not $nucleusExe) {
+    Write-Warning "nucleus no encontrado en el PATH. Telemetry no se registro."
 } else {
-    # Ruta relativa directa: desde la carpeta donde está build.ps1
-    $updateScript = Join-Path $PSScriptRoot "scripts\python\update_build_telemetry.py"
+    $telemetryStream = "brain_build"
+    $emojiBox        = [char]::ConvertFromUtf32(0x1F4E6)
+    $telemetryLabel  = "$emojiBox BRAIN BUILD"
+    $telemetryPath   = $logFile -replace '\\', '/'
 
-    if (-not (Test-Path $updateScript)) {
-        Write-Warning "No se encontró el script de telemetry"
-        Write-Warning "Ruta buscada: $updateScript"
-        Write-Warning "Directorio actual: $PWD"
-        Write-Warning "PSScriptRoot   : $PSScriptRoot"
-    } else {
-        $telemetryKey   = "brain_build"
-        $emojiBox       = [char]::ConvertFromUtf32(0x1F4E6)   # 📦
-        $telemetryLabel = "$emojiBox BRAIN BUILD"             # ← exactamente como lo querés
-        $telemetryPath  = $logFile -replace '\\', '/'
+    try {
+        & $nucleusExe telemetry register `
+            --stream      $telemetryStream `
+            --label       $telemetryLabel `
+            --path        $telemetryPath `
+            --priority    3 `
+            --category    build `
+            --description "Brain build pipeline output - compiler and bundler logs for the Brain module"
 
-        try {
-            # Llamada al script Python
-            & $pythonExe $updateScript $telemetryKey $telemetryLabel $telemetryPath
-
-            if ($LASTEXITCODE -eq 0) {
-                Write-Success "Telemetry actualizado correctamente"
-                Write-Host "      Label: $telemetryLabel" -ForegroundColor White
-                Write-Host "      Path : $telemetryPath"  -ForegroundColor Gray
-            } else {
-                Write-Warning "El script de telemetry terminó con código $LASTEXITCODE"
-            }
+        if ($LASTEXITCODE -eq 0) {
+            Write-Success "Telemetry registrado correctamente"
+            Write-Host "      Stream: $telemetryStream" -ForegroundColor White
+            Write-Host "      Label : $telemetryLabel"  -ForegroundColor White
+            Write-Host "      Path  : $telemetryPath"   -ForegroundColor Gray
+        } else {
+            Write-Warning "nucleus telemetry register termino con codigo $LASTEXITCODE"
         }
-        catch {
-            Write-Warning "Error al ejecutar el script de telemetry: $_"
-        }
+    }
+    catch {
+        Write-Warning "Error al ejecutar nucleus telemetry register: $_"
     }
 }
 

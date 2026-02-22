@@ -1,8 +1,8 @@
 {
   "name": "bloom-conductor",
-  "productName": "Bloom Nucleus Launcher",
+  "productName": "Bloom Nucleus Workspace",
   "version": "1.0.0",
-  "description": "Bloom Nucleus Conductor - Post-installation launcher",
+  "description": "Bloom Nucleus Conductor - Post-installation workspace",
   "main": "main_conductor.js",
   "author": {
     "name": "BTIP Studio",
@@ -21,7 +21,7 @@
   },
   "build": {
     "appId": "com.bloom.nucleus.conductor",
-    "productName": "Bloom Nucleus Launcher",
+    "productName": "Bloom Nucleus Workspace",
     "win": {
       "target": [
         {

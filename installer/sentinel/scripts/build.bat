@@ -118,7 +118,7 @@ for %%F in ("%OUTPUT_FILE%") do set "OUTPUT_FILE_ABS=%%~fF"
 "%OUTPUT_FILE_ABS%" --help > "%HELP_DIR%\sentinel_help.txt" 2>> "%LOG_FILE%"
 
 :: ============================================
-:: ACTUALIZAR TELEMETRY (USANDO NUCLEUS CLI)
+:: REGISTRAR STREAM EN TELEMETRY (NUCLEUS CLI)
 :: ============================================
 echo.
 echo ⏳ Registrando Telemetría vía Nucleus...
@@ -128,17 +128,19 @@ echo ⏳ Registrando Telemetría vía Nucleus... >> "%LOG_FILE%"
 set "NUCLEUS_EXE=%PROJECT_ROOT%\installer\native\bin\%PLATFORM%\nucleus\nucleus.exe"
 
 if exist "%NUCLEUS_EXE%" (
-    :: Normalizar ruta del log para el JSON (Slashes hacia adelante)
+    :: Normalizar ruta del log para el JSON (slashes hacia adelante)
     set "NORM_LOG_PATH=%LOG_FILE:\=/%"
 
     "!NUCLEUS_EXE!" telemetry register ^
-        --stream sentinel_build ^
-        --label "📦 SENTINEL BUILD" ^
-        --path "!NORM_LOG_PATH!" ^
-        --priority 3 >> "%LOG_FILE%" 2>&1
+        --stream      sentinel_build ^
+        --label       "📦 SENTINEL BUILD" ^
+        --path        "!NORM_LOG_PATH!" ^
+        --priority    3 ^
+        --category    build ^
+        --description "Sentinel build pipeline output — compiler and bundler logs for the Sentinel module" >> "%LOG_FILE%" 2>&1
 
     if %ERRORLEVEL% EQU 0 (
-        echo   ✅ Telemetry actualizado correctamente
+        echo   ✅ Telemetry registrado correctamente
     ) else (
         echo   ⚠️ Error al registrar telemetría (Nucleus RC: %ERRORLEVEL%)
     )

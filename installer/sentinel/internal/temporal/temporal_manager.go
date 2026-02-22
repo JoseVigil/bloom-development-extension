@@ -78,6 +78,11 @@ func NewManager(c *core.Core) *Manager {
 		"temporal_service",
 		"TEMPORAL SERVER",
 		3, // Priority ⚙️
+		&core.LoggerOptions{
+			Categories:  []string{"sentinel"},
+			Description: "Temporal server log — tracks workflow engine lifecycle, worker registration and FSM state transitions",
+			JSONMode:    c.IsJSON,
+		},
 	)
 	if err != nil {
 		c.Logger.Error("Error creando logger de Temporal: %v", err)

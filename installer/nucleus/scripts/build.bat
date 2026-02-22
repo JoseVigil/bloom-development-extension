@@ -124,25 +124,28 @@ if exist "%GOVERNANCE_SOURCE%" copy /Y "%GOVERNANCE_SOURCE%" "%OUTPUT_DIR%\" >nu
 "!ABS_OUTPUT_FILE!" --help > "%HELP_DIR%\nucleus_help.txt" 2>> "%LOG_FILE%"
 
 :: ============================================
-:: ACTUALIZAR TELEMETRY (USANDO NUCLEUS CLI)
+:: REGISTRAR STREAM EN TELEMETRY (NUCLEUS CLI)
 :: ============================================
 echo.
 echo ⏳ Registrando Telemetría...
 echo ⏳ Registrando Telemetría... >> "%LOG_FILE%"
 
-:: Normalizar ruta del log para el JSON (Slashes hacia adelante)
+:: Normalizar ruta del log para el JSON (slashes hacia adelante)
 set "NORM_LOG_PATH=%LOG_FILE:\=/%"
 
 :: Ejecutar el comando de registro usando el binario recién compilado
 "!ABS_OUTPUT_FILE!" telemetry register ^
-    --stream nucleus_build ^
-    --label "📦 NUCLEUS BUILD" ^
-    --path "!NORM_LOG_PATH!" ^
-    --priority 3 >> "%LOG_FILE%" 2>&1
+    --stream      nucleus_build ^
+    --label       "📦 NUCLEUS BUILD" ^
+    --path        "!NORM_LOG_PATH!" ^
+    --priority    3 ^
+    --category    build ^
+    --description "Nucleus build pipeline output — compiler and bundler logs for the Nucleus module" >> "%LOG_FILE%" 2>&1
 
 if %ERRORLEVEL% EQU 0 (
-    echo ✅ Telemetry actualizado vía Nucleus CLI
+    echo ✅ Telemetry registrado vía Nucleus CLI
     echo   Stream  : nucleus_build >> "%LOG_FILE%"
+    echo   Label   : 📦 NUCLEUS BUILD >> "%LOG_FILE%"
     echo   Priority: 3 >> "%LOG_FILE%"
 ) else (
     echo ⚠️ Error al registrar telemetría (Código: %ERRORLEVEL%)

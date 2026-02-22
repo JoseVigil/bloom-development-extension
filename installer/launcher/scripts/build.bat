@@ -179,10 +179,12 @@ echo Registrando telemetría...
 set "NORM_LOG_PATH=%LOG_FILE:\=/%"
 
 nucleus telemetry register ^
-    --stream launcher_build ^
-    --label "🚀 LAUNCHER BUILD" ^
-    --path "!NORM_LOG_PATH!" ^
-    --priority 3 >> "%LOG_FILE%" 2>&1
+    --stream      launcher_build ^
+    --label       "🚀 LAUNCHER BUILD" ^
+    --path        "!NORM_LOG_PATH!" ^
+    --priority    3 ^
+    --category    launcher ^
+    --description "Launcher build pipeline output — compiler and bundler logs for the Launcher module" >> "%LOG_FILE%" 2>&1
 
 if %ERRORLEVEL% EQU 0 (
     echo ✅ Telemetry registered via Nucleus CLI
