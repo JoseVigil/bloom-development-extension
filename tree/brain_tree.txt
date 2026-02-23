@@ -133,6 +133,8 @@ bloom-development-extension/
     │   │   ├── unlock.py
     │   │   ├── update.py
     │   │   └── validate.py
+    │   ├── logs/
+    │   │   └── logs.py
     │   ├── nucleus/
     │   │   ├── __init__.py
     │   │   ├── __pycache__/ [... cache]
@@ -155,7 +157,8 @@ bloom-development-extension/
     │   │   ├── __init__.py
     │   │   ├── __pycache__/ [... cache]
     │   │   ├── accounts.py
-    │   │   └── profiles.py
+    │   │   ├── profiles.py
+    │   │   └── profiles_launches_command.py
     │   ├── project/
     │   │   ├── __init__.py
     │   │   ├── __pycache__/ [... cache]
@@ -179,6 +182,7 @@ bloom-development-extension/
     │   ├── system/
     │   │   ├── __init__.py
     │   │   ├── __pycache__/ [... cache]
+    │   │   ├── help_docs.py
     │   │   ├── info.py
     │   │   ├── info_flags.py
     │   │   ├── release_info.py
@@ -238,6 +242,7 @@ bloom-development-extension/
     │   │   ├── code_compressor.py
     │   │   ├── files_compressor.py
     │   │   ├── files_extractor.py
+    │   │   ├── tree_all_manager.py
     │   │   └── tree_manager.py
     │   ├── git/
     │   │   ├── __init__.py
@@ -264,18 +269,21 @@ bloom-development-extension/
     │   │   ├── staging_manager.py
     │   │   └── validation_manager.py
     │   ├── intent_manager.py
+    │   ├── logs/
+    │   │   └── logs_manager.py
     │   ├── nucleus_inspector.py
     │   ├── nucleus_manager.py
     │   ├── profile/
     │   │   ├── __init__.py
     │   │   ├── __pycache__/ [... cache]
+    │   │   ├── bloom_launcher_client.py
+    │   │   ├── launch_history_reader.py
     │   │   ├── logic/
     │   │   │   ├── __init__.py
     │   │   │   ├── __pycache__/ [... cache]
     │   │   │   ├── chrome_resolver.py
     │   │   │   ├── profile_store.py
     │   │   │   └── synapse_handler.py
-    │   │   ├── path_resolver.py
     │   │   ├── profile_accounts.py
     │   │   ├── profile_create.py
     │   │   ├── profile_launcher.py
@@ -305,7 +313,6 @@ bloom-development-extension/
     │   │               ├── data-loader.js
     │   │               ├── index.html
     │   │               ├── landing.js
-    │   │               ├── landing.synapse.config.js
     │   │               ├── landingProtocol.js
     │   │               ├── script.js
     │   │               └── styles.css
@@ -331,6 +338,7 @@ bloom-development-extension/
     │   ├── system/
     │   │   ├── __init__.py
     │   │   ├── __pycache__/ [... cache]
+    │   │   ├── help_docs_manager.py
     │   │   ├── info_manager.py
     │   │   └── metadata_manager.py
     │   └── twitter/
@@ -355,4 +363,5 @@ bloom-development-extension/
         ├── environment.py
         ├── github_types.py
         ├── logger.py
+        ├── paths.py
         └── runtime_resolver.py

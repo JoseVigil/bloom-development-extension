@@ -21,14 +21,14 @@ class ProfileCreator:
     Separated from ProfileManager to maintain single responsibility.
     """
 
-    def __init__(self, path_resolver):
+    def __init__(self, paths):
         """
         Initialize ProfileCreator.
 
         Args:
-            path_resolver: PathResolver instance for directory resolution
+            paths: Paths instance for directory resolution
         """
-        self.path_resolver = path_resolver
+        self.paths = paths
         logger.debug("🗂️ ProfileCreator initialized")
 
     def create_profile(
@@ -112,7 +112,7 @@ class ProfileCreator:
 
     def _profile_exists(self, profile_id: str) -> bool:
         """Check if profile already exists in profiles.json."""
-        profiles_file = self.path_resolver.profiles_json
+        profiles_file = self.paths.profiles_json
         if not profiles_file.exists():
             return False
         
@@ -138,7 +138,7 @@ class ProfileCreator:
         Raises:
             OSError: If directory creation fails
         """
-        profile_dir = self.path_resolver.profiles_dir / profile_id
+        profile_dir = self.paths.profiles_dir / profile_id
         
         try:
             profile_dir.mkdir(parents=True, exist_ok=True)
@@ -168,12 +168,12 @@ class ProfileCreator:
             FileNotFoundError: If source extension not found
             OSError: If copy operation fails
         """
-        profile_dir = self.path_resolver.profiles_dir / profile_id
+        profile_dir = self.paths.profiles_dir / profile_id
         dest_extension = profile_dir / "extension"  # ✅ FIXED: era "BloomExtension"
 
         if is_master:
             # Master profile: use base extension from bin/extension
-            source_extension = self.path_resolver.base_dir / "bin" / "extension"
+            source_extension = self.paths.base_dir / "bin" / "extension"
             logger.info(f"🎯 Master profile - using base extension: {source_extension}")
             
             if not source_extension.exists():
@@ -188,7 +188,7 @@ class ProfileCreator:
             try:
                 master_profile = self._get_master_profile()
                 master_id = master_profile['id']
-                source_extension = self.path_resolver.profiles_dir / master_id / "extension"
+                source_extension = self.paths.profiles_dir / master_id / "extension"
                 logger.info(f"📂 Using master profile '{master_id}' extension as template")
                 
             except ValueError as e:
@@ -240,7 +240,7 @@ class ProfileCreator:
             logger.error(f"❌ Page generators not available: {e}")
             raise ImportError(f"Cannot import page generators: {e}")
 
-        profile_dir = self.path_resolver.profiles_dir / profile_id
+        profile_dir = self.paths.profiles_dir / profile_id
         extension_dir = profile_dir / "extension"
 
         # Verificar que extension_dir existe
@@ -288,7 +288,7 @@ class ProfileCreator:
         Raises:
             ValueError: If no master profile found
         """
-        profiles_file = self.path_resolver.profiles_json
+        profiles_file = self.paths.profiles_json
         if not profiles_file.exists():
             raise ValueError("profiles.json not found")
         
@@ -308,7 +308,7 @@ class ProfileCreator:
         Args:
             profile_data: Profile information to register
         """
-        profiles_file = self.path_resolver.profiles_json
+        profiles_file = self.paths.profiles_json
         
         # Load existing profiles or create new structure
         if profiles_file.exists():

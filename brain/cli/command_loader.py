@@ -293,6 +293,15 @@ def load_all_commands_explicit() -> CommandRegistry:
         print(f"Warning: Could not load ValidateCommand: {e}")
     
     # =================================================================
+    # LOGS
+    # =================================================================
+    try:
+        from brain.commands.logs.logs import LogsCommand
+        registry.register(LogsCommand())
+    except ImportError as e:
+        print(f"Warning: Could not load LogsCommand: {e}")
+    
+    # =================================================================
     # NUCLEUS
     # =================================================================
     try:
@@ -645,6 +654,7 @@ def get_hiddenimports_list():
         'brain.commands.intent.unlock',
         'brain.commands.intent.update',
         'brain.commands.intent.validate',
+        'brain.commands.logs.logs',
         'brain.commands.nucleus.create',
         'brain.commands.nucleus.create_exp_intent',
         'brain.commands.nucleus.delete',

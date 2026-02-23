@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"nucleus/internal/mandates"
 	"nucleus/internal/orchestration/types"
 )
 
@@ -164,6 +165,14 @@ func (a *SentinelActivities) LaunchSentinel(ctx context.Context, input types.Sen
 		Error:           sentinelResult.Error,
 		LaunchID:        input.CommandID,
 	}
+
+	// Encadenar hooks post_launch de forma best-effort.
+	// Corre en goroutine para no bloquear el retorno del launch —
+	// los hooks pueden esperar hasta 120s los logs de Chrome.
+	go func() {
+		hctx := mandates.NewHookContext(result.LaunchID, result.ProfileID)
+		mandates.RunEvent(context.Background(), "post_launch", hctx)
+	}()
 
 	return result, nil
 }

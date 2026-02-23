@@ -98,9 +98,9 @@ class ChromeLogReader:
                     f"Neither 'log_files.debug_log' nor 'logs_dir' found for profile {profile_id}"
                 )
             if launch_id:
-                source_file = Path(raw_logs_dir) / f"chrome_{launch_id}_debug.log"
+                source_file = Path(raw_logs_dir) / f"{launch_id}_debug.log"
             else:
-                source_file = self._resolve_latest_log(Path(raw_logs_dir), 'chrome_*_debug.log')
+                source_file = self._resolve_latest_log(Path(raw_logs_dir), '*_debug.log')
 
         logger.debug(f"Source file: {source_file}")
 
@@ -115,7 +115,7 @@ class ChromeLogReader:
         logs_dir.mkdir(parents=True, exist_ok=True)
 
         if launch_id:
-            output_file = logs_dir / f"chrome_{launch_id}_engine_read.log"
+            output_file = logs_dir / f"{launch_id}_engine_read.log"
         else:
             output_file = logs_dir / "default_engine_read.log"
 

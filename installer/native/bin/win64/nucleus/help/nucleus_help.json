@@ -137,6 +137,40 @@
     ]
   },
   {
+    "name": "list",
+    "use": "list \u003cevent\u003e",
+    "short": "List hooks registered for an event",
+    "category": "MANDATES",
+    "args": [
+      {
+        "name": "\u003cevent\u003e",
+        "required": true
+      }
+    ],
+    "example": "  nucleus hooks list post_launch\n  nucleus --json hooks list post_launch",
+    "json_response": "{\n  \"event\": \"post_launch\",\n  \"hooks_dir\": \"C:\\\\Users\\\\josev\\\\AppData\\\\Local\\\\BloomNucleus\\\\hooks\\\\post_launch\",\n  \"hooks\": [\"00_generate_synapse_trace.py\"]\n}"
+  },
+  {
+    "name": "run",
+    "use": "run \u003cevent\u003e",
+    "short": "Execute all hooks registered for an event",
+    "category": "MANDATES",
+    "args": [
+      {
+        "name": "\u003cevent\u003e",
+        "required": true
+      }
+    ],
+    "options": [
+      {
+        "name": "context",
+        "usage": "Hook context as JSON string"
+      }
+    ],
+    "example": "  nucleus hooks run post_launch\n  nucleus hooks run post_launch --context '{\"launch_id\":\"001_031c802a_205228\",\"profile_id\":\"031c802a\",\"log_base_dir\":\"C:\\\\...\\\\logs\",\"nucleus_bin\":\"C:\\\\...\\\\nucleus.exe\"}'\n  nucleus --json hooks run post_launch --context '{...}'",
+    "json_response": "{\n  \"success\": true,\n  \"event\": \"post_launch\",\n  \"total\": 1,\n  \"failed\": 0,\n  \"hooks\": [\n    {\n      \"hook\": \"00_generate_synapse_trace.py\",\n      \"success\": true,\n      \"stdout\": \"Synapse trace generado correctamente\"\n    }\n  ]\n}"
+  },
+  {
     "name": "info",
     "use": "info",
     "short": "Display detailed system information",
@@ -170,100 +204,11 @@
     "category": "TEAM"
   },
   {
-    "name": "logs",
-    "use": "logs [component]",
-    "short": "Read and filter component logs via telemetry.json index",
-    "category": "DIAGNOSTICS",
-    "args": [
-      {
-        "name": "component",
-        "required": false
-      }
-    ],
-    "options": [
-      {
-        "name": "errors-only",
-        "usage": "Show only WARNING and ERROR lines",
-        "default": "false"
-      },
-      {
-        "name": "json",
-        "usage": "Output result as JSON",
-        "default": "false"
-      },
-      {
-        "name": "launch",
-        "usage": "Correlate all logs for a launch ID (e.g. 001_7a30f1a6_195107)"
-      },
-      {
-        "name": "no-startup",
-        "usage": "Exclude initialization/startup noise lines",
-        "default": "false"
-      },
-      {
-        "name": "since",
-        "usage": "Show lines from the last X duration (e.g. 5m, 2h, 30s)"
-      }
-    ],
-    "example": "  nucleus logs brain_server\n  nucleus logs brain_server --since 10m --errors-only --no-startup\n  nucleus logs sentinel_core --since 1h\n  nucleus logs brain_service --errors-only\n  nucleus logs --launch 001_7a30f1a6_195107\n  nucleus --json logs brain_server --since 5m --errors-only",
-    "json_response": "{\n  \"success\": true,\n  \"component\": \"brain_server\",\n  \"lines\": [\n    \"2026-02-20 22:50:09 ERROR WinError 64: The specified network name is no longer available\",\n    \"2026-02-20 22:50:09 ERROR Connection reset by peer\"\n  ],\n  \"count\": 2\n}"
-  },
-  {
-    "name": "logs",
-    "use": "logs [stream]",
-    "short": "Read, trace and analyze Nucleus log streams",
-    "category": "ORCHESTRATION",
-    "args": [
-      {
-        "name": "stream",
-        "required": false
-      }
-    ],
-    "options": [
-      {
-        "name": "errors-only",
-        "usage": "Only show WARNING or ERROR lines",
-        "default": "false"
-      },
-      {
-        "name": "json",
-        "usage": "Output in JSON format",
-        "default": "false"
-      },
-      {
-        "name": "launch",
-        "usage": "Launch ID to produce a full synapse trace"
-      },
-      {
-        "name": "no-startup",
-        "usage": "Exclude Brain startup noise patterns",
-        "default": "false"
-      },
-      {
-        "name": "out",
-        "usage": "Output file path (default: logs/synapse/trace_\u003claunch_id\u003e.log)"
-      },
-      {
-        "name": "profile",
-        "usage": "Profile ID (required for Chrome log analysis with --launch)"
-      },
-      {
-        "name": "since",
-        "usage": "Only show lines from last X minutes/hours (e.g. 5m, 2h)"
-      },
-      {
-        "name": "summary",
-        "usage": "Show dashboard of all streams",
-        "default": "false"
-      },
-      {
-        "name": "tail",
-        "usage": "Live tail mode (follow file)",
-        "default": "false"
-      }
-    ],
-    "example": "  nucleus logs nucleus_synapse --since 5m\n  nucleus logs sentinel_core --errors-only --no-startup\n  nucleus logs --launch 001_0b31f2fa_033803 --profile 0b31f2fa-1463-4919-b63e-96db6e36744c\n  nucleus logs --summary --since 10m\n  nucleus --json logs --launch 001_0b31f2fa_033803 --profile 0b31f2fa-1463-4919-b63e-96db6e36744c",
-    "json_response": "{\n  \"success\": true,\n  \"mode\": \"stream|launch|summary\",\n  \"lines\": 42,\n  \"output_file\": \"logs/synapse_trace/trace_001_0b31f2fa_033803.log\"\n}"
+    "name": "synapse",
+    "use": "synapse",
+    "short": "Trace automático del último launch — obtiene perfil y launch_id via Brain CLI",
+    "category": "SUPERVISOR",
+    "example": "  nucleus logs synapse"
   },
   {
     "name": "remove",

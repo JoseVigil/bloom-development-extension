@@ -116,12 +116,12 @@ func (ig *Ignition) buildSilentLaunchArgs(spec *IgnitionSpec, mode string, launc
 	_ = os.MkdirAll(logDir, 0755)
 
 	logPrefix := filepath.Join(logDir, launchID)
-    chromeLogPrefix := "chrome_" + logPrefix
 
 	args = append(args,
-        fmt.Sprintf("--log-net-log=%s_netlog.json", chromeLogPrefix),
+		"--enable-logging",
+		fmt.Sprintf("--log-net-log=%s_netlog.json", logPrefix),
         "--net-log-capture-mode=IncludeAll",
-        fmt.Sprintf("--log-file=%s_debug.log", chromeLogPrefix),
+		fmt.Sprintf("--log-file=%s_debug.log", logPrefix),
     )
 
 	// 5. URL de destino (ya debería estar seteada en prepareSessionFiles)

@@ -85,6 +85,7 @@ hiddenimports = [
     'brain.commands.intent.unlock',
     'brain.commands.intent.update',
     'brain.commands.intent.validate',
+    'brain.commands.logs.logs',
     'brain.commands.nucleus.create',
     'brain.commands.nucleus.create_exp_intent',
     'brain.commands.nucleus.delete',
@@ -175,6 +176,7 @@ hiddenimports = [
     'brain.core.intent.staging_manager',
     'brain.core.intent.validation_manager',
     'brain.core.intent_manager',
+    'brain.core.logs.logs_manager',
     'brain.core.nucleus_inspector',
     'brain.core.nucleus_manager',
     'brain.core.profile',
@@ -184,7 +186,6 @@ hiddenimports = [
     'brain.core.profile.logic.chrome_resolver',
     'brain.core.profile.logic.profile_store',
     'brain.core.profile.logic.synapse_handler',
-    'brain.core.profile.path_resolver',
     'brain.core.profile.profile_accounts',
     'brain.core.profile.profile_create',
     'brain.core.profile.profile_launcher',
@@ -256,7 +257,7 @@ datas.extend([
     (str(core_profile_src / '__init__.py'), 'brain/core/profile'),
     (str(core_profile_src / 'profile_manager.py'), 'brain/core/profile'),
     (str(core_profile_src / 'profile_launcher.py'), 'brain/core/profile'),
-    (str(core_profile_src / 'path_resolver.py'), 'brain/core/profile'),
+
     # No olvides la lógica interna y web (si no PyInstaller los ignorará)
     (str(core_profile_src / 'logic' / '__init__.py'), 'brain/core/profile/logic'),
     (str(core_profile_src / 'logic' / 'profile_store.py'), 'brain/core/profile/logic'),

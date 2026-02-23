@@ -135,7 +135,10 @@ class BrainLogger:
                     console_format = logging.Formatter('%(levelname)-8s | %(name)-20s | %(message)s')
                 else:
                     console_handler.setLevel(logging.ERROR)
-                    console_format = logging.Formatter('%(levelname)-8s | %(message)s')
+                    console_format = logging.Formatter(
+                        '%(asctime)s | %(levelname)-8s | %(message)s',
+                        datefmt='%Y-%m-%d %H:%M:%S'
+                    )
                 console_handler.setFormatter(console_format)
                 root.addHandler(console_handler)
 
@@ -346,3 +349,24 @@ def cleanup_logging():
     """Limpia las entradas de telemetría al cerrar la aplicación."""
     if BrainLogger._instance:
         BrainLogger._instance.cleanup_telemetry()
+
+
+# ── Fallback safety net ────────────────────────────────────────────────────────
+# If a process (e.g. the Windows service entrypoint) imports get_logger without
+# ever calling setup_global_logging(), the root logger has no handlers and Python
+# would emit records with lastResort (no timestamp). We install a minimal handler
+# here so every Brain process always gets timestamps in its output even when the
+# full BrainLogger.setup() was never invoked.
+#
+# BrainLogger.setup() calls root.handlers.clear() before adding its own handlers,
+# so this fallback is automatically replaced when setup() runs — no double-logging.
+_fallback_handler = logging.StreamHandler(sys.stderr)
+_fallback_handler.setFormatter(logging.Formatter(
+    '%(asctime)s | %(levelname)-8s | %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+))
+_fallback_handler.setLevel(logging.DEBUG)
+_root = logging.getLogger()
+if not _root.handlers:
+    _root.addHandler(_fallback_handler)
+    _root.setLevel(logging.DEBUG)

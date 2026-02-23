@@ -30,6 +30,7 @@ class CommandCategory(Enum):
     TWITTER = ("twitter", "Twitter/X integration and social data analysis")
     SYSTEM = ("system", "Runtime and system introspection")
     SYNAPSE = ("synapse", "Chrome Native Messaging Bridge and protocol management")
+    LOGS = ("logs", "Log stream reading, synapse trace and diagnostics")
 
     def __init__(self, name: str, description: str):
         self.category_name = name
@@ -81,3 +82,4 @@ RUNTIME = CommandCategory.RUNTIME
 SYSTEM = CommandCategory.SYSTEM
 TWITTER = CommandCategory.TWITTER
 SYNAPSE = CommandCategory.SYNAPSE
+LOGS = CommandCategory.LOGS

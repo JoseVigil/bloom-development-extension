@@ -80,7 +80,7 @@ func (tm *TelemetryManager) RegisterStream(id, label, path string, priority int,
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
 
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := time.Now().Format(time.RFC3339)
 	firstSeen := now
 	if existing, exists := tm.data.Streams[id]; exists {
 		firstSeen = existing.FirstSeen
@@ -397,7 +397,7 @@ func registerStreamCLI(telemetryPath, streamID, label, logPath, description stri
 		}
 	}
 
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := time.Now().Format(time.RFC3339)
 	firstSeen := now
 	if existing, exists := telemetry.Streams[streamID]; exists {
 		firstSeen = existing.FirstSeen

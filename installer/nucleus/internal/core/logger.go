@@ -70,13 +70,10 @@ func InitLogger(paths *PathConfig, category string, jsonMode bool, extraCategori
 		category:   category,
 	}
 
-	header := fmt.Sprintf("\n%s [%s] Logging session started %s\n",
-		strings.Repeat("=", 40),
-		category,
-		strings.Repeat("=", 40))
-
-	file.WriteString(header)
-	file.Sync()
+	// Header via logger.Printf — el runtime antepone "2006/01/02 15:04:05"
+	// que parseLineTimestamp reconoce correctamente.
+	logger.logger.Printf("======================================== [%s] Logging session started ========================================", category)
+	logger.Flush()
 
 	// Construir slice de categorías: siempre incluye "nucleus" + extras
 	categories := append([]string{"nucleus"}, extraCategories...)
@@ -115,6 +112,8 @@ func getNucleusIcon(category string) string {
 		return "⚙️"
 	case "WORKER":
 		return "👷"
+	case "MANDATE":
+    	return "📋"
 	default:
 		return "⚙️"
 	}
@@ -140,6 +139,8 @@ func getNucleusStreamDescription(category string) string {
 		return "Nucleus temporal log — captures Temporal workflow engine interactions"
 	case "SYNAPSE":
 		return "Synapse orchestration log — records the full launch chain for a browser profile"
+	case "MANDATE":
+   	 	return "Nucleus mandate log — captures hook execution and mandate orchestration events"
 	default:
 		return fmt.Sprintf("Nucleus %s log", strings.ToLower(category))
 	}
@@ -237,12 +238,7 @@ func (l *Logger) Close() error {
 	defer l.mu.Unlock()
 
 	if l.file != nil {
-		footer := fmt.Sprintf("\n%s [%s] Logging session ended %s\n\n",
-			strings.Repeat("=", 40),
-			l.category,
-			strings.Repeat("=", 40))
-
-		l.file.WriteString(footer)
+		l.logger.Printf("======================================== [%s] Logging session ended ========================================", l.category)
 		l.file.Sync()
 
 		err := l.file.Close()
@@ -319,11 +315,8 @@ func InitServiceLogger(paths *PathConfig, jsonMode bool) (*Logger, error) {
 		category:   "SERVICE",
 	}
 
-	header := fmt.Sprintf("\n%s [SERVICE] Logging session started %s\n",
-		strings.Repeat("=", 40),
-		strings.Repeat("=", 40))
-	file.WriteString(header)
-	file.Sync()
+	logger.logger.Printf("======================================== [SERVICE] Logging session started ========================================")
+	logger.Flush()
 
 	tm := GetTelemetryManager(paths.Logs, paths.Logs)
 	tm.RegisterStream(
@@ -378,11 +371,8 @@ func InitWorkerManagerLogger(paths *PathConfig, jsonMode bool) (*Logger, error) 
 		category:   "WORKER",
 	}
 
-	header := fmt.Sprintf("\n%s [WORKER MANAGER] Logging session started %s\n",
-		strings.Repeat("=", 40),
-		strings.Repeat("=", 40))
-	file.WriteString(header)
-	file.Sync()
+	logger.logger.Printf("======================================== [WORKER MANAGER] Logging session started ========================================")
+	logger.Flush()
 
 	tm := GetTelemetryManager(paths.Logs, paths.Logs)
 	tm.RegisterStream(

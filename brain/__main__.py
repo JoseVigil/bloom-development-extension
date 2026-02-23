@@ -173,7 +173,7 @@ def main():
     # Limpiar locks
     try:
         pm = ProfileManager()
-        pm.launcher.cleanup_profile_locks(pm.paths.profiles_dir)
+        pm.launcher.cleanup_profile_locks()
     except Exception as e:
         if not json_mode:
             logger.warning(f"⚠️ No se pudieron limpiar locks de perfiles: {e}")

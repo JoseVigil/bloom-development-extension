@@ -39,7 +39,7 @@
 ------------------------------------------------------------------------------------------------------------------------
 
   SYSTEM             System information and diagnostics                       2 cmds
-  DIAGNOSTICS        Health checks, log inspection and system diagnostics     2 cmds
+  DIAGNOSTICS        Health checks, log inspection and system diagnostics     1 cmd
   GOVERNANCE         Organization initialization and authority                4 cmds
   TEAM               Team and collaboration management                        3 cmds
   VAULT              Secure key and credential management                     4 cmds
@@ -47,8 +47,9 @@
   ANALYTICS          System monitoring and telemetry                          1 cmd
   TELEMETRY          Centralized log stream registration                      1 cmd
   TEMPORAL_SERVER    Temporal server management and diagnostics               1 cmd
-  ORCHESTRATION      Workflow orchestration and automation                    5 cmds
-  ---------------------------------------------------------------------------  Total: 25 commands
+  ORCHESTRATION      Workflow orchestration and automation                    4 cmds
+  MANDATES           Mandate hooks and orchestration                          1 cmd
+  ---------------------------------------------------------------------------  Total: 24 commands
 
 
 =======================================================[ SYSTEM ]=======================================================
@@ -111,42 +112,6 @@
           "brain_service_log":   ["2026-02-20 22:50:09 ERROR Connection reset by peer"],
           "brain_event_bus_log": ["2026-02-20 22:50:09 ERROR WinError 64: pipe broken"]
         }
-      }
-
-    --------------------------------------------------------------------------------
-
-  > LOGS
-    Read and filter component logs via telemetry.json index
-
-    Usage: nucleus logs [component]
-
-    Arguments:
-      component             optional
-
-    Flags:
-      --errors-only              Show only WARNING and ERROR lines
-      --json                     Output result as JSON
-      --launch                   Correlate all logs for a launch ID (e.g. 001_7a30f1a6_195107)
-      --no-startup               Exclude initialization/startup noise lines
-      --since                    Show lines from the last X duration (e.g. 5m, 2h, 30s)
-
-    Example:
-        nucleus logs brain_server
-        nucleus logs brain_server --since 10m --errors-only --no-startup
-        nucleus logs sentinel_core --since 1h
-        nucleus logs brain_service --errors-only
-        nucleus logs --launch 001_7a30f1a6_195107
-        nucleus --json logs brain_server --since 5m --errors-only
-
-    JSON Response:
-      {
-        "success": true,
-        "component": "brain_server",
-        "lines": [
-          "2026-02-20 22:50:09 ERROR WinError 64: The specified network name is no longer available",
-          "2026-02-20 22:50:09 ERROR Connection reset by peer"
-        ],
-        "count": 2
       }
 
     --------------------------------------------------------------------------------
@@ -568,42 +533,6 @@
 
     --------------------------------------------------------------------------------
 
-  > LOGS
-    Read, trace and analyze Nucleus log streams
-
-    Usage: nucleus logs [stream]
-
-    Arguments:
-      stream                optional
-
-    Flags:
-      --errors-only              Only show WARNING or ERROR lines
-      --json                     Output in JSON format
-      --launch                   Launch ID to produce a full synapse trace
-      --no-startup               Exclude Brain startup noise patterns
-      --out                      Output file path (default: logs/synapse/trace_<launch_id>.log)
-      --profile                  Profile ID (required for Chrome log analysis with --launch)
-      --since                    Only show lines from last X minutes/hours (e.g. 5m, 2h)
-      --summary                  Show dashboard of all streams
-      --tail                     Live tail mode (follow file)
-
-    Example:
-        nucleus logs nucleus_synapse --since 5m
-        nucleus logs sentinel_core --errors-only --no-startup
-        nucleus logs --launch 001_0b31f2fa_033803 --profile 0b31f2fa-1463-4919-b63e-96db6e36744c
-        nucleus logs --summary --since 10m
-        nucleus --json logs --launch 001_0b31f2fa_033803 --profile 0b31f2fa-1463-4919-b63e-96db6e36744c
-
-    JSON Response:
-      {
-        "success": true,
-        "mode": "stream|launch|summary",
-        "lines": 42,
-        "output_file": "logs/synapse_trace/trace_001_0b31f2fa_033803.log"
-      }
-
-    --------------------------------------------------------------------------------
-
   > SERVICE
     Service lifecycle management for Windows (NSSM)
 
@@ -913,6 +842,78 @@
 
     Flags:
       --task-queue, -q           Task queue de Temporal [default: profile-orchestration]
+
+    --------------------------------------------------------------------------------
+
+
+======================================================[ MANDATES ]======================================================
+
+  > HOOKS
+    Manage and execute mandate hooks
+
+    Usage: nucleus hooks
+
+    Subcommands:
+      list                  List hooks registered for an event
+        nucleus hooks list <event>
+      run                   Execute all hooks registered for an event
+        nucleus hooks run <event>
+
+    Subcommand Details:
+
+      └─ LIST
+        List hooks registered for an event
+
+        Usage: nucleus hooks list <event>
+
+        Arguments:
+          <event>               required
+
+        Example:
+            nucleus hooks list post_launch
+            nucleus --json hooks list post_launch
+
+        JSON Response:
+          {
+            "event": "post_launch",
+            "hooks_dir": "C:\\Users\\josev\\AppData\\Local\\BloomNucleus\\hooks\\post_launch",
+            "hooks": ["00_generate_synapse_trace.py"]
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ RUN
+        Execute all hooks registered for an event
+
+        Usage: nucleus hooks run <event>
+
+        Arguments:
+          <event>               required
+
+        Flags:
+          --context                  Hook context as JSON string
+
+        Example:
+            nucleus hooks run post_launch
+            nucleus hooks run post_launch --context '{"launch_id":"001_031c802a_205228","profile_id":"031c802a","log_base_dir":"C:\\...\\logs","nucleus_bin":"C:\\...\\nucleus.exe"}'
+            nucleus --json hooks run post_launch --context '{...}'
+
+        JSON Response:
+          {
+            "success": true,
+            "event": "post_launch",
+            "total": 1,
+            "failed": 0,
+            "hooks": [
+              {
+                "hook": "00_generate_synapse_trace.py",
+                "success": true,
+                "stdout": "Synapse trace generado correctamente"
+              }
+            ]
+          }
+
+        ----------------------------------------------------------------------
 
     --------------------------------------------------------------------------------
 

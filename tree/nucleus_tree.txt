@@ -5,6 +5,7 @@ bloom-development-extension/
     ├── VERSION
     ├── build_number.txt
     ├── codebase/
+    │   └── go_files_2026-02-16_20-17-22.txt
     ├── docs/
     │   ├── EXECUTIVE_SUMMARY.md
     │   ├── GOVERNANCE.md
@@ -35,11 +36,19 @@ bloom-development-extension/
     │   │   ├── blueprint.go
     │   │   ├── ollama_client.go
     │   │   └── ownership.go
+    │   ├── mandates/
+    │   │   ├── mandate_activities.go
+    │   │   ├── mandate_hooks_cmd.go
+    │   │   ├── mandate_logger.go
+    │   │   ├── mandate_runner.go
+    │   │   └── mandate_types.go
     │   ├── orchestration/
     │   │   ├── activities/
     │   │   │   └── sentinel_activities.go
     │   │   ├── commands/
-    │   │   │   └── synapse.go
+    │   │   │   ├── synapse.go
+    │   │   │   ├── sysproc_other.go
+    │   │   │   └── sysproc_windows.go
     │   │   ├── queries/
     │   │   │   └── status.go
     │   │   ├── signals/
@@ -71,10 +80,9 @@ bloom-development-extension/
     │   ├── supervisor/
     │   │   ├── dev_start.go
     │   │   ├── health.go
+    │   │   ├── logs.go
     │   │   ├── service.go
     │   │   └── supervisor.go
-    │   ├── synapse/
-    │   │   └── synapse_commands.go
     │   ├── system/
     │   │   ├── info.go
     │   │   └── version.go

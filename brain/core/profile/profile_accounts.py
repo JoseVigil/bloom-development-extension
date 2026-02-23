@@ -17,14 +17,14 @@ class ProfileAccountManager:
     within the profiles.json registry.
     """
 
-    def __init__(self, path_resolver):
+    def __init__(self, paths):
         """
         Initialize ProfileAccountManager.
 
         Args:
-            path_resolver: PathResolver instance for directory and file resolution.
+            paths: Paths instance for directory and file resolution.
         """
-        self.paths = path_resolver
+        self.paths = paths
 
     def _update_profile_registry(self, profile_id: str, update_data: Dict[str, Any]) -> Dict[str, Any]:
         """

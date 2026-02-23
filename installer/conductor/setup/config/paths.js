@@ -77,6 +77,8 @@ const getResourcePath = (resourceName) => {
       return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'launcher');
     case 'cortex':
       return path.join(workspaceRoot, '..', 'native', 'bin', 'cortex');
+    case 'hooks':
+      return path.join(workspaceRoot, '..', 'native', 'hooks');  
     case 'temporal':
       return path.join(workspaceRoot, '..', 'temporal');
     case 'chrome-win':
@@ -282,6 +284,8 @@ const paths = {
   temporalSource: getResourcePath('temporal'),
   extensionSource: getResourcePath('extension'),
   chromeWinSource: getResourcePath('chrome-win'),
+  hooksSource: getResourcePath('hooks'),
+  hooksDir: path.join(baseDir, 'hooks'),
 };
 
 // ============================================================================

@@ -16,6 +16,7 @@ import (
 	_ "nucleus/internal/supervisor"
 	_ "nucleus/internal/system"
 	_ "nucleus/internal/vault"
+	_ "nucleus/internal/mandates"
 
 	"github.com/spf13/cobra"
 )

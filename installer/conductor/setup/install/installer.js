@@ -491,11 +491,6 @@ async function deployAllSystemBinaries(win) {
     // ========================================================================
     logger.info('\n🎮 CONDUCTOR LAUNCHER');
     
-    // Conductor tiene dos versiones en el source:
-    // 1. bloom-conductor.exe (standalone) ✅
-    // 2. win-unpacked/ (Electron completa con app.asar) ❌
-    // Solo copiamos el .exe standalone
-    
     const conductorExeSrc = path.join(paths.conductorSource, 'bloom-conductor.exe');
     
     if (await fs.pathExists(conductorExeSrc)) {
@@ -525,6 +520,40 @@ async function deployAllSystemBinaries(win) {
     } else {
       logger.warn('⚠️ bloom-launcher.exe not found, skipping');
       results.launcher = { success: false, skipped: true };
+    }
+
+    // ========================================================================
+    // 12. PYTHON HOOKS
+    // ========================================================================
+    logger.info('\n🪝 PYTHON HOOKS');
+
+    if (await fs.pathExists(paths.hooksSource)) {
+      // Fresh copy: limpiar destino primero
+      if (await fs.pathExists(paths.hooksDir)) {
+        await fs.remove(paths.hooksDir);
+        logger.info('  Cleaned existing hooks directory');
+      }
+      await fs.ensureDir(paths.hooksDir);
+
+      const entries = await fs.readdir(paths.hooksSource, { withFileTypes: true });
+      const hookFolders = entries.filter(e => e.isDirectory());
+
+      if (hookFolders.length === 0) {
+        logger.warn('⚠️ No hook folders found in source, skipping');
+        results.hooks = { success: false, skipped: true };
+      } else {
+        for (const folder of hookFolders) {
+          const folderSrc = path.join(paths.hooksSource, folder.name);
+          const folderDest = path.join(paths.hooksDir, folder.name);
+          await fs.copy(folderSrc, folderDest, { overwrite: true });
+          logger.info(`  ✓ ${folder.name}`);
+        }
+        logger.success(`✅ Hooks deployed (${hookFolders.length} hooks)`);
+        results.hooks = { success: true };
+      }
+    } else {
+      logger.warn('⚠️ Hooks source not found, skipping');
+      results.hooks = { success: false, skipped: true };
     }
     
     // ========================================================================
@@ -565,6 +594,48 @@ async function deployAllSystemBinaries(win) {
 async function runBinariesDeploy(win) {
   // Wrapper que llama a la función unificada
   return await deployAllSystemBinaries(win);
+}
+
+// ============================================================================
+// HOOKS DEPLOY
+// ============================================================================
+
+async function deployHooks() {
+  logger.info('Deploying Python hooks...');
+
+  const src = paths.hooksSource;
+  const dest = paths.hooksDir;
+
+  if (!await fs.pathExists(src)) {
+    logger.warn(`⚠️ Hooks source not found, skipping: ${src}`);
+    return;
+  }
+
+  // Fresh copy: borrar destino y copiar limpio
+  if (await fs.pathExists(dest)) {
+    await fs.remove(dest);
+    logger.info(`  Cleaned existing hooks dir: ${dest}`);
+  }
+
+  await fs.ensureDir(dest);
+
+  // Copiar solo las subcarpetas (y sus contenidos) que haya en src
+  const entries = await fs.readdir(src, { withFileTypes: true });
+  const folders = entries.filter(e => e.isDirectory());
+
+  if (folders.length === 0) {
+    logger.warn('⚠️ No hook folders found in source, skipping');
+    return;
+  }
+
+  for (const folder of folders) {
+    const folderSrc = path.join(src, folder.name);
+    const folderDest = path.join(dest, folder.name);
+    await fs.copy(folderSrc, folderDest, { overwrite: true });
+    logger.info(`  ✓ Copied hook: ${folder.name}`);
+  }
+
+  logger.success(`✅ Hooks deployed to: ${dest}`);
 }
 
 async function runConductorDeploy(win) {

@@ -51,7 +51,7 @@ flowchart LR
             VSSwagger[📜 Swagger / API Contract]
         end
 
-        Launcher[🎛️ Bloom Conductor
+        Workspace[🎛️ Bloom Conductor
         Sovereign Intent Interface]
 
         NucleusExe[⚖️ Nucleus
@@ -66,6 +66,9 @@ flowchart LR
         Brain[🧠 Brain
         Python Engine]
         Host[⚙️ Host Service\nC++]
+
+        BloomLauncher[🚀 Bloom Launcher
+        Session Bridge / Chrome Spawner]
 
         subgraph Chrome["🌐 Chromium Profiles"]
             Ext["🧩 Bloom Cortex
@@ -106,12 +109,12 @@ flowchart LR
         Ext --> Landing
 
         User --> VS
-        User <--> Launcher
+        User <--> Workspace
         User <--> Discovery
         User <--> Landing
 
-        Launcher <--> Sentinel
-        Launcher <--> NucleusExe
+        Workspace <--> Sentinel
+        Workspace <--> NucleusExe
         Sentinel <--> NucleusExe
         Sentinel <--> Brain
 
@@ -119,9 +122,12 @@ flowchart LR
         Metamorph -.actualiza.-> Brain
         Metamorph -.actualiza.-> Host
         Metamorph -.actualiza.-> Sentinel
-        Metamorph -.actualiza.-> Launcher
+        Metamorph -.actualiza.-> Workspace
 
         VS --> Brain
+
+        Brain --launch request--> BloomLauncher
+        BloomLauncher --spawns via Session 1--> Chrome
 
         Brain <--> Host
         Host <--> Ext
@@ -129,8 +135,8 @@ flowchart LR
         Brain <--> ProjectFolder
         Brain <--> NucleusFolder
 
-        Launcher <--> ProjectFolder
-        Launcher <--> NucleusFolder
+        Workspace <--> ProjectFolder
+        Workspace <--> NucleusFolder
         VS <--> ProjectFolder
 
         Ext --> ChatGPTSite
@@ -147,9 +153,9 @@ flowchart LR
 
 La ejecución de BTIPS se apoya en una infraestructura de **Sidecar** que independiza la lógica organizacional de la interfaz visual.
 
-*   **Sentinel Sidecar:** Proceso *daemon* que actúa como orquestador persistente. Mantiene el Event Bus activo y garantiza que la ejecución técnica no se interrumpa si el Launcher se cierre.
+*   **Sentinel Sidecar:** Proceso *daemon* que actúa como orquestador persistente. Mantiene el Event Bus activo y garantiza que la ejecución técnica no se interrumpa si el Workspace se cierre.
 *   **Synapse Protocol:** Handshake de 3 fases (Extension ↔ Host ↔ Brain) que valida la integridad del canal antes de procesar intents.
-*   **Data Persistence & Stateless UI:** El Launcher opera como una **Stateless UI**. No depende de estados volátiles en memoria, sino que reconstruye su realidad escaneando los archivos de intents en el Filesystem (`.bloom/intents/`) y sincronizando eventos perdidos mediante *polling* histórico al Sidecar.
+*   **Data Persistence & Stateless UI:** El Workspace (Conductor) opera como una **Stateless UI**. No depende de estados volátiles en memoria, sino que reconstruye su realidad escaneando los archivos de intents en el Filesystem (`.bloom/intents/`) y sincronizando eventos perdidos mediante *polling* histórico al Sidecar.
 
 ---
 
@@ -301,7 +307,107 @@ Sabe que perdió los eventos 43 y 44, y puede solicitarlos explícitamente a Bra
 
 ---
 
-### 2.6️⃣ Metamorph (Declarative State Reconciler)
+### 2.6️⃣ Bloom Launcher (Session Bridge / Chrome Spawner)
+
+**Bloom Launcher** (`bloom-launcher.exe`) es el puente de sesión que resuelve el problema de **Session 0 isolation** en Windows. Actúa como intermediario entre Brain (que corre como servicio en Session 0) y los perfiles de Chromium que deben ejecutarse en la sesión interactiva del usuario (Session 1).
+
+#### El Problema que Resuelve
+
+Nucleus (`BloomNucleusService`) y Brain (`BloomBrainService`) corren como servicios NSSM en Session 0 de Windows. Session 0 está aislada del desktop del usuario: no tiene acceso a displays, cursor ni al compositor de DirectX. Cuando Brain intenta lanzar Chrome directamente desde Session 0, Chromium falla con errores de display y permisos (`DCompositionCreateDevice: Access is denied`, `Unable to find a primary display`, etc.).
+
+Bloom Launcher resuelve esto escuchando en un named pipe (`\\.\pipe\bloom-launcher`) y utilizando las Windows Terminal Services APIs para obtener el token del usuario interactivo y lanzar Chrome directamente en su sesión.
+
+#### Flujo de Launch (`internal/executor/launch.go`)
+
+1. **`WTSGetActiveConsoleSessionId`** — obtiene el ID numérico de la sesión interactiva activa (normalmente Session 1)
+2. **`WTSQueryUserToken`** — obtiene el access token del usuario de esa sesión (requiere `SeTcbPrivilege`, disponible cuando el proceso corre como SYSTEM)
+3. **`DuplicateTokenEx`** — convierte el token a tipo Primary (`CreateProcessAsUser` rechaza tokens de impersonación)
+4. **`CreateEnvironmentBlock`** — genera el bloque de entorno del usuario (`USERPROFILE`, `APPDATA`, `TEMP`) para que Chrome no herede el entorno de SYSTEM
+5. **`CreateProcessAsUserW`** con `Desktop: "winsta0\\default"` — lanza Chrome asignado al desktop interactivo del usuario, resolviendo los errores de display y DComposition
+
+#### Protocolo Named Pipe
+
+Comunicación JSON newline-delimited sobre `\\.\pipe\bloom-launcher`.
+
+**Request** (Brain → Launcher):
+```json
+{
+  "request_id": "uuid",
+  "profile_id": "1d3dad54-...",
+  "args": ["C:\\...\\chrome.exe", "--no-sandbox", "--load-extension=...", "..."]
+}
+```
+
+**Response** (Launcher → Brain):
+```json
+{
+  "request_id": "uuid",
+  "success": true,
+  "pid": 22540
+}
+```
+
+El proceso Chrome lanzado es completamente detached — Bloom Launcher no espera su terminación.
+
+#### Qué NO cambia
+
+Bloom Launcher es un cambio quirúrgico. No altera:
+- La lógica de construcción de args (`profile_launcher.py` en Brain)
+- El contrato JSON del named pipe
+- Sentinel, Nucleus ni la cadena de orquestación completa
+- El lock de Chrome (`.chrome_app.lock`)
+
+Solo cambia el mecanismo de launch final: de `subprocess.Popen` en Session 0 a `CreateProcessAsUserW` con token de Session 1.
+
+#### Estructura
+
+```
+bloom-launcher/
+├── cmd/main.go                    # Entry point, CLI
+├── internal/
+│   ├── pipe/server.go             # Named pipe server (Windows)
+│   ├── executor/launch.go         # CreateProcessAsUserW en Session 1
+│   ├── startup/startup_windows.go # HKCU\Run registration
+│   └── logger/logger.go           # Logger → AppData/logs/launcher/
+├── go.mod
+└── go.sum
+```
+
+#### Comandos CLI
+
+```
+bloom-launcher.exe serve      # Arrancar daemon (default sin args)
+bloom-launcher.exe install    # Registrar en HKCU\Run + arrancar
+bloom-launcher.exe uninstall  # Desregistrar de HKCU\Run
+bloom-launcher.exe status     # RUNNING | STOPPED
+bloom-launcher.exe version    # Versión
+```
+
+#### Deploy e Instalación
+
+Electron instala el binario y registra el autostart. El launcher no necesita estar corriendo en Session 1 para funcionar: al recibir una solicitud en el pipe, obtiene el token de la sesión activa en ese momento mediante `WTSQueryUserToken`. Si no hay sesión interactiva disponible (headless, RDP sin consola física), retorna error claro: `LauncherUnavailableError`.
+
+Path de instalación:
+```
+C:\Users\<user>\AppData\Local\BloomNucleus\bin\launcher\bloom-launcher.exe
+```
+
+Registro autostart:
+```
+HKCU\Software\Microsoft\Windows\CurrentVersion\Run
+  BloomLauncher = "...bin\launcher\bloom-launcher.exe serve"
+```
+
+#### Resiliencia
+
+- **Pipe unavailable**: Brain detecta el error, intenta arrancar `bloom-launcher.exe` directamente y reintenta después de 5s.
+- **HKCU\Run borrado**: Bloom Launcher detecta la entrada faltante al arrancar y auto-repara el registro.
+- **Sin sesión interactiva**: `WTSGetActiveConsoleSessionId` retorna `0xFFFFFFFF`; el launcher retorna `LauncherUnavailableError` con mensaje claro en lugar de colgar.
+- **Token inválido**: si `WTSQueryUserToken` falla (permisos insuficientes), el error sube por la cadena con el código Win32 exacto.
+
+---
+
+### 2.7️⃣ Metamorph (Declarative State Reconciler)
 
 **Metamorph** es el reconciliador declarativo de estado que gobierna las actualizaciones del sistema Bloom. A diferencia de updaters tradicionales que ejecutan comandos imperativos, Metamorph opera mediante **reconciliación continua**: compara el estado actual del sistema con el estado deseado (declarado en manifests) y converge atómicamente hacia él.
 

@@ -75,13 +75,61 @@ class ProfileLauncher:
     def __init__(self, paths, chrome_resolver):
         """
         Args:
-            paths: PathResolver instance
+            paths: Paths instance
             chrome_resolver: ChromeResolver instance (unused en spec-driven)
         """
         self.paths = paths
         self.resolver = chrome_resolver
         self.launcher_client = LauncherClient(paths.base_dir)
         logger.debug("ProfileLauncher inicializado (spec-driven only)")
+
+    def cleanup_profile_locks(self) -> int:
+        """
+        Elimina todos los lock files huérfanos de Chrome (.chrome_app.lock)
+        de los directorios de perfil conocidos.
+
+        Llamado al inicio de Brain para evitar que crashes previos bloqueen
+        futuros lanzamientos. Itera sobre los perfiles registrados en
+        profiles.json y limpia el lock de cada uno.
+
+        Returns:
+            Número de locks eliminados.
+        """
+        removed = 0
+
+        try:
+            import json
+            profiles_file = self.paths.profiles_json
+            if not profiles_file.exists():
+                logger.debug("⚠️ profiles.json no encontrado, omitiendo cleanup de locks")
+                return removed
+
+            with open(profiles_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+
+            for profile in data.get('profiles', []):
+                profile_path = profile.get('path')
+                if not profile_path:
+                    continue
+
+                lock_file = Path(profile_path) / ".chrome_app.lock"
+                if lock_file.exists():
+                    try:
+                        lock_file.unlink()
+                        logger.debug(f"🧹 Lock huérfano eliminado: {lock_file}")
+                        removed += 1
+                    except OSError as e:
+                        logger.warning(f"⚠️ No se pudo eliminar lock {lock_file}: {e}")
+
+        except Exception as e:
+            logger.warning(f"⚠️ Error durante cleanup de locks: {e}")
+
+        if removed:
+            logger.info(f"🧹 {removed} lock(s) huérfano(s) eliminados al inicio")
+        else:
+            logger.debug("✅ No hay locks huérfanos")
+
+        return removed
     
     def launch(
         self,
@@ -258,9 +306,18 @@ class ProfileLauncher:
                 debug_log = str(logs_path / f"debug_{timestamp}.log")
                 net_log = str(logs_path / f"net_{timestamp}.log")
                 
+                # IMPORTANT: Do NOT use --enable-logging=stderr together with
+                # --log-net-log. When stderr mode is active, Chrome internally
+                # prepends "chrome_" to all log-related paths, corrupting the
+                # --log-net-log destination (e.g. "chrome_C:\...\net_*.log").
+                #
+                # Instead, use --enable-logging=--log-file=<path> to write the
+                # debug log directly to a controlled path. This keeps both log
+                # destinations fully under Python's control with no side effects.
                 args.extend([
-                    f"--enable-logging=stderr",
+                    f"--enable-logging",
                     f"--log-level=0",
+                    f"--log-file={debug_log}",
                     f"--log-net-log={net_log}"
                 ])
                 

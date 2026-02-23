@@ -61,6 +61,20 @@ class Paths:
         """logs/ directory."""
         return self._base_dir / "logs"
 
+    @property
+    def workers_dir(self) -> Path:
+        """workers/ directory."""
+        return self._base_dir / "workers"
+
+    # -------------------------------------------------------------------------
+    # Workers subdirectories
+    # -------------------------------------------------------------------------
+
+    @property
+    def workers_brain_dir(self) -> Path:
+        """workers/brain/ — Brain service worker files (PID, events, traffic log)."""
+        return self.workers_dir / "brain"
+
     # -------------------------------------------------------------------------
     # Config files
     # -------------------------------------------------------------------------
@@ -94,14 +108,33 @@ class Paths:
         """bin/conductor/bloom-conductor.exe"""
         return self.bin_dir / "conductor" / "bloom-conductor.exe"
 
+    @property
+    def launcher_exe(self) -> Path:
+        """bin/launcher/bloom-launcher.exe"""
+        return self.bin_dir / "launcher" / "bloom-launcher.exe"
+
     # -------------------------------------------------------------------------
-    # Log directories (brain)
+    # Log directories
     # -------------------------------------------------------------------------
 
     @property
     def brain_logs_dir(self) -> Path:
         """logs/brain/ — root for all Brain log files."""
         return self.logs_dir / "brain"
+
+    @property
+    def sentinel_logs_dir(self) -> Path:
+        """logs/sentinel/ — root for all Sentinel log files."""
+        return self.logs_dir / "sentinel"
+
+    @property
+    def chromium_logs_dir(self) -> Path:
+        """logs/chromium/ — Chromium instance log files."""
+        return self.logs_dir / "chromium"
+
+    def sentinel_profile_logs_dir(self, profile_id: str) -> Path:
+        """logs/sentinel/profiles/{profile_id}/ — per-profile sentinel logs."""
+        return self.sentinel_logs_dir / "profiles" / profile_id
 
     # -------------------------------------------------------------------------
     # Config-driven lookups
@@ -191,7 +224,7 @@ class Paths:
             logger.info(f"🔍 [PATHS] Ejecutable: {exe_path}")
             logger.info(f"🔍 [PATHS] BASE CALCULADA: {base}")
 
-            for dirname in ['bin', 'config', 'profiles']:
+            for dirname in ['bin', 'config', 'profiles', 'workers', 'logs']:
                 (base / dirname).mkdir(parents=True, exist_ok=True)
 
             return base

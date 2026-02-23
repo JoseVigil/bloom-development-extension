@@ -2,7 +2,6 @@
 """
 Brain Core Module
 """
-# Si necesitas exportar PathResolver aquí, debe ser así:
-from .profile.path_resolver import PathResolver
+from brain.shared.paths import Paths
 
-__all__ = ['PathResolver']
+__all__ = ['Paths']

@@ -4,9 +4,15 @@ bloom-development-extension/
     ├── cmd/
     │   └── main.go
     ├── go.mod
+    ├── go.sum
     ├── internal/
+    │   ├── buildinfo/
+    │   │   └── buildinfo.go
     │   ├── executor/
     │   │   └── launch.go
+    │   ├── info/
+    │   │   ├── info.go
+    │   │   └── version.go
     │   ├── logger/
     │   │   └── logger.go
     │   ├── pipe/
@@ -14,3 +20,5 @@ bloom-development-extension/
     │   └── startup/
     │       └── startup_windows.go
     └── scripts/
+        ├── build.bat
+        └── build_number.txt

@@ -456,7 +456,7 @@ https://claude.ai/chat/a920ade0-adb4-407d-a3e2-798aa58869ac
 
 roamtouch Mandate turning point
 https://chatgpt.com/c/6995caae-c454-8332-a0e3-a5ccd678fdc6
-btips mandate development
+btips mandate development (temporal mandates)
 https://claude.ai/chat/617bd311-a0dd-4822-9ab8-50a76d845d8c
 
 jose gmail mercado
@@ -470,3 +470,6 @@ https://claude.ai/chat/1188b8cc-37bd-44a9-9835-34abaad4a716
 
 roamtouch workspace
 https://chatgpt.com/c/6997080d-77a4-832c-80a2-00f0040193d0
+
+nenes mandate hooks
+https://claude.ai/chat/d3089fad-bdcb-47b2-b096-6e9365c42896

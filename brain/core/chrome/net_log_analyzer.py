@@ -103,9 +103,9 @@ class NetLogAnalyzer:
                     f"Neither 'log_files.net_log' nor 'logs_dir' found for profile {profile_id}"
                 )
             if launch_id:
-                source_file = Path(raw_logs_dir) / f"chrome_{launch_id}_netlog.json"
+                source_file = Path(raw_logs_dir) / f"{launch_id}_netlog.json"
             else:
-                source_file = self._resolve_latest_log(Path(raw_logs_dir), 'chrome_*_netlog.json')
+                source_file = self._resolve_latest_log(Path(raw_logs_dir), '*_netlog.json')
 
         logger.debug(f"Source file: {source_file}")
 
@@ -120,10 +120,10 @@ class NetLogAnalyzer:
         output_dir.mkdir(parents=True, exist_ok=True)
 
         if launch_id:
-            output_file = output_dir / f"chrome_{launch_id}_engine_network.log"
+            output_file = output_dir / f"{launch_id}_engine_network.log"
         else:
             timestamp = datetime.now().strftime("%Y%m%d")
-            output_file = output_dir / f"chrome_bloom_net_log_{timestamp}.log"
+            output_file = output_dir / f"bloom_net_log_{timestamp}.log"
 
         logger.info(f"Analyzing network log: {source_file}")
         logger.info(f"Output will be saved to: {output_file}")
