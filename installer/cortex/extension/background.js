@@ -407,6 +407,10 @@ function executeCommand(msg) {
       executeWindowClose(msgId);
       break;
 
+    case 'keepalive':
+      // Silently acknowledge host keepalive
+      break;
+
     default:
       console.warn('[Synapse] ⚠ Unknown command:', command);
       respondToHost(msgId, { success: false, error: 'Unknown command' });

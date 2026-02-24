@@ -29,6 +29,7 @@ class ProfileCreator:
             paths: Paths instance for directory resolution
         """
         self.paths = paths
+        self._server_mode = False
         logger.debug("🗂️ ProfileCreator initialized")
 
     def create_profile(
@@ -305,9 +306,15 @@ class ProfileCreator:
         """
         Register profile in profiles.json.
         
-        Args:
-            profile_data: Profile information to register
+        IMPORTANTE: Solo puede ser llamado cuando _server_mode=True.
+        Brain es el único escritor autorizado de profiles.json (BTIP-001).
         """
+        if not self._server_mode:
+            raise RuntimeError(
+                "ProfileCreator._register_profile llamado fuera del contexto del servidor. "
+                "La creación de perfiles debe delegarse a Brain via comando PROFILE_CREATE por socket."
+            )
+
         profiles_file = self.paths.profiles_json
         
         # Load existing profiles or create new structure

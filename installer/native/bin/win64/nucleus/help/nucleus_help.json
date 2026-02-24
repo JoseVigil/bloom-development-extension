@@ -455,6 +455,10 @@
         "default": "2"
       },
       {
+        "name": "source",
+        "usage": "Application that writes this log (optional): brain|nucleus|sentinel|conductor|launcher|host"
+      },
+      {
         "name": "stream",
         "usage": "Stream identifier — lowercase snake_case (required)"
       }

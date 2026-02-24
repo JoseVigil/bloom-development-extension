@@ -48,8 +48,8 @@ class ServerManager:
         self.port = port
         
         # Workers directory structure: BloomNucleus/workers/brain/
-        app_data = os.environ.get('LOCALAPPDATA') or os.environ.get('PROGRAMDATA')
-        self.base_dir = Path(app_data) / "BloomNucleus"
+        # Resolver base_dir desde la ubicación del ejecutable, igual que Paths()
+        self.base_dir = Path(sys.executable).parent.parent.parent
         self.config_dir = self.base_dir / "config"
         self.workers_brain_dir = self.base_dir / "workers" / "brain"
         
@@ -255,6 +255,35 @@ class ServerManager:
                     }
                     await self._send_to_writer(writer, response)
                 
+                elif msg_type == 'PROFILE_CREATE':
+                    # Brain es el único escritor autorizado de profiles.json (BTIP-001)
+                    try:
+                        from brain.core.profile.profile_create import ProfileCreator
+                        from brain.shared.paths import Paths
+
+                        paths = Paths()
+                        creator = ProfileCreator(paths=paths)
+                        creator._server_mode = True
+                        profile_data = creator.create_profile(
+                            profile_id=msg.get('profile_id'),
+                            name=msg.get('name'),
+                            master=msg.get('master', False)
+                        )
+                        response = {
+                            "type": "PROFILE_CREATE_ACK",
+                            "status": "ok",
+                            "profile": profile_data
+                        }
+                        logger.info(f"✅ [{conn_id}] Profile created: {profile_data['id'][:8]}")
+                    except Exception as e:
+                        logger.error(f"❌ [{conn_id}] PROFILE_CREATE failed: {e}", exc_info=True)
+                        response = {
+                            "type": "PROFILE_CREATE_ACK",
+                            "status": "error",
+                            "message": str(e)
+                        }
+                    await self._send_to_writer(writer, response)
+
                 else:
                     # === ROUTING LOGIC ===
                     target_profile = msg.get('target_profile')

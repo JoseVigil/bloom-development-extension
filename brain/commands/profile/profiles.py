@@ -149,29 +149,66 @@ class ProfilesCreateCommand(BaseCommand):
             logger.debug(f"  → Master flag: {master}")
             
             try:
-                from brain.core.profile.profile_manager import ProfileManager
-                
+                import socket as _socket
+                import struct
+
                 if gc.verbose and not gc.json_mode:
                     master_indicator = " (MASTER)" if master else ""
                     typer.echo(f"🔨 Creando perfil '{alias}'{master_indicator}...", err=True)
-                
-                logger.debug("Inicializando ProfileManager...")
-                pm = ProfileManager()
-                
-                logger.info(f"Creando perfil con alias '{alias}' (master={master})...")
-                profile_data = pm.create_profile(name=alias, master=master)
+
+                logger.debug("Conectando al servidor Brain (127.0.0.1:5678)...")
+                try:
+                    sock = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+                    sock.settimeout(10)
+                    sock.connect(("127.0.0.1", 5678))
+                except (ConnectionRefusedError, OSError) as conn_err:
+                    raise RuntimeError(
+                        f"Brain server no está corriendo en 127.0.0.1:5678. "
+                        f"Iniciá el servicio antes de crear perfiles. ({conn_err})"
+                    )
+
+                try:
+                    payload = json.dumps({
+                        "type": "PROFILE_CREATE",
+                        "name": alias,
+                        "master": master
+                    }, ensure_ascii=False).encode("utf-8")
+                    sock.sendall(struct.pack(">I", len(payload)) + payload)
+                    logger.debug("→ PROFILE_CREATE enviado al servidor")
+
+                    raw_len = sock.recv(4)
+                    if len(raw_len) < 4:
+                        raise RuntimeError("Respuesta inválida del servidor Brain")
+                    msg_len = struct.unpack(">I", raw_len)[0]
+                    raw_body = b""
+                    while len(raw_body) < msg_len:
+                        chunk = sock.recv(msg_len - len(raw_body))
+                        if not chunk:
+                            break
+                        raw_body += chunk
+                    ack = json.loads(raw_body.decode("utf-8"))
+                finally:
+                    sock.close()
+
+                if ack.get("status") != "ok":
+                    raise RuntimeError(ack.get("message", "Error desconocido en servidor"))
+
+                profile = ack.get("profile", {})
+                profile_data = {
+                    "id": profile.get("id"),
+                    "alias": profile.get("name"),
+                    "path": profile.get("profile_dir"),
+                    "master_profile": profile.get("master")
+                }
                 logger.info(f"✅ Perfil creado: ID={profile_data.get('id', 'N/A')[:8]}, Master={profile_data.get('master_profile', False)}")
-                
-                # En modo JSON, devolver formato plano esperado por Sentinel
+
                 if gc.json_mode:
                     result = {
                         "uuid": profile_data.get('id'),
                         "master_profile": profile_data.get('master_profile', False),
                         "status": "success"
                     }
-                    # Usar dumps directamente para control total
-                    output = json.dumps(result, ensure_ascii=False)
-                    typer.echo(output)
+                    typer.echo(json.dumps(result, ensure_ascii=False))
                     logger.info("✅ Comando profile create completado (JSON)")
                 else:
                     result = {
@@ -181,7 +218,7 @@ class ProfilesCreateCommand(BaseCommand):
                     }
                     gc.output(result, self._render_create)
                     logger.info("✅ Comando profile create completado")
-                
+
             except Exception as e:
                 logger.error(f"❌ Error al crear perfil '{alias}': {str(e)}", exc_info=True)
                 self._handle_error(gc, f"Error al crear perfil: {str(e)}")

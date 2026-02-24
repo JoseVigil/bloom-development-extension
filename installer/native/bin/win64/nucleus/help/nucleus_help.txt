@@ -300,6 +300,7 @@
           --label                    Display label with emoji (required)
           --path                     Absolute path to log file (required)
           --priority                 Priority: 1=critical 2=important 3=informational [default: 2]
+          --source                   Application that writes this log (optional): brain|nucleus|sentinel|conductor|launcher|host
           --stream                   Stream identifier — lowercase snake_case (required)
 
         ----------------------------------------------------------------------

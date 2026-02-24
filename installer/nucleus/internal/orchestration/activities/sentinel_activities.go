@@ -45,7 +45,7 @@ func NewSentinelActivities(logsDir, nucleusPath, sentinelPath string) *SentinelA
 // Comando ejecutado: sentinel --json launch <profile_id> [--mode <mode>] [--config-file -]
 func (a *SentinelActivities) LaunchSentinel(ctx context.Context, input types.SentinelLaunchInput) (types.SentinelLaunchResult, error) {
 	// Construir comando: sentinel --json launch <profile_id>
-	args := []string{"--json", "launch", input.ProfileID}
+	args := []string{"--json", "launch", input.ProfileID, "--skip-preflight"}
 
 	// Agregar flags opcionales
 	if input.Mode != "" {
