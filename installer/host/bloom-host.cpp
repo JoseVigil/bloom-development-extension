@@ -287,6 +287,9 @@ void handle_extension_ready(const json& msg) {
     }
     
     std::cerr << "[HANDSHAKE] FASE 1: Extension → Host (extension_ready)" << std::endl;
+    if (g_logger.is_ready()) {
+        g_logger.log_native("INFO", "HANDSHAKE_FASE1 extension_ready received");
+    }
     
     // Extraer identidad del mensaje
     try_extract_identity(msg);
@@ -311,6 +314,9 @@ void handle_extension_ready(const json& msg) {
     write_message_to_chrome(response_str);
     
     std::cerr << "[HANDSHAKE] FASE 2: Host → Extension (host_ready)" << std::endl;
+    if (g_logger.is_ready()) {
+        g_logger.log_native("INFO", "HANDSHAKE_FASE2 host_ready sent version=" + VERSION + " build=" + std::to_string(BUILD));
+    }
     g_handshake_state.store(HANDSHAKE_HOST_READY);
     
     // Esperar a que haya conexión TCP antes de Fase 3
@@ -347,7 +353,8 @@ void handle_extension_ready(const json& msg) {
                 }
                 
                 if (g_logger.is_ready()) {
-                    g_logger.log_native("INFO", "HANDSHAKE_COMPLETE Version=" + VERSION);
+                    g_logger.log_native("INFO", "HANDSHAKE_FASE3 PROFILE_CONNECTED sent to Brain");
+                    g_logger.log_native("INFO", "HANDSHAKE_COMPLETE Version=" + VERSION + " Build=" + std::to_string(BUILD));
                 }
                 
                 std::cerr << "[HANDSHAKE] ✓ COMPLETO - Sistema listo para comandos" << std::endl;
@@ -358,6 +365,9 @@ void handle_extension_ready(const json& msg) {
         }
         
         std::cerr << "[HANDSHAKE] ⚠️ Timeout esperando conexión TCP para Fase 3" << std::endl;
+        if (g_logger.is_ready()) {
+            g_logger.log_native("WARN", "HANDSHAKE_FASE3_TIMEOUT TCP not available after 5000ms");
+        }
     }).detach();
 }
 
@@ -389,6 +399,9 @@ void handle_chrome_message(const std::string& msg_str) {
         std::string type = json_get_string_safe(msg, "type");
         
         std::cerr << "[CHROME_MSG] command='" << command << "' type='" << type << "'" << std::endl;
+        if (g_logger.is_ready()) {
+            g_logger.log_native("INFO", "CHROME_MSG command=" + command + " type=" + type + " size=" + std::to_string(msg_str.size()));
+        }
         
         // 🔒 HANDSHAKE: Manejar extension_ready
         if (command == "extension_ready") {
@@ -452,6 +465,9 @@ void handle_service_message(const std::string& msg_str) {
         std::string command = json_get_string_safe(msg, "command");
         
         std::cerr << "[SERVICE_MSG] type='" << type << "' command='" << command << "'" << std::endl;
+        if (g_logger.is_ready()) {
+            g_logger.log_native("INFO", "BRAIN_MSG type=" + type + " command=" + command + " size=" + std::to_string(msg_str.size()));
+        }
         
         // 🔒 VALIDACIÓN: Solo rutear si handshake confirmado
         if (!is_handshake_confirmed()) {
@@ -836,7 +852,9 @@ int main(int argc, char* argv[]) {
                     g_logger.log_native("INFO", "STDIN_EOF StdinMessages=" + std::to_string(stdin_messages) +
                                        " Pending=" + std::to_string(pending) +
                                        " Sent=" + std::to_string(g_messages_sent.load()) +
-                                       " Received=" + std::to_string(g_messages_received.load()));
+                                       " Received=" + std::to_string(g_messages_received.load()) +
+                                       " Heartbeats=" + std::to_string(g_heartbeat_count.load()) +
+                                       " HandshakeState=" + std::to_string(g_handshake_state.load()));
                 }
                 break;
             }
