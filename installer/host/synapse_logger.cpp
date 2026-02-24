@@ -149,7 +149,7 @@ void SynapseLogManager::register_telemetry() {
         "\"" + nucleus + "\""
         " telemetry register"
         " --stream \""      + stream_id + "\""
-        " --label \"�️ HOST\""
+        " --label \"HOST\""
         " --path \""        + host_fwd  + "\""
         " --path \""        + ext_fwd   + "\""
         " --priority 2"
@@ -158,8 +158,9 @@ void SynapseLogManager::register_telemetry() {
         " --description \"" + desc + "\"";
 
 #ifdef _WIN32
-    // En Windows envolvemos en cmd /C para que el shell resuelva el path
-    cmd = "cmd /C " + cmd;
+    // En Windows cmd /C requiere que todo el comando compuesto esté
+    // envuelto en comillas externas adicionales cuando contiene comillas internas.
+    cmd = "cmd /C \"" + cmd + "\"";
 #endif
 
     int ret = std::system(cmd.c_str());
@@ -189,11 +190,16 @@ void SynapseLogManager::initialize(const std::string& p_profile_id,
     profile_id = p_profile_id;
     launch_id  = p_launch_id;
 
+    std::cerr << "[" << get_timestamp_ms() << "] [DEBUG] [HOST] "
+              << "INIT_CALLED profile=" << p_profile_id
+              << " launch=" << p_launch_id << "\n";
+    std::cerr.flush();
+
     // 1. Directorio base
     std::string base = get_base_log_directory();
     if (base.empty()) {
         std::cerr << "[" << get_timestamp_ms() << "] [ERROR] [HOST] "
-                  << "Cannot determine base log directory\n";
+                  << "INIT_FAIL base_dir=EMPTY\n";
         std::cerr.flush();
         return;
     }
@@ -204,9 +210,13 @@ void SynapseLogManager::initialize(const std::string& p_profile_id,
         + PATH_SEP + profile_id
         + PATH_SEP + launch_id;
 
+    std::cerr << "[" << get_timestamp_ms() << "] [DEBUG] [HOST] "
+              << "INIT_DIR_ATTEMPT path=" << log_directory << "\n";
+    std::cerr.flush();
+
     if (!create_directory_recursive(log_directory)) {
         std::cerr << "[" << get_timestamp_ms() << "] [ERROR] [HOST] "
-                  << "Cannot create log directory: " << log_directory << "\n";
+                  << "INIT_FAIL dir_create path=" << log_directory << "\n";
         std::cerr.flush();
         return;
     }
@@ -230,7 +240,11 @@ void SynapseLogManager::initialize(const std::string& p_profile_id,
 
     if (!native_log.is_open() || !browser_log.is_open()) {
         std::cerr << "[" << get_timestamp_ms() << "] [ERROR] [HOST] "
-                  << "Cannot open log files in: " << log_directory << "\n";
+                  << "INIT_FAIL open_files"
+                  << " host=" << host_log_path
+                  << " ext=" << extension_log_path
+                  << " native_open=" << native_log.is_open()
+                  << " browser_open=" << browser_log.is_open() << "\n";
         std::cerr.flush();
         return;
     }

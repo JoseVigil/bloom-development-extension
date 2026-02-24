@@ -1,3 +1,4 @@
+
 #include <iostream>
 #include <vector>
 #include <string>
@@ -25,7 +26,7 @@ const std::string VERSION = "2.1.0";
 const int BUILD = BUILD_NUMBER;
 const int SERVICE_PORT = 5678;
 const size_t MAX_MESSAGE_SIZE = 50 * 1024 * 1024;
-const size_t MAX_CHROME_MSG_SIZE = 1020000; // 🔒 MURO DE 1MB (con margen de seguridad)
+const size_t MAX_CHROME_MSG_SIZE = 1020000; // � MURO DE 1MB (con margen de seguridad)
 const int RECONNECT_DELAY_MS = 500;
 const size_t MAX_QUEUED_MESSAGES = 500;
 const int MAX_IDENTITY_WAIT_MS = 10000;
@@ -129,7 +130,7 @@ void write_message_to_chrome(const std::string& s) {
         std::lock_guard<std::mutex> lock(stdout_mutex);
         uint32_t len = static_cast<uint32_t>(s.size());
         
-        // 🔒 VALIDACIÓN DEL MURO DE 1MB
+        // � VALIDACIÓN DEL MURO DE 1MB
         if (len > MAX_CHROME_MSG_SIZE) {
             std::cerr << "[WRITE_CHROME] ✗ MENSAJE DEMASIADO GRANDE: " << len 
                       << " bytes (límite: " << MAX_CHROME_MSG_SIZE << ")" << std::endl;
@@ -291,8 +292,33 @@ void handle_extension_ready(const json& msg) {
         g_logger.log_native("INFO", "HANDSHAKE_FASE1 extension_ready received");
     }
     
-    // Extraer identidad del mensaje
-    try_extract_identity(msg);
+    // Extraer identidad directamente del mensaje extension_ready
+    // (no usar try_extract_identity que requiere type=="SYSTEM_HELLO")
+    {
+        std::string profile = json_get_string_safe(msg, "profile_id");
+        std::string launch  = json_get_string_safe(msg, "launch_id");
+        std::string ext_id  = json_get_string_safe(msg, "extension_id");
+
+        if (!profile.empty() && !launch.empty()) {
+            std::lock_guard<std::mutex> id_lock(g_identity_mutex);
+            if (g_profile_id.empty()) {
+                g_profile_id    = profile;
+                g_launch_id     = launch;
+                g_extension_id  = ext_id;
+
+                g_logger.initialize(profile, launch);
+
+                identity_resolved.store(true);
+                g_identity_cv.notify_all();
+
+                std::cerr << "[HANDSHAKE] ✓ Identity resolved from extension_ready"
+                          << " profile=" << profile
+                          << " launch="  << launch << std::endl;
+            }
+        } else {
+            std::cerr << "[HANDSHAKE] ⚠️ extension_ready missing profile_id or launch_id" << std::endl;
+        }
+    }
     
     // Transición a Fase 1
     g_handshake_state.store(HANDSHAKE_EXTENSION_READY);
@@ -403,7 +429,7 @@ void handle_chrome_message(const std::string& msg_str) {
             g_logger.log_native("INFO", "CHROME_MSG command=" + command + " type=" + type + " size=" + std::to_string(msg_str.size()));
         }
         
-        // 🔒 HANDSHAKE: Manejar extension_ready
+        // � HANDSHAKE: Manejar extension_ready
         if (command == "extension_ready") {
             handle_extension_ready(msg);
             return;
@@ -469,7 +495,7 @@ void handle_service_message(const std::string& msg_str) {
             g_logger.log_native("INFO", "BRAIN_MSG type=" + type + " command=" + command + " size=" + std::to_string(msg_str.size()));
         }
         
-        // 🔒 VALIDACIÓN: Solo rutear si handshake confirmado
+        // � VALIDACIÓN: Solo rutear si handshake confirmado
         if (!is_handshake_confirmed()) {
             std::cerr << "[SERVICE_MSG] ⚠️ Handshake NO confirmado - mensaje bloqueado" << std::endl;
             
