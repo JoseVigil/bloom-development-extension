@@ -796,8 +796,6 @@ void tcp_client_loop() {
 
 int main(int argc, char* argv[]) {
     try {
-	// TEMP DEBUG: redirigir stderr a archivo fijo
-	freopen("C:\\Users\\josev\\AppData\\Local\\BloomNucleus\\logs\\host_stderr.txt", "a", stderr);
         // ========== CLI Command Handling ==========
         auto cli_result = CLIParser::parse_and_execute(argc, argv);
         if (cli_result.handled) {
