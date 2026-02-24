@@ -5,6 +5,8 @@
 #include <mutex>
 #include <chrono>
 #include <thread>
+#include <vector>
+#include <utility>
 
 /**
  * @brief Sistema de logging para Synapse Native Bridge (bloom-host)
@@ -42,6 +44,21 @@ private:
 
     bool ready;                      // true cuando ambos archivos están abiertos y listos
 
+    // Cola de mensajes nativos emitidos antes de que initialize() sea llamado.
+    // Cada entrada guarda el timestamp original para preservar orden cronológico.
+    // Límite: 100 entradas — más que suficiente para cubrir el handshake completo.
+    struct PendingEntry {
+        std::string timestamp;
+        std::string level;
+        std::string message;
+    };
+    std::vector<PendingEntry> pending_queue;
+    std::mutex                pending_mutex;
+    static constexpr size_t   MAX_PENDING = 100;
+
+    /** Vuelca pending_queue al archivo nativo. Llamar solo con native_mutex tomado y ready==true. */
+    void flush_pending_queue();
+
     // -------------------------------------------------------------------------
     // Internals
     // -------------------------------------------------------------------------
@@ -69,7 +86,7 @@ private:
     /**
      * Invoca `nucleus telemetry register` con los dos paths del stream.
      *   stream_id: synapse_host_{launch_id}   (snake_case, único por sesión)
-     *   label:     🖥️ HOST
+     *   label:     �️ HOST
      *   source:    host
      *   category:  synapse
      *

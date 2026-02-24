@@ -119,7 +119,7 @@ std::string SynapseLogManager::get_nucleus_executable() {
 //       Nucleus es el único writer autorizado.
 //
 // stream_id: synapse_host_{launch_id}  — único por sesión, snake_case
-// label:     🖥️ HOST
+// label:     �️ HOST
 // paths:     array con host_log_path + extension_log_path
 // ============================================================================
 
@@ -149,7 +149,7 @@ void SynapseLogManager::register_telemetry() {
         "\"" + nucleus + "\""
         " telemetry register"
         " --stream \""      + stream_id + "\""
-        " --label \"🖥️ HOST\""
+        " --label \"�️ HOST\""
         " --path \""        + host_fwd  + "\""
         " --path \""        + ext_fwd   + "\""
         " --priority 2"
@@ -265,7 +265,12 @@ void SynapseLogManager::initialize(const std::string& p_profile_id,
               << " dir="     << log_directory << "\n";
     std::cerr.flush();
 
-    // 6. Registrar ambos archivos en telemetry.json via nucleus CLI.
+    // 6. Volcar mensajes encolados antes de que el logger estuviera listo.
+    //    Estos son los logs del handshake Fase 1 y Fase 2 que llegaron
+    //    antes de que initialize() fuera llamado.
+    flush_pending_queue();
+
+    // 7. Registrar ambos archivos en telemetry.json via nucleus CLI.
     //    Se lanza en thread separado (detached) para no bloquear el startup.
     //    std::system() en Windows invoca cmd.exe y puede tardar varios segundos.
     //    Si bloqueara aquí, Chrome mataría el proceso por idle timeout (6s) antes
@@ -292,6 +297,20 @@ void SynapseLogManager::log_native(const std::string& level,
     std::string ts   = get_timestamp_ms();
     std::string line = "[" + ts + "] [" + level + "] [HOST] " + message;
 
+    // stderr → capturado por Sentinel → trace unificado de Synapse
+    // Se escribe SIEMPRE, independientemente del estado del logger.
+    std::cerr << line << "\n";
+    std::cerr.flush();
+
+    if (!ready) {
+        // Logger aún no inicializado: encolar para flush posterior.
+        std::lock_guard<std::mutex> lock(pending_mutex);
+        if (pending_queue.size() < MAX_PENDING) {
+            pending_queue.push_back({ts, level, message});
+        }
+        return;
+    }
+
     {
         std::lock_guard<std::mutex> lock(native_mutex);
         if (native_log.is_open()) {
@@ -299,9 +318,37 @@ void SynapseLogManager::log_native(const std::string& level,
             native_log.flush();
         }
     }
+}
 
-    // stderr → capturado por Sentinel → trace unificado de Synapse
-    std::cerr << line << "\n";
+// ============================================================================
+// flush_pending_queue — vuelca mensajes encolados antes de initialize()
+// Precondición: native_mutex tomado y ready == true.
+// ============================================================================
+
+void SynapseLogManager::flush_pending_queue() {
+    // Tomar snapshot de la cola y limpiarla bajo pending_mutex
+    std::vector<PendingEntry> snapshot;
+    {
+        std::lock_guard<std::mutex> lock(pending_mutex);
+        snapshot.swap(pending_queue);
+    }
+
+    if (snapshot.empty()) return;
+
+    // Escribir snapshot al archivo bajo native_mutex
+    std::lock_guard<std::mutex> lock(native_mutex);
+    if (!native_log.is_open()) return;
+
+    native_log << "--- PENDING LOG FLUSH (" << snapshot.size() << " entries) ---\n";
+    for (const auto& e : snapshot) {
+        std::string line = "[" + e.timestamp + "] [" + e.level + "] [HOST] " + e.message;
+        native_log << line << "\n";
+    }
+    native_log << "--- END PENDING FLUSH ---\n";
+    native_log.flush();
+
+    std::cerr << "[" << get_timestamp_ms() << "] [INFO] [HOST] "
+              << "Flushed " << snapshot.size() << " pending log entries to disk\n";
     std::cerr.flush();
 }
 
