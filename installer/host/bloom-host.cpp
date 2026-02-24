@@ -30,6 +30,7 @@ const int RECONNECT_DELAY_MS = 500;
 const size_t MAX_QUEUED_MESSAGES = 500;
 const int MAX_IDENTITY_WAIT_MS = 10000;
 const int HEARTBEAT_INTERVAL_SEC = 10;
+const int CHROME_KEEPALIVE_INTERVAL_MS = 3000; // < 6s Chrome NM idle timeout
 
 // ============================================================================
 // HANDSHAKE DE 3 FASES
@@ -567,6 +568,45 @@ void heartbeat_loop() {
 }
 
 // ============================================================================
+// CHROME KEEPALIVE LOOP
+// Prevents Chrome from terminating the NM Host due to pipe inactivity.
+// Chrome's Service Worker kills idle NM hosts after ~6 seconds with no
+// stdout activity. We must write to Chrome independently of Brain traffic.
+// ============================================================================
+
+void chrome_keepalive_loop() {
+    std::cerr << "[CHROME_KA] Thread started - interval=" 
+              << CHROME_KEEPALIVE_INTERVAL_MS << "ms" << std::endl;
+    
+    try {
+        while (!shutdown_requested.load()) {
+            std::this_thread::sleep_for(
+                std::chrono::milliseconds(CHROME_KEEPALIVE_INTERVAL_MS));
+            
+            if (shutdown_requested.load()) break;
+            
+            // Only send keepalives once handshake is confirmed.
+            // Before that, host_ready already keeps the pipe warm.
+            if (g_handshake_state.load() != HANDSHAKE_CONFIRMED) continue;
+            
+            json ka;
+            ka["command"] = "keepalive";
+            ka["timestamp"] = get_timestamp_ms();
+            ka["heartbeat_count"] = g_heartbeat_count.load();
+            
+            std::string ka_str = ka.dump();
+            write_message_to_chrome(ka_str);
+            
+            std::cerr << "[CHROME_KA] ✓ Keepalive sent to Chrome" << std::endl;
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "[CHROME_KA] ✗ Exception: " << e.what() << std::endl;
+    }
+    
+    std::cerr << "[CHROME_KA] Thread exiting" << std::endl;
+}
+
+// ============================================================================
 // TCP CLIENT LOOP
 // ============================================================================
 
@@ -762,6 +802,9 @@ int main(int argc, char* argv[]) {
         std::cerr << "[HOST] Starting heartbeat thread..." << std::endl;
         std::thread heartbeat_thread(heartbeat_loop);
 
+        std::cerr << "[HOST] Starting Chrome keepalive thread..." << std::endl;
+        std::thread chrome_keepalive_thread(chrome_keepalive_loop);
+
         std::cerr << "[HOST] ✓ All threads started - entering main loop" << std::endl;
         std::cerr << "[HOST] Listening on STDIN for Chrome messages..." << std::endl;
         std::cerr << "[HOST] Handshake state: " << g_handshake_state.load() << std::endl;
@@ -847,6 +890,10 @@ int main(int argc, char* argv[]) {
         std::cerr << "[HOST] Waiting for heartbeat thread to exit..." << std::endl;
         if (heartbeat_thread.joinable()) heartbeat_thread.join();
         std::cerr << "[HOST] ✓ Heartbeat thread joined" << std::endl;
+        
+        std::cerr << "[HOST] Waiting for Chrome keepalive thread to exit..." << std::endl;
+        if (chrome_keepalive_thread.joinable()) chrome_keepalive_thread.join();
+        std::cerr << "[HOST] ✓ Chrome keepalive thread joined" << std::endl;
 
         PlatformUtils::cleanup_networking();
         
