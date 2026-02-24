@@ -6,134 +6,117 @@
 #include <chrono>
 
 /**
- * @brief Sistema de logging dual para Synapse Native Bridge
- * 
+ * @brief Sistema de logging para Synapse Native Bridge (bloom-host)
+ *
  * Maneja dos canales de logging separados:
- * - native_log: Eventos del proceso C++ (bloom-host.exe) → synapse_host_*.log
- * - browser_log: Mensajes redirigidos desde la extensión Chrome → synapse_extension_*.log
- * 
- * Los archivos se crean dinámicamente al recibir la identidad del perfil.
- * Integración automática con telemetry.json para monitoreo de streams activos.
+ *   - native_log:  Eventos del proceso C++ (bloom-host) → synapse_host_YYYYMMDD.log
+ *   - browser_log: Mensajes redirigidos desde la extensión Chrome → synapse_extension_YYYYMMDD.log
+ *
+ * Estructura de directorios:
+ *   Windows: %LOCALAPPDATA%\BloomNucleus\logs\host\{profile_id}\{launch_id}\
+ *   macOS:   /tmp/bloom-nucleus/logs/host/{profile_id}/{launch_id}/
+ *
+ * Registro de telemetría:
+ *   Delegado a nucleus via CLI — este componente NUNCA escribe telemetry.json directamente.
+ *   nucleus.exe se localiza en %LOCALAPPDATA%\BloomNucleus\bin\nucleus\nucleus.exe (Windows)
+ *   o en PATH (macOS). Se invoca `nucleus telemetry register` una sola vez al crear los
+ *   archivos, con ambos paths como array en un solo stream.
+ *
+ * Visibilidad en trace:
+ *   Cada entrada se escribe también a stderr para que Sentinel la capture
+ *   y la alinee en el trace unificado de Synapse con timestamps consistentes.
  */
 class SynapseLogManager {
 private:
     std::ofstream native_log;
     std::ofstream browser_log;
-    std::mutex native_mutex;
-    std::mutex browser_mutex;
-    std::mutex telemetry_mutex;
-    std::string log_directory;
+    std::mutex    native_mutex;
+    std::mutex    browser_mutex;
+
+    std::string log_directory;       // Ruta completa al directorio de sesión
+    std::string host_log_path;       // Ruta al archivo synapse_host_YYYYMMDD.log
+    std::string extension_log_path;  // Ruta al archivo synapse_extension_YYYYMMDD.log
     std::string profile_id;
-    std::string current_host_log_path;
-    std::string current_extension_log_path;
-    bool initialized;
-    bool logs_opened;
-    
-    // Control de actualización de telemetry (throttling)
-    std::chrono::steady_clock::time_point last_telemetry_update_host;
-    std::chrono::steady_clock::time_point last_telemetry_update_extension;
-    static constexpr int TELEMETRY_UPDATE_INTERVAL_SECONDS = 30;
-    
-    /**
-     * @brief Genera timestamp con precisión de milisegundos
-     * @return String en formato "YYYY-MM-DD HH:MM:SS.mmm"
-     */
+    std::string launch_id;
+
+    bool ready;                      // true cuando ambos archivos están abiertos y listos
+
+    // -------------------------------------------------------------------------
+    // Internals
+    // -------------------------------------------------------------------------
+
+    /** Timestamp UTC: "YYYY-MM-DD HH:MM:SS.mmm" */
     std::string get_timestamp_ms();
-    
+
     /**
-     * @brief Obtiene el directorio base de logs según el SO
-     * @return Path completo al directorio de logs
-     * 
-     * Windows: %LOCALAPPDATA%\BloomNucleus\logs
-     * Unix:    /tmp/bloom-nucleus/logs
+     * Retorna el directorio raíz de logs de BloomNucleus según el SO.
+     *   Windows: %LOCALAPPDATA%\BloomNucleus\logs
+     *   macOS:   /tmp/bloom-nucleus/logs
      */
-    std::string get_log_directory();
-    
-    /**
-     * @brief Crea recursivamente un directorio y sus padres
-     * @param path Ruta completa a crear
-     * @return true si exitoso o ya existía
-     */
+    std::string get_base_log_directory();
+
+    /** Crea recursivamente un directorio y sus padres (cross-platform). */
     bool create_directory_recursive(const std::string& path);
-    
+
     /**
-     * @brief Obtiene la ruta completa a telemetry.json
-     * @return Path al archivo telemetry.json
-     * 
-     * Windows: %LOCALAPPDATA%\BloomNucleus\logs\telemetry.json
-     * Unix:    /tmp/bloom-nucleus/logs/telemetry.json
+     * Retorna el path absoluto al ejecutable nucleus según el SO.
+     *   Windows: %LOCALAPPDATA%\BloomNucleus\bin\nucleus\nucleus.exe
+     *   macOS:   nucleus  (en PATH)
      */
-    std::string get_telemetry_path();
-    
+    std::string get_nucleus_executable();
+
     /**
-     * @brief Actualiza entrada en telemetry.json para un stream
-     * @param stream_name Nombre del stream ("synapse_host" o "synapse_extension")
-     * @param log_path Ruta completa al archivo de log
-     * 
-     * Crea o actualiza entrada con:
-     * - label: Etiqueta descriptiva con emoji
-     * - path: Ruta completa al archivo
-     * - priority: 2 (fijo)
-     * - last_update: Timestamp ISO 8601
+     * Invoca `nucleus telemetry register` con los dos paths del stream.
+     *   stream_id: synapse_host_{launch_id}   (snake_case, único por sesión)
+     *   label:     🖥️ HOST
+     *   source:    host
+     *   category:  synapse
+     *
+     * Nucleus es el único writer autorizado de telemetry.json.
+     * Falla silenciosamente via stderr si nucleus no está disponible.
      */
-    void update_telemetry(const std::string& stream_name, const std::string& log_path);
+    void register_telemetry();
 
 public:
     SynapseLogManager();
     ~SynapseLogManager();
-    
+
     /**
-     * @brief Fase 1: Inicializa el directorio de logs específico del perfil
+     * @brief Inicialización única — crea directorio, archivos y registra telemetría.
+     *
      * @param profile_id UUID del perfil (e.g., "14c11dbf-7f2a-43be-beba-7ae757cc7486")
-     * 
-     * Crea la estructura:
-     * logs/profiles/{profile_id}/host/
-     * 
-     * NO crea archivos físicos todavía (espera el launch_id).
+     * @param launch_id  ID de lanzamiento (e.g., "009_14c11dbf_045012")
+     *
+     * Estructura creada:
+     *   logs/host/{profile_id}/{launch_id}/synapse_host_YYYYMMDD.log
+     *   logs/host/{profile_id}/{launch_id}/synapse_extension_YYYYMMDD.log
+     *
+     * Llama a `nucleus telemetry register` con ambos paths en un solo stream.
+     * Es idempotente: llamadas repetidas con los mismos IDs no tienen efecto.
      */
-    void initialize_with_profile_id(const std::string& profile_id);
-    
-    /**
-     * @brief Fase 2: Crea los archivos de log con el ID de sesión
-     * @param launch_id ID de lanzamiento (e.g., "009_14c11dbf_045012")
-     * 
-     * Crea archivos con formato:
-     * - synapse_host_DDD_UUUUUUUU_HHMMSS.log
-     * - synapse_extension_DDD_UUUUUUUU_HHMMSS.log
-     * 
-     * Donde:
-     * - DDD: Día del mes (3 dígitos)
-     * - UUUUUUUU: Primeros 8 chars del profile_id
-     * - HHMMSS: Hora, minuto, segundo
-     * 
-     * Escribe headers de sesión con timestamp y PID.
-     * Registra streams iniciales en telemetry.json.
-     */
-    void initialize_with_launch_id(const std::string& launch_id);
-    
-    /**
-     * @brief Verifica si el logger está listo para escribir
-     * @return true si los archivos están abiertos
-     */
+    void initialize(const std::string& profile_id, const std::string& launch_id);
+
+    /** true si los archivos están abiertos y listos para escribir. */
     bool is_ready() const;
-    
+
     /**
-     * @brief Escribe entrada en el log nativo (bloom-host)
-     * @param level Nivel de log (INFO, WARN, ERROR, DEBUG, CRITICAL)
+     * @brief Escribe en el log nativo del proceso host.
+     * @param level   INFO | WARN | ERROR | DEBUG | CRITICAL
      * @param message Mensaje a registrar
-     * 
-     * Actualiza telemetry.json cada 30 segundos para mantener señal de vida.
+     *
+     * Escribe en synapse_host_YYYYMMDD.log y duplica a stderr
+     * para visibilidad en el trace unificado de Synapse vía Sentinel.
      */
     void log_native(const std::string& level, const std::string& message);
-    
+
     /**
-     * @brief Escribe entrada en el log del navegador (extension)
-     * @param level Nivel de log
-     * @param message Mensaje a registrar
-     * @param timestamp Timestamp opcional (si viene de la extensión)
-     * 
-     * Actualiza telemetry.json cada 30 segundos para mantener señal de vida.
+     * @brief Escribe en el log de la extensión Chrome.
+     * @param level     Nivel de log
+     * @param message   Mensaje a registrar
+     * @param timestamp Timestamp ISO opcional proveniente de la extensión
+     *
+     * Escribe en synapse_extension_YYYYMMDD.log y duplica a stderr.
      */
-    void log_browser(const std::string& level, const std::string& message, 
+    void log_browser(const std::string& level, const std::string& message,
                      const std::string& timestamp = "");
 };

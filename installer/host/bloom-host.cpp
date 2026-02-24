@@ -212,10 +212,13 @@ bool try_extract_profile_id_from_raw(const std::string& msg_str) {
             
             std::lock_guard<std::mutex> lock(g_identity_mutex);
             if (g_profile_id.empty()) {
+                // Guardamos el profile_id para que try_extract_identity lo tenga listo,
+                // pero NO inicializamos el logger aquí: se requiere también el launch_id
+                // para crear la estructura de directorios completa.
                 g_profile_id = candidate;
-                g_logger.initialize_with_profile_id(candidate);
                 
-                std::cerr << "[IDENTITY_EXTRACT_RAW] ✓ profile=" << candidate << std::endl;
+                std::cerr << "[IDENTITY_EXTRACT_RAW] ✓ profile=" << candidate
+                          << " (logger pending launch_id)" << std::endl;
                 return true;
             }
         }
@@ -252,8 +255,7 @@ bool try_extract_identity(const json& msg) {
             g_launch_id = launch;
             g_extension_id = ext_id;
             
-            g_logger.initialize_with_profile_id(profile);
-            g_logger.initialize_with_launch_id(launch);
+            g_logger.initialize(profile, launch);
             
             identity_resolved.store(true);
             g_identity_cv.notify_all();
@@ -785,8 +787,7 @@ int main(int argc, char* argv[]) {
             g_profile_id = cli_profile_id;
             g_launch_id = cli_launch_id;
             
-            g_logger.initialize_with_profile_id(cli_profile_id);
-            g_logger.initialize_with_launch_id(cli_launch_id);
+            g_logger.initialize(cli_profile_id, cli_launch_id);
             
             identity_resolved.store(true);
             g_identity_cv.notify_all();

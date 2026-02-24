@@ -1,325 +1,322 @@
 #include "synapse_logger.h"
+
 #include <sstream>
 #include <iomanip>
 #include <fstream>
 #include <ctime>
+#include <cstdlib>
+#include <iostream>
 
 #if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
     #include <windows.h>
     #include <shlobj.h>
     #include <direct.h>
-    #define mkdir_impl(path) _mkdir(path)
-    #define getpid_impl() _getpid()
+    #include <process.h>
+    #define PATH_SEP               "\\"
+    #define mkdir_p(p)             _mkdir(p)
+    #define gmtime_cross(t, tm)    gmtime_s((tm), (t))
+    #define getpid_cross()         static_cast<int>(_getpid())
 #else
     #include <sys/stat.h>
     #include <unistd.h>
-    #define mkdir_impl(path) mkdir(path, 0755)
-    #define getpid_impl() getpid()
+    #define PATH_SEP               "/"
+    #define mkdir_p(p)             mkdir((p), 0755)
+    #define gmtime_cross(t, tm)    gmtime_r((t), (tm))
+    #define getpid_cross()         static_cast<int>(getpid())
 #endif
 
-SynapseLogManager::SynapseLogManager() 
-    : initialized(false), logs_opened(false) {
-    last_telemetry_update_host = std::chrono::steady_clock::now();
-    last_telemetry_update_extension = std::chrono::steady_clock::now();
-}
+// ============================================================================
+// Constructor / Destructor
+// ============================================================================
+
+SynapseLogManager::SynapseLogManager() : ready(false) {}
 
 SynapseLogManager::~SynapseLogManager() {
-    if (native_log.is_open()) native_log.close();
+    if (native_log.is_open())  native_log.close();
     if (browser_log.is_open()) browser_log.close();
 }
 
+// ============================================================================
+// Timestamp UTC — "YYYY-MM-DD HH:MM:SS.mmm"
+// ============================================================================
+
 std::string SynapseLogManager::get_timestamp_ms() {
-    auto now = std::chrono::system_clock::now();
-    auto now_t = std::chrono::system_clock::to_time_t(now);
+    auto now    = std::chrono::system_clock::now();
+    auto now_t  = std::chrono::system_clock::to_time_t(now);
     auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-        now.time_since_epoch()) % 1000;
-    
-    std::stringstream ss;
-    ss << std::put_time(std::localtime(&now_t), "%Y-%m-%d %H:%M:%S")
+                      now.time_since_epoch()) % 1000;
+
+    std::tm tm_utc{};
+    gmtime_cross(&now_t, &tm_utc);
+
+    std::ostringstream ss;
+    ss << std::put_time(&tm_utc, "%Y-%m-%d %H:%M:%S")
        << "." << std::setfill('0') << std::setw(3) << now_ms.count();
     return ss.str();
 }
 
-std::string SynapseLogManager::get_log_directory() {
+// ============================================================================
+// Directorio base de logs
+// ============================================================================
+
+std::string SynapseLogManager::get_base_log_directory() {
 #ifdef _WIN32
-    char path[MAX_PATH];
+    // Preferir SHGetFolderPath; fallback a env var
+    char path[MAX_PATH] = {};
     if (SHGetFolderPathA(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, path) >= 0) {
-        std::string base = std::string(path) + "\\BloomNucleus\\logs";
-        mkdir_impl(base.c_str());
-        return base;
+        return std::string(path) + "\\BloomNucleus\\logs";
     }
+    const char* appdata = std::getenv("LOCALAPPDATA");
+    if (appdata) return std::string(appdata) + "\\BloomNucleus\\logs";
     return "";
 #else
-    std::string base = "/tmp/bloom-nucleus/logs";
-    mkdir_impl(base.c_str());
-    return base;
+    return "/tmp/bloom-nucleus/logs";
 #endif
 }
 
-std::string SynapseLogManager::get_telemetry_path() {
-#ifdef _WIN32
-    char path[MAX_PATH];
-    if (SHGetFolderPathA(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, path) >= 0) {
-        return std::string(path) + "\\BloomNucleus\\logs\\telemetry.json";
-    }
-    return "";
-#else
-    return "/tmp/bloom-nucleus/logs/telemetry.json";
-#endif
-}
+// ============================================================================
+// Creación recursiva de directorios
+// ============================================================================
 
 bool SynapseLogManager::create_directory_recursive(const std::string& path) {
+    if (path.empty()) return false;
+    char sep = PATH_SEP[0];
+    size_t pos = 0;
+    do {
+        pos = path.find(sep, pos + 1);
+        std::string sub = path.substr(0, pos);
+        if (!sub.empty()) mkdir_p(sub.c_str());
+    } while (pos != std::string::npos);
+    return true;
+}
+
+// ============================================================================
+// Path al ejecutable nucleus
+//   Windows: %LOCALAPPDATA%\BloomNucleus\bin\nucleus\nucleus.exe
+//   macOS:   nucleus  (en PATH)
+// ============================================================================
+
+std::string SynapseLogManager::get_nucleus_executable() {
 #ifdef _WIN32
-    size_t pos = 0;
-    do {
-        pos = path.find_first_of("\\/", pos + 1);
-        std::string subpath = path.substr(0, pos);
-        mkdir_impl(subpath.c_str());
-    } while (pos != std::string::npos);
-    return true;
+    char path[MAX_PATH] = {};
+    if (SHGetFolderPathA(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, path) >= 0) {
+        return std::string(path) + "\\BloomNucleus\\bin\\nucleus\\nucleus.exe";
+    }
+    const char* appdata = std::getenv("LOCALAPPDATA");
+    if (appdata) {
+        return std::string(appdata) + "\\BloomNucleus\\bin\\nucleus\\nucleus.exe";
+    }
+    return "nucleus.exe"; // Fallback: PATH
 #else
-    size_t pos = 0;
-    do {
-        pos = path.find('/', pos + 1);
-        std::string subpath = path.substr(0, pos);
-        mkdir_impl(subpath.c_str());
-    } while (pos != std::string::npos);
-    return true;
+    return "nucleus";     // macOS: en PATH
 #endif
 }
 
-void SynapseLogManager::initialize_with_profile_id(const std::string& profile_id) {
-    if (initialized) return;
-    
-    this->profile_id = profile_id;
-    
-    std::string base_dir = get_log_directory();
-    if (base_dir.empty()) return;
-    
-    // Nueva estructura: logs/profiles/{uuid}/host/
+// ============================================================================
+// Registro de telemetría via nucleus CLI
+//
+// SPEC: Las aplicaciones NUNCA escriben telemetry.json directamente.
+//       Nucleus es el único writer autorizado.
+//
+// stream_id: synapse_host_{launch_id}  — único por sesión, snake_case
+// label:     🖥️ HOST
+// paths:     array con host_log_path + extension_log_path
+// ============================================================================
+
+void SynapseLogManager::register_telemetry() {
+    // Convertir backslashes → forward slashes (spec: paths en telemetry.json usan '/')
+    auto fwd = [](std::string p) -> std::string {
+        for (char& c : p) if (c == '\\') c = '/';
+        return p;
+    };
+
+    // Sanitizar launch_id a snake_case válido para stream_id
+    std::string stream_id = "synapse_host_" + launch_id;
+    for (char& c : stream_id) {
+        if (c == '-') c = '_';
+        if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_') c = '_';
+    }
+
+    std::string nucleus   = get_nucleus_executable();
+    std::string host_fwd  = fwd(host_log_path);
+    std::string ext_fwd   = fwd(extension_log_path);
+    std::string desc      = "bloom-host native bridge — host process events and Chrome extension"
+                            " messages for profile " + profile_id;
+
+    // Construir comando
+    // Dos --path → nucleus serializa como array en telemetry.json
+    std::string cmd =
+        "\"" + nucleus + "\""
+        " telemetry register"
+        " --stream \""      + stream_id + "\""
+        " --label \"🖥️ HOST\""
+        " --path \""        + host_fwd  + "\""
+        " --path \""        + ext_fwd   + "\""
+        " --priority 2"
+        " --category synapse"
+        " --source host"
+        " --description \"" + desc + "\"";
+
 #ifdef _WIN32
-    std::string profile_dir = base_dir + "\\profiles\\" + profile_id + "\\host";
-    create_directory_recursive(profile_dir);
-    log_directory = profile_dir;
-#else
-    std::string profile_dir = base_dir + "/profiles/" + profile_id + "/host";
-    create_directory_recursive(profile_dir);
-    log_directory = profile_dir;
+    // En Windows envolvemos en cmd /C para que el shell resuelva el path
+    cmd = "cmd /C " + cmd;
 #endif
-    
-    initialized = true;
+
+    int ret = std::system(cmd.c_str());
+    if (ret != 0) {
+        // No bloqueamos el host, avisamos por stderr para que Sentinel lo vea en el trace
+        std::cerr << "[" << get_timestamp_ms() << "] [WARN] [HOST] "
+                  << "nucleus telemetry register failed (exit=" << ret
+                  << ") — logs exist but telemetry.json not updated"
+                  << " nucleus_path=" << nucleus << "\n";
+        std::cerr.flush();
+    } else {
+        std::cerr << "[" << get_timestamp_ms() << "] [INFO] [HOST] "
+                  << "telemetry registered stream=" << stream_id << "\n";
+        std::cerr.flush();
+    }
 }
 
-void SynapseLogManager::initialize_with_launch_id(const std::string& launch_id) {
-    if (!initialized || log_directory.empty() || logs_opened) return;
-    
-    // Obtener timestamp para nombre de archivo
-    auto now = std::chrono::system_clock::now();
+// ============================================================================
+// initialize() — punto de entrada único
+// Idempotente: llamadas repetidas con los mismos IDs no tienen efecto.
+// ============================================================================
+
+void SynapseLogManager::initialize(const std::string& p_profile_id,
+                                   const std::string& p_launch_id) {
+    if (ready) return;
+
+    profile_id = p_profile_id;
+    launch_id  = p_launch_id;
+
+    // 1. Directorio base
+    std::string base = get_base_log_directory();
+    if (base.empty()) {
+        std::cerr << "[" << get_timestamp_ms() << "] [ERROR] [HOST] "
+                  << "Cannot determine base log directory\n";
+        std::cerr.flush();
+        return;
+    }
+
+    // 2. Estructura: logs/host/{profile_id}/{launch_id}/
+    log_directory = base
+        + PATH_SEP "host"
+        + PATH_SEP + profile_id
+        + PATH_SEP + launch_id;
+
+    if (!create_directory_recursive(log_directory)) {
+        std::cerr << "[" << get_timestamp_ms() << "] [ERROR] [HOST] "
+                  << "Cannot create log directory: " << log_directory << "\n";
+        std::cerr.flush();
+        return;
+    }
+
+    // 3. Filename: synapse_host_YYYYMMDD.log  /  synapse_extension_YYYYMMDD.log
+    auto now   = std::chrono::system_clock::now();
     auto now_t = std::chrono::system_clock::to_time_t(now);
-    std::tm tm = *std::localtime(&now_t);
-    
-    // Formato: synapse_host_027_ecdeed9b_112814.log
-    // DDD: Día del mes (3 dígitos)
-    // UUUUUUUU: Primeros 8 chars del profile_id
-    // HHMMSS: Hora+Minuto+Segundo
-    std::stringstream filename_suffix;
-    filename_suffix << std::setfill('0') << std::setw(3) << tm.tm_mday << "_"
-                    << profile_id.substr(0, 8) << "_"
-                    << std::setfill('0') << std::setw(2) << tm.tm_hour
-                    << std::setfill('0') << std::setw(2) << tm.tm_min
-                    << std::setfill('0') << std::setw(2) << tm.tm_sec;
-    
-    std::string suffix = filename_suffix.str();
-    
-    // Crear rutas completas con nuevos nombres
-#ifdef _WIN32
-    current_host_log_path = log_directory + "\\synapse_host_" + suffix + ".log";
-    current_extension_log_path = log_directory + "\\synapse_extension_" + suffix + ".log";
-#else
-    current_host_log_path = log_directory + "/synapse_host_" + suffix + ".log";
-    current_extension_log_path = log_directory + "/synapse_extension_" + suffix + ".log";
-#endif
-    
-    // Abrir archivos
-    native_log.open(current_host_log_path, std::ios::app);
-    browser_log.open(current_extension_log_path, std::ios::app);
-    
-    // Escribir headers y registrar en telemetry
-    if (native_log.is_open()) {
-        native_log << "\n========== HOST SESSION " << get_timestamp_ms() 
-                  << " PID:" << getpid_impl() 
-                  << " LAUNCH:" << launch_id << " ==========\n";
-        native_log.flush();
-        logs_opened = true;
-        
-        // Primera actualización de telemetry para host
-        update_telemetry("synapse_host", current_host_log_path);
+    std::tm tm_utc{};
+    gmtime_cross(&now_t, &tm_utc);
+
+    std::ostringstream date_ss;
+    date_ss << std::put_time(&tm_utc, "%Y%m%d");
+    std::string date_str = date_ss.str();
+
+    host_log_path      = log_directory + PATH_SEP "synapse_host_"      + date_str + ".log";
+    extension_log_path = log_directory + PATH_SEP "synapse_extension_" + date_str + ".log";
+
+    // 4. Abrir archivos en modo append (seguro ante reinicios el mismo día)
+    native_log.open(host_log_path,      std::ios::app);
+    browser_log.open(extension_log_path, std::ios::app);
+
+    if (!native_log.is_open() || !browser_log.is_open()) {
+        std::cerr << "[" << get_timestamp_ms() << "] [ERROR] [HOST] "
+                  << "Cannot open log files in: " << log_directory << "\n";
+        std::cerr.flush();
+        return;
     }
-    
-    if (browser_log.is_open()) {
-        browser_log << "\n========== EXTENSION SESSION " << get_timestamp_ms() 
-                   << " PID:" << getpid_impl()
-                   << " LAUNCH:" << launch_id << " ==========\n";
-        browser_log.flush();
-        
-        // Primera actualización de telemetry para extension
-        update_telemetry("synapse_extension", current_extension_log_path);
-    }
+
+    ready = true;
+
+    // 5. Headers de sesión
+    std::string ts = get_timestamp_ms();
+    int pid = getpid_cross();
+
+    native_log  << "\n===== HOST SESSION "
+                << ts << " UTC"
+                << " PID:"     << pid
+                << " PROFILE:" << profile_id
+                << " LAUNCH:"  << launch_id
+                << " =====\n";
+    native_log.flush();
+
+    browser_log << "\n===== EXTENSION SESSION "
+                << ts << " UTC"
+                << " PID:"     << pid
+                << " PROFILE:" << profile_id
+                << " LAUNCH:"  << launch_id
+                << " =====\n";
+    browser_log.flush();
+
+    // Mirror a stderr → Sentinel lo captura en el trace unificado
+    std::cerr << "[" << ts << "] [INFO] [HOST] "
+              << "Logger initialized"
+              << " profile=" << profile_id
+              << " launch="  << launch_id
+              << " dir="     << log_directory << "\n";
+    std::cerr.flush();
+
+    // 6. Registrar ambos archivos en telemetry.json via nucleus CLI
+    register_telemetry();
 }
+
+// ============================================================================
+// is_ready
+// ============================================================================
 
 bool SynapseLogManager::is_ready() const {
-    return initialized && logs_opened && native_log.is_open();
+    return ready;
 }
 
-void SynapseLogManager::update_telemetry(const std::string& stream_name, 
-                                         const std::string& log_path) {
-    std::lock_guard<std::mutex> lock(telemetry_mutex);
-    
-    std::string telemetry_path = get_telemetry_path();
-    if (telemetry_path.empty()) return;
-    
-    // Generar timestamp ISO 8601
-    auto now = std::chrono::system_clock::now();
-    auto now_t = std::chrono::system_clock::to_time_t(now);
-    auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-        now.time_since_epoch()) % 1000;
-    
-    std::stringstream iso_timestamp;
-    iso_timestamp << std::put_time(std::gmtime(&now_t), "%Y-%m-%dT%H:%M:%S")
-                  << "." << std::setfill('0') << std::setw(6) << (now_ms.count() * 1000);
-    
-    // Leer telemetry.json existente
-    std::ifstream input(telemetry_path);
-    std::stringstream buffer;
-    
-    if (input.is_open()) {
-        buffer << input.rdbuf();
-        input.close();
-    } else {
-        // Si no existe, crear estructura básica
-        buffer << "{\n  \"active_streams\": {\n  }\n}";
-    }
-    
-    std::string content = buffer.str();
-    
-    // Determinar label según stream
-    std::string label = (stream_name == "synapse_host") ? "🖥️ SYNAPSE HOST" : "🧩 SYNAPSE EXTENSION";
-    
-    // Escapar backslashes en la ruta para JSON (Windows)
-    std::string escaped_path = log_path;
-    size_t pos = 0;
-    while ((pos = escaped_path.find("\\", pos)) != std::string::npos) {
-        escaped_path.replace(pos, 1, "\\\\");
-        pos += 2;
-    }
-    
-    // Crear entrada JSON
-    std::stringstream new_entry;
-    new_entry << "    \"" << stream_name << "\": {\n"
-              << "      \"label\": \"" << label << "\",\n"
-              << "      \"path\": \"" << escaped_path << "\",\n"
-              << "      \"priority\": 2,\n"
-              << "      \"last_update\": \"" << iso_timestamp.str() << "\"\n"
-              << "    }";
-    
-    // Buscar si ya existe la entrada
-    size_t stream_pos = content.find("\"" + stream_name + "\"");
-    
-    if (stream_pos != std::string::npos) {
-        // Actualizar entrada existente
-        // Encontrar el inicio de la entrada (incluye espacios)
-        size_t start = stream_pos;
-        while (start > 0 && content[start - 1] != '\n') start--;
-        
-        // Encontrar el final de la entrada (hasta el cierre del objeto)
-        size_t end = content.find("}", stream_pos);
-        if (end != std::string::npos) {
-            // Verificar si hay coma después
-            size_t comma_check = end + 1;
-            while (comma_check < content.length() && 
-                   (content[comma_check] == ' ' || content[comma_check] == '\n')) {
-                comma_check++;
-            }
-            bool has_comma = (comma_check < content.length() && content[comma_check] == ',');
-            
-            if (has_comma) {
-                end = comma_check;
-            }
-            
-            std::string replacement = new_entry.str();
-            if (has_comma) replacement += ",";
-            
-            content.replace(start, end - start + 1, replacement + "\n");
-        }
-    } else {
-        // Agregar nueva entrada
-        size_t insert_pos = content.find("\"active_streams\": {");
-        if (insert_pos != std::string::npos) {
-            insert_pos = content.find("{", insert_pos) + 1;
-            
-            // Verificar si hay otras entradas
-            size_t next_quote = content.find("\"", insert_pos);
-            size_t closing_brace = content.find("}", insert_pos);
-            
-            std::string new_entry_str = new_entry.str();
-            if (next_quote < closing_brace) {
-                // Hay otras entradas, agregar coma
-                new_entry_str += ",";
-            }
-            
-            content.insert(insert_pos, "\n" + new_entry_str + "\n  ");
+// ============================================================================
+// log_native — log del proceso host + mirror a stderr (trace de Synapse)
+// ============================================================================
+
+void SynapseLogManager::log_native(const std::string& level,
+                                   const std::string& message) {
+    std::string ts   = get_timestamp_ms();
+    std::string line = "[" + ts + "] [" + level + "] [HOST] " + message;
+
+    {
+        std::lock_guard<std::mutex> lock(native_mutex);
+        if (native_log.is_open()) {
+            native_log << line << "\n";
+            native_log.flush();
         }
     }
-    
-    // Escribir archivo actualizado
-    std::ofstream output(telemetry_path);
-    if (output.is_open()) {
-        output << content;
-        output.close();
-    }
-    
-    // Actualizar timestamp de última actualización
-    if (stream_name == "synapse_host") {
-        last_telemetry_update_host = std::chrono::steady_clock::now();
-    } else {
-        last_telemetry_update_extension = std::chrono::steady_clock::now();
-    }
+
+    // stderr → capturado por Sentinel → trace unificado de Synapse
+    std::cerr << line << "\n";
+    std::cerr.flush();
 }
 
-void SynapseLogManager::log_native(const std::string& level, const std::string& message) {
-    std::lock_guard<std::mutex> lock(native_mutex);
-    if (!native_log.is_open()) return;
-    
-    native_log << "[" << get_timestamp_ms() << "] [" << level << "] [HOST] " 
-               << message << std::endl;
-    native_log.flush();
-    
-    // Actualizar telemetry cada 30 segundos (señal de vida)
-    auto now = std::chrono::steady_clock::now();
-    auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
-        now - last_telemetry_update_host).count();
-    
-    if (elapsed >= TELEMETRY_UPDATE_INTERVAL_SECONDS) {
-        update_telemetry("synapse_host", current_host_log_path);
-    }
-}
+// ============================================================================
+// log_browser — log de la extensión Chrome + mirror a stderr (trace de Synapse)
+// ============================================================================
 
-void SynapseLogManager::log_browser(const std::string& level, const std::string& message, 
-                                   const std::string& timestamp) {
-    std::lock_guard<std::mutex> lock(browser_mutex);
-    if (!browser_log.is_open()) return;
-    
-    std::string ts = timestamp.empty() ? get_timestamp_ms() : timestamp;
-    browser_log << "[" << ts << "] [" << level << "] [EXTENSION] " 
-                << message << std::endl;
-    browser_log.flush();
-    
-    // Actualizar telemetry cada 30 segundos (señal de vida)
-    auto now = std::chrono::steady_clock::now();
-    auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
-        now - last_telemetry_update_extension).count();
-    
-    if (elapsed >= TELEMETRY_UPDATE_INTERVAL_SECONDS) {
-        update_telemetry("synapse_extension", current_extension_log_path);
+void SynapseLogManager::log_browser(const std::string& level,
+                                    const std::string& message,
+                                    const std::string& timestamp) {
+    std::string ts   = timestamp.empty() ? get_timestamp_ms() : timestamp;
+    std::string line = "[" + ts + "] [" + level + "] [EXTENSION] " + message;
+
+    {
+        std::lock_guard<std::mutex> lock(browser_mutex);
+        if (browser_log.is_open()) {
+            browser_log << line << "\n";
+            browser_log.flush();
+        }
     }
+
+    std::cerr << line << "\n";
+    std::cerr.flush();
 }
