@@ -12,18 +12,59 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// StreamPaths represents a log path that can be a single string or a list.
+// JSON: "path": "single.log"  OR  "path": ["a.log", "b.log"]
+// When reading, always use Paths() to iterate. When a single string is
+// registered it is stored as a one-element slice internally.
+type StreamPaths []string
+
+func (sp StreamPaths) MarshalJSON() ([]byte, error) {
+	if len(sp) == 1 {
+		// Serialize single path as plain string for backwards compatibility
+		return json.Marshal(sp[0])
+	}
+	return json.Marshal([]string(sp))
+}
+
+func (sp *StreamPaths) UnmarshalJSON(data []byte) error {
+	// Try string first
+	var s string
+	if err := json.Unmarshal(data, &s); err == nil {
+		*sp = StreamPaths{s}
+		return nil
+	}
+	// Try array
+	var arr []string
+	if err := json.Unmarshal(data, &arr); err != nil {
+		return err
+	}
+	*sp = StreamPaths(arr)
+	return nil
+}
+
+// Primary returns the first path — used for backwards-compatible single-path access.
+func (sp StreamPaths) Primary() string {
+	if len(sp) == 0 {
+		return ""
+	}
+	return sp[0]
+}
+
 // StreamInfo holds metadata for a single log stream.
 // Categories is a slice so a stream can belong to multiple subsystems
 // (e.g. nucleus_synapse belongs to both "nucleus" and "synapse").
+// Path supports a single string or an array — see StreamPaths.
+// Source is optional — identifies which application/binary writes this stream.
 type StreamInfo struct {
-	Label       string   `json:"label"`
-	Path        string   `json:"path"`
-	Priority    int      `json:"priority"`
-	Categories  []string `json:"categories"`
-	Description string   `json:"description"`
-	FirstSeen   string   `json:"first_seen"`
-	LastUpdate  string   `json:"last_update"`
-	Active      bool     `json:"active"`
+	Label       string      `json:"label"`
+	Path        StreamPaths `json:"path"`
+	Priority    int         `json:"priority"`
+	Categories  []string    `json:"categories"`
+	Description string      `json:"description"`
+	Source      string      `json:"source,omitempty"`
+	FirstSeen   string      `json:"first_seen"`
+	LastUpdate  string      `json:"last_update"`
+	Active      bool        `json:"active"`
 }
 
 // TelemetryData is the root object written to telemetry.json.
@@ -76,22 +117,29 @@ func (tm *TelemetryManager) load() {
 
 // RegisterStream registers or updates a stream from within the nucleus process.
 // categories is a slice like []string{"nucleus", "synapse"}.
-func (tm *TelemetryManager) RegisterStream(id, label, path string, priority int, categories []string, description string) {
+// paths accepts one or more file paths — stored as StreamPaths (string or array in JSON).
+func (tm *TelemetryManager) RegisterStream(id, label string, priority int, categories []string, description, source string, paths ...string) {
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
 
-	now := time.Now().Format(time.RFC3339)
+	now := time.Now().UTC().Format(time.RFC3339)
 	firstSeen := now
 	if existing, exists := tm.data.Streams[id]; exists {
 		firstSeen = existing.FirstSeen
 	}
 
+	normalizedPaths := make(StreamPaths, len(paths))
+	for i, p := range paths {
+		normalizedPaths[i] = filepath.ToSlash(p)
+	}
+
 	tm.data.Streams[id] = StreamInfo{
 		Label:       label,
-		Path:        filepath.ToSlash(path),
+		Path:        normalizedPaths,
 		Priority:    priority,
 		Categories:  categories,
 		Description: description,
+		Source:      source,
 		FirstSeen:   firstSeen,
 		LastUpdate:  now,
 		Active:      true,
@@ -176,6 +224,7 @@ func newTelemetryRegisterCommand(c *Core) *cobra.Command {
 		priority    int
 		categories  []string
 		description string
+		source      string
 	)
 
 	cmd := &cobra.Command{
@@ -276,7 +325,7 @@ NOTES
 
 			telemetryPath := filepath.Join(c.Paths.Logs, "telemetry.json")
 
-			if err := registerStreamCLI(telemetryPath, streamID, label, logPath, description, priority, categories); err != nil {
+			if err := registerStreamCLI(telemetryPath, streamID, label, logPath, description, source, priority, categories); err != nil {
 				return fmt.Errorf("failed to register stream: %w", err)
 			}
 
@@ -300,6 +349,8 @@ NOTES
 	cmd.Flags().IntVar(&priority, "priority", 2, "Priority: 1=critical 2=important 3=informational")
 	cmd.Flags().StringArrayVar(&categories, "category", []string{}, "Subsystem category (repeatable): brain|build|conductor|launcher|nucleus|sentinel|synapse")
 	cmd.Flags().StringVar(&description, "description", "", "Who writes this log and what it captures (required)")
+
+	cmd.Flags().StringVar(&source, "source", "", "Application that writes this log (optional): brain|nucleus|sentinel|conductor|launcher|host")
 
 	_ = cmd.MarkFlagRequired("stream")
 	_ = cmd.MarkFlagRequired("label")
@@ -375,7 +426,7 @@ func newTelemetryListCommand(c *Core) *cobra.Command {
 // ============================================================================
 
 // registerStreamCLI is the standalone atomic writer called by the CLI.
-func registerStreamCLI(telemetryPath, streamID, label, logPath, description string, priority int, categories []string) error {
+func registerStreamCLI(telemetryPath, streamID, label, logPath, description, source string, priority int, categories []string) error {
 	logsDir := filepath.Dir(telemetryPath)
 	if err := os.MkdirAll(logsDir, 0755); err != nil {
 		return fmt.Errorf("failed to create logs directory: %w", err)
@@ -397,7 +448,7 @@ func registerStreamCLI(telemetryPath, streamID, label, logPath, description stri
 		}
 	}
 
-	now := time.Now().Format(time.RFC3339)
+	now := time.Now().UTC().Format(time.RFC3339)
 	firstSeen := now
 	if existing, exists := telemetry.Streams[streamID]; exists {
 		firstSeen = existing.FirstSeen
@@ -405,10 +456,11 @@ func registerStreamCLI(telemetryPath, streamID, label, logPath, description stri
 
 	telemetry.Streams[streamID] = StreamInfo{
 		Label:       label,
-		Path:        filepath.ToSlash(logPath),
+		Path:        StreamPaths{filepath.ToSlash(logPath)},
 		Priority:    priority,
 		Categories:  categories,
 		Description: description,
+		Source:      source,
 		FirstSeen:   firstSeen,
 		LastUpdate:  now,
 		Active:      true,

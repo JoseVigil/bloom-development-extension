@@ -83,7 +83,7 @@ func InitLogger(paths *PathConfig, category string, jsonMode bool, extraCategori
 	streamID := "nucleus_" + strings.ToLower(category)
 	streamLabel := icon + " " + category
 	description := getNucleusStreamDescription(category)
-	tm.RegisterStream(streamID, streamLabel, filepath.ToSlash(logPath), 2, categories, description)
+	tm.RegisterStream(streamID, streamLabel, 2, categories, description, "nucleus", filepath.ToSlash(logPath))
 
 	return logger, nil
 }
@@ -322,10 +322,11 @@ func InitServiceLogger(paths *PathConfig, jsonMode bool) (*Logger, error) {
 	tm.RegisterStream(
 		"nucleus_service",
 		"⚙️ NUCLEUS SERVICE",
-		filepath.ToSlash(logPath),
 		2,
 		[]string{"nucleus"},
 		"Nucleus background service log — captures service lifecycle, health checks and daemon events",
+		"nucleus",
+		filepath.ToSlash(logPath),
 	)
 
 	return logger, nil
@@ -378,10 +379,11 @@ func InitWorkerManagerLogger(paths *PathConfig, jsonMode bool) (*Logger, error) 
 	tm.RegisterStream(
 		"nucleus_worker_manager",
 		"👷 WORKER MANAGER",
-		filepath.ToSlash(logPath),
 		2,
 		[]string{"nucleus"},
 		"Nucleus worker manager log — tracks worker pool lifecycle, task assignment and completion",
+		"nucleus",
+		filepath.ToSlash(logPath),
 	)
 
 	return logger, nil
