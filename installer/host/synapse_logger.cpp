@@ -265,8 +265,14 @@ void SynapseLogManager::initialize(const std::string& p_profile_id,
               << " dir="     << log_directory << "\n";
     std::cerr.flush();
 
-    // 6. Registrar ambos archivos en telemetry.json via nucleus CLI
-    register_telemetry();
+    // 6. Registrar ambos archivos en telemetry.json via nucleus CLI.
+    //    Se lanza en thread separado (detached) para no bloquear el startup.
+    //    std::system() en Windows invoca cmd.exe y puede tardar varios segundos.
+    //    Si bloqueara aquí, Chrome mataría el proceso por idle timeout (6s) antes
+    //    de que el host responda al handshake con host_ready.
+    std::thread([this]() {
+        register_telemetry();
+    }).detach();
 }
 
 // ============================================================================

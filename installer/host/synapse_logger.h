@@ -4,6 +4,7 @@
 #include <string>
 #include <mutex>
 #include <chrono>
+#include <thread>
 
 /**
  * @brief Sistema de logging para Synapse Native Bridge (bloom-host)
