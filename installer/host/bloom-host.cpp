@@ -703,7 +703,39 @@ void tcp_client_loop() {
                 g_logger.log_native("INFO", "TCP_CONNECTED Socket=" + std::to_string(sock));
             }
 
-            // Registrarse con Brain como host
+            // ---------------------------------------------------------------
+            // FIX: Esperar identidad antes de enviar REGISTER_HOST.
+            // El thread STDIN procesa extension_ready y setea identity_resolved.
+            // Si identity_resolved ya está true (CLI args o handshake previo),
+            // el wait retorna de inmediato sin bloquear.
+            // ---------------------------------------------------------------
+            {
+                std::unique_lock<std::mutex> id_wait(g_identity_mutex);
+                bool resolved = g_identity_cv.wait_for(
+                    id_wait,
+                    std::chrono::milliseconds(MAX_IDENTITY_WAIT_MS),
+                    [] { return identity_resolved.load() || shutdown_requested.load(); }
+                );
+
+                if (!resolved || shutdown_requested.load()) {
+                    std::cerr << "[TCP] ⚠️ Identity wait timeout (" << MAX_IDENTITY_WAIT_MS
+                              << "ms) - REGISTER_HOST will have empty profile_id" << std::endl;
+                    if (g_logger.is_ready()) {
+                        g_logger.log_native("WARN", "TCP_IDENTITY_TIMEOUT ms=" +
+                                           std::to_string(MAX_IDENTITY_WAIT_MS));
+                    }
+                } else {
+                    std::cerr << "[TCP] ✓ Identity resolved before REGISTER_HOST"
+                              << " profile=" << g_profile_id
+                              << " launch=" << g_launch_id << std::endl;
+                    if (g_logger.is_ready()) {
+                        g_logger.log_native("INFO", "TCP_IDENTITY_OK profile=" + g_profile_id +
+                                           " launch=" + g_launch_id);
+                    }
+                }
+            }
+
+            // Registrarse con Brain como host (con identidad ya resuelta)
             json reg;
             reg["type"] = "REGISTER_HOST";
             {
@@ -816,6 +848,15 @@ int main(int argc, char* argv[]) {
             return cli_result.exit_code;
         }
         // ==========================================
+
+        // ---------------------------------------------------------------
+        // FIX: stderr unbuffered — garantiza que todo output de diagnóstico
+        // llegue al archivo host_stderr.txt aunque el proceso termine
+        // abruptamente. Debe hacerse ANTES de cualquier escritura a cerr.
+        // En Windows, setup_binary_io() puede dejar stderr en modo buffered;
+        // este setvbuf lo fuerza a _IONBF (sin buffer) explícitamente.
+        // ---------------------------------------------------------------
+        setvbuf(stderr, nullptr, _IONBF, 0);
 
         PlatformUtils::initialize_networking();
         PlatformUtils::setup_binary_io();
