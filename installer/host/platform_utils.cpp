@@ -28,8 +28,13 @@ void cleanup_networking() {
 
 void setup_binary_io() {
 #ifdef _WIN32
-    _setmode(_fileno(stdin), _O_BINARY);
+    _setmode(_fileno(stdin),  _O_BINARY);
     _setmode(_fileno(stdout), _O_BINARY);
+    // FIX: stderr debe quedar unbuffered para que host_stderr.txt reciba
+    // contenido aunque el proceso termine abruptamente. _setmode solo cambia
+    // la traducción CR/LF; el buffering lo controla setvbuf por separado.
+    // _IONBF = sin buffer: cada write va directo al handle del archivo.
+    setvbuf(stderr, nullptr, _IONBF, 0);
 #endif
 }
 

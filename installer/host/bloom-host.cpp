@@ -849,17 +849,8 @@ int main(int argc, char* argv[]) {
         }
         // ==========================================
 
-        // ---------------------------------------------------------------
-        // FIX: stderr unbuffered — garantiza que todo output de diagnóstico
-        // llegue al archivo host_stderr.txt aunque el proceso termine
-        // abruptamente. Debe hacerse ANTES de cualquier escritura a cerr.
-        // En Windows, setup_binary_io() puede dejar stderr en modo buffered;
-        // este setvbuf lo fuerza a _IONBF (sin buffer) explícitamente.
-        // ---------------------------------------------------------------
-        setvbuf(stderr, nullptr, _IONBF, 0);
-
         PlatformUtils::initialize_networking();
-        PlatformUtils::setup_binary_io();
+        PlatformUtils::setup_binary_io();   // setvbuf(stderr, _IONBF) incluido aquí
         
         std::string cli_profile_id = PlatformUtils::get_cli_argument(argc, argv, "--profile-id");
         std::string cli_launch_id = PlatformUtils::get_cli_argument(argc, argv, "--launch-id");
