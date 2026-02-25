@@ -873,9 +873,38 @@ int main(int argc, char* argv[]) {
             std::lock_guard<std::mutex> lock(g_identity_mutex);
             g_profile_id = cli_profile_id;
             g_launch_id = cli_launch_id;
-            
+
+            // ---------------------------------------------------------------
+            // DIRECT DISK LOG — escribe directo a disco antes de que el logger
+            // esté listo. No depende de stderr ni de ninguna captura externa.
+            // logs/host_boot.log — append, una línea por sesión.
+            // ---------------------------------------------------------------
+            auto write_boot_log = [&](const std::string& line) {
+                const char* appdata = std::getenv("LOCALAPPDATA");
+                std::string path;
+#ifdef _WIN32
+                if (appdata) path = std::string(appdata) + "\\BloomNucleus\\logs\\host_boot.log";
+#else
+                path = "/tmp/bloom-nucleus/logs/host_boot.log";
+#endif
+                if (!path.empty()) {
+                    std::ofstream f(path, std::ios::app);
+                    if (f.is_open()) { f << line << "\n"; f.flush(); }
+                }
+            };
+
+            write_boot_log("[BOOT] pid=" + std::to_string(PlatformUtils::get_current_pid())
+                           + " profile=" + cli_profile_id
+                           + " launch="  + cli_launch_id
+                           + " build="   + std::to_string(BUILD));
+            // ---------------------------------------------------------------
+
             g_logger.initialize(cli_profile_id, cli_launch_id);
-            
+
+            write_boot_log("[INIT] logger_ready=" + std::string(g_logger.is_ready() ? "true" : "false")
+                           + " profile=" + cli_profile_id
+                           + " launch="  + cli_launch_id);
+
             identity_resolved.store(true);
             g_identity_cv.notify_all();
             
