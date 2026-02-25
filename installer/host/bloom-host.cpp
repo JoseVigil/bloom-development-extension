@@ -702,6 +702,20 @@ void tcp_client_loop() {
             if (g_logger.is_ready()) {
                 g_logger.log_native("INFO", "TCP_CONNECTED Socket=" + std::to_string(sock));
             }
+
+            // Registrarse con Brain como host
+            json reg;
+            reg["type"] = "REGISTER_HOST";
+            {
+                std::lock_guard<std::mutex> lock(g_identity_mutex);
+                reg["profile_id"] = g_profile_id;
+                reg["launch_id"]  = g_launch_id;
+            }
+            reg["pid"]       = PlatformUtils::get_current_pid();
+            reg["timestamp"] = get_timestamp_ms();
+
+            std::string reg_str = reg.dump();
+            write_to_service(reg_str);
             
             // Flush pending messages
             {
