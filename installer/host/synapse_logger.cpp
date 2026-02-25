@@ -80,14 +80,42 @@ std::string SynapseLogManager::get_base_log_directory() {
 
 bool SynapseLogManager::create_directory_recursive(const std::string& path) {
     if (path.empty()) return false;
+
     char sep = PATH_SEP[0];
     size_t pos = 0;
+
     do {
         pos = path.find(sep, pos + 1);
         std::string sub = path.substr(0, pos);
-        if (!sub.empty()) mkdir_p(sub.c_str());
+        if (sub.empty()) continue;
+
+        int ret = mkdir_p(sub.c_str());
+        if (ret != 0 && errno != EEXIST) {
+            std::cerr << "[" << get_timestamp_ms() << "] [ERROR] [HOST] "
+                      << "mkdir_p failed: path=" << sub
+                      << " errno=" << errno << "\n";
+            std::cerr.flush();
+        }
     } while (pos != std::string::npos);
-    return true;
+
+    // Verificar que el directorio final realmente existe.
+    // La función no puede retornar true si el path no está en disco —
+    // eso ocultaría el error y open() fallaría silenciosamente después.
+#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
+    DWORD attr = GetFileAttributesA(path.c_str());
+    bool ok = (attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY));
+#else
+    struct stat st;
+    bool ok = (stat(path.c_str(), &st) == 0 && S_ISDIR(st.st_mode));
+#endif
+
+    if (!ok) {
+        std::cerr << "[" << get_timestamp_ms() << "] [ERROR] [HOST] "
+                  << "DIR_NOT_CREATED path=" << path << "\n";
+        std::cerr.flush();
+    }
+
+    return ok;
 }
 
 // ============================================================================

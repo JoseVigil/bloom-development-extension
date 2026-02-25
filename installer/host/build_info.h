@@ -2,6 +2,6 @@
 #ifndef BUILD_INFO_H
 #define BUILD_INFO_H
 
-#define BUILD_NUMBER 25
+#define BUILD_NUMBER 26
 
 #endif // BUILD_INFO_H
