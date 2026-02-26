@@ -893,17 +893,34 @@ int main(int argc, char* argv[]) {
                 }
             };
 
+            // Calcular el path esperado para diagnóstico en boot log
+            auto get_expected_log_dir = [&]() -> std::string {
+#ifdef _WIN32
+                const char* appdata = std::getenv("LOCALAPPDATA");
+                if (!appdata) return "LOCALAPPDATA_MISSING";
+                return std::string(appdata)
+                    + "\\BloomNucleus\\logs\\host\\"
+                    + cli_profile_id + "\\" + cli_launch_id;
+#else
+                return "/tmp/bloom-nucleus/logs/host/"
+                    + cli_profile_id + "/" + cli_launch_id;
+#endif
+            };
+            std::string expected_dir = get_expected_log_dir();
+
             write_boot_log("[BOOT] pid=" + std::to_string(PlatformUtils::get_current_pid())
                            + " profile=" + cli_profile_id
                            + " launch="  + cli_launch_id
-                           + " build="   + std::to_string(BUILD));
+                           + " build="   + std::to_string(BUILD)
+                           + " expected_dir=" + expected_dir);
             // ---------------------------------------------------------------
 
             g_logger.initialize(cli_profile_id, cli_launch_id);
 
             write_boot_log("[INIT] logger_ready=" + std::string(g_logger.is_ready() ? "true" : "false")
                            + " profile=" + cli_profile_id
-                           + " launch="  + cli_launch_id);
+                           + " launch="  + cli_launch_id
+                           + " expected_dir=" + expected_dir);
 
             identity_resolved.store(true);
             g_identity_cv.notify_all();
