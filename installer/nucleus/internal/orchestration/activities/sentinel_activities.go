@@ -45,7 +45,7 @@ func NewSentinelActivities(logsDir, nucleusPath, sentinelPath string) *SentinelA
 // Comando ejecutado: sentinel --json launch <profile_id> [--mode <mode>] [--config-file -]
 func (a *SentinelActivities) LaunchSentinel(ctx context.Context, input types.SentinelLaunchInput) (types.SentinelLaunchResult, error) {
 	// Construir comando: sentinel --json launch <profile_id>
-	args := []string{"--json", "launch", input.ProfileID, "--skip-preflight"}
+	args := []string{"--json", "launch", input.ProfileID}
 
 	// Agregar flags opcionales
 	if input.Mode != "" {
@@ -137,11 +137,16 @@ func (a *SentinelActivities) LaunchSentinel(ctx context.Context, input types.Sen
 
 	// Si parseamos JSON pero indica error
 	if parseErr == nil && !sentinelResult.Success {
+		// Preferir el launch_id que Sentinel generó; si no viene, usar CommandID de Temporal
+		launchID := sentinelResult.LaunchID
+		if launchID == "" {
+			launchID = input.CommandID
+		}
 		return types.SentinelLaunchResult{
 			Success:   false,
 			ProfileID: sentinelResult.ProfileID,
 			Error:     sentinelResult.Error,
-			LaunchID:  input.CommandID,
+			LaunchID:  launchID,
 		}, fmt.Errorf("sentinel launch failed: %s", sentinelResult.Error)
 	}
 
@@ -155,6 +160,13 @@ func (a *SentinelActivities) LaunchSentinel(ctx context.Context, input types.Sen
 	}
 
 	// Mapear resultado
+	// Preferir el launch_id que Sentinel generó (formato corto: "001_a3c93b51_153056").
+	// Si Sentinel no lo devuelve en el JSON, usar el CommandID de Temporal como fallback
+	// para no romper el flujo existente.
+	effectiveLaunchID := sentinelResult.LaunchID
+	if effectiveLaunchID == "" {
+		effectiveLaunchID = input.CommandID
+	}
 	result := types.SentinelLaunchResult{
 		Success:         sentinelResult.Success,
 		ProfileID:       sentinelResult.ProfileID,
@@ -163,7 +175,7 @@ func (a *SentinelActivities) LaunchSentinel(ctx context.Context, input types.Sen
 		ExtensionLoaded: sentinelResult.ExtensionLoaded,
 		EffectiveConfig: sentinelResult.EffectiveConfig,
 		Error:           sentinelResult.Error,
-		LaunchID:        input.CommandID,
+		LaunchID:        effectiveLaunchID,
 	}
 
 	// Encadenar hooks post_launch de forma best-effort.
@@ -315,6 +327,7 @@ func (a *SentinelActivities) SeedProfile(ctx context.Context, input types.SeedPr
 type SentinelCommandResult struct {
 	Success         bool                   `json:"success"`
 	ProfileID       string                 `json:"profile_id,omitempty"`
+	LaunchID        string                 `json:"launch_id,omitempty"` // ID corto generado por Sentinel, e.g. "001_a3c93b51_153056"
 	ChromePID       int                    `json:"chrome_pid,omitempty"`
 	DebugPort       int                    `json:"debug_port,omitempty"`
 	ExtensionLoaded bool                   `json:"extension_loaded,omitempty"`

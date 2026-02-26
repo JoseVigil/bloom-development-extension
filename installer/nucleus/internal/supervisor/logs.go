@@ -1124,8 +1124,9 @@ func runLaunchTrace(c *core.Core, launchID, profileID, outFilePath string, jsonO
 				"🔍 CHROME ENGINE AUDIT ("+shortID+")",
 				2,
 				[]string{"synapse"},
-				filepath.ToSlash(readPath),
 				"Chrome engine audit para launch "+launchID+" — detección de errores Chromium y bloqueos de seguridad",
+				"brain",
+				filepath.ToSlash(readPath),
 			)
 			fmt.Fprintf(os.Stderr, "[INFO] engine_read generado y registrado: %s\n", readPath)
 		}
@@ -1143,8 +1144,9 @@ func runLaunchTrace(c *core.Core, launchID, profileID, outFilePath string, jsonO
 				"🌐 CHROME NETWORK ("+shortID+")",
 				2,
 				[]string{"synapse"},
-				filepath.ToSlash(netPath),
 				"Chrome network log para launch "+launchID+" — requests URL y sesiones HTTP/2",
+				"brain",
+				filepath.ToSlash(netPath),
 			)
 			fmt.Fprintf(os.Stderr, "[INFO] engine_network generado y registrado: %s\n", netPath)
 		}
@@ -1162,8 +1164,9 @@ func runLaunchTrace(c *core.Core, launchID, profileID, outFilePath string, jsonO
 				"⛏️ CHROME ENGINE MINING ("+shortID+")",
 				2,
 				[]string{"synapse"},
+				"Chrome mining log para launch "+launchID+" — bloom keyword extraction with context from engine debug output",
+				"brain",
 				filepath.ToSlash(miningPath),
-				"Chrome mining log para launch "+launchID+" — extracción keyword bloom con contexto",
 			)
 			fmt.Fprintf(os.Stderr, "[INFO] engine_mining generado y registrado: %s\n", miningPath)
 		}
@@ -1306,8 +1309,9 @@ func runLaunchTrace(c *core.Core, launchID, profileID, outFilePath string, jsonO
 		fmt.Sprintf("🔍 SYNAPSE TRACE (%s)", launchID),
 		2,
 		[]string{"nucleus", "synapse"},
-		filepath.ToSlash(outFilePath),
 		fmt.Sprintf("Synapse trace log — correlación temporal de todos los streams activos para launch %s (profile: %s)", launchID, profileID),
+		"nucleus",
+		filepath.ToSlash(outFilePath),
 	)
 
 	// ── Output ────────────────────────────────────────────────────────────────

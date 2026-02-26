@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"sentinel/internal/core"
+	"sentinel/internal/eventbus"
 )
 
 // Launch ejecuta la secuencia de lanzamiento del perfil
@@ -94,72 +95,91 @@ func (ig *Ignition) applyMissionTargetURL(spec *IgnitionSpec, profileData map[st
 	}
 }
 
-// execute construye los argumentos y lanza Chromium
+// execute delega el lanzamiento de Chromium a Brain vía EventBus TCP.
+// Brain lo procesa con ProfileManager → bloom_launcher_client → named pipe →
+// bloom-launcher.exe (Session 1) → Chrome con display visible.
+//
+// ANTES: exec.Command(chrome) directo desde Session 0 → Chrome muere al perder sesión.
+// AHORA: LaunchProfileSync() → Brain → bloom-launcher → Session 1 → PID real.
+//
+// El contrato hacia arriba (Launch → execute → int PID) no cambia.
 func (ig *Ignition) execute(profileID string, mode string, profileData map[string]interface{}) (int, error) {
-	spec, err := ig.loadIgnitionSpec(profileID)
+	ig.Core.Logger.Info("[EXECUTE] Delegando lanzamiento a Brain via EventBus...")
+
+	// ── 1. Validar SpecPath ───────────────────────────────────────────────────
+	// Seteado en Launch() → getProfileData() antes de llegar aquí.
+	// Es la ruta al ignition_spec.json que prepareSessionFiles() ya actualizó.
+	if ig.SpecPath == "" {
+		return 0, fmt.Errorf(
+			"SpecPath vacío para perfil %s — getProfileData() debe ejecutarse antes de execute()",
+			profileID,
+		)
+	}
+
+	// ── 2. Conectar con Brain ─────────────────────────────────────────────────
+	// Brain corre como servicio Windows (NSSM) en 127.0.0.1:5678.
+	// Conexión efímera: se abre para este launch y se cierra al terminar.
+	const brainAddr = "127.0.0.1:5678"
+
+	client := eventbus.NewSentinelClient(brainAddr, ig.Core.Logger)
+	if err := client.Connect(); err != nil {
+		return 0, fmt.Errorf(
+			"no se pudo conectar con Brain en %s: %v — verificar que Brain esté corriendo como servicio",
+			brainAddr, err,
+		)
+	}
+	defer client.Close()
+
+	if err := client.WaitForConnection(5 * time.Second); err != nil {
+		return 0, fmt.Errorf("timeout conectando con Brain: %v", err)
+	}
+
+	ig.Core.Logger.Info("[EXECUTE] Conectado con Brain. Enviando LAUNCH_PROFILE...")
+
+	// ── 3. LaunchProfileSync ──────────────────────────────────────────────────
+	// Bloquea hasta recibir LAUNCH_PROFILE_ACK con PID real de Chrome,
+	// o hasta timeout (60s).
+	const launchTimeout = 120 * time.Second
+
+	chromePID, err := client.LaunchProfileSync(
+		profileID,
+		ig.Session.LaunchID,
+		ig.SpecPath,
+		mode,
+		launchTimeout,
+	)
 	if err != nil {
-		return 0, fmt.Errorf("no se pudo cargar spec de ignition: %v", err)
+		return 0, fmt.Errorf("fallo en LaunchProfileSync: %v", err)
 	}
 
-	ig.applyMissionTargetURL(spec, profileData)
-
-	args := ig.buildSilentLaunchArgs(spec, mode, ig.Session.LaunchID)
-
-	cmd := exec.Command(spec.Engine.Executable, args...)
-
-	if runtime.GOOS == "windows" {
-		cmd.SysProcAttr = &syscall.SysProcAttr{
-			HideWindow:    true,
-			CreationFlags: 0x08000000,
-		}
+	if chromePID <= 0 {
+		return 0, fmt.Errorf("Brain retornó PID inválido: %d", chromePID)
 	}
 
-	logDir := filepath.Join(ig.Core.Paths.AppDataDir, "logs", "chromium")
-	if err := os.MkdirAll(logDir, 0755); err != nil {
-		ig.Core.Logger.Info("[WARN] No se pudo crear directorio de logs: %v", err)
+	// ── 4. Verificar proceso vivo ─────────────────────────────────────────────
+	// Brain verifica internamente, pero hacemos doble check para detectar
+	// muertes inmediatas post-launch desde el lado de Sentinel.
+	time.Sleep(500 * time.Millisecond)
+	if !ig.isProcessAlive(chromePID) {
+		return 0, fmt.Errorf(
+			"proceso Chromium murió inmediatamente después del launch (PID %d) — "+
+				"revisar logs de bloom-launcher y chromium",
+			chromePID,
+		)
 	}
 
-	logFilePath := filepath.Join(logDir, fmt.Sprintf("%s_%s.log", profileID, time.Now().Format("20060102_150405")))
-	logFile, err := os.Create(logFilePath)
-	if err != nil {
-		ig.Core.Logger.Info("[WARN] No se pudo crear archivo de log %s: %v → salida por defecto", logFilePath, err)
-	} else {
-		defer logFile.Close()
-		cmd.Stdout = logFile
-		cmd.Stderr = logFile
-	}
+	ig.Core.Logger.Info("[EXECUTE] ✅ Chrome lanzado via Brain → bloom-launcher → Session 1 (PID: %d)", chromePID)
 
-	if err := cmd.Start(); err != nil {
-		return 0, fmt.Errorf("error al iniciar Chromium: %v", err)
-	}
-
-	time.Sleep(250 * time.Millisecond)
-
-	pid := cmd.Process.Pid
-	if pid <= 0 {
-		_ = cmd.Process.Kill()
-		return 0, fmt.Errorf("PID no disponible después de start")
-	}
-
-	time.Sleep(800 * time.Millisecond)
-	if !ig.isProcessAlive(pid) {
-		_ = cmd.Process.Kill()
-		return 0, fmt.Errorf("proceso Chromium murió inmediatamente (PID %d)", pid)
-	}
-
-	ig.Core.Logger.Info("[EXECUTE] Motor Chromium iniciado → PID: %d | Log: %s", pid, logFilePath)
-
-	// Registrar streams de telemetría generados como consecuencia del launch (spec §8).
-	// Responsabilidad de sentinel/ignition: es aquí donde se conocen los paths
-	// reales y el profileID en el momento exacto del lanzamiento.
+	// ── 5. Registrar streams de telemetría ────────────────────────────────────
 	shortID := profileID
 	if len(profileID) > 8 {
 		shortID = profileID[:8]
 	}
 
-	// sentinel/profiles — log por perfil
-	profileLogPath := filepath.Join(ig.Core.Paths.AppDataDir, "logs", "sentinel", "profiles",
-		fmt.Sprintf("sentinel_%s_%s.log", profileID, time.Now().Format("20060102")))
+	profileLogPath := filepath.Join(
+		ig.Core.Paths.AppDataDir, "logs", "sentinel", "profiles",
+		fmt.Sprintf("sentinel_%s_%s.log", profileID, time.Now().Format("20060102")),
+	)
 	core.RegisterExternalStream(ig.Core.Paths,
 		"sentinel_profile_"+shortID,
 		"SENTINEL PROFILE ("+shortID+")",
@@ -171,7 +191,12 @@ func (ig *Ignition) execute(profileID string, mode string, profileData map[strin
 		},
 	)
 
-	// chromium/debug — log de chromium para ese perfil (archivo ya creado arriba)
+	// El log de Chromium ahora lo crea bloom-launcher en Session 1.
+	// Registramos el path esperado para que Nucleus pueda seguirlo en telemetría.
+	logDir := filepath.Join(ig.Core.Paths.AppDataDir, "logs", "chromium")
+	_ = os.MkdirAll(logDir, 0755)
+	logFilePath := filepath.Join(logDir, fmt.Sprintf("%s_%s.log", profileID, time.Now().Format("20060102_150405")))
+
 	core.RegisterExternalStream(ig.Core.Paths,
 		"chromium_debug_"+shortID,
 		"CHROMIUM DEBUG ("+shortID+")",
@@ -179,11 +204,11 @@ func (ig *Ignition) execute(profileID string, mode string, profileData map[strin
 		3,
 		&core.LoggerOptions{
 			Categories:  []string{"synapse"},
-			Description: "Chromium debug log for profile "+shortID+" — low-level browser internals generated as a consequence of the Synapse-initiated launch",
+			Description: "Chromium debug log for profile " + shortID + " — low-level browser internals generated as a consequence of the Synapse-initiated launch",
 		},
 	)
 
-	return pid, nil
+	return chromePID, nil
 }
 
 // isProcessAlive verifica si un proceso está activo

@@ -8,7 +8,7 @@ import json
 import logging
 from pathlib import Path
 from typing import Dict, Any, Optional, List
-from datetime import datetime
+import time
 from collections import deque
 
 try:
@@ -151,7 +151,11 @@ class EventBus:
         Returns:
             Complete event dictionary with timestamp
         """
-        timestamp = datetime.utcnow().isoformat() + 'Z'
+        # Unix nanoseconds as int64 — matches Go's Event.timestamp (int64).
+        # Previously this was datetime.utcnow().isoformat()+'Z' (a string),
+        # which caused Sentinel to log:
+        #   "cannot unmarshal string into Go struct field Event.timestamp of type int64"
+        timestamp = int(time.time() * 1_000_000_000)
         
         event = {
             'type': event_type,
@@ -182,10 +186,21 @@ class EventBus:
         if not since_timestamp:
             return list(self.event_queue)
         
+        # since_timestamp is now expected as int (Unix nanoseconds).
+        # Numeric comparison replaces the old ISO string lexicographic comparison.
+        try:
+            since_ns = int(since_timestamp)
+        except (TypeError, ValueError):
+            # Fallback: accept ISO string from old persisted events and treat as 0
+            since_ns = 0
+
         filtered = []
         for event in self.event_queue:
-            event_time = event.get('timestamp', '')
-            if event_time > since_timestamp:
+            event_time = event.get('timestamp', 0)
+            # Handle legacy events persisted with ISO string timestamps
+            if isinstance(event_time, str):
+                event_time = 0
+            if event_time > since_ns:
                 filtered.append(event)
         
         logger.info(f"📊 POLL_EVENTS: {len(filtered)} events since {since_timestamp}")

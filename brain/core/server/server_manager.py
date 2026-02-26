@@ -198,6 +198,12 @@ class ServerManager:
                         "profile_id": profile_id
                     }
                     await self._send_to_writer(writer, ack)
+
+                elif msg_type in ('REGISTER_CLI', 'REGISTER_SENTINEL'):
+                    self.clients[writer]['type'] = 'cli'
+                    logger.info(f"🎯 [{conn_id}] Registered as CLI/Sentinel (via {msg_type})")
+                    ack = {"type": "REGISTER_ACK", "conn_id": conn_id, "role": "cli"}
+                    await self._send_to_writer(writer, ack)    
                 
                 elif msg_type == 'PROFILE_CONNECTED':
                     # Handshake confirmation from Host
@@ -282,6 +288,116 @@ class ServerManager:
                             "status": "error",
                             "message": str(e)
                         }
+                    await self._send_to_writer(writer, response)
+
+                elif msg_type == 'LAUNCH_PROFILE':
+                    # Sentinel (invocado por Nucleus/Temporal) solicita lanzamiento
+                    # de un perfil de Chrome via bloom-launcher (Session 1).
+                    #
+                    # Contrato de entrada:
+                    #   profile_id     : str — UUID del perfil
+                    #   launch_id      : str — ID lógico generado por Sentinel (correlación)
+                    #   data.spec_path : str — ruta absoluta al ignition_spec.json
+                    #                         ya preparado por Sentinel::prepareSessionFiles()
+                    #   data.mode      : str — 'landing' | 'discovery'
+                    #
+                    # Contrato de salida (LAUNCH_PROFILE_ACK):
+                    #   status 'ok'    → pid: int
+                    #   status 'error' → message: str
+                    profile_id = msg.get('profile_id')
+                    launch_id  = msg.get('launch_id')
+                    data_field = msg.get('data', {})
+                    spec_path  = data_field.get('spec_path')
+                    mode       = data_field.get('mode', 'landing')
+
+                    if not profile_id or not spec_path:
+                        logger.error(f"❌ [{conn_id}] LAUNCH_PROFILE: faltan profile_id o spec_path")
+                        response = {
+                            "type": "LAUNCH_PROFILE_ACK",
+                            "launch_id": launch_id,
+                            "status": "error",
+                            "message": "profile_id y spec_path son obligatorios"
+                        }
+                        await self._send_to_writer(writer, response)
+                        continue  # no break — mantener conexión viva
+
+                    logger.info(f"🚀 [{conn_id}] LAUNCH_PROFILE: {profile_id[:8]} (mode={mode})")
+
+                    try:
+                        import json as _json
+                        from pathlib import Path as _Path
+                        from brain.core.profile.profile_manager import ProfileManager
+
+                        def _do_launch():
+                            # Leer spec desde disco (Sentinel ya lo preparó)
+                            spec_file = _Path(spec_path)
+                            if not spec_file.exists():
+                                raise FileNotFoundError(
+                                    f"ignition_spec.json no encontrado: {spec_path}"
+                                )
+                            with open(spec_file, 'r', encoding='utf-8') as f:
+                                spec_data = _json.load(f)
+
+                            # Inyectar mode en page_config
+                            if 'page_config' not in spec_data:
+                                spec_data['page_config'] = {}
+                            spec_data['page_config']['type'] = mode
+                            spec_data['page_config']['auto_generate_url'] = True
+
+                            pm = ProfileManager()
+                            result = pm.launch_profile(
+                                profile_id=profile_id,
+                                spec_data=spec_data
+                            )
+                            # result: {"status": "success", "data": {"launch": {"pid": N, ...}}}
+                            pid = (
+                                result
+                                .get('data', {})
+                                .get('launch', {})
+                                .get('pid', 0)
+                            )
+                            if not pid:
+                                raise RuntimeError(
+                                    f"Launch completó pero no retornó PID. result={result}"
+                                )
+                            return pid
+
+                        loop = asyncio.get_event_loop()
+                        chrome_pid = await loop.run_in_executor(None, _do_launch)
+
+                        # Emitir evento al EventBus para que otros consumidores se enteren
+                        event = await self.event_bus.add_event(
+                            'PROFILE_LAUNCHED',
+                            {
+                                'profile_id': profile_id,
+                                'launch_id': launch_id,
+                                'chrome_pid': chrome_pid,
+                                'mode': mode,
+                            }
+                        )
+                        await self._broadcast_event(event)
+
+                        response = {
+                            "type": "LAUNCH_PROFILE_ACK",
+                            "launch_id": launch_id,
+                            "status": "ok",
+                            "pid": chrome_pid
+                        }
+                        logger.info(
+                            f"✅ [{conn_id}] LAUNCH_PROFILE OK: {profile_id[:8]} PID={chrome_pid}"
+                        )
+
+                    except Exception as e:
+                        logger.error(
+                            f"❌ [{conn_id}] LAUNCH_PROFILE failed: {e}", exc_info=True
+                        )
+                        response = {
+                            "type": "LAUNCH_PROFILE_ACK",
+                            "launch_id": launch_id,
+                            "status": "error",
+                            "message": str(e)
+                        }
+
                     await self._send_to_writer(writer, response)
 
                 else:

@@ -180,7 +180,6 @@ hiddenimports = [
     'brain.core.nucleus_inspector',
     'brain.core.nucleus_manager',
     'brain.core.profile',
-    'brain.core.profile.bloom_launcher_client',
     'brain.core.profile.launch_history_reader',
     'brain.core.profile.logic',
     'brain.core.profile.logic.chrome_resolver',
@@ -191,6 +190,7 @@ hiddenimports = [
     'brain.core.profile.profile_launcher',
     'brain.core.profile.profile_manager',
     'brain.core.profile.profile_state_manager',
+    'brain.core.profile.session1_launcher',
     'brain.core.profile.web',
     'brain.core.profile.web.discovery_generator',
     'brain.core.profile.web.landing_generator',
@@ -269,7 +269,8 @@ datas.extend([
 ])
 
 # Binarios adicionales (DLLs, .so, etc.)
-binaries = []
+from PyInstaller.utils.hooks import collect_dynamic_libs
+binaries = collect_dynamic_libs('win32')
 
 a = Analysis(
     [str(PROJECT_ROOT / 'brain' / '__main__.py')],

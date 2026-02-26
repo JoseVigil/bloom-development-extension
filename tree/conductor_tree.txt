@@ -1,2 +1,107 @@
 bloom-development-extension/
-└── conductor [NOT FOUND]
+└── conductor/
+    ├── .gitignore
+    ├── app.manifest
+    ├── config-loader.js
+    ├── entitlements.plist
+    ├── forge.config.js
+    ├── installer-config.json
+    ├── main.js
+    ├── node_modules/ [... dependencies]
+    ├── package-lock.json
+    ├── package.json
+    ├── preload.js
+    ├── scripts/
+    │   ├── clean_chrome_cache.ps1
+    │   ├── cleanup_zombies.ps1
+    │   ├── fix_bridge_id.py
+    │   └── sanitize_manifest.py
+    ├── setup/
+    │   ├── app.manifest
+    │   ├── assets/
+    │   │   ├── bloom.ico
+    │   │   └── installer.gif
+    │   ├── bloom-setup-version.ps1
+    │   ├── build_info.json
+    │   ├── config/
+    │   │   ├── constants.js
+    │   │   └── paths.js
+    │   ├── core/
+    │   │   ├── admin-utils.js
+    │   │   ├── menu-builder.js
+    │   │   └── window-manager.js
+    │   ├── dist/ [... build output]
+    │   ├── install/
+    │   │   ├── chromium-installer.js
+    │   │   ├── diagnose/
+    │   │   │   ├── diagnose-service.js
+    │   │   │   └── service-diagnostics.js
+    │   │   ├── installer.js
+    │   │   ├── installer_metamorph.js
+    │   │   ├── installer_nucleus.js
+    │   │   ├── launcher-creator.js
+    │   │   ├── native-host-installer.js
+    │   │   ├── nucleus_manager.js
+    │   │   ├── pre-install-cleanup.js
+    │   │   ├── runtime-installer.js
+    │   │   ├── service-installer-brain.js
+    │   │   ├── service-installer-launcher.js
+    │   │   ├── service-installer-nucleus.js
+    │   │   ├── service-manager.js
+    │   │   └── shortcut-installer.js
+    │   ├── ipc/
+    │   │   ├── install-handlers.js
+    │   │   ├── launch-handlers.js
+    │   │   └── shared-handlers.js
+    │   ├── main.js
+    │   ├── node_modules/ [... dependencies]
+    │   ├── package-lock.json
+    │   ├── package.json
+    │   ├── preload.js
+    │   ├── registry-scripts/
+    │   │   ├── cleanup.ps1
+    │   │   └── hkcu.ps1
+    │   ├── run-admin.bat
+    │   ├── scripts/
+    │   │   ├── check-status.bat
+    │   │   ├── clean_chrome_cache.ps1
+    │   │   ├── cleanup_zombies.ps1
+    │   │   ├── emergency-cleanup.bat
+    │   │   ├── fix_bridge_id.py
+    │   │   ├── install-brain-service.bat
+    │   │   ├── install-nucleus-service.bat
+    │   │   ├── reinstall-brain-service.bat
+    │   │   ├── reinstall-nucleus-service.bat
+    │   │   ├── sanitize_manifest.py
+    │   │   ├── uninstall-brain-service.bat
+    │   │   └── uninstall-nucleus-service.bat
+    │   ├── src/
+    │   │   ├── index.html
+    │   │   ├── installation_manager.js
+    │   │   ├── renderer.js
+    │   │   ├── styles.css
+    │   │   └── ui_manager.js
+    │   ├── utils/
+    │   │   ├── exec-helper.js
+    │   │   └── repair-tools.js
+    │   └── version.json
+    ├── shared/
+    │   ├── build-info.js
+    │   ├── bump-version.js
+    │   └── logger.js
+    ├── utils/
+    │   ├── exec-helper.js
+    │   └── repair-tools.js
+    └── workspace/
+        ├── assets/
+        │   └── bloom.ico
+        ├── bloom-conductor-version.ps1
+        ├── build_info.json
+        ├── main_conductor.js
+        ├── node_modules/ [... dependencies]
+        ├── package-lock.json
+        ├── package.json
+        ├── preload_conductor.js
+        ├── src/
+        │   └── conductor.html
+        └── version.json

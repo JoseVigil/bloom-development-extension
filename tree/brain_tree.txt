@@ -1,6 +1,7 @@
 bloom-development-extension/
 └── brain/
     ├── .env
+    ├── ADDING_DEPENDENCIES.md
     ├── VERSION
     ├── __build__.py
     ├── __init__.py
@@ -276,7 +277,6 @@ bloom-development-extension/
     │   ├── profile/
     │   │   ├── __init__.py
     │   │   ├── __pycache__/ [... cache]
-    │   │   ├── bloom_launcher_client.py
     │   │   ├── launch_history_reader.py
     │   │   ├── logic/
     │   │   │   ├── __init__.py
@@ -289,6 +289,7 @@ bloom-development-extension/
     │   │   ├── profile_launcher.py
     │   │   ├── profile_manager.py
     │   │   ├── profile_state_manager.py
+    │   │   ├── session1_launcher.py
     │   │   └── web/
     │   │       ├── __init__.py
     │   │       ├── __pycache__/ [... cache]

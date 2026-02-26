@@ -1,7 +1,7 @@
-2026/02/24 12:56:12 Warning: failed to register telemetry for metamorph_core: exec: "nucleus": executable file not found in %PATH%
+2026/02/26 01:43:00 Warning: failed to register telemetry for metamorph_core: exec: "nucleus": executable file not found in %PATH%
 {
-  "build_date": "2026 -Tue 02-24",
-  "build_number": 81,
+  "build_date": "2026 -Thu 02-26",
+  "build_number": 96,
   "capabilities": [
     "state_inspection",
     "manifest_reconciliation",

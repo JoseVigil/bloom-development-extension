@@ -22,6 +22,7 @@ type Event struct {
 	Type      string                 `json:"type"`
 	ProfileID string                 `json:"profile_id,omitempty"`
 	LaunchID  string                 `json:"launch_id,omitempty"`
+	Pid       int                    `json:"pid,omitempty"`  
 	Timestamp int64                  `json:"timestamp"`
 	Sequence  uint64                 `json:"sequence,omitempty"`
 	Data      map[string]interface{} `json:"data,omitempty"`

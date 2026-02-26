@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/sdk/worker"
 
 	"nucleus/internal/core"
+	"nucleus/internal/mandates"
 	"nucleus/internal/orchestration/activities"
 	temporalworkflows "nucleus/internal/orchestration/temporal/workflows"
 	"github.com/spf13/cobra"
@@ -150,8 +151,8 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 			logger.Info("Registrando activities...")
 
 			// Construir paths usando PathConfig disponible
-			logsDir := c.Paths.Logs
-			telemetryPath := filepath.Join(c.Paths.Root, "telemetry.json")
+			logsDir    := c.Paths.Logs
+			nucleusExe := filepath.Join(c.Paths.Bin, "nucleus", "nucleus.exe")
 			sentinelExe := filepath.Join(c.Paths.Bin, "sentinel", "sentinel.exe")
 
 			// Verificar que sentinel existe
@@ -163,7 +164,7 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 			// Crear instancia de SentinelActivities
 			sentinelAct := activities.NewSentinelActivities(
 				logsDir,
-				telemetryPath,
+				nucleusExe,
 				sentinelExe,
 			)
 
@@ -183,6 +184,9 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 			w.RegisterActivityWithOptions(sentinelAct.SeedProfile, activity.RegisterOptions{
 				Name: "sentinel.SeedProfile",
 			})
+
+			// Registrar mandate activities (hooks post-launch)
+			w.RegisterActivity(mandates.RunPostLaunchHooksActivity)
 
 			logger.Success("✅ Activities registradas")
 

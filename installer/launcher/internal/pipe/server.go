@@ -3,9 +3,9 @@
 package pipe
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net"
 	"sync"
 
@@ -105,15 +105,25 @@ func (s *Server) Close() {
 func (s *Server) handleConn(conn net.Conn) {
 	defer conn.Close()
 
-	data, err := io.ReadAll(conn)
-	if err != nil {
-		s.log.Warn("Error leyendo del pipe: %v", err)
+	// Leer hasta '\n' — el cliente envía "JSON\n" como delimitador de mensaje.
+	// io.ReadAll esperaría EOF, que en named pipes solo llega al cerrar la conexión;
+	// como el cliente necesita leer la respuesta antes de cerrar, nunca llegaría.
+	scanner := bufio.NewScanner(conn)
+	scanner.Buffer(make([]byte, 256*1024), 256*1024) // hasta 256 KB por mensaje
+	if !scanner.Scan() {
+		err := scanner.Err()
+		if err != nil {
+			s.log.Warn("Error leyendo del pipe: %v", err)
+		} else {
+			s.log.Warn("Conexión cerrada sin datos")
+		}
 		return
 	}
+	line := scanner.Bytes()
 
 	var req LaunchRequest
-	if err := json.Unmarshal(data, &req); err != nil {
-		s.log.Warn("JSON inválido recibido: %v", err)
+	if err := json.Unmarshal(line, &req); err != nil {
+		s.log.Warn("JSON inválido recibido: %v | raw: %q", err, string(line))
 		writeResponse(conn, LaunchResponse{OK: false, Success: false, Error: "invalid JSON"})
 		return
 	}

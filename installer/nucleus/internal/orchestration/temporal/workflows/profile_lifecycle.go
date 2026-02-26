@@ -7,6 +7,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
+	"nucleus/internal/mandates"
 	"nucleus/internal/orchestration/queries"
 	"nucleus/internal/orchestration/signals"
 	"nucleus/internal/orchestration/types"
@@ -139,6 +140,27 @@ func ProfileLifecycleWorkflow(ctx workflow.Context, input types.ProfileLifecycle
 					"chrome_pid", launchResult.ChromePID,
 					"debug_port", launchResult.DebugPort,
 					"extension_loaded", launchResult.ExtensionLoaded)
+
+				// ── POST-LAUNCH HOOKS ─────────────────────────────────────────────
+				// Best-effort: los hooks no bloquean el workflow si fallan.
+				// Se usa un ActivityOptions propio con retry deshabilitado.
+				hookCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+					StartToCloseTimeout: 2 * time.Minute,
+					RetryPolicy: &temporal.RetryPolicy{
+						MaximumAttempts: 1,
+					},
+				})
+				hctx := mandates.NewHookContext(launchResult.LaunchID, input.ProfileID)
+				var hooksResult mandates.HooksRunResult
+				if err := workflow.ExecuteActivity(hookCtx, mandates.RunPostLaunchHooksActivity, hctx).Get(ctx, &hooksResult); err != nil {
+					logger.Warn("post_launch hooks activity failed (non-fatal)", "error", err)
+				} else {
+					logger.Info("post_launch hooks completed",
+						"total", hooksResult.Total,
+						"failed", hooksResult.Failed,
+						"launch_id", launchResult.LaunchID)
+				}
+				// ─────────────────────────────────────────────────────────────────
 			} else {
 				state.State = types.StateFailed
 				state.ErrorMessage = launchResult.Error

@@ -581,3 +581,125 @@ func (sc *SentinelClient) IsConnected() bool {
 func (sc *SentinelClient) Close() error {
 	return sc.bus.Close()
 }
+
+// LaunchProfileSync envía LAUNCH_PROFILE al Brain y espera sincrónicamente
+// el LAUNCH_PROFILE_ACK correlacionado por launch_id.
+//
+// Bloquea hasta recibir el ACK con el PID real de Chrome lanzado por
+// bloom-launcher en Session 1, o hasta que expire el timeout.
+//
+// Correlación: Brain retorna launch_id en el top-level del ACK (event.LaunchID).
+// El ticker interno loguea el progreso cada 10s para diagnóstico — no es
+// heartbeat de Temporal (eso vive en el Worker de Nucleus, no aquí).
+func (sc *SentinelClient) LaunchProfileSync(
+	profileID string,
+	launchID string,
+	specPath string,
+	mode string,
+	timeout time.Duration,
+) (int, error) {
+	return sc.LaunchProfileSyncWithHeartbeat(profileID, launchID, specPath, mode, timeout, nil)
+}
+
+// LaunchProfileSyncWithHeartbeat es la implementación real; permite pasar un
+// heartbeatFn que se invoca cada 10s durante la espera.
+// Usar desde Temporal activities: heartbeatFn = func() { activity.RecordHeartbeat(ctx, "waiting_ack") }
+func (sc *SentinelClient) LaunchProfileSyncWithHeartbeat(
+	profileID string,
+	launchID string,
+	specPath string,
+	mode string,
+	timeout time.Duration,
+	heartbeatFn func(),
+) (int, error) {
+
+	type result struct {
+		pid int
+		err error
+	}
+	resultCh := make(chan result, 1)
+	var once sync.Once
+
+	sc.On("LAUNCH_PROFILE_ACK", func(event Event) {
+		// Brain retorna launch_id en el top-level del JSON → event.LaunchID.
+		// Fallback a Data["launch_id"] por compatibilidad con versiones anteriores.
+		eventLaunchID := event.LaunchID
+		if eventLaunchID == "" {
+			if event.Data != nil {
+				eventLaunchID, _ = event.Data["launch_id"].(string)
+			}
+		}
+		if eventLaunchID != launchID {
+			return
+		}
+
+		once.Do(func() {
+			if event.Status == "ok" {
+				if event.Pid == 0 {
+					resultCh <- result{0, fmt.Errorf("LAUNCH_PROFILE_ACK recibido sin PID válido")}
+				} else {
+					resultCh <- result{event.Pid, nil}
+				}
+			} else {
+				errMsg := event.Error
+				if errMsg == "" {
+					if event.Data != nil {
+						if msg, ok := event.Data["message"].(string); ok {
+							errMsg = msg
+						}
+					}
+				}
+				if errMsg == "" {
+					errMsg = "Brain reportó error en LAUNCH_PROFILE sin mensaje"
+				}
+				resultCh <- result{0, fmt.Errorf("launch fallido: %s", errMsg)}
+			}
+		})
+	})
+
+	event := Event{
+		Type:      "LAUNCH_PROFILE",
+		ProfileID: profileID,
+		LaunchID:  launchID,
+		Timestamp: time.Now().UnixNano(),
+		Data: map[string]interface{}{
+			"launch_id": launchID,
+			"spec_path": specPath,
+			"mode":      mode,
+		},
+	}
+
+	if err := sc.Send(event); err != nil {
+		return 0, fmt.Errorf("error enviando LAUNCH_PROFILE a Brain: %w", err)
+	}
+
+	const heartbeatInterval = 10 * time.Second
+	heartbeatTicker := time.NewTicker(heartbeatInterval)
+	defer heartbeatTicker.Stop()
+
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+
+	elapsed := time.Duration(0)
+	for {
+		select {
+		case res := <-resultCh:
+			return res.pid, res.err
+
+		case <-heartbeatTicker.C:
+			elapsed += heartbeatInterval
+			sc.logger.Info("[LAUNCH_SYNC] Esperando LAUNCH_PROFILE_ACK... (%s / %s, launch_id=%s)",
+				elapsed, timeout, launchID)
+			if heartbeatFn != nil {
+				heartbeatFn()
+			}
+
+		case <-deadline.C:
+			return 0, fmt.Errorf(
+				"timeout esperando LAUNCH_PROFILE_ACK (launch_id=%s, timeout=%s) — "+
+					"verificar que Brain esté corriendo y que bloom-launcher esté activo en Session 1",
+				launchID, timeout,
+			)
+		}
+	}
+}

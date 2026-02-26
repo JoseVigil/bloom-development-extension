@@ -41,7 +41,7 @@ from typing import Dict, Any, Optional
 from datetime import datetime
 
 from brain.shared.logger import get_logger
-from brain.core.profile.bloom_launcher_client import LauncherClient, LauncherUnavailableError
+from brain.core.profile.session1_launcher import launch_in_user_session
 
 logger = get_logger("brain.profile.launcher")
 
@@ -80,7 +80,6 @@ class ProfileLauncher:
         """
         self.paths = paths
         self.resolver = chrome_resolver
-        self.launcher_client = LauncherClient(paths.base_dir)
         logger.debug("ProfileLauncher inicializado (spec-driven only)")
 
     def cleanup_profile_locks(self) -> int:
@@ -297,15 +296,34 @@ class ProfileLauncher:
             # Agregar target_url al final
             args.append(target_url)
             
+            # Extraer launch_id del spec ANTES de construir los paths de log.
+            # El nombre de los archivos debe coincidir con lo que brain chrome
+            # busca: <launch_id>_debug.log y <launch_id>_netlog.json.
+            # Fallback a timestamp solo si Sentinel no proveyó launch_id.
+            launch_id = spec.get('launch_id')
+
             # Preparar logs
             if logs_base:
                 logs_path = self.paths.base_dir / logs_base if not os.path.isabs(logs_base) else Path(logs_base)
                 logs_path.mkdir(parents=True, exist_ok=True)
-                
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                debug_log = str(logs_path / f"debug_{timestamp}.log")
-                net_log = str(logs_path / f"net_{timestamp}.log")
-                
+
+                if launch_id:
+                    log_prefix = launch_id
+                else:
+                    # Fallback: timestamp para launches sin identidad asignada
+                    log_prefix = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    logger.warning(
+                        "⚠️  launch_id no encontrado en spec — usando timestamp como prefijo de log. "
+                        "brain chrome read-log no podrá encontrar estos archivos por launch_id."
+                    )
+
+                debug_log = str(logs_path / f"{log_prefix}_debug.log")
+                net_log   = str(logs_path / f"{log_prefix}_netlog.json")
+
+                logger.debug(f"📁 Log prefix: {log_prefix}")
+                logger.debug(f"   debug → {debug_log}")
+                logger.debug(f"   netlog → {net_log}")
+
                 # IMPORTANT: Do NOT use --enable-logging=stderr together with
                 # --log-net-log. When stderr mode is active, Chrome internally
                 # prepends "chrome_" to all log-related paths, corrupting the
@@ -320,16 +338,13 @@ class ProfileLauncher:
                     f"--log-file={debug_log}",
                     f"--log-net-log={net_log}"
                 ])
-                
+
                 log_files = {
                     "debug_log": debug_log,
                     "net_log": net_log
                 }
             else:
                 log_files = {}
-            
-            # Extraer launch_id del spec si existe
-            launch_id = spec.get('launch_id')
             
             logger.info(f"✅ Spec validado. Preparando handoff...")
             logger.debug(f"   Total args: {len(args)}")
@@ -527,8 +542,8 @@ class ProfileLauncher:
             # ======================================================
             # 1. SILENCIO TOTAL EN STDOUT
             # ======================================================
-            import logging
-            logging.disable(logging.CRITICAL)
+            # import logging
+            # logging.disable(logging.CRITICAL)
 
             # ======================================================
             # 2. LANZAMIENTO DESACOPLADO
@@ -536,15 +551,13 @@ class ProfileLauncher:
             logger.info("🚀 Spawning proceso desacoplado...")
 
             if platform.system() == 'Windows':
-                # Windows: delegar a bloom-launcher (Session 1) via named pipe.
-                # Razón: Brain corre en Session 0 (NSSM service) sin acceso al
-                # compositor de ventanas (DComposition). bloom-launcher corre en
-                # Session 1 (sesión interactiva del usuario) y puede crear
-                # ventanas de Chromium visibles.
+                # Brain corre como servicio SYSTEM (Session 0) y tiene SeTcbPrivilege.
+                # Usamos WTSQueryUserToken + CreateProcessAsUserW directamente via ctypes
+                # para cruzar la barrera Session 0 → Session 1 sin intermediarios.
                 try:
-                    logger.info("🌉 Delegando a bloom-launcher (Session 1)...")
-                    chrome_pid = self.launcher_client.launch_chrome(args, profile_id)
-                    logger.info(f"✅ Chrome lanzado via bloom-launcher PID={chrome_pid}")
+                    logger.info("🌉 Lanzando Chrome en Session 1 via WTSQueryUserToken...")
+                    chrome_pid = launch_in_user_session(args)
+                    logger.info(f"✅ Chrome lanzado en Session 1, PID={chrome_pid}")
 
                     class _FakeProc:
                         """Shim que expone .pid igual que subprocess.Popen."""
@@ -553,14 +566,12 @@ class ProfileLauncher:
 
                     proc = _FakeProc(chrome_pid)
 
-                except LauncherUnavailableError as exc:
-                    logger.error(f"❌ bloom-launcher no disponible: {exc}")
+                except (OSError, ValueError) as exc:
+                    logger.error(f"❌ Error lanzando Chrome en Session 1: {exc}")
                     raise LaunchError(
-                        f"Launcher de sesión no disponible: {exc}. "
-                        "Asegúrese de que bloom-launcher.exe esté corriendo "
-                        "en la sesión del usuario.",
+                        f"No se pudo lanzar Chrome en la sesión del usuario: {exc}",
                         self.ERROR_LAUNCH_FAILED,
-                        {"stage": "session_launcher", "error": str(exc)},
+                        {"stage": "session1_launcher", "error": str(exc)},
                     )
             else:
                 # macOS / Linux: Popen directo (no tienen Session 0 isolation).
@@ -593,14 +604,7 @@ class ProfileLauncher:
                 }
             }
 
-            # ======================================================
-            # 4. ENTREGA Y CIERRE QUIRÚRGICO
-            # ======================================================
-            sys.stdout.write(json.dumps(result) + "\n")
-            sys.stdout.flush()
-
-            time.sleep(0.5)
-            os._exit(0)
+            return result
 
         except LaunchError:
             raise  # Re-raise con código original
