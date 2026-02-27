@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cstdio>
 #include "build_info.h"  // For BUILD_NUMBER
+#include "help_renderer.h"
 #include <nlohmann/json.hpp>
 
 #ifdef _WIN32
@@ -353,80 +354,7 @@ namespace CLICommands {
     }
     
     inline void print_help() {
-        std::cout << R"(
-BLOOM-HOST --- Native Messaging Bridge for Chrome Extension
-================================================================
-
-DESCRIPTION:
-  bloom-host is a native messaging bridge that facilitates bidirectional
-  communication between the Bloom Chrome Extension and the Brain service.
-  
-  It operates as a daemon process, automatically launched by Chrome when
-  the extension needs native capabilities.
-
-USAGE:
-  bloom-host [OPTIONS]
-  
-  Normal operation (launched by Chrome):
-    bloom-host --profile-id=<id> --launch-id=<id>
-  
-  Command-line diagnostics:
-    bloom-host --version
-    bloom-host --info
-    bloom-host --health
-    bloom-host --help
-
-OPTIONS:
-  --version              Display version information and exit
-  --info                 Display system and runtime information
-  --health               Verify dependencies and connectivity
-  --help                 Show this help message
-
-  --profile-id <id>      Profile identifier for session tracking
-  --launch-id <id>       Launch identifier for session tracking
-
-PROTOCOL:
-  Synapse Native Messaging Protocol v2.1
-  - Chrome -> Host: Little Endian (4-byte length + JSON payload)
-  - Host -> Brain: Big Endian over TCP (localhost:5678)
-  - Max message size: 1MB (1,020,000 bytes)
-
-HANDSHAKE PHASES:
-  Phase 1: extension_ready  -> Extension signals readiness
-  Phase 2: host_ready       -> Host confirms connection
-  Phase 3: PROFILE_CONNECTED -> Brain acknowledges session
-
-DEPENDENCIES:
-  * TCP connection to Brain service (localhost:5678)
-  * STDIN/STDOUT available for Chrome communication
-  * Write permissions for log files (optional)
-
-TELEMETRY:
-  When profile/launch IDs are provided, bloom-host streams telemetry
-  to the Brain service for monitoring and debugging.
-
-EXAMPLES:
-  # Check version
-  bloom-host --version
-  
-  # System diagnostics
-  bloom-host --info
-  
-  # Verify health
-  bloom-host --health
-  
-  # Normal Chrome launch (automatic)
-  # Configured via native manifest in:
-  # - Windows: HKCU\Software\Google\Chrome\NativeMessagingHosts
-  # - Linux: ~/.config/google-chrome/NativeMessagingHosts
-  # - macOS: ~/Library/Application Support/Google/Chrome/NativeMessagingHosts
-
-FOR MORE INFORMATION:
-  Documentation: /help/host-help.txt
-  Protocol Spec: Synapse Protocol v2.1
-  Related: brain, sentinel, nucleus
-
-)" << std::endl;
+        HelpRenderer::render();
     }
     
     inline int check_health() {
