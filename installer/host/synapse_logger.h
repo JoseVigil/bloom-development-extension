@@ -16,8 +16,8 @@
  *   - browser_log: Mensajes redirigidos desde la extensión Chrome → synapse_extension_YYYYMMDD.log
  *
  * Estructura de directorios:
- *   Windows: %LOCALAPPDATA%\BloomNucleus\logs\host\{profile_id}\{launch_id}\
- *   macOS:   /tmp/bloom-nucleus/logs/host/{profile_id}/{launch_id}/
+ *   Windows: %LOCALAPPDATA%\BloomNucleus\logs\host\profiles\{profile_id}\{launch_id}\
+ *   macOS:   /tmp/bloom-nucleus/logs/host/profiles/{profile_id}/{launch_id}/
  *
  * Registro de telemetría:
  *   Delegado a nucleus via CLI — este componente NUNCA escribe telemetry.json directamente.
@@ -106,8 +106,8 @@ public:
      * @param launch_id  ID de lanzamiento (e.g., "009_14c11dbf_045012")
      *
      * Estructura creada:
-     *   logs/host/{profile_id}/{launch_id}/synapse_host_YYYYMMDD.log
-     *   logs/host/{profile_id}/{launch_id}/synapse_extension_YYYYMMDD.log
+     *   logs/host/profiles/{profile_id}/{launch_id}/synapse_host_YYYYMMDD.log
+     *   logs/host/profiles/{profile_id}/{launch_id}/synapse_extension_YYYYMMDD.log
      *
      * Llama a `nucleus telemetry register` con ambos paths en un solo stream.
      * Es idempotente: llamadas repetidas con los mismos IDs no tienen efecto.

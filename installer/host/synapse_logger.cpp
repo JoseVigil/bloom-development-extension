@@ -89,31 +89,13 @@ bool SynapseLogManager::create_directory_recursive(const std::string& path) {
         std::string sub = path.substr(0, pos);
         if (sub.empty()) continue;
 
-        // Saltar segmentos triviales como "C:" en Windows
-        if (sub.size() == 2 && sub[1] == ':') continue;
-
-#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
-        // CreateDirectoryA devuelve 0 en fallo — usar GetLastError() para
-        // distinguir ERROR_ALREADY_EXISTS (seguro) de errores reales.
-        BOOL ok = CreateDirectoryA(sub.c_str(), NULL);
-        if (!ok) {
-            DWORD err = GetLastError();
-            if (err != ERROR_ALREADY_EXISTS) {
-                std::cerr << "[" << get_timestamp_ms() << "] [ERROR] [HOST] "
-                          << "CreateDirectoryA failed: path=" << sub
-                          << " win_err=" << err << "\n";
-                std::cerr.flush();
-            }
-        }
-#else
         int ret = mkdir_p(sub.c_str());
         if (ret != 0 && errno != EEXIST) {
             std::cerr << "[" << get_timestamp_ms() << "] [ERROR] [HOST] "
-                      << "mkdir failed: path=" << sub
+                      << "mkdir_p failed: path=" << sub
                       << " errno=" << errno << "\n";
             std::cerr.flush();
         }
-#endif
     } while (pos != std::string::npos);
 
     // Verificar que el directorio final realmente existe.
@@ -250,9 +232,10 @@ void SynapseLogManager::initialize(const std::string& p_profile_id,
         return;
     }
 
-    // 2. Estructura: logs/host/{profile_id}/{launch_id}/
+    // 2. Estructura: logs/host/profiles/{profile_id}/{launch_id}/
     log_directory = base
         + PATH_SEP "host"
+        + PATH_SEP "profiles"
         + PATH_SEP + profile_id
         + PATH_SEP + launch_id;
 

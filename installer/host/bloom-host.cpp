@@ -1,5 +1,4 @@
 #include <iostream>
-#include <fstream>
 #include <vector>
 #include <string>
 #include <thread>
@@ -12,15 +11,9 @@
 
 #include "synapse_logger.h"
 #include "chunked_buffer.h"
-#include "platform_utils.h"   // winsock2.h debe llegar antes que shlobj.h
+#include "platform_utils.h"
 #include "build_info.h"
 #include "cli_parser.h"
-
-#ifdef _WIN32
-    #include <shlobj.h>        // después de platform_utils.h para respetar el orden winsock2 → windows
-#else
-    #include <sys/stat.h>
-#endif
 
 using json = nlohmann::json;
 
@@ -856,6 +849,53 @@ int main(int argc, char* argv[]) {
         }
         // ==========================================
 
+        // ========== --init: pre-launch initialization invoked by Sentinel ==========
+        //
+        // Sentinel llama a bloom-host.exe --init --profile-id <id> --launch-id <id>
+        // ANTES de que Chrome arranque, con el token completo del usuario.
+        //
+        // Responsabilidades:
+        //   1. Crear estructura de directorios de logs
+        //   2. Crear archivos de log vacíos (con header de sesión)
+        //   3. Registrar telemetría via nucleus
+        //   4. Salir con código 0 (éxito) o 1 (fallo)
+        //
+        // Cuando Chrome luego invoca el host via Native Messaging, los directorios
+        // y archivos ya existen y el token restringido de Chrome puede escribir.
+        // ============================================================================
+        bool is_init_mode = false;
+        for (int i = 1; i < argc; i++) {
+            if (std::string(argv[i]) == "--init") { is_init_mode = true; break; }
+        }
+
+        if (is_init_mode) {
+            std::string profile_id = PlatformUtils::get_cli_argument(argc, argv, "--profile-id");
+            std::string launch_id  = PlatformUtils::get_cli_argument(argc, argv, "--launch-id");
+
+            if (profile_id.empty() || launch_id.empty()) {
+                std::cerr << "[INIT] ERROR: --profile-id y --launch-id son obligatorios con --init\n";
+                return 1;
+            }
+
+            std::cerr << "[INIT] bloom-host --init"
+                      << " profile=" << profile_id
+                      << " launch="  << launch_id << "\n";
+
+            // initialize() crea dirs, archivos, headers de sesión y registra telemetría.
+            // Con el token de Sentinel (usuario completo) CreateDirectoryA tiene permisos.
+            g_logger.initialize(profile_id, launch_id);
+
+            if (!g_logger.is_ready()) {
+                std::cerr << "[INIT] ERROR: logger no pudo inicializarse — ver stderr para detalles\n";
+                return 1;
+            }
+
+            g_logger.log_native("INFO", "Host pre-initialized by Sentinel --init. Dirs and files ready.");
+            std::cerr << "[INIT] OK — estructura creada, telemetría registrada, saliendo\n";
+            return 0;
+        }
+        // ============================================================================
+
         PlatformUtils::initialize_networking();
         PlatformUtils::setup_binary_io();   // setvbuf(stderr, _IONBF) incluido aquí
         
@@ -884,63 +924,20 @@ int main(int argc, char* argv[]) {
             // ---------------------------------------------------------------
             // DIRECT DISK LOG — escribe directo a disco antes de que el logger
             // esté listo. No depende de stderr ni de ninguna captura externa.
-            //
-            // CRÍTICO: No usar getenv("LOCALAPPDATA").
-            // Chrome Native Messaging lanza bloom-host.exe con un environment
-            // heredado de Chrome, no del usuario. getenv puede devolver null
-            // o un path donde ofstream falla silenciosamente si logs/ no existe.
-            //
-            // Usamos SHGetFolderPathA(CSIDL_LOCAL_APPDATA) que resuelve desde
-            // el token del proceso — siempre correcto bajo cualquier launcher.
-            //
-            // Path primario: config/profile/{id}/host_boot.log
-            //   → Sentinel crea este directorio ANTES de lanzar Chrome.
-            //   → Garantizado que existe cuando bloom-host arranca.
-            // Path secundario: logs/host_boot.log (fallback)
+            // logs/host_boot.log — append, una línea por sesión.
             // ---------------------------------------------------------------
             auto write_boot_log = [&](const std::string& line) {
+                const char* appdata = std::getenv("LOCALAPPDATA");
+                std::string path;
 #ifdef _WIN32
-                char buf[MAX_PATH] = {};
-                std::string appdata;
-                if (SHGetFolderPathA(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, buf) >= 0) {
-                    appdata = std::string(buf);
-                } else {
-                    const char* e = std::getenv("LOCALAPPDATA");
-                    if (e) appdata = std::string(e);
-                }
-                if (appdata.empty()) return;
-
-                // Destino: logs/host/profile/{profile_id}/host_boot.log
-                std::string dir = appdata + "\\BloomNucleus\\logs\\host\\profile\\"
-                                + cli_profile_id;
-                std::string filepath = dir + "\\host_boot.log";
-
-                // Crear directorio segmento a segmento con CreateDirectoryA.
-                // ofstream no crea directorios intermedios — hay que hacerlo explícito.
-                {
-                    size_t pos = 0;
-                    while ((pos = dir.find('\\', pos + 1)) != std::string::npos) {
-                        std::string sub = dir.substr(0, pos);
-                        CreateDirectoryA(sub.c_str(), NULL); // ERROR_ALREADY_EXISTS es OK
-                    }
-                    CreateDirectoryA(dir.c_str(), NULL);
-                }
-
-                std::ofstream f(filepath, std::ios::app);
-                if (f.is_open()) { f << line << "\n"; f.flush(); }
+                if (appdata) path = std::string(appdata) + "\\BloomNucleus\\logs\\host_boot.log";
 #else
-                std::string dir = "/tmp/bloom-nucleus/logs/host/profile/" + cli_profile_id;
-                // mkdir -p equivalente en macOS/Linux
-                {
-                    size_t pos = 0;
-                    while ((pos = dir.find('/', pos + 1)) != std::string::npos) {
-                        mkdir(dir.substr(0, pos).c_str(), 0755);
-                    }
-                    mkdir(dir.c_str(), 0755);
-                }
-                std::ofstream f(dir + "/host_boot.log", std::ios::app);
-                if (f.is_open()) { f << line << "\n"; f.flush(); }
+                path = "/tmp/bloom-nucleus/logs/host_boot.log";
 #endif
+                if (!path.empty()) {
+                    std::ofstream f(path, std::ios::app);
+                    if (f.is_open()) { f << line << "\n"; f.flush(); }
+                }
             };
 
             write_boot_log("[BOOT] pid=" + std::to_string(PlatformUtils::get_current_pid())
