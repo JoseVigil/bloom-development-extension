@@ -14,42 +14,15 @@ type ManagedBinary struct {
 	Status               string        `json:"status"` // "healthy", "missing", "corrupted", "unknown"
 	UpdatableByMetamorph bool          `json:"updatable_by_metamorph"`
 	CortexMeta           *CortexMeta   `json:"cortex_meta,omitempty"`   // populated only for .blx
-	LauncherInfo         *LauncherInfo `json:"launcher_info,omitempty"` // populated only for bloom-launcher
+	SensorInfo           *SensorInfo   `json:"sensor_info,omitempty"`   // populated only for bloom-sensor
 }
 
-// LauncherInfo contains the extended runtime metadata reported by bloom-launcher's
-// `info --json` command. Fields mirror the launcher's JSON output exactly.
-type LauncherInfo struct {
-	FullVersion string             `json:"full_version"`
-	BuildDate   string             `json:"build_date"`
-	Channel     string             `json:"channel"`
-	Daemon      LauncherDaemon     `json:"daemon"`
-	Startup     LauncherStartup    `json:"startup"`
-	Runtime     LauncherRuntime    `json:"runtime"`
-	Pipe        LauncherPipe       `json:"pipe"`
-}
-
-// LauncherDaemon reflects the daemon sub-object from launcher's info output.
-type LauncherDaemon struct {
-	Running bool `json:"running"`
-}
-
-// LauncherStartup reflects the startup sub-object from launcher's info output.
-type LauncherStartup struct {
-	Registered bool `json:"registered"`
-}
-
-// LauncherRuntime reflects the runtime sub-object from launcher's info output.
-type LauncherRuntime struct {
-	Arch string `json:"arch"`
-	Exe  string `json:"exe"`
-	Go   string `json:"go"`
-	OS   string `json:"os"`
-}
-
-// LauncherPipe reflects the pipe sub-object from launcher's info output.
-type LauncherPipe struct {
-	Name string `json:"name"`
+// SensorInfo contains the metadata reported by bloom-sensor's `--json info` command.
+// Fields mirror the sensor's JSON output exactly.
+type SensorInfo struct {
+	Channel      string            `json:"channel"`
+	Capabilities []string          `json:"capabilities"`
+	Requires     map[string]string `json:"requires"`
 }
 
 // ExternalBinary represents a third-party binary audited but not updated by Metamorph

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 )
@@ -101,15 +100,16 @@ func getManagedBinaries() []managedBinaryDefinition {
 			buildField:   "build_number",
 		},
 		{
-			// Launcher daemon binary.  build_number is a JSON string in its output
-			// ("0"), not a number, so it is handled by inspectLauncher() rather
-			// than the generic extractVersionAndBuild path.
-			name:         "Launcher",
-			path:         "launcher/bloom-launcher.exe",
-			versionArgs:  []string{"--version", "--json"}, // → {"version":"1.0.0","build_number":"0",...}
-			infoArgs:     []string{"info", "--json"},       // → full info JSON with daemon/startup/runtime/pipe
+			// Sensor (Human Presence Runtime).  version is plain-text output
+			// ("bloom-sensor dev (stable) build=13"), not JSON, so it is handled
+			// by inspectSensor() rather than the generic extractVersionAndBuild path.
+			// info uses --json flag placed before the subcommand per sensor's convention.
+			name:         "Sensor",
+			path:         "sensor/bloom-sensor.exe",
+			versionArgs:  []string{"version"},    // → plain text: "bloom-sensor dev (stable) build=13"
+			infoArgs:     []string{"--json", "info"}, // → JSON with version/channel/capabilities/requires
 			versionField: "version",
-			buildField:   "", // not used — handled in inspectLauncher
+			buildField:   "", // not used — handled in inspectSensor
 		},
 		{
 			name:         "Setup",
@@ -222,10 +222,9 @@ func InspectManagedBinary(name, path string, def managedBinaryDefinition) (*Mana
 		return inspectSetup(binary, path)
 	}
 
-	// Launcher: build_number is a string in its JSON; use a dedicated inspector
-	// that also captures the rich info fields (daemon, startup, runtime, pipe).
-	if name == "Launcher" {
-		return inspectLauncher(binary, path)
+	// Sensor: version is plain-text, info is JSON; use dedicated inspector.
+	if name == "Sensor" {
+		return inspectSensor(binary, path)
 	}
 
 	// Standard executables: version_args first, info_args as fallback
@@ -311,89 +310,48 @@ func inspectSetup(binary *ManagedBinary, exePath string) (*ManagedBinary, error)
 	return inspectElectronBinary(binary, exePath, "bloom-setup-version.ps1")
 }
 
-// inspectLauncher interrogates bloom-launcher using its native CLI flags.
+// inspectSensor interrogates bloom-sensor using its native CLI flags.
 //
 // Two-pass strategy:
-//  1. `--version --json` — fast path; captures version + build_number (string).
-//  2. `info --json`      — enriches the result with daemon/startup/runtime/pipe
-//     fields stored in binary.LauncherInfo.
+//  1. `version`      — plain-text output; version extracted via ParseVersionFromOutput.
+//                      Example: "bloom-sensor dev (stable) build=13"
+//  2. `--json info`  — JSON output; enriches the result with channel and capabilities
+//                      stored in binary.SensorInfo.
 //
-// build_number is emitted as a JSON string by bloom-launcher (e.g. "0"), so it
-// is parsed explicitly here rather than via the generic extractVersionAndBuild
-// helper (which expects a float64).
-func inspectLauncher(binary *ManagedBinary, exePath string) (*ManagedBinary, error) {
-	// Pass 1: --version --json
-	out, err := ExecuteCommandWithTimeout(exePath, "--version", "--json")
+// Note: bloom-sensor requires --json BEFORE the subcommand, unlike most other binaries.
+func inspectSensor(binary *ManagedBinary, exePath string) (*ManagedBinary, error) {
+	// Pass 1: version (plain text)
+	out, err := ExecuteCommandWithTimeout(exePath, "version")
 	if err == nil && out != "" {
-		jsonStart := strings.Index(out, "{")
-		if jsonStart >= 0 {
-			var v map[string]interface{}
-			if json.Unmarshal([]byte(out[jsonStart:]), &v) == nil {
-				if ver, ok := v["version"].(string); ok && ver != "" {
-					binary.Version = ver
-					binary.Status = "healthy"
-				}
-				// build_number is a string in launcher's output
-				if bn, ok := v["build_number"].(string); ok && bn != "" {
-					if n, err := strconv.Atoi(bn); err == nil {
-						binary.BuildNumber = n
-					}
-				}
-			}
+		version := ParseVersionFromOutput(out)
+		if version != "unknown" {
+			binary.Version = version
+			binary.Status = "healthy"
 		}
 	}
 
-	// Pass 2: info --json — collect extended metadata
-	infoOut, err := ExecuteCommandWithTimeout(exePath, "info", "--json")
+	// Pass 2: --json info — collect extended metadata
+	infoOut, err := ExecuteCommandWithTimeout(exePath, "--json", "info")
 	if err == nil && infoOut != "" {
 		jsonStart := strings.Index(infoOut, "{")
 		if jsonStart >= 0 {
 			var info struct {
-				Version     string `json:"version"`
-				BuildNumber string `json:"build_number"`
-				BuildDate   string `json:"build_date"`
-				FullVersion string `json:"full_version"`
-				Channel     string `json:"channel"`
-				Daemon      struct {
-					Running bool `json:"running"`
-				} `json:"daemon"`
-				Startup struct {
-					Registered bool `json:"registered"`
-				} `json:"startup"`
-				Runtime struct {
-					Arch string `json:"arch"`
-					Exe  string `json:"exe"`
-					Go   string `json:"go"`
-					OS   string `json:"os"`
-				} `json:"runtime"`
-				Pipe struct {
-					Name string `json:"name"`
-				} `json:"pipe"`
+				Name         string   `json:"name"`
+				Version      string   `json:"version"`
+				Channel      string   `json:"channel"`
+				Capabilities []string `json:"capabilities"`
+				Requires     map[string]string `json:"requires"`
 			}
 			if json.Unmarshal([]byte(infoOut[jsonStart:]), &info) == nil {
-				// Promote version/build from info if not already set
+				// Promote version from info if not already set
 				if binary.Version == "unknown" && info.Version != "" {
 					binary.Version = info.Version
 					binary.Status = "healthy"
 				}
-				if binary.BuildNumber == 0 && info.BuildNumber != "" {
-					if n, err := strconv.Atoi(info.BuildNumber); err == nil {
-						binary.BuildNumber = n
-					}
-				}
-				binary.LauncherInfo = &LauncherInfo{
-					FullVersion: info.FullVersion,
-					BuildDate:   info.BuildDate,
-					Channel:     info.Channel,
-					Daemon:      LauncherDaemon{Running: info.Daemon.Running},
-					Startup:     LauncherStartup{Registered: info.Startup.Registered},
-					Runtime: LauncherRuntime{
-						Arch: info.Runtime.Arch,
-						Exe:  info.Runtime.Exe,
-						Go:   info.Runtime.Go,
-						OS:   info.Runtime.OS,
-					},
-					Pipe: LauncherPipe{Name: info.Pipe.Name},
+				binary.SensorInfo = &SensorInfo{
+					Channel:      info.Channel,
+					Capabilities: info.Capabilities,
+					Requires:     info.Requires,
 				}
 			}
 		}

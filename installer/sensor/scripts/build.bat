@@ -22,10 +22,10 @@ echo. >> "%LOG_FILE%"
 :: ════════════════════════════════════════════════════════════════
 echo.
 echo ============================================
-echo 🌸 Building Bloom Sensor - Telemetry Daemon
+echo � Building Bloom Sensor - Telemetry Daemon
 echo ============================================
 echo.
-echo 🌸 Building Bloom Sensor >> "%LOG_FILE%"
+echo � Building Bloom Sensor >> "%LOG_FILE%"
 
 :: ════════════════════════════════════════════════════════════════
 :: ARCHITECTURE DETECTION
@@ -147,7 +147,7 @@ if %ERRORLEVEL% NEQ 0 (
 echo ✅ Dependencies OK
 echo.
 
-go build -p 1 -ldflags="-s -w -H=windowsgui -X bloom-sensor/internal/buildinfo.BuildNumber=!NEXT_BUILD! -X bloom-sensor/internal/buildinfo.BuildDate=%BUILD_DATE% -X bloom-sensor/internal/buildinfo.BuildTime=%BUILD_TIME%" -o "!ABS_OUTPUT_FILE!" ./cmd/main.go >> "%LOG_FILE%" 2>&1
+go build -p 1 -ldflags="-s -w -X bloom-sensor/internal/buildinfo.BuildNumber=!NEXT_BUILD! -X bloom-sensor/internal/buildinfo.BuildDate=%BUILD_DATE% -X bloom-sensor/internal/buildinfo.BuildTime=%BUILD_TIME%" -o "!ABS_OUTPUT_FILE!" ./cmd/main.go >> "%LOG_FILE%" 2>&1
 set BUILD_RC=%ERRORLEVEL%
 
 popd
@@ -210,7 +210,7 @@ set "NORM_LOG_PATH=%LOG_FILE:\=/%"
 
 "%NUCLEUS_EXE%" telemetry register ^
     --stream      sensor_build ^
-    --label       "🌸 SENSOR BUILD" ^
+    --label       "� SENSOR BUILD" ^
     --path        "!NORM_LOG_PATH!" ^
     --priority    3 ^
     --category    sensor ^
@@ -232,17 +232,17 @@ if %ERRORLEVEL% EQU 0 (
 :: ════════════════════════════════════════════════════════════════
 echo.
 echo ============================================
-echo 🎉 Bloom Sensor Build Completed [%PLATFORM%]
+echo � Bloom Sensor Build Completed [%PLATFORM%]
 echo ============================================
 echo.
-echo 📦 Build Artifacts:
+echo � Build Artifacts:
 echo    Directory : %OUTPUT_DIR%
 echo    Binary    : bloom-sensor.exe
 echo    Help      : %HELP_DIR%
 echo    Build #   : %NEXT_BUILD%
 echo    Version   : v1.0.0-build.%NEXT_BUILD%
 echo.
-echo 📋 Build Log:
+echo � Build Log:
 echo    %LOG_FILE%
 echo.
 

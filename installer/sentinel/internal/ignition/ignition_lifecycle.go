@@ -116,7 +116,18 @@ func (ig *Ignition) execute(profileID string, mode string, profileData map[strin
 		)
 	}
 
-	// ── 2. Conectar con Brain ─────────────────────────────────────────────────
+	// ── 2. Pre-inicializar bloom-host ─────────────────────────────────────────
+	// Chrome lanza bloom-host.exe con un token de seguridad restringido que NO
+	// puede crear directorios. Sentinel (token completo) debe crear la estructura
+	// de logs ANTES del handoff para que bloom-host los encuentre listos.
+	//
+	// Fallo aquí → lanzamiento abortado. NO enviar LAUNCH_PROFILE a Brain si
+	// la inicialización del host no completó con exit 0.
+	if err := ig.initBloomHost(profileID, ig.Session.LaunchID); err != nil {
+		return 0, fmt.Errorf("fallo en inicialización de bloom-host: %v", err)
+	}
+
+	// ── 3. Conectar con Brain ─────────────────────────────────────────────────
 	// Brain corre como servicio Windows (NSSM) en 127.0.0.1:5678.
 	// Conexión efímera: se abre para este launch y se cierra al terminar.
 	const brainAddr = "127.0.0.1:5678"
@@ -136,7 +147,7 @@ func (ig *Ignition) execute(profileID string, mode string, profileData map[strin
 
 	ig.Core.Logger.Info("[EXECUTE] Conectado con Brain. Enviando LAUNCH_PROFILE...")
 
-	// ── 3. LaunchProfileSync ──────────────────────────────────────────────────
+	// ── 4. LaunchProfileSync ──────────────────────────────────────────────────
 	// Bloquea hasta recibir LAUNCH_PROFILE_ACK con PID real de Chrome,
 	// o hasta timeout (60s).
 	const launchTimeout = 120 * time.Second
@@ -156,7 +167,7 @@ func (ig *Ignition) execute(profileID string, mode string, profileData map[strin
 		return 0, fmt.Errorf("Brain retornó PID inválido: %d", chromePID)
 	}
 
-	// ── 4. Verificar proceso vivo ─────────────────────────────────────────────
+	// ── 5. Verificar proceso vivo ─────────────────────────────────────────────
 	// Brain verifica internamente, pero hacemos doble check para detectar
 	// muertes inmediatas post-launch desde el lado de Sentinel.
 	time.Sleep(500 * time.Millisecond)
@@ -170,7 +181,7 @@ func (ig *Ignition) execute(profileID string, mode string, profileData map[strin
 
 	ig.Core.Logger.Info("[EXECUTE] ✅ Chrome lanzado via Brain → bloom-launcher → Session 1 (PID: %d)", chromePID)
 
-	// ── 5. Registrar streams de telemetría ────────────────────────────────────
+	// ── 6. Registrar streams de telemetría ────────────────────────────────────
 	shortID := profileID
 	if len(profileID) > 8 {
 		shortID = profileID[:8]
