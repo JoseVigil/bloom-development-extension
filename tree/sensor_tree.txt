@@ -1,0 +1,39 @@
+bloom-development-extension/
+└── sensor/
+    ├── README.md
+    ├── cmd/
+    │   └── main.go
+    ├── go.mod
+    ├── go.sum
+    ├── internal/
+    │   ├── buildinfo/
+    │   │   └── buildinfo.go
+    │   ├── cli/
+    │   │   ├── config.go
+    │   │   ├── help_renderer.go
+    │   │   └── root.go
+    │   ├── core/
+    │   │   └── core.go
+    │   ├── input/
+    │   │   └── idle.go
+    │   ├── logger/
+    │   │   └── logger.go
+    │   ├── metrics/
+    │   │   ├── energy.go
+    │   │   └── state.go
+    │   ├── runtime/
+    │   │   ├── engine.go
+    │   │   ├── loop.go
+    │   │   └── scheduler.go
+    │   ├── session/
+    │   │   └── windows.go
+    │   ├── startup/
+    │   │   └── startup_windows.go
+    │   └── transport/
+    │       └── sentinel_client.go
+    ├── pkg/
+    │   └── events/
+    │       └── events.go
+    └── scripts/
+        ├── build.bat
+        └── build_number.txt

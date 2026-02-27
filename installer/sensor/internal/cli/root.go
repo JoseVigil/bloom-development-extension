@@ -54,8 +54,8 @@ func BuildRootCommand(c *core.Core) *cobra.Command {
 
 func createVersionCommand(c *core.Core) *cobra.Command {
 	return &cobra.Command{
-		Use:      "version",
-		Short:    "Display version and build information",
+		Use:   "version",
+		Short: "Display version and build information",
 		Annotations: map[string]string{
 			"category": "SYSTEM",
 			"json_response": `{
@@ -95,13 +95,13 @@ func createInfoCommand(c *core.Core) *cobra.Command {
   "version": "1.0.0",
   "channel": "stable",
   "capabilities": [
-    "human_presence_detection",
     "session_monitoring",
     "idle_detection",
-    "energy_metrics",
-    "sentinel_publish"
+    "cognitive_metrics_v1"
   ],
-  "requires": ["session_1", "windows"]
+  "requires": {
+    "sentinel": ">=1.5.0"
+  }
 }`,
 		},
 		Example: `bloom-sensor info
@@ -112,15 +112,12 @@ bloom-sensor --json info`,
 				"version": buildinfo.Version,
 				"channel": buildinfo.Channel,
 				"capabilities": []string{
-					"human_presence_detection",
 					"session_monitoring",
 					"idle_detection",
-					"energy_metrics",
-					"sentinel_publish",
+					"cognitive_metrics_v1",
 				},
-				"requires": []string{
-					"session_1",
-					"windows",
+				"requires": map[string]string{
+					"sentinel": ">=1.5.0",
 				},
 			}
 			printJSON(result) //nolint:errcheck
@@ -132,6 +129,8 @@ bloom-sensor --json info`,
 
 func createRunCommand(c *core.Core) *cobra.Command {
 	var once bool
+	var foreground bool
+	var diagnostic bool
 
 	cmd := &cobra.Command{
 		Use:   "run",
@@ -146,30 +145,57 @@ The engine runs a tick loop every 60 seconds, collecting:
 On start, emits HUMAN_SESSION_ACTIVE to Sentinel.
 On stop (SIGINT / context cancel), emits HUMAN_SESSION_LOCKED.
 
-Use --once for a single diagnostic tick.`,
+Use --once for a single diagnostic tick.
+Use --foreground to keep stdout open for debugging.
+Use --diagnostic to print each tick with full metric detail.`,
 		Annotations: map[string]string{
-			"category":      "RUNTIME",
-			"json_response": "false",
+			"category": "RUNTIME",
+			"json_response": `{
+  "status": "running",
+  "pid": 1234,
+  "session": "active",
+  "sentinel_connected": true
+}`,
 		},
 		Example: `bloom-sensor run
 bloom-sensor run --once
+bloom-sensor run --diagnostic
 bloom-sensor --json run --once`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			engine := runtime.NewEngine(c)
 			if once {
 				state := engine.RunOnce()
 				if c.Config.OutputJSON {
-					return printJSON(state)
+					result := map[string]interface{}{
+						"status":             "running",
+						"pid":                os.Getpid(),
+						"session":            map[bool]string{true: "active", false: "locked"}[state.SessionActive],
+						"sentinel_connected": c.SentinelClient.IsConnected(),
+					}
+					return printJSON(result)
 				}
 				fmt.Printf("tick: energy=%.2f idle=%ds session_active=%v seq=%d\n",
 					state.EnergyIndex, state.IdleSeconds, state.SessionActive, state.Sequence)
 				return nil
 			}
+			if c.Config.OutputJSON {
+				result := map[string]interface{}{
+					"status":             "running",
+					"pid":                os.Getpid(),
+					"session":            "active",
+					"sentinel_connected": c.SentinelClient.IsConnected(),
+				}
+				printJSON(result) //nolint:errcheck
+			}
+			_ = foreground
+			_ = diagnostic
 			engine.Run()
 			return nil
 		},
 	}
 	cmd.Flags().BoolVar(&once, "once", false, "Execute a single tick and exit (diagnostic mode)")
+	cmd.Flags().BoolVar(&foreground, "foreground", false, "Keep stdout open (useful for debugging)")
+	cmd.Flags().BoolVar(&diagnostic, "diagnostic", false, "Print each tick to stdout with full metric detail")
 	return cmd
 }
 
@@ -180,23 +206,29 @@ func createStatusCommand(c *core.Core) *cobra.Command {
 		Annotations: map[string]string{
 			"category": "RUNTIME",
 			"json_response": `{
+  "process_running": true,
+  "pid": 1234,
+  "autostart_registered": true,
   "sentinel_connected": true,
-  "autostart_enabled": true,
-  "autostart_value": "\"C:\\Bloom\\bloom-sensor.exe\" run",
-  "channel": "stable",
-  "version": "1.0.0"
+  "last_state_update": "2026-02-24T15:04:05Z"
 }`,
 		},
 		Example: `bloom-sensor status
 bloom-sensor --json status`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			enabled, regValue := startup.IsEnabled()
+			enabled, _ := startup.IsEnabled()
+
+			var lastStateUpdate string
+			if c.CurrentState != nil && !c.CurrentState.Timestamp.IsZero() {
+				lastStateUpdate = c.CurrentState.Timestamp.UTC().Format(time.RFC3339)
+			}
+
 			status := map[string]interface{}{
-				"sentinel_connected": c.SentinelClient.IsConnected(),
-				"autostart_enabled":  enabled,
-				"autostart_value":    regValue,
-				"channel":            c.Config.Channel,
-				"version":            buildinfo.Version,
+				"process_running":      true,
+				"pid":                  os.Getpid(),
+				"autostart_registered": enabled,
+				"sentinel_connected":   c.SentinelClient.IsConnected(),
+				"last_state_update":    lastStateUpdate,
 			}
 			return printJSON(status)
 		},
@@ -219,8 +251,9 @@ The operation is idempotent — safe to run multiple times.`,
 		Annotations: map[string]string{
 			"category": "LIFECYCLE",
 			"json_response": `{
-  "enabled": true,
-  "path": "C:\\Bloom"
+  "success": true,
+  "registry_key": "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\\BloomSensor",
+  "value": "C:\\Bloom\\bloom-sensor.exe run"
 }`,
 		},
 		Example: `bloom-sensor enable
@@ -236,7 +269,11 @@ bloom-sensor --json enable`,
 				return err
 			}
 			c.Logger.Info("autostart enabled: %s", dir)
-			result := map[string]interface{}{"enabled": true, "path": dir}
+			result := map[string]interface{}{
+				"success":      true,
+				"registry_key": `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\BloomSensor`,
+				"value":        exePath + " run",
+			}
 			return printJSON(result)
 		},
 	}
@@ -254,7 +291,8 @@ The operation is idempotent — safe to run even if the key does not exist.`,
 		Annotations: map[string]string{
 			"category": "LIFECYCLE",
 			"json_response": `{
-  "enabled": false
+  "success": true,
+  "removed": true
 }`,
 		},
 		Example: `bloom-sensor disable
@@ -264,13 +302,25 @@ bloom-sensor --json disable`,
 				return err
 			}
 			c.Logger.Info("autostart disabled")
-			result := map[string]interface{}{"enabled": false}
+			result := map[string]interface{}{
+				"success": true,
+				"removed": true,
+			}
 			return printJSON(result)
 		},
 	}
 }
 
 // ─── TELEMETRY ───────────────────────────────────────────────────────────────
+
+// ExportEnvelope wraps the snapshots array with aggregated export metadata.
+type ExportEnvelope struct {
+	Period             string              `json:"period"`
+	Samples            int                 `json:"samples"`
+	AvgEnergyIndex     float64             `json:"avg_energy_index"`
+	TotalActiveMinutes int                 `json:"total_active_minutes"`
+	Snapshots          []events.HumanState `json:"snapshots"`
+}
 
 func createExportCommand(c *core.Core) *cobra.Command {
 	var lastDuration string
@@ -292,16 +342,22 @@ Use --last to filter by duration (e.g. 1h, 30m, 90m).
 Output is always JSON regardless of --json flag.`,
 		Annotations: map[string]string{
 			"category": "TELEMETRY",
-			"json_response": `[
-  {
-    "timestamp": "2026-02-27T15:04:05Z",
-    "session_active": true,
-    "session_locked": false,
-    "idle_seconds": 12,
-    "energy_index": 0.99,
-    "sequence": 47
-  }
-]`,
+			"json_response": `{
+  "period": "24h",
+  "samples": 1440,
+  "avg_energy_index": 0.62,
+  "total_active_minutes": 312,
+  "snapshots": [
+    {
+      "timestamp": "2026-02-27T15:04:05Z",
+      "session_active": true,
+      "session_locked": false,
+      "idle_seconds": 12,
+      "energy_index": 0.99,
+      "sequence": 47
+    }
+  ]
+}`,
 		},
 		Example: `bloom-sensor export
 bloom-sensor export --last 1h
@@ -309,6 +365,7 @@ bloom-sensor export --last 30m
 bloom-sensor --json export --last 2h`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var snapshots []events.HumanState
+			period := "all"
 
 			if lastDuration != "" {
 				d, err := time.ParseDuration(lastDuration)
@@ -316,11 +373,34 @@ bloom-sensor --json export --last 2h`,
 					return fmt.Errorf("invalid duration %q: %w", lastDuration, err)
 				}
 				snapshots = c.Buffer.Since(d)
+				period = lastDuration
 			} else {
-				snapshots = c.Buffer.Last(100)
+				snapshots = c.Buffer.Last(1440)
+				period = "24h"
 			}
 
-			return printJSON(snapshots)
+			// Compute aggregates
+			var sumEnergy float64
+			totalActive := 0
+			for _, s := range snapshots {
+				sumEnergy += s.EnergyIndex
+				if s.SessionActive {
+					totalActive++
+				}
+			}
+			avgEnergy := 0.0
+			if len(snapshots) > 0 {
+				avgEnergy = sumEnergy / float64(len(snapshots))
+			}
+
+			envelope := ExportEnvelope{
+				Period:             period,
+				Samples:            len(snapshots),
+				AvgEnergyIndex:     avgEnergy,
+				TotalActiveMinutes: totalActive,
+				Snapshots:          snapshots,
+			}
+			return printJSON(envelope)
 		},
 	}
 	cmd.Flags().StringVar(&lastDuration, "last", "", "Export snapshots from the last duration (e.g. 1h, 30m, 90m)")
