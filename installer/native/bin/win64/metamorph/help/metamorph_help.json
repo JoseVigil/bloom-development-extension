@@ -86,6 +86,14 @@
     "json_response": "{\n  \"timestamp\": \"2026-02-15T10:00:00Z\",\n  \"system_healthy\": true,\n  \"status\": \"operational\",\n  \"summary\": {\n    \"total_binaries\": 7,\n    \"healthy_count\": 7,\n    \"missing_count\": 0\n  }\n}"
   },
   {
+    "name": "verify-sync",
+    "use": "verify-sync",
+    "short": "Verify deployed binaries match the last build",
+    "category": "INSPECTION",
+    "example": "  metamorph verify-sync\n  metamorph --json verify-sync",
+    "json_response": "{\n  \"timestamp\": \"2026-02-27T12:00:00Z\",\n  \"in_sync\": true,\n  \"reference\": \"C:\\\\Users\\\\josev\\\\AppData\\\\Local\\\\BloomNucleus\\\\config\\\\metamorph.json\",\n  \"summary\": {\n    \"total\": 9,\n    \"synced\": 9,\n    \"drifted\": 0,\n    \"missing\": 0\n  },\n  \"components\": [\n    {\n      \"name\": \"Brain\",\n      \"status\": \"synced\",\n      \"expected_hash\": \"b716e2...\",\n      \"actual_hash\":   \"b716e2...\",\n      \"path\": \"C:\\\\Users\\\\josev\\\\AppData\\\\Local\\\\BloomNucleus\\\\bin\\\\brain\\\\brain.exe\"\n    }\n  ]\n}"
+  },
+  {
     "name": "version",
     "use": "version",
     "short": "Display version and build information",

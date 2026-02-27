@@ -91,7 +91,7 @@ func InitLogger(paths *PathConfig, category string, jsonMode bool) (*Logger, err
 	// Registrar stream en telemetry usando Nucleus CLI
 	streamID := "metamorph_" + strings.ToLower(category)
 	streamLabel := label + " " + category
-	registerTelemetry(streamID, streamLabel, filepath.ToSlash(logPath), 2)
+	registerTelemetry(streamID, streamLabel, filepath.ToSlash(logPath), 2, file)
 
 	return logger, nil
 }
@@ -113,8 +113,10 @@ func getMetamorphLabel(category string) string {
 	}
 }
 
-// registerTelemetry registra el stream en el sistema de telemetria usando Nucleus CLI
-func registerTelemetry(streamID, label, path string, priority int) {
+// registerTelemetry registra el stream en el sistema de telemetria usando Nucleus CLI.
+// Los errores se escriben solo al archivo de log — nunca a consola — para no
+// contaminar stdout en modo JSON ni generar ruido en modo normal.
+func registerTelemetry(streamID, label, path string, priority int, logFile *os.File) {
 	cmd := exec.Command(
 		"nucleus", "telemetry", "register",
 		"--stream", streamID,
@@ -124,7 +126,10 @@ func registerTelemetry(streamID, label, path string, priority int) {
 	)
 
 	if err := cmd.Run(); err != nil {
-		log.Printf("Warning: failed to register telemetry for %s: %v", streamID, err)
+		if logFile != nil {
+			ts := time.Now().Format("2006/01/02 15:04:05")
+			fmt.Fprintf(logFile, "%s Warning: failed to register telemetry for %s: %v\n", ts, streamID, err)
+		}
 	}
 }
 

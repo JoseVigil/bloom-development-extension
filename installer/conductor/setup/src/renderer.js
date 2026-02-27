@@ -98,6 +98,7 @@ class InstallationManager {
     this.ui = uiManager;
     this.extensionId = null;
     this.profileId = null;
+    this.sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
   }
 
   async initialize() {
@@ -137,32 +138,21 @@ class InstallationManager {
         throw new Error(errorMsg);
       }
 
-      this.extensionId = result.extensionId;
-      this.profileId = result.profileId;
+      this.extensionId = result.extensionId || result.extension_id || null;
+      this.profileId = result.profileId || result.profile_id;
       
       console.log("✅ [AUTO] Instalación completa");
       
       // 2. MOSTRAR PANTALLA DE HEARTBEAT
+      // NOTA: NO llamamos launchGodMode(). El installer ya ejecutó
+      // "nucleus synapse launch" en launchMasterProfile() (paso 9/9) y validó
+      // que Sentinel está RUNNING. Llamarlo de nuevo causa "Sentinel daemon not ready".
       await this.sleep(1000);
       this.ui.showScreen('heartbeat-screen');
       this.ui.updateText('final-extension-id', this.extensionId);
       this.ui.updateText('final-profile-id', this.profileId);
-      
-      // 3. LANZAR CHROME AUTOMÁTICAMENTE
-      console.log("🚀 [AUTO] Lanzando Chrome con perfil...");
-      await this.sleep(500);
-      
-      const launchResult = await this.api.launchGodMode(this.profileId);
 
-      // Validar respuesta - el CLI retorna { status: "success", data: {...} }
-      if (!launchResult || launchResult.status !== 'success') {
-        const errorMsg = launchResult?.error || 'Unknown error';
-        throw new Error("Error al lanzar Chrome: " + errorMsg);
-      }
-
-      console.log("✅ [AUTO] Chrome lanzado exitosamente");
-      
-      // 4. INICIAR HEARTBEAT (60 segundos de timeout)
+      // 3. INICIAR HEARTBEAT (60 segundos de timeout)
       this.startHeartbeatMonitoring(60);
 
       return { success: true };

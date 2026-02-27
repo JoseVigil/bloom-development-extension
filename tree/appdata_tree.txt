@@ -49,32 +49,7 @@ BloomNucleus/
 │   │   ├── vk_swiftshader_icd.json
 │   │   └── vulkan-1.dll
 │   ├── conductor/
-│   │   ├── bloom-conductor.exe
-│   │   ├── builder-debug.yml
-│   │   └── win-unpacked/
-│   │       ├── Bloom Nucleus Workspace.exe
-│   │       ├── LICENSE.electron.txt
-│   │       ├── LICENSES.chromium.html
-│   │       ├── bloom-conductor-version.ps1
-│   │       ├── chrome_100_percent.pak
-│   │       ├── chrome_200_percent.pak
-│   │       ├── d3dcompiler_47.dll
-│   │       ├── ffmpeg.dll
-│   │       ├── icudtl.dat
-│   │       ├── libEGL.dll
-│   │       ├── libGLESv2.dll
-│   │       ├── locales/ [... localization files]
-│   │       ├── resources/
-│   │       │   ├── app.asar
-│   │       │   ├── app.asar.unpacked/
-│   │       │   │   └── build_info.json
-│   │       │   └── elevate.exe
-│   │       ├── resources.pak
-│   │       ├── snapshot_blob.bin
-│   │       ├── v8_context_snapshot.bin
-│   │       ├── vk_swiftshader.dll
-│   │       ├── vk_swiftshader_icd.json
-│   │       └── vulkan-1.dll
+│   │   └── bloom-conductor.exe
 │   ├── cortex/
 │   │   └── bloom-cortex.blx
 │   ├── engine/
@@ -132,8 +107,6 @@ BloomNucleus/
 │   │   └── metamorph.exe
 │   ├── native/
 │   │   ├── bloom-host.exe
-│   │   ├── help/
-│   │   │   └── help.txt
 │   │   └── libwinpthread-1.dll
 │   ├── node/
 │   │   └── node.exe
@@ -175,171 +148,71 @@ BloomNucleus/
 │   │   │   └── sentinel_help.txt
 │   │   ├── sentinel-config.json
 │   │   └── sentinel.exe
-│   ├── setup/
-│   │   ├── bloom-setup.exe
-│   │   ├── bloom-setup.exe.blockmap
-│   │   ├── builder-debug.yml
-│   │   └── win-unpacked/
-│   │       ├── Bloom Nucleus Installer.exe
-│   │       ├── LICENSE.electron.txt
-│   │       ├── LICENSES.chromium.html
-│   │       ├── bloom-setup-version.ps1
-│   │       ├── chrome_100_percent.pak
-│   │       ├── chrome_200_percent.pak
-│   │       ├── d3dcompiler_47.dll
-│   │       ├── ffmpeg.dll
-│   │       ├── icudtl.dat
-│   │       ├── libEGL.dll
-│   │       ├── libGLESv2.dll
-│   │       ├── locales/ [... localization files]
-│   │       ├── resources/
-│   │       │   ├── app.asar
-│   │       │   ├── app.asar.unpacked/
-│   │       │   │   └── build_info.json
-│   │       │   ├── brain/
-│   │       │   │   ├── _internal/ [... dependencies]
-│   │       │   │   ├── brain.exe
-│   │       │   │   └── help/
-│   │       │   │       ├── brain-ai-full.json
-│   │       │   │       ├── brain-ai-schema.json
-│   │       │   │       ├── brain-legacy.json
-│   │       │   │       ├── help-full.txt
-│   │       │   │       └── help.txt
-│   │       │   ├── cortex/
-│   │       │   │   └── bloom-cortex.blx
-│   │       │   ├── elevate.exe
-│   │       │   ├── metamorph/
-│   │       │   │   ├── help/
-│   │       │   │   │   ├── metamorph_help.json
-│   │       │   │   │   ├── metamorph_help.txt
-│   │       │   │   │   └── metamorph_info.json
-│   │       │   │   ├── metamorph-config.json
-│   │       │   │   └── metamorph.exe
-│   │       │   ├── native/
-│   │       │   │   ├── bloom-host.exe
-│   │       │   │   ├── help/
-│   │       │   │   │   └── help.txt
-│   │       │   │   └── libwinpthread-1.dll
-│   │       │   ├── nssm/
-│   │       │   │   └── nssm.exe
-│   │       │   ├── nucleus/
-│   │       │   │   ├── help/
-│   │       │   │   │   ├── nucleus_help.json
-│   │       │   │   │   └── nucleus_help.txt
-│   │       │   │   ├── nucleus-governance.json
-│   │       │   │   └── nucleus.exe
-│   │       │   ├── runtime/
-│   │       │   │   ├── LICENSE.txt
-│   │       │   │   ├── _asyncio.pyd
-│   │       │   │   ├── _bz2.pyd
-│   │       │   │   ├── _ctypes.pyd
-│   │       │   │   ├── _decimal.pyd
-│   │       │   │   ├── _elementtree.pyd
-│   │       │   │   ├── _hashlib.pyd
-│   │       │   │   ├── _lzma.pyd
-│   │       │   │   ├── _msi.pyd
-│   │       │   │   ├── _multiprocessing.pyd
-│   │       │   │   ├── _overlapped.pyd
-│   │       │   │   ├── _queue.pyd
-│   │       │   │   ├── _socket.pyd
-│   │       │   │   ├── _sqlite3.pyd
-│   │       │   │   ├── _ssl.pyd
-│   │       │   │   ├── _uuid.pyd
-│   │       │   │   ├── _zoneinfo.pyd
-│   │       │   │   ├── libcrypto-1_1.dll
-│   │       │   │   ├── libffi-7.dll
-│   │       │   │   ├── libssl-1_1.dll
-│   │       │   │   ├── pyexpat.pyd
-│   │       │   │   ├── python.cat
-│   │       │   │   ├── python.exe
-│   │       │   │   ├── python3.dll
-│   │       │   │   ├── python310._pth
-│   │       │   │   ├── python310.dll
-│   │       │   │   ├── python310.zip
-│   │       │   │   ├── pythonw.exe
-│   │       │   │   ├── select.pyd
-│   │       │   │   ├── sqlite3.dll
-│   │       │   │   ├── unicodedata.pyd
-│   │       │   │   ├── vcruntime140.dll
-│   │       │   │   ├── vcruntime140_1.dll
-│   │       │   │   └── winsound.pyd
-│   │       │   └── sentinel/
-│   │       │       ├── help/
-│   │       │       │   ├── sentinel_help.json
-│   │       │       │   └── sentinel_help.txt
-│   │       │       ├── sentinel-config.json
-│   │       │       └── sentinel.exe
-│   │       ├── resources.pak
-│   │       ├── snapshot_blob.bin
-│   │       ├── v8_context_snapshot.bin
-│   │       ├── vk_swiftshader.dll
-│   │       ├── vk_swiftshader_icd.json
-│   │       └── vulkan-1.dll
 │   └── temporal/
 │       └── temporal.exe
 ├── config/
-│   ├── metamorph.json
 │   ├── nucleus.json
 │   ├── profile/
-│   │   └── ae0dea2e-7445-4e55-a3a4-c68ad665f2a5/
-│   │       ├── com.bloom.synapse.ae0dea2e.json
+│   │   └── 5d611de9-2cfe-4cc2-8ab0-28cff394cbbe/
+│   │       ├── com.bloom.synapse.5d611de9.json
 │   │       └── ignition_spec.json
 │   └── profiles.json
 ├── history/
 │   └── profiles/
-│       └── ae0dea2e-7445-4e55-a3a4-c68ad665f2a5/
+│       └── 5d611de9-2cfe-4cc2-8ab0-28cff394cbbe/
 │           ├── launches/
-│           │   └── 20260225.ndjson
+│           │   └── 20260226.ndjson
 │           └── sessions/
-│               └── 001_ae0dea2e_193336.ndjson
+│               └── 001_5d611de9_191628.ndjson
 ├── hooks/
 │   └── post_launch/
 │       └── 00_generate_synapse_trace.py
 ├── logs/
 │   ├── brain/
 │   │   ├── core/
-│   │   │   ├── brain_core_20260225.log
 │   │   │   └── brain_core_20260226.log
 │   │   ├── profile/
-│   │   │   ├── brain_profile_20260225.log
 │   │   │   └── brain_profile_20260226.log
 │   │   ├── server/
-│   │   │   ├── brain_server_20260225.log
 │   │   │   ├── brain_server_20260226.log
-│   │   │   ├── brain_server_event_bus_20260225.log
 │   │   │   ├── brain_server_event_bus_20260226.log
-│   │   │   ├── brain_server_manager_20260225.log
 │   │   │   └── brain_server_manager_20260226.log
 │   │   └── service/
 │   │       └── brain_service.log
+│   ├── chromium/
 │   ├── conductor/
-│   │   └── conductor_launch_2026-02-25_22-44-05.log
+│   │   └── conductor_launch_2026-02-26_22-14-24.log
 │   ├── install/
-│   │   └── electron_install_2026-02-25_22-44-05.log
+│   │   └── electron_install_2026-02-26_22-14-24.log
 │   ├── launcher/
-│   │   └── launcher_20260225.log
+│   │   └── launcher_20260226.log
 │   ├── nucleus/
-│   │   ├── nucleus_orchestration_20260225.log
-│   │   ├── nucleus_synapse_20260225.log
+│   │   ├── nucleus_orchestration_20260226.log
 │   │   ├── nucleus_synapse_20260226.log
-│   │   ├── nucleus_temporal_20260225.log
 │   │   ├── nucleus_temporal_20260226.log
 │   │   ├── service/
 │   │   │   └── nucleus_service.log
 │   │   └── worker/
-│   │       └── worker_manager_20260225.log
+│   │       └── worker_manager_20260226.log
 │   ├── sentinel/
-│   │   ├── sentinel_core_20260225.log
-│   │   ├── sentinel_core_20260226.log
-│   │   └── startup/
-│   │       └── sentinel_startup_20260225.log
+│   │   ├── profiles/
+│   │   │   ├── 5d611de9-2cfe-4cc2-8ab0-28cff394cbbe/
+│   │   │   │   ├── 001_5d611de9_191628_debug.log
+│   │   │   │   ├── 001_5d611de9_191628_engine_mining.log
+│   │   │   │   ├── 001_5d611de9_191628_engine_network.log
+│   │   │   │   ├── 001_5d611de9_191628_engine_read.log
+│   │   │   │   └── 001_5d611de9_191628_netlog.json
+│   │   │   └── sentinel_5d611de9-2cfe-4cc2-8ab0-28cff394cbbe_20260226.log
+│   │   └── sentinel_core_20260226.log
+│   ├── synapse_trace/
+│   │   └── synapse_trace_001_5d611de9_191628.log
 │   ├── telemetry.json
 │   ├── telemetry.json.lock
 │   └── temporal/
 │       ├── temporal.db
 │       └── temporal.pid
 ├── profiles/
-│   └── ae0dea2e-7445-4e55-a3a4-c68ad665f2a5/
+│   └── 5d611de9-2cfe-4cc2-8ab0-28cff394cbbe/
 │       ├── ActorSafetyLists/
 │       ├── AmountExtractionHeuristicRegexes/
 │       ├── CertificateRevocation/
@@ -519,8 +392,8 @@ BloomNucleus/
 │       │   │   ├── LOG
 │       │   │   └── MANIFEST-000001
 │       │   ├── Sessions/
-│       │   │   ├── Session_13416532420308066
-│       │   │   └── Tabs_13416532426700826
+│       │   │   ├── Session_13416617792853675
+│       │   │   └── Tabs_13416617798776600
 │       │   ├── Shared Dictionary/
 │       │   │   ├── cache/
 │       │   │   │   ├── index
@@ -552,7 +425,7 @@ BloomNucleus/
 │       │   │   ├── QuotaManager
 │       │   │   └── QuotaManager-journal
 │       │   ├── blob_storage/
-│       │   │   └── 9337472a-b1af-4205-ae74-85dbaed5bbf2/
+│       │   │   └── 0ca987ca-3253-4f37-8ca4-156ac4a970c0/
 │       │   ├── chrome_cart_db/
 │       │   │   ├── LOCK
 │       │   │   └── LOG
@@ -658,22 +531,8 @@ BloomNucleus/
 │       └── segmentation_platform/
 │           ├── ukm_db
 │           └── ukm_db-wal
-├── staging/
-│   ├── downloads/
-│   ├── snapshots/
-│   └── temp/
-├── tree/
-│   ├── appdata_tree.txt
-│   ├── brain_tree.txt
-│   ├── conductor_tree.txt
-│   ├── cortex_tree.txt
-│   ├── installer_tree.txt
-│   ├── native_tree.txt
-│   ├── nucleus_tree.txt
-│   ├── sentinel_tree.txt
-│   ├── src_tree.txt
-│   └── webview_tree.txt
 └── workers/
     └── brain/
         ├── events.jsonl
-        └── service.pid
+        ├── service.pid
+        └── tcp_traffic.log

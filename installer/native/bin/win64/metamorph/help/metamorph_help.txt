@@ -29,11 +29,11 @@
 ------------------------------------------------------------------------------------------------------------------------
 
   SYSTEM            System information and version details                   2 cmds
-  INSPECTION        Binary and state inspection tools                        2 cmds
+  INSPECTION        Binary and state inspection tools                        3 cmds
   RECONCILIATION    Manifest-driven state reconciliation                     2 cmds
   ROLLBACK          Snapshot restoration and rollback                        1 cmd
   MAINTENANCE       System cleanup and maintenance                           2 cmds
-  --------------------------------------------------------------------------  Total: 9 commands
+  --------------------------------------------------------------------------  Total: 10 commands
 
 
 =======================================================[ SYSTEM ]=======================================================
@@ -132,6 +132,39 @@
           "healthy_count": 7,
           "missing_count": 0
         }
+      }
+
+    --------------------------------------------------------------------------------
+
+  > VERIFY-SYNC
+    Verify deployed binaries match the last build
+
+    Usage: metamorph verify-sync
+
+    Example:
+        metamorph verify-sync
+        metamorph --json verify-sync
+
+    JSON Response:
+      {
+        "timestamp": "2026-02-27T12:00:00Z",
+        "in_sync": true,
+        "reference": "C:\\Users\\josev\\AppData\\Local\\BloomNucleus\\config\\metamorph.json",
+        "summary": {
+          "total": 9,
+          "synced": 9,
+          "drifted": 0,
+          "missing": 0
+        },
+        "components": [
+          {
+            "name": "Brain",
+            "status": "synced",
+            "expected_hash": "b716e2...",
+            "actual_hash":   "b716e2...",
+            "path": "C:\\Users\\josev\\AppData\\Local\\BloomNucleus\\bin\\brain\\brain.exe"
+          }
+        ]
       }
 
     --------------------------------------------------------------------------------
