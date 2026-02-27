@@ -21,6 +21,7 @@ SOURCE_FILES=(
     "chunked_buffer.cpp"
     "platform_utils.cpp"
     "cli_handler.cpp"
+    "help_renderer.cpp"
 )
 
 HEADER_FILES=(
@@ -28,6 +29,7 @@ HEADER_FILES=(
     "chunked_buffer.h"
     "platform_utils.h"
     "cli_handler.h"
+    "help_renderer.h"
 )
 
 HEADER_DIR="nlohmann"
