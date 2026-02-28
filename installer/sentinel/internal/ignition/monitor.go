@@ -89,7 +89,7 @@ func (th *MonitorHub) StartHandshakeMonitor(profileID, launchID string) {
 }
 
 func (th *MonitorHub) runLogMiner(commandType string, profileID string, launchID string) {
-	brainPath := filepath.Join(th.Core.Paths.BinDir, "brain.exe")
+	brainPath := filepath.Join(th.Core.Paths.BinDir, "brain", "brain.exe")
 	args := []string{"--json", "chrome", commandType, profileID, "--launch-id", launchID}
 	cmd := exec.Command(brainPath, args...)
 	cmd.Env = append(os.Environ(), "PYTHONIOENCODING=utf-8", "PYTHONUTF8=1")

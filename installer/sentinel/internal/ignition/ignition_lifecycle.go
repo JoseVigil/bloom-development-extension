@@ -95,13 +95,6 @@ func (ig *Ignition) applyMissionTargetURL(spec *IgnitionSpec, profileData map[st
 	}
 }
 
-// execute delega el lanzamiento de Chromium a Brain vía EventBus TCP.
-// Brain lo procesa con ProfileManager → bloom_launcher_client → named pipe →
-// bloom-launcher.exe (Session 1) → Chrome con display visible.
-//
-// ANTES: exec.Command(chrome) directo desde Session 0 → Chrome muere al perder sesión.
-// AHORA: LaunchProfileSync() → Brain → bloom-launcher → Session 1 → PID real.
-//
 // El contrato hacia arriba (Launch → execute → int PID) no cambia.
 func (ig *Ignition) execute(profileID string, mode string, profileData map[string]interface{}) (int, error) {
 	ig.Core.Logger.Info("[EXECUTE] Delegando lanzamiento a Brain via EventBus...")

@@ -9,7 +9,7 @@ import (
 )
 
 // detachSysProcAttr returns SysProcAttr that creates a new process group
-// and detaches from the parent console — needed for bloom-launcher.exe serve
+// and detaches from the parent console 
 func detachSysProcAttr() *syscall.SysProcAttr {
 	return &syscall.SysProcAttr{
 		CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP | 0x00000008, // DETACHED_PROCESS

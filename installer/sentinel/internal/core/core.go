@@ -31,7 +31,6 @@ type Core struct {
 	TemporalManager  any 
 }
 
-// ✅ FIX: Nueva función que detecta --json ANTES de inicializar
 func detectJSONMode() bool {
 	for _, arg := range os.Args {
 		if arg == "--json" {
@@ -47,10 +46,8 @@ func Initialize() (*Core, error) {
 		return nil, fmt.Errorf("error al inicializar rutas: %w", err)
 	}
 
-	// ✅ FIX: Detectar modo JSON ANTES de crear el logger
 	jsonMode := detectJSONMode()
 
-	// ✅ FIX: Pasar jsonMode al logger + registrar category y description obligatorios (spec)
 	logger, err := InitLogger(paths, "sentinel_core", "SENTINEL CORE", 1, &LoggerOptions{
 		Categories:  []string{"sentinel"},
 		Description: "Sentinel core log — system-critical log tracking browser process management, crashes and security events",
@@ -70,7 +67,7 @@ func Initialize() (*Core, error) {
 		Paths:  paths,
 		Config: config,
 		Logger: logger,
-		IsJSON: jsonMode, // ✅ FIX: Guardar el modo detectado
+		IsJSON: jsonMode,
 	}, nil
 }
 
