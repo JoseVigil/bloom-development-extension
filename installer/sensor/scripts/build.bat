@@ -147,7 +147,7 @@ if %ERRORLEVEL% NEQ 0 (
 echo ✅ Dependencies OK
 echo.
 
-go build -p 1 -ldflags="-s -w -X bloom-sensor/internal/buildinfo.BuildNumber=!NEXT_BUILD! -X bloom-sensor/internal/buildinfo.BuildDate=%BUILD_DATE% -X bloom-sensor/internal/buildinfo.BuildTime=%BUILD_TIME%" -o "!ABS_OUTPUT_FILE!" ./cmd/main.go >> "%LOG_FILE%" 2>&1
+go build -p 1 -ldflags="-s -w -X bloom-sensor/internal/buildinfo.Version=1.0.0 -X bloom-sensor/internal/buildinfo.BuildNumber=!NEXT_BUILD! -X bloom-sensor/internal/buildinfo.BuildDate=%BUILD_DATE% -X bloom-sensor/internal/buildinfo.BuildTime=%BUILD_TIME%" -o "!ABS_OUTPUT_FILE!" ./cmd/main.go >> "%LOG_FILE%" 2>&1
 set BUILD_RC=%ERRORLEVEL%
 
 popd

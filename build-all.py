@@ -271,10 +271,10 @@ def get_contracts(verify_env: str) -> list[BinaryContract]:
             # verify_binary lo maneja via _parse_build() que acepta str y float.
             name         = "Sensor",
             bin_path     = b / "sensor/bloom-sensor.exe",
-            version_cmd  = [sensor, "--version", "--json"],
-            info_cmd     = [sensor, "info", "--json"],
+            version_cmd  = [sensor, "--json", "version"],
+            info_cmd     = [sensor, "--json", "info"],
             version_field= "version",
-            build_field  = "build_number",
+            build_field  = "build",
         ),
         BinaryContract(
             name         = "Setup",

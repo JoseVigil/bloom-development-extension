@@ -63,7 +63,7 @@ const getResourcePath = (resourceName) => {
       return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'metamorph');
     case 'brain':
       return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'brain');
-    case 'native':
+    case 'host':
       return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'host');
     case 'nssm':
       return path.join(workspaceRoot, '..', 'native', 'nssm', arch);
@@ -95,35 +95,6 @@ const getResourcePath = (resourceName) => {
       return path.join(workspaceRoot, '..', 'resources', resourceName);
   }
 };
-
-// ============================================================================
-// UNIFIED STRUCTURE PATHS
-// New simplified structure:
-// 
-// BloomNucleus/
-// ├── bin/
-// │   ├── brain/
-// │   │   ├── brain.exe
-// │   │   └── _internal/          (PyInstaller dependencies)
-// │   ├── native/
-// │   │   ├── bloom-host.exe      (single binary for all profiles)
-// │   │   └── nssm.exe
-// │   ├── engine/
-// │   │   └── runtime/            (embedded Python)
-// │   └── extension/              (template - copied per profile by Brain)
-// ├── profiles/
-// │   └── [UUID]/                 (created by Brain per profile)
-// │       ├── extension/          (private extension copy)
-// │       ├── synapse/            (private bridge config)
-// │       │   └── com.bloom.synapse.[UUID].json
-// │       └── chrome-data/        (Chrome user data)
-// └── logs/
-//     ├── install.log
-//     ├── runtime.log
-//     └── profiles/
-//         └── [UUID]/
-//             └── chrome_net.log  (network log per profile)
-// ============================================================================
 
 // ============================================================================
 // COMPUTED PATHS
@@ -190,12 +161,12 @@ const paths = {
   brainDir: path.join(baseDir, 'bin', 'brain'),
   brainExe,
   
-  // Native Host + NSSM (bin/host/)
-  nativeDir: path.join(baseDir, 'bin', 'host'),  // variable name kept for compatibility
+  // Host (bloom-host.exe + DLLs)
+  hostDir: path.join(baseDir, 'bin', 'host'),
   hostBinary,
   nssmDir: path.join(baseDir, 'bin', 'nssm'),
   nssmExe: platform === 'win32'
-    ? path.join(baseDir, 'bin', 'host', 'nssm.exe')
+    ? path.join(baseDir, 'bin', 'nssm', 'nssm.exe')
     : null,
   
   // Ollama (LLM Runtime)
@@ -282,7 +253,7 @@ const paths = {
   sentinelSource: getResourcePath('sentinel'),
   metamorphSource: getResourcePath('metamorph'),
   brainSource: getResourcePath('brain'),
-  nativeSource: getResourcePath('native'),
+  hostSource: getResourcePath('host'),
   nssmSource: getResourcePath('nssm'),
   ollamaSource: getResourcePath('ollama'),
   nodeSource: getResourcePath('node'),
@@ -348,7 +319,7 @@ const criticalPaths = [
   'sentinelDir', 'sentinelExe',
   'metamorphDir', 'metamorphExe',
   'brainDir', 'brainExe',
-  'nativeDir', 'hostBinary',
+  'hostDir', 'hostBinary',
   'nssmDir',
   'ollamaDir', 'ollamaExe',
   'nodeDir', 'nodeExe',
@@ -371,7 +342,7 @@ console.log(`📁 Base directory: ${baseDir}`);
 console.log(`⚖️ Nucleus binary: ${paths.nucleusExe}`);
 console.log(`🎯 Sentinel binary: ${paths.sentinelExe}`);
 console.log(`🧠 Brain binary: ${brainExe}`);
-console.log(`🔗 Native host: ${hostBinary}`);
+console.log(`🔗 Host binary: ${hostBinary}`);
 console.log(`🦙 Ollama binary: ${paths.ollamaExe}`);
 console.log(`⏱️ Temporal binary: ${paths.temporalExe}`);
 console.log(`🎮 Conductor binary: ${paths.conductorExe}`);

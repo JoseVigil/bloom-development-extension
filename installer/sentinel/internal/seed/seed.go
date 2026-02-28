@@ -56,7 +56,7 @@ func init() {
 		cmd.Annotations["requires"] = `  - brain.exe debe estar disponible en bin/
   - bloom-cortex.blx en bin/cortex/
   - Permiso de escritura en HKCU\Software\Google\Chrome\NativeMessagingHosts
-  - bloom-host.exe en bin/native/
+  - bloom-host.exe en bin/host/
   - Extension ID válido en configuración`
 
 		return cmd
@@ -364,7 +364,7 @@ func deployCortexPackage(blxPath, destDir string, c *core.Core) error {
 
 func writeNativeManifest(c *core.Core, path, hostName, uuid string) error {
 	bloomBaseDir := filepath.Join(os.Getenv("LOCALAPPDATA"), "BloomNucleus")
-	bridgePath := filepath.Join(bloomBaseDir, "bin", "native", "bloom-host.exe")
+	bridgePath := filepath.Join(bloomBaseDir, "bin", "host", "bloom-host.exe")
 
 	manifest := map[string]interface{}{
 		"name":        hostName,

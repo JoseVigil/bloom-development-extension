@@ -27,11 +27,11 @@ import (
 //	logs/host/profiles/<profileID>/<launchID>/synapse_extension_YYYYMMDD.log
 func (ig *Ignition) initBloomHost(profileID string, launchID string) error {
 	// ── 1. Resolver ruta al binario ───────────────────────────────────────────
-	hostBin := filepath.Join(ig.Core.Paths.BinDir, "native", "bloom-host.exe")
+	hostBin := filepath.Join(ig.Core.Paths.BinDir, "host", "bloom-host.exe")
 
 	if _, err := os.Stat(hostBin); os.IsNotExist(err) {
 		return fmt.Errorf(
-			"bloom-host.exe no encontrado en %s — verificar instalación del paquete native",
+			"bloom-host.exe no encontrado en %s — verificar instalación del paquete host",
 			hostBin,
 		)
 	}

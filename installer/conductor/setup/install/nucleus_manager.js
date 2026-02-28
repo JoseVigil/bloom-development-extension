@@ -64,7 +64,7 @@ const EMPTY_NUCLEUS = {
         method: 'file_exists',
         targets: [
           'bin', 'bin/nucleus', 'bin/sentinel', 'bin/brain', 
-          'bin/native', 'bin/cortex', 'bin/ollama', 'bin/conductor', 
+          'bin/host', 'bin/cortex', 'bin/ollama', 'bin/conductor', 
           'bin/chrome-win', 'config', 'engine/runtime', 'profiles', 'logs'
         ],
         result: null

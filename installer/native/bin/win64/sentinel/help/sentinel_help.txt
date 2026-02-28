@@ -83,7 +83,7 @@
       * brain.exe debe estar disponible en bin/
       * bloom-cortex.blx en bin/cortex/
       * Permiso de escritura en HKCU\Software\Google\Chrome\NativeMessagingHosts
-      * bloom-host.exe en bin/native/
+      * bloom-host.exe en bin/host/
       * Extension ID válido en configuración
 
     --------------------------------------------------------------------------------
