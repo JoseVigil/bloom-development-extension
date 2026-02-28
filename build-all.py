@@ -9,9 +9,9 @@ Secuencia de ejecución:
   3. Sentinel     → installer/sentinel/scripts/build.bat
   4. Host         → skipped on Windows (Linux build via installer/host/build.sh)
   5. Conductor    → cd installer/conductor && npm run build:all
-                    (buildea launcher + setup en un solo paso)
+                    (buildea sensor + setup en un solo paso)
   6. Metamorph    → installer/metamorph/scripts/build.bat
-  7. Launcher     → installer/launcher/scripts/build.bat
+  7. Sensor       → installer/sensor/scripts/build.bat
   8. Cortex       → installer/cortex/build-cortex/package.py
                     (lee cortex.meta.json, incrementa build_number, produce .blx)
 
@@ -155,7 +155,7 @@ BUILDS = {
     "sentinel":   ROOT / "installer/sentinel/scripts/build.bat",
     "metamorph":  ROOT / "installer/metamorph/scripts/build.bat",
     "conductor":  ROOT / "installer/conductor",          # cwd para npm
-    "launcher":   ROOT / "installer/launcher/scripts/build.bat",
+    "sensor":     ROOT / "installer/sensor/scripts/build.bat",
     "cortex":     ROOT / "installer/cortex/build-cortex/package.py",
 }
 
@@ -213,7 +213,7 @@ def get_contracts(verify_env: str) -> list[BinaryContract]:
     sentinel  = str(b / "sentinel/sentinel.exe")
     host      = str(b / "host/bloom-host.exe")
     metamorph = str(b / "metamorph/metamorph.exe")
-    launcher  = str(b / "launcher/bloom-launcher.exe")
+    sensor    = str(b / "sensor/bloom-sensor.exe")
     ps1       = str(b / "conductor/win-unpacked/bloom-conductor-version.ps1")
     ps1_setup = str(b / "setup/win-unpacked/bloom-setup-version.ps1")
 
@@ -267,12 +267,12 @@ def get_contracts(verify_env: str) -> list[BinaryContract]:
             build_field  = "build_number",
         ),
         BinaryContract(
-            # build_number es string en la salida de launcher (ej: "0"),
+            # build_number es string en la salida de sensor (ej: "0"),
             # verify_binary lo maneja via _parse_build() que acepta str y float.
-            name         = "Launcher",
-            bin_path     = b / "launcher/bloom-launcher.exe",
-            version_cmd  = [launcher, "--version", "--json"],
-            info_cmd     = [launcher, "info", "--json"],
+            name         = "Sensor",
+            bin_path     = b / "sensor/bloom-sensor.exe",
+            version_cmd  = [sensor, "--version", "--json"],
+            info_cmd     = [sensor, "info", "--json"],
             version_field= "version",
             build_field  = "build_number",
         ),
@@ -416,7 +416,7 @@ def build_conductor() -> StepResult:
     conductor_dir = BUILDS["conductor"]
     if not conductor_dir.is_dir():
         return StepResult("Conductor", False, error=f"Directorio no encontrado: {conductor_dir}")
-    log("Ejecutando npm run build:all (launcher + setup) ...")
+    log("Ejecutando npm run build:all (sensor + setup) ...")
     # En Windows npm es npm.cmd, no un ejecutable directo
     npm_cmd = "npm.cmd" if sys.platform == "win32" else "npm"
     code, out, err = run(
@@ -428,15 +428,15 @@ def build_conductor() -> StepResult:
     return StepResult("Conductor", True)
 
 
-def build_launcher() -> StepResult:
-    launcher_bat = BUILDS["launcher"]
-    if not launcher_bat.exists():
-        return StepResult("Launcher", False, error=f"Script no encontrado: {launcher_bat}")
+def build_sensor() -> StepResult:
+    sensor_bat = BUILDS["sensor"]
+    if not sensor_bat.exists():
+        return StepResult("Sensor", False, error=f"Script no encontrado: {sensor_bat}")
     log("Ejecutando build.bat ...")
-    code, out, err = run(["cmd", "/c", launcher_bat.name], cwd=launcher_bat.parent)
+    code, out, err = run(["cmd", "/c", sensor_bat.name], cwd=sensor_bat.parent)
     if code != 0:
-        return StepResult("Launcher", False, error=err or out)
-    return StepResult("Launcher", True)
+        return StepResult("Sensor", False, error=err or out)
+    return StepResult("Sensor", True)
 
 
 def ensure_cortex_meta(meta_path: Path, channel: str) -> None:
@@ -498,7 +498,7 @@ def build_cortex(channel: str, production: bool) -> StepResult:
 
 def _parse_build(val) -> Optional[int]:
     """Convierte build_number a int de forma segura.
-    Acepta int, float (JSON estándar) y string (ej: bloom-launcher emite "0").
+    Acepta int, float (JSON estándar) y string (ej: bloom-sensor emite "0").
     """
     if val is None:
         return None
@@ -666,7 +666,7 @@ def main() -> None:
         ("Conductor", lambda: build_conductor()),
         ("Host",      lambda: StepResult("Host", True, skipped=True,
                                          skip_reason="Build en Linux — installer/host/build.sh")),
-        ("Launcher",  lambda: build_launcher()),
+        ("Sensor",    lambda: build_sensor()),
     ]
 
     for name, fn in steps:

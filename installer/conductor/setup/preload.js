@@ -20,6 +20,18 @@ const API = {
     ipcRenderer.invoke('port:check', { port, host }),
   
   // ==========================================
+  // NUCLEUS HANDLERS (replace sentinel:*)
+  // ==========================================
+  
+  nucleusHealth: () => ipcRenderer.invoke('nucleus:health'),
+  nucleusValidate: () => ipcRenderer.invoke('nucleus:validate'),
+  nucleusRepair: () => ipcRenderer.invoke('nucleus:repair'),
+  nucleusLaunch: (profileId) => ipcRenderer.invoke('nucleus:launch', profileId),
+  nucleusDevStart: () => ipcRenderer.invoke('nucleus:dev-start'),
+  nucleusStatus: (profileId) => ipcRenderer.invoke('nucleus:status', profileId),
+  checkBrainServiceStatus: () => ipcRenderer.invoke('check-brain-service-status'),
+
+  // ==========================================
   // INSTALL MODE HANDLERS (Existing)
   // ==========================================
   
@@ -81,14 +93,6 @@ const API = {
       'profiles:list',
       'dashboard:error',
       'services:status',
-      
-      // Sentinel sidecar events (Event Bus)
-      'sentinel:profile-connected',    // Handshake 3 fases OK
-      'sentinel:extension-error',      // Error en bridge/extension
-      'sentinel:audit-completed',      // Limpieza de perfiles huérfanos
-      'sentinel:intent-complete',      // Operación IA completada
-      'sentinel:intent-failed',        // Operación IA falló
-      'sentinel:event',                // Eventos genéricos
       
       // Shared events
       'error',
@@ -154,6 +158,7 @@ if (process.env.NODE_ENV === 'development') {
 
 console.log('🌸 [PRELOAD] Preload script loaded');
 console.log('📋 [PRELOAD] API exposed as: window.api & window.electronAPI');
+console.log('🧠 [PRELOAD] Nucleus handlers registered (replaces sentinel:*)');
 if (process.env.NODE_ENV === 'development') {
   console.log('🔧 [PRELOAD] DevTools exposed');
 }

@@ -75,6 +75,8 @@ const getResourcePath = (resourceName) => {
       return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'conductor');
     case 'launcher':
       return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'launcher');
+    case 'sensor':
+      return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'sensor');
     case 'cortex':
       return path.join(workspaceRoot, '..', 'native', 'bin', 'cortex');
     case 'hooks':
@@ -135,8 +137,8 @@ const brainExe = platform === 'win32'
   : path.join(baseDir, 'bin', 'brain', 'brain');
 
 const hostBinary = platform === 'win32'
-  ? path.join(baseDir, 'bin', 'native', 'bloom-host.exe')
-  : path.join(baseDir, 'bin', 'native', 'bloom-host');
+  ? path.join(baseDir, 'bin', 'host', 'bloom-host.exe')
+  : path.join(baseDir, 'bin', 'host', 'bloom-host');
 
 const assetsDir = (() => {
   if (app?.isPackaged) {
@@ -188,12 +190,12 @@ const paths = {
   brainDir: path.join(baseDir, 'bin', 'brain'),
   brainExe,
   
-  // Native Host + NSSM
-  nativeDir: path.join(baseDir, 'bin', 'native'),
+  // Native Host + NSSM (bin/host/)
+  nativeDir: path.join(baseDir, 'bin', 'host'),  // variable name kept for compatibility
   hostBinary,
   nssmDir: path.join(baseDir, 'bin', 'nssm'),
   nssmExe: platform === 'win32'
-    ? path.join(baseDir, 'bin', 'nssm', 'nssm.exe')
+    ? path.join(baseDir, 'bin', 'host', 'nssm.exe')
     : null,
   
   // Ollama (LLM Runtime)
@@ -208,11 +210,17 @@ const paths = {
     ? path.join(baseDir, 'bin', 'conductor', 'bloom-conductor.exe')
     : path.join(baseDir, 'bin', 'conductor', 'bloom-conductor'),
 
-  // Bloom Launcher (Session Agent - HKCU\Run, not a service)
+  // Bloom Launcher (Session Agent - HKCU\Run, not a service) — DEPRECATED, kept for compat
   launcherDir: path.join(baseDir, 'bin', 'launcher'),
   launcherExe: platform === 'win32'
     ? path.join(baseDir, 'bin', 'launcher', 'bloom-launcher.exe')
     : path.join(baseDir, 'bin', 'launcher', 'bloom-launcher'),
+
+  // Bloom Sensor (Session Agent - replaces bloom-launcher)
+  sensorDir: path.join(baseDir, 'bin', 'sensor'),
+  sensorExe: platform === 'win32'
+    ? path.join(baseDir, 'bin', 'sensor', 'bloom-sensor.exe')
+    : path.join(baseDir, 'bin', 'sensor', 'bloom-sensor'),
   
   // Cortex (Extension Package)
   cortexDir: path.join(baseDir, 'bin', 'cortex'),
@@ -280,6 +288,7 @@ const paths = {
   nodeSource: getResourcePath('node'),
   conductorSource: getResourcePath('conductor'),
   launcherSource: getResourcePath('launcher'),
+  sensorSource: getResourcePath('sensor'),
   cortexSource: getResourcePath('cortex'),
   temporalSource: getResourcePath('temporal'),
   extensionSource: getResourcePath('extension'),

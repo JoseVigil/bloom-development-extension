@@ -43,7 +43,7 @@ const {
 
 const { installRuntime } = require('./runtime-installer');
 const { installChromium } = require('./chromium-installer');
-const { installLauncher } = require('./service-installer-launcher');
+const { installSensor } = require('./service-installer-sensor');
 
 const {
   nucleusHealth,
@@ -56,7 +56,7 @@ const {
 // ⚠️ DEPRECADO: deployAllBinaries, deployConductor, deployMetamorph
 // Todas las copias de binarios están ahora en deployAllSystemBinaries()
 
-const LAUNCHER_EXE_NAME = 'bloom-launcher.exe';
+const SENSOR_EXE_NAME = 'bloom-sensor.exe';
 
 // ============================================================================
 // PROGRESS REPORTING
@@ -374,7 +374,7 @@ async function deployAllSystemBinaries(win) {
     // ========================================================================
     logger.info('\n🔗 NATIVE HOST');
     
-    // paths.nativeSource ya apunta a .../native/bin/win64/host/
+    // paths.nativeSource apunta a .../native/bin/win64/host/
     const hostExeSrc = path.join(paths.nativeSource, 'bloom-host.exe');
     
     results.nativeHost = await copyFileSafe(
@@ -505,21 +505,21 @@ async function deployAllSystemBinaries(win) {
     }
 
     // ========================================================================
-    // 11. BLOOM LAUNCHER (Session Agent)
+    // 11. BLOOM SENSOR (Session Agent)
     // ========================================================================
-    logger.info('\n🌉 BLOOM LAUNCHER (SESSION AGENT)');
+    logger.info('\n🌉 BLOOM SENSOR (SESSION AGENT)');
 
-    const launcherExeSrc = path.join(paths.launcherSource, LAUNCHER_EXE_NAME);
+    const sensorExeSrc = path.join(paths.sensorSource, SENSOR_EXE_NAME);
 
-    if (await fs.pathExists(launcherExeSrc)) {
-      results.launcher = await copyFileSafe(
-        launcherExeSrc,
-        paths.launcherExe,
-        LAUNCHER_EXE_NAME
+    if (await fs.pathExists(sensorExeSrc)) {
+      results.sensor = await copyFileSafe(
+        sensorExeSrc,
+        paths.sensorExe,
+        SENSOR_EXE_NAME
       );
     } else {
-      logger.warn('⚠️ bloom-launcher.exe not found, skipping');
-      results.launcher = { success: false, skipped: true };
+      logger.warn('⚠️ bloom-sensor.exe not found, skipping');
+      results.sensor = { success: false, skipped: true };
     }
 
     // ========================================================================
@@ -674,6 +674,125 @@ async function runMetamorphDeploy(win) {
   } catch (error) {
     throw error;
   }
+}
+
+// ============================================================================
+// METAMORPH AUDIT - Snapshot de versiones post-deploy
+// ============================================================================
+
+async function runMetamorphAudit(win) {
+  const MILESTONE = 'metamorph_audit';
+
+  if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
+    logger.info(`⭐️ ${MILESTONE} completed, skipping`);
+    return { success: true, skipped: true };
+  }
+
+  await nucleusManager.startMilestone(MILESTONE);
+  emitProgress(win, 5, 10, 'Auditing deployed binaries...');
+
+  const metamorphExe = paths.metamorphExe;
+
+  if (!fs.existsSync(metamorphExe)) {
+    // No es fatal — metamorph puede no estar deployado en todos los entornos
+    logger.warn('⚠️ metamorph.exe not found, skipping audit');
+    await nucleusManager.completeMilestone(MILESTONE, { skipped: true, reason: 'metamorph_not_found' });
+    return { success: true, skipped: true };
+  }
+
+  try {
+    logger.separator('METAMORPH AUDIT');
+
+    // 1. inspect --all : genera config/metamorph.json con versiones de todos los binarios
+    logger.info('🔍 Running metamorph inspect --all...');
+    const inspectResult = await executeMetamorphCommand(['--json', 'inspect', '--all']);
+    const managed   = inspectResult.summary?.managed_count   ?? '?';
+    const external  = inspectResult.summary?.external_count  ?? '?';
+    const healthy   = inspectResult.summary?.healthy_count   ?? '?';
+    logger.success(`   ✓ Snapshot saved — managed: ${managed}, external: ${external}, healthy: ${healthy}`);
+
+    // 2. verify-sync : compara hashes origen vs producción
+    logger.info('🔎 Running metamorph verify-sync...');
+    const syncResult = await executeMetamorphCommand(['--json', 'verify-sync']);
+    const inSync  = syncResult.in_sync;
+    const synced  = syncResult.summary?.synced  ?? '?';
+    const drifted = syncResult.summary?.drifted ?? 0;
+    const missing = syncResult.summary?.missing ?? 0;
+
+    if (!inSync) {
+      const driftedComponents = (syncResult.components || [])
+        .filter(c => c.status !== 'synced')
+        .map(c => c.name)
+        .join(', ');
+      throw new Error(`Deployment drift detected — drifted: ${drifted}, missing: ${missing} (${driftedComponents})`);
+    }
+
+    logger.success(`   ✓ All ${synced} binaries in sync`);
+
+    await nucleusManager.completeMilestone(MILESTONE, {
+      in_sync: inSync,
+      synced,
+      managed,
+      external,
+      healthy,
+    });
+
+    return { success: true, in_sync: inSync, synced };
+
+  } catch (error) {
+    await nucleusManager.failMilestone(MILESTONE, error.message);
+    throw error;
+  }
+}
+
+async function executeMetamorphCommand(args) {
+  return new Promise((resolve, reject) => {
+    const { spawn } = require('child_process');
+
+    const child = spawn(paths.metamorphExe, args, {
+      cwd: paths.metamorphDir,
+      env: { ...process.env },
+      shell: false,
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', d => { stdout += d; });
+    child.stderr.on('data', d => { stderr += d; });
+
+    child.on('close', () => {
+      try {
+        // parseCLIJson no está disponible aquí — parseo directo
+        const lines = stdout.split('\n');
+        for (const line of lines) {
+          const t = line.trim();
+          if (t.startsWith('{')) {
+            resolve(JSON.parse(t));
+            return;
+          }
+        }
+        // Intento con el bloque completo
+        resolve(JSON.parse(stdout.trim()));
+      } catch (e) {
+        if (stderr) logger.warn('[Metamorph stderr]', stderr.trim());
+        reject(new Error(`metamorph JSON parse failed: ${e.message}`));
+      }
+    });
+
+    child.on('error', err => reject(err));
+
+    setTimeout(() => {
+      if (!child.killed) {
+        child.kill();
+        reject(new Error('metamorph command timeout'));
+      }
+    }, 30000);
+  });
 }
 
 async function installBrainService(win) {
@@ -1056,7 +1175,7 @@ async function runCertification(win) {
 }
 
 // ============================================================================
-// SESSION LAUNCHER INSTALLER
+// SESSION SENSOR INSTALLER
 // ============================================================================
 
 async function installSessionLauncher(win) {
@@ -1068,22 +1187,22 @@ async function installSessionLauncher(win) {
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 7, 10, 'Installing Session Launcher...');
+  emitProgress(win, 7, 10, 'Installing Session Agent...');
 
   try {
-    const started = await installLauncher();
+    const started = await installSensor();
 
     if (!started) {
-      // No es fatal — el launcher puede no tener sesión interactiva durante CI/install remoto
-      logger.warn('⚠️ bloom-launcher did not confirm RUNNING — may start on next user login');
+      // No es fatal — el sensor puede no tener sesión interactiva durante CI/install remoto
+      logger.warn('⚠️ bloom-sensor did not confirm RUNNING — may start on next user login');
     }
 
-    await nucleusManager.completeMilestone(MILESTONE, { launcher_running: started });
+    await nucleusManager.completeMilestone(MILESTONE, { sensor_running: started });
     return { success: true };
 
   } catch (error) {
-    // No lanzar — launcher no es crítico para completar la instalación
-    logger.warn(`⚠️ Session launcher install warning: ${error.message}`);
+    // No lanzar — sensor no es crítico para completar la instalación
+    logger.warn(`⚠️ Session sensor install warning: ${error.message}`);
     await nucleusManager.failMilestone(MILESTONE, error.message);
     return { success: false, non_critical: true };
   }
@@ -1106,18 +1225,19 @@ async function installService(win) {
       logger.info(`Resuming from: ${summary.next_milestone}`);
     }
 
-    await createDirectories(win);           // 1/9
-    await runChromiumInstall(win);          // 2/9
-    await runRuntimeInstall(win);           // 3/9
-    await runBinariesDeploy(win);           // 4/9
-    await installBrainService(win);         // 5/9
+    await createDirectories(win);           // 1/10
+    await runChromiumInstall(win);          // 2/10
+    await runRuntimeInstall(win);           // 3/10
+    await runBinariesDeploy(win);           // 4/10
+    await runMetamorphAudit(win);           // 5/10 - Snapshot + verify-sync
+    await installBrainService(win);         // 6/10
     // NOTA: Nucleus Service DEBE arrancar ANTES de seed
     // porque seed necesita Temporal workflows
-    await installNucleusService(win);       // 6/9 - Arranca Temporal
+    await installNucleusService(win);       // 7/10 - Arranca Temporal
     await installSessionLauncher(win);      // Session agent (non-critical)
-    await runCertification(win);            // 7/9 - Verifica Temporal ready
-    await seedMasterProfile(win);           // 8/9 - Usa Temporal
-    await launchMasterProfile(win);         // 9/9 - Heartbeat final
+    await runCertification(win);            // 8/10 - Verifica Temporal ready
+    await seedMasterProfile(win);           // 9/10 - Usa Temporal
+    await launchMasterProfile(win);         // 10/10 - Heartbeat final
 
     await nucleusManager.markInstallationComplete();
 
