@@ -21,14 +21,14 @@ No escirbas guas de implementacion. No escibas de mas, debe quedar resto para qu
 DEVUÉLVEME UN ARCHIVOS MARKDOWN COMO CODIGO FUENTE EN UN ARTIFACT. NO USES TRIPLE BACKTICKS (```). NO USES BLOQUES DE CÓDIGO CERCADOS. TODO EL CONTENIDO, INCLUYENDO CÓDIGO, DEBE ESTAR FORMATEADO EXCLUSIVAMENTE CON INDENTACIÓN DE 4 ESPACIOS. SI USAS ``` EN CUALQUIER LUGAR, EL RESULTADO SE ROMPE. ENTIENDE: SOLO QUIERO TEXTO PLANO MARKDOWN, SIN FENCES, SIN HTML, SIN FORMATO ESPECIAL. TODO EL ARCHIVO DEBE SER 100% MARKDOWN PURO.
 
 Si no disponés de tokens suficientes para completar la respuesta, no la generes. No incluyas guías de implementación ni explicaciones básicas: soy desarrollador y sé aplicarlo. Respondé únicamente con la solución solicitada, sin adornos ni pasos innecesarios.
-z
-
 
 ¿Cuántos tokens aproximadamente hemos usado?
 "¿Cuánto contexto nos queda?"
 "¿Estamos cerca del límite de la conversación?"
 
-Quiero me digas en cinco palabras que es este prompt. Necesito me informes la fecha y hora en detalle del ultimo chat de este prompt. Informame tambien cuantas conversaciones llevamos en el mismo y cuantos tokens te quedan en cantidad y %. 
+Quiero me digas en cinco palabras que es este prompt. 
+Necesito me informes la fecha y hora en detalle del ultimo chat de este prompt. 
+Informame tambien cuantas conversaciones llevamos en el mismo y cuantos tokens te quedan en cantidad y %. 
 Contesta corto y con este formato. 
 Mensajes: X
 Tokens disponibles: XXX 
@@ -58,7 +58,6 @@ Informame:
 Idioma: Español
 Formato: Lista simple, sin narrativa
 
-
 NOTA: Los limites de cantidad de mensajes para cumplir el plan free son de cinco horas. Es necesario calcular de este lado la cantidad de mensajes por ventana de 5 horas para encontrar el tope del plan. 
 
 Los cortes de plan son otra ventaja extraordinaria para usar btips. 
@@ -69,6 +68,14 @@ CLAUDE
 "Por favor, crea un archivo resumen.txt con las rutas exactas de cada archivo generado, y luego preséntalo junto con todos los archivos"
 
 Decime literalmente: "SOLO responde lo que pregunté" o "NO agregues nada más" al inicio de tu mensaje.
+
+SOLO responde lo que pregunté o pedi
+NO agregues nada más
+Dame instrucciones de qué archivos modificaste
+Mostrá el contenido completo de los archivos
+Usá el comando view para mostrarme los archivos
+
+Podes ayudarme a arreglar el problema en mi codigo?
 
 Restricciones.
 - No crees guias de trobleshooting. 
@@ -91,15 +98,37 @@ Si veo algo raro pregunto:
 "Falta X función, la agrego o la tenés en otro archivo?"
 "Este archivo pisa al otro, cuál uso?"
 
-Lo que NO hago más:
 
-Asumir qué necesitás
-Escribir documentación no pedida
-Crear archivos "de ayuda"
-Explicar lo que hice
+**PROTOCOLO DE ENTREGA DE ARCHIVOS**
+
+**Cuando solicites archivos modificados:**
+
+1. **"Utilizá el comando `view` para mostrar el contenido completo de cada archivo modificado"**
+
+2. **"Mostrá el diff de los cambios realizados en cada archivo"**
+
+3. **"Presentá los archivos en bloques de código con sintaxis highlighting"**
+
+**Cuando algo falle:**
+
+4. **"El método actual no está funcionando. Ejecutá `view` sobre [ruta/archivo] y mostrá el output completo"**
+
+5. **"Verificá que el archivo existe en `/mnt/user-data/outputs/` usando `bash_tool` con `ls -la`"**
+
+**Al finalizar modificaciones:**
+
+6. **"Confirmá las rutas exactas de los archivos entregables y mostrá su contenido usando `view`"**
+
+7. **"Listá todos los archivos modificados con sus rutas absolutas antes de mostrar su contenido"**
+
+**Este protocolo garantiza:**
+- Trazabilidad de cambios
+- Contenido visible en chat
+- Independencia de features de UI
+- Método reproducible
 
 
-DEV REMINDER
+DEV FRIENDLY REMINDER
 Las horas de la mañana debes aprovecharlas para resolver los problemas mas grandes, grandes features, refactorizaciones y exploraciones. Por la tarde troubleshooting y testing. 
 
 

@@ -27,7 +27,8 @@ const API = {
   launchGodMode: (profileId) => ipcRenderer.invoke('brain:launch', profileId),
   checkExtensionHeartbeat: () => ipcRenderer.invoke('extension:heartbeat'),
   preflightChecks: () => ipcRenderer.invoke('preflight-checks'),
-  
+  checkBrainServiceStatus: () => ipcRenderer.invoke('check-brain-service-status'), 
+    
   // NEW: Métodos adicionales para install mode
   startInstallation: (options = {}) => ipcRenderer.invoke('install:start', options),
   checkRequirements: () => ipcRenderer.invoke('install:check-requirements'),

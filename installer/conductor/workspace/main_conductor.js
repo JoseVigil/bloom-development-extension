@@ -190,7 +190,7 @@ function startGUI() {
       show: false
     });
 
-    mainWindow.loadFile(path.join(__dirname, 'src', 'conductor.html'));
+    mainWindow.loadFile(path.join(__dirname, 'conductor.html'));
 
     mainWindow.once('ready-to-show', () => {
       logger.success('Conductor window ready');

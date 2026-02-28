@@ -10,6 +10,9 @@ node diagnose-service.js
 
 #Agragar librerias python en brain.specs despues de pip install local.
 
+build-all with metamorph
+python build-all.py --verify-env dev
+
 brain build
 C:\repos\bloom-videos\bloom-development-extension
 .\build.ps1 -Clean (powershell admin)
@@ -26,11 +29,12 @@ npm run build
 cd conductor/setu     
 npm run build
 
-
 Plugin
 /c/repos/bloom-videos/bloom-development-extension
 npm run compile
 F5
+
+brain filesystem tree --generate-all
 
 Electron
 /c/repos/bloom-videos/bloom-development-extension/installer/electron-app
@@ -65,7 +69,7 @@ brain filesystem tree src installer webview brain contracts package.json tsconfi
 
 brain filesystem tree installer -o tree/installer_tree.txt
 
-brain filesystem tree conductor -o tree/conductor_tree.txt
+
 
 brain filesystem tree brain -o tree/brain_tree.txt
 
@@ -80,6 +84,10 @@ brain filesystem tree installer/nucleus -o tree/nucleus_tree.txt
 brain filesystem tree installer/sentinel -o tree/sentinel_tree.txt
 
 brain filesystem tree installer/metamorph -o tree/metamorph_tree.txt
+
+brain filesystem tree installer/sensor -o tree/sensor_tree.txt
+
+brain filesystem tree installer/conductor -o tree/conductor_tree.txt
 
 brain filesystem tree installer/chrome-extension/src -o tree/chrome_extension_src_tree.txt
 
@@ -112,7 +120,7 @@ Borrar todas las keys
 Get-ChildItem "HKCU:\Software\Google\Chrome\NativeMessagingHosts" | Where-Object { $_.PSChildName -like "com.bloom.synapse*" } | Remove-Item -Recurse -Force -Verbose
 
 
-& "C:\Users\josev\AppData\Local\BloomNucleus\bin\chrome-win\chrome.exe" --user-data-dir="C:\Users\josev\AppData\Local\BloomNucleus\profiles\14c11dbf-7f2a-43be-beba-7ae757cc7486" --profile-directory=Default --no-first-run --no-default-browser-check --disable-default-apps --disable-session-crashed-bubble --disable-features=ChromeWhatsNewUI --load-extension="C:\Users\josev\AppData\Local\BloomNucleus\profiles\14c11dbf-7f2a-43be-beba-7ae757cc7486\extension" "chrome-extension://hpblclepliicmihaplldignhjdggnkdh/discovery/index.html"
+"C:\Users\josev\AppData\Local\BloomNucleus\bin\chrome-win\chrome.exe" --user-data-dir="C:\Users\josev\AppData\Local\BloomNucleus\profiles\9daa58a0-7d2f-404c-ad2f-41f7a7556a2b" --profile-directory=Default --no-first-run --no-default-browser-check --disable-default-apps --disable-session-crashed-bubble --disable-features=ChromeWhatsNewUI --load-extension="C:\Users\josev\AppData\Local\BloomNucleus\profiles\9daa58a0-7d2f-404c-ad2f-41f7a7556a2b\extension" "chrome-extension://hpblclepliicmihaplldignhjdggnkdh/discovery/index.html"
 
 & "C:\Users\josev\AppData\Local\BloomNucleus\bin\chrome-win\chrome.exe" --user-data-dir="C:\Users\josev\AppData\Local\BloomNucleus\profiles\14c11dbf-7f2a-43be-beba-7ae757cc7486" --profile-directory=Default --no-first-run --no-default-browser-check --disable-default-apps --disable-session-crashed-bubble --disable-features=ChromeWhatsNewUI --load-extension="C:\Users\josev\AppData\Local\BloomNucleus\profiles\14c11dbf-7f2a-43be-beba-7ae757cc7486\extension" "chrome-extension://hpblclepliicmihaplldignhjdggnkdh/landing/index.html"
 

@@ -892,8 +892,8 @@ function registerInstallHandlers() {
     try {
       log('🚀 Starting installation...');
 
-      const { runFullInstallation } = require('./install/installer');
-      const result = await runFullInstallation(BrowserWindow.getAllWindows()[0]);
+      const { installService } = require('./install/installer');
+      const result = await installService(BrowserWindow.getAllWindows()[0]);
 
       if (result.success) {
         log('✅ Installation completed successfully');
@@ -1002,7 +1002,7 @@ function registerInstallHandlers() {
 
   ipcMain.handle('install:cleanup', async () => {
     try {
-      const { cleanupOldServices } = require('./install/service-installer');
+      const { cleanupOldServices } = require('./install/service-installer-brain');
       await cleanupOldServices();
       return { success: true };
     } catch (error) {
@@ -1120,6 +1120,22 @@ function registerInstallHandlers() {
       };
     }
   });
+
+  // ============================================================================
+  // LAUNCHER OPEN (Session agent con flag de onboarding)
+  // ============================================================================
+  ipcMain.handle('launcher:open', async (event, { onboarding } = {}) => {
+    log(`🌉 [IPC] launcher:open called (onboarding: ${onboarding})`);
+    try {
+      const { installLauncher } = require('./install/service-installer-launcher');
+      const started = await installLauncher();
+      return { success: started };
+    } catch (err) {
+      error('❌ [IPC] launcher:open error:', err.message);
+      return { success: false, error: err.message };
+    }
+  });
+
 }
 
 // ============================================================================
