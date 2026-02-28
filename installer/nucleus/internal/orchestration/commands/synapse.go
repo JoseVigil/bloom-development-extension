@@ -11,7 +11,6 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"time"
 
 	"nucleus/internal/core"
@@ -67,18 +66,16 @@ Available subcommands:
 
 // PreflightResult agrupa el resultado del pre-flight check
 type PreflightResult struct {
-	BrainOK    bool
-	LauncherOK bool
-	Error      string
+	BrainOK bool
+	Error   string
 }
 
-// runPreflightCheck verifica Brain TCP server y bloom-launcher named pipe
-// antes de enviar cualquier señal a Temporal. Peor caso: ~13s (10s Brain + 3s launcher).
-// Si ambos están up, tarda <500ms.
-func runPreflightCheck(binDir string) *PreflightResult {
+// runPreflightCheck verifica Brain TCP server antes de enviar cualquier señal
+// a Temporal. Peor caso: ~10s (timeout NSSM). Si Brain está up, tarda <500ms.
+func runPreflightCheck() *PreflightResult {
 	result := &PreflightResult{}
 
-	// ── 1. Brain TCP server (port 5678) ──────────────────────────────────
+	// ── Brain TCP server (port 5678) ──────────────────────────────────────
 	if checkBrainTCP() {
 		result.BrainOK = true
 	} else {
@@ -94,32 +91,6 @@ func runPreflightCheck(binDir string) *PreflightResult {
 		result.BrainOK = true
 	}
 
-	// ── 2. bloom-launcher named pipe ─────────────────────────────────────
-	if checkLauncherPipe() {
-		result.LauncherOK = true
-	} else {
-		launcherExe := filepath.Join(binDir, "launcher", "bloom-launcher.exe")
-		if err := startLauncherDetached(launcherExe); err != nil {
-			result.Error = fmt.Sprintf(
-				"bloom-launcher no está corriendo. Chrome no tendrá ventana visible.\n"+
-					"Inicialo manualmente: bloom-launcher.exe serve\n(Error: %v)", err)
-			return result
-		}
-		deadline := time.Now().Add(3 * time.Second)
-		for time.Now().Before(deadline) {
-			if checkLauncherPipe() {
-				result.LauncherOK = true
-				break
-			}
-			time.Sleep(300 * time.Millisecond)
-		}
-		if !result.LauncherOK {
-			result.Error = "bloom-launcher no está corriendo. Chrome no tendrá ventana visible.\n" +
-				"Inicialo manualmente: bloom-launcher.exe serve"
-			return result
-		}
-	}
-
 	return result
 }
 
@@ -132,15 +103,6 @@ func checkBrainTCP() bool {
 	return true
 }
 
-func checkLauncherPipe() bool {
-	f, err := os.Open(`\\.\pipe\bloom-launcher`)
-	if err != nil {
-		return false
-	}
-	f.Close()
-	return true
-}
-
 func nssmStartService(name string, timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -149,15 +111,6 @@ func nssmStartService(name string, timeout time.Duration) error {
 		return fmt.Errorf("%v — %s", err, string(out))
 	}
 	return nil
-}
-
-func startLauncherDetached(exePath string) error {
-	if _, err := os.Stat(exePath); err != nil {
-		return fmt.Errorf("bloom-launcher.exe not found at %s", exePath)
-	}
-	cmd := exec.Command(exePath, "serve")
-	cmd.SysProcAttr = detachSysProcAttr()
-	return cmd.Start()
 }
 
 // ── SEED ──────────────────────────────────────────────────────────────────────
@@ -268,17 +221,11 @@ func createLaunchSubcommand(c *core.Core) *cobra.Command {
 Before contacting Temporal, a pre-flight check verifies:
   1. Brain TCP server (port 5678) is responding
      → If not: attempts nssm start BloomBrain (10s timeout)
-  2. bloom-launcher named pipe (\\.\pipe\bloom-launcher) is responding
-     → If not: starts bloom-launcher.exe serve detached (3s timeout)
 
-If either check fails after retries, the command aborts with a clear error
+If the check fails after retry, the command aborts with a clear error
 message before any workflow is triggered.
 
-bloom-launcher must be running in Session 1 (user interactive session).
-If the user has no interactive session, the pipe check will fail and
-the error will say so explicitly.
-
-Use --skip-preflight to bypass these checks.
+Use --skip-preflight to bypass this check.
 
 Requires: No special role
 Effects:  Starts Chrome via Sentinel; creates Temporal workflow signals`,
@@ -317,24 +264,11 @@ Effects:  Starts Chrome via Sentinel; creates Temporal workflow signals`,
 
 			// ── Pre-flight check ──────────────────────────────────────────
 			if !skipPreflight {
-				binDir := c.Paths.Bin
-				if binDir == "" {
-					appDataDir := os.Getenv("BLOOM_APPDATA_DIR")
-					if appDataDir == "" {
-						localAppData := os.Getenv("LOCALAPPDATA")
-						if localAppData == "" {
-							localAppData = os.Getenv("HOME")
-						}
-						appDataDir = filepath.Join(localAppData, "BloomNucleus")
-					}
-					binDir = filepath.Join(appDataDir, "bin")
-				}
-
 				if !jsonOutput {
 					logger.Info("Running pre-flight check…")
 				}
 
-				pf := runPreflightCheck(binDir)
+				pf := runPreflightCheck()
 				if pf.Error != "" {
 					if jsonOutput {
 						outputJSON(map[string]interface{}{
@@ -351,7 +285,7 @@ Effects:  Starts Chrome via Sentinel; creates Temporal workflow signals`,
 				}
 
 				if !jsonOutput {
-					logger.Success("✅ Pre-flight OK (Brain: up, Launcher: up)")
+					logger.Success("✅ Pre-flight OK (Brain: up)")
 				}
 			}
 			// ── End pre-flight ────────────────────────────────────────────

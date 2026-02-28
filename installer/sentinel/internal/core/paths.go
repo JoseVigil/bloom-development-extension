@@ -7,7 +7,8 @@ import (
 )
 
 type Paths struct {
-	BinDir       string
+	BinDir       string // bin\ raíz — chrome, host, extensions, nucleus
+	SentinelDir  string // bin\sentinel\ — config y binario propio de sentinel
 	AppDataDir   string
 	ProfilesDir  string
 	LogsDir      string
@@ -20,7 +21,11 @@ func InitPaths() (*Paths, error) {
 	if err != nil {
 		return nil, err
 	}
-	binDir := filepath.Dir(exe)
+	// sentinel.exe vive en bin\sentinel\ — separamos los dos conceptos:
+	// SentinelDir = bin\sentinel\  (config propia, binario sentinel)
+	// BinDir      = bin\           (chrome, host, extensions, nucleus)
+	sentinelDir := filepath.Dir(exe)
+	binDir := filepath.Dir(sentinelDir)
 
 	localAppData := os.Getenv("LOCALAPPDATA")
 	if localAppData == "" {
@@ -28,12 +33,11 @@ func InitPaths() (*Paths, error) {
 	}
 	appDataDir := filepath.Join(localAppData, "BloomNucleus")
 
-	// BinDir = bin/sentinel/
-	// nucleus.exe está en bin/nucleus/ — subimos un nivel con filepath.Dir
-	nucleusBin := filepath.Join(filepath.Dir(binDir), "nucleus", "nucleus.exe")
+	nucleusBin := filepath.Join(binDir, "nucleus", "nucleus.exe")
 
 	paths := &Paths{
 		BinDir:       binDir,
+		SentinelDir:  sentinelDir,
 		AppDataDir:   appDataDir,
 		ProfilesDir:  filepath.Join(appDataDir, "profiles"),
 		LogsDir:      filepath.Join(appDataDir, "logs", "sentinel"),
@@ -55,6 +59,7 @@ func (p *Paths) String() string {
 	var sb strings.Builder
 	sb.WriteString("Rutas del Sistema:\n")
 	sb.WriteString("  BinDir:      " + p.BinDir + "\n")
+	sb.WriteString("  SentinelDir: " + p.SentinelDir + "\n")
 	sb.WriteString("  AppDataDir:  " + p.AppDataDir + "\n")
 	sb.WriteString("  ProfilesDir: " + p.ProfilesDir + "\n")
 	sb.WriteString("  LogsDir:     " + p.LogsDir + "\n")

@@ -57,6 +57,7 @@ const {
 // Todas las copias de binarios están ahora en deployAllSystemBinaries()
 
 const SENSOR_EXE_NAME = 'bloom-sensor.exe';
+const SETUP_EXE_NAME  = 'bloom-setup.exe';
 
 // ============================================================================
 // PROGRESS REPORTING
@@ -125,7 +126,7 @@ async function createDirectories(win) {
       paths.nucleusDir,
       paths.sentinelDir,
       paths.brainDir,
-      paths.nativeDir,
+      paths.hostDir,
       paths.ollamaDir,
       paths.cortexDir,
       paths.conductorDir,
@@ -375,7 +376,7 @@ async function deployAllSystemBinaries(win) {
     logger.info('\n🔗 NATIVE HOST');
     
     // paths.nativeSource apunta a .../native/bin/win64/host/
-    const hostExeSrc = path.join(paths.nativeSource, 'bloom-host.exe');
+    const hostExeSrc = path.join(paths.hostSource, 'bloom-host.exe');
     
     results.nativeHost = await copyFileSafe(
       hostExeSrc,
@@ -384,10 +385,10 @@ async function deployAllSystemBinaries(win) {
     );
     
     // Copiar DLLs asociados del mismo directorio
-    results.nativeDLLs = await copyDLLs(
-      paths.nativeSource,  // Ya es la carpeta host/
-      paths.nativeDir,
-      'Native Host DLLs'
+    results.hostDLLs = await copyDLLs(
+      paths.hostSource,
+      paths.hostDir,
+      'Host DLLs'
     );
     
     // ========================================================================
@@ -487,9 +488,9 @@ async function deployAllSystemBinaries(win) {
     }
     
     // ========================================================================
-    // 10. CONDUCTOR (Launcher)
+    // 10. CONDUCTOR (Wokspace)
     // ========================================================================
-    logger.info('\n🎮 CONDUCTOR LAUNCHER');
+    logger.info('\n🎮 CONDUCTOR WORKSPACE');
     
     const conductorExeSrc = path.join(paths.conductorSource, 'bloom-conductor.exe');
     
@@ -520,6 +521,24 @@ async function deployAllSystemBinaries(win) {
     } else {
       logger.warn('⚠️ bloom-sensor.exe not found, skipping');
       results.sensor = { success: false, skipped: true };
+    }
+
+    // ========================================================================
+    // 12. SETUP (Installer / Self-update binary)
+    // ========================================================================
+    logger.info('\n🔧 SETUP INSTALLER');
+
+    const setupExeSrc = path.join(paths.setupSource, SETUP_EXE_NAME);
+
+    if (await fs.pathExists(setupExeSrc)) {
+      results.setup = await copyFileSafe(
+        setupExeSrc,
+        paths.setupExe,
+        SETUP_EXE_NAME
+      );
+    } else {
+      logger.warn(`⚠️ ${SETUP_EXE_NAME} not found, skipping`);
+      results.setup = { success: false, skipped: true };
     }
 
     // ========================================================================
@@ -703,41 +722,44 @@ async function runMetamorphAudit(win) {
   try {
     logger.separator('METAMORPH AUDIT');
 
-    // 1. inspect --all : genera config/metamorph.json con versiones de todos los binarios
+    // inspect --all : genera config/metamorph.json con versiones y hashes de todos los binarios.
+    // Este es el snapshot inicial post-install. verify-sync NO se usa aquí — ese comando es para
+    // detectar drift en producción (comparando source vs destino). En instalación fresca, el
+    // source de verdad es el deploy que acabamos de hacer, no un hash comparison contra staging.
     logger.info('🔍 Running metamorph inspect --all...');
     const inspectResult = await executeMetamorphCommand(['--json', 'inspect', '--all']);
-    const managed   = inspectResult.summary?.managed_count   ?? '?';
-    const external  = inspectResult.summary?.external_count  ?? '?';
-    const healthy   = inspectResult.summary?.healthy_count   ?? '?';
-    logger.success(`   ✓ Snapshot saved — managed: ${managed}, external: ${external}, healthy: ${healthy}`);
 
-    // 2. verify-sync : compara hashes origen vs producción
-    logger.info('🔎 Running metamorph verify-sync...');
-    const syncResult = await executeMetamorphCommand(['--json', 'verify-sync']);
-    const inSync  = syncResult.in_sync;
-    const synced  = syncResult.summary?.synced  ?? '?';
-    const drifted = syncResult.summary?.drifted ?? 0;
-    const missing = syncResult.summary?.missing ?? 0;
+    const managed  = inspectResult.summary?.managed_count  ?? 0;
+    const external = inspectResult.summary?.external_count ?? 0;
+    const healthy  = inspectResult.summary?.healthy_count  ?? 0;
+    const missing  = inspectResult.summary?.missing_count  ?? 0;
 
-    if (!inSync) {
-      const driftedComponents = (syncResult.components || [])
-        .filter(c => c.status !== 'synced')
-        .map(c => c.name)
-        .join(', ');
-      throw new Error(`Deployment drift detected — drifted: ${drifted}, missing: ${missing} (${driftedComponents})`);
+    logger.success(`   ✓ Snapshot saved — managed: ${managed}, external: ${external}, healthy: ${healthy}, missing: ${missing}`);
+
+    // Validar que los binarios críticos (managed) están presentes en disco.
+    // Un binario con hash vacío o size 0 significa que metamorph no pudo leerlo.
+    // No exigimos 'healthy' porque algunos binarios válidos (Host, Conductor, Setup)
+    // no exponen versión semántica y quedan en status 'unknown' — eso es esperado.
+    const CRITICAL_MANAGED = ['Brain', 'Nucleus', 'Sentinel', 'Host', 'Metamorph', 'Sentinel', 'Cortex'];
+    const notFound = (inspectResult.managed_binaries || []).filter(b => {
+      return CRITICAL_MANAGED.includes(b.name) && b.size_bytes === 0;
+    });
+
+    if (notFound.length > 0) {
+      const names = notFound.map(b => b.name).join(', ');
+      throw new Error(`Critical binaries not found on disk after deploy: ${names}`);
     }
 
-    logger.success(`   ✓ All ${synced} binaries in sync`);
+    logger.success(`   ✓ All critical binaries present on disk`);
 
     await nucleusManager.completeMilestone(MILESTONE, {
-      in_sync: inSync,
-      synced,
       managed,
       external,
       healthy,
+      missing,
     });
 
-    return { success: true, in_sync: inSync, synced };
+    return { success: true, managed, healthy };
 
   } catch (error) {
     await nucleusManager.failMilestone(MILESTONE, error.message);
@@ -767,17 +789,35 @@ async function executeMetamorphCommand(args) {
 
     child.on('close', () => {
       try {
-        // parseCLIJson no está disponible aquí — parseo directo
+        // Parser multilínea: acumular líneas desde el primer { o [
+        // hasta que las llaves/corchetes queden balanceados
         const lines = stdout.split('\n');
+        let inJson = false;
+        let braceCount = 0;
+        let jsonLines = [];
+
         for (const line of lines) {
           const t = line.trim();
-          if (t.startsWith('{')) {
-            resolve(JSON.parse(t));
-            return;
+
+          if (!inJson && (t.startsWith('{') || t.startsWith('['))) {
+            inJson = true;
+          }
+
+          if (inJson) {
+            jsonLines.push(line);
+            for (const char of t) {
+              if (char === '{' || char === '[') braceCount++;
+              if (char === '}' || char === ']') braceCount--;
+            }
+            if (braceCount === 0) break;
           }
         }
-        // Intento con el bloque completo
-        resolve(JSON.parse(stdout.trim()));
+
+        if (jsonLines.length === 0) {
+          throw new Error(`No JSON found in output. stdout: ${stdout.slice(0, 200)}`);
+        }
+
+        resolve(JSON.parse(jsonLines.join('\n')));
       } catch (e) {
         if (stderr) logger.warn('[Metamorph stderr]', stderr.trim());
         reject(new Error(`metamorph JSON parse failed: ${e.message}`));
@@ -786,12 +826,14 @@ async function executeMetamorphCommand(args) {
 
     child.on('error', err => reject(err));
 
-    setTimeout(() => {
+    const timeoutHandle = setTimeout(() => {
       if (!child.killed) {
         child.kill();
         reject(new Error('metamorph command timeout'));
       }
     }, 30000);
+
+    child.on('close', () => clearTimeout(timeoutHandle));
   });
 }
 
@@ -1178,8 +1220,8 @@ async function runCertification(win) {
 // SESSION SENSOR INSTALLER
 // ============================================================================
 
-async function installSessionLauncher(win) {
-  const MILESTONE = 'launcher_install';
+async function installSessionSensor(win) {
+  const MILESTONE = 'sensor_install';
 
   if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
     logger.info(`⭐️ ${MILESTONE} completed, skipping`);
@@ -1234,7 +1276,7 @@ async function installService(win) {
     // NOTA: Nucleus Service DEBE arrancar ANTES de seed
     // porque seed necesita Temporal workflows
     await installNucleusService(win);       // 7/10 - Arranca Temporal
-    await installSessionLauncher(win);      // Session agent (non-critical)
+    await installSessionSensor(win);        // Session agent (non-critical)
     await runCertification(win);            // 8/10 - Verifica Temporal ready
     await seedMasterProfile(win);           // 9/10 - Usa Temporal
     await launchMasterProfile(win);         // 10/10 - Heartbeat final

@@ -77,6 +77,8 @@ const getResourcePath = (resourceName) => {
       return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'launcher');
     case 'sensor':
       return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'sensor');
+    case 'setup':
+      return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'setup');
     case 'cortex':
       return path.join(workspaceRoot, '..', 'native', 'bin', 'cortex');
     case 'hooks':
@@ -181,17 +183,17 @@ const paths = {
     ? path.join(baseDir, 'bin', 'conductor', 'bloom-conductor.exe')
     : path.join(baseDir, 'bin', 'conductor', 'bloom-conductor'),
 
-  // Bloom Launcher (Session Agent - HKCU\Run, not a service) — DEPRECATED, kept for compat
-  launcherDir: path.join(baseDir, 'bin', 'launcher'),
-  launcherExe: platform === 'win32'
-    ? path.join(baseDir, 'bin', 'launcher', 'bloom-launcher.exe')
-    : path.join(baseDir, 'bin', 'launcher', 'bloom-launcher'),
-
   // Bloom Sensor (Session Agent - replaces bloom-launcher)
   sensorDir: path.join(baseDir, 'bin', 'sensor'),
   sensorExe: platform === 'win32'
     ? path.join(baseDir, 'bin', 'sensor', 'bloom-sensor.exe')
     : path.join(baseDir, 'bin', 'sensor', 'bloom-sensor'),
+
+  // Setup (Installer / Self-update binary - tracked by Metamorph)
+  setupDir: path.join(baseDir, 'bin', 'setup'),
+  setupExe: platform === 'win32'
+    ? path.join(baseDir, 'bin', 'setup', 'bloom-setup.exe')
+    : path.join(baseDir, 'bin', 'setup', 'bloom-setup'),
   
   // Cortex (Extension Package)
   cortexDir: path.join(baseDir, 'bin', 'cortex'),
@@ -260,6 +262,7 @@ const paths = {
   conductorSource: getResourcePath('conductor'),
   launcherSource: getResourcePath('launcher'),
   sensorSource: getResourcePath('sensor'),
+  setupSource:  getResourcePath('setup'),
   cortexSource: getResourcePath('cortex'),
   temporalSource: getResourcePath('temporal'),
   extensionSource: getResourcePath('extension'),

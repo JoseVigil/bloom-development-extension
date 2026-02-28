@@ -109,9 +109,9 @@ class Paths:
         return self.bin_dir / "conductor" / "bloom-conductor.exe"
 
     @property
-    def launcher_exe(self) -> Path:
-        """bin/launcher/bloom-launcher.exe"""
-        return self.bin_dir / "launcher" / "bloom-launcher.exe"
+    def sensor_exe(self) -> Path:
+        """bin/sensor/bloom-sensor.exe"""
+        return self.bin_dir / "sensor" / "bloom-sensor.exe"
 
     # -------------------------------------------------------------------------
     # Log directories

@@ -91,7 +91,7 @@ async function killBloomProcesses(logger) {
     'sentinel.exe',
     'bloom-host.exe',
     'bloom-conductor.exe',
-    'bloom-launcher.exe', // CRÍTICO: liberar antes del deploy de binarios
+    'bloom-sensor.exe',   // CRÍTICO: liberar antes del deploy de binarios
     'temporal.exe',       // CRÍTICO: liberar temporal.exe
     'ollama.exe'          // CRÍTICO: liberar ollama.exe
     // ❌ NO INCLUIR node.exe - el instalador Electron lo usa

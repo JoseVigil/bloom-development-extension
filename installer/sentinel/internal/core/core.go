@@ -60,7 +60,7 @@ func Initialize() (*Core, error) {
 		return nil, fmt.Errorf("error al inicializar logger: %w", err)
 	}
 
-	config, err := LoadConfig(paths.BinDir)
+	config, err := LoadConfig(paths.SentinelDir)
 	if err != nil {
 		logger.Close()
 		return nil, fmt.Errorf("error al cargar configuración: %w", err)

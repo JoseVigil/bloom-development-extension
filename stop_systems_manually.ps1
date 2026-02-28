@@ -42,19 +42,19 @@ Write-Host "======================================" -ForegroundColor DarkCyan
 taskkill /F /T /IM temporal.exe 2>$null
 
 # ==============================
-# MATAR bloom-launcher.exe
+# MATAR bloom-sensor.exe
 # ==============================
-$bloomLauncher = Get-Process -Name "bloom-launcher" -ErrorAction SilentlyContinue
+$bloomSensor = Get-Process -Name "bloom-sensor" -ErrorAction SilentlyContinue
 
-foreach ($proc in $bloomLauncher) {
-    Write-Host "Matando bloom-launcher (PID $($proc.Id))"
+foreach ($proc in $bloomSensor) {
+    Write-Host "Matando bloom-sensor (PID $($proc.Id))"
     Stop-Process -Id $proc.Id -Force
 }
 
 Start-Sleep -Seconds 2
 
 # ==============================
-# MATAR SOLO chrome HIJOS DE bloom-launcher
+# MATAR SOLO chrome HIJOS DE bloom-sensor
 # ==============================
 $chromeProcesses = Get-CimInstance Win32_Process | Where-Object {
     $_.Name -eq "chrome.exe"
@@ -64,7 +64,7 @@ foreach ($chrome in $chromeProcesses) {
     $parent = Get-Process -Id $chrome.ParentProcessId -ErrorAction SilentlyContinue
 
     if ($parent -and $parent.ProcessName -like "*bloom*") {
-        Write-Host "Matando chrome hijo de bloom-launcher (PID $($chrome.ProcessId))"
+        Write-Host "Matando chrome hijo de bloom-sensor (PID $($chrome.ProcessId))"
         Stop-Process -Id $chrome.ProcessId -Force
     }
 }

@@ -3,10 +3,51 @@ package inspection
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 )
+
+// metamorphAppConfig represents the subset of metamorph-config.json that inspection
+// cares about.  The file lives in the same directory as the metamorph executable
+// and is the authoritative source for binary paths that can differ between
+// installations (e.g. Host, which moved from bin/native/ to bin/host/).
+type metamorphAppConfig struct {
+	Paths struct {
+		HostExe string `json:"host_exe"`
+	} `json:"paths"`
+}
+
+// defaultHostPath is the compile-time fallback used only when metamorph-config.json
+// cannot be read or does not contain paths.host_exe.
+const defaultHostPath = "native/bloom-host.exe"
+
+// loadMetamorphAppConfig reads metamorph-config.json from the same directory as
+// the running executable.  Returns a zero-value struct (no error) if the file is
+// absent so callers can apply their own defaults gracefully.
+func loadMetamorphAppConfig() (metamorphAppConfig, error) {
+	exeDir, err := filepath.Abs(filepath.Dir(os.Args[0]))
+	if err != nil {
+		return metamorphAppConfig{}, fmt.Errorf("could not determine executable directory: %w", err)
+	}
+	configPath := filepath.Join(exeDir, "metamorph-config.json")
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Config file is optional; callers will use defaults.
+			return metamorphAppConfig{}, nil
+		}
+		return metamorphAppConfig{}, fmt.Errorf("could not read metamorph-config.json: %w", err)
+	}
+
+	var cfg metamorphAppConfig
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return metamorphAppConfig{}, fmt.Errorf("could not parse metamorph-config.json: %w", err)
+	}
+	return cfg, nil
+}
 
 // managedBinaryDefinition defines a managed binary and its interrogation contract.
 // Each binary has its own flag convention — do not assume a uniform interface.
@@ -35,11 +76,15 @@ type managedBinaryDefinition struct {
 //
 // NOTE ON PATHS:
 //
-//	Host deploys to bin/native/ in AppData (not bin/host/).
-//	This matches the layout used by the Windows service manager (bloom-host).
+//	Host path is read from paths.host_exe in metamorph-config.json at runtime.
+//	The config-supplied value is passed in as hostPath; if the config is absent
+//	or the field is empty, defaultHostPath ("native/bloom-host.exe") is used.
 //	Conductor and Setup are Electron apps; their version .ps1 scripts live
 //	inside win-unpacked/ within their respective directories.
-func getManagedBinaries() []managedBinaryDefinition {
+func getManagedBinaries(hostPath string) []managedBinaryDefinition {
+	if hostPath == "" {
+		hostPath = defaultHostPath
+	}
 	return []managedBinaryDefinition{
 		{
 			name:         "Brain",
@@ -66,10 +111,11 @@ func getManagedBinaries() []managedBinaryDefinition {
 			buildField:   "build",
 		},
 		{
-			// Host deploys to bin/native/ — not bin/host/ — to match the
-			// Windows service layout expected by bloom-host and NSSM.
+			// Path is resolved at runtime from paths.host_exe in metamorph-config.json.
+			// Falls back to defaultHostPath ("native/bloom-host.exe") if the config is
+			// absent or the field is empty.
 			name:         "Host",
-			path:         "native/bloom-host.exe",
+			path:         hostPath,
 			versionArgs:  []string{"--version", "--json"},
 			infoArgs:     []string{"--info", "--json"},
 			versionField: "version",
@@ -362,7 +408,15 @@ func inspectSensor(binary *ManagedBinary, exePath string) (*ManagedBinary, error
 
 // InspectAllManagedBinaries inspects all managed binaries in parallel.
 func InspectAllManagedBinaries(basePath string) ([]ManagedBinary, error) {
-	definitions := getManagedBinaries()
+	// Load metamorph-config.json to resolve paths that can vary per installation.
+	// A missing config file is non-fatal; each binary falls back to its default.
+	appCfg, err := loadMetamorphAppConfig()
+	if err != nil {
+		// Non-fatal: log to stderr and proceed with defaults.
+		fmt.Fprintf(os.Stderr, "warning: could not load metamorph-config.json: %v\n", err)
+	}
+
+	definitions := getManagedBinaries(appCfg.Paths.HostExe)
 	results := make([]ManagedBinary, len(definitions))
 
 	var wg sync.WaitGroup

@@ -870,14 +870,6 @@ function registerInstallHandlers() {
     return checks;
   });
 
-  ipcMain.handle('nucleus:health', async () => {
-    try {
-      return await executeNucleusCommand(['--json', 'health']);
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  });
-
   ipcMain.handle('repair-bridge', async (event) => {
     log('🔧 [IPC] repair-bridge called (delegating to Nucleus)');
 

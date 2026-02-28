@@ -1,4 +1,4 @@
-// service-installer-launcher.js
+// service-installer-sensor.js
 // Instalación de bloom-sensor como agente de sesión de usuario
 // NO es un servicio NSSM — se registra en HKCU\Run del usuario actual
 // Esto lo hace correr en Session 1 (sesión interactiva) al login del usuario
@@ -9,7 +9,6 @@ const { execSync } = require('child_process');
 const { paths } = require('../config/paths');
 
 const SENSOR_EXE_NAME = 'bloom-sensor.exe';
-const LEGACY_LAUNCHER_EXE_NAME = 'bloom-launcher.exe';
 
 // ============================================================================
 // INSTALACIÓN
@@ -27,10 +26,6 @@ async function installSensor() {
   // ── LIMPIEZA PREVIA ───────────────────────────────────────────
   // Detener bloom-launcher legacy si está corriendo
   console.log('🛑 Limpiando instancias previas...');
-  try {
-    execSync(`taskkill /F /IM ${LEGACY_LAUNCHER_EXE_NAME}`, { stdio: 'ignore' });
-    console.log(`   ✓ ${LEGACY_LAUNCHER_EXE_NAME} detenido`);
-  } catch (_) {}
 
   // Detener bloom-sensor previo si existe
   try {
@@ -98,9 +93,4 @@ async function uninstallSensor() {
   console.log('✅ bloom-sensor removido');
 }
 
-// Legacy alias for backwards compatibility
-async function installLauncher() {
-  return await installSensor();
-}
-
-module.exports = { installSensor, uninstallSensor, installLauncher };
+module.exports = { installSensor, uninstallSensor };

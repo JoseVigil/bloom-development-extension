@@ -104,7 +104,7 @@ AppData/Local/BloomNucleus/
         │   └── nucleus.exe
         ├── sentinel/
         │   └── sentinel.exe
-        ├── native/
+        ├── host/
         │   └── bloom-host.exe
         ├── conductor/
         │   └── bloom-conductor.exe
@@ -214,7 +214,7 @@ metamorph generate-manifest > current_state.json
       "version": "2.1.0",
       "build_number": 12,
       "hash": "sha256_jkl012...",
-      "path": "native/bloom-host.exe",
+      "path": "host/bloom-host.exe",
       "size_bytes": 2097152
     },
     "cortex": {
@@ -1122,8 +1122,8 @@ Building Metamorph v1.0.0 (build 3)
 go build -o metamorph.exe -ldflags "-X main.Version=1.0.0 -X main.BuildNumber=3"
 Build successful: metamorph.exe (8.5 MB)
 
-# Copy to native
-copy metamorph.exe ..\native\bin\win64\metamorph\
+# Copy to host
+copy metamorph.exe ..\host\bin\win64\metamorph\
 ```
 
 ---

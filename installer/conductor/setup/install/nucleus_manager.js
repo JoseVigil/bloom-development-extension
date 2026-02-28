@@ -38,7 +38,7 @@ const EMPTY_NUCLEUS = {
     brain_exe: paths.brainExe,
     chromium_exe: paths.chromeExe,
     conductor_exe: paths.conductorExe,
-    launcher_exe: paths.launcherExe,
+    sensor_exe: paths.sensorExe,
     cortex_blx: paths.cortexBlx,
     ollama_exe: paths.ollamaExe,
     host_exe: paths.hostBinary
@@ -117,6 +117,19 @@ const EMPTY_NUCLEUS = {
           temporal:  ['temporal.exe'],
           conductor: ['bloom-conductor.exe']
         },
+        result: null
+      },
+      error: null
+    },
+
+    metamorph_audit: {
+      status: 'pending',
+      started_at: null,
+      completed_at: null,
+      verification: {
+        method: 'metamorph_command',
+        command: 'metamorph --json inspect --all && metamorph --json verify-sync',
+        expected_in_sync: true,
         result: null
       },
       error: null
@@ -256,15 +269,15 @@ const EMPTY_NUCLEUS = {
       error: null
     },
 
-    launcher_install: {
+    sensor_install: {
       status: 'pending',
       started_at: null,
       completed_at: null,
       verification: {
         method: 'process_running',
-        target: 'bloom-launcher.exe',
+        target: 'bloom-sensor.exe',
         registry_key: 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run',
-        registry_value: 'BloomLauncher',
+        registry_value: 'BloomSensor',
         result: null
       },
       error: null
@@ -451,6 +464,7 @@ class NucleusManager {
    */
   async startMilestone(milestoneName) {
     if (!this.state?.milestones?.[milestoneName]) {
+      logger.warn(`⚠️ Milestone desconocido ignorado: ${milestoneName}`);
       throw new Error(`Hito desconocido: ${milestoneName}`);
     }
 
@@ -469,6 +483,7 @@ class NucleusManager {
    */
   async completeMilestone(milestoneName, verificationResult = null) {
     if (!this.state?.milestones?.[milestoneName]) {
+      logger.warn(`⚠️ Milestone desconocido ignorado: ${milestoneName}`);
       throw new Error(`Hito desconocido: ${milestoneName}`);
     }
 
@@ -560,9 +575,10 @@ class NucleusManager {
       'chromium',                  // 2/10
       'brain_runtime',             // 3/10
       'binaries',                  // 4/10
-      'brain_service_install',     // 5/10
+      'metamorph_audit',           // 5/10 - Snapshot + verify-sync
+      'brain_service_install',     // 6/10
       'nucleus_service_install',   // 6/10 - Arranca Temporal
-      'launcher_install',          // 7/10 - Session agent (non-critical)
+      'sensor_install',            // 7/10 - Session agent (non-critical)
       'certification',             // 8/10 - Verifica Temporal ready
       'nucleus_seed',              // 9/10 - Usa Temporal
       'nucleus_launch',            // 10/10 - Heartbeat final
