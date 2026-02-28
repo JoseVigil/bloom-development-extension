@@ -67,8 +67,8 @@ flowchart LR
         Python Engine]
         Host[⚙️ Host Service\nC++]
 
-        BloomLauncher[🚀 Bloom Launcher
-        Session Bridge / Chrome Spawner]
+        BloomSensor[🌱 Bloom Sensor
+        Human Presence Runtime / Session 1]
 
         subgraph Chrome["🌐 Chromium Profiles"]
             Ext["🧩 Bloom Cortex
@@ -126,8 +126,8 @@ flowchart LR
 
         VS --> Brain
 
-        Brain --launch request--> BloomLauncher
-        BloomLauncher --spawns via Session 1--> Chrome
+        BloomSensor --presence events--> Sentinel
+        NucleusExe -.supervisa via eventos.-> BloomSensor
 
         Brain <--> Host
         Host <--> Ext
@@ -307,103 +307,33 @@ Sabe que perdió los eventos 43 y 44, y puede solicitarlos explícitamente a Bra
 
 ---
 
-### 2.6️⃣ Bloom Launcher (Session Bridge / Chrome Spawner)
+### 2.6️⃣ Bloom Sensor (Human Presence Runtime)
 
-**Bloom Launcher** (`bloom-launcher.exe`) es el puente de sesión que resuelve el problema de **Session 0 isolation** en Windows. Actúa como intermediario entre Brain (que corre como servicio en Session 0) y los perfiles de Chromium que deben ejecutarse en la sesión interactiva del usuario (Session 1).
-
-#### El Problema que Resuelve
-
-Nucleus (`BloomNucleusService`) y Brain (`BloomBrainService`) corren como servicios NSSM en Session 0 de Windows. Session 0 está aislada del desktop del usuario: no tiene acceso a displays, cursor ni al compositor de DirectX. Cuando Brain intenta lanzar Chrome directamente desde Session 0, Chromium falla con errores de display y permisos (`DCompositionCreateDevice: Access is denied`, `Unable to find a primary display`, etc.).
-
-Bloom Launcher resuelve esto escuchando en un named pipe (`\\.\pipe\bloom-launcher`) y utilizando las Windows Terminal Services APIs para obtener el token del usuario interactivo y lanzar Chrome directamente en su sesión.
-
-#### Flujo de Launch (`internal/executor/launch.go`)
-
-1. **`WTSGetActiveConsoleSessionId`** — obtiene el ID numérico de la sesión interactiva activa (normalmente Session 1)
-2. **`WTSQueryUserToken`** — obtiene el access token del usuario de esa sesión (requiere `SeTcbPrivilege`, disponible cuando el proceso corre como SYSTEM)
-3. **`DuplicateTokenEx`** — convierte el token a tipo Primary (`CreateProcessAsUser` rechaza tokens de impersonación)
-4. **`CreateEnvironmentBlock`** — genera el bloque de entorno del usuario (`USERPROFILE`, `APPDATA`, `TEMP`) para que Chrome no herede el entorno de SYSTEM
-5. **`CreateProcessAsUserW`** con `Desktop: "winsta0\\default"` — lanza Chrome asignado al desktop interactivo del usuario, resolviendo los errores de display y DComposition
-
-#### Protocolo Named Pipe
-
-Comunicación JSON newline-delimited sobre `\\.\pipe\bloom-launcher`.
-
-**Request** (Brain → Launcher):
-```json
-{
-  "request_id": "uuid",
-  "profile_id": "1d3dad54-...",
-  "args": ["C:\\...\\chrome.exe", "--no-sandbox", "--load-extension=...", "..."]
-}
-```
-
-**Response** (Launcher → Brain):
-```json
-{
-  "request_id": "uuid",
-  "success": true,
-  "pid": 22540
-}
-```
-
-El proceso Chrome lanzado es completamente detached — Bloom Launcher no espera su terminación.
-
-#### Qué NO cambia
-
-Bloom Launcher es un cambio quirúrgico. No altera:
-- La lógica de construcción de args (`profile_launcher.py` en Brain)
-- El contrato JSON del named pipe
-- Sentinel, Nucleus ni la cadena de orquestación completa
-- El lock de Chrome (`.chrome_app.lock`)
-
-Solo cambia el mecanismo de launch final: de `subprocess.Popen` en Session 0 a `CreateProcessAsUserW` con token de Session 1.
-
-#### Estructura
+**Bloom Sensor** (`bloom-sensor.exe`) es el daemon de presencia humana del ecosistema Bloom. Corre en **Session 1** como proceso persistente, iniciándose automáticamente al login del usuario. Reemplaza a `bloom-launcher` tanto en su punto de arranque (`HKCU\Run`) como en su rol dentro del ecosistema: donde Launcher era un puente técnico de sesión para lanzar Chrome desde Session 0, Sensor es la capa fisiológica del sistema — transforma presencia humana en señal cognitiva utilizable.
 
 ```
-bloom-launcher/
-├── cmd/main.go                    # Entry point, CLI
-├── internal/
-│   ├── pipe/server.go             # Named pipe server (Windows)
-│   ├── executor/launch.go         # CreateProcessAsUserW en Session 1
-│   ├── startup/startup_windows.go # HKCU\Run registration
-│   └── logger/logger.go           # Logger → AppData/logs/launcher/
-├── go.mod
-└── go.sum
+Sensor mide. Nucleus decide. Brain ejecuta.
 ```
 
-#### Comandos CLI
+#### Responsabilidades Principales
 
-```
-bloom-launcher.exe serve      # Arrancar daemon (default sin args)
-bloom-launcher.exe install    # Registrar en HKCU\Run + arrancar
-bloom-launcher.exe uninstall  # Desregistrar de HKCU\Run
-bloom-launcher.exe status     # RUNNING | STOPPED
-bloom-launcher.exe version    # Versión
-```
+* **Presencia de sesión:** Detecta si la sesión está activa, bloqueada o idle mediante las Windows Session APIs (`WTSQuerySessionInformation`, `GetLastInputInfo`)
+* **Cálculo de energy_index:** Produce un valor determinista `[0.0–1.0]` que representa el nivel de actividad del usuario, sin ML ni estado externo
+* **Publicación de eventos:** Emite eventos `HUMAN_*` a Sentinel cada 60 segundos; la reconexión es automática con backoff exponencial
+* **Ring buffer:** Retiene los últimos 1440 snapshots en memoria (24h a 1 tick/min)
 
-#### Deploy e Instalación
+#### Relación con el Ecosistema
 
-Electron instala el binario y registra el autostart. El launcher no necesita estar corriendo en Session 1 para funcionar: al recibir una solicitud en el pipe, obtiene el token de la sesión activa en ese momento mediante `WTSQueryUserToken`. Si no hay sesión interactiva disponible (headless, RDP sin consola física), retorna error claro: `LauncherUnavailableError`.
+Sensor no participa en la ejecución de intents ni en la cadena cognitiva directamente. Es un observable pasivo: publica estado, no recibe comandos. Nucleus puede supervisar su actividad vía eventos transportados por Sentinel, pero no lo controla activamente.
 
-Path de instalación:
-```
-C:\Users\<user>\AppData\Local\BloomNucleus\bin\launcher\bloom-launcher.exe
-```
+#### Autostart y Deploy
 
-Registro autostart:
+Conductor despliega `bloom-sensor.exe`, ejecuta `bloom-sensor enable` para registrar el autostart (eliminando la clave legacy `BloomLauncher` si existe) y luego `bloom-sensor run` para iniciar el proceso. La verificación se confirma con `bloom-sensor --json status`.
+
 ```
 HKCU\Software\Microsoft\Windows\CurrentVersion\Run
-  BloomLauncher = "...bin\launcher\bloom-launcher.exe serve"
+  BloomSensor = "C:\...\BloomNucleus\bin\sensor\bloom-sensor.exe" run
 ```
-
-#### Resiliencia
-
-- **Pipe unavailable**: Brain detecta el error, intenta arrancar `bloom-launcher.exe` directamente y reintenta después de 5s.
-- **HKCU\Run borrado**: Bloom Launcher detecta la entrada faltante al arrancar y auto-repara el registro.
-- **Sin sesión interactiva**: `WTSGetActiveConsoleSessionId` retorna `0xFFFFFFFF`; el launcher retorna `LauncherUnavailableError` con mensaje claro en lugar de colgar.
-- **Token inválido**: si `WTSQueryUserToken` falla (permisos insuficientes), el error sube por la cadena con el código Win32 exacto.
 
 ---
 
@@ -549,6 +479,7 @@ Metamorph actualiza los siguientes componentes:
 * **Sentinel** (Event Bus daemon)
 * **Conductor** (Electron UI)
 * **Cortex** (Chrome Extension, empaquetada como `.blx`)
+* **Sensor** (Human Presence Runtime)
 
 **NO actualiza:**
 * Nucleus mismo (requiere proceso especial)
