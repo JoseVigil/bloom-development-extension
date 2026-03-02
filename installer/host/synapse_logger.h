@@ -117,6 +117,11 @@ public:
     /** true si los archivos están abiertos y listos para escribir. */
     bool is_ready() const;
 
+    /** Rutas a los archivos de log creados. Vacías si is_ready() == false. */
+    std::string get_log_directory()    const;
+    std::string get_host_log_path()    const;
+    std::string get_extension_log_path() const;
+
     /**
      * @brief Escribe en el log nativo del proceso host.
      * @param level   INFO | WARN | ERROR | DEBUG | CRITICAL

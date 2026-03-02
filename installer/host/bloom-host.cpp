@@ -872,8 +872,28 @@ int main(int argc, char* argv[]) {
             std::string profile_id = PlatformUtils::get_cli_argument(argc, argv, "--profile-id");
             std::string launch_id  = PlatformUtils::get_cli_argument(argc, argv, "--launch-id");
 
+            // Detectar --json: si está presente, stdout emite un objeto JSON parseable.
+            // stderr sigue recibiendo los logs de diagnóstico normales (para Sentinel).
+            // stdout en --init no es usado por Chrome (el proceso sale antes del loop NM),
+            // por lo que escribir aquí es completamente seguro y no afecta el protocolo.
+            bool json_output = false;
+            for (int i = 1; i < argc; i++) {
+                if (std::string(argv[i]) == "--json") { json_output = true; break; }
+            }
+
             if (profile_id.empty() || launch_id.empty()) {
-                std::cerr << "[INIT] ERROR: --profile-id y --launch-id son obligatorios con --init\n";
+                std::string err_msg = "--profile-id y --launch-id son obligatorios con --init";
+                std::cerr << "[INIT] ERROR: " << err_msg << "\n";
+                if (json_output) {
+                    json result;
+                    result["ok"]        = false;
+                    result["error"]     = err_msg;
+                    result["profile_id"] = profile_id;
+                    result["launch_id"]  = launch_id;
+                    result["timestamp"]  = get_timestamp_ms();
+                    std::cout << result.dump() << "\n";
+                    std::cout.flush();
+                }
                 return 1;
             }
 
@@ -886,12 +906,39 @@ int main(int argc, char* argv[]) {
             g_logger.initialize(profile_id, launch_id);
 
             if (!g_logger.is_ready()) {
-                std::cerr << "[INIT] ERROR: logger no pudo inicializarse — ver stderr para detalles\n";
+                std::string err_msg = "logger no pudo inicializarse — ver stderr para detalles";
+                std::cerr << "[INIT] ERROR: " << err_msg << "\n";
+                if (json_output) {
+                    json result;
+                    result["ok"]        = false;
+                    result["error"]     = err_msg;
+                    result["profile_id"] = profile_id;
+                    result["launch_id"]  = launch_id;
+                    result["timestamp"]  = get_timestamp_ms();
+                    std::cout << result.dump() << "\n";
+                    std::cout.flush();
+                }
                 return 1;
             }
 
             g_logger.log_native("INFO", "Host pre-initialized by Sentinel --init. Dirs and files ready.");
             std::cerr << "[INIT] OK — estructura creada, telemetría registrada, saliendo\n";
+
+            // Emitir resultado JSON a stdout si se pidió --json.
+            // El objeto es minimal e intencional: solo lo que Sentinel necesita parsear.
+            if (json_output) {
+                json result;
+                result["ok"]             = true;
+                result["profile_id"]     = profile_id;
+                result["launch_id"]      = launch_id;
+                result["log_directory"]  = g_logger.get_log_directory();
+                result["host_log"]       = g_logger.get_host_log_path();
+                result["extension_log"]  = g_logger.get_extension_log_path();
+                result["timestamp"]      = get_timestamp_ms();
+                std::cout << result.dump() << "\n";
+                std::cout.flush();
+            }
+
             return 0;
         }
         // ============================================================================

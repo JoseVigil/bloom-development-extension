@@ -332,6 +332,14 @@ bool SynapseLogManager::is_ready() const {
 }
 
 // ============================================================================
+// Getters de rutas — disponibles tras initialize()
+// ============================================================================
+
+std::string SynapseLogManager::get_log_directory()      const { return log_directory;      }
+std::string SynapseLogManager::get_host_log_path()      const { return host_log_path;      }
+std::string SynapseLogManager::get_extension_log_path() const { return extension_log_path; }
+
+// ============================================================================
 // log_native — log del proceso host + mirror a stderr (trace de Synapse)
 // ============================================================================
 
