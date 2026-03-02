@@ -173,9 +173,11 @@ void SynapseLogManager::register_telemetry() {
     std::string nucleus      = get_nucleus_executable();
 
     // Dos streams separados — uno por archivo, cada uno con identidad propia.
-    // Spec: archivos con identidad propia → stream separado por archivo.
-    // cortex_synapse   = eventos del proceso C++ (canal nativo)
-    // cortex_extension = mensajes de la extensión Chrome (canal browser)
+    // nucleus --path es string singular (no array), por lo que se hace una llamada por archivo.
+    // Los labels no incluyen emoji: los emojis se corrompen al pasar argumentos a traves
+    // de cmd.exe en Windows independientemente de chcp, ya que CreateProcess hereda la
+    // codepage del proceso padre. El resto de los streams en telemetry.json registran sus
+    // emojis desde dentro de nucleus/brain donde el encoding esta bajo control.
     struct StreamDef {
         std::string stream_id;
         std::string label;
@@ -186,41 +188,50 @@ void SynapseLogManager::register_telemetry() {
     std::vector<StreamDef> streams = {
         {
             "synapse_host_"      + safe_profile,
-            "🌉 HOST",
+            "HOST",
             fwd(host_log_path),
             "bloom-host native bridge — host process events log"
             " for profile " + profile_id + " launch " + launch_id
         },
         {
             "synapse_extension_" + safe_profile,
-            "🔌 EXTENSION",
+            "EXTENSION",
             fwd(extension_log_path),
             "bloom-host native bridge — Chrome extension messages log"
             " for profile " + profile_id + " launch " + launch_id
         }
     };
 
-    for (const auto& s : streams) {
-        std::string cmd =
-            "\"" + nucleus + "\""
-            " telemetry register"
-            " --stream \""      + s.stream_id  + "\""
-            " --label \""       + s.label      + "\""
-            " --path \""        + s.path       + "\""
-            " --priority 2"
-            " --category synapse"
-            " --category " + safe_profile
-            + " --category " + safe_launch
-            + " --source host"
-            + " --description \"" + s.description + "\"";
+    for (size_t i = 0; i < streams.size(); ++i) {
+        const auto& s = streams[i];
+
+        // Retry loop: nucleus usa flock en telemetry.json. Si la invocacion anterior
+        // aun tiene el lock, esperamos y reintentamos hasta 3 veces con backoff.
+        int ret = -1;
+        for (int attempt = 0; attempt < 3 && ret != 0; ++attempt) {
+            if (attempt > 0) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(300 * attempt));
+            }
+
+            std::string cmd =
+                "\"" + nucleus + "\""
+                " telemetry register"
+                " --stream \""      + s.stream_id  + "\""
+                " --label \""       + s.label      + "\""
+                " --path \""        + s.path       + "\""
+                " --priority 2"
+                " --category synapse"
+                " --category " + safe_profile
+                + " --category " + safe_launch
+                + " --source host"
+                + " --description \"" + s.description + "\"";
 
 #ifdef _WIN32
-        // chcp 65001 fuerza UTF-8 en cmd.exe hijo para que el emoji del label
-        // no se corrompa al pasar por la codepage del sistema (cp1252 por defecto).
-        cmd = "cmd /C \"chcp 65001 >nul & " + cmd + "\"";
+            cmd = "cmd /C \"" + cmd + "\"";
 #endif
+            ret = std::system(cmd.c_str());
+        }
 
-        int ret = std::system(cmd.c_str());
         if (ret != 0) {
             std::cerr << "[" << get_timestamp_ms() << "] [WARN] [HOST] "
                       << "nucleus telemetry register failed (exit=" << ret
@@ -231,6 +242,11 @@ void SynapseLogManager::register_telemetry() {
             std::cerr << "[" << get_timestamp_ms() << "] [INFO] [HOST] "
                       << "telemetry registered stream=" << s.stream_id << "\n";
             std::cerr.flush();
+        }
+
+        // Pausa entre streams para que nucleus libere el flock antes de la siguiente llamada
+        if (i + 1 < streams.size()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
         }
     }
 }
