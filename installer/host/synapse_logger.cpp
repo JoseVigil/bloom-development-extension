@@ -213,9 +213,11 @@ void SynapseLogManager::register_telemetry() {
     for (size_t i = 0; i < streams.size(); ++i) {
         const auto& s = streams[i];
 
+        std::string last_cmd;  // Guardamos el último comando intentado para loggear en caso de error
+        int ret = -1;
+
         // Retry loop: nucleus usa flock en telemetry.json. Si la invocacion anterior
         // aun tiene el lock, esperamos y reintentamos hasta 3 veces con backoff.
-        int ret = -1;
         for (int attempt = 0; attempt < 3 && ret != 0; ++attempt) {
             if (attempt > 0) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(300 * attempt));
@@ -224,7 +226,7 @@ void SynapseLogManager::register_telemetry() {
             std::string cmd =
                 "\"" + nucleus + "\""
                 " telemetry register"
-                " --stream \""      + s.stream_id  + "\""   // ← CORRECCIÓN AQUÍ: --stream en lugar de --stream-id
+                " --stream \""      + s.stream_id  + "\""
                 " --label \""       + s.label      + "\""
                 " --path \""        + s.path       + "\""
                 " --priority 2"
@@ -238,14 +240,18 @@ void SynapseLogManager::register_telemetry() {
 #ifdef _WIN32
             cmd = "cmd /C \"" + cmd + "\"";
 #endif
+
+            last_cmd = cmd;  // Guardamos para loggear si falla
             ret = std::system(cmd.c_str());
         }
 
         if (ret != 0) {
-            log_native("ERROR", "nucleus telemetry register failed (exit=" + std::to_string(ret) +
-                               ") stream=" + s.stream_id +
-                               " nucleus_path=" + nucleus +
-                               " cmd=\"" + cmd + "\"");  // ← Más detalle en log_native
+            log_native("ERROR", 
+                "nucleus telemetry register failed (exit=" + std::to_string(ret) +
+                ") stream=" + s.stream_id +
+                " nucleus_path=" + nucleus +
+                " last_cmd=\"" + last_cmd + "\""
+            );
         } else {
             log_native("INFO", "telemetry registered stream=" + s.stream_id);
         }
