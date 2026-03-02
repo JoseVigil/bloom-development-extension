@@ -61,7 +61,6 @@ std::string SynapseLogManager::get_timestamp_ms() {
 
 std::string SynapseLogManager::get_base_log_directory() {
 #ifdef _WIN32
-    // Preferir SHGetFolderPath; fallback a env var
     char path[MAX_PATH] = {};
     if (SHGetFolderPathA(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, path) >= 0) {
         return std::string(path) + "\\BloomNucleus\\logs";
@@ -71,6 +70,39 @@ std::string SynapseLogManager::get_base_log_directory() {
     return "";
 #else
     return "/tmp/bloom-nucleus/logs";
+#endif
+}
+
+// ============================================================================
+// get_bloom_root — raíz de BloomNucleus derivada desde el ejecutable
+//
+// bloom-host.exe vive en <root>/bin/host/bloom-host.exe
+// Subimos dos niveles: bin/host → bin → <root>
+// ============================================================================
+
+static std::string strip_last_component(const std::string& s) {
+    size_t pos = s.find_last_of("/\\");
+    return (pos == std::string::npos) ? s : s.substr(0, pos);
+}
+
+std::string SynapseLogManager::get_bloom_root() {
+#ifdef _WIN32
+    char exePath[MAX_PATH] = {};
+    if (GetModuleFileNameA(NULL, exePath, MAX_PATH) == 0) {
+        char path[MAX_PATH] = {};
+        if (SHGetFolderPathA(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, path) >= 0) {
+            return std::string(path) + "\\BloomNucleus";
+        }
+        const char* appdata = std::getenv("LOCALAPPDATA");
+        return appdata ? std::string(appdata) + "\\BloomNucleus" : "";
+    }
+    std::string p(exePath);
+    p = strip_last_component(p); // → .../bin/host
+    p = strip_last_component(p); // → .../bin
+    p = strip_last_component(p); // → .../BloomNucleus
+    return p;
+#else
+    return "/tmp/bloom-nucleus";
 #endif
 }
 
@@ -98,9 +130,6 @@ bool SynapseLogManager::create_directory_recursive(const std::string& path) {
         }
     } while (pos != std::string::npos);
 
-    // Verificar que el directorio final realmente existe.
-    // La función no puede retornar true si el path no está en disco —
-    // eso ocultaría el error y open() fallaría silenciosamente después.
 #if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
     DWORD attr = GetFileAttributesA(path.c_str());
     bool ok = (attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY));
@@ -119,24 +148,18 @@ bool SynapseLogManager::create_directory_recursive(const std::string& path) {
 }
 
 // ============================================================================
-// Path al ejecutable nucleus
-//   Windows: %LOCALAPPDATA%\BloomNucleus\bin\nucleus\nucleus.exe
-//   macOS:   nucleus  (en PATH)
+// Path al ejecutable nucleus — siempre absoluto desde get_bloom_root()
 // ============================================================================
 
 std::string SynapseLogManager::get_nucleus_executable() {
+    std::string root = get_bloom_root();
 #ifdef _WIN32
-    char path[MAX_PATH] = {};
-    if (SHGetFolderPathA(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, path) >= 0) {
-        return std::string(path) + "\\BloomNucleus\\bin\\nucleus\\nucleus.exe";
+    if (!root.empty()) {
+        return root + "\\bin\\nucleus\\nucleus.exe";
     }
-    const char* appdata = std::getenv("LOCALAPPDATA");
-    if (appdata) {
-        return std::string(appdata) + "\\BloomNucleus\\bin\\nucleus\\nucleus.exe";
-    }
-    return "nucleus.exe"; // Fallback: PATH
+    return "nucleus.exe"; // Fallback de último recurso
 #else
-    return "nucleus";     // macOS: en PATH
+    return "nucleus";
 #endif
 }
 
@@ -146,19 +169,20 @@ std::string SynapseLogManager::get_nucleus_executable() {
 // SPEC: Las aplicaciones NUNCA escriben telemetry.json directamente.
 //       Nucleus es el único writer autorizado.
 //
-// stream_id: host_{launch_id}  — único por sesión, snake_case
-// label:     �️ HOST
-// paths:     array con host_log_path + extension_log_path
+// FIX (CWD): nucleus.exe resuelve telemetry.json relativo a su CWD.
+//            std::system() hereda el CWD del proceso padre, que cuando
+//            Sentinel llama a bloom-host puede ser bin\metamorph u otro
+//            directorio arbitrario — no la raíz de BloomNucleus.
+//            Solución: usar CreateProcess con lpCurrentDirectory explícito
+//            apuntando a get_bloom_root(). std::system() ELIMINADO.
 // ============================================================================
 
 void SynapseLogManager::register_telemetry() {
-    // Convertir backslashes → forward slashes (spec: paths en telemetry.json usan '/')
     auto fwd = [](std::string p) -> std::string {
         for (char& c : p) if (c == '\\') c = '/';
         return p;
     };
 
-    // Sanitizar un string para usarlo como stream_id o categoria (snake_case, alphanum)
     auto sanitize = [](const std::string& s) -> std::string {
         std::string out = s;
         for (char& c : out) {
@@ -171,19 +195,29 @@ void SynapseLogManager::register_telemetry() {
     std::string safe_profile = sanitize(profile_id);
     std::string safe_launch  = sanitize(launch_id);
     std::string nucleus      = get_nucleus_executable();
+    std::string bloom_root   = get_bloom_root();
 
-    // Dos streams separados — uno por archivo, cada uno con identidad propia.
-    // nucleus --path es string singular (no array), por lo que se hace una llamada por archivo.
-    // Los labels no incluyen emoji: los emojis se corrompen al pasar argumentos a traves
-    // de cmd.exe en Windows independientemente de chcp, ya que CreateProcess hereda la
-    // codepage del proceso padre. El resto de los streams en telemetry.json registran sus
-    // emojis desde dentro de nucleus/brain donde el encoding esta bajo control.
+    // ── DEBUG: loguear CWD real y rutas resueltas antes de cualquier llamada ──
+    // Esto aparecerá en host_YYYYMMDD.log y en stderr (capturado por Sentinel).
+    // Permite confirmar si el CWD es correcto o si las rutas son erróneas.
+    {
+#ifdef _WIN32
+        char cwd[MAX_PATH] = {};
+        GetCurrentDirectoryA(MAX_PATH, cwd);
+        log_native("DEBUG", std::string("[TELEMETRY-DEBUG] CWD_at_register=") + cwd);
+#endif
+        log_native("DEBUG", "[TELEMETRY-DEBUG] bloom_root=" + bloom_root);
+        log_native("DEBUG", "[TELEMETRY-DEBUG] nucleus_exe=" + nucleus);
+        log_native("DEBUG", "[TELEMETRY-DEBUG] host_log_path=" + host_log_path);
+        log_native("DEBUG", "[TELEMETRY-DEBUG] extension_log_path=" + extension_log_path);
+    }
+
     struct StreamDef {
         std::string stream_id;
         std::string label;
         std::string path;
         std::string source;
-        std::string extra_category;  // category adicional especifica del stream
+        std::string extra_category;
         std::string description;
     };
 
@@ -213,17 +247,17 @@ void SynapseLogManager::register_telemetry() {
     for (size_t i = 0; i < streams.size(); ++i) {
         const auto& s = streams[i];
 
-        std::string last_cmd;  // Guardamos el último comando intentado para loggear en caso de error
+        std::string last_cmd;
         int ret = -1;
 
-        // Retry loop: nucleus usa flock en telemetry.json. Si la invocacion anterior
-        // aun tiene el lock, esperamos y reintentamos hasta 3 veces con backoff.
         for (int attempt = 0; attempt < 8 && ret != 0; ++attempt) {
             if (attempt > 0) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(500 * attempt));
             }
 
-            std::string cmd =
+            // Construir la línea de argumentos para nucleus.
+            // NO se usa cmd /C — CreateProcess invoca el exe directamente.
+            std::string args =
                 "\"" + nucleus + "\""
                 " telemetry register"
                 " --stream \""      + s.stream_id  + "\""
@@ -237,26 +271,74 @@ void SynapseLogManager::register_telemetry() {
                 + " --source " + s.source
                 + " --description \"" + s.description + "\"";
 
-#ifdef _WIN32
-            cmd = "cmd /C \"" + cmd + "\"";
-#endif
+            last_cmd = args;
+            log_native("DEBUG", "[TELEMETRY-DEBUG] attempt=" + std::to_string(attempt)
+                + " cmd=" + args
+                + " cwd=" + bloom_root);
 
-            last_cmd = cmd;  // Guardamos para loggear si falla
-            ret = std::system(cmd.c_str());
+#ifdef _WIN32
+            // ── CreateProcess con CWD explícito ──────────────────────────────
+            // lpCurrentDirectory = bloom_root garantiza que nucleus.exe
+            // encuentre telemetry.json en logs/telemetry.json relativo a la
+            // raíz de BloomNucleus, independientemente del CWD heredado.
+            STARTUPINFOA si = {};
+            PROCESS_INFORMATION pi = {};
+            si.cb = sizeof(si);
+
+            // CreateProcess modifica el buffer de la línea de comandos,
+            // por eso usamos un vector<char> mutable.
+            std::vector<char> cmdBuf(args.begin(), args.end());
+            cmdBuf.push_back('\0');
+
+            BOOL created = CreateProcessA(
+                NULL,               // lpApplicationName — NULL: se extrae del cmdBuf
+                cmdBuf.data(),      // lpCommandLine — mutable
+                NULL,               // lpProcessAttributes
+                NULL,               // lpThreadAttributes
+                FALSE,              // bInheritHandles
+                0,                  // dwCreationFlags
+                NULL,               // lpEnvironment — heredar entorno actual
+                bloom_root.c_str(), // lpCurrentDirectory — ← FIX PRINCIPAL
+                &si,
+                &pi
+            );
+
+            if (!created) {
+                DWORD err = GetLastError();
+                log_native("ERROR", "[TELEMETRY-DEBUG] CreateProcess FAILED"
+                    " GetLastError=" + std::to_string(err)
+                    + " nucleus=" + nucleus
+                    + " bloom_root=" + bloom_root);
+                ret = -1;
+            } else {
+                WaitForSingleObject(pi.hProcess, 15000); // timeout 15s
+                DWORD exitCode = 1;
+                GetExitCodeProcess(pi.hProcess, &exitCode);
+                CloseHandle(pi.hProcess);
+                CloseHandle(pi.hThread);
+                ret = static_cast<int>(exitCode);
+
+                log_native("DEBUG", "[TELEMETRY-DEBUG] nucleus exit=" + std::to_string(ret)
+                    + " stream=" + s.stream_id);
+            }
+#else
+            // Non-Windows: std::system() es suficiente (no hay issue de CWD en Linux/macOS)
+            ret = std::system(args.c_str());
+#endif
         }
 
         if (ret != 0) {
-            log_native("ERROR", 
+            log_native("ERROR",
                 "nucleus telemetry register failed (exit=" + std::to_string(ret) +
                 ") stream=" + s.stream_id +
                 " nucleus_path=" + nucleus +
+                " bloom_root=" + bloom_root +
                 " last_cmd=\"" + last_cmd + "\""
             );
         } else {
             log_native("INFO", "telemetry registered stream=" + s.stream_id);
         }
 
-        // Pausa entre streams para que nucleus libere el flock antes de la siguiente llamada
         if (i + 1 < streams.size()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(500));
         }
@@ -265,7 +347,6 @@ void SynapseLogManager::register_telemetry() {
 
 // ============================================================================
 // initialize() — punto de entrada único
-// Idempotente: llamadas repetidas con los mismos IDs no tienen efecto.
 // ============================================================================
 
 void SynapseLogManager::initialize(const std::string& p_profile_id,
@@ -280,7 +361,6 @@ void SynapseLogManager::initialize(const std::string& p_profile_id,
               << " launch=" << p_launch_id << "\n";
     std::cerr.flush();
 
-    // 1. Directorio base
     std::string base = get_base_log_directory();
     if (base.empty()) {
         std::cerr << "[" << get_timestamp_ms() << "] [ERROR] [HOST] "
@@ -289,7 +369,6 @@ void SynapseLogManager::initialize(const std::string& p_profile_id,
         return;
     }
 
-    // 2. Estructura: logs/host/profiles/{profile_id}/{launch_id}/
     log_directory = base
         + PATH_SEP "host"
         + PATH_SEP "profiles"
@@ -307,7 +386,6 @@ void SynapseLogManager::initialize(const std::string& p_profile_id,
         return;
     }
 
-    // 3. Filename: host_YYYYMMDD.log  /  cortex_extension_YYYYMMDD.log
     auto now   = std::chrono::system_clock::now();
     auto now_t = std::chrono::system_clock::to_time_t(now);
     std::tm tm_utc{};
@@ -320,7 +398,6 @@ void SynapseLogManager::initialize(const std::string& p_profile_id,
     host_log_path      = log_directory + PATH_SEP "host_"              + date_str + ".log";
     extension_log_path = log_directory + PATH_SEP "cortex_extension_"  + date_str + ".log";
 
-    // 4. Abrir archivos en modo append (seguro ante reinicios el mismo día)
     native_log.open(host_log_path,      std::ios::app);
     browser_log.open(extension_log_path, std::ios::app);
 
@@ -337,7 +414,6 @@ void SynapseLogManager::initialize(const std::string& p_profile_id,
 
     ready = true;
 
-    // 5. Headers de sesión
     std::string ts = get_timestamp_ms();
     int pid = getpid_cross();
 
@@ -357,7 +433,6 @@ void SynapseLogManager::initialize(const std::string& p_profile_id,
                 << " =====\n";
     browser_log.flush();
 
-    // Mirror a stderr → Sentinel lo captura en el trace unificado
     std::cerr << "[" << ts << "] [INFO] [HOST] "
               << "Logger initialized"
               << " profile=" << profile_id
@@ -365,16 +440,21 @@ void SynapseLogManager::initialize(const std::string& p_profile_id,
               << " dir="     << log_directory << "\n";
     std::cerr.flush();
 
-    // 6. Volcar mensajes encolados antes de que el logger estuviera listo.
-    //    Estos son los logs del handshake Fase 1 y Fase 2 que llegaron
-    //    antes de que initialize() fuera llamado.
     flush_pending_queue();
 
-    // 7. Registrar ambos archivos en telemetry.json via nucleus CLI.
-    //    Se lanza en thread separado (detached) para no bloquear el startup.
-    //    std::system() en Windows invoca cmd.exe y puede tardar varios segundos.
-    //    Si bloqueara aquí, Chrome mataría el proceso por idle timeout (6s) antes
-    //    de que el host responda al handshake con host_ready.
+    // NOTA IMPORTANTE — modo Native Messaging vs modo --init:
+    //
+    // En modo Native Messaging (lanzado por Chrome): el thread detached
+    // está BIEN porque el proceso vive durante toda la sesión del browser.
+    // Chrome tiene timeout de 6s para el handshake; no podemos bloquear aquí.
+    //
+    // En modo --init (lanzado por Sentinel): register_telemetry_sync() debe
+    // llamarse DESPUÉS de initialize() en el main de bloom-host.cpp.
+    // El thread detached sería matado antes de ejecutar porque main() sale
+    // inmediatamente. Sentinel llama register_telemetry_sync() explícitamente.
+    //
+    // → En modo --init NO se lanza el thread; bloom-host.cpp llama
+    //   register_telemetry_sync() tras initialize(). Ver bloom-host.cpp.
     std::thread([this]() {
         register_telemetry();
     }).detach();
@@ -389,7 +469,7 @@ bool SynapseLogManager::is_ready() const {
 }
 
 // ============================================================================
-// Getters de rutas — disponibles tras initialize()
+// Getters
 // ============================================================================
 
 std::string SynapseLogManager::get_log_directory()      const { return log_directory;      }
@@ -397,14 +477,7 @@ std::string SynapseLogManager::get_host_log_path()      const { return host_log_
 std::string SynapseLogManager::get_extension_log_path() const { return extension_log_path; }
 
 // ============================================================================
-// register_telemetry_sync — registro sincrono para modo --init
-//
-// En modo Native Messaging, initialize() lanza register_telemetry() en un
-// thread detached para no bloquear el handshake de Chrome (timeout 6s).
-// En modo --init el proceso sale con return 0 inmediatamente despues de
-// initialize(), matando el thread antes de que ejecute std::system().
-// Este metodo publico llama register_telemetry() directamente en el
-// thread del caller, garantizando que nucleus sea invocado antes de salir.
+// register_telemetry_sync — registro síncrono para modo --init
 // ============================================================================
 
 void SynapseLogManager::register_telemetry_sync() {
@@ -413,7 +486,7 @@ void SynapseLogManager::register_telemetry_sync() {
 }
 
 // ============================================================================
-// log_native — log del proceso host + mirror a stderr (trace de Synapse)
+// log_native
 // ============================================================================
 
 void SynapseLogManager::log_native(const std::string& level,
@@ -421,13 +494,10 @@ void SynapseLogManager::log_native(const std::string& level,
     std::string ts   = get_timestamp_ms();
     std::string line = "[" + ts + "] [" + level + "] [HOST] " + message;
 
-    // stderr → capturado por Sentinel → trace unificado de Synapse
-    // Se escribe SIEMPRE, independientemente del estado del logger.
     std::cerr << line << "\n";
     std::cerr.flush();
 
     if (!ready) {
-        // Logger aún no inicializado: encolar para flush posterior.
         std::lock_guard<std::mutex> lock(pending_mutex);
         if (pending_queue.size() < MAX_PENDING) {
             pending_queue.push_back({ts, level, message});
@@ -445,12 +515,10 @@ void SynapseLogManager::log_native(const std::string& level,
 }
 
 // ============================================================================
-// flush_pending_queue — vuelca mensajes encolados antes de initialize()
-// Precondición: native_mutex tomado y ready == true.
+// flush_pending_queue
 // ============================================================================
 
 void SynapseLogManager::flush_pending_queue() {
-    // Tomar snapshot de la cola y limpiarla bajo pending_mutex
     std::vector<PendingEntry> snapshot;
     {
         std::lock_guard<std::mutex> lock(pending_mutex);
@@ -459,7 +527,6 @@ void SynapseLogManager::flush_pending_queue() {
 
     if (snapshot.empty()) return;
 
-    // Escribir snapshot al archivo bajo native_mutex
     std::lock_guard<std::mutex> lock(native_mutex);
     if (!native_log.is_open()) return;
 
@@ -477,7 +544,7 @@ void SynapseLogManager::flush_pending_queue() {
 }
 
 // ============================================================================
-// log_browser — log de la extensión Chrome + mirror a stderr (trace de Synapse)
+// log_browser
 // ============================================================================
 
 void SynapseLogManager::log_browser(const std::string& level,

@@ -73,6 +73,13 @@ private:
      */
     std::string get_base_log_directory();
 
+    /**
+     * Retorna la raíz de instalación de BloomNucleus derivada desde el ejecutable.
+     *   Windows: directorio padre de bin\host\ (tres niveles arriba de bloom-host.exe)
+     *   macOS:   /tmp/bloom-nucleus
+     */
+    std::string get_bloom_root();
+
     /** Crea recursivamente un directorio y sus padres (cross-platform). */
     bool create_directory_recursive(const std::string& path);
 
