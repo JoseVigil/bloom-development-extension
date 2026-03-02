@@ -183,6 +183,7 @@ void SynapseLogManager::register_telemetry() {
         std::string label;
         std::string path;
         std::string source;
+        std::string extra_category;  // category adicional especifica del stream
         std::string description;
     };
 
@@ -192,6 +193,7 @@ void SynapseLogManager::register_telemetry() {
             "HOST",
             fwd(host_log_path),
             "host",
+            "host",
             "Synapse Host Application — Native Messaging bridge handling"
             " protocol handshake, TCP connection to Brain, and message routing"
             " for profile " + profile_id + " launch " + launch_id
@@ -200,6 +202,7 @@ void SynapseLogManager::register_telemetry() {
             "cortex_" + safe_profile,
             "CORTEX",
             fwd(extension_log_path),
+            "cortex",
             "cortex",
             "Cortex Extension — Synapse communication with host"
             " using Google Native Messaging"
@@ -226,7 +229,8 @@ void SynapseLogManager::register_telemetry() {
                 " --path \""        + s.path       + "\""
                 " --priority 2"
                 " --category synapse"
-                " --category " + safe_profile
+                + " --category " + s.extra_category
+                + " --category " + safe_profile
                 + " --category " + safe_launch
                 + " --source " + s.source
                 + " --description \"" + s.description + "\"";
@@ -310,7 +314,7 @@ void SynapseLogManager::initialize(const std::string& p_profile_id,
     date_ss << std::put_time(&tm_utc, "%Y%m%d");
     std::string date_str = date_ss.str();
 
-    host_log_path      = log_directory + PATH_SEP "cortex_synapse_"    + date_str + ".log";
+    host_log_path      = log_directory + PATH_SEP "host_"              + date_str + ".log";
     extension_log_path = log_directory + PATH_SEP "cortex_extension_"  + date_str + ".log";
 
     // 4. Abrir archivos en modo append (seguro ante reinicios el mismo día)
