@@ -224,7 +224,7 @@ void SynapseLogManager::register_telemetry() {
             std::string cmd =
                 "\"" + nucleus + "\""
                 " telemetry register"
-                " --stream \""      + s.stream_id  + "\""
+                " --stream \""      + s.stream_id  + "\""   // ← CORRECCIÓN AQUÍ: --stream en lugar de --stream-id
                 " --label \""       + s.label      + "\""
                 " --path \""        + s.path       + "\""
                 " --priority 2"
@@ -242,15 +242,12 @@ void SynapseLogManager::register_telemetry() {
         }
 
         if (ret != 0) {
-            std::cerr << "[" << get_timestamp_ms() << "] [WARN] [HOST] "
-                      << "nucleus telemetry register failed (exit=" << ret
-                      << ") stream=" << s.stream_id
-                      << " nucleus_path=" << nucleus << "\n";
-            std::cerr.flush();
+            log_native("ERROR", "nucleus telemetry register failed (exit=" + std::to_string(ret) +
+                               ") stream=" + s.stream_id +
+                               " nucleus_path=" + nucleus +
+                               " cmd=\"" + cmd + "\"");  // ← Más detalle en log_native
         } else {
-            std::cerr << "[" << get_timestamp_ms() << "] [INFO] [HOST] "
-                      << "telemetry registered stream=" << s.stream_id << "\n";
-            std::cerr.flush();
+            log_native("INFO", "telemetry registered stream=" + s.stream_id);
         }
 
         // Pausa entre streams para que nucleus libere el flock antes de la siguiente llamada

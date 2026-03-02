@@ -158,17 +158,17 @@ BloomNucleus/
 │   ├── metamorph.json
 │   ├── nucleus.json
 │   ├── profile/
-│   │   └── 8526aab5-a229-4e99-bbc0-01cc66e2ba7e/
-│   │       ├── com.bloom.synapse.8526aab5.json
+│   │   └── 85929bd0-551f-4513-aa2e-113765f38705/
+│   │       ├── com.bloom.synapse.85929bd0.json
 │   │       └── ignition_spec.json
 │   └── profiles.json
 ├── history/
 │   └── profiles/
-│       └── 8526aab5-a229-4e99-bbc0-01cc66e2ba7e/
+│       └── 85929bd0-551f-4513-aa2e-113765f38705/
 │           ├── launches/
 │           │   └── 20260302.ndjson
 │           └── sessions/
-│               └── 001_8526aab5_105041.ndjson
+│               └── 001_85929bd0_114254.ndjson
 ├── hooks/
 │   └── post_launch/
 │       └── 00_generate_synapse_trace.py
@@ -186,17 +186,15 @@ BloomNucleus/
 │   │       └── brain_service.log
 │   ├── chromium/
 │   ├── conductor/
-│   │   ├── conductor_launch_2026-03-02_13-49-07.log
-│   │   └── conductor_launch_2026-03-02_13-49-08.log
+│   │   └── conductor_launch_2026-03-02_14-41-08.log
 │   ├── host/
 │   │   └── profiles/
-│   │       └── 8526aab5-a229-4e99-bbc0-01cc66e2ba7e/
-│   │           └── 001_8526aab5_105041/
+│   │       └── 85929bd0-551f-4513-aa2e-113765f38705/
+│   │           └── 001_85929bd0_114254/
 │   │               ├── cortex_extension_20260302.log
 │   │               └── host_20260302.log
 │   ├── install/
-│   │   ├── electron_install_2026-03-02_13-49-07.log
-│   │   └── electron_install_2026-03-02_13-49-08.log
+│   │   └── electron_install_2026-03-02_14-41-08.log
 │   ├── metamorph/
 │   │   └── metamorph_core_20260302.log
 │   ├── nucleus/
@@ -211,23 +209,18 @@ BloomNucleus/
 │   │   └── sensor_20260302.log
 │   ├── sentinel/
 │   │   ├── profiles/
-│   │   │   ├── 8526aab5-a229-4e99-bbc0-01cc66e2ba7e/
-│   │   │   │   ├── 001_8526aab5_105041_debug.log
-│   │   │   │   ├── 001_8526aab5_105041_engine_mining.log
-│   │   │   │   ├── 001_8526aab5_105041_engine_network.log
-│   │   │   │   ├── 001_8526aab5_105041_engine_read.log
-│   │   │   │   └── 001_8526aab5_105041_netlog.json
-│   │   │   └── sentinel_8526aab5-a229-4e99-bbc0-01cc66e2ba7e_20260302.log
+│   │   │   ├── 85929bd0-551f-4513-aa2e-113765f38705/
+│   │   │   │   ├── 001_85929bd0_114254_debug.log
+│   │   │   │   └── 001_85929bd0_114254_netlog.json
+│   │   │   └── sentinel_85929bd0-551f-4513-aa2e-113765f38705_20260302.log
 │   │   └── sentinel_core_20260302.log
-│   ├── synapse_trace/
-│   │   └── synapse_trace_001_8526aab5_105041.log
 │   ├── telemetry.json
 │   ├── telemetry.json.lock
 │   └── temporal/
 │       ├── temporal.db
 │       └── temporal.pid
 ├── profiles/
-│   └── 8526aab5-a229-4e99-bbc0-01cc66e2ba7e/
+│   └── 85929bd0-551f-4513-aa2e-113765f38705/
 │       ├── ActorSafetyLists/
 │       ├── AmountExtractionHeuristicRegexes/
 │       ├── CertificateRevocation/
@@ -407,8 +400,8 @@ BloomNucleus/
 │       │   │   ├── LOG
 │       │   │   └── MANIFEST-000001
 │       │   ├── Sessions/
-│       │   │   ├── Session_13416933046519896
-│       │   │   └── Tabs_13416933054048868
+│       │   │   ├── Session_13416936179446302
+│       │   │   └── Tabs_13416936186972832
 │       │   ├── Shared Dictionary/
 │       │   │   ├── cache/
 │       │   │   │   ├── index
@@ -440,7 +433,7 @@ BloomNucleus/
 │       │   │   ├── QuotaManager
 │       │   │   └── QuotaManager-journal
 │       │   ├── blob_storage/
-│       │   │   └── 591f623d-ad4a-4618-be2c-fc402bf9bad3/
+│       │   │   └── 68e93f00-3f89-4eed-bb86-ce10605bf014/
 │       │   ├── chrome_cart_db/
 │       │   │   ├── LOCK
 │       │   │   └── LOG
