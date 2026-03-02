@@ -849,6 +849,21 @@ int main(int argc, char* argv[]) {
         }
         // ==========================================
 
+        // ========== --help / -h: guard defensivo independiente de CLIParser ==========
+        //
+        // CLIParser deberia manejar --help, pero en Linux puede fallar si el flag
+        // no esta registrado o si parse_and_execute retorna handled=false.
+        // Este guard garantiza que --help NUNCA caiga al loop de Native Messaging
+        // en ninguna plataforma.
+        // ============================================================================
+        for (int i = 1; i < argc; i++) {
+            std::string arg = argv[i];
+            if (arg == "--help" || arg == "-h") {
+                HelpRenderer::render();
+                return 0;
+            }
+        }
+
         // ========== --init: pre-launch initialization invoked by Sentinel ==========
         //
         // Sentinel llama a bloom-host.exe --init --profile-id <id> --launch-id <id>
@@ -872,13 +887,29 @@ int main(int argc, char* argv[]) {
             std::string profile_id = PlatformUtils::get_cli_argument(argc, argv, "--profile-id");
             std::string launch_id  = PlatformUtils::get_cli_argument(argc, argv, "--launch-id");
 
-            // Detectar --json: si está presente, stdout emite un objeto JSON parseable.
-            // stderr sigue recibiendo los logs de diagnóstico normales (para Sentinel).
+            // Detectar --json: si está presente, stdout emite un objeto JSON puro y parseable.
+            // Todo stderr (logs de diagnóstico, debug del logger, etc.) se redirige a null
+            // inmediatamente para que el output sea limpio y scripteable.
             // stdout en --init no es usado por Chrome (el proceso sale antes del loop NM),
             // por lo que escribir aquí es completamente seguro y no afecta el protocolo.
             bool json_output = false;
             for (int i = 1; i < argc; i++) {
                 if (std::string(argv[i]) == "--json") { json_output = true; break; }
+            }
+
+            if (json_output) {
+                // Redirigir stderr a null — silencia todo: logs del host, del logger,
+                // del telemetry thread, etc. El proceso sale antes del loop NM así que
+                // no hay riesgo de perder tráfico de Chrome.
+                static std::ofstream null_sink;
+#ifdef _WIN32
+                null_sink.open("nul");
+#else
+                null_sink.open("/dev/null");
+#endif
+                if (null_sink.is_open()) {
+                    std::cerr.rdbuf(null_sink.rdbuf());
+                }
             }
 
             if (profile_id.empty() || launch_id.empty()) {

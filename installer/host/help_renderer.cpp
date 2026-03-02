@@ -115,6 +115,13 @@ std::vector<CategoryDescriptor> HelpRenderer::build_command_registry() {
             lid_opt.required    = true;
             cmd.options.push_back(lid_opt);
 
+            CommandDescriptor::Option json_opt;
+            json_opt.flag        = "--json";
+            json_opt.description = "Suppress all stderr output; emit a single JSON object to stdout. "
+                                   "Fields: ok, profile_id, launch_id, log_directory, host_log, extension_log, timestamp";
+            json_opt.required    = false;
+            cmd.options.push_back(json_opt);
+
             cat.commands.push_back(cmd);
         }
 
@@ -276,7 +283,9 @@ void HelpRenderer::print_usage() {
     writeln("    " + Colors::apply(Colors::GREEN, "bloom-host --health", use_colors)
             + Colors::dim("                 # Run health checks", use_colors));
     writeln("    " + Colors::apply(Colors::GREEN, "bloom-host --init --profile-id <id> --launch-id <id>", use_colors)
-            + Colors::dim("  # Pre-init (Sentinel)", use_colors));
+            + Colors::dim("         # Pre-init (Sentinel)", use_colors));
+    writeln("    " + Colors::apply(Colors::GREEN, "bloom-host --init --json --profile-id <id> --launch-id <id>", use_colors)
+            + Colors::dim("  # Pre-init, JSON output only", use_colors));
     writeln();
 }
 

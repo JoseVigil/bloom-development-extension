@@ -239,7 +239,7 @@ if command -v x86_64-w64-mingw32-g++ &> /dev/null; then
     if [ -n "$PTHREAD_DLL" ] && [ -f "$PTHREAD_DLL" ]; then
         cp "$PTHREAD_DLL" "$OUT_DIR/win64/host/"
         echo -e "${GREEN}  ✓ Copied: libwinpthread-1.dll (from $(dirname $PTHREAD_DLL))${NC}"
-        ((COPIED_COUNT++))
+        COPIED_COUNT=$((COPIED_COUNT + 1))
     fi
     
     # Buscar y copiar libgcc_s_seh-1.dll (preferir posix sobre win32)
@@ -250,7 +250,7 @@ if command -v x86_64-w64-mingw32-g++ &> /dev/null; then
     if [ -n "$GCC_DLL" ] && [ -f "$GCC_DLL" ]; then
         cp "$GCC_DLL" "$OUT_DIR/win64/host/"
         echo -e "${GREEN}  ✓ Copied: libgcc_s_seh-1.dll (from $(dirname $GCC_DLL))${NC}"
-        ((COPIED_COUNT++))
+        COPIED_COUNT=$((COPIED_COUNT + 1))
     fi
     
     # Buscar y copiar libstdc++-6.dll (preferir posix sobre win32)
@@ -261,7 +261,7 @@ if command -v x86_64-w64-mingw32-g++ &> /dev/null; then
     if [ -n "$STDCPP_DLL" ] && [ -f "$STDCPP_DLL" ]; then
         cp "$STDCPP_DLL" "$OUT_DIR/win64/host/"
         echo -e "${GREEN}  ✓ Copied: libstdc++-6.dll (from $(dirname $STDCPP_DLL))${NC}"
-        ((COPIED_COUNT++))
+        COPIED_COUNT=$((COPIED_COUNT + 1))
     fi
     
     if [ $COPIED_COUNT -eq 0 ]; then
