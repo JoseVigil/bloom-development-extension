@@ -158,62 +158,80 @@ void SynapseLogManager::register_telemetry() {
         return p;
     };
 
-    // Key por profile_id — una entrada por perfil, no por sesion.
-    // Usar launch_id generaria cientos de entradas en telemetry.json.
-    // El launch_id se pasa como categoria para que sea filtrable.
-    std::string stream_id = "synapse_host_" + profile_id;
-    for (char& c : stream_id) {
-        if (c == '-') c = '_';
-        if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_') c = '_';
-    }
+    // Sanitizar un string para usarlo como stream_id o categoria (snake_case, alphanum)
+    auto sanitize = [](const std::string& s) -> std::string {
+        std::string out = s;
+        for (char& c : out) {
+            if (c == '-') c = '_';
+            if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_') c = '_';
+        }
+        return out;
+    };
 
-    // Sanitizar profile_id y launch_id para usarlos como categorias
-    std::string cat_profile = profile_id;
-    std::string cat_launch  = launch_id;
-    for (char& c : cat_profile) { if (c == '-') c = '_'; }
-    for (char& c : cat_launch)  { if (c == '-') c = '_'; }
+    std::string safe_profile = sanitize(profile_id);
+    std::string safe_launch  = sanitize(launch_id);
+    std::string nucleus      = get_nucleus_executable();
 
-    std::string nucleus   = get_nucleus_executable();
-    std::string host_fwd  = fwd(host_log_path);
-    std::string ext_fwd   = fwd(extension_log_path);
-    std::string desc      = "bloom-host native bridge — cortex_synapse + cortex_extension logs"
-                            " for profile " + profile_id + " launch " + launch_id;
+    // Dos streams separados — uno por archivo, cada uno con identidad propia.
+    // Spec: archivos con identidad propia → stream separado por archivo.
+    // cortex_synapse   = eventos del proceso C++ (canal nativo)
+    // cortex_extension = mensajes de la extensión Chrome (canal browser)
+    struct StreamDef {
+        std::string stream_id;
+        std::string label;
+        std::string path;
+        std::string description;
+    };
 
-    // Construir comando
-    // Dos --path → nucleus serializa como array en telemetry.json
-    std::string cmd =
-        "\"" + nucleus + "\""
-        " telemetry register"
-        " --stream \""      + stream_id + "\""
-        " --label \"🌉 HOST\""
-        " --path \""        + host_fwd  + "\""
-        " --path \""        + ext_fwd   + "\""
-        " --priority 2"
-        " --category synapse"
-        " --category extension"
-        " --category " + cat_profile
-        + " --category " + cat_launch
-        + " --source host"
-        + " --description \"" + desc + "\"";
+    std::vector<StreamDef> streams = {
+        {
+            "synapse_host_"      + safe_profile,
+            "🌉 HOST",
+            fwd(host_log_path),
+            "bloom-host native bridge — host process events log"
+            " for profile " + profile_id + " launch " + launch_id
+        },
+        {
+            "synapse_extension_" + safe_profile,
+            "🔌 EXTENSION",
+            fwd(extension_log_path),
+            "bloom-host native bridge — Chrome extension messages log"
+            " for profile " + profile_id + " launch " + launch_id
+        }
+    };
+
+    for (const auto& s : streams) {
+        std::string cmd =
+            "\"" + nucleus + "\""
+            " telemetry register"
+            " --stream \""      + s.stream_id  + "\""
+            " --label \""       + s.label      + "\""
+            " --path \""        + s.path       + "\""
+            " --priority 2"
+            " --category synapse"
+            " --category " + safe_profile
+            + " --category " + safe_launch
+            + " --source host"
+            + " --description \"" + s.description + "\"";
 
 #ifdef _WIN32
-    // En Windows cmd /C requiere que todo el comando compuesto esté
-    // envuelto en comillas externas adicionales cuando contiene comillas internas.
-    cmd = "cmd /C \"" + cmd + "\"";
+        // chcp 65001 fuerza UTF-8 en cmd.exe hijo para que el emoji del label
+        // no se corrompa al pasar por la codepage del sistema (cp1252 por defecto).
+        cmd = "cmd /C \"chcp 65001 >nul & " + cmd + "\"";
 #endif
 
-    int ret = std::system(cmd.c_str());
-    if (ret != 0) {
-        // No bloqueamos el host, avisamos por stderr para que Sentinel lo vea en el trace
-        std::cerr << "[" << get_timestamp_ms() << "] [WARN] [HOST] "
-                  << "nucleus telemetry register failed (exit=" << ret
-                  << ") — logs exist but telemetry.json not updated"
-                  << " nucleus_path=" << nucleus << "\n";
-        std::cerr.flush();
-    } else {
-        std::cerr << "[" << get_timestamp_ms() << "] [INFO] [HOST] "
-                  << "telemetry registered stream=" << stream_id << "\n";
-        std::cerr.flush();
+        int ret = std::system(cmd.c_str());
+        if (ret != 0) {
+            std::cerr << "[" << get_timestamp_ms() << "] [WARN] [HOST] "
+                      << "nucleus telemetry register failed (exit=" << ret
+                      << ") stream=" << s.stream_id
+                      << " nucleus_path=" << nucleus << "\n";
+            std::cerr.flush();
+        } else {
+            std::cerr << "[" << get_timestamp_ms() << "] [INFO] [HOST] "
+                      << "telemetry registered stream=" << s.stream_id << "\n";
+            std::cerr.flush();
+        }
     }
 }
 
@@ -413,52 +431,20 @@ void SynapseLogManager::flush_pending_queue() {
 
     if (snapshot.empty()) return;
 
-    // Separar entradas nativas de entradas del canal browser.
-    // Las entradas browser se marcaron con level "BROWSER:<level>" en log_browser().
-    std::vector<PendingEntry> native_entries;
-    std::vector<PendingEntry> browser_entries;
+    // Escribir snapshot al archivo bajo native_mutex
+    std::lock_guard<std::mutex> lock(native_mutex);
+    if (!native_log.is_open()) return;
 
+    native_log << "--- PENDING LOG FLUSH (" << snapshot.size() << " entries) ---\n";
     for (const auto& e : snapshot) {
-        if (e.level.rfind("BROWSER:", 0) == 0) {
-            // Restaurar el level original quitando el prefijo
-            PendingEntry be = e;
-            be.level = e.level.substr(8); // strip "BROWSER:"
-            browser_entries.push_back(be);
-        } else {
-            native_entries.push_back(e);
-        }
+        std::string line = "[" + e.timestamp + "] [" + e.level + "] [HOST] " + e.message;
+        native_log << line << "\n";
     }
-
-    // Flush canal nativo
-    if (!native_entries.empty()) {
-        std::lock_guard<std::mutex> lock(native_mutex);
-        if (native_log.is_open()) {
-            native_log << "--- PENDING LOG FLUSH (" << native_entries.size() << " entries) ---\n";
-            for (const auto& e : native_entries) {
-                native_log << "[" << e.timestamp << "] [" << e.level << "] [HOST] " << e.message << "\n";
-            }
-            native_log << "--- END PENDING FLUSH ---\n";
-            native_log.flush();
-        }
-    }
-
-    // Flush canal browser
-    if (!browser_entries.empty()) {
-        std::lock_guard<std::mutex> lock(browser_mutex);
-        if (browser_log.is_open()) {
-            browser_log << "--- PENDING LOG FLUSH (" << browser_entries.size() << " entries) ---\n";
-            for (const auto& e : browser_entries) {
-                browser_log << "[" << e.timestamp << "] [" << e.level << "] [EXTENSION] " << e.message << "\n";
-            }
-            browser_log << "--- END PENDING FLUSH ---\n";
-            browser_log.flush();
-        }
-    }
+    native_log << "--- END PENDING FLUSH ---\n";
+    native_log.flush();
 
     std::cerr << "[" << get_timestamp_ms() << "] [INFO] [HOST] "
-              << "Flushed pending entries"
-              << " native=" << native_entries.size()
-              << " browser=" << browser_entries.size() << "\n";
+              << "Flushed " << snapshot.size() << " pending log entries to disk\n";
     std::cerr.flush();
 }
 
@@ -472,22 +458,6 @@ void SynapseLogManager::log_browser(const std::string& level,
     std::string ts   = timestamp.empty() ? get_timestamp_ms() : timestamp;
     std::string line = "[" + ts + "] [" + level + "] [EXTENSION] " + message;
 
-    // stderr → capturado por Sentinel → trace unificado de Synapse
-    // Se escribe SIEMPRE, independientemente del estado del logger.
-    std::cerr << line << "\n";
-    std::cerr.flush();
-
-    if (!ready) {
-        // Logger aún no inicializado: encolar para flush posterior.
-        // Reutilizamos pending_queue (canal nativo) pero marcamos el mensaje
-        // con nivel "BROWSER:" para que flush_pending_queue lo dirija correctamente.
-        std::lock_guard<std::mutex> lock(pending_mutex);
-        if (pending_queue.size() < MAX_PENDING) {
-            pending_queue.push_back({ts, "BROWSER:" + level, message});
-        }
-        return;
-    }
-
     {
         std::lock_guard<std::mutex> lock(browser_mutex);
         if (browser_log.is_open()) {
@@ -495,4 +465,7 @@ void SynapseLogManager::log_browser(const std::string& level,
             browser_log.flush();
         }
     }
+
+    std::cerr << line << "\n";
+    std::cerr.flush();
 }
