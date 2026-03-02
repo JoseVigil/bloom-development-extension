@@ -162,6 +162,19 @@ void write_message_to_chrome(const std::string& s) {
         g_messages_sent.fetch_add(1);
         
         std::cerr << "[WRITE_CHROME] ✓ Success - Total sent: " << g_messages_sent.load() << std::endl;
+
+        if (g_logger.is_ready()) {
+            // Parse only command/type metadata — never log string content
+            std::string log_cmd, log_type;
+            try {
+                auto j = json::parse(s);
+                log_cmd  = json_get_string_safe(j, "command");
+                log_type = json_get_string_safe(j, "type");
+            } catch (...) {}
+            g_logger.log_browser("INFO", "CHROME_OUT command=" + log_cmd +
+                                          " type=" + log_type +
+                                          " size=" + std::to_string(len));
+        }
     } catch (const std::exception& e) {
         std::cerr << "[WRITE_CHROME] ✗ Exception: " << e.what() << std::endl;
     }
@@ -289,6 +302,7 @@ void handle_extension_ready(const json& msg) {
     std::cerr << "[HANDSHAKE] FASE 1: Extension → Host (extension_ready)" << std::endl;
     if (g_logger.is_ready()) {
         g_logger.log_native("INFO", "HANDSHAKE_FASE1 extension_ready received");
+        g_logger.log_browser("INFO", "CHROME_IN command=extension_ready type= size=0");
     }
     
     // Extraer identidad directamente del mensaje extension_ready
@@ -341,6 +355,7 @@ void handle_extension_ready(const json& msg) {
     std::cerr << "[HANDSHAKE] FASE 2: Host → Extension (host_ready)" << std::endl;
     if (g_logger.is_ready()) {
         g_logger.log_native("INFO", "HANDSHAKE_FASE2 host_ready sent version=" + VERSION + " build=" + std::to_string(BUILD));
+        g_logger.log_browser("INFO", "CHROME_OUT command=host_ready version=" + VERSION + " build=" + std::to_string(BUILD));
     }
     g_handshake_state.store(HANDSHAKE_HOST_READY);
     
@@ -426,6 +441,12 @@ void handle_chrome_message(const std::string& msg_str) {
         std::cerr << "[CHROME_MSG] command='" << command << "' type='" << type << "'" << std::endl;
         if (g_logger.is_ready()) {
             g_logger.log_native("INFO", "CHROME_MSG command=" + command + " type=" + type + " size=" + std::to_string(msg_str.size()));
+            // Extension-channel entry: command + type + size only — no payload
+            std::string ext_ts = json_get_string_safe(msg, "timestamp");
+            g_logger.log_browser("INFO", "CHROME_IN command=" + command +
+                                          " type=" + type +
+                                          " size=" + std::to_string(msg_str.size()),
+                                 ext_ts);
         }
         
         // � HANDSHAKE: Manejar extension_ready
@@ -436,17 +457,27 @@ void handle_chrome_message(const std::string& msg_str) {
         
         // Procesar chunks
         if (msg.contains("bloom_chunk")) {
+            std::string seq_str   = json_get_string_safe(msg["bloom_chunk"], "seq");
+            std::string total_str = json_get_string_safe(msg["bloom_chunk"], "total");
+            if (g_logger.is_ready()) {
+                g_logger.log_browser("INFO", "CHUNK_IN seq=" + seq_str + " total=" + total_str);
+            }
+
             std::string complete_msg;
             auto result = g_chunked_buffer.process_chunk(msg, complete_msg);
             
             if (result == ChunkedMessageBuffer::COMPLETE_VALID) {
                 std::cerr << "[CHUNK] ✓ Message assembled - Size: " 
                           << complete_msg.size() << " bytes" << std::endl;
+                if (g_logger.is_ready()) {
+                    g_logger.log_browser("INFO", "CHUNK_ASSEMBLED size=" + std::to_string(complete_msg.size()));
+                }
                 write_to_service(complete_msg);
             } else if (result == ChunkedMessageBuffer::COMPLETE_INVALID_CHECKSUM) {
                 std::cerr << "[CHUNK] ✗ Invalid checksum" << std::endl;
                 if (g_logger.is_ready()) {
                     g_logger.log_native("ERROR", "CHUNK_INVALID_CHECKSUM");
+                    g_logger.log_browser("WARN", "CHUNK_INVALID_CHECKSUM");
                 }
             } else if (result == ChunkedMessageBuffer::CHUNK_ERROR) {
                 std::cerr << "[CHUNK] ✗ Chunk error" << std::endl;
@@ -472,6 +503,7 @@ void handle_chrome_message(const std::string& msg_str) {
         
         if (g_logger.is_ready()) {
             g_logger.log_native("ERROR", "CHROME_PARSE_ERROR: " + std::string(e.what()));
+            g_logger.log_browser("WARN", "CHROME_PARSE_ERROR " + std::string(e.what()));
         }
     } catch (const std::exception& e) {
         std::cerr << "[CHROME_MSG] ✗ Exception: " << e.what() << std::endl;
@@ -641,6 +673,9 @@ void chrome_keepalive_loop() {
             write_message_to_chrome(ka_str);
             
             std::cerr << "[CHROME_KA] ✓ Keepalive sent to Chrome" << std::endl;
+            if (g_logger.is_ready()) {
+                g_logger.log_browser("INFO", "CHROME_OUT command=keepalive size=" + std::to_string(ka_str.size()));
+            }
         }
     } catch (const std::exception& e) {
         std::cerr << "[CHROME_KA] ✗ Exception: " << e.what() << std::endl;
