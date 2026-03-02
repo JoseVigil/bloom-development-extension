@@ -218,9 +218,9 @@ void SynapseLogManager::register_telemetry() {
 
         // Retry loop: nucleus usa flock en telemetry.json. Si la invocacion anterior
         // aun tiene el lock, esperamos y reintentamos hasta 3 veces con backoff.
-        for (int attempt = 0; attempt < 3 && ret != 0; ++attempt) {
+        for (int attempt = 0; attempt < 8 && ret != 0; ++attempt) {
             if (attempt > 0) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(300 * attempt));
+                std::this_thread::sleep_for(std::chrono::milliseconds(500 * attempt));
             }
 
             std::string cmd =
