@@ -197,9 +197,6 @@ void SynapseLogManager::register_telemetry() {
     std::string nucleus      = get_nucleus_executable();
     std::string bloom_root   = get_bloom_root();
 
-    // ── DEBUG: loguear CWD real y rutas resueltas antes de cualquier llamada ──
-    // Esto aparecerá en host_YYYYMMDD.log y en stderr (capturado por Sentinel).
-    // Permite confirmar si el CWD es correcto o si las rutas son erróneas.
     {
 #ifdef _WIN32
         char cwd[MAX_PATH] = {};
@@ -244,6 +241,44 @@ void SynapseLogManager::register_telemetry() {
         }
     };
 
+#ifdef _WIN32
+    // ── Construir bloque de entorno para nucleus una sola vez ────────────────
+    //
+    // ROOT CAUSE: nucleus.exe CLI usa BLOOM_DIR para localizar telemetry.json.
+    // Cuando bloom-host es spawneado por Sentinel (o Chrome), hereda un entorno
+    // que puede no tener BLOOM_DIR seteada. nucleus sale con exit=0 pero no
+    // escribe nada — fallo silencioso por variable ausente.
+    //
+    // Solución: construir un bloque de entorno explícito que copia el entorno
+    // actual y garantiza BLOOM_DIR=bloom_root, sobreescribiendo cualquier valor
+    // previo incorrecto. El bloque ANSI es "K=V\0K=V\0\0" (doble null al final).
+    std::string env_block;
+    {
+        std::string bloom_dir_entry = "BLOOM_DIR=" + bloom_root;
+
+        LPCH raw_env = GetEnvironmentStringsA();
+        if (raw_env) {
+            for (LPCH p = raw_env; *p; ) {
+                std::string entry(p);
+                p += entry.size() + 1;
+                // Excluir BLOOM_DIR existente para reemplazarla con el valor correcto
+                if (entry.size() >= 9 &&
+                    (entry.substr(0, 9) == "BLOOM_DIR" || entry.substr(0, 9) == "bloom_dir") &&
+                    (entry.size() == 9 || entry[9] == '=')) {
+                    continue;
+                }
+                env_block += entry;
+                env_block += '\0';
+            }
+            FreeEnvironmentStringsA(raw_env);
+        }
+        env_block += bloom_dir_entry;
+        env_block += '\0';
+        env_block += '\0'; // fin del bloque
+    }
+    log_native("DEBUG", "[TELEMETRY-DEBUG] BLOOM_DIR injected=" + bloom_root);
+#endif
+
     for (size_t i = 0; i < streams.size(); ++i) {
         const auto& s = streams[i];
 
@@ -255,8 +290,6 @@ void SynapseLogManager::register_telemetry() {
                 std::this_thread::sleep_for(std::chrono::milliseconds(500 * attempt));
             }
 
-            // Construir la línea de argumentos para nucleus.
-            // NO se usa cmd /C — CreateProcess invoca el exe directamente.
             std::string args =
                 "\"" + nucleus + "\""
                 " telemetry register"
@@ -277,28 +310,22 @@ void SynapseLogManager::register_telemetry() {
                 + " cwd=" + bloom_root);
 
 #ifdef _WIN32
-            // ── CreateProcess con CWD explícito ──────────────────────────────
-            // lpCurrentDirectory = bloom_root garantiza que nucleus.exe
-            // encuentre telemetry.json en logs/telemetry.json relativo a la
-            // raíz de BloomNucleus, independientemente del CWD heredado.
             STARTUPINFOA si = {};
             PROCESS_INFORMATION pi = {};
             si.cb = sizeof(si);
 
-            // CreateProcess modifica el buffer de la línea de comandos,
-            // por eso usamos un vector<char> mutable.
             std::vector<char> cmdBuf(args.begin(), args.end());
             cmdBuf.push_back('\0');
 
             BOOL created = CreateProcessA(
-                NULL,               // lpApplicationName — NULL: se extrae del cmdBuf
+                NULL,               // lpApplicationName
                 cmdBuf.data(),      // lpCommandLine — mutable
                 NULL,               // lpProcessAttributes
                 NULL,               // lpThreadAttributes
                 FALSE,              // bInheritHandles
-                0,                  // dwCreationFlags
-                NULL,               // lpEnvironment — heredar entorno actual
-                bloom_root.c_str(), // lpCurrentDirectory — ← FIX PRINCIPAL
+                0,                  // dwCreationFlags — entorno ANSI, sin flags extra
+                env_block.data(),   // lpEnvironment — explícito con BLOOM_DIR garantizado
+                bloom_root.c_str(), // lpCurrentDirectory — raíz de BloomNucleus
                 &si,
                 &pi
             );
@@ -311,7 +338,7 @@ void SynapseLogManager::register_telemetry() {
                     + " bloom_root=" + bloom_root);
                 ret = -1;
             } else {
-                WaitForSingleObject(pi.hProcess, 15000); // timeout 15s
+                WaitForSingleObject(pi.hProcess, 15000);
                 DWORD exitCode = 1;
                 GetExitCodeProcess(pi.hProcess, &exitCode);
                 CloseHandle(pi.hProcess);
@@ -322,7 +349,6 @@ void SynapseLogManager::register_telemetry() {
                     + " stream=" + s.stream_id);
             }
 #else
-            // Non-Windows: std::system() es suficiente (no hay issue de CWD en Linux/macOS)
             ret = std::system(args.c_str());
 #endif
         }
