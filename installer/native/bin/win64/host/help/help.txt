@@ -1,0 +1,104 @@
+
+                                             BLOOM-HOST
+                      Synapse Native Messaging Bridge  |  v2.1.0  |  build 45
+
+
+----------------------------------------------------------------------------------------------------
+  USAGE
+----------------------------------------------------------------------------------------------------
+
+  bloom-host [COMMAND] [OPTIONS]
+
+  Examples:
+    bloom-host --version                # Display version
+    bloom-host --info                   # System information
+    bloom-host --health                 # Run health checks
+    bloom-host --init --profile-id <id> --launch-id <id>         # Pre-init (Sentinel)
+    bloom-host --init --json --profile-id <id> --launch-id <id>  # Pre-init, JSON output only
+
+
+----------------------------------------------------------------------------------------------------
+  GLOBAL OPTIONS
+----------------------------------------------------------------------------------------------------
+
+  --json            Output in JSON format (machine-readable)
+  --help, -h        Show this help message
+
+  NOTE: --json redirects logs to stderr. For clean output in scripts:
+    PowerShell:  bloom-host --json --info 2>$null
+    Bash:        bloom-host --json --info 2>/dev/null
+
+
+----------------------------------------------------------------------------------------------------
+  COMMAND CATEGORIES
+----------------------------------------------------------------------------------------------------
+
+  SYSTEM       Process information and runtime diagnostics           4 cmds
+  LIFECYCLE    Session initialization invoked by Sentinel before Chrome launch  1 cmd
+  RUNTIME      Normal operation — launched automatically by Chrome via registry  1 cmd
+
+  ---------------------------------------------------------------------  Total: 6 commands
+
+
+=============================================[ SYSTEM ]=============================================
+
+  Process information and runtime diagnostics
+
+  > --version, -v
+    Display version and build number
+
+    Usage: bloom-host --version
+
+  > --info, -i
+    Show system, runtime and configuration details
+
+    Usage: bloom-host --info
+
+    * Options:
+      --json                Output as JSON (machine-readable) [optional]
+
+  > --health
+    Run health checks: platform, STDIO, network stack
+
+    Usage: bloom-host --health
+
+  > --help, -h
+    Show this help message
+
+    Usage: bloom-host --help
+
+
+===========================================[ LIFECYCLE ]============================================
+
+  Session initialization invoked by Sentinel before Chrome launch
+
+  > --init
+    Pre-initialize log directories and register telemetry
+
+    Usage: bloom-host --init --profile-id <id> --launch-id <id>
+
+    * Options:
+      --profile-id          Profile UUID (required) [required]
+      --launch-id           Launch identifier, e.g. 001_6f1909c9_165232 (required) [required]
+      --json                Suppress all stderr output; emit a single JSON object to stdout. Fields: ok, profile_id, launch_id, log_directory, host_log, extension_log, timestamp [optional]
+
+
+============================================[ RUNTIME ]=============================================
+
+  Normal operation — launched automatically by Chrome via registry
+
+  > (default)
+    Native Messaging bridge mode — invoked by Chrome, not manually
+
+    Usage: bloom-host --profile-id <id> --launch-id <id>
+
+    * Options:
+      --profile-id          Profile UUID passed by Chrome via NM manifest args [optional]
+      --launch-id           Launch identifier passed by Chrome via NM manifest args [optional]
+
+
+----------------------------------------------------------------------------------------------------
+
+                             bloom-host is part of the Bloom ecosystem
+                             Related: brain  sentinel  nucleus  cortex
+              Use 'bloom-host <command> --help' is not supported — all help is here.
