@@ -185,7 +185,7 @@ void SynapseLogManager::register_telemetry() {
         "\"" + nucleus + "\""
         " telemetry register"
         " --stream \""      + stream_id + "\""
-        " --label \"HOST\""
+        " --label \"🌉 HOST\""
         " --path \""        + host_fwd  + "\""
         " --path \""        + ext_fwd   + "\""
         " --priority 2"
@@ -413,20 +413,52 @@ void SynapseLogManager::flush_pending_queue() {
 
     if (snapshot.empty()) return;
 
-    // Escribir snapshot al archivo bajo native_mutex
-    std::lock_guard<std::mutex> lock(native_mutex);
-    if (!native_log.is_open()) return;
+    // Separar entradas nativas de entradas del canal browser.
+    // Las entradas browser se marcaron con level "BROWSER:<level>" en log_browser().
+    std::vector<PendingEntry> native_entries;
+    std::vector<PendingEntry> browser_entries;
 
-    native_log << "--- PENDING LOG FLUSH (" << snapshot.size() << " entries) ---\n";
     for (const auto& e : snapshot) {
-        std::string line = "[" + e.timestamp + "] [" + e.level + "] [HOST] " + e.message;
-        native_log << line << "\n";
+        if (e.level.rfind("BROWSER:", 0) == 0) {
+            // Restaurar el level original quitando el prefijo
+            PendingEntry be = e;
+            be.level = e.level.substr(8); // strip "BROWSER:"
+            browser_entries.push_back(be);
+        } else {
+            native_entries.push_back(e);
+        }
     }
-    native_log << "--- END PENDING FLUSH ---\n";
-    native_log.flush();
+
+    // Flush canal nativo
+    if (!native_entries.empty()) {
+        std::lock_guard<std::mutex> lock(native_mutex);
+        if (native_log.is_open()) {
+            native_log << "--- PENDING LOG FLUSH (" << native_entries.size() << " entries) ---\n";
+            for (const auto& e : native_entries) {
+                native_log << "[" << e.timestamp << "] [" << e.level << "] [HOST] " << e.message << "\n";
+            }
+            native_log << "--- END PENDING FLUSH ---\n";
+            native_log.flush();
+        }
+    }
+
+    // Flush canal browser
+    if (!browser_entries.empty()) {
+        std::lock_guard<std::mutex> lock(browser_mutex);
+        if (browser_log.is_open()) {
+            browser_log << "--- PENDING LOG FLUSH (" << browser_entries.size() << " entries) ---\n";
+            for (const auto& e : browser_entries) {
+                browser_log << "[" << e.timestamp << "] [" << e.level << "] [EXTENSION] " << e.message << "\n";
+            }
+            browser_log << "--- END PENDING FLUSH ---\n";
+            browser_log.flush();
+        }
+    }
 
     std::cerr << "[" << get_timestamp_ms() << "] [INFO] [HOST] "
-              << "Flushed " << snapshot.size() << " pending log entries to disk\n";
+              << "Flushed pending entries"
+              << " native=" << native_entries.size()
+              << " browser=" << browser_entries.size() << "\n";
     std::cerr.flush();
 }
 
@@ -440,6 +472,22 @@ void SynapseLogManager::log_browser(const std::string& level,
     std::string ts   = timestamp.empty() ? get_timestamp_ms() : timestamp;
     std::string line = "[" + ts + "] [" + level + "] [EXTENSION] " + message;
 
+    // stderr → capturado por Sentinel → trace unificado de Synapse
+    // Se escribe SIEMPRE, independientemente del estado del logger.
+    std::cerr << line << "\n";
+    std::cerr.flush();
+
+    if (!ready) {
+        // Logger aún no inicializado: encolar para flush posterior.
+        // Reutilizamos pending_queue (canal nativo) pero marcamos el mensaje
+        // con nivel "BROWSER:" para que flush_pending_queue lo dirija correctamente.
+        std::lock_guard<std::mutex> lock(pending_mutex);
+        if (pending_queue.size() < MAX_PENDING) {
+            pending_queue.push_back({ts, "BROWSER:" + level, message});
+        }
+        return;
+    }
+
     {
         std::lock_guard<std::mutex> lock(browser_mutex);
         if (browser_log.is_open()) {
@@ -447,7 +495,4 @@ void SynapseLogManager::log_browser(const std::string& level,
             browser_log.flush();
         }
     }
-
-    std::cerr << line << "\n";
-    std::cerr.flush();
 }

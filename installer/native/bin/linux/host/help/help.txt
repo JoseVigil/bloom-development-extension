@@ -1,6 +1,6 @@
 
                                              BLOOM-HOST
-                      Synapse Native Messaging Bridge  |  v2.1.0  |  build 49
+                      Synapse Native Messaging Bridge  |  v2.1.0  |  build 50
 
 
 ----------------------------------------------------------------------------------------------------
