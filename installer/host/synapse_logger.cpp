@@ -146,7 +146,7 @@ std::string SynapseLogManager::get_nucleus_executable() {
 // SPEC: Las aplicaciones NUNCA escriben telemetry.json directamente.
 //       Nucleus es el único writer autorizado.
 //
-// stream_id: synapse_host_{launch_id}  — único por sesión, snake_case
+// stream_id: host_{launch_id}  — único por sesión, snake_case
 // label:     �️ HOST
 // paths:     array con host_log_path + extension_log_path
 // ============================================================================
@@ -304,7 +304,7 @@ void SynapseLogManager::initialize(const std::string& p_profile_id,
         return;
     }
 
-    // 3. Filename: synapse_host_YYYYMMDD.log  /  synapse_extension_YYYYMMDD.log
+    // 3. Filename: host_YYYYMMDD.log  /  cortex_extension_YYYYMMDD.log
     auto now   = std::chrono::system_clock::now();
     auto now_t = std::chrono::system_clock::to_time_t(now);
     std::tm tm_utc{};

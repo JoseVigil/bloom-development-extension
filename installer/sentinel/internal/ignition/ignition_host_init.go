@@ -24,8 +24,8 @@ import (
 //
 // Estructura creada en disco (idempotente — no falla si ya existe):
 //
-//	logs/host/profiles/<profileID>/<launchID>/synapse_host_YYYYMMDD.log
-//	logs/host/profiles/<profileID>/<launchID>/synapse_extension_YYYYMMDD.log
+//	logs/host/profiles/<profileID>/<launchID>/host_YYYYMMDD.log
+//	logs/host/profiles/<profileID>/<launchID>/cortex_extension_YYYYMMDD.log
 func (ig *Ignition) initBloomHost(profileID string, launchID string) error {
 	// ── 1. Resolver ruta al binario ───────────────────────────────────────────
 	hostBin := filepath.Join(ig.Core.Paths.BinDir, "host", "bloom-host.exe")
@@ -58,6 +58,7 @@ func (ig *Ignition) initBloomHost(profileID string, launchID string) error {
 
 	cmd := exec.Command(hostBin,
 		"--init",
+		"--json",
 		"--profile-id", profileID,
 		"--launch-id", launchID,
 	)
@@ -130,8 +131,8 @@ func (ig *Ignition) initBloomHost(profileID string, launchID string) error {
 	// (el exit 0 ya garantiza que la inicialización fue exitosa).
 	today := time.Now().Format("20060102")
 	expectedFiles := []string{
-		filepath.Join(logDir, fmt.Sprintf("synapse_host_%s.log", today)),
-		filepath.Join(logDir, fmt.Sprintf("synapse_extension_%s.log", today)),
+		filepath.Join(logDir, fmt.Sprintf("host_%s.log", today)),
+		filepath.Join(logDir, fmt.Sprintf("cortex_extension_%s.log", today)),
 	}
 
 	for _, f := range expectedFiles {

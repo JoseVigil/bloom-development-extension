@@ -12,8 +12,8 @@
  * @brief Sistema de logging para Synapse Native Bridge (bloom-host)
  *
  * Maneja dos canales de logging separados:
- *   - native_log:  Eventos del proceso C++ (bloom-host) → synapse_host_YYYYMMDD.log
- *   - browser_log: Mensajes redirigidos desde la extensión Chrome → synapse_extension_YYYYMMDD.log
+ *   - native_log:  Eventos del proceso C++ (bloom-host) → host_YYYYMMDD.log
+ *   - browser_log: Mensajes redirigidos desde la extensión Chrome → cortex_extension_YYYYMMDD.log
  *
  * Estructura de directorios:
  *   Windows: %LOCALAPPDATA%\BloomNucleus\logs\host\profiles\{profile_id}\{launch_id}\
@@ -37,8 +37,8 @@ private:
     std::mutex    browser_mutex;
 
     std::string log_directory;       // Ruta completa al directorio de sesión
-    std::string host_log_path;       // Ruta al archivo synapse_host_YYYYMMDD.log
-    std::string extension_log_path;  // Ruta al archivo synapse_extension_YYYYMMDD.log
+    std::string host_log_path;       // Ruta al archivo host_YYYYMMDD.log
+    std::string extension_log_path;  // Ruta al archivo cortex_extension_YYYYMMDD.log
     std::string profile_id;
     std::string launch_id;
 
@@ -85,7 +85,7 @@ private:
 
     /**
      * Invoca `nucleus telemetry register` con los dos paths del stream.
-     *   stream_id: synapse_host_{launch_id}   (snake_case, único por sesión)
+     *   stream_id: host_{launch_id}   (snake_case, único por sesión)
      *   label:     �️ HOST
      *   source:    host
      *   category:  synapse
@@ -106,8 +106,8 @@ public:
      * @param launch_id  ID de lanzamiento (e.g., "009_14c11dbf_045012")
      *
      * Estructura creada:
-     *   logs/host/profiles/{profile_id}/{launch_id}/synapse_host_YYYYMMDD.log
-     *   logs/host/profiles/{profile_id}/{launch_id}/synapse_extension_YYYYMMDD.log
+     *   logs/host/profiles/{profile_id}/{launch_id}/host_YYYYMMDD.log
+     *   logs/host/profiles/{profile_id}/{launch_id}/cortex_extension_YYYYMMDD.log
      *
      * Llama a `nucleus telemetry register` con ambos paths en un solo stream.
      * Es idempotente: llamadas repetidas con los mismos IDs no tienen efecto.
@@ -138,7 +138,7 @@ public:
      * @param level   INFO | WARN | ERROR | DEBUG | CRITICAL
      * @param message Mensaje a registrar
      *
-     * Escribe en synapse_host_YYYYMMDD.log y duplica a stderr
+     * Escribe en host_YYYYMMDD.log y duplica a stderr
      * para visibilidad en el trace unificado de Synapse vía Sentinel.
      */
     void log_native(const std::string& level, const std::string& message);
@@ -149,7 +149,7 @@ public:
      * @param message   Mensaje a registrar
      * @param timestamp Timestamp ISO opcional proveniente de la extensión
      *
-     * Escribe en synapse_extension_YYYYMMDD.log y duplica a stderr.
+     * Escribe en cortex_extension_YYYYMMDD.log y duplica a stderr.
      */
     void log_browser(const std::string& level, const std::string& message,
                      const std::string& timestamp = "");
