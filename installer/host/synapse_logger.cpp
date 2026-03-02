@@ -158,18 +158,26 @@ void SynapseLogManager::register_telemetry() {
         return p;
     };
 
-    // Sanitizar launch_id a snake_case válido para stream_id
-    std::string stream_id = "synapse_host_" + launch_id;
+    // Key por profile_id — una entrada por perfil, no por sesion.
+    // Usar launch_id generaria cientos de entradas en telemetry.json.
+    // El launch_id se pasa como categoria para que sea filtrable.
+    std::string stream_id = "synapse_host_" + profile_id;
     for (char& c : stream_id) {
         if (c == '-') c = '_';
         if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_') c = '_';
     }
 
+    // Sanitizar profile_id y launch_id para usarlos como categorias
+    std::string cat_profile = profile_id;
+    std::string cat_launch  = launch_id;
+    for (char& c : cat_profile) { if (c == '-') c = '_'; }
+    for (char& c : cat_launch)  { if (c == '-') c = '_'; }
+
     std::string nucleus   = get_nucleus_executable();
     std::string host_fwd  = fwd(host_log_path);
     std::string ext_fwd   = fwd(extension_log_path);
-    std::string desc      = "bloom-host native bridge — host process events and Chrome extension"
-                            " messages for profile " + profile_id;
+    std::string desc      = "bloom-host native bridge — cortex_synapse + cortex_extension logs"
+                            " for profile " + profile_id + " launch " + launch_id;
 
     // Construir comando
     // Dos --path → nucleus serializa como array en telemetry.json
@@ -182,8 +190,11 @@ void SynapseLogManager::register_telemetry() {
         " --path \""        + ext_fwd   + "\""
         " --priority 2"
         " --category synapse"
-        " --source host"
-        " --description \"" + desc + "\"";
+        " --category extension"
+        " --category " + cat_profile
+        + " --category " + cat_launch
+        + " --source host"
+        + " --description \"" + desc + "\"";
 
 #ifdef _WIN32
     // En Windows cmd /C requiere que todo el comando compuesto esté
@@ -260,8 +271,8 @@ void SynapseLogManager::initialize(const std::string& p_profile_id,
     date_ss << std::put_time(&tm_utc, "%Y%m%d");
     std::string date_str = date_ss.str();
 
-    host_log_path      = log_directory + PATH_SEP "synapse_host_"      + date_str + ".log";
-    extension_log_path = log_directory + PATH_SEP "synapse_extension_" + date_str + ".log";
+    host_log_path      = log_directory + PATH_SEP "cortex_synapse_"    + date_str + ".log";
+    extension_log_path = log_directory + PATH_SEP "cortex_extension_"  + date_str + ".log";
 
     // 4. Abrir archivos en modo append (seguro ante reinicios el mismo día)
     native_log.open(host_log_path,      std::ios::app);
