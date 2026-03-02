@@ -182,22 +182,27 @@ void SynapseLogManager::register_telemetry() {
         std::string stream_id;
         std::string label;
         std::string path;
+        std::string source;
         std::string description;
     };
 
     std::vector<StreamDef> streams = {
         {
-            "synapse_host_"      + safe_profile,
+            "host_"   + safe_profile,
             "HOST",
             fwd(host_log_path),
-            "bloom-host native bridge — host process events log"
+            "host",
+            "Synapse Host Application — Native Messaging bridge handling"
+            " protocol handshake, TCP connection to Brain, and message routing"
             " for profile " + profile_id + " launch " + launch_id
         },
         {
-            "synapse_extension_" + safe_profile,
-            "EXTENSION",
+            "cortex_" + safe_profile,
+            "CORTEX",
             fwd(extension_log_path),
-            "bloom-host native bridge — Chrome extension messages log"
+            "cortex",
+            "Cortex Extension — Synapse communication with host"
+            " using Google Native Messaging"
             " for profile " + profile_id + " launch " + launch_id
         }
     };
@@ -223,7 +228,7 @@ void SynapseLogManager::register_telemetry() {
                 " --category synapse"
                 " --category " + safe_profile
                 + " --category " + safe_launch
-                + " --source host"
+                + " --source " + s.source
                 + " --description \"" + s.description + "\"";
 
 #ifdef _WIN32
