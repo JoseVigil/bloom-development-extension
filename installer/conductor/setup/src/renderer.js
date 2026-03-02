@@ -111,52 +111,86 @@ class InstallationManager {
     console.log("🚀 [AUTO] Iniciando flujo automático...");
     this.ui.showScreen('installation-screen');
 
-    // Escuchar eventos de progreso del backend
+    // ── Registrar listeners ANTES de llamar installService ──────────────────
+    // Así no perdemos ningún evento aunque lleguen durante la instalación.
+
+    // 1. Progreso de instalación → barra de progreso
     window.api.on('installation-progress', (data) => {
-      console.log(`[Progress] ${data.percentage}% - ${data.message}`);
-      
+      const step = data.current ?? data.step ?? 0;
+      const total = data.total ?? 10;
+      const percentage = data.percentage ?? Math.round((step / total) * 100);
+      console.log(`[Progress] ${percentage}% [${step}/${total}] ${data.message}`);
+
       const fillEl = document.getElementById('progress-fill');
       const textEl = document.getElementById('progress-text');
       const detailsEl = document.getElementById('installation-details');
-      
-      if (fillEl) fillEl.style.width = data.percentage + '%';
-      if (textEl) textEl.textContent = data.message;
-      
+
+      if (fillEl) fillEl.style.width = percentage + '%';
+      if (textEl) textEl.textContent = `Paso ${step}/${total}: ${data.message}`;
       if (detailsEl) {
-        detailsEl.innerHTML = data.detail 
-          ? `<p style="color: #4299e1;">• ${data.detail}</p>`
-          : '';
+        detailsEl.innerHTML = data.detail
+          ? `<p style="color:#4299e1;">• ${data.detail}</p>` : '';
       }
-    }); // ✅ Cierre del callback
+    });
+
+    // 2. Heartbeat starting → mostrar pantalla heartbeat INMEDIATAMENTE
+    window.api.on('heartbeat:starting', (data) => {
+      console.log("🔴 [Semáforo] heartbeat:starting → pantalla heartbeat");
+      this.profileId = data.profile_id || this.profileId;
+      this.ui.showScreen('heartbeat-screen');
+    });
+
+    // 3. Launch done → círculo amarillo (Sentinel lanzado, esperando handshake)
+    window.api.on('heartbeat:launch-done', (data) => {
+      console.log("🟡 [Semáforo] heartbeat:launch-done → amarillo");
+      this.profileId = data.profile_id || this.profileId;
+      const circle = document.getElementById('heartbeat-circle');
+      if (circle) {
+        circle.classList.remove('synapse', 'connected');
+        circle.classList.add('synapse');
+      }
+      const sub = document.getElementById('heartbeat-sub');
+      if (sub) sub.textContent = 'Sentinel activo · Esperando handshake con extensión...';
+    });
+
+    // 4. Validated → círculo verde → avanzar
+    window.api.on('heartbeat:validated', async (data) => {
+      console.log("🟢 [Semáforo] heartbeat:validated → verde");
+      this.profileId = data.profile_id || this.profileId;
+      const circle = document.getElementById('heartbeat-circle');
+      if (circle) {
+        circle.classList.remove('synapse');
+        circle.classList.add('connected');
+      }
+      const sub = document.getElementById('heartbeat-sub');
+      if (sub) sub.textContent = 'Perfil conectado · Handshake exitoso';
+      await this.sleep(1800);
+      this.ui.showScreen('connection-success-screen');
+      const ob = document.getElementById('start-onboarding-btn');
+      if (ob) ob.disabled = false;
+    });
 
     try {
-      // 1. INSTALAR (el backend emite eventos)
+      // ── Lanzar instalación (bloqueante, los eventos ya están escuchando) ──
       const result = await this.api.installService();
-      
+
       if (!result.success) {
-        const errorMsg = result.error?.message || result.error || 'Installation failed';
-        throw new Error(errorMsg);
+        throw new Error(result.error?.message || result.error || 'Installation failed');
       }
 
       this.extensionId = result.extensionId || result.extension_id || null;
-      this.profileId = result.profileId || result.profile_id;
-      
-      console.log("✅ [AUTO] Instalación completa");
-      
-      // 2. MOSTRAR PANTALLA DE HEARTBEAT
-      // NOTA: NO llamamos launchGodMode(). El installer ya ejecutó
-      // "nucleus synapse launch" en launchMasterProfile() (paso 9/9) y validó
-      // que Sentinel está RUNNING. Llamarlo de nuevo causa "Sentinel daemon not ready".
-      await this.sleep(1000);
-      this.ui.showScreen('heartbeat-screen');
-      this.ui.updateText('final-extension-id', this.extensionId);
-      this.ui.updateText('final-profile-id', this.profileId);
+      this.profileId = result.profileId || result.profile_id || this.profileId;
 
-      // 3. INICIAR HEARTBEAT (60 segundos de timeout)
-      this.startHeartbeatMonitoring(60);
+      console.log("✅ [AUTO] installService() resolvió. Profile:", this.profileId);
+
+      // Si heartbeat:validated ya llegó (y cambió la pantalla), no hacer nada más.
+      // Si por algún motivo no llegó, activar polling de respaldo.
+      if (this.ui.currentScreen !== 'connection-success-screen') {
+        this._startHeartbeatFallbackPoll();
+      }
 
       return { success: true };
-      
+
     } catch (error) {
       console.error("❌ [AUTO] Error:", error);
       this.ui.showError(error.message);
@@ -164,110 +198,46 @@ class InstallationManager {
     }
   }
 
-  async startHeartbeatMonitoring(maxSeconds = 60) {
-  console.log("💓 [Heartbeat] Iniciando...");
-  
-  const statusEl = document.getElementById('heartbeat-counter');
-  const dotEl = document.getElementById('heartbeat-dot');
-  const detailsEl = document.getElementById('connection-details');
-  const extIdEl = document.getElementById('heartbeat-extension-id');
-  const profIdEl = document.getElementById('heartbeat-profile-id');
-  
-  // PASO 1: Delay inicial (Chrome iniciando)
-  await this.sleep(3000);
-  
-  // PASO 2: Chrome iniciado
-  if (statusEl) statusEl.textContent = '✓ Chrome iniciado correctamente';
-  await this.sleep(1500);
-  
-  // PASO 3: Cargando extensión
-  if (statusEl) statusEl.textContent = '⏳ Cargando extensión de Chrome...';
-  await this.sleep(2000);
-  
-  // PASO 4: Extensión cargada
-  if (statusEl) statusEl.textContent = '✓ Extensión cargada exitosamente';
-  await this.sleep(1500);
-  
-  // PASO 5: Conectando con host
-  if (statusEl) statusEl.textContent = '🔌 Estableciendo conexión con el host...';
-  await this.sleep(2000);
-  
-  // PASO 6: Polling REAL de heartbeat TCP
-  let attempts = 0;
-  const interval = setInterval(async () => {
-    attempts++;
-    
-    try {
-      // ✅ ÚNICO CAMBIO: Consultar Brain Service en vez de extension
-      const status = await this.api.checkBrainServiceStatus();
-      
-      // ✅ Verificar si hay profiles registrados
-      if (status && status.registeredProfiles > 0) {
-        clearInterval(interval);
-        console.log("✅ [Heartbeat] ¡Host registrado en Brain Service!");
-        console.log(`   Profiles registrados: ${status.registeredProfiles}`);
-        
-        // Cambiar dot a verde
-        if (dotEl) {
-          dotEl.classList.remove('red');
-          dotEl.classList.add('green');
-        }
-        
-        // Cambiar ripples a verde
-        document.querySelectorAll('.ripple').forEach(ripple => {
-          ripple.style.borderColor = '#48bb78';
-        });
-        
-        // Mensaje de éxito
-        if (statusEl) statusEl.textContent = '✓ Host conectado exitosamente';
-        await this.sleep(1500);
-        
-        // Mostrar detalles
-        if (detailsEl) {
-          if (extIdEl) extIdEl.textContent = this.extensionId;
-          if (profIdEl) profIdEl.textContent = this.profileId;
-          detailsEl.style.display = 'block';
-        }
-        
-        if (statusEl) {
-          statusEl.textContent = '🎉 Sistema completamente conectado';
-          statusEl.style.color = '#48bb78';
-          statusEl.style.fontWeight = '600';
-        }
-        
-        // Pausa final
-        await this.sleep(3000);
-        
-        // Transición a Success
-        this.ui.showScreen('connection-success-screen');
-        
-        // Habilitar botón de onboarding
-        const onboardingBtn = document.getElementById('start-onboarding-btn');
-        if (onboardingBtn) onboardingBtn.disabled = false;
-        
-        return;
-      }
-    } catch (error) {
-      console.warn("⚠️ [Heartbeat] Check falló:", error.message);
-    }
-    
-    // Timeout
-    if (attempts >= maxSeconds) {
-      clearInterval(interval);
-      
-      if (statusEl) {
-        statusEl.innerHTML = '<strong style="color:#e53e3e;">❌ No se detectó conexión</strong><br>' +
-          '<small>Verifica que Chrome abrió correctamente.</small>';
-      }
-      
-      const retryBtn = document.getElementById('retry-heartbeat-btn');
-      if (retryBtn) retryBtn.style.display = 'block';
-    }
-    
-  }, 1000);
-} // ✅ Cierre de setInterval
+  // Polling de respaldo: por si heartbeat:validated nunca llegó pero el sistema ya está OK
+  _startHeartbeatFallbackPoll() {
+    console.log("🔁 [Fallback poll] Iniciando polling de respaldo...");
+    let attempts = 0;
+    const MAX = 40; // 40 × 3s = 120s
 
-} // ✅ Cierre de startHeartbeatMonitoring
+    const poll = setInterval(async () => {
+      if (this.ui.currentScreen === 'connection-success-screen') {
+        clearInterval(poll); return;
+      }
+      attempts++;
+      try {
+        const status = await this.api.checkBrainServiceStatus();
+        console.log(`[Fallback poll ${attempts}] running=${status?.running} profiles=${status?.registeredProfiles}`);
+
+        if (status && (status.running || status.registeredProfiles > 0)) {
+          clearInterval(poll);
+          // Disparar verde manualmente
+          const circle = document.getElementById('heartbeat-circle');
+          if (circle) { circle.classList.remove('synapse'); circle.classList.add('connected'); }
+          const sub = document.getElementById('heartbeat-sub');
+          if (sub) sub.textContent = 'Perfil conectado · Handshake exitoso';
+          await this.sleep(1800);
+          this.ui.showScreen('connection-success-screen');
+          return;
+        }
+      } catch (e) { console.warn('[Fallback poll] error:', e.message); }
+
+      if (attempts >= MAX) {
+        clearInterval(poll);
+        // Timeout: mostrar botón reintentar
+        const sub = document.getElementById('heartbeat-sub');
+        if (sub) sub.textContent = 'Sin respuesta · Verifica los logs';
+        const retry = document.getElementById('retry-heartbeat-btn');
+        if (retry) retry.style.display = 'block';
+      }
+    }, 3000);
+  }
+
+} // ── end InstallationManager ──
 
 // ========================================================================
 // 3. HEARTBEAT MANAGER (Adaptado para TCP)

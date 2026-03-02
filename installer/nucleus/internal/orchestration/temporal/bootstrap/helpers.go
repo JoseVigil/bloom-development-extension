@@ -17,7 +17,7 @@ import (
 
 // GetPIDFilePath retorna la ruta del archivo PID para Temporal
 func GetPIDFilePath(c *core.Core) string {
-	return filepath.Join(c.Paths.Logs, "temporal", "temporal.pid")
+	return filepath.Join(c.Paths.LogsDir, "temporal", "temporal.pid")
 }
 
 // SavePID guarda el PID en un archivo

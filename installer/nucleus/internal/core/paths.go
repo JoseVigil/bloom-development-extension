@@ -40,7 +40,7 @@ func InitPaths() (*Paths, error) {
 		SentinelDir:  sentinelDir,
 		AppDataDir:   appDataDir,
 		ProfilesDir:  filepath.Join(appDataDir, "profiles"),
-		LogsDir:      filepath.Join(appDataDir, "logs", "sentinel"),
+		LogsDir:      filepath.Join(appDataDir, "logs"),
 		TelemetryDir: filepath.Join(appDataDir, "logs"),
 		NucleusBin:   nucleusBin,
 	}

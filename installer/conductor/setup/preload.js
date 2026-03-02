@@ -85,6 +85,10 @@ const API = {
       'installation-progress',
       'installation-error',
       'installation-complete',
+      // Heartbeat lifecycle events
+      'heartbeat:starting',
+      'heartbeat:launch-done',
+      'heartbeat:validated',
       
       // Launch mode events
       'server-status',

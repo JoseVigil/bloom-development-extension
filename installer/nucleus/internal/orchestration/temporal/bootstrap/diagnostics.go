@@ -82,7 +82,7 @@ func runDiagnosticsJSON(c *core.Core) {
 		"ui_responding":   healthChecks["ui"],
 	}
 
-	dbPath := filepath.Join(c.Paths.Logs, "temporal", "temporal.db")
+	dbPath := filepath.Join(c.Paths.LogsDir, "temporal", "temporal.db")
 	dbInfo := map[string]interface{}{
 		"path":   dbPath,
 		"exists": false,
@@ -93,7 +93,7 @@ func runDiagnosticsJSON(c *core.Core) {
 	}
 	result["database"] = dbInfo
 
-	pidPath := filepath.Join(c.Paths.Logs, "temporal", "temporal.pid")
+	pidPath := filepath.Join(c.Paths.LogsDir, "temporal", "temporal.pid")
 	pidInfo := map[string]interface{}{
 		"path":   pidPath,
 		"exists": false,
@@ -162,7 +162,7 @@ func runDiagnosticsHuman(c *core.Core) {
 	}
 
 	logger.Info("[3] Database")
-	dbPath := filepath.Join(c.Paths.Logs, "temporal", "temporal.db")
+	dbPath := filepath.Join(c.Paths.LogsDir, "temporal", "temporal.db")
 	if info, err := os.Stat(dbPath); err == nil {
 		logger.Success("  Database: %s", dbPath)
 		logger.Info("  Size: %d bytes", info.Size())
@@ -171,7 +171,7 @@ func runDiagnosticsHuman(c *core.Core) {
 	}
 
 	logger.Info("[4] PID File")
-	pidPath := filepath.Join(c.Paths.Logs, "temporal", "temporal.pid")
+	pidPath := filepath.Join(c.Paths.LogsDir, "temporal", "temporal.pid")
 	if pidData, err := os.ReadFile(pidPath); err == nil {
 		logger.Success("  PID file: %s", pidPath)
 		if pid, err := strconv.Atoi(strings.TrimSpace(string(pidData))); err == nil {
@@ -182,8 +182,8 @@ func runDiagnosticsHuman(c *core.Core) {
 	}
 
 	logger.Info("[5] Logs")
-	nucleusLogs := filepath.Join(c.Paths.Logs, "nucleus")
-	temporalLogs := filepath.Join(c.Paths.Logs, "temporal")
+	nucleusLogs := filepath.Join(c.Paths.LogsDir, "nucleus")
+	temporalLogs := filepath.Join(c.Paths.LogsDir, "temporal")
 	
 	if _, err := os.Stat(nucleusLogs); err == nil {
 		logger.Success("  Nucleus logs: %s", nucleusLogs)

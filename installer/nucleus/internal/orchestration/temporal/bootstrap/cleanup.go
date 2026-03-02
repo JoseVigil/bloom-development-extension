@@ -210,7 +210,7 @@ func executeCleanup(c *core.Core, logger *core.Logger) CleanupResult {
 	}
 
 	// Limpiar PID file si existe
-	pidPath := filepath.Join(c.Paths.Logs, "temporal", "temporal.pid")
+	pidPath := filepath.Join(c.Paths.LogsDir, "temporal", "temporal.pid")
 	if _, err := os.Stat(pidPath); err == nil {
 		os.Remove(pidPath)
 		if logger != nil {

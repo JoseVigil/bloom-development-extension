@@ -1,4 +1,4 @@
-# NUCLEUS SYNAPSE USAGE GUIDE v3.0
+# NUCLEUS SYNAPSE USAGE GUIDE v3.1
 
 ## Resumen Ejecutivo
 
@@ -14,6 +14,8 @@ Los perfiles son **actores con estado persistente** orquestados por Temporal. Ca
 
 **🆕 Cambio Clave v3.0 (Post-Refactor Feb 2026):**  
 Todas las Sentinel Activities fueron **unificadas** en `internal/orchestration/activities/sentinel_activities.go`, eliminando la dispersión anterior en múltiples archivos y simplificando el mantenimiento del código.
+
+**📝 v3.1 (Mar 2026):** Correcciones de homologación — rutas de archivos, patrones de registro de comandos, convención de nombres y ejemplos de integración alineados con el código en producción.
 
 ---
 
@@ -621,9 +623,7 @@ async function main() {
     
     // 2. Launch profile
     const launchResult = await client.launchProfile(seedResult.profile_id, {
-      mode: 'landing',
-      email: 'electron@example.com',
-      heartbeat: true
+      mode: 'landing'
     });
     
     console.log('Chrome PID:', launchResult.chrome_pid);
@@ -820,7 +820,7 @@ case "${1:-}" in
         seed_profile "${2:-profile_default}" "${3:-false}"
         ;;
     launch)
-        launch_profile "${2:-}" "${3:-landing}" "${4:-}"
+        launch_profile "${2:-}" "${3:-landing}"
         ;;
     shutdown)
         shutdown_all
@@ -833,7 +833,7 @@ case "${1:-}" in
         echo ""
         echo "Commands:"
         echo "  seed <alias> [is_master]     - Seed a new profile"
-        echo "  launch <profile_id> [mode] [email] - Launch a profile"
+        echo "  launch <profile_id> [mode]        - Launch a profile"
         echo "  shutdown                     - Shutdown all profiles"
         echo "  full <alias>                 - Run complete workflow"
         exit 1
@@ -1016,9 +1016,7 @@ function Get-NucleusVaultStatus {
 function Start-NucleusFullWorkflow {
     param(
         [Parameter(Mandatory=$true)]
-        [string]$ProfileAlias,
-        
-        [string]$Email = "user@example.com"
+        [string]$ProfileAlias
     )
     
     Write-ColorOutput "=== Starting Full Workflow ===" "Info"
@@ -1034,7 +1032,7 @@ function Start-NucleusFullWorkflow {
         $seedResult = New-NucleusProfile -Alias $ProfileAlias
         
         # 3. Launch profile
-        $launchResult = Start-NucleusProfile -ProfileId $seedResult.profile_id -Email $Email
+        $launchResult = Start-NucleusProfile -ProfileId $seedResult.profile_id
         
         Write-ColorOutput "=== Workflow Completed Successfully ===" "Info"
         
@@ -1062,7 +1060,7 @@ Export-ModuleMember -Function @(
 
 # Ejemplo de uso:
 # Import-Module .\NucleusSynapse.psm1
-# Start-NucleusFullWorkflow -ProfileAlias "my_profile" -Email "test@example.com"
+# Start-NucleusFullWorkflow -ProfileAlias "my_profile"
 ```
 
 ---
@@ -1232,9 +1230,6 @@ sudo apt-get install xvfb
 export DISPLAY=:99
 Xvfb :99 -screen 0 1920x1080x24 &
 
-# O usar modo headless
-nucleus synapse launch profile_001 --mode headless
-
 # Verificar permisos de directorio de perfiles
 ls -la ~/.local/share/BloomNucleus/profiles/
 ```
@@ -1296,7 +1291,7 @@ Temporal reintentará reconectar automáticamente. Si no se recupera en 5 minuto
 # Forzar shutdown y relaunch
 nucleus synapse shutdown-all
 sleep 5
-nucleus synapse launch profile_001 --heartbeat
+nucleus synapse launch profile_001
 ```
 
 ---
@@ -1369,7 +1364,7 @@ nucleus/
 │   │   ├── activities/
 │   │   │   └── sentinel_activities.go        # ✅ Activities unificadas
 │   │   ├── commands/
-│   │   │   └── synapse.go                    # Comandos CLI
+│   │   │   └── synapse.go                    # ✅ Comandos CLI Synapse
 │   │   ├── queries/
 │   │   │   └── status.go
 │   │   ├── signals/
@@ -1391,8 +1386,6 @@ nucleus/
 │   │   └── workflows/
 │   │       ├── recovery_flow.go
 │   │       └── system_gate.go
-│   ├── synapse/
-│   │   └── synapse_commands.go            # ✅ CLI synapse
 │   ├── supervisor/
 │   │   ├── dev_start.go
 │   │   ├── health.go
@@ -1417,7 +1410,7 @@ nucleus/
 | Componente | Ubicación | Descripción |
 |------------|-----------|-------------|
 | **Sentinel Activities** | `internal/orchestration/activities/sentinel_activities.go` | Todas las activities unificadas |
-| **Synapse Commands** | `internal/synapse/synapse_commands.go` | CLI commands (seed, launch, etc.) |
+| **Synapse Commands** | `internal/orchestration/commands/synapse.go` | CLI commands (seed, launch, etc.) |
 | **Temporal Ensure** | `internal/orchestration/temporal/bootstrap/ensure.go` | Comando idempotente para asegurar Temporal |
 | **Profile Lifecycle** | `internal/orchestration/temporal/workflows/profile_lifecycle.go` | Workflow principal de perfiles |
 | **Temporal Client** | `internal/orchestration/temporal/temporal_client.go` | Cliente para interactuar con Temporal |
@@ -1470,99 +1463,134 @@ curl http://localhost:7233/metrics
 
 ## Creación de Nuevos Comandos Synapse
 
-### 1. Definir Command en CLI Layer
+> **⚠️ Leer antes de empezar:** Para una guía paso a paso completa con todos los patrones, checklist y ejemplos adicionales, ver `SYNAPSE_NEW_COMMAND_GUIDE_v1.1`. Esta sección es un resumen de referencia rápida.
 
-**Archivo:** `cmd/synapse/my_command.go`
+### 1. Definir el Subcomando CLI
+
+**Archivo:** `internal/orchestration/commands/synapse.go` — agregar al final, antes del `init()`
 
 ```go
-package synapse
+package commands
 
 import (
-    "encoding/json"
+    "context"
     "fmt"
-    "github.com/spf13/cobra"
+    "os"
+
     "nucleus/internal/core"
-    "nucleus/internal/orchestration/temporal"
+    temporalclient "nucleus/internal/orchestration/temporal"
+
+    "github.com/spf13/cobra"
 )
 
-type MyCommandResult struct {
-    Success   bool   `json:"success"`
-    Message   string `json:"message"`
-    Data      string `json:"data,omitempty"`
-    Error     string `json:"error,omitempty"`
-    Timestamp int64  `json:"timestamp"`
-}
+func createMyCommandSubcommand(c *core.Core) *cobra.Command {
+    var jsonOutput bool
+    var myFlag string
 
-func newMyCommand(c *core.Core) *cobra.Command {
     cmd := &cobra.Command{
-        Use:   "mycommand <arg1> [arg2]",
+        Use:   "my-command <arg1> [arg2]",
         Short: "Description of what this command does",
         Long: `Longer description with examples:
 
-  nucleus synapse mycommand value1
-  nucleus synapse mycommand value1 value2 --flag`,
+  nucleus synapse my-command value1
+  nucleus synapse my-command value1 value2 --my-flag custom`,
         Args: cobra.MinimumNArgs(1),
-        RunE: func(cmd *cobra.Command, args []string) error {
-            // Parse flags
-            flagValue, _ := cmd.Flags().GetString("my-flag")
-            
-            // Execute Temporal workflow
-            result, err := executeMyWorkflow(c, args[0], flagValue)
-            if err != nil {
-                if c.IsJSON {
-                    errResult := &MyCommandResult{
-                        Success:   false,
-                        Error:     err.Error(),
-                        Timestamp: time.Now().Unix(),
-                    }
-                    output, _ := json.Marshal(errResult)
-                    fmt.Println(string(output))
-                    return nil  // Don't double-print error
-                }
-                return err
-            }
-            
-            // Output result
+
+        Annotations: map[string]string{
+            "category": "ORCHESTRATION",
+            "json_response": `{
+  "success": true,
+  "message": "Operation completed",
+  "data": "operation result",
+  "timestamp": 1707145200
+}`,
+        },
+
+        Example: `  nucleus synapse my-command value1
+  nucleus --json synapse my-command value1 --my-flag custom`,
+
+        Run: func(cmd *cobra.Command, args []string) {
             if c.IsJSON {
-                output, _ := json.Marshal(result)
-                fmt.Println(string(output))
-            } else {
-                fmt.Printf("Success: %s\n", result.Message)
+                jsonOutput = true
             }
-            
-            return nil
+
+            logger, err := core.InitLogger(&c.Paths, "SYNAPSE", jsonOutput, "synapse")
+            if err != nil {
+                fmt.Fprintf(os.Stderr, "[ERROR] Failed to initialize logger: %v\n", err)
+                os.Exit(1)
+            }
+            defer logger.Close()
+
+            if !jsonOutput {
+                logger.Info("Executing my-command: %s", args[0])
+            }
+
+            ctx := context.Background()
+            tc, err := temporalclient.NewClient(ctx, &c.Paths, jsonOutput)
+            if err != nil {
+                if jsonOutput {
+                    outputJSON(map[string]interface{}{
+                        "success": false,
+                        "error":   fmt.Sprintf("failed to connect to Temporal: %v", err),
+                    })
+                } else {
+                    logger.Error("Failed to connect to Temporal: %v", err)
+                }
+                os.Exit(1)
+            }
+            defer tc.Close()
+
+            result, err := tc.ExecuteMyWorkflow(ctx, logger, args[0], myFlag)
+            if err != nil {
+                if jsonOutput {
+                    outputJSON(map[string]interface{}{"success": false, "error": err.Error()})
+                } else {
+                    logger.Error("Command failed: %v", err)
+                }
+                os.Exit(1)
+            }
+
+            if jsonOutput {
+                outputJSON(result)
+                return
+            }
+            logger.Success("✅ Operation completed")
+            logger.Info("Data: %s", result.Data)
         },
     }
-    
-    // Add flags
-    cmd.Flags().String("my-flag", "default", "Description of flag")
-    
+
+    cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
+    cmd.Flags().StringVar(&myFlag, "my-flag", "default", "Description of flag")
     return cmd
 }
 ```
 
-### 2. Registrar Command
+### 2. Adjuntar al Padre
 
-**Archivo:** `cmd/synapse/synapse.go`
+**En el mismo archivo**, dentro de `createSynapseCommand`:
 
 ```go
-func NewSynapseCommand(c *core.Core) *cobra.Command {
-    cmd := &cobra.Command{
-        Use:   "synapse",
-        Short: "Temporal workflow orchestration",
-    }
-    
-    cmd.AddCommand(newLaunchCommand(c))
-    cmd.AddCommand(newSeedCommand(c))
-    cmd.AddCommand(newMyCommand(c))  // ← Añadir aquí
-    
+func createSynapseCommand(c *core.Core) *cobra.Command {
+    cmd := &cobra.Command{ /* ... */ }
+
+    cmd.AddCommand(createSeedSubcommand(c))
+    cmd.AddCommand(createLaunchSubcommand(c))
+    cmd.AddCommand(createStatusSubcommand(c))
+    cmd.AddCommand(createShutdownSubcommand(c))
+    cmd.AddCommand(createStartOllamaSubcommand(c))
+    cmd.AddCommand(createVaultStatusSubcommand(c))
+    cmd.AddCommand(createShutdownAllSubcommand(c))
+    cmd.AddCommand(createMyCommandSubcommand(c))  // ← Añadir aquí
+
     return cmd
 }
 ```
+
+> **⚠️ No agregar** `core.RegisterCommand()` en el `init()` para el subcomando nuevo. Solo el padre `createSynapseCommand` está registrado en el registry. Agregar una segunda entrada crearía un comando top-level `nucleus my-command`, no un subcomando de `synapse`.
 
 ### 3. Definir Workflow de Temporal
 
-**Archivo:** `internal/orchestration/temporal/workflows/my_workflow.go`
+**Archivo:** `internal/orchestration/temporal/workflows/my_workflow.go` (nuevo archivo)
 
 ```go
 package workflows
@@ -1570,6 +1598,7 @@ package workflows
 import (
     "time"
     "go.temporal.io/sdk/workflow"
+    "go.temporal.io/sdk/temporal"
 )
 
 type MyWorkflowInput struct {
@@ -1578,35 +1607,29 @@ type MyWorkflowInput struct {
 }
 
 type MyWorkflowResult struct {
-    Success   bool
-    Message   string
-    Data      string
-    Timestamp int64
+    Success   bool   `json:"success"`
+    Message   string `json:"message"`
+    Data      string `json:"data,omitempty"`
+    Timestamp int64  `json:"timestamp"`
 }
 
 func MyWorkflow(ctx workflow.Context, input MyWorkflowInput) (*MyWorkflowResult, error) {
-    // Configurar opciones de activity
     activityOptions := workflow.ActivityOptions{
         StartToCloseTimeout: 5 * time.Minute,
+        HeartbeatTimeout:    30 * time.Second,
         RetryPolicy: &temporal.RetryPolicy{
-            MaximumAttempts: 3,
-            InitialInterval: 2 * time.Second,
+            MaximumAttempts:    3,
+            InitialInterval:    2 * time.Second,
             BackoffCoefficient: 2.0,
         },
     }
     ctx = workflow.WithActivityOptions(ctx, activityOptions)
-    
-    // Ejecutar activity
+
     var activityResult string
-    err := workflow.ExecuteActivity(ctx, MyActivity, input).Get(ctx, &activityResult)
-    if err != nil {
-        return &MyWorkflowResult{
-            Success: false,
-            Message: "Activity failed",
-        }, err
+    if err := workflow.ExecuteActivity(ctx, "MyActivity", input).Get(ctx, &activityResult); err != nil {
+        return &MyWorkflowResult{Success: false, Message: "Activity failed"}, err
     }
-    
-    // Retornar resultado
+
     return &MyWorkflowResult{
         Success:   true,
         Message:   "Operation completed",
@@ -1616,33 +1639,19 @@ func MyWorkflow(ctx workflow.Context, input MyWorkflowInput) (*MyWorkflowResult,
 }
 ```
 
-### 4. Definir Activity
+### 4. Agregar Activity al archivo unificado
 
-**Archivo:** `internal/orchestration/temporal/activities/my_activity.go`
+**Archivo:** `internal/orchestration/activities/sentinel_activities.go` — **modificar archivo existente**
+
+> **⚠️ No crear un archivo o struct separado.** Todas las activities viven en `SentinelActivities` según el refactor v3.0.
 
 ```go
-package activities
+// Agregar al final de sentinel_activities.go
 
-import (
-    "context"
-    "nucleus/internal/orchestration/temporal/workflows"
-)
-
-type MyActivities struct {
-    // Dependencies inyectadas
-}
-
-func (a *MyActivities) MyActivity(ctx context.Context, input workflows.MyWorkflowInput) (string, error) {
-    // Lógica de negocio
-    // Puede llamar a Sentinel, interactuar con Chrome, etc.
-    
-    result := performOperation(input.Arg1, input.FlagValue)
+func (a *SentinelActivities) MyActivity(ctx context.Context, input workflows.MyWorkflowInput) (string, error) {
+    // Lógica de negocio — puede llamar a Sentinel, interactuar con Chrome, etc.
+    result := fmt.Sprintf("processed %s with flag %s", input.Arg1, input.FlagValue)
     return result, nil
-}
-
-func performOperation(arg1, flagValue string) string {
-    // Implementación
-    return "operation result"
 }
 ```
 
@@ -1652,50 +1661,48 @@ func performOperation(arg1, flagValue string) string {
 
 ```go
 func (w *Worker) Start(ctx context.Context) error {
-    // ... código existente ...
-    
     // Registrar workflows
     w.worker.RegisterWorkflow(workflows.LaunchWorkflow)
     w.worker.RegisterWorkflow(workflows.SeedWorkflow)
     w.worker.RegisterWorkflow(workflows.MyWorkflow)  // ← Añadir
-    
-    // Registrar activities
-    activities := &activities.MyActivities{}
+
+    // Registrar activities (SentinelActivities ya instanciado)
+    activities := &activities.SentinelActivities{}
+    w.worker.RegisterActivity(activities.LaunchSentinel)
+    w.worker.RegisterActivity(activities.MonitorSentinel)
     w.worker.RegisterActivity(activities.MyActivity)  // ← Añadir
-    
-    // ... resto del código ...
 }
 ```
 
 ### 6. Crear Client Helper
 
-**Archivo:** `internal/orchestration/temporal/client.go`
+**Archivo:** `internal/orchestration/temporal/temporal_client.go`
 
 ```go
 func (c *Client) ExecuteMyWorkflow(
     ctx context.Context,
+    logger *core.Logger,
     arg1, flagValue string,
 ) (*workflows.MyWorkflowResult, error) {
     workflowOptions := client.StartWorkflowOptions{
         ID:        fmt.Sprintf("my_workflow_%s_%d", arg1, time.Now().Unix()),
         TaskQueue: c.config.TaskQueue,
     }
-    
-    input := workflows.MyWorkflowInput{
-        Arg1:      arg1,
-        FlagValue: flagValue,
-    }
-    
+
+    input := workflows.MyWorkflowInput{Arg1: arg1, FlagValue: flagValue}
+
+    logger.Debug("Starting MyWorkflow: %s", arg1)
+
     we, err := c.client.ExecuteWorkflow(ctx, workflowOptions, workflows.MyWorkflow, input)
     if err != nil {
         return nil, fmt.Errorf("failed to start workflow: %w", err)
     }
-    
+
     var result workflows.MyWorkflowResult
     if err := we.Get(ctx, &result); err != nil {
         return nil, fmt.Errorf("workflow execution failed: %w", err)
     }
-    
+
     return &result, nil
 }
 ```
@@ -1708,13 +1715,13 @@ nucleus temporal ensure
 nucleus worker start -q profile-orchestration
 
 # 2. Probar comando
-nucleus --json synapse mycommand test_value --my-flag custom_value
+nucleus --json synapse my-command test_value --my-flag custom_value
 
-# 3. Verificar output
+# 3. Verificar output esperado
 {
   "success": true,
   "message": "Operation completed",
-  "data": "operation result",
+  "data": "processed test_value with flag custom_value",
   "timestamp": 1707145200
 }
 
@@ -2043,6 +2050,18 @@ Depende de tus recursos (RAM, CPU). Un perfil Chrome consume ~300-500 MB de RAM.
 
 ## Changelog
 
+### v3.1.0 (2026-03-01) - Homologación Post-Audit
+- 🔧 **Árbol de archivos corregido**: eliminada rama `internal/synapse/` residual del pre-refactor; única ruta canónica es `internal/orchestration/commands/synapse.go`
+- 🔧 **Tabla "Archivos Clave" corregida**: `Synapse Commands` apunta a `internal/orchestration/commands/synapse.go`
+- 🔧 **Sección "Creación de Nuevos Comandos" reescrita**:
+  - Ruta correcta: `internal/orchestration/commands/synapse.go` / `package commands`
+  - Convención de nombres: `createXxxSubcommand` (era `newXxxCommand`)
+  - Patrón de registro: `cmd.AddCommand()` dentro del padre (era `NewSynapseCommand` separado)
+  - Activities: agregar a `SentinelActivities` en `sentinel_activities.go` (era struct separado)
+  - Cliente: `temporal_client.go` (era `client.go`)
+- 🔧 **Troubleshooting**: eliminados `--mode headless` y `--heartbeat` (flags inexistentes)
+- 🔧 **Integraciones Node.js, PowerShell y Bash**: eliminado parámetro `email` del comando `launch` (no existe en la implementación actual)
+
 ### v3.0.0 (2026-02-16) - Post-Refactor Release
 - 🆕 **Unificación de Activities**: Todas las Sentinel Activities consolidadas en `sentinel_activities.go`
 - 🆕 **Sintaxis actualizada**: `seed` usa flag `--master` en lugar de parámetro posicional
@@ -2078,8 +2097,8 @@ Depende de tus recursos (RAM, CPU). Un perfil Chrome consume ~300-500 MB de RAM.
 
 ---
 
-**Versión:** 3.0.0  
-**Fecha:** 2026-02-16  
+**Versión:** 3.1.0  
+**Fecha:** 2026-03-01  
 **Autor:** Platform Engineering Team  
 **Estado:** Production Ready  
-**Cambios v3.0:** Activities unificadas, sintaxis de comandos actualizada, documentación ampliada
+**Cambios v3.1:** Homologación post-audit — rutas de archivos, patrones de nuevos comandos, flags y ejemplos de integración corregidos

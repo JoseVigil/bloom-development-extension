@@ -1,6 +1,8 @@
-# 🧬 Guía de Creación de Comandos SYNAPSE v1.0
+# 🧬 Guía de Creación de Comandos SYNAPSE v1.1
 
 Esta guía define el proceso paso a paso para agregar nuevos comandos al sistema **Synapse**, la capa de orquestación de Nucleus que gestiona perfiles mediante workflows de Temporal.
+
+> **v1.1 — Post-audit Feb 2026**: Actualizada para reflejar la implementación real en producción. Los patrones de registro, ubicación de archivos, convenciones de nombres y categoría de agrupación se corrigieron para alinear la guía con el código fuente en `internal/orchestration/commands/synapse.go`.
 
 ---
 
@@ -13,6 +15,11 @@ Esta guía define el proceso paso a paso para agregar nuevos comandos al sistema
 5. [Testing y Validación](#5-testing-y-validación)
 6. [Checklist Completo](#6-checklist-completo)
 7. [Ejemplos Completos](#7-ejemplos-completos)
+8. [Errores Comunes y Soluciones](#8-errores-comunes-y-soluciones)
+9. [Mejores Prácticas](#9-mejores-prácticas)
+10. [Debugging](#10-debugging)
+11. [Checklist Final](#11-checklist-final)
+12. [Recursos](#12-recursos)
 
 ---
 
@@ -41,12 +48,13 @@ Esta guía define el proceso paso a paso para agregar nuevos comandos al sistema
 - No involucra workflows de Temporal
 - Es una operación simple sin estado
 
-### 1.3 Comandos Synapse Existentes (v3.0)
+### 1.3 Comandos Synapse Existentes
 
 ```bash
 nucleus synapse seed <alias> [--master]      # Crear perfil persistente
 nucleus synapse launch <profile_id>          # Lanzar Sentinel + Chrome
 nucleus synapse status <profile_id>          # Query estado del workflow
+nucleus synapse shutdown <profile_id>        # Shutdown de un perfil
 nucleus synapse shutdown-all                 # Detener todos los perfiles
 nucleus synapse start-ollama                 # Iniciar Ollama workflow
 nucleus synapse vault-status                 # Estado del vault
@@ -60,7 +68,7 @@ nucleus synapse vault-status                 # Estado del vault
 
 ```
 ┌─────────────────────────────────────┐
-│ CLI Command Layer                   │  ← internal/synapse/synapse_commands.go
+│ CLI Command Layer                   │  ← internal/orchestration/commands/synapse.go
 │ (synapse seed, launch, etc.)        │
 └─────────────────────────────────────┘
            ↓
@@ -93,21 +101,21 @@ nucleus synapse vault-status                 # Estado del vault
 ```
 nucleus/
 ├── internal/
-│   ├── synapse/
-│   │   └── synapse_commands.go           # ✅ Comandos CLI Synapse
 │   ├── orchestration/
+│   │   ├── commands/
+│   │   │   └── synapse.go                   # ✅ Comandos CLI Synapse
 │   │   ├── activities/
-│   │   │   └── sentinel_activities.go    # ✅ Activities unificadas
+│   │   │   └── sentinel_activities.go       # ✅ Activities unificadas
 │   │   ├── temporal/
-│   │   │   ├── temporal_client.go        # ✅ Client helpers
-│   │   │   ├── worker.go                 # Worker registration
+│   │   │   ├── temporal_client.go           # ✅ Client helpers
+│   │   │   ├── worker.go                    # Worker registration
 │   │   │   └── workflows/
-│   │   │       └── profile_lifecycle.go  # ✅ Workflow definitions
+│   │   │       └── profile_lifecycle.go     # ✅ Workflow definitions
 │   │   └── types/
-│   │       └── orchestration.go          # Tipos compartidos
+│   │       └── orchestration.go             # Tipos compartidos
 │   └── core/
-│       └── registry.go                   # Sistema de registro
-└── main.go                               # Import del paquete
+│       └── registry.go                      # Sistema de registro
+└── main.go                                  # Import del paquete
 ```
 
 ### 2.3 Patrón de Registro
@@ -117,139 +125,170 @@ nucleus/
 - Comparten el mismo cliente Temporal
 - Comparten estructuras de resultado comunes
 
+El patrón de registro es **árbol padre-hijos**: solo el comando padre `synapse` se registra en el `CommandRegistry`. Los subcomandos se agregan al padre mediante `cmd.AddCommand()` dentro de la función constructora del padre. Esto garantiza que el path sea siempre `nucleus synapse <subcmd>`.
+
 ```go
-// File: internal/synapse/synapse_commands.go
-package synapse
+// File: internal/orchestration/commands/synapse.go
+package commands
 
 func init() {
-	core.RegisterCommand("SYNAPSE", seedCmd)
-	core.RegisterCommand("SYNAPSE", launchCmd)
-	core.RegisterCommand("SYNAPSE", statusCmd)
-	core.RegisterCommand("SYNAPSE", shutdownCmd)
-	// ← Aquí agregarás tu nuevo comando
+    // ⚠️ Solo el padre se registra en el registry.
+    // Los subcomandos se adjuntan dentro de createSynapseCommand().
+    core.RegisterCommand("ORCHESTRATION", createSynapseCommand)
+}
+
+func createSynapseCommand(c *core.Core) *cobra.Command {
+    cmd := &cobra.Command{
+        Use:   "synapse",
+        Short: "Temporal workflow orchestration via Sentinel",
+        Annotations: map[string]string{
+            "category": "ORCHESTRATION",
+        },
+    }
+
+    // Subcomandos se adjuntan aquí:
+    cmd.AddCommand(createSeedSubcommand(c))
+    cmd.AddCommand(createLaunchSubcommand(c))
+    cmd.AddCommand(createStatusSubcommand(c))
+    // ← Aquí agregarás tu nuevo subcomando
+    cmd.AddCommand(createMyNewSubcommand(c))
+
+    return cmd
 }
 ```
+
+> **¿Por qué categoría `"ORCHESTRATION"` y no `"SYNAPSE"`?**
+> La categoría es propagada por `registry.go` a todos los subcomandos via `annotateSubcommands()`. Todos los comandos bajo `nucleus synapse` aparecen agrupados como `ORCHESTRATION` en el help y en cualquier sistema que lea `cmd.Annotations["category"]`. Esto es intencional: Synapse es la interfaz CLI de la capa de orquestación, no una categoría independiente.
 
 ---
 
 ## 3. Paso a Paso: Crear un Nuevo Comando
 
-### PASO 1: Definir el Comando CLI
+### PASO 1: Definir el Subcomando CLI
 
-**Archivo**: `internal/synapse/synapse_commands.go`
+**Archivo**: `internal/orchestration/commands/synapse.go`
+
+Agregar al final del archivo, **antes** del `init()`:
 
 ```go
-// Agregar al final del archivo, ANTES del init()
-func myNewCmd(c *core.Core) *cobra.Command {
-	var jsonOutput bool
-	var customFlag string
+func createMyNewSubcommand(c *core.Core) *cobra.Command {
+    var jsonOutput bool
+    var customFlag string
 
-	cmd := &cobra.Command{
-		Use:   "my-command <arg1> [arg2]",
-		Short: "Brief description of what this command does",
-		Long: `Detailed explanation of the command.
-		
+    cmd := &cobra.Command{
+        Use:   "my-command <arg1> [arg2]",
+        Short: "Brief description of what this command does",
+        Long: `Detailed explanation of the command.
+
 This command performs X operation on profiles by:
 - Creating a workflow in Temporal
 - Executing MyActivity
 - Returning the result`,
-		Args: cobra.RangeArgs(1, 2),  // 1 obligatorio, 1 opcional
-		
-		Annotations: map[string]string{
-			"category": "SYNAPSE",
-			"json_response": `{
+        Args: cobra.RangeArgs(1, 2),
+
+        Annotations: map[string]string{
+            "category": "ORCHESTRATION",
+            "json_response": `{
   "success": true,
   "profile_id": "abc123",
   "operation": "my-command",
   "result": "completed"
 }`,
-		},
-		
-		Example: `  nucleus synapse my-command profile_001
+        },
+
+        Example: `  nucleus synapse my-command profile_001
   nucleus synapse my-command profile_001 optional_arg --custom-flag value
   nucleus --json synapse my-command profile_001`,
-		
-		Run: func(cmd *cobra.Command, args []string) {
-			profileID := args[0]
-			optionalArg := ""
-			if len(args) > 1 {
-				optionalArg = args[1]
-			}
 
-			// Crear logger
-			logger, err := core.InitLogger(&c.Paths, "SYNAPSE", jsonOutput)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "[ERROR] Failed to initialize logger: %v\n", err)
-				os.Exit(1)
-			}
-			defer logger.Close()
+        Run: func(cmd *cobra.Command, args []string) {
+            profileID := args[0]
+            optionalArg := ""
+            if len(args) > 1 {
+                optionalArg = args[1]
+            }
+            if c.IsJSON {
+                jsonOutput = true
+            }
 
-			if !jsonOutput {
-				logger.Info("Executing my-command for profile: %s", profileID)
-			}
+            logger, err := core.InitLogger(&c.Paths, "SYNAPSE", jsonOutput, "synapse")
+            if err != nil {
+                fmt.Fprintf(os.Stderr, "[ERROR] Failed to initialize logger: %v\n", err)
+                os.Exit(1)
+            }
+            defer logger.Close()
 
-			// Crear cliente Temporal
-			ctx := context.Background()
-			tc, err := temporalclient.NewClient(ctx, &c.Paths, jsonOutput)
-			if err != nil {
-				if jsonOutput {
-					outputJSON(map[string]interface{}{
-						"success": false,
-						"error":   fmt.Sprintf("failed to connect to Temporal: %v", err),
-					})
-				} else {
-					logger.Error("Failed to connect to Temporal: %v", err)
-				}
-				os.Exit(1)
-			}
-			defer tc.Close()
+            if !jsonOutput {
+                logger.Info("Executing my-command for profile: %s", profileID)
+            }
 
-			// Ejecutar workflow (ver PASO 3)
-			result, err := tc.ExecuteMyWorkflow(ctx, logger, profileID, customFlag)
-			if err != nil {
-				if jsonOutput {
-					outputJSON(map[string]interface{}{
-						"success":    false,
-						"profile_id": profileID,
-						"error":      err.Error(),
-					})
-				} else {
-					logger.Error("My command failed: %v", err)
-				}
-				os.Exit(1)
-			}
+            ctx := context.Background()
+            tc, err := temporalclient.NewClient(ctx, &c.Paths, jsonOutput)
+            if err != nil {
+                if jsonOutput {
+                    outputJSON(map[string]interface{}{
+                        "success": false,
+                        "error":   fmt.Sprintf("failed to connect to Temporal: %v", err),
+                    })
+                } else {
+                    logger.Error("Failed to connect to Temporal: %v", err)
+                }
+                os.Exit(1)
+            }
+            defer tc.Close()
 
-			// Output
-			if jsonOutput {
-				outputJSON(result)
-			} else {
-				logger.Success("✅ My command completed successfully")
-				logger.Info("Profile ID: %s", result.ProfileID)
-				logger.Info("Result: %s", result.Result)
-			}
-		},
-	}
+            result, err := tc.ExecuteMyWorkflow(ctx, logger, profileID, customFlag)
+            if err != nil {
+                if jsonOutput {
+                    outputJSON(map[string]interface{}{
+                        "success":    false,
+                        "profile_id": profileID,
+                        "error":      err.Error(),
+                    })
+                } else {
+                    logger.Error("My command failed: %v", err)
+                }
+                os.Exit(1)
+            }
 
-	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
-	cmd.Flags().StringVar(&customFlag, "custom-flag", "default", "Custom flag description")
+            if jsonOutput {
+                outputJSON(result)
+                return
+            }
+            logger.Success("✅ My command completed successfully")
+            logger.Info("Profile ID: %s", result.ProfileID)
+            logger.Info("Result: %s", result.Result)
+        },
+    }
 
-	return cmd
+    cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
+    cmd.Flags().StringVar(&customFlag, "custom-flag", "default", "Custom flag description")
+
+    return cmd
 }
 ```
 
-### PASO 2: Registrar el Comando
+### PASO 2: Adjuntar el Subcomando al Padre
 
-**En el mismo archivo** (`synapse_commands.go`), agregar al `init()`:
+**En el mismo archivo** (`synapse.go`), dentro de `createSynapseCommand`:
 
 ```go
-func init() {
-	core.RegisterCommand("SYNAPSE", seedCmd)
-	core.RegisterCommand("SYNAPSE", launchCmd)
-	core.RegisterCommand("SYNAPSE", statusCmd)
-	core.RegisterCommand("SYNAPSE", shutdownCmd)
-	core.RegisterCommand("SYNAPSE", myNewCmd)  // ✅ Agregar aquí
+func createSynapseCommand(c *core.Core) *cobra.Command {
+    cmd := &cobra.Command{ /* ... */ }
+
+    cmd.AddCommand(createSeedSubcommand(c))
+    cmd.AddCommand(createLaunchSubcommand(c))
+    cmd.AddCommand(createStatusSubcommand(c))
+    cmd.AddCommand(createShutdownSubcommand(c))
+    cmd.AddCommand(createStartOllamaSubcommand(c))
+    cmd.AddCommand(createVaultStatusSubcommand(c))
+    cmd.AddCommand(createShutdownAllSubcommand(c))
+    cmd.AddCommand(createMyNewSubcommand(c))  // ✅ Agregar aquí
+
+    return cmd
 }
 ```
+
+> **⚠️ No agregar `core.RegisterCommand()` en el `init()`** para el nuevo subcomando. Solo el padre `createSynapseCommand` está registrado. Agregar una segunda entrada al registry crearía un comando top-level `nucleus my-command`, no un subcomando.
 
 ### PASO 3: Definir el Workflow
 
@@ -259,61 +298,55 @@ func init() {
 package workflows
 
 import (
-	"time"
-	"go.temporal.io/sdk/workflow"
-	"go.temporal.io/sdk/temporal"
+    "time"
+    "go.temporal.io/sdk/workflow"
+    "go.temporal.io/sdk/temporal"
 )
 
-// MyWorkflowInput define los parámetros de entrada
 type MyWorkflowInput struct {
-	ProfileID  string
-	CustomFlag string
+    ProfileID  string
+    CustomFlag string
 }
 
-// MyWorkflowResult define la respuesta del workflow
 type MyWorkflowResult struct {
-	Success   bool   `json:"success"`
-	ProfileID string `json:"profile_id"`
-	Operation string `json:"operation"`
-	Result    string `json:"result"`
-	Timestamp int64  `json:"timestamp"`
+    Success   bool   `json:"success"`
+    ProfileID string `json:"profile_id"`
+    Operation string `json:"operation"`
+    Result    string `json:"result"`
+    Timestamp int64  `json:"timestamp"`
 }
 
-// MyWorkflow es el workflow que orquesta la operación
 func MyWorkflow(ctx workflow.Context, input MyWorkflowInput) (*MyWorkflowResult, error) {
-	// Configurar opciones de activity
-	activityOptions := workflow.ActivityOptions{
-		StartToCloseTimeout: 5 * time.Minute,
-		HeartbeatTimeout:    30 * time.Second,
-		RetryPolicy: &temporal.RetryPolicy{
-			MaximumAttempts:    3,
-			InitialInterval:    2 * time.Second,
-			BackoffCoefficient: 2.0,
-		},
-	}
-	ctx = workflow.WithActivityOptions(ctx, activityOptions)
+    activityOptions := workflow.ActivityOptions{
+        StartToCloseTimeout: 5 * time.Minute,
+        HeartbeatTimeout:    30 * time.Second,
+        RetryPolicy: &temporal.RetryPolicy{
+            MaximumAttempts:    3,
+            InitialInterval:    2 * time.Second,
+            BackoffCoefficient: 2.0,
+        },
+    }
+    ctx = workflow.WithActivityOptions(ctx, activityOptions)
 
-	// Ejecutar activity (ver PASO 4)
-	var activityResult string
-	err := workflow.ExecuteActivity(ctx, "MyActivity", input).Get(ctx, &activityResult)
-	if err != nil {
-		return &MyWorkflowResult{
-			Success:   false,
-			ProfileID: input.ProfileID,
-			Operation: "my-command",
-			Result:    "failed",
-			Timestamp: workflow.Now(ctx).Unix(),
-		}, err
-	}
+    var activityResult string
+    err := workflow.ExecuteActivity(ctx, "MyActivity", input).Get(ctx, &activityResult)
+    if err != nil {
+        return &MyWorkflowResult{
+            Success:   false,
+            ProfileID: input.ProfileID,
+            Operation: "my-command",
+            Result:    "failed",
+            Timestamp: workflow.Now(ctx).Unix(),
+        }, err
+    }
 
-	// Retornar resultado exitoso
-	return &MyWorkflowResult{
-		Success:   true,
-		ProfileID: input.ProfileID,
-		Operation: "my-command",
-		Result:    activityResult,
-		Timestamp: workflow.Now(ctx).Unix(),
-	}, nil
+    return &MyWorkflowResult{
+        Success:   true,
+        ProfileID: input.ProfileID,
+        Operation: "my-command",
+        Result:    activityResult,
+        Timestamp: workflow.Now(ctx).Unix(),
+    }, nil
 }
 ```
 
@@ -326,32 +359,16 @@ func MyWorkflow(ctx workflow.Context, input MyWorkflowInput) (*MyWorkflowResult,
 ```go
 // Agregar al final del archivo sentinel_activities.go
 
-// MyActivity ejecuta la lógica de negocio
 func (a *SentinelActivities) MyActivity(ctx context.Context, input workflows.MyWorkflowInput) (string, error) {
-	// Lógica específica de tu comando
-	// Puede involucrar:
-	// - Llamar a Sentinel
-	// - Interactuar con Chrome
-	// - Ejecutar operaciones del sistema
-	// - Comunicarse con servicios externos
-	
-	// Ejemplo: obtener información del perfil
-	profileData, err := a.getProfileData(input.ProfileID)
-	if err != nil {
-		return "", fmt.Errorf("failed to get profile data: %w", err)
-	}
-	
-	// Ejecutar operación principal
-	result := fmt.Sprintf("Processed profile %s with flag %s", 
-		profileData.Alias, input.CustomFlag)
-	
-	return result, nil
-}
+    profileData, err := a.getProfileData(input.ProfileID)
+    if err != nil {
+        return "", fmt.Errorf("failed to get profile data: %w", err)
+    }
 
-// Helper privado para la activity
-func (a *SentinelActivities) getProfileData(profileID string) (*ProfileData, error) {
-	// Implementación...
-	return &ProfileData{Alias: "test"}, nil
+    result := fmt.Sprintf("Processed profile %s with flag %s",
+        profileData.Alias, input.CustomFlag)
+
+    return result, nil
 }
 ```
 
@@ -361,20 +378,16 @@ func (a *SentinelActivities) getProfileData(profileID string) (*ProfileData, err
 
 ```go
 func (w *Worker) Start(ctx context.Context) error {
-	// ... código existente ...
-	
-	// Registrar workflows
-	w.worker.RegisterWorkflow(workflows.LaunchWorkflow)
-	w.worker.RegisterWorkflow(workflows.SeedWorkflow)
-	w.worker.RegisterWorkflow(workflows.MyWorkflow)  // ✅ Agregar aquí
-	
-	// Registrar activities
-	activities := &activities.SentinelActivities{}
-	w.worker.RegisterActivity(activities.LaunchSentinel)
-	w.worker.RegisterActivity(activities.MonitorSentinel)
-	w.worker.RegisterActivity(activities.MyActivity)  // ✅ Agregar aquí
-	
-	// ... resto del código ...
+    // Registrar workflows
+    w.worker.RegisterWorkflow(workflows.LaunchWorkflow)
+    w.worker.RegisterWorkflow(workflows.SeedWorkflow)
+    w.worker.RegisterWorkflow(workflows.MyWorkflow)  // ✅ Agregar
+
+    // Registrar activities
+    activities := &activities.SentinelActivities{}
+    w.worker.RegisterActivity(activities.LaunchSentinel)
+    w.worker.RegisterActivity(activities.MonitorSentinel)
+    w.worker.RegisterActivity(activities.MyActivity)  // ✅ Agregar
 }
 ```
 
@@ -383,38 +396,35 @@ func (w *Worker) Start(ctx context.Context) error {
 **Archivo**: `internal/orchestration/temporal/temporal_client.go` (MODIFICAR)
 
 ```go
-// Agregar al final del archivo
-
-// ExecuteMyWorkflow ejecuta el workflow de tu nuevo comando
 func (c *Client) ExecuteMyWorkflow(
-	ctx context.Context,
-	logger *core.Logger,
-	profileID string,
-	customFlag string,
+    ctx context.Context,
+    logger *core.Logger,
+    profileID string,
+    customFlag string,
 ) (*workflows.MyWorkflowResult, error) {
-	workflowOptions := client.StartWorkflowOptions{
-		ID:        fmt.Sprintf("my_command_%s_%d", profileID, time.Now().Unix()),
-		TaskQueue: c.config.TaskQueue,
-	}
-	
-	input := workflows.MyWorkflowInput{
-		ProfileID:  profileID,
-		CustomFlag: customFlag,
-	}
-	
-	logger.Debug("Starting MyWorkflow for profile: %s", profileID)
-	
-	we, err := c.client.ExecuteWorkflow(ctx, workflowOptions, workflows.MyWorkflow, input)
-	if err != nil {
-		return nil, fmt.Errorf("failed to start workflow: %w", err)
-	}
-	
-	var result workflows.MyWorkflowResult
-	if err := we.Get(ctx, &result); err != nil {
-		return nil, fmt.Errorf("workflow execution failed: %w", err)
-	}
-	
-	return &result, nil
+    workflowOptions := client.StartWorkflowOptions{
+        ID:        fmt.Sprintf("my_command_%s_%d", profileID, time.Now().Unix()),
+        TaskQueue: c.config.TaskQueue,
+    }
+
+    input := workflows.MyWorkflowInput{
+        ProfileID:  profileID,
+        CustomFlag: customFlag,
+    }
+
+    logger.Debug("Starting MyWorkflow for profile: %s", profileID)
+
+    we, err := c.client.ExecuteWorkflow(ctx, workflowOptions, workflows.MyWorkflow, input)
+    if err != nil {
+        return nil, fmt.Errorf("failed to start workflow: %w", err)
+    }
+
+    var result workflows.MyWorkflowResult
+    if err := we.Get(ctx, &result); err != nil {
+        return nil, fmt.Errorf("workflow execution failed: %w", err)
+    }
+
+    return &result, nil
 }
 ```
 
@@ -423,16 +433,12 @@ func (c *Client) ExecuteMyWorkflow(
 **Archivo**: `internal/orchestration/types/orchestration.go` (MODIFICAR si necesitas tipos compartidos)
 
 ```go
-// Agregar solo si necesitas tipos compartidos entre múltiples componentes
-
 type ProfileData struct {
-	ID        string
-	Alias     string
-	IsMaster  bool
-	CreatedAt time.Time
+    ID        string
+    Alias     string
+    IsMaster  bool
+    CreatedAt time.Time
 }
-
-// ... otros tipos según necesidad
 ```
 
 ---
@@ -467,19 +473,19 @@ sequenceDiagram
 **Timeouts:**
 ```go
 activityOptions := workflow.ActivityOptions{
-	StartToCloseTimeout: 5 * time.Minute,   // Tiempo total máximo
-	HeartbeatTimeout:    30 * time.Second,  // Intervalo de heartbeat
-	ScheduleToStartTimeout: 1 * time.Minute, // Máximo en cola
+    StartToCloseTimeout:    5 * time.Minute,   // Tiempo total máximo
+    HeartbeatTimeout:       30 * time.Second,  // Intervalo de heartbeat
+    ScheduleToStartTimeout: 1 * time.Minute,   // Máximo en cola
 }
 ```
 
 **Retry Policy:**
 ```go
 RetryPolicy: &temporal.RetryPolicy{
-	MaximumAttempts:    3,              // Intentos máximos
-	InitialInterval:    2 * time.Second, // Primera espera
-	BackoffCoefficient: 2.0,            // Multiplicador exponencial
-	MaximumInterval:    30 * time.Second, // Máximo entre reintentos
+    MaximumAttempts:    3,
+    InitialInterval:    2 * time.Second,
+    BackoffCoefficient: 2.0,
+    MaximumInterval:    30 * time.Second,
 }
 ```
 
@@ -504,7 +510,6 @@ go build -o nucleus.exe
 
 # 2. Verificar que el comando aparece
 nucleus synapse --help
-
 # Debe aparecer:
 #   my-command    Brief description of what this command does
 ```
@@ -536,37 +541,30 @@ open http://localhost:8233
 package activities
 
 import (
-	"context"
-	"testing"
-	"nucleus/internal/orchestration/workflows"
+    "context"
+    "testing"
+    "nucleus/internal/orchestration/workflows"
 )
 
 func TestMyActivity(t *testing.T) {
-	// Setup
-	activities := &SentinelActivities{}
-	
-	input := workflows.MyWorkflowInput{
-		ProfileID:  "test_profile",
-		CustomFlag: "test_value",
-	}
-	
-	// Execute
-	result, err := activities.MyActivity(context.Background(), input)
-	
-	// Assert
-	if err != nil {
-		t.Fatalf("Activity failed: %v", err)
-	}
-	
-	if result == "" {
-		t.Error("Expected non-empty result")
-	}
-	
-	t.Logf("Activity result: %s", result)
+    activities := &SentinelActivities{}
+
+    input := workflows.MyWorkflowInput{
+        ProfileID:  "test_profile",
+        CustomFlag: "test_value",
+    }
+
+    result, err := activities.MyActivity(context.Background(), input)
+    if err != nil {
+        t.Fatalf("Activity failed: %v", err)
+    }
+    if result == "" {
+        t.Error("Expected non-empty result")
+    }
+    t.Logf("Activity result: %s", result)
 }
 ```
 
-**Ejecutar test:**
 ```bash
 go test ./internal/orchestration/activities/... -v
 ```
@@ -579,46 +577,37 @@ go test ./internal/orchestration/activities/... -v
 package workflows
 
 import (
-	"testing"
-	"go.temporal.io/sdk/testsuite"
+    "testing"
+    "go.temporal.io/sdk/testsuite"
 )
 
 func TestMyWorkflow(t *testing.T) {
-	// Setup test suite
-	testSuite := &testsuite.WorkflowTestSuite{}
-	env := testSuite.NewTestWorkflowEnvironment()
-	
-	// Mock activity
-	env.OnActivity("MyActivity", mock.Anything, mock.Anything).Return("mocked result", nil)
-	
-	// Input
-	input := MyWorkflowInput{
-		ProfileID:  "test_profile",
-		CustomFlag: "test",
-	}
-	
-	// Execute
-	env.ExecuteWorkflow(MyWorkflow, input)
-	
-	// Assert
-	if !env.IsWorkflowCompleted() {
-		t.Error("Workflow did not complete")
-	}
-	
-	err := env.GetWorkflowError()
-	if err != nil {
-		t.Fatalf("Workflow failed: %v", err)
-	}
-	
-	var result MyWorkflowResult
-	err = env.GetWorkflowResult(&result)
-	if err != nil {
-		t.Fatalf("Failed to get result: %v", err)
-	}
-	
-	if !result.Success {
-		t.Error("Expected successful result")
-	}
+    testSuite := &testsuite.WorkflowTestSuite{}
+    env := testSuite.NewTestWorkflowEnvironment()
+
+    env.OnActivity("MyActivity", mock.Anything, mock.Anything).Return("mocked result", nil)
+
+    input := MyWorkflowInput{
+        ProfileID:  "test_profile",
+        CustomFlag: "test",
+    }
+
+    env.ExecuteWorkflow(MyWorkflow, input)
+
+    if !env.IsWorkflowCompleted() {
+        t.Error("Workflow did not complete")
+    }
+    if err := env.GetWorkflowError(); err != nil {
+        t.Fatalf("Workflow failed: %v", err)
+    }
+
+    var result MyWorkflowResult
+    if err := env.GetWorkflowResult(&result); err != nil {
+        t.Fatalf("Failed to get result: %v", err)
+    }
+    if !result.Success {
+        t.Error("Expected successful result")
+    }
 }
 ```
 
@@ -634,11 +623,11 @@ func TestMyWorkflow(t *testing.T) {
 - [ ] He identificado si necesito un workflow de larga duración
 
 ### Desarrollo
-- [ ] **PASO 1**: Comando CLI creado en `synapse_commands.go`
-- [ ] **PASO 2**: Comando registrado en `init()`
+- [ ] **PASO 1**: Subcomando CLI creado en `internal/orchestration/commands/synapse.go`
+- [ ] **PASO 2**: Subcomando adjuntado al padre con `cmd.AddCommand(createMyNewSubcommand(c))` dentro de `createSynapseCommand`
 - [ ] **PASO 3**: Workflow definido en `workflows/my_workflow.go`
 - [ ] **PASO 4**: Activity agregada a `sentinel_activities.go`
-- [ ] **PASO 5**: Activity registrada en `worker.go`
+- [ ] **PASO 5**: Activity y Workflow registrados en `worker.go`
 - [ ] **PASO 6**: Helper creado en `temporal_client.go`
 - [ ] **PASO 7**: Tipos definidos (si es necesario)
 
@@ -646,7 +635,7 @@ func TestMyWorkflow(t *testing.T) {
 - [ ] `Use` define sintaxis correcta
 - [ ] `Short` describe en una línea
 - [ ] `Long` explica en detalle
-- [ ] `Annotations` tiene `category` y `json_response`
+- [ ] `Annotations` tiene `category: "ORCHESTRATION"` y `json_response`
 - [ ] `Example` muestra casos de uso reales
 - [ ] JSON response es válido y completo
 
@@ -672,6 +661,7 @@ func TestMyWorkflow(t *testing.T) {
 ## 7. Ejemplos Completos
 
 ### Ejemplo 1: Comando Simple (Query)
+
 Comando que hace una query rápida sobre el estado de un perfil sin modificarlo.
 
 **Características:**
@@ -681,18 +671,18 @@ Comando que hace una query rápida sobre el estado de un perfil sin modificarlo.
 - No modifica estado
 
 ```go
-// synapse_commands.go
-func profileInfoCmd(c *core.Core) *cobra.Command {
-	var jsonOutput bool
+// internal/orchestration/commands/synapse.go
+func createProfileInfoSubcommand(c *core.Core) *cobra.Command {
+    var jsonOutput bool
 
-	cmd := &cobra.Command{
-		Use:   "profile-info <profile_id>",
-		Short: "Get detailed information about a profile",
-		Args:  cobra.ExactArgs(1),
-		
-		Annotations: map[string]string{
-			"category": "SYNAPSE",
-			"json_response": `{
+    cmd := &cobra.Command{
+        Use:   "profile-info <profile_id>",
+        Short: "Get detailed information about a profile",
+        Args:  cobra.ExactArgs(1),
+
+        Annotations: map[string]string{
+            "category": "ORCHESTRATION",
+            "json_response": `{
   "success": true,
   "profile_id": "abc123",
   "alias": "my_profile",
@@ -701,59 +691,65 @@ func profileInfoCmd(c *core.Core) *cobra.Command {
   "created_at": 1708095022,
   "sentinel_pid": 12345
 }`,
-		},
-		
-		Run: func(cmd *cobra.Command, args []string) {
-			profileID := args[0]
-			
-			logger, _ := core.InitLogger(&c.Paths, "SYNAPSE", jsonOutput)
-			defer logger.Close()
-			
-			ctx := context.Background()
-			tc, err := temporalclient.NewClient(ctx, &c.Paths, jsonOutput)
-			if err != nil {
-				logger.Error("Failed to connect: %v", err)
-				os.Exit(1)
-			}
-			defer tc.Close()
-			
-			// Query directo (no ejecuta workflow)
-			info, err := tc.QueryProfileInfo(ctx, profileID)
-			if err != nil {
-				logger.Error("Query failed: %v", err)
-				os.Exit(1)
-			}
-			
-			if jsonOutput {
-				outputJSON(info)
-			} else {
-				logger.Info("Profile: %s", info.Alias)
-				logger.Info("State: %s", info.State)
-			}
-		},
-	}
-	
-	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
-	return cmd
+        },
+
+        Run: func(cmd *cobra.Command, args []string) {
+            profileID := args[0]
+            if c.IsJSON {
+                jsonOutput = true
+            }
+
+            logger, err := core.InitLogger(&c.Paths, "SYNAPSE", jsonOutput, "synapse")
+            if err != nil {
+                fmt.Fprintf(os.Stderr, "[ERROR] Failed to initialize logger: %v\n", err)
+                os.Exit(1)
+            }
+            defer logger.Close()
+
+            ctx := context.Background()
+            tc, err := temporalclient.NewClient(ctx, &c.Paths, jsonOutput)
+            if err != nil {
+                logger.Error("Failed to connect: %v", err)
+                os.Exit(1)
+            }
+            defer tc.Close()
+
+            info, err := tc.QueryProfileInfo(ctx, profileID)
+            if err != nil {
+                logger.Error("Query failed: %v", err)
+                os.Exit(1)
+            }
+
+            if jsonOutput {
+                outputJSON(info)
+            } else {
+                logger.Info("Profile: %s", info.Alias)
+                logger.Info("State: %s", info.State)
+            }
+        },
+    }
+
+    cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
+    return cmd
 }
 ```
 
 **temporal_client.go:**
 ```go
 func (c *Client) QueryProfileInfo(ctx context.Context, profileID string) (*ProfileInfo, error) {
-	workflowID := fmt.Sprintf("profile_%s", profileID)
-	
-	resp, err := c.client.QueryWorkflow(ctx, workflowID, "", "GetProfileInfo")
-	if err != nil {
-		return nil, err
-	}
-	
-	var info ProfileInfo
-	if err := resp.Get(&info); err != nil {
-		return nil, err
-	}
-	
-	return &info, nil
+    workflowID := fmt.Sprintf("profile_%s", profileID)
+
+    resp, err := c.client.QueryWorkflow(ctx, workflowID, "", "GetProfileInfo")
+    if err != nil {
+        return nil, err
+    }
+
+    var info ProfileInfo
+    if err := resp.Get(&info); err != nil {
+        return nil, err
+    }
+
+    return &info, nil
 }
 ```
 
@@ -770,26 +766,26 @@ Comando que ejecuta una operación compleja que modifica el estado del perfil.
 - Persiste estado
 
 ```go
-// synapse_commands.go
-func restartProfileCmd(c *core.Core) *cobra.Command {
-	var jsonOutput bool
-	var force bool
+// internal/orchestration/commands/synapse.go
+func createRestartProfileSubcommand(c *core.Core) *cobra.Command {
+    var jsonOutput bool
+    var force bool
 
-	cmd := &cobra.Command{
-		Use:   "restart <profile_id>",
-		Short: "Restart a profile (shutdown + launch)",
-		Long: `Restart a profile by shutting it down gracefully and relaunching it.
-		
+    cmd := &cobra.Command{
+        Use:   "restart <profile_id>",
+        Short: "Restart a profile (shutdown + launch)",
+        Long: `Restart a profile by shutting it down gracefully and relaunching it.
+
 This operation:
 - Shuts down Sentinel and Chrome
 - Waits for clean termination
 - Relaunches with previous configuration
 - Updates workflow state`,
-		Args: cobra.ExactArgs(1),
-		
-		Annotations: map[string]string{
-			"category": "SYNAPSE",
-			"json_response": `{
+        Args: cobra.ExactArgs(1),
+
+        Annotations: map[string]string{
+            "category": "ORCHESTRATION",
+            "json_response": `{
   "success": true,
   "profile_id": "abc123",
   "operation": "restart",
@@ -797,53 +793,60 @@ This operation:
   "new_pid": 12346,
   "state": "RUNNING"
 }`,
-		},
-		
-		Example: `  nucleus synapse restart profile_001
+        },
+
+        Example: `  nucleus synapse restart profile_001
   nucleus synapse restart profile_001 --force
   nucleus --json synapse restart profile_001`,
-		
-		Run: func(cmd *cobra.Command, args []string) {
-			profileID := args[0]
-			
-			logger, _ := core.InitLogger(&c.Paths, "SYNAPSE", jsonOutput)
-			defer logger.Close()
-			
-			if !jsonOutput {
-				logger.Info("Restarting profile: %s (force: %v)", profileID, force)
-			}
-			
-			ctx := context.Background()
-			tc, _ := temporalclient.NewClient(ctx, &c.Paths, jsonOutput)
-			defer tc.Close()
-			
-			result, err := tc.ExecuteRestartWorkflow(ctx, logger, profileID, force)
-			if err != nil {
-				if jsonOutput {
-					outputJSON(map[string]interface{}{
-						"success": false,
-						"error":   err.Error(),
-					})
-				} else {
-					logger.Error("Restart failed: %v", err)
-				}
-				os.Exit(1)
-			}
-			
-			if jsonOutput {
-				outputJSON(result)
-			} else {
-				logger.Success("✅ Profile restarted successfully")
-				logger.Info("Old PID: %d", result.OldPID)
-				logger.Info("New PID: %d", result.NewPID)
-			}
-		},
-	}
-	
-	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
-	cmd.Flags().BoolVar(&force, "force", false, "Force restart even if profile is busy")
-	
-	return cmd
+
+        Run: func(cmd *cobra.Command, args []string) {
+            profileID := args[0]
+            if c.IsJSON {
+                jsonOutput = true
+            }
+
+            logger, err := core.InitLogger(&c.Paths, "SYNAPSE", jsonOutput, "synapse")
+            if err != nil {
+                fmt.Fprintf(os.Stderr, "[ERROR] Failed to initialize logger: %v\n", err)
+                os.Exit(1)
+            }
+            defer logger.Close()
+
+            if !jsonOutput {
+                logger.Info("Restarting profile: %s (force: %v)", profileID, force)
+            }
+
+            ctx := context.Background()
+            tc, err := temporalclient.NewClient(ctx, &c.Paths, jsonOutput)
+            if err != nil {
+                logger.Error("Failed to connect: %v", err)
+                os.Exit(1)
+            }
+            defer tc.Close()
+
+            result, err := tc.ExecuteRestartWorkflow(ctx, logger, profileID, force)
+            if err != nil {
+                if jsonOutput {
+                    outputJSON(map[string]interface{}{"success": false, "error": err.Error()})
+                } else {
+                    logger.Error("Restart failed: %v", err)
+                }
+                os.Exit(1)
+            }
+
+            if jsonOutput {
+                outputJSON(result)
+                return
+            }
+            logger.Success("✅ Profile restarted successfully")
+            logger.Info("Old PID: %d", result.OldPID)
+            logger.Info("New PID: %d", result.NewPID)
+        },
+    }
+
+    cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
+    cmd.Flags().BoolVar(&force, "force", false, "Force restart even if profile is busy")
+    return cmd
 }
 ```
 
@@ -852,120 +855,64 @@ This operation:
 package workflows
 
 import (
-	"time"
-	"go.temporal.io/sdk/workflow"
+    "time"
+    "go.temporal.io/sdk/workflow"
+    "go.temporal.io/sdk/temporal"
 )
 
 type RestartWorkflowInput struct {
-	ProfileID string
-	Force     bool
+    ProfileID string
+    Force     bool
 }
 
 type RestartWorkflowResult struct {
-	Success   bool   `json:"success"`
-	ProfileID string `json:"profile_id"`
-	Operation string `json:"operation"`
-	OldPID    int    `json:"old_pid"`
-	NewPID    int    `json:"new_pid"`
-	State     string `json:"state"`
+    Success   bool   `json:"success"`
+    ProfileID string `json:"profile_id"`
+    Operation string `json:"operation"`
+    OldPID    int    `json:"old_pid"`
+    NewPID    int    `json:"new_pid"`
+    State     string `json:"state"`
 }
 
 func RestartWorkflow(ctx workflow.Context, input RestartWorkflowInput) (*RestartWorkflowResult, error) {
-	activityOptions := workflow.ActivityOptions{
-		StartToCloseTimeout: 5 * time.Minute,
-		HeartbeatTimeout:    30 * time.Second,
-		RetryPolicy: &temporal.RetryPolicy{
-			MaximumAttempts:    3,
-			InitialInterval:    2 * time.Second,
-			BackoffCoefficient: 2.0,
-		},
-	}
-	ctx = workflow.WithActivityOptions(ctx, activityOptions)
-	
-	// 1. Obtener PID actual
-	var oldPID int
-	err := workflow.ExecuteActivity(ctx, "GetSentinelPID", input.ProfileID).Get(ctx, &oldPID)
-	if err != nil {
-		return nil, err
-	}
-	
-	// 2. Shutdown graceful
-	err = workflow.ExecuteActivity(ctx, "ShutdownSentinel", input.ProfileID, input.Force).Get(ctx, nil)
-	if err != nil {
-		return nil, err
-	}
-	
-	// 3. Esperar terminación (puede hacer sleep)
-	err = workflow.Sleep(ctx, 2*time.Second)
-	if err != nil {
-		return nil, err
-	}
-	
-	// 4. Relaunch
-	var newPID int
-	err = workflow.ExecuteActivity(ctx, "LaunchSentinel", input.ProfileID).Get(ctx, &newPID)
-	if err != nil {
-		return nil, err
-	}
-	
-	return &RestartWorkflowResult{
-		Success:   true,
-		ProfileID: input.ProfileID,
-		Operation: "restart",
-		OldPID:    oldPID,
-		NewPID:    newPID,
-		State:     "RUNNING",
-	}, nil
-}
-```
+    activityOptions := workflow.ActivityOptions{
+        StartToCloseTimeout: 5 * time.Minute,
+        HeartbeatTimeout:    30 * time.Second,
+        RetryPolicy: &temporal.RetryPolicy{
+            MaximumAttempts:    3,
+            InitialInterval:    2 * time.Second,
+            BackoffCoefficient: 2.0,
+        },
+    }
+    ctx = workflow.WithActivityOptions(ctx, activityOptions)
 
-**sentinel_activities.go (agregar):**
-```go
-func (a *SentinelActivities) GetSentinelPID(ctx context.Context, profileID string) (int, error) {
-	// Lógica para obtener PID
-	return 12345, nil
-}
-```
+    var oldPID int
+    if err := workflow.ExecuteActivity(ctx, "GetSentinelPID", input.ProfileID).Get(ctx, &oldPID); err != nil {
+        return nil, err
+    }
 
-**temporal_client.go (agregar):**
-```go
-func (c *Client) ExecuteRestartWorkflow(
-	ctx context.Context,
-	logger *core.Logger,
-	profileID string,
-	force bool,
-) (*workflows.RestartWorkflowResult, error) {
-	workflowOptions := client.StartWorkflowOptions{
-		ID:        fmt.Sprintf("restart_%s_%d", profileID, time.Now().Unix()),
-		TaskQueue: c.config.TaskQueue,
-	}
-	
-	input := workflows.RestartWorkflowInput{
-		ProfileID: profileID,
-		Force:     force,
-	}
-	
-	logger.Debug("Starting RestartWorkflow for profile: %s", profileID)
-	
-	we, err := c.client.ExecuteWorkflow(ctx, workflowOptions, workflows.RestartWorkflow, input)
-	if err != nil {
-		return nil, fmt.Errorf("failed to start workflow: %w", err)
-	}
-	
-	var result workflows.RestartWorkflowResult
-	if err := we.Get(ctx, &result); err != nil {
-		return nil, fmt.Errorf("workflow execution failed: %w", err)
-	}
-	
-	return &result, nil
-}
-```
+    if err := workflow.ExecuteActivity(ctx, "ShutdownSentinel", input.ProfileID, input.Force).Get(ctx, nil); err != nil {
+        return nil, err
+    }
 
-**worker.go (agregar):**
-```go
-w.worker.RegisterWorkflow(workflows.RestartWorkflow)
-w.worker.RegisterActivity(activities.GetSentinelPID)
-// ShutdownSentinel y LaunchSentinel ya existen
+    if err := workflow.Sleep(ctx, 2*time.Second); err != nil {
+        return nil, err
+    }
+
+    var newPID int
+    if err := workflow.ExecuteActivity(ctx, "LaunchSentinel", input.ProfileID).Get(ctx, &newPID); err != nil {
+        return nil, err
+    }
+
+    return &RestartWorkflowResult{
+        Success:   true,
+        ProfileID: input.ProfileID,
+        Operation: "restart",
+        OldPID:    oldPID,
+        NewPID:    newPID,
+        State:     "RUNNING",
+    }, nil
+}
 ```
 
 ---
@@ -981,106 +928,77 @@ Comando que envía una señal a un workflow de larga duración existente.
 - Usado para cambios de configuración en caliente
 
 ```go
-// synapse_commands.go
-func updateConfigCmd(c *core.Core) *cobra.Command {
-	var jsonOutput bool
-	var configKey string
-	var configValue string
+// internal/orchestration/commands/synapse.go
+func createUpdateConfigSubcommand(c *core.Core) *cobra.Command {
+    var jsonOutput bool
+    var configKey string
+    var configValue string
 
-	cmd := &cobra.Command{
-		Use:   "update-config <profile_id>",
-		Short: "Update profile configuration without restart",
-		Args:  cobra.ExactArgs(1),
-		
-		Annotations: map[string]string{
-			"category": "SYNAPSE",
-			"json_response": `{
+    cmd := &cobra.Command{
+        Use:   "update-config <profile_id>",
+        Short: "Update profile configuration without restart",
+        Args:  cobra.ExactArgs(1),
+
+        Annotations: map[string]string{
+            "category": "ORCHESTRATION",
+            "json_response": `{
   "success": true,
   "profile_id": "abc123",
   "config_key": "mode",
   "config_value": "discovery",
   "applied": true
 }`,
-		},
-		
-		Run: func(cmd *cobra.Command, args []string) {
-			profileID := args[0]
-			
-			logger, _ := core.InitLogger(&c.Paths, "SYNAPSE", jsonOutput)
-			defer logger.Close()
-			
-			ctx := context.Background()
-			tc, _ := temporalclient.NewClient(ctx, &c.Paths, jsonOutput)
-			defer tc.Close()
-			
-			err := tc.SignalUpdateConfig(ctx, profileID, configKey, configValue)
-			if err != nil {
-				logger.Error("Signal failed: %v", err)
-				os.Exit(1)
-			}
-			
-			if jsonOutput {
-				outputJSON(map[string]interface{}{
-					"success":      true,
-					"profile_id":   profileID,
-					"config_key":   configKey,
-					"config_value": configValue,
-					"applied":      true,
-				})
-			} else {
-				logger.Success("✅ Configuration updated")
-				logger.Info("%s = %s", configKey, configValue)
-			}
-		},
-	}
-	
-	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
-	cmd.Flags().StringVar(&configKey, "key", "", "Configuration key")
-	cmd.Flags().StringVar(&configValue, "value", "", "Configuration value")
-	cmd.MarkFlagRequired("key")
-	cmd.MarkFlagRequired("value")
-	
-	return cmd
+        },
+
+        Run: func(cmd *cobra.Command, args []string) {
+            profileID := args[0]
+            if c.IsJSON {
+                jsonOutput = true
+            }
+
+            logger, err := core.InitLogger(&c.Paths, "SYNAPSE", jsonOutput, "synapse")
+            if err != nil {
+                fmt.Fprintf(os.Stderr, "[ERROR] Failed to initialize logger: %v\n", err)
+                os.Exit(1)
+            }
+            defer logger.Close()
+
+            ctx := context.Background()
+            tc, err := temporalclient.NewClient(ctx, &c.Paths, jsonOutput)
+            if err != nil {
+                logger.Error("Failed to connect: %v", err)
+                os.Exit(1)
+            }
+            defer tc.Close()
+
+            if err := tc.SignalUpdateConfig(ctx, profileID, configKey, configValue); err != nil {
+                logger.Error("Signal failed: %v", err)
+                os.Exit(1)
+            }
+
+            if jsonOutput {
+                outputJSON(map[string]interface{}{
+                    "success":      true,
+                    "profile_id":   profileID,
+                    "config_key":   configKey,
+                    "config_value": configValue,
+                    "applied":      true,
+                })
+                return
+            }
+            logger.Success("✅ Configuration updated")
+            logger.Info("%s = %s", configKey, configValue)
+        },
+    }
+
+    cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
+    cmd.Flags().StringVar(&configKey, "key", "", "Configuration key")
+    cmd.Flags().StringVar(&configValue, "value", "", "Configuration value")
+    cmd.MarkFlagRequired("key")
+    cmd.MarkFlagRequired("value")
+
+    return cmd
 }
-```
-
-**temporal_client.go (agregar):**
-```go
-func (c *Client) SignalUpdateConfig(ctx context.Context, profileID, key, value string) error {
-	workflowID := fmt.Sprintf("profile_%s", profileID)
-	
-	signalData := map[string]string{
-		"key":   key,
-		"value": value,
-	}
-	
-	err := c.client.SignalWorkflow(ctx, workflowID, "", "UpdateConfig", signalData)
-	if err != nil {
-		return fmt.Errorf("failed to send signal: %w", err)
-	}
-	
-	return nil
-}
-```
-
-**profile_lifecycle.go (modificar workflow existente):**
-```go
-// En el workflow ProfileLifecycleWorkflow, agregar:
-
-configUpdateChan := workflow.GetSignalChannel(ctx, "UpdateConfig")
-selector.AddReceive(configUpdateChan, func(c workflow.ReceiveChannel, more bool) {
-	var configUpdate map[string]string
-	c.Receive(ctx, &configUpdate)
-	
-	// Aplicar configuración sin reiniciar
-	key := configUpdate["key"]
-	value := configUpdate["value"]
-	
-	// Actualizar estado interno
-	profileState.Config[key] = value
-	
-	logger.Info("Configuration updated: %s = %s", key, value)
-})
 ```
 
 ---
@@ -1096,19 +1014,19 @@ Error: unknown command "my-command" for "nucleus synapse"
 ```
 
 **Causas:**
-1. Comando no registrado en `init()`
+1. Subcomando no adjuntado al padre con `cmd.AddCommand()`
 2. Paquete no compilado correctamente
 
 **Solución:**
 ```go
-// Verificar en synapse_commands.go
-func init() {
-	core.RegisterCommand("SYNAPSE", myNewCmd)  // ← Debe estar aquí
-}
+// Verificar en createSynapseCommand() de synapse.go:
+cmd.AddCommand(createMyNewSubcommand(c))  // ← Debe estar aquí
 
 // Recompilar
 go build -o nucleus.exe
 ```
+
+> **Nota:** Agregar `core.RegisterCommand("ORCHESTRATION", createMyNewSubcommand)` en el `init()` **no** resuelve esto — crearía un comando `nucleus my-command` a nivel raíz, no `nucleus synapse my-command`.
 
 ---
 
@@ -1161,10 +1079,7 @@ w.worker.RegisterActivity(activities.MyActivity)  // ← Agregar
 
 **Solución:**
 ```bash
-# Iniciar Temporal
 nucleus temporal ensure
-
-# Verificar
 curl http://localhost:7233/health
 ```
 
@@ -1180,8 +1095,6 @@ curl http://localhost:7233/health
 ```bash
 # En otra terminal
 nucleus worker start -q profile-orchestration
-
-# Verificar
 nucleus worker status
 ```
 
@@ -1192,90 +1105,88 @@ nucleus worker status
 ### 9.1 Naming Conventions
 
 ```go
-// ✅ CORRECTO
-func seedCmd(c *core.Core) *cobra.Command         // Nombre del comando
-func ExecuteSeedWorkflow(...)                      // Client helper
-func SeedWorkflow(ctx workflow.Context, ...)       // Workflow
-func (a *Activities) SeedProfile(...)             // Activity
+// ✅ CORRECTO — patrón del proyecto
+func createSynapseCommand(c *core.Core) *cobra.Command      // Padre
+func createSeedSubcommand(c *core.Core) *cobra.Command      // Subcomando existente
+func createMyNewSubcommand(c *core.Core) *cobra.Command     // Subcomando nuevo
+func ExecuteMyWorkflow(ctx, logger, profileID string) ...   // Client helper
+func MyWorkflow(ctx workflow.Context, ...) ...              // Workflow
+func (a *Activities) MyActivity(ctx context.Context, ...) ... // Activity
 
 // ❌ INCORRECTO
-func createSeedCommand(...)                        // Demasiado verboso
-func seed(...)                                     // Muy genérico
-func DoSeed(...)                                   // No sigue convención
+func myNewCmd(...)          // No sigue la convención createXxxSubcommand del archivo
+func seedCmd(...)           // Idem
+func DoSeed(...)            // No sigue convención Go del proyecto
 ```
 
 ### 9.2 Error Handling
 
 ```go
-// ✅ CORRECTO - Diferenciar JSON vs humano
+// ✅ CORRECTO — diferenciar JSON vs humano
 if err != nil {
-	if jsonOutput {
-		outputJSON(map[string]interface{}{
-			"success": false,
-			"error":   err.Error(),
-		})
-	} else {
-		logger.Error("Operation failed: %v", err)
-	}
-	os.Exit(1)
+    if jsonOutput {
+        outputJSON(map[string]interface{}{
+            "success": false,
+            "error":   err.Error(),
+        })
+    } else {
+        logger.Error("Operation failed: %v", err)
+    }
+    os.Exit(1)
 }
 
-// ❌ INCORRECTO - Mezclar outputs
+// ❌ INCORRECTO — mezclar outputs
 if err != nil {
-	fmt.Println("Error:", err)  // No sigue convención
-	return
+    fmt.Println("Error:", err)  // No sigue convención
+    return
 }
 ```
 
 ### 9.3 Logging
 
 ```go
-// ✅ CORRECTO - Usar logger con niveles
+// ✅ CORRECTO — usar logger con niveles
 logger.Debug("Starting workflow with input: %+v", input)
 logger.Info("Processing profile: %s", profileID)
 logger.Warning("Retry attempt %d of %d", attempt, maxAttempts)
 logger.Error("Failed to connect: %v", err)
 logger.Success("✅ Operation completed")
 
-// ❌ INCORRECTO - fmt.Println directo
+// ❌ INCORRECTO — fmt.Println directo
 fmt.Println("Starting...")
 ```
 
 ### 9.4 Workflow Design
 
 ```go
-// ✅ CORRECTO - Workflow es orchestrator
+// ✅ CORRECTO — Workflow es orchestrator
 func MyWorkflow(ctx workflow.Context, input Input) (*Result, error) {
-	// Solo orquestación
-	err := workflow.ExecuteActivity(ctx, Activity1, data).Get(ctx, &result1)
-	err = workflow.ExecuteActivity(ctx, Activity2, result1).Get(ctx, &result2)
-	return &result2, nil
+    err := workflow.ExecuteActivity(ctx, Activity1, data).Get(ctx, &result1)
+    err = workflow.ExecuteActivity(ctx, Activity2, result1).Get(ctx, &result2)
+    return &result2, nil
 }
 
-// ❌ INCORRECTO - Lógica de negocio en workflow
+// ❌ INCORRECTO — lógica de negocio en workflow
 func MyWorkflow(ctx workflow.Context, input Input) (*Result, error) {
-	// NO hacer esto - la lógica va en activities
-	data := processData(input)  // ← Esto va en activity
-	result := calculateStuff(data)  // ← Esto también
-	return &result, nil
+    data := processData(input)    // ← Esto va en activity
+    result := calculateStuff(data) // ← Esto también
+    return &result, nil
 }
 ```
 
 ### 9.5 Activity Design
 
 ```go
-// ✅ CORRECTO - Activity es stateless
-func (a *Activities) ProcessData(ctx context.Context, input Data) (*Result, error) {
-	// Lógica de negocio aquí
-	// No guardar estado en 'a'
-	result := doWork(input)
-	return &result, nil
+// ✅ CORRECTO — Activity es stateless
+func (a *SentinelActivities) ProcessData(ctx context.Context, input Data) (*Result, error) {
+    result := doWork(input)
+    return &result, nil
 }
 
-// ❌ INCORRECTO - Activity con estado mutable
-func (a *Activities) ProcessData(ctx context.Context, input Data) (*Result, error) {
-	a.counter++  // ← NO hacer esto
-	return &Result{Count: a.counter}, nil
+// ❌ INCORRECTO — Activity con estado mutable
+func (a *SentinelActivities) ProcessData(ctx context.Context, input Data) (*Result, error) {
+    a.counter++  // ← NO hacer esto
+    return &Result{Count: a.counter}, nil
 }
 ```
 
@@ -1288,10 +1199,9 @@ func (a *Activities) ProcessData(ctx context.Context, input Data) (*Result, erro
 ```bash
 # Temporal UI
 open http://localhost:8233
-
-# Buscar tu workflow por ID
-# Ver event history completo
-# Ver inputs/outputs de activities
+# → Buscar workflow por ID
+# → Ver event history completo
+# → Ver inputs/outputs de activities
 ```
 
 ### 10.2 Logs Locales
@@ -1303,14 +1213,13 @@ tail -f ~/.local/share/BloomNucleus/logs/orchestration/worker.log
 # Temporal logs
 tail -f ~/.local/share/BloomNucleus/logs/temporal/temporal.log
 
-# Activity logs (si logeas desde activity)
+# Activity logs
 tail -f ~/.local/share/BloomNucleus/logs/sentinel/*.log
 ```
 
 ### 10.3 Verbose Mode
 
 ```bash
-# Ejecutar con verbose para ver más detalles
 nucleus --verbose synapse my-command profile_001
 ```
 
@@ -1333,6 +1242,7 @@ Antes de considerar tu comando terminado:
 - [ ] `Long` explica todos los detalles
 - [ ] `Example` muestra casos de uso reales
 - [ ] `Annotations` tiene `json_response` completo
+- [ ] `Annotations` tiene `category: "ORCHESTRATION"`
 - [ ] README o documentación externa actualizada
 
 ### Testing
@@ -1346,7 +1256,7 @@ Antes de considerar tu comando terminado:
 - [ ] Workflow registrado en worker
 - [ ] Activity registrada en worker
 - [ ] Helper en temporal_client
-- [ ] Comando registrado en init()
+- [ ] Subcomando adjuntado al padre con `cmd.AddCommand()`
 - [ ] Compila sin warnings
 
 ### Calidad
@@ -1362,14 +1272,15 @@ Antes de considerar tu comando terminado:
 
 ### Documentación Relacionada
 - **NUCLEUS SYNAPSE USAGE GUIDE v3.0**: Guía de uso de Synapse
-- **Guía Maestra de Implementación de Comandos NUCLEUS**: Patrones generales de comandos
+- **Guía Maestra de Implementación de Comandos NUCLEUS v2.0**: Patrones generales de comandos
 - **Temporal Documentation**: https://docs.temporal.io
 
 ### Archivos Clave
 ```
 internal/
-├── synapse/synapse_commands.go          ← Tus comandos CLI
 ├── orchestration/
+│   ├── commands/
+│   │   └── synapse.go                   ← Tus subcomandos CLI
 │   ├── activities/sentinel_activities.go ← Tus activities
 │   ├── temporal/
 │   │   ├── temporal_client.go           ← Tus helpers
@@ -1398,101 +1309,105 @@ tail -f ~/.local/share/BloomNucleus/logs/orchestration/worker.log
 
 ---
 
-**Versión**: 1.0  
-**Fecha**: 2026-02-16  
-**Autor**: Platform Engineering Team  
-**Estado**: Production Ready  
-**Contexto**: Post-refactor Feb 2026 (Activities unificadas)
-
----
-
 ## Apéndice: Template Rápido
 
 ### Copiar y adaptar este template:
 
 ```go
 // ==========================================
-// NUEVO COMANDO SYNAPSE - TEMPLATE
+// NUEVO SUBCOMANDO SYNAPSE — TEMPLATE
 // ==========================================
 
-// 1. COMANDO CLI (en synapse_commands.go)
-func myCommandCmd(c *core.Core) *cobra.Command {
-	var jsonOutput bool
-	
-	cmd := &cobra.Command{
-		Use:   "my-command <arg>",
-		Short: "Brief description",
-		Args:  cobra.ExactArgs(1),
-		
-		Annotations: map[string]string{
-			"category": "SYNAPSE",
-			"json_response": `{"success": true}`,
-		},
-		
-		Run: func(cmd *cobra.Command, args []string) {
-			logger, _ := core.InitLogger(&c.Paths, "SYNAPSE", jsonOutput)
-			defer logger.Close()
-			
-			ctx := context.Background()
-			tc, _ := temporalclient.NewClient(ctx, &c.Paths, jsonOutput)
-			defer tc.Close()
-			
-			result, err := tc.ExecuteMyWorkflow(ctx, logger, args[0])
-			if err != nil {
-				logger.Error("Failed: %v", err)
-				os.Exit(1)
-			}
-			
-			if jsonOutput {
-				outputJSON(result)
-			} else {
-				logger.Success("✅ Done")
-			}
-		},
-	}
-	
-	cmd.Flags().BoolVar(&jsonOutput, "json", false, "JSON output")
-	return cmd
+// 1. SUBCOMANDO CLI (en internal/orchestration/commands/synapse.go)
+func createMyCommandSubcommand(c *core.Core) *cobra.Command {
+    var jsonOutput bool
+
+    cmd := &cobra.Command{
+        Use:   "my-command <arg>",
+        Short: "Brief description",
+        Args:  cobra.ExactArgs(1),
+
+        Annotations: map[string]string{
+            "category":      "ORCHESTRATION",
+            "json_response": `{"success": true}`,
+        },
+
+        Run: func(cmd *cobra.Command, args []string) {
+            if c.IsJSON {
+                jsonOutput = true
+            }
+            logger, err := core.InitLogger(&c.Paths, "SYNAPSE", jsonOutput, "synapse")
+            if err != nil {
+                fmt.Fprintf(os.Stderr, "[ERROR] Failed to initialize logger: %v\n", err)
+                os.Exit(1)
+            }
+            defer logger.Close()
+
+            ctx := context.Background()
+            tc, err := temporalclient.NewClient(ctx, &c.Paths, jsonOutput)
+            if err != nil {
+                logger.Error("Failed to connect: %v", err)
+                os.Exit(1)
+            }
+            defer tc.Close()
+
+            result, err := tc.ExecuteMyWorkflow(ctx, logger, args[0])
+            if err != nil {
+                if jsonOutput {
+                    outputJSON(map[string]interface{}{"success": false, "error": err.Error()})
+                } else {
+                    logger.Error("Failed: %v", err)
+                }
+                os.Exit(1)
+            }
+
+            if jsonOutput {
+                outputJSON(result)
+            } else {
+                logger.Success("✅ Done")
+            }
+        },
+    }
+
+    cmd.Flags().BoolVar(&jsonOutput, "json", false, "JSON output")
+    return cmd
 }
 
-// 2. REGISTRAR (en init() de synapse_commands.go)
-func init() {
-	core.RegisterCommand("SYNAPSE", myCommandCmd)
-}
+// 2. ADJUNTAR AL PADRE (dentro de createSynapseCommand en synapse.go)
+cmd.AddCommand(createMyCommandSubcommand(c))  // ← agregar esta línea
 
 // 3. WORKFLOW (en workflows/my_workflow.go)
 func MyWorkflow(ctx workflow.Context, input Input) (*Result, error) {
-	opts := workflow.ActivityOptions{
-		StartToCloseTimeout: 5 * time.Minute,
-	}
-	ctx = workflow.WithActivityOptions(ctx, opts)
-	
-	var result string
-	err := workflow.ExecuteActivity(ctx, "MyActivity", input).Get(ctx, &result)
-	return &Result{Data: result}, err
+    opts := workflow.ActivityOptions{
+        StartToCloseTimeout: 5 * time.Minute,
+    }
+    ctx = workflow.WithActivityOptions(ctx, opts)
+
+    var result string
+    err := workflow.ExecuteActivity(ctx, "MyActivity", input).Get(ctx, &result)
+    return &Result{Data: result}, err
 }
 
 // 4. ACTIVITY (en sentinel_activities.go)
 func (a *SentinelActivities) MyActivity(ctx context.Context, input Input) (string, error) {
-	// Lógica aquí
-	return "result", nil
+    return "result", nil
 }
 
 // 5. CLIENT HELPER (en temporal_client.go)
 func (c *Client) ExecuteMyWorkflow(ctx context.Context, logger *core.Logger, arg string) (*Result, error) {
-	opts := client.StartWorkflowOptions{
-		ID: fmt.Sprintf("my_op_%s_%d", arg, time.Now().Unix()),
-		TaskQueue: c.config.TaskQueue,
-	}
-	
-	we, err := c.client.ExecuteWorkflow(ctx, opts, workflows.MyWorkflow, Input{Arg: arg})
-	if err != nil {
-		return nil, err
-	}
-	
-	var result Result
-	err = we.Get(ctx, &result)
-	return &result, err
+    opts := client.StartWorkflowOptions{
+        ID:        fmt.Sprintf("my_op_%s_%d", arg, time.Now().Unix()),
+        TaskQueue: c.config.TaskQueue,
+    }
+
+    we, err := c.client.ExecuteWorkflow(ctx, opts, workflows.MyWorkflow, Input{Arg: arg})
+    if err != nil {
+        return nil, err
+    }
+
+    var result Result
+    err = we.Get(ctx, &result)
+    return &result, err
 }
 
 // 6. REGISTRAR EN WORKER (en worker.go)
@@ -1501,3 +1416,20 @@ w.worker.RegisterActivity(activities.MyActivity)
 ```
 
 ¡Copia este template y reemplaza los nombres!
+
+---
+
+**Versión**: 1.1
+**Fecha**: 2026-03-01
+**Autor**: Platform Engineering Team
+**Estado**: Production Ready
+**Contexto**: Actualización post-audit — alineada con `internal/orchestration/commands/synapse.go`
+
+**Cambios respecto a v1.0:**
+- Ubicación de archivo corregida: `internal/orchestration/commands/synapse.go` (era `internal/synapse/synapse_commands.go`)
+- Package corregido: `package commands` (era `package synapse`)
+- Categoría corregida: `"ORCHESTRATION"` en todos los ejemplos y anotaciones (era `"SYNAPSE"`)
+- Patrón de registro aclarado: solo el padre se registra en `init()`; los subcomandos se adjuntan con `cmd.AddCommand()` dentro de `createSynapseCommand()`
+- Convención de nombres corregida: `createXxxSubcommand` (era `xxxCmd`)
+- Eliminada ambigüedad sobre registro de subcomandos individuales en `§2.3`
+- Template del apéndice actualizado con todos los patrones correctos

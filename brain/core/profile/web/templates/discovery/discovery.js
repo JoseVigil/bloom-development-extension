@@ -289,6 +289,12 @@ class DiscoveryFlow {
     if (this.statusCircleEl) {
       this.statusCircleEl.classList.add('success');
     }
+
+    // Show success message below circle
+    const successMsg = document.getElementById('handshake-success-msg');
+    if (successMsg) {
+      successMsg.classList.add('show');
+    }
     
     // Show connection info
     if (this.connectionRowEl) {
@@ -348,7 +354,7 @@ class DiscoveryFlow {
   }
 
   startCountdown() {
-    let count = 5;
+    let count = 7;
     
     // Get countdown element
     let countdownEl = document.getElementById('countdown-value');

@@ -275,7 +275,7 @@ func (tp *TemporalProcess) Wait() error {
 
 // startTemporalBackground inicia Temporal en background (modo non-interactive)
 func startTemporalBackground(c *core.Core, executablePath string) (int, error) {
-	temporalLogsDir := filepath.Join(c.Paths.Logs, "temporal")
+	temporalLogsDir := filepath.Join(c.Paths.LogsDir, "temporal")
 	if err := os.MkdirAll(temporalLogsDir, 0755); err != nil {
 		return 0, fmt.Errorf("failed to create temporal logs dir: %w", err)
 	}

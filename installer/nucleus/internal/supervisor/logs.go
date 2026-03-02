@@ -587,7 +587,7 @@ Si hay más de un perfil te pregunta cuál usar.`,
 			// ── Step 1: obtener perfiles ──────────────────────────────────────
 			fmt.Println("🔍 Obteniendo perfiles via Brain CLI...")
 			var profileList brainProfileList
-			if err := runBrainJSON(c.Paths.Bin, &profileList, "profile", "list"); err != nil {
+			if err := runBrainJSON(c.Paths.BinDir, &profileList, "profile", "list"); err != nil {
 				return fmt.Errorf("no se pudo obtener la lista de perfiles: %w", err)
 			}
 			profiles := profileList.Data.Profiles
@@ -616,7 +616,7 @@ Si hay más de un perfil te pregunta cuál usar.`,
 			// ── Step 3: obtener último launch_id ──────────────────────────────
 			fmt.Printf("🔍 Obteniendo launches del perfil %s...\n", chosen.Alias)
 			var launchList brainLaunchList
-			if err := runBrainJSON(c.Paths.Bin, &launchList, "profile", "launches", chosen.ID); err != nil {
+			if err := runBrainJSON(c.Paths.BinDir, &launchList, "profile", "launches", chosen.ID); err != nil {
 				return fmt.Errorf("no se pudo obtener los launches: %w", err)
 			}
 			launches := launchList.Data.Launches
@@ -656,7 +656,7 @@ Si hay más de un perfil te pregunta cuál usar.`,
 // ═════════════════════════════════════════════════════════════════════════════
 
 func runStreamReader(c *core.Core, streamName, since string, errOnly, noStartup, tailMode, jsonOut bool) error {
-	tf, err := loadTelemetry(c.Paths.Logs)
+	tf, err := loadTelemetry(c.Paths.LogsDir)
 	if err != nil {
 		return err
 	}
@@ -1031,7 +1031,7 @@ func streamSymbol(stream, text string) string {
 }
 
 func runLaunchTrace(c *core.Core, launchID, profileID, outFilePath string, jsonOut bool, knownTS ...time.Time) error {
-	tf, err := loadTelemetry(c.Paths.Logs)
+	tf, err := loadTelemetry(c.Paths.LogsDir)
 	if err != nil {
 		return err
 	}
@@ -1105,14 +1105,14 @@ func runLaunchTrace(c *core.Core, launchID, profileID, outFilePath string, jsonO
 
 	if profileID != "" {
 		fmt.Fprintln(os.Stderr, "[INFO] Invocando brain CLI para análisis Chrome...")
-		tm := core.GetTelemetryManager(c.Paths.Logs, c.Paths.Logs)
+		tm := core.GetTelemetryManager(c.Paths.LogsDir, c.Paths.LogsDir)
 		shortID := launchID
 		if len(shortID) > 8 {
 			shortID = shortID[:8]
 		}
 
 		// read-log → _engine_read.log
-		readPath, _, readErr := invokeBrainCLI(c.Paths.Bin,
+		readPath, _, readErr := invokeBrainCLI(c.Paths.BinDir,
 			"chrome", "read-log", profileID, "--launch-id", launchID)
 		if readErr != nil {
 			chrome.readErr = readErr.Error()
@@ -1132,7 +1132,7 @@ func runLaunchTrace(c *core.Core, launchID, profileID, outFilePath string, jsonO
 		}
 
 		// read-net-log → _engine_network.log
-		netPath, _, netErr := invokeBrainCLI(c.Paths.Bin,
+		netPath, _, netErr := invokeBrainCLI(c.Paths.BinDir,
 			"chrome", "read-net-log", profileID, "--launch-id", launchID)
 		if netErr != nil {
 			chrome.networkErr = netErr.Error()
@@ -1152,7 +1152,7 @@ func runLaunchTrace(c *core.Core, launchID, profileID, outFilePath string, jsonO
 		}
 
 		// mining-log → _engine_mining.log
-		miningPath, _, miningErr := invokeBrainCLI(c.Paths.Bin,
+		miningPath, _, miningErr := invokeBrainCLI(c.Paths.BinDir,
 			"chrome", "mining-log", profileID, "--launch-id", launchID, "--keyword", "bloom")
 		if miningErr != nil {
 			chrome.miningErr = miningErr.Error()
@@ -1177,7 +1177,7 @@ func runLaunchTrace(c *core.Core, launchID, profileID, outFilePath string, jsonO
 	}
 
 	// ── Step 4: Build digest file ─────────────────────────────────────────────
-	traceDir := filepath.Join(c.Paths.Logs, "synapse_trace")
+	traceDir := filepath.Join(c.Paths.LogsDir, "synapse_trace")
 	if err := os.MkdirAll(traceDir, 0755); err != nil {
 		return fmt.Errorf("cannot create synapse_trace dir: %w", err)
 	}
@@ -1303,7 +1303,7 @@ func runLaunchTrace(c *core.Core, launchID, profileID, outFilePath string, jsonO
 	}
 
 	// ── Step 5: Register in telemetry ────────────────────────────────────────
-	tm := core.GetTelemetryManager(c.Paths.Logs, c.Paths.Logs)
+	tm := core.GetTelemetryManager(c.Paths.LogsDir, c.Paths.LogsDir)
 	tm.RegisterStream(
 		fmt.Sprintf("synapse_trace_%s", launchID),
 		fmt.Sprintf("🔍 SYNAPSE TRACE (%s)", launchID),
@@ -1351,7 +1351,7 @@ type streamStats struct {
 }
 
 func runSummary(c *core.Core, since string, jsonOut bool) error {
-	tf, err := loadTelemetry(c.Paths.Logs)
+	tf, err := loadTelemetry(c.Paths.LogsDir)
 	if err != nil {
 		return err
 	}

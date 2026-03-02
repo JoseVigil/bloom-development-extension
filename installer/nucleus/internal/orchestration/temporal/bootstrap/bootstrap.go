@@ -55,7 +55,7 @@ func getTemporalExecutablePath() (string, error) {
 
 // getPIDFilePath devuelve la ruta al archivo PID
 func getPIDFilePath(c *core.Core) string {
-	return filepath.Join(c.Paths.Logs, "temporal", "temporal.pid")
+	return filepath.Join(c.Paths.LogsDir, "temporal", "temporal.pid")
 }
 
 // getGlobalJSONFlag obtiene el flag --json de manera robusta

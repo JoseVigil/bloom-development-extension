@@ -151,9 +151,9 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 			logger.Info("Registrando activities...")
 
 			// Construir paths usando PathConfig disponible
-			logsDir    := c.Paths.Logs
-			nucleusExe := filepath.Join(c.Paths.Bin, "nucleus", "nucleus.exe")
-			sentinelExe := filepath.Join(c.Paths.Bin, "sentinel", "sentinel.exe")
+			logsDir    := c.Paths.LogsDir
+			nucleusExe := filepath.Join(c.Paths.BinDir, "nucleus", "nucleus.exe")
+			sentinelExe := filepath.Join(c.Paths.BinDir, "sentinel", "sentinel.exe")
 
 			// Verificar que sentinel existe
 			if _, err := os.Stat(sentinelExe); os.IsNotExist(err) {

@@ -28,8 +28,8 @@ type Logger struct {
 // InitLogger crea un logger que escribe a archivo y consola.
 // extraCategories permite registrar el stream en categorías adicionales
 // (e.g. "synapse" para nucleus_synapse, que pertenece a ["nucleus", "synapse"]).
-func InitLogger(paths *PathConfig, category string, jsonMode bool, extraCategories ...string) (*Logger, error) {
-	targetDir := filepath.Join(paths.Logs, "nucleus")
+func InitLogger(paths *Paths, category string, jsonMode bool, extraCategories ...string) (*Logger, error) {
+	targetDir := filepath.Join(paths.LogsDir, "nucleus")
 	if err := os.MkdirAll(targetDir, 0755); err != nil {
 		return nil, fmt.Errorf("error creando directorio %s: %w", targetDir, err)
 	}
@@ -79,7 +79,7 @@ func InitLogger(paths *PathConfig, category string, jsonMode bool, extraCategori
 	categories := append([]string{"nucleus"}, extraCategories...)
 
 	// Registrar stream en telemetry
-	tm := GetTelemetryManager(paths.Logs, paths.Logs)
+	tm := GetTelemetryManager(paths.LogsDir, paths.LogsDir)
 	streamID := "nucleus_" + strings.ToLower(category)
 	streamLabel := icon + " " + category
 	description := getNucleusStreamDescription(category)
@@ -282,8 +282,8 @@ func (l *Logger) OutputResult(jsonData interface{}, interactiveMessage string) e
 
 // InitServiceLogger crea un logger para el servicio background de Nucleus.
 // Escribe en logs/nucleus/service/nucleus_service_YYYYMMDD.log (rotación diaria).
-func InitServiceLogger(paths *PathConfig, jsonMode bool) (*Logger, error) {
-	targetDir := filepath.Join(paths.Logs, "nucleus", "service")
+func InitServiceLogger(paths *Paths, jsonMode bool) (*Logger, error) {
+	targetDir := filepath.Join(paths.LogsDir, "nucleus", "service")
 	if err := os.MkdirAll(targetDir, 0755); err != nil {
 		return nil, fmt.Errorf("error creando directorio %s: %w", targetDir, err)
 	}
@@ -318,7 +318,7 @@ func InitServiceLogger(paths *PathConfig, jsonMode bool) (*Logger, error) {
 	logger.logger.Printf("======================================== [SERVICE] Logging session started ========================================")
 	logger.Flush()
 
-	tm := GetTelemetryManager(paths.Logs, paths.Logs)
+	tm := GetTelemetryManager(paths.LogsDir, paths.LogsDir)
 	tm.RegisterStream(
 		"nucleus_service",
 		"⚙️ NUCLEUS SERVICE",
@@ -338,8 +338,8 @@ func InitServiceLogger(paths *PathConfig, jsonMode bool) (*Logger, error) {
 
 // InitWorkerManagerLogger crea un logger para el pool de workers de Nucleus.
 // Escribe en logs/nucleus/worker/nucleus_worker_manager_YYYYMMDD.log.
-func InitWorkerManagerLogger(paths *PathConfig, jsonMode bool) (*Logger, error) {
-	targetDir := filepath.Join(paths.Logs, "nucleus", "worker")
+func InitWorkerManagerLogger(paths *Paths, jsonMode bool) (*Logger, error) {
+	targetDir := filepath.Join(paths.LogsDir, "nucleus", "worker")
 	if err := os.MkdirAll(targetDir, 0755); err != nil {
 		return nil, fmt.Errorf("error creando directorio %s: %w", targetDir, err)
 	}
@@ -375,7 +375,7 @@ func InitWorkerManagerLogger(paths *PathConfig, jsonMode bool) (*Logger, error) 
 	logger.logger.Printf("======================================== [WORKER MANAGER] Logging session started ========================================")
 	logger.Flush()
 
-	tm := GetTelemetryManager(paths.Logs, paths.Logs)
+	tm := GetTelemetryManager(paths.LogsDir, paths.LogsDir)
 	tm.RegisterStream(
 		"nucleus_worker_manager",
 		"👷 WORKER MANAGER",
@@ -399,7 +399,7 @@ type TemporalLogger struct {
 }
 
 // InitTemporalLogger crea un logger específico para Temporal
-func InitTemporalLogger(paths *PathConfig, jsonMode bool) (*TemporalLogger, error) {
+func InitTemporalLogger(paths *Paths, jsonMode bool) (*TemporalLogger, error) {
 	logger, err := InitLogger(paths, "TEMPORAL", jsonMode)
 	if err != nil {
 		return nil, err

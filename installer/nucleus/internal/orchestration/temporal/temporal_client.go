@@ -21,7 +21,7 @@ type Client struct {
 }
 
 // NewClient crea un nuevo cliente Temporal
-func NewClient(ctx context.Context, paths *core.PathConfig, jsonMode bool) (*Client, error) {
+func NewClient(ctx context.Context, paths *core.Paths, jsonMode bool) (*Client, error) {
 	// Crear logger específico para Temporal
 	temporalLogger, err := core.InitTemporalLogger(paths, jsonMode)
 	if err != nil {

@@ -277,7 +277,7 @@ func findAllTemporalProcesses() ([]TemporalProcessInfo, error) {
 func cleanInternalState(c *core.Core, logger *core.Logger) bool {
 	success := true
 
-	pidPath := filepath.Join(c.Paths.Logs, "temporal", "temporal.pid")
+	pidPath := filepath.Join(c.Paths.LogsDir, "temporal", "temporal.pid")
 	if _, err := os.Stat(pidPath); err == nil {
 		if err := os.Remove(pidPath); err != nil {
 			success = false

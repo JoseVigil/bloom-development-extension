@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -60,6 +61,49 @@ func (ig *Ignition) initBloomHost(profileID string, launchID string) error {
 		"--profile-id", profileID,
 		"--launch-id", launchID,
 	)
+
+	// bloom-host resuelve rutas usando LOCALAPPDATA del entorno.
+	// Cuando Sentinel corre como servicio Windows (SYSTEM), os.Environ()
+	// contiene LOCALAPPDATA=C:\WINDOWS\system32\config\systemprofile\...
+	// lo que hace que bloom-host escriba en el perfil de SYSTEM en lugar
+	// del usuario real.
+	//
+	// Solución: derivar LOCALAPPDATA desde ig.Core.Paths.AppDataDir que ya
+	// fue resuelto correctamente por Sentinel (es el padre de AppDataDir).
+	// Ej: AppDataDir = C:\Users\josev\AppData\Local\BloomNucleus
+	//  → localAppData = C:\Users\josev\AppData\Local
+	//  → userProfile  = C:\Users\josev
+	localAppData := filepath.Dir(ig.Core.Paths.AppDataDir)
+	userProfile := filepath.Dir(filepath.Dir(localAppData)) // Local → AppData → user
+
+	// Partir del entorno actual y sobreescribir solo las variables de ruta
+	env := os.Environ()
+	overrides := map[string]string{
+		"LOCALAPPDATA": localAppData,
+		"APPDATA":      filepath.Join(filepath.Dir(localAppData), "Roaming"),
+		"USERPROFILE":  userProfile,
+	}
+	filtered := make([]string, 0, len(env))
+	for _, e := range env {
+		key := e[:func() int {
+			for i, c := range e {
+				if c == '=' {
+					return i
+				}
+			}
+			return len(e)
+		}()]
+		upperKey := strings.ToUpper(key)
+		if _, skip := overrides[upperKey]; !skip {
+			filtered = append(filtered, e)
+		}
+	}
+	for k, v := range overrides {
+		filtered = append(filtered, fmt.Sprintf("%s=%s", k, v))
+	}
+	cmd.Env = filtered
+
+	ig.Core.Logger.Info("[HOST-INIT] Entorno corregido → LOCALAPPDATA=%s", localAppData)
 
 	// Capturar stdout/stderr para loguear en caso de error
 	output, err := cmd.CombinedOutput()

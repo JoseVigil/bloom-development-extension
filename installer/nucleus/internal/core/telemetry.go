@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gofrs/flock"
 	"github.com/spf13/cobra"
 )
 
@@ -323,7 +325,7 @@ NOTES
 				return fmt.Errorf("at least one --category is required")
 			}
 
-			telemetryPath := filepath.Join(c.Paths.Logs, "telemetry.json")
+			telemetryPath := filepath.Join(c.Paths.LogsDir, "telemetry.json")
 
 			if err := registerStreamCLI(telemetryPath, streamID, label, logPath, description, source, priority, categories); err != nil {
 				return fmt.Errorf("failed to register stream: %w", err)
@@ -375,7 +377,7 @@ func newTelemetryListCommand(c *Core) *cobra.Command {
 `,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			telemetryPath := filepath.Join(c.Paths.Logs, "telemetry.json")
+			telemetryPath := filepath.Join(c.Paths.LogsDir, "telemetry.json")
 
 			raw, err := os.ReadFile(telemetryPath)
 			if err != nil {
@@ -425,13 +427,66 @@ func newTelemetryListCommand(c *Core) *cobra.Command {
 // INTERNAL HELPER
 // ============================================================================
 
+// lockPath returns the canonical path for the telemetry file lock.
+// All processes — CLI and in-process — must use the same lock file.
+func lockPath(telemetryPath string) string {
+	return telemetryPath + ".lock"
+}
+
+// acquireLock opens (or creates) the lock file and blocks until an exclusive
+// flock is obtained. The caller is responsible for calling fl.Unlock().
+//
+// A 30-second timeout prevents a crashed process from starving callers forever.
+// TryLockContext is used so we can propagate a meaningful error on timeout.
+func acquireLock(telemetryPath string) (*flock.Flock, error) {
+	lp := lockPath(telemetryPath)
+
+	// Ensure the directory exists before we try to create the lock file.
+	if err := os.MkdirAll(filepath.Dir(lp), 0755); err != nil {
+		return nil, fmt.Errorf("failed to create lock directory: %w", err)
+	}
+
+	fl := flock.New(lp)
+
+	// Block with a generous timeout. Under normal operation the first process
+	// holds the lock for < 50 ms, so 30 s is only reached on hard failure.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	locked, err := fl.TryLockContext(ctx, 50*time.Millisecond)
+	if err != nil {
+		return nil, fmt.Errorf("failed to acquire telemetry lock: %w", err)
+	}
+	if !locked {
+		return nil, fmt.Errorf("timeout waiting for telemetry lock after 30s")
+	}
+
+	return fl, nil
+}
+
 // registerStreamCLI is the standalone atomic writer called by the CLI.
+//
+// Lock order (strict):
+//  1. Acquire telemetry.json.lock  ← FIRST, before any I/O
+//  2. Read telemetry.json
+//  3. Mutate in-memory
+//  4. Write telemetry.json.tmp
+//  5. Rename .tmp → telemetry.json
+//  6. Release lock
 func registerStreamCLI(telemetryPath, streamID, label, logPath, description, source string, priority int, categories []string) error {
 	logsDir := filepath.Dir(telemetryPath)
 	if err := os.MkdirAll(logsDir, 0755); err != nil {
 		return fmt.Errorf("failed to create logs directory: %w", err)
 	}
 
+	// ── Step 1: acquire the file lock as the very first operation ──────────
+	fl, err := acquireLock(telemetryPath)
+	if err != nil {
+		return err
+	}
+	defer fl.Unlock() // released only after the rename completes
+
+	// ── Step 2: read current state ─────────────────────────────────────────
 	var telemetry TelemetryData
 	raw, err := os.ReadFile(telemetryPath)
 	if err != nil {
@@ -448,6 +503,7 @@ func registerStreamCLI(telemetryPath, streamID, label, logPath, description, sou
 		}
 	}
 
+	// ── Step 3: mutate ─────────────────────────────────────────────────────
 	now := time.Now().UTC().Format(time.RFC3339)
 	firstSeen := now
 	if existing, exists := telemetry.Streams[streamID]; exists {
@@ -466,20 +522,23 @@ func registerStreamCLI(telemetryPath, streamID, label, logPath, description, sou
 		Active:      true,
 	}
 
+	// ── Step 4: marshal and write to .tmp ──────────────────────────────────
 	output, err := json.MarshalIndent(telemetry, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal JSON: %w", err)
 	}
 
-	// Atomic write: temp file + rename
 	tmpPath := telemetryPath + ".tmp"
 	if err := os.WriteFile(tmpPath, output, 0644); err != nil {
 		return fmt.Errorf("failed to write temp file: %w", err)
 	}
+
+	// ── Step 5: atomic rename — lock is still held ─────────────────────────
 	if err := os.Rename(tmpPath, telemetryPath); err != nil {
 		_ = os.Remove(tmpPath)
 		return fmt.Errorf("failed to rename temp file: %w", err)
 	}
 
+	// ── Step 6: lock released by deferred fl.Unlock() ─────────────────────
 	return nil
 }

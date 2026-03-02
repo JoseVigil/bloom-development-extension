@@ -827,6 +827,35 @@ function registerInstallHandlers() {
     }
   });
 
+  ipcMain.handle('launcher:open', async (event, options = {}) => {
+    try {
+      const launcherExe = process.execPath; // mismo bloom-setup.exe
+      const args = ['--mode=launch'];
+      if (options.onboarding) args.push('--onboarding');
+
+      log(`🚀 [launcher:open] Spawning launcher: ${launcherExe} ${args.join(' ')}`);
+
+      const { spawn } = require('child_process');
+      const child = spawn(launcherExe, args, {
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: false
+      });
+      child.unref();
+
+      // Cerrar el instalador después de lanzar el launcher
+      setTimeout(() => {
+        log('👋 Closing installer after launcher spawn');
+        app.quit();
+      }, 1500);
+
+      return { success: true };
+    } catch (err) {
+      error('❌ launcher:open failed:', err.message);
+      return { success: false, error: err.message };
+    }
+  });
+
   ipcMain.handle('install:check-requirements', async () => {
     return {
       platform: os.platform(),

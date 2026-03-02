@@ -7,30 +7,69 @@
   <title>Bloom Nucleus Installer</title>
   <link rel="stylesheet" href="./styles.css">
   <style>
-    /* Animación ripple para heartbeat */
-    @keyframes ripple-effect {
-      0% {
-        width: 60px;
-        height: 60px;
-        opacity: 0.8;
-      }
-      100% {
-        width: 140px;
-        height: 140px;
-        opacity: 0;
-      }
+    /* ── Semáforo de conexión ─────────────────────────────────────────────── */
+    @keyframes sem-pulse {
+      0%, 100% { box-shadow: 0 0 30px 6px rgba(239,68,68,0.55); }
+      50%       { box-shadow: 0 0 55px 16px rgba(239,68,68,0.85); }
+    }
+    @keyframes sem-ripple {
+      0%   { transform: scale(1);   opacity: 0.38; }
+      100% { transform: scale(2.4); opacity: 0; }
     }
 
-    /* Cambiar color de ripples cuando el dot se vuelve verde */
-    .status-dot.green + .ripple,
-    .status-dot.green ~ .ripple {
-      border-color: #48bb78 !important;
+    #heartbeat-circle {
+      width: 120px; height: 120px;
+      border-radius: 50%;
+      margin: 0 auto;
+      position: relative;
+      background: #ef4444;
+      box-shadow: 0 0 30px 6px rgba(239,68,68,0.55);
+      animation: sem-pulse 1.6s ease-in-out infinite;
+      transition: background 0.55s ease, box-shadow 0.55s ease;
+    }
+    #heartbeat-circle::before {
+      content: '';
+      position: absolute; inset: 0;
+      border-radius: 50%;
+      background: #ef4444;
+      opacity: 0.35;
+      animation: sem-ripple 2s ease-out infinite;
+      transition: opacity 0.4s ease;
+    }
+    #heartbeat-circle.synapse {
+      background: #eab308;
+      box-shadow: 0 0 30px 6px rgba(234,179,8,0.55);
+      animation: none;
+    }
+    #heartbeat-circle.synapse::before { opacity: 0; animation: none; }
+    #heartbeat-circle.connected {
+      background: #22c55e;
+      box-shadow: 0 0 30px 6px rgba(34,197,94,0.55);
+      animation: none;
+    }
+    #heartbeat-circle.connected::before { opacity: 0; animation: none; }
+
+    /* Success screen — mismo círculo, siempre verde */
+    #success-circle {
+      width: 120px; height: 120px;
+      border-radius: 50%;
+      background: #22c55e;
+      box-shadow: 0 0 30px 6px rgba(34,197,94,0.55);
+    }
+
+    #heartbeat-sub {
+      font-size: 15px;
+      color: #64748b;
+      margin-top: 28px;
+      min-height: 22px;
+      transition: color 0.4s ease;
+      text-align: center;
     }
   </style>
 </head>
 <body>
   <div class="container">
-    
+
     <!-- 1. WELCOME SCREEN -->
     <div class="screen active" id="welcome-screen">
       <div class="card">
@@ -40,18 +79,15 @@
           Instalación automática de tu asistente IA local.<br>
           <strong>Zero Config. Zero Admin. Modo Dios.</strong>
         </p>
-        
         <div class="info-box">
           <strong>📍 Ubicación:</strong>
           <code id="install-path">%LOCALAPPDATA%\BloomNucleus</code>
         </div>
-
-        <div class="info-box" style="background: #f0fff4; border-left-color: #48bb78;">
+        <div class="info-box" style="background:rgba(34,197,94,0.08);border-left-color:#22c55e;">
           ✅ Instalación local (Sin permisos de administrador)<br>
           ✅ Motor IA + Chrome Profile aislado<br>
           ✅ Extensión configurada automáticamente
         </div>
-
         <div class="button-group">
           <button class="button" id="start-button">🚀 INSTALAR BLOOM NUCLEUS</button>
         </div>
@@ -64,19 +100,14 @@
         <div class="logo">B</div>
         <h1>Desplegando Sistema</h1>
         <p class="text-center">Configurando motor IA, perfiles y extensión...</p>
-        
         <div class="progress-container">
           <div class="progress-bar">
             <div class="progress-fill" id="progress-fill"></div>
           </div>
           <div class="progress-text" id="progress-text">Iniciando despliegue...</div>
         </div>
-        
         <div class="spinner"></div>
-        
-        <div id="installation-details" style="margin-top: 30px; font-size: 14px; color: #4299e1; text-align: center; min-height: 24px;">
-          <!-- Dinámico -->
-        </div>
+        <div id="installation-details" style="margin-top:24px;font-size:14px;color:#4299e1;text-align:center;min-height:24px;"></div>
       </div>
     </div>
 
@@ -85,18 +116,16 @@
       <div class="card">
         <div class="success-icon">✓</div>
         <h1>Sistema Instalado</h1>
-        <p class="text-center">Bloom Nucleus está instalado y configurado.<br>Falta verificar la conexión entre componentes.</p>
-
+        <p class="text-center">Bloom Nucleus está instalado y configurado.</p>
         <div class="success-box">
           <strong>📊 Componentes Desplegados:</strong>
-          <ul style="margin-left: 20px; margin-top: 10px; text-align: left;">
+          <ul style="margin-left:20px;margin-top:10px;text-align:left;">
             <li>Motor IA: <strong>Activo</strong></li>
             <li>Extension ID: <code id="final-extension-id">...</code></li>
             <li>Perfil Maestro: <code id="final-profile-id">...</code></li>
             <li>Native Host: <strong>Registrado en HKCU</strong></li>
           </ul>
         </div>
-
         <div class="button-group">
           <button class="button button-secondary" id="final-view-logs-btn">📄 Ver Logs</button>
           <button class="button" id="launch-bloom-btn">🔌 CONECTAR</button>
@@ -106,57 +135,27 @@
 
     <!-- 4. HEARTBEAT VALIDATION SCREEN -->
     <div class="screen" id="heartbeat-screen">
-      <div class="card">
-        <div class="logo">B</div>
-        <h1>Validando Conexión</h1>
-        <p class="text-center">Conectando extensión con el motor IA...</p>
-
-        <div class="info-box" style="background: #ebf8ff; border-left-color: #4299e1; text-align: center; padding: 40px 20px;">
-          
-          <!-- Heartbeat visual con ondas -->
-          <div style="position: relative; width: 100px; height: 100px; margin: 0 auto;">
-            <div class="status-dot red" id="heartbeat-dot" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 60px; height: 60px; z-index: 2;"></div>
-            <div class="ripple" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 60px; height: 60px; border-radius: 50%; border: 3px solid #f56565; opacity: 0; animation: ripple-effect 2s ease-out infinite;"></div>
-            <div class="ripple" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 60px; height: 60px; border-radius: 50%; border: 3px solid #f56565; opacity: 0; animation: ripple-effect 2s ease-out infinite; animation-delay: 0.5s;"></div>
-            <div class="ripple" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 60px; height: 60px; border-radius: 50%; border: 3px solid #f56565; opacity: 0; animation: ripple-effect 2s ease-out infinite; animation-delay: 1s;"></div>
-            <div class="ripple" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 60px; height: 60px; border-radius: 50%; border: 3px solid #f56565; opacity: 0; animation: ripple-effect 2s ease-out infinite; animation-delay: 1.5s;"></div>
-          </div>
-
-          <!-- Status message dinámico -->
-          <p id="heartbeat-counter" style="font-size: 16px; color: #4a5568; font-weight: 500; margin-top: 30px; text-align: center; min-height: 24px;">
-            🔍 Iniciando conexión...
-          </p>
-          
-          <button class="button button-secondary" id="retry-heartbeat-btn" style="display: none; margin-top: 30px;">
-            🔄 Reintentar Conexión
-          </button>
-        </div>
-
-        <!-- Success box - Solo aparece al final -->
-        <div class="success-box" id="connection-details" style="margin-top: 20px; display: none; background: #e6fffa; border-left-color: #4299e1;">
-          <strong style="color: #0987a0; font-size: 18px;">✓ Conexión Exitosa</strong>
-          <p style="margin-top: 12px; font-size: 14px;">Extension ID: <code id="heartbeat-extension-id">...</code></p>
-          <p style="font-size: 14px;">Profile ID: <code id="heartbeat-profile-id">...</code></p>
-        </div>
+      <div class="card" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;">
+        <h1 style="margin-bottom:8px;">Descubriendo Perfil Maestro</h1>
+        <p class="text-center" style="margin-bottom:48px;color:#64748b;">
+          Esperando handshake con el perfil...
+        </p>
+        <div id="heartbeat-circle"></div>
+        <p id="heartbeat-sub">Iniciando Sentinel...</p>
+        <button class="button button-secondary" id="retry-heartbeat-btn" style="display:none;margin-top:32px;">
+          🔄 Reintentar
+        </button>
       </div>
     </div>
 
     <!-- 5. CONNECTION SUCCESS SCREEN -->
     <div class="screen" id="connection-success-screen">
-      <div class="card">
-        <div class="logo">B</div>
-        <h1>Conexión Verificada</h1>
-        <p class="text-center">Todos los componentes están comunicándose correctamente.</p>
-
-        <div class="info-box" style="background: #ebf8ff; border-left-color: #4299e1; text-align: center; padding: 30px 20px;">
-          <div style="font-size: 96px; margin-bottom: 20px; color: #48bb78;">✓</div>
-          <p style="margin-top: 8px; font-size: 15px; color: #2c5282;">Paso 1/3: Chrome iniciado ✅</p>
-          <p style="font-size: 15px; color: #2c5282;">Paso 2/3: Extensión cargada ✅</p>
-          <p style="font-size: 15px; color: #2c5282;">Paso 3/3: Host conectado ✅</p>
-        </div>
-
+      <div class="card" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;">
+        <h1 style="margin-bottom:8px;">Instalación Exitosa</h1>
+        <p style="color:#64748b;margin-bottom:48px;font-size:18px;">Ya podés comenzar el onboarding</p>
+        <div id="success-circle" class="connected" style="margin-bottom:48px;"></div>
         <div class="button-group">
-          <button class="button" id="start-onboarding-btn" style="font-size: 18px; padding: 15px 30px;">
+          <button class="button" id="start-onboarding-btn" style="font-size:18px;padding:15px 30px;">
             🚀 INICIAR ONBOARDING
           </button>
         </div>
@@ -169,12 +168,10 @@
         <div class="error-icon">✕</div>
         <h1>Error en la Instalación</h1>
         <p class="text-center" id="error-message">Ha ocurrido un error.</p>
-        
-        <div class="warning-box" style="text-align: left; margin-top: 20px;">
+        <div class="warning-box" style="text-align:left;margin-top:20px;">
           <strong>🔍 Información de Debug:</strong>
-          <pre id="error-stack" style="font-size: 11px; overflow-x: auto; margin-top: 10px;"></pre>
+          <pre id="error-stack" style="font-size:11px;overflow-x:auto;margin-top:10px;"></pre>
         </div>
-        
         <div class="button-group">
           <button class="button button-secondary" id="view-error-logs-btn">Ver Logs Completos</button>
           <button class="button" id="retry-button">🔄 Reintentar</button>
@@ -183,7 +180,6 @@
     </div>
 
   </div>
-
   <script src="renderer.js"></script>
 </body>
 </html>

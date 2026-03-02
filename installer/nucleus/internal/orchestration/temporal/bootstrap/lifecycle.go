@@ -217,7 +217,7 @@ func runTemporalStart(c *core.Core) {
 	}
 
 	// Crear proceso
-	tp := NewTemporalProcess(c.Paths.Logs, temporalPath)
+	tp := NewTemporalProcess(c.Paths.LogsDir, temporalPath)
 
 	// Configurar signal handling
 	ctx, cancel := context.WithCancel(context.Background())

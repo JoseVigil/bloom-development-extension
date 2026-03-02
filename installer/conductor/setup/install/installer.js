@@ -942,6 +942,30 @@ async function launchMasterProfile(win) {
   await nucleusManager.startMilestone(MILESTONE);
   emitProgress(win, 9, 9, 'Launching Master Profile (Heartbeat)...');
 
+  // ── Señal inmediata al renderer para mostrar pantalla heartbeat ──
+  const profileUuidEarly = nucleusManager.state.master_profile;
+  if (win && win.webContents) {
+    win.webContents.send('heartbeat:starting', { profile_id: profileUuidEarly });
+  }
+
+  // ── Reposicionar ventana al centro-izquierda para que el perfil quede a la derecha ──
+  try {
+    const { screen } = require('electron');
+    const display = screen.getPrimaryDisplay();
+    const { width: sw, height: sh } = display.workAreaSize;
+    const [ww, wh] = win.getSize();
+
+    // Ocupar la mitad izquierda, centrado verticalmente
+    const x = Math.round((sw / 2 - ww) / 2);
+    const y = Math.round((sh - wh) / 2);
+
+    win.setPosition(x, y, true); // true = animate en macOS
+    win.setAlwaysOnTop(true, 'floating');
+    logger.info(`🪟 Installer repositioned to center-left: ${x},${y}`);
+  } catch (posErr) {
+    logger.warn(`⚠️ Could not reposition window: ${posErr.message}`);
+  }
+
   try {
     logger.separator('NUCLEUS LAUNCH - HEARTBEAT VALIDATION');
 
@@ -994,6 +1018,15 @@ async function launchMasterProfile(win) {
     logger.info(`   PID: ${launchResult.chrome_pid}`);
     logger.info(`   Debug port: ${launchResult.debug_port}`);
     logger.info(`   Extension loaded: ${launchResult.extension_loaded}`);
+
+    // Sentinel activo + extensión cargada → señal de que el handshake puede comenzar
+    if (win && win.webContents) {
+      win.webContents.send('heartbeat:launch-done', {
+        profile_id: profileUuid,
+        chrome_pid: launchResult.chrome_pid,
+        extension_loaded: launchResult.extension_loaded
+      });
+    }
 
     // =========================================================================
     // PASO 3: synapse status — verifica que el workflow del perfil está READY
@@ -1062,6 +1095,15 @@ async function launchMasterProfile(win) {
     logger.info('   \u2713 Temporal workflows operational');
     logger.info('   \u2713 Sentinel launched successfully');
     logger.info('   \u2713 Profile READY in Temporal');
+
+    // Señal final al renderer: handshake completo → círculo verde
+    if (win && win.webContents) {
+      win.webContents.send('heartbeat:validated', {
+        profile_id: profileUuid,
+        profile_state: profileState,
+        chrome_pid: launchResult.chrome_pid
+      });
+    }
 
     await nucleusManager.completeMilestone(MILESTONE, {
       profile_id: profileUuid,

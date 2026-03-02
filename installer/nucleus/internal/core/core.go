@@ -10,7 +10,7 @@ import (
 type Core struct {
 	Logger *log.Logger
 	Config map[string]interface{}
-	Paths  PathConfig
+	Paths  Paths
 	IsJSON bool
 }
 
@@ -26,7 +26,7 @@ func NewCore(output io.Writer) (*Core, error) {
 	return &Core{
 		Logger: logger,
 		Config: make(map[string]interface{}),
-		Paths:  paths,
+		Paths:  *paths,
 		IsJSON: false,
 	}, nil
 }
@@ -44,7 +44,7 @@ func NewCoreSilent() (*Core, error) {
 	return &Core{
 		Logger: logger,
 		Config: make(map[string]interface{}),
-		Paths:  paths,
+		Paths:  *paths,
 		IsJSON: false,
 	}, nil
 }
