@@ -123,6 +123,17 @@ public:
     std::string get_extension_log_path() const;
 
     /**
+     * @brief Registra telemetria de forma SINCRONA (bloqueante).
+     *
+     * Invocar unicamente desde modos CLI de vida corta (--init) donde el proceso
+     * sale inmediatamente despues. En modo Native Messaging, initialize() ya lanza
+     * register_telemetry() en un thread detached para no bloquear el handshake de Chrome.
+     *
+     * Precondicion: is_ready() == true.
+     */
+    void register_telemetry_sync();
+
+    /**
      * @brief Escribe en el log nativo del proceso host.
      * @param level   INFO | WARN | ERROR | DEBUG | CRITICAL
      * @param message Mensaje a registrar

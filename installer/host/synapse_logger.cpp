@@ -340,6 +340,22 @@ std::string SynapseLogManager::get_host_log_path()      const { return host_log_
 std::string SynapseLogManager::get_extension_log_path() const { return extension_log_path; }
 
 // ============================================================================
+// register_telemetry_sync — registro sincrono para modo --init
+//
+// En modo Native Messaging, initialize() lanza register_telemetry() en un
+// thread detached para no bloquear el handshake de Chrome (timeout 6s).
+// En modo --init el proceso sale con return 0 inmediatamente despues de
+// initialize(), matando el thread antes de que ejecute std::system().
+// Este metodo publico llama register_telemetry() directamente en el
+// thread del caller, garantizando que nucleus sea invocado antes de salir.
+// ============================================================================
+
+void SynapseLogManager::register_telemetry_sync() {
+    if (!ready) return;
+    register_telemetry();
+}
+
+// ============================================================================
 // log_native — log del proceso host + mirror a stderr (trace de Synapse)
 // ============================================================================
 

@@ -953,6 +953,13 @@ int main(int argc, char* argv[]) {
             }
 
             g_logger.log_native("INFO", "Host pre-initialized by Sentinel --init. Dirs and files ready.");
+
+            // Registrar telemetria SINCRONO — en --init el proceso sale con return 0
+            // inmediatamente, lo que mata el thread detached de initialize() antes de
+            // que ejecute std::system(nucleus). register_telemetry_sync() corre en el
+            // thread del caller, garantizando que nucleus escriba telemetry.json antes
+            // de que el proceso salga.
+            g_logger.register_telemetry_sync();
             std::cerr << "[INIT] OK — estructura creada, telemetría registrada, saliendo\n";
 
             // Emitir resultado JSON a stdout si se pidió --json.
