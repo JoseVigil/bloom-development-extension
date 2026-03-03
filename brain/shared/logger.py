@@ -11,6 +11,7 @@ import os
 import sys
 import subprocess
 import traceback
+import json
 from pathlib import Path
 from logging.handlers import RotatingFileHandler
 from datetime import datetime
@@ -221,31 +222,31 @@ class BrainLogger:
                     f"WARNING: No se pudo inicializar logger especializado '{namespace}': {e}\n"
                 )
 
-    def _register_telemetry_stream(
-        self,
-        stream_id: str,
-        label: str,
-        log_path: Path,
-        priority: int,
-        category: str,
-        description: str,
-    ):
-        """
-        Registra un stream en telemetry.json via nucleus CLI.
-        Nucleus es el único escritor de telemetry.json (single-writer pattern).
-
-        Args:
-            stream_id:   ID único del stream (ej: "brain_core")
-            label:       Etiqueta visible (ej: "🧠 BRAIN CORE")
-            log_path:    Ruta absoluta al archivo de log
-            priority:    1=alta, 2=media, 3=baja
-            category:    Subsistema (ej: "brain")
-            description: Quién escribe el log y qué captura
-        """
+    def _register_telemetry_stream(self, stream_id, label, log_path, priority, category, description):
         try:
             from brain.shared.paths import Paths
-            nucleus_exe = Paths().nucleus_exe
+            telemetry_path = Path(Paths().logs_dir) / "telemetry.json"
 
+            # Verificar si necesita registrarse
+            if telemetry_path.exists():
+                try:
+                    data = json.loads(telemetry_path.read_text(encoding='utf-8'))
+                    existing = data.get("active_streams", {}).get(stream_id)
+                    if existing:
+                        current_path = str(log_path).replace("\\", "/")
+                        same_path = existing.get("path", "") == current_path
+                        
+                        # Parsear last_update
+                        last_update_str = existing.get("last_update", "")
+                        if same_path and last_update_str:
+                            last_update = datetime.fromisoformat(last_update_str.replace("Z", "+00:00"))
+                            age_minutes = (datetime.now(timezone.utc) - last_update).total_seconds() / 60
+                            if age_minutes < 60:
+                                return  # ← fresco, no relanzar nucleus
+                except Exception:
+                    pass
+
+            nucleus_exe = Paths().nucleus_exe
             cmd = [
                 str(nucleus_exe),
                 "telemetry", "register",
@@ -266,17 +267,11 @@ class BrainLogger:
                 )
 
         except subprocess.TimeoutExpired:
-            sys.stderr.write(
-                f"WARNING: nucleus telemetry register timeout para '{stream_id}'\n"
-            )
+            sys.stderr.write(f"WARNING: nucleus telemetry register timeout para '{stream_id}'\n")
         except FileNotFoundError:
-            sys.stderr.write(
-                f"WARNING: nucleus.exe no encontrado, telemetría no registrada para '{stream_id}'\n"
-            )
+            sys.stderr.write(f"WARNING: nucleus.exe no encontrado para '{stream_id}'\n")
         except Exception as e:
-            sys.stderr.write(
-                f"WARNING: Error al registrar telemetría para '{stream_id}': {e}\n"
-            )
+            sys.stderr.write(f"WARNING: Error al registrar telemetría para '{stream_id}': {e}\n")
 
     def cleanup_telemetry(self, stream_id: str = None):
         """

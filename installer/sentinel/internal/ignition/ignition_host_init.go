@@ -1,134 +1,68 @@
 package ignition
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"time"
 )
 
-// initBloomHost ejecuta bloom-host.exe en modo --init para pre-crear la
-// estructura de logs del host antes de que Chrome sea lanzado.
-//
-// Chrome lanza bloom-host.exe con un security token restringido que no tiene
-// permisos para crear directorios. Sentinel corre con el token completo del
-// usuario y debe crear la estructura primero.
-//
-// Contrato:
-//   - Debe llamarse DESPUÉS de prepareSessionFiles() → launchID y profileID disponibles.
-//   - Debe llamarse ANTES del handoff a Brain / LaunchProfileSync().
-//   - Exit code 0  → éxito, continuar con el lanzamiento.
-//   - Exit code != 0 → abortar; NO lanzar Chrome.
-//
-// Estructura creada en disco (idempotente — no falla si ya existe):
-//
-//	logs/host/profiles/<profileID>/<launchID>/host_YYYYMMDD.log
-//	logs/host/profiles/<profileID>/<launchID>/cortex_extension_YYYYMMDD.log
 func (ig *Ignition) initBloomHost(profileID string, launchID string) error {
-	// ── 1. Resolver ruta al binario ───────────────────────────────────────────
-	hostBin := filepath.Join(ig.Core.Paths.BinDir, "host", "bloom-host.exe")
+	brainBin := filepath.Join(ig.Core.Paths.BinDir, "brain", "brain.exe")
 
-	if _, err := os.Stat(hostBin); os.IsNotExist(err) {
-		return fmt.Errorf(
-			"bloom-host.exe no encontrado en %s — verificar instalación del paquete host",
-			hostBin,
-		)
+	if _, err := os.Stat(brainBin); os.IsNotExist(err) {
+		return fmt.Errorf("brain.exe no encontrado en %s — verificar instalación", brainBin)
 	}
 
-	// ── 2. Pre-crear directorio de logs ───────────────────────────────────────
-	// Garantizamos la existencia del directorio destino antes de invocar el
-	// binario, por si el propio --init depende de que el padre exista.
-	// La creación es idempotente: os.MkdirAll no falla si ya existe.
-	logDir := filepath.Join(
-		ig.Core.Paths.AppDataDir, "logs", "host", "profiles", profileID, launchID,
-	)
-	if err := os.MkdirAll(logDir, 0755); err != nil {
-		return fmt.Errorf("no se pudo crear directorio de logs del host en %s: %v", logDir, err)
-	}
+	ig.Core.Logger.Info("[HOST-INIT] Delegando inicialización a Brain (profile: %s, launch: %s)...", profileID, launchID)
 
-	ig.Core.Logger.Info("[HOST-INIT] Directorio de logs preparado: %s", logDir)
-
-	// ── 3. Ejecutar bloom-host.exe --init ────────────────────────────────────
-	ig.Core.Logger.Info(
-		"[HOST-INIT] Ejecutando bloom-host --init (profile: %s, launch: %s)...",
-		profileID, launchID,
-	)
-
-	cmd := exec.Command(hostBin,
-		"--init",
+	cmd := exec.Command(brainBin,
 		"--json",
+		"synapse", "host-init",
 		"--profile-id", profileID,
 		"--launch-id", launchID,
+		"--bloom-root", ig.Core.Paths.AppDataDir,
 	)
+	cmd.Dir = ig.Core.Paths.AppDataDir
 
-	// bloom-host resuelve rutas usando LOCALAPPDATA del entorno.
-	// Cuando Sentinel corre como servicio Windows (SYSTEM), os.Environ()
-	// contiene LOCALAPPDATA=C:\WINDOWS\system32\config\systemprofile\...
-	// lo que hace que bloom-host escriba en el perfil de SYSTEM en lugar
-	// del usuario real.
-	//
-	// Solución: derivar LOCALAPPDATA desde ig.Core.Paths.AppDataDir que ya
-	// fue resuelto correctamente por Sentinel (es el padre de AppDataDir).
-	// Ej: AppDataDir = C:\Users\josev\AppData\Local\BloomNucleus
-	//  → localAppData = C:\Users\josev\AppData\Local
-	//  → userProfile  = C:\Users\josev
-	localAppData := filepath.Dir(ig.Core.Paths.AppDataDir)
-	userProfile := filepath.Dir(filepath.Dir(localAppData)) // Local → AppData → user
+	ig.Core.Logger.Info("[HOST-INIT] CMD: %s --json synapse host-init --profile-id %s --launch-id %s", brainBin, profileID, launchID)
+	ig.Core.Logger.Info("[HOST-INIT] CWD: %s", cmd.Dir)
 
-	// Partir del entorno actual y sobreescribir solo las variables de ruta
-	env := os.Environ()
-	overrides := map[string]string{
-		"LOCALAPPDATA": localAppData,
-		"APPDATA":      filepath.Join(filepath.Dir(localAppData), "Roaming"),
-		"USERPROFILE":  userProfile,
+	// stdout → JSON puro de Brain
+	// stderr → logs de diagnóstico (Paths, logger) — no contaminan el parse
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+
+	if stderr.Len() > 0 {
+		ig.Core.Logger.Info("[HOST-INIT] Brain stderr: %s", stderr.String())
 	}
-	filtered := make([]string, 0, len(env))
-	for _, e := range env {
-		key := e[:func() int {
-			for i, c := range e {
-				if c == '=' {
-					return i
-				}
-			}
-			return len(e)
-		}()]
-		upperKey := strings.ToUpper(key)
-		if _, skip := overrides[upperKey]; !skip {
-			filtered = append(filtered, e)
-		}
-	}
-	for k, v := range overrides {
-		filtered = append(filtered, fmt.Sprintf("%s=%s", k, v))
-	}
-	cmd.Env = filtered
-
-	ig.Core.Logger.Info("[HOST-INIT] Entorno corregido → LOCALAPPDATA=%s", localAppData)
-
-	// Capturar stdout/stderr para loguear en caso de error
-	output, err := cmd.CombinedOutput()
 
 	if err != nil {
-		// Incluir output del proceso para facilitar diagnóstico
 		detail := ""
-		if len(output) > 0 {
-			detail = fmt.Sprintf(" — output: %s", string(output))
+		if stdout.Len() > 0 {
+			detail = fmt.Sprintf(" — stdout: %s", stdout.String())
+		} else if stderr.Len() > 0 {
+			detail = fmt.Sprintf(" — stderr: %s", stderr.String())
 		}
-		return fmt.Errorf(
-			"bloom-host --init falló (profile: %s, launch: %s)%s: %v",
-			profileID, launchID, detail, err,
-		)
+		return fmt.Errorf("brain synapse host-init falló (profile: %s, launch: %s)%s: %v", profileID, launchID, detail, err)
 	}
 
-	if len(output) > 0 {
-		ig.Core.Logger.Info("[HOST-INIT] bloom-host output: %s", string(output))
+	ig.Core.Logger.Info("[HOST-INIT] Brain stdout: %s", stdout.String())
+
+	hostInitResult, parseErr := parseHostInitOutput(stdout.Bytes())
+	if parseErr != nil {
+		ig.Core.Logger.Info("[HOST-INIT] [WARN] No se pudo parsear JSON de Brain: %v", parseErr)
+	} else if hostInitResult.Status != "success" {
+		return fmt.Errorf("brain synapse host-init reportó status=%s — %s", hostInitResult.Status, hostInitResult.Message)
 	}
 
-	// ── 4. Verificar que los archivos de log fueron creados ───────────────────
-	// bloom-host los crea con timestamp del día actual.
-	// Si usan una convención distinta, advertimos pero no abortamos
-	// (el exit 0 ya garantiza que la inicialización fue exitosa).
+	logDir := filepath.Join(ig.Core.Paths.AppDataDir, "logs", "host", "profiles", profileID, launchID)
 	today := time.Now().Format("20060102")
 	expectedFiles := []string{
 		filepath.Join(logDir, fmt.Sprintf("host_%s.log", today)),
@@ -137,17 +71,33 @@ func (ig *Ignition) initBloomHost(profileID string, launchID string) error {
 
 	for _, f := range expectedFiles {
 		if _, statErr := os.Stat(f); os.IsNotExist(statErr) {
-			ig.Core.Logger.Info(
-				"[HOST-INIT] [WARN] Archivo de log esperado no encontrado: %s "+
-					"(bloom-host puede usar otra convención de nombre)", f,
-			)
+			ig.Core.Logger.Info("[HOST-INIT] [WARN] Archivo de log esperado no encontrado: %s", f)
 		} else {
 			ig.Core.Logger.Info("[HOST-INIT] ✅ Log verificado: %s", f)
 		}
 	}
 
-	ig.Core.Logger.Info(
-		"[HOST-INIT] ✅ Inicialización completada — Chrome puede arrancar bloom-host sin restricciones de permisos",
-	)
+	ig.Core.Logger.Info("[HOST-INIT] ✅ Inicialización completada via Brain — Chrome puede arrancar")
 	return nil
+}
+
+type hostInitResponse struct {
+	Status  string          `json:"status"`
+	Message string          `json:"message"`
+	Data    json.RawMessage `json:"data"`
+}
+
+func parseHostInitOutput(output []byte) (*hostInitResponse, error) {
+	lines := splitLines(output)
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := lines[i]
+		if len(line) == 0 || line[0] != '{' {
+			continue
+		}
+		var r hostInitResponse
+		if err := json.Unmarshal([]byte(line), &r); err == nil {
+			return &r, nil
+		}
+	}
+	return nil, fmt.Errorf("no se encontró JSON válido en stdout de Brain")
 }

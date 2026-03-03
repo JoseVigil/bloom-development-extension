@@ -535,6 +535,12 @@ def load_all_commands_explicit() -> CommandRegistry:
     except ImportError as e:
         print(f"Warning: Could not load SynapseHostCommand: {e}")
     
+    try:
+        from brain.commands.synapse.synapse_host_init_cli import SynapseHostInitCommand
+        registry.register(SynapseHostInitCommand())
+    except ImportError as e:
+        print(f"Warning: Could not load SynapseHostInitCommand: {e}")
+    
     # =================================================================
     # SYSTEM
     # =================================================================
@@ -691,6 +697,7 @@ def get_hiddenimports_list():
         'brain.commands.runtime.run',
         'brain.commands.server.server',
         'brain.commands.synapse.synapse_host_cli',
+        'brain.commands.synapse.synapse_host_init_cli',
         'brain.commands.system.help_docs',
         'brain.commands.system.info',
         'brain.commands.system.info',

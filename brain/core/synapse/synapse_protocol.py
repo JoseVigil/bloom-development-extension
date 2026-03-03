@@ -8,7 +8,7 @@ import json
 import struct
 import logging
 from typing import Optional, Dict, Any, Callable
-from .synapse_exceptions import SynapseConnectionError
+from .synapse_exceptions import ConnectionError as SynapseConnectionError
 from .handlers.api_key_handler import register_handler
 
 class SynapseProtocol:
