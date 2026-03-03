@@ -400,6 +400,70 @@ class ServerManager:
 
                     await self._send_to_writer(writer, response)
 
+                elif msg_type == 'HOST_INIT':
+                    # Sentinel solicita inicialización del host Synapse.
+                    # Ejecutado desde el servicio Brain (proceso permanente con
+                    # sesión nucleus activa) — garantiza que nucleus persista
+                    # los streams en telemetry.json.
+                    #
+                    # Contrato de entrada:
+                    #   profile_id : str — UUID del perfil Chrome
+                    #   launch_id  : str — Launch ID de la sesión
+                    #   bloom_root : str — Raíz de BloomNucleus (opcional)
+                    #
+                    # Contrato de salida (HOST_INIT_ACK):
+                    #   status 'ok'    → data: dict con paths creados
+                    #   status 'error' → message: str
+                    profile_id = msg.get('profile_id')
+                    launch_id  = msg.get('launch_id')
+                    _data      = msg.get('data') or {}
+                    bloom_root = _data.get('bloom_root') or msg.get('bloom_root')
+
+                    if not profile_id or not launch_id:
+                        logger.error(f"❌ [{conn_id}] HOST_INIT: faltan profile_id o launch_id")
+                        response = {
+                            "type": "HOST_INIT_ACK",
+                            "status": "error",
+                            "message": "profile_id y launch_id son obligatorios"
+                        }
+                        await self._send_to_writer(writer, response)
+                        continue
+
+                    logger.info(f"🔧 [{conn_id}] HOST_INIT: {profile_id[:8]} launch={launch_id}")
+
+                    try:
+                        from brain.core.synapse.synapse_host_init_manager import SynapseHostInitManager
+
+                        def _do_host_init():
+                            manager = SynapseHostInitManager(bloom_root=bloom_root)
+                            return manager.init_host(
+                                profile_id=profile_id,
+                                launch_id=launch_id,
+                                bloom_root=bloom_root,
+                            )
+
+                        loop = asyncio.get_event_loop()
+                        data = await loop.run_in_executor(None, _do_host_init)
+
+                        response = {
+                            "type": "HOST_INIT_ACK",
+                            "launch_id": launch_id,
+                            "status": "ok",
+                            "data": data,
+                        }
+                        logger.info(f"✅ [{conn_id}] HOST_INIT OK: {profile_id[:8]}")
+
+                    except Exception as e:
+                        logger.error(f"❌ [{conn_id}] HOST_INIT failed: {e}", exc_info=True)
+                        response = {
+                            "type": "HOST_INIT_ACK",
+                            "launch_id": launch_id,
+                            "status": "error",
+                            "message": str(e),
+                        }
+
+                    await self._send_to_writer(writer, response)
+
                 else:
                     # === ROUTING LOGIC ===
                     target_profile = msg.get('target_profile')
