@@ -81,6 +81,7 @@ type TelemetryManager struct {
 	data  TelemetryData
 	path  string
 	dirty bool
+	tlog  *Logger // structured log for all telemetry operations — nil until InitTelemetryLogger is called
 }
 
 var (
@@ -107,13 +108,29 @@ func GetTelemetryManager(logsDir, telemetryDir string) *TelemetryManager {
 }
 
 func (tm *TelemetryManager) load() {
+	// load() must NEVER call tlogf() while holding the mutex.
+	// tlogf() acquires mu.RLock — calling it under mu.Lock causes a deadlock.
+	// Instead, capture messages and log them after releasing the lock.
+	var logLevel, logMsg string
+
 	tm.mu.Lock()
-	defer tm.mu.Unlock()
 	if data, err := os.ReadFile(tm.path); err == nil {
-		_ = json.Unmarshal(data, &tm.data)
+		if parseErr := json.Unmarshal(data, &tm.data); parseErr != nil {
+			logLevel, logMsg = "ERROR", fmt.Sprintf("load: failed to parse telemetry.json — %v (path: %s)", parseErr, tm.path)
+		} else {
+			logLevel, logMsg = "DEBUG", fmt.Sprintf("load: parsed telemetry.json — %d streams (path: %s)", len(tm.data.Streams), tm.path)
+		}
+	} else if !os.IsNotExist(err) {
+		logLevel, logMsg = "ERROR", fmt.Sprintf("load: failed to read telemetry.json — %v (path: %s)", err, tm.path)
 	}
 	if tm.data.Streams == nil {
 		tm.data.Streams = make(map[string]StreamInfo)
+	}
+	tm.mu.Unlock()
+
+	// Safe to log here — lock is released
+	if logMsg != "" {
+		tm.tlogf(logLevel, "%s", logMsg)
 	}
 }
 
@@ -122,7 +139,7 @@ func (tm *TelemetryManager) load() {
 // paths accepts one or more file paths — stored as StreamPaths (string or array in JSON).
 func (tm *TelemetryManager) RegisterStream(id, label string, priority int, categories []string, description, source string, paths ...string) {
 	tm.mu.Lock()
-	defer tm.mu.Unlock()
+	// NOTE: no defer — we unlock manually before calling tlogf to avoid deadlock
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	firstSeen := now
@@ -147,6 +164,59 @@ func (tm *TelemetryManager) RegisterStream(id, label string, priority int, categ
 		Active:      true,
 	}
 	tm.dirty = true
+	// Capture for logging after lock release — tlogf acquires RLock, cannot call under Lock
+	logMsg := fmt.Sprintf("RegisterStream id=%s label=%q categories=%v source=%q paths=%v",
+		id, label, categories, source, normalizedPaths)
+	tm.mu.Unlock()
+	tm.tlogf("INFO", "%s", logMsg)
+}
+
+// InitTelemetryLogger wires a dedicated Logger into the TelemetryManager.
+//
+// Call this once — after GetTelemetryManager — from the application bootstrap
+// (e.g. after InitPaths). It solves the chicken-and-egg bootstrap problem:
+// the logger is created first, then the stream is registered into the manager
+// that is already running.
+//
+//	tm := core.GetTelemetryManager(paths.LogsDir, paths.LogsDir)
+//	tm.InitTelemetryLogger(&paths, jsonMode)
+func (tm *TelemetryManager) InitTelemetryLogger(paths *Paths, jsonMode bool) {
+	// The telemetry logger ALWAYS routes its console output to stderr,
+	// regardless of the global jsonMode flag. This is critical: nucleus
+	// subcommands (including `telemetry register`) write JSON to stdout for
+	// external callers — any log line on stdout would corrupt that output.
+	logger, err := InitLogger(paths, "TELEMETRY", true /* forceStderr */)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[telemetry] WARNING: could not init telemetry logger: %v\n", err)
+		return
+	}
+	tm.mu.Lock()
+	tm.tlog = logger
+	tm.mu.Unlock()
+
+	tm.tlogf("INFO", "TelemetryManager logger initialized — path: %s", tm.path)
+}
+
+// tlogf is a nil-safe helper: logs only when the telemetry logger is wired.
+func (tm *TelemetryManager) tlogf(level, f string, v ...any) {
+	tm.mu.RLock()
+	l := tm.tlog
+	tm.mu.RUnlock()
+	if l == nil {
+		return
+	}
+	switch level {
+	case "INFO":
+		l.Info(f, v...)
+	case "ERROR":
+		l.Error(f, v...)
+	case "WARNING":
+		l.Warning(f, v...)
+	case "SUCCESS":
+		l.Success(f, v...)
+	case "DEBUG":
+		l.Debug(f, v...)
+	}
 }
 
 // GetData returns a safe copy of the current telemetry data.
@@ -189,10 +259,21 @@ func (tm *TelemetryManager) save() {
 		tm.mu.Unlock()
 		return
 	}
-	data, _ := json.MarshalIndent(tm.data, "", "  ")
+	data, marshalErr := json.MarshalIndent(tm.data, "", "  ")
+	if marshalErr != nil {
+		tm.mu.Unlock()
+		tm.tlogf("ERROR", "save: json.MarshalIndent failed — %v", marshalErr)
+		return
+	}
+	streamCount := len(tm.data.Streams)
 	tm.dirty = false
 	tm.mu.Unlock()
-	_ = os.WriteFile(tm.path, data, 0644)
+
+	if writeErr := os.WriteFile(tm.path, data, 0644); writeErr != nil {
+		tm.tlogf("ERROR", "save: WriteFile(%s) failed — %v", tm.path, writeErr)
+		return
+	}
+	tm.tlogf("DEBUG", "save: telemetry.json written — %d streams (%d bytes)", streamCount, len(data))
 }
 
 // ============================================================================
@@ -479,14 +560,42 @@ func acquireLock(telemetryPath string) (*flock.Flock, func(), error) {
 //  5. Rename .tmp → telemetry.json
 //  6. Release lock
 func registerStreamCLI(telemetryPath, streamID, label, logPath, description, source string, priority int, categories []string) error {
+	// logEvent writes to the telemetry logger (file) AND stderr as fallback.
+	// NEVER to stdout — registerStreamCLI is called from the CLI path where
+	// stdout is reserved for JSON output consumed by external callers.
+	logEvent := func(level, f string, v ...any) {
+		msg := fmt.Sprintf(f, v...)
+		// Always write to file logger if available
+		if telemetryInstance != nil {
+			telemetryInstance.mu.RLock()
+			l := telemetryInstance.tlog
+			telemetryInstance.mu.RUnlock()
+			if l != nil {
+				switch level {
+				case "INFO":
+					l.Info("%s", msg)
+				case "ERROR":
+					l.Error("%s", msg)
+				case "SUCCESS":
+					l.Success("%s", msg)
+				}
+				return
+			}
+		}
+		// Fallback: stderr only — never stdout
+		fmt.Fprintf(os.Stderr, "[telemetry/%s] %s\n", level, msg)
+	}
+
 	logsDir := filepath.Dir(telemetryPath)
 	if err := os.MkdirAll(logsDir, 0755); err != nil {
+		logEvent("ERROR", "registerStreamCLI: MkdirAll(%s) failed — %v", logsDir, err)
 		return fmt.Errorf("failed to create logs directory: %w", err)
 	}
 
 	// FIX: cleanup hace unlock + os.Remove del lock file
 	_, cleanup, err := acquireLock(telemetryPath)
 	if err != nil {
+		logEvent("ERROR", "registerStreamCLI: acquireLock failed — %v", err)
 		return err
 	}
 	defer cleanup()
@@ -496,11 +605,13 @@ func registerStreamCLI(telemetryPath, streamID, label, logPath, description, sou
 	raw, err := os.ReadFile(telemetryPath)
 	if err != nil {
 		if !os.IsNotExist(err) {
+			logEvent("ERROR", "registerStreamCLI: ReadFile(%s) failed — %v", telemetryPath, err)
 			return fmt.Errorf("failed to read telemetry file: %w", err)
 		}
 		telemetry.Streams = make(map[string]StreamInfo)
 	} else {
 		if err := json.Unmarshal(raw, &telemetry); err != nil {
+			logEvent("ERROR", "registerStreamCLI: json.Unmarshal failed — %v (path: %s, raw bytes: %d)", err, telemetryPath, len(raw))
 			return fmt.Errorf("failed to parse telemetry JSON: %w", err)
 		}
 		if telemetry.Streams == nil {
@@ -527,20 +638,27 @@ func registerStreamCLI(telemetryPath, streamID, label, logPath, description, sou
 		Active:      true,
 	}
 
+	logEvent("INFO", "registerStreamCLI: registering id=%s label=%q categories=%v source=%q path=%s",
+		streamID, label, categories, source, logPath)
+
 	output, err := json.MarshalIndent(telemetry, "", "  ")
 	if err != nil {
+		logEvent("ERROR", "registerStreamCLI: json.MarshalIndent failed — %v", err)
 		return fmt.Errorf("failed to marshal JSON: %w", err)
 	}
 
 	tmpPath := telemetryPath + ".tmp"
 	if err := os.WriteFile(tmpPath, output, 0644); err != nil {
+		logEvent("ERROR", "registerStreamCLI: WriteFile(%s) failed — %v", tmpPath, err)
 		return fmt.Errorf("failed to write temp file: %w", err)
 	}
 
 	if err := os.Rename(tmpPath, telemetryPath); err != nil {
 		_ = os.Remove(tmpPath)
+		logEvent("ERROR", "registerStreamCLI: Rename(%s → %s) failed — %v", tmpPath, telemetryPath, err)
 		return fmt.Errorf("failed to rename temp file: %w", err)
 	}
 
+	logEvent("SUCCESS", "registerStreamCLI: telemetry.json updated — id=%s (%d streams total)", streamID, len(telemetry.Streams))
 	return nil
 }
