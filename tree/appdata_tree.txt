@@ -158,72 +158,391 @@ BloomNucleus/
 │   ├── metamorph.json
 │   ├── nucleus.json
 │   ├── profile/
-│   │   └── 4c83463d-a73c-4f32-97c2-27e3d34f8121/
-│   │       ├── com.bloom.synapse.4c83463d.json
+│   │   └── 0e351912-92fe-4b66-9ecc-dde1b0bb9c33/
+│   │       ├── com.bloom.synapse.0e351912.json
 │   │       └── ignition_spec.json
 │   └── profiles.json
+├── history/
+│   └── profiles/
+│       └── 0e351912-92fe-4b66-9ecc-dde1b0bb9c33/
+│           ├── launches/
+│           │   └── 20260303.ndjson
+│           └── sessions/
+│               └── 001_0e351912_155813.ndjson
 ├── hooks/
 │   └── post_launch/
 │       └── 00_generate_synapse_trace.py
 ├── logs/
 │   ├── brain/
 │   │   ├── core/
-│   │   │   └── brain_core_20260302.log
+│   │   │   └── brain_core_20260303.log
 │   │   ├── profile/
-│   │   │   └── brain_profile_20260302.log
+│   │   │   └── brain_profile_20260303.log
 │   │   ├── server/
-│   │   │   ├── brain_server_20260302.log
-│   │   │   ├── brain_server_event_bus_20260302.log
-│   │   │   └── brain_server_manager_20260302.log
+│   │   │   ├── brain_server_20260303.log
+│   │   │   ├── brain_server_event_bus_20260303.log
+│   │   │   └── brain_server_manager_20260303.log
 │   │   └── service/
 │   │       └── brain_service.log
+│   ├── chromium/
 │   ├── conductor/
-│   │   ├── conductor_launch_2026-03-02_21-39-01.log
-│   │   └── conductor_launch_2026-03-02_21-39-02.log
+│   │   └── conductor_launch_2026-03-03_18-56-42.log
+│   ├── host/
+│   │   └── profiles/
+│   │       └── 0e351912-92fe-4b66-9ecc-dde1b0bb9c33/
+│   │           └── 001_0e351912_155813/
+│   │               ├── cortex_extension_20260303.log
+│   │               └── host_20260303.log
 │   ├── install/
-│   │   ├── electron_install_2026-03-02_21-39-01.log
-│   │   └── electron_install_2026-03-02_21-39-02.log
+│   │   └── electron_install_2026-03-03_18-56-42.log
 │   ├── metamorph/
-│   │   └── metamorph_core_20260302.log
+│   │   └── metamorph_core_20260303.log
 │   ├── nucleus/
-│   │   ├── nucleus_orchestration_20260302.log
-│   │   ├── nucleus_synapse_20260302.log
-│   │   ├── nucleus_temporal_20260302.log
+│   │   ├── nucleus_orchestration_20260303.log
+│   │   ├── nucleus_synapse_20260303.log
+│   │   ├── nucleus_temporal_20260303.log
 │   │   ├── service/
 │   │   │   └── nucleus_service.log
 │   │   └── worker/
-│   │       └── worker_manager_20260302.log
+│   │       └── worker_manager_20260303.log
 │   ├── sensor/
-│   │   └── sensor_20260302.log
+│   │   └── sensor_20260303.log
 │   ├── sentinel/
 │   │   ├── profiles/
-│   │   │   ├── 4c83463d-a73c-4f32-97c2-27e3d34f8121/
-│   │   │   └── sentinel_4c83463d-a73c-4f32-97c2-27e3d34f8121_20260302.log
-│   │   └── sentinel_core_20260302.log
+│   │   │   ├── 0e351912-92fe-4b66-9ecc-dde1b0bb9c33/
+│   │   │   │   ├── 001_0e351912_155813_debug.log
+│   │   │   │   ├── 001_0e351912_155813_engine_mining.log
+│   │   │   │   ├── 001_0e351912_155813_engine_network.log
+│   │   │   │   ├── 001_0e351912_155813_engine_read.log
+│   │   │   │   └── 001_0e351912_155813_netlog.json
+│   │   │   └── sentinel_0e351912-92fe-4b66-9ecc-dde1b0bb9c33_20260303.log
+│   │   └── sentinel_core_20260303.log
+│   ├── synapse_trace/
+│   │   └── synapse_trace_001_0e351912_155813.log
 │   ├── telemetry.json
 │   └── temporal/
 │       ├── temporal.db
 │       └── temporal.pid
 ├── profiles/
-│   └── 4c83463d-a73c-4f32-97c2-27e3d34f8121/
-│       └── extension/
-│           ├── assets/
-│           │   ├── 128x128.png
-│           │   ├── icon128.png
-│           │   └── icon16.png
-│           ├── background.js
-│           ├── content.js
-│           ├── discovery/
-│           │   ├── content-aistudio.js
-│           │   ├── discovery.js
-│           │   ├── discoveryProtocol.js
-│           │   ├── index.html
-│           │   ├── onboarding.js
-│           │   ├── script.js
-│           │   └── styles.css
-│           ├── discovery.synapse.config.js
-│           ├── landing/
-│           └── manifest.json
+│   └── 0e351912-92fe-4b66-9ecc-dde1b0bb9c33/
+│       ├── ActorSafetyLists/
+│       ├── AmountExtractionHeuristicRegexes/
+│       ├── CertificateRevocation/
+│       ├── Crashpad/
+│       │   ├── attachments/
+│       │   ├── reports/
+│       │   └── settings.dat
+│       ├── Crowd Deny/
+│       ├── Default/
+│       │   ├── Account Web Data
+│       │   ├── Account Web Data-journal
+│       │   ├── Affiliation Database
+│       │   ├── Affiliation Database-journal
+│       │   ├── AutofillAiModelCache/
+│       │   │   ├── LOCK
+│       │   │   └── LOG
+│       │   ├── AutofillStrikeDatabase/
+│       │   │   ├── LOCK
+│       │   │   └── LOG
+│       │   ├── BookmarkMergedSurfaceOrdering
+│       │   ├── BrowsingTopicsSiteData
+│       │   ├── BrowsingTopicsSiteData-journal
+│       │   ├── BrowsingTopicsState
+│       │   ├── BudgetDatabase/
+│       │   │   ├── LOCK
+│       │   │   └── LOG
+│       │   ├── Cache/
+│       │   │   ├── Cache_Data/
+│       │   │   │   ├── index
+│       │   │   │   ├── sqldb0
+│       │   │   │   ├── sqldb1
+│       │   │   │   └── sqldb2
+│       │   │   └── No_Vary_Search/
+│       │   │       ├── journal.baj
+│       │   │       └── snapshot.baf
+│       │   ├── ClientCertificates/
+│       │   │   ├── LOCK
+│       │   │   └── LOG
+│       │   ├── Code Cache/
+│       │   │   └── pc/
+│       │   │       ├── 05_@;2t2fb2=a6@=`6`2`25[.9092[9660;65-[99164=57144=815`2.db
+│       │   │       └── 05_@;2t2fb2=a6@=`6`2`25[.9092[9660;65-[99164=57144=815`2.journal
+│       │   ├── Collaboration/
+│       │   │   ├── MessageDB
+│       │   │   └── MessageDB-journal
+│       │   ├── DIPS
+│       │   ├── DataSharing/
+│       │   │   ├── DataSharingDB
+│       │   │   └── DataSharingDB-journal
+│       │   ├── DawnGraphiteCache/
+│       │   │   ├── data_0
+│       │   │   ├── data_1
+│       │   │   ├── data_2
+│       │   │   ├── data_3
+│       │   │   └── index
+│       │   ├── DawnWebGPUCache/
+│       │   │   ├── data_0
+│       │   │   ├── data_1
+│       │   │   ├── data_2
+│       │   │   ├── data_3
+│       │   │   └── index
+│       │   ├── Extension Rules/
+│       │   │   ├── 000003.log
+│       │   │   ├── CURRENT
+│       │   │   ├── LOCK
+│       │   │   ├── LOG
+│       │   │   └── MANIFEST-000001
+│       │   ├── Extension Scripts/
+│       │   │   ├── 000003.log
+│       │   │   ├── CURRENT
+│       │   │   ├── LOCK
+│       │   │   ├── LOG
+│       │   │   └── MANIFEST-000001
+│       │   ├── Extension State/
+│       │   │   ├── 000003.log
+│       │   │   ├── CURRENT
+│       │   │   ├── LOCK
+│       │   │   ├── LOG
+│       │   │   └── MANIFEST-000001
+│       │   ├── Favicons
+│       │   ├── Favicons-journal
+│       │   ├── Feature Engagement Tracker/
+│       │   │   ├── AvailabilityDB/
+│       │   │   │   ├── LOCK
+│       │   │   │   └── LOG
+│       │   │   └── EventDB/
+│       │   │       ├── LOCK
+│       │   │       └── LOG
+│       │   ├── GCM Store/
+│       │   │   ├── 000003.log
+│       │   │   ├── CURRENT
+│       │   │   ├── LOCK
+│       │   │   ├── LOG
+│       │   │   └── MANIFEST-000001
+│       │   ├── GPUCache/
+│       │   │   ├── data_0
+│       │   │   ├── data_1
+│       │   │   ├── data_2
+│       │   │   ├── data_3
+│       │   │   └── index
+│       │   ├── History
+│       │   ├── History-journal
+│       │   ├── LOCK
+│       │   ├── LOG
+│       │   ├── Local Extension Settings/
+│       │   │   └── hpblclepliicmihaplldignhjdggnkdh/
+│       │   │       ├── 000003.log
+│       │   │       ├── CURRENT
+│       │   │       ├── LOCK
+│       │   │       ├── LOG
+│       │   │       └── MANIFEST-000001
+│       │   ├── Local Storage/
+│       │   │   └── leveldb/
+│       │   │       ├── 000003.log
+│       │   │       ├── CURRENT
+│       │   │       ├── LOCK
+│       │   │       ├── LOG
+│       │   │       └── MANIFEST-000001
+│       │   ├── Login Data
+│       │   ├── Login Data For Account
+│       │   ├── Login Data For Account-journal
+│       │   ├── Login Data-journal
+│       │   ├── Network/
+│       │   │   ├── Cookies
+│       │   │   ├── Cookies-journal
+│       │   │   ├── Device Bound Sessions
+│       │   │   ├── Device Bound Sessions-journal
+│       │   │   ├── Network Persistent State
+│       │   │   ├── NetworkDataMigrated
+│       │   │   ├── Reporting and NEL
+│       │   │   ├── Reporting and NEL-journal
+│       │   │   ├── SCT Auditing Pending Reports
+│       │   │   ├── TransportSecurity
+│       │   │   ├── Trust Tokens
+│       │   │   └── Trust Tokens-journal
+│       │   ├── Network Action Predictor
+│       │   ├── Network Action Predictor-journal
+│       │   ├── PersistentOriginTrials/
+│       │   │   ├── LOCK
+│       │   │   └── LOG
+│       │   ├── Preferences
+│       │   ├── PreferredApps
+│       │   ├── README
+│       │   ├── Safe Browsing Network/
+│       │   │   ├── NetworkDataMigrated
+│       │   │   ├── Safe Browsing Cookies
+│       │   │   └── Safe Browsing Cookies-journal
+│       │   ├── Secure Preferences
+│       │   ├── Segmentation Platform/
+│       │   │   ├── SegmentInfoDB/
+│       │   │   │   ├── LOCK
+│       │   │   │   └── LOG
+│       │   │   ├── SignalDB/
+│       │   │   │   ├── LOCK
+│       │   │   │   └── LOG
+│       │   │   └── SignalStorageConfigDB/
+│       │   │       ├── LOCK
+│       │   │       └── LOG
+│       │   ├── ServerCertificate
+│       │   ├── ServerCertificate-journal
+│       │   ├── Service Worker/
+│       │   │   ├── Database/
+│       │   │   │   ├── 000003.log
+│       │   │   │   ├── CURRENT
+│       │   │   │   ├── LOCK
+│       │   │   │   ├── LOG
+│       │   │   │   └── MANIFEST-000001
+│       │   │   └── ScriptCache/
+│       │   │       ├── 2cc80dabc69f58b6_0
+│       │   │       ├── index
+│       │   │       └── index-dir/
+│       │   │           └── the-real-index
+│       │   ├── Session Storage/
+│       │   │   ├── 000003.log
+│       │   │   ├── CURRENT
+│       │   │   ├── LOCK
+│       │   │   ├── LOG
+│       │   │   └── MANIFEST-000001
+│       │   ├── Sessions/
+│       │   │   ├── Session_13417037897575676
+│       │   │   └── Tabs_13417037903569876
+│       │   ├── Shared Dictionary/
+│       │   │   ├── cache/
+│       │   │   │   ├── index
+│       │   │   │   └── index-dir/
+│       │   │   │       └── the-real-index
+│       │   │   ├── db
+│       │   │   └── db-journal
+│       │   ├── SharedStorage
+│       │   ├── Shortcuts
+│       │   ├── Shortcuts-journal
+│       │   ├── Site Characteristics Database/
+│       │   │   ├── 000003.log
+│       │   │   ├── CURRENT
+│       │   │   ├── LOCK
+│       │   │   ├── LOG
+│       │   │   └── MANIFEST-000001
+│       │   ├── Sync Data/
+│       │   │   └── LevelDB/
+│       │   │       ├── 000003.log
+│       │   │       ├── CURRENT
+│       │   │       ├── LOCK
+│       │   │       ├── LOG
+│       │   │       └── MANIFEST-000001
+│       │   ├── Top Sites
+│       │   ├── Top Sites-journal
+│       │   ├── Web Data
+│       │   ├── Web Data-journal
+│       │   ├── WebStorage/
+│       │   │   ├── QuotaManager
+│       │   │   └── QuotaManager-journal
+│       │   ├── blob_storage/
+│       │   │   └── 526ca0da-25c6-4094-aed3-e5a8f138e8ae/
+│       │   ├── chrome_cart_db/
+│       │   │   ├── LOCK
+│       │   │   └── LOG
+│       │   ├── commerce_subscription_db/
+│       │   │   ├── LOCK
+│       │   │   └── LOG
+│       │   ├── discount_infos_db/
+│       │   │   ├── LOCK
+│       │   │   └── LOG
+│       │   ├── discounts_db/
+│       │   │   ├── LOCK
+│       │   │   └── LOG
+│       │   ├── heavy_ad_intervention_opt_out.db
+│       │   ├── heavy_ad_intervention_opt_out.db-journal
+│       │   ├── optimization_guide_hint_cache_store/
+│       │   │   ├── LOCK
+│       │   │   └── LOG
+│       │   ├── parcel_tracking_db/
+│       │   │   ├── LOCK
+│       │   │   └── LOG
+│       │   ├── power_bookmarks/
+│       │   │   ├── PowerBookmarks.db
+│       │   │   └── PowerBookmarks.db-journal
+│       │   ├── shared_proto_db/
+│       │   │   ├── 000003.log
+│       │   │   ├── CURRENT
+│       │   │   ├── LOCK
+│       │   │   ├── LOG
+│       │   │   ├── MANIFEST-000001
+│       │   │   └── metadata/
+│       │   │       ├── 000003.log
+│       │   │       ├── CURRENT
+│       │   │       ├── LOCK
+│       │   │       ├── LOG
+│       │   │       └── MANIFEST-000001
+│       │   └── trusted_vault.pb
+│       ├── DevToolsActivePort
+│       ├── FileTypePolicies/
+│       ├── FirstPartySetsPreloaded/
+│       ├── GPUPersistentCache/
+│       │   └── DawnGraphiteCache/
+│       │       └── AD277SZPBPK7F6SGJV5FTCFBB7NJ7QPK/
+│       │           ├── cache.db
+│       │           ├── cache.db-wal
+│       │           └── cache.journal
+│       ├── GrShaderCache/
+│       │   ├── data_0
+│       │   ├── data_1
+│       │   ├── data_2
+│       │   ├── data_3
+│       │   └── index
+│       ├── HistorySearch/
+│       ├── Last Browser
+│       ├── Last Version
+│       ├── Local State
+│       ├── MEIPreload/
+│       ├── OnDeviceHeadSuggestModel/
+│       ├── OptimizationHints/
+│       ├── OriginTrials/
+│       ├── PKIMetadata/
+│       ├── PlusAddressBlocklist/
+│       ├── PrivacySandboxAttestationsPreloaded/
+│       ├── SSLErrorAssistant/
+│       ├── Safe Browsing/
+│       ├── SafetyTips/
+│       ├── ShaderCache/
+│       │   ├── data_0
+│       │   ├── data_1
+│       │   ├── data_2
+│       │   ├── data_3
+│       │   └── index
+│       ├── Subresource Filter/
+│       │   └── Unindexed Rules/
+│       ├── TpcdMetadata/
+│       ├── TrustTokenKeyCommitments/
+│       ├── Variations
+│       ├── WasmTtsEngine/
+│       ├── ZxcvbnData/
+│       ├── component_crx_cache/
+│       ├── extension/
+│       │   ├── assets/
+│       │   │   ├── 128x128.png
+│       │   │   ├── icon128.png
+│       │   │   └── icon16.png
+│       │   ├── background.js
+│       │   ├── content.js
+│       │   ├── discovery/
+│       │   │   ├── content-aistudio.js
+│       │   │   ├── discovery.js
+│       │   │   ├── discoveryProtocol.js
+│       │   │   ├── index.html
+│       │   │   ├── onboarding.js
+│       │   │   ├── script.js
+│       │   │   └── styles.css
+│       │   ├── discovery.synapse.config.js
+│       │   ├── landing/
+│       │   └── manifest.json
+│       ├── extensions_crx_cache/
+│       │   └── metadata.json
+│       ├── first_party_sets.db
+│       ├── first_party_sets.db-journal
+│       ├── hyphen-data/
+│       └── segmentation_platform/
+│           ├── ukm_db
+│           └── ukm_db-wal
 ├── staging/
 │   ├── downloads/
 │   ├── snapshots/

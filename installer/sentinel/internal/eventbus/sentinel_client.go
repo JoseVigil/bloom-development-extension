@@ -604,6 +604,92 @@ func (sc *SentinelClient) LaunchProfileSync(
 // LaunchProfileSyncWithHeartbeat es la implementación real; permite pasar un
 // heartbeatFn que se invoca cada 10s durante la espera.
 // Usar desde Temporal activities: heartbeatFn = func() { activity.RecordHeartbeat(ctx, "waiting_ack") }
+// HostInitSync envía HOST_INIT al servicio Brain y espera sincrónicamente
+// el HOST_INIT_ACK correlacionado por launch_id.
+//
+// Ejecutado desde el servicio Brain (proceso permanente con sesión nucleus
+// activa) — garantiza que nucleus persista los streams en telemetry.json.
+// Bloquea hasta recibir el ACK con los paths creados, o hasta timeout.
+func (sc *SentinelClient) HostInitSync(
+	profileID string,
+	launchID string,
+	bloomRoot string,
+	timeout time.Duration,
+) (map[string]interface{}, error) {
+
+	type result struct {
+		data map[string]interface{}
+		err  error
+	}
+	resultCh := make(chan result, 1)
+	var once sync.Once
+
+	sc.On("HOST_INIT_ACK", func(event Event) {
+		// Correlacionar por launch_id en Data
+		eventLaunchID := event.LaunchID
+		if eventLaunchID == "" {
+			if event.Data != nil {
+				eventLaunchID, _ = event.Data["launch_id"].(string)
+			}
+		}
+		if eventLaunchID != launchID {
+			return
+		}
+
+		once.Do(func() {
+			if event.Status == "ok" {
+				data := event.Data
+				if data == nil {
+					data = make(map[string]interface{})
+				}
+				resultCh <- result{data, nil}
+			} else {
+				errMsg := event.Error
+				if errMsg == "" && event.Data != nil {
+					if msg, ok := event.Data["message"].(string); ok {
+						errMsg = msg
+					}
+				}
+				if errMsg == "" {
+					errMsg = "Brain reportó error en HOST_INIT sin mensaje"
+				}
+				resultCh <- result{nil, fmt.Errorf("host-init fallido: %s", errMsg)}
+			}
+		})
+	})
+
+	ev := Event{
+		Type:      "HOST_INIT",
+		ProfileID: profileID,
+		LaunchID:  launchID,
+		Timestamp: time.Now().UnixNano(),
+		Data: map[string]interface{}{
+			"profile_id": profileID,
+			"launch_id":  launchID,
+			"bloom_root": bloomRoot,
+		},
+	}
+
+	if err := sc.Send(ev); err != nil {
+		return nil, fmt.Errorf("error enviando HOST_INIT a Brain: %w", err)
+	}
+
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+
+	for {
+		select {
+		case res := <-resultCh:
+			return res.data, res.err
+		case <-deadline.C:
+			return nil, fmt.Errorf(
+				"timeout esperando HOST_INIT_ACK (launch_id=%s, timeout=%s)",
+				launchID, timeout,
+			)
+		}
+	}
+}
+
 func (sc *SentinelClient) LaunchProfileSyncWithHeartbeat(
 	profileID string,
 	launchID string,
