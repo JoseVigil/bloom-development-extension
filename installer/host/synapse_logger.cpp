@@ -29,7 +29,7 @@
 // Constructor / Destructor
 // ============================================================================
 
-SynapseLogManager::SynapseLogManager() : ready(false) {}
+SynapseLogManager::SynapseLogManager() : ready(false), skip_telemetry_(false) {}
 
 SynapseLogManager::~SynapseLogManager() {
     if (native_log.is_open())  native_log.close();
@@ -487,9 +487,14 @@ void SynapseLogManager::initialize(const std::string& p_profile_id,
     //
     // → En modo --init NO se lanza el thread; bloom-host.cpp llama
     //   register_telemetry_sync() tras initialize(). Ver bloom-host.cpp.
-    std::thread([this]() {
-        register_telemetry();
-    }).detach();
+    //
+    // → Si skip_telemetry_==true (Brain invocó con --skip-telemetry), no se
+    //   lanza el thread en ningún modo — Brain ya registró los streams.
+    if (!skip_telemetry_) {
+        std::thread([this]() {
+            register_telemetry();
+        }).detach();
+    }
 }
 
 // ============================================================================
@@ -513,7 +518,7 @@ std::string SynapseLogManager::get_extension_log_path() const { return extension
 // ============================================================================
 
 void SynapseLogManager::register_telemetry_sync() {
-    if (!ready) return;
+    if (!ready || skip_telemetry_) return;
     register_telemetry();
 }
 

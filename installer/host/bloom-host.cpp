@@ -907,7 +907,7 @@ int main(int argc, char* argv[]) {
         // Responsabilidades:
         //   1. Crear estructura de directorios de logs
         //   2. Crear archivos de log vacíos (con header de sesión)
-        //   3. Registrar telemetría via nucleus
+        //   3. Registrar telemetría via nucleus (omitido si --skip-telemetry)
         //   4. Salir con código 0 (éxito) o 1 (fallo)
         //
         // Cuando Chrome luego invoca el host via Native Messaging, los directorios
@@ -966,6 +966,17 @@ int main(int argc, char* argv[]) {
             std::cerr << "[INIT] bloom-host --init"
                       << " profile=" << profile_id
                       << " launch="  << launch_id << "\n";
+
+            // --skip-telemetry: Brain ya registró los streams en nucleus.
+            // bloom-host solo crea dirs y archivos; no llama a nucleus CLI.
+            bool skip_telemetry = false;
+            for (int i = 1; i < argc; i++) {
+                if (std::string(argv[i]) == "--skip-telemetry") { skip_telemetry = true; break; }
+            }
+            if (skip_telemetry) {
+                std::cerr << "[INIT] --skip-telemetry: nucleus registration delegated to Brain\n";
+            }
+            g_logger.set_skip_telemetry(skip_telemetry);
 
             // initialize() crea dirs, archivos, headers de sesión y registra telemetría.
             // Con el token de Sentinel (usuario completo) CreateDirectoryA tiene permisos.

@@ -43,6 +43,7 @@ private:
     std::string launch_id;
 
     bool ready;                      // true cuando ambos archivos están abiertos y listos
+    bool skip_telemetry_;            // true cuando Brain ya registró los streams — bloom-host omite nucleus CLI
 
     // Cola de mensajes nativos emitidos antes de que initialize() sea llamado.
     // Cada entrada guarda el timestamp original para preservar orden cronológico.
@@ -128,6 +129,17 @@ public:
     std::string get_log_directory()    const;
     std::string get_host_log_path()    const;
     std::string get_extension_log_path() const;
+
+    /**
+     * @brief Indica a bloom-host que Brain ya registró los streams en nucleus.
+     *
+     * Cuando Brain invoca bloom-host --init --skip-telemetry, bloom-host solo
+     * crea la estructura de directorios y archivos de log — no llama a nucleus CLI.
+     * Brain es el único responsable del registro de telemetría en esa cadena.
+     *
+     * Debe llamarse ANTES de initialize().
+     */
+    void set_skip_telemetry(bool skip) { skip_telemetry_ = skip; }
 
     /**
      * @brief Registra telemetria de forma SINCRONA (bloqueante).
