@@ -61,12 +61,18 @@ std::string SynapseLogManager::get_timestamp_ms() {
 
 std::string SynapseLogManager::get_base_log_directory() {
 #ifdef _WIN32
+    // LOCALAPPDATA del entorno tiene prioridad sobre SHGetFolderPathA.
+    // Cuando bloom-host es spawneado por Brain (servicio SYSTEM), el manager
+    // inyecta LOCALAPPDATA del usuario real en el entorno del proceso.
+    const char* appdata = std::getenv("LOCALAPPDATA");
+    if (appdata && appdata[0] != '\0') {
+        return std::string(appdata) + "\\BloomNucleus\\logs";
+    }
+    // Fallback: SHGetFolderPathA (puede devolver perfil SYSTEM si no hay env)
     char path[MAX_PATH] = {};
     if (SHGetFolderPathA(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, path) >= 0) {
         return std::string(path) + "\\BloomNucleus\\logs";
     }
-    const char* appdata = std::getenv("LOCALAPPDATA");
-    if (appdata) return std::string(appdata) + "\\BloomNucleus\\logs";
     return "";
 #else
     return "/tmp/bloom-nucleus/logs";
