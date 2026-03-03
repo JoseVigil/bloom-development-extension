@@ -16,7 +16,6 @@ import (
 	"strings"
 	"time"
 
-	"nucleus/internal/mandates"
 	"nucleus/internal/orchestration/types"
 )
 
@@ -178,13 +177,9 @@ func (a *SentinelActivities) LaunchSentinel(ctx context.Context, input types.Sen
 		LaunchID:        effectiveLaunchID,
 	}
 
-	// Encadenar hooks post_launch de forma best-effort.
-	// Corre en goroutine para no bloquear el retorno del launch —
-	// los hooks pueden esperar hasta 120s los logs de Chrome.
-	go func() {
-		hctx := mandates.NewHookContext(result.LaunchID, result.ProfileID)
-		mandates.RunEvent(context.Background(), "post_launch", hctx)
-	}()
+	// Los hooks post_launch son ejecutados por RunPostLaunchHooksActivity
+	// en ProfileLifecycleWorkflow. Ejecutarlos también aquí causaba doble
+	// ejecución paralela: colisión en nucleus logs synapse → total 1 failed 1.
 
 	return result, nil
 }
