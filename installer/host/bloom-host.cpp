@@ -907,8 +907,10 @@ int main(int argc, char* argv[]) {
         // Responsabilidades:
         //   1. Crear estructura de directorios de logs
         //   2. Crear archivos de log vacíos (con header de sesión)
-        //   3. Registrar telemetría via nucleus (omitido si --skip-telemetry)
-        //   4. Salir con código 0 (éxito) o 1 (fallo)
+        //   3. Salir con código 0 (éxito) o 1 (fallo)
+        //
+        // El registro de telemetría en nucleus es responsabilidad exclusiva de Brain.
+        // Brain llama a _register_telemetry_from_brain() antes de invocar bloom-host.
         //
         // Cuando Chrome luego invoca el host via Native Messaging, los directorios
         // y archivos ya existen y el token restringido de Chrome puede escribir.
@@ -967,17 +969,6 @@ int main(int argc, char* argv[]) {
                       << " profile=" << profile_id
                       << " launch="  << launch_id << "\n";
 
-            // --skip-telemetry: Brain ya registró los streams en nucleus.
-            // bloom-host solo crea dirs y archivos; no llama a nucleus CLI.
-            bool skip_telemetry = false;
-            for (int i = 1; i < argc; i++) {
-                if (std::string(argv[i]) == "--skip-telemetry") { skip_telemetry = true; break; }
-            }
-            if (skip_telemetry) {
-                std::cerr << "[INIT] --skip-telemetry: nucleus registration delegated to Brain\n";
-            }
-            g_logger.set_skip_telemetry(skip_telemetry);
-
             // initialize() crea dirs, archivos, headers de sesión y registra telemetría.
             // Con el token de Sentinel (usuario completo) CreateDirectoryA tiene permisos.
             g_logger.initialize(profile_id, launch_id);
@@ -999,14 +990,7 @@ int main(int argc, char* argv[]) {
             }
 
             g_logger.log_native("INFO", "Host pre-initialized by Sentinel --init. Dirs and files ready.");
-
-            // Registrar telemetria SINCRONO — en --init el proceso sale con return 0
-            // inmediatamente, lo que mata el thread detached de initialize() antes de
-            // que ejecute std::system(nucleus). register_telemetry_sync() corre en el
-            // thread del caller, garantizando que nucleus escriba telemetry.json antes
-            // de que el proceso salga.
-            g_logger.register_telemetry_sync();
-            std::cerr << "[INIT] OK — estructura creada, telemetría registrada, saliendo\n";
+            std::cerr << "[INIT] OK — estructura creada, saliendo\n";
 
             // Emitir resultado JSON a stdout si se pidió --json.
             // El objeto es minimal e intencional: solo lo que Sentinel necesita parsear.

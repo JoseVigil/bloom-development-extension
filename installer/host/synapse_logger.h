@@ -20,10 +20,7 @@
  *   macOS:   /tmp/bloom-nucleus/logs/host/profiles/{profile_id}/{launch_id}/
  *
  * Registro de telemetría:
- *   Delegado a nucleus via CLI — este componente NUNCA escribe telemetry.json directamente.
- *   nucleus.exe se localiza en %LOCALAPPDATA%\BloomNucleus\bin\nucleus\nucleus.exe (Windows)
- *   o en PATH (macOS). Se invoca `nucleus telemetry register` una sola vez al crear los
- *   archivos, con ambos paths como array en un solo stream.
+ *   Responsabilidad exclusiva de Brain. bloom-host no llama a nucleus CLI.
  *
  * Visibilidad en trace:
  *   Cada entrada se escribe también a stderr para que Sentinel la capture
@@ -43,7 +40,6 @@ private:
     std::string launch_id;
 
     bool ready;                      // true cuando ambos archivos están abiertos y listos
-    bool skip_telemetry_;            // true cuando Brain ya registró los streams — bloom-host omite nucleus CLI
 
     // Cola de mensajes nativos emitidos antes de que initialize() sea llamado.
     // Cada entrada guarda el timestamp original para preservar orden cronológico.
@@ -59,10 +55,6 @@ private:
 
     /** Vuelca pending_queue al archivo nativo. Llamar solo con native_mutex tomado y ready==true. */
     void flush_pending_queue();
-
-    // -------------------------------------------------------------------------
-    // Internals
-    // -------------------------------------------------------------------------
 
     /** Timestamp UTC: "YYYY-MM-DD HH:MM:SS.mmm" */
     std::string get_timestamp_ms();
@@ -84,31 +76,12 @@ private:
     /** Crea recursivamente un directorio y sus padres (cross-platform). */
     bool create_directory_recursive(const std::string& path);
 
-    /**
-     * Retorna el path absoluto al ejecutable nucleus según el SO.
-     *   Windows: %LOCALAPPDATA%\BloomNucleus\bin\nucleus\nucleus.exe
-     *   macOS:   nucleus  (en PATH)
-     */
-    std::string get_nucleus_executable();
-
-    /**
-     * Invoca `nucleus telemetry register` con los dos paths del stream.
-     *   stream_id: host_{launch_id}   (snake_case, único por sesión)
-     *   label:     �️ HOST
-     *   source:    host
-     *   category:  synapse
-     *
-     * Nucleus es el único writer autorizado de telemetry.json.
-     * Falla silenciosamente via stderr si nucleus no está disponible.
-     */
-    void register_telemetry();
-
 public:
     SynapseLogManager();
     ~SynapseLogManager();
 
     /**
-     * @brief Inicialización única — crea directorio, archivos y registra telemetría.
+     * @brief Inicialización única — crea directorio y archivos de log.
      *
      * @param profile_id UUID del perfil (e.g., "14c11dbf-7f2a-43be-beba-7ae757cc7486")
      * @param launch_id  ID de lanzamiento (e.g., "009_14c11dbf_045012")
@@ -117,7 +90,7 @@ public:
      *   logs/host/profiles/{profile_id}/{launch_id}/host_YYYYMMDD.log
      *   logs/host/profiles/{profile_id}/{launch_id}/cortex_extension_YYYYMMDD.log
      *
-     * Llama a `nucleus telemetry register` con ambos paths en un solo stream.
+     * El registro de telemetría en nucleus es responsabilidad exclusiva de Brain.
      * Es idempotente: llamadas repetidas con los mismos IDs no tienen efecto.
      */
     void initialize(const std::string& profile_id, const std::string& launch_id);
@@ -126,31 +99,9 @@ public:
     bool is_ready() const;
 
     /** Rutas a los archivos de log creados. Vacías si is_ready() == false. */
-    std::string get_log_directory()    const;
-    std::string get_host_log_path()    const;
+    std::string get_log_directory()      const;
+    std::string get_host_log_path()      const;
     std::string get_extension_log_path() const;
-
-    /**
-     * @brief Indica a bloom-host que Brain ya registró los streams en nucleus.
-     *
-     * Cuando Brain invoca bloom-host --init --skip-telemetry, bloom-host solo
-     * crea la estructura de directorios y archivos de log — no llama a nucleus CLI.
-     * Brain es el único responsable del registro de telemetría en esa cadena.
-     *
-     * Debe llamarse ANTES de initialize().
-     */
-    void set_skip_telemetry(bool skip) { skip_telemetry_ = skip; }
-
-    /**
-     * @brief Registra telemetria de forma SINCRONA (bloqueante).
-     *
-     * Invocar unicamente desde modos CLI de vida corta (--init) donde el proceso
-     * sale inmediatamente despues. En modo Native Messaging, initialize() ya lanza
-     * register_telemetry() en un thread detached para no bloquear el handshake de Chrome.
-     *
-     * Precondicion: is_ready() == true.
-     */
-    void register_telemetry_sync();
 
     /**
      * @brief Escribe en el log nativo del proceso host.
