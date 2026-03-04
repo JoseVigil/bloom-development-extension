@@ -90,8 +90,7 @@ func InitLogger(paths *PathConfig, category string, jsonMode bool) (*Logger, err
 
 	// Registrar stream en telemetry usando Nucleus CLI
 	streamID := "metamorph_" + strings.ToLower(category)
-	streamLabel := label + " " + category
-	registerTelemetry(streamID, streamLabel, filepath.ToSlash(logPath), 2, file)
+	registerTelemetry(streamID, label, filepath.ToSlash(logPath), 2, file)
 
 	return logger, nil
 }
@@ -99,17 +98,34 @@ func InitLogger(paths *PathConfig, category string, jsonMode bool) (*Logger, err
 func getMetamorphLabel(category string) string {
 	switch category {
 	case "RECONCILE":
-		return "[RECONCILE]"
+		return "🔄 METAMORPH RECONCILE"
 	case "INSPECTOR":
-		return "[INSPECTOR]"
+		return "🔍 METAMORPH INSPECTOR"
 	case "STAGING":
-		return "[STAGING]"
+		return "🚧 METAMORPH STAGING"
 	case "SERVICES":
-		return "[SERVICES]"
+		return "⚙️ METAMORPH SERVICES"
 	case "ROLLBACK":
-		return "[ROLLBACK]"
+		return "↩️ METAMORPH ROLLBACK"
 	default:
-		return "[METAMORPH]"
+		return "🦋 METAMORPH"
+	}
+}
+
+func getMetamorphDescription(category string) string {
+	switch category {
+	case "RECONCILE":
+		return "Metamorph reconcile log — captures reconciliation lifecycle, state transitions and errors written by nucleus"
+	case "INSPECTOR":
+		return "Metamorph inspector log — captures inspection runs, findings and errors written by nucleus"
+	case "STAGING":
+		return "Metamorph staging log — captures staging operations, file preparation and errors written by nucleus"
+	case "SERVICES":
+		return "Metamorph services log — captures service management operations and errors written by nucleus"
+	case "ROLLBACK":
+		return "Metamorph rollback log — captures rollback execution, step results and errors written by nucleus"
+	default:
+		return "Metamorph operation log — captures operation lifecycle and errors written by nucleus"
 	}
 }
 
@@ -117,17 +133,29 @@ func getMetamorphLabel(category string) string {
 // Los errores se escriben solo al archivo de log — nunca a consola — para no
 // contaminar stdout en modo JSON ni generar ruido en modo normal.
 func registerTelemetry(streamID, label, path string, priority int, logFile *os.File) {
+	// Derivar la categoria de telemetria desde el streamID (ej: "metamorph_reconcile")
+	// Metamorph corre bajo nucleus, con category "nucleus" como primaria.
+	category := strings.SplitN(streamID, "_", 2)[0] // "metamorph" -> usa "nucleus"
+	_ = category                                      // categoria derivada del binario que escribe
+
+	description := getMetamorphDescription(
+		strings.ToUpper(strings.TrimPrefix(streamID, "metamorph_")),
+	)
+
 	cmd := exec.Command(
 		"nucleus", "telemetry", "register",
-		"--stream", streamID,
-		"--label", label,
-		"--path", path,
-		"--priority", fmt.Sprintf("%d", priority),
+		"--stream",      streamID,
+		"--label",       label,
+		"--path",        path,
+		"--priority",    fmt.Sprintf("%d", priority),
+		"--category",    "nucleus",
+		"--source",      "nucleus",
+		"--description", description,
 	)
 
 	if err := cmd.Run(); err != nil {
 		if logFile != nil {
-			ts := time.Now().Format("2006/01/02 15:04:05")
+			ts := time.Now().UTC().Format(time.RFC3339)
 			fmt.Fprintf(logFile, "%s Warning: failed to register telemetry for %s: %v\n", ts, streamID, err)
 		}
 	}

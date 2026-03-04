@@ -16,15 +16,24 @@ import time
 
 def wait_for_chrome_logs(log_base_dir: str, launch_id: str, timeout: int = 30, interval: int = 2) -> bool:
     """
-    Espera que los logs reales de Chrome del launch existan en disco.
-    Retorna True en cuanto ambos archivos están presentes, False si se agota el timeout.
+    Espera que los logs reales de Chrome, Cortex y Host del launch existan en disco.
+    Retorna True en cuanto todos los archivos requeridos están presentes,
+    False si se agota el timeout.
+
+    Archivos esperados:
+      - {launch_id}_debug.log        (Sentinel/Chrome engine)
+      - {launch_id}_netlog.json      (Chrome net-log)
+      - cortex_extension_*.log       (Cortex extension — generado por Brain)
+      - host_*.log                   (bloom-host — generado por Brain)
     """
     base = pathlib.Path(log_base_dir)
     deadline = time.time() + timeout
     while time.time() < deadline:
-        debug_logs  = list(base.rglob(f"{launch_id}_debug.log"))
-        netlog_logs = list(base.rglob(f"{launch_id}_netlog.json"))
-        if debug_logs and netlog_logs:
+        debug_logs   = list(base.rglob(f"{launch_id}_debug.log"))
+        netlog_logs  = list(base.rglob(f"{launch_id}_netlog.json"))
+        cortex_logs  = list(base.rglob("cortex_extension_*.log"))
+        host_logs    = list(base.rglob("host_*.log"))
+        if debug_logs and netlog_logs and cortex_logs and host_logs:
             return True
         time.sleep(interval)
     return False
@@ -64,13 +73,24 @@ def main():
 
     found = wait_for_chrome_logs(log_base_dir, launch_id)
     if not found:
+        base = pathlib.Path(log_base_dir)
+        missing = []
+        if not list(base.rglob(f"{launch_id}_debug.log")):
+            missing.append(f"{launch_id}_debug.log")
+        if not list(base.rglob(f"{launch_id}_netlog.json")):
+            missing.append(f"{launch_id}_netlog.json")
+        if not list(base.rglob("cortex_extension_*.log")):
+            missing.append("cortex_extension_*.log")
+        if not list(base.rglob("host_*.log")):
+            missing.append("host_*.log")
         sys.stderr.write(
-            f"[warn] Timeout esperando logs de Chrome para {launch_id} "
-            f"en {log_base_dir} — ejecutando nucleus de todas formas\n"
+            f"[warn] Timeout esperando logs para {launch_id} "
+            f"en {log_base_dir} — archivos no encontrados: {', '.join(missing)} "
+            f"— ejecutando nucleus de todas formas\n"
         )
 
     result = subprocess.run(
-        [nucleus_bin, "logs", "synapse"],
+        [nucleus_bin, "--json", "logs", "synapse"],
         capture_output=True,
         text=True,
     )

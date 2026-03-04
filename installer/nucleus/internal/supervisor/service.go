@@ -115,6 +115,15 @@ explicitly stopped.`,
   nucleus --json service start`,
 
 		Run: func(cmd *cobra.Command, args []string) {
+			// TELEMETRY BOOTSTRAP — solo el service daemon inicializa el logger.
+			// Ningún subcomando corto (temporal ensure, telemetry register, etc.)
+			// debe inicializarlo — son consumidos via CombinedOutput y el header
+			// contaminaría el JSON que parsea el caller.
+			{
+				tm := core.GetTelemetryManager(c.Paths.LogsDir, c.Paths.LogsDir)
+				tm.InitTelemetryLogger(&c.Paths, true)
+			}
+			
 			// Create supervisor instance
 			logsDir := getLogsDir(c)
 			binDir := getBinDir(c)

@@ -94,7 +94,7 @@ class SynapseHostInitManager:
             {
                 "path":        data.get("host_log", ""),
                 "stream_id":   f"host_{launch_id}",
-                "label":       f"🖥️ HOST {launch_id}",
+                "label":       "🖥️ HOST",
                 "priority":    "2",
                 "category":    "host",
                 "description": f"bloom-host log for launch {launch_id}",
@@ -102,7 +102,7 @@ class SynapseHostInitManager:
             {
                 "path":        data.get("extension_log", ""),
                 "stream_id":   f"cortex_{launch_id}",
-                "label":       f"🧠 CORTEX {launch_id}",
+                "label":       "🧠 CORTEX",
                 "priority":    "2",
                 "category":    "synapse",
                 "description": f"Cortex extension log for launch {launch_id}",

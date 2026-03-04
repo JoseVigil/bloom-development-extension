@@ -240,6 +240,32 @@ func parseLineTimestamp(line string) time.Time {
 			}
 		}
 	}
+	// ── Priority 1c: Host / Cortex session banner ────────────────────────────
+	// Format: "===== HOST SESSION 2026-03-04 04:48:55.764 UTC PID:... ====="
+	//         "===== EXTENSION SESSION 2026-03-04 04:48:55.764 UTC PID:... ====="
+	// The timestamp "YYYY-MM-DD HH:MM:SS.mmm" appears right after the keyword SESSION.
+	{
+		const sessionKeyword = " SESSION "
+		if idx := strings.Index(line, sessionKeyword); idx >= 0 {
+			rest := strings.TrimSpace(line[idx+len(sessionKeyword):])
+			// rest starts with "2026-03-04 04:48:55.764 UTC ..."
+			// Try "2006-01-02 15:04:05.000" (23 chars) then strip " UTC"
+			if len(rest) >= 23 {
+				candidate := rest[:23]
+				if t, err := time.ParseInLocation("2006-01-02 15:04:05.000", candidate, time.UTC); err == nil {
+					return t
+				}
+			}
+			// Fallback: without milliseconds "2006-01-02 15:04:05" (19 chars)
+			if len(rest) >= 19 {
+				candidate := rest[:19]
+				if t, err := time.ParseInLocation("2006-01-02 15:04:05", candidate, time.UTC); err == nil {
+					return t
+				}
+			}
+		}
+	}
+
 	// Formats that include an explicit timezone offset (Z or ±HH:MM) are parsed
 	// as-is via time.Parse — the offset is self-describing.
 	// Formats WITHOUT an explicit offset (Go logger, plain ISO) are written by
@@ -584,8 +610,16 @@ func createSynapseCommand(c *core.Core) *cobra.Command {
 Si hay más de un perfil te pregunta cuál usar.`,
 		Example: `  nucleus logs synapse`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// En modo JSON (invocado por hook o CLI con --json) toda la narrativa
+			// interactiva va a stderr para mantener stdout limpio para el JSON.
+			// En modo terminal va a stdout como siempre.
+			out := os.Stdout
+			if c.IsJSON {
+				out = os.Stderr
+			}
+
 			// ── Step 1: obtener perfiles ──────────────────────────────────────
-			fmt.Println("🔍 Obteniendo perfiles via Brain CLI...")
+			fmt.Fprintln(out, "🔍 Obteniendo perfiles via Brain CLI...")
 			var profileList brainProfileList
 			if err := runBrainJSON(c.Paths.BinDir, &profileList, "profile", "list"); err != nil {
 				return fmt.Errorf("no se pudo obtener la lista de perfiles: %w", err)
@@ -599,13 +633,13 @@ Si hay más de un perfil te pregunta cuál usar.`,
 			var chosen brainProfile
 			if len(profiles) == 1 {
 				chosen = profiles[0]
-				fmt.Printf("✅ Perfil: %s (%s)\n", chosen.Alias, chosen.ID)
+				fmt.Fprintf(out, "✅ Perfil: %s (%s)\n", chosen.Alias, chosen.ID)
 			} else {
-				fmt.Println("\nPerfiles disponibles:")
+				fmt.Fprintln(out, "\nPerfiles disponibles:")
 				for i, p := range profiles {
-					fmt.Printf("  [%d] %s — %s  (último launch: %s)\n", i+1, p.Alias, p.ID, p.LastLaunchID)
+					fmt.Fprintf(out, "  [%d] %s — %s  (último launch: %s)\n", i+1, p.Alias, p.ID, p.LastLaunchID)
 				}
-				fmt.Print("\nElegí un número: ")
+				fmt.Fprint(out, "\nElegí un número: ")
 				var sel int
 				if _, err := fmt.Scan(&sel); err != nil || sel < 1 || sel > len(profiles) {
 					return fmt.Errorf("selección inválida")
@@ -614,7 +648,7 @@ Si hay más de un perfil te pregunta cuál usar.`,
 			}
 
 			// ── Step 3: obtener último launch_id ──────────────────────────────
-			fmt.Printf("🔍 Obteniendo launches del perfil %s...\n", chosen.Alias)
+			fmt.Fprintf(out, "🔍 Obteniendo launches del perfil %s...\n", chosen.Alias)
 			var launchList brainLaunchList
 			if err := runBrainJSON(c.Paths.BinDir, &launchList, "profile", "launches", chosen.ID); err != nil {
 				return fmt.Errorf("no se pudo obtener los launches: %w", err)
@@ -632,7 +666,7 @@ Si hay más de un perfil te pregunta cuál usar.`,
 				launchID = last.LaunchID
 			}
 
-			fmt.Printf("✅ Launch ID: %s  (ts: %s, estado: %s)\n\n", launchID, last.TS, last.Status)
+			fmt.Fprintf(out, "✅ Launch ID: %s  (ts: %s, estado: %s)\n\n", launchID, last.TS, last.Status)
 
 			// Parsear el timestamp del launch para evitar búsqueda en synapse log
 			var launchTime time.Time
@@ -645,8 +679,8 @@ Si hay más de un perfil te pregunta cuál usar.`,
 			}
 
 			// ── Step 4: correr el trace completo ──────────────────────────────
-			fmt.Println("🚀 Ejecutando trace completo de logs...")
-			return runLaunchTrace(c, launchID, chosen.ID, "", false, launchTime)
+			fmt.Fprintln(out, "🚀 Ejecutando trace completo de logs...")
+			return runLaunchTrace(c, launchID, chosen.ID, "", c.IsJSON, launchTime)
 		},
 	}
 }
@@ -955,6 +989,8 @@ type traceSummary struct {
 	launchTime     string
 	chromePID      string
 	extensionOK    string
+	cortexOK       string
+	hostOK         string
 	errorCount     int
 	warningCount   int
 	streamsActive  int
@@ -966,6 +1002,8 @@ func extractSummaryFacts(lines []timedLine) traceSummary {
 		launchTime:  "unknown",
 		chromePID:   "unknown",
 		extensionOK: "unknown",
+		cortexOK:    "unknown",
+		hostOK:      "unknown",
 	}
 	for _, l := range lines {
 		s.totalLines++
@@ -991,6 +1029,24 @@ func extractSummaryFacts(lines []timedLine) traceSummary {
 				s.extensionOK = "true"
 			} else if strings.Contains(upper, "EXTENSION") && strings.Contains(upper, "ERROR") {
 				s.extensionOK = "false"
+			}
+		}
+		// Cortex — detected from cortex stream
+		if strings.Contains(l.stream, "cortex") {
+			if s.cortexOK == "unknown" {
+				s.cortexOK = "active"
+			}
+			if strings.Contains(upper, "ERROR") {
+				s.cortexOK = "error"
+			}
+		}
+		// Host — detected from host stream
+		if strings.Contains(l.stream, "host") {
+			if s.hostOK == "unknown" {
+				s.hostOK = "active"
+			}
+			if strings.Contains(upper, "ERROR") {
+				s.hostOK = "error"
 			}
 		}
 	}
@@ -1023,6 +1079,15 @@ func streamSymbol(stream, text string) string {
 	}
 	if strings.Contains(stream, "sentinel") {
 		return "🛡️ "
+	}
+	if strings.Contains(stream, "cortex") {
+		return "🧠"
+	}
+	if strings.Contains(stream, "host") {
+		return "🖥️ "
+	}
+	if strings.Contains(stream, "telemetry") {
+		return "📡"
 	}
 	if strings.Contains(stream, "brain") {
 		return "🧠"
@@ -1221,6 +1286,8 @@ func runLaunchTrace(c *core.Core, launchID, profileID, outFilePath string, jsonO
 	fmt.Fprintf(w, "- Launch iniciado:   %s\n", sum.launchTime)
 	fmt.Fprintf(w, "- Chrome PID:        %s\n", sum.chromePID)
 	fmt.Fprintf(w, "- Extension loaded:  %s\n", sum.extensionOK)
+	fmt.Fprintf(w, "- Cortex:            %s\n", sum.cortexOK)
+	fmt.Fprintf(w, "- Host:              %s\n", sum.hostOK)
 	fmt.Fprintf(w, "- Errores detectados:  %d\n", sum.errorCount)
 	fmt.Fprintf(w, "- Warnings detectados: %d\n", sum.warningCount)
 	fmt.Fprintf(w, "- Streams analizados:  %d\n", sum.streamsActive)
@@ -1284,6 +1351,98 @@ func runLaunchTrace(c *core.Core, launchID, profileID, outFilePath string, jsonO
 		fmt.Fprintf(w, "%s\n", chrome.miningLog)
 	} else {
 		fmt.Fprintf(w, "(no se proveyó --profile, mining log omitido)\n")
+	}
+	fmt.Fprintf(w, "\n%s\n", sep)
+
+	// ── CORTEX EXTENSION LOG ──────────────────────────────────────────────────
+	fmt.Fprintf(w, "\n[CORTEX EXTENSION — bloom-cortex]\n\n")
+	cortexWritten := false
+	for streamID, stream := range tf.ActiveStreams {
+		if !strings.Contains(streamID, "cortex") {
+			continue
+		}
+		lines := readStreamWindow(stream.Path, windowStart, windowEnd, false)
+		if len(lines) == 0 {
+			fmt.Fprintf(w, "(%s: sin actividad en ventana)\n", streamID)
+		} else {
+			fmt.Fprintf(w, "--- %s (%s) ---\n", stream.Label, streamID)
+			for _, l := range lines {
+				if strings.TrimSpace(l.text) == "" {
+					continue
+				}
+				tsStr := "??:??:??"
+				if !l.ts.IsZero() {
+					tsStr = l.ts.Format("15:04:05")
+				}
+				fmt.Fprintf(w, "%s %s\n", tsStr, l.text)
+			}
+			fmt.Fprintln(w)
+		}
+		cortexWritten = true
+	}
+	if !cortexWritten {
+		fmt.Fprintf(w, "(stream cortex no encontrado en telemetry.json para este launch)\n")
+	}
+	fmt.Fprintf(w, "\n%s\n", dash)
+
+	// ── HOST LOG ──────────────────────────────────────────────────────────────
+	fmt.Fprintf(w, "\n[HOST — bloom-host]\n\n")
+	hostWritten := false
+	for streamID, stream := range tf.ActiveStreams {
+		if !strings.Contains(streamID, "host") {
+			continue
+		}
+		lines := readStreamWindow(stream.Path, windowStart, windowEnd, false)
+		if len(lines) == 0 {
+			fmt.Fprintf(w, "(%s: sin actividad en ventana)\n", streamID)
+		} else {
+			fmt.Fprintf(w, "--- %s (%s) ---\n", stream.Label, streamID)
+			for _, l := range lines {
+				if strings.TrimSpace(l.text) == "" {
+					continue
+				}
+				tsStr := "??:??:??"
+				if !l.ts.IsZero() {
+					tsStr = l.ts.Format("15:04:05")
+				}
+				fmt.Fprintf(w, "%s %s\n", tsStr, l.text)
+			}
+			fmt.Fprintln(w)
+		}
+		hostWritten = true
+	}
+	if !hostWritten {
+		fmt.Fprintf(w, "(stream host no encontrado en telemetry.json para este launch)\n")
+	}
+	fmt.Fprintf(w, "\n%s\n", dash)
+
+	// ── NUCLEUS TELEMETRY LOG ─────────────────────────────────────────────────
+	fmt.Fprintf(w, "\n[NUCLEUS TELEMETRY — telemetry.json events]\n\n")
+	telemetryWritten := false
+	for streamID, stream := range tf.ActiveStreams {
+		if streamID != "nucleus_telemetry" {
+			continue
+		}
+		lines := readStreamWindow(stream.Path, windowStart, windowEnd, false)
+		if len(lines) == 0 {
+			fmt.Fprintf(w, "(nucleus_telemetry: sin actividad en ventana)\n")
+		} else {
+			for _, l := range lines {
+				if strings.TrimSpace(l.text) == "" {
+					continue
+				}
+				tsStr := "??:??:??"
+				if !l.ts.IsZero() {
+					tsStr = l.ts.Format("15:04:05")
+				}
+				fmt.Fprintf(w, "%s %s\n", tsStr, l.text)
+			}
+		}
+		telemetryWritten = true
+		break
+	}
+	if !telemetryWritten {
+		fmt.Fprintf(w, "(stream nucleus_telemetry no encontrado en telemetry.json)\n")
 	}
 	fmt.Fprintf(w, "\n%s\n", sep)
 

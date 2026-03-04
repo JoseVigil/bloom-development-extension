@@ -15,7 +15,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gofrs/flock"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -198,57 +197,17 @@ func (s *Supervisor) waitForTemporalReady(ctx context.Context, timeout time.Dura
 	return fmt.Errorf("temporal server not ready after %v", timeout)
 }
 
-// updateTemporalTelemetry updates telemetry.json with Temporal Server info
+// updateTemporalTelemetry registers the Temporal Server stream via nucleus telemetry register.
 func (s *Supervisor) updateTemporalTelemetry(proc *ManagedProcess) {
-	telemetryPath := filepath.Join(s.logsDir, "telemetry.json")
-	lockPath := telemetryPath + ".lock"
-
-	lock := flock.New(lockPath)
-
-	// Retry with backoff
-	for i := 0; i < 5; i++ {
-		locked, err := lock.TryLock()
-		if err == nil && locked {
-			defer lock.Unlock()
-			break
-		}
-		time.Sleep(time.Duration(50+i*30) * time.Millisecond)
-	}
-
-	// Read existing telemetry
-	var telemetry map[string]interface{}
-	data, err := os.ReadFile(telemetryPath)
-	if err == nil {
-		json.Unmarshal(data, &telemetry)
-	}
-	if telemetry == nil {
-		telemetry = make(map[string]interface{})
-	}
-
-	streams, ok := telemetry["active_streams"].(map[string]interface{})
-	if !ok {
-		streams = make(map[string]interface{})
-		telemetry["active_streams"] = streams
-	}
-
-	// Normalize path to forward slashes
-	normalizedPath := strings.ReplaceAll(proc.LogPath, "\\", "/")
-
-	// Update stream with Temporal Server info
-	streams["temporal_server"] = map[string]interface{}{
-		"label":       "⏱️ TEMPORAL SERVER",
-		"path":        normalizedPath,
-		"priority":    1, // Critical
-		"pid":         proc.PID,
-		"state":       string(proc.State),
-		"last_update": time.Now().UTC().Format(time.RFC3339),
-	}
-
-	// Write atomically
-	tmpPath := telemetryPath + ".tmp"
-	newData, _ := json.MarshalIndent(telemetry, "", "  ")
-	os.WriteFile(tmpPath, newData, 0644)
-	os.Rename(tmpPath, telemetryPath)
+	s.registerStream(
+		"temporal_server",
+		"⏱️ TEMPORAL SERVER",
+		proc.LogPath,
+		"Temporal Server log — workflow engine process managed by the Nucleus supervisor",
+		"nucleus",
+		1,
+		[]string{"nucleus"},
+	)
 }
 
 // ============================================================================
@@ -329,57 +288,17 @@ func (s *Supervisor) startWorkerManager(ctx context.Context) (*ManagedProcess, e
 	return proc, nil
 }
 
-// updateWorkerTelemetry updates telemetry.json with Worker Manager info
+// updateWorkerTelemetry registers the Worker Manager stream via nucleus telemetry register.
 func (s *Supervisor) updateWorkerTelemetry(proc *ManagedProcess) {
-	telemetryPath := filepath.Join(s.logsDir, "telemetry.json")
-	lockPath := telemetryPath + ".lock"
-
-	lock := flock.New(lockPath)
-
-	// Retry with backoff
-	for i := 0; i < 5; i++ {
-		locked, err := lock.TryLock()
-		if err == nil && locked {
-			defer lock.Unlock()
-			break
-		}
-		time.Sleep(time.Duration(50+i*30) * time.Millisecond)
-	}
-
-	// Read existing telemetry
-	var telemetry map[string]interface{}
-	data, err := os.ReadFile(telemetryPath)
-	if err == nil {
-		json.Unmarshal(data, &telemetry)
-	}
-	if telemetry == nil {
-		telemetry = make(map[string]interface{})
-	}
-
-	streams, ok := telemetry["active_streams"].(map[string]interface{})
-	if !ok {
-		streams = make(map[string]interface{})
-		telemetry["active_streams"] = streams
-	}
-
-	// Normalize path to forward slashes
-	normalizedPath := strings.ReplaceAll(proc.LogPath, "\\", "/")
-
-	// Update stream with Worker Manager info
-	streams["worker_manager"] = map[string]interface{}{
-		"label":       "🔧 WORKER MANAGER",
-		"path":        normalizedPath,
-		"priority":    2, // Important (not critical like Temporal)
-		"pid":         proc.PID,
-		"state":       string(proc.State),
-		"last_update": time.Now().UTC().Format(time.RFC3339),
-	}
-
-	// Write atomically
-	tmpPath := telemetryPath + ".tmp"
-	newData, _ := json.MarshalIndent(telemetry, "", "  ")
-	os.WriteFile(tmpPath, newData, 0644)
-	os.Rename(tmpPath, telemetryPath)
+	s.registerStream(
+		"worker_manager",
+		"🔧 WORKER MANAGER",
+		proc.LogPath,
+		"Temporal Worker Manager log — processes workflow tasks from the profile-orchestration queue",
+		"nucleus",
+		2,
+		[]string{"nucleus"},
+	)
 }
 
 // ============================================================================
@@ -515,6 +434,35 @@ func (s *Supervisor) StartNodeProcess(ctx context.Context, name string, scriptPa
 	return proc, nil
 }
 
+// registerStream registra un stream de proceso via nucleus telemetry register.
+// Es la única forma correcta de escribir a telemetry.json desde el supervisor —
+// delega en registerStreamCLI que maneja locking, merge atómico y verificación post-write.
+func (s *Supervisor) registerStream(streamID, label, logPath, description, source string, priority int, categories []string) {
+	nucleusBin := filepath.Join(s.binDir, "nucleus", "nucleus.exe")
+	if _, err := os.Stat(nucleusBin); err != nil {
+		return // nucleus no disponible — no crítico
+	}
+
+	normalizedPath := strings.ReplaceAll(logPath, "\\", "/")
+
+	args := []string{
+		"telemetry", "register",
+		"--id", streamID,
+		"--label", label,
+		"--path", normalizedPath,
+		"--description", description,
+		"--source", source,
+		"--priority", fmt.Sprintf("%d", priority),
+	}
+	for _, cat := range categories {
+		args = append(args, "--category", cat)
+	}
+
+	cmd := exec.Command(nucleusBin, args...)
+	cmd.Stderr = os.Stderr
+	cmd.Run()
+}
+
 // monitorProcess watches a process and updates telemetry
 func (s *Supervisor) monitorProcess(proc *ManagedProcess, logFile *os.File) {
 	defer logFile.Close()
@@ -534,57 +482,17 @@ func (s *Supervisor) monitorProcess(proc *ManagedProcess, logFile *os.File) {
 	s.updateTelemetry(proc)
 }
 
-// updateTelemetry writes process state to telemetry.json with atomic locking
+// updateTelemetry registers a generic process stream via nucleus telemetry register.
 func (s *Supervisor) updateTelemetry(proc *ManagedProcess) {
-	telemetryPath := filepath.Join(s.logsDir, "telemetry.json")
-	lockPath := telemetryPath + ".lock"
-
-	lock := flock.New(lockPath)
-
-	// Retry with backoff
-	for i := 0; i < 5; i++ {
-		locked, err := lock.TryLock()
-		if err == nil && locked {
-			defer lock.Unlock()
-			break
-		}
-		time.Sleep(time.Duration(50+i*30) * time.Millisecond)
-	}
-
-	// Read existing telemetry
-	var telemetry map[string]interface{}
-	data, err := os.ReadFile(telemetryPath)
-	if err == nil {
-		json.Unmarshal(data, &telemetry)
-	}
-	if telemetry == nil {
-		telemetry = make(map[string]interface{})
-	}
-
-	streams, ok := telemetry["active_streams"].(map[string]interface{})
-	if !ok {
-		streams = make(map[string]interface{})
-		telemetry["active_streams"] = streams
-	}
-
-	// Normalize path to forward slashes
-	normalizedPath := strings.ReplaceAll(proc.LogPath, "\\", "/")
-
-	// Update stream
-	streams[proc.Name] = map[string]interface{}{
-		"label":       fmt.Sprintf("🔧 %s", proc.Name),
-		"path":        normalizedPath,
-		"priority":    2,
-		"pid":         proc.PID,
-		"state":       string(proc.State),
-		"last_update": time.Now().UTC().Format(time.RFC3339),
-	}
-
-	// Write atomically
-	tmpPath := telemetryPath + ".tmp"
-	newData, _ := json.MarshalIndent(telemetry, "", "  ")
-	os.WriteFile(tmpPath, newData, 0644)
-	os.Rename(tmpPath, telemetryPath)
+	s.registerStream(
+		proc.Name,
+		fmt.Sprintf("🔧 %s", strings.ToUpper(strings.ReplaceAll(proc.Name, "_", " "))),
+		proc.LogPath,
+		fmt.Sprintf("%s process log — managed by the Nucleus supervisor", proc.Name),
+		"nucleus",
+		2,
+		[]string{"nucleus"},
+	)
 }
 
 // Shutdown performs graceful shutdown of all managed processes

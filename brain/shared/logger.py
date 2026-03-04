@@ -258,7 +258,7 @@ class BrainLogger:
                 "--description", description,
             ]
 
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=5)
 
             if result.returncode != 0:
                 sys.stderr.write(

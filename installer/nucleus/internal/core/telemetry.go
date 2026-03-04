@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -77,11 +79,13 @@ type TelemetryData struct {
 // TelemetryManager is a long-running in-process writer used by nucleus itself.
 // External processes MUST use the CLI command instead.
 type TelemetryManager struct {
-	mu    sync.RWMutex
-	data  TelemetryData
-	path  string
-	dirty bool
-	tlog  *Logger // structured log for all telemetry operations — nil until InitTelemetryLogger is called
+	mu           sync.RWMutex
+	data         TelemetryData
+	path         string
+	dirty        bool
+	tlog         *Logger // structured log for all telemetry operations — nil until InitTelemetryLogger is called
+	lastModTime  time.Time // last known mtime of telemetry.json — used to detect external writes
+	lastSnapshot map[string]string // streamID → lastUpdate — used to detect new/updated streams from CLI path
 }
 
 var (
@@ -98,10 +102,12 @@ func init() {
 func GetTelemetryManager(logsDir, telemetryDir string) *TelemetryManager {
 	once.Do(func() {
 		telemetryInstance = &TelemetryManager{
-			path: filepath.Join(telemetryDir, "telemetry.json"),
-			data: TelemetryData{Streams: make(map[string]StreamInfo)},
+			path:         filepath.Join(telemetryDir, "telemetry.json"),
+			data:         TelemetryData{Streams: make(map[string]StreamInfo)},
+			lastSnapshot: make(map[string]string),
 		}
 		telemetryInstance.load()
+		telemetryInstance.snapshotNoLock() // record initial state
 		go telemetryInstance.autoSaveLoop()
 	})
 	return telemetryInstance
@@ -134,6 +140,85 @@ func (tm *TelemetryManager) load() {
 	}
 }
 
+// snapshotNoLock records the current stream lastUpdate values.
+// MUST be called with mu held (read or write lock acceptable if caller holds write).
+// For the initial call from GetTelemetryManager, no lock is needed since the
+// goroutine hasn't started yet. This is safe because snapshotNoLock only reads
+// tm.data which is fully initialized before this call.
+func (tm *TelemetryManager) snapshotNoLock() {
+	for id, s := range tm.data.Streams {
+		tm.lastSnapshot[id] = s.LastUpdate
+	}
+}
+
+// detectExternalChanges reads telemetry.json from disk and logs any streams
+// that were added or updated by external CLI processes since the last snapshot.
+// Returns true if changes were detected.
+func (tm *TelemetryManager) detectExternalChanges() bool {
+	// Check file mtime first — cheap early exit
+	fi, err := os.Stat(tm.path)
+	if err != nil {
+		return false
+	}
+
+	tm.mu.RLock()
+	lastMod := tm.lastModTime
+	tm.mu.RUnlock()
+
+	if !fi.ModTime().After(lastMod) {
+		return false
+	}
+
+	// File was modified externally — read and diff
+	raw, err := os.ReadFile(tm.path)
+	if err != nil {
+		tm.tlogf("ERROR", "detectExternalChanges: ReadFile(%s) failed — %v", tm.path, err)
+		return false
+	}
+
+	var fresh TelemetryData
+	if err := json.Unmarshal(raw, &fresh); err != nil {
+		tm.tlogf("ERROR", "detectExternalChanges: json.Unmarshal failed — %v", err)
+		return false
+	}
+	if fresh.Streams == nil {
+		return false
+	}
+
+	tm.mu.Lock()
+	tm.lastModTime = fi.ModTime()
+
+	var events []string
+	for id, s := range fresh.Streams {
+		prev, known := tm.lastSnapshot[id]
+		if !known {
+			events = append(events, fmt.Sprintf("registerStreamCLI [new]: id=%s label=%q categories=%v source=%q path=%s",
+				id, s.Label, s.Categories, s.Source, s.Path.Primary()))
+			tm.lastSnapshot[id] = s.LastUpdate
+		} else if prev != s.LastUpdate {
+			events = append(events, fmt.Sprintf("registerStreamCLI [update]: id=%s label=%q lastUpdate=%s",
+				id, s.Label, s.LastUpdate))
+			tm.lastSnapshot[id] = s.LastUpdate
+		}
+	}
+
+	// Merge external changes into in-process data so the in-process view stays consistent.
+	// We only add/update — we never delete streams based on external state.
+	for id, s := range fresh.Streams {
+		if _, exists := tm.data.Streams[id]; !exists {
+			tm.data.Streams[id] = s
+		}
+	}
+
+	tm.mu.Unlock()
+
+	for _, ev := range events {
+		tm.tlogf("INFO", "%s", ev)
+	}
+
+	return len(events) > 0
+}
+
 // RegisterStream registers or updates a stream from within the nucleus process.
 // categories is a slice like []string{"nucleus", "synapse"}.
 // paths accepts one or more file paths — stored as StreamPaths (string or array in JSON).
@@ -164,6 +249,8 @@ func (tm *TelemetryManager) RegisterStream(id, label string, priority int, categ
 		Active:      true,
 	}
 	tm.dirty = true
+	// Update snapshot so detectExternalChanges doesn't double-log in-process registrations
+	tm.lastSnapshot[id] = now
 	// Capture for logging after lock release — tlogf acquires RLock, cannot call under Lock
 	logMsg := fmt.Sprintf("RegisterStream id=%s label=%q categories=%v source=%q paths=%v",
 		id, label, categories, source, normalizedPaths)
@@ -179,20 +266,73 @@ func (tm *TelemetryManager) RegisterStream(id, label string, priority int, categ
 // that is already running.
 //
 //	tm := core.GetTelemetryManager(paths.LogsDir, paths.LogsDir)
-//	tm.InitTelemetryLogger(&paths, jsonMode)
+//	tm.InitTelemetryLogger(&paths, true) // true = fuerza stderr
 func (tm *TelemetryManager) InitTelemetryLogger(paths *Paths, jsonMode bool) {
 	// The telemetry logger ALWAYS routes its console output to stderr,
 	// regardless of the global jsonMode flag. This is critical: nucleus
 	// subcommands (including `telemetry register`) write JSON to stdout for
 	// external callers — any log line on stdout would corrupt that output.
-	logger, err := InitLogger(paths, "TELEMETRY", true /* forceStderr */)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "[telemetry] WARNING: could not init telemetry logger: %v\n", err)
+	// jsonMode is forced to true here regardless of the caller's value.
+
+	targetDir := filepath.Join(paths.LogsDir, "nucleus", "telemetry")
+	if err := os.MkdirAll(targetDir, 0755); err != nil {
+		fmt.Fprintf(os.Stderr, "[telemetry] WARNING: could not create telemetry log dir: %v\n", err)
 		return
 	}
+
+	now := time.Now()
+	logFileName := fmt.Sprintf("nucleus_telemetry_%s.log", now.Format("20060102"))
+	logPath := filepath.Join(targetDir, logFileName)
+
+	file, err := os.OpenFile(logPath, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0666)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[telemetry] WARNING: could not open telemetry log file %s: %v\n", logPath, err)
+		return
+	}
+
+	// Always stderr — never stdout. jsonMode forced true.
+	dest := io.MultiWriter(os.Stderr, file)
+	l := log.New(dest, "", log.Ldate|log.Ltime)
+
+	logger := &Logger{
+		file:       file,
+		logger:     l,
+		isJSONMode: true, // forced — never contaminates stdout
+		silentMode: false,
+		category:   "TELEMETRY",
+	}
+
+	logger.logger.Printf("======================================== [TELEMETRY] Logging session started ========================================")
+	logger.Flush()
+
 	tm.mu.Lock()
 	tm.tlog = logger
 	tm.mu.Unlock()
+
+	// Register the stream — lock already released above, safe to call RegisterStream
+	tm.RegisterStream(
+		"nucleus_telemetry",
+		"📡 TELEMETRY",
+		2,
+		[]string{"nucleus"},
+		"Nucleus telemetry log — captures all reads, writes, errors, parse failures and lock issues related to telemetry.json",
+		"nucleus",
+		filepath.ToSlash(logPath),
+	)
+
+	// Force immediate save so nucleus_telemetry appears in telemetry.json before
+	// any external registerStreamCLI process reads and overwrites the file.
+	// Without this, the 3-second autoSaveLoop tick arrives after the first
+	// external write, which reads the old file and loses nucleus_telemetry.
+	tm.save()
+
+	// Record the file mtime after our initial save so detectExternalChanges
+	// has a correct baseline and won't re-log our own write as an external change.
+	if fi, err := os.Stat(tm.path); err == nil {
+		tm.mu.Lock()
+		tm.lastModTime = fi.ModTime()
+		tm.mu.Unlock()
+	}
 
 	tm.tlogf("INFO", "TelemetryManager logger initialized — path: %s", tm.path)
 }
@@ -246,19 +386,56 @@ func (tm *TelemetryManager) GetStreamsByCategory(category string) map[string]Str
 	return result
 }
 
+// autoSaveLoop runs every 3 seconds:
+//   - saves in-process dirty state to disk
+//   - detects and logs streams registered externally via registerStreamCLI
+//   - emits a heartbeat every 60 seconds to confirm the daemon is alive
 func (tm *TelemetryManager) autoSaveLoop() {
 	ticker := time.NewTicker(3 * time.Second)
+	heartbeatTicks := 0
+	const heartbeatEvery = 20 // 20 × 3s = 60s
+
 	for range ticker.C {
+		// 1. Flush in-process dirty state
 		tm.save()
+
+		// 2. Detect external changes (CLI path: Brain, Conductor, Sentinel)
+		tm.detectExternalChanges()
+
+		// 3. Heartbeat — confirms daemon is alive even during idle periods
+		heartbeatTicks++
+		if heartbeatTicks >= heartbeatEvery {
+			heartbeatTicks = 0
+			tm.mu.RLock()
+			streamCount := len(tm.data.Streams)
+			tm.mu.RUnlock()
+			tm.tlogf("DEBUG", "autoSaveLoop heartbeat — daemon alive, %d streams tracked", streamCount)
+		}
 	}
 }
 
 func (tm *TelemetryManager) save() {
 	tm.mu.Lock()
+
+	// Merge desde disco SIEMPRE — captura streams escritos por procesos CLI
+	// que corrieron entre el último save y ahora.
+	if raw, err := os.ReadFile(tm.path); err == nil {
+		var onDisk TelemetryData
+		if json.Unmarshal(raw, &onDisk) == nil && onDisk.Streams != nil {
+			for id, stream := range onDisk.Streams {
+				if _, exists := tm.data.Streams[id]; !exists {
+					tm.data.Streams[id] = stream
+					tm.dirty = true // hay algo nuevo — forzar write
+				}
+			}
+		}
+	}
+
 	if !tm.dirty {
 		tm.mu.Unlock()
 		return
 	}
+
 	data, marshalErr := json.MarshalIndent(tm.data, "", "  ")
 	if marshalErr != nil {
 		tm.mu.Unlock()
@@ -273,6 +450,13 @@ func (tm *TelemetryManager) save() {
 		tm.tlogf("ERROR", "save: WriteFile(%s) failed — %v", tm.path, writeErr)
 		return
 	}
+
+	if fi, err := os.Stat(tm.path); err == nil {
+		tm.mu.Lock()
+		tm.lastModTime = fi.ModTime()
+		tm.mu.Unlock()
+	}
+
 	tm.tlogf("DEBUG", "save: telemetry.json written — %d streams (%d bytes)", streamCount, len(data))
 }
 
@@ -543,7 +727,7 @@ func acquireLock(telemetryPath string) (*flock.Flock, func(), error) {
 	// FIX: cleanup borra el archivo físico — gofrs/flock en Windows no lo hace
 	cleanup := func() {
 		fl.Unlock()
-		fl.Close() 
+		fl.Close()
 		os.Remove(lp) // ← este era el bug
 	}
 
@@ -560,12 +744,8 @@ func acquireLock(telemetryPath string) (*flock.Flock, func(), error) {
 //  5. Rename .tmp → telemetry.json
 //  6. Release lock
 func registerStreamCLI(telemetryPath, streamID, label, logPath, description, source string, priority int, categories []string) error {
-	// logEvent writes to the telemetry logger (file) AND stderr as fallback.
-	// NEVER to stdout — registerStreamCLI is called from the CLI path where
-	// stdout is reserved for JSON output consumed by external callers.
 	logEvent := func(level, f string, v ...any) {
 		msg := fmt.Sprintf(f, v...)
-		// Always write to file logger if available
 		if telemetryInstance != nil {
 			telemetryInstance.mu.RLock()
 			l := telemetryInstance.tlog
@@ -582,7 +762,6 @@ func registerStreamCLI(telemetryPath, streamID, label, logPath, description, sou
 				return
 			}
 		}
-		// Fallback: stderr only — never stdout
 		fmt.Fprintf(os.Stderr, "[telemetry/%s] %s\n", level, msg)
 	}
 
@@ -592,73 +771,112 @@ func registerStreamCLI(telemetryPath, streamID, label, logPath, description, sou
 		return fmt.Errorf("failed to create logs directory: %w", err)
 	}
 
-	// FIX: cleanup hace unlock + os.Remove del lock file
-	_, cleanup, err := acquireLock(telemetryPath)
-	if err != nil {
-		logEvent("ERROR", "registerStreamCLI: acquireLock failed — %v", err)
-		return err
-	}
-	defer cleanup()
+	const maxRetries = 5
+	const retryDelay = 80 * time.Millisecond
 
-	// Lee el estado completo — todos los streams existentes se preservan
-	var telemetry TelemetryData
-	raw, err := os.ReadFile(telemetryPath)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			logEvent("ERROR", "registerStreamCLI: ReadFile(%s) failed — %v", telemetryPath, err)
-			return fmt.Errorf("failed to read telemetry file: %w", err)
+	var lastErr error
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		lastErr = func() error {
+			_, cleanup, err := acquireLock(telemetryPath)
+			if err != nil {
+				logEvent("ERROR", "registerStreamCLI: acquireLock failed (attempt %d/%d) — %v", attempt, maxRetries, err)
+				return err
+			}
+			defer cleanup()
+
+			// Read current state — dentro del lock, nadie más puede escribir
+			var telemetry TelemetryData
+			raw, err := os.ReadFile(telemetryPath)
+			if err != nil {
+				if !os.IsNotExist(err) {
+					logEvent("ERROR", "registerStreamCLI: ReadFile failed (attempt %d/%d) — %v", attempt, maxRetries, err)
+					return fmt.Errorf("failed to read telemetry file: %w", err)
+				}
+				telemetry.Streams = make(map[string]StreamInfo)
+			} else {
+				if err := json.Unmarshal(raw, &telemetry); err != nil {
+					logEvent("ERROR", "registerStreamCLI: json.Unmarshal failed — %v (bytes: %d)", err, len(raw))
+					return fmt.Errorf("failed to parse telemetry JSON: %w", err)
+				}
+				if telemetry.Streams == nil {
+					telemetry.Streams = make(map[string]StreamInfo)
+				}
+			}
+
+			// Merge — preserva todos los streams existentes
+			now := time.Now().UTC().Format(time.RFC3339)
+			firstSeen := now
+			existingAction := "new"
+			if existing, exists := telemetry.Streams[streamID]; exists {
+				firstSeen = existing.FirstSeen
+				existingAction = "update"
+			}
+
+			telemetry.Streams[streamID] = StreamInfo{
+				Label:       label,
+				Path:        StreamPaths{filepath.ToSlash(logPath)},
+				Priority:    priority,
+				Categories:  categories,
+				Description: description,
+				Source:      source,
+				FirstSeen:   firstSeen,
+				LastUpdate:  now,
+				Active:      true,
+			}
+
+			logEvent("INFO", "registerStreamCLI [%s]: id=%s label=%q categories=%v source=%q path=%s",
+				existingAction, streamID, label, categories, source, logPath)
+
+			output, err := json.MarshalIndent(telemetry, "", "  ")
+			if err != nil {
+				logEvent("ERROR", "registerStreamCLI: MarshalIndent failed — %v", err)
+				return fmt.Errorf("failed to marshal JSON: %w", err)
+			}
+
+			// Write atómico: tmp → rename, dentro del lock
+			tmpPath := telemetryPath + ".tmp"
+			if err := os.WriteFile(tmpPath, output, 0644); err != nil {
+				logEvent("ERROR", "registerStreamCLI: WriteFile(%s) failed — %v", tmpPath, err)
+				return fmt.Errorf("failed to write temp file: %w", err)
+			}
+
+			if err := os.Rename(tmpPath, telemetryPath); err != nil {
+				_ = os.Remove(tmpPath)
+				logEvent("ERROR", "registerStreamCLI: Rename failed — %v", err)
+				return fmt.Errorf("failed to rename temp file: %w", err)
+			}
+
+			// Verificación post-write: leer de vuelta y confirmar que el stream está
+			verifyRaw, verifyErr := os.ReadFile(telemetryPath)
+			if verifyErr != nil {
+				logEvent("ERROR", "registerStreamCLI: post-write verify ReadFile failed — %v", verifyErr)
+				return fmt.Errorf("post-write verification failed: %w", verifyErr)
+			}
+			var verifyData TelemetryData
+			if verifyErr = json.Unmarshal(verifyRaw, &verifyData); verifyErr != nil {
+				logEvent("ERROR", "registerStreamCLI: post-write verify Unmarshal failed — %v", verifyErr)
+				return fmt.Errorf("post-write verification parse failed: %w", verifyErr)
+			}
+			if _, found := verifyData.Streams[streamID]; !found {
+				// El stream no está — alguien sobreescribió entre nuestro Rename y ahora
+				// Esto no debería pasar dentro del lock, pero si pasa, reintentamos
+				logEvent("ERROR", "registerStreamCLI: post-write verify FAILED — id=%s not found after write (%d streams), retrying", streamID, len(verifyData.Streams))
+				return fmt.Errorf("post-write verification: stream %q missing after write", streamID)
+			}
+
+			logEvent("SUCCESS", "registerStreamCLI: telemetry.json updated — id=%s (%d streams total)", streamID, len(telemetry.Streams))
+			return nil
+		}()
+
+		if lastErr == nil {
+			return nil
 		}
-		telemetry.Streams = make(map[string]StreamInfo)
-	} else {
-		if err := json.Unmarshal(raw, &telemetry); err != nil {
-			logEvent("ERROR", "registerStreamCLI: json.Unmarshal failed — %v (path: %s, raw bytes: %d)", err, telemetryPath, len(raw))
-			return fmt.Errorf("failed to parse telemetry JSON: %w", err)
-		}
-		if telemetry.Streams == nil {
-			telemetry.Streams = make(map[string]StreamInfo)
+
+		if attempt < maxRetries {
+			time.Sleep(retryDelay * time.Duration(attempt)) // backoff lineal: 80ms, 160ms, 240ms...
 		}
 	}
 
-	// Merge — solo toca el stream target, los demás quedan intactos
-	now := time.Now().UTC().Format(time.RFC3339)
-	firstSeen := now
-	if existing, exists := telemetry.Streams[streamID]; exists {
-		firstSeen = existing.FirstSeen
-	}
-
-	telemetry.Streams[streamID] = StreamInfo{
-		Label:       label,
-		Path:        StreamPaths{filepath.ToSlash(logPath)},
-		Priority:    priority,
-		Categories:  categories,
-		Description: description,
-		Source:      source,
-		FirstSeen:   firstSeen,
-		LastUpdate:  now,
-		Active:      true,
-	}
-
-	logEvent("INFO", "registerStreamCLI: registering id=%s label=%q categories=%v source=%q path=%s",
-		streamID, label, categories, source, logPath)
-
-	output, err := json.MarshalIndent(telemetry, "", "  ")
-	if err != nil {
-		logEvent("ERROR", "registerStreamCLI: json.MarshalIndent failed — %v", err)
-		return fmt.Errorf("failed to marshal JSON: %w", err)
-	}
-
-	tmpPath := telemetryPath + ".tmp"
-	if err := os.WriteFile(tmpPath, output, 0644); err != nil {
-		logEvent("ERROR", "registerStreamCLI: WriteFile(%s) failed — %v", tmpPath, err)
-		return fmt.Errorf("failed to write temp file: %w", err)
-	}
-
-	if err := os.Rename(tmpPath, telemetryPath); err != nil {
-		_ = os.Remove(tmpPath)
-		logEvent("ERROR", "registerStreamCLI: Rename(%s → %s) failed — %v", tmpPath, telemetryPath, err)
-		return fmt.Errorf("failed to rename temp file: %w", err)
-	}
-
-	logEvent("SUCCESS", "registerStreamCLI: telemetry.json updated — id=%s (%d streams total)", streamID, len(telemetry.Streams))
-	return nil
+	return fmt.Errorf("registerStreamCLI: all %d attempts failed for id=%s — last error: %w", maxRetries, streamID, lastErr)
 }

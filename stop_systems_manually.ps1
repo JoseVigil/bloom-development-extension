@@ -69,6 +69,74 @@ foreach ($chrome in $chromeProcesses) {
     }
 }
 
+# ==============================
+# CERRAR CHROMIUM (NO CHROME)
+# Identifica por ruta de instalacion para no tocar Chrome
+# Mata el arbol completo de procesos con /T
+# ==============================
+Write-Host ""
+Write-Host "Cerrando Chromium..."
+
+$allChromium = Get-CimInstance Win32_Process | Where-Object {
+    $_.ExecutablePath -and
+    $_.ExecutablePath -like "*Chromium*" -and
+    $_.ExecutablePath -notlike "*Google\Chrome*"
+}
+
+if ($allChromium) {
+    # Obtener solo los PIDs raiz (cuyo padre NO es tambien Chromium)
+    $chromiumPids = $allChromium | Select-Object -ExpandProperty ProcessId
+    
+    $rootProcesses = $allChromium | Where-Object {
+        $chromiumPids -notcontains $_.ParentProcessId
+    }
+
+    foreach ($root in $rootProcesses) {
+        Write-Host "Matando arbol Chromium desde PID raiz $($root.ProcessId) - $($root.ExecutablePath)"
+        taskkill /F /T /PID $root.ProcessId 2>$null
+    }
+    Start-Sleep -Seconds 2
+
+    # Verificacion: matar cualquier remanente por ruta
+    $remanentes = Get-CimInstance Win32_Process | Where-Object {
+        $_.ExecutablePath -and
+        $_.ExecutablePath -like "*Chromium*" -and
+        $_.ExecutablePath -notlike "*Google\Chrome*"
+    }
+    foreach ($rem in $remanentes) {
+        Write-Host "Matando remanente Chromium PID $($rem.ProcessId)"
+        Stop-Process -Id $rem.ProcessId -Force -ErrorAction SilentlyContinue
+    }
+} else {
+    Write-Host "No se encontraron procesos de Chromium en ejecucion."
+}
+
+# ==============================
+# BORRAR CARPETAS DE BloomNucleus
+# ==============================
+Write-Host ""
+Write-Host "======================================" -ForegroundColor DarkCyan
+Write-Host " LIMPIANDO CARPETAS BloomNucleus" -ForegroundColor Cyan
+Write-Host "======================================" -ForegroundColor DarkCyan
+
+$bloomNucleusPath = "C:\Users\josev\AppData\Local\BloomNucleus"
+
+if (Test-Path $bloomNucleusPath) {
+    $subFolders = Get-ChildItem -Path $bloomNucleusPath -Directory -ErrorAction SilentlyContinue
+
+    if ($subFolders) {
+        foreach ($folder in $subFolders) {
+            Write-Host "Borrando carpeta: $($folder.FullName)"
+            Remove-Item -Path $folder.FullName -Recurse -Force -ErrorAction SilentlyContinue
+        }
+        Write-Host "Carpetas eliminadas correctamente." -ForegroundColor Green
+    } else {
+        Write-Host "No se encontraron subcarpetas en BloomNucleus."
+    }
+} else {
+    Write-Host "La ruta $bloomNucleusPath no existe."
+}
+
 Write-Host ""
 Write-Host "======================================" -ForegroundColor DarkCyan
 Write-Host " SISTEMA DETENIDO CORRECTAMENTE" -ForegroundColor Green

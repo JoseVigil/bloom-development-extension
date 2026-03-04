@@ -113,7 +113,9 @@ func getNucleusIcon(category string) string {
 	case "WORKER":
 		return "👷"
 	case "MANDATE":
-    	return "📋"
+		return "📋"
+	case "TELEMETRY": // ← NUEVO
+		return "📡"
 	default:
 		return "⚙️"
 	}
@@ -140,7 +142,9 @@ func getNucleusStreamDescription(category string) string {
 	case "SYNAPSE":
 		return "Synapse orchestration log — records the full launch chain for a browser profile"
 	case "MANDATE":
-   	 	return "Nucleus mandate log — captures hook execution and mandate orchestration events"
+		return "Nucleus mandate log — captures hook execution and mandate orchestration events"
+	case "TELEMETRY": // ← NUEVO
+		return "Nucleus telemetry log — captures all reads, writes, errors, parse failures and lock issues related to telemetry.json"
 	default:
 		return fmt.Sprintf("Nucleus %s log", strings.ToLower(category))
 	}
