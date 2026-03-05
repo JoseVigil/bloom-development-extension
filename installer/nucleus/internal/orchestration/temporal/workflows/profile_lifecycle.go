@@ -105,11 +105,21 @@ func ProfileLifecycleWorkflow(ctx workflow.Context, input types.ProfileLifecycle
 			currentCommandID = fmt.Sprintf("launch_%s_%d", input.ProfileID, workflow.Now(ctx).UnixNano())
 
 			launchInput := types.SentinelLaunchInput{
-				ProfileID:      input.ProfileID,
-				CommandID:      currentCommandID,
-				Environment:    input.Environment,
-				Mode:           launchSignal.Mode,
-				ConfigOverride: launchSignal.ConfigOverride,
+				ProfileID:         input.ProfileID,
+				CommandID:         currentCommandID,
+				Environment:       input.Environment,
+				Mode:              launchSignal.Mode,
+				ConfigOverride:    launchSignal.ConfigOverride,
+				OverrideAlias:     launchSignal.OverrideAlias,
+				OverrideEmail:     launchSignal.OverrideEmail,
+				OverrideExtension: launchSignal.OverrideExtension,
+				OverrideHeartbeat: launchSignal.OverrideHeartbeat,
+				OverrideRegister:  launchSignal.OverrideRegister,
+				OverrideRole:      launchSignal.OverrideRole,
+				OverrideService:   launchSignal.OverrideService,
+				OverrideStep:      launchSignal.OverrideStep,
+				Save:              launchSignal.Save,
+				AddAccounts:       launchSignal.AddAccounts,
 			}
 
 			var launchResult types.SentinelLaunchResult

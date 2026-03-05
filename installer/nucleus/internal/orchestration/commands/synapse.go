@@ -213,6 +213,19 @@ func createLaunchSubcommand(c *core.Core) *cobra.Command {
 	var mode string
 	var skipPreflight bool
 
+	// Override flags
+	var overrideAlias string
+	var overrideEmail string
+	var overrideExtension string
+	var overrideHeartbeat string
+	var overrideRegister string
+	var overrideRole string
+	var overrideService string
+	var overrideStep string
+	var save bool
+	var configFile string
+	var addAccounts []string
+
 	cmd := &cobra.Command{
 		Use:   "launch <profile_id>",
 		Short: "Launch Sentinel for a profile (with pre-flight check)",
@@ -226,6 +239,10 @@ If the check fails after retry, the command aborts with a clear error
 message before any workflow is triggered.
 
 Use --skip-preflight to bypass this check.
+
+Override flags allow modifying profile attributes for this session without
+persisting changes (unless --save is specified). All overrides are forwarded
+directly to Sentinel at launch time.
 
 Requires: No special role
 Effects:  Starts Chrome via Sentinel; creates Temporal workflow signals`,
@@ -247,6 +264,11 @@ Effects:  Starts Chrome via Sentinel; creates Temporal workflow signals`,
 		Example: `  nucleus synapse launch prf_a1b2c3d4
   nucleus synapse launch prf_a1b2c3d4 --mode discovery
   nucleus synapse launch prf_a1b2c3d4 --skip-preflight
+  nucleus synapse launch prf_a1b2c3d4 --override-email user@example.com --override-service google
+  nucleus synapse launch prf_a1b2c3d4 --override-role sovereign --override-register true --save
+  nucleus synapse launch prf_a1b2c3d4 --add-account google,user@gmail.com,active --add-account twitter,@user,active
+  nucleus synapse launch prf_a1b2c3d4 --config-file overrides.json
+  nucleus synapse launch prf_a1b2c3d4 --config-file @/path/to/config.json
   nucleus --json synapse launch prf_a1b2c3d4`,
 
 		Run: func(cmd *cobra.Command, args []string) {
@@ -306,7 +328,19 @@ Effects:  Starts Chrome via Sentinel; creates Temporal workflow signals`,
 			}
 			defer tc.Close()
 
-			result, err := tc.ExecuteLaunchWorkflow(ctx, logger, profileID, mode)
+			result, err := tc.ExecuteLaunchWorkflow(ctx, logger, profileID, mode, temporalclient.LaunchOverrides{
+					ConfigFile:        configFile,
+					OverrideAlias:     overrideAlias,
+					OverrideEmail:     overrideEmail,
+					OverrideExtension: overrideExtension,
+					OverrideHeartbeat: overrideHeartbeat,
+					OverrideRegister:  overrideRegister,
+					OverrideRole:      overrideRole,
+					OverrideService:   overrideService,
+					OverrideStep:      overrideStep,
+					Save:              save,
+					AddAccounts:       addAccounts,
+				})
 			if err != nil {
 				if jsonOutput {
 					outputJSON(map[string]interface{}{
@@ -337,6 +371,24 @@ Effects:  Starts Chrome via Sentinel; creates Temporal workflow signals`,
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
 	cmd.Flags().StringVar(&mode, "mode", "landing", "Launch mode (landing, discovery)")
 	cmd.Flags().BoolVar(&skipPreflight, "skip-preflight", false, "Skip Brain/launcher pre-flight check")
+
+	// Config file
+	cmd.Flags().StringVar(&configFile, "config-file", "", "Load overrides from JSON file (@file path or - for stdin)")
+
+	// Override flags
+	cmd.Flags().StringVar(&overrideAlias, "override-alias", "", "Override profile alias")
+	cmd.Flags().StringVar(&overrideEmail, "override-email", "", "Override profile email")
+	cmd.Flags().StringVar(&overrideExtension, "override-extension", "", "Override extension ID")
+	cmd.Flags().StringVar(&overrideHeartbeat, "override-heartbeat", "", "Override heartbeat flag (true/false)")
+	cmd.Flags().StringVar(&overrideRegister, "override-register", "", "Override register flag (true/false)")
+	cmd.Flags().StringVar(&overrideRole, "override-role", "", "Override profile role")
+	cmd.Flags().StringVar(&overrideService, "override-service", "", "Override registration service (google, twitter, github, etc)")
+	cmd.Flags().StringVar(&overrideStep, "override-step", "", "Override current step (default: 0)")
+	cmd.Flags().BoolVar(&save, "save", false, "Persist overrides in profiles.json")
+
+	// Linked accounts — repetible
+	cmd.Flags().StringArrayVar(&addAccounts, "add-account", []string{}, "Add linked account (provider,email_or_username,status). Repeatable")
+
 	return cmd
 }
 

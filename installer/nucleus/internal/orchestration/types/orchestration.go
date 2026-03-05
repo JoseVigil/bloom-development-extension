@@ -49,8 +49,22 @@ type SentinelLaunchInput struct {
 	ProfileID      string `json:"profile_id"`
 	CommandID      string `json:"command_id"`
 	Environment    string `json:"environment"`
-	Mode           string `json:"mode,omitempty"`            // landing, discovery, headless
-	ConfigOverride string `json:"config_override,omitempty"` // JSON string con overrides
+	Mode           string `json:"mode,omitempty"`            // landing, discovery
+	ConfigOverride string `json:"config_override,omitempty"` // JSON string con overrides (@file o -)
+
+	// Override flags — sobrescriben campos del perfil en memoria sin persistir (salvo --save)
+	OverrideAlias     string `json:"override_alias,omitempty"`
+	OverrideEmail     string `json:"override_email,omitempty"`
+	OverrideExtension string `json:"override_extension,omitempty"`
+	OverrideHeartbeat string `json:"override_heartbeat,omitempty"` // "true" / "false"
+	OverrideRegister  string `json:"override_register,omitempty"`  // "true" / "false"
+	OverrideRole      string `json:"override_role,omitempty"`
+	OverrideService   string `json:"override_service,omitempty"` // google, twitter, github, etc
+	OverrideStep      string `json:"override_step,omitempty"`    // número de step (default "0")
+	Save              bool   `json:"save,omitempty"`             // persistir overrides en profiles.json
+
+	// Linked accounts — repetible: "provider,email_or_username,status"
+	AddAccounts []string `json:"add_accounts,omitempty"`
 }
 
 // SentinelLaunchResult es el resultado de lanzar Sentinel
@@ -129,8 +143,22 @@ type RecoveryFlowResult struct {
 
 // LaunchSignal - Señal para lanzar Sentinel
 type LaunchSignal struct {
-	Mode           string `json:"mode"`            // landing, discovery
-	ConfigOverride string `json:"config_override"` // JSON opcional
+	Mode           string `json:"mode"`                      // landing, discovery
+	ConfigOverride string `json:"config_override,omitempty"` // JSON opcional (@file o -)
+
+	// Override flags
+	OverrideAlias     string `json:"override_alias,omitempty"`
+	OverrideEmail     string `json:"override_email,omitempty"`
+	OverrideExtension string `json:"override_extension,omitempty"`
+	OverrideHeartbeat string `json:"override_heartbeat,omitempty"`
+	OverrideRegister  string `json:"override_register,omitempty"`
+	OverrideRole      string `json:"override_role,omitempty"`
+	OverrideService   string `json:"override_service,omitempty"`
+	OverrideStep      string `json:"override_step,omitempty"`
+	Save              bool   `json:"save,omitempty"`
+
+	// Linked accounts
+	AddAccounts []string `json:"add_accounts,omitempty"`
 }
 
 // HeartbeatSignal - Señal de heartbeat desde Sentinel

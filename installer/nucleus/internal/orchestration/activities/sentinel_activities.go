@@ -41,25 +41,80 @@ func NewSentinelActivities(logsDir, nucleusPath, sentinelPath string) *SentinelA
 // ═══════════════════════════════════════════════════════════════════════════
 
 // LaunchSentinel activity para lanzar Sentinel de forma idempotente
-// Comando ejecutado: sentinel --json launch <profile_id> [--mode <mode>] [--config-file -]
+// Comando ejecutado: sentinel --json launch <profile_id> [flags...]
 func (a *SentinelActivities) LaunchSentinel(ctx context.Context, input types.SentinelLaunchInput) (types.SentinelLaunchResult, error) {
-	// Construir comando: sentinel --json launch <profile_id>
+	// Construir comando base: sentinel --json launch <profile_id>
 	args := []string{"--json", "launch", input.ProfileID}
 
-	// Agregar flags opcionales
+	// --mode
 	if input.Mode != "" {
 		args = append(args, "--mode", input.Mode)
 	}
+
+	// --config-file (@ path o - para stdin)
 	if input.ConfigOverride != "" {
-		args = append(args, "--config-file", "-")
+		args = append(args, "--config-file", input.ConfigOverride)
+	}
+
+	// --override-alias
+	if input.OverrideAlias != "" {
+		args = append(args, "--override-alias", input.OverrideAlias)
+	}
+
+	// --override-email
+	if input.OverrideEmail != "" {
+		args = append(args, "--override-email", input.OverrideEmail)
+	}
+
+	// --override-extension
+	if input.OverrideExtension != "" {
+		args = append(args, "--override-extension", input.OverrideExtension)
+	}
+
+	// --override-heartbeat
+	if input.OverrideHeartbeat != "" {
+		args = append(args, "--override-heartbeat", input.OverrideHeartbeat)
+	}
+
+	// --override-register
+	if input.OverrideRegister != "" {
+		args = append(args, "--override-register", input.OverrideRegister)
+	}
+
+	// --override-role
+	if input.OverrideRole != "" {
+		args = append(args, "--override-role", input.OverrideRole)
+	}
+
+	// --override-service
+	if input.OverrideService != "" {
+		args = append(args, "--override-service", input.OverrideService)
+	}
+
+	// --override-step
+	if input.OverrideStep != "" {
+		args = append(args, "--override-step", input.OverrideStep)
+	}
+
+	// --save
+	if input.Save {
+		args = append(args, "--save")
+	}
+
+	// --add-account (repetible)
+	for _, account := range input.AddAccounts {
+		args = append(args, "--add-account", account)
 	}
 
 	// Crear comando
 	cmd := exec.CommandContext(ctx, a.sentinelPath, args...)
 
-	// Si hay config override, pasarlo por stdin
-	if input.ConfigOverride != "" {
-		cmd.Stdin = strings.NewReader(input.ConfigOverride)
+	// Si config-file es "-", pasar ConfigOverride por stdin (contenido JSON directo)
+	if input.ConfigOverride == "-" {
+		// En este caso el caller debe haber puesto el JSON en un campo separado.
+		// Por ahora stdin queda vacío — el soporte de piping JSON inline
+		// se puede agregar cuando se exponga --config-inline en nucleus.
+		cmd.Stdin = strings.NewReader("")
 	}
 
 	// Buffers para capturar salida

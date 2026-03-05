@@ -137,8 +137,23 @@ func (c *Client) ExecuteSeedWorkflow(ctx context.Context, logger *core.Logger, a
 	}, nil
 }
 
+// LaunchOverrides agrupa todos los flags opcionales de override para el comando launch
+type LaunchOverrides struct {
+	ConfigFile        string
+	OverrideAlias     string
+	OverrideEmail     string
+	OverrideExtension string
+	OverrideHeartbeat string
+	OverrideRegister  string
+	OverrideRole      string
+	OverrideService   string
+	OverrideStep      string
+	Save              bool
+	AddAccounts       []string
+}
+
 // ExecuteLaunchWorkflow ejecuta el launch de un perfil existente usando señales
-func (c *Client) ExecuteLaunchWorkflow(ctx context.Context, logger *core.Logger, profileID string, mode string) (*LaunchResult, error) {
+func (c *Client) ExecuteLaunchWorkflow(ctx context.Context, logger *core.Logger, profileID string, mode string, overrides LaunchOverrides) (*LaunchResult, error) {
 	workflowID := fmt.Sprintf("profile-lifecycle-%s", profileID)
 
 	logger.Info("Executing launch for profile: %s (workflow: %s)", profileID, workflowID)
@@ -206,8 +221,18 @@ func (c *Client) ExecuteLaunchWorkflow(ctx context.Context, logger *core.Logger,
 
 	// Enviar señal de LAUNCH
 	launchSignal := types.LaunchSignal{
-		Mode:           mode,
-		ConfigOverride: "", // TODO: Agregar soporte para config override si es necesario
+		Mode:              mode,
+		ConfigOverride:    overrides.ConfigFile,
+		OverrideAlias:     overrides.OverrideAlias,
+		OverrideEmail:     overrides.OverrideEmail,
+		OverrideExtension: overrides.OverrideExtension,
+		OverrideHeartbeat: overrides.OverrideHeartbeat,
+		OverrideRegister:  overrides.OverrideRegister,
+		OverrideRole:      overrides.OverrideRole,
+		OverrideService:   overrides.OverrideService,
+		OverrideStep:      overrides.OverrideStep,
+		Save:              overrides.Save,
+		AddAccounts:       overrides.AddAccounts,
 	}
 
 	if err := c.SignalWorkflow(ctx, workflowID, "", signals.SignalLaunch, launchSignal); err != nil {
