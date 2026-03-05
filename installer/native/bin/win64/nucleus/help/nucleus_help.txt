@@ -667,14 +667,30 @@
           <profile_id>          required
 
         Flags:
+          --add-account              Add linked account (provider,email_or_username,status). Repeatable [default: []]
+          --config-file              Load overrides from JSON file (@file path or - for stdin)
           --json                     Output in JSON format
           --mode                     Launch mode (landing, discovery) [default: landing]
+          --override-alias           Override profile alias
+          --override-email           Override profile email
+          --override-extension       Override extension ID
+          --override-heartbeat       Override heartbeat flag (true/false)
+          --override-register        Override register flag (true/false)
+          --override-role            Override profile role
+          --override-service         Override registration service (google, twitter, github, etc)
+          --override-step            Override current step (default: 0)
+          --save                     Persist overrides in profiles.json
           --skip-preflight           Skip Brain/launcher pre-flight check
 
         Example:
             nucleus synapse launch prf_a1b2c3d4
             nucleus synapse launch prf_a1b2c3d4 --mode discovery
             nucleus synapse launch prf_a1b2c3d4 --skip-preflight
+            nucleus synapse launch prf_a1b2c3d4 --override-email user@example.com --override-service google
+            nucleus synapse launch prf_a1b2c3d4 --override-role sovereign --override-register true --save
+            nucleus synapse launch prf_a1b2c3d4 --add-account google,user@gmail.com,active --add-account twitter,@user,active
+            nucleus synapse launch prf_a1b2c3d4 --config-file overrides.json
+            nucleus synapse launch prf_a1b2c3d4 --config-file @/path/to/config.json
             nucleus --json synapse launch prf_a1b2c3d4
 
         JSON Response:

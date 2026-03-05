@@ -505,3 +505,9 @@ https://claude.ai/chat/cc369773-09ba-4433-bdb4-7b741ddb3bb0
 moneyprinter
 Automate the creation of YouTube Shorts by providing a video topic
 https://github.com/FujiwaraChoki/MoneyPrinter
+
+nanochat
+https://github.com/karpathy/nanochat
+
+jose gmail onboarding definitivo
+https://claude.ai/chat/18d86c8a-f724-47c0-a0fd-482834928a6b

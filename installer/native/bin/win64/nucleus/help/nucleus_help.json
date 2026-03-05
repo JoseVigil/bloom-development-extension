@@ -285,6 +285,15 @@
     ],
     "options": [
       {
+        "name": "add-account",
+        "usage": "Add linked account (provider,email_or_username,status). Repeatable",
+        "default": "[]"
+      },
+      {
+        "name": "config-file",
+        "usage": "Load overrides from JSON file (@file path or - for stdin)"
+      },
+      {
         "name": "json",
         "usage": "Output in JSON format",
         "default": "false"
@@ -295,12 +304,49 @@
         "default": "landing"
       },
       {
+        "name": "override-alias",
+        "usage": "Override profile alias"
+      },
+      {
+        "name": "override-email",
+        "usage": "Override profile email"
+      },
+      {
+        "name": "override-extension",
+        "usage": "Override extension ID"
+      },
+      {
+        "name": "override-heartbeat",
+        "usage": "Override heartbeat flag (true/false)"
+      },
+      {
+        "name": "override-register",
+        "usage": "Override register flag (true/false)"
+      },
+      {
+        "name": "override-role",
+        "usage": "Override profile role"
+      },
+      {
+        "name": "override-service",
+        "usage": "Override registration service (google, twitter, github, etc)"
+      },
+      {
+        "name": "override-step",
+        "usage": "Override current step (default: 0)"
+      },
+      {
+        "name": "save",
+        "usage": "Persist overrides in profiles.json",
+        "default": "false"
+      },
+      {
         "name": "skip-preflight",
         "usage": "Skip Brain/launcher pre-flight check",
         "default": "false"
       }
     ],
-    "example": "  nucleus synapse launch prf_a1b2c3d4\n  nucleus synapse launch prf_a1b2c3d4 --mode discovery\n  nucleus synapse launch prf_a1b2c3d4 --skip-preflight\n  nucleus --json synapse launch prf_a1b2c3d4",
+    "example": "  nucleus synapse launch prf_a1b2c3d4\n  nucleus synapse launch prf_a1b2c3d4 --mode discovery\n  nucleus synapse launch prf_a1b2c3d4 --skip-preflight\n  nucleus synapse launch prf_a1b2c3d4 --override-email user@example.com --override-service google\n  nucleus synapse launch prf_a1b2c3d4 --override-role sovereign --override-register true --save\n  nucleus synapse launch prf_a1b2c3d4 --add-account google,user@gmail.com,active --add-account twitter,@user,active\n  nucleus synapse launch prf_a1b2c3d4 --config-file overrides.json\n  nucleus synapse launch prf_a1b2c3d4 --config-file @/path/to/config.json\n  nucleus --json synapse launch prf_a1b2c3d4",
     "json_response": "{\n  \"success\": true,\n  \"profile_id\": \"prf_a1b2c3d4\",\n  \"chrome_pid\": 14832,\n  \"debug_port\": 9222,\n  \"extension_loaded\": true,\n  \"state\": \"RUNNING\"\n}"
   },
   {

@@ -10,7 +10,6 @@ bloom-development-extension/
     ├── node_modules/ [... dependencies]
     ├── package-lock.json
     ├── package.json
-    ├── preload.js
     ├── scripts/
     │   ├── clean_chrome_cache.ps1
     │   ├── cleanup_zombies.ps1
@@ -37,18 +36,13 @@ bloom-development-extension/
     │   │   │   ├── diagnose-service.js
     │   │   │   └── service-diagnostics.js
     │   │   ├── installer.js
-    │   │   ├── installer_metamorph.js
     │   │   ├── installer_nucleus.js
-    │   │   ├── launcher-creator.js
-    │   │   ├── native-host-installer.js
     │   │   ├── nucleus_manager.js
     │   │   ├── pre-install-cleanup.js
     │   │   ├── runtime-installer.js
     │   │   ├── service-installer-brain.js
-    │   │   ├── service-installer-launcher.js
     │   │   ├── service-installer-nucleus.js
-    │   │   ├── service-manager.js
-    │   │   └── shortcut-installer.js
+    │   │   └── service-installer-sensor.js
     │   ├── ipc/
     │   │   ├── install-handlers.js
     │   │   ├── launch-handlers.js
@@ -77,10 +71,8 @@ bloom-development-extension/
     │   │   └── uninstall-nucleus-service.bat
     │   ├── src/
     │   │   ├── index.html
-    │   │   ├── installation_manager.js
     │   │   ├── renderer.js
-    │   │   ├── styles.css
-    │   │   └── ui_manager.js
+    │   │   └── styles.css
     │   ├── utils/
     │   │   ├── exec-helper.js
     │   │   └── repair-tools.js
@@ -89,19 +81,15 @@ bloom-development-extension/
     │   ├── build-info.js
     │   ├── bump-version.js
     │   └── logger.js
-    ├── utils/
-    │   ├── exec-helper.js
-    │   └── repair-tools.js
     └── workspace/
         ├── assets/
         │   └── bloom.ico
         ├── bloom-conductor-version.ps1
         ├── build_info.json
+        ├── conductor.html
         ├── main_conductor.js
         ├── node_modules/ [... dependencies]
         ├── package-lock.json
         ├── package.json
         ├── preload_conductor.js
-        ├── src/
-        │   └── conductor.html
         └── version.json
