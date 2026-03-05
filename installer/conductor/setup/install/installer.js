@@ -116,7 +116,7 @@ async function createDirectories(win) {
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 1, 9, 'Creating directories...');
+  emitProgress(win, 1, 11, 'Creating system directories...');
 
   try {
     logger.separator('CREATING DIRECTORIES');
@@ -165,7 +165,7 @@ async function runChromiumInstall(win) {
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 2, 9, 'Installing Chromium...');
+  emitProgress(win, 2, 11, 'Installing Chromium browser...');
 
   try {
     const result = await installChromium(win);
@@ -187,7 +187,7 @@ async function runRuntimeInstall(win) {
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 3, 9, 'Installing Python Runtime...');
+  emitProgress(win, 3, 11, 'Configuring Python runtime...');
 
   try {
     // Remover servicio antes de instalar runtime (si existe)
@@ -321,7 +321,7 @@ async function deployAllSystemBinaries(win) {
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 4, 9, 'Deploying all system binaries...');
+  emitProgress(win, 4, 11, 'Deploying system binaries...');
 
   try {
     logger.separator('DEPLOYING ALL SYSTEM BINARIES');
@@ -708,7 +708,7 @@ async function runMetamorphAudit(win) {
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 5, 10, 'Auditing deployed binaries...');
+  emitProgress(win, 5, 11, 'Auditing deployed binaries...');
 
   const metamorphExe = paths.metamorphExe;
 
@@ -846,7 +846,7 @@ async function installBrainService(win) {
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 7, 9, 'Installing Brain Service...');
+  emitProgress(win, 6, 11, 'Installing Brain Service...');
 
   try {
     logger.separator('INSTALLING BRAIN SERVICE');
@@ -883,7 +883,7 @@ async function seedMasterProfile(win) {
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 8, 9, 'Seeding Master Profile...');
+  emitProgress(win, 10, 11, 'Seeding Master Profile...');
 
   try {
     logger.separator('SEEDING MASTER PROFILE');
@@ -940,7 +940,7 @@ async function launchMasterProfile(win) {
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 9, 9, 'Launching Master Profile (Heartbeat)...');
+  emitProgress(win, 11, 11, 'Launching Master Profile...');
 
   // ── Señal inmediata al renderer para mostrar pantalla heartbeat ──
   const profileUuidEarly = nucleusManager.state.master_profile;
@@ -948,20 +948,19 @@ async function launchMasterProfile(win) {
     win.webContents.send('heartbeat:starting', { profile_id: profileUuidEarly });
   }
 
-  // ── Reposicionar ventana al centro-izquierda para que el perfil quede a la derecha ──
+  // ── Reposicionar ventana al borde izquierdo, centrada verticalmente ──
   try {
     const { screen } = require('electron');
     const display = screen.getPrimaryDisplay();
-    const { width: sw, height: sh } = display.workAreaSize;
-    const [ww, wh] = win.getSize();
+    const { height: sh } = display.workAreaSize;
+    const [, wh] = win.getSize();
 
-    // Ocupar la mitad izquierda, centrado verticalmente
-    const x = Math.round((sw / 2 - ww) / 2);
+    const x = 32;
     const y = Math.round((sh - wh) / 2);
 
-    win.setPosition(x, y, true); // true = animate en macOS
+    win.setPosition(x, y, true);
     win.setAlwaysOnTop(true, 'floating');
-    logger.info(`🪟 Installer repositioned to center-left: ${x},${y}`);
+    logger.info(`🪟 Installer anchored to left edge: x=${x}, y=${y}`);
   } catch (posErr) {
     logger.warn(`⚠️ Could not reposition window: ${posErr.message}`);
   }
@@ -1135,7 +1134,7 @@ async function installNucleusService(win) {
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 6, 9, 'Installing Nucleus Service...');
+  emitProgress(win, 7, 11, 'Installing Nucleus Service...');
 
   try {
     logger.separator('INSTALLING NUCLEUS SERVICE (CRITICAL 24/7)');
@@ -1183,7 +1182,7 @@ async function runCertification(win) {
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 7, 9, 'Running certification...');
+  emitProgress(win, 9, 11, 'Certifying system components...');
 
   try {
     logger.separator('CERTIFICATION - NUCLEUS HEALTH CHECK');
@@ -1271,7 +1270,7 @@ async function installSessionSensor(win) {
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 7, 10, 'Installing Session Agent...');
+  emitProgress(win, 8, 11, 'Installing Session Agent...');
 
   try {
     const started = await installSensor();
@@ -1309,19 +1308,19 @@ async function installService(win) {
       logger.info(`Resuming from: ${summary.next_milestone}`);
     }
 
-    await createDirectories(win);           // 1/10
-    await runChromiumInstall(win);          // 2/10
-    await runRuntimeInstall(win);           // 3/10
-    await runBinariesDeploy(win);           // 4/10
-    await runMetamorphAudit(win);           // 5/10 - Snapshot + verify-sync
-    await installBrainService(win);         // 6/10
+    await createDirectories(win);           // 1/11
+    await runChromiumInstall(win);          // 2/11
+    await runRuntimeInstall(win);           // 3/11
+    await runBinariesDeploy(win);           // 4/11
+    await runMetamorphAudit(win);           // 5/11 - Snapshot + verify-sync
+    await installBrainService(win);         // 6/11
     // NOTA: Nucleus Service DEBE arrancar ANTES de seed
     // porque seed necesita Temporal workflows
-    await installNucleusService(win);       // 7/10 - Arranca Temporal
-    await installSessionSensor(win);        // Session agent (non-critical)
-    await runCertification(win);            // 8/10 - Verifica Temporal ready
-    await seedMasterProfile(win);           // 9/10 - Usa Temporal
-    await launchMasterProfile(win);         // 10/10 - Heartbeat final
+    await installNucleusService(win);       // 7/11 - Arranca Temporal
+    await installSessionSensor(win);        // 8/11 — non-critical, cannot abort
+    await runCertification(win);            // 9/11 - Verifica Temporal ready
+    await seedMasterProfile(win);           // 10/11 - Usa Temporal
+    await launchMasterProfile(win);         // 11/11 - Heartbeat final
 
     await nucleusManager.markInstallationComplete();
 

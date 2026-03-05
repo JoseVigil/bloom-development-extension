@@ -1,94 +1,103 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Synapse Discovery</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Mono:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <div class="container">
-    <!-- DISCOVERY SCREEN -->
+
+    <!-- ═══════════════════════════════════════════
+         DISCOVERY SCREEN
+    ═══════════════════════════════════════════ -->
     <div id="screen-discovery" class="screen active">
-      <!-- Status Circle -->
+
+      <!-- Semaphore status circle -->
       <div class="status-circle" id="status-circle">
         <div class="circle-checkmark" id="circle-checkmark">✓</div>
       </div>
-      
+
       <!-- Title -->
       <h1>Synapse Discovery</h1>
-      
-      <!-- Profile Name -->
-      <p class="profile-name" id="profile-name-display">
-        Profile: <span id="profile-alias-text">-</span>
+
+      <!-- Profile label -->
+      <p class="profile-name" id="profile-name-display" style="display: none;">
+        Profile / <span id="profile-alias-text">—</span>
       </p>
-      
-      <!-- Single Status Line -->
+
+      <!-- System status line -->
       <div class="status-line" id="status-line">
-        <span id="status-text">Inicializando extensión</span>
+        <span id="status-text">Initializing</span>
       </div>
-      
-      <!-- Connection Info (single row) -->
+
+      <!-- Connection info row -->
       <div class="connection-row" id="connection-row" style="display: none;">
-        <span id="profile-info">Profile: -</span>
-        <span class="separator">•</span>
-        <span id="connected-time">Conectado: -</span>
+        <span id="profile-info">Profile: —</span>
+        <span class="separator">·</span>
+        <span id="connected-time">Established: —</span>
       </div>
-      
-      <!-- Countdown Label -->
-      <div class="countdown-label" id="countdown-label">
-        Esta ventana se cerrará en <span id="countdown-value">7</span> segundos
-      </div>
-      
-      <!-- Handshake Success Message -->
+
+      <!-- Handshake success message -->
       <div class="handshake-success-msg" id="handshake-success-msg">
-        <span class="success-icon-small">✓</span> Conexión establecida exitosamente
+        <span class="success-icon-small">✓</span> System Active
       </div>
-      
-      <!-- Error Container -->
+
+      <!-- Countdown -->
+      <div class="countdown-label" id="countdown-label">
+        Window closes in <span id="countdown-value">7</span>s
+      </div>
+
+      <!-- Error container -->
       <div class="error-container" id="discovery-error">
         <div id="error-message">Error</div>
         <pre id="error-details"></pre>
       </div>
-      
-      <!-- Hidden progress counter -->
+
+      <!-- Debug -->
       <div class="debug-info" id="debug-info" style="display: none;">
-        Intento: <span id="attempt-count">0</span>
+        Attempt <span id="attempt-count">0</span>
       </div>
+
     </div>
 
-    <!-- MULTI-PROVIDER SELECTOR SCREENS -->
-    
-    <!-- Provider Selection Screen (Step 2) -->
+    <!-- ═══════════════════════════════════════════
+         MULTI-PROVIDER SELECTOR
+    ═══════════════════════════════════════════ -->
+
+    <!-- Provider Selection (Step 2) -->
     <div id="screen-provider-select" class="screen">
       <div class="progress-bar"><div class="progress-fill" style="width: 40%"></div></div>
-      <div class="step-indicator">Paso 2 de 4</div>
+      <div class="step-indicator">Step 2 of 4</div>
       <div class="status-icon">🔑</div>
-      <h1>Selecciona tu AI Provider</h1>
-      <p>¿Qué servicio de IA deseas configurar?</p>
-      
+      <h1>Select AI Provider</h1>
+      <p>Choose the AI service to configure for this profile.</p>
+
       <div class="provider-grid">
         <button class="provider-card" data-provider="gemini">
           <div class="provider-icon">🔷</div>
           <h3>Gemini</h3>
           <p>Google AI Studio</p>
-          <span class="provider-badge">Gratis</span>
+          <span class="provider-badge">Free</span>
         </button>
-        
+
         <button class="provider-card" data-provider="claude">
           <div class="provider-icon">🟠</div>
           <h3>Claude</h3>
           <p>Anthropic Console</p>
-          <span class="provider-badge">Desde $5/mes</span>
+          <span class="provider-badge">From $5/mo</span>
         </button>
-        
+
         <button class="provider-card" data-provider="openai">
           <div class="provider-icon">🟢</div>
           <h3>ChatGPT</h3>
           <p>OpenAI Platform</p>
           <span class="provider-badge">Pay-as-you-go</span>
         </button>
-        
+
         <button class="provider-card" data-provider="xai">
           <div class="provider-icon">⚡</div>
           <h3>Grok</h3>
@@ -96,115 +105,119 @@
           <span class="provider-badge">Beta</span>
         </button>
       </div>
-      
-      <button class="btn-secondary" id="btn-skip-provider">Configurar después</button>
+
+      <button class="btn-secondary" id="btn-skip-provider">Configure later</button>
     </div>
 
-    <!-- API Key Waiting Screen (Step 3) -->
+    <!-- API Key Waiting (Step 3) -->
     <div id="screen-api-waiting" class="screen">
       <div class="progress-bar"><div class="progress-fill" style="width: 66%"></div></div>
-      <div class="step-indicator">Paso 3 de 4</div>
+      <div class="step-indicator">Step 3 of 4</div>
       <div class="spinner"></div>
-      <h1>Esperando API Key...</h1>
-      <p>Crea y copia tu API Key de <strong id="provider-name-display">Gemini</strong>.<br>La detectaremos automáticamente cuando la copies.</p>
-      
+      <h1>Waiting for API Key</h1>
+      <p>Create and copy your API key from <strong id="provider-name-display">Gemini</strong>. It will be detected automatically when copied.</p>
+
       <div class="info-box">
-        <h3 id="instructions-title">Instrucciones:</h3>
+        <h3 id="instructions-title">Instructions</h3>
         <ol id="instructions-list">
-          <li>Haz clic en "Crear API Key"</li>
-          <li>Copia la clave generada</li>
-          <li>Vuelve a esta ventana</li>
+          <li>Click "Create API Key"</li>
+          <li>Copy the generated key</li>
+          <li>Return to this window</li>
         </ol>
       </div>
-      
+
       <div class="key-format-hint" id="key-format-hint">
-        <strong>Formato esperado:</strong> <code id="key-format-example">AIzaSy...</code>
+        <strong>Expected format</strong> &nbsp; <code id="key-format-example">AIzaSy...</code>
       </div>
-      
-      <button class="btn" id="btn-open-console">Ir a Console</button>
-      <button class="btn-secondary" id="btn-back-to-providers">Elegir otro provider</button>
+
+      <button class="btn" id="btn-open-console">Open Console</button>
+      <button class="btn-secondary" id="btn-back-to-providers">Choose different provider</button>
     </div>
 
-    <!-- API Key Success Screen (Step 4) -->
+    <!-- API Key Persistent (Step 4) -->
     <div id="screen-api-success" class="screen">
       <div class="progress-bar"><div class="progress-fill" style="width: 100%"></div></div>
       <div class="success-checkmark">✓</div>
-      <h1>¡API Key Registrada!</h1>
-      <p>Tu clave de <strong id="success-provider-name">Gemini</strong> ha sido guardada de forma segura.</p>
-      
+      <h1>Key Persistent</h1>
+      <p>Your <strong id="success-provider-name">Gemini</strong> key is stored and active.</p>
+
       <div class="info-box">
-        <p><strong>Provider:</strong> <span id="success-provider-display">Gemini</span></p>
-        <p><strong>Profile:</strong> <span id="success-profile-name">Personal</span></p>
-        <p><strong>Estado:</strong> ✓ Validada y activa</p>
+        <p><strong>Provider</strong> &nbsp; <span id="success-provider-display">Gemini</span></p>
+        <p><strong>Profile</strong> &nbsp; <span id="success-profile-name">Personal</span></p>
+        <p><strong>Status</strong> &nbsp; Established</p>
       </div>
-      
+
       <div class="action-buttons">
-        <button class="btn" id="btn-add-another-key">Agregar otra clave</button>
-        <button class="btn-secondary" id="btn-finish-setup">Finalizar configuración</button>
+        <button class="btn" id="btn-add-another-key">Add another key</button>
+        <button class="btn-secondary" id="btn-finish-setup">Finish setup</button>
       </div>
     </div>
 
-    <!-- ONBOARDING SCREENS -->
+    <!-- ═══════════════════════════════════════════
+         ONBOARDING SCREENS
+    ═══════════════════════════════════════════ -->
+
     <div id="screen-onboarding-welcome" class="screen">
       <div class="progress-bar"><div class="progress-fill" style="width: 0%"></div></div>
-      <div class="step-indicator">Paso 1 de 3</div>
+      <div class="step-indicator">Step 1 of 3</div>
       <div class="status-icon">🌸</div>
-      <h1>Bienvenido a Bloom</h1>
-      <p>Vamos a configurar tu perfil en 2 pasos simples.<br>Necesitarás una cuenta de Google y crear una API Key de Gemini.</p>
-      <button class="btn" id="btn-start-onboarding">Comenzar</button>
+      <h1>Bloom</h1>
+      <p>Profile setup in two steps. You will need a Google account and a Gemini API key.</p>
+      <button class="btn" id="btn-start-onboarding">Initialize</button>
     </div>
 
     <div id="screen-google-login" class="screen">
       <div class="progress-bar"><div class="progress-fill" style="width: 33%"></div></div>
-      <div class="step-indicator">Paso 2 de 3</div>
+      <div class="step-indicator">Step 2 of 3</div>
       <div class="status-icon">🔐</div>
-      <h1>Inicia sesión con Google</h1>
-      <p>Necesitamos que inicies sesión en tu cuenta de Google para continuar.</p>
-      <button class="btn" id="btn-google-login">Iniciar sesión con Google</button>
+      <h1>Google Auth</h1>
+      <p>Sign in with your Google account to continue.</p>
+      <button class="btn" id="btn-google-login">Sign in with Google</button>
     </div>
 
     <div id="screen-google-waiting" class="screen">
       <div class="progress-bar"><div class="progress-fill" style="width: 33%"></div></div>
-      <div class="step-indicator">Paso 2 de 3</div>
+      <div class="step-indicator">Step 2 of 3</div>
       <div class="spinner"></div>
-      <h1>Esperando inicio de sesión...</h1>
-      <p>Completa el inicio de sesión en la pestaña que se abrió.<br>Detectaremos automáticamente cuando hayas iniciado sesión.</p>
+      <h1>Waiting for auth</h1>
+      <p>Complete sign-in in the tab that opened. This window will detect it automatically.</p>
     </div>
 
     <div id="screen-gemini-api" class="screen">
       <div class="progress-bar"><div class="progress-fill" style="width: 66%"></div></div>
-      <div class="step-indicator">Paso 3 de 3</div>
+      <div class="step-indicator">Step 3 of 3</div>
       <div class="status-icon">🔑</div>
-      <h1>Crea tu Gemini API Key</h1>
+      <h1>Gemini API Key</h1>
       <div class="info-box">
-        <h3>Instrucciones:</h3>
+        <h3>Instructions</h3>
         <ol>
-          <li>Haz clic en "Crear API Key" en la nueva pestaña</li>
-          <li>Copia la clave generada</li>
-          <li>La detectaremos automáticamente</li>
+          <li>Click "Create API Key" in the new tab</li>
+          <li>Copy the generated key</li>
+          <li>This window will detect it automatically</li>
         </ol>
       </div>
-      <button class="btn" id="btn-open-aistudio">Ir a AI Studio</button>
+      <button class="btn" id="btn-open-aistudio">Open AI Studio</button>
     </div>
 
     <div id="screen-gemini-waiting" class="screen">
       <div class="progress-bar"><div class="progress-fill" style="width: 66%"></div></div>
-      <div class="step-indicator">Paso 3 de 3</div>
+      <div class="step-indicator">Step 3 of 3</div>
       <div class="spinner"></div>
-      <h1>Esperando API Key...</h1>
-      <p>Crea y copia tu API Key en AI Studio.<br>La detectaremos automáticamente cuando la copies.</p>
+      <h1>Waiting for key</h1>
+      <p>Create and copy your API key in AI Studio. Detection is automatic.</p>
     </div>
 
     <div id="screen-onboarding-success" class="screen">
       <div class="progress-bar"><div class="progress-fill" style="width: 100%"></div></div>
       <div class="success-checkmark">✓</div>
-      <h1>¡Configuración completa!</h1>
-      <p>Tu perfil está listo para usar.<br>Esta ventana se cerrará automáticamente.</p>
+      <h1>System Active</h1>
+      <p>Profile established. This window will close automatically.</p>
       <div class="info-box">
-        <p><strong>Email:</strong> <span id="final-email">-</span></p>
-        <p><strong>API Key:</strong> ✓ Configurada</p>
+        <p><strong>Email</strong> &nbsp; <span id="final-email">—</span></p>
+        <p><strong>API Key</strong> &nbsp; Persistent</p>
       </div>
     </div>
+
   </div>
 
   <script src="../discovery.synapse.config.js"></script>

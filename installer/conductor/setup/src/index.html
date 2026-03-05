@@ -5,66 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' http://localhost:* ws://localhost:*;">
   <title>Bloom Nucleus Installer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Mono:wght@300;400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="./styles.css">
   <style>
-    /* ── Semáforo de conexión ─────────────────────────────────────────────── */
-    @keyframes sem-pulse {
-      0%, 100% { box-shadow: 0 0 30px 6px rgba(239,68,68,0.55); }
-      50%       { box-shadow: 0 0 55px 16px rgba(239,68,68,0.85); }
-    }
-    @keyframes sem-ripple {
-      0%   { transform: scale(1);   opacity: 0.38; }
-      100% { transform: scale(2.4); opacity: 0; }
-    }
-
-    #heartbeat-circle {
-      width: 120px; height: 120px;
-      border-radius: 50%;
-      margin: 0 auto;
-      position: relative;
-      background: #ef4444;
-      box-shadow: 0 0 30px 6px rgba(239,68,68,0.55);
-      animation: sem-pulse 1.6s ease-in-out infinite;
-      transition: background 0.55s ease, box-shadow 0.55s ease;
-    }
-    #heartbeat-circle::before {
-      content: '';
-      position: absolute; inset: 0;
-      border-radius: 50%;
-      background: #ef4444;
-      opacity: 0.35;
-      animation: sem-ripple 2s ease-out infinite;
-      transition: opacity 0.4s ease;
-    }
-    #heartbeat-circle.synapse {
-      background: #eab308;
-      box-shadow: 0 0 30px 6px rgba(234,179,8,0.55);
-      animation: none;
-    }
-    #heartbeat-circle.synapse::before { opacity: 0; animation: none; }
-    #heartbeat-circle.connected {
-      background: #22c55e;
-      box-shadow: 0 0 30px 6px rgba(34,197,94,0.55);
-      animation: none;
-    }
-    #heartbeat-circle.connected::before { opacity: 0; animation: none; }
-
-    /* Success screen — mismo círculo, siempre verde */
-    #success-circle {
-      width: 120px; height: 120px;
-      border-radius: 50%;
-      background: #22c55e;
-      box-shadow: 0 0 30px 6px rgba(34,197,94,0.55);
-    }
-
-    #heartbeat-sub {
-      font-size: 15px;
-      color: #64748b;
-      margin-top: 28px;
-      min-height: 22px;
-      transition: color 0.4s ease;
-      text-align: center;
-    }
+    /* Inline overrides removed — all styles now in styles.css (BTIPS v1.0) */
   </style>
 </head>
 <body>
@@ -83,7 +28,7 @@
           <strong>📍 Ubicación:</strong>
           <code id="install-path">%LOCALAPPDATA%\BloomNucleus</code>
         </div>
-        <div class="info-box" style="background:rgba(34,197,94,0.08);border-left-color:#22c55e;">
+        <div class="info-box success-box">
           ✅ Instalación local (Sin permisos de administrador)<br>
           ✅ Motor IA + Chrome Profile aislado<br>
           ✅ Extensión configurada automáticamente
@@ -98,7 +43,7 @@
     <div class="screen" id="installation-screen">
       <div class="card">
         <div class="logo">B</div>
-        <h1>Desplegando Sistema</h1>
+        <h1>Building System</h1>
         <p class="text-center">Configurando motor IA, perfiles y extensión...</p>
         <div class="progress-container">
           <div class="progress-bar">
@@ -107,15 +52,15 @@
           <div class="progress-text" id="progress-text">Iniciando despliegue...</div>
         </div>
         <div class="spinner"></div>
-        <div id="installation-details" style="margin-top:24px;font-size:14px;color:#4299e1;text-align:center;min-height:24px;"></div>
+        <div id="installation-details" style="margin-top:24px;font-size:14px;color:var(--color-accent);text-align:center;min-height:24px;"></div>
       </div>
     </div>
 
     <!-- 3. SUCCESS SCREEN -->
     <div class="screen" id="success-screen">
       <div class="card">
-        <div class="success-icon">✓</div>
-        <h1>Sistema Instalado</h1>
+        <div class="success-icon">●</div>
+        <h1>System Established</h1>
         <p class="text-center">Bloom Nucleus está instalado y configurado.</p>
         <div class="success-box">
           <strong>📊 Componentes Desplegados:</strong>
@@ -151,7 +96,7 @@
     <!-- 5. CONNECTION SUCCESS SCREEN -->
     <div class="screen" id="connection-success-screen">
       <div class="card" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;">
-        <h1 style="margin-bottom:8px;">Instalación Exitosa</h1>
+        <h1 style="margin-bottom:8px;">System Active</h1>
         <p style="color:#64748b;margin-bottom:48px;font-size:18px;">Ya podés comenzar el onboarding</p>
         <div id="success-circle" class="connected" style="margin-bottom:48px;"></div>
         <div class="button-group">

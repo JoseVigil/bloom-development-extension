@@ -117,7 +117,7 @@ class InstallationManager {
     // 1. Progreso de instalación → barra de progreso
     window.api.on('installation-progress', (data) => {
       const step = data.current ?? data.step ?? 0;
-      const total = data.total ?? 10;
+      const total = data.total ?? 11;
       const percentage = data.percentage ?? Math.round((step / total) * 100);
       console.log(`[Progress] ${percentage}% [${step}/${total}] ${data.message}`);
 
@@ -129,7 +129,7 @@ class InstallationManager {
       if (textEl) textEl.textContent = `Paso ${step}/${total}: ${data.message}`;
       if (detailsEl) {
         detailsEl.innerHTML = data.detail
-          ? `<p style="color:#4299e1;">• ${data.detail}</p>` : '';
+          ? `<p style="color:var(--color-accent);">• ${data.detail}</p>` : '';
       }
     });
 

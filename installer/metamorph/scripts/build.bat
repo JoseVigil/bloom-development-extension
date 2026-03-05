@@ -218,25 +218,13 @@ if %INSPECT_RC% EQU 0 (
 echo.
 
 :: ════════════════════════════════════════════════════════════════
-:: VERIFY-SYNC — Confirm deployed binaries match last inspect
+:: NOTE: verify-sync is intentionally NOT run here.
+:: verify-sync is a post-installation health check, not a build step.
+:: It requires all components to be deployed to AppData first.
+:: Run it manually after the installer completes:
+::   metamorph verify-sync
+:: Or via build-all.py with --verify-env prod
 :: ════════════════════════════════════════════════════════════════
-echo Verifying sync...
-echo. >> "%LOG_FILE%"
-echo [VERIFY-SYNC] Comparing deployed binaries against metamorph.json >> "%LOG_FILE%"
-
-"!ABS_OUTPUT_FILE!" --json verify-sync >> "%LOG_FILE%" 2>&1
-set VERIFY_RC=%ERRORLEVEL%
-
-if %VERIFY_RC% EQU 0 (
-    echo ✅ All binaries in sync
-    echo [SUCCESS] Verify-sync passed >> "%LOG_FILE%"
-) else (
-    echo ❌ Sync check failed — binaries may not have deployed correctly
-    echo    Check log: %LOG_FILE%
-    echo [ERROR] Verify-sync failed with code %VERIFY_RC% >> "%LOG_FILE%"
-    exit /b %VERIFY_RC%
-)
-echo.
 
 :: ════════════════════════════════════════════════════════════════
 :: TELEMETRY REGISTRATION (via Nucleus CLI)

@@ -625,29 +625,138 @@ def print_errors(results: list[StepResult]) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Bloom Build All — orquestador maestro de builds."
+        prog="build-all.py",
+        description=(
+            "Bloom Build All — Orquestador maestro de builds del ecosistema Bloom.\n"
+            "\n"
+            "Compila todos los componentes en orden, verifica sus versiones\n"
+            "y opcionalmente valida el estado de la instalación en producción."
+        ),
+        epilog=(
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "OPCIONES — DETALLE\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "  --channel CHANNEL\n"
+            "      Release channel para el empaquetado de Cortex (.blx).\n"
+            "        stable   Versión de producción (default)\n"
+            "        beta     Versión de prueba pre-release\n"
+            "        dev      Versión de desarrollo local\n"
+            "\n"
+            "  --production\n"
+            "      Excluye archivos .map del paquete Cortex (.blx).\n"
+            "      Usar en releases públicos para reducir el tamaño del bundle.\n"
+            "\n"
+            "  --skip-verify\n"
+            "      Omite la FASE 3 de verificación post-build.\n"
+            "      Útil para builds rápidos cuando solo interesa compilar.\n"
+            "\n"
+            "  --verify-env ENV\n"
+            "      Entorno de verificación para FASE 3 y FASE 5.\n"
+            "        dev    Verifica en installer/native/bin/win64/ (default)\n"
+            "               verify-sync se omite — no todos los binarios están presentes\n"
+            "        prod   Verifica en %%LOCALAPPDATA%%\\BloomNucleus\\bin\\\n"
+            "               Activa FASE 5: verify-sync contra metamorph.json\n"
+            "               Requiere que el installer haya sido ejecutado\n"
+            "\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "SECUENCIA DE BUILD\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "  FASE 1  Compilación de ejecutables\n"
+            "            Brain      → build_brain.ps1\n"
+            "            Nucleus    → installer/nucleus/scripts/build.bat\n"
+            "            Sentinel   → installer/sentinel/scripts/build.bat\n"
+            "            Metamorph  → installer/metamorph/scripts/build.bat\n"
+            "            Conductor  → installer/conductor (npm run build:all)\n"
+            "            Host       → SKIPPED en Windows (build via Linux)\n"
+            "            Sensor     → installer/sensor/scripts/build.bat\n"
+            "\n"
+            "  FASE 2  Empaquetado de Cortex (.blx)\n"
+            "            Cortex     → installer/cortex/build-cortex/package.py\n"
+            "\n"
+            "  FASE 3  Verificación post-build (versión y build number)\n"
+            "            Verifica cada binario recién compilado\n"
+            "            dev  → installer/native/bin/win64/\n"
+            "            prod → %%LOCALAPPDATA%%\\BloomNucleus\\bin\\\n"
+            "\n"
+            "  FASE 4  Resumen de errores\n"
+            "\n"
+            "  FASE 5  Verify-sync (solo con --verify-env prod)\n"
+            "            Compara hashes de AppData contra metamorph.json\n"
+            "            Requiere que el installer haya sido ejecutado primero\n"
+            "\n"
+            "  FASE 6  Telemetría\n"
+            "            Registra el log del build via nucleus telemetry register\n"
+            "\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "EJEMPLOS\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "  # Build estándar de desarrollo (más común)\n"
+            "  python build-all.py\n"
+            "\n"
+            "  # Build con verify-sync al final (requiere installer ejecutado)\n"
+            "  python build-all.py --verify-env prod\n"
+            "\n"
+            "  # Build de canal beta para Cortex, excluyendo .map files\n"
+            "  python build-all.py --channel beta --production\n"
+            "\n"
+            "  # Build rápido sin verificación post-compilación\n"
+            "  python build-all.py --skip-verify\n"
+            "\n"
+            "  # Build completo de producción: beta, sin .map, verify-sync contra AppData\n"
+            "  python build-all.py --channel beta --production --verify-env prod\n"
+            "\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "NOTAS\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "  verify-sync NO corre durante el build en entorno dev.\n"
+            "  Es una herramienta post-instalación. Para usarla manualmente:\n"
+            "    metamorph verify-sync\n"
+            "    metamorph --json verify-sync\n"
+            "\n"
+            "  Si verify-sync reporta componentes faltantes después del installer:\n"
+            "    metamorph rollout\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
-        "--channel", default="stable", choices=["stable", "beta", "dev"],
-        help="Release channel para todos los builds (default: stable)"
+        "--channel",
+        default="stable",
+        choices=["stable", "beta", "dev"],
+        metavar="CHANNEL",
+        help="Release channel para Cortex: stable (default), beta, dev",
     )
     parser.add_argument(
-        "--production", action="store_true",
-        help="Excluye archivos .map del paquete Cortex"
+        "--production",
+        action="store_true",
+        help="Excluye archivos .map del paquete Cortex (.blx)",
     )
     parser.add_argument(
-        "--skip-verify", action="store_true",
-        help="Omite la verificación post-build de los binarios"
+        "--skip-verify",
+        action="store_true",
+        help="Omite la FASE 3 de verificación post-build",
     )
     parser.add_argument(
-        "--verify-env", default="dev", choices=["dev", "prod"],
-        help="Entorno de verificacion: dev=installer/native/bin/win64 prod=BloomNucleus/bin"
+        "--verify-env",
+        default="dev",
+        choices=["dev", "prod"],
+        metavar="ENV",
+        help="Entorno de verificación: dev (default) o prod. Ver detalle abajo.",
     )
-    return parser.parse_args()
+    return parser, parser.parse_args()
+
+
+def write_help_file(parser: argparse.ArgumentParser) -> None:
+    """Escribe build-all-help.txt en la raiz del repo junto al script."""
+    import io
+    buf = io.StringIO()
+    parser.print_help(buf)
+    help_file = ROOT / "build-all-help.txt"
+    help_file.write_text(buf.getvalue(), encoding="utf-8")
+    log(f"{GREEN}OK{RESET}  ->  build-all-help.txt -> {help_file}")
 
 
 def main() -> None:
-    args = parse_args()
+    parser, args = parse_args()
 
     header(f"BLOOM BUILD ALL  |  channel: {args.channel}  |  verify: {args.verify_env}  |  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
@@ -754,9 +863,39 @@ def main() -> None:
     print_summary(build_results, verify_results)
 
     # ------------------------------------------------------------------
+    # FASE 5: verify-sync (solo si --verify-env prod)
+    # verify-sync es una herramienta post-instalación: compara los binarios
+    # desplegados en AppData contra metamorph.json. Solo tiene sentido
+    # ejecutarla cuando todos los componentes ya fueron instalados.
+    # En entorno dev los binarios viven en installer/native/bin/win64
+    # y varios (Host, Sensor) pueden no estar presentes, lo que provocaría
+    # falsos negativos. Por eso se omite en dev.
+    # ------------------------------------------------------------------
+    if args.verify_env == "prod" and not args.skip_verify:
+        header("FASE 5 — Verify-sync (entorno producción)")
+        metamorph_prod = get_bin_base("prod") / "metamorph/metamorph.exe"
+        if metamorph_prod.exists():
+            log(f"Ejecutando verify-sync contra AppData ...")
+            code, out, err = run([str(metamorph_prod), "--json", "verify-sync"])
+            if code == 0:
+                log(f"{GREEN}OK{RESET}  — todos los binarios en sync con metamorph.json")
+            else:
+                log(f"{RED}FAIL{RESET}  — verify-sync reportó componentes faltantes o drifted")
+                log(f"  Correr 'metamorph rollout' para redesplegar los binarios faltantes")
+        else:
+            log(f"{YELLOW}SKIP{RESET}  — metamorph.exe no encontrado en prod ({metamorph_prod})")
+            log(f"  El installer aún no fue ejecutado. Correr verify-sync manualmente después.")
+    elif args.verify_env == "dev":
+        header("FASE 5 — Verify-sync")
+        log(f"{YELLOW}SKIP{RESET}  — verify-sync omitido en entorno dev")
+        log(f"  verify-sync es una verificación post-instalación.")
+        log(f"  Usarlo con: python build-all.py --verify-env prod")
+        log(f"  O manualmente después del installer: metamorph verify-sync")
+
+    # ------------------------------------------------------------------
     # FASE 4: Telemetría
     # ------------------------------------------------------------------
-    header("FASE 4 — Telemetría")
+    header("FASE 6 — Telemetría")
     log_path = get_log_path()
     print(f"  Log: {log_path}", flush=True)
 
@@ -764,6 +903,12 @@ def main() -> None:
     log(f"{GREEN}OK{RESET}  →  log escrito")
 
     register_telemetry(log_path)
+
+    # Generar build-all-help.txt en la raiz del repo
+    try:
+        write_help_file(parser)
+    except Exception as e:
+        log(f"{YELLOW}WARN{RESET}  — no se pudo generar build-all-help.txt: {e}")
 
     # Exit code: 0 si todo OK, 1 si algún build falló
     failed = [r for r in build_results if not r.success and not r.skipped]

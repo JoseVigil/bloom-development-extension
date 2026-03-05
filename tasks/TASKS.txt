@@ -464,8 +464,10 @@ https://chatgpt.com/c/6985dfd2-0350-8327-942d-173c37668524
 
 notimation code wiki 
 https://aistudio.google.com/prompts/new_chat
+roamtouch code wiki simulado con gemini
+https://aistudio.google.com/prompts/1NqgVMpCzDxvqw25azqGR4dTnpm3AHWGt
 
-roamtouch onboarding research
+notimation gmail onboarding research
 https://claude.ai/chat/1188b8cc-37bd-44a9-9835-34abaad4a716
 
 roamtouch workspace
@@ -490,3 +492,16 @@ https://chatgpt.com/c/69a1be99-cde4-8326-b572-ae544cb89f77
 
 padkite ollama quen
 https://chatgpt.com/c/69a70cf2-7e5c-832f-aa34-38a1c4a0d53e
+
+uitool incomplete telemetry via nucleus
+https://claude.ai/chat/b28f5065-98fc-463e-846c-893e549bffda
+
+jose gmail actualizacion documentacion synapse
+https://claude.ai/chat/4f3dffb7-461d-4489-9923-615f81886a17
+
+notimation tamaño ventana electron para installer
+https://claude.ai/chat/cc369773-09ba-4433-bdb4-7b741ddb3bb0
+
+moneyprinter
+Automate the creation of YouTube Shorts by providing a video topic
+https://github.com/FujiwaraChoki/MoneyPrinter

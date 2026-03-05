@@ -229,6 +229,12 @@ class DiscoveryFlow {
     // Complete searching stage
     this.completeCurrentStage();
     await this.delay(400);
+
+    // Transition circle to .synapse state (state 2 — sentinel active, awaiting handshake)
+    if (this.statusCircleEl) {
+      this.statusCircleEl.classList.remove('connected');
+      this.statusCircleEl.classList.add('synapse');
+    }
     
     // Stage 3: Handshake
     this.showStage(2);
@@ -285,9 +291,10 @@ class DiscoveryFlow {
     this.discoveryCompleted = true;
     this.isConnected = true;
     
-    // Transform circle to green with checkmark
+    // Transition circle to .connected state (state 3 — handshake validated)
     if (this.statusCircleEl) {
-      this.statusCircleEl.classList.add('success');
+      this.statusCircleEl.classList.remove('synapse');
+      this.statusCircleEl.classList.add('connected');
     }
 
     // Show success message below circle
@@ -304,7 +311,7 @@ class DiscoveryFlow {
       }
       
       if (this.connectedTimeEl) {
-        this.connectedTimeEl.textContent = `Conectado: ${new Date().toLocaleTimeString()}`;
+        this.connectedTimeEl.textContent = `Established: ${new Date().toLocaleTimeString()}`;
       }
       
       this.connectionRowEl.style.display = 'flex';

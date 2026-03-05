@@ -966,8 +966,10 @@ async function checkOnboardingStatus() {
 async function createWindow() {
   const win = new BrowserWindow({
     title: IS_LAUNCH_MODE ? 'Bloom Nucleus' : 'Bloom Nucleus Installer',
-    width: IS_LAUNCH_MODE ? 1400 : 1000,
+    width: IS_LAUNCH_MODE ? 1400 : 520,
     height: IS_LAUNCH_MODE ? 900 : 700,
+    resizable: IS_LAUNCH_MODE ? true : false,
+    alwaysOnTop: IS_LAUNCH_MODE ? false : true,
     show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -981,6 +983,9 @@ async function createWindow() {
   win.once('ready-to-show', () => {
     log('👁️ Window ready to show');
     win.show();
+    if (!IS_LAUNCH_MODE) {
+      win.setAlwaysOnTop(true, 'floating');
+    }
   });
 
   if (IS_DEV) {

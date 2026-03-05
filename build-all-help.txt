@@ -1,0 +1,96 @@
+usage: build-all.py [-h] [--channel CHANNEL] [--production] [--skip-verify] [--verify-env ENV]
+
+Bloom Build All — Orquestador maestro de builds del ecosistema Bloom.
+
+Compila todos los componentes en orden, verifica sus versiones
+y opcionalmente valida el estado de la instalación en producción.
+
+options:
+  -h, --help         show this help message and exit
+  --channel CHANNEL  Release channel para Cortex: stable (default), beta, dev
+  --production       Excluye archivos .map del paquete Cortex (.blx)
+  --skip-verify      Omite la FASE 3 de verificación post-build
+  --verify-env ENV   Entorno de verificación: dev (default) o prod. Ver detalle abajo.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OPCIONES — DETALLE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  --channel CHANNEL
+      Release channel para el empaquetado de Cortex (.blx).
+        stable   Versión de producción (default)
+        beta     Versión de prueba pre-release
+        dev      Versión de desarrollo local
+
+  --production
+      Excluye archivos .map del paquete Cortex (.blx).
+      Usar en releases públicos para reducir el tamaño del bundle.
+
+  --skip-verify
+      Omite la FASE 3 de verificación post-build.
+      Útil para builds rápidos cuando solo interesa compilar.
+
+  --verify-env ENV
+      Entorno de verificación para FASE 3 y FASE 5.
+        dev    Verifica en installer/native/bin/win64/ (default)
+               verify-sync se omite — no todos los binarios están presentes
+        prod   Verifica en %%LOCALAPPDATA%%\BloomNucleus\bin\
+               Activa FASE 5: verify-sync contra metamorph.json
+               Requiere que el installer haya sido ejecutado
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECUENCIA DE BUILD
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  FASE 1  Compilación de ejecutables
+            Brain      → build_brain.ps1
+            Nucleus    → installer/nucleus/scripts/build.bat
+            Sentinel   → installer/sentinel/scripts/build.bat
+            Metamorph  → installer/metamorph/scripts/build.bat
+            Conductor  → installer/conductor (npm run build:all)
+            Host       → SKIPPED en Windows (build via Linux)
+            Sensor     → installer/sensor/scripts/build.bat
+
+  FASE 2  Empaquetado de Cortex (.blx)
+            Cortex     → installer/cortex/build-cortex/package.py
+
+  FASE 3  Verificación post-build (versión y build number)
+            Verifica cada binario recién compilado
+            dev  → installer/native/bin/win64/
+            prod → %%LOCALAPPDATA%%\BloomNucleus\bin\
+
+  FASE 4  Resumen de errores
+
+  FASE 5  Verify-sync (solo con --verify-env prod)
+            Compara hashes de AppData contra metamorph.json
+            Requiere que el installer haya sido ejecutado primero
+
+  FASE 6  Telemetría
+            Registra el log del build via nucleus telemetry register
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+EJEMPLOS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # Build estándar de desarrollo (más común)
+  python build-all.py
+
+  # Build con verify-sync al final (requiere installer ejecutado)
+  python build-all.py --verify-env prod
+
+  # Build de canal beta para Cortex, excluyendo .map files
+  python build-all.py --channel beta --production
+
+  # Build rápido sin verificación post-compilación
+  python build-all.py --skip-verify
+
+  # Build completo de producción: beta, sin .map, verify-sync contra AppData
+  python build-all.py --channel beta --production --verify-env prod
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+NOTAS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  verify-sync NO corre durante el build en entorno dev.
+  Es una herramienta post-instalación. Para usarla manualmente:
+    metamorph verify-sync
+    metamorph --json verify-sync
+
+  Si verify-sync reporta componentes faltantes después del installer:
+    metamorph rollout

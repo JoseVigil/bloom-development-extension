@@ -140,6 +140,12 @@ async function loadConfig() {
         
         await chrome.storage.local.set({ synapseMode: mode });
         validateConfig(mode);
+
+        // Enforce window dimensions for discovery mode
+        if (mode === 'discovery') {
+          enforceDiscoveryWindowSize();
+        }
+
         return;
       } else {
         throw new Error('SYNAPSE_CONFIG not defined after importScripts');
@@ -211,10 +217,78 @@ async function loadConfig() {
     await chrome.storage.local.set({ synapseMode: mode });
     validateConfig(mode);
 
+    // Enforce window dimensions for discovery mode
+    if (mode === 'discovery') {
+      enforceDiscoveryWindowSize();
+    }
+
   } catch (e) {
     console.error('[Synapse] ✗ Config load failed:', e);
     console.error('[Synapse] Stack trace:', e.stack);
   }
+}
+
+// ============================================================================
+// WINDOW SIZE ENFORCEMENT
+// ============================================================================
+
+/**
+ * applyWindowLayout(layout)
+ *
+ * Applies a window layout descriptor to the current Chromium window.
+ * This is the single point of truth for window sizing/positioning in the
+ * extension. All callers funnel through here.
+ *
+ * IMPORTANT: `left` and `top` must be pre-resolved by the caller.
+ * background.js runs as a service worker — `screen` / `window.screen`
+ * are not available here. Coordinate resolution happens in
+ * discoveryProtocol.getWindowLayout(), which runs in page context.
+ *
+ * @param {object} layout — { width, height, left, top, state }
+ */
+async function applyWindowLayout(layout = {}) {
+  const {
+    width  = 600,
+    height = 800,
+    left,
+    top,
+    state  = 'normal'
+  } = layout;
+
+  try {
+    const win = await chrome.windows.getCurrent({ populate: false });
+
+    if (!win || win.type !== 'normal') {
+      console.warn('[Synapse] applyWindowLayout: not a normal window, skipping');
+      return;
+    }
+
+    const updateProps = { width, height, state };
+
+    // Only set position if the caller resolved coordinates.
+    // Without screen access, we can't compute a fallback here.
+    if (typeof left === 'number') updateProps.left = left;
+    if (typeof top  === 'number') updateProps.top  = top;
+
+    await chrome.windows.update(win.id, updateProps);
+
+    console.log(`[Synapse] ✓ Window layout applied: ${width}×${height}`, updateProps);
+
+  } catch (e) {
+    console.error('[Synapse] ✗ applyWindowLayout failed:', e);
+  }
+}
+
+/**
+ * enforceDiscoveryWindowSize()
+ *
+ * Fallback called from loadConfig when mode === 'discovery'.
+ * Only sets dimensions — no position, since screen is unavailable in a
+ * service worker. The protocol's requestWindowLayout() will follow
+ * shortly with fully-resolved coordinates from page context.
+ */
+async function enforceDiscoveryWindowSize() {
+  await applyWindowLayout({ width: 600, height: 800, state: 'normal' });
 }
 
 // ============================================================================
@@ -322,6 +396,14 @@ function handleHostMessage(msg) {
     
     handshakeState = 'CONFIRMED';
     console.log('[HANDSHAKE] ✓✓✓ HANDSHAKE COMPLETADO - Canal seguro establecido');
+
+    // If the host_ready payload includes a window layout override, apply it now.
+    // This is the Cortex API path — the native host can control window
+    // dimensions/position at launch time without changing the extension code.
+    if (msg.window) {
+      console.log('[HANDSHAKE] Applying window layout from host payload:', msg.window);
+      applyWindowLayout(msg.window);
+    }
     
     // Notificar a discovery/landing que el handshake está completo
     chrome.runtime.sendMessage({
@@ -611,6 +693,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
       timestamp: msg.timestamp
     });
     sendResp({ received: true });
+    return true;
+  }
+
+  // Window layout request — from discoveryProtocol.requestWindowLayout()
+  if (command === 'window_layout_request' && msg.layout) {
+    console.log('[Synapse] Window layout request received:', msg.layout);
+    applyWindowLayout(msg.layout).then(() => {
+      sendResp({ received: true, layout: msg.layout });
+    });
     return true;
   }
 
