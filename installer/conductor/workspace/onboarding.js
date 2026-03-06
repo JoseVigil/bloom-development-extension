@@ -1,6 +1,15 @@
-// onboarding.html — JavaScript logic block (Synapse Protocol v4.0)
-// Drop this into btips_onboarding_v5.html replacing the existing <script> block.
-// CSS, HTML structure, and all IDs are left untouched.
+// onboarding.js — BTIPS Conductor (Synapse Protocol v4.0)
+// Script completo del onboarding. Cargado por onboarding.html via <script src="onboarding.js">.
+
+// ── LOGGING ────────────────────────────────────────────────────────────────
+function log(level, msg) {
+  const ts = new Date().toISOString();
+  const fn = level === 'error' ? 'error' : level === 'warn' ? 'warn' : 'log';
+  console[fn](`[${ts}] [${level.toUpperCase()}] [RENDERER] ${msg}`);
+  if (window.onboarding?.log) {
+    window.onboarding.log(level, msg).catch(() => {});
+  }
+}
 
 // ── STATE ──────────────────────────────────────────────────────────────────
 const activeAccounts    = new Set();
@@ -15,6 +24,8 @@ let userEmail           = null; // email del usuario (capturado en Screen 1 si a
 
 // ── NAVIGATION ─────────────────────────────────────────────────────────────
 async function goTo(n) {
+  log('info', `goTo(${n})`);
+
   // Ocultar todas las screens
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   // Mostrar la screen objetivo
@@ -32,7 +43,7 @@ async function goTo(n) {
     setTimeout(() => {
       document.getElementById('sn-identity')?.classList.add('active');
     }, 400);
-    kickoffDiscovery();
+    // kickoffDiscovery() NO va aquí — se llama desde handleIdentityBtn()
   }
   if (n === 3) loadOrgs();
   if (n === 5) loadRepos();
@@ -40,40 +51,35 @@ async function goTo(n) {
 }
 
 function showCortex(msg) {
-  const el = document.getElementById('cortex-msg');
+  const el = document.getElementById('cortex-text');
   if (!el) return;
   el.textContent = msg;
-  el.classList.remove('show');
-  void el.offsetWidth; // reflow
-  el.classList.add('show');
+  document.getElementById('cortex-bar')?.classList.add('visible');
 }
 
-// ── SCREEN 0 → 1: arrancar el onboarding ──────────────────────────────────
-async function kickoffDiscovery() {
-  // Lanzar Chrome en modo discovery + registro (no bloquea la UI)
-  const result = await window.onboarding.launchDiscovery({ email: userEmail });
-  if (!result.success) {
-    showCortex("Could not launch Discovery. Retry.");
-    return;
-  }
-
-  // Enviar step google_login a Chrome para que abra en la pantalla correcta
-  await window.onboarding.navigate({
-    step: 'google_login',
-    email: userEmail
-  });
+function hideCortex() {
+  document.getElementById('cortex-bar')?.classList.remove('visible');
 }
 
-// ── SCREEN 1 — Identity: botón Validate con polling real ──────────────────
+// ── INFO POPUP ─────────────────────────────────────────────────────────────
+function openInfo()  { document.getElementById('info-popup').classList.add('open'); }
+function closeInfo() { document.getElementById('info-popup').classList.remove('open'); }
+
+// ── SCREEN 1 — Identity ────────────────────────────────────────────────────
 async function handleIdentityBtn() {
+  log('info', 'click — btn-continue-identity (Validate)');
+
   const btn = document.getElementById('btn-continue-identity');
   btn.textContent = 'Awaiting accounts…';
   btn.disabled = true;
+  btn.onclick = null;
 
   showCortex("Register your accounts in the Discovery window.");
 
-  // Polling cada 3 segundos — espera que nucleus synapse status
-  // devuelva identity con las cuentas activas
+  // Lanzar Chrome en modo discovery — AQUÍ y solo aquí
+  await kickoffDiscovery();
+
+  // Arrancar polling de cuentas cada 3 segundos
   identityPollTimer = setInterval(async () => {
     const result = await window.onboarding.pollIdentity();
     if (!result.success) return;
@@ -82,6 +88,7 @@ async function handleIdentityBtn() {
       if (result.accounts[name] && !activeAccounts.has(name)) {
         activeAccounts.add(name);
         document.getElementById('acc-' + name)?.classList.add('active');
+        log('info', `account confirmed: ${name}`);
       }
     });
 
@@ -93,10 +100,31 @@ async function handleIdentityBtn() {
   }, 3000);
 }
 
+async function kickoffDiscovery() {
+  log('info', 'IPC → onboarding:launch-discovery — email: ' + (userEmail || '(none)'));
+  const result = await window.onboarding.launchDiscovery({ email: userEmail });
+  log(result.success ? 'info' : 'error', `IPC ← onboarding:launch-discovery — success: ${result.success}`);
+
+  if (!result.success) {
+    showCortex("Could not launch Discovery. Retry.");
+    const btn = document.getElementById('btn-continue-identity');
+    btn.textContent = 'Validate';
+    btn.disabled = false;
+    btn.onclick = handleIdentityBtn;
+    return;
+  }
+
+  // Enviar step google_login a Chrome
+  log('info', 'IPC → onboarding:navigate — step: google_login');
+  const navResult = await window.onboarding.navigate({ step: 'google_login', email: userEmail });
+  log(navResult.success ? 'info' : 'error', `IPC ← onboarding:navigate — success: ${navResult.success}`);
+}
+
 function checkIdentityReady() {
   const allDone = REQUIRED_ACCOUNTS.every(a => activeAccounts.has(a));
   if (!allDone) return;
 
+  log('info', 'all required accounts confirmed — identity ready');
   document.getElementById('sn-identity')?.classList.add('established');
   showCortex("Identity confirmed. Vault layer next.");
 
@@ -106,13 +134,7 @@ function checkIdentityReady() {
   btn.onclick = () => goTo(2);
 }
 
-// Wire up identity button
-document.addEventListener('DOMContentLoaded', () => {
-  const identityBtn = document.getElementById('btn-continue-identity');
-  if (identityBtn) identityBtn.onclick = handleIdentityBtn;
-});
-
-// ── SCREEN 3 — Nucleus: orgs reales + folder picker real ──────────────────
+// ── SCREEN 3 — Nucleus ─────────────────────────────────────────────────────
 async function loadOrgs() {
   const result = await window.onboarding.listOrgs();
   const list = document.getElementById('org-list');
@@ -156,18 +178,21 @@ async function selectFolder() {
   const pathEl = document.getElementById('folder-path');
   if (pathEl) pathEl.textContent = result.path;
   document.getElementById('folder-picker')?.classList.add('selected');
-  folderSelected      = true;
-  selectedFolderPath  = result.path;
+  folderSelected     = true;
+  selectedFolderPath = result.path;
   checkNucleusReady();
 }
 
 function checkNucleusReady() {
-  const btn = document.getElementById('btn-continue-nucleus');
-  if (!btn) return;
-  btn.disabled = !(selectedOrg && folderSelected);
+  document.getElementById('btn-init-nucleus').disabled = !(selectedOrg && folderSelected);
 }
 
-// ── SCREEN 3b — Terminal con output real de nucleus init ──────────────────
+function initNucleus() {
+  log('info', `initNucleus — org: ${selectedOrg} | path: ${selectedFolderPath}`);
+  goTo(4);
+}
+
+// ── SCREEN 4 — Nucleus Init Terminal ───────────────────────────────────────
 function runNucleusTerminal() {
   const terminal = document.getElementById('nucleus-terminal');
   if (!terminal) return;
@@ -182,10 +207,12 @@ function runNucleusTerminal() {
     terminal.scrollTop = terminal.scrollHeight;
   });
 
+  log('info', 'IPC → onboarding:init-nucleus');
   window.onboarding.initNucleus({
     org:  selectedOrg,
     path: selectedFolderPath
   }).then(result => {
+    log(result.success ? 'info' : 'error', `IPC ← onboarding:init-nucleus — success: ${result.success}`);
     if (result.success) {
       const done = document.createElement('div');
       done.className = 'terminal-line done';
@@ -198,11 +225,12 @@ function runNucleusTerminal() {
       err.style.color = 'var(--error)';
       err.textContent = '✗ Init failed: ' + result.error;
       terminal.appendChild(err);
+      log('error', `runNucleusTerminal failed: ${result.error}`);
     }
   });
 }
 
-// ── SCREEN 4 — Project: repos reales ─────────────────────────────────────
+// ── SCREEN 5 — Project ─────────────────────────────────────────────────────
 async function loadRepos() {
   const grid = document.getElementById('project-grid');
   if (!grid) return;
@@ -258,33 +286,43 @@ function selectProject(el, repoObj) {
   }
 }
 
-// ── SCREEN 5 (Milestone) — Create Mandate + enviar step success a Chrome ──
+// ── SCREEN 6 — Milestone ───────────────────────────────────────────────────
 async function createMandateAndContinue() {
+  log('info', 'click — btn-create-mandate');
   const btn = document.getElementById('btn-create-mandate');
   if (btn) {
-    btn.disabled  = true;
+    btn.disabled    = true;
     btn.textContent = 'Creating mandate…';
   }
 
+  log('info', `IPC → onboarding:create-mandate — project: ${selectedProject.name}`);
   const result = await window.onboarding.createMandate({
     project:     selectedProject.name,
     projectPath: selectedProject.path || ''
   });
+  log(result.success ? 'info' : 'error', `IPC ← onboarding:create-mandate — success: ${result.success}`);
 
   if (result.success) {
-    // Notificar a Chrome que el onboarding está completo
-    await window.onboarding.navigate({ step: 'success' });
-    goTo(6); // milestone screen en Conductor
+    log('info', 'IPC → onboarding:navigate — step: success');
+    const navResult = await window.onboarding.navigate({ step: 'success' });
+    log(navResult.success ? 'info' : 'error', `IPC ← onboarding:navigate — success: ${navResult.success}`);
+    goTo(6);
   } else {
     if (btn) {
-      btn.disabled  = false;
+      btn.disabled    = false;
       btn.textContent = 'Retry';
     }
+    log('error', `createMandateAndContinue failed: ${result.error}`);
     showCortex('Mandate failed: ' + result.error);
   }
 }
 
-// ── SCREEN 6 (Launch) — handoff real al workspace ─────────────────────────
+// ── SCREEN 7 — Launch ──────────────────────────────────────────────────────
+function enterSystem() {
+  log('info', 'click — btn-enter-system');
+  goTo(7);
+}
+
 function runLaunchSequence() {
   document.getElementById('ambient')?.classList.remove('milestone');
   const sysLayer = document.getElementById('system-layer');
@@ -298,21 +336,29 @@ function runLaunchSequence() {
 
   showCortex("System initialization complete.");
 
-  // Handoff después de que terminen las animaciones
   const totalDelay = 300 + (lines.length * 500) + 800;
   setTimeout(completeOnboarding, totalDelay);
 }
 
 async function completeOnboarding() {
   showCortex("Establishing workspace connection…");
+  log('info', 'IPC → onboarding:complete');
 
   const result = await window.onboarding.complete({
     workspaceUrl: 'http://localhost:3000'
   });
 
+  log(result.success ? 'info' : 'error', `IPC ← onboarding:complete — success: ${result.success}`);
   if (!result.success) {
+    log('error', `completeOnboarding failed: ${result.error}`);
     showCortex('Handoff failed: ' + result.error);
   }
   // Si success: Electron redimensiona y carga la URL.
   // El renderer no necesita hacer nada más.
 }
+
+// ── INIT ───────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  log('info', 'DOM ready — initialized');
+  document.getElementById('btn-continue-identity').onclick = handleIdentityBtn;
+});

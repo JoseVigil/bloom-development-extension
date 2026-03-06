@@ -23,7 +23,7 @@ taskkill /F /IM chrome.exe /T
 cd conductor
 npm run build:all
 
-cd conductor/launcher     
+cd conductor/workspace   
 npm run build
 
 cd conductor/setu     
@@ -88,6 +88,8 @@ brain filesystem tree installer/metamorph -o tree/metamorph_tree.txt
 brain filesystem tree installer/sensor -o tree/sensor_tree.txt
 
 brain filesystem tree installer/conductor -o tree/conductor_tree.txt
+
+brain filesystem tree installer/conductor/workspace -o tree/workspace_tree.txt
 
 brain filesystem tree installer/chrome-extension/src -o tree/chrome_extension_src_tree.txt
 

@@ -76,6 +76,12 @@ class Logger {
         filename = `conductor_launch_${timestamp}.log`;
         this.streamId = `conductor_launch_${timestamp}`;
         this.streamLabel = '🚀 CONDUCTOR LAUNCH';
+      } else if (this.category === 'onboarding') {
+        const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        targetDir        = path.join(this.basePath, 'conductor');
+        filename         = `conductor_onboarding_${date}.log`;
+        this.streamId    = 'conductor_onboarding';
+        this.streamLabel = '🚀 ONBOARDING';
       } else {
         // Por defecto para launcher
         targetDir = path.join(this.basePath, 'conductor');
@@ -132,8 +138,9 @@ Log File: ${this.logFile}
       const { spawn } = require('child_process');
       
       const categoryMap = {
-        installer: { category: 'conductor', description: 'Electron installer session log — one file per install attempt, captures full install flow' },
-        conductor: { category: 'conductor', description: 'Conductor launch session log — captures Electron main process startup and lifecycle events' }
+        installer:  { category: 'conductor', description: 'Electron installer session log — one file per install attempt, captures full install flow' },
+        conductor:  { category: 'conductor', description: 'Conductor launch session log — captures Electron main process startup and lifecycle events' },
+        onboarding: { category: 'conductor', source: 'conductor', description: 'Conductor onboarding log — full onboarding flow from boot to completion, IPC calls, screen transitions and nucleus.exe invocations' }
       };
       const meta = categoryMap[this.category] || { category: 'conductor', description: 'Conductor log' };
 

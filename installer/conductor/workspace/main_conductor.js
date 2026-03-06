@@ -9,6 +9,8 @@ const os   = require('os');
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const { spawn, execFile } = require('child_process');
 const { promisify } = require('util');
+const { getLogger } = require('../shared/logger');
+const log = getLogger('onboarding');
 
 // ── CONSTANTS ──────────────────────────────────────────────────────────────
 const BLOOM_BASE   = path.join(process.env.LOCALAPPDATA, 'BloomNucleus');
@@ -106,6 +108,139 @@ function createWorkspaceWindow(url) {
   mainWindow.on('closed', () => { mainWindow = null; });
 }
 
+// ── NUCLEUS IPC HANDLERS ───────────────────────────────────────────────────
+// Handlers expuestos por preload_conductor.js al workspace (conductor.html).
+// Siguen el mismo patrón inline que setupOnboardingHandlers().
+function setupNucleusHandlers() {
+
+  // ── nucleus:health ────────────────────────────────────────────────────
+  // nucleus --json health
+  // Normaliza la respuesta para conductor.html:
+  //   health.status          → "healthy" | "degraded" | "unhealthy"
+  //   health.all_services_ok → boolean
+  //   health.services        → { [name]: string } para el service-grid
+  ipcMain.handle('nucleus:health', async () => {
+    try {
+      const raw    = await execNucleus(['--json', 'health'], 15000);
+      const allOk  = raw.success === true;
+      const state  = (raw.state || '').toUpperCase();
+      const status = allOk ? 'healthy' : state === 'DEGRADED' ? 'degraded' : 'unhealthy';
+
+      const services = {};
+      if (raw.components && typeof raw.components === 'object') {
+        for (const [name, info] of Object.entries(raw.components)) {
+          if (!info || typeof info !== 'object') continue;
+          const parts = [info.state || (info.healthy ? 'OK' : 'ERROR')];
+          if (info.port        !== undefined) parts.push(`port ${info.port}`);
+          if (info.latency_ms  !== undefined) parts.push(`${info.latency_ms}ms`);
+          if (info.pid         !== undefined) parts.push(`pid ${info.pid}`);
+          if (info.profiles_count !== undefined) parts.push(`profiles: ${info.profiles_count}`);
+          if (info.error)                     parts.push(`⚠ ${info.error}`);
+          services[name] = parts.join(' · ');
+        }
+      }
+
+      return {
+        success: true,
+        health: {
+          status,
+          all_services_ok:   allOk,
+          state:             raw.state             || null,
+          error:             raw.error             || null,
+          timestamp:         raw.timestamp         || null,
+          services,
+          components:        raw.components        || null,
+          brain_last_errors: raw.brain_last_errors || null
+        }
+      };
+    } catch (err) {
+      return {
+        success: false,
+        error:   err.message,
+        health: {
+          status:            'unhealthy',
+          all_services_ok:   false,
+          state:             'UNREACHABLE',
+          error:             err.message,
+          services:          { nucleus: `⚠ ${err.message}` },
+          components:        null,
+          brain_last_errors: null
+        }
+      };
+    }
+  });
+
+  // ── nucleus:list-profiles ─────────────────────────────────────────────
+  // nucleus --json profile list
+  ipcMain.handle('nucleus:list-profiles', async () => {
+    try {
+      const result = await execNucleus(['--json', 'profile', 'list'], 10000);
+      return {
+        success:  result.success !== false,
+        profiles: result.profiles || []
+      };
+    } catch (err) {
+      return { success: false, profiles: [], error: err.message };
+    }
+  });
+
+  // ── nucleus:launch-profile ────────────────────────────────────────────
+  // nucleus --json synapse launch <profileId>
+  ipcMain.handle('nucleus:launch-profile', async (event, profileId) => {
+    if (!profileId || typeof profileId !== 'string') {
+      return { success: false, error: 'profileId is required' };
+    }
+    try {
+      const result = await execNucleus(
+        ['--json', 'synapse', 'launch', profileId], 30000
+      );
+      return { success: result.success !== false, profileId, result };
+    } catch (err) {
+      return { success: false, profileId, error: err.message };
+    }
+  });
+
+  // ── nucleus:create-profile ────────────────────────────────────────────
+  // nucleus --json profile create --name <profileName>
+  ipcMain.handle('nucleus:create-profile', async (event, profileName) => {
+    if (!profileName || typeof profileName !== 'string' || !profileName.trim()) {
+      return { success: false, error: 'profileName is required' };
+    }
+    try {
+      const result = await execNucleus(
+        ['--json', 'profile', 'create', '--name', profileName.trim()], 15000
+      );
+      return {
+        success: result.success !== false,
+        profile: result.profile || null,
+        result
+      };
+    } catch (err) {
+      return { success: false, profile: null, error: err.message };
+    }
+  });
+
+  // ── nucleus:get-installation ──────────────────────────────────────────
+  // Lee nucleus.json directamente — sin invocar el binario.
+  ipcMain.handle('nucleus:get-installation', async () => {
+    try {
+      if (!fs.existsSync(NUCLEUS_JSON)) {
+        return { success: false, error: 'nucleus.json not found' };
+      }
+      const data = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
+      return {
+        success:      true,
+        installation: data.installation || null,
+        onboarding:   data.onboarding   || null,
+        raw:          data
+      };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  });
+
+}
+
 // ── BOOT ───────────────────────────────────────────────────────────────────
 app.whenReady().then(async () => {
   // 1. Verificar instalación
@@ -119,6 +254,8 @@ app.whenReady().then(async () => {
   }
 
   const nucleusData = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
+  log.info('[BOOT] nucleus.json found');
+  log.info('[BOOT] onboarding completed:', nucleusData?.onboarding?.completed === true);
 
   if (!nucleusData.installation?.completed) {
     await dialog.showMessageBox({
@@ -129,13 +266,17 @@ app.whenReady().then(async () => {
     app.quit(); return;
   }
 
-  // 2. Decisión: onboarding o workspace
+  // 2. Registrar handlers IPC (siempre, antes de cualquier ventana)
+  setupNucleusHandlers();
+
+  // 3. Decisión: onboarding o workspace
   const onboardingDone = nucleusData?.onboarding?.completed === true;
 
   if (onboardingDone) {
     const url = nucleusData.onboarding.workspace_url || 'http://localhost:3000';
     createWorkspaceWindow(url);
   } else {
+    log.info('[BOOT] Loading onboarding window');
     createOnboardingWindow();
     setupOnboardingHandlers();
   }
@@ -174,23 +315,27 @@ function setupOnboardingHandlers() {
   //   --override-heartbeat false → Sin heartbeat durante registro
   //   --save                    → Persiste overrides en profiles.json
   ipcMain.handle('onboarding:launch-discovery', async (event, { email }) => {
+    log.info('[IPC] onboarding:launch-discovery — email:', email || '(none)');
     try {
       const nucleusData = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
       const profileId = nucleusData.master_profile;
       if (!profileId) throw new Error('master_profile not found');
 
-      const args = [
-        '--json', 'synapse', 'launch', profileId,
-        '--mode', 'discovery',
-        '--override-register', 'true',
-        '--override-heartbeat', 'false',
-        '--save'
-      ];
-      if (email) args.push('--override-email', email);
+      // Spec v2.0 §8: nucleus synapse launch <profile_id> --mode discovery
+      // Flags --override-register / --override-email / --override-heartbeat / --save
+      // están pendientes de implementación en Go (no existen en el binario actual).
+      // Activar cuando nucleus los soporte:
+      //   args.push('--override-register', 'true');
+      //   args.push('--override-heartbeat', 'false');
+      //   args.push('--save');
+      //   if (email) args.push('--override-email', email);
+      const args = ['--json', 'synapse', 'launch', profileId, '--mode', 'discovery'];
 
       const result = await execNucleus(args, 30000);
+      log.success('[IPC] onboarding:launch-discovery — ok');
       return { success: result.success !== false, profileId, result };
     } catch (err) {
+      log.error('[IPC] onboarding:launch-discovery — FAILED:', err.message);
       return { success: false, error: err.message };
     }
   });
@@ -204,17 +349,25 @@ function setupOnboardingHandlers() {
   //   welcome, google_login, google_login_waiting, gemini_api,
   //   gemini_api_waiting, provider_select, api_waiting, api_success, success
   ipcMain.handle('onboarding:navigate', async (event, { step, email, service }) => {
+    log.info('[IPC] onboarding:navigate — step:', step);
     try {
       const nucleusData = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
       const profileId = nucleusData.master_profile;
 
-      const args = ['--json', 'synapse', 'onboarding', profileId, '--step', step];
-      if (email)   args.push('--email',   email);
-      if (service) args.push('--service', service);
+      // Spec v2.0 §4.5: nucleus synapse onboarding <profile_id> --step <step>
+      // Este subcomando está pendiente de implementación en Go.
+      // Cuando esté disponible, descomentar el bloque execNucleus y eliminar el log de aviso.
+      //
+      // const args = ['--json', 'synapse', 'onboarding', profileId, '--step', step];
+      // if (email)   args.push('--email',   email);
+      // if (service) args.push('--service', service);
+      // const result = await execNucleus(args, 10000);
+      // const success = result.signal_sent === true || result.success !== false;
 
-      const result = await execNucleus(args, 10000);
+      log.warn('[IPC] onboarding:navigate — nucleus synapse onboarding not yet implemented, persisting step locally only');
+      const success = true; // optimistic until subcommand is available
 
-      // Persistir step actual en nucleus.json (escritor: Conductor)
+      // Persistir step actual en nucleus.json (escritor: Conductor — spec v2.0 §7)
       nucleusData.onboarding = nucleusData.onboarding || {};
       nucleusData.onboarding.started      = true;
       nucleusData.onboarding.current_step = step;
@@ -224,8 +377,10 @@ function setupOnboardingHandlers() {
       }
       fs.writeFileSync(NUCLEUS_JSON, JSON.stringify(nucleusData, null, 2));
 
-      return { success: result.signal_sent === true || result.success !== false };
+      log.success('[IPC] onboarding:navigate — ok (step persisted)');
+      return { success };
     } catch (err) {
+      log.error('[IPC] onboarding:navigate — FAILED:', err.message);
       return { success: false, error: err.message };
     }
   });
@@ -244,6 +399,7 @@ function setupOnboardingHandlers() {
   //   }
   // }
   ipcMain.handle('onboarding:poll-identity', async () => {
+    log.info('[IPC] onboarding:poll-identity');
     try {
       const nucleusData = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
       const profileId = nucleusData.master_profile;
@@ -255,29 +411,27 @@ function setupOnboardingHandlers() {
         );
         const raw = result.identity || {};
         if (Object.keys(raw).length > 0) {
-          return {
-            success: true,
-            accounts: {
-              google: raw.google?.status === 'active',
-              gemini: raw.gemini?.status === 'active',
-              github: raw.github?.status === 'active'
-            }
+          const accounts = {
+            google: raw.google?.status === 'active',
+            gemini: raw.gemini?.status === 'active',
+            github: raw.github?.status === 'active'
           };
+          log.success('[IPC] onboarding:poll-identity — ok:', JSON.stringify(accounts));
+          return { success: true, accounts };
         }
       } catch (_) {}
 
       // Fallback: leer accounts desde nucleus.json
-      // Conductor escribe este campo cuando ACCOUNT_REGISTERED llega
       const accounts = nucleusData.onboarding?.accounts || [];
-      return {
-        success: true,
-        accounts: {
-          google: accounts.some(a => a.provider === 'google' && a.status === 'active'),
-          gemini: accounts.some(a => a.provider === 'gemini' && a.status === 'active'),
-          github: accounts.some(a => a.provider === 'github' && a.status === 'active')
-        }
+      const resolved = {
+        google: accounts.some(a => a.provider === 'google' && a.status === 'active'),
+        gemini: accounts.some(a => a.provider === 'gemini' && a.status === 'active'),
+        github: accounts.some(a => a.provider === 'github' && a.status === 'active')
       };
+      log.success('[IPC] onboarding:poll-identity — ok (fallback):', JSON.stringify(resolved));
+      return { success: true, accounts: resolved };
     } catch (err) {
+      log.error('[IPC] onboarding:poll-identity — FAILED:', err.message);
       return { success: false, accounts: { google: false, gemini: false, github: false } };
     }
   });
@@ -289,8 +443,10 @@ function setupOnboardingHandlers() {
       title: 'Select Nucleus location',
       buttonLabel: 'Select'
     });
-    if (result.canceled || !result.filePaths.length)
+    if (result.canceled || !result.filePaths.length) {
+      log.warn('[IPC] onboarding:select-folder — canceled');
       return { success: false, canceled: true };
+    }
     return { success: true, path: result.filePaths[0] };
   });
 
@@ -300,12 +456,14 @@ function setupOnboardingHandlers() {
       const result = await execNucleus(['--json', 'github', 'list-orgs']);
       return { success: true, orgs: result.orgs || [] };
     } catch (err) {
+      log.error('[IPC] onboarding:list-orgs — FAILED:', err.message);
       return { success: false, orgs: [], error: err.message };
     }
   });
 
   // ── HANDLER: Inicializar Nucleus con streaming de output ────────────────
   ipcMain.handle('onboarding:init-nucleus', async (event, { org, path: nucleusPath }) => {
+    log.info('[IPC] onboarding:init-nucleus — org:', org, '| path:', nucleusPath);
     return new Promise((resolve) => {
       const child = spawn(
         NUCLEUS_EXE,
@@ -329,11 +487,19 @@ function setupOnboardingHandlers() {
       });
 
       child.on('close', code => {
-        if (code === 0) resolve({ success: true, output: allOutput });
-        else resolve({ success: false, error: `Exit code ${code}`, output: allOutput });
+        if (code === 0) {
+          log.success('[IPC] onboarding:init-nucleus — ok');
+          resolve({ success: true, output: allOutput });
+        } else {
+          log.error('[IPC] onboarding:init-nucleus — FAILED: exit code', code);
+          resolve({ success: false, error: `Exit code ${code}`, output: allOutput });
+        }
       });
 
-      child.on('error', err => resolve({ success: false, error: err.message }));
+      child.on('error', err => {
+        log.error('[IPC] onboarding:init-nucleus — FAILED:', err.message);
+        resolve({ success: false, error: err.message });
+      });
     });
   });
 
@@ -345,6 +511,7 @@ function setupOnboardingHandlers() {
       );
       return { success: true, repos: result.repos || [] };
     } catch (err) {
+      log.error('[IPC] onboarding:list-repos — FAILED:', err.message);
       return { success: false, repos: [], error: err.message };
     }
   });
@@ -359,12 +526,14 @@ function setupOnboardingHandlers() {
       ]);
       return { success: result.success !== false, result };
     } catch (err) {
+      log.error('[IPC] onboarding:create-mandate — FAILED:', err.message);
       return { success: false, error: err.message };
     }
   });
 
   // ── HANDLER: Completar onboarding + handoff al workspace ────────────────
   ipcMain.handle('onboarding:complete', async (event, { workspaceUrl }) => {
+    log.info('[IPC] onboarding:complete — workspaceUrl:', workspaceUrl || 'http://localhost:3000');
     try {
       const nucleusData = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
       nucleusData.onboarding = {
@@ -385,9 +554,20 @@ function setupOnboardingHandlers() {
         setTimeout(() => mainWindow?.maximize(), 600);
       }
 
+      log.success('[IPC] onboarding:complete — ok');
       return { success: true };
     } catch (err) {
+      log.error('[IPC] onboarding:complete — FAILED:', err.message);
       return { success: false, error: err.message };
     }
+  });
+
+  // ── HANDLER: Bridge de logging desde el renderer ────────────────────────
+  ipcMain.handle('onboarding:log', async (event, { level, message }) => {
+    const msg = `[RENDERER] ${message}`;
+    if      (level === 'error') log.error(msg);
+    else if (level === 'warn')  log.warn(msg);
+    else                        log.info(msg);
+    return { success: true };
   });
 }
