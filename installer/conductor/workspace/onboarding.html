@@ -1,0 +1,1539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BTIPS — System Birth</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Mono:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:              #080A0E;
+  --surface:         #0D1117;
+  --surface-hover:   #131820;
+  --border:          rgba(255,255,255,0.06);
+  --border-active:   rgba(255,255,255,0.18);
+  --text-primary:    #E8EAF0;
+  --text-secondary:  rgba(232,234,240,0.45);
+  --text-dim:        rgba(232,234,240,0.22);
+  --accent:          #C8F55A;
+  --accent-dim:      rgba(200,245,90,0.12);
+  --accent-glow:     rgba(200,245,90,0.06);
+  --error:           #FF4444;
+  --font-head:       'Syne', sans-serif;
+  --font-mono:       'DM Mono', monospace;
+}
+
+html, body {
+  width: 100%; height: 100%;
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font-head);
+  overflow: hidden;
+}
+
+/* ── GRAIN TEXTURE ── */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 1000;
+}
+
+/* ── PROGRESS THREAD ── */
+#progress-thread {
+  position: fixed;
+  top: 0; left: 0;
+  height: 1px;
+  background: var(--accent);
+  transition: width 1s cubic-bezier(0.4,0,0.2,1);
+  opacity: 0.6;
+  z-index: 300;
+  width: 0%;
+}
+
+/* ── AMBIENT GLOW ── */
+#ambient {
+  position: fixed;
+  width: 700px; height: 700px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(200,245,90,0.025) 0%, transparent 70%);
+  left: 50%; top: 50%;
+  transform: translate(-50%,-50%);
+  pointer-events: none;
+  transition: opacity 1.5s;
+  opacity: 0;
+  z-index: 0;
+}
+#ambient.glow { opacity: 1; }
+#ambient.milestone {
+  opacity: 1;
+  background: radial-gradient(circle, rgba(200,245,90,0.045) 0%, transparent 65%);
+  animation: ambient-breathe 4s ease-in-out infinite;
+}
+@keyframes ambient-breathe {
+  0%,100% { transform: translate(-50%,-50%) scale(1); }
+  50% { transform: translate(-50%,-50%) scale(1.07); }
+}
+
+/* ── SYSTEM PERSISTENCE LAYER ── */
+#system-layer {
+  position: fixed;
+  left: 40px; top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  z-index: 100;
+  opacity: 0;
+  transition: opacity 0.8s ease;
+}
+#system-layer.visible { opacity: 1; }
+
+.sys-node {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  opacity: 0;
+  transform: translateX(-12px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+.sys-node.active { opacity: 1; transform: translateX(0); }
+
+.sys-node-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--border-active);
+  border: 1px solid var(--border-active);
+  flex-shrink: 0;
+  transition: background 0.4s, box-shadow 0.4s, border-color 0.4s;
+}
+.sys-node.established .sys-node-dot {
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+  border-color: var(--accent);
+}
+
+.sys-node-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  white-space: nowrap;
+  transition: color 0.4s;
+}
+.sys-node.established .sys-node-label { color: var(--text-secondary); }
+
+.sys-node-status {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+  opacity: 0;
+  transition: opacity 0.4s;
+  margin-left: 2px;
+}
+.sys-node.established .sys-node-status { opacity: 1; }
+
+.sys-connector {
+  width: 1px; height: 20px;
+  background: linear-gradient(to bottom, var(--border), transparent);
+  margin-left: 2px;
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+.sys-connector.visible { opacity: 1; }
+
+/* ── STAGE ── */
+#stage {
+  width: 100%; height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+/* ── SCREENS ── */
+.screen {
+  position: absolute;
+  width: 100%; height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.7s ease;
+}
+.screen.active { opacity: 1; pointer-events: all; }
+
+.screen-inner {
+  width: 100%;
+  max-width: 480px;
+  padding: 0 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0;
+}
+
+/* ── TYPOGRAPHY ── */
+.stage-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 32px;
+}
+
+.stage-title {
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+.stage-body {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  font-family: var(--font-mono);
+  margin-bottom: 48px;
+  max-width: 320px;
+}
+
+/* ── BUTTONS ── */
+.btn-primary {
+  background: var(--accent);
+  color: #080A0E;
+  border: none;
+  border-radius: 2px;
+  padding: 16px 48px;
+  font-family: var(--font-head);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.15s;
+}
+.btn-primary:hover:not(:disabled) { opacity: 0.88; transform: translateY(-1px); }
+.btn-primary:active:not(:disabled) { transform: translateY(0); }
+.btn-primary:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 14px 40px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+}
+.btn-ghost:hover { border-color: var(--border-active); color: var(--text-primary); }
+
+/* ── STATE BLOCK ── */
+.state-block {
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 20px 28px;
+  margin-bottom: 40px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.state-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+}
+.state-dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
+  flex-shrink: 0;
+}
+.state-key { color: var(--text-dim); }
+.state-val { color: var(--text-secondary); }
+
+/* ── VAULT VISUAL ── */
+.vault-icon {
+  width: 80px; height: 80px;
+  border: 1px solid var(--border-active);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 40px;
+  position: relative;
+  transition: border-color 0.5s, box-shadow 0.5s;
+}
+.vault-icon.armed {
+  border-color: var(--accent);
+  box-shadow: 0 0 24px var(--accent-glow), 0 0 1px var(--accent);
+}
+
+/* ── NUCLEUS VISUAL ── */
+.nucleus-visual {
+  width: 100px; height: 100px;
+  position: relative;
+  margin-bottom: 40px;
+}
+.nucleus-ring {
+  position: absolute; inset: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  animation: pulse-ring 3s ease-in-out infinite;
+}
+.nucleus-ring:nth-child(2) { inset:12px; animation-delay:0.4s; border-color: rgba(200,245,90,0.12); }
+.nucleus-ring:nth-child(3) { inset:24px; animation-delay:0.8s; border-color: rgba(200,245,90,0.22); }
+.nucleus-core {
+  position: absolute; inset: 38px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 20px var(--accent);
+}
+@keyframes pulse-ring {
+  0%,100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.04); opacity: 0.55; }
+}
+
+/* ── MILESTONE SCREEN ── */
+#screen-milestone .headline {
+  font-size: 42px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  margin-bottom: 8px;
+}
+#screen-milestone .sub {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.15em;
+  color: var(--text-dim);
+  margin-bottom: 56px;
+  text-transform: uppercase;
+}
+.milestone-nodes {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: 100%;
+  max-width: 320px;
+  margin-bottom: 56px;
+}
+.m-node {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.5s, transform 0.5s;
+}
+.m-node.show { opacity: 1; transform: translateY(0); }
+.m-node-name {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.m-node-state {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--accent);
+  letter-spacing: 0.1em;
+}
+
+/* ── IDENTITY ICONS ── */
+.account-icons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  margin-bottom: 48px;
+  flex-wrap: wrap;
+}
+
+.acc-icon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+}
+
+.acc-icon-ring {
+  width: 52px; height: 52px;
+  border-radius: 2px;
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.5s, box-shadow 0.5s;
+  background: var(--surface);
+  position: relative;
+  overflow: hidden;
+}
+
+.acc-icon-ring::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--accent-dim);
+  opacity: 0;
+  transition: opacity 0.5s;
+}
+
+.acc-icon-ring svg {
+  transition: opacity 0.5s;
+  position: relative;
+  z-index: 1;
+}
+
+.acc-icon.active .acc-icon-ring {
+  border-color: var(--accent);
+  box-shadow: 0 0 12px var(--accent-glow);
+}
+.acc-icon.active .acc-icon-ring::before { opacity: 1; }
+.acc-icon.active .acc-icon-ring svg { opacity: 1; }
+.acc-icon:not(.active) .acc-icon-ring svg { opacity: 0.2; }
+
+.acc-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  transition: color 0.5s;
+}
+.acc-icon.active .acc-label { color: var(--text-secondary); }
+
+/* acc-badge defined above */
+
+.acc-optional {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+/* ── ORG SELECTOR ── */
+.select-list {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 32px;
+}
+
+.select-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+  background: transparent;
+}
+.select-item:hover {
+  border-color: var(--border-active);
+  background: var(--surface);
+  color: var(--text-primary);
+}
+.select-item.selected {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  color: var(--text-primary);
+}
+.select-item-label { font-size: 11px; color: var(--text-dim); }
+.select-item.selected .select-item-label { color: var(--accent); }
+
+.field-row {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  margin-bottom: 40px;
+}
+.field {
+  flex: 1;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 14px 18px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.3s;
+  letter-spacing: 0.04em;
+}
+.field::placeholder { color: var(--text-dim); }
+.field:focus { border-color: var(--border-active); }
+
+.folder-picker {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 14px 20px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  margin-bottom: 40px;
+  cursor: pointer;
+  transition: border-color 0.2s;
+  background: transparent;
+}
+.folder-picker:hover { border-color: var(--border-active); }
+.folder-picker.selected { border-color: var(--accent); }
+.folder-picker-path {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-dim);
+  letter-spacing: 0.04em;
+}
+.folder-picker.selected .folder-picker-path { color: var(--text-secondary); }
+.folder-picker-action {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+/* ── TERMINAL SIMULATION ── */
+.terminal {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 20px 24px;
+  margin-bottom: 40px;
+  min-height: 120px;
+  text-align: left;
+  background: var(--surface);
+}
+.terminal-line {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  line-height: 2;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.terminal-line.active { color: var(--text-secondary); opacity: 1; }
+.terminal-line.done { color: var(--accent); opacity: 1; }
+.terminal-cursor {
+  display: inline-block;
+  width: 6px; height: 11px;
+  background: var(--accent);
+  margin-left: 4px;
+  vertical-align: middle;
+  animation: cursor-blink 1s step-end infinite;
+}
+@keyframes cursor-blink {
+  0%,100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* ── PROJECT PICKER ── */
+.project-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  width: 100%;
+  margin-bottom: 40px;
+}
+.project-card {
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  text-align: left;
+  background: transparent;
+}
+.project-card:hover { border-color: var(--border-active); background: var(--surface); }
+.project-card.selected { border-color: var(--accent); background: var(--accent-dim); }
+.project-card-name {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-primary);
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
+.project-card-type {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.project-card.selected .project-card-type { color: var(--accent); }
+
+/* ── LAUNCH SCREEN ── */
+#screen-launch .launch-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 48px;
+  width: 100%;
+  max-width: 320px;
+}
+.launch-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.5s, transform 0.5s;
+}
+.launch-line.show { opacity: 1; transform: translateY(0); }
+.launch-dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  flex-shrink: 0;
+  transition: background 0.4s, box-shadow 0.4s;
+}
+.launch-line.done .launch-dot {
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
+}
+.launch-text {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+  letter-spacing: 0.06em;
+}
+
+/* ── CORTEX BAR ── */
+#cortex-bar {
+  position: fixed;
+  bottom: 40px; left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  opacity: 0;
+  transition: opacity 0.5s, transform 0.5s;
+  z-index: 200;
+}
+#cortex-bar.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+.cortex-inner {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 320px;
+}
+.cortex-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+  flex-shrink: 0;
+  animation: cortex-blink 2s ease-in-out infinite;
+}
+@keyframes cortex-blink {
+  0%,100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+.cortex-text {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+  flex: 1;
+}
+.cortex-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+/* ── ENTRY SCREEN ── */
+#screen-entry .logo {
+  font-size: 13px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  margin-bottom: 72px;
+}
+#screen-entry .headline {
+  font-size: 32px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  margin-bottom: 64px;
+}
+#screen-entry .sub {
+  font-size: 13px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  letter-spacing: 0.08em;
+  margin-bottom: 56px;
+}
+
+/* ── IDENTITY SCREEN EXTRAS ── */
+.identity-explain {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+  letter-spacing: 0.03em;
+  margin-bottom: 40px;
+}
+
+.info-btn {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--border-active);
+  background: transparent;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: border-color 0.2s, color 0.2s;
+  line-height: 1;
+}
+.info-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ── INFO POPUP ── */
+#info-popup {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+#info-popup.open { opacity: 1; pointer-events: all; }
+
+.info-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(8,10,14,0.85);
+  cursor: pointer;
+}
+
+.info-panel {
+  position: relative;
+  z-index: 1;
+  background: var(--surface);
+  border: 1px solid var(--border-active);
+  border-radius: 2px;
+  padding: 36px 40px;
+  max-width: 400px;
+  width: calc(100% - 48px);
+  transform: translateY(8px);
+  transition: transform 0.3s;
+}
+#info-popup.open .info-panel { transform: translateY(0); }
+
+.info-panel-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 20px;
+}
+
+.info-panel-title {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  margin-bottom: 20px;
+  line-height: 1.3;
+}
+
+.info-panel-body {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.8;
+  letter-spacing: 0.03em;
+  margin-bottom: 28px;
+}
+
+.info-panel-body strong {
+  color: var(--text-primary);
+  font-weight: 400;
+}
+
+.info-close {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.2s;
+}
+.info-close:hover { color: var(--text-secondary); }
+
+/* ── LOCK BADGE ── */
+.acc-badge {
+  position: absolute;
+  top: -8px; right: -8px;
+  width: 20px; height: 20px;
+  border-radius: 2px;
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.4s;
+  box-shadow: 0 0 8px var(--accent-glow);
+}
+.acc-icon.active .acc-badge { opacity: 1; }
+
+/* ── SECTION DIVIDER ── */
+.divider {
+  width: 100%;
+  height: 1px;
+  background: var(--border);
+  margin: 32px 0;
+}
+
+/* ── QUESTION LABEL ── */
+.question-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 16px;
+  align-self: flex-start;
+  width: 100%;
+  text-align: left;
+}
+
+/* ── MANDATE EXPLAINER ── */
+.mandate-info {
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 16px 20px;
+  margin-bottom: 32px;
+  width: 100%;
+  text-align: left;
+}
+.mandate-info p {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  letter-spacing: 0.04em;
+  line-height: 1.7;
+}
+
+/* ── FADE-IN ANIMATION ── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.fade-up { animation: fadeUp 0.7s cubic-bezier(0.4,0,0.2,1) both; }
+</style>
+</head>
+<body>
+
+<div id="progress-thread"></div>
+<div id="ambient"></div>
+
+<!-- System Persistence Layer -->
+<div id="system-layer">
+  <div class="sys-node" id="sn-identity">
+    <div class="sys-node-dot"></div>
+    <div class="sys-node-label">Identity</div>
+    <div class="sys-node-status">Active</div>
+  </div>
+  <div class="sys-connector" id="sc-1"></div>
+  <div class="sys-node" id="sn-vault">
+    <div class="sys-node-dot"></div>
+    <div class="sys-node-label">Vault</div>
+    <div class="sys-node-status">Secured</div>
+  </div>
+  <div class="sys-connector" id="sc-2"></div>
+  <div class="sys-node" id="sn-nucleus">
+    <div class="sys-node-dot"></div>
+    <div class="sys-node-label">Nucleus</div>
+    <div class="sys-node-status">Established</div>
+  </div>
+  <div class="sys-connector" id="sc-3"></div>
+  <div class="sys-node" id="sn-project">
+    <div class="sys-node-dot"></div>
+    <div class="sys-node-label">Project</div>
+    <div class="sys-node-status">Active</div>
+  </div>
+  <div class="sys-connector" id="sc-4"></div>
+  <div class="sys-node" id="sn-mandate">
+    <div class="sys-node-dot"></div>
+    <div class="sys-node-label">Mandate</div>
+    <div class="sys-node-status">Persistent</div>
+  </div>
+</div>
+
+<!-- Cortex Bar (Synapse) -->
+<div id="cortex-bar">
+  <div class="cortex-inner">
+    <div class="cortex-dot"></div>
+    <div class="cortex-text" id="cortex-text">System is being established.</div>
+    <div class="cortex-label">Synapse</div>
+  </div>
+</div>
+
+<!-- Info Popup -->
+<div id="info-popup">
+  <div class="info-backdrop" onclick="closeInfo()"></div>
+  <div class="info-panel">
+    <div class="info-panel-label">Identity — Architecture</div>
+    <div class="info-panel-title">How identity works<br>in BTIPS.</div>
+    <div class="info-panel-body">
+      BTIPS does not create accounts or store credentials. Identity is established through a <strong>master Chromium profile</strong> where you register trusted accounts — Google, Gemini, and GitHub.<br><br>
+      These accounts are secured by the <strong>browser vault</strong> and hardware encryption on your device. BTIPS simply detects the existing identity layer and uses it.<br><br>
+      The <strong>Discovery page</strong> runs inside your browser profile and guides you through registering each account. Once all three are confirmed, your sovereign identity is anchored to this machine.
+    </div>
+    <button class="info-close" onclick="closeInfo()">Close</button>
+  </div>
+</div>
+
+<!-- STAGE -->
+<div id="stage">
+
+  <!-- SCREEN 0: Entry -->
+  <div class="screen active" id="screen-entry">
+    <div class="screen-inner">
+      <div class="logo">BTIPS</div>
+      <h1 class="headline">A system<br>born in your machine.</h1>
+      <p class="sub">No account. No server. Only yours.</p>
+      <button class="btn-primary" onclick="goTo(1)">Start</button>
+    </div>
+  </div>
+
+  <!-- SCREEN 1: Establish Identity -->
+  <div class="screen" id="screen-identity">
+    <div class="screen-inner">
+      <div class="stage-label">Stage 1 — Identity</div>
+      <h2 class="stage-title">Establish your identity.</h2>
+
+      <div class="identity-explain">
+        <span>Connect trusted accounts through your master Chromium profile.</span>
+        <button class="info-btn" onclick="openInfo()">i</button>
+      </div>
+
+      <div class="account-icons">
+        <!-- Google -->
+        <div class="acc-icon" id="acc-google" onclick="toggleAccount('google')">
+          <div class="acc-icon-ring">
+            <div class="acc-badge">
+              <svg width="12" height="12" viewBox="0 0 32 32" fill="none">
+                <rect x="6" y="14" width="20" height="14" rx="1" stroke="#C8F55A" stroke-width="2.5"/>
+                <path d="M10 14V10a6 6 0 0112 0v4" stroke="#C8F55A" stroke-width="2.5" stroke-linecap="round"/>
+                <circle cx="16" cy="21" r="2.5" fill="#C8F55A"/>
+              </svg>
+            </div>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+            </svg>
+          </div>
+          <div class="acc-label">Google</div>
+        </div>
+        <!-- Gemini -->
+        <div class="acc-icon" id="acc-gemini" onclick="toggleAccount('gemini')">
+          <div class="acc-icon-ring">
+            <div class="acc-badge">
+              <svg width="12" height="12" viewBox="0 0 32 32" fill="none">
+                <rect x="6" y="14" width="20" height="14" rx="1" stroke="#C8F55A" stroke-width="2.5"/>
+                <path d="M10 14V10a6 6 0 0112 0v4" stroke="#C8F55A" stroke-width="2.5" stroke-linecap="round"/>
+                <circle cx="16" cy="21" r="2.5" fill="#C8F55A"/>
+              </svg>
+            </div>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <path d="M12 2C6.5 7 2 9 2 12c0 3 4.5 5 10 10 5.5-5 10-7 10-10 0-3-4.5-5-10-10z" stroke="rgba(232,234,240,0.7)" stroke-width="1.2" fill="none"/>
+              <path d="M12 2v20M2 12h20" stroke="rgba(232,234,240,0.35)" stroke-width="0.8"/>
+            </svg>
+          </div>
+          <div class="acc-label">Gemini</div>
+        </div>
+        <!-- GitHub -->
+        <div class="acc-icon" id="acc-github" onclick="toggleAccount('github')">
+          <div class="acc-icon-ring">
+            <div class="acc-badge">
+              <svg width="12" height="12" viewBox="0 0 32 32" fill="none">
+                <rect x="6" y="14" width="20" height="14" rx="1" stroke="#C8F55A" stroke-width="2.5"/>
+                <path d="M10 14V10a6 6 0 0112 0v4" stroke="#C8F55A" stroke-width="2.5" stroke-linecap="round"/>
+                <circle cx="16" cy="21" r="2.5" fill="#C8F55A"/>
+              </svg>
+            </div>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="rgba(232,234,240,0.7)">
+              <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/>
+            </svg>
+          </div>
+          <div class="acc-label">GitHub</div>
+        </div>
+      </div>
+
+      <button class="btn-primary" id="btn-continue-identity" style="min-width:200px;">Validate</button>
+    </div>
+  </div>
+
+  <!-- SCREEN 2: Vault Active (identity confirmed) -->
+  <div class="screen" id="screen-vault">
+    <div class="screen-inner">
+      <div class="vault-icon armed">
+        <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+          <rect x="6" y="12" width="20" height="16" rx="1" stroke="#C8F55A" stroke-width="1.2"/>
+          <path d="M10 12V9a6 6 0 0112 0v3" stroke="#C8F55A" stroke-width="1.2" stroke-linecap="round"/>
+          <circle cx="16" cy="20" r="2.5" fill="#C8F55A"/>
+        </svg>
+      </div>
+      <div class="stage-label">Stage 2 — Vault</div>
+      <h2 class="stage-title">Sovereign Identity<br>Generated.</h2>
+      <p class="stage-body">Your authority has been anchored to this device through hardware encryption.<br><br>Credentials are secured by the browser vault. BTIPS never stores them.</p>
+      <div class="state-block" style="margin-bottom:40px;">
+        <div class="state-line">
+          <div class="state-dot"></div>
+          <span class="state-key">Identity</span>
+          <span class="state-val">Active</span>
+        </div>
+        <div class="state-line">
+          <div class="state-dot"></div>
+          <span class="state-key">Vault</span>
+          <span class="state-val">Hardware encrypted</span>
+        </div>
+        <div class="state-line">
+          <div class="state-dot"></div>
+          <span class="state-key">Credentials</span>
+          <span class="state-val">Browser-secured — not stored by BTIPS</span>
+        </div>
+      </div>
+      <button class="btn-primary" onclick="goTo(3)">Continue</button>
+    </div>
+  </div>
+
+  <!-- SCREEN 3: Nucleus Creation -->
+  <div class="screen" id="screen-nucleus">
+    <div class="screen-inner">
+      <div class="nucleus-visual">
+        <div class="nucleus-ring"></div>
+        <div class="nucleus-ring"></div>
+        <div class="nucleus-ring"></div>
+        <div class="nucleus-core"></div>
+      </div>
+      <div class="stage-label">Stage 3 — Nucleus</div>
+      <h2 class="stage-title">Create your Nucleus.</h2>
+      <p class="stage-body" style="margin-bottom:32px;">The Nucleus is the governance layer of your system — the master repository and structural root of all projects.</p>
+
+      <div class="question-label">What is the name of your organization?</div>
+      <div class="select-list" id="org-list">
+        <div class="select-item" onclick="selectOrg(this, 'personal')">
+          <span>personal</span>
+          <span class="select-item-label">GitHub Org</span>
+        </div>
+        <div class="select-item" onclick="selectOrg(this, 'btips-lab')">
+          <span>btips-lab</span>
+          <span class="select-item-label">GitHub Org</span>
+        </div>
+        <div class="select-item" onclick="selectOrg(this, 'new')">
+          <span>+ Create new organization</span>
+          <span class="select-item-label">GitHub</span>
+        </div>
+      </div>
+
+      <div class="question-label">Where do you want your Nucleus?</div>
+      <div class="folder-picker" id="folder-picker" onclick="selectFolder()">
+        <span class="folder-picker-path" id="folder-path">~/Documents/systems/</span>
+        <span class="folder-picker-action">Select</span>
+      </div>
+
+      <button class="btn-primary" id="btn-init-nucleus" onclick="initNucleus()" disabled>Initialize Nucleus</button>
+    </div>
+  </div>
+
+  <!-- SCREEN 3b: Nucleus Init Terminal -->
+  <div class="screen" id="screen-nucleus-init">
+    <div class="screen-inner">
+      <div class="stage-label">Nucleus — Initializing</div>
+      <h2 class="stage-title" style="margin-bottom:32px;">Building the<br>governance layer.</h2>
+      <div class="terminal" id="nucleus-terminal">
+        <div class="terminal-line" id="tl-0">$ nucleus init --org btips-lab</div>
+        <div class="terminal-line" id="tl-1">→ Creating repository structure...</div>
+        <div class="terminal-line" id="tl-2">→ Generating governance scaffold...</div>
+        <div class="terminal-line" id="tl-3">→ Creating GitHub repository...</div>
+        <div class="terminal-line" id="tl-4">→ Linking local path...</div>
+        <div class="terminal-line" id="tl-5">✓ Nucleus established.<span class="terminal-cursor"></span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCREEN 4: Project Selection -->
+  <div class="screen" id="screen-project">
+    <div class="screen-inner">
+      <div class="stage-label">Stage 4 — Project</div>
+      <h2 class="stage-title">Select your first project.</h2>
+      <p class="stage-body" style="margin-bottom:32px;">The system will create a Genesis Mandate from this project. This mandate becomes the first operational continuity of your workspace.</p>
+
+      <div class="question-label">Choose a repository from the organization</div>
+      <div class="project-grid" id="project-grid">
+        <div class="project-card" onclick="selectProject(this)">
+          <div class="project-card-name">btips-core</div>
+          <div class="project-card-type">Repository</div>
+        </div>
+        <div class="project-card" onclick="selectProject(this)">
+          <div class="project-card-name">research-engine</div>
+          <div class="project-card-type">Repository</div>
+        </div>
+        <div class="project-card" onclick="selectProject(this)">
+          <div class="project-card-name">trade-framework</div>
+          <div class="project-card-type">Repository</div>
+        </div>
+        <div class="project-card" onclick="selectProject(this)">
+          <div class="project-card-name">+ Local folder</div>
+          <div class="project-card-type">Select path</div>
+        </div>
+      </div>
+
+      <button class="btn-primary" id="btn-create-mandate" onclick="goTo(6)" disabled>Create Mandate</button>
+    </div>
+  </div>
+
+  <!-- SCREEN 5: System Activated -->
+  <div class="screen" id="screen-milestone">
+    <div class="screen-inner">
+      <div class="stage-label" style="margin-bottom:24px;">System — Active</div>
+      <h1 class="headline">System<br>Activated.</h1>
+      <p class="sub">Your system now exists.<br>Your first mandate is ready.</p>
+      <div class="milestone-nodes" id="milestone-nodes">
+        <div class="m-node" id="mn-identity">
+          <span class="m-node-name">Identity</span>
+          <span class="m-node-state">Active</span>
+        </div>
+        <div class="m-node" id="mn-vault">
+          <span class="m-node-name">Vault</span>
+          <span class="m-node-state">Secured</span>
+        </div>
+        <div class="m-node" id="mn-nucleus">
+          <span class="m-node-name">Nucleus</span>
+          <span class="m-node-state">Established</span>
+        </div>
+        <div class="m-node" id="mn-project">
+          <span class="m-node-name">Project</span>
+          <span class="m-node-state">Active</span>
+        </div>
+        <div class="m-node" id="mn-mandate">
+          <span class="m-node-name">Genesis Mandate</span>
+          <span class="m-node-state">Persistent</span>
+        </div>
+      </div>
+      <div style="opacity:0; transition: opacity 0.8s;" id="enter-btn">
+        <button class="btn-primary" onclick="enterSystem()">Enter System</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCREEN 6: Launching -->
+  <div class="screen" id="screen-launch">
+    <div class="screen-inner">
+      <div class="stage-label">Synapse</div>
+      <h2 class="stage-title" style="margin-bottom:48px; color: var(--text-secondary); font-size: 22px;">Launching system<br>environment.</h2>
+      <div class="launch-lines" id="launch-lines">
+        <div class="launch-line" id="ll-0">
+          <div class="launch-dot"></div>
+          <div class="launch-text">Initializing secure profiles</div>
+        </div>
+        <div class="launch-line" id="ll-1">
+          <div class="launch-dot"></div>
+          <div class="launch-text">Opening workspace environment</div>
+        </div>
+        <div class="launch-line" id="ll-2">
+          <div class="launch-dot"></div>
+          <div class="launch-text">Loading project context</div>
+        </div>
+        <div class="launch-line" id="ll-3">
+          <div class="launch-dot"></div>
+          <div class="launch-text">Activating Genesis Mandate</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /stage -->
+
+<script>
+// onboarding.html — JavaScript logic block (Synapse Protocol v4.0)
+// Drop this into btips_onboarding_v5.html replacing the existing <script> block.
+// CSS, HTML structure, and all IDs are left untouched.
+
+// ── STATE ──────────────────────────────────────────────────────────────────
+const activeAccounts    = new Set();
+const REQUIRED_ACCOUNTS = ['google', 'gemini']; // GitHub es opcional en esta etapa
+let selectedOrg         = null;
+let selectedFolderPath  = null;
+let folderSelected      = false;
+let selectedProjectEl   = null;
+let selectedProject     = null; // { name, path }
+let identityPollTimer   = null;
+let userEmail           = null; // email del usuario (capturado en Screen 1 si aplica)
+
+// ── NAVIGATION ─────────────────────────────────────────────────────────────
+async function goTo(n) {
+  // Ocultar todas las screens
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  // Mostrar la screen objetivo
+  const target = document.querySelector(`.screen[data-screen="${n}"]`);
+  if (target) target.classList.add('active');
+
+  // Actualizar stepper (si existe)
+  document.querySelectorAll('.step-node').forEach((node, i) => {
+    node.classList.toggle('active', i === n);
+    node.classList.toggle('done',   i < n);
+  });
+
+  // Efectos por pantalla
+  if (n === 1) {
+    setTimeout(() => {
+      document.getElementById('sn-identity')?.classList.add('active');
+    }, 400);
+    kickoffDiscovery();
+  }
+  if (n === 3) loadOrgs();
+  if (n === 5) loadRepos();
+  if (n === 6) runLaunchSequence();
+}
+
+function showCortex(msg) {
+  const el = document.getElementById('cortex-msg');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.remove('show');
+  void el.offsetWidth; // reflow
+  el.classList.add('show');
+}
+
+// ── SCREEN 0 → 1: arrancar el onboarding ──────────────────────────────────
+async function kickoffDiscovery() {
+  // Lanzar Chrome en modo discovery + registro (no bloquea la UI)
+  const result = await window.onboarding.launchDiscovery({ email: userEmail });
+  if (!result.success) {
+    showCortex("Could not launch Discovery. Retry.");
+    return;
+  }
+
+  // Enviar step google_login a Chrome para que abra en la pantalla correcta
+  await window.onboarding.navigate({
+    step: 'google_login',
+    email: userEmail
+  });
+}
+
+// ── SCREEN 1 — Identity: botón Validate con polling real ──────────────────
+async function handleIdentityBtn() {
+  const btn = document.getElementById('btn-continue-identity');
+  btn.textContent = 'Awaiting accounts…';
+  btn.disabled = true;
+
+  showCortex("Register your accounts in the Discovery window.");
+
+  // Polling cada 3 segundos — espera que nucleus synapse status
+  // devuelva identity con las cuentas activas
+  identityPollTimer = setInterval(async () => {
+    const result = await window.onboarding.pollIdentity();
+    if (!result.success) return;
+
+    ['google', 'gemini', 'github'].forEach(name => {
+      if (result.accounts[name] && !activeAccounts.has(name)) {
+        activeAccounts.add(name);
+        document.getElementById('acc-' + name)?.classList.add('active');
+      }
+    });
+
+    if (REQUIRED_ACCOUNTS.every(a => activeAccounts.has(a))) {
+      clearInterval(identityPollTimer);
+      identityPollTimer = null;
+      checkIdentityReady();
+    }
+  }, 3000);
+}
+
+function checkIdentityReady() {
+  const allDone = REQUIRED_ACCOUNTS.every(a => activeAccounts.has(a));
+  if (!allDone) return;
+
+  document.getElementById('sn-identity')?.classList.add('established');
+  showCortex("Identity confirmed. Vault layer next.");
+
+  const btn = document.getElementById('btn-continue-identity');
+  btn.textContent = 'Continue';
+  btn.disabled = false;
+  btn.onclick = () => goTo(2);
+}
+
+// Wire up identity button
+document.addEventListener('DOMContentLoaded', () => {
+  const identityBtn = document.getElementById('btn-continue-identity');
+  if (identityBtn) identityBtn.onclick = handleIdentityBtn;
+});
+
+// ── SCREEN 3 — Nucleus: orgs reales + folder picker real ──────────────────
+async function loadOrgs() {
+  const result = await window.onboarding.listOrgs();
+  const list = document.getElementById('org-list');
+  if (!list) return;
+  list.innerHTML = '';
+
+  if (result.success && result.orgs.length > 0) {
+    result.orgs.forEach(org => {
+      const item = document.createElement('div');
+      item.className = 'select-item';
+      item.innerHTML = `
+        <span>${org.name}</span>
+        <span class="select-item-label">${org.type || 'GitHub Org'}</span>
+      `;
+      item.onclick = () => selectOrg(item, org.name);
+      list.appendChild(item);
+    });
+  }
+
+  const newItem = document.createElement('div');
+  newItem.className = 'select-item';
+  newItem.innerHTML = `
+    <span>+ Create new organization</span>
+    <span class="select-item-label">GitHub</span>
+  `;
+  newItem.onclick = () => selectOrg(newItem, 'new');
+  list.appendChild(newItem);
+}
+
+function selectOrg(el, orgName) {
+  document.querySelectorAll('#org-list .select-item').forEach(i => i.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedOrg = orgName;
+  checkNucleusReady();
+}
+
+async function selectFolder() {
+  const result = await window.onboarding.selectFolder();
+  if (!result.success || result.canceled) return;
+
+  const pathEl = document.getElementById('folder-path');
+  if (pathEl) pathEl.textContent = result.path;
+  document.getElementById('folder-picker')?.classList.add('selected');
+  folderSelected      = true;
+  selectedFolderPath  = result.path;
+  checkNucleusReady();
+}
+
+function checkNucleusReady() {
+  const btn = document.getElementById('btn-continue-nucleus');
+  if (!btn) return;
+  btn.disabled = !(selectedOrg && folderSelected);
+}
+
+// ── SCREEN 3b — Terminal con output real de nucleus init ──────────────────
+function runNucleusTerminal() {
+  const terminal = document.getElementById('nucleus-terminal');
+  if (!terminal) return;
+  terminal.innerHTML = '';
+
+  window.onboarding.onInitLine(({ line, isError }) => {
+    const el = document.createElement('div');
+    el.className = 'terminal-line active';
+    if (isError) el.style.color = 'var(--error)';
+    el.textContent = line;
+    terminal.appendChild(el);
+    terminal.scrollTop = terminal.scrollHeight;
+  });
+
+  window.onboarding.initNucleus({
+    org:  selectedOrg,
+    path: selectedFolderPath
+  }).then(result => {
+    if (result.success) {
+      const done = document.createElement('div');
+      done.className = 'terminal-line done';
+      done.innerHTML = '✓ Nucleus established.<span class="terminal-cursor"></span>';
+      terminal.appendChild(done);
+      setTimeout(() => goTo(5), 1200);
+    } else {
+      const err = document.createElement('div');
+      err.className = 'terminal-line';
+      err.style.color = 'var(--error)';
+      err.textContent = '✗ Init failed: ' + result.error;
+      terminal.appendChild(err);
+    }
+  });
+}
+
+// ── SCREEN 4 — Project: repos reales ─────────────────────────────────────
+async function loadRepos() {
+  const grid = document.getElementById('project-grid');
+  if (!grid) return;
+  grid.innerHTML = `
+    <div style="color:var(--text-dim);font-family:var(--font-mono);
+                font-size:12px;padding:16px;grid-column:1/-1;">
+      Loading repositories…
+    </div>`;
+
+  const result = await window.onboarding.listRepos({ org: selectedOrg });
+  grid.innerHTML = '';
+
+  if (result.success && result.repos.length > 0) {
+    result.repos.slice(0, 5).forEach(repo => {
+      const card = document.createElement('div');
+      card.className = 'project-card';
+      card.innerHTML = `
+        <div class="project-card-name">${repo.name}</div>
+        <div class="project-card-type">Repository</div>
+      `;
+      card.onclick = () => selectProject(card, repo);
+      grid.appendChild(card);
+    });
+  }
+
+  const local = document.createElement('div');
+  local.className = 'project-card';
+  local.innerHTML = `
+    <div class="project-card-name">+ Local folder</div>
+    <div class="project-card-type">Select path</div>
+  `;
+  local.onclick = async () => {
+    const fr = await window.onboarding.selectFolder();
+    if (fr.success) {
+      selectProject(local, {
+        name: fr.path.split(/[\\/]/).pop(),
+        path: fr.path
+      });
+    }
+  };
+  grid.appendChild(local);
+}
+
+function selectProject(el, repoObj) {
+  if (selectedProjectEl) selectedProjectEl.classList.remove('selected');
+  el.classList.add('selected');
+  selectedProjectEl = el;
+  selectedProject   = repoObj;
+  const btn = document.getElementById('btn-create-mandate');
+  if (btn) {
+    btn.disabled = false;
+    btn.onclick  = createMandateAndContinue;
+  }
+}
+
+// ── SCREEN 5 (Milestone) — Create Mandate + enviar step success a Chrome ──
+async function createMandateAndContinue() {
+  const btn = document.getElementById('btn-create-mandate');
+  if (btn) {
+    btn.disabled  = true;
+    btn.textContent = 'Creating mandate…';
+  }
+
+  const result = await window.onboarding.createMandate({
+    project:     selectedProject.name,
+    projectPath: selectedProject.path || ''
+  });
+
+  if (result.success) {
+    // Notificar a Chrome que el onboarding está completo
+    await window.onboarding.navigate({ step: 'success' });
+    goTo(6); // milestone screen en Conductor
+  } else {
+    if (btn) {
+      btn.disabled  = false;
+      btn.textContent = 'Retry';
+    }
+    showCortex('Mandate failed: ' + result.error);
+  }
+}
+
+// ── SCREEN 6 (Launch) — handoff real al workspace ─────────────────────────
+function runLaunchSequence() {
+  document.getElementById('ambient')?.classList.remove('milestone');
+  const sysLayer = document.getElementById('system-layer');
+  if (sysLayer) sysLayer.style.opacity = '0';
+
+  const lines = document.querySelectorAll('#launch-lines .launch-line');
+  lines.forEach((line, i) => {
+    setTimeout(() => line.classList.add('show'), 300 + i * 500);
+    setTimeout(() => line.classList.add('done'), 600 + i * 500);
+  });
+
+  showCortex("System initialization complete.");
+
+  // Handoff después de que terminen las animaciones
+  const totalDelay = 300 + (lines.length * 500) + 800;
+  setTimeout(completeOnboarding, totalDelay);
+}
+
+async function completeOnboarding() {
+  showCortex("Establishing workspace connection…");
+
+  const result = await window.onboarding.complete({
+    workspaceUrl: 'http://localhost:3000'
+  });
+
+  if (!result.success) {
+    showCortex('Handoff failed: ' + result.error);
+  }
+  // Si success: Electron redimensiona y carga la URL.
+  // El renderer no necesita hacer nada más.
+}</script>
+</body>
+</html>

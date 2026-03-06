@@ -1,341 +1,393 @@
-// main_conductor.js — Bloom Nucleus Conductor
+// main_conductor.js — Bloom Conductor
+// Integración Onboarding UI + Synapse Protocol v4.0
 
-// ============================================================================
-// UTF-8 OUTPUT (Windows)
-// ============================================================================
-if (process.platform === 'win32') {
-  if (process.stdout && process.stdout._handle) process.stdout._handle.setBlocking(true);
-  if (process.stderr && process.stderr._handle) process.stderr._handle.setBlocking(true);
-  try {
-    const { execSync } = require('child_process');
-    execSync('chcp 65001 > nul 2>&1', { stdio: 'ignore', windowsHide: true });
-  } catch {}
-}
+'use strict';
 
 const path = require('path');
 const fs   = require('fs');
 const os   = require('os');
-
-// ============================================================================
-// CLI CONTRACT
-//
-// PROBLEMA EN ELECTRON EMPAQUETADO:
-//   - process.exit() antes de require('electron') funciona en dev pero en
-//     producción Electron ya arrancó su proceso principal internamente.
-//   - Llamar process.exit() sin pasar por app.quit() deja procesos huérfanos
-//     y no flusha stdout en Windows.
-//
-// SOLUCIÓN: Detectar CLI flags, entrar en app.whenReady(), escribir output,
-//   llamar app.exit(0). Electron no crea ventanas porque nunca llamamos
-//   createWindow(). El proceso termina limpiamente sin instancia visible.
-// ============================================================================
-
-const CLI_FLAGS = ['--version', '--info', '--version-json'];
-const IS_CLI_MODE = process.argv.some(a => CLI_FLAGS.includes(a));
-
-function getBloomBasePathCLI() {
-  const homeDir = os.homedir();
-  if (process.platform === 'win32')
-    return path.join(homeDir, 'AppData', 'Local', 'BloomNucleus');
-  if (process.platform === 'darwin')
-    return path.join(homeDir, 'Library', 'Application Support', 'BloomNucleus');
-  return path.join(homeDir, '.local', 'share', 'BloomNucleus');
-}
-
-function loadBuildInfo() {
-  const candidates = [
-    // Dentro del asar (funciona porque está en asarUnpack)
-    path.join(__dirname, 'build_info.json'),
-    // En app.asar.unpacked
-    process.resourcesPath ? path.join(process.resourcesPath, 'app.asar.unpacked', 'build_info.json') : null,
-    // Junto al exe como resource
-    process.resourcesPath ? path.join(process.resourcesPath, 'build_info.json') : null,
-    // Dev: CWD
-    path.join(process.cwd(), 'build_info.json'),
-  ].filter(Boolean);
-
-  for (const c of candidates) {
-    try {
-      if (fs.existsSync(c)) return JSON.parse(fs.readFileSync(c, 'utf8'));
-    } catch { /* try next */ }
-  }
-
-  // Fallback seguro
-  const pkg = (() => { try { return require('./package.json'); } catch { return {}; } })();
-  return {
-    name: pkg.name || 'bloom-conductor',
-    product_name: pkg.productName || 'Bloom Nucleus Workspace',
-    version: pkg.version || '0.0.0',
-    build: 0,
-    full_version: `${pkg.version || '0.0.0'}+build.0`,
-    channel: 'stable',
-    built_at: 'unknown',
-    git_commit: 'unknown',
-    platform: process.platform,
-    arch: process.arch,
-    node_version: process.version,
-    electron_version: 'unknown'
-  };
-}
-
-function handleCLIOutput() {
-  const args = process.argv;
-
-  if (args.includes('--version')) {
-    const info = loadBuildInfo();
-    process.stdout.write([
-      `name:            ${info.product_name}`,
-      `version:         ${info.version}`,
-      `build:           ${info.build}`,
-      `full_version:    ${info.full_version}`,
-      `channel:         ${info.channel}`,
-    ].join('\n') + '\n');
-    return true;
-  }
-
-  if (args.includes('--info')) {
-    const info = loadBuildInfo();
-    const bloomBase = getBloomBasePathCLI();
-    process.stdout.write([
-      `name:              ${info.product_name}`,
-      `version:           ${info.version}`,
-      `build:             ${info.build}`,
-      `full_version:      ${info.full_version}`,
-      `channel:           ${info.channel}`,
-      `built_at:          ${info.built_at}`,
-      `git_commit:        ${info.git_commit}`,
-      `platform:          ${process.platform}`,
-      `arch:              ${process.arch}`,
-      `executable_path:   ${process.execPath}`,
-      `bloom_base:        ${bloomBase}`,
-      `node_version:      ${process.version}`,
-      `electron_version:  ${info.electron_version}`,
-    ].join('\n') + '\n');
-    return true;
-  }
-
-  if (args.includes('--version-json')) {
-    const info = loadBuildInfo();
-    process.stdout.write(JSON.stringify({
-      name: info.name,
-      product_name: info.product_name,
-      version: info.version,
-      build: info.build,
-      full_version: info.full_version,
-      channel: info.channel,
-      built_at: info.built_at,
-      git_commit: info.git_commit,
-      platform: process.platform,
-      arch: process.arch,
-    }, null, 2) + '\n');
-    return true;
-  }
-
-  return false;
-}
-
-// ============================================================================
-// ELECTRON INITIALIZATION
-// ============================================================================
-const { app, BrowserWindow, ipcMain } = require('electron');
-const { exec } = require('child_process');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { spawn, execFile } = require('child_process');
 const { promisify } = require('util');
 
-// ── CLI MODE: salir limpiamente sin crear ventana ─────────────────────────────
-if (IS_CLI_MODE) {
-  app.disableHardwareAcceleration();
+// ── CONSTANTS ──────────────────────────────────────────────────────────────
+const BLOOM_BASE   = path.join(process.env.LOCALAPPDATA, 'BloomNucleus');
+const NUCLEUS_EXE  = path.join(BLOOM_BASE, 'bin', 'nucleus', 'nucleus.exe');
+const NUCLEUS_JSON = path.join(BLOOM_BASE, 'config', 'nucleus.json');
 
-  app.whenReady().then(() => {
-    handleCLIOutput();
-    app.exit(0);
+let mainWindow = null;
+
+// ── NUCLEUS HELPER ─────────────────────────────────────────────────────────
+// Parser robusto que extrae el primer bloque JSON del stdout,
+// ignorando líneas de log previas.
+function execNucleus(args, timeoutMs = 15000) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(NUCLEUS_EXE, args, { windowsHide: true });
+    let stdout = '', stderr = '';
+
+    child.stdout.on('data', d => { stdout += d.toString(); });
+    child.stderr.on('data', d => { stderr += d.toString(); });
+
+    const timer = setTimeout(() => {
+      child.kill();
+      reject(new Error(`nucleus timeout after ${timeoutMs}ms: ${args.join(' ')}`));
+    }, timeoutMs);
+
+    child.on('close', code => {
+      clearTimeout(timer);
+      try {
+        // Extraer primer bloque JSON del output
+        const match = stdout.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+        if (!match) {
+          if (code !== 0) reject(new Error(`exit ${code}: ${stderr}`));
+          else resolve({ success: true, raw: stdout });
+          return;
+        }
+        const result = JSON.parse(match[0]);
+        resolve(result);
+      } catch (e) {
+        reject(new Error(`JSON parse failed: ${e.message} | stdout: ${stdout}`));
+      }
+    });
+
+    child.on('error', err => { clearTimeout(timer); reject(err); });
   });
-
-  // Evitar comportamiento por defecto de window-all-closed
-  app.on('window-all-closed', () => {});
-
-} else {
-  // ── MODO NORMAL: GUI ────────────────────────────────────────────────────────
-  startGUI();
 }
 
-// ============================================================================
-// GUI MODE
-// ============================================================================
-function startGUI() {
-  const { getLogger } = require('../shared/logger');
-  const logger = getLogger('conductor');
+// ── WINDOW FACTORIES ───────────────────────────────────────────────────────
+function createOnboardingWindow() {
+  mainWindow = new BrowserWindow({
+    width: 920,
+    height: 620,
+    minWidth: 920,
+    minHeight: 620,
+    resizable: false,
+    center: true,
+    alwaysOnTop: false,
+    backgroundColor: '#080A0E',
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload_onboarding.js')
+    },
+    icon: path.join(__dirname, 'assets', 'bloom.ico'),
+    title: 'Bloom — System Setup',
+    show: false,
+    frame: true
+  });
 
-  const execAsync = promisify(exec);
+  mainWindow.loadFile(path.join(__dirname, 'onboarding.html'));
+  mainWindow.once('ready-to-show', () => mainWindow.show());
+  mainWindow.on('closed', () => { mainWindow = null; });
+}
 
-  let mainWindow = null;
+function createWorkspaceWindow(url) {
+  mainWindow = new BrowserWindow({
+    width: 1280,
+    height: 800,
+    resizable: true,
+    center: true,
+    backgroundColor: '#080A0E',
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload_workspace.js')
+    },
+    icon: path.join(__dirname, 'assets', 'bloom.ico'),
+    title: 'Bloom Workspace',
+    show: false
+  });
 
-  const BLOOM_BASE   = path.join(process.env.LOCALAPPDATA, 'BloomNucleus');
-  const NUCLEUS_EXE  = path.join(BLOOM_BASE, 'bin', 'nucleus', 'nucleus.exe');
-  const NUCLEUS_JSON = path.join(BLOOM_BASE, 'config', 'nucleus.json');
+  mainWindow.loadURL(url);
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
+    mainWindow.maximize();
+  });
+  mainWindow.on('closed', () => { mainWindow = null; });
+}
 
-  function createWindow() {
-    logger.info('Creating Conductor window...');
-
-    mainWindow = new BrowserWindow({
-      width: 1000,
-      height: 700,
-      webPreferences: {
-        nodeIntegration: false,
-        contextIsolation: true,
-        preload: path.join(__dirname, 'preload_conductor.js')
-      },
-      icon: path.join(__dirname, 'assets', 'bloom.ico'),
-      title: 'Bloom Nucleus Workspace',
-      backgroundColor: '#0f0f1e',
-      show: false
+// ── BOOT ───────────────────────────────────────────────────────────────────
+app.whenReady().then(async () => {
+  // 1. Verificar instalación
+  if (!fs.existsSync(NUCLEUS_JSON)) {
+    await dialog.showMessageBox({
+      type: 'error',
+      title: 'Installation Required',
+      message: 'nucleus.json not found. Please run bloom-setup.exe first.'
     });
-
-    mainWindow.loadFile(path.join(__dirname, 'conductor.html'));
-
-    mainWindow.once('ready-to-show', () => {
-      logger.success('Conductor window ready');
-      mainWindow.show();
-    });
-
-    mainWindow.on('closed', () => {
-      logger.info('Conductor window closed');
-      mainWindow = null;
-    });
+    app.quit(); return;
   }
 
-  async function checkInstallation() {
-    logger.separator('INSTALLATION CHECK');
-    try {
-      if (!fs.existsSync(NUCLEUS_JSON)) {
-        logger.error('nucleus.json not found');
-        return { success: false, error: 'nucleus.json not found. Please run the installer first.' };
-      }
+  const nucleusData = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
+
+  if (!nucleusData.installation?.completed) {
+    await dialog.showMessageBox({
+      type: 'error',
+      title: 'Installation Incomplete',
+      message: 'Installation not completed. Please run bloom-setup.exe.'
+    });
+    app.quit(); return;
+  }
+
+  // 2. Decisión: onboarding o workspace
+  const onboardingDone = nucleusData?.onboarding?.completed === true;
+
+  if (onboardingDone) {
+    const url = nucleusData.onboarding.workspace_url || 'http://localhost:3000';
+    createWorkspaceWindow(url);
+  } else {
+    createOnboardingWindow();
+    setupOnboardingHandlers();
+  }
+});
+
+// ── APP LIFECYCLE ──────────────────────────────────────────────────────────
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') app.quit();
+});
+
+app.on('activate', () => {
+  if (BrowserWindow.getAllWindows().length === 0) {
+    // Re-evaluate state on reactivate (macOS)
+    if (fs.existsSync(NUCLEUS_JSON)) {
       const nucleusData = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
-      if (!nucleusData.installation || !nucleusData.installation.completed) {
-        logger.warn('Installation not completed');
-        return { success: false, error: 'Installation not completed. Please run the installer.' };
+      const onboardingDone = nucleusData?.onboarding?.completed === true;
+      if (onboardingDone) {
+        createWorkspaceWindow(nucleusData.onboarding.workspace_url || 'http://localhost:3000');
+      } else {
+        createOnboardingWindow();
+        setupOnboardingHandlers();
       }
-      if (!fs.existsSync(NUCLEUS_EXE)) {
-        logger.error('Nucleus binary not found');
-        return { success: false, error: 'Nucleus binary not found. Installation may be corrupted.' };
-      }
-      logger.success('Installation verified');
-      logger.info(`Master Profile: ${nucleusData.master_profile || 'N/A'}`);
-      return { success: true, nucleusData };
-    } catch (error) {
-      logger.error('Installation check failed:', error.message);
-      return { success: false, error: `Failed to verify installation: ${error.message}` };
     }
   }
+});
 
-  ipcMain.handle('nucleus:health', async () => {
-    logger.info('Health check requested');
+// ── ONBOARDING HANDLERS ────────────────────────────────────────────────────
+function setupOnboardingHandlers() {
+
+  // ── HANDLER: Lanzar Discovery en modo registro ──────────────────────────
+  // Paso 0 del flujo: Chrome abre en welcome automáticamente.
+  // Flags:
+  //   --mode discovery          → Discovery page
+  //   --override-register true  → Flujo B (registro de cuentas)
+  //   --override-email          → Pre-rellena el login de Google
+  //   --override-heartbeat false → Sin heartbeat durante registro
+  //   --save                    → Persiste overrides en profiles.json
+  ipcMain.handle('onboarding:launch-discovery', async (event, { email }) => {
     try {
-      const { stdout } = await execAsync(`"${NUCLEUS_EXE}" --json health`);
-      const result = JSON.parse(stdout);
-      logger.success('Health check passed');
-      return { success: true, health: result };
-    } catch (error) {
-      logger.error('Health check failed:', error.message);
-      return { success: false, error: error.message, health: { status: 'unhealthy', error: error.message } };
+      const nucleusData = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
+      const profileId = nucleusData.master_profile;
+      if (!profileId) throw new Error('master_profile not found');
+
+      const args = [
+        '--json', 'synapse', 'launch', profileId,
+        '--mode', 'discovery',
+        '--override-register', 'true',
+        '--override-heartbeat', 'false',
+        '--save'
+      ];
+      if (email) args.push('--override-email', email);
+
+      const result = await execNucleus(args, 30000);
+      return { success: result.success !== false, profileId, result };
+    } catch (err) {
+      return { success: false, error: err.message };
     }
   });
 
-  ipcMain.handle('nucleus:list-profiles', async () => {
-    logger.info('Listing profiles...');
+  // ── HANDLER: Enviar step de onboarding a Chrome ─────────────────────────
+  // Usa nucleus synapse onboarding — el nuevo subcomando del spec v2.0.
+  // Temporal garantiza que la señal llega aunque Brain esté ocupado.
+  // El comando retorna inmediatamente tras enviar la señal (no espera Chrome).
+  //
+  // Steps válidos (strings, no ints):
+  //   welcome, google_login, google_login_waiting, gemini_api,
+  //   gemini_api_waiting, provider_select, api_waiting, api_success, success
+  ipcMain.handle('onboarding:navigate', async (event, { step, email, service }) => {
     try {
-      const { stdout } = await execAsync(`"${NUCLEUS_EXE}" --json profile list`);
-      const result = JSON.parse(stdout);
-      logger.success(`Found ${result.profiles?.length || 0} profiles`);
-      return { success: true, profiles: result.profiles || [] };
-    } catch (error) {
-      logger.error('Failed to list profiles:', error.message);
-      return { success: false, error: error.message, profiles: [] };
-    }
-  });
+      const nucleusData = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
+      const profileId = nucleusData.master_profile;
 
-  ipcMain.handle('nucleus:launch-profile', async (event, profileId) => {
-    logger.separator('LAUNCHING PROFILE');
-    logger.info(`Profile ID: ${profileId}`);
-    try {
-      const { stdout } = await execAsync(`"${NUCLEUS_EXE}" --json launch ${profileId}`);
-      const result = JSON.parse(stdout);
-      logger.success('Profile launched successfully');
-      return { success: true, result };
-    } catch (error) {
-      logger.error('Failed to launch profile:', error.message);
-      return { success: false, error: error.message };
-    }
-  });
+      const args = ['--json', 'synapse', 'onboarding', profileId, '--step', step];
+      if (email)   args.push('--email',   email);
+      if (service) args.push('--service', service);
 
-  ipcMain.handle('nucleus:create-profile', async (event, profileName) => {
-    logger.info(`Creating profile: ${profileName}`);
-    try {
-      const { stdout } = await execAsync(`"${NUCLEUS_EXE}" --json profile create "${profileName}"`);
-      const result = JSON.parse(stdout);
-      logger.success(`Profile created: ${result.profile_id || result.id}`);
-      return { success: true, profile: result };
-    } catch (error) {
-      logger.error('Failed to create profile:', error.message);
-      return { success: false, error: error.message };
-    }
-  });
+      const result = await execNucleus(args, 10000);
 
-  ipcMain.handle('nucleus:get-installation', async () => {
-    logger.info('Getting installation info...');
-    try {
-      if (!fs.existsSync(NUCLEUS_JSON)) {
-        logger.warn('nucleus.json not found');
-        return { success: false, error: 'nucleus.json not found' };
+      // Persistir step actual en nucleus.json (escritor: Conductor)
+      nucleusData.onboarding = nucleusData.onboarding || {};
+      nucleusData.onboarding.started      = true;
+      nucleusData.onboarding.current_step = step;
+      nucleusData.onboarding.updated_at   = new Date().toISOString();
+      if (!nucleusData.onboarding.started_at) {
+        nucleusData.onboarding.started_at = new Date().toISOString();
       }
-      const data = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
-      logger.success('Installation info retrieved');
-      return { success: true, installation: data };
-    } catch (error) {
-      logger.error('Failed to get installation info:', error.message);
-      return { success: false, error: error.message };
+      fs.writeFileSync(NUCLEUS_JSON, JSON.stringify(nucleusData, null, 2));
+
+      return { success: result.signal_sent === true || result.success !== false };
+    } catch (err) {
+      return { success: false, error: err.message };
     }
   });
 
-  app.whenReady().then(async () => {
-    logger.separator('CONDUCTOR STARTING');
-    logger.info('Bloom Nucleus Conductor');
-    logger.info(`Base path: ${BLOOM_BASE}`);
+  // ── HANDLER: Polling de identidad ───────────────────────────────────────
+  // Llama nucleus synapse status y extrae el campo identity.
+  // Retorna qué providers tienen status: "active".
+  //
+  // Estructura esperada de nucleus synapse status:
+  // {
+  //   "success": true,
+  //   "state": "RUNNING",
+  //   "identity": {
+  //     "google": { "email": "...", "status": "active" },
+  //     "gemini": { "email": "...", "status": "active" }
+  //   }
+  // }
+  ipcMain.handle('onboarding:poll-identity', async () => {
+    try {
+      const nucleusData = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
+      const profileId = nucleusData.master_profile;
 
-    const installCheck = await checkInstallation();
+      // Intento 1: synapse status con campo identity
+      try {
+        const result = await execNucleus(
+          ['--json', 'synapse', 'status', profileId], 8000
+        );
+        const raw = result.identity || {};
+        if (Object.keys(raw).length > 0) {
+          return {
+            success: true,
+            accounts: {
+              google: raw.google?.status === 'active',
+              gemini: raw.gemini?.status === 'active',
+              github: raw.github?.status === 'active'
+            }
+          };
+        }
+      } catch (_) {}
 
-    if (!installCheck.success) {
-      logger.error('Installation check failed, showing error dialog');
-      const { dialog } = require('electron');
-      await dialog.showMessageBox({
-        type: 'error',
-        title: 'Installation Required',
-        message: installCheck.error,
-        detail: 'Please run bloom-setup.exe to install Bloom Nucleus first.'
+      // Fallback: leer accounts desde nucleus.json
+      // Conductor escribe este campo cuando ACCOUNT_REGISTERED llega
+      const accounts = nucleusData.onboarding?.accounts || [];
+      return {
+        success: true,
+        accounts: {
+          google: accounts.some(a => a.provider === 'google' && a.status === 'active'),
+          gemini: accounts.some(a => a.provider === 'gemini' && a.status === 'active'),
+          github: accounts.some(a => a.provider === 'github' && a.status === 'active')
+        }
+      };
+    } catch (err) {
+      return { success: false, accounts: { google: false, gemini: false, github: false } };
+    }
+  });
+
+  // ── HANDLER: Folder picker nativo ───────────────────────────────────────
+  ipcMain.handle('onboarding:select-folder', async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openDirectory', 'createDirectory'],
+      title: 'Select Nucleus location',
+      buttonLabel: 'Select'
+    });
+    if (result.canceled || !result.filePaths.length)
+      return { success: false, canceled: true };
+    return { success: true, path: result.filePaths[0] };
+  });
+
+  // ── HANDLER: Listar orgs de GitHub ──────────────────────────────────────
+  ipcMain.handle('onboarding:list-orgs', async () => {
+    try {
+      const result = await execNucleus(['--json', 'github', 'list-orgs']);
+      return { success: true, orgs: result.orgs || [] };
+    } catch (err) {
+      return { success: false, orgs: [], error: err.message };
+    }
+  });
+
+  // ── HANDLER: Inicializar Nucleus con streaming de output ────────────────
+  ipcMain.handle('onboarding:init-nucleus', async (event, { org, path: nucleusPath }) => {
+    return new Promise((resolve) => {
+      const child = spawn(
+        NUCLEUS_EXE,
+        ['init', '--org', org, '--path', nucleusPath],
+        { windowsHide: true }
+      );
+
+      let allOutput = '';
+
+      child.stdout.on('data', d => {
+        const line = d.toString().trim();
+        if (!line) return;
+        allOutput += line + '\n';
+        event.sender.send('onboarding:init-line', { line, isError: false });
       });
-      logger.info('Quitting due to failed installation check');
-      app.quit();
-      return;
+
+      child.stderr.on('data', d => {
+        const line = d.toString().trim();
+        if (!line) return;
+        event.sender.send('onboarding:init-line', { line, isError: true });
+      });
+
+      child.on('close', code => {
+        if (code === 0) resolve({ success: true, output: allOutput });
+        else resolve({ success: false, error: `Exit code ${code}`, output: allOutput });
+      });
+
+      child.on('error', err => resolve({ success: false, error: err.message }));
+    });
+  });
+
+  // ── HANDLER: Listar repos de una org ────────────────────────────────────
+  ipcMain.handle('onboarding:list-repos', async (event, { org }) => {
+    try {
+      const result = await execNucleus(
+        ['--json', 'github', 'list-repos', '--org', org]
+      );
+      return { success: true, repos: result.repos || [] };
+    } catch (err) {
+      return { success: false, repos: [], error: err.message };
     }
-
-    createWindow();
   });
 
-  app.on('window-all-closed', () => {
-    logger.info('All windows closed');
-    if (process.platform !== 'darwin') {
-      logger.info('Quitting application');
-      app.quit();
+  // ── HANDLER: Crear Genesis Mandate ──────────────────────────────────────
+  ipcMain.handle('onboarding:create-mandate', async (event, { project, projectPath }) => {
+    try {
+      const result = await execNucleus([
+        '--json', 'mandate', 'create',
+        '--project', project,
+        '--path', projectPath
+      ]);
+      return { success: result.success !== false, result };
+    } catch (err) {
+      return { success: false, error: err.message };
     }
   });
 
-  app.on('activate', () => {
-    logger.info('Application activated');
-    if (mainWindow === null) createWindow();
-  });
+  // ── HANDLER: Completar onboarding + handoff al workspace ────────────────
+  ipcMain.handle('onboarding:complete', async (event, { workspaceUrl }) => {
+    try {
+      const nucleusData = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
+      nucleusData.onboarding = {
+        ...nucleusData.onboarding,
+        completed:     true,
+        completed_at:  new Date().toISOString(),
+        workspace_url: workspaceUrl || 'http://localhost:3000',
+        current_step:  'success'
+      };
+      fs.writeFileSync(NUCLEUS_JSON, JSON.stringify(nucleusData, null, 2));
 
-  app.on('will-quit', () => {
-    logger.separator('CONDUCTOR SHUTDOWN');
-    logger.info('Application shutting down');
+      if (mainWindow) {
+        mainWindow.setResizable(true);
+        mainWindow.setSize(1280, 800, true);
+        mainWindow.center();
+        await new Promise(r => setTimeout(r, 400));
+        mainWindow.loadURL(nucleusData.onboarding.workspace_url);
+        setTimeout(() => mainWindow?.maximize(), 600);
+      }
+
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
   });
 }
