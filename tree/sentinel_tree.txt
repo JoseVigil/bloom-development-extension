@@ -26,6 +26,7 @@ bloom-development-extension/
     │   │   ├── config.go
     │   │   ├── core.go
     │   │   ├── logger.go
+    │   │   ├── logger_helpers.go
     │   │   ├── metadata.go
     │   │   ├── paths.go
     │   │   ├── telemetry.go
@@ -40,6 +41,8 @@ bloom-development-extension/
     │   │   └── synapse_handshake.go
     │   ├── ignition/
     │   │   ├── ignition.go
+    │   │   ├── ignition_history.go
+    │   │   ├── ignition_host_init.go
     │   │   ├── ignition_identity.go
     │   │   ├── ignition_lifecycle.go
     │   │   ├── ignition_spec.go
@@ -64,13 +67,14 @@ bloom-development-extension/
     │   └── ui/
     │       ├── cockpit.go
     │       ├── dashboard.go
-    │       ├── log_station.go
-    │       └── refresher.go
+    │       └── log_station.go
     ├── main.go
     ├── scripts/
     │   ├── build-darwin.sh
     │   ├── build-linux.sh
     │   ├── build.bat
     │   ├── build_number.txt
-    │   └── extract_go_files.py
+    │   ├── extract_go_files.py
+    │   └── tree/
+    │       └── conductor_tree.txt
     └── sentinel-config.json

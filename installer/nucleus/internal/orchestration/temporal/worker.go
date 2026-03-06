@@ -132,18 +132,21 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 
 			// ✅ REGISTRAR WORKFLOWS
 			logger.Info("Registrando workflows...")
-			
+
 			// Workflow principal de ciclo de vida del perfil
 			w.RegisterWorkflow(temporalworkflows.ProfileLifecycleWorkflow)
-			
+
 			// Recovery workflow
 			w.RegisterWorkflow(temporalworkflows.RecoveryFlowWorkflow)
-			
+
 			// Workflows adicionales existentes
 			w.RegisterWorkflow(temporalworkflows.StartOllamaWorkflow)
 			w.RegisterWorkflow(temporalworkflows.VaultStatusWorkflow)
 			w.RegisterWorkflow(temporalworkflows.ShutdownAllWorkflow)
 			w.RegisterWorkflow(temporalworkflows.SeedWorkflow)
+
+			// Workflow de onboarding navigate
+			w.RegisterWorkflow(temporalworkflows.OnboardingWorkflow)
 
 			logger.Success("✅ Workflows registrados")
 
@@ -151,8 +154,8 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 			logger.Info("Registrando activities...")
 
 			// Construir paths usando PathConfig disponible
-			logsDir    := c.Paths.LogsDir
-			nucleusExe := filepath.Join(c.Paths.BinDir, "nucleus", "nucleus.exe")
+			logsDir     := c.Paths.LogsDir
+			nucleusExe  := filepath.Join(c.Paths.BinDir, "nucleus", "nucleus.exe")
 			sentinelExe := filepath.Join(c.Paths.BinDir, "sentinel", "sentinel.exe")
 
 			// Verificar que sentinel existe
@@ -183,6 +186,11 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 
 			w.RegisterActivityWithOptions(sentinelAct.SeedProfile, activity.RegisterOptions{
 				Name: "sentinel.SeedProfile",
+			})
+
+			// Activity de onboarding navigate — usa SentinelClient.RouteToProfile() directo
+			w.RegisterActivityWithOptions(sentinelAct.SendOnboardingNavigateActivity, activity.RegisterOptions{
+				Name: "sentinel.SendOnboardingNavigate",
 			})
 
 			// Registrar mandate activities (hooks post-launch)

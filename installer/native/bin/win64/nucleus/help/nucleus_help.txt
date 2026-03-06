@@ -643,6 +643,8 @@
     Subcommands:
       launch                Launch Sentinel for a profile (with pre-flight check)
         nucleus synapse launch <profile_id>
+      onboarding            Send onboarding navigation signal to a running profile
+        nucleus synapse onboarding <profile_id>
       seed                  Create new persistent profile workflow
         nucleus synapse seed <alias>
       shutdown              Shutdown a profile workflow gracefully
@@ -701,6 +703,32 @@
             "debug_port": 9222,
             "extension_loaded": true,
             "state": "RUNNING"
+          }
+
+        ----------------------------------------------------------------------
+
+      └─ ONBOARDING
+        Send onboarding navigation signal to a running profile
+
+        Usage: nucleus synapse onboarding <profile_id>
+
+        Arguments:
+          <profile_id>          required
+
+        Flags:
+          --step                     Onboarding screen to navigate to (required)
+
+        Example:
+            nucleus synapse onboarding profile_001 --step account_setup
+            nucleus --json synapse onboarding profile_001 --step account_setup
+
+        JSON Response:
+          {
+            "success": true,
+            "profile_id": "profile_001",
+            "step": "account_setup",
+            "request_id": "onb_nav_1741234567_abc",
+            "status": "routed"
           }
 
         ----------------------------------------------------------------------

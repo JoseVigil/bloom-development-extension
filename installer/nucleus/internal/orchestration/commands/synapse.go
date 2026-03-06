@@ -44,7 +44,8 @@ Available subcommands:
   shutdown      Shutdown a profile workflow
   start-ollama  Start Ollama AI service via Temporal workflow
   vault-status  Query Vault lock state via Brain
-  shutdown-all  Shutdown all orchestrated services gracefully`,
+  shutdown-all  Shutdown all orchestrated services gracefully
+  onboarding    Send onboarding navigation signal to a running profile`,
 
 		Annotations: map[string]string{
 			"category": "ORCHESTRATION",
@@ -58,6 +59,7 @@ Available subcommands:
 	cmd.AddCommand(createStartOllamaSubcommand(c))
 	cmd.AddCommand(createVaultStatusSubcommand(c))
 	cmd.AddCommand(createShutdownAllSubcommand(c))
+	cmd.AddCommand(createOnboardingSubcommand(c))
 
 	return cmd
 }
@@ -329,18 +331,18 @@ Effects:  Starts Chrome via Sentinel; creates Temporal workflow signals`,
 			defer tc.Close()
 
 			result, err := tc.ExecuteLaunchWorkflow(ctx, logger, profileID, mode, temporalclient.LaunchOverrides{
-					ConfigFile:        configFile,
-					OverrideAlias:     overrideAlias,
-					OverrideEmail:     overrideEmail,
-					OverrideExtension: overrideExtension,
-					OverrideHeartbeat: overrideHeartbeat,
-					OverrideRegister:  overrideRegister,
-					OverrideRole:      overrideRole,
-					OverrideService:   overrideService,
-					OverrideStep:      overrideStep,
-					Save:              save,
-					AddAccounts:       addAccounts,
-				})
+				ConfigFile:        configFile,
+				OverrideAlias:     overrideAlias,
+				OverrideEmail:     overrideEmail,
+				OverrideExtension: overrideExtension,
+				OverrideHeartbeat: overrideHeartbeat,
+				OverrideRegister:  overrideRegister,
+				OverrideRole:      overrideRole,
+				OverrideService:   overrideService,
+				OverrideStep:      overrideStep,
+				Save:              save,
+				AddAccounts:       addAccounts,
+			})
 			if err != nil {
 				if jsonOutput {
 					outputJSON(map[string]interface{}{
@@ -739,6 +741,103 @@ Effects:  Terminates all active Chrome processes and orchestration workflows`,
 			c.Logger.Printf("[INFO]    Services stopped: %v", result.ServicesShutdown)
 		},
 	}
+
+	return cmd
+}
+
+// ── ONBOARDING ────────────────────────────────────────────────────────────────
+
+func createOnboardingSubcommand(c *core.Core) *cobra.Command {
+	var step string
+
+	cmd := &cobra.Command{
+		Use:   "onboarding <profile_id>",
+		Short: "Send onboarding navigation signal to a running profile",
+
+		Long: `Send an onboarding navigation signal to a running Chrome profile via Brain TCP routing.
+
+This command signals the Cortex extension running in the target profile to advance
+to a specific onboarding screen. The signal travels:
+  Temporal Activity → SentinelClient → Brain TCP → bloom-host → background.js → discovery.js
+
+The command confirms Brain has routed the message (status: routed) but does not
+wait for Chrome to process it. Use ONBOARDING_COMPLETE event (sentinel listen) to
+confirm the user completed the flow.
+
+Requires: Active profile with Chrome running and Cortex extension connected.
+Effects: None on Brain state. Triggers showScreen() in the target Chrome profile.`,
+
+		Args: cobra.ExactArgs(1),
+
+		Annotations: map[string]string{
+			"category": "SYNAPSE",
+			"json_response": `{
+  "success": true,
+  "profile_id": "profile_001",
+  "step": "account_setup",
+  "request_id": "onb_nav_1741234567_abc",
+  "status": "routed"
+}`,
+		},
+
+		Example: `  nucleus synapse onboarding profile_001 --step account_setup
+  nucleus --json synapse onboarding profile_001 --step account_setup`,
+
+		Run: func(cmd *cobra.Command, args []string) {
+			profileID := args[0]
+
+			logger, err := core.InitLogger(&c.Paths, "SYNAPSE", c.IsJSON, "synapse")
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "[ERROR] Failed to initialize logger: %v\n", err)
+				os.Exit(1)
+			}
+			defer logger.Close()
+
+			if !c.IsJSON {
+				logger.Info("Sending onboarding signal to profile: %s (step: %s)", profileID, step)
+			}
+
+			ctx := context.Background()
+			tc, err := temporalclient.NewClient(ctx, &c.Paths, c.IsJSON)
+			if err != nil {
+				if c.IsJSON {
+					outputJSON(map[string]interface{}{"success": false, "error": fmt.Sprintf("failed to connect to Temporal: %v", err)})
+				} else {
+					logger.Error("Failed to connect to Temporal: %v", err)
+				}
+				os.Exit(1)
+			}
+			defer tc.Close()
+
+			result, err := tc.ExecuteOnboardingWorkflow(ctx, logger, profileID, step)
+			if err != nil {
+				if c.IsJSON {
+					outputJSON(map[string]interface{}{
+						"success":    false,
+						"profile_id": profileID,
+						"step":       step,
+						"error":      err.Error(),
+					})
+				} else {
+					logger.Error("❌ Onboarding signal failed: %v", err)
+				}
+				os.Exit(1)
+			}
+
+			if c.IsJSON {
+				outputJSON(result)
+				return
+			}
+
+			logger.Success("✅ Onboarding signal routed to profile %s", profileID)
+			logger.Info("   Step:       %s", result.Step)
+			logger.Info("   Request ID: %s", result.RequestID)
+			logger.Info("   Status:     %s", result.Status)
+		},
+	}
+
+	cmd.Flags().StringVar(&step, "step", "", "Onboarding screen to navigate to (required)")
+	cmd.MarkFlagRequired("step")
 
 	return cmd
 }

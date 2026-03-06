@@ -350,6 +350,26 @@
     "json_response": "{\n  \"success\": true,\n  \"profile_id\": \"prf_a1b2c3d4\",\n  \"chrome_pid\": 14832,\n  \"debug_port\": 9222,\n  \"extension_loaded\": true,\n  \"state\": \"RUNNING\"\n}"
   },
   {
+    "name": "onboarding",
+    "use": "onboarding \u003cprofile_id\u003e",
+    "short": "Send onboarding navigation signal to a running profile",
+    "category": "ORCHESTRATION",
+    "args": [
+      {
+        "name": "\u003cprofile_id\u003e",
+        "required": true
+      }
+    ],
+    "options": [
+      {
+        "name": "step",
+        "usage": "Onboarding screen to navigate to (required)"
+      }
+    ],
+    "example": "  nucleus synapse onboarding profile_001 --step account_setup\n  nucleus --json synapse onboarding profile_001 --step account_setup",
+    "json_response": "{\n  \"success\": true,\n  \"profile_id\": \"profile_001\",\n  \"step\": \"account_setup\",\n  \"request_id\": \"onb_nav_1741234567_abc\",\n  \"status\": \"routed\"\n}"
+  },
+  {
     "name": "seed",
     "use": "seed \u003calias\u003e",
     "short": "Create new persistent profile workflow",

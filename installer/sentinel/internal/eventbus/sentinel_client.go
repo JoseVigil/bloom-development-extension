@@ -120,13 +120,13 @@ Ejemplos:
 			},
 		}
 
-		cmd.Flags().StringVar(&brainAddr, "brain-addr", "127.0.0.1:5678", 
+		cmd.Flags().StringVar(&brainAddr, "brain-addr", "127.0.0.1:5678",
 			"Dirección TCP del Brain")
-		cmd.Flags().StringVarP(&eventType, "type", "t", "", 
+		cmd.Flags().StringVarP(&eventType, "type", "t", "",
 			"Tipo de evento (LAUNCH_PROFILE, STOP_PROFILE, etc.) [REQUERIDO]")
-		cmd.Flags().StringVarP(&profileID, "profile-id", "p", "", 
+		cmd.Flags().StringVarP(&profileID, "profile-id", "p", "",
 			"ID del perfil (opcional)")
-		cmd.Flags().StringVarP(&dataJSON, "data", "d", "", 
+		cmd.Flags().StringVarP(&dataJSON, "data", "d", "",
 			"Datos adicionales en formato JSON (opcional)")
 
 		return cmd
@@ -224,26 +224,26 @@ Ejemplos:
 						// Salida formateada
 						timestamp := time.Unix(0, event.Timestamp).Format("15:04:05.000")
 						fmt.Fprintf(os.Stderr, "[%s] %s", timestamp, event.Type)
-						
+
 						if event.ProfileID != "" {
 							fmt.Fprintf(os.Stderr, " (profile: %s)", event.ProfileID)
 						}
-						
+
 						if event.Status != "" {
 							fmt.Fprintf(os.Stderr, " [%s]", event.Status)
 						}
-						
+
 						fmt.Fprintln(os.Stderr, "")
-						
+
 						if event.Error != "" {
 							fmt.Fprintf(os.Stderr, "  Error: %s\n", event.Error)
 						}
-						
+
 						if len(event.Data) > 0 {
 							dataJSON, _ := json.MarshalIndent(event.Data, "  ", "  ")
 							fmt.Fprintf(os.Stderr, "  Data: %s\n", string(dataJSON))
 						}
-						
+
 						fmt.Fprintln(os.Stderr, "")
 					}
 				})
@@ -253,11 +253,11 @@ Ejemplos:
 			},
 		}
 
-		cmd.Flags().StringVar(&brainAddr, "brain-addr", "127.0.0.1:5678", 
+		cmd.Flags().StringVar(&brainAddr, "brain-addr", "127.0.0.1:5678",
 			"Dirección TCP del Brain")
-		cmd.Flags().StringVarP(&eventFilter, "filter", "f", "", 
+		cmd.Flags().StringVarP(&eventFilter, "filter", "f", "",
 			"Filtrar eventos por tipo o profile_id (substring match)")
-		cmd.Flags().BoolVar(&outputJSON, "json", false, 
+		cmd.Flags().BoolVar(&outputJSON, "json", false,
 			"Salida en JSON puro (sin formateo legible)")
 
 		return cmd
@@ -348,7 +348,7 @@ Ejemplos:
 					os.Exit(1)
 				}
 
-				logger.Info("Solicitando eventos desde: %s", 
+				logger.Info("Solicitando eventos desde: %s",
 					time.Unix(0, finalTimestamp).Format("2006-01-02 15:04:05"))
 
 				// Solicitar eventos
@@ -383,11 +383,11 @@ Ejemplos:
 			},
 		}
 
-		cmd.Flags().StringVar(&brainAddr, "brain-addr", "127.0.0.1:5678", 
+		cmd.Flags().StringVar(&brainAddr, "brain-addr", "127.0.0.1:5678",
 			"Dirección TCP del Brain")
-		cmd.Flags().Int64Var(&sinceTimestamp, "since", 0, 
+		cmd.Flags().Int64Var(&sinceTimestamp, "since", 0,
 			"Timestamp Unix (segundos o nanosegundos)")
-		cmd.Flags().StringVar(&sinceTime, "since-time", "", 
+		cmd.Flags().StringVar(&sinceTime, "since-time", "",
 			"Tiempo relativo (ej: 5m, 1h, 30s)")
 
 		return cmd
@@ -396,10 +396,10 @@ Ejemplos:
 
 // Utilidad: contains verifica si una cadena contiene otra
 func contains(haystack, needle string) bool {
-	return len(needle) == 0 || 
-		   (len(haystack) >= len(needle) && 
-		    haystack[:len(needle)] == needle) ||
-		   containsSubstring(haystack, needle)
+	return len(needle) == 0 ||
+		(len(haystack) >= len(needle) &&
+			haystack[:len(needle)] == needle) ||
+		containsSubstring(haystack, needle)
 }
 
 func containsSubstring(s, substr string) bool {
@@ -413,26 +413,26 @@ func containsSubstring(s, substr string) bool {
 
 // SentinelClient gestiona la comunicación con el Brain usando EventBus
 type SentinelClient struct {
-	bus         *EventBus
-	handlers    map[string][]EventHandler
-	handlersMu  sync.RWMutex
-	logger      *core.Logger
+	bus        *EventBus
+	handlers   map[string][]EventHandler
+	handlersMu sync.RWMutex
+	logger     *core.Logger
 }
 
 // NewSentinelClient crea un nuevo cliente de Sentinel que consume un EventBus
 // IMPORTANTE: Ahora recibe el logger centralizado
 func NewSentinelClient(addr string, logger *core.Logger) *SentinelClient {
 	bus := NewEventBus(addr, logger)
-	
+
 	sc := &SentinelClient{
 		bus:      bus,
 		handlers: make(map[string][]EventHandler),
 		logger:   logger,
 	}
-	
+
 	// Iniciar dispatcher de eventos desde el bus
 	go sc.eventDispatcher()
-	
+
 	return sc
 }
 
@@ -441,24 +441,24 @@ func (sc *SentinelClient) Connect() error {
 	if err := sc.bus.Connect(); err != nil {
 		return err
 	}
-	
+
 	// Iniciar el loop de lectura del bus
 	sc.bus.Start()
-	
+
 	return nil
 }
 
 // WaitForConnection espera a que la conexión esté activa
 func (sc *SentinelClient) WaitForConnection(timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
-	
+
 	for time.Now().Before(deadline) {
 		if sc.bus.IsConnected() {
 			return nil
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	
+
 	return fmt.Errorf("timeout esperando conexión")
 }
 
@@ -563,11 +563,11 @@ func (sc *SentinelClient) SendProfileStateSync(corrections []map[string]interfac
 			"source":      "startup_audit",
 		},
 	}
-	
+
 	if err := sc.Send(event); err != nil {
 		return fmt.Errorf("error enviando PROFILE_STATE_SYNC: %w", err)
 	}
-	
+
 	fmt.Fprintf(os.Stderr, "[SentinelClient] Sincronización de estado enviada (%d correcciones)\n", len(corrections))
 	return nil
 }
@@ -787,5 +787,86 @@ func (sc *SentinelClient) LaunchProfileSyncWithHeartbeat(
 				launchID, timeout,
 			)
 		}
+	}
+}
+
+// RouteToProfile envía un mensaje al Brain con target_profile y espera sincrónicamente
+// el ACK de routing correlacionado por requestID.
+//
+// El Brain recibe el mensaje, lo enruta al perfil destino a través de bloom-host,
+// y retorna { type: "ROUTED", request_id: "...", status: "routed" } como ACK.
+// Este método confirma entrega al perfil, pero NO espera que Chrome lo procese.
+//
+// Uso desde activities: pasar timeout de 10s para operaciones de navegación.
+func (sc *SentinelClient) RouteToProfile(
+	profileID string,
+	payload map[string]interface{},
+	requestID string,
+	timeout time.Duration,
+) error {
+	type result struct {
+		err error
+	}
+	resultCh := make(chan result, 1)
+	var once sync.Once
+
+	// Registrar handler para el ACK de routing
+	sc.On("ROUTED", func(event Event) {
+		// Correlacionar por request_id en Data para evitar race conditions
+		// cuando hay múltiples perfiles activos simultáneamente.
+		eventRequestID := ""
+		if event.Data != nil {
+			eventRequestID, _ = event.Data["request_id"].(string)
+		}
+		// Fallback: Brain puede retornar request_id en el campo top-level RequestID
+		if eventRequestID == "" {
+			eventRequestID = event.RequestID
+		}
+		if eventRequestID != requestID {
+			return
+		}
+
+		once.Do(func() {
+			if event.Status == "routed" || event.Status == "ok" {
+				resultCh <- result{nil}
+			} else {
+				errMsg := event.Error
+				if errMsg == "" && event.Data != nil {
+					if msg, ok := event.Data["message"].(string); ok {
+						errMsg = msg
+					}
+				}
+				if errMsg == "" {
+					errMsg = "Brain reportó error en routing sin mensaje"
+				}
+				resultCh <- result{fmt.Errorf("routing fallido: %s", errMsg)}
+			}
+		})
+	})
+
+	// Construir el evento de routing
+	routeEvent := Event{
+		Type:      "ROUTE_TO_PROFILE",
+		ProfileID: profileID,
+		RequestID: requestID,
+		Timestamp: time.Now().UnixNano(),
+		Data:      payload,
+	}
+
+	if err := sc.Send(routeEvent); err != nil {
+		return fmt.Errorf("error enviando ROUTE_TO_PROFILE a Brain: %w", err)
+	}
+
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+
+	select {
+	case res := <-resultCh:
+		return res.err
+	case <-deadline.C:
+		return fmt.Errorf(
+			"timeout esperando ACK de routing (request_id=%s, profile=%s, timeout=%s)",
+			requestID, profileID, timeout,
+		)
 	}
 }

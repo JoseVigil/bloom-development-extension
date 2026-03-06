@@ -12,6 +12,7 @@ import (
 	"nucleus/internal/core"
 	"nucleus/internal/orchestration/queries"
 	"nucleus/internal/orchestration/signals"
+	"nucleus/internal/orchestration/temporal/workflows"
 	"nucleus/internal/orchestration/types"
 )
 
@@ -127,13 +128,13 @@ func (c *Client) ExecuteSeedWorkflow(ctx context.Context, logger *core.Logger, a
 	}
 
 	return &SeedResult{
-		Success:      true,
-		ProfileID:    seedResult.ProfileID,
-		Alias:        seedResult.Alias,
-		IsMaster:     seedResult.IsMaster,
-		WorkflowID:   profileWE.GetID(),
+		Success:       true,
+		ProfileID:     seedResult.ProfileID,
+		Alias:         seedResult.Alias,
+		IsMaster:      seedResult.IsMaster,
+		WorkflowID:    profileWE.GetID(),
 		WorkflowRunID: profileWE.GetRunID(),
-		Timestamp:    time.Now().Unix(),
+		Timestamp:     time.Now().Unix(),
 	}, nil
 }
 
@@ -208,9 +209,9 @@ func (c *Client) ExecuteLaunchWorkflow(ctx context.Context, logger *core.Logger,
 	}
 
 	// Validar que el perfil está en estado apropiado para launch
-	if currentStatus.State != types.StateSeeded && 
-	   currentStatus.State != types.StateReady && 
-	   currentStatus.State != types.StateIdle {
+	if currentStatus.State != types.StateSeeded &&
+		currentStatus.State != types.StateReady &&
+		currentStatus.State != types.StateIdle {
 		return nil, fmt.Errorf("profile cannot be launched in state: %s (must be SEEDED, READY, or IDLE)", currentStatus.State)
 	}
 
@@ -316,6 +317,64 @@ func (c *Client) GetProfileStatus(ctx context.Context, profileID string) (*types
 	return &status, nil
 }
 
+// ExecuteOnboardingWorkflow ejecuta el workflow de navegación de onboarding
+// y bloquea hasta obtener el ACK de routing del Brain.
+//
+// El workflowID sigue la convención: onboarding_{profile_id}_{timestamp_unix_nano}
+// El requestID sigue el formato BTIPS: onb_nav_{timestamp_unix}_{prefix}
+func (c *Client) ExecuteOnboardingWorkflow(
+	ctx context.Context,
+	logger *core.Logger,
+	profileID string,
+	step string,
+) (*OnboardingResult, error) {
+	// Generar requestID único con formato especificado en BTIPS v4.0
+	prefix := profileID
+	if len(prefix) > 3 {
+		prefix = prefix[:3]
+	}
+	requestID := fmt.Sprintf("onb_nav_%d_%s", time.Now().Unix(), prefix)
+
+	workflowID := fmt.Sprintf("onboarding_%s_%d", profileID, time.Now().UnixNano())
+
+	logger.Info("Executing onboarding workflow: %s (step: %s, request_id: %s)", workflowID, step, requestID)
+
+	workflowOptions := client.StartWorkflowOptions{
+		ID:        workflowID,
+		TaskQueue: "profile-orchestration",
+	}
+
+	input := workflows.OnboardingNavigateInput{
+		ProfileID: profileID,
+		Step:      step,
+		RequestID: requestID,
+	}
+
+	we, err := c.client.ExecuteWorkflow(ctx, workflowOptions, "OnboardingWorkflow", input)
+	if err != nil {
+		return nil, fmt.Errorf("failed to start onboarding workflow: %w", err)
+	}
+
+	// Bloquear hasta resultado
+	var wfResult workflows.OnboardingNavigateResult
+	if err := we.Get(ctx, &wfResult); err != nil {
+		return nil, fmt.Errorf("onboarding workflow failed: %w", err)
+	}
+
+	if !wfResult.Success {
+		return nil, fmt.Errorf("onboarding routing failed: %s", wfResult.Error)
+	}
+
+	return &OnboardingResult{
+		Success:   true,
+		ProfileID: wfResult.ProfileID,
+		Step:      wfResult.Step,
+		RequestID: wfResult.RequestID,
+		Status:    wfResult.Status,
+		Timestamp: time.Now().Unix(),
+	}, nil
+}
+
 // LaunchResult contrato para Electron (respuesta de launch)
 type LaunchResult struct {
 	Success         bool                   `json:"success"`
@@ -340,4 +399,15 @@ type SeedResult struct {
 	WorkflowRunID string `json:"workflow_run_id"`
 	Error         string `json:"error,omitempty"`
 	Timestamp     int64  `json:"timestamp"`
+}
+
+// OnboardingResult contrato para Electron (respuesta de onboarding navigate)
+type OnboardingResult struct {
+	Success   bool   `json:"success"`
+	ProfileID string `json:"profile_id"`
+	Step      string `json:"step"`
+	RequestID string `json:"request_id"`
+	Status    string `json:"status"`
+	Error     string `json:"error,omitempty"`
+	Timestamp int64  `json:"timestamp"`
 }
