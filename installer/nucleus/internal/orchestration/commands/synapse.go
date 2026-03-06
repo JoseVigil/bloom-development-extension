@@ -770,7 +770,7 @@ Effects: None on Brain state. Triggers showScreen() in the target Chrome profile
 		Args: cobra.ExactArgs(1),
 
 		Annotations: map[string]string{
-			"category": "SYNAPSE",
+			"category": "ORCHESTRATION",
 			"json_response": `{
   "success": true,
   "profile_id": "profile_001",

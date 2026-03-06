@@ -445,6 +445,24 @@ function handleHostMessage(msg) {
     return;
   }
 
+  // Onboarding navigate — señal remota desde nucleus CLI
+  // Ruta: Brain TCP → bloom-host → Native Messaging → background.js → discovery.js
+  // Usar `return` para prevenir reenvío al Brain (loop prevention).
+  if (msg.command === 'onboarding_navigate') {
+    chrome.tabs.query({ url: chrome.runtime.getURL('discovery.html') }, (tabs) => {
+      if (!tabs || tabs.length === 0) {
+        console.warn('[BG] onboarding_navigate: no discovery tab found');
+        return;
+      }
+      // Enviar solo a la primera tab de discovery activa
+      chrome.tabs.sendMessage(tabs[0].id, {
+        command: 'onboarding_navigate',
+        payload: msg.payload || msg
+      });
+    });
+    return; // ← CRÍTICO: previene reenvío al Brain
+  }
+
   // Generic commands
   if (msg.command) {
     executeCommand(msg);

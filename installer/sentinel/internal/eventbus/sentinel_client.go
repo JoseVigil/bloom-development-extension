@@ -818,10 +818,6 @@ func (sc *SentinelClient) RouteToProfile(
 		if event.Data != nil {
 			eventRequestID, _ = event.Data["request_id"].(string)
 		}
-		// Fallback: Brain puede retornar request_id en el campo top-level RequestID
-		if eventRequestID == "" {
-			eventRequestID = event.RequestID
-		}
 		if eventRequestID != requestID {
 			return
 		}
@@ -848,7 +844,6 @@ func (sc *SentinelClient) RouteToProfile(
 	routeEvent := Event{
 		Type:      "ROUTE_TO_PROFILE",
 		ProfileID: profileID,
-		RequestID: requestID,
 		Timestamp: time.Now().UnixNano(),
 		Data:      payload,
 	}

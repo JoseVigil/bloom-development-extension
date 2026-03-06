@@ -563,6 +563,15 @@ class OnboardingFlow {
         this.syncWithState(state);
       }
     });
+
+    // Listener para señales de navegación remotas desde background.js
+    // Originadas en: nucleus synapse onboarding <profile_id> --step <step>
+    // Ruta: Brain TCP → bloom-host → background.js → chrome.runtime.sendMessage
+    chrome.runtime.onMessage.addListener((msg) => {
+      if (msg.command === 'onboarding_navigate' && msg.payload) {
+        this.handleOnboardingNavigate(msg.payload);
+      }
+    });
   }
 
   async checkResume() {
@@ -588,6 +597,21 @@ class OnboardingFlow {
     if (state.geminiKeyValidated && !this.apiKeyValidated) {
       this.handleApiKeyValidated();
     }
+  }
+
+  // handleOnboardingNavigate procesa señales de navegación remotas enviadas
+  // por `nucleus synapse onboarding <profile_id> --step <step>`.
+  // Llama showScreen() con el step recibido.
+  // No envía ACK — Brain ya recibió el ACK de routing antes de llegar aquí.
+  handleOnboardingNavigate(payload) {
+    const step = payload?.step;
+    if (!step) {
+      console.warn('[Onboarding] handleOnboardingNavigate: missing step in payload', payload);
+      return;
+    }
+
+    console.log('[Onboarding] Remote navigate →', step);
+    this.showScreen(step);
   }
 
   showScreen(screenName) {

@@ -1,4 +1,15 @@
 // File: internal/orchestration/temporal/workflows/onboarding_workflow.go
+// Workflow de Temporal para ejecutar la activity de navegación de onboarding.
+//
+// Workflow ID convención: onboarding_{profile_id}_{timestamp_unix_nano}
+// Request ID convención: onb_nav_{timestamp_unix}_{prefix_3chars}
+//
+// El workflow arranca una instancia del Worker que ejecuta:
+//   SendOnboardingNavigateActivity → SentinelClient TCP → Brain → bloom-host → Chrome
+//
+// No modifica estado del ProfileLifecycleWorkflow. Es un workflow de corta duración
+// (fire-and-confirm): retorna cuando Brain ACK el routing, no cuando Chrome procesa.
+
 package workflows
 
 import (
@@ -7,16 +18,18 @@ import (
 
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+
+	"nucleus/internal/orchestration/activities"
 )
 
-// OnboardingNavigateInput parámetros del workflow de onboarding
+// OnboardingNavigateInput son los parámetros de entrada del workflow
 type OnboardingNavigateInput struct {
 	ProfileID string `json:"profile_id"`
 	Step      string `json:"step"`
 	RequestID string `json:"request_id"`
 }
 
-// OnboardingNavigateResult resultado del workflow de onboarding
+// OnboardingNavigateResult es el resultado del workflow
 type OnboardingNavigateResult struct {
 	Success   bool   `json:"success"`
 	ProfileID string `json:"profile_id"`
@@ -26,20 +39,8 @@ type OnboardingNavigateResult struct {
 	Error     string `json:"error,omitempty"`
 }
 
-// OnboardingWorkflow orquesta el envío de una señal de navegación de onboarding
-// a un perfil Chrome activo a través del Brain TCP.
-//
-// Este workflow es de corta duración: envía la señal y retorna el ACK de routing.
-// NO espera que Chrome procese la señal — eso se confirma vía ONBOARDING_COMPLETE
-// en el EventBus de Sentinel (sentinel listen --filter ONBOARDING_COMPLETE).
-//
-// Flujo:
-//
-//	nucleus CLI → Temporal → OnboardingWorkflow
-//	  → SendOnboardingNavigate activity
-//	    → SentinelClient.RouteToProfile()
-//	      → Brain TCP :5678
-//	        → bloom-host → background.js → discovery.js → showScreen(step)
+// OnboardingWorkflow ejecuta la activity de navegación de onboarding y retorna
+// el ACK de routing de Brain. Workflow de corta duración — típicamente < 15s.
 func OnboardingWorkflow(ctx workflow.Context, input OnboardingNavigateInput) (OnboardingNavigateResult, error) {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("OnboardingWorkflow started",
@@ -48,28 +49,30 @@ func OnboardingWorkflow(ctx workflow.Context, input OnboardingNavigateInput) (On
 		"request_id", input.RequestID,
 	)
 
-	// Activity options: timeout corto, 3 reintentos con backoff exponencial.
-	// El timeout de 30s es suficiente para Brain TCP local; la activity interna
-	// usa un timeout más ajustado de 10s en RouteToProfile.
+	// Opciones de la activity:
+	// - StartToCloseTimeout: 30s — suficiente para TCP + Brain ACK (timeout interno: 10s)
+	// - RetryPolicy: 2 intentos máximo — la operación es idempotente (Brain ignora duplicados)
 	activityOptions := workflow.ActivityOptions{
 		StartToCloseTimeout: 30 * time.Second,
 		HeartbeatTimeout:    15 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
-			MaximumAttempts:    3,
-			InitialInterval:    time.Second,
-			BackoffCoefficient: 2.0,
-			MaximumInterval:    10 * time.Second,
+			MaximumAttempts:        2,
+			InitialInterval:        1 * time.Second,
+			BackoffCoefficient:     2.0,
+			MaximumInterval:        5 * time.Second,
+			NonRetryableErrorTypes: []string{"routing_failed"},
 		},
 	}
-	ctx = workflow.WithActivityOptions(ctx, activityOptions)
+	actCtx := workflow.WithActivityOptions(ctx, activityOptions)
 
-	var result OnboardingNavigateResult
-	err := workflow.ExecuteActivity(
-		ctx,
-		"sentinel.SendOnboardingNavigate",
-		input,
-	).Get(ctx, &result)
+	actInput := activities.OnboardingNavigateInput{
+		ProfileID: input.ProfileID,
+		Step:      input.Step,
+		RequestID: input.RequestID,
+	}
 
+	var actResult activities.OnboardingNavigateResult
+	err := workflow.ExecuteActivity(actCtx, "sentinel.SendOnboardingNavigate", actInput).Get(ctx, &actResult)
 	if err != nil {
 		logger.Error("OnboardingWorkflow activity failed",
 			"profile_id", input.ProfileID,
@@ -88,8 +91,15 @@ func OnboardingWorkflow(ctx workflow.Context, input OnboardingNavigateInput) (On
 	logger.Info("OnboardingWorkflow completed",
 		"profile_id", input.ProfileID,
 		"step", input.Step,
-		"status", result.Status,
+		"status", actResult.Status,
 	)
 
-	return result, nil
+	return OnboardingNavigateResult{
+		Success:   actResult.Success,
+		ProfileID: actResult.ProfileID,
+		Step:      actResult.Step,
+		RequestID: actResult.RequestID,
+		Status:    actResult.Status,
+		Error:     actResult.Error,
+	}, nil
 }
