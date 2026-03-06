@@ -511,3 +511,4 @@ https://github.com/karpathy/nanochat
 
 jose gmail onboarding definitivo
 https://claude.ai/chat/18d86c8a-f724-47c0-a0fd-482834928a6b
+
