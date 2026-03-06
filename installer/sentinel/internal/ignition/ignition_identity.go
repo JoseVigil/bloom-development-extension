@@ -87,6 +87,10 @@ func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profi
 		"extension_id":  ig.Core.Config.Provisioning.ExtensionID,
 		"register":      getBoolField(profileData, "register", false),
 		"heartbeat":     getBoolField(profileData, "heartbeat", true),
+		// step: paso de onboarding activo para este perfil.
+		// Usado por discovery.js para reanudar el flujo correcto tras un reload.
+		// Valor 0 = sin onboarding activo (modo normal de discovery/heartbeat).
+		"step": getIntField(profileData, "step", 0),
 	}
 
 	// === 3. AGREGAR CAMPOS ESPECÍFICOS DE LANDING (desde profiles.json) ===

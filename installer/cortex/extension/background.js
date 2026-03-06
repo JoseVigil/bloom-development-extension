@@ -117,6 +117,16 @@ async function loadConfig() {
       email: /"email"\s*:\s*"([^"]+)"/
     };
 
+    // step: paso de onboarding activo inyectado por Ignition (Gap 2)
+    const stepMatcher = {
+      step: /"step"\s*:\s*(\d+)/
+    };
+
+    // service: providers de registro activos inyectados por Ignition
+    const serviceMatcher = {
+      service: /"service"\s*:\s*"([^"]+)"/
+    };
+
     const landingMatchers = {
       total_launches: /"total_launches"\s*:\s*(\d+)/,
       uptime: /"uptime"\s*:\s*(\d+)/,
@@ -173,7 +183,9 @@ async function loadConfig() {
         
         const initialMatchers = {
           ...baseMatchers,
-          ...(mode === 'discovery' ? registerMatcher : landingMatchers)
+          ...(mode === 'discovery' ? registerMatcher : landingMatchers),
+          ...stepMatcher,
+          ...serviceMatcher
         };
         
         for (const [key, regex] of Object.entries(initialMatchers)) {
@@ -183,7 +195,7 @@ async function loadConfig() {
             let value;
             if (key === 'register') {
               value = match[1] === 'true';
-            } else if (['total_launches', 'uptime', 'intents_done'].includes(key)) {
+            } else if (['total_launches', 'uptime', 'intents_done', 'step'].includes(key)) {
               value = parseInt(match[1], 10);
             } else {
               value = match[1];
@@ -426,6 +438,46 @@ function handleHostMessage(msg) {
   if (msg.event === 'API_KEY_REGISTERED' || 
       msg.event === 'API_KEY_REGISTRATION_FAILED') {
     handleAPIKeyResponse(msg);
+    return;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // ACCOUNT_REGISTERED — confirmación de cuenta registrada desde Sentinel
+  //
+  // Flujo: discovery.js → ACCOUNT_REGISTERED → background.js (aquí)
+  //        → sendToHost → bloom-host → Sentinel → Nucleus
+  //        → nucleus synapse status devuelve identity con la cuenta activa
+  //
+  // El mensaje que llega desde discovery.js tiene la forma:
+  // {
+  //   event: 'ACCOUNT_REGISTERED',
+  //   profile_id: string,   // REQUERIDO para correlación en Nucleus
+  //   launch_id:  string,   // REQUERIDO para correlación en Nucleus
+  //   service:    string,   // 'google' | 'gemini' | 'github'
+  //   email:      string,   // dirección de la cuenta registrada
+  //   timestamp:  number
+  // }
+  //
+  // NOTA: Si profile_id o launch_id están ausentes, Nucleus no puede
+  // correlacionar el registro. Se loguea un warning pero se forwardea
+  // igual para no bloquear el flujo — Nucleus debe tolerar este caso.
+  // ─────────────────────────────────────────────────────────────────────
+  if (msg.event === 'ACCOUNT_REGISTERED') {
+    if (!msg.profile_id || !msg.launch_id) {
+      console.warn('[Synapse] ⚠️ ACCOUNT_REGISTERED recibido sin profile_id/launch_id — forwarding de todas formas');
+    }
+
+    console.log('[Synapse] ✓ ACCOUNT_REGISTERED → forwarding to native host:', msg.service, msg.email || '');
+
+    sendToHost({
+      event:      'ACCOUNT_REGISTERED',
+      profile_id: msg.profile_id  || config?.profileId,
+      launch_id:  msg.launch_id   || config?.launchId,
+      service:    msg.service,
+      email:      msg.email       || '',
+      timestamp:  msg.timestamp   || Date.now()
+    });
+
     return;
   }
 
@@ -698,6 +750,44 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
       event: "DISCOVERY_COMPLETE",
       payload: msg.payload || msg
     });
+    sendResp({ received: true });
+    return true;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // ACCOUNT_REGISTERED — originado en discovery.js tras completar el
+  // registro de una cuenta (Google, Gemini, GitHub, etc.)
+  //
+  // Este handler recibe el evento desde la discovery page y lo reenvía
+  // al native host vía sendToHost. El bloque espejo en handleHostMessage
+  // (arriba) procesa la confirmación de vuelta desde Sentinel.
+  //
+  // Contrato del payload esperado:
+  // {
+  //   event:      'ACCOUNT_REGISTERED',
+  //   profile_id: string,   // UUID del perfil — del SYNAPSE_CONFIG inyectado por Ignition
+  //   launch_id:  string,   // ID del launch activo — del SYNAPSE_CONFIG
+  //   service:    string,   // 'google' | 'gemini' | 'github'
+  //   email:      string,   // cuenta registrada
+  //   timestamp:  number
+  // }
+  // ─────────────────────────────────────────────────────────────────────
+  if (event === 'ACCOUNT_REGISTERED') {
+    if (!msg.profile_id || !msg.launch_id) {
+      console.warn('[Synapse] ⚠️ ACCOUNT_REGISTERED enviado sin profile_id/launch_id');
+    }
+
+    console.log('[Synapse] ✓ ACCOUNT_REGISTERED recibido desde discovery.js — service:', msg.service);
+
+    sendToHost({
+      event:      'ACCOUNT_REGISTERED',
+      profile_id: msg.profile_id  || config?.profileId,
+      launch_id:  msg.launch_id   || config?.launchId,
+      service:    msg.service,
+      email:      msg.email       || '',
+      timestamp:  msg.timestamp   || Date.now()
+    });
+
     sendResp({ received: true });
     return true;
   }
