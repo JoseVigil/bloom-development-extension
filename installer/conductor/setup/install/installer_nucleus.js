@@ -365,7 +365,7 @@ async function nucleusHealth() {
 
   try {
     // CRÍTICO: Usar --json para obtener respuesta estructurada
-    const result = await executeNucleusCommand(['health', '--json']);
+    const result = await executeNucleusCommand(['--json', 'health']);
     
     // El resultado debe tener la estructura:
     // { success: boolean, state: string, components: {...}, timestamp: number }
@@ -409,7 +409,7 @@ async function checkOllamaInstalled() {
   const log = ensureLogger();
   
   try {
-    const result = await executeNucleusCommand(['ollama', 'check', '--json']);
+    const result = await executeNucleusCommand(['--json', 'ollama', 'check']);
     
     if (result && result.installed === true) {
       log.success(`✓ Ollama detected: v${result.version || 'unknown'}`);
@@ -432,7 +432,7 @@ async function installOllama() {
   log.info('Starting Ollama installation via Nucleus...');
 
   try {
-    const result = await executeNucleusCommand(['ollama', 'install', '--json']);
+    const result = await executeNucleusCommand(['--json', 'ollama', 'install']);
     
     if (result && result.success) {
       log.success('✓ Ollama installed successfully');
@@ -454,7 +454,7 @@ async function ensureOllamaRunning() {
   log.info('Ensuring Ollama service is running...');
 
   try {
-    const result = await executeNucleusCommand(['ollama', 'start', '--json']);
+    const result = await executeNucleusCommand(['--json', 'ollama', 'start']);
     
     if (result && result.running === true) {
       log.success('✓ Ollama service is running');
@@ -475,7 +475,7 @@ async function pullOllamaModel(modelName) {
   log.info(`Pulling model: ${modelName}...`);
 
   try {
-    const result = await executeNucleusCommand(['ollama', 'pull', modelName, '--json']);
+    const result = await executeNucleusCommand(['--json', 'ollama', 'pull', modelName]);
     
     if (result && result.success) {
       log.success(`✓ Model ${modelName} pulled successfully`);
@@ -501,7 +501,7 @@ async function ensureOllamaModels() {
     log.info(`Checking ${model}...`);
     
     try {
-      const result = await executeNucleusCommand(['ollama', 'list', '--json']);
+      const result = await executeNucleusCommand(['--json', 'ollama', 'list']);
       
       if (result && result.models) {
         const modelExists = result.models.some(m => m.name.startsWith(model));
@@ -564,7 +564,7 @@ async function runCertification() {
   log.info('Certifying installation via Nucleus...');
 
   try {
-    const result = await executeNucleusCommand(['certify', '--json']);
+    const result = await executeNucleusCommand(['--json', 'certify']);
     
     if (result && result.success) {
       log.success('✓ Certification PASSED');
@@ -599,7 +599,7 @@ async function waitForNucleusReady(maxRetries = 30, intervalMs = 1000) {
 
   for (let i = 0; i < maxRetries; i++) {
     try {
-      const result = await executeNucleusCommand(['health', '--json']);
+      const result = await executeNucleusCommand(['--json', 'health']);
       
       if (result && result.healthy === true) {
         log.success('✓ Nucleus service is ready');
@@ -624,7 +624,7 @@ async function checkNucleusServiceStatus() {
   const log = ensureLogger();
   
   try {
-    const result = await executeNucleusCommand(['service', 'status', '--json']);
+    const result = await executeNucleusCommand(['--json', 'service', 'status']);
     
     if (result && result.running === true) {
       log.success('✓ Nucleus service is running');

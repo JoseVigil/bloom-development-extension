@@ -38,13 +38,15 @@
   COMMAND CATEGORIES
 ------------------------------------------------------------------------------------------------------------------------
 
-  SYSTEM      Health checks and system diagnostics                     2 cmds
-  IDENTITY    Profile identity and seed management                     1 cmd
-  RUNTIME     Browser instance lifecycle control                       3 cmds
-  TEMPORAL    Workflow orchestration and task execution                1 cmd
-  BRIDGE      JSON-RPC communication with Electron                     4 cmds
-  UI          Monitoring and telemetry interfaces                      2 cmds
-  --------------------------------------------------------------------  Total: 13 commands
+  SYSTEM         Health checks and system diagnostics                     2 cmds
+  IDENTITY       Profile identity and seed management                     1 cmd
+  RUNTIME        Browser instance lifecycle control                       3 cmds
+  IGNITION       Advanced launch configuration and overrides              1 cmd
+  TEMPORAL       Workflow orchestration and task execution                1 cmd
+  BRIDGE         JSON-RPC communication with Electron                     4 cmds
+  DEVELOPMENT    Integrated development environment                       1 cmd
+  UI             Monitoring and telemetry interfaces                      2 cmds
+  -----------------------------------------------------------------------  Total: 15 commands
 
 
 =======================================================[ SYSTEM ]=======================================================
@@ -143,6 +145,23 @@
     --------------------------------------------------------------------------------
 
 
+======================================================[ IGNITION ]======================================================
+
+  > LAUNCH-PROFILE
+    Lanza un perfil de Chrome y monitorea su onboarding
+
+    Usage: sentinel launch-profile <profile_id>
+
+    Arguments:
+      <profile_id>          required
+
+    Flags:
+      --timeout, -t              Timeout en segundos para esperar onboarding (no implementado aún) [default: 60]
+      --wait, -w                 Esperar a que complete el onboarding (no implementado aún)
+
+    --------------------------------------------------------------------------------
+
+
 ======================================================[ TEMPORAL ]======================================================
 
   > TEMPORAL
@@ -208,6 +227,19 @@
     --------------------------------------------------------------------------------
 
 
+====================================================[ DEVELOPMENT ]=====================================================
+
+  > DEV-START
+    Inicia el entorno de desarrollo integrado
+
+    Usage: sentinel dev-start
+
+    Example:
+        sentinel dev-start
+
+    --------------------------------------------------------------------------------
+
+
 =========================================================[ UI ]=========================================================
 
   > COCKPIT
@@ -245,7 +277,7 @@
 
 
 ------------------------------------------------------------------------------------------------------------------------
-  💡 COMMON MISTAKES & TIPS
+  � COMMON MISTAKES & TIPS
 ------------------------------------------------------------------------------------------------------------------------
 
   X MISTAKE #1: Placing --json flag after the command

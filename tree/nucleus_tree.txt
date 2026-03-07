@@ -70,6 +70,7 @@ bloom-development-extension/
     │   │   │   ├── temporal_client.go
     │   │   │   ├── worker.go
     │   │   │   └── workflows/
+    │   │   │       ├── onboarding_workflow.go
     │   │   │       ├── profile_lifecycle.go
     │   │   │       └── system_workflows.go
     │   │   ├── types/

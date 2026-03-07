@@ -506,8 +506,10 @@ moneyprinter
 Automate the creation of YouTube Shorts by providing a video topic
 https://github.com/FujiwaraChoki/MoneyPrinter
 
-nanochat
-https://github.com/karpathy/nanochat
+karpathy nanochat
+https:// github.com/karpathy/nanochat
+karpathy microgpt
+https://gist.github.com/karpathy/8627fe009c40f57531cb18360106ce95
 
 jose gmail onboarding definitivo
 https://claude.ai/chat/18d86c8a-f724-47c0-a0fd-482834928a6b

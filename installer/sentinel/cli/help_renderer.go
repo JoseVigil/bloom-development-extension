@@ -157,7 +157,7 @@ func (r *ModernHelpRenderer) printCategoriesOverview(root *cobra.Command) {
 	r.printSectionHeader("COMMAND CATEGORIES", BrightMagenta)
 	
 	categories := r.categorizeCommands(root)
-	categoryOrder := []string{"SYSTEM", "IDENTITY", "RUNTIME", "TEMPORAL", "BRIDGE", "DEVELOPMENT", "UI"}
+	categoryOrder := []string{"SYSTEM", "IDENTITY", "RUNTIME", "IGNITION", "TEMPORAL", "BRIDGE", "DEVELOPMENT", "UI"}
 	
 	maxNameLen := 0
 	for name := range categories {
@@ -201,7 +201,7 @@ func (r *ModernHelpRenderer) printCategoriesOverview(root *cobra.Command) {
 
 func (r *ModernHelpRenderer) printDetailedCommands(root *cobra.Command) {
 	categories := r.categorizeCommands(root)
-	categoryOrder := []string{"SYSTEM", "IDENTITY", "RUNTIME", "TEMPORAL", "BRIDGE", "DEVELOPMENT", "UI"}
+	categoryOrder := []string{"SYSTEM", "IDENTITY", "RUNTIME", "IGNITION", "TEMPORAL", "BRIDGE", "DEVELOPMENT", "UI"}
 	
 	for _, catName := range categoryOrder {
 		cmds, exists := categories[catName]
@@ -366,7 +366,7 @@ func (r *ModernHelpRenderer) printFooter() {
 	if r.isRedirected() {
 		emoji = "[!]"
 	} else {
-		emoji = "💡"
+		emoji = "�"
 	}
 	
 	r.writeln(r.centerText(
@@ -380,7 +380,7 @@ func (r *ModernHelpRenderer) printFooter() {
 
 func (r *ModernHelpRenderer) printCommonMistakes() {
 	r.writeln("")
-	r.printSectionHeader("💡 COMMON MISTAKES & TIPS", BrightMagenta)
+	r.printSectionHeader("� COMMON MISTAKES & TIPS", BrightMagenta)
 	
 	var bullet string
 	if r.isRedirected() {
@@ -400,7 +400,7 @@ func (r *ModernHelpRenderer) printCommonMistakes() {
 	if r.isRedirected() {
 		lightbulb = "* "
 	} else {
-		lightbulb = "💡 "
+		lightbulb = "� "
 	}
 	
 	// Mistake 1
@@ -484,6 +484,7 @@ func (r *ModernHelpRenderer) getCategoryDescription(category string) string {
 		"SYSTEM":      "Health checks and system diagnostics",
 		"IDENTITY":    "Profile identity and seed management",
 		"RUNTIME":     "Browser instance lifecycle control",
+		"IGNITION":    "Advanced launch configuration and overrides",
 		"TEMPORAL":    "Workflow orchestration and task execution",
 		"BRIDGE":      "JSON-RPC communication with Electron",
 		"DEVELOPMENT": "Integrated development environment",

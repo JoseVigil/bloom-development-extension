@@ -34,6 +34,13 @@
     ]
   },
   {
+    "name": "dev-start",
+    "use": "dev-start",
+    "short": "Inicia el entorno de desarrollo integrado",
+    "category": "DEVELOPMENT",
+    "example": "  sentinel dev-start"
+  },
+  {
     "name": "info",
     "use": "info",
     "short": "Display detailed system and runtime information",

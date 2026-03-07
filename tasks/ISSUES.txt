@@ -1,0 +1,16 @@
+MANDATE
+
+btips 
+PROMPT_onboarding_logging_v3.md
+Eventos separados con logger. Problema con comando nucleus synapse identificado
+https://claude.ai/chat/11860251-cd89-4c45-b6e7-b5e1f61c3d12
+
+roamtouch
+problema de start, nucleus service start no alcanza
+https://claude.ai/chat/dbeda0de-09cf-44da-86b7-61458758780d
+
+uitool
+Verificar health check en instalador Electron
+https://claude.ai/chat/7c68cd4f-23ba-43f1-85d7-9894285f7157
+
+

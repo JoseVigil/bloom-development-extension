@@ -22,15 +22,31 @@ let selectedProject     = null; // { name, path }
 let identityPollTimer   = null;
 let userEmail           = null; // email del usuario (capturado en Screen 1 si aplica)
 
+// ── SCREEN MAP ─────────────────────────────────────────────────────────────
+const SCREEN_IDS = [
+  'entry',        // 0
+  'identity',     // 1
+  'vault',        // 2
+  'nucleus',      // 3
+  'nucleus-init', // 4
+  'project',      // 5
+  'milestone',    // 6
+  'launch'        // 7
+];
+
 // ── NAVIGATION ─────────────────────────────────────────────────────────────
 async function goTo(n) {
-  log('info', `goTo(${n})`);
+  log('info', `goTo(${n}) — screen-${SCREEN_IDS[n]}`);
 
   // Ocultar todas las screens
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  // Mostrar la screen objetivo
-  const target = document.querySelector(`.screen[data-screen="${n}"]`);
-  if (target) target.classList.add('active');
+  // Mostrar la screen objetivo por id
+  const target = document.getElementById('screen-' + SCREEN_IDS[n]);
+  if (target) {
+    target.classList.add('active');
+  } else {
+    log('error', `screen-${SCREEN_IDS[n]} NOT FOUND in DOM`);
+  }
 
   // Actualizar stepper (si existe)
   document.querySelectorAll('.step-node').forEach((node, i) => {

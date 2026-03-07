@@ -322,14 +322,13 @@ function setupOnboardingHandlers() {
       if (!profileId) throw new Error('master_profile not found');
 
       // Spec v2.0 §8: nucleus synapse launch <profile_id> --mode discovery
-      // Flags --override-register / --override-email / --override-heartbeat / --save
-      // están pendientes de implementación en Go (no existen en el binario actual).
-      // Activar cuando nucleus los soporte:
-      //   args.push('--override-register', 'true');
-      //   args.push('--override-heartbeat', 'false');
-      //   args.push('--save');
-      //   if (email) args.push('--override-email', email);
-      const args = ['--json', 'synapse', 'launch', profileId, '--mode', 'discovery'];
+      const args = [
+        '--json', 'synapse', 'launch', profileId,
+        '--mode', 'discovery',
+        '--override-register', 'true',
+        '--override-heartbeat', 'false'
+      ];
+      if (email) args.push('--override-email', email);
 
       const result = await execNucleus(args, 30000);
       log.success('[IPC] onboarding:launch-discovery — ok');

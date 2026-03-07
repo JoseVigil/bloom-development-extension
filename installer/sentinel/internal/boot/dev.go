@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sentinel/internal/core"
 	"sentinel/internal/discovery"
+	"sentinel/internal/health"  
 	"sentinel/internal/ollama"
 	"sentinel/internal/startup"
 	"sentinel/internal/temporal"
