@@ -595,7 +595,25 @@ async function deployAllSystemBinaries(win) {
       logger.warn(`⚠️ Skipped: ${skipped.length} components`);
       skipped.forEach(name => logger.warn(`   - ${name}`));
     }
-    
+
+    // ========================================================================
+    // GUARDAR ORIGEN DE BINARIOS
+    // Permite a metamorph rollout y otras herramientas saber dónde buscar
+    // los binarios fuente sin depender de variables de entorno.
+    // paths.nucleusSource apunta a .../native/bin/<arch>/nucleus —
+    // su directorio padre es la carpeta de plataforma que usamos como origen.
+    // ========================================================================
+    const originPath = path.dirname(paths.nucleusSource); // .../native/bin/win64
+    const originPlatform = path.basename(originPath);     // 'win64' o 'win32'
+    const { app: electronApp } = require('electron');
+    const originType = (electronApp && electronApp.isPackaged) ? 'remote_release' : 'local_repo';
+
+    nucleusManager.state.installation.origin_path = originPath;
+    nucleusManager.state.installation.origin_type = originType;
+    nucleusManager.state.installation.origin_platform = originPlatform;
+
+    logger.info(`📍 Binary origin recorded: ${originPath} (${originType}, ${originPlatform})`);
+
     await nucleusManager.completeMilestone(MILESTONE, {
       deployed: deployed.length,
       skipped: skipped.length,

@@ -23,7 +23,10 @@ const EMPTY_NUCLEUS = {
   installation: {
     force_reinstall: false,
     completed: false,
-    completed_at: null
+    completed_at: null,
+    origin_path: null,
+    origin_type: null,
+    origin_platform: null
   },
 
   onboarding: {
@@ -559,6 +562,9 @@ class NucleusManager {
     this.state.installation.force_reinstall = false;
     this.state.installation.completed = false;
     this.state.installation.completed_at = null;
+    this.state.installation.origin_path = null;
+    this.state.installation.origin_type = null;
+    this.state.installation.origin_platform = null;
 
     await writeNucleus(this.state);
     

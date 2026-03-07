@@ -180,23 +180,12 @@ if %ERRORLEVEL% EQU 0 (
 echo.
 
 :: ════════════════════════════════════════════════════════════════
-:: ROLLOUT — Deploy binaries from repo to AppData
+:: ROLLOUT — intentionally skipped during build.
+:: Rollout requires administrator privileges (UAC) and is a manual
+:: deployment step, not part of the build pipeline.
+:: Run it separately when you want to deploy to AppData:
+::   metamorph rollout
 :: ════════════════════════════════════════════════════════════════
-echo Deploying binaries to AppData (rollout)...
-echo. >> "%LOG_FILE%"
-echo [ROLLOUT] Deploying binaries to AppData >> "%LOG_FILE%"
-
-"!ABS_OUTPUT_FILE!" rollout >> "%LOG_FILE%" 2>&1
-set ROLLOUT_RC=%ERRORLEVEL%
-
-if %ROLLOUT_RC% EQU 0 (
-    echo ✅ Rollout successful
-    echo [SUCCESS] Rollout completed >> "%LOG_FILE%"
-) else (
-    echo ⚠️  Rollout failed ^(non-critical, check log^)
-    echo [WARNING] Rollout failed with code %ROLLOUT_RC% >> "%LOG_FILE%"
-)
-echo.
 
 :: ════════════════════════════════════════════════════════════════
 :: INSPECT — Interrogate all binaries and write metamorph.json
