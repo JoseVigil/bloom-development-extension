@@ -81,6 +81,8 @@ const getResourcePath = (resourceName) => {
       return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'setup');
     case 'cortex':
       return path.join(workspaceRoot, '..', 'native', 'bin', 'cortex');
+    case 'bootstrap':
+      return path.join(workspaceRoot, '..', 'native', 'bin', 'bootstrap');
     case 'hooks':
       return path.join(workspaceRoot, '..', 'native', 'hooks');  
     case 'temporal':
@@ -269,6 +271,8 @@ const paths = {
   chromeWinSource: getResourcePath('chrome-win'),
   hooksSource: getResourcePath('hooks'),
   hooksDir: path.join(baseDir, 'hooks'),
+  bootstrapDir:    path.join(baseDir, 'bin', 'bootstrap'),
+  bootstrapSource: getResourcePath('bootstrap'),
 };
 
 // ============================================================================

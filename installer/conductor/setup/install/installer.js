@@ -429,6 +429,13 @@ async function deployAllSystemBinaries(win) {
       'Metamorph'
     );
     
+    // Bootstrap
+    results.bootstrap = await copyDirectorySafe(
+      paths.bootstrapSource,  
+      paths.bootstrapDir,     
+      'Bootstrap'
+    );
+
     // ========================================================================
     // 6. CORTEX (Extension Package)
     // ========================================================================

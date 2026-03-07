@@ -447,7 +447,7 @@ func (s *Supervisor) registerStream(streamID, label, logPath, description, sourc
 
 	args := []string{
 		"telemetry", "register",
-		"--id", streamID,
+		"--stream", streamID,
 		"--label", label,
 		"--path", normalizedPath,
 		"--description", description,
