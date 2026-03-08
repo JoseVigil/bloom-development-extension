@@ -236,70 +236,6 @@ if ($testExitCode -eq 0) {
 }
 
 # =========================================
-# DEPLOY LOCAL
-# =========================================
-Write-Host ""
-Write-Step "Desplegando localmente..."
-
-$deployBin = Join-Path $env:LOCALAPPDATA "BloomNucleus\bin\brain"
-
-# Limpiar destino
-if (Test-Path $deployBin) {
-    try {
-        Remove-Item $deployBin -Recurse -Force -ErrorAction Stop
-    } catch {
-        Get-Process -Name "brain" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-        Start-Sleep -Seconds 1
-        Remove-Item $deployBin -Recurse -Force -ErrorAction SilentlyContinue
-    }
-}
-
-# Copiar archivos
-try {
-    New-Item -ItemType Directory -Path $deployBin -Force | Out-Null
-    $sourceDir = Split-Path $exePath -Parent
-    Copy-Item "$sourceDir\*" $deployBin -Recurse -Force
-    Write-Success "Binario desplegado"
-} catch {
-    Write-Error "Error copiando archivos: $_"
-}
-
-# =========================================
-# CONFIGURAR PATH
-# =========================================
-Write-Host ""
-Write-Step "Configurando PATH..."
-
-$userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
-$bloomBinPath = Join-Path $env:LOCALAPPDATA "BloomNucleus\bin"
-
-if ($userPath -notlike "*BloomNucleus\bin*") {
-    try {
-        $newPath = "$userPath;$bloomBinPath"
-        [Environment]::SetEnvironmentVariable("PATH", $newPath, "User")
-        Write-Success "PATH actualizado (reinicia terminal)"
-    } catch {
-        Write-Warning "No se pudo actualizar PATH automaticamente"
-        Write-Host "      Anade manualmente: $bloomBinPath" -ForegroundColor Yellow
-    }
-} else {
-    Write-Success "PATH ya configurado"
-}
-
-# =========================================
-# RESUMEN FINAL
-# =========================================
-Write-Host ""
-Write-Header "$($EMO.ok) BUILD COMPLETADO"
-
-Write-Host "   $($EMO.box) Ejecutable:" -NoNewline
-Write-Host "  $deployBin\brain.exe" -ForegroundColor Yellow
-Write-Host ""
-Write-Host "   $($EMO.doc) Log:" -NoNewline
-Write-Host "         $logFile" -ForegroundColor Yellow
-Write-Host ""
-
-# =========================================
 # REGISTRAR STREAM EN TELEMETRY
 # =========================================
 Write-Step "Registrando stream de telemetry..."
@@ -343,7 +279,7 @@ Write-Host ""
 Write-Header "$($EMO.ok) BUILD COMPLETADO"
 
 Write-Host "   $($EMO.box) Ejecutable:" -NoNewline
-Write-Host "  $deployBin\brain.exe" -ForegroundColor Yellow
+Write-Host "  $exePath" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "   $($EMO.doc) Log:" -NoNewline
 Write-Host "         $logFile" -ForegroundColor Yellow

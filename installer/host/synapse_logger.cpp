@@ -37,6 +37,18 @@ SynapseLogManager::~SynapseLogManager() {
 }
 
 // ============================================================================
+// set_user_base_dir — debe llamarse antes de initialize()
+// ============================================================================
+
+void SynapseLogManager::set_user_base_dir(const std::string& base_dir) {
+    if (base_dir.empty()) return;
+    user_base_dir = base_dir;
+    std::cerr << "[" << get_timestamp_ms() << "] [DEBUG] [HOST] "
+              << "USER_BASE_DIR_SET path=" << user_base_dir << "\n";
+    std::cerr.flush();
+}
+
+// ============================================================================
 // Timestamp UTC — "YYYY-MM-DD HH:MM:SS.mmm"
 // ============================================================================
 
@@ -60,6 +72,14 @@ std::string SynapseLogManager::get_timestamp_ms() {
 // ============================================================================
 
 std::string SynapseLogManager::get_base_log_directory() {
+    // Priority 1: explicit path passed by Sentinel via --user-base-dir.
+    // This is the path Sentinel resolved with the real user token, so it is
+    // always correct regardless of whether the process runs in Session 0
+    // (spawned by Chrome) or in the user session (spawned by Sentinel --init).
+    if (!user_base_dir.empty()) {
+        return user_base_dir + PATH_SEP "logs";
+    }
+
 #ifdef _WIN32
     // LOCALAPPDATA del entorno tiene prioridad sobre SHGetFolderPathA.
     // Cuando bloom-host es spawneado por Brain (servicio SYSTEM), el manager
@@ -266,9 +286,194 @@ bool SynapseLogManager::is_ready() const {
 std::string SynapseLogManager::get_log_directory()      const { return log_directory;      }
 std::string SynapseLogManager::get_host_log_path()      const { return host_log_path;      }
 std::string SynapseLogManager::get_extension_log_path() const { return extension_log_path; }
+std::string SynapseLogManager::get_cortex_log_path()    const { return extension_log_path; }
 
 // ============================================================================
-// log_native
+// initialize_from_telemetry() — NM mode path resolution via telemetry.json
+//
+// Instead of constructing paths from %LOCALAPPDATA% (which resolves to the
+// System profile when Chrome spawns the host), we read the absolute paths
+// that Brain already wrote to telemetry.json before Chrome was launched.
+//
+// Expected telemetry.json structure (relevant excerpt):
+//   {
+//     "active_streams": {
+//       "host_{launch_id}":   { "path": "C:\\...\\host_20260308.log",   ... },
+//       "cortex_{launch_id}": { "path": "C:\\...\\cortex_ext_20260308.log", ... }
+//     }
+//   }
+//
+// Falls back to initialize(profile_id, launch_id) if telemetry.json cannot
+// be read or the expected keys are absent.
+// ============================================================================
+
+// Minimal JSON string extractor: finds "key": "value" and returns value.
+// Handles Windows backslash-escaped paths (\\Users\\...).
+static std::string extract_json_string(const std::string& json,
+                                       const std::string& key) {
+    std::string needle = "\"" + key + "\"";
+    size_t pos = json.find(needle);
+    if (pos == std::string::npos) return "";
+
+    // Skip past key, colon, optional whitespace, opening quote
+    pos = json.find(':', pos + needle.size());
+    if (pos == std::string::npos) return "";
+    pos = json.find('"', pos + 1);
+    if (pos == std::string::npos) return "";
+    pos++; // step past opening quote
+
+    std::string result;
+    while (pos < json.size()) {
+        char c = json[pos++];
+        if (c == '\\' && pos < json.size()) {
+            char esc = json[pos++];
+            if      (esc == '\\') result += '\\';
+            else if (esc == '/')  result += '/';
+            else if (esc == '"')  result += '"';
+            else if (esc == 'n')  result += '\n';
+            else if (esc == 'r')  result += '\r';
+            else if (esc == 't')  result += '\t';
+            else                  result += esc;
+        } else if (c == '"') {
+            break; // closing quote
+        } else {
+            result += c;
+        }
+    }
+    return result;
+}
+
+bool SynapseLogManager::initialize_from_telemetry(const std::string& p_launch_id,
+                                                   const std::string& telemetry_path) {
+    if (ready) return true;
+
+    std::cerr << "[" << get_timestamp_ms() << "] [DEBUG] [HOST] "
+              << "TELEMETRY_INIT_CALLED launch=" << p_launch_id
+              << " telemetry=" << telemetry_path << "\n";
+    std::cerr.flush();
+
+    // ── 1. Read telemetry.json ────────────────────────────────────────────────
+    std::ifstream tf(telemetry_path);
+    if (!tf.is_open()) {
+        std::cerr << "[" << get_timestamp_ms() << "] [WARN] [HOST] "
+                  << "TELEMETRY_OPEN_FAIL path=" << telemetry_path
+                  << " — falling back to directory-based init\n";
+        std::cerr.flush();
+        return false;
+    }
+
+    std::string content((std::istreambuf_iterator<char>(tf)),
+                         std::istreambuf_iterator<char>());
+    tf.close();
+
+    // ── 2. Extract host stream path ───────────────────────────────────────────
+    // We need the "path" field that sits inside the "host_{launch_id}" object.
+    // Strategy: find the stream key, then find the next "path" occurrence after it.
+    std::string host_stream_key  = "host_"   + p_launch_id;
+    std::string cortex_stream_key = "cortex_" + p_launch_id;
+
+    auto extract_stream_path = [&](const std::string& stream_key) -> std::string {
+        size_t key_pos = content.find("\"" + stream_key + "\"");
+        if (key_pos == std::string::npos) return "";
+
+        // Find the opening brace of this stream object
+        size_t brace = content.find('{', key_pos);
+        if (brace == std::string::npos) return "";
+
+        // Find the matching closing brace (depth tracking)
+        int depth = 0;
+        size_t end = brace;
+        for (; end < content.size(); ++end) {
+            if (content[end] == '{') ++depth;
+            else if (content[end] == '}') { --depth; if (depth == 0) break; }
+        }
+
+        std::string stream_obj = content.substr(brace, end - brace + 1);
+        return extract_json_string(stream_obj, "path");
+    };
+
+    std::string resolved_host_path   = extract_stream_path(host_stream_key);
+    std::string resolved_cortex_path = extract_stream_path(cortex_stream_key);
+
+    if (resolved_host_path.empty()) {
+        std::cerr << "[" << get_timestamp_ms() << "] [WARN] [HOST] "
+                  << "TELEMETRY_KEY_NOT_FOUND key=" << host_stream_key
+                  << " — falling back to directory-based init\n";
+        std::cerr.flush();
+        return false;
+    }
+
+    std::cerr << "[" << get_timestamp_ms() << "] [DEBUG] [HOST] "
+              << "TELEMETRY_RESOLVED"
+              << " host="   << resolved_host_path
+              << " cortex=" << resolved_cortex_path << "\n";
+    std::cerr.flush();
+
+    // ── 3. Open files in append mode ─────────────────────────────────────────
+    launch_id          = p_launch_id;
+    host_log_path      = resolved_host_path;
+    extension_log_path = resolved_cortex_path.empty() ? resolved_host_path : resolved_cortex_path;
+
+    // Derive log_directory from host path for informational purposes
+    {
+        size_t sep = host_log_path.find_last_of("/\\");
+        log_directory = (sep != std::string::npos) ? host_log_path.substr(0, sep) : ".";
+    }
+
+    native_log.open(host_log_path, std::ios::app);
+    if (!native_log.is_open()) {
+        std::cerr << "[" << get_timestamp_ms() << "] [ERROR] [HOST] "
+                  << "TELEMETRY_OPEN_HOST_FAIL path=" << host_log_path << "\n";
+        std::cerr.flush();
+        return false;
+    }
+
+    if (!resolved_cortex_path.empty()) {
+        browser_log.open(extension_log_path, std::ios::app);
+        if (!browser_log.is_open()) {
+            std::cerr << "[" << get_timestamp_ms() << "] [WARN] [HOST] "
+                      << "TELEMETRY_OPEN_CORTEX_FAIL path=" << extension_log_path
+                      << " — cortex log will be skipped\n";
+            std::cerr.flush();
+            // Non-fatal: host log is open; cortex log will silently drop
+        }
+    }
+
+    ready = true;
+
+    // ── 4. Write session header ───────────────────────────────────────────────
+    std::string ts  = get_timestamp_ms();
+    int         pid = getpid_cross();
+
+    native_log << "\n===== HOST SESSION (NM) "
+               << ts << " UTC"
+               << " PID:"     << pid
+               << " LAUNCH:"  << launch_id
+               << " SRC:telemetry"
+               << " =====\n";
+    native_log.flush();
+
+    if (browser_log.is_open()) {
+        browser_log << "\n===== EXTENSION SESSION (NM) "
+                    << ts << " UTC"
+                    << " PID:"     << pid
+                    << " LAUNCH:"  << launch_id
+                    << " SRC:telemetry"
+                    << " =====\n";
+        browser_log.flush();
+    }
+
+    std::cerr << "[" << ts << "] [INFO] [HOST] "
+              << "Logger initialized via telemetry.json"
+              << " launch=" << launch_id
+              << " dir="    << log_directory << "\n";
+    std::cerr.flush();
+
+    flush_pending_queue();
+    return true;
+}
+
+// ============================================================================
 // ============================================================================
 
 void SynapseLogManager::log_native(const std::string& level,

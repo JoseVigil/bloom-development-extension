@@ -116,6 +116,25 @@ class ProfileManager:
 
         return {"profile_id": profile_id, "status": "destroyed"}
 
+    def get_profile(self, profile_id: str) -> Dict[str, Any]:
+        """
+        Retrieves detailed status and metadata for a single profile.
+
+        Args:
+            profile_id: Identifier of the profile to inspect.
+
+        Returns:
+            Profile metadata dict with existence and account info.
+
+        Raises:
+            ValueError: If the profile is not found in the registry.
+        """
+        profiles = self.list_profiles()
+        profile = next((p for p in profiles if p['id'] == profile_id), None)
+        if not profile:
+            raise ValueError(f"Profile {profile_id} not found")
+        return profile
+
     # --- Delegated Account Methods ---
 
     def link_account(self, profile_id: str, email: str) -> Dict[str, Any]:

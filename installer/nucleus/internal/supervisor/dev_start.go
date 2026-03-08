@@ -26,6 +26,7 @@ func init() {
 func createDevStartCommand(c *core.Core) *cobra.Command {
 	var simulation bool
 	var skipVault bool
+	var skipControlPlane bool
 	var outputJSON bool
 
 	cmd := &cobra.Command{
@@ -35,10 +36,11 @@ func createDevStartCommand(c *core.Core) *cobra.Command {
 
 1. Temporal Core verification
 2. Worker initialization check  
-3. Heavy infrastructure (Ollama) startup
-4. Governance validation
-5. Vault unlock verification
-6. Control Plane initialization (Node.js bootstrap)
+3. Brain Server startup
+4. Heavy infrastructure (Ollama) startup
+5. Governance validation
+6. Vault unlock verification
+7. Control Plane initialization (Node.js bootstrap)
 
 This command orchestrates all services required for a complete
 Nucleus development environment with proper health checks and
@@ -64,7 +66,7 @@ deterministic startup order.`,
 
 			// Execute boot sequence
 			ctx := context.Background()
-			result, err := executeBootSequence(ctx, supervisor, simulation, skipVault)
+			result, err := executeBootSequence(ctx, supervisor, simulation, skipVault, skipControlPlane)
 			if err != nil {
 				c.Logger.Printf("[ERROR] ❌ Boot sequence failed: %v", err)
 				
@@ -90,6 +92,7 @@ deterministic startup order.`,
 			c.Logger.Printf("[INFO]    Boot time: %.2fs", result.BootTime)
 			c.Logger.Printf("[INFO]    Temporal: Running (port 7233)")
 			c.Logger.Printf("[INFO]    Worker: Connected")
+			c.Logger.Printf("[INFO]    Brain Server: Running (port 5678)")
 			c.Logger.Printf("[INFO]    Ollama: PID %d (port %d)", result.OllamaPID, result.OllamaPort)
 			c.Logger.Printf("[INFO]    Vault: %s", result.VaultState)
 			c.Logger.Printf("[INFO]    Control Plane: PID %d", result.ControlPlanePID)
@@ -101,6 +104,7 @@ deterministic startup order.`,
 	// Define flags
 	cmd.Flags().BoolVar(&simulation, "simulation", false, "Run in simulation mode (use test ownership.json)")
 	cmd.Flags().BoolVar(&skipVault, "skip-vault", false, "Skip vault verification (development only)")
+	cmd.Flags().BoolVar(&skipControlPlane, "skip-control-plane", false, "Skip Control Plane startup (pre-onboarding mode)")
 	cmd.Flags().BoolVar(&outputJSON, "json", false, "Output result as JSON")
 
 	return cmd
@@ -111,6 +115,7 @@ type BootSequenceResult struct {
 	Success         bool    `json:"success"`
 	BootTime        float64 `json:"boot_time_seconds"`
 	FailedStage     string  `json:"failed_stage,omitempty"`
+	BrainPID        int     `json:"brain_pid,omitempty"`
 	OllamaPID       int     `json:"ollama_pid,omitempty"`
 	OllamaPort      int     `json:"ollama_port,omitempty"`
 	VaultState      string  `json:"vault_state"`
@@ -119,7 +124,7 @@ type BootSequenceResult struct {
 }
 
 // executeBootSequence runs the complete boot sequence
-func executeBootSequence(ctx context.Context, s *Supervisor, simulation, skipVault bool) (*BootSequenceResult, error) {
+func executeBootSequence(ctx context.Context, s *Supervisor, simulation, skipVault, skipControlPlane bool) (*BootSequenceResult, error) {
 	startTime := time.Now()
 	
 	result := &BootSequenceResult{
@@ -191,6 +196,38 @@ func executeBootSequence(ctx context.Context, s *Supervisor, simulation, skipVau
 	fmt.Printf("[INFO] ✓ Worker Manager started: PID %d\n", workerProc.PID)
 
 	// ========================================================================
+	// Phase 2.5: Start Brain Server
+	// ========================================================================
+	fmt.Println("[INFO] Starting Brain Server...")
+
+	brainProc, err := s.startBrainServer(ctx)
+	if err != nil {
+		result.Success = false
+		result.FailedStage = "brain_server_start"
+		return result, fmt.Errorf("brain server start failed: %w", err)
+	}
+
+	// Si Brain fue recién spawnado (Cmd != nil), esperar a que el puerto esté listo.
+	// Si ya estaba corriendo (Cmd == nil), isBrainRunning() ya lo confirmó — no hay que esperar.
+	if brainProc.Cmd != nil {
+		fmt.Println("[INFO] Waiting for Brain Server to be ready on port 5678...")
+		if err := s.waitForBrainReady(15 * time.Second); err != nil {
+			result.Success = false
+			result.FailedStage = "brain_server_ready"
+			return result, fmt.Errorf("brain server failed to become ready: %w", err)
+		}
+		fmt.Printf("[INFO] ✓ Brain Server ready: PID %d (port 5678)\n", brainProc.PID)
+		result.BrainPID = brainProc.PID
+	} else {
+		fmt.Println("[INFO] ✓ Brain Server already running (port 5678)")
+	}
+
+	// Registrar en telemetry si tiene log path (proceso nuevo, no externo)
+	if brainProc.LogPath != "" {
+		s.updateBrainTelemetry(brainProc)
+	}
+
+	// ========================================================================
 	// Phase 3: Start Ollama (NON-BLOCKING)
 	// ========================================================================
 	fmt.Println("[INFO] Starting Ollama (non-blocking)...")
@@ -236,15 +273,19 @@ func executeBootSequence(ctx context.Context, s *Supervisor, simulation, skipVau
 	}
 
 	// ========================================================================
-	// Phase 6: Control Plane
+	// Phase 6: Control Plane (optional — skipped during pre-onboarding)
 	// ========================================================================
-	proc, err := s.bootControlPlane(ctx, simulation)
-	if err != nil {
-		result.Success = false
-		result.FailedStage = "control_plane"
-		return result, fmt.Errorf("control plane start failed: %w", err)
+	if !skipControlPlane {
+		proc, err := s.bootControlPlane(ctx, simulation)
+		if err != nil {
+			result.Success = false
+			result.FailedStage = "control_plane"
+			return result, fmt.Errorf("control plane start failed: %w", err)
+		}
+		result.ControlPlanePID = proc.PID
+	} else {
+		fmt.Println("[INFO] ✓ Control Plane skipped (pre-onboarding mode)")
 	}
-	result.ControlPlanePID = proc.PID
 
 	// Calculate boot time
 	result.BootTime = time.Since(startTime).Seconds()

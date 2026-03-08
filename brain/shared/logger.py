@@ -360,7 +360,11 @@ _fallback_handler.setFormatter(logging.Formatter(
     '%(asctime)s | %(levelname)-8s | %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 ))
-_fallback_handler.setLevel(logging.DEBUG)
+# CRITICAL: Must be ERROR-only so DEBUG/INFO logs during module imports
+# (e.g. Paths.__init__) never reach the console before setup_global_logging()
+# has checked json_mode. setup() calls root.handlers.clear() so this is
+# always replaced when the full logger initializes.
+_fallback_handler.setLevel(logging.ERROR)
 _root = logging.getLogger()
 if not _root.handlers:
     _root.addHandler(_fallback_handler)

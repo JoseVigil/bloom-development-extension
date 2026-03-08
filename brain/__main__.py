@@ -9,7 +9,6 @@ import os
 import logging
 import multiprocessing
 from pathlib import Path
-from brain.core.profile.profile_manager import ProfileManager
 
 # ============================================================================
 # FIX CRÍTICO 0: NULL WRITER ROBUSTO (Para Servicios)
@@ -172,6 +171,7 @@ def main():
 
     # Limpiar locks
     try:
+        from brain.core.profile.profile_manager import ProfileManager
         pm = ProfileManager()
         pm.launcher.cleanup_profile_locks()
     except Exception as e:

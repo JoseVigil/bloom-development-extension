@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -148,6 +149,13 @@ func runRollout(c *core.Core, dryRun bool) error {
 
 	// Stop managed services before deploying to avoid "Access is denied" on locked files.
 	managedServices := []string{"BloomBrain", "BloomNucleusService"}
+	// processesToKill maps each service to the exe names that must be dead
+	// before files can be overwritten. Mirrors what the installer does via
+	// taskkill /F /IM <name> /T to ensure child processes are also killed.
+	processesToKill := map[string][]string{
+		"BloomBrain":        {"brain.exe"},
+		"BloomNucleusService": {"nucleus.exe", "temporal.exe"},
+	}
 	if !dryRun {
 		if !c.Config.OutputJSON {
 			fmt.Println("  Stopping services...")
@@ -159,6 +167,10 @@ func runRollout(c *core.Core, dryRun bool) error {
 				}
 			} else if !c.Config.OutputJSON {
 				fmt.Printf("  ⏹  %-20s stopped\n", svcName)
+			}
+			// Force-kill any lingering child processes so files are unlocked.
+			for _, procName := range processesToKill[svcName] {
+				killProcess(procName)
 			}
 		}
 		fmt.Println()
@@ -550,6 +562,13 @@ func waitForServiceState(s *mgr.Service, desired svc.State, timeout time.Duratio
 		time.Sleep(300 * time.Millisecond)
 	}
 	return fmt.Errorf("timed out waiting for service state %v", desired)
+}
+
+// killProcess force-kills all instances of a process by name using taskkill /F /T.
+// Silently ignores errors (process not running is not an error).
+// /T kills the process tree so child processes are also terminated.
+func killProcess(name string) {
+	_ = exec.Command("taskkill", "/F", "/IM", name, "/T").Run()
 }
 
 // cleanupOldExe removes a .old file at the given path, silently ignoring errors.

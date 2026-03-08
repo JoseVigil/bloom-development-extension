@@ -173,7 +173,11 @@ func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profi
 
 	var manifest map[string]interface{}
 	json.Unmarshal(mData, &manifest)
-	manifest["args"] = []string{"--profile-id", profileID, "--launch-id", launchID}
+	manifest["args"] = []string{
+		"--profile-id",    profileID,
+		"--launch-id",     launchID,
+		"--user-base-dir", ig.Core.Paths.AppDataDir,
+	}
 
 	updatedManifest, _ := json.MarshalIndent(manifest, "", "  ")
 	if err := os.WriteFile(manifestPath, updatedManifest, 0644); err != nil {

@@ -66,6 +66,7 @@ type ServiceResult struct {
 
 func createServiceStartCommand(c *core.Core) *cobra.Command {
 	var skipVault bool
+	var skipControlPlane bool
 	var outputJSON bool
 
 	cmd := &cobra.Command{
@@ -79,10 +80,11 @@ and will not terminate until it receives a SIGTERM or SIGINT signal.
 Boot sequence:
 1. Temporal Server verification
 2. Temporal Worker initialization
-3. Ollama LLM runtime startup
-4. Governance validation
-5. Vault status check (optional)
-6. Control Plane initialization
+3. Brain Server startup
+4. Ollama LLM runtime startup
+5. Governance validation
+6. Vault status check (optional)
+7. Control Plane initialization (optional — skipped pre-onboarding)
 
 The service will remain running and respond to health checks until
 explicitly stopped.`,
@@ -112,6 +114,7 @@ explicitly stopped.`,
 
 		Example: `  nucleus service start
   nucleus service start --skip-vault
+  nucleus service start --skip-vault --skip-control-plane
   nucleus --json service start`,
 
 		Run: func(cmd *cobra.Command, args []string) {
@@ -138,7 +141,7 @@ explicitly stopped.`,
 			c.Logger.Printf("[INFO]    Logs: %s", logsDir)
 
 			// Run boot sequence (reuse from dev-start)
-			bootResult, err := executeBootSequence(ctx, supervisor, false, skipVault)
+			bootResult, err := executeBootSequence(ctx, supervisor, false, skipVault, skipControlPlane)
 			if err != nil {
 				c.Logger.Printf("[ERROR] ❌ Service boot failed: %v", err)
 
@@ -226,6 +229,7 @@ explicitly stopped.`,
 
 	// Define flags
 	cmd.Flags().BoolVar(&skipVault, "skip-vault", false, "Skip vault verification (development only)")
+	cmd.Flags().BoolVar(&skipControlPlane, "skip-control-plane", false, "Skip Control Plane startup (pre-onboarding mode)")
 	cmd.Flags().BoolVar(&outputJSON, "json", false, "Output result as JSON")
 
 	return cmd
@@ -432,4 +436,3 @@ func shutdownServices(ctx context.Context, s *Supervisor) error {
 
 	return lastErr
 }
-

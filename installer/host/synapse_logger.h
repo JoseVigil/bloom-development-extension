@@ -40,6 +40,7 @@ private:
     std::string launch_id;
 
     bool ready;                      // true cuando ambos archivos están abiertos y listos
+    std::string user_base_dir;       // Override de AppDataDir pasado via --user-base-dir (CLI)
 
     // Cola de mensajes nativos emitidos antes de que initialize() sea llamado.
     // Cada entrada guarda el timestamp original para preservar orden cronológico.
@@ -81,6 +82,19 @@ public:
     ~SynapseLogManager();
 
     /**
+     * @brief Establece el directorio base de BloomNucleus resuelto por Sentinel
+     *        con el token del usuario real. Debe llamarse ANTES de initialize().
+     *
+     * Cuando bloom-host es spawneado por Chrome (Session 0 / SYSTEM context),
+     * %LOCALAPPDATA% resuelve al perfil de SYSTEM en lugar del usuario interactivo.
+     * Sentinel pasa el path correcto via --user-base-dir en el NM manifest args,
+     * y main() llama a este método antes de initialize().
+     *
+     * @param base_dir  Ej: "C:\\Users\\josev\\AppData\\Local\\BloomNucleus"
+     */
+    void set_user_base_dir(const std::string& base_dir);
+
+    /**
      * @brief Inicialización única — crea directorio y archivos de log.
      *
      * @param profile_id UUID del perfil (e.g., "14c11dbf-7f2a-43be-beba-7ae757cc7486")
@@ -95,6 +109,23 @@ public:
      */
     void initialize(const std::string& profile_id, const std::string& launch_id);
 
+    /**
+     * @brief Inicialización desde telemetry.json — usa los paths absolutos ya
+     *        resueltos por Brain, evitando la dependencia de %LOCALAPPDATA% que
+     *        falla cuando Chrome spawna el host en Session 0 / System context.
+     *
+     * @param p_launch_id     ID de lanzamiento (e.g., "009_14c11dbf_045012")
+     * @param telemetry_path  Ruta absoluta a telemetry.json
+     *
+     * Busca active_streams["host_{launch_id}"]["path"] y
+     *        active_streams["cortex_{launch_id}"]["path"] en telemetry.json.
+     * Abre ambos archivos en append mode.
+     *
+     * @return true si la inicialización fue exitosa, false si no.
+     */
+    bool initialize_from_telemetry(const std::string& p_launch_id,
+                                   const std::string& telemetry_path);
+
     /** true si los archivos están abiertos y listos para escribir. */
     bool is_ready() const;
 
@@ -102,6 +133,8 @@ public:
     std::string get_log_directory()      const;
     std::string get_host_log_path()      const;
     std::string get_extension_log_path() const;
+    /** Alias semántico para get_extension_log_path() — usado en handshake cortex. */
+    std::string get_cortex_log_path()    const;
 
     /**
      * @brief Escribe en el log nativo del proceso host.

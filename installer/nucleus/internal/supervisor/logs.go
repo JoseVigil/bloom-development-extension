@@ -49,10 +49,13 @@ type telemetryFile struct {
 type telemetryStream struct {
 	Path        string   `json:"path"`
 	Label       string   `json:"label,omitempty"`
+	Priority    int      `json:"priority,omitempty"`
 	Categories  []string `json:"categories"`
 	Description string   `json:"description,omitempty"`
-	LastUpdate  string   `json:"last_update,omitempty"`
+	Source      string   `json:"source,omitempty"`
 	FirstSeen   string   `json:"first_seen,omitempty"`
+	LastUpdate  string   `json:"last_update,omitempty"`
+	Active      bool     `json:"active,omitempty"`
 }
 
 // ── startup noise patterns (Brain CLI) ───────────────────────────────────────
@@ -349,6 +352,7 @@ func loadTelemetry(logsDir string) (*telemetryFile, error) {
 	return &tf, nil
 }
 
+
 // ── stream reader ─────────────────────────────────────────────────────────────
 
 type streamReadOptions struct {
@@ -457,6 +461,39 @@ func readStreamWindow(path string, start, end time.Time, noStartup bool) []timed
 		if !ts.Before(start) && !ts.After(end) {
 			result = append(result, timedLine{ts: ts, text: line})
 		}
+	}
+	return result
+}
+
+// readStreamFull reads all lines from a log file without any time filter.
+// Used for streams that are dedicated to a single launch (the stream ID already
+// contains the launch_id, so every line in the file belongs to that launch).
+// Continuation lines without a timestamp inherit the last known timestamp,
+// matching the same sticky-timestamp behaviour as readStreamWindow.
+func readStreamFull(path string, noStartup bool) []timedLine {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+
+	var result []timedLine
+	var stickyTS time.Time
+
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if noStartup && isStartupNoise(line) {
+			continue
+		}
+		ts := parseLineTimestamp(line)
+		if ts.IsZero() {
+			result = append(result, timedLine{ts: stickyTS, text: line})
+			continue
+		}
+		stickyTS = ts
+		result = append(result, timedLine{ts: ts, text: line})
 	}
 	return result
 }
@@ -836,15 +873,16 @@ type timedLine struct {
 }
 
 // calculateWindowFromTelemetry calcula la ventana de captura del trace a partir
-// de los metadatos de telemetry.json en lugar de usar un intervalo hardcodeado.
+// del launchTS y los metadatos de telemetry.json.
 //
 // Regla:
-//   - windowStart = min(launchTS-30s, min(first_seen) de todos los streams)
-//   - windowEnd   = max(launchTS+5m,  max(last_update) de todos los streams + 1m)
+//   - windowStart = launchTS - 30s  (fijo, no se expande hacia atrás)
+//   - windowEnd   = max(launchTS+5m, last_update de streams activos en esta ventana + 1m)
 //
-// Esto garantiza que ningún stream registrado en telemetry quede cortado por un
-// límite de ventana arbitrario, independientemente de cuánto tarde en terminar.
-// Si los timestamps de telemetry no son parseables, se usa el mínimo launchTS±5m.
+// IMPORTANTE: el windowStart está anclado al launchTS y nunca se expande con
+// first_seen de otros streams. Expandirlo causaba que logs de launches anteriores
+// quedaran dentro de la ventana y se acumularan en el archivo de salida.
+// Si los timestamps de telemetry no son parseables, se usa launchTS+5m como tope.
 func calculateWindowFromTelemetry(tf *telemetryFile, launchTS time.Time) (time.Time, time.Time) {
 	// Telemetry timestamps are written with time.Now().Format(time.RFC3339),
 	// which uses the local timezone. We must parse them as local time so the
@@ -868,20 +906,30 @@ func calculateWindowFromTelemetry(tf *telemetryFile, launchTS time.Time) (time.T
 		return time.Time{}
 	}
 
-	// Baseline mínima garantizada
+	// windowStart está FIJO: solo 30s antes del launch.
+	// No se expande con first_seen de otros streams para evitar capturar
+	// logs de launches anteriores.
 	start := launchTS.Add(-30 * time.Second)
 	end := launchTS.Add(5 * time.Minute)
 
+	// Solo extendemos windowEnd con last_update de streams cuyo last_update
+	// cae DENTRO de la ventana del launch (es decir, >= launchTS - margen).
+	// Streams con last_update anterior al launch pertenecen a otro launch y
+	// no deben influir en el windowEnd de este trace.
 	for _, stream := range tf.ActiveStreams {
-		if fs := parseLocal(stream.FirstSeen); !fs.IsZero() && fs.Before(start) {
-			start = fs
+		lu := parseLocal(stream.LastUpdate)
+		if lu.IsZero() {
+			continue
 		}
-		if lu := parseLocal(stream.LastUpdate); !lu.IsZero() {
-			// +1m de margen sobre el último evento registrado en telemetry
-			candidate := lu.Add(1 * time.Minute)
-			if candidate.After(end) {
-				end = candidate
-			}
+		// Solo considerar si el last_update ocurrió después del inicio del launch.
+		// Streams que terminaron antes del launch son de un run anterior.
+		if lu.Before(launchTS) {
+			continue
+		}
+		// +1m de margen sobre el último evento registrado en telemetry
+		candidate := lu.Add(1 * time.Minute)
+		if candidate.After(end) {
+			end = candidate
 		}
 	}
 
@@ -893,13 +941,44 @@ func calculateWindowFromTelemetry(tf *telemetryFile, launchTS time.Time) (time.T
 	return start, end
 }
 
-// collectWindowLines collects all lines from all streams within the time window.
-// readStreamWindow already resolves sticky timestamps for continuation lines,
-// so we just stamp each timedLine with its stream ID without re-parsing.
-func collectWindowLines(tf *telemetryFile, start, end time.Time) []timedLine {
+// isLaunchDedicatedStream reports whether a stream is exclusively dedicated to
+// a single launch. The telemetry convention is that such streams embed the
+// launch_id (e.g. "005_cbc25063_090120") directly in the stream ID, so every
+// line in the file belongs to that launch and no time-window filter is needed.
+//
+// Streams that are persistent across launches (brain_*, sentinel_core,
+// nucleus_synapse, nucleus_orchestration, worker_manager, …) do NOT contain the
+// launch_id in their stream ID and must be filtered by time window instead.
+func isLaunchDedicatedStream(streamID, launchID string) bool {
+	if launchID == "" {
+		return false
+	}
+	return strings.Contains(streamID, launchID)
+}
+
+// collectWindowLines collects lines from all streams for the given launch.
+//
+// Two strategies are applied depending on the stream type:
+//
+//  1. Launch-dedicated streams (stream ID contains launchID):
+//     The file is read in full — every line belongs to this launch by
+//     construction, so time filtering would only risk dropping lines whose
+//     timestamps fall slightly outside the computed window.
+//
+//  2. Persistent streams (brain_*, sentinel_core, nucleus_synapse, …):
+//     These accumulate logs from every launch, so we apply the [start, end]
+//     time window to isolate only the lines that belong to this launch.
+func collectWindowLines(tf *telemetryFile, launchID string, start, end time.Time) []timedLine {
 	var all []timedLine
 	for streamID, stream := range tf.ActiveStreams {
-		lines := readStreamWindow(stream.Path, start, end, false)
+		var lines []timedLine
+		if isLaunchDedicatedStream(streamID, launchID) {
+			// Stream is exclusive to this launch — read it completely.
+			lines = readStreamFull(stream.Path, false)
+		} else {
+			// Persistent stream — filter by time window to isolate this launch.
+			lines = readStreamWindow(stream.Path, start, end, false)
+		}
 		for _, tl := range lines {
 			tl.stream = streamID
 			all = append(all, tl)
@@ -1129,7 +1208,9 @@ func runLaunchTrace(c *core.Core, launchID, profileID, outFilePath string, jsonO
 		windowStart.Format(time.RFC3339), windowEnd.Format(time.RFC3339))
 
 	// ── Step 2: Collect lines from all telemetry streams ────────────────────
-	allLines := collectWindowLines(tf, windowStart, windowEnd)
+	// Launch-dedicated streams (stream ID contains launchID) are read in full.
+	// Persistent streams are filtered by the computed time window.
+	allLines := collectWindowLines(tf, launchID, windowStart, windowEnd)
 
 	// Collect inactive streams
 	seenStreams := map[string]struct{}{}
@@ -1361,9 +1442,16 @@ func runLaunchTrace(c *core.Core, launchID, profileID, outFilePath string, jsonO
 		if !strings.Contains(streamID, "cortex") {
 			continue
 		}
-		lines := readStreamWindow(stream.Path, windowStart, windowEnd, false)
+		// cortex streams are always launch-dedicated (e.g. cortex_005_cbc25063_090120)
+		// so we read them in full — no time-window filtering needed.
+		var lines []timedLine
+		if isLaunchDedicatedStream(streamID, launchID) {
+			lines = readStreamFull(stream.Path, false)
+		} else {
+			lines = readStreamWindow(stream.Path, windowStart, windowEnd, false)
+		}
 		if len(lines) == 0 {
-			fmt.Fprintf(w, "(%s: sin actividad en ventana)\n", streamID)
+			fmt.Fprintf(w, "(%s: sin actividad)\n", streamID)
 		} else {
 			fmt.Fprintf(w, "--- %s (%s) ---\n", stream.Label, streamID)
 			for _, l := range lines {
@@ -1392,9 +1480,16 @@ func runLaunchTrace(c *core.Core, launchID, profileID, outFilePath string, jsonO
 		if !strings.Contains(streamID, "host") {
 			continue
 		}
-		lines := readStreamWindow(stream.Path, windowStart, windowEnd, false)
+		// host streams are always launch-dedicated (e.g. host_005_cbc25063_090120)
+		// so we read them in full — no time-window filtering needed.
+		var lines []timedLine
+		if isLaunchDedicatedStream(streamID, launchID) {
+			lines = readStreamFull(stream.Path, false)
+		} else {
+			lines = readStreamWindow(stream.Path, windowStart, windowEnd, false)
+		}
 		if len(lines) == 0 {
-			fmt.Fprintf(w, "(%s: sin actividad en ventana)\n", streamID)
+			fmt.Fprintf(w, "(%s: sin actividad)\n", streamID)
 		} else {
 			fmt.Fprintf(w, "--- %s (%s) ---\n", stream.Label, streamID)
 			for _, l := range lines {

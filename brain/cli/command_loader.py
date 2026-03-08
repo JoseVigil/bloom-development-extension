@@ -464,6 +464,12 @@ def load_all_commands_explicit() -> CommandRegistry:
         print(f"Warning: Could not load ProfilesListCommand: {e}")
     
     try:
+        from brain.commands.profile.profiles import ProfilesStatusCommand
+        registry.register(ProfilesStatusCommand())
+    except ImportError as e:
+        print(f"Warning: Could not load ProfilesStatusCommand: {e}")
+    
+    try:
         from brain.commands.profile.profiles import ProfilesUnlinkCommand
         registry.register(ProfilesUnlinkCommand())
     except ImportError as e:
@@ -680,6 +686,7 @@ def get_hiddenimports_list():
         'brain.commands.nucleus.sync',
         'brain.commands.profile.accounts',
         'brain.commands.profile.accounts',
+        'brain.commands.profile.profiles',
         'brain.commands.profile.profiles',
         'brain.commands.profile.profiles',
         'brain.commands.profile.profiles',

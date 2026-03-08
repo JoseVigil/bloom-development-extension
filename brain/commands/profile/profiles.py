@@ -795,3 +795,101 @@ class ProfilesAccountsRemoveCommand(BaseCommand):
         else:
             typer.echo(f"❌ {message}", err=True)
         raise typer.Exit(code=1)
+
+class ProfilesStatusCommand(BaseCommand):
+    """Muestra el estado detallado de un perfil de Chrome Worker."""
+
+    def metadata(self) -> CommandMetadata:
+        return CommandMetadata(
+            name="status",
+            category=CommandCategory.PROFILE,
+            version="1.0.0",
+            description="Muestra el estado detallado de un perfil de Worker",
+            examples=[
+                "brain profile status <profile-id>",
+                "brain profile status <profile-id> --json"
+            ]
+        )
+
+    def register(self, app: typer.Typer) -> None:
+        @app.command(name="status")
+        def profile_status(
+            ctx: typer.Context,
+            profile_id: str = typer.Argument(..., help="ID del perfil a inspeccionar")
+        ):
+            """Muestra el estado detallado de un perfil."""
+            logger.info(f"🔍 Comando: profile status - ID: {profile_id[:8]}")
+
+            gc = ctx.obj
+            if gc is None:
+                from brain.shared.context import GlobalContext
+                gc = GlobalContext()
+
+            logger.debug(f"  → Modo JSON: {gc.json_mode}")
+            logger.debug(f"  → Verbose: {gc.verbose}")
+
+            try:
+                from brain.core.profile.profile_manager import ProfileManager
+
+                logger.debug("Inicializando ProfileManager...")
+                pm = ProfileManager()
+
+                logger.info(f"Obteniendo estado del perfil {profile_id[:8]}...")
+                profile = pm.get_profile(profile_id)
+                logger.info(f"✅ Estado obtenido exitosamente")
+
+                result = {
+                    "status": "success",
+                    "operation": "status",
+                    "data": profile
+                }
+
+                gc.output(result, self._render_status)
+                logger.info("✅ Comando profile status completado")
+
+            except ValueError as e:
+                logger.error(f"❌ Perfil no encontrado: {str(e)}")
+                self._handle_error(gc, str(e))
+            except Exception as e:
+                logger.error(f"❌ Error al obtener estado: {str(e)}", exc_info=True)
+                self._handle_error(gc, f"Error al obtener estado: {str(e)}")
+
+    def _render_status(self, data: dict) -> None:
+        """Renderiza el estado detallado de un perfil."""
+        p = data.get("data", {})
+
+        profile_id = p.get("id", "N/A")
+        alias = p.get("alias", p.get("name", "N/A"))
+        is_master = p.get("master_profile", False)
+        exists = p.get("exists", False)
+        linked_account = p.get("linked_account") or "—"
+        created = p.get("created_at", "N/A")[:19].replace("T", " ") if p.get("created_at") else "N/A"
+        accounts = p.get("accounts", {})
+
+        status_icon = "✅ Activo" if exists else "❌ Borrado"
+        master_badge = " 👑 MASTER" if is_master else ""
+
+        typer.echo(f"\n🔍 Estado del Perfil{master_badge}")
+        typer.echo("─" * 50)
+        typer.echo(f"  ID:            {profile_id}")
+        typer.echo(f"  Alias:         {alias}")
+        typer.echo(f"  Estado:        {status_icon}")
+        typer.echo(f"  Cuenta linked: {linked_account}")
+        typer.echo(f"  Creado:        {created}")
+
+        if accounts:
+            typer.echo(f"\n  📦 Cuentas registradas ({len(accounts)}):")
+            for provider, identifier in accounts.items():
+                typer.echo(f"     • {provider:<15} {identifier}")
+        else:
+            typer.echo(f"\n  📦 Sin cuentas registradas")
+
+        typer.echo()
+
+    def _handle_error(self, gc, message: str):
+        """Manejo unificado de errores."""
+        if gc.json_mode:
+            typer.echo(json.dumps({"status": "error", "message": message}))
+        else:
+            typer.echo(f"❌ {message}", err=True)
+        raise typer.Exit(code=1)

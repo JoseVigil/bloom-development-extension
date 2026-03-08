@@ -219,6 +219,44 @@ func (tm *TelemetryManager) detectExternalChanges() bool {
 	return len(events) > 0
 }
 
+// launchIDFromStreamID extracts the launch_id from a launch-dedicated stream ID.
+// Convention: cortex_<launch_id> and host_<launch_id>, where launch_id follows
+// the pattern NNN_profileShort_HHMMSS (e.g. "005_cbc25063_090120").
+//
+// Returns the launch_id string if found, or "" if the stream is not
+// a launch-dedicated cortex/host stream.
+func launchIDFromStreamID(streamID string) string {
+	for _, prefix := range []string{"cortex_", "host_"} {
+		if strings.HasPrefix(streamID, prefix) {
+			launchID := strings.TrimPrefix(streamID, prefix)
+			if launchID != "" {
+				return launchID
+			}
+		}
+	}
+	return ""
+}
+
+// injectLaunchIDCategory returns a categories slice that always includes the
+// launch_id for launch-dedicated streams (cortex_*, host_*).
+// For all other streams the original slice is returned unchanged.
+// If the launch_id is already present it is not duplicated.
+func injectLaunchIDCategory(streamID string, categories []string) []string {
+	launchID := launchIDFromStreamID(streamID)
+	if launchID == "" {
+		return categories
+	}
+	for _, cat := range categories {
+		if cat == launchID {
+			return categories // already present
+		}
+	}
+	enriched := make([]string, len(categories)+1)
+	copy(enriched, categories)
+	enriched[len(categories)] = launchID
+	return enriched
+}
+
 // RegisterStream registers or updates a stream from within the nucleus process.
 // categories is a slice like []string{"nucleus", "synapse"}.
 // paths accepts one or more file paths — stored as StreamPaths (string or array in JSON).
@@ -236,6 +274,10 @@ func (tm *TelemetryManager) RegisterStream(id, label string, priority int, categ
 	for i, p := range paths {
 		normalizedPaths[i] = filepath.ToSlash(p)
 	}
+
+	// Enrich cortex/host streams with their launch_id as an explicit category
+	// so consumers can filter by launch_id without string-matching the stream ID.
+	categories = injectLaunchIDCategory(id, categories)
 
 	tm.data.Streams[id] = StreamInfo{
 		Label:       label,
@@ -812,6 +854,9 @@ func registerStreamCLI(telemetryPath, streamID, label, logPath, description, sou
 				firstSeen = existing.FirstSeen
 				existingAction = "update"
 			}
+
+			// Enrich cortex/host streams with their launch_id as an explicit category.
+			categories = injectLaunchIDCategory(streamID, categories)
 
 			telemetry.Streams[streamID] = StreamInfo{
 				Label:       label,

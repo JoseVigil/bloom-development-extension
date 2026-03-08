@@ -348,6 +348,13 @@ void handle_extension_ready(const json& msg) {
     });
     response["max_message_size"] = MAX_CHROME_MSG_SIZE;
     response["timestamp"] = get_timestamp_ms();
+
+    // Include cortex log path so the extension knows where to route LOG_ENTRY
+    // messages. This is the path Brain registered in telemetry.json — already
+    // the correct absolute path regardless of Session context.
+    if (g_logger.is_ready() && !g_logger.get_cortex_log_path().empty()) {
+        response["cortex_log_path"] = g_logger.get_cortex_log_path();
+    }
     
     std::string response_str = response.dump();
     write_message_to_chrome(response_str);
@@ -969,6 +976,16 @@ int main(int argc, char* argv[]) {
                       << " profile=" << profile_id
                       << " launch="  << launch_id << "\n";
 
+            // Si Sentinel pasó --user-base-dir, usarlo como base de logs.
+            // En modo --init Sentinel corre con token completo, así que
+            // %LOCALAPPDATA% funciona igual — pero ser explícito es más robusto.
+            {
+                std::string user_base = PlatformUtils::get_cli_argument(argc, argv, "--user-base-dir");
+                if (!user_base.empty()) {
+                    g_logger.set_user_base_dir(user_base);
+                }
+            }
+
             // initialize() crea dirs, archivos, headers de sesión y registra telemetría.
             // Con el token de Sentinel (usuario completo) CreateDirectoryA tiene permisos.
             g_logger.initialize(profile_id, launch_id);
@@ -1030,11 +1047,24 @@ int main(int argc, char* argv[]) {
         
         std::cerr << "[HOST] CLI args: profile='" << cli_profile_id 
                   << "' launch='" << cli_launch_id << "'" << std::endl;
-        
+
+        // --user-base-dir: path de BloomNucleus resuelto por Sentinel con el token
+        // del usuario real. Pasado en los args del NM manifest por ignition_identity.go.
+        // Sin este arg, get_base_log_directory() usa %LOCALAPPDATA% que en Session 0
+        // (proceso spawneado por Chrome) resuelve al perfil SYSTEM — path incorrecto.
+        std::string cli_user_base_dir = PlatformUtils::get_cli_argument(argc, argv, "--user-base-dir");
+        std::cerr << "[HOST] CLI user-base-dir: '" << cli_user_base_dir << "'" << std::endl;
+
+        if (!cli_user_base_dir.empty()) {
+            g_logger.set_user_base_dir(cli_user_base_dir);
+        }
+
         if (!cli_profile_id.empty() && !cli_launch_id.empty()) {
-            std::lock_guard<std::mutex> lock(g_identity_mutex);
-            g_profile_id = cli_profile_id;
-            g_launch_id = cli_launch_id;
+            {
+                std::lock_guard<std::mutex> lock(g_identity_mutex);
+                g_profile_id = cli_profile_id;
+                g_launch_id  = cli_launch_id;
+            }
 
             // ---------------------------------------------------------------
             // DIRECT DISK LOG — escribe directo a disco antes de que el logger
@@ -1042,10 +1072,16 @@ int main(int argc, char* argv[]) {
             // logs/host_boot.log — append, una línea por sesión.
             // ---------------------------------------------------------------
             auto write_boot_log = [&](const std::string& line) {
-                const char* appdata = std::getenv("LOCALAPPDATA");
                 std::string path;
 #ifdef _WIN32
-                if (appdata) path = std::string(appdata) + "\\BloomNucleus\\logs\\host_boot.log";
+                // Preferir user_base_dir (resuelto por Sentinel con token real)
+                // sobre %LOCALAPPDATA% (falla en Session 0 / SYSTEM context).
+                if (!cli_user_base_dir.empty()) {
+                    path = cli_user_base_dir + "\\logs\\host_boot.log";
+                } else {
+                    const char* appdata = std::getenv("LOCALAPPDATA");
+                    if (appdata) path = std::string(appdata) + "\\BloomNucleus\\logs\\host_boot.log";
+                }
 #else
                 path = "/tmp/bloom-nucleus/logs/host_boot.log";
 #endif

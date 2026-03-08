@@ -212,8 +212,6 @@ func (s *Supervisor) updateTemporalTelemetry(proc *ManagedProcess) {
 
 // ============================================================================
 // WORKER MANAGER
-// Agregar este código en supervisor.go después del método waitForTemporalReady
-// (después de la línea ~253)
 // ============================================================================
 
 // startWorkerManager starts the Temporal Worker Manager as a subprocess
@@ -298,6 +296,134 @@ func (s *Supervisor) updateWorkerTelemetry(proc *ManagedProcess) {
 		"nucleus",
 		2,
 		[]string{"nucleus"},
+	)
+}
+
+// ============================================================================
+// BRAIN SERVER MANAGEMENT
+// ============================================================================
+
+// isBrainRunning verifica si Brain ya está escuchando en puerto 5678.
+// Si está corriendo, NO lo tocamos — evita restart innecesario.
+func (s *Supervisor) isBrainRunning() bool {
+	conn, err := net.DialTimeout("tcp", "127.0.0.1:5678", 1*time.Second)
+	if err != nil {
+		return false
+	}
+	conn.Close()
+	return true
+}
+
+// startBrainServer levanta brain.exe server start como proceso gestionado.
+//
+// Brain está escrito en Python (PyInstaller frozen) y `server start` es
+// BLOQUEANTE — el proceso queda corriendo hasta recibir SIGTERM.
+// Por eso usamos cmd.Start() (spawn desacoplado) en lugar de cmd.Run().
+//
+// Si Brain ya está corriendo en puerto 5678, retorna sin tocarlo.
+func (s *Supervisor) startBrainServer(ctx context.Context) (*ManagedProcess, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Si ya está en el mapa del supervisor y está listo, no hacer nada.
+	if proc, exists := s.processes["brain_server"]; exists {
+		if proc.State == StateReady {
+			return proc, nil
+		}
+	}
+
+	// Verificar si ya está corriendo externamente (e.g. levantado a mano).
+	// En ese caso lo registramos como proceso externo sin spawnear uno nuevo.
+	if s.isBrainRunning() {
+		proc := &ManagedProcess{
+			Name:      "brain_server",
+			Cmd:       nil, // proceso externo, no gestionado por nosotros
+			PID:       0,
+			State:     StateReady,
+			StartedAt: time.Now(),
+		}
+		s.processes["brain_server"] = proc
+		fmt.Println("[INFO] ✓ Brain Server already running on port 5678 — skipping start")
+		return proc, nil
+	}
+
+	// Resolver ruta del binario: binDir/brain/brain.exe
+	brainBin := filepath.Join(s.binDir, "brain", "brain.exe")
+	if _, err := os.Stat(brainBin); err != nil {
+		return nil, fmt.Errorf("brain binary not found at %s", brainBin)
+	}
+
+	// Log file con fecha
+	today := time.Now()
+	dateStr := fmt.Sprintf("%04d%02d%02d", today.Year(), today.Month(), today.Day())
+	logPath := filepath.Join(s.logsDir, "brain", "service", fmt.Sprintf("brain_service_%s.log", dateStr))
+
+	if err := os.MkdirAll(filepath.Dir(logPath), 0755); err != nil {
+		return nil, fmt.Errorf("failed to create brain log directory: %w", err)
+	}
+
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create brain log file: %w", err)
+	}
+
+	// brain.exe service start — bloqueante, spawn desacoplado con Start()
+	cmd := exec.CommandContext(ctx, brainBin, "service", "start")
+	cmd.Stdout = logFile
+	cmd.Stderr = logFile
+	cmd.Dir = filepath.Dir(brainBin)
+
+	if err := cmd.Start(); err != nil {
+		logFile.Close()
+		return nil, fmt.Errorf("failed to spawn brain server: %w", err)
+	}
+
+	proc := &ManagedProcess{
+		Name:      "brain_server",
+		Cmd:       cmd,
+		PID:       cmd.Process.Pid,
+		State:     StateStarting,
+		LogPath:   logPath,
+		StartedAt: time.Now(),
+	}
+
+	s.processes["brain_server"] = proc
+
+	// Monitor en background — actualiza State cuando el proceso termina
+	go s.monitorProcess(proc, logFile)
+
+	return proc, nil
+}
+
+// waitForBrainReady espera hasta que Brain esté escuchando en puerto 5678.
+func (s *Supervisor) waitForBrainReady(timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if s.isBrainRunning() {
+			s.mu.Lock()
+			if proc, exists := s.processes["brain_server"]; exists {
+				proc.mu.Lock()
+				proc.State = StateReady
+				proc.mu.Unlock()
+			}
+			s.mu.Unlock()
+			return nil
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	return fmt.Errorf("brain server not ready after %v — check logs in brain/service/", timeout)
+}
+
+// updateBrainTelemetry registra el stream de Brain en telemetry.json
+func (s *Supervisor) updateBrainTelemetry(proc *ManagedProcess) {
+	s.registerStream(
+		"brain_service",
+		"🧠 BRAIN SERVER",
+		proc.LogPath,
+		"Brain TCP server log — central event bus for Chrome Native Host connections",
+		"brain",
+		1,
+		[]string{"brain", "synapse"},
 	)
 }
 
@@ -558,15 +684,17 @@ func (s *Supervisor) bootGovernance(ctx context.Context, simulation bool) error 
 	var ownershipPath string
 
 	if simulation {
-		ownershipPath = filepath.Join("installer", "nucleus", "scripts",
-			"simulation_env", ".bloom", ".ownership.json")
-	} else {
-		bloomDir := os.Getenv("BLOOM_DIR")
-		if bloomDir == "" {
-			return fmt.Errorf("BLOOM_DIR not set")
-		}
-		ownershipPath = filepath.Join(bloomDir, ".ownership.json")
-	}
+        ownershipPath = filepath.Join("installer", "nucleus", "scripts",
+            "simulation_env", ".bloom", ".ownership.json")
+    } else {
+        bloomDir := os.Getenv("BLOOM_DIR")
+        if bloomDir == "" {
+            // BLOOM_DIR no seteado = instalación en progreso, skip governance
+            fmt.Println("[INFO] ⚠️  BLOOM_DIR not set - skipping governance (installation mode)")
+            return nil
+        }
+        ownershipPath = filepath.Join(bloomDir, ".ownership.json")
+    }
 
 	// Durante instalación, si .ownership.json no existe, skip validation
 	if _, err := os.Stat(ownershipPath); err != nil {
