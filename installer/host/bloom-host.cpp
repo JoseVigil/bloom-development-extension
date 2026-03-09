@@ -537,21 +537,18 @@ void handle_service_message(const std::string& msg_str) {
         
         // � VALIDACIÓN: Solo rutear si handshake confirmado
         if (!is_handshake_confirmed()) {
-            std::cerr << "[SERVICE_MSG] ⚠️ Handshake NO confirmado - mensaje bloqueado" << std::endl;
+            std::cerr << "[SERVICE_MSG] ⚠️ Handshake NO confirmado - mensaje descartado" << std::endl;
             
             if (g_logger.is_ready()) {
                 g_logger.log_native("WARN", "MSG_BLOCKED_NO_HANDSHAKE type=" + type);
             }
             
-            // Cola el mensaje para reenvío posterior
-            {
-                std::lock_guard<std::mutex> lock(g_pending_mutex);
-                if (g_pending_messages.size() < MAX_QUEUED_MESSAGES) {
-                    g_pending_messages.push(msg_str);
-                    std::cerr << "[SERVICE_MSG] Mensaje encolado - Queue size: " 
-                              << g_pending_messages.size() << std::endl;
-                }
-            }
+            // FIX: Los mensajes en handle_service_message vienen de Brain → Host.
+            // Encolarlos en g_pending_messages y luego drenalos desde tcp_client_loop
+            // los reenvía de vuelta a Brain como si fueran mensajes del host,
+            // causando que Brain reciba type=None. Se descartan en su lugar.
+            // g_pending_messages es exclusivamente para mensajes Host → Brain
+            // que no pudieron enviarse por socket no disponible.
             
             return;
         }
@@ -1099,7 +1096,31 @@ int main(int argc, char* argv[]) {
                            + " build="   + std::to_string(BUILD));
             // ---------------------------------------------------------------
 
-            g_logger.initialize(cli_profile_id, cli_launch_id);
+            // FIX: En NM mode el host es spawneado por Chrome en Session 0 (SYSTEM context).
+            // %LOCALAPPDATA% en ese contexto resuelve al perfil de SYSTEM, no al usuario
+            // real — lo que hace que initialize() construya un path incorrecto y falle al
+            // abrir los archivos de log. Brain ya registró los paths absolutos correctos en
+            // telemetry.json antes de que Chrome arrancara, así que los usamos directamente.
+            // initialize() queda como fallback por si telemetry.json no es accesible aún.
+            {
+                std::string telemetry_path;
+                if (!cli_user_base_dir.empty()) {
+                    telemetry_path = cli_user_base_dir + "\\logs\\telemetry.json";
+                } else {
+                    const char* appdata = std::getenv("LOCALAPPDATA");
+                    if (appdata) telemetry_path = std::string(appdata) + "\\BloomNucleus\\logs\\telemetry.json";
+                }
+
+                bool from_telemetry = false;
+                if (!telemetry_path.empty()) {
+                    from_telemetry = g_logger.initialize_from_telemetry(cli_launch_id, telemetry_path);
+                }
+
+                if (!from_telemetry) {
+                    std::cerr << "[HOST] Telemetry init failed or skipped — falling back to directory-based init" << std::endl;
+                    g_logger.initialize(cli_profile_id, cli_launch_id);
+                }
+            }
 
             write_boot_log("[INIT] logger_ready=" + std::string(g_logger.is_ready() ? "true" : "false")
                            + " profile=" + cli_profile_id
