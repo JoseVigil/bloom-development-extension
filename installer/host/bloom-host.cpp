@@ -68,6 +68,8 @@ std::mutex g_pending_mutex;
 SynapseLogManager g_logger;
 ChunkedMessageBuffer g_chunked_buffer;
 
+std::string g_user_base_dir = "";  // derivado de argv[0] en main(), usado por handle_extension_ready()
+
 std::atomic<uint64_t> g_heartbeat_count{0};
 std::atomic<uint64_t> g_messages_sent{0};
 std::atomic<uint64_t> g_messages_received{0};
@@ -321,6 +323,9 @@ void handle_extension_ready(const json& msg) {
                 g_launch_id     = launch;
                 g_extension_id  = ext_id;
 
+                if (!g_user_base_dir.empty()) {
+                    g_logger.set_user_base_dir(g_user_base_dir);
+                }
                 g_logger.initialize(profile, launch);
 
                 identity_resolved.store(true);
@@ -1054,18 +1059,28 @@ int main(int argc, char* argv[]) {
         std::string cli_user_base_dir = PlatformUtils::get_cli_argument(argc, argv, "--user-base-dir");
         std::cerr << "[HOST] CLI user-base-dir: '" << cli_user_base_dir << "'" << std::endl;
 
-        // Chrome no pasa los args del manifest cuando el host está registrado en HKLM.
-        // Fallback: derivar BloomNucleus root desde argv[0] subiendo 3 niveles.
+        // Derivar g_user_base_dir desde argv[0] si CLI no lo proveyó.
+        // Chrome no pasa los args del manifest cuando el host está en HKLM,
+        // así que argv[0] es la única fuente confiable del path base.
         // argv[0] = C:\...\BloomNucleus\bin\host\bloom-host.exe
-        //            → bin\host → bin → BloomNucleus
-        if (cli_user_base_dir.empty() && argc > 0) {
+        //            → strip bin\host → strip bin → BloomNucleus root
+        if (!cli_user_base_dir.empty()) {
+            g_user_base_dir = cli_user_base_dir;
+        } else if (argc > 0) {
             std::string exe(argv[0]);
             auto strip = [](const std::string& s) -> std::string {
                 size_t pos = s.find_last_of("/\\");
                 return (pos == std::string::npos) ? s : s.substr(0, pos);
             };
-            cli_user_base_dir = strip(strip(strip(exe)));
-            std::cerr << "[HOST] user-base-dir derived from argv[0]: '" << cli_user_base_dir << "'" << std::endl;
+            g_user_base_dir = strip(strip(strip(exe)));
+            std::cerr << "[HOST] g_user_base_dir derived from argv[0]: '" << g_user_base_dir << "'" << std::endl;
+        }
+        if (!g_user_base_dir.empty()) {
+            g_logger.set_user_base_dir(g_user_base_dir);
+        }
+
+        if (!cli_user_base_dir.empty()) {
+            g_logger.set_user_base_dir(cli_user_base_dir);
         }
 
         if (!cli_profile_id.empty() && !cli_launch_id.empty()) {
