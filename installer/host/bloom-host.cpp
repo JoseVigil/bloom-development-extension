@@ -52,6 +52,7 @@ std::mutex g_handshake_mutex;
 
 std::atomic<socket_t> service_socket{INVALID_SOCK};
 std::mutex stdout_mutex;
+std::mutex service_mutex;  // protege escrituras concurrentes al socket TCP de Brain
 std::atomic<bool> shutdown_requested{false};
 std::atomic<bool> identity_resolved{false};
 
@@ -182,6 +183,7 @@ void write_message_to_chrome(const std::string& s) {
 
 void write_to_service(const std::string& s) {
     try {
+        std::lock_guard<std::mutex> lock(service_mutex);
         socket_t sock = service_socket.load();
         if (sock != INVALID_SOCK) {
             uint32_t len = static_cast<uint32_t>(s.size());
