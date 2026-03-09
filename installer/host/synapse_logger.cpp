@@ -1,6 +1,7 @@
 #include "synapse_logger.h"
 
 #include <sstream>
+#include <thread>
 #include <iomanip>
 #include <fstream>
 #include <ctime>
@@ -226,12 +227,30 @@ void SynapseLogManager::initialize(const std::string& p_profile_id,
     host_log_path      = log_directory + PATH_SEP "host_"              + date_str + ".log";
     extension_log_path = log_directory + PATH_SEP "cortex_extension_"  + date_str + ".log";
 
-    native_log.open(host_log_path,      std::ios::app);
-    browser_log.open(extension_log_path, std::ios::app);
+    // Retry loop: el proceso --init puede haber cerrado los handles hace
+    // milisegundos. Windows puede retener el lock brevemente. 3 intentos
+    // con 50ms de espera son suficientes para cubrir ese gap.
+    for (int attempt = 0; attempt < 3 && !native_log.is_open(); ++attempt) {
+        if (attempt > 0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            std::cerr << "[" << get_timestamp_ms() << "] [DEBUG] [HOST] "
+                      << "OPEN_RETRY attempt=" << attempt
+                      << " host=" << host_log_path << "\n";
+            std::cerr.flush();
+        }
+        native_log.open(host_log_path, std::ios::app);
+    }
+
+    for (int attempt = 0; attempt < 3 && !browser_log.is_open(); ++attempt) {
+        if (attempt > 0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+        browser_log.open(extension_log_path, std::ios::app);
+    }
 
     if (!native_log.is_open() || !browser_log.is_open()) {
         std::cerr << "[" << get_timestamp_ms() << "] [ERROR] [HOST] "
-                  << "INIT_FAIL open_files"
+                  << "INIT_FAIL open_files (after retries)"
                   << " host=" << host_log_path
                   << " ext=" << extension_log_path
                   << " native_open=" << native_log.is_open()

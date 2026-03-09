@@ -1127,7 +1127,10 @@ int main(int argc, char* argv[]) {
 
             write_boot_log("[INIT] logger_ready=" + std::string(g_logger.is_ready() ? "true" : "false")
                            + " profile=" + cli_profile_id
-                           + " launch="  + cli_launch_id);
+                           + " launch="  + cli_launch_id
+                           + " host_log=" + g_logger.get_host_log_path()
+                           + " ext_log="  + g_logger.get_extension_log_path()
+                           + " log_dir="  + g_logger.get_log_directory());
 
             identity_resolved.store(true);
             g_identity_cv.notify_all();
