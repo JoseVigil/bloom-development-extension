@@ -67,8 +67,7 @@ std::mutex g_pending_mutex;
 
 SynapseLogManager g_logger;
 ChunkedMessageBuffer g_chunked_buffer;
-
-std::string g_user_base_dir = "";  // derivado de argv[0] en main(), usado por handle_extension_ready()
+std::string g_user_base_dir = "";  // path base de BloomNucleus, derivado de argv[0] en main()
 
 std::atomic<uint64_t> g_heartbeat_count{0};
 std::atomic<uint64_t> g_messages_sent{0};
@@ -1059,11 +1058,9 @@ int main(int argc, char* argv[]) {
         std::string cli_user_base_dir = PlatformUtils::get_cli_argument(argc, argv, "--user-base-dir");
         std::cerr << "[HOST] CLI user-base-dir: '" << cli_user_base_dir << "'" << std::endl;
 
-        // Derivar g_user_base_dir desde argv[0] si CLI no lo proveyó.
-        // Chrome no pasa los args del manifest cuando el host está en HKLM,
-        // así que argv[0] es la única fuente confiable del path base.
-        // argv[0] = C:\...\BloomNucleus\bin\host\bloom-host.exe
-        //            → strip bin\host → strip bin → BloomNucleus root
+        // Chrome no pasa los args del manifest cuando el host está en HKLM.
+        // Derivar g_user_base_dir desde argv[0] subiendo 3 niveles:
+        // C:\...\BloomNucleus\bin\host\bloom-host.exe → BloomNucleus
         if (!cli_user_base_dir.empty()) {
             g_user_base_dir = cli_user_base_dir;
         } else if (argc > 0) {
@@ -1077,10 +1074,6 @@ int main(int argc, char* argv[]) {
         }
         if (!g_user_base_dir.empty()) {
             g_logger.set_user_base_dir(g_user_base_dir);
-        }
-
-        if (!cli_user_base_dir.empty()) {
-            g_logger.set_user_base_dir(cli_user_base_dir);
         }
 
         if (!cli_profile_id.empty() && !cli_launch_id.empty()) {
