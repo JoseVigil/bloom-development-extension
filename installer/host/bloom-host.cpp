@@ -1096,29 +1096,32 @@ int main(int argc, char* argv[]) {
                            + " build="   + std::to_string(BUILD));
             // ---------------------------------------------------------------
 
-            // FIX: En NM mode el host es spawneado por Chrome en Session 0 (SYSTEM context).
-            // %LOCALAPPDATA% en ese contexto resuelve al perfil de SYSTEM, no al usuario
-            // real — lo que hace que initialize() construya un path incorrecto y falle al
-            // abrir los archivos de log. Brain ya registró los paths absolutos correctos en
-            // telemetry.json antes de que Chrome arrancara, así que los usamos directamente.
-            // initialize() queda como fallback por si telemetry.json no es accesible aún.
-            {
-                std::string telemetry_path;
+            // initialize_from_telemetry usa paths absolutos pre-escritos por Brain en
+            // telemetry.json, evitando %LOCALAPPDATA% que en Session 0 resuelve al perfil
+            // SYSTEM. Se envuelve en try/catch para que cualquier excepción no crashee el
+            // proceso antes de identity_resolved.store(true) — lo que dejaría tcp_client_loop
+            // colgado y nunca enviaría REGISTER_HOST a Brain.
+            bool logger_initialized = false;
+            try {
                 if (!cli_user_base_dir.empty()) {
-                    telemetry_path = cli_user_base_dir + "\\logs\\telemetry.json";
-                } else {
-                    const char* appdata = std::getenv("LOCALAPPDATA");
-                    if (appdata) telemetry_path = std::string(appdata) + "\\BloomNucleus\\logs\\telemetry.json";
+                    std::string telemetry_path = cli_user_base_dir + "\\logs\\telemetry.json";
+                    logger_initialized = g_logger.initialize_from_telemetry(cli_launch_id, telemetry_path);
+                    if (!logger_initialized) {
+                        std::cerr << "[HOST] initialize_from_telemetry key not found — fallback to directory init" << std::endl;
+                    }
                 }
-
-                bool from_telemetry = false;
-                if (!telemetry_path.empty()) {
-                    from_telemetry = g_logger.initialize_from_telemetry(cli_launch_id, telemetry_path);
-                }
-
-                if (!from_telemetry) {
-                    std::cerr << "[HOST] Telemetry init failed or skipped — falling back to directory-based init" << std::endl;
+            } catch (const std::exception& e) {
+                std::cerr << "[HOST] initialize_from_telemetry threw: " << e.what() << " — fallback" << std::endl;
+                logger_initialized = false;
+            } catch (...) {
+                std::cerr << "[HOST] initialize_from_telemetry threw unknown exception — fallback" << std::endl;
+                logger_initialized = false;
+            }
+            if (!logger_initialized) {
+                try {
                     g_logger.initialize(cli_profile_id, cli_launch_id);
+                } catch (...) {
+                    std::cerr << "[HOST] initialize() threw — continuing without file logs" << std::endl;
                 }
             }
 
