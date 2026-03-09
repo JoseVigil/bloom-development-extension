@@ -40,6 +40,8 @@ class SynapseHostInitManager:
             cmd,
             capture_output=True,
             text=True,
+            encoding='utf-8',
+            errors='replace',
             cwd=str(resolved_root),
             env=env,
             timeout=30,
@@ -128,6 +130,8 @@ class SynapseHostInitManager:
                 ],
                 capture_output=True,
                 text=True,
+                encoding='utf-8',
+                errors='replace',
                 env=env,
                 timeout=10,
             )
