@@ -182,6 +182,25 @@ void SynapseLogManager::initialize(const std::string& p_profile_id,
                                    const std::string& p_launch_id) {
     if (ready) return;
 
+    // DIAG: escribe diagnóstico a path hardcodeado antes de cualquier lógica.
+    // Esto confirma que initialize() fue llamado y muestra qué construye.
+    auto diag_write = [&](const std::string& msg) {
+        // Intentar con user_base_dir si está disponible
+        std::vector<std::string> diag_paths;
+        if (!user_base_dir.empty()) {
+            diag_paths.push_back(user_base_dir + "\\logs\\nm_init_diag.log");
+        }
+        diag_paths.push_back("C:\\Users\\josev\\AppData\\Local\\BloomNucleus\\logs\\nm_init_diag.log");
+        diag_paths.push_back("C:\\Windows\\Temp\\nm_init_diag.log");
+        for (const auto& p : diag_paths) {
+            std::ofstream df(p, std::ios::app);
+            if (df.is_open()) { df << msg << "\n"; df.flush(); break; }
+        }
+    };
+    diag_write("[DIAG] initialize() called profile=" + p_profile_id
+               + " launch=" + p_launch_id
+               + " user_base_dir=" + user_base_dir);
+
     profile_id = p_profile_id;
     launch_id  = p_launch_id;
 
@@ -227,26 +246,20 @@ void SynapseLogManager::initialize(const std::string& p_profile_id,
     host_log_path      = log_directory + PATH_SEP "host_"              + date_str + ".log";
     extension_log_path = log_directory + PATH_SEP "cortex_extension_"  + date_str + ".log";
 
-    // Retry loop: el proceso --init puede haber cerrado los handles hace
-    // milisegundos. Windows puede retener el lock brevemente. 3 intentos
-    // con 50ms de espera son suficientes para cubrir ese gap.
+    diag_write("[DIAG] attempting open host=" + host_log_path
+               + " ext=" + extension_log_path);
+
     for (int attempt = 0; attempt < 3 && !native_log.is_open(); ++attempt) {
-        if (attempt > 0) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
-            std::cerr << "[" << get_timestamp_ms() << "] [DEBUG] [HOST] "
-                      << "OPEN_RETRY attempt=" << attempt
-                      << " host=" << host_log_path << "\n";
-            std::cerr.flush();
-        }
+        if (attempt > 0) std::this_thread::sleep_for(std::chrono::milliseconds(50));
         native_log.open(host_log_path, std::ios::app);
     }
-
     for (int attempt = 0; attempt < 3 && !browser_log.is_open(); ++attempt) {
-        if (attempt > 0) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        }
+        if (attempt > 0) std::this_thread::sleep_for(std::chrono::milliseconds(50));
         browser_log.open(extension_log_path, std::ios::app);
     }
+
+    diag_write("[DIAG] open results native=" + std::string(native_log.is_open() ? "OK" : "FAIL")
+               + " browser=" + std::string(browser_log.is_open() ? "OK" : "FAIL"));
 
     if (!native_log.is_open() || !browser_log.is_open()) {
         std::cerr << "[" << get_timestamp_ms() << "] [ERROR] [HOST] "
@@ -256,8 +269,10 @@ void SynapseLogManager::initialize(const std::string& p_profile_id,
                   << " native_open=" << native_log.is_open()
                   << " browser_open=" << browser_log.is_open() << "\n";
         std::cerr.flush();
+        diag_write("[DIAG] INIT_FAIL — returning without ready=true");
         return;
     }
+    diag_write("[DIAG] INIT_SUCCESS ready=true");
 
     ready = true;
 
