@@ -1054,22 +1054,18 @@ int main(int argc, char* argv[]) {
         std::string cli_user_base_dir = PlatformUtils::get_cli_argument(argc, argv, "--user-base-dir");
         std::cerr << "[HOST] CLI user-base-dir: '" << cli_user_base_dir << "'" << std::endl;
 
-        // DIAG TEMPORAL: volcar todos los argv al nm_init_diag.log
-        std::string argv_dump = "[DIAG-ARGV] argc=" + std::to_string(argc);
-        for (int i = 0; i < argc; i++) {
-            argv_dump += " argv[" + std::to_string(i) + "]='" + std::string(argv[i]) + "'";
-        }
-        std::ofstream diag_argv("C:\\Users\\josev\\AppData\\Local\\BloomNucleus\\logs\\nm_init_diag.log", std::ios::app);
-        if (!diag_argv.is_open()) {
-            diag_argv.open("C:\\Windows\\Temp\\nm_init_diag.log", std::ios::app);
-        }
-        if (diag_argv.is_open()) {
-            diag_argv << argv_dump << "\n";
-            diag_argv.flush();
-        }
-
-        if (!cli_user_base_dir.empty()) {
-            g_logger.set_user_base_dir(cli_user_base_dir);
+        // Chrome no pasa los args del manifest cuando el host está registrado en HKLM.
+        // Fallback: derivar BloomNucleus root desde argv[0] subiendo 3 niveles.
+        // argv[0] = C:\...\BloomNucleus\bin\host\bloom-host.exe
+        //            → bin\host → bin → BloomNucleus
+        if (cli_user_base_dir.empty() && argc > 0) {
+            std::string exe(argv[0]);
+            auto strip = [](const std::string& s) -> std::string {
+                size_t pos = s.find_last_of("/\\");
+                return (pos == std::string::npos) ? s : s.substr(0, pos);
+            };
+            cli_user_base_dir = strip(strip(strip(exe)));
+            std::cerr << "[HOST] user-base-dir derived from argv[0]: '" << cli_user_base_dir << "'" << std::endl;
         }
 
         if (!cli_profile_id.empty() && !cli_launch_id.empty()) {
@@ -1117,33 +1113,12 @@ int main(int argc, char* argv[]) {
             // colgado y nunca enviaría REGISTER_HOST a Brain.
             bool logger_initialized = false;
             try {
-                // Derivar base_dir: preferir CLI arg, fallback a raíz del ejecutable.
-                // GetModuleFileNameA no depende de %LOCALAPPDATA% ni variables de entorno,
-                // por lo que es inmune al problema de Session 0 / SYSTEM context.
-                std::string effective_base = cli_user_base_dir;
-                if (effective_base.empty()) {
-#ifdef _WIN32
-                    char exe_path[MAX_PATH] = {};
-                    if (GetModuleFileNameA(NULL, exe_path, MAX_PATH) != 0) {
-                        std::string p(exe_path);
-                        auto strip_last = [](const std::string& s) -> std::string {
-                            size_t pos = s.find_last_of("/\\");
-                            return (pos == std::string::npos) ? s : s.substr(0, pos);
-                        };
-                        effective_base = strip_last(strip_last(strip_last(p))); // bin\host\bloom-host.exe → bin\host → bin → BloomNucleus
-                    }
-#endif
-                }
-
-                if (!effective_base.empty()) {
-                    std::string telemetry_path = effective_base + "\\logs\\telemetry.json";
-                    std::cerr << "[HOST] initialize_from_telemetry path='" << telemetry_path << "'" << std::endl;
+                if (!cli_user_base_dir.empty()) {
+                    std::string telemetry_path = cli_user_base_dir + "\\logs\\telemetry.json";
                     logger_initialized = g_logger.initialize_from_telemetry(cli_launch_id, telemetry_path);
                     if (!logger_initialized) {
                         std::cerr << "[HOST] initialize_from_telemetry key not found — fallback to directory init" << std::endl;
                     }
-                } else {
-                    std::cerr << "[HOST] effective_base empty — skipping telemetry init, fallback to directory init" << std::endl;
                 }
             } catch (const std::exception& e) {
                 std::cerr << "[HOST] initialize_from_telemetry threw: " << e.what() << " — fallback" << std::endl;
