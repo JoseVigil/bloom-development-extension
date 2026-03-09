@@ -129,6 +129,11 @@ installer/native/bin/**
 !installer/native/bin/win64/host/help/
 !installer/native/bin/linux/host/bloom-host
 !installer/native/bin/linux/host/help/
+!installer/native/bin/win64/host/libgcc_s_seh-1.dll
+!installer/native/bin/win64/host/libstdc++-6.dll
+!installer/native/bin/win64/host/libwinpthread-1.dll
+!installer/native/bin/linux/host/bloom-host
+
  
 # Electron builder outputs
 **/win-unpacked/
