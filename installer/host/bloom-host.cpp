@@ -67,7 +67,6 @@ std::mutex g_pending_mutex;
 
 SynapseLogManager g_logger;
 ChunkedMessageBuffer g_chunked_buffer;
-std::string g_user_base_dir = "";  // path base de BloomNucleus, derivado de argv[0] en main()
 
 std::atomic<uint64_t> g_heartbeat_count{0};
 std::atomic<uint64_t> g_messages_sent{0};
@@ -322,9 +321,6 @@ void handle_extension_ready(const json& msg) {
                 g_launch_id     = launch;
                 g_extension_id  = ext_id;
 
-                if (!g_user_base_dir.empty()) {
-                    g_logger.set_user_base_dir(g_user_base_dir);
-                }
                 g_logger.initialize(profile, launch);
 
                 identity_resolved.store(true);
@@ -749,40 +745,45 @@ void tcp_client_loop() {
             }
 
             // ---------------------------------------------------------------
-            // FIX: NO bloquear esperando identidad aquí.
-            //
-            // El wait_for anterior tomaba g_identity_mutex durante hasta
-            // MAX_IDENTITY_WAIT_MS (10s). Chrome tiene un timeout de ~6s para
-            // Native Messaging. Si Brain conecta rápido, el TCP thread ganaba
-            // el mutex antes de que Chrome enviara extension_ready, bloqueando
-            // handle_extension_ready que también necesita g_identity_mutex.
-            // Chrome no recibía respuesta, mataba el proceso NM.
-            //
-            // La identidad llega por STDIN via extension_ready, no por TCP.
-            // Enviamos REGISTER_HOST inmediatamente con lo que haya disponible
-            // (puede ser vacío si Chrome no pasó args). Brain recibe la
-            // identidad real cuando el host envía PROFILE_CONNECTED después
-            // del handshake completado.
+            // FIX: Esperar identidad antes de enviar REGISTER_HOST.
+            // El thread STDIN procesa extension_ready y setea identity_resolved.
+            // Si identity_resolved ya está true (CLI args o handshake previo),
+            // el wait retorna de inmediato sin bloquear.
             // ---------------------------------------------------------------
-            std::string reg_profile, reg_launch;
             {
-                std::lock_guard<std::mutex> lock(g_identity_mutex);
-                reg_profile = g_profile_id;
-                reg_launch  = g_launch_id;
+                std::unique_lock<std::mutex> id_wait(g_identity_mutex);
+                bool resolved = g_identity_cv.wait_for(
+                    id_wait,
+                    std::chrono::milliseconds(MAX_IDENTITY_WAIT_MS),
+                    [] { return identity_resolved.load() || shutdown_requested.load(); }
+                );
+
+                if (!resolved || shutdown_requested.load()) {
+                    std::cerr << "[TCP] ⚠️ Identity wait timeout (" << MAX_IDENTITY_WAIT_MS
+                              << "ms) - REGISTER_HOST will have empty profile_id" << std::endl;
+                    if (g_logger.is_ready()) {
+                        g_logger.log_native("WARN", "TCP_IDENTITY_TIMEOUT ms=" +
+                                           std::to_string(MAX_IDENTITY_WAIT_MS));
+                    }
+                } else {
+                    std::cerr << "[TCP] ✓ Identity resolved before REGISTER_HOST"
+                              << " profile=" << g_profile_id
+                              << " launch=" << g_launch_id << std::endl;
+                    if (g_logger.is_ready()) {
+                        g_logger.log_native("INFO", "TCP_IDENTITY_OK profile=" + g_profile_id +
+                                           " launch=" + g_launch_id);
+                    }
+                }
             }
 
-            std::cerr << "[TCP] Sending REGISTER_HOST profile='" << reg_profile
-                      << "' launch='" << reg_launch << "'" << std::endl;
-            if (g_logger.is_ready()) {
-                g_logger.log_native("INFO", "TCP_REGISTER_HOST profile=" + reg_profile +
-                                   " launch=" + reg_launch);
-            }
-
-            // Registrarse con Brain como host
+            // Registrarse con Brain como host (con identidad ya resuelta)
             json reg;
             reg["type"] = "REGISTER_HOST";
-            reg["profile_id"] = reg_profile;
-            reg["launch_id"]  = reg_launch;
+            {
+                std::lock_guard<std::mutex> lock(g_identity_mutex);
+                reg["profile_id"] = g_profile_id;
+                reg["launch_id"]  = g_launch_id;
+            }
             reg["pid"]       = PlatformUtils::get_current_pid();
             reg["timestamp"] = get_timestamp_ms();
 
@@ -1053,22 +1054,8 @@ int main(int argc, char* argv[]) {
         std::string cli_user_base_dir = PlatformUtils::get_cli_argument(argc, argv, "--user-base-dir");
         std::cerr << "[HOST] CLI user-base-dir: '" << cli_user_base_dir << "'" << std::endl;
 
-        // Chrome no pasa los args del manifest cuando el host está en HKLM.
-        // Derivar g_user_base_dir desde argv[0] subiendo 3 niveles:
-        // C:\...\BloomNucleus\bin\host\bloom-host.exe → BloomNucleus
         if (!cli_user_base_dir.empty()) {
-            g_user_base_dir = cli_user_base_dir;
-        } else if (argc > 0) {
-            std::string exe(argv[0]);
-            auto strip = [](const std::string& s) -> std::string {
-                size_t pos = s.find_last_of("/\\");
-                return (pos == std::string::npos) ? s : s.substr(0, pos);
-            };
-            g_user_base_dir = strip(strip(strip(exe)));
-            std::cerr << "[HOST] g_user_base_dir derived from argv[0]: '" << g_user_base_dir << "'" << std::endl;
-        }
-        if (!g_user_base_dir.empty()) {
-            g_logger.set_user_base_dir(g_user_base_dir);
+            g_logger.set_user_base_dir(cli_user_base_dir);
         }
 
         if (!cli_profile_id.empty() && !cli_launch_id.empty()) {
@@ -1116,12 +1103,34 @@ int main(int argc, char* argv[]) {
             // colgado y nunca enviaría REGISTER_HOST a Brain.
             bool logger_initialized = false;
             try {
+                // FIX: construir telemetry_base desde múltiples fuentes en orden de confianza.
+                // cli_user_base_dir es lo ideal (resuelto por Sentinel con token real), pero
+                // cuando el binary viejo tiene el bug argc-1 o Chrome no pasa el arg, llegará
+                // vacío. En ese caso derivar desde argv[0] subiendo 3 niveles:
+                //   C:\...\BloomNucleus\bin\host\bloom-host.exe → BloomNucleus
+                // argv[0] siempre está disponible y no depende de ningún arg del manifest.
+                std::string telemetry_base;
                 if (!cli_user_base_dir.empty()) {
-                    std::string telemetry_path = cli_user_base_dir + "\\logs\\telemetry.json";
+                    telemetry_base = cli_user_base_dir;
+                    std::cerr << "[HOST] telemetry_base from --user-base-dir: '" << telemetry_base << "'" << std::endl;
+                } else if (argc > 0) {
+                    auto strip = [](const std::string& s) -> std::string {
+                        size_t pos = s.find_last_of("/\\");
+                        return (pos == std::string::npos) ? s : s.substr(0, pos);
+                    };
+                    telemetry_base = strip(strip(strip(std::string(argv[0]))));
+                    std::cerr << "[HOST] telemetry_base derived from argv[0]: '" << telemetry_base << "'" << std::endl;
+                }
+
+                if (!telemetry_base.empty()) {
+                    std::string telemetry_path = telemetry_base + "\\logs\\telemetry.json";
+                    std::cerr << "[HOST] attempting initialize_from_telemetry: '" << telemetry_path << "'" << std::endl;
                     logger_initialized = g_logger.initialize_from_telemetry(cli_launch_id, telemetry_path);
                     if (!logger_initialized) {
                         std::cerr << "[HOST] initialize_from_telemetry key not found — fallback to directory init" << std::endl;
                     }
+                } else {
+                    std::cerr << "[HOST] telemetry_base empty — skipping initialize_from_telemetry" << std::endl;
                 }
             } catch (const std::exception& e) {
                 std::cerr << "[HOST] initialize_from_telemetry threw: " << e.what() << " — fallback" << std::endl;
@@ -1137,7 +1146,6 @@ int main(int argc, char* argv[]) {
                     std::cerr << "[HOST] initialize() threw — continuing without file logs" << std::endl;
                 }
             }
-
             write_boot_log("[INIT] logger_ready=" + std::string(g_logger.is_ready() ? "true" : "false")
                            + " profile=" + cli_profile_id
                            + " launch="  + cli_launch_id
