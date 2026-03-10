@@ -1008,7 +1008,73 @@ int main(int argc, char* argv[]) {
             g_logger.log_native("INFO", "Host pre-initialized by Sentinel --init. Dirs and files ready.");
             std::cerr << "[INIT] OK — estructura creada, saliendo\n";
 
-            // Emitir resultado JSON a stdout si se pidió --json.
+            // ================================================================
+            // AUTO-REGISTRO HKCU — solo en --init mode
+            //
+            // bloom-host --init es invocado por Sentinel con el token del
+            // usuario real (no SYSTEM). RegCreateKeyExA escribe en el HKCU
+            // correcto — el mismo que Chrome consulta al resolver NM hosts.
+            //
+            // ignition_identity.go ya NO escribe registry (bloque 6.1 removido).
+            // Esta es la única fuente de verdad para la registry key.
+            // ================================================================
+#ifdef _WIN32
+            {
+                std::string short_id  = profile_id.substr(0, 8);
+                std::string host_name = "com.bloom.synapse." + short_id;
+                std::string reg_path  = "SOFTWARE\\Google\\Chrome\\NativeMessagingHosts\\" + host_name;
+
+                // Construir path al manifest — mismo que escribe ignition_identity.go
+                std::string user_base = PlatformUtils::get_cli_argument(argc, argv, "--user-base-dir");
+                std::string manifest_path;
+                if (!user_base.empty()) {
+                    manifest_path = user_base + "\\config\\profile\\" + profile_id
+                                    + "\\" + host_name + ".json";
+                } else {
+                    // Fallback: derivar desde LOCALAPPDATA
+                    const char* appdata = std::getenv("LOCALAPPDATA");
+                    if (appdata) {
+                        manifest_path = std::string(appdata) + "\\BloomNucleus\\config\\profile\\"
+                                        + profile_id + "\\" + host_name + ".json";
+                    }
+                }
+
+                if (manifest_path.empty()) {
+                    std::cerr << "[INIT] ⚠️ No se pudo construir manifest_path — registry no registrada\n";
+                    g_logger.log_native("WARN", "HKCU_SKIP manifest_path_empty");
+                } else {
+                    HKEY hKey;
+                    LONG ret = RegCreateKeyExA(
+                        HKEY_CURRENT_USER, reg_path.c_str(),
+                        0, NULL, REG_OPTION_NON_VOLATILE,
+                        KEY_SET_VALUE, NULL, &hKey, NULL
+                    );
+
+                    if (ret == ERROR_SUCCESS) {
+                        RegSetValueExA(hKey, "", 0, REG_SZ,
+                            (const BYTE*)manifest_path.c_str(),
+                            (DWORD)(manifest_path.size() + 1));
+                        RegCloseKey(hKey);
+                        std::cerr << "[INIT] ✅ HKCU registry key registrada: " << reg_path << "\n";
+                        std::cerr << "[INIT]    manifest: " << manifest_path << "\n";
+                        g_logger.log_native("INFO", "HKCU_OK key=" + reg_path + " manifest=" + manifest_path);
+                    } else {
+                        std::cerr << "[INIT] ⚠️ RegCreateKeyExA falló error=" << ret << "\n";
+                        g_logger.log_native("WARN", "HKCU_FAIL error=" + std::to_string(ret));
+                    }
+
+                    // Limpiar HKLM si quedó alguna key residual de intentos anteriores
+                    LONG del_ret = RegDeleteKeyA(HKEY_LOCAL_MACHINE, reg_path.c_str());
+                    if (del_ret == ERROR_SUCCESS) {
+                        std::cerr << "[INIT] ✅ HKLM key residual eliminada: " << reg_path << "\n";
+                        g_logger.log_native("INFO", "HKLM_CLEANED key=" + reg_path);
+                    }
+                }
+            }
+#endif
+            // ================================================================
+
+            // Emitir resultado JSON a stdout si se pidió --json.            
             // El objeto es minimal e intencional: solo lo que Sentinel necesita parsear.
             if (json_output) {
                 json result;
