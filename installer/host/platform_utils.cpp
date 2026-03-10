@@ -47,9 +47,15 @@ int get_current_pid() {
 }
 
 std::string get_cli_argument(int argc, char* argv[], const std::string& flag) {
-    for (int i = 1; i < argc - 1; ++i) {
+    // BUG FIX: era `i < argc - 1`, lo que excluía el último par posible
+    // cuando Chrome agrega la origin como arg extra al final del manifest args,
+    // desplazando --user-base-dir al penúltimo slot. Correcto: iterar hasta
+    // argc (excluyendo), tomando argv[i+1] solo si i+1 < argc.
+    for (int i = 1; i < argc; ++i) {
         if (std::string(argv[i]) == flag) {
-            return std::string(argv[i + 1]);
+            if (i + 1 < argc) {
+                return std::string(argv[i + 1]);
+            }
         }
     }
     return "";
