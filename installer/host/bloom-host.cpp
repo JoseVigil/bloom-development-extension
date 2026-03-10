@@ -749,45 +749,40 @@ void tcp_client_loop() {
             }
 
             // ---------------------------------------------------------------
-            // FIX: Esperar identidad antes de enviar REGISTER_HOST.
-            // El thread STDIN procesa extension_ready y setea identity_resolved.
-            // Si identity_resolved ya está true (CLI args o handshake previo),
-            // el wait retorna de inmediato sin bloquear.
+            // FIX: NO bloquear esperando identidad aquí.
+            //
+            // El wait_for anterior tomaba g_identity_mutex durante hasta
+            // MAX_IDENTITY_WAIT_MS (10s). Chrome tiene un timeout de ~6s para
+            // Native Messaging. Si Brain conecta rápido, el TCP thread ganaba
+            // el mutex antes de que Chrome enviara extension_ready, bloqueando
+            // handle_extension_ready que también necesita g_identity_mutex.
+            // Chrome no recibía respuesta, mataba el proceso NM.
+            //
+            // La identidad llega por STDIN via extension_ready, no por TCP.
+            // Enviamos REGISTER_HOST inmediatamente con lo que haya disponible
+            // (puede ser vacío si Chrome no pasó args). Brain recibe la
+            // identidad real cuando el host envía PROFILE_CONNECTED después
+            // del handshake completado.
             // ---------------------------------------------------------------
-            {
-                std::unique_lock<std::mutex> id_wait(g_identity_mutex);
-                bool resolved = g_identity_cv.wait_for(
-                    id_wait,
-                    std::chrono::milliseconds(MAX_IDENTITY_WAIT_MS),
-                    [] { return identity_resolved.load() || shutdown_requested.load(); }
-                );
-
-                if (!resolved || shutdown_requested.load()) {
-                    std::cerr << "[TCP] ⚠️ Identity wait timeout (" << MAX_IDENTITY_WAIT_MS
-                              << "ms) - REGISTER_HOST will have empty profile_id" << std::endl;
-                    if (g_logger.is_ready()) {
-                        g_logger.log_native("WARN", "TCP_IDENTITY_TIMEOUT ms=" +
-                                           std::to_string(MAX_IDENTITY_WAIT_MS));
-                    }
-                } else {
-                    std::cerr << "[TCP] ✓ Identity resolved before REGISTER_HOST"
-                              << " profile=" << g_profile_id
-                              << " launch=" << g_launch_id << std::endl;
-                    if (g_logger.is_ready()) {
-                        g_logger.log_native("INFO", "TCP_IDENTITY_OK profile=" + g_profile_id +
-                                           " launch=" + g_launch_id);
-                    }
-                }
-            }
-
-            // Registrarse con Brain como host (con identidad ya resuelta)
-            json reg;
-            reg["type"] = "REGISTER_HOST";
+            std::string reg_profile, reg_launch;
             {
                 std::lock_guard<std::mutex> lock(g_identity_mutex);
-                reg["profile_id"] = g_profile_id;
-                reg["launch_id"]  = g_launch_id;
+                reg_profile = g_profile_id;
+                reg_launch  = g_launch_id;
             }
+
+            std::cerr << "[TCP] Sending REGISTER_HOST profile='" << reg_profile
+                      << "' launch='" << reg_launch << "'" << std::endl;
+            if (g_logger.is_ready()) {
+                g_logger.log_native("INFO", "TCP_REGISTER_HOST profile=" + reg_profile +
+                                   " launch=" + reg_launch);
+            }
+
+            // Registrarse con Brain como host
+            json reg;
+            reg["type"] = "REGISTER_HOST";
+            reg["profile_id"] = reg_profile;
+            reg["launch_id"]  = reg_launch;
             reg["pid"]       = PlatformUtils::get_current_pid();
             reg["timestamp"] = get_timestamp_ms();
 
