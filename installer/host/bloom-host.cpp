@@ -883,10 +883,111 @@ void tcp_client_loop() {
 
 int main(int argc, char* argv[]) {
     try {
+
+        // ============================================================================
+        // PRE-BOOT LOG — primera instrucción de main(). Debe quedar aquí SIEMPRE.
+        //
+        // Escribe a disco, a stderr y a OutputDebugString ANTES de cualquier
+        // inicialización. Diagnostica si el crash ocurre:
+        //   - ANTES de main()  → este log no aparece (DLL / CRT failure)
+        //   - EN main()        → este log aparece; buscar la siguiente sección fallida
+        //
+        // No depende de: CLIParser, networking, logger, ni argumentos del manifest.
+        // El path se deriva de argv[0] subiendo 3 niveles:
+        //   BloomNucleus\bin\host\bloom-host.exe  →  BloomNucleus
+        // ============================================================================
+        {
+            // --- helpers mínimos sin dependencias externas ---
+            auto strip_last = [](const std::string& s) -> std::string {
+                size_t pos = s.find_last_of("/\\");
+                return (pos == std::string::npos) ? s : s.substr(0, pos);
+            };
+
+            auto early_pid = []() -> std::string {
+#ifdef _WIN32
+                return std::to_string(static_cast<int>(GetCurrentProcessId()));
+#else
+                return std::to_string(static_cast<int>(getpid()));
+#endif
+            };
+
+            // --- construir mensaje ---
+            std::string exe_path = (argc > 0 && argv[0]) ? std::string(argv[0]) : "(unknown)";
+            std::string pre_boot_msg =
+                "[PRE_BOOT] MAIN_ENTERED"
+                " pid="   + early_pid() +
+                " build=" + std::to_string(BUILD) +
+                " argc="  + std::to_string(argc) +
+                " exe="   + exe_path;
+
+            // 1. stderr — capturado por Sentinel o visible en consola
+            std::cerr << pre_boot_msg << std::endl;
+
+            // 2. OutputDebugString — visible en DebugView (Sysinternals)
+            //    incluso cuando Chrome redirige stderr a null
+#ifdef _WIN32
+            OutputDebugStringA(("bloom-host: " + pre_boot_msg + "\n").c_str());
+#endif
+
+            // 3. Archivo directo a disco — no depende de ninguna abstracción
+            //    Intenta: argv[0] up 3 levels → BloomNucleus\logs\host_boot.log
+            //    Fallback: %LOCALAPPDATA%\BloomNucleus\logs\host_boot.log
+            std::string early_base = strip_last(strip_last(strip_last(exe_path)));
+            if (early_base.empty() || early_base == exe_path) {
+                const char* appdata = std::getenv("LOCALAPPDATA");
+                if (appdata && appdata[0] != '\0') {
+                    early_base = std::string(appdata) + "\\BloomNucleus";
+                }
+            }
+            if (!early_base.empty()) {
+#ifdef _WIN32
+                std::string boot_path = early_base + "\\logs\\host_boot.log";
+#else
+                std::string boot_path = early_base + "/logs/host_boot.log";
+#endif
+                std::ofstream boot_f(boot_path, std::ios::app);
+                if (boot_f.is_open()) {
+                    boot_f << pre_boot_msg << "\n";
+                    boot_f.flush();
+                } else {
+                    // El directorio no existe — anotarlo en stderr/DebugView
+                    std::string dir_err = "[PRE_BOOT] WARN host_boot.log not writable at: " + boot_path;
+                    std::cerr << dir_err << std::endl;
+#ifdef _WIN32
+                    OutputDebugStringA(("bloom-host: " + dir_err + "\n").c_str());
+#endif
+                }
+            }
+        }
+        // ============================================================================
+        // FIN PRE-BOOT LOG
+        // ============================================================================
+
         // ========== CLI Command Handling ==========
-        auto cli_result = CLIParser::parse_and_execute(argc, argv);
-        if (cli_result.handled) {
-            return cli_result.exit_code;
+        // Wrapped in its own try/catch so a crash here is distinguishable from
+        // a crash before main() (pre-boot log appears but this section fails).
+        std::cerr << "[PRE_BOOT] Entering CLIParser::parse_and_execute" << std::endl;
+#ifdef _WIN32
+        OutputDebugStringA("bloom-host: [PRE_BOOT] Entering CLIParser::parse_and_execute\n");
+#endif
+        try {
+            auto cli_result = CLIParser::parse_and_execute(argc, argv);
+            if (cli_result.handled) {
+                return cli_result.exit_code;
+            }
+        } catch (const std::exception& e) {
+            std::string cli_err = std::string("[PRE_BOOT] FATAL CLIParser threw: ") + e.what();
+            std::cerr << cli_err << std::endl;
+#ifdef _WIN32
+            OutputDebugStringA(("bloom-host: " + cli_err + "\n").c_str());
+#endif
+            return 3;
+        } catch (...) {
+            std::cerr << "[PRE_BOOT] FATAL CLIParser threw unknown exception" << std::endl;
+#ifdef _WIN32
+            OutputDebugStringA("bloom-host: [PRE_BOOT] FATAL CLIParser threw unknown exception\n");
+#endif
+            return 3;
         }
         // ==========================================
 
@@ -1027,8 +1128,36 @@ int main(int argc, char* argv[]) {
         }
         // ============================================================================
 
-        PlatformUtils::initialize_networking();
+        // Networking init — wrap so a failure here is distinguishable in host_boot.log
+        std::cerr << "[PRE_BOOT] Entering initialize_networking" << std::endl;
+#ifdef _WIN32
+        OutputDebugStringA("bloom-host: [PRE_BOOT] Entering initialize_networking\n");
+#endif
+        try {
+            PlatformUtils::initialize_networking();
+        } catch (const std::exception& e) {
+            std::string net_err = std::string("[PRE_BOOT] FATAL initialize_networking threw: ") + e.what();
+            std::cerr << net_err << std::endl;
+#ifdef _WIN32
+            OutputDebugStringA(("bloom-host: " + net_err + "\n").c_str());
+#endif
+            return 4;
+        } catch (...) {
+            std::cerr << "[PRE_BOOT] FATAL initialize_networking threw unknown exception" << std::endl;
+#ifdef _WIN32
+            OutputDebugStringA("bloom-host: [PRE_BOOT] FATAL initialize_networking threw unknown exception\n");
+#endif
+            return 4;
+        }
+        std::cerr << "[PRE_BOOT] Entering setup_binary_io" << std::endl;
+#ifdef _WIN32
+        OutputDebugStringA("bloom-host: [PRE_BOOT] Entering setup_binary_io\n");
+#endif
         PlatformUtils::setup_binary_io();   // setvbuf(stderr, _IONBF) incluido aquí
+        std::cerr << "[PRE_BOOT] setup_binary_io done — normal logging active" << std::endl;
+#ifdef _WIN32
+        OutputDebugStringA("bloom-host: [PRE_BOOT] setup_binary_io done\n");
+#endif
         
         std::string cli_profile_id = PlatformUtils::get_cli_argument(argc, argv, "--profile-id");
         std::string cli_launch_id = PlatformUtils::get_cli_argument(argc, argv, "--launch-id");
@@ -1058,43 +1187,61 @@ int main(int argc, char* argv[]) {
             g_logger.set_user_base_dir(cli_user_base_dir);
         }
 
+        // -----------------------------------------------------------------------
+        // BOOT LOG — disponible desde aquí, antes de cualquier inicialización
+        // del logger formal. Escribe a disco + stderr + OutputDebugString para
+        // que el punto de fallo quede registrado incluso si el logger no arranca.
+        //
+        // FIX: Lambda movido FUERA del bloque if(cli_args). Antes estaba dentro
+        // y no dejaba ninguna evidencia cuando los args del manifest no llegaban.
+        // Ahora también registra el caso "CLI args missing".
+        // -----------------------------------------------------------------------
+        auto write_boot_log = [&](const std::string& line) {
+            // 1. stderr
+            std::cerr << line << std::endl;
+
+            // 2. OutputDebugString — visible en DebugView (Sysinternals)
+            //    incluso cuando Chrome no captura stderr del proceso hijo
+#ifdef _WIN32
+            OutputDebugStringA(("bloom-host: " + line + "\n").c_str());
+#endif
+
+            // 3. Archivo directo a disco — no depende de ninguna abstracción
+            std::string path;
+#ifdef _WIN32
+            // Preferir user_base_dir (resuelto por Sentinel con token real)
+            // sobre %LOCALAPPDATA% (falla en Session 0 / SYSTEM context).
+            if (!cli_user_base_dir.empty()) {
+                path = cli_user_base_dir + "\\logs\\host_boot.log";
+            } else {
+                const char* appdata = std::getenv("LOCALAPPDATA");
+                if (appdata) path = std::string(appdata) + "\\BloomNucleus\\logs\\host_boot.log";
+            }
+#else
+            path = "/tmp/bloom-nucleus/logs/host_boot.log";
+#endif
+            if (!path.empty()) {
+                std::ofstream f(path, std::ios::app);
+                if (f.is_open()) { f << line << "\n"; f.flush(); }
+            }
+        };
+
+        // Primer checkpoint: confirmar que llegamos hasta aquí con los args
+        // del manifest. Si profile/launch aparecen "(missing)", el manifest
+        // no pasó los args — ese es el punto de fallo a investigar.
+        write_boot_log("[BOOT] pid=" + std::to_string(PlatformUtils::get_current_pid())
+                       + " profile=" + (cli_profile_id.empty() ? "(missing)" : cli_profile_id)
+                       + " launch="  + (cli_launch_id.empty()  ? "(missing)" : cli_launch_id)
+                       + " base_dir=" + (cli_user_base_dir.empty() ? "(missing)" : cli_user_base_dir)
+                       + " build="   + std::to_string(BUILD));
+        // -----------------------------------------------------------------------
+
         if (!cli_profile_id.empty() && !cli_launch_id.empty()) {
             {
                 std::lock_guard<std::mutex> lock(g_identity_mutex);
                 g_profile_id = cli_profile_id;
                 g_launch_id  = cli_launch_id;
             }
-
-            // ---------------------------------------------------------------
-            // DIRECT DISK LOG — escribe directo a disco antes de que el logger
-            // esté listo. No depende de stderr ni de ninguna captura externa.
-            // logs/host_boot.log — append, una línea por sesión.
-            // ---------------------------------------------------------------
-            auto write_boot_log = [&](const std::string& line) {
-                std::string path;
-#ifdef _WIN32
-                // Preferir user_base_dir (resuelto por Sentinel con token real)
-                // sobre %LOCALAPPDATA% (falla en Session 0 / SYSTEM context).
-                if (!cli_user_base_dir.empty()) {
-                    path = cli_user_base_dir + "\\logs\\host_boot.log";
-                } else {
-                    const char* appdata = std::getenv("LOCALAPPDATA");
-                    if (appdata) path = std::string(appdata) + "\\BloomNucleus\\logs\\host_boot.log";
-                }
-#else
-                path = "/tmp/bloom-nucleus/logs/host_boot.log";
-#endif
-                if (!path.empty()) {
-                    std::ofstream f(path, std::ios::app);
-                    if (f.is_open()) { f << line << "\n"; f.flush(); }
-                }
-            };
-
-            write_boot_log("[BOOT] pid=" + std::to_string(PlatformUtils::get_current_pid())
-                           + " profile=" + cli_profile_id
-                           + " launch="  + cli_launch_id
-                           + " build="   + std::to_string(BUILD));
-            // ---------------------------------------------------------------
 
             // initialize_from_telemetry usa paths absolutos pre-escritos por Brain en
             // telemetry.json, evitando %LOCALAPPDATA% que en Session 0 resuelve al perfil
@@ -1103,7 +1250,7 @@ int main(int argc, char* argv[]) {
             // colgado y nunca enviaría REGISTER_HOST a Brain.
             bool logger_initialized = false;
             try {
-                // FIX: construir telemetry_base desde múltiples fuentes en orden de confianza.
+                // Construir telemetry_base desde múltiples fuentes en orden de confianza.
                 // cli_user_base_dir es lo ideal (resuelto por Sentinel con token real), pero
                 // cuando el binary viejo tiene el bug argc-1 o Chrome no pasa el arg, llegará
                 // vacío. En ese caso derivar desde argv[0] subiendo 3 niveles:
@@ -1155,10 +1302,10 @@ int main(int argc, char* argv[]) {
 
             identity_resolved.store(true);
             g_identity_cv.notify_all();
-            
+
             std::cerr << "[HOST] ✓ Identity from CLI arguments" << std::endl;
         } else {
-            std::cerr << "[HOST] CLI args missing - will wait for SYSTEM_HELLO" << std::endl;
+            write_boot_log("[BOOT] WARN CLI args missing — waiting for SYSTEM_HELLO from Brain");
         }
 
         std::cerr << "[HOST] Starting TCP client thread..." << std::endl;
