@@ -1017,9 +1017,13 @@ int main(int argc, char* argv[]) {
             OutputDebugStringA(("bloom-host: " + pre_boot_msg + "\n").c_str());
 #endif
 
-            // 3. Archivo directo a disco — no depende de ninguna abstracción
-            //    Intenta: argv[0] up 3 levels → BloomNucleus\logs\host_boot.log
-            //    Fallback: %LOCALAPPDATA%\BloomNucleus\logs\host_boot.log
+            // 3. Archivo directo a disco — no depende de ninguna abstracción.
+            //    En PRE_BOOT la identidad (profile_id / launch_id) todavía no se
+            //    conoce, así que se escribe en el path legacy de fallback:
+            //      BloomNucleus\logs\host_boot.log
+            //    Una vez resuelta la identidad, write_boot_log redirige todas las
+            //    entradas siguientes al path canónico del launch:
+            //      logs\host\profiles\{profile_id}\{launch_id}\host_boot_{launch_id}.log
             std::string early_base = strip_last(strip_last(strip_last(exe_path)));
             if (early_base.empty() || early_base == exe_path) {
                 const char* appdata = std::getenv("LOCALAPPDATA");
@@ -1038,7 +1042,6 @@ int main(int argc, char* argv[]) {
                     boot_f << pre_boot_msg << "\n";
                     boot_f.flush();
                 } else {
-                    // El directorio no existe — anotarlo en stderr/DebugView
                     std::string dir_err = "[PRE_BOOT] WARN host_boot.log not writable at: " + boot_path;
                     std::cerr << dir_err << std::endl;
 #ifdef _WIN32
@@ -1294,20 +1297,63 @@ int main(int argc, char* argv[]) {
             OutputDebugStringA(("bloom-host: " + line + "\n").c_str());
 #endif
 
-            // 3. Archivo directo a disco — no depende de ninguna abstracción
+            // 3. Archivo directo a disco — no depende de ninguna abstracción.
+            //
+            // Path selection strategy:
+            //   a) Si el logger ya está listo, el directorio del launch existe y
+            //      usamos el path canónico:
+            //        logs\host\profiles\{profile_id}\{launch_id}\host_boot_{launch_id}.log
+            //   b) Si la identidad ya está resuelta pero el logger no (raro), se
+            //      construye el path del launch a mano.
+            //   c) Fallback legacy hasta que se conozca la identidad:
+            //        BloomNucleus\logs\host_boot.log
             std::string path;
 #ifdef _WIN32
-            // Preferir user_base_dir (resuelto por Sentinel con token real)
-            // sobre %LOCALAPPDATA% (falla en Session 0 / SYSTEM context).
-            if (!cli_user_base_dir.empty()) {
-                path = cli_user_base_dir + "\\logs\\host_boot.log";
-            } else {
-                const char* appdata = std::getenv("LOCALAPPDATA");
-                if (appdata) path = std::string(appdata) + "\\BloomNucleus\\logs\\host_boot.log";
-            }
+            const char sep = '\\';
 #else
-            path = "/tmp/bloom-nucleus/logs/host_boot.log";
+            const char sep = '/';
 #endif
+            if (g_logger.is_ready() && !g_logger.get_log_directory().empty()) {
+                // (a) Path canónico — dentro del launch dir
+                path = g_logger.get_log_directory() + sep
+                       + "host_boot_" + cli_launch_id + ".log";
+            } else if (!cli_profile_id.empty() && !cli_launch_id.empty()) {
+                // (b) Identidad conocida, logger aún no listo — construir path a mano
+                std::string base;
+                if (!cli_user_base_dir.empty()) {
+                    base = cli_user_base_dir;
+                } else {
+#ifdef _WIN32
+                    const char* appdata = std::getenv("LOCALAPPDATA");
+                    if (appdata) base = std::string(appdata) + "\\BloomNucleus";
+#else
+                    base = "/tmp/bloom-nucleus";
+#endif
+                }
+                if (!base.empty()) {
+#ifdef _WIN32
+                    path = base + "\\logs\\host\\profiles\\"
+                           + cli_profile_id + "\\" + cli_launch_id
+                           + "\\host_boot_" + cli_launch_id + ".log";
+#else
+                    path = base + "/logs/host/profiles/"
+                           + cli_profile_id + "/" + cli_launch_id
+                           + "/host_boot_" + cli_launch_id + ".log";
+#endif
+                }
+            } else {
+                // (c) Fallback legacy — identidad todavía desconocida (PRE_BOOT)
+#ifdef _WIN32
+                if (!cli_user_base_dir.empty()) {
+                    path = cli_user_base_dir + "\\logs\\host_boot.log";
+                } else {
+                    const char* appdata = std::getenv("LOCALAPPDATA");
+                    if (appdata) path = std::string(appdata) + "\\BloomNucleus\\logs\\host_boot.log";
+                }
+#else
+                path = "/tmp/bloom-nucleus/logs/host_boot.log";
+#endif
+            }
             if (!path.empty()) {
                 std::ofstream f(path, std::ios::app);
                 if (f.is_open()) { f << line << "\n"; f.flush(); }
