@@ -1305,7 +1305,57 @@ int main(int argc, char* argv[]) {
 
             std::cerr << "[HOST] ✓ Identity from CLI arguments" << std::endl;
         } else {
-            write_boot_log("[BOOT] WARN CLI args missing — waiting for SYSTEM_HELLO from Brain");
+            write_boot_log("[BOOT] No CLI args — reading identity from extension_ready on stdin");
+
+            uint32_t len = 0;
+            if (!std::cin.read(reinterpret_cast<char*>(&len), 4) || len == 0 || len > MAX_MESSAGE_SIZE) {
+                write_boot_log("[BOOT] FATAL could not read message length from stdin — exiting");
+                return 1;
+            }
+
+            std::vector<char> buf(len);
+            if (!std::cin.read(buf.data(), len)) {
+                write_boot_log("[BOOT] FATAL could not read message body from stdin — exiting");
+                return 1;
+            }
+
+            std::string msg_str(buf.begin(), buf.end());
+            write_boot_log("[BOOT] First stdin message: " + msg_str.substr(0, 200));
+
+            try {
+                auto first_msg = json::parse(msg_str);
+                std::string cmd = first_msg.value("command", "");
+                if (cmd != "extension_ready") {
+                    write_boot_log("[BOOT] FATAL unexpected command '" + cmd + "' — expected extension_ready");
+                    return 1;
+                }
+                cli_profile_id = first_msg.value("profile_id", "");
+                cli_launch_id  = first_msg.value("launch_id",  "");
+                write_boot_log("[BOOT] Identity from extension_ready: profile=" + cli_profile_id
+                               + " launch=" + cli_launch_id);
+            } catch (const std::exception& e) {
+                write_boot_log("[BOOT] FATAL JSON parse error: " + std::string(e.what()));
+                return 1;
+            }
+
+            if (cli_profile_id.empty() || cli_launch_id.empty()) {
+                write_boot_log("[BOOT] FATAL extension_ready missing profile_id or launch_id — exiting");
+                return 1;
+            }
+
+            try {
+                g_logger.initialize(cli_profile_id, cli_launch_id);
+            } catch (...) {
+                std::cerr << "[HOST] initialize() threw — continuing without file logs" << std::endl;
+            }
+            write_boot_log("[INIT] logger_ready=" + std::string(g_logger.is_ready() ? "true" : "false")
+                           + " profile=" + cli_profile_id
+                           + " launch="  + cli_launch_id);
+
+            identity_resolved.store(true);
+            g_identity_cv.notify_all();
+
+            std::cerr << "[HOST] ✓ Identity from extension_ready" << std::endl;
         }
 
         std::cerr << "[HOST] Starting TCP client thread..." << std::endl;
