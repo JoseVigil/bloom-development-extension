@@ -288,6 +288,85 @@ bool try_extract_identity(const json& msg) {
     return false;
 }
 
+// send_host_ready_to_chrome() -- called proactively after REGISTER_ACK.
+// Sends host_ready to Chrome before extension_ready arrives so Chrome's
+// NM idle timeout (~6s) does not kill the pipe.
+// Safe to call multiple times: guarded by g_handshake_state.
+void send_host_ready_to_chrome() {
+    std::lock_guard<std::mutex> lock(g_handshake_mutex);
+
+    if (g_handshake_state.load() != HANDSHAKE_NONE) {
+        std::cerr << "[HOST_READY] already sent (state=" << g_handshake_state.load() << ") -- skipping" << std::endl;
+        return;
+    }
+
+    json response;
+    response["command"] = "host_ready";
+    response["version"] = VERSION;
+    response["build"]   = BUILD;
+    response["capabilities"] = json::array({
+        "chunked_messages",
+        "slave_mode_timeout",
+        "size_validation"
+    });
+    response["max_message_size"] = MAX_CHROME_MSG_SIZE;
+    response["timestamp"] = get_timestamp_ms();
+
+    if (g_logger.is_ready() && !g_logger.get_cortex_log_path().empty()) {
+        response["cortex_log_path"] = g_logger.get_cortex_log_path();
+    }
+
+    std::string response_str = response.dump();
+    write_message_to_chrome(response_str);
+
+    std::cerr << "[HOST_READY] sent to Chrome (proactive after REGISTER_ACK)" << std::endl;
+    if (g_logger.is_ready()) {
+        g_logger.log_native("INFO", "HOST_READY_SENT_PROACTIVE version=" + VERSION);
+        g_logger.log_browser("INFO", "CHROME_OUT command=host_ready version=" + VERSION);
+    }
+
+    g_handshake_state.store(HANDSHAKE_HOST_READY);
+
+    // Fase 3: once host_ready is out, notify Brain as PROFILE_CONNECTED.
+    // Wait up to 5s for TCP socket (already connected, should be instant).
+    std::thread([]{
+        for (int i = 0; i < 50; i++) {
+            if (service_socket.load() != INVALID_SOCK) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                json notify;
+                notify["type"] = "PROFILE_CONNECTED";
+                {
+                    std::lock_guard<std::mutex> lk(g_identity_mutex);
+                    notify["profile_id"]   = g_profile_id;
+                    notify["launch_id"]    = g_launch_id;
+                    notify["extension_id"] = g_extension_id;
+                }
+                notify["handshake_confirmed"] = true;
+                notify["host_version"] = VERSION;
+                notify["host_build"]   = BUILD;
+                notify["timestamp"]    = get_timestamp_ms();
+                write_to_service(notify.dump());
+                std::cerr << "[HANDSHAKE] FASE 3: Host -> Brain (PROFILE_CONNECTED)" << std::endl;
+                {
+                    std::lock_guard<std::mutex> lk(g_handshake_mutex);
+                    g_handshake_state.store(HANDSHAKE_CONFIRMED);
+                }
+                if (g_logger.is_ready()) {
+                    g_logger.log_native("INFO", "HANDSHAKE_FASE3 PROFILE_CONNECTED sent to Brain");
+                    g_logger.log_native("INFO", "HANDSHAKE_COMPLETE Version=" + VERSION);
+                }
+                std::cerr << "[HANDSHAKE] COMPLETO - Sistema listo para comandos" << std::endl;
+                return;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+        std::cerr << "[HANDSHAKE] WARN: timeout waiting for TCP for Fase 3" << std::endl;
+        if (g_logger.is_ready()) {
+            g_logger.log_native("WARN", "HANDSHAKE_FASE3_TIMEOUT TCP not available after 5000ms");
+        }
+    }).detach();
+}
+
 // ============================================================================
 // HANDSHAKE DE 3 FASES - IMPLEMENTACIÓN
 // ============================================================================
@@ -535,36 +614,30 @@ void handle_service_message(const std::string& msg_str) {
             g_logger.log_native("INFO", "BRAIN_MSG type=" + type + " command=" + command + " size=" + std::to_string(msg_str.size()));
         }
         
-        // FIX: REGISTER_ACK must be processed BEFORE the handshake guard.
-        // Brain sends REGISTER_ACK immediately after receiving REGISTER_HOST.
-        // At that point extension_ready from Chrome has not arrived yet
-        // (STDIN is still at 0 messages), so is_handshake_confirmed() is false.
-        // The old guard was discarding REGISTER_ACK, so host_ready was never
-        // sent to Chrome, Chrome never got a response, and after ~10s it closed
-        // stdin → STDIN_EOF StdinMessages=0.
-        //
-        // REGISTER_ACK is the signal from Brain that the host is registered.
-        // Once received, the host must wait for extension_ready from Chrome
-        // (handled in handle_chrome_message / handle_extension_ready) and then
-        // send host_ready. We do not need to forward REGISTER_ACK to Chrome.
+        // FIX: REGISTER_ACK must be handled BEFORE the handshake guard.
+        // Brain sends it immediately after REGISTER_HOST. At that moment
+        // extension_ready from Chrome has not arrived yet (StdinMessages=0),
+        // so is_handshake_confirmed() is false. Previous code discarded it,
+        // host_ready was never sent, and Chrome killed the pipe after ~7s.
         if (type == "REGISTER_ACK") {
-            std::cerr << "[SERVICE_MSG] REGISTER_ACK received — host registered with Brain" << std::endl;
+            std::cerr << "[SERVICE_MSG] REGISTER_ACK received - host registered with Brain" << std::endl;
             if (g_logger.is_ready()) {
                 g_logger.log_native("INFO", "REGISTER_ACK_RECEIVED brain registration confirmed");
             }
-            // Nothing to forward to Chrome. host_ready will be sent by
-            // handle_extension_ready() when Chrome sends extension_ready.
+            // Send host_ready proactively so Chrome does not time out.
+            // Chrome NM idle-kills the host after ~6s with no stdout activity.
+            // handle_extension_ready() will be a no-op if called later because
+            // g_handshake_state will already be past HANDSHAKE_NONE.
+            send_host_ready_to_chrome();
             return;
         }
 
-        // VALIDACIÓN: Solo rutear si handshake confirmado
+        // Solo rutear si handshake confirmado
         if (!is_handshake_confirmed()) {
-            std::cerr << "[SERVICE_MSG] ⚠️ Handshake NO confirmado - mensaje descartado" << std::endl;
-            
+            std::cerr << "[SERVICE_MSG] Handshake NO confirmado - descartado type=" + type << std::endl;
             if (g_logger.is_ready()) {
                 g_logger.log_native("WARN", "MSG_BLOCKED_NO_HANDSHAKE type=" + type);
             }
-            
             return;
         }
         
@@ -1354,15 +1427,15 @@ int main(int argc, char* argv[]) {
             }
 
             if (cli_profile_id.empty() || cli_launch_id.empty()) {
-                write_boot_log("[BOOT] FATAL extension_ready missing profile_id or launch_id — exiting");
+                write_boot_log("[BOOT] FATAL extension_ready missing profile_id or launch_id -- exiting");
                 return 1;
             }
 
             // FIX: assign globals under mutex BEFORE notify_all().
-            // tcp_client_loop reads g_profile_id / g_launch_id after wait_for() wakes up.
+            // tcp_client_loop reads g_profile_id/g_launch_id after wait_for() wakes.
             // Without this, REGISTER_HOST was sent with empty identity.
             {
-                std::lock_guard<std::mutex> lock(g_identity_mutex);
+                std::lock_guard<std::mutex> id_lock(g_identity_mutex);
                 g_profile_id = cli_profile_id;
                 g_launch_id  = cli_launch_id;
             }
@@ -1370,7 +1443,7 @@ int main(int argc, char* argv[]) {
             try {
                 g_logger.initialize(cli_profile_id, cli_launch_id);
             } catch (...) {
-                std::cerr << "[HOST] initialize() threw — continuing without file logs" << std::endl;
+                std::cerr << "[HOST] initialize() threw -- continuing without file logs" << std::endl;
             }
             write_boot_log("[INIT] logger_ready=" + std::string(g_logger.is_ready() ? "true" : "false")
                            + " profile=" + cli_profile_id

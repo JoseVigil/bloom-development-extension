@@ -1,9 +1,9 @@
-[PRE_BOOT] MAIN_ENTERED pid=1142 build=101 argc=2 exe=/home/noti/repos/bloom-videos/bloom-development-extension/installer/host/../../installer/native/bin/linux/host/bloom-host
+[PRE_BOOT] MAIN_ENTERED pid=1240 build=102 argc=2 exe=/home/noti/repos/bloom-videos/bloom-development-extension/installer/host/../../installer/native/bin/linux/host/bloom-host
 [PRE_BOOT] WARN host_boot.log not writable at: /home/noti/repos/bloom-videos/bloom-development-extension/installer/host/../../installer/native/bin/logs/host_boot.log
 [PRE_BOOT] Entering CLIParser::parse_and_execute
 
                                              BLOOM-HOST
-                      Synapse Native Messaging Bridge  |  v2.1.0  |  build 101
+                      Synapse Native Messaging Bridge  |  v2.1.0  |  build 102
 
 
 ----------------------------------------------------------------------------------------------------
