@@ -535,20 +535,35 @@ void handle_service_message(const std::string& msg_str) {
             g_logger.log_native("INFO", "BRAIN_MSG type=" + type + " command=" + command + " size=" + std::to_string(msg_str.size()));
         }
         
-        // � VALIDACIÓN: Solo rutear si handshake confirmado
+        // FIX: REGISTER_ACK must be processed BEFORE the handshake guard.
+        // Brain sends REGISTER_ACK immediately after receiving REGISTER_HOST.
+        // At that point extension_ready from Chrome has not arrived yet
+        // (STDIN is still at 0 messages), so is_handshake_confirmed() is false.
+        // The old guard was discarding REGISTER_ACK, so host_ready was never
+        // sent to Chrome, Chrome never got a response, and after ~10s it closed
+        // stdin → STDIN_EOF StdinMessages=0.
+        //
+        // REGISTER_ACK is the signal from Brain that the host is registered.
+        // Once received, the host must wait for extension_ready from Chrome
+        // (handled in handle_chrome_message / handle_extension_ready) and then
+        // send host_ready. We do not need to forward REGISTER_ACK to Chrome.
+        if (type == "REGISTER_ACK") {
+            std::cerr << "[SERVICE_MSG] REGISTER_ACK received — host registered with Brain" << std::endl;
+            if (g_logger.is_ready()) {
+                g_logger.log_native("INFO", "REGISTER_ACK_RECEIVED brain registration confirmed");
+            }
+            // Nothing to forward to Chrome. host_ready will be sent by
+            // handle_extension_ready() when Chrome sends extension_ready.
+            return;
+        }
+
+        // VALIDACIÓN: Solo rutear si handshake confirmado
         if (!is_handshake_confirmed()) {
             std::cerr << "[SERVICE_MSG] ⚠️ Handshake NO confirmado - mensaje descartado" << std::endl;
             
             if (g_logger.is_ready()) {
                 g_logger.log_native("WARN", "MSG_BLOCKED_NO_HANDSHAKE type=" + type);
             }
-            
-            // FIX: Los mensajes en handle_service_message vienen de Brain → Host.
-            // Encolarlos en g_pending_messages y luego drenalos desde tcp_client_loop
-            // los reenvía de vuelta a Brain como si fueran mensajes del host,
-            // causando que Brain reciba type=None. Se descartan en su lugar.
-            // g_pending_messages es exclusivamente para mensajes Host → Brain
-            // que no pudieron enviarse por socket no disponible.
             
             return;
         }
@@ -1343,15 +1358,13 @@ int main(int argc, char* argv[]) {
                 return 1;
             }
 
-            // FIX: assign globals BEFORE notifying tcp_client_loop.
+            // FIX: assign globals under mutex BEFORE notify_all().
             // tcp_client_loop reads g_profile_id / g_launch_id after wait_for() wakes up.
-            // Previously only the local cli_profile_id / cli_launch_id were set here,
-            // leaving the globals empty → TCP_IDENTITY_OK profile= launch= → Brain
-            // received REGISTER_HOST with empty identity → handshake never completed.
+            // Without this, REGISTER_HOST was sent with empty identity.
             {
                 std::lock_guard<std::mutex> lock(g_identity_mutex);
-                g_profile_id   = cli_profile_id;
-                g_launch_id    = cli_launch_id;
+                g_profile_id = cli_profile_id;
+                g_launch_id  = cli_launch_id;
             }
 
             try {
