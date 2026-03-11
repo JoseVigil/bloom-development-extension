@@ -305,7 +305,7 @@ https://aistudio.google.com/prompts/1zYc3GZzpUUlLiEHokUeYw1UId2tE2vcS
 jose gmail personalizacion chrommium
 https://aistudio.google.com/prompts/1bXtnDVWne0zaS4HSiFWaZrXC1rI_VKFk
 
-josegmail Integración Synway Asterisk - Ubuntu
+jose gmail Integración Synway Asterisk - Ubuntu
 https://chatgpt.com/c/692f3a0a-b120-832f-adae-4992db41c648 
 jose gmail Integracion Asterisk Laravel
 https://chatgpt.com/c/696a30fd-c8ec-8326-a2cf-d602544ad602
@@ -472,6 +472,9 @@ https://claude.ai/chat/1188b8cc-37bd-44a9-9835-34abaad4a716
 
 roamtouch workspace
 https://chatgpt.com/c/6997080d-77a4-832c-80a2-00f0040193d0
+padkite workspace 
+https://chatgpt.com/c/69ac4d7c-b898-8327-a31c-08e6e1f25ae1
+https://claude.ai/chat/848033f1-7633-4fc6-bb8d-281cc88f1a25
 
 nenes mandate hooks
 https://claude.ai/chat/d3089fad-bdcb-47b2-b096-6e9365c42896
@@ -510,7 +513,18 @@ karpathy nanochat
 https:// github.com/karpathy/nanochat
 karpathy microgpt
 https://gist.github.com/karpathy/8627fe009c40f57531cb18360106ce95
+karpathy autoresearch
+https://github.com/karpathy/autoresearch
 
 jose gmail onboarding definitivo
 https://claude.ai/chat/18d86c8a-f724-47c0-a0fd-482834928a6b
+
+jose gmail CMU course
+https://modernaicourse.org/
+
+elias langchain
+https://claude.ai/chat/0433d96d-d5ec-44a3-a3b2-eddf9f525b0f
+
+roamtouch meesaging debugging
+https://chatgpt.com/c/69b0d4aa-21bc-8330-939e-a6b77ef2f941
 

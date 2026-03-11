@@ -1,13 +1,13 @@
 package ignition
 
 import (
-	"encoding/json"
-	"fmt"
-	"os"
-	"path/filepath"
-	"time"
+    "encoding/json"
+    "fmt"
+    "os"
+    "path/filepath"
+    "time"
 
-	"golang.org/x/sys/windows/registry"
+    "golang.org/x/sys/windows/registry"
 )
 
 func (ig *Ignition) generateLogicalLaunchID(profileID string) string {
@@ -185,20 +185,25 @@ func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profi
 	}
 
 	// === 6.1 REGISTRAR CLAVE DE WINDOWS ===
-	// HKLM en lugar de HKCU: Sentinel es invocado por Nucleus que corre como servicio
-	// de Windows (SYSTEM). Escribir en CURRENT_USER desde SYSTEM apunta al hive de
-	// SYSTEM, no al del usuario interactivo. LOCAL_MACHINE aplica a todos los usuarios
-	// y es accesible desde cualquier contexto de ejecución.
+	// Nucleus corre como servicio SYSTEM. Sentinel hereda ese token.
+	// Para escribir en HKCU del usuario interactivo hay que obtener su token
+	// via WTSQueryUserToken y hacer impersonation antes de escribir registry.
 	hostName := fmt.Sprintf("com.bloom.synapse.%s", shortID)
 	regKeyPath := `SOFTWARE\Google\Chrome\NativeMessagingHosts\` + hostName
-	k, _, err := registry.CreateKey(registry.LOCAL_MACHINE, regKeyPath, registry.ALL_ACCESS)
-	if err != nil {
-		ig.Core.Logger.Error("[IGNITION] No se pudo registrar Native Messaging en registry: %v", err)
+
+	if err := registerNativeHostHKCU(regKeyPath, manifestPath, ig.Core.Logger); err != nil {
+		ig.Core.Logger.Error("[IGNITION] No se pudo registrar HKCU: %v", err)
 	} else {
-		k.SetStringValue("", manifestPath)
-		k.Close()
-		ig.Core.Logger.Info("[IGNITION] ✅ Registry key actualizada: %s", regKeyPath)
+		ig.Core.Logger.Info("[IGNITION] ✅ Registry key registrada en HKCU: %s", regKeyPath)
 	}
+
+	// Eliminar HKLM si existe
+	hklmKey, err := registry.OpenKey(registry.LOCAL_MACHINE, regKeyPath, registry.SET_VALUE|registry.QUERY_VALUE)
+	if err == nil {
+		hklmKey.Close()
+		registry.DeleteKey(registry.LOCAL_MACHINE, regKeyPath)
+		ig.Core.Logger.Info("[IGNITION] ✅ HKLM key eliminada: %s", regKeyPath)
+	}	
 
 	ig.Core.Logger.Info("[IGNITION] 🆔 Identidad [%s] inyectada en Spec, JS y Native Host.", launchID)
 	ig.Core.Logger.Info("[IGNITION] 📁 Archivos de sesión preparados:")

@@ -92,6 +92,29 @@ async function initialize() {
   isInitialized = true;
   
   await loadConfig();
+
+  // FIX: Verificar que profileId y launchId existen antes de conectar.
+  // Si el config file usa snake_case (profile_id/launch_id) en vez de
+  // camelCase (profileId/launchId), los regex matchers fallan silenciosamente
+  // y estos campos quedan undefined. En JSON.stringify, undefined se omite,
+  // por lo que el host recibe el mensaje sin esos campos y profile.empty()
+  // devuelve true — el logger nunca se inicializa.
+  if (!config) {
+    console.error('[Synapse] ✗ Config failed to load — aborting connection');
+    isInitialized = false;
+    return;
+  }
+
+  if (!config.profileId || !config.launchId) {
+    console.error('[Synapse] ✗ profileId or launchId missing from config — aborting connection');
+    console.error('[Synapse] config.profileId:', config.profileId);
+    console.error('[Synapse] config.launchId:', config.launchId);
+    console.error('[Synapse] Full config dump:', JSON.stringify(config, null, 2));
+    console.error('[Synapse] ℹ️  Verify that the config file uses "profileId" and "launchId" (camelCase)');
+    isInitialized = false;
+    return;
+  }
+
   setupKeepalive();
   connectNative();
 }
@@ -147,6 +170,18 @@ async function loadConfig() {
       if (self.SYNAPSE_CONFIG) {
         config = { ...self.SYNAPSE_CONFIG, mode };
         console.log(`[Synapse] ✓ Config loaded via importScripts (${mode} mode):`, config);
+
+        // FIX: Normalizar claves snake_case a camelCase por si el config
+        // file usa profile_id / launch_id en lugar de profileId / launchId.
+        // Esto cubre el caso donde Ignition genera el config con snake_case.
+        if (!config.profileId && config.profile_id) {
+          console.warn('[Synapse] ⚠️  profileId not found — falling back to profile_id (snake_case)');
+          config.profileId = config.profile_id;
+        }
+        if (!config.launchId && config.launch_id) {
+          console.warn('[Synapse] ⚠️  launchId not found — falling back to launch_id (snake_case)');
+          config.launchId = config.launch_id;
+        }
         
         await chrome.storage.local.set({ synapseMode: mode });
         validateConfig(mode);
@@ -205,6 +240,23 @@ async function loadConfig() {
             console.log(`[Synapse] ✓ Parsed ${key}:`, value);
           } else {
             console.warn(`[Synapse] ✗ Could not parse ${key} with regex:`, regex);
+          }
+        }
+
+        // FIX: Si los matchers camelCase fallaron (el config usa snake_case),
+        // intentar también con snake_case para profileId y launchId.
+        if (!config.profileId) {
+          const snakeMatch = text.match(/"profile_id"\s*:\s*"([^"]+)"/);
+          if (snakeMatch) {
+            config.profileId = snakeMatch[1];
+            console.warn('[Synapse] ⚠️  profileId parsed from snake_case key "profile_id":', config.profileId);
+          }
+        }
+        if (!config.launchId) {
+          const snakeMatch = text.match(/"launch_id"\s*:\s*"([^"]+)"/);
+          if (snakeMatch) {
+            config.launchId = snakeMatch[1];
+            console.warn('[Synapse] ⚠️  launchId parsed from snake_case key "launch_id":', config.launchId);
           }
         }
         
@@ -328,16 +380,23 @@ function connectNative() {
     nativePort.onDisconnect.addListener(handleDisconnect);
 
     // 🔒 FASE 1: Extension → Host (extension_ready)
-    console.log('[HANDSHAKE] FASE 1: Extension → Host (extension_ready)');
-    
-    nativePort.postMessage({
-      command: "extension_ready",
-      profile_id: config.profileId,
-      launch_id: config.launchId,
-      extension_id: config.extension_id || chrome.runtime.id,
+    // FIX: Construir el mensaje explícitamente y loguearlo antes de enviarlo.
+    // Si profile_id o launch_id son undefined, JSON.stringify los omite
+    // silenciosamente y el host recibe un objeto sin esos campos —
+    // profile.empty() devuelve true y el logger nunca se inicializa.
+    const extensionReadyMsg = {
+      command:       "extension_ready",
+      profile_id:    config.profileId,
+      launch_id:     config.launchId,
+      extension_id:  config.extension_id || chrome.runtime.id,
       profile_alias: config.profile_alias,
-      timestamp: Date.now()
-    });
+      timestamp:     Date.now()
+    };
+
+    console.log('[HANDSHAKE] FASE 1: Extension → Host (extension_ready)');
+    console.log('[HANDSHAKE] Payload:', JSON.stringify(extensionReadyMsg));
+
+    nativePort.postMessage(extensionReadyMsg);
 
     handshakeState = 'EXTENSION_READY';
     connectionState = 'CONNECTED';
@@ -399,11 +458,11 @@ function handleHostMessage(msg) {
     console.log('[HANDSHAKE] FASE 3: Extension → Host (handshake_confirm)');
     
     nativePort.postMessage({
-      command: "handshake_confirm",
-      profile_id: config.profileId,
-      launch_id: config.launchId,
+      command:      "handshake_confirm",
+      profile_id:   config.profileId,
+      launch_id:    config.launchId,
       extension_id: config.extension_id || chrome.runtime.id,
-      timestamp: Date.now()
+      timestamp:    Date.now()
     });
     
     handshakeState = 'CONFIRMED';
@@ -919,6 +978,20 @@ chrome.runtime.onStartup.addListener(() => {
   console.log('[Synapse] 🚀 Browser startup');
   initialize();
 });
+
+// FIX: Cold-start activation.
+//
+// onInstalled and onStartup only fire on first install or browser restart.
+// When Chrome launches a profile that already has the extension installed,
+// the Service Worker is activated in the background without firing either
+// event. In that case initialize() was never called, nativePort stayed null,
+// and the host waited forever for extension_ready on stdin → STDIN_EOF.
+//
+// Calling initialize() at the top level of the script guarantees it runs
+// on every Service Worker activation, including cold-start activations
+// triggered by Native Messaging. The isInitialized guard inside initialize()
+// prevents duplicate execution when onInstalled or onStartup also fires.
+initialize();
 
 chrome.runtime.onSuspend?.addListener(() => {
   console.log('[Synapse] 💤 Service worker suspending');
