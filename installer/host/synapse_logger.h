@@ -36,6 +36,7 @@ private:
     std::string log_directory;       // Ruta completa al directorio de sesión
     std::string host_log_path;       // Ruta al archivo host_YYYYMMDD.log
     std::string extension_log_path;  // Ruta al archivo cortex_extension_YYYYMMDD.log
+    std::string diag_log_path;       // Ruta al archivo nm_init_diag_{launch_id}.log
     std::string profile_id;
     std::string launch_id;
 
@@ -103,6 +104,7 @@ public:
      * Estructura creada:
      *   logs/host/profiles/{profile_id}/{launch_id}/host_YYYYMMDD.log
      *   logs/host/profiles/{profile_id}/{launch_id}/cortex_extension_YYYYMMDD.log
+     *   logs/host/profiles/{profile_id}/{launch_id}/nm_init_diag_{launch_id}.log
      *
      * El registro de telemetría en nucleus es responsabilidad exclusiva de Brain.
      * Es idempotente: llamadas repetidas con los mismos IDs no tienen efecto.
@@ -135,6 +137,12 @@ public:
     std::string get_extension_log_path() const;
     /** Alias semántico para get_extension_log_path() — usado en handshake cortex. */
     std::string get_cortex_log_path()    const;
+    /**
+     * Ruta al archivo de diagnóstico de inicialización del logger.
+     *   logs/host/profiles/{profile_id}/{launch_id}/nm_init_diag_{launch_id}.log
+     * Vacía si is_ready() == false.
+     */
+    std::string get_diag_log_path()      const;
 
     /**
      * @brief Escribe en el log nativo del proceso host.
