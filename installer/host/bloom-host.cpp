@@ -1434,6 +1434,34 @@ int main(int argc, char* argv[]) {
                            + " ext_log="  + g_logger.get_extension_log_path()
                            + " log_dir="  + g_logger.get_log_directory());
 
+            // Eliminar archivos legacy de raiz ahora que los logs canonicos estan listos.
+            // host_boot.log y nm_init_diag.log en logs/ solo tienen valor durante PRE_BOOT.
+            // Una vez que el launch dir existe y ambos logs canonicos estan abiertos,
+            // los legacy son redundantes y confunden la estructura de logs.
+            {
+                std::vector<std::string> legacy_files;
+#ifdef _WIN32
+                std::string legacy_base = !cli_user_base_dir.empty()
+                    ? cli_user_base_dir
+                    : ([]() -> std::string {
+                        const char* a = std::getenv("LOCALAPPDATA");
+                        return a ? std::string(a) + "\\BloomNucleus" : "";
+                      })();
+                if (!legacy_base.empty()) {
+                    legacy_files.push_back(legacy_base + "\\logs\\host_boot.log");
+                    legacy_files.push_back(legacy_base + "\\logs\\nm_init_diag.log");
+                }
+#else
+                legacy_files.push_back("/tmp/bloom-nucleus/logs/host_boot.log");
+                legacy_files.push_back("/tmp/bloom-nucleus/logs/nm_init_diag.log");
+#endif
+                for (const auto& lf : legacy_files) {
+                    if (std::remove(lf.c_str()) == 0) {
+                        write_boot_log("[BOOT] Removed legacy file: " + lf);
+                    }
+                }
+            }
+
             identity_resolved.store(true);
             g_identity_cv.notify_all();
 
@@ -1494,6 +1522,31 @@ int main(int argc, char* argv[]) {
             write_boot_log("[INIT] logger_ready=" + std::string(g_logger.is_ready() ? "true" : "false")
                            + " profile=" + cli_profile_id
                            + " launch="  + cli_launch_id);
+
+            // Eliminar archivos legacy de raiz — mismo razonamiento que en el branch CLI.
+            {
+                std::vector<std::string> legacy_files;
+#ifdef _WIN32
+                std::string legacy_base = !cli_user_base_dir.empty()
+                    ? cli_user_base_dir
+                    : ([]() -> std::string {
+                        const char* a = std::getenv("LOCALAPPDATA");
+                        return a ? std::string(a) + "\\BloomNucleus" : "";
+                      })();
+                if (!legacy_base.empty()) {
+                    legacy_files.push_back(legacy_base + "\\logs\\host_boot.log");
+                    legacy_files.push_back(legacy_base + "\\logs\\nm_init_diag.log");
+                }
+#else
+                legacy_files.push_back("/tmp/bloom-nucleus/logs/host_boot.log");
+                legacy_files.push_back("/tmp/bloom-nucleus/logs/nm_init_diag.log");
+#endif
+                for (const auto& lf : legacy_files) {
+                    if (std::remove(lf.c_str()) == 0) {
+                        write_boot_log("[BOOT] Removed legacy file: " + lf);
+                    }
+                }
+            }
 
             identity_resolved.store(true);
             g_identity_cv.notify_all();

@@ -182,20 +182,32 @@ void SynapseLogManager::initialize(const std::string& p_profile_id,
                                    const std::string& p_launch_id) {
     if (ready) return;
 
-    // DIAG: escribe diagnóstico a path hardcodeado antes de cualquier lógica.
-    // Esto confirma que initialize() fue llamado y muestra qué construye.
+    // DIAG: escribe diagnóstico de inicialización.
+    //
+    // Path strategy (misma cascada que write_boot_log en main):
+    //   1. Una vez que log_directory esta construido -> launch dir canonico:
+    //        logs/host/profiles/{profile_id}/{launch_id}/nm_init_diag_{launch_id}.log
+    //   2. Fallback legacy hasta ese momento:
+    //        {user_base_dir}/logs/nm_init_diag.log  (o Windows\Temp)
+    //
+    // diag_log_path se actualiza a (1) ni bien log_directory es valido,
+    // para que todas las entradas siguientes vayan al lugar correcto.
     auto diag_write = [&](const std::string& msg) {
-        // Intentar con user_base_dir si está disponible
-        std::vector<std::string> diag_paths;
-        if (!user_base_dir.empty()) {
-            diag_paths.push_back(user_base_dir + "\\logs\\nm_init_diag.log");
+        std::string target = diag_log_path;  // vacio hasta que log_directory este listo
+        if (target.empty()) {
+            // Fallback legacy: solo para las primeras lineas antes de tener log_directory.
+            if (!user_base_dir.empty()) {
+#ifdef _WIN32
+                target = user_base_dir + "\\logs\\nm_init_diag.log";
+#else
+                target = user_base_dir + "/logs/nm_init_diag.log";
+#endif
+            } else {
+                target = "C:\\Windows\\Temp\\nm_init_diag.log";
+            }
         }
-        diag_paths.push_back("C:\\Users\\josev\\AppData\\Local\\BloomNucleus\\logs\\nm_init_diag.log");
-        diag_paths.push_back("C:\\Windows\\Temp\\nm_init_diag.log");
-        for (const auto& p : diag_paths) {
-            std::ofstream df(p, std::ios::app);
-            if (df.is_open()) { df << msg << "\n"; df.flush(); break; }
-        }
+        std::ofstream df(target, std::ios::app);
+        if (df.is_open()) { df << msg << "\n"; df.flush(); }
     };
     diag_write("[DIAG] initialize() called profile=" + p_profile_id
                + " launch=" + p_launch_id
@@ -233,6 +245,11 @@ void SynapseLogManager::initialize(const std::string& p_profile_id,
         std::cerr.flush();
         return;
     }
+
+    // Desde aqui log_directory existe — redirigir diag al launch dir canonico.
+    // Todas las entradas siguientes van a nm_init_diag_{launch_id}.log en lugar
+    // del fallback legacy logs/nm_init_diag.log.
+    diag_log_path = log_directory + PATH_SEP + "nm_init_diag_" + p_launch_id + ".log";
 
     auto now   = std::chrono::system_clock::now();
     auto now_t = std::chrono::system_clock::to_time_t(now);
@@ -321,6 +338,7 @@ std::string SynapseLogManager::get_log_directory()      const { return log_direc
 std::string SynapseLogManager::get_host_log_path()      const { return host_log_path;      }
 std::string SynapseLogManager::get_extension_log_path() const { return extension_log_path; }
 std::string SynapseLogManager::get_cortex_log_path()    const { return extension_log_path; }
+std::string SynapseLogManager::get_diag_log_path()      const { return diag_log_path;      }
 
 // ============================================================================
 // initialize_from_telemetry() — NM mode path resolution via telemetry.json
