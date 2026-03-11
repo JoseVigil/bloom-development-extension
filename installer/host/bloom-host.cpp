@@ -1343,6 +1343,17 @@ int main(int argc, char* argv[]) {
                 return 1;
             }
 
+            // FIX: assign globals BEFORE notifying tcp_client_loop.
+            // tcp_client_loop reads g_profile_id / g_launch_id after wait_for() wakes up.
+            // Previously only the local cli_profile_id / cli_launch_id were set here,
+            // leaving the globals empty → TCP_IDENTITY_OK profile= launch= → Brain
+            // received REGISTER_HOST with empty identity → handshake never completed.
+            {
+                std::lock_guard<std::mutex> lock(g_identity_mutex);
+                g_profile_id   = cli_profile_id;
+                g_launch_id    = cli_launch_id;
+            }
+
             try {
                 g_logger.initialize(cli_profile_id, cli_launch_id);
             } catch (...) {
