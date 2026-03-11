@@ -1008,7 +1008,7 @@ int main(int argc, char* argv[]) {
             g_logger.log_native("INFO", "Host pre-initialized by Sentinel --init. Dirs and files ready.");
             std::cerr << "[INIT] OK — estructura creada, saliendo\n";
 
-            // Emitir resultado JSON a stdout si se pidió --json.
+            // Emitir resultado JSON a stdout si se pidió --json.            
             // El objeto es minimal e intencional: solo lo que Sentinel necesita parsear.
             if (json_output) {
                 json result;
@@ -1283,4 +1283,3 @@ int main(int argc, char* argv[]) {
         return 2;
     }
 }
-
