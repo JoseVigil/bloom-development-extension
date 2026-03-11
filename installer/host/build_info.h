@@ -2,6 +2,7 @@
 #ifndef BUILD_INFO_H
 #define BUILD_INFO_H
 
-#define BUILD_NUMBER 105
+#define BUILD_NUMBER 106
+#define VERSION_STRING "2.2.0"
 
 #endif // BUILD_INFO_H
