@@ -160,81 +160,79 @@ BloomNucleus/
 │   ├── metamorph.json
 │   ├── nucleus.json
 │   ├── profile/
-│   │   └── 54b42bf2-153c-4691-80a9-48e3f83805cd/
-│   │       ├── com.bloom.synapse.54b42bf2.json
+│   │   └── df276c23-8105-4c56-8773-8b75c178dacc/
+│   │       ├── com.bloom.synapse.df276c23.json
 │   │       └── ignition_spec.json
 │   └── profiles.json
 ├── history/
 │   └── profiles/
-│       └── 54b42bf2-153c-4691-80a9-48e3f83805cd/
+│       └── df276c23-8105-4c56-8773-8b75c178dacc/
 │           ├── launches/
-│           │   └── 20260310.ndjson
+│           │   └── 20260311.ndjson
 │           └── sessions/
-│               └── 001_54b42bf2_113541.ndjson
+│               └── 001_df276c23_174511.ndjson
 ├── hooks/
 │   └── post_launch/
 │       └── 00_generate_synapse_trace.py
 ├── logs/
 │   ├── brain/
 │   │   ├── core/
-│   │   │   └── brain_core_20260310.log
+│   │   │   └── brain_core_20260311.log
 │   │   ├── profile/
-│   │   │   └── brain_profile_20260310.log
+│   │   │   └── brain_profile_20260311.log
 │   │   ├── server/
-│   │   │   ├── brain_server_20260310.log
-│   │   │   ├── brain_server_event_bus_20260310.log
-│   │   │   └── brain_server_manager_20260310.log
+│   │   │   ├── brain_server_20260311.log
+│   │   │   ├── brain_server_event_bus_20260311.log
+│   │   │   └── brain_server_manager_20260311.log
 │   │   └── service/
 │   │       └── brain_service.log
 │   ├── chromium/
 │   ├── conductor/
-│   │   ├── conductor_launch_2026-03-10_14-33-28.log
-│   │   └── conductor_launch_2026-03-10_14-33-29.log
+│   │   └── conductor_launch_2026-03-11_20-43-05.log
 │   ├── host/
 │   │   └── profiles/
-│   │       └── 54b42bf2-153c-4691-80a9-48e3f83805cd/
-│   │           └── 001_54b42bf2_113541/
-│   │               ├── cortex_extension_20260310.log
-│   │               └── host_20260310.log
+│   │       └── df276c23-8105-4c56-8773-8b75c178dacc/
+│   │           └── 001_df276c23_174511/
+│   │               ├── cortex_extension_20260311.log
+│   │               ├── host_20260311.log
+│   │               └── host_boot_001_df276c23_174511.log
+│   ├── host_boot.log
 │   ├── install/
-│   │   ├── electron_install_2026-03-10_14-33-28.log
-│   │   └── electron_install_2026-03-10_14-33-29.log
+│   │   └── electron_install_2026-03-11_20-43-05.log
 │   ├── metamorph/
-│   │   └── metamorph_core_20260310.log
+│   │   └── metamorph_core_20260311.log
 │   ├── nm_init_diag.log
 │   ├── nucleus/
-│   │   ├── nucleus_orchestration_20260310.log
-│   │   ├── nucleus_synapse_20260310.log
-│   │   ├── nucleus_temporal_20260310.log
+│   │   ├── nucleus_orchestration_20260311.log
+│   │   ├── nucleus_synapse_20260311.log
+│   │   ├── nucleus_temporal_20260311.log
 │   │   ├── service/
 │   │   │   └── nucleus_service.log
 │   │   ├── telemetry/
-│   │   │   └── nucleus_telemetry_20260310.log
+│   │   │   └── nucleus_telemetry_20260311.log
 │   │   └── worker/
-│   │       └── worker_manager_20260310.log
+│   │       └── worker_manager_20260311.log
 │   ├── sensor/
-│   │   └── sensor_20260310.log
+│   │   └── sensor_20260311.log
 │   ├── sentinel/
 │   │   ├── profiles/
-│   │   │   ├── 54b42bf2-153c-4691-80a9-48e3f83805cd/
-│   │   │   │   ├── 001_54b42bf2_113541_debug.log
-│   │   │   │   ├── 001_54b42bf2_113541_engine_mining.log
-│   │   │   │   ├── 001_54b42bf2_113541_engine_read.log
-│   │   │   │   └── 001_54b42bf2_113541_netlog.json
-│   │   │   └── sentinel_54b42bf2-153c-4691-80a9-48e3f83805cd_20260310.log
-│   │   └── sentinel_core_20260310.log
+│   │   │   ├── df276c23-8105-4c56-8773-8b75c178dacc/
+│   │   │   │   ├── 001_df276c23_174511_debug.log
+│   │   │   │   ├── 001_df276c23_174511_engine_mining.log
+│   │   │   │   ├── 001_df276c23_174511_engine_read.log
+│   │   │   │   └── 001_df276c23_174511_netlog.json
+│   │   │   └── sentinel_df276c23-8105-4c56-8773-8b75c178dacc_20260311.log
+│   │   └── sentinel_core_20260311.log
 │   ├── synapse_trace/
-│   │   └── synapse_trace_001_54b42bf2_113541.log
+│   │   └── synapse_trace_001_df276c23_174511.log
 │   ├── telemetry.json
 │   └── temporal/
 │       ├── temporal.db
 │       └── temporal.pid
 ├── profiles/
-│   └── 54b42bf2-153c-4691-80a9-48e3f83805cd/
+│   └── df276c23-8105-4c56-8773-8b75c178dacc/
 │       ├── ActorSafetyLists/
 │       ├── AmountExtractionHeuristicRegexes/
-│       ├── BrowserMetrics/
-│       │   └── BrowserMetrics-69B02C40-4D2C.pma
 │       ├── CertificateRevocation/
 │       ├── Crashpad/
 │       │   ├── attachments/
@@ -246,7 +244,19 @@ BloomNucleus/
 │       │   ├── Account Web Data-journal
 │       │   ├── Affiliation Database
 │       │   ├── Affiliation Database-journal
+│       │   ├── AutofillAiModelCache/
+│       │   │   ├── LOCK
+│       │   │   └── LOG
+│       │   ├── AutofillStrikeDatabase/
+│       │   │   ├── LOCK
+│       │   │   └── LOG
 │       │   ├── BookmarkMergedSurfaceOrdering
+│       │   ├── BrowsingTopicsSiteData
+│       │   ├── BrowsingTopicsSiteData-journal
+│       │   ├── BrowsingTopicsState
+│       │   ├── BudgetDatabase/
+│       │   │   ├── LOCK
+│       │   │   └── LOG
 │       │   ├── Cache/
 │       │   │   ├── Cache_Data/
 │       │   │   │   ├── index
@@ -263,6 +273,13 @@ BloomNucleus/
 │       │   │   └── pc/
 │       │   │       ├── 05_@;2t2fb2=a6@=`6`2`25[.9092[9660;65-[99164=57144=815`2.db
 │       │   │       └── 05_@;2t2fb2=a6@=`6`2`25[.9092[9660;65-[99164=57144=815`2.journal
+│       │   ├── Collaboration/
+│       │   │   ├── MessageDB
+│       │   │   └── MessageDB-journal
+│       │   ├── DIPS
+│       │   ├── DataSharing/
+│       │   │   ├── DataSharingDB
+│       │   │   └── DataSharingDB-journal
 │       │   ├── DawnGraphiteCache/
 │       │   │   ├── data_0
 │       │   │   ├── data_1
@@ -295,6 +312,19 @@ BloomNucleus/
 │       │   │   └── MANIFEST-000001
 │       │   ├── Favicons
 │       │   ├── Favicons-journal
+│       │   ├── Feature Engagement Tracker/
+│       │   │   ├── AvailabilityDB/
+│       │   │   │   ├── LOCK
+│       │   │   │   └── LOG
+│       │   │   └── EventDB/
+│       │   │       ├── LOCK
+│       │   │       └── LOG
+│       │   ├── GCM Store/
+│       │   │   ├── 000003.log
+│       │   │   ├── CURRENT
+│       │   │   ├── LOCK
+│       │   │   ├── LOG
+│       │   │   └── MANIFEST-000001
 │       │   ├── GPUCache/
 │       │   │   ├── data_0
 │       │   │   ├── data_1
@@ -336,10 +366,13 @@ BloomNucleus/
 │       │   │   ├── TransportSecurity
 │       │   │   ├── Trust Tokens
 │       │   │   └── Trust Tokens-journal
+│       │   ├── Network Action Predictor
+│       │   ├── Network Action Predictor-journal
 │       │   ├── PersistentOriginTrials/
 │       │   │   ├── LOCK
 │       │   │   └── LOG
 │       │   ├── Preferences
+│       │   ├── PreferredApps
 │       │   ├── README
 │       │   ├── Safe Browsing Network/
 │       │   │   ├── NetworkDataMigrated
@@ -377,8 +410,8 @@ BloomNucleus/
 │       │   │   ├── LOG
 │       │   │   └── MANIFEST-000001
 │       │   ├── Sessions/
-│       │   │   ├── Session_13417626946792372
-│       │   │   └── Tabs_13417626961445700
+│       │   │   ├── Session_13417735515283527
+│       │   │   └── Tabs_13417735522359000
 │       │   ├── Shared Dictionary/
 │       │   │   ├── cache/
 │       │   │   │   ├── index
@@ -387,6 +420,8 @@ BloomNucleus/
 │       │   │   ├── db
 │       │   │   └── db-journal
 │       │   ├── SharedStorage
+│       │   ├── Shortcuts
+│       │   ├── Shortcuts-journal
 │       │   ├── Site Characteristics Database/
 │       │   │   ├── 000003.log
 │       │   │   ├── CURRENT
@@ -407,6 +442,8 @@ BloomNucleus/
 │       │   ├── WebStorage/
 │       │   │   ├── QuotaManager
 │       │   │   └── QuotaManager-journal
+│       │   ├── blob_storage/
+│       │   │   └── b495677b-7041-4663-aaff-dc49bd6e3d71/
 │       │   ├── chrome_cart_db/
 │       │   │   ├── LOCK
 │       │   │   └── LOG
@@ -417,6 +454,11 @@ BloomNucleus/
 │       │   │   ├── LOCK
 │       │   │   └── LOG
 │       │   ├── discounts_db/
+│       │   │   ├── LOCK
+│       │   │   └── LOG
+│       │   ├── heavy_ad_intervention_opt_out.db
+│       │   ├── heavy_ad_intervention_opt_out.db-journal
+│       │   ├── optimization_guide_hint_cache_store/
 │       │   │   ├── LOCK
 │       │   │   └── LOG
 │       │   ├── parcel_tracking_db/
@@ -440,6 +482,7 @@ BloomNucleus/
 │       │   └── trusted_vault.pb
 │       ├── DevToolsActivePort
 │       ├── FileTypePolicies/
+│       ├── FirstPartySetsPreloaded/
 │       ├── GPUPersistentCache/
 │       │   └── DawnGraphiteCache/
 │       │       └── AD277SZPBPK7F6SGJV5FTCFBB7NJ7QPK/
@@ -453,6 +496,7 @@ BloomNucleus/
 │       │   ├── data_3
 │       │   └── index
 │       ├── HistorySearch/
+│       ├── Last Browser
 │       ├── Last Version
 │       ├── Local State
 │       ├── MEIPreload/
@@ -498,6 +542,10 @@ BloomNucleus/
 │       │   ├── discovery.synapse.config.js
 │       │   ├── landing/
 │       │   └── manifest.json
+│       ├── extensions_crx_cache/
+│       │   └── metadata.json
+│       ├── first_party_sets.db
+│       ├── first_party_sets.db-journal
 │       ├── hyphen-data/
 │       └── segmentation_platform/
 │           ├── ukm_db

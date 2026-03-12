@@ -1,0 +1,21 @@
+bloom-development-extension/
+└── host/
+    ├── HostExecutor.ts
+    ├── bloom-host.cpp
+    ├── build.sh
+    ├── build_info.h
+    ├── build_number.txt
+    ├── chunked_buffer.cpp
+    ├── chunked_buffer.h
+    ├── cli_handler.cpp
+    ├── cli_handler.h
+    ├── cli_parser.h
+    ├── help_renderer.cpp
+    ├── help_renderer.h
+    ├── nlohmann/
+    │   └── json.hpp
+    ├── platform_utils.cpp
+    ├── platform_utils.h
+    ├── setup-openssl-mingw.sh
+    ├── synapse_logger.cpp
+    └── synapse_logger.h

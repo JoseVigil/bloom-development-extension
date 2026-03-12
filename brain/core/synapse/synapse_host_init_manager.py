@@ -60,15 +60,28 @@ class SynapseHostInitManager:
         parsed = self._parse_host_output(result.stdout)
         _diag.debug(f"[HOST-INIT] parsed={parsed}")
 
+        import datetime
+        date_str = datetime.datetime.utcnow().strftime("%Y%m%d")
+
+        log_base = parsed.get("log_directory", "")
+        profile_short = profile_id[:8]
+
+        # Paths canónicos para los dos logs auxiliares.
+        # Formato: <nombre_fijo>_<launch_id>.<ext>  — consistente con host/cortex.
+        boot_log  = f"{log_base}/host_boot_{launch_id}.log".replace("\\", "/") if log_base else ""
+        diag_log  = f"{log_base}/nm_init_diag_{launch_id}.log".replace("\\", "/") if log_base else ""
+
         data = {
             "profile_id":    profile_id,
             "launch_id":     launch_id,
             "bloom_root":    str(resolved_root),
             "host_binary":   str(host_bin),
             "exit_code":     result.returncode,
-            "log_directory": parsed.get("log_directory", ""),
+            "log_directory": log_base,
             "host_log":      parsed.get("host_log", ""),
             "extension_log": parsed.get("extension_log", ""),
+            "boot_log":      boot_log,
+            "diag_log":      diag_log,
             "timestamp":     parsed.get("timestamp"),
             "raw_output":    result.stdout.strip(),
         }
@@ -108,6 +121,22 @@ class SynapseHostInitManager:
                 "priority":    "2",
                 "category":    "synapse",
                 "description": f"Cortex extension log for launch {launch_id}",
+            },
+            {
+                "path":        data.get("boot_log", ""),
+                "stream_id":   f"host_boot_{launch_id}",
+                "label":       "🥾 HOST BOOT",
+                "priority":    "3",
+                "category":    "host",
+                "description": f"Pre-logger boot trace for launch {launch_id}",
+            },
+            {
+                "path":        data.get("diag_log", ""),
+                "stream_id":   f"nm_init_diag_{launch_id}",
+                "label":       "🔧 NM INIT DIAG",
+                "priority":    "3",
+                "category":    "host",
+                "description": f"Logger initialization diagnostic for launch {launch_id}",
             },
         ]
 

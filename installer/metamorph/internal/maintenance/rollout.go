@@ -37,7 +37,7 @@ preserving subdirectories (help/, win-unpacked/, _internal/, etc.).
 
 Components deployed:
   Brain, Nucleus, Sentinel, Metamorph, Conductor (+ win-unpacked),
-  Host → native/, Cortex (.blx), Setup, NSSM
+  Host → host/, Cortex (.blx), Setup, NSSM
 
 After rollout, 'metamorph inspect' is run automatically to update
 %LOCALAPPDATA%\BloomNucleus\config\metamorph.json.
@@ -92,7 +92,7 @@ type rolloutEntry struct {
 }
 
 // getRolloutEntries returns the canonical source→destination mapping.
-// Host lives in native/bin/win64/host/ but deploys to AppData bin/native/.
+// Host lives in native/bin/win64/host/ and deploys to AppData bin/host/.
 // Cortex is a single .blx file living one level up at native/bin/cortex/.
 // NSSM lives at native/nssm/win64/ (outside the per-platform bin tree).
 func getRolloutEntries() []rolloutEntry {
@@ -103,8 +103,7 @@ func getRolloutEntries() []rolloutEntry {
 		{component: "Metamorph", src: "metamorph", dst: "metamorph"},
 		{component: "Conductor", src: "conductor", dst: "conductor"},
 		{component: "Setup",     src: "setup",     dst: "setup"},
-		// Host folder is named "host" in repo but deploys to "native" in AppData
-		{component: "Host",      src: "host",      dst: "native"},
+		{component: "Host",      src: "host",      dst: "host"},
 	}
 }
 
@@ -149,17 +148,21 @@ func runRollout(c *core.Core, dryRun bool) error {
 
 	// Stop managed services before deploying to avoid "Access is denied" on locked files.
 	managedServices := []string{"BloomBrain", "BloomNucleusService"}
-	// processesToKill maps each service to the exe names that must be dead
-	// before files can be overwritten. Mirrors what the installer does via
-	// taskkill /F /IM <name> /T to ensure child processes are also killed.
-	processesToKill := map[string][]string{
-		"BloomBrain":        {"brain.exe"},
-		"BloomNucleusService": {"nucleus.exe", "temporal.exe"},
+	// allProcessesToKill are killed unconditionally before copying.
+	// bloom-host.exe holds handles on brain/_internal/VCRUNTIME140.dll.
+	// brain.exe/nucleus.exe may also run as workers outside of their services.
+	allProcessesToKill := []string{
+		"brain.exe",
+		"nucleus.exe",
+		"temporal.exe",
+		"bloom-host.exe",
+		"bloom-sensor.exe",
 	}
 	if !dryRun {
 		if !c.Config.OutputJSON {
-			fmt.Println("  Stopping services...")
+			fmt.Println("  Stopping services and killing processes...")
 		}
+		// Step 1: stop services via SCM.
 		for _, svcName := range managedServices {
 			if err := controlService(svcName, false); err != nil {
 				if !c.Config.OutputJSON {
@@ -168,9 +171,21 @@ func runRollout(c *core.Core, dryRun bool) error {
 			} else if !c.Config.OutputJSON {
 				fmt.Printf("  ⏹  %-20s stopped\n", svcName)
 			}
-			// Force-kill any lingering child processes so files are unlocked.
-			for _, procName := range processesToKill[svcName] {
-				killProcess(procName)
+		}
+		// Step 2: force-kill all known processes and their trees.
+		// This catches workers running outside services and releases all
+		// file handles including DLL locks like VCRUNTIME140.dll.
+		for _, procName := range allProcessesToKill {
+			killProcess(procName)
+		}
+		// Step 3: pause to let Windows release all file handles.
+		time.Sleep(1 * time.Second)
+		// Step 4: remove legacy bin/native/ dir created by old incorrect rollout.
+		nativeLegacyDir := filepath.Join(appDataBin, "native")
+		if _, err := os.Stat(nativeLegacyDir); err == nil {
+			_ = os.RemoveAll(nativeLegacyDir)
+			if !c.Config.OutputJSON {
+				fmt.Printf("  🗑  removed legacy bin/native/ directory\n")
 			}
 		}
 		fmt.Println()

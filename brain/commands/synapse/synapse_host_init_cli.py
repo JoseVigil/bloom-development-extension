@@ -99,12 +99,18 @@ class SynapseHostInitCommand(BaseCommand):
         log_dir = inner.get("log_directory", "")
         if log_dir:
             typer.echo(f"   📁 Logs: {log_dir}")
-        host_log = inner.get("host_log")
-        ext_log = inner.get("extension_log")
+        host_log  = inner.get("host_log")
+        ext_log   = inner.get("extension_log")
+        boot_log  = inner.get("boot_log")
+        diag_log  = inner.get("diag_log")
         if host_log:
             typer.echo(f"   📄 host_log:      {host_log}")
         if ext_log:
             typer.echo(f"   📄 extension_log: {ext_log}")
+        if boot_log:
+            typer.echo(f"   📄 boot_log:      {boot_log}")
+        if diag_log:
+            typer.echo(f"   📄 diag_log:      {diag_log}")
 
     def _handle_error(self, gc, message: str):
         """Manejo unificado de errores."""

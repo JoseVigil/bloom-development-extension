@@ -1119,8 +1119,8 @@ func extractSummaryFacts(lines []timedLine) traceSummary {
 				s.cortexOK = "error"
 			}
 		}
-		// Host — detected from host stream
-		if strings.Contains(l.stream, "host") {
+		// Host — detected from host and nm_init_diag streams
+		if strings.Contains(l.stream, "host") || strings.Contains(l.stream, "nm_init_diag") {
 			if s.hostOK == "unknown" {
 				s.hostOK = "active"
 			}
@@ -1162,7 +1162,7 @@ func streamSymbol(stream, text string) string {
 	if strings.Contains(stream, "cortex") {
 		return "🧠"
 	}
-	if strings.Contains(stream, "host") {
+	if strings.Contains(stream, "host") || strings.Contains(stream, "nm_init_diag") {
 		return "🖥️ "
 	}
 	if strings.Contains(stream, "telemetry") {
@@ -1477,7 +1477,7 @@ func runLaunchTrace(c *core.Core, launchID, profileID, outFilePath string, jsonO
 	fmt.Fprintf(w, "\n[HOST — bloom-host]\n\n")
 	hostWritten := false
 	for streamID, stream := range tf.ActiveStreams {
-		if !strings.Contains(streamID, "host") {
+		if !strings.Contains(streamID, "host") && !strings.Contains(streamID, "nm_init_diag") {
 			continue
 		}
 		// host streams are always launch-dedicated (e.g. host_005_cbc25063_090120)

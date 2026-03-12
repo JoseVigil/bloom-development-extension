@@ -13,4 +13,14 @@ uitool
 Verificar health check en instalador Electron
 https://claude.ai/chat/7c68cd4f-23ba-43f1-85d7-9894285f7157
 
+bloomaut metamorph rollout fix
+https://claude.ai/chat/50a9ca06-f422-4384-849c-9f6f84bb4a78
+
+jose gmail host bug logger
+https://claude.ai/chat/9e4ed740-6933-4f10-8dcf-8e21bc624b8e
+V1 notimation gmail FIXES
+https://claude.ai/chat/48545194-afe7-4c25-8bae-b007b4c9f8dd
+
+notimation rodrigo requirement
+https://chatgpt.com/c/69b02903-9f64-8328-8fbf-a40b8bbf20d2
 
