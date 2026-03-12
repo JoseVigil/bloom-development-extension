@@ -1017,33 +1017,51 @@ int main(int argc, char* argv[]) {
             OutputDebugStringA(("bloom-host: " + pre_boot_msg + "\n").c_str());
 #endif
 
-            // 3. Archivo directo a disco — no depende de ninguna abstracción
-            //    Intenta: argv[0] up 3 levels → BloomNucleus\logs\host_boot.log
-            //    Fallback: %LOCALAPPDATA%\BloomNucleus\logs\host_boot.log
-            std::string early_base = strip_last(strip_last(strip_last(exe_path)));
-            if (early_base.empty() || early_base == exe_path) {
-                const char* appdata = std::getenv("LOCALAPPDATA");
-                if (appdata && appdata[0] != '\0') {
-                    early_base = std::string(appdata) + "\\BloomNucleus";
+            // 3. Archivo directo a disco.
+            // Escanear argv buscando --profile-id y --launch-id.
+            // Si estan presentes (caso --init): escribir al launch dir canonico
+            //   logs\host\profiles\{profile_id}\{launch_id}\host_boot_{launch_id}.log
+            // Si no estan (--version, proceso Chrome): no escribir nada a disco.
+            // Esto elimina la creacion de host_boot.log en logs/ raiz.
+            {
+                std::string pre_profile_id, pre_launch_id, pre_user_base;
+                for (int ai = 1; ai < argc - 1; ++ai) {
+                    std::string a = argv[ai];
+                    if (a == "--profile-id")    pre_profile_id = argv[ai + 1];
+                    if (a == "--launch-id")     pre_launch_id  = argv[ai + 1];
+                    if (a == "--user-base-dir") pre_user_base  = argv[ai + 1];
                 }
-            }
-            if (!early_base.empty()) {
+                if (!pre_profile_id.empty() && !pre_launch_id.empty()) {
+                    std::string base = !pre_user_base.empty()
+                        ? pre_user_base
+                        : strip_last(strip_last(strip_last(exe_path)));
+                    if (base.empty() || base == exe_path) {
+                        const char* appdata = std::getenv("LOCALAPPDATA");
+                        if (appdata && appdata[0] != '\0')
+                            base = std::string(appdata) + "\\BloomNucleus";
+                    }
+                    if (!base.empty()) {
 #ifdef _WIN32
-                std::string boot_path = early_base + "\\logs\\host_boot.log";
+                        std::string boot_path = base + "\\logs\\host\\profiles\\"
+                                              + pre_profile_id + "\\" + pre_launch_id
+                                              + "\\host_boot_" + pre_launch_id + ".log";
 #else
-                std::string boot_path = early_base + "/logs/host_boot.log";
+                        std::string boot_path = base + "/logs/host/profiles/"
+                                              + pre_profile_id + "/" + pre_launch_id
+                                              + "/host_boot_" + pre_launch_id + ".log";
 #endif
-                std::ofstream boot_f(boot_path, std::ios::app);
-                if (boot_f.is_open()) {
-                    boot_f << pre_boot_msg << "\n";
-                    boot_f.flush();
-                } else {
-                    // El directorio no existe — anotarlo en stderr/DebugView
-                    std::string dir_err = "[PRE_BOOT] WARN host_boot.log not writable at: " + boot_path;
-                    std::cerr << dir_err << std::endl;
+                        std::ofstream boot_f(boot_path, std::ios::app);
+                        if (boot_f.is_open()) {
+                            boot_f << pre_boot_msg << "\n";
+                            boot_f.flush();
+                        } else {
+                            std::string dir_err = "[PRE_BOOT] WARN boot log not writable at: " + boot_path;
+                            std::cerr << dir_err << std::endl;
 #ifdef _WIN32
-                    OutputDebugStringA(("bloom-host: " + dir_err + "\n").c_str());
+                            OutputDebugStringA(("bloom-host: " + dir_err + "\n").c_str());
 #endif
+                        }
+                    }
                 }
             }
         }
@@ -1294,20 +1312,34 @@ int main(int argc, char* argv[]) {
             OutputDebugStringA(("bloom-host: " + line + "\n").c_str());
 #endif
 
-            // 3. Archivo directo a disco — no depende de ninguna abstracción
+            // 3. Archivo directo a disco.
+            // Launch dir canonico si hay identidad; nada si no.
             std::string path;
+            if (g_logger.is_ready() && !g_logger.get_log_directory().empty()) {
 #ifdef _WIN32
-            // Preferir user_base_dir (resuelto por Sentinel con token real)
-            // sobre %LOCALAPPDATA% (falla en Session 0 / SYSTEM context).
-            if (!cli_user_base_dir.empty()) {
-                path = cli_user_base_dir + "\\logs\\host_boot.log";
-            } else {
-                const char* appdata = std::getenv("LOCALAPPDATA");
-                if (appdata) path = std::string(appdata) + "\\BloomNucleus\\logs\\host_boot.log";
-            }
+                path = g_logger.get_log_directory() + "\\host_boot_" + cli_launch_id + ".log";
 #else
-            path = "/tmp/bloom-nucleus/logs/host_boot.log";
+                path = g_logger.get_log_directory() + "/host_boot_" + cli_launch_id + ".log";
 #endif
+            } else if (!cli_profile_id.empty() && !cli_launch_id.empty()) {
+                std::string base = !cli_user_base_dir.empty()
+                    ? cli_user_base_dir
+                    : ([]() -> std::string {
+                        const char* a = std::getenv("LOCALAPPDATA");
+                        return a ? std::string(a) + "\\BloomNucleus" : "";
+                      })();
+                if (!base.empty()) {
+#ifdef _WIN32
+                    path = base + "\\logs\\host\\profiles\\"
+                           + cli_profile_id + "\\" + cli_launch_id
+                           + "\\host_boot_" + cli_launch_id + ".log";
+#else
+                    path = base + "/logs/host/profiles/"
+                           + cli_profile_id + "/" + cli_launch_id
+                           + "/host_boot_" + cli_launch_id + ".log";
+#endif
+                }
+            }
             if (!path.empty()) {
                 std::ofstream f(path, std::ios::app);
                 if (f.is_open()) { f << line << "\n"; f.flush(); }
