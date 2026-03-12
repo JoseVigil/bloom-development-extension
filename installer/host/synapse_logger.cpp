@@ -27,6 +27,18 @@
 #endif
 
 // ============================================================================
+// Windows DebugView helper — no-op on non-Windows builds
+// ============================================================================
+
+static void debug_output(const std::string& line) {
+#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
+    OutputDebugStringA((line + "\n").c_str());
+#else
+    (void)line;
+#endif
+}
+
+// ============================================================================
 // Constructor / Destructor
 // ============================================================================
 
@@ -551,6 +563,8 @@ void SynapseLogManager::log_native(const std::string& level,
             native_log.flush();
         }
     }
+
+    debug_output(line);
 }
 
 // ============================================================================
@@ -599,6 +613,8 @@ void SynapseLogManager::log_browser(const std::string& level,
             browser_log.flush();
         }
     }
+
+    debug_output(line);
 
     std::cerr << line << "\n";
     std::cerr.flush();
