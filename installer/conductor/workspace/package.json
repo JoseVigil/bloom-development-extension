@@ -40,13 +40,21 @@
     },
     "files": [
       "main_conductor.js",
-      "preload_conductor.js",
-      "src/**/*",
+      "onboarding/**/*",
+      "core/**/*",
       "assets/**/*",
       "build_info.json",
       "version.json",
       "package.json",
-      "bloom-conductor-cli.cmd"
+      "bloom-conductor-cli.cmd",
+      {
+        "from": "../shared",
+        "to": "shared",
+        "filter": [
+          "logger.js",
+          "global_paths.js"
+        ]
+      }
     ],
     "extraFiles": [
       {

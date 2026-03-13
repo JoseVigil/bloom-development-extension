@@ -4,16 +4,20 @@ bloom-development-extension/
     │   └── bloom.ico
     ├── bloom-conductor-version.ps1
     ├── build_info.json
-    ├── conductor.html
-    ├── ipc/
-    │   ├── health-handlers.js
-    │   └── profiles-handlers.js
+    ├── core/
+    │   ├── core.html
+    │   ├── ipc/
+    │   │   ├── health-handlers.js
+    │   │   └── profiles-handlers.js
+    │   └── preload_conductor.js
     ├── main_conductor.js
     ├── node_modules/ [... dependencies]
-    ├── onboarding-script-block.js
-    ├── onboarding.html
+    ├── onboarding/
+    │   ├── ipc/
+    │   │   └── onboarding-handlers.js
+    │   ├── onboarding.html
+    │   ├── onboarding.js
+    │   └── preload_onboarding.js
     ├── package-lock.json
     ├── package.json
-    ├── preload_conductor.js
-    ├── preload_onboarding.js
     └── version.json

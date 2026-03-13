@@ -7,7 +7,7 @@ const path = require('path');
 const { paths } = require('../config/paths');
 const { getLogger } = require('../../shared/logger');
 
-const logger = getLogger('nucleus_manager');
+const logger = getLogger('installer');
 
 // ============================================================================
 // NUCLEUS.JSON SCHEMA (Contrato Formal)

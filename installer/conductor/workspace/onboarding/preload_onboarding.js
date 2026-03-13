@@ -32,5 +32,8 @@ contextBridge.exposeInMainWorld('onboarding', {
   onInitLine: (callback) => {
     ipcRenderer.removeAllListeners('onboarding:init-line');
     ipcRenderer.on('onboarding:init-line', (_, data) => callback(data));
-  }
+  },
+
+  // Logger bridge — renderer → main → archivo de log
+  log: (level, message) => ipcRenderer.invoke('onboarding:log', { level, message })
 });

@@ -209,6 +209,7 @@ function handleCLIOutput(onDone) {
 
 const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const { spawn } = require('child_process');
+const { paths } = require('./config/paths');
 
 // ── CLI MODE gate: salir limpiamente sin crear ninguna ventana ────────────────
 if (IS_CLI_MODE) {
@@ -829,23 +830,36 @@ function registerInstallHandlers() {
 
   ipcMain.handle('launcher:open', async (event, options = {}) => {
     try {
-      const launcherExe = process.execPath; // mismo bloom-setup.exe
-      const args = ['--mode=launch'];
-      if (options.onboarding) args.push('--onboarding');
+      // Fuente de verdad: nucleus.json escrito por el instalador
+      // Fallback: paths.conductorExe de global_paths.js (cross-platform)
+      let conductorExe = paths.conductorExe;
 
-      log(`🚀 [launcher:open] Spawning launcher: ${launcherExe} ${args.join(' ')}`);
+      if (fs.existsSync(paths.configFile)) {
+        const nucleusData = JSON.parse(fs.readFileSync(paths.configFile, 'utf8'));
+        if (nucleusData?.system_map?.conductor_exe) {
+          conductorExe = nucleusData.system_map.conductor_exe;
+        }
+      }
 
-      const { spawn } = require('child_process');
-      const child = spawn(launcherExe, args, {
+      if (!fs.existsSync(conductorExe)) {
+        error(`❌ bloom-conductor.exe not found: ${conductorExe}`);
+        return { success: false, error: `bloom-conductor.exe not found: ${conductorExe}` };
+      }
+
+      log(`🚀 [launcher:open] Spawning conductor: ${conductorExe}`);
+
+      // Sin args — el conductor lee nucleus.json y decide solo:
+      // onboarding.completed === false → abre onboarding
+      // onboarding.completed === true  → abre workspace
+      const child = spawn(conductorExe, [], {
         detached: true,
         stdio: 'ignore',
         windowsHide: false
       });
       child.unref();
 
-      // Cerrar el instalador después de lanzar el launcher
       setTimeout(() => {
-        log('👋 Closing installer after launcher spawn');
+        log('👋 Closing installer after conductor spawn');
         app.quit();
       }, 1500);
 

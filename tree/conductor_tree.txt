@@ -92,8 +92,8 @@ bloom-development-extension/
         │   └── profiles-handlers.js
         ├── main_conductor.js
         ├── node_modules/ [... dependencies]
-        ├── onboarding-script-block.js
         ├── onboarding.html
+        ├── onboarding.js
         ├── package-lock.json
         ├── package.json
         ├── preload_conductor.js

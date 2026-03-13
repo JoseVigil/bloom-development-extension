@@ -1,0 +1,366 @@
+let app;
+try {
+  app = require('electron').app;
+} catch (e) {
+  app = null;
+}
+const path = require('path');
+const os = require('os');
+
+const platform = os.platform();
+const homeDir = os.homedir();
+const arch = os.arch() === 'x64' ? 'win64' : 'win32';
+
+// ============================================================================
+// BASE DIRECTORY - Cross-platform (Windows, macOS, Linux)
+// ============================================================================
+const getBaseDir = () => {
+  if (platform === 'win32') {
+    return path.join(process.env.LOCALAPPDATA || path.join(homeDir, 'AppData', 'Local'), 'BloomNucleus');
+  } else if (platform === 'darwin') {
+    return path.join(homeDir, 'Library', 'Application Support', 'BloomNucleus');
+  } else {
+    return path.join(homeDir, '.local', 'share', 'BloomNucleus');
+  }
+};
+
+const baseDir = getBaseDir();
+
+// Repository root (for development) - WORKSPACE AWARE
+// shared/ is inside conductor/, so we go up 2 levels to reach the repo root
+const repoRoot = path.join(__dirname, '..', '..');
+
+// ============================================================================
+// RESOURCE PATH RESOLUTION
+// ============================================================================
+const getResourcePath = (resourceName) => {
+  if (app && app?.isPackaged) {
+    const resourcePath = path.join(process.resourcesPath, resourceName);
+    
+    const fs = require('fs');
+    const unpackedPath = path.join(process.resourcesPath, 'app.asar.unpacked', resourceName);
+    
+    if (fs.existsSync(unpackedPath)) {
+      return unpackedPath;
+    }
+    
+    return resourcePath;
+  }
+
+  // Development mode - workspace structure
+  // We are in: conductor/shared/paths.js
+  // Workspace root is: conductor/
+  const workspaceRoot = path.join(__dirname, '..');
+
+  switch (resourceName) {
+    case 'runtime':
+      return path.join(workspaceRoot, '..', 'resources', 'runtime');
+    case 'nucleus':
+      return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'nucleus');
+    case 'sentinel':
+      return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'sentinel');
+    case 'metamorph':
+      return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'metamorph');
+    case 'brain':
+      return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'brain');
+    case 'host':
+      return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'host');
+    case 'nssm':
+      return path.join(workspaceRoot, '..', 'native', 'nssm', arch);
+    case 'ollama':
+      return path.join(workspaceRoot, '..', 'ollama');
+    case 'node':
+      return path.join(workspaceRoot, '..', 'node');
+    case 'conductor':
+      return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'conductor');
+    case 'launcher':
+      return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'launcher');
+    case 'sensor':
+      return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'sensor');
+    case 'setup':
+      return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'setup');
+    case 'cortex':
+      return path.join(workspaceRoot, '..', 'native', 'bin', 'cortex');
+    case 'bootstrap':
+      return path.join(workspaceRoot, '..', 'native', 'bin', 'bootstrap');
+    case 'hooks':
+      return path.join(workspaceRoot, '..', 'native', 'hooks');  
+    case 'temporal':
+      return path.join(workspaceRoot, '..', 'temporal');
+    case 'chrome-win':
+      return path.join(workspaceRoot, '..', 'chrome', 'chrome-win.zip');
+    case 'chrome-mac':
+      return path.join(workspaceRoot, '..', 'chrome', 'chrome-mac.zip');
+    case 'chrome-linux':
+      return path.join(workspaceRoot, '..', 'chrome', 'chrome-linux.zip');
+    case 'assets':
+      return path.join(workspaceRoot, 'setup', 'assets');
+    default:
+      return path.join(workspaceRoot, '..', 'resources', resourceName);
+  }
+};
+
+// ============================================================================
+// COMPUTED PATHS
+// ============================================================================
+const pythonExe = platform === 'win32'
+  ? path.join(baseDir, 'bin', 'engine', 'runtime', 'python.exe')
+  : path.join(baseDir, 'bin', 'engine', 'runtime', 'bin', 'python3');
+
+const brainExe = platform === 'win32'
+  ? path.join(baseDir, 'bin', 'brain', 'brain.exe')
+  : path.join(baseDir, 'bin', 'brain', 'brain');
+
+const hostBinary = platform === 'win32'
+  ? path.join(baseDir, 'bin', 'host', 'bloom-host.exe')
+  : path.join(baseDir, 'bin', 'host', 'bloom-host');
+
+const assetsDir = (() => {
+  if (app?.isPackaged) {
+    const unpackedAssets = path.join(process.resourcesPath, 'app.asar.unpacked', 'assets');
+    const fs = require('fs');
+    if (fs.existsSync(unpackedAssets)) {
+      return unpackedAssets;
+    }
+    return path.join(process.resourcesPath, 'assets');
+  }
+  return path.join(__dirname, '..', 'setup', 'assets');
+})();
+
+// ============================================================================
+// PATHS OBJECT - Unified Structure
+// ============================================================================
+const paths = {
+  // Base directories
+  baseDir,
+  bloomBase: baseDir,
+  installDir: baseDir,
+  repoRoot,
+
+  // Binary directory structure (NEW UNIFIED LAYOUT)
+  binDir: path.join(baseDir, 'bin'),
+  
+  // Nucleus (Governance Layer)
+  nucleusDir: path.join(baseDir, 'bin', 'nucleus'),
+  nucleusExe: platform === 'win32'
+    ? path.join(baseDir, 'bin', 'nucleus', 'nucleus.exe')
+    : path.join(baseDir, 'bin', 'nucleus', 'nucleus'),
+  nucleusConfig: path.join(baseDir, 'bin', 'nucleus', 'nucleus-governance.json'),
+  
+  // Sentinel (Operations Layer)
+  sentinelDir: path.join(baseDir, 'bin', 'sentinel'),
+  sentinelExe: platform === 'win32'
+    ? path.join(baseDir, 'bin', 'sentinel', 'sentinel.exe')
+    : path.join(baseDir, 'bin', 'sentinel', 'sentinel'),
+  sentinelConfig: path.join(baseDir, 'bin', 'sentinel', 'sentinel-config.json'),
+  
+  // Metamorph (System Reconciliation)
+  metamorphDir: path.join(baseDir, 'bin', 'metamorph'),
+  metamorphExe: platform === 'win32'
+    ? path.join(baseDir, 'bin', 'metamorph', 'metamorph.exe')
+    : path.join(baseDir, 'bin', 'metamorph', 'metamorph'),
+  metamorphConfig: path.join(baseDir, 'bin', 'metamorph', 'metamorph-config.json'),
+  
+  // Brain (AI Engine)
+  brainDir: path.join(baseDir, 'bin', 'brain'),
+  brainExe,
+  
+  // Host (bloom-host.exe + DLLs)
+  hostDir: path.join(baseDir, 'bin', 'host'),
+  hostBinary,
+  nssmDir: path.join(baseDir, 'bin', 'nssm'),
+  nssmExe: platform === 'win32'
+    ? path.join(baseDir, 'bin', 'nssm', 'nssm.exe')
+    : null,
+  
+  // Ollama (LLM Runtime)
+  ollamaDir: path.join(baseDir, 'bin', 'ollama'),
+  ollamaExe: platform === 'win32'
+    ? path.join(baseDir, 'bin', 'ollama', 'ollama.exe')
+    : path.join(baseDir, 'bin', 'ollama', 'ollama'),
+  
+  // Conductor (Launcher - deployed by installer)
+  conductorDir: path.join(baseDir, 'bin', 'conductor'),
+  conductorExe: platform === 'win32'
+    ? path.join(baseDir, 'bin', 'conductor', 'bloom-conductor.exe')
+    : path.join(baseDir, 'bin', 'conductor', 'bloom-conductor'),
+
+  // Bloom Sensor (Session Agent - replaces bloom-launcher)
+  sensorDir: path.join(baseDir, 'bin', 'sensor'),
+  sensorExe: platform === 'win32'
+    ? path.join(baseDir, 'bin', 'sensor', 'bloom-sensor.exe')
+    : path.join(baseDir, 'bin', 'sensor', 'bloom-sensor'),
+
+  // Setup (Installer / Self-update binary - tracked by Metamorph)
+  setupDir: path.join(baseDir, 'bin', 'setup'),
+  setupExe: platform === 'win32'
+    ? path.join(baseDir, 'bin', 'setup', 'bloom-setup.exe')
+    : path.join(baseDir, 'bin', 'setup', 'bloom-setup'),
+  
+  // Cortex (Extension Package)
+  cortexDir: path.join(baseDir, 'bin', 'cortex'),
+  cortexBlx: path.join(baseDir, 'bin', 'cortex', 'bloom-cortex.blx'),
+  
+  // Node.js (for Nucleus dev-start and API services)
+  nodeDir: path.join(baseDir, 'bin', 'node'),
+  nodeExe: platform === 'win32'
+    ? path.join(baseDir, 'bin', 'node', 'node.exe')
+    : path.join(baseDir, 'bin', 'node', 'node'),
+  
+  // Temporal (Workflow Orchestration)
+  temporalDir: path.join(baseDir, 'bin', 'temporal'),
+  temporalExe: platform === 'win32'
+    ? path.join(baseDir, 'bin', 'temporal', 'temporal.exe')
+    : path.join(baseDir, 'bin', 'temporal', 'temporal'),
+  
+  // Chrome
+  chromeDir: path.join(baseDir, 'bin', 'chrome-win'),
+  chromeExe: platform === 'win32'
+    ? path.join(baseDir, 'bin', 'chrome-win', 'chrome.exe')
+    : null,
+  
+  // Extension template (copied per-profile by Brain)
+  extensionDir: path.join(baseDir, 'bin', 'extension'),
+  extensionTemplateDir: path.join(baseDir, 'bin', 'extension'),
+
+  // Engine & Runtime Python
+  engineDir: path.join(baseDir, 'bin', 'engine'),
+  runtimeDir: path.join(baseDir, 'bin', 'engine', 'runtime'),
+  pythonExe,
+
+  // Profiles directory (managed by Brain)
+  profilesDir: path.join(baseDir, 'profiles'),
+  
+  // Config directory
+  configDir: path.join(baseDir, 'config'),
+  configFile: path.join(baseDir, 'config', 'nucleus.json'),
+  profilesConfig: path.join(baseDir, 'config', 'profiles.json'), // Managed by Brain
+
+  // Logs
+  logsDir: path.join(baseDir, 'logs'),
+  installLog: path.join(baseDir, 'logs', 'install.log'),
+  runtimeLog: path.join(baseDir, 'logs', 'runtime.log'),
+  profileLogsDir: path.join(baseDir, 'logs', 'profiles'),
+
+  // Assets
+  assetsDir,
+  bloomIcon: path.join(assetsDir, 'bloom.ico'),
+
+  // Desktop (for shortcuts)
+  desktop: path.join(homeDir, 'Desktop'),
+
+  // ============================================================================
+  // SOURCE PATHS (resources to copy during installation)
+  // ============================================================================
+  runtimeSource: getResourcePath('runtime'),
+  nucleusSource: getResourcePath('nucleus'),
+  sentinelSource: getResourcePath('sentinel'),
+  metamorphSource: getResourcePath('metamorph'),
+  brainSource: getResourcePath('brain'),
+  hostSource: getResourcePath('host'),
+  nssmSource: getResourcePath('nssm'),
+  ollamaSource: getResourcePath('ollama'),
+  nodeSource: getResourcePath('node'),
+  conductorSource: getResourcePath('conductor'),
+  launcherSource: getResourcePath('launcher'),
+  sensorSource: getResourcePath('sensor'),
+  setupSource:  getResourcePath('setup'),
+  cortexSource: getResourcePath('cortex'),
+  temporalSource: getResourcePath('temporal'),
+  extensionSource: getResourcePath('extension'),
+  chromeWinSource: getResourcePath('chrome-win'),
+  hooksSource: getResourcePath('hooks'),
+  hooksDir: path.join(baseDir, 'hooks'),
+  bootstrapDir:    path.join(baseDir, 'bin', 'bootstrap'),
+  bootstrapSource: getResourcePath('bootstrap'),
+};
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+/**
+ * Get the path for a specific profile
+ * @param {string} profileId - UUID or alias of the profile
+ * @returns {string} - Full path to profile directory
+ */
+function getProfilePath(profileId) {
+  return path.join(paths.profilesDir, profileId);
+}
+
+/**
+ * Get profile-specific paths
+ * @param {string} profileId - UUID or alias of the profile
+ * @returns {Object} - Object with profile-specific paths
+ */
+function getProfilePaths(profileId) {
+  const profileDir = getProfilePath(profileId);
+  
+  return {
+    base: profileDir,
+    extension: path.join(profileDir, 'extension'),
+    synapse: path.join(profileDir, 'synapse'),
+    synapseManifest: path.join(profileDir, 'synapse', `com.bloom.synapse.${profileId}.json`),
+    chromeData: path.join(profileDir, 'chrome-data'),
+    logs: path.join(paths.profileLogsDir, profileId),
+    netLog: path.join(paths.profileLogsDir, profileId, 'chrome_net.log')
+  };
+}
+
+/**
+ * Get the synapse manifest path for a profile
+ * This is where Brain creates the private bridge configuration
+ * @param {string} profileId - UUID of the profile
+ * @returns {string} - Full path to synapse manifest
+ */
+function getSynapseManifestPath(profileId) {
+  return path.join(paths.profilesDir, profileId, 'synapse', `com.bloom.synapse.${profileId}.json`);
+}
+
+// ============================================================================
+// VALIDATION
+// ============================================================================
+const criticalPaths = [
+  'baseDir', 'bloomBase', 'binDir',
+  'nucleusDir', 'nucleusExe',
+  'sentinelDir', 'sentinelExe',
+  'metamorphDir', 'metamorphExe',
+  'brainDir', 'brainExe',
+  'hostDir', 'hostBinary',
+  'nssmDir',
+  'ollamaDir', 'ollamaExe',
+  'nodeDir', 'nodeExe',
+  'temporalDir', 'temporalExe',
+  'conductorDir', 'cortexDir',
+  'chromeDir',
+  'extensionDir', 'engineDir', 'runtimeDir', 
+  'configDir', 'profilesDir', 'logsDir'
+];
+
+for (const key of criticalPaths) {
+  if (!paths[key]) {
+    console.error(`❌ CRITICAL: Path '${key}' is undefined`);
+    throw new Error(`Path configuration error: '${key}' is undefined`);
+  }
+}
+
+console.log('✅ Paths initialized successfully (Unified Structure)');
+console.log(`📁 Base directory: ${baseDir}`);
+console.log(`⚖️ Nucleus binary: ${paths.nucleusExe}`);
+console.log(`🎯 Sentinel binary: ${paths.sentinelExe}`);
+console.log(`🧠 Brain binary: ${brainExe}`);
+console.log(`🔗 Host binary: ${hostBinary}`);
+console.log(`🦙 Ollama binary: ${paths.ollamaExe}`);
+console.log(`⏱️ Temporal binary: ${paths.temporalExe}`);
+console.log(`🎮 Conductor binary: ${paths.conductorExe}`);
+console.log(`📦 Cortex package: ${paths.cortexBlx}`);
+console.log(`👤 Profiles directory: ${paths.profilesDir}`);
+console.log(`⚙️ Config directory: ${paths.configDir}`);
+
+module.exports = { 
+  paths, 
+  getResourcePath,
+  getProfilePath,
+  getProfilePaths,
+  getSynapseManifestPath
+};

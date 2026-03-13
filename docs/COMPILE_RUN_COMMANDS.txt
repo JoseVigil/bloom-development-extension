@@ -23,10 +23,13 @@ taskkill /F /IM chrome.exe /T
 cd conductor
 npm run build:all
 
+Ejecutar onboarding
+bloom-setup.exe --mode=launch --onboarding
+
 cd conductor/workspace   
 npm run build
 
-cd conductor/setu     
+cd conductor/setup     
 npm run build
 
 Plugin
@@ -69,8 +72,6 @@ brain filesystem tree src installer webview brain contracts package.json tsconfi
 
 brain filesystem tree installer -o tree/installer_tree.txt
 
-
-
 brain filesystem tree brain -o tree/brain_tree.txt
 
 brain filesystem tree webview -o tree/webview_tree.txt
@@ -82,6 +83,8 @@ brain filesystem tree installer/native -o tree/native_tree.txt
 brain filesystem tree installer/nucleus -o tree/nucleus_tree.txt
 
 brain filesystem tree installer/sentinel -o tree/sentinel_tree.txt
+
+brain filesystem tree installer/host -o tree/host_tree.txt
 
 brain filesystem tree installer/metamorph -o tree/metamorph_tree.txt
 
