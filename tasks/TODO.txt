@@ -1,0 +1,15 @@
+- Compile
+Compilar el nuevo plugin bundle npm run build
+installer/native/bin/bootstrap/bundle.js
+Compilar installer/vscode/bloom-extension.vsix
+npm run package:vscode
+
+- Install 
+Instalar node 32 y 64 segun plataforma
+Instalar .vsix
+
+- Update
+Metamorph incluir .vsix, bootstrap y node
+
+- Startup 
+nucleus correr comando launch y verificar que funciona. Recordar que el pronlema de fondo del comando es que no estaban levantando los servicios.

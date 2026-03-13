@@ -43,11 +43,17 @@ class TreeManager:
         targets: Optional[List[str]], 
         output_file: Path, 
         use_hash: bool = False, 
-        use_json: bool = False
+        use_json: bool = False,
+        use_dates: bool = False,
     ) -> Dict[str, Any]:
         """
         Generate tree structure and write to file.
-        
+
+        Options:
+          --hash          Include MD5 hashes next to each file
+          --export-json   Export a JSON snapshot alongside the tree file
+          --dates         Include last-modified date (YYYY-MM-DD HH:MM) next to each entry
+
         Returns:
             Dictionary with metadata about the generation process
         """
@@ -72,7 +78,8 @@ class TreeManager:
                 use_hash=use_hash, 
                 file_hashes=file_hashes,
                 base_path=self.root,
-                skip_name=True  # NEW: Skip printing the name again
+                skip_name=True,  # NEW: Skip printing the name again
+                use_dates=use_dates,
             )
         else:
             # Procesando targets específicos, mostrar root y luego targets
@@ -91,7 +98,8 @@ class TreeManager:
                 final_output += self._build_tree(
                     p, prefix="", is_last=is_last, 
                     use_hash=use_hash, file_hashes=file_hashes, 
-                    base_path=self.root
+                    base_path=self.root,
+                    use_dates=use_dates,
                 )
 
         # Calculate hashes and add header
@@ -160,6 +168,14 @@ class TreeManager:
 
     # --- INTERNAL METHODS ---
 
+    def _get_mtime(self, path: str) -> Optional[str]:
+        """Return last-modified timestamp as 'YYYY-MM-DD HH:MM', or None on error."""
+        try:
+            mtime = os.path.getmtime(path)
+            return datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M')
+        except OSError:
+            return None
+
     def _resolve_paths(self, paths: Optional[List[str]]) -> List[str]:
         """Resolve relative paths to absolute paths."""
         if not paths:
@@ -208,7 +224,8 @@ class TreeManager:
         use_hash: bool = False, 
         file_hashes: Optional[Dict[str, str]] = None, 
         base_path: str = "",
-        skip_name: bool = False  # NEW: Skip printing directory name
+        skip_name: bool = False,  # NEW: Skip printing directory name
+        use_dates: bool = False,  # NEW: Append last-modified date to each entry
     ) -> str:
         """
         Recursively build tree structure string.
@@ -252,13 +269,28 @@ class TreeManager:
 
                 if use_hash and file_hashes is not None:
                     tree_str += " [DIR]"
+
+                if use_dates:
+                    mtime = self._get_mtime(path)
+                    if mtime:
+                        tree_str += f"  [{mtime}]"
             else:
+                # --- file entry ---
+                suffix_parts = []
+
                 if use_hash and file_hashes is not None:
                     file_hash = self._compute_md5(path)
                     if file_hash:
                         file_hashes[rel_path] = file_hash
                         padding = max(0, 50 - len(prefix) - len(connector) - len(name))
-                        tree_str += " " + "." * padding + " " + file_hash[:16]
+                        suffix_parts.append(" " + "." * padding + " " + file_hash[:16])
+
+                if use_dates:
+                    mtime = self._get_mtime(path)
+                    if mtime:
+                        suffix_parts.append(f"  [{mtime}]")
+
+                tree_str += "".join(suffix_parts)
             
             tree_str += "\n"
 
@@ -285,7 +317,8 @@ class TreeManager:
             is_last_entry = (i == len(entries) - 1)
             tree_str += self._build_tree(
                 full, new_prefix, is_last_entry, 
-                use_hash, file_hashes, base_path
+                use_hash, file_hashes, base_path,
+                use_dates=use_dates,
             )
 
         return tree_str

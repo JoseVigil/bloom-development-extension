@@ -12,7 +12,11 @@ Secuencia de ejecución:
                     (buildea sensor + setup en un solo paso)
   6. Metamorph    → installer/metamorph/scripts/build.bat
   7. Sensor       → installer/sensor/scripts/build.bat
-  8. Cortex       → installer/cortex/build-cortex/package.py
+  8. Plugin       → npm run build (tsc + copy-assets + esbuild bundle)
+                    Output: installer/native/bin/bootstrap/bundle.js
+  9. Vsix         → npm run package:vscode (vsce package)
+                    Output: installer/vscode/bloom-extension.vsix
+  10. Cortex      → installer/cortex/build-cortex/package.py
                     (lee cortex.meta.json, incrementa build_number, produce .blx)
 
 Luego de buildear los ejecutables, interroga cada uno para verificar versión
@@ -157,6 +161,11 @@ BUILDS = {
     "conductor":  ROOT / "installer/conductor",          # cwd para npm
     "sensor":     ROOT / "installer/sensor/scripts/build.bat",
     "cortex":     ROOT / "installer/cortex/build-cortex/package.py",
+    # Plugin VSCode — repo raíz (bloom-development-extension)
+    # build: tsc + copy-assets + esbuild bundle → installer/native/bin/bootstrap/bundle.js
+    # vsix:  vsce package → installer/vscode/bloom-extension.vsix
+    "plugin":     ROOT,                                  # cwd para npm run build
+    "vsix":       ROOT,                                  # cwd para npm run package:vscode
 }
 
 CORTEX_SOURCE = ROOT / "installer/cortex/extension"
@@ -216,6 +225,14 @@ def get_contracts(verify_env: str) -> list[BinaryContract]:
     sensor    = str(b / "sensor/bloom-sensor.exe")
     ps1       = str(b / "conductor/win-unpacked/bloom-conductor-version.ps1")
     ps1_setup = str(b / "setup/win-unpacked/bloom-setup-version.ps1")
+
+    # Plugin: bundle.js siempre vive en bootstrap/ dentro del bin base
+    # dev  → installer/native/bin/bootstrap/bundle.js
+    # prod → AppData/Local/BloomNucleus/bin/bootstrap/bundle.js
+    plugin_bundle = b / "bootstrap/bundle.js"
+
+    # Vsix: solo existe en dev (installer/vscode/). En prod ya fue instalado por code CLI.
+    vsix_path = ROOT / "installer/vscode"
 
     return [
         BinaryContract(
@@ -437,6 +454,67 @@ def build_sensor() -> StepResult:
     if code != 0:
         return StepResult("Sensor", False, error=err or out)
     return StepResult("Sensor", True)
+
+
+def build_plugin() -> StepResult:
+    """
+    Compila el plugin VSCode en tres pasos:
+      1. tsc  -> out/
+      2. copy-assets -> out/ui/
+      3. esbuild bundle -> installer/native/bin/bootstrap/bundle.js
+
+    El script npm run build ya encadena los tres pasos.
+    Output critico: installer/native/bin/bootstrap/bundle.js
+    """
+    plugin_dir = BUILDS["plugin"]
+    npm_cmd = "npm.cmd" if sys.platform == "win32" else "npm"
+    log("Ejecutando npm run build (tsc + copy-assets + esbuild bundle) ...")
+    code, out, err = run(
+        [npm_cmd, "run", "build"],
+        cwd=plugin_dir,
+    )
+    if code != 0:
+        return StepResult("Plugin", False, error=err or out)
+
+    # Verificar que bundle.js fue generado
+    bundle_path = plugin_dir / "installer/native/bin/bootstrap/bundle.js"
+    if not bundle_path.exists():
+        return StepResult("Plugin", False,
+                          error=f"Build OK pero bundle.js no encontrado en {bundle_path}")
+
+    size_kb = bundle_path.stat().st_size / 1024
+    log(f"bundle.js generado: {size_kb:.1f} KB → {bundle_path}")
+    return StepResult("Plugin", True)
+
+
+def build_vsix() -> StepResult:
+    """
+    Empaqueta el plugin como .vsix usando vsce.
+    Output: installer/vscode/bloom-extension.vsix
+    Requiere que build_plugin() haya corrido antes (necesita out/ y bundle.js).
+    """
+    plugin_dir = BUILDS["vsix"]
+    npm_cmd = "npm.cmd" if sys.platform == "win32" else "npm"
+    log("Ejecutando npm run package:vscode (vsce package) ...")
+    code, out, err = run(
+        [npm_cmd, "run", "package:vscode"],
+        cwd=plugin_dir,
+    )
+    if code != 0:
+        return StepResult("Vsix", False, error=err or out)
+
+    # Verificar que el .vsix fue generado
+    vsix_dir = plugin_dir / "installer/vscode"
+    vsix_files = list(vsix_dir.glob("*.vsix")) if vsix_dir.exists() else []
+    if not vsix_files:
+        return StepResult("Vsix", False,
+                          error=f"vsce OK pero no se encontró .vsix en {vsix_dir}")
+
+    # El más reciente en caso de que haya varios
+    vsix_file = max(vsix_files, key=lambda p: p.stat().st_mtime)
+    size_kb = vsix_file.stat().st_size / 1024
+    log(f".vsix generado: {vsix_file.name} ({size_kb:.1f} KB)")
+    return StepResult("Vsix", True)
 
 
 def ensure_cortex_meta(meta_path: Path, channel: str) -> None:
@@ -669,6 +747,11 @@ def parse_args() -> argparse.Namespace:
             "            Conductor  → installer/conductor (npm run build:all)\n"
             "            Host       → SKIPPED en Windows (build via Linux)\n"
             "            Sensor     → installer/sensor/scripts/build.bat\n"
+            "            Plugin     → npm run build\n"
+            "                         (tsc + copy-assets + esbuild bundle)\n"
+            "                         → installer/native/bin/bootstrap/bundle.js\n"
+            "            Vsix       → npm run package:vscode (vsce)\n"
+            "                         → installer/vscode/bloom-extension.vsix\n"
             "\n"
             "  FASE 2  Empaquetado de Cortex (.blx)\n"
             "            Cortex     → installer/cortex/build-cortex/package.py\n"
@@ -776,6 +859,9 @@ def main() -> None:
         ("Host",      lambda: StepResult("Host", True, skipped=True,
                                          skip_reason="Build en Linux — installer/host/build.sh")),
         ("Sensor",    lambda: build_sensor()),
+        # Plugin debe ir antes de Vsix (vsce necesita out\ y bundle.js)
+        ("Plugin",    lambda: build_plugin()),
+        ("Vsix",      lambda: build_vsix()),
     ]
 
     for name, fn in steps:

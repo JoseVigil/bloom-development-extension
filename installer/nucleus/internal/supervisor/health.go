@@ -99,7 +99,7 @@ When brain_service is UNREACHABLE, the last 20 lines of brain_service.log
 and brain_server_event_bus.log are appended to the output automatically.
 
 Use --fix to attempt automated remediation of known failures:
-  - brain_service UNREACHABLE → nssm start BloomBrain
+  - brain_service UNREACHABLE → nssm start BloomBrainService
   - governance BLOOM_DIR missing → prints exact fix instruction
   - worker DISCONNECTED → nucleus worker start
 
@@ -337,10 +337,10 @@ func tailFile(path string, n int) []string {
 func applyFixes(result *HealthResult) {
 	if brain, ok := result.Components["brain_service"]; ok && !brain.Healthy {
 		brain.FixAttempted = true
-		if err := nssmStart("BloomBrain", 10*time.Second); err != nil {
+		if err := nssmStart("BloomBrainService", 10*time.Second); err != nil {
 			brain.FixResult = fmt.Sprintf("FAILED: %v", err)
 		} else {
-			brain.FixResult = "SUCCESS: BloomBrain started via NSSM"
+			brain.FixResult = "SUCCESS: BloomBrainService started via NSSM"
 			brain.Healthy = true
 			brain.State = "RUNNING"
 			brain.Error = ""
@@ -359,11 +359,16 @@ func applyFixes(result *HealthResult) {
 		worker.FixAttempted = true
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		out, err := exec.CommandContext(ctx, "nucleus", "worker", "start").CombinedOutput()
-		if err != nil {
-			worker.FixResult = fmt.Sprintf("FAILED: %v — %s", err, string(out))
+		nucleusExe, exeErr := getNucleusExecutablePath()
+		if exeErr != nil {
+			worker.FixResult = fmt.Sprintf("FAILED: nucleus not found: %v", exeErr)
 		} else {
-			worker.FixResult = "SUCCESS: nucleus worker start executed"
+			out, err := exec.CommandContext(ctx, nucleusExe, "worker", "start").CombinedOutput()
+			if err != nil {
+				worker.FixResult = fmt.Sprintf("FAILED: %v — %s", err, string(out))
+			} else {
+				worker.FixResult = "SUCCESS: nucleus worker start executed"
+			}
 		}
 		result.Components["worker"] = worker
 	}
@@ -412,18 +417,33 @@ func checkWorker(ctx context.Context, s *Supervisor, validate bool) ComponentHea
 	s.mu.RLock()
 	proc, exists := s.processes["nucleus_worker"]
 	s.mu.RUnlock()
-	if !exists {
+
+	if !exists || proc.State != StateReady {
+		// Fallback: el worker puede estar vivo aunque no haya sido spawnado
+		// por este proceso (e.g. service restart, NSSM). Verificar via
+		// temporal task-queue describe — si hay pollers activos, está conectado.
+		tqCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		defer cancel()
+		out, err := exec.CommandContext(tqCtx, "temporal", "task-queue", "describe",
+			"--task-queue", "nucleus-task-queue").CombinedOutput()
+		if err == nil && len(out) > 0 && !bytes.Contains(out, []byte("\"pollers\":[]")) {
+			// Temporal confirma que hay workers conectados en este task-queue
+			health.Healthy = true
+			health.State = "CONNECTED"
+			health.Error = "worker not tracked by supervisor (external process)"
+			return health
+		}
+		// Sin pollers confirmados — realmente desconectado
 		health.Healthy = false
 		health.State = "DISCONNECTED"
-		health.Error = "Worker process not found in supervisor"
+		if !exists {
+			health.Error = "Worker not found in supervisor and no active pollers in task-queue"
+		} else {
+			health.Error = fmt.Sprintf("Worker state is %s, expected READY; no active pollers confirmed", proc.State)
+		}
 		return health
 	}
-	if proc.State != StateReady {
-		health.Healthy = false
-		health.State = "DISCONNECTED"
-		health.Error = fmt.Sprintf("Worker state is %s, expected READY", proc.State)
-		return health
-	}
+
 	health.Healthy = true
 	health.State = "CONNECTED"
 	health.PID = proc.PID
@@ -458,7 +478,7 @@ func checkOllama(ctx context.Context, s *Supervisor, validate bool) ComponentHea
 func checkControlPlane(ctx context.Context, s *Supervisor, validate bool) ComponentHealth {
 	health := ComponentHealth{}
 	s.mu.RLock()
-	proc, exists := s.processes["control_plane"]
+	proc, exists := s.processes["control_plane_api"]
 	s.mu.RUnlock()
 	if !exists {
 		health.Healthy = false
@@ -474,7 +494,15 @@ func checkControlPlane(ctx context.Context, s *Supervisor, validate bool) Compon
 
 func checkVault(ctx context.Context, s *Supervisor, validate bool) ComponentHealth {
 	health := ComponentHealth{}
-	out, err := exec.CommandContext(ctx, "nucleus", "synapse", "vault-status", "--json").Output()
+	nucleusExe, err := getNucleusExecutablePath()
+	if err != nil {
+		health.Healthy = false
+		health.State = "FAILED"
+		health.Error = fmt.Sprintf("nucleus not found: %v", err)
+		return health
+	}
+	// --json es flag global de nucleus, debe ir antes del subcomando
+	out, err := exec.CommandContext(ctx, nucleusExe, "--json", "synapse", "vault-status").Output()
 	if err != nil {
 		health.Healthy = false
 		health.State = "FAILED"
@@ -568,7 +596,7 @@ func checkBloomAPI(ctx context.Context, s *Supervisor, validate bool) ComponentH
 	health := ComponentHealth{Port: 48215}
 	start := time.Now()
 	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get("http://127.0.0.1:48215/documentation")
+	resp, err := client.Get("http://127.0.0.1:48215/api/docs")
 	health.LatencyMs = time.Since(start).Milliseconds()
 	if err != nil {
 		health.Healthy = false

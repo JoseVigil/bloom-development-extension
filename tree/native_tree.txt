@@ -5,9 +5,10 @@ bloom-development-extension/
     │   ├── .DS_Store
     │   ├── bin/
     │   ├── bootstrap/
+    │   │   ├── bundle.js
+    │   │   ├── bundle.js.map
     │   │   └── server-bootstrap.js
     │   ├── config/
-    │   │   └── profiles.json
     │   ├── cortex/
     │   │   └── bloom-cortex.blx
     │   ├── darwin/
@@ -22,97 +23,14 @@ bloom-development-extension/
     │   ├── logs/
     │   │   └── brain/
     │   │       ├── core/
-    │   │       │   ├── brain_core_20260221.log
-    │   │       │   ├── brain_core_20260222.log
-    │   │       │   ├── brain_core_20260223.log
-    │   │       │   ├── brain_core_20260224.log
-    │   │       │   ├── brain_core_20260225.log
-    │   │       │   ├── brain_core_20260226.log
-    │   │       │   ├── brain_core_20260227.log
-    │   │       │   ├── brain_core_20260228.log
-    │   │       │   ├── brain_core_20260301.log
-    │   │       │   ├── brain_core_20260302.log
-    │   │       │   ├── brain_core_20260303.log
-    │   │       │   ├── brain_core_20260304.log
-    │   │       │   ├── brain_core_20260305.log
-    │   │       │   ├── brain_core_20260306.log
-    │   │       │   ├── brain_core_20260307.log
-    │   │       │   ├── brain_core_20260308.log
-    │   │       │   └── brain_core_20260309.log
+    │   │       │   └── brain_core_20260313.log
     │   │       ├── profile/
-    │   │       │   ├── brain_profile_20260221.log
-    │   │       │   ├── brain_profile_20260222.log
-    │   │       │   ├── brain_profile_20260223.log
-    │   │       │   ├── brain_profile_20260224.log
-    │   │       │   ├── brain_profile_20260225.log
-    │   │       │   ├── brain_profile_20260226.log
-    │   │       │   ├── brain_profile_20260227.log
-    │   │       │   ├── brain_profile_20260228.log
-    │   │       │   ├── brain_profile_20260301.log
-    │   │       │   ├── brain_profile_20260302.log
-    │   │       │   ├── brain_profile_20260303.log
-    │   │       │   ├── brain_profile_20260304.log
-    │   │       │   ├── brain_profile_20260305.log
-    │   │       │   ├── brain_profile_20260306.log
-    │   │       │   ├── brain_profile_20260307.log
-    │   │       │   ├── brain_profile_20260308.log
-    │   │       │   └── brain_profile_20260309.log
+    │   │       │   └── brain_profile_20260313.log
     │   │       └── server/
-    │   │           ├── brain_server_20260221.log
-    │   │           ├── brain_server_20260222.log
-    │   │           ├── brain_server_20260223.log
-    │   │           ├── brain_server_20260224.log
-    │   │           ├── brain_server_20260225.log
-    │   │           ├── brain_server_20260226.log
-    │   │           ├── brain_server_20260227.log
-    │   │           ├── brain_server_20260228.log
-    │   │           ├── brain_server_20260301.log
-    │   │           ├── brain_server_20260302.log
-    │   │           ├── brain_server_20260303.log
-    │   │           ├── brain_server_20260304.log
-    │   │           ├── brain_server_20260305.log
-    │   │           ├── brain_server_20260306.log
-    │   │           ├── brain_server_20260307.log
-    │   │           ├── brain_server_20260308.log
-    │   │           ├── brain_server_20260309.log
-    │   │           ├── brain_server_event_bus_20260221.log
-    │   │           ├── brain_server_event_bus_20260222.log
-    │   │           ├── brain_server_event_bus_20260223.log
-    │   │           ├── brain_server_event_bus_20260224.log
-    │   │           ├── brain_server_event_bus_20260225.log
-    │   │           ├── brain_server_event_bus_20260226.log
-    │   │           ├── brain_server_event_bus_20260227.log
-    │   │           ├── brain_server_event_bus_20260228.log
-    │   │           ├── brain_server_event_bus_20260301.log
-    │   │           ├── brain_server_event_bus_20260302.log
-    │   │           ├── brain_server_event_bus_20260303.log
-    │   │           ├── brain_server_event_bus_20260304.log
-    │   │           ├── brain_server_event_bus_20260305.log
-    │   │           ├── brain_server_event_bus_20260306.log
-    │   │           ├── brain_server_event_bus_20260307.log
-    │   │           ├── brain_server_event_bus_20260308.log
-    │   │           ├── brain_server_event_bus_20260309.log
-    │   │           ├── brain_server_manager_20260221.log
-    │   │           ├── brain_server_manager_20260222.log
-    │   │           ├── brain_server_manager_20260223.log
-    │   │           ├── brain_server_manager_20260224.log
-    │   │           ├── brain_server_manager_20260225.log
-    │   │           ├── brain_server_manager_20260226.log
-    │   │           ├── brain_server_manager_20260227.log
-    │   │           ├── brain_server_manager_20260228.log
-    │   │           ├── brain_server_manager_20260301.log
-    │   │           ├── brain_server_manager_20260302.log
-    │   │           ├── brain_server_manager_20260303.log
-    │   │           ├── brain_server_manager_20260304.log
-    │   │           ├── brain_server_manager_20260305.log
-    │   │           ├── brain_server_manager_20260306.log
-    │   │           ├── brain_server_manager_20260307.log
-    │   │           ├── brain_server_manager_20260308.log
-    │   │           └── brain_server_manager_20260309.log
+    │   │           ├── brain_server_20260313.log
+    │   │           ├── brain_server_event_bus_20260313.log
+    │   │           └── brain_server_manager_20260313.log
     │   ├── profiles/
-    │   ├── setup/
-    │   │   ├── builder-debug.yml
-    │   │   └── builder-effective-config.yaml
     │   ├── win32/
     │   │   ├── brain/
     │   │   │   ├── _internal/ [... dependencies]
@@ -172,29 +90,33 @@ bloom-development-extension/
     │   │   │   ├── builder-debug.yml
     │   │   │   ├── builder-effective-config.yaml
     │   │   │   └── win-unpacked/
-    │   │   │       ├── Bloom Nucleus Workspace.exe
     │   │   │       ├── LICENSE.electron.txt
     │   │   │       ├── LICENSES.chromium.html
-    │   │   │       ├── bloom-conductor-version.ps1
     │   │   │       ├── chrome_100_percent.pak
     │   │   │       ├── chrome_200_percent.pak
     │   │   │       ├── d3dcompiler_47.dll
+    │   │   │       ├── electron.exe
     │   │   │       ├── ffmpeg.dll
     │   │   │       ├── icudtl.dat
     │   │   │       ├── libEGL.dll
     │   │   │       ├── libGLESv2.dll
     │   │   │       ├── locales/ [... localization files]
     │   │   │       ├── resources/
-    │   │   │       │   ├── app.asar
-    │   │   │       │   ├── app.asar.unpacked/
-    │   │   │       │   │   └── build_info.json
-    │   │   │       │   └── elevate.exe
+    │   │   │       │   └── app.asar.unpacked/
+    │   │   │       │       └── build_info.json
     │   │   │       ├── resources.pak
     │   │   │       ├── snapshot_blob.bin
     │   │   │       ├── v8_context_snapshot.bin
     │   │   │       ├── vk_swiftshader.dll
     │   │   │       ├── vk_swiftshader_icd.json
     │   │   │       └── vulkan-1.dll
+    │   │   ├── host/
+    │   │   │   ├── bloom-host.exe
+    │   │   │   ├── help/
+    │   │   │   │   └── help.txt
+    │   │   │   ├── libgcc_s_seh-1.dll
+    │   │   │   ├── libstdc++-6.dll
+    │   │   │   └── libwinpthread-1.dll
     │   │   ├── metamorph/
     │   │   │   ├── help/
     │   │   │   │   ├── metamorph_help.json

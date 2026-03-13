@@ -711,7 +711,9 @@ func (s *Supervisor) bootGovernance(ctx context.Context, simulation bool) error 
 }
 
 func (s *Supervisor) bootControlPlane(ctx context.Context, simulation bool) (*ManagedProcess, error) {
-	bootstrapScript := filepath.Join(s.binDir, "bootstrap", "server-bootstrap.js")
+	// Production: launch the self-contained bundle — no NODE_PATH required.
+	// Built by: npm run build:bundle → installer/native/bin/bootstrap/bundle.js
+	bundleScript := filepath.Join(s.binDir, "bootstrap", "bundle.js")
 
 	env := []string{
 		"BLOOM_USER_ROLE=" + os.Getenv("BLOOM_USER_ROLE"),
@@ -719,15 +721,32 @@ func (s *Supervisor) bootControlPlane(ctx context.Context, simulation bool) (*Ma
 		"BLOOM_WORKER_RUNNING=true",
 		fmt.Sprintf("BLOOM_SIMULATION_MODE=%t", simulation),
 		"BLOOM_LOGS_DIR=" + s.logsDir,
+		"BLOOM_NUCLEUS_PATH=" + os.Getenv("BLOOM_NUCLEUS_PATH"),
 	}
 
-	proc, err := s.StartNodeProcess(ctx, "control_plane_api", bootstrapScript, env)
+	proc, err := s.StartNodeProcess(ctx, "control_plane_api", bundleScript, env)
 	if err != nil {
 		return nil, err
 	}
 
-	// Wait for server to be ready
-	time.Sleep(3 * time.Second)
+	// Wait for the API server to be ready on port 48215 (up to 15s)
+	if err := s.waitForPort("48215", 15*time.Second); err != nil {
+		fmt.Printf("[WARN] Control Plane may not be ready: %v\n", err)
+	}
 
 	return proc, nil
+}
+
+// waitForPort polls until the given TCP port is open or timeout expires.
+func (s *Supervisor) waitForPort(port string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		conn, err := net.DialTimeout("tcp", "127.0.0.1:"+port, 500*time.Millisecond)
+		if err == nil {
+			conn.Close()
+			return nil
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	return fmt.Errorf("port %s not ready after %s", port, timeout)
 }

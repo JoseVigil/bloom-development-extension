@@ -48,6 +48,11 @@ SECUENCIA DE BUILD
             Conductor  → installer/conductor (npm run build:all)
             Host       → SKIPPED en Windows (build via Linux)
             Sensor     → installer/sensor/scripts/build.bat
+            Plugin     → npm run build
+                         (tsc + copy-assets + esbuild bundle)
+                         → installer/native/bin/bootstrap/bundle.js
+            Vsix       → npm run package:vscode (vsce)
+                         → installer/vscode/bloom-extension.vsix
 
   FASE 2  Empaquetado de Cortex (.blx)
             Cortex     → installer/cortex/build-cortex/package.py
