@@ -88,10 +88,10 @@ Example:
 // a destination path (relative to BloomNucleus/bin/).
 // srcIsFile=true means only a single file is copied, not the whole directory.
 type rolloutEntry struct {
-	component  string
-	src        string // relative to native/bin/win64/ (or native/ for nssm)
-	dst        string // relative to BloomNucleus/bin/
-	srcIsFile  bool   // copy single file instead of full directory
+	component string
+	src       string // relative to native/bin/win64/ (or native/ for nssm)
+	dst       string // relative to BloomNucleus/bin/
+	srcIsFile bool   // copy single file instead of full directory
 }
 
 // getRolloutEntries returns the canonical source→destination mapping.
@@ -100,13 +100,13 @@ type rolloutEntry struct {
 // NSSM lives at native/nssm/win64/ (outside the per-platform bin tree).
 func getRolloutEntries() []rolloutEntry {
 	return []rolloutEntry{
-		{component: "Brain",     src: "brain",     dst: "brain"},
-		{component: "Nucleus",   src: "nucleus",   dst: "nucleus"},
-		{component: "Sentinel",  src: "sentinel",  dst: "sentinel"},
+		{component: "Brain", src: "brain", dst: "brain"},
+		{component: "Nucleus", src: "nucleus", dst: "nucleus"},
+		{component: "Sentinel", src: "sentinel", dst: "sentinel"},
 		{component: "Metamorph", src: "metamorph", dst: "metamorph"},
 		{component: "Conductor", src: "conductor", dst: "conductor"},
-		{component: "Setup",     src: "setup",     dst: "setup"},
-		{component: "Host",      src: "host",      dst: "host"},
+		{component: "Setup", src: "setup", dst: "setup"},
+		{component: "Host", src: "host", dst: "host"},
 	}
 }
 
@@ -120,13 +120,18 @@ type rolloutResult struct {
 
 // runRollout resolves paths and deploys all components.
 func runRollout(c *core.Core, dryRun bool) error {
+	c.Logger.Info("rollout started — dry_run=%v", dryRun)
+
 	origin, err := resolveOriginFromNucleusJSON()
 	if err != nil {
+		c.Logger.Error("could not resolve origin path: %v", err)
 		return fmt.Errorf("could not resolve origin path: %w", err)
 	}
+	c.Logger.Info("origin resolved — path=%s type=%s platform=%s", origin.Path, origin.Type, origin.Platform)
 
 	appDataBin, err := resolveAppDataBin()
 	if err != nil {
+		c.Logger.Error("could not resolve AppData bin path: %v", err)
 		return fmt.Errorf("could not resolve AppData bin path: %w", err)
 	}
 
@@ -163,9 +168,13 @@ func runRollout(c *core.Core, dryRun bool) error {
 	// Stop managed services before deploying to avoid "Access is denied" on locked files.
 	managedServices := []string{"BloomBrain", "BloomNucleusService"}
 	// allProcessesToKill are killed unconditionally before copying.
+	// Order matters: nssm.exe must die first — it is the parent process of both
+	// BloomBrain and BloomNucleusService. If killed after its children, NSSM may
+	// restart them before we copy, and keeps its own file handle on nssm.exe itself.
 	// bloom-host.exe holds handles on brain/_internal/VCRUNTIME140.dll.
-	// brain.exe/nucleus.exe may also run as workers outside of their services.
+	// nucleus.exe spawns worker children; /T in taskkill kills the whole tree.
 	allProcessesToKill := []string{
+		"nssm.exe",      // first — parent of brain and nucleus, holds handle on nssm.exe
 		"brain.exe",
 		"nucleus.exe",
 		"temporal.exe",
@@ -179,17 +188,22 @@ func runRollout(c *core.Core, dryRun bool) error {
 		// Step 1: stop services via SCM.
 		for _, svcName := range managedServices {
 			if err := controlService(svcName, false); err != nil {
+				c.Logger.Warning("could not stop service %s: %v", svcName, err)
 				if !c.Config.OutputJSON {
 					fmt.Printf("  ⚠  %-20s could not stop: %v\n", svcName, err)
 				}
-			} else if !c.Config.OutputJSON {
-				fmt.Printf("  ⏹  %-20s stopped\n", svcName)
+			} else {
+				c.Logger.Info("service stopped: %s", svcName)
+				if !c.Config.OutputJSON {
+					fmt.Printf("  ⏹  %-20s stopped\n", svcName)
+				}
 			}
 		}
 		// Step 2: force-kill all known processes and their trees.
 		// This catches workers running outside services and releases all
 		// file handles including DLL locks like VCRUNTIME140.dll.
 		for _, procName := range allProcessesToKill {
+			c.Logger.Info("killing process: %s", procName)
 			killProcess(procName)
 		}
 		// Step 3: pause to let Windows release all file handles.
@@ -198,6 +212,7 @@ func runRollout(c *core.Core, dryRun bool) error {
 		nativeLegacyDir := filepath.Join(appDataBin, "native")
 		if _, err := os.Stat(nativeLegacyDir); err == nil {
 			_ = os.RemoveAll(nativeLegacyDir)
+			c.Logger.Info("removed legacy bin/native directory")
 			if !c.Config.OutputJSON {
 				fmt.Printf("  🗑  removed legacy bin/native/ directory\n")
 			}
@@ -211,7 +226,9 @@ func runRollout(c *core.Core, dryRun bool) error {
 		dst := filepath.Join(appDataBin, entry.dst)
 
 		if _, err := os.Stat(src); os.IsNotExist(err) {
-			skipped = append(skipped, fmt.Sprintf("%s (source not found: %s)", entry.component, src))
+			msg := fmt.Sprintf("%s (source not found: %s)", entry.component, src)
+			skipped = append(skipped, msg)
+			c.Logger.Warning("component skipped — source not found: %s", entry.component)
 			if !c.Config.OutputJSON {
 				fmt.Printf("  ⚠  %-14s skipped — source not found\n", entry.component)
 			}
@@ -229,6 +246,7 @@ func runRollout(c *core.Core, dryRun bool) error {
 		if err != nil {
 			msg := fmt.Sprintf("%s: %v", entry.component, err)
 			errors = append(errors, msg)
+			c.Logger.Error("error deploying %s: %v", entry.component, err)
 			if !c.Config.OutputJSON {
 				fmt.Printf("  ✗  %-14s ERROR: %v\n", entry.component, err)
 			}
@@ -241,6 +259,7 @@ func runRollout(c *core.Core, dryRun bool) error {
 			Destination: dst,
 			FilesCopied: count,
 		})
+		c.Logger.Info("deployed %s — %d files → %s", entry.component, count, dst)
 		if !c.Config.OutputJSON {
 			verb := "Deployed"
 			if dryRun {
@@ -255,6 +274,7 @@ func runRollout(c *core.Core, dryRun bool) error {
 		dst := filepath.Join(appDataBin, "cortex", "bloom-cortex.blx")
 		if _, err := os.Stat(cortexSrc); os.IsNotExist(err) {
 			skipped = append(skipped, "Cortex (source not found: "+cortexSrc+")")
+			c.Logger.Warning("component skipped — source not found: Cortex")
 			if !c.Config.OutputJSON {
 				fmt.Printf("  ⚠  %-14s skipped — source not found\n", "Cortex")
 			}
@@ -262,6 +282,7 @@ func runRollout(c *core.Core, dryRun bool) error {
 			count, err := copySingleFile(cortexSrc, dst, dryRun)
 			if err != nil {
 				errors = append(errors, "Cortex: "+err.Error())
+				c.Logger.Error("error deploying Cortex: %v", err)
 				if !c.Config.OutputJSON {
 					fmt.Printf("  ✗  %-14s ERROR: %v\n", "Cortex", err)
 				}
@@ -272,6 +293,7 @@ func runRollout(c *core.Core, dryRun bool) error {
 					Destination: dst,
 					FilesCopied: count,
 				})
+				c.Logger.Info("deployed Cortex — %d files → %s", count, dst)
 				if !c.Config.OutputJSON {
 					verb := "Deployed"
 					if dryRun {
@@ -288,6 +310,7 @@ func runRollout(c *core.Core, dryRun bool) error {
 		dst := filepath.Join(appDataBin, "nssm", "nssm.exe")
 		if _, err := os.Stat(nssmSrc); os.IsNotExist(err) {
 			skipped = append(skipped, "NSSM (source not found: "+nssmSrc+")")
+			c.Logger.Warning("component skipped — source not found: NSSM")
 			if !c.Config.OutputJSON {
 				fmt.Printf("  ⚠  %-14s skipped — source not found\n", "NSSM")
 			}
@@ -295,6 +318,7 @@ func runRollout(c *core.Core, dryRun bool) error {
 			count, err := copySingleFile(nssmSrc, dst, dryRun)
 			if err != nil {
 				errors = append(errors, "NSSM: "+err.Error())
+				c.Logger.Error("error deploying NSSM: %v", err)
 				if !c.Config.OutputJSON {
 					fmt.Printf("  ✗  %-14s ERROR: %v\n", "NSSM", err)
 				}
@@ -305,6 +329,7 @@ func runRollout(c *core.Core, dryRun bool) error {
 					Destination: dst,
 					FilesCopied: count,
 				})
+				c.Logger.Info("deployed NSSM — %d files → %s", count, dst)
 				if !c.Config.OutputJSON {
 					verb := "Deployed"
 					if dryRun {
@@ -316,14 +341,12 @@ func runRollout(c *core.Core, dryRun bool) error {
 		}
 	}
 
-	// Deploy Bootstrap (full directory: bundle.js, bundle.js.map, bootstrap.meta.json,
-	// server-bootstrap.js, version-bootstrap.py — whatever the build produced)
-	// Source: installer/native/bin/bootstrap/
-	// Dest:   BloomNucleus/bin/bootstrap/
+	// Deploy Bootstrap (full directory)
 	{
 		dst := filepath.Join(appDataBin, "bootstrap")
 		if _, err := os.Stat(bootstrapSrcDir); os.IsNotExist(err) {
 			skipped = append(skipped, "Bootstrap (source not found: "+bootstrapSrcDir+")")
+			c.Logger.Warning("component skipped — source not found: Bootstrap")
 			if !c.Config.OutputJSON {
 				fmt.Printf("  ⚠  %-14s skipped — source not found\n", "Bootstrap")
 			}
@@ -331,6 +354,7 @@ func runRollout(c *core.Core, dryRun bool) error {
 			count, err := copyDir(bootstrapSrcDir, dst, dryRun)
 			if err != nil {
 				errors = append(errors, "Bootstrap: "+err.Error())
+				c.Logger.Error("error deploying Bootstrap: %v", err)
 				if !c.Config.OutputJSON {
 					fmt.Printf("  ✗  %-14s ERROR: %v\n", "Bootstrap", err)
 				}
@@ -341,6 +365,7 @@ func runRollout(c *core.Core, dryRun bool) error {
 					Destination: dst,
 					FilesCopied: count,
 				})
+				c.Logger.Info("deployed Bootstrap — %d files → %s", count, dst)
 				if !c.Config.OutputJSON {
 					verb := "Deployed"
 					if dryRun {
@@ -357,6 +382,7 @@ func runRollout(c *core.Core, dryRun bool) error {
 		dst := filepath.Join(appDataBin, "vscode", "bloom-extension.vsix")
 		if _, err := os.Stat(vscodeSrc); os.IsNotExist(err) {
 			skipped = append(skipped, "VSCode (source not found: "+vscodeSrc+")")
+			c.Logger.Warning("component skipped — source not found: VSCode")
 			if !c.Config.OutputJSON {
 				fmt.Printf("  ⚠  %-14s skipped — source not found\n", "VSCode")
 			}
@@ -364,6 +390,7 @@ func runRollout(c *core.Core, dryRun bool) error {
 			count, err := copySingleFile(vscodeSrc, dst, dryRun)
 			if err != nil {
 				errors = append(errors, "VSCode: "+err.Error())
+				c.Logger.Error("error deploying VSCode: %v", err)
 				if !c.Config.OutputJSON {
 					fmt.Printf("  ✗  %-14s ERROR: %v\n", "VSCode", err)
 				}
@@ -374,6 +401,7 @@ func runRollout(c *core.Core, dryRun bool) error {
 					Destination: dst,
 					FilesCopied: count,
 				})
+				c.Logger.Info("deployed VSCode — %d files → %s", count, dst)
 				if !c.Config.OutputJSON {
 					verb := "Deployed"
 					if dryRun {
@@ -385,11 +413,12 @@ func runRollout(c *core.Core, dryRun bool) error {
 		}
 	}
 
-	// Deploy Node (platform-aware: installer/node/win64/ or installer/node/win32/)
+	// Deploy Node (platform-aware)
 	{
 		dst := filepath.Join(appDataBin, "node", "node.exe")
 		if _, err := os.Stat(nodeSrc); os.IsNotExist(err) {
 			skipped = append(skipped, fmt.Sprintf("Node (source not found: %s)", nodeSrc))
+			c.Logger.Warning("component skipped — source not found: Node (%s)", origin.Platform)
 			if !c.Config.OutputJSON {
 				fmt.Printf("  ⚠  %-14s skipped — source not found (%s)\n", "Node", origin.Platform)
 			}
@@ -397,6 +426,7 @@ func runRollout(c *core.Core, dryRun bool) error {
 			count, err := copySingleFile(nodeSrc, dst, dryRun)
 			if err != nil {
 				errors = append(errors, "Node: "+err.Error())
+				c.Logger.Error("error deploying Node: %v", err)
 				if !c.Config.OutputJSON {
 					fmt.Printf("  ✗  %-14s ERROR: %v\n", "Node", err)
 				}
@@ -407,6 +437,7 @@ func runRollout(c *core.Core, dryRun bool) error {
 					Destination: dst,
 					FilesCopied: count,
 				})
+				c.Logger.Info("deployed Node — %d files → %s [%s]", count, dst, origin.Platform)
 				if !c.Config.OutputJSON {
 					verb := "Deployed"
 					if dryRun {
@@ -426,24 +457,27 @@ func runRollout(c *core.Core, dryRun bool) error {
 		}
 		for _, svcName := range managedServices {
 			if err := controlService(svcName, true); err != nil {
+				c.Logger.Warning("could not restart service %s: %v", svcName, err)
 				if !c.Config.OutputJSON {
 					fmt.Printf("  ⚠  %-20s could not start: %v\n", svcName, err)
 				}
 				errors = append(errors, fmt.Sprintf("restart %s: %v", svcName, err))
-			} else if !c.Config.OutputJSON {
-				fmt.Printf("  ▶  %-20s started\n", svcName)
+			} else {
+				c.Logger.Info("service started: %s", svcName)
+				if !c.Config.OutputJSON {
+					fmt.Printf("  ▶  %-20s started\n", svcName)
+				}
 			}
 		}
 		fmt.Println()
 	}
 
 	// Clean up metamorph.exe.old left by the self-update rename+replace.
-	// Done here (after deploy, with admin rights) using the known appDataBin path
-	// so we don't rely on os.Executable() which can differ in an elevated process.
 	if !dryRun {
 		oldExe := filepath.Join(appDataBin, "metamorph", "metamorph.exe.old")
 		if _, err := os.Stat(oldExe); err == nil {
 			if removeErr := os.Remove(oldExe); removeErr == nil {
+				c.Logger.Info("removed stale metamorph.exe.old")
 				if !c.Config.OutputJSON {
 					fmt.Printf("  🗑  metamorph.exe.old removed\n")
 				}
@@ -451,7 +485,7 @@ func runRollout(c *core.Core, dryRun bool) error {
 		}
 	}
 
-	// Print summary
+	// Build summary
 	status := "success"
 	if len(errors) > 0 {
 		status = "partial"
@@ -459,6 +493,8 @@ func runRollout(c *core.Core, dryRun bool) error {
 	if len(deployed) == 0 {
 		status = "failed"
 	}
+
+	c.Logger.Info("rollout complete — status=%s deployed=%d skipped=%d errors=%d dry_run=%v", status, len(deployed), len(skipped), len(errors), dryRun)
 
 	if c.Config.OutputJSON {
 		c.OutputJSON(map[string]interface{}{
@@ -487,6 +523,16 @@ func runRollout(c *core.Core, dryRun bool) error {
 	return nil
 }
 
+// componentNames extracts just the component names from a slice of rolloutResult,
+// used for a compact log summary.
+func componentNames(results []rolloutResult) []string {
+	names := make([]string, len(results))
+	for i, r := range results {
+		names[i] = r.Component
+	}
+	return names
+}
+
 // installationOrigin holds the relevant fields from nucleus.json installation block.
 type installationOrigin struct {
 	Path     string // installation.origin_path  — e.g. C:\repos\bloom\installer\native\bin\win64
@@ -496,8 +542,6 @@ type installationOrigin struct {
 
 // resolveOriginFromNucleusJSON reads %LOCALAPPDATA%\BloomNucleus\config\nucleus.json
 // and returns the origin_path recorded by the installer.
-// This is the canonical way to locate the binary source directory — the installer
-// writes it at install time so no heuristics or env vars are needed at runtime.
 func resolveOriginFromNucleusJSON() (*installationOrigin, error) {
 	nucleusJSON, err := resolveNucleusJSONPath()
 	if err != nil {
@@ -576,7 +620,6 @@ func resolveAppDataBin() (string, error) {
 }
 
 // resolvePlatform returns "win64" or "win32" based on the current architecture.
-// Kept as fallback for contexts outside of rollout.
 func resolvePlatform() string {
 	if runtime.GOARCH == "amd64" {
 		return "win64"
@@ -620,7 +663,6 @@ func ensureElevated() error {
 }
 
 // isElevated returns true if the current process has administrator privileges.
-// TOKEN_ELEVATION is a single DWORD so we read it directly as uint32.
 func isElevated() (bool, error) {
 	token := windows.Token(0)
 	if err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_QUERY, &token); err != nil {
@@ -696,14 +738,11 @@ func waitForServiceState(s *mgr.Service, desired svc.State, timeout time.Duratio
 }
 
 // killProcess force-kills all instances of a process by name using taskkill /F /T.
-// Silently ignores errors (process not running is not an error).
-// /T kills the process tree so child processes are also terminated.
 func killProcess(name string) {
 	_ = exec.Command("taskkill", "/F", "/IM", name, "/T").Run()
 }
 
 // cleanupOldExe removes a .old file at the given path, silently ignoring errors.
-// Used to clean up metamorph.exe.old after a self-update rename+replace.
 func cleanupOldExe(path string) {
 	if _, err := os.Stat(path); err == nil {
 		_ = os.Remove(path)
@@ -712,8 +751,6 @@ func cleanupOldExe(path string) {
 
 // copyDirWithSelfUpdate copies a directory like copyDir, but handles the special
 // case where the destination contains the currently running executable (metamorph.exe).
-// For that file it uses rename+replace: rename the live exe to .old (Windows allows
-// this even while it's running), then copy the new one into place.
 func copyDirWithSelfUpdate(src, dst string, dryRun bool) (int, error) {
 	count := 0
 	err := filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
@@ -745,7 +782,6 @@ func copyDirWithSelfUpdate(src, dst string, dryRun bool) (int, error) {
 				return fmt.Errorf("mkdir %s: %w", filepath.Dir(target), err)
 			}
 
-			// For the running exe, rename it away first so Windows releases the lock.
 			if strings.EqualFold(base, "metamorph.exe") {
 				if _, statErr := os.Stat(target); statErr == nil {
 					if renameErr := os.Rename(target, target+".old"); renameErr != nil {
@@ -765,7 +801,6 @@ func copyDirWithSelfUpdate(src, dst string, dryRun bool) (int, error) {
 }
 
 // copyDir recursively copies src directory into dst, creating dst if needed.
-// Returns number of files copied.
 func copyDir(src, dst string, dryRun bool) (int, error) {
 	count := 0
 	err := filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
@@ -773,7 +808,6 @@ func copyDir(src, dst string, dryRun bool) (int, error) {
 			return err
 		}
 
-		// Compute destination path
 		rel, err := filepath.Rel(src, path)
 		if err != nil {
 			return err
@@ -789,7 +823,6 @@ func copyDir(src, dst string, dryRun bool) (int, error) {
 			return nil
 		}
 
-		// Skip macOS metadata files that might be in the repo
 		base := filepath.Base(path)
 		if strings.HasPrefix(base, "._") || base == ".DS_Store" {
 			return nil
@@ -810,7 +843,6 @@ func copyDir(src, dst string, dryRun bool) (int, error) {
 }
 
 // copySingleFile copies one file to dst, creating parent directories as needed.
-// Returns 1 on success for consistent counting.
 func copySingleFile(src, dst string, dryRun bool) (int, error) {
 	if !dryRun {
 		if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {

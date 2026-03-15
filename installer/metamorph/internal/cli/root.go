@@ -7,6 +7,21 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// commandCategoryToLogCategory maps the command annotation "category" (used by
+// RegisterCommand) to the log file category written by InitLogger.
+//
+// Log files produced:
+//   metamorph_core_YYYYMMDD.log        — SYSTEM commands (info, version, status)
+//   metamorph_operations_YYYYMMDD.log  — MAINTENANCE + ROLLBACK (rollout, cleanup, rollback)
+//   metamorph_inspection_YYYYMMDD.log  — INSPECTION + RECONCILIATION (inspect, verify-sync, reconcile, generate-manifest)
+var commandCategoryToLogCategory = map[string]string{
+	"SYSTEM":          "CORE",
+	"INSPECTION":      "INSPECTION",
+	"RECONCILIATION":  "INSPECTION",
+	"ROLLBACK":        "OPERATIONS",
+	"MAINTENANCE":     "OPERATIONS",
+}
+
 func Execute(c *core.Core) error {
 	rootCmd := createRootCommand(c)
 	core.BuildCommands(c, rootCmd)
@@ -29,6 +44,23 @@ manifests, providing atomic updates, rollback capabilities, and state inspection
 			}
 			if verboseFlag, _ := cmd.Flags().GetBool("verbose"); verboseFlag {
 				c.Config.Verbose = true
+			}
+
+			// Resolve the log category from the command's registered category.
+			// Falls back to "CORE" for any command without an annotation.
+			cmdCategory := cmd.Annotations["category"]
+			logCategory, ok := commandCategoryToLogCategory[cmdCategory]
+			if !ok {
+				logCategory = "CORE"
+			}
+
+			// Initialize the logger now that we know which command is running.
+			// This ensures each category writes to its own dedicated log file,
+			// and the logger is opened exactly once per process execution.
+			if err := c.InitLoggerForCategory(logCategory); err != nil {
+				// Logger failure is non-fatal — commands degrade gracefully.
+				// The empty Logger{} from NewCore already guards all log calls.
+				_ = err
 			}
 		},
 	}

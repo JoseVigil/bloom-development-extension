@@ -153,7 +153,7 @@ type BootstrapMeta struct {
 // ManagedBinary entry. The script is executed from its own directory so that
 // any relative imports inside it resolve correctly.
 func inspectBootstrap(basePath string) (ManagedBinary, error) {
-	scriptDir := filepath.Join(basePath, "bin", "bootstrap")
+	scriptDir := filepath.Join(basePath, "bootstrap")
 	scriptPath := filepath.Join(scriptDir, "version-bootstrap.py")
 
 	stat, err := os.Stat(scriptPath)
@@ -247,7 +247,7 @@ type VSIXMeta struct {
 // inspectVSCodeExtension reads bin/vscode/bloom-extension.vsix (a ZIP archive)
 // and extracts version and metadata from extension/package.json inside it.
 func inspectVSCodeExtension(basePath string) (ManagedBinary, error) {
-	vsixPath := filepath.Join(basePath, "bin", "vscode", "bloom-extension.vsix")
+	vsixPath := filepath.Join(basePath, "vscode", "bloom-extension.vsix")
 
 	stat, err := os.Stat(vsixPath)
 	if err != nil {

@@ -25,7 +25,8 @@ bloom-development-extension/
     │   │   ├── managed.go
     │   │   ├── status.go
     │   │   ├── types.go
-    │   │   └── utils.go
+    │   │   ├── utils.go
+    │   │   └── verify_sync.go
     │   ├── maintenance/
     │   │   ├── cleanup.go
     │   │   └── rollout.go

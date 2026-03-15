@@ -1,9 +1,7 @@
 BloomNucleus/
 ├── bin/
 │   ├── bootstrap/
-│   │   ├── VERSION
 │   │   ├── bootstrap.meta.json
-│   │   ├── bundle-bootstrap.js
 │   │   ├── bundle.js
 │   │   ├── bundle.js.map
 │   │   ├── server-bootstrap.js
@@ -140,8 +138,7 @@ BloomNucleus/
 │   │   │   ├── metamorph_help.txt
 │   │   │   └── metamorph_info.json
 │   │   ├── metamorph-config.json
-│   │   ├── metamorph.exe
-│   │   └── metamorph.exe.old
+│   │   └── metamorph.exe
 │   ├── node/
 │   │   └── node.exe
 │   ├── nssm/
@@ -351,21 +348,26 @@ BloomNucleus/
 │   │               └── nm_init_diag_001_21d14600_095033.log
 │   ├── metamorph/
 │   │   ├── metamorph_core_20260313.log
-│   │   └── metamorph_core_20260314.log
+│   │   ├── metamorph_core_20260314.log
+│   │   └── metamorph_core_20260315.log
 │   ├── nucleus/
 │   │   ├── nucleus_orchestration_20260313.log
 │   │   ├── nucleus_orchestration_20260314.log
+│   │   ├── nucleus_orchestration_20260315.log
 │   │   ├── nucleus_synapse_20260313.log
 │   │   ├── nucleus_temporal_20260313.log
 │   │   ├── nucleus_temporal_20260314.log
+│   │   ├── nucleus_temporal_20260315.log
 │   │   ├── service/
 │   │   │   └── nucleus_service.log
 │   │   ├── telemetry/
 │   │   │   ├── nucleus_telemetry_20260313.log
-│   │   │   └── nucleus_telemetry_20260314.log
+│   │   │   ├── nucleus_telemetry_20260314.log
+│   │   │   └── nucleus_telemetry_20260315.log
 │   │   └── worker/
 │   │       ├── worker_manager_20260313.log
-│   │       └── worker_manager_20260314.log
+│   │       ├── worker_manager_20260314.log
+│   │       └── worker_manager_20260315.log
 │   ├── sensor/
 │   │   ├── sensor_20260313.log
 │   │   ├── sensor_20260314.log
@@ -379,7 +381,8 @@ BloomNucleus/
 │   │   │   │   └── 001_21d14600_095033_netlog.json
 │   │   │   └── sentinel_21d14600-a692-4727-98da-b5f1eca1685a_20260313.log
 │   │   ├── sentinel_core_20260313.log
-│   │   └── sentinel_core_20260314.log
+│   │   ├── sentinel_core_20260314.log
+│   │   └── sentinel_core_20260315.log
 │   ├── synapse_trace/
 │   │   └── synapse_trace_001_21d14600_095033.log
 │   ├── telemetry.json

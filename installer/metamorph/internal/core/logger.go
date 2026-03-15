@@ -90,7 +90,8 @@ func InitLogger(paths *PathConfig, category string, jsonMode bool) (*Logger, err
 
 	// Registrar stream en telemetry usando Nucleus CLI
 	streamID := "metamorph_" + strings.ToLower(category)
-	registerTelemetry(streamID, label, filepath.ToSlash(logPath), 2, file)
+	nucleusExe := filepath.Join(paths.BinDir, "nucleus", "nucleus.exe")
+	registerTelemetry(streamID, label, filepath.ToSlash(logPath), nucleusExe, 2, file)
 
 	return logger, nil
 }
@@ -132,18 +133,14 @@ func getMetamorphDescription(category string) string {
 // registerTelemetry registra el stream en el sistema de telemetria usando Nucleus CLI.
 // Los errores se escriben solo al archivo de log — nunca a consola — para no
 // contaminar stdout en modo JSON ni generar ruido en modo normal.
-func registerTelemetry(streamID, label, path string, priority int, logFile *os.File) {
-	// Derivar la categoria de telemetria desde el streamID (ej: "metamorph_reconcile")
-	// Metamorph corre bajo nucleus, con category "nucleus" como primaria.
-	category := strings.SplitN(streamID, "_", 2)[0] // "metamorph" -> usa "nucleus"
-	_ = category                                      // categoria derivada del binario que escribe
-
+// nucleusExe debe ser la ruta absoluta a nucleus.exe (no depende del PATH del sistema).
+func registerTelemetry(streamID, label, path, nucleusExe string, priority int, logFile *os.File) {
 	description := getMetamorphDescription(
 		strings.ToUpper(strings.TrimPrefix(streamID, "metamorph_")),
 	)
 
 	cmd := exec.Command(
-		"nucleus", "telemetry", "register",
+		nucleusExe, "telemetry", "register",
 		"--stream",      streamID,
 		"--label",       label,
 		"--path",        path,
@@ -155,8 +152,12 @@ func registerTelemetry(streamID, label, path string, priority int, logFile *os.F
 
 	if err := cmd.Run(); err != nil {
 		if logFile != nil {
-			ts := time.Now().UTC().Format(time.RFC3339)
-			fmt.Fprintf(logFile, "%s Warning: failed to register telemetry for %s: %v\n", ts, streamID, err)
+			// Si nucleus.exe no existe aún (primer run antes del rollout),
+			// no hay nada útil que loguear — ignorar silenciosamente.
+			if !os.IsNotExist(err) {
+				ts := time.Now().UTC().Format(time.RFC3339)
+				fmt.Fprintf(logFile, "%s Warning: failed to register telemetry for %s: %v\n", ts, streamID, err)
+			}
 		}
 	}
 }
