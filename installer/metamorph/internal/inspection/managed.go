@@ -146,16 +146,17 @@ func getManagedBinaries(hostPath string) []managedBinaryDefinition {
 			buildField:   "build_number",
 		},
 		{
-			// Sensor (Human Presence Runtime).  version is plain-text output
-			// ("bloom-sensor dev (stable) build=13"), not JSON, so it is handled
-			// by inspectSensor() rather than the generic extractVersionAndBuild path.
-			// info uses --json flag placed before the subcommand per sensor's convention.
+			// Sensor (Human Presence Runtime).
+			// --json version → JSON: {"build": "57", "channel": "stable", "version": "1.0.0"}
+			// Note: build is a string in the JSON output, _parse_build handles str→int conversion.
+			// --json info   → JSON: {version, channel, capabilities, requires} — no build field.
+			// inspectSensor uses --json version for version+build, --json info for SensorInfo metadata.
 			name:         "Sensor",
 			path:         "sensor/bloom-sensor.exe",
-			versionArgs:  []string{"version"},    // → plain text: "bloom-sensor dev (stable) build=13"
-			infoArgs:     []string{"--json", "info"}, // → JSON with version/channel/capabilities/requires
+			versionArgs:  []string{"--json", "version"}, // → JSON with version/build/channel
+			infoArgs:     []string{"--json", "info"},     // → JSON with capabilities/requires
 			versionField: "version",
-			buildField:   "", // not used — handled in inspectSensor
+			buildField:   "build", // string in JSON — handled by extractVersionAndBuild via fmt.Sprintf→int
 		},
 		{
 			name:         "Setup",
@@ -359,33 +360,46 @@ func inspectSetup(binary *ManagedBinary, exePath string) (*ManagedBinary, error)
 // inspectSensor interrogates bloom-sensor using its native CLI flags.
 //
 // Two-pass strategy:
-//  1. `version`      — plain-text output; version extracted via ParseVersionFromOutput.
-//                      Example: "bloom-sensor dev (stable) build=13"
-//  2. `--json info`  — JSON output; enriches the result with channel and capabilities
-//                      stored in binary.SensorInfo.
+//  1. `--json version` — JSON output; extracts version, build (string), channel.
+//                        Example: {"build": "57", "channel": "stable", "version": "1.0.0"}
+//  2. `--json info`    — JSON output; enriches the result with capabilities and requires
+//                        stored in binary.SensorInfo.
 //
-// Note: bloom-sensor requires --json BEFORE the subcommand, unlike most other binaries.
+// Note: bloom-sensor requires --json BEFORE the subcommand.
 func inspectSensor(binary *ManagedBinary, exePath string) (*ManagedBinary, error) {
-	// Pass 1: version (plain text)
-	out, err := ExecuteCommandWithTimeout(exePath, "version")
+	// Pass 1: --json version (JSON) — version and build number
+	out, err := ExecuteCommandWithTimeout(exePath, "--json", "version")
 	if err == nil && out != "" {
-		version := ParseVersionFromOutput(out)
-		if version != "unknown" {
-			binary.Version = version
-			binary.Status = "healthy"
+		jsonStart := strings.Index(out, "{")
+		if jsonStart >= 0 {
+			var vdata struct {
+				Version string `json:"version"`
+				Build   string `json:"build"` // sensor emits build as string e.g. "57"
+				Channel string `json:"channel"`
+			}
+			if json.Unmarshal([]byte(out[jsonStart:]), &vdata) == nil && vdata.Version != "" {
+				binary.Version = vdata.Version
+				binary.Status = "healthy"
+				// Parse build string → int
+				if vdata.Build != "" {
+					if n, err := fmt.Sscanf(vdata.Build, "%d", &binary.BuildNumber); n != 1 || err != nil {
+						binary.BuildNumber = 0
+					}
+				}
+			}
 		}
 	}
 
-	// Pass 2: --json info — collect extended metadata
+	// Pass 2: --json info — collect extended metadata (capabilities, requires)
 	infoOut, err := ExecuteCommandWithTimeout(exePath, "--json", "info")
 	if err == nil && infoOut != "" {
 		jsonStart := strings.Index(infoOut, "{")
 		if jsonStart >= 0 {
 			var info struct {
-				Name         string   `json:"name"`
-				Version      string   `json:"version"`
-				Channel      string   `json:"channel"`
-				Capabilities []string `json:"capabilities"`
+				Name         string            `json:"name"`
+				Version      string            `json:"version"`
+				Channel      string            `json:"channel"`
+				Capabilities []string          `json:"capabilities"`
 				Requires     map[string]string `json:"requires"`
 			}
 			if json.Unmarshal([]byte(infoOut[jsonStart:]), &info) == nil {

@@ -100,6 +100,8 @@ brain filesystem tree installer/chrome-extension/src -o tree/chrome_extension_sr
 
 brain filesystem tree C:\Users\josev\AppData\Local\BloomNucleus -o tree/appdata_tree.txt
 
+brain filesystem tree installer -o tree/installer_tree.txt
+
 
 
 

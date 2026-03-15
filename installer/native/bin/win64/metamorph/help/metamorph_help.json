@@ -26,7 +26,7 @@
   {
     "name": "inspect",
     "use": "inspect",
-    "short": "Inspect all binaries and show detailed info",
+    "short": "Inspect all binaries (AppData or native build output)",
     "category": "INSPECTION",
     "options": [
       {
@@ -34,10 +34,15 @@
         "shorthand": "a",
         "usage": "Include external binaries (Temporal, Ollama, Chromium, Node)",
         "default": "false"
+      },
+      {
+        "name": "native",
+        "usage": "Inspect native/bin/\u003cplatform\u003e/ build output instead of AppData",
+        "default": "false"
       }
     ],
-    "example": "  metamorph inspect\n  metamorph inspect --all\n  metamorph --json inspect\n  metamorph --json inspect --all",
-    "json_response": "{\n  \"managed_binaries\": [\n    {\n      \"name\": \"Brain\",\n      \"version\": \"3.2.0\",\n      \"status\": \"healthy\"\n    }\n  ],\n  \"summary\": {\n    \"total_binaries\": 7,\n    \"healthy_count\": 7\n  }\n}"
+    "example": "  metamorph inspect\n  metamorph inspect --all\n  metamorph inspect --native\n  metamorph inspect --native --all\n  metamorph --json inspect\n  metamorph --json inspect --native\n  metamorph --json inspect --all",
+    "json_response": "{\n  \"managed_binaries\": [\n    {\n      \"name\": \"Brain\",\n      \"version\": \"3.2.0\",\n      \"hash\": \"a3f1c2...\",\n      \"size_bytes\": 18432000,\n      \"last_modified\": \"2026-03-15T14:00:00Z\",\n      \"status\": \"healthy\",\n      \"updatable_by_metamorph\": true\n    }\n  ],\n  \"summary\": {\n    \"total_binaries\": 11,\n    \"managed_count\": 11,\n    \"healthy_count\": 11,\n    \"missing_count\": 0\n  },\n  \"timestamp\": \"2026-03-15T14:16:43Z\"\n}\n\n  Written to (default):  %LOCALAPPDATA%\\\\BloomNucleus\\\\config\\\\metamorph.json\n  Written to (--native): %LOCALAPPDATA%\\\\BloomNucleus\\\\config\\\\native\\\\native_metamorph.json"
   },
   {
     "name": "reconcile",
@@ -90,6 +95,13 @@
     "use": "verify-sync",
     "short": "Verify deployed binaries match the last build",
     "category": "INSPECTION",
+    "options": [
+      {
+        "name": "native",
+        "usage": "Verify native/bin/\u003cplatform\u003e/ build output instead of AppData (reads native_metamorph.json)",
+        "default": "false"
+      }
+    ],
     "example": "  metamorph verify-sync\n  metamorph --json verify-sync",
     "json_response": "{\n  \"timestamp\": \"2026-02-27T12:00:00Z\",\n  \"in_sync\": true,\n  \"reference\": \"C:\\\\Users\\\\josev\\\\AppData\\\\Local\\\\BloomNucleus\\\\config\\\\metamorph.json\",\n  \"summary\": {\n    \"total\": 9,\n    \"synced\": 9,\n    \"drifted\": 0,\n    \"missing\": 0\n  },\n  \"components\": [\n    {\n      \"name\": \"Brain\",\n      \"status\": \"synced\",\n      \"expected_hash\": \"b716e2...\",\n      \"actual_hash\":   \"b716e2...\",\n      \"path\": \"C:\\\\Users\\\\josev\\\\AppData\\\\Local\\\\BloomNucleus\\\\bin\\\\brain\\\\brain.exe\"\n    }\n  ]\n}"
   },

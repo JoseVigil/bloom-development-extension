@@ -3,6 +3,7 @@ bloom-development-extension/
     ├── build-cortex/
     │   ├── VERSION
     │   ├── build_number.txt
+    │   ├── cortex.meta.json
     │   └── package.py
     ├── extension/
     │   ├── assets/
@@ -11,10 +12,7 @@ bloom-development-extension/
     │   │   └── icon16.png
     │   ├── background.js
     │   ├── content.js
-    │   ├── manifest.json
-    │   └── synapse/
-    │       ├── discovery.synapse.config.js
-    │       └── landing.synapse.config.js
+    │   └── manifest.json
     └── legacy-crypto/
         ├── crx/
         │   ├── id.json

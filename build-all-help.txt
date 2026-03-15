@@ -10,8 +10,8 @@ Usa --only <componente> para correr un único build de forma aislada
 
 options:
   -h, --help         show this help message and exit
-  --only COMPONENTE  Corre únicamente el build de un componente: brain, nucleus, sentinel, metamorph, conductor, sensor, vscode, vsix, bootstrap,
-                     cortex. Omite verificación post-build.
+  --only COMPONENTE  Corre únicamente el build de un componente: brain, nucleus, sentinel, metamorph, conductor, sensor, vsix, bootstrap, cortex.
+                     Omite verificación post-build.
   --channel CHANNEL  Release channel para Cortex: stable (default), beta, dev
   --production       Excluye archivos .map del paquete Cortex (.blx)
   --skip-verify      Omite la FASE 3 de verificación post-build
@@ -30,10 +30,11 @@ OPCIONES — DETALLE
         metamorph  → installer/metamorph/scripts/build.bat
         conductor  → installer/conductor (npm run build:all)
         sensor     → installer/sensor/scripts/build.bat
-        vscode     → npm run build (tsc + copy-assets + esbuild)
-        vsix       → npm run package:vscode (requiere plugin buildeado)
-        bootstrap  → installer/bootstrap/version-bootstrap.py
-                     (requiere plugin buildeado — necesita bundle.js)
+        bootstrap  → npm run build:bundle + version-bootstrap.py
+                     Genera bundle.js, incrementa build_number,
+                     copia todo a installer/native/bin/bootstrap/
+        vsix       → npm run package:vscode (requiere bootstrap primero)
+                     Produce installer/vscode/bloom-extension.vsix
         cortex     → installer/cortex/build-cortex/package.py
       Nota: --only cortex respeta --channel y --production.
       Nota: --only omite la verificación post-build (FASE 3).
@@ -71,13 +72,12 @@ SECUENCIA DE BUILD
             Conductor  → installer/conductor (npm run build:all)
             Host       → SKIPPED en Windows (build via Linux)
             Sensor     → installer/sensor/scripts/build.bat
-            Plugin     → npm run build
-                         (tsc + copy-assets + esbuild bundle)
-                         → installer/native/bin/bootstrap/bundle.js
+            Bootstrap  → npm run build:bundle + version-bootstrap.py
+                         Genera bundle.js, incrementa build_number,
+                         copia todo a installer/native/bin/bootstrap/
             Vsix       → npm run package:vscode (vsce)
                          → installer/vscode/bloom-extension.vsix
-            Bootstrap  → installer/bootstrap/version-bootstrap.py
-                         (incrementa build_number en bootstrap.meta.json)
+                         (requiere Bootstrap ejecutado antes)
 
   FASE 2  Empaquetado de Cortex (.blx)
             Cortex     → installer/cortex/build-cortex/package.py
@@ -124,10 +124,13 @@ EJEMPLOS — BUILD INDIVIDUAL (--only)
   python build-all.py --only metamorph
   python build-all.py --only conductor
   python build-all.py --only sensor
-  python build-all.py --only vscode
-  python build-all.py --only vsix
   python build-all.py --only bootstrap
+  python build-all.py --only vsix
   python build-all.py --only cortex
+
+  # Extension VSCode: bootstrap genera bundle.js, vsix empaqueta el .vsix
+  python build-all.py --only bootstrap   # → installer/native/bin/bootstrap/
+  python build-all.py --only vsix        # → installer/vscode/bloom-extension.vsix
 
   # Cortex individual con opciones de canal
   python build-all.py --only cortex --channel beta

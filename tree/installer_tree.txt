@@ -32,6 +32,12 @@ bloom-development-extension/
     │           ├── file-utils.ts
     │           ├── org-resolver.ts
     │           └── validators.ts
+    ├── bootstrap/
+    │   ├── VERSION
+    │   ├── bootstrap.meta.json
+    │   ├── bundle-bootstrap.js
+    │   ├── server-bootstrap.js
+    │   └── version-bootstrap.py
     ├── chrome/
     │   ├── chrome-mac.zip
     │   └── chrome-win.zip
@@ -42,21 +48,10 @@ bloom-development-extension/
     │   ├── entitlements.plist
     │   ├── forge.config.js
     │   ├── installer-config.json
-    │   ├── launcher/
-    │   │   ├── assets/
-    │   │   │   └── bloom.ico
-    │   │   ├── main_conductor.js
-    │   │   ├── node_modules/ [... dependencies]
-    │   │   ├── package-lock.json
-    │   │   ├── package.json
-    │   │   ├── preload_conductor.js
-    │   │   └── src/
-    │   │       └── conductor.html
     │   ├── main.js
     │   ├── node_modules/ [... dependencies]
     │   ├── package-lock.json
     │   ├── package.json
-    │   ├── preload.js
     │   ├── scripts/
     │   │   ├── clean_chrome_cache.ps1
     │   │   ├── cleanup_zombies.ps1
@@ -67,6 +62,8 @@ bloom-development-extension/
     │   │   ├── assets/
     │   │   │   ├── bloom.ico
     │   │   │   └── installer.gif
+    │   │   ├── bloom-setup-version.ps1
+    │   │   ├── build_info.json
     │   │   ├── config/
     │   │   │   ├── constants.js
     │   │   │   └── paths.js
@@ -82,13 +79,12 @@ bloom-development-extension/
     │   │   │   │   └── service-diagnostics.js
     │   │   │   ├── installer.js
     │   │   │   ├── installer_nucleus.js
-    │   │   │   ├── launcher-creator.js
-    │   │   │   ├── native-host-installer.js
     │   │   │   ├── nucleus_manager.js
+    │   │   │   ├── pre-install-cleanup.js
     │   │   │   ├── runtime-installer.js
-    │   │   │   ├── service-installer.js
-    │   │   │   ├── service-manager.js
-    │   │   │   └── shortcut-installer.js
+    │   │   │   ├── service-installer-brain.js
+    │   │   │   ├── service-installer-nucleus.js
+    │   │   │   └── service-installer-sensor.js
     │   │   ├── ipc/
     │   │   │   ├── install-handlers.js
     │   │   │   ├── launch-handlers.js
@@ -117,22 +113,44 @@ bloom-development-extension/
     │   │   │   └── uninstall-nucleus-service.bat
     │   │   ├── src/
     │   │   │   ├── index.html
-    │   │   │   ├── installation_manager.js
     │   │   │   ├── renderer.js
-    │   │   │   ├── styles.css
-    │   │   │   └── ui_manager.js
-    │   │   └── utils/
-    │   │       ├── exec-helper.js
-    │   │       └── repair-tools.js
+    │   │   │   └── styles.css
+    │   │   ├── utils/
+    │   │   │   ├── exec-helper.js
+    │   │   │   └── repair-tools.js
+    │   │   └── version.json
     │   ├── shared/
+    │   │   ├── build-info.js
+    │   │   ├── bump-version.js
+    │   │   ├── global_paths.js
     │   │   └── logger.js
-    │   └── utils/
-    │       ├── exec-helper.js
-    │       └── repair-tools.js
+    │   └── workspace/
+    │       ├── assets/
+    │       │   └── bloom.ico
+    │       ├── bloom-conductor-version.ps1
+    │       ├── build_info.json
+    │       ├── core/
+    │       │   ├── core.html
+    │       │   ├── ipc/
+    │       │   │   ├── health-handlers.js
+    │       │   │   └── profiles-handlers.js
+    │       │   └── preload_core.js
+    │       ├── main_conductor.js
+    │       ├── node_modules/ [... dependencies]
+    │       ├── onboarding/
+    │       │   ├── ipc/
+    │       │   │   └── onboarding-handlers.js
+    │       │   ├── onboarding.html
+    │       │   ├── onboarding.js
+    │       │   └── preload_onboarding.js
+    │       ├── package-lock.json
+    │       ├── package.json
+    │       └── version.json
     ├── cortex/
     │   ├── build-cortex/
     │   │   ├── VERSION
     │   │   ├── build_number.txt
+    │   │   ├── cortex.meta.json
     │   │   └── package.py
     │   ├── extension/
     │   │   ├── assets/
@@ -141,10 +159,7 @@ bloom-development-extension/
     │   │   │   └── icon16.png
     │   │   ├── background.js
     │   │   ├── content.js
-    │   │   ├── manifest.json
-    │   │   └── synapse/
-    │   │       ├── discovery.synapse.config.js
-    │   │       └── landing.synapse.config.js
+    │   │   └── manifest.json
     │   └── legacy-crypto/
     │       ├── crx/
     │       │   ├── id.json
@@ -153,10 +168,10 @@ bloom-development-extension/
     │           ├── key_generation_extesion.crx
     │           └── key_generation_extesion.pem
     ├── create_installer.py
+    ├── dist/ [... build output]
     ├── host/
     │   ├── HostExecutor.ts
     │   ├── bloom-host.cpp
-    │   ├── bloom-host.cpp.save
     │   ├── build.sh
     │   ├── build_info.h
     │   ├── build_number.txt
@@ -165,13 +180,16 @@ bloom-development-extension/
     │   ├── cli_handler.cpp
     │   ├── cli_handler.h
     │   ├── cli_parser.h
+    │   ├── help_renderer.cpp
+    │   ├── help_renderer.h
     │   ├── nlohmann/
     │   │   └── json.hpp
     │   ├── platform_utils.cpp
     │   ├── platform_utils.h
     │   ├── setup-openssl-mingw.sh
     │   ├── synapse_logger.cpp
-    │   └── synapse_logger.h
+    │   ├── synapse_logger.h
+    │   └── version_number.txt
     ├── metamorph/
     │   ├── README.md
     │   ├── VERSION
@@ -190,10 +208,19 @@ bloom-development-extension/
     │   │   │   ├── registry.go
     │   │   │   └── version.go
     │   │   ├── inspection/
+    │   │   │   ├── cortex.go
+    │   │   │   ├── external.go
+    │   │   │   ├── formatting.go
     │   │   │   ├── inspect.go
-    │   │   │   └── status.go
+    │   │   │   ├── inspection_test.go
+    │   │   │   ├── managed.go
+    │   │   │   ├── status.go
+    │   │   │   ├── types.go
+    │   │   │   ├── utils.go
+    │   │   │   └── verify_sync.go
     │   │   ├── maintenance/
-    │   │   │   └── cleanup.go
+    │   │   │   ├── cleanup.go
+    │   │   │   └── rollout.go
     │   │   ├── reconciliation/
     │   │   │   ├── generate_manifest.go
     │   │   │   └── reconcile.go
@@ -229,9 +256,11 @@ bloom-development-extension/
     │   ├── bin/
     │   │   ├── .DS_Store
     │   │   ├── bootstrap/
-    │   │   │   └── server-bootstrap.js
-    │   │   ├── config/
-    │   │   │   └── profiles.json
+    │   │   │   ├── bootstrap.meta.json
+    │   │   │   ├── bundle.js
+    │   │   │   ├── bundle.js.map
+    │   │   │   ├── server-bootstrap.js
+    │   │   │   └── version-bootstrap.py
     │   │   ├── cortex/
     │   │   │   └── bloom-cortex.blx
     │   │   ├── darwin/
@@ -240,8 +269,9 @@ bloom-development-extension/
     │   │   ├── linux/
     │   │   │   ├── bloom-host
     │   │   │   └── host/
-    │   │   │       └── bloom-host
-    │   │   ├── profiles/
+    │   │   │       ├── bloom-host
+    │   │   │       └── help/
+    │   │   │           └── help.txt
     │   │   ├── win32/
     │   │   │   ├── brain/
     │   │   │   │   ├── _internal/ [... dependencies]
@@ -261,62 +291,7 @@ bloom-development-extension/
     │   │   │   │       ├── icudtl.dat
     │   │   │   │       ├── libEGL.dll
     │   │   │   │       ├── libGLESv2.dll
-    │   │   │   │       ├── locales/
-    │   │   │   │       │   ├── af.pak
-    │   │   │   │       │   ├── am.pak
-    │   │   │   │       │   ├── ar.pak
-    │   │   │   │       │   ├── bg.pak
-    │   │   │   │       │   ├── bn.pak
-    │   │   │   │       │   ├── ca.pak
-    │   │   │   │       │   ├── cs.pak
-    │   │   │   │       │   ├── da.pak
-    │   │   │   │       │   ├── de.pak
-    │   │   │   │       │   ├── el.pak
-    │   │   │   │       │   ├── en-GB.pak
-    │   │   │   │       │   ├── en-US.pak
-    │   │   │   │       │   ├── es-419.pak
-    │   │   │   │       │   ├── es.pak
-    │   │   │   │       │   ├── et.pak
-    │   │   │   │       │   ├── fa.pak
-    │   │   │   │       │   ├── fi.pak
-    │   │   │   │       │   ├── fil.pak
-    │   │   │   │       │   ├── fr.pak
-    │   │   │   │       │   ├── gu.pak
-    │   │   │   │       │   ├── he.pak
-    │   │   │   │       │   ├── hi.pak
-    │   │   │   │       │   ├── hr.pak
-    │   │   │   │       │   ├── hu.pak
-    │   │   │   │       │   ├── id.pak
-    │   │   │   │       │   ├── it.pak
-    │   │   │   │       │   ├── ja.pak
-    │   │   │   │       │   ├── kn.pak
-    │   │   │   │       │   ├── ko.pak
-    │   │   │   │       │   ├── lt.pak
-    │   │   │   │       │   ├── lv.pak
-    │   │   │   │       │   ├── ml.pak
-    │   │   │   │       │   ├── mr.pak
-    │   │   │   │       │   ├── ms.pak
-    │   │   │   │       │   ├── nb.pak
-    │   │   │   │       │   ├── nl.pak
-    │   │   │   │       │   ├── pl.pak
-    │   │   │   │       │   ├── pt-BR.pak
-    │   │   │   │       │   ├── pt-PT.pak
-    │   │   │   │       │   ├── ro.pak
-    │   │   │   │       │   ├── ru.pak
-    │   │   │   │       │   ├── sk.pak
-    │   │   │   │       │   ├── sl.pak
-    │   │   │   │       │   ├── sr.pak
-    │   │   │   │       │   ├── sv.pak
-    │   │   │   │       │   ├── sw.pak
-    │   │   │   │       │   ├── ta.pak
-    │   │   │   │       │   ├── te.pak
-    │   │   │   │       │   ├── th.pak
-    │   │   │   │       │   ├── tr.pak
-    │   │   │   │       │   ├── uk.pak
-    │   │   │   │       │   ├── ur.pak
-    │   │   │   │       │   ├── vi.pak
-    │   │   │   │       │   ├── zh-CN.pak
-    │   │   │   │       │   └── zh-TW.pak
+    │   │   │   │       ├── locales/ [... localization files]
     │   │   │   │       ├── resources/
     │   │   │   │       │   ├── app.asar
     │   │   │   │       │   └── elevate.exe
@@ -344,17 +319,38 @@ bloom-development-extension/
     │   │   └── win64/
     │   │       ├── brain/
     │   │       │   ├── _internal/ [... dependencies]
-    │   │       │   ├── brain.exe
-    │   │       │   └── help/
-    │   │       │       ├── brain-ai-full.json
-    │   │       │       ├── brain-ai-schema.json
-    │   │       │       ├── brain-legacy.json
-    │   │       │       ├── help-full.txt
-    │   │       │       └── help.txt
+    │   │       │   └── brain.exe
+    │   │       ├── conductor/
+    │   │       │   ├── bloom-conductor.exe
+    │   │       │   ├── builder-debug.yml
+    │   │       │   ├── builder-effective-config.yaml
+    │   │       │   └── win-unpacked/
+    │   │       │       ├── LICENSE.electron.txt
+    │   │       │       ├── LICENSES.chromium.html
+    │   │       │       ├── chrome_100_percent.pak
+    │   │       │       ├── chrome_200_percent.pak
+    │   │       │       ├── d3dcompiler_47.dll
+    │   │       │       ├── electron.exe
+    │   │       │       ├── ffmpeg.dll
+    │   │       │       ├── icudtl.dat
+    │   │       │       ├── libEGL.dll
+    │   │       │       ├── libGLESv2.dll
+    │   │       │       ├── locales/ [... localization files]
+    │   │       │       ├── resources/
+    │   │       │       │   └── app.asar.unpacked/
+    │   │       │       │       └── build_info.json
+    │   │       │       ├── resources.pak
+    │   │       │       ├── snapshot_blob.bin
+    │   │       │       ├── v8_context_snapshot.bin
+    │   │       │       ├── vk_swiftshader.dll
+    │   │       │       ├── vk_swiftshader_icd.json
+    │   │       │       └── vulkan-1.dll
     │   │       ├── host/
     │   │       │   ├── bloom-host.exe
     │   │       │   ├── help/
     │   │       │   │   └── help.txt
+    │   │       │   ├── libgcc_s_seh-1.dll
+    │   │       │   ├── libstdc++-6.dll
     │   │       │   └── libwinpthread-1.dll
     │   │       ├── metamorph/
     │   │       │   ├── help/
@@ -369,19 +365,133 @@ bloom-development-extension/
     │   │       │   │   └── nucleus_help.txt
     │   │       │   ├── nucleus-governance.json
     │   │       │   └── nucleus.exe
-    │   │       └── sentinel/
-    │   │           ├── help/
-    │   │           │   ├── sentinel_help.json
-    │   │           │   └── sentinel_help.txt
-    │   │           ├── sentinel-config.json
-    │   │           └── sentinel.exe
+    │   │       ├── sensor/
+    │   │       │   ├── bloom-sensor.exe
+    │   │       │   └── help/
+    │   │       │       ├── sensor_help.json
+    │   │       │       └── sensor_help.txt
+    │   │       ├── sentinel/
+    │   │       │   ├── help/
+    │   │       │   │   ├── sentinel_help.json
+    │   │       │   │   └── sentinel_help.txt
+    │   │       │   ├── sentinel-config.json
+    │   │       │   └── sentinel.exe
+    │   │       └── setup/
+    │   │           ├── bloom-setup.exe
+    │   │           ├── bloom-setup.exe.blockmap
+    │   │           ├── builder-debug.yml
+    │   │           ├── builder-effective-config.yaml
+    │   │           └── win-unpacked/
+    │   │               ├── Bloom Nucleus Installer.exe
+    │   │               ├── LICENSE.electron.txt
+    │   │               ├── LICENSES.chromium.html
+    │   │               ├── bloom-setup-version.ps1
+    │   │               ├── chrome_100_percent.pak
+    │   │               ├── chrome_200_percent.pak
+    │   │               ├── d3dcompiler_47.dll
+    │   │               ├── ffmpeg.dll
+    │   │               ├── icudtl.dat
+    │   │               ├── libEGL.dll
+    │   │               ├── libGLESv2.dll
+    │   │               ├── locales/ [... localization files]
+    │   │               ├── resources/
+    │   │               │   ├── app.asar
+    │   │               │   ├── app.asar.unpacked/
+    │   │               │   │   └── build_info.json
+    │   │               │   ├── brain/
+    │   │               │   │   ├── _internal/ [... dependencies]
+    │   │               │   │   ├── brain.exe
+    │   │               │   │   └── help/
+    │   │               │   │       ├── brain-ai-full.json
+    │   │               │   │       ├── brain-ai-schema.json
+    │   │               │   │       ├── brain-legacy.json
+    │   │               │   │       ├── help-full.txt
+    │   │               │   │       └── help.txt
+    │   │               │   ├── cortex/
+    │   │               │   │   └── bloom-cortex.blx
+    │   │               │   ├── elevate.exe
+    │   │               │   ├── metamorph/
+    │   │               │   │   ├── help/
+    │   │               │   │   │   ├── metamorph_help.json
+    │   │               │   │   │   ├── metamorph_help.txt
+    │   │               │   │   │   └── metamorph_info.json
+    │   │               │   │   ├── metamorph-config.json
+    │   │               │   │   └── metamorph.exe
+    │   │               │   ├── native/
+    │   │               │   │   ├── bloom-host.exe
+    │   │               │   │   ├── help/
+    │   │               │   │   │   └── help.txt
+    │   │               │   │   ├── libgcc_s_seh-1.dll
+    │   │               │   │   ├── libstdc++-6.dll
+    │   │               │   │   └── libwinpthread-1.dll
+    │   │               │   ├── nssm/
+    │   │               │   │   └── nssm.exe
+    │   │               │   ├── nucleus/
+    │   │               │   │   ├── help/
+    │   │               │   │   │   ├── nucleus_help.json
+    │   │               │   │   │   └── nucleus_help.txt
+    │   │               │   │   ├── nucleus-governance.json
+    │   │               │   │   └── nucleus.exe
+    │   │               │   ├── runtime/
+    │   │               │   │   ├── LICENSE.txt
+    │   │               │   │   ├── _asyncio.pyd
+    │   │               │   │   ├── _bz2.pyd
+    │   │               │   │   ├── _ctypes.pyd
+    │   │               │   │   ├── _decimal.pyd
+    │   │               │   │   ├── _elementtree.pyd
+    │   │               │   │   ├── _hashlib.pyd
+    │   │               │   │   ├── _lzma.pyd
+    │   │               │   │   ├── _msi.pyd
+    │   │               │   │   ├── _multiprocessing.pyd
+    │   │               │   │   ├── _overlapped.pyd
+    │   │               │   │   ├── _queue.pyd
+    │   │               │   │   ├── _socket.pyd
+    │   │               │   │   ├── _sqlite3.pyd
+    │   │               │   │   ├── _ssl.pyd
+    │   │               │   │   ├── _uuid.pyd
+    │   │               │   │   ├── _zoneinfo.pyd
+    │   │               │   │   ├── libcrypto-1_1.dll
+    │   │               │   │   ├── libffi-7.dll
+    │   │               │   │   ├── libssl-1_1.dll
+    │   │               │   │   ├── pyexpat.pyd
+    │   │               │   │   ├── python.cat
+    │   │               │   │   ├── python.exe
+    │   │               │   │   ├── python3.dll
+    │   │               │   │   ├── python310._pth
+    │   │               │   │   ├── python310.dll
+    │   │               │   │   ├── python310.zip
+    │   │               │   │   ├── pythonw.exe
+    │   │               │   │   ├── select.pyd
+    │   │               │   │   ├── sqlite3.dll
+    │   │               │   │   ├── unicodedata.pyd
+    │   │               │   │   ├── vcruntime140.dll
+    │   │               │   │   ├── vcruntime140_1.dll
+    │   │               │   │   └── winsound.pyd
+    │   │               │   └── sentinel/
+    │   │               │       ├── help/
+    │   │               │       │   ├── sentinel_help.json
+    │   │               │       │   └── sentinel_help.txt
+    │   │               │       ├── sentinel-config.json
+    │   │               │       └── sentinel.exe
+    │   │               ├── resources.pak
+    │   │               ├── snapshot_blob.bin
+    │   │               ├── v8_context_snapshot.bin
+    │   │               ├── vk_swiftshader.dll
+    │   │               ├── vk_swiftshader_icd.json
+    │   │               └── vulkan-1.dll
+    │   ├── hooks/
+    │   │   └── post_launch/
+    │   │       └── 00_generate_synapse_trace.py
     │   └── nssm/
     │       ├── win32/
     │       │   └── nssm.exe
     │       └── win64/
     │           └── nssm.exe
     ├── node/
-    │   └── node.exe
+    │   ├── win32/
+    │   │   └── node.exe
+    │   └── win64/
+    │       └── node.exe
     ├── node_modules/ [... dependencies]
     ├── nucleus/
     │   ├── .gitignore
@@ -389,6 +499,7 @@ bloom-development-extension/
     │   ├── VERSION
     │   ├── build_number.txt
     │   ├── codebase/
+    │   │   └── go_files_2026-02-16_20-17-22.txt
     │   ├── docs/
     │   │   ├── EXECUTIVE_SUMMARY.md
     │   │   ├── GOVERNANCE.md
@@ -402,7 +513,7 @@ bloom-development-extension/
     │   │   │   ├── config.go
     │   │   │   └── help_renderer.go
     │   │   ├── client/
-    │   │   │   └── client.go
+    │   │   │   └── api_client.go
     │   │   ├── core/
     │   │   │   ├── build_info.go
     │   │   │   ├── core.go
@@ -419,14 +530,19 @@ bloom-development-extension/
     │   │   │   ├── blueprint.go
     │   │   │   ├── ollama_client.go
     │   │   │   └── ownership.go
+    │   │   ├── mandates/
+    │   │   │   ├── mandate_activities.go
+    │   │   │   ├── mandate_hooks_cmd.go
+    │   │   │   ├── mandate_logger.go
+    │   │   │   ├── mandate_runner.go
+    │   │   │   └── mandate_types.go
     │   │   ├── orchestration/
     │   │   │   ├── activities/
-    │   │   │   │   ├── sentinel_intent.go
-    │   │   │   │   ├── sentinel_launch.go
-    │   │   │   │   ├── sentinel_ollama.go
-    │   │   │   │   └── sentinel_stop.go
+    │   │   │   │   └── sentinel_activities.go
     │   │   │   ├── commands/
-    │   │   │   │   └── synapse.go
+    │   │   │   │   ├── synapse.go
+    │   │   │   │   ├── sysproc_other.go
+    │   │   │   │   └── sysproc_windows.go
     │   │   │   ├── queries/
     │   │   │   │   └── status.go
     │   │   │   ├── signals/
@@ -439,28 +555,29 @@ bloom-development-extension/
     │   │   │   │   │   ├── diagnostics.go
     │   │   │   │   │   ├── ensure.go
     │   │   │   │   │   ├── force_stop.go
-    │   │   │   │   │   ├── health.go
     │   │   │   │   │   ├── helpers.go
     │   │   │   │   │   ├── lifecycle.go
     │   │   │   │   │   ├── pid.go
     │   │   │   │   │   ├── ports.go
-    │   │   │   │   │   └── process.go
-    │   │   │   │   ├── client.go
+    │   │   │   │   │   ├── process.go
+    │   │   │   │   │   └── temporal_health.go
+    │   │   │   │   ├── temporal_client.go
     │   │   │   │   ├── worker.go
     │   │   │   │   └── workflows/
+    │   │   │   │       ├── onboarding_workflow.go
+    │   │   │   │       ├── profile_lifecycle.go
     │   │   │   │       └── system_workflows.go
     │   │   │   ├── types/
     │   │   │   │   └── orchestration.go
     │   │   │   └── workflows/
-    │   │   │       ├── profile_lifecycle.go
     │   │   │       ├── recovery_flow.go
     │   │   │       └── system_gate.go
     │   │   ├── supervisor/
     │   │   │   ├── dev_start.go
     │   │   │   ├── health.go
+    │   │   │   ├── logs.go
+    │   │   │   ├── service.go
     │   │   │   └── supervisor.go
-    │   │   ├── synapse/
-    │   │   │   └── commands.go
     │   │   ├── system/
     │   │   │   ├── info.go
     │   │   │   └── version.go
@@ -574,6 +691,46 @@ bloom-development-extension/
     │   ├── setup-dev.js
     │   ├── setup_runtime.js
     │   └── validate.js
+    ├── sensor/
+    │   ├── README.md
+    │   ├── cmd/
+    │   │   └── main.go
+    │   ├── go.mod
+    │   ├── go.sum
+    │   ├── internal/
+    │   │   ├── buildinfo/
+    │   │   │   └── buildinfo.go
+    │   │   ├── cli/
+    │   │   │   ├── config.go
+    │   │   │   ├── help_renderer.go
+    │   │   │   └── registry.go
+    │   │   ├── cmdregistry/
+    │   │   │   └── cmdregistry.go
+    │   │   ├── core/
+    │   │   │   └── core.go
+    │   │   ├── input/
+    │   │   │   └── idle.go
+    │   │   ├── logger/
+    │   │   │   └── logger.go
+    │   │   ├── metrics/
+    │   │   │   ├── energy.go
+    │   │   │   └── state.go
+    │   │   ├── runtime/
+    │   │   │   ├── engine.go
+    │   │   │   ├── loop.go
+    │   │   │   └── scheduler.go
+    │   │   ├── session/
+    │   │   │   └── windows.go
+    │   │   ├── startup/
+    │   │   │   └── startup_windows.go
+    │   │   └── transport/
+    │   │       └── sentinel_client.go
+    │   ├── pkg/
+    │   │   └── events/
+    │   │       └── events.go
+    │   └── scripts/
+    │       ├── build.bat
+    │       └── build_number.txt
     ├── sentinel/
     │   ├── VERSION
     │   ├── cli/
@@ -601,6 +758,7 @@ bloom-development-extension/
     │   │   │   ├── config.go
     │   │   │   ├── core.go
     │   │   │   ├── logger.go
+    │   │   │   ├── logger_helpers.go
     │   │   │   ├── metadata.go
     │   │   │   ├── paths.go
     │   │   │   ├── telemetry.go
@@ -613,10 +771,15 @@ bloom-development-extension/
     │   │   │   ├── protocol.go
     │   │   │   ├── sentinel_client.go
     │   │   │   └── synapse_handshake.go
+    │   │   ├── health/
+    │   │   │   └── health.go
     │   │   ├── ignition/
     │   │   │   ├── ignition.go
+    │   │   │   ├── ignition_history.go
+    │   │   │   ├── ignition_host_init.go
     │   │   │   ├── ignition_identity.go
     │   │   │   ├── ignition_lifecycle.go
+    │   │   │   ├── ignition_registry_windows.go
     │   │   │   ├── ignition_spec.go
     │   │   │   ├── launch_commands.go
     │   │   │   ├── monitor.go
@@ -639,15 +802,18 @@ bloom-development-extension/
     │   │   └── ui/
     │   │       ├── cockpit.go
     │   │       ├── dashboard.go
-    │   │       ├── log_station.go
-    │   │       └── refresher.go
+    │   │       └── log_station.go
     │   ├── main.go
     │   ├── scripts/
     │   │   ├── build-darwin.sh
     │   │   ├── build-linux.sh
     │   │   ├── build.bat
     │   │   ├── build_number.txt
-    │   │   └── extract_go_files.py
+    │   │   ├── extract_go_files.py
+    │   │   └── tree/
+    │   │       └── conductor_tree.txt
     │   └── sentinel-config.json
-    └── temporal/
-        └── temporal.exe
+    ├── temporal/
+    │   └── temporal.exe
+    └── vscode/
+        └── bloom-extension.vsix

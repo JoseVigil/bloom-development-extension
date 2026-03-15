@@ -144,7 +144,6 @@ def register_telemetry(log_path: Path, build_results: list) -> None:
         "Metamorph": "metamorph",
         "Conductor": "conductor",
         "Sensor":    "sensor",
-        "Vscode":    "vscode",
         "Vsix":      "vsix",
         "Bootstrap": "bootstrap",
         "Cortex":    "cortex",
@@ -187,6 +186,15 @@ def register_telemetry(log_path: Path, build_results: list) -> None:
 
 ROOT = Path(__file__).parent.resolve()
 
+# ---------------------------------------------------------------------------
+# Paths de binarios y fuentes por entorno
+# ---------------------------------------------------------------------------
+_DEV_BIN_BASE  = ROOT / "installer/native/bin/win64"
+_PROD_BIN_BASE = NUCLEUS_HOME / "bin"
+
+CORTEX_SOURCE  = ROOT / "installer/cortex/extension"
+CORTEX_OUTPUT  = ROOT / "installer/native/bin/win64/cortex"
+
 BUILDS = {
     "brain":      ROOT / "build_brain.ps1",
     "nucleus":    ROOT / "installer/nucleus/scripts/build.bat",
@@ -195,13 +203,11 @@ BUILDS = {
     "conductor":  ROOT / "installer/conductor",          # cwd para npm
     "sensor":     ROOT / "installer/sensor/scripts/build.bat",
     "cortex":     ROOT / "installer/cortex/build-cortex/package.py",
-    # Plugin VSCode — repo raíz (bloom-development-extension)
-    # build: tsc + copy-assets + esbuild bundle → installer/native/bin/bootstrap/bundle.js
-    # vsix:  vsce package → installer/vscode/bloom-extension.vsix
-    "vscode":     ROOT,                                  # cwd para npm run build
-    "vsix":       ROOT,                                  # cwd para npm run package:vscode
-    # Bootstrap — incrementa build_number después del build del plugin
+    # Bootstrap — genera bundle.js + meta + copia todo a installer/native/bin/bootstrap/
     "bootstrap":  ROOT / "installer/bootstrap/version-bootstrap.py",
+    # Vsix — empaqueta la extensión instalable para VSCode (.vsix)
+    # Requiere que bootstrap haya corrido antes (necesita out/ y bundle.js)
+    "vsix":       ROOT,                                  # cwd para npm run package:vscode
 }
 
 def get_bin_base(verify_env: str) -> Path:
@@ -480,42 +486,11 @@ def build_sensor() -> StepResult:
     return StepResult("Sensor", True)
 
 
-def build_plugin() -> StepResult:
-    """
-    Compila el plugin VSCode en tres pasos:
-      1. tsc  -> out/
-      2. copy-assets -> out/ui/
-      3. esbuild bundle -> installer/native/bin/bootstrap/bundle.js
-
-    El script npm run build ya encadena los tres pasos.
-    Output critico: installer/native/bin/bootstrap/bundle.js
-    """
-    plugin_dir = BUILDS["vscode"]
-    npm_cmd = "npm.cmd" if sys.platform == "win32" else "npm"
-    log("Ejecutando npm run build (tsc + copy-assets + esbuild bundle) ...")
-    code, out, err = run(
-        [npm_cmd, "run", "build"],
-        cwd=plugin_dir,
-    )
-    if code != 0:
-        return StepResult("Vscode", False, error=err or out)
-
-    # Verificar que bundle.js fue generado
-    bundle_path = plugin_dir / "installer/native/bin/bootstrap/bundle.js"
-    if not bundle_path.exists():
-        return StepResult("Vscode", False,
-                          error=f"Build OK pero bundle.js no encontrado en {bundle_path}")
-
-    size_kb = bundle_path.stat().st_size / 1024
-    log(f"bundle.js generado: {size_kb:.1f} KB → {bundle_path}")
-    return StepResult("Vscode", True)
-
-
 def build_vsix() -> StepResult:
     """
-    Empaqueta el plugin como .vsix usando vsce.
+    Empaqueta la extensión como .vsix usando vsce.
     Output: installer/vscode/bloom-extension.vsix
-    Requiere que build_plugin() haya corrido antes (necesita out/ y bundle.js).
+    Requiere que build_bootstrap() haya corrido antes (necesita out/ y bundle.js).
     """
     plugin_dir = BUILDS["vsix"]
     npm_cmd = "npm.cmd" if sys.platform == "win32" else "npm"
@@ -538,6 +513,15 @@ def build_vsix() -> StepResult:
     vsix_file = max(vsix_files, key=lambda p: p.stat().st_mtime)
     size_kb = vsix_file.stat().st_size / 1024
     log(f".vsix generado: {vsix_file.name} ({size_kb:.1f} KB)")
+
+    # Copiar a installer/native/bin/vscode/ para deploy
+    import shutil
+    native_vsix_dir = ROOT / "installer/native/bin/vscode"
+    native_vsix_dir.mkdir(parents=True, exist_ok=True)
+    dst = native_vsix_dir / vsix_file.name
+    shutil.copy2(vsix_file, dst)
+    log(f"Copiado → {dst.relative_to(ROOT)}")
+
     return StepResult("Vsix", True)
 
 
@@ -608,7 +592,7 @@ def build_bootstrap() -> StepResult:
     import shutil
     native_dir.mkdir(parents=True, exist_ok=True)
 
-    for fname in ("bootstrap.meta.json", "version-bootstrap.py", "server-bootstrap.js"):
+    for fname in ("bootstrap.meta.json", "version-bootstrap.py", "server-bootstrap.js", "VERSION"):
         src = source_dir / fname
         dst = native_dir / fname
         if not src.exists():
@@ -741,8 +725,100 @@ def verify_binary(contract: BinaryContract) -> StepResult:
 
 
 # ---------------------------------------------------------------------------
-# Reporte final
+# Verificación post-build via metamorph inspect --native
 # ---------------------------------------------------------------------------
+
+def verify_with_metamorph(verify_env: str) -> list[StepResult]:
+    """
+    Delega la verificación post-build a metamorph inspect.
+
+    En entorno dev  → metamorph --json inspect --native
+                      Lee native/bin/win64/ (binarios recién buildeados)
+                      Resultado escrito en AppData/config/native/native_metamorph.json
+
+    En entorno prod → metamorph --json inspect
+                      Lee AppData/BloomNucleus/bin/ (binarios instalados)
+                      Resultado escrito en AppData/config/metamorph.json
+
+    Retorna una lista de StepResult con el mismo formato que usaba verify_binary,
+    para que print_summary y write_log no necesiten ningún cambio.
+    """
+    if verify_env == "dev":
+        metamorph_exe = _DEV_BIN_BASE / "metamorph/metamorph.exe"
+        cmd = [str(metamorph_exe), "--json", "inspect", "--native"]
+        env_label = f"native ({_DEV_BIN_BASE})"
+    else:
+        metamorph_exe = _PROD_BIN_BASE / "metamorph/metamorph.exe"
+        cmd = [str(metamorph_exe), "--json", "inspect"]
+        env_label = f"prod ({_PROD_BIN_BASE})"
+
+    log(f"Verificando en: {env_label}")
+
+    if not metamorph_exe.exists():
+        log(f"{RED}FAIL{RESET}  — metamorph.exe no encontrado en {metamorph_exe}")
+        return [StepResult("Metamorph", False,
+                           error=f"metamorph.exe no encontrado: {metamorph_exe}")]
+
+    results: list[StepResult] = []
+
+    try:
+        code, out, err = run(cmd, cwd=metamorph_exe.parent, timeout=60)
+    except subprocess.TimeoutExpired:
+        log(f"{RED}FAIL{RESET}  — metamorph inspect timeout (60s)")
+        return [StepResult("Inspect", False, error="metamorph inspect timeout (60s)")]
+    except Exception as e:
+        log(f"{RED}FAIL{RESET}  — error ejecutando metamorph inspect: {e}")
+        return [StepResult("Inspect", False, error=str(e))]
+
+    if code != 0:
+        log(f"{RED}FAIL{RESET}  — metamorph inspect retornó code {code}")
+        return [StepResult("Inspect", False,
+                           error=f"metamorph inspect falló (code {code}): {err or out}")]
+
+    data = parse_json_output(out)
+    if not data or "managed_binaries" not in data:
+        log(f"{RED}FAIL{RESET}  — metamorph inspect no retornó JSON válido")
+        return [StepResult("Inspect", False, error="JSON inválido o vacío")]
+
+    # Normalizar nombres de inspect → nombres de componente usados en build_results
+    INSPECT_NAME_MAP = {
+        "VSCodeExtension": "Vsix",
+    }
+
+    # Convertir cada entrada de managed_binaries a StepResult
+    for b in data["managed_binaries"]:
+        raw_name = b.get("name", "unknown")
+        name     = INSPECT_NAME_MAP.get(raw_name, raw_name)
+        status  = b.get("status", "unknown")
+        version = b.get("version")
+        build   = b.get("build_number")
+
+        print(f"\n  {BOLD}→ {name}{RESET}")
+
+        if status == "healthy":
+            log(f"{GREEN}OK{RESET}  →  v{version}  build {build if build else '—'}")
+            results.append(StepResult(name, True, version=version, build=build))
+        elif status == "missing":
+            log(f"{RED}FAIL{RESET}  —  binario no encontrado: {b.get('path', '')}")
+            results.append(StepResult(name, False,
+                                      error=f"missing: {b.get('path', '')}"))
+        else:
+            log(f"{YELLOW}WARN{RESET}  —  status={status}")
+            results.append(StepResult(name, False,
+                                      error=f"status inesperado: {status}"))
+
+    # Resumen del inspect
+    summary = data.get("summary", {})
+    total   = summary.get("total_binaries", 0)
+    healthy = summary.get("healthy_count", 0)
+    missing = summary.get("missing_count", 0)
+    print()
+    log(f"Inspect summary: {healthy}/{total} healthy, {missing} missing")
+
+    return results
+
+
+
 
 def print_summary(build_results: list[StepResult], verify_results: list[StepResult]) -> None:
     header("RESUMEN DE BUILD")
@@ -805,7 +881,7 @@ def print_errors(results: list[StepResult]) -> None:
 
 VALID_COMPONENTS = [
     "brain", "nucleus", "sentinel", "metamorph", "conductor",
-    "sensor", "vscode", "vsix", "bootstrap", "cortex",
+    "sensor", "vsix", "bootstrap", "cortex",
 ]
 
 
@@ -835,10 +911,11 @@ def parse_args() -> argparse.Namespace:
             "        metamorph  → installer/metamorph/scripts/build.bat\n"
             "        conductor  → installer/conductor (npm run build:all)\n"
             "        sensor     → installer/sensor/scripts/build.bat\n"
-            "        vscode     → npm run build (tsc + copy-assets + esbuild)\n"
-            "        vsix       → npm run package:vscode (requiere plugin buildeado)\n"
-            "        bootstrap  → installer/bootstrap/version-bootstrap.py\n"
-            "                     (requiere plugin buildeado — necesita bundle.js)\n"
+            "        bootstrap  → npm run build:bundle + version-bootstrap.py\n"
+            "                     Genera bundle.js, incrementa build_number,\n"
+            "                     copia todo a installer/native/bin/bootstrap/\n"
+            "        vsix       → npm run package:vscode (requiere bootstrap primero)\n"
+            "                     Produce installer/vscode/bloom-extension.vsix\n"
             "        cortex     → installer/cortex/build-cortex/package.py\n"
             "      Nota: --only cortex respeta --channel y --production.\n"
             "      Nota: --only omite la verificación post-build (FASE 3).\n"
@@ -876,13 +953,12 @@ def parse_args() -> argparse.Namespace:
             "            Conductor  → installer/conductor (npm run build:all)\n"
             "            Host       → SKIPPED en Windows (build via Linux)\n"
             "            Sensor     → installer/sensor/scripts/build.bat\n"
-            "            Plugin     → npm run build\n"
-            "                         (tsc + copy-assets + esbuild bundle)\n"
-            "                         → installer/native/bin/bootstrap/bundle.js\n"
+            "            Bootstrap  → npm run build:bundle + version-bootstrap.py\n"
+            "                         Genera bundle.js, incrementa build_number,\n"
+            "                         copia todo a installer/native/bin/bootstrap/\n"
             "            Vsix       → npm run package:vscode (vsce)\n"
             "                         → installer/vscode/bloom-extension.vsix\n"
-            "            Bootstrap  → installer/bootstrap/version-bootstrap.py\n"
-            "                         (incrementa build_number en bootstrap.meta.json)\n"
+            "                         (requiere Bootstrap ejecutado antes)\n"
             "\n"
             "  FASE 2  Empaquetado de Cortex (.blx)\n"
             "            Cortex     → installer/cortex/build-cortex/package.py\n"
@@ -929,10 +1005,13 @@ def parse_args() -> argparse.Namespace:
             "  python build-all.py --only metamorph\n"
             "  python build-all.py --only conductor\n"
             "  python build-all.py --only sensor\n"
-            "  python build-all.py --only vscode\n"
-            "  python build-all.py --only vsix\n"
             "  python build-all.py --only bootstrap\n"
+            "  python build-all.py --only vsix\n"
             "  python build-all.py --only cortex\n"
+            "\n"
+            "  # Extension VSCode: bootstrap genera bundle.js, vsix empaqueta el .vsix\n"
+            "  python build-all.py --only bootstrap   # → installer/native/bin/bootstrap/\n"
+            "  python build-all.py --only vsix        # → installer/vscode/bloom-extension.vsix\n"
             "\n"
             "  # Cortex individual con opciones de canal\n"
             "  python build-all.py --only cortex --channel beta\n"
@@ -1023,9 +1102,8 @@ def run_single(component: str, channel: str, production: bool) -> None:
         "metamorph":  lambda: build_bat("Metamorph", BUILDS["metamorph"]),
         "conductor":  lambda: build_conductor(),
         "sensor":     lambda: build_sensor(),
-        "vscode":     lambda: build_plugin(),
-        "vsix":       lambda: build_vsix(),
         "bootstrap":  lambda: build_bootstrap(),
+        "vsix":       lambda: build_vsix(),
         "cortex":     lambda: build_cortex(channel, production),
     }
 
@@ -1101,11 +1179,10 @@ def main() -> None:
         ("Host",      lambda: StepResult("Host", True, skipped=True,
                                          skip_reason="Build en Linux — installer/host/build.sh")),
         ("Sensor",    lambda: build_sensor()),
-        # Plugin debe ir antes de Vsix (vsce necesita out\ y bundle.js)
-        ("Vscode",    lambda: build_plugin()),
-        ("Vsix",      lambda: build_vsix()),
-        # Bootstrap debe ir después de Plugin (bundle.js ya generado)
+        # Bootstrap primero: genera bundle.js + meta + copia a installer/native/bin/bootstrap/
         ("Bootstrap", lambda: build_bootstrap()),
+        # Vsix después de Bootstrap (vsce necesita out/ y bundle.js ya generados)
+        ("Vsix",      lambda: build_vsix()),
     ]
 
     for name, fn in steps:
@@ -1158,47 +1235,7 @@ def main() -> None:
 
     if not args.skip_verify:
         header("FASE 3 — Verificación post-build")
-        contracts = get_contracts(args.verify_env)
-        log(f"Verificando en: {get_bin_base(args.verify_env)}")
-        for contract in contracts:
-            print(f"\n  {BOLD}→ {contract.name}{RESET}")
-            vr = verify_binary(contract)
-            if vr.success:
-                log(f"{GREEN}OK{RESET}  →  v{vr.version}  build {vr.build}")
-            else:
-                log(f"{RED}FAIL{RESET}  —  {vr.error}")
-            verify_results.append(vr)
-
-        # Cortex: leer desde cortex.meta.json (no es ejecutable)
-        print(f"\n  {BOLD}→ Cortex (meta){RESET}")
-        meta_path = BUILDS["cortex"].parent / "cortex.meta.json"
-        try:
-            with meta_path.open("r", encoding="utf-8") as f:
-                meta = json.load(f)
-            vr = StepResult("Cortex", True,
-                            version=meta.get("version"),
-                            build=meta.get("build_number"))
-            log(f"{GREEN}OK{RESET}  →  v{vr.version}  build {vr.build}")
-        except Exception as e:
-            vr = StepResult("Cortex", False, error=str(e))
-            log(f"{RED}FAIL{RESET}  —  {e}")
-        verify_results.append(vr)
-
-        # Bootstrap: leer desde bootstrap.meta.json (no es ejecutable)
-        print(f"\n  {BOLD}→ Bootstrap (meta){RESET}")
-        bootstrap_meta_path = BUILDS["bootstrap"].parent / "bootstrap.meta.json"
-        try:
-            with bootstrap_meta_path.open("r", encoding="utf-8") as f:
-                bmeta = json.load(f)
-            vr = StepResult("Bootstrap", True,
-                            version=bmeta.get("version"),
-                            build=bmeta.get("build_number"))
-            log(f"{GREEN}OK{RESET}  →  v{vr.version}  build {vr.build}")
-        except Exception as e:
-            vr = StepResult("Bootstrap", False, error=str(e))
-            log(f"{RED}FAIL{RESET}  —  {e}")
-        verify_results.append(vr)
-
+        verify_results = verify_with_metamorph(args.verify_env)
     else:
         log("Verificación omitida (--skip-verify)")
 

@@ -46,20 +46,20 @@
       "build_info.json",
       "version.json",
       "package.json",
-      "bloom-conductor-cli.cmd",
-      {
-        "from": "../shared",
-        "to": "shared",
-        "filter": [
-          "logger.js",
-          "global_paths.js"
-        ]
-      }
+      "bloom-conductor-cli.cmd"
     ],
     "extraFiles": [
       {
         "from": "bloom-conductor-version.ps1",
         "to": "bloom-conductor-version.ps1"
+      },
+      {
+        "from": "../shared/logger.js",
+        "to": "shared/logger.js"
+      },
+      {
+        "from": "../shared/global_paths.js",
+        "to": "shared/global_paths.js"
       }
     ],
     "directories": {

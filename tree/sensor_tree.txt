@@ -11,7 +11,9 @@ bloom-development-extension/
     │   ├── cli/
     │   │   ├── config.go
     │   │   ├── help_renderer.go
-    │   │   └── root.go
+    │   │   └── registry.go
+    │   ├── cmdregistry/
+    │   │   └── cmdregistry.go
     │   ├── core/
     │   │   └── core.go
     │   ├── input/

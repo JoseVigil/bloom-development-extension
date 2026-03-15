@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/bloom/metamorph/internal/core"
@@ -24,11 +25,12 @@ func init() {
 func createInspectCommand(c *core.Core) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "inspect",
-		Short: "Inspect all binaries and show detailed info",
+		Short: "Inspect all binaries (AppData or native build output)",
 		Long: `Perform detailed inspection of all managed binaries and their metadata.
 
 By default, inspects only managed binaries (updatable by Metamorph).
 Use --all flag to include external binaries (Temporal, Ollama, Chromium, Node).
+Use --native flag to inspect build output in native/bin/<platform>/ instead of AppData.
 
 The inspection includes:
   • Version detection via --info or --version
@@ -37,12 +39,16 @@ The inspection includes:
   • Health status verification
 
 Results are always written to:
-  %LOCALAPPDATA%\BloomNucleus\config\metamorph.json
+  Default : %LOCALAPPDATA%\BloomNucleus\config\metamorph.json
+  Native  : %LOCALAPPDATA%\BloomNucleus\config\native\native_metamorph.json
 
 Example:
-  metamorph inspect              # Managed binaries only
-  metamorph inspect --all        # Include external binaries
-  metamorph --json inspect       # JSON output`,
+  metamorph inspect                    # Managed binaries only (AppData)
+  metamorph inspect --all              # Include external binaries (AppData)
+  metamorph inspect --native           # Inspect native/bin/<platform>/ build output
+  metamorph inspect --native --all     # Native + external binaries
+  metamorph --json inspect             # JSON output
+  metamorph --json inspect --native    # JSON output from native`,
 		Annotations: map[string]string{
 			"category": "INSPECTION",
 			"json_response": `{
@@ -50,32 +56,67 @@ Example:
     {
       "name": "Brain",
       "version": "3.2.0",
-      "status": "healthy"
+      "hash": "a3f1c2...",
+      "size_bytes": 18432000,
+      "last_modified": "2026-03-15T14:00:00Z",
+      "status": "healthy",
+      "updatable_by_metamorph": true
     }
   ],
   "summary": {
-    "total_binaries": 7,
-    "healthy_count": 7
-  }
-}`,
+    "total_binaries": 11,
+    "managed_count": 11,
+    "healthy_count": 11,
+    "missing_count": 0
+  },
+  "timestamp": "2026-03-15T14:16:43Z"
+}
+
+  Written to (default):  %LOCALAPPDATA%\\BloomNucleus\\config\\metamorph.json
+  Written to (--native): %LOCALAPPDATA%\\BloomNucleus\\config\\native\\native_metamorph.json`,
 		},
 		Example: `  metamorph inspect
   metamorph inspect --all
+  metamorph inspect --native
+  metamorph inspect --native --all
   metamorph --json inspect
+  metamorph --json inspect --native
   metamorph --json inspect --all`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			includeExternal, _ := cmd.Flags().GetBool("all")
-			return runInspection(c, includeExternal)
+			nativeMode, _ := cmd.Flags().GetBool("native")
+			return runInspection(c, includeExternal, nativeMode)
 		},
 	}
 
 	cmd.Flags().BoolP("all", "a", false, "Include external binaries (Temporal, Ollama, Chromium, Node)")
+	cmd.Flags().Bool("native", false, "Inspect native/bin/<platform>/ build output instead of AppData")
 	return cmd
 }
 
-// runInspection performs the inspection, writes metamorph.json, and outputs results.
-func runInspection(c *core.Core, includeExternal bool) error {
-	basePath := GetBasePath()
+// runInspection performs the inspection, writes the result JSON, and outputs results.
+func runInspection(c *core.Core, includeExternal bool, nativeMode bool) error {
+	var basePath string
+	var bootstrapBase string
+
+	if nativeMode {
+		// Resolve native/bin/<platform>/ relative to the executable location
+		nativePlatformPath, err := resolveNativeBasePath()
+		if err != nil {
+			return fmt.Errorf("could not resolve native base path: %w", err)
+		}
+		basePath = nativePlatformPath
+
+		// Bootstrap and VSCode have no platform subfolder — they live in native/bin/
+		nativeBinPath, err := resolveNativeBinPath()
+		if err != nil {
+			return fmt.Errorf("could not resolve native bin path: %w", err)
+		}
+		bootstrapBase = nativeBinPath
+	} else {
+		basePath = GetBasePath()
+		bootstrapBase = basePath
+	}
 
 	// Inspect managed binaries
 	managed, err := InspectAllManagedBinaries(basePath)
@@ -83,16 +124,16 @@ func runInspection(c *core.Core, includeExternal bool) error {
 		return err
 	}
 
-	// Inspect Bootstrap (standalone Python-based launcher in bin/bootstrap)
-	bootstrap, err := inspectBootstrap(basePath)
+	// Inspect Bootstrap — uses bootstrapBase (cross-platform, no platform subfolder)
+	bootstrap, err := inspectBootstrap(bootstrapBase)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "warning: could not inspect bootstrap: %v\n", err)
 	} else {
 		managed = append(managed, bootstrap)
 	}
 
-	// Inspect VSCode extension (.vsix) in bin/vscode
-	vsix, err := inspectVSCodeExtension(basePath)
+	// Inspect VSCode extension — uses bootstrapBase (cross-platform, no platform subfolder)
+	vsix, err := inspectVSCodeExtension(bootstrapBase)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "warning: could not inspect vscode extension: %v\n", err)
 	} else {
@@ -116,9 +157,15 @@ func runInspection(c *core.Core, includeExternal bool) error {
 		Timestamp:        time.Now().UTC().Format(time.RFC3339),
 	}
 
-	// Always persist to config/metamorph.json
-	if err := writeMetamorphConfig(result); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: could not write metamorph.json: %v\n", err)
+	// Persist to the appropriate config file
+	if nativeMode {
+		if err := writeNativeMetamorphConfig(result); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not write native_metamorph.json: %v\n", err)
+		}
+	} else {
+		if err := writeMetamorphConfig(result); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not write metamorph.json: %v\n", err)
+		}
 	}
 
 	// Output to stdout
@@ -129,6 +176,58 @@ func runInspection(c *core.Core, includeExternal bool) error {
 	}
 
 	return nil
+}
+
+// ─── Native path resolution ───────────────────────────────────────────────────
+
+// resolveNativeBasePath returns native/bin/<platform>/ resolved relative to
+// the running executable. The exe lives at:
+//
+//	native/bin/win64/metamorph/metamorph.exe
+//
+// resolveNativeBinPath() climbs to native/bin/, then we append the detected
+// platform (win64/win32) to get the correct base path for platform binaries.
+func resolveNativeBasePath() (string, error) {
+	platform, err := detectPlatform()
+	if err != nil {
+		return "", err
+	}
+
+	binPath, err := resolveNativeBinPath()
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Join(binPath, platform), nil
+}
+
+// resolveNativeBinPath returns native/bin/ resolved relative to the running
+// executable. Used for cross-platform components (Bootstrap, VSCode) that
+// have no platform subfolder.
+func resolveNativeBinPath() (string, error) {
+	exePath, err := os.Executable()
+	if err != nil {
+		return "", fmt.Errorf("could not determine executable path: %w", err)
+	}
+
+	// native/bin/win64/metamorph/metamorph.exe
+	//                            └── Dir()  → .../metamorph/
+	//                       └── ..          → .../win64/
+	//                  └── ../..            → .../bin/   ← bootstrapBase ✅
+	binPath := filepath.Clean(filepath.Join(filepath.Dir(exePath), "..", ".."))
+	return binPath, nil
+}
+
+// detectPlatform returns "win64" or "win32" based on the running process architecture.
+func detectPlatform() (string, error) {
+	switch runtime.GOARCH {
+	case "amd64":
+		return "win64", nil
+	case "386":
+		return "win32", nil
+	default:
+		return "", fmt.Errorf("unsupported architecture: %s", runtime.GOARCH)
+	}
 }
 
 // ─── Bootstrap ────────────────────────────────────────────────────────────────
@@ -350,7 +449,26 @@ func writeMetamorphConfig(result InspectionResult) error {
 	if err != nil {
 		return fmt.Errorf("could not resolve config path: %w", err)
 	}
+	return writeJSONAtomic(configPath, result)
+}
 
+// writeNativeMetamorphConfig persists the inspection result to:
+//
+//	%LOCALAPPDATA%\BloomNucleus\config\native\native_metamorph.json
+//
+// Written only when running with --native. Reflects the state of build
+// output in native/bin/<platform>/ rather than the deployed AppData binaries.
+func writeNativeMetamorphConfig(result InspectionResult) error {
+	configPath, err := resolveNativeMetamorphConfigPath()
+	if err != nil {
+		return fmt.Errorf("could not resolve native config path: %w", err)
+	}
+	return writeJSONAtomic(configPath, result)
+}
+
+// writeJSONAtomic marshals result to JSON and writes it atomically to path
+// using a .tmp intermediate file and os.Rename.
+func writeJSONAtomic(configPath string, result InspectionResult) error {
 	if err := os.MkdirAll(filepath.Dir(configPath), 0755); err != nil {
 		return fmt.Errorf("could not create config directory: %w", err)
 	}
@@ -360,7 +478,6 @@ func writeMetamorphConfig(result InspectionResult) error {
 		return fmt.Errorf("could not marshal inspection result: %w", err)
 	}
 
-	// Write atomically: write to .tmp then rename
 	tmpPath := configPath + ".tmp"
 	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
 		return fmt.Errorf("could not write temp file: %w", err)
@@ -390,4 +507,23 @@ func resolveMetamorphConfigPath() (string, error) {
 	}
 
 	return filepath.Join(localAppData, "BloomNucleus", "config", "metamorph.json"), nil
+}
+
+// resolveNativeMetamorphConfigPath returns the absolute path to native_metamorph.json.
+// Respects BLOOM_NUCLEUS_HOME if set, otherwise uses the platform default.
+func resolveNativeMetamorphConfigPath() (string, error) {
+	if home := os.Getenv("BLOOM_NUCLEUS_HOME"); home != "" {
+		return filepath.Join(home, "config", "native", "native_metamorph.json"), nil
+	}
+
+	localAppData := os.Getenv("LOCALAPPDATA")
+	if localAppData == "" {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("could not determine home directory: %w", err)
+		}
+		localAppData = filepath.Join(homeDir, "AppData", "Local")
+	}
+
+	return filepath.Join(localAppData, "BloomNucleus", "config", "native", "native_metamorph.json"), nil
 }

@@ -136,7 +136,9 @@ async function createDirectories(win) {
       paths.runtimeDir,
       paths.profilesDir,
       paths.logsDir,
-      paths.temporalDir  
+      paths.temporalDir,
+      paths.vscodeDir,    // bin/vscode — bloom-extension.vsix
+      paths.bootstrapDir, // bin/bootstrap — bootstrap files
     ];
 
     for (const dir of dirs) {
@@ -429,13 +431,6 @@ async function deployAllSystemBinaries(win) {
       'Metamorph'
     );
     
-    // Bootstrap
-    results.bootstrap = await copyDirectorySafe(
-      paths.bootstrapSource,  
-      paths.bootstrapDir,     
-      'Bootstrap'
-    );
-
     // ========================================================================
     // 6. CORTEX (Extension Package)
     // ========================================================================
@@ -583,6 +578,55 @@ async function deployAllSystemBinaries(win) {
     }
     
     // ========================================================================
+    // 13. VSCODE PLUGIN (bloom-extension.vsix → bin/vscode)
+    // ========================================================================
+    logger.info('\n🧩 VSCODE PLUGIN');
+
+    const vsixSrc = paths.vscodeSource; // installer/vscode/bloom-extension.vsix
+    const vsixDest = path.join(paths.vscodeDir, 'bloom-extension.vsix');
+
+    if (await fs.pathExists(vsixSrc)) {
+      results.vscode = await copyFileSafe(vsixSrc, vsixDest, 'bloom-extension.vsix');
+    } else {
+      logger.warn('⚠️ bloom-extension.vsix not found, skipping');
+      results.vscode = { success: false, skipped: true };
+    }
+
+    // ========================================================================
+    // 14. BOOTSTRAP (installer/bootstrap/* → bin/bootstrap)
+    // ========================================================================
+    logger.info('\n🥾 BOOTSTRAP');
+
+    const bootstrapFiles = [
+      'bootstrap.meta.json',
+      'bundle.js',
+      'bundle.js.map',
+      'server-bootstrap.js',
+      'version-bootstrap.py'
+    ];
+
+    if (await fs.pathExists(paths.bootstrapSource)) {
+      await fs.ensureDir(paths.bootstrapDir);
+      let bootstrapCopied = 0;
+      for (const file of bootstrapFiles) {
+        const fileSrc  = path.join(paths.bootstrapSource, file);
+        const fileDest = path.join(paths.bootstrapDir, file);
+        if (await fs.pathExists(fileSrc)) {
+          await fs.copy(fileSrc, fileDest, { overwrite: true });
+          logger.info(`  ✓ ${file}`);
+          bootstrapCopied++;
+        } else {
+          logger.warn(`  ⚠️ ${file} not found in source, skipping`);
+        }
+      }
+      logger.success(`✅ Bootstrap deployed (${bootstrapCopied}/${bootstrapFiles.length} files)`);
+      results.bootstrap = { success: true, count: bootstrapCopied };
+    } else {
+      logger.warn('⚠️ Bootstrap source not found, skipping');
+      results.bootstrap = { success: false, skipped: true };
+    }
+
+    // ========================================================================
     // RESUMEN FINAL
     // ========================================================================
     logger.separator('BINARY DEPLOYMENT SUMMARY');
@@ -638,6 +682,128 @@ async function deployAllSystemBinaries(win) {
 async function runBinariesDeploy(win) {
   // Wrapper que llama a la función unificada
   return await deployAllSystemBinaries(win);
+}
+
+// ============================================================================
+// VSCODE EXTENSION INSTALLER
+// ============================================================================
+
+/**
+ * Instala o actualiza bloom-extension.vsix en VS Code.
+ * Requiere que el .vsix ya esté deployado en bin/vscode/ (runBinariesDeploy).
+ * 
+ * Estrategia:
+ *  - Busca `code` en PATH y en rutas estándar de instalación de VS Code.
+ *  - Ejecuta: code --install-extension <vsix> --force
+ *    El flag --force actualiza la extensión si ya está instalada.
+ *  - No es un milestone crítico: un fallo loguea warning pero no aborta la instalación.
+ */
+async function installVSCodeExtension(win) {
+  const MILESTONE = 'vscode_extension';
+
+  if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
+    logger.info(`⭐️ ${MILESTONE} completed, skipping`);
+    return { success: true, skipped: true };
+  }
+
+  await nucleusManager.startMilestone(MILESTONE);
+  emitProgress(win, 4.5, 11, 'Installing VS Code extension...');
+
+  try {
+    logger.separator('INSTALLING VSCODE EXTENSION');
+
+    const vsixPath = path.join(paths.vscodeDir, 'bloom-extension.vsix');
+
+    if (!await fs.pathExists(vsixPath)) {
+      logger.warn(`⚠️ bloom-extension.vsix not found at: ${vsixPath}`);
+      await nucleusManager.completeMilestone(MILESTONE, { skipped: true, reason: 'vsix_not_found' });
+      return { success: true, skipped: true };
+    }
+
+    // Candidatos para el ejecutable de VS Code en Windows
+    const codeCandidates = [
+      'code',   // code en PATH (instalación de usuario o sistema)
+      path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Microsoft VS Code', 'bin', 'code.cmd'),
+      path.join(process.env.ProgramFiles  || '', 'Microsoft VS Code',            'bin', 'code.cmd'),
+      path.join(process.env['ProgramFiles(x86)'] || '', 'Microsoft VS Code',     'bin', 'code.cmd'),
+    ];
+
+    let codeExe = null;
+    for (const candidate of codeCandidates) {
+      // Para 'code' (sin path absoluto) confiamos en PATH; para el resto verificamos existencia
+      if (candidate === 'code') {
+        codeExe = candidate;
+        break;
+      }
+      if (await fs.pathExists(candidate)) {
+        codeExe = candidate;
+        break;
+      }
+    }
+
+    if (!codeExe) {
+      logger.warn('⚠️ VS Code CLI not found — extension will not be installed automatically');
+      await nucleusManager.completeMilestone(MILESTONE, { skipped: true, reason: 'code_cli_not_found' });
+      return { success: true, skipped: true };
+    }
+
+    logger.info(`Using VS Code CLI: ${codeExe}`);
+    logger.info(`Installing extension from: ${vsixPath}`);
+
+    // --force permite instalar aunque la versión ya esté presente (actualiza si hay nueva)
+    const result = await new Promise((resolve) => {
+      const child = spawn(codeExe, ['--install-extension', vsixPath, '--force'], {
+        windowsHide: true,
+        timeout: 60000,
+        shell: true   // necesario para .cmd en Windows
+      });
+
+      let stdout = '';
+      let stderr = '';
+
+      child.stdout.on('data', (data) => {
+        stdout += data.toString();
+        logger.debug(`  [code] ${data.toString().trim()}`);
+      });
+      child.stderr.on('data', (data) => {
+        stderr += data.toString();
+      });
+
+      child.on('close', (code) => {
+        resolve({ exitCode: code, stdout, stderr });
+      });
+
+      child.on('error', (err) => {
+        resolve({ exitCode: -1, stdout, stderr, error: err.message });
+      });
+    });
+
+    if (result.exitCode === 0) {
+      logger.success('✅ bloom-extension installed/updated in VS Code');
+      await nucleusManager.completeMilestone(MILESTONE, {
+        vsix_path: vsixPath,
+        code_cli: codeExe,
+        exit_code: result.exitCode
+      });
+      return { success: true };
+    } else {
+      // No es fatal — el usuario puede no tener VS Code instalado
+      logger.warn(`⚠️ VS Code extension install returned exit code ${result.exitCode}`);
+      if (result.stderr) logger.warn(`   stderr: ${result.stderr.trim()}`);
+      await nucleusManager.completeMilestone(MILESTONE, {
+        skipped: true,
+        reason: `exit_code_${result.exitCode}`,
+        stderr: result.stderr
+      });
+      return { success: true, skipped: true };
+    }
+
+  } catch (error) {
+    // No abortar la instalación por fallos del plugin de VS Code
+    logger.warn(`⚠️ VS Code extension install warning: ${error.message}`);
+    await nucleusManager.failMilestone(MILESTONE, error.message);
+    return { success: false, non_critical: true };
+  }
 }
 
 // ============================================================================
@@ -1336,7 +1502,8 @@ async function installService(win) {
     await createDirectories(win);           // 1/11
     await runChromiumInstall(win);          // 2/11
     await runRuntimeInstall(win);           // 3/11
-    await runBinariesDeploy(win);           // 4/11
+    await runBinariesDeploy(win);           // 4/11 - Incluye bootstrap y vsix deploy
+    await installVSCodeExtension(win);      // 4.5/11 - Instala/actualiza extensión en VS Code (non-critical)
     await runMetamorphAudit(win);           // 5/11 - Snapshot + verify-sync
     await installBrainService(win);         // 6/11
     // NOTA: Nucleus Service DEBE arrancar ANTES de seed

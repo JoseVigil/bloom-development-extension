@@ -18,7 +18,7 @@ func init() {
 }
 
 func createVerifySyncCommand(c *core.Core) *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "verify-sync",
 		Short: "Verify deployed binaries match the last build",
 		Long: `Compare each binary currently on disk against the state recorded in
@@ -66,9 +66,12 @@ Example:
 		Example: `  metamorph verify-sync
   metamorph --json verify-sync`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runVerifySync(c)
+			nativeMode, _ := cmd.Flags().GetBool("native")
+			return runVerifySync(c, nativeMode)
 		},
 	}
+	cmd.Flags().Bool("native", false, "Verify native/bin/<platform>/ build output instead of AppData (reads native_metamorph.json)")
+	return cmd
 }
 
 // syncStatus represents the result of comparing a single component.
@@ -116,10 +119,16 @@ type metamorphConfig struct {
 }
 
 // runVerifySync is the main entry point for the verify-sync command.
-func runVerifySync(c *core.Core) error {
-	configPath, err := resolveMetamorphConfigPath()
+func runVerifySync(c *core.Core, nativeMode bool) error {
+	var configPath string
+	var err error
+	if nativeMode {
+		configPath, err = resolveNativeMetamorphConfigPath()
+	} else {
+		configPath, err = resolveMetamorphConfigPath()
+	}
 	if err != nil {
-		return fmt.Errorf("could not resolve metamorph.json path: %w", err)
+		return fmt.Errorf("could not resolve metamorph config path: %w", err)
 	}
 
 	// Load metamorph.json as source of truth

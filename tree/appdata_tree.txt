@@ -1,6 +1,7 @@
 BloomNucleus/
 ├── bin/
 │   ├── bootstrap/
+│   │   ├── VERSION
 │   │   ├── bootstrap.meta.json
 │   │   ├── bundle.js
 │   │   ├── bundle.js.map
@@ -138,7 +139,8 @@ BloomNucleus/
 │   │   │   ├── metamorph_help.txt
 │   │   │   └── metamorph_info.json
 │   │   ├── metamorph-config.json
-│   │   └── metamorph.exe
+│   │   ├── metamorph.exe
+│   │   └── metamorph.exe.old
 │   ├── node/
 │   │   └── node.exe
 │   ├── nssm/
@@ -330,7 +332,8 @@ BloomNucleus/
 │   │   │   └── brain_server_manager_20260315.log
 │   │   └── service/
 │   │       ├── brain_service.log
-│   │       └── brain_service_20260314.log
+│   │       ├── brain_service_20260314.log
+│   │       └── brain_service_20260315.log
 │   ├── build/ [... build output]
 │   ├── chromium/
 │   ├── conductor/
@@ -347,9 +350,9 @@ BloomNucleus/
 │   │               ├── host_boot_001_21d14600_095033.log
 │   │               └── nm_init_diag_001_21d14600_095033.log
 │   ├── metamorph/
-│   │   ├── metamorph_core_20260313.log
-│   │   ├── metamorph_core_20260314.log
-│   │   └── metamorph_core_20260315.log
+│   │   ├── metamorph_core_20260315.log
+│   │   ├── metamorph_inspection_20260315.log
+│   │   └── metamorph_operations_20260315.log
 │   ├── nucleus/
 │   │   ├── nucleus_orchestration_20260313.log
 │   │   ├── nucleus_orchestration_20260314.log

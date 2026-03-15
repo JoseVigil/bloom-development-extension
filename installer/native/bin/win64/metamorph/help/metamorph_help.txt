@@ -83,17 +83,21 @@
 =====================================================[ INSPECTION ]=====================================================
 
   > INSPECT
-    Inspect all binaries and show detailed info
+    Inspect all binaries (AppData or native build output)
 
     Usage: metamorph inspect
 
     Flags:
       --all, -a                  Include external binaries (Temporal, Ollama, Chromium, Node)
+      --native                   Inspect native/bin/<platform>/ build output instead of AppData
 
     Example:
         metamorph inspect
         metamorph inspect --all
+        metamorph inspect --native
+        metamorph inspect --native --all
         metamorph --json inspect
+        metamorph --json inspect --native
         metamorph --json inspect --all
 
     JSON Response:
@@ -102,14 +106,23 @@
           {
             "name": "Brain",
             "version": "3.2.0",
-            "status": "healthy"
+            "hash": "a3f1c2...",
+            "size_bytes": 18432000,
+            "last_modified": "2026-03-15T14:00:00Z",
+            "status": "healthy",
+            "updatable_by_metamorph": true
           }
         ],
         "summary": {
-          "total_binaries": 7,
-          "healthy_count": 7
-        }
+          "total_binaries": 11,
+          "managed_count": 11,
+          "healthy_count": 11,
+          "missing_count": 0
+        },
+        "timestamp": "2026-03-15T14:16:43Z"
       }
+        Written to (default):  %LOCALAPPDATA%\\BloomNucleus\\config\\metamorph.json
+        Written to (--native): %LOCALAPPDATA%\\BloomNucleus\\config\\native\\native_metamorph.json
 
     --------------------------------------------------------------------------------
 
@@ -140,6 +153,9 @@
     Verify deployed binaries match the last build
 
     Usage: metamorph verify-sync
+
+    Flags:
+      --native                   Verify native/bin/<platform>/ build output instead of AppData (reads native_metamorph.json)
 
     Example:
         metamorph verify-sync
