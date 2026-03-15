@@ -1,0 +1,12 @@
+{
+  "name": "Bloom Bootstrap",
+  "info": "Bootstrap runtime for the Bloom VS Code extension. Loads and initializes the extension's Node.js environment inside the Nucleus service, acting as the bridge between the VS Code plugin and the Bloom backend.",
+  "version": "1.0.0",
+  "build_number": 6,
+  "build_date": "2026-03-14T19:59:14Z",
+  "files": [
+    "bundle.js",
+    "bundle.js.map",
+    "server-bootstrap.js"
+  ]
+}

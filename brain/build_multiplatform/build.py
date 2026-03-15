@@ -299,6 +299,7 @@ def verify_executable(brain_exe):
     code, stdout, stderr = safe_subprocess_run(
         [str(brain_exe), "--help"],
         timeout=30,
+        cwd=str(brain_exe.parent),  # FIX: ejecutar desde la carpeta del exe para evitar carpetas de runtime en PROJECT_ROOT
         desc="Verificacion de funcionalidad"
     )
     
@@ -326,11 +327,17 @@ def generate_help_files(brain_exe):
         ("brain-ai-full.json",   ["--ai",   "--help", "--full"]),
     ]
 
+    exe_dir = str(brain_exe.parent.resolve())  # FIX: directorio del exe como cwd para todos los subprocesos
+
     ok_count = 0
     for filename, args in variants:
         out_file = help_output_dir / filename
         cmd = [str(brain_exe)] + args
-        code, stdout, stderr = safe_subprocess_run(cmd, timeout=30, desc=f"Help: {filename}")
+        code, stdout, stderr = safe_subprocess_run(
+            cmd, timeout=30,
+            cwd=exe_dir,  # FIX: evita que brain cree carpetas de runtime en PROJECT_ROOT
+            desc=f"Help: {filename}"
+        )
         output = stdout or stderr
         if output and output.strip():
             try:

@@ -16,7 +16,11 @@ Secuencia de ejecución:
                     Output: installer/native/bin/bootstrap/bundle.js
   9. Vsix         → npm run package:vscode (vsce package)
                     Output: installer/vscode/bloom-extension.vsix
-  10. Cortex      → installer/cortex/build-cortex/package.py
+  10. Bootstrap   → installer/bootstrap/version-bootstrap.py
+                    (incrementa build_number en bootstrap.meta.json)
+                    copia bootstrap.meta.json + version-bootstrap.py
+                    a installer/native/bin/bootstrap/
+  11. Cortex      → installer/cortex/build-cortex/package.py
                     (lee cortex.meta.json, incrementa build_number, produce .blx)
 
 Luego de buildear los ejecutables, interroga cada uno para verificar versión
@@ -55,8 +59,12 @@ BUILD_ALL_PRIORITY = 2
 
 
 def get_log_path() -> Path:
-    """Genera el path del log con timestamp del dia: build_all_YYYYMMDD.log"""
-    ts = datetime.now().strftime("%Y%m%d")
+    """
+    Genera el path del log con fecha del dia: build_all_YYYYMMDD.log
+    Multiples runs del mismo dia hacen append al mismo archivo.
+    El stream_id es fijo (build_all) — nucleus sobreescribe el path en cada registro.
+    """
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d")
     return LOGS_BUILD_DIR / f"build_all_{ts}.log"
 
 
@@ -70,7 +78,7 @@ def write_log(log_path: Path, build_results: list, verify_results: list,
     """
     LOGS_BUILD_DIR.mkdir(parents=True, exist_ok=True)
 
-    ts_run = datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
+    ts_run = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     lines = []
     lines.append(f"[{ts_run}] INFO  ============================================")
@@ -111,14 +119,42 @@ def write_log(log_path: Path, build_results: list, verify_results: list,
         f.write('\n'.join(lines) + '\n')
 
 
-def register_telemetry(log_path: Path) -> None:
+def register_telemetry(log_path: Path, build_results: list) -> None:
     """
     Registra el stream en telemetry.json via nucleus telemetry register.
     Nucleus es el UNICO escritor de telemetry.json — nunca escribir directo.
+
+    Convenciones aplicadas (BLOOM_NUCLEUS_LOGGING_SPEC):
+      - stream_id : build_all  (fijo — nucleus sobreescribe el path en cada registro)
+      - category  : build
+      - source    : omitido — build-all.py es un script externo, no un binario del ecosistema
+      - path      : archivo diario con append — multiples runs del mismo dia en el mismo archivo
+      - priority  : 2 (Important — pipeline principal de compilacion)
+      - timestamps: UTC en el archivo de log
     """
     if not NUCLEUS_EXE.exists():
         print(f"  {YELLOW}[telemetry] nucleus.exe no encontrado en {NUCLEUS_EXE} — registro omitido{RESET}", flush=True)
         return
+
+    # Categorías: "build" siempre + categoría válida de cada componente buildeado exitosamente
+    COMPONENT_CATEGORY = {
+        "Brain":     "brain",
+        "Nucleus":   "nucleus",
+        "Sentinel":  "sentinel",
+        "Metamorph": "metamorph",
+        "Conductor": "conductor",
+        "Sensor":    "sensor",
+        "Vscode":    "vscode",
+        "Vsix":      "vsix",
+        "Bootstrap": "bootstrap",
+        "Cortex":    "cortex",
+    }
+    extra_categories = [
+        COMPONENT_CATEGORY[r.component]
+        for r in build_results
+        if r.component in COMPONENT_CATEGORY and (r.success or r.skipped)
+    ]
+    categories = ["build"] + extra_categories
 
     cmd = [
         str(NUCLEUS_EXE),
@@ -127,9 +163,11 @@ def register_telemetry(log_path: Path) -> None:
         "--label",       BUILD_ALL_LABEL,
         "--path",        str(log_path).replace(chr(92), "/"),
         "--priority",    str(BUILD_ALL_PRIORITY),
-        "--category",    "build",
-        "--description", "Full build pipeline log — aggregates output from all module builds in a single run",
+        "--description", "build-all.py pipeline log — registra resultado de cada fase (compilacion, empaquetado, verificacion) por run del orquestador maestro",
     ]
+    for cat in categories:
+        cmd += ["--category", cat]
+
 
     try:
         result = subprocess.run(
@@ -147,10 +185,6 @@ def register_telemetry(log_path: Path) -> None:
     except Exception as e:
         print(f"  {YELLOW}[telemetry] error al registrar: {e}{RESET}", flush=True)
 
-# ---------------------------------------------------------------------------
-# Rutas — relativas a la raíz del repositorio (donde vive este script)
-# ---------------------------------------------------------------------------
-
 ROOT = Path(__file__).parent.resolve()
 
 BUILDS = {
@@ -164,23 +198,11 @@ BUILDS = {
     # Plugin VSCode — repo raíz (bloom-development-extension)
     # build: tsc + copy-assets + esbuild bundle → installer/native/bin/bootstrap/bundle.js
     # vsix:  vsce package → installer/vscode/bloom-extension.vsix
-    "plugin":     ROOT,                                  # cwd para npm run build
+    "vscode":     ROOT,                                  # cwd para npm run build
     "vsix":       ROOT,                                  # cwd para npm run package:vscode
+    # Bootstrap — incrementa build_number después del build del plugin
+    "bootstrap":  ROOT / "installer/bootstrap/version-bootstrap.py",
 }
-
-CORTEX_SOURCE = ROOT / "installer/cortex/extension"
-CORTEX_OUTPUT = ROOT / "installer/native/bin/cortex"
-
-# ---------------------------------------------------------------------------
-# Contratos de interrogación por componente
-# Cada entrada define cómo obtener versión y build_number del binario ya buildeado.
-# ---------------------------------------------------------------------------
-
-# BIN_BASE se resuelve en runtime según --verify-env (ver get_bin_base())
-_PROD_BIN_BASE = Path(os.environ.get("BLOOM_NUCLEUS_HOME",
-    Path.home() / "AppData/Local/BloomNucleus/bin"
-))
-_DEV_BIN_BASE  = ROOT / "installer/native/bin/win64"
 
 def get_bin_base(verify_env: str) -> Path:
     """Retorna el directorio raíz de binarios según el entorno de verificación."""
@@ -337,13 +359,15 @@ def header(title: str) -> None:
     print(f"{BOLD}  {title}{RESET}", flush=True)
     print(f"{BOLD}{'─' * 60}{RESET}", flush=True)
 
-def run(cmd: list[str], cwd: Path = ROOT, timeout: int = 300) -> tuple[int, str, str]:
+def run(cmd: list[str], cwd: Optional[Path] = None, timeout: int = 300) -> tuple[int, str, str]:
     """
     Ejecuta un comando mostrando su output en tiempo real (streaming).
     Retorna (returncode, stdout_completo, stderr_completo).
     Fuerza UTF-8 con reemplazo de caracteres inválidos para evitar
     UnicodeDecodeError en consolas Windows con codepage CP1252.
     """
+    if cwd is None:
+        cwd = ROOT
     stdout_lines: list[str] = []
     stderr_lines: list[str] = []
 
@@ -466,7 +490,7 @@ def build_plugin() -> StepResult:
     El script npm run build ya encadena los tres pasos.
     Output critico: installer/native/bin/bootstrap/bundle.js
     """
-    plugin_dir = BUILDS["plugin"]
+    plugin_dir = BUILDS["vscode"]
     npm_cmd = "npm.cmd" if sys.platform == "win32" else "npm"
     log("Ejecutando npm run build (tsc + copy-assets + esbuild bundle) ...")
     code, out, err = run(
@@ -474,17 +498,17 @@ def build_plugin() -> StepResult:
         cwd=plugin_dir,
     )
     if code != 0:
-        return StepResult("Plugin", False, error=err or out)
+        return StepResult("Vscode", False, error=err or out)
 
     # Verificar que bundle.js fue generado
     bundle_path = plugin_dir / "installer/native/bin/bootstrap/bundle.js"
     if not bundle_path.exists():
-        return StepResult("Plugin", False,
+        return StepResult("Vscode", False,
                           error=f"Build OK pero bundle.js no encontrado en {bundle_path}")
 
     size_kb = bundle_path.stat().st_size / 1024
     log(f"bundle.js generado: {size_kb:.1f} KB → {bundle_path}")
-    return StepResult("Plugin", True)
+    return StepResult("Vscode", True)
 
 
 def build_vsix() -> StepResult:
@@ -515,6 +539,84 @@ def build_vsix() -> StepResult:
     size_kb = vsix_file.stat().st_size / 1024
     log(f".vsix generado: {vsix_file.name} ({size_kb:.1f} KB)")
     return StepResult("Vsix", True)
+
+
+def build_bootstrap() -> StepResult:
+    """
+    Cuatro responsabilidades:
+      1. Corre npm run build:bundle para generar bundle.js y bundle.js.map.
+      2. Verifica que bundle.js y bundle.js.map fueron generados en native/.
+      3. Incrementa build_number en installer/bootstrap/bootstrap.meta.json.
+      4. Copia bootstrap.meta.json + version-bootstrap.py + server-bootstrap.js a
+         installer/native/bin/bootstrap/ para que queden disponibles en el
+         deploy a AppData y nucleus pueda consultar version/info desde ahí.
+
+    Nota: Nucleus (supervisor.go) lanza bundle.js directamente — no server-bootstrap.js.
+    server-bootstrap.js se copia a native/ solo como referencia del entry point de esbuild.
+    """
+    script    = BUILDS["bootstrap"]
+    source_dir = script.parent                                          # installer/bootstrap/
+    native_dir = ROOT / "installer/native/bin/bootstrap"               # output del build
+
+    # ------------------------------------------------------------------
+    # 1. Correr npm run build:bundle para generar bundle.js
+    # ------------------------------------------------------------------
+    npm_cmd = "npm.cmd" if sys.platform == "win32" else "npm"
+    log("Ejecutando npm run build:bundle ...")
+    code, out, err = run(
+        [npm_cmd, "run", "build:bundle"],
+        cwd=ROOT,
+    )
+    if code != 0:
+        return StepResult("Bootstrap", False, error=err or out)
+
+    # ------------------------------------------------------------------
+    # 2. Verificar que bundle.js y bundle.js.map existen en native
+    # ------------------------------------------------------------------
+    for fname in ("bundle.js", "bundle.js.map"):
+        fpath = native_dir / fname
+        if not fpath.exists():
+            return StepResult("Bootstrap", False,
+                              error=f"{fname} no encontrado en {native_dir} — build:bundle no generó el archivo esperado")
+        size_kb = fpath.stat().st_size / 1024
+        log(f"{fname}: {size_kb:.1f} KB  ✓")
+
+    # ------------------------------------------------------------------
+    # 3. Incrementar build_number
+    # ------------------------------------------------------------------
+    if not script.exists():
+        return StepResult("Bootstrap", False, error=f"Script no encontrado: {script}")
+
+    log("Incrementando build_number en bootstrap.meta.json ...")
+    code, out, err = run([sys.executable, str(script)], cwd=source_dir)
+    if code != 0:
+        return StepResult("Bootstrap", False, error=err or out)
+
+    # version-bootstrap.py emite JSON — parsearlo directamente
+    result_json = parse_json_output(out)
+    if not result_json or not result_json.get("success"):
+        return StepResult("Bootstrap", False,
+                          error=result_json.get("error", "version-bootstrap.py no emitió JSON válido") if result_json else "Sin output JSON")
+
+    version      = result_json["version"]
+    build_number = result_json["build_number"]
+    log(f"v{version}  build {build_number}")
+
+    # ------------------------------------------------------------------
+    # 4. Copiar meta + script a native para deploy
+    # ------------------------------------------------------------------
+    import shutil
+    native_dir.mkdir(parents=True, exist_ok=True)
+
+    for fname in ("bootstrap.meta.json", "version-bootstrap.py", "server-bootstrap.js"):
+        src = source_dir / fname
+        dst = native_dir / fname
+        if not src.exists():
+            return StepResult("Bootstrap", False, error=f"Archivo fuente no encontrado: {src}")
+        shutil.copy2(src, dst)
+        log(f"Copiado → {dst.relative_to(ROOT)}")
+
+    return StepResult("Bootstrap", True, version=version, build=build_number)
 
 
 def ensure_cortex_meta(meta_path: Path, channel: str) -> None:
@@ -701,6 +803,12 @@ def print_errors(results: list[StepResult]) -> None:
 # Main
 # ---------------------------------------------------------------------------
 
+VALID_COMPONENTS = [
+    "brain", "nucleus", "sentinel", "metamorph", "conductor",
+    "sensor", "vscode", "vsix", "bootstrap", "cortex",
+]
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="build-all.py",
@@ -708,12 +816,33 @@ def parse_args() -> argparse.Namespace:
             "Bloom Build All — Orquestador maestro de builds del ecosistema Bloom.\n"
             "\n"
             "Compila todos los componentes en orden, verifica sus versiones\n"
-            "y opcionalmente valida el estado de la instalación en producción."
+            "y opcionalmente valida el estado de la instalación en producción.\n"
+            "\n"
+            "Usa --only <componente> para correr un único build de forma aislada\n"
+            "(útil para re-intentar un paso que falló en el build completo)."
         ),
         epilog=(
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "OPCIONES — DETALLE\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "  --only COMPONENTE\n"
+            "      Corre únicamente el build del componente indicado.\n"
+            "      Ideal para re-intentar un paso fallido sin correr el all.\n"
+            "      Componentes válidos:\n"
+            "        brain      → build_brain.ps1\n"
+            "        nucleus    → installer/nucleus/scripts/build.bat\n"
+            "        sentinel   → installer/sentinel/scripts/build.bat\n"
+            "        metamorph  → installer/metamorph/scripts/build.bat\n"
+            "        conductor  → installer/conductor (npm run build:all)\n"
+            "        sensor     → installer/sensor/scripts/build.bat\n"
+            "        vscode     → npm run build (tsc + copy-assets + esbuild)\n"
+            "        vsix       → npm run package:vscode (requiere plugin buildeado)\n"
+            "        bootstrap  → installer/bootstrap/version-bootstrap.py\n"
+            "                     (requiere plugin buildeado — necesita bundle.js)\n"
+            "        cortex     → installer/cortex/build-cortex/package.py\n"
+            "      Nota: --only cortex respeta --channel y --production.\n"
+            "      Nota: --only omite la verificación post-build (FASE 3).\n"
+            "\n"
             "  --channel CHANNEL\n"
             "      Release channel para el empaquetado de Cortex (.blx).\n"
             "        stable   Versión de producción (default)\n"
@@ -752,6 +881,8 @@ def parse_args() -> argparse.Namespace:
             "                         → installer/native/bin/bootstrap/bundle.js\n"
             "            Vsix       → npm run package:vscode (vsce)\n"
             "                         → installer/vscode/bloom-extension.vsix\n"
+            "            Bootstrap  → installer/bootstrap/version-bootstrap.py\n"
+            "                         (incrementa build_number en bootstrap.meta.json)\n"
             "\n"
             "  FASE 2  Empaquetado de Cortex (.blx)\n"
             "            Cortex     → installer/cortex/build-cortex/package.py\n"
@@ -771,7 +902,7 @@ def parse_args() -> argparse.Namespace:
             "            Registra el log del build via nucleus telemetry register\n"
             "\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "EJEMPLOS\n"
+            "EJEMPLOS — BUILD COMPLETO\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "  # Build estándar de desarrollo (más común)\n"
             "  python build-all.py\n"
@@ -789,6 +920,25 @@ def parse_args() -> argparse.Namespace:
             "  python build-all.py --channel beta --production --verify-env prod\n"
             "\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "EJEMPLOS — BUILD INDIVIDUAL (--only)\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "  # Re-intentar un componente que falló en el build all\n"
+            "  python build-all.py --only brain\n"
+            "  python build-all.py --only nucleus\n"
+            "  python build-all.py --only sentinel\n"
+            "  python build-all.py --only metamorph\n"
+            "  python build-all.py --only conductor\n"
+            "  python build-all.py --only sensor\n"
+            "  python build-all.py --only vscode\n"
+            "  python build-all.py --only vsix\n"
+            "  python build-all.py --only bootstrap\n"
+            "  python build-all.py --only cortex\n"
+            "\n"
+            "  # Cortex individual con opciones de canal\n"
+            "  python build-all.py --only cortex --channel beta\n"
+            "  python build-all.py --only cortex --channel beta --production\n"
+            "\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "NOTAS\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "  verify-sync NO corre durante el build en entorno dev.\n"
@@ -800,6 +950,17 @@ def parse_args() -> argparse.Namespace:
             "    metamorph rollout\n"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--only",
+        default=None,
+        choices=VALID_COMPONENTS,
+        metavar="COMPONENTE",
+        help=(
+            f"Corre únicamente el build de un componente: "
+            f"{', '.join(VALID_COMPONENTS)}. "
+            "Omite verificación post-build."
+        ),
     )
     parser.add_argument(
         "--channel",
@@ -825,6 +986,18 @@ def parse_args() -> argparse.Namespace:
         metavar="ENV",
         help="Entorno de verificación: dev (default) o prod. Ver detalle abajo.",
     )
+
+    # Regenerar build-all-help.txt siempre que se construye el parser,
+    # ANTES de parse_args() — así --help también lo actualiza, no solo el build completo.
+    try:
+        import io as _io
+        _buf = _io.StringIO()
+        parser.print_help(_buf)
+        _help_file = ROOT / "build-all-help.txt"
+        _help_file.write_text(_buf.getvalue(), encoding="utf-8")
+    except Exception:
+        pass  # nunca bloquear el build por esto
+
     return parser, parser.parse_args()
 
 
@@ -838,8 +1011,77 @@ def write_help_file(parser: argparse.ArgumentParser) -> None:
     log(f"{GREEN}OK{RESET}  ->  build-all-help.txt -> {help_file}")
 
 
+def run_single(component: str, channel: str, production: bool) -> None:
+    """
+    Corre el build de un único componente y muestra su resultado.
+    Usado con --only para re-intentar un paso fallido sin correr el all.
+    """
+    DISPATCH = {
+        "brain":      lambda: build_brain(),
+        "nucleus":    lambda: build_bat("Nucleus",   BUILDS["nucleus"]),
+        "sentinel":   lambda: build_bat("Sentinel",  BUILDS["sentinel"]),
+        "metamorph":  lambda: build_bat("Metamorph", BUILDS["metamorph"]),
+        "conductor":  lambda: build_conductor(),
+        "sensor":     lambda: build_sensor(),
+        "vscode":     lambda: build_plugin(),
+        "vsix":       lambda: build_vsix(),
+        "bootstrap":  lambda: build_bootstrap(),
+        "cortex":     lambda: build_cortex(channel, production),
+    }
+
+    fn = DISPATCH.get(component)
+    if fn is None:
+        print(f"{RED}Componente desconocido: {component}{RESET}")
+        print(f"Validos: {', '.join(VALID_COMPONENTS)}")
+        sys.exit(2)
+
+    header(f"BLOOM BUILD — {component.upper()}  |  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"\n  {BOLD}-> {component.capitalize()}{RESET}")
+
+    try:
+        result = fn()
+    except subprocess.TimeoutExpired:
+        result = StepResult(component.capitalize(), False, error="Timeout excedido (300s)")
+    except Exception as e:
+        result = StepResult(component.capitalize(), False, error=str(e))
+
+    if result.skipped:
+        log(f"{YELLOW}SKIPPED{RESET} — {result.skip_reason}")
+    elif result.success:
+        ver = f"  v{result.version} build {result.build}" if result.version else ""
+        log(f"{GREEN}OK{RESET}{ver}")
+    else:
+        log(f"{RED}FAIL{RESET}")
+        if result.error:
+            header("ERROR DETALLADO")
+            for line in result.error.strip().splitlines():
+                print(f"    {line}")
+
+    print()
+    if result.success or result.skipped:
+        print(f"  {GREEN}{BOLD}OK {component.capitalize()} buildeado correctamente.{RESET}")
+        print(f"  Podes re-correr el build completo con: python build-all.py")
+    else:
+        print(f"  {RED}{BOLD}FAIL {component.capitalize()} fallo. Revisa el error arriba.{RESET}")
+    print()
+
+    # Logging y telemetría — siempre, incluso en --only
+    log_path = get_log_path()
+    write_log(log_path, [result], [], channel="n/a", verify_env="n/a")
+    register_telemetry(log_path, [result])
+
+    sys.exit(0 if (result.success or result.skipped) else 1)
+
+
 def main() -> None:
     parser, args = parse_args()
+
+    # ------------------------------------------------------------------
+    # Modo --only: build de un unico componente
+    # ------------------------------------------------------------------
+    if args.only:
+        run_single(args.only, args.channel, args.production)
+        return  # run_single llama sys.exit(), pero por claridad
 
     header(f"BLOOM BUILD ALL  |  channel: {args.channel}  |  verify: {args.verify_env}  |  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
@@ -860,8 +1102,10 @@ def main() -> None:
                                          skip_reason="Build en Linux — installer/host/build.sh")),
         ("Sensor",    lambda: build_sensor()),
         # Plugin debe ir antes de Vsix (vsce necesita out\ y bundle.js)
-        ("Plugin",    lambda: build_plugin()),
+        ("Vscode",    lambda: build_plugin()),
         ("Vsix",      lambda: build_vsix()),
+        # Bootstrap debe ir después de Plugin (bundle.js ya generado)
+        ("Bootstrap", lambda: build_bootstrap()),
     ]
 
     for name, fn in steps:
@@ -939,6 +1183,22 @@ def main() -> None:
             vr = StepResult("Cortex", False, error=str(e))
             log(f"{RED}FAIL{RESET}  —  {e}")
         verify_results.append(vr)
+
+        # Bootstrap: leer desde bootstrap.meta.json (no es ejecutable)
+        print(f"\n  {BOLD}→ Bootstrap (meta){RESET}")
+        bootstrap_meta_path = BUILDS["bootstrap"].parent / "bootstrap.meta.json"
+        try:
+            with bootstrap_meta_path.open("r", encoding="utf-8") as f:
+                bmeta = json.load(f)
+            vr = StepResult("Bootstrap", True,
+                            version=bmeta.get("version"),
+                            build=bmeta.get("build_number"))
+            log(f"{GREEN}OK{RESET}  →  v{vr.version}  build {vr.build}")
+        except Exception as e:
+            vr = StepResult("Bootstrap", False, error=str(e))
+            log(f"{RED}FAIL{RESET}  —  {e}")
+        verify_results.append(vr)
+
     else:
         log("Verificación omitida (--skip-verify)")
 
@@ -988,13 +1248,7 @@ def main() -> None:
     write_log(log_path, build_results, verify_results, args.channel, args.verify_env)
     log(f"{GREEN}OK{RESET}  →  log escrito")
 
-    register_telemetry(log_path)
-
-    # Generar build-all-help.txt en la raiz del repo
-    try:
-        write_help_file(parser)
-    except Exception as e:
-        log(f"{YELLOW}WARN{RESET}  — no se pudo generar build-all-help.txt: {e}")
+    register_telemetry(log_path, build_results)
 
     # Exit code: 0 si todo OK, 1 si algún build falló
     failed = [r for r in build_results if not r.success and not r.skipped]

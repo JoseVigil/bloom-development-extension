@@ -29,36 +29,36 @@ const isWatch = process.argv.includes('--watch');
 async function build() {
   fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
 
-  // Antes de bundlear, parchamos los require() relativos del entry point.
-  // server-bootstrap.js usa rutas relativas diseñadas para el bin\ de producción:
-  //   require('../WebSocketManager')           → out\server\WebSocketManager.js
-  //   require('../api/server')                 → out\api\server.js
-  //   require('../managers/HeadlessUserManager') → out\managers\HeadlessUserManager.js
+  // server-bootstrap.js importa los tres módulos del Control Plane con paths
+  // relativos a installer/bootstrap/ que apuntan a out/:
+  //   require('../../out/server/WebSocketManager')
+  //   require('../../out/api/server')
+  //   require('../../out/managers/HeadlessUserManager')
   //
-  // El plugin alias las mapea a sus paths reales en out\ para que esbuild
-  // las pueda resolver y bundlear correctamente.
+  // El plugin los intercepta por sufijo de path y los resuelve a sus
+  // ubicaciones reales en out/ para que esbuild los bundlee correctamente.
   const outDir = path.join(REPO_ROOT, 'out');
+  const srcDir = path.join(REPO_ROOT, 'src');
+
 
   const aliasPlugin = {
     name: 'bloom-alias',
     setup(build) {
-      // require('../WebSocketManager') → out/server/WebSocketManager.js
-      build.onResolve({ filter: /^\.\.\/WebSocketManager$/ }, () => ({
+      build.onResolve({ filter: /out[\/\\]server[\/\\]WebSocketManager$/ }, () => ({
         path: path.join(outDir, 'server', 'WebSocketManager.js'),
       }));
-      // require('../api/server') → out/api/server.js
-      build.onResolve({ filter: /^\.\.\/api\/server$/ }, () => ({
+      build.onResolve({ filter: /out[\/\\]api[\/\\]server$/ }, () => ({
         path: path.join(outDir, 'api', 'server.js'),
       }));
-      // require('../managers/HeadlessUserManager') → out/managers/HeadlessUserManager.js
-      build.onResolve({ filter: /^\.\.\/managers\/HeadlessUserManager$/ }, () => ({
-        path: path.join(outDir, 'managers', 'HeadlessUserManager.js'),
+      build.onResolve({ filter: /out[\/\\]managers[\/\\]HeadlessUserManager$/ }, () => ({
+        path: path.join(REPO_ROOT, 'src', 'managers', 'HeadlessUserManager.ts'),
       }));
     },
   };
 
   const ctx = await esbuild.context({
     entryPoints: [ENTRY],
+    loader: { '.ts': 'ts' },
     bundle: true,
     platform: 'node',
     target: 'node18',
@@ -66,19 +66,21 @@ async function build() {
     outfile: OUT_FILE,
     plugins: [aliasPlugin],
     external: [
-      // Módulos con bindings nativos — deben existir en node_modules del bin
+      // vscode API — solo existe dentro del proceso VSCode, nunca en standalone
+      'vscode',
+      // cookie — dep de light-my-request (test helper de fastify), no necesaria en runtime
+      'cookie',
+      // Bindings nativos — deben existir en node_modules del bin en AppData
       'fsevents',
-      // proper-lockfile y chokidar se incluyen en el bundle por defecto.
-      // Si dan problemas con bindings nativos, moverlos aquí.
     ],
     sourcemap: true,
     minify: process.env.NODE_ENV === 'production',
     banner: {
       js: [
-        `// Bloom Control Plane Bundle`,
-        `// Generated: ${new Date().toISOString()}`,
-        `// Entry: installer/bootstrap/server-bootstrap.js`,
-        `// DO NOT EDIT — regenerate with: npm run build:bundle`,
+        '// Bloom Control Plane Bundle',
+        '// Generated: ' + new Date().toISOString(),
+        '// Entry: installer/bootstrap/server-bootstrap.js',
+        '// DO NOT EDIT — regenerate with: npm run build:bundle',
         '',
       ].join('\n'),
     },
@@ -87,21 +89,21 @@ async function build() {
 
   if (isWatch) {
     await ctx.watch();
-    console.log(`[bundle] 👀 Watching for changes...`);
-    console.log(`[bundle]    Entry:  ${ENTRY}`);
-    console.log(`[bundle]    Output: ${OUT_FILE}`);
+    console.log('[bundle] Watching for changes...');
+    console.log('[bundle]    Entry:  ' + ENTRY);
+    console.log('[bundle]    Output: ' + OUT_FILE);
   } else {
     const result = await ctx.rebuild();
     await ctx.dispose();
 
     if (result.errors.length > 0) {
-      console.error('[bundle] ❌ Build failed:', result.errors);
+      console.error('[bundle] Build failed:', result.errors);
       process.exit(1);
     }
 
     const sizeKB = (fs.statSync(OUT_FILE).size / 1024).toFixed(1);
-    console.log(`[bundle] ✅ Bundle created: ${OUT_FILE}`);
-    console.log(`[bundle]    Size: ${sizeKB} KB`);
+    console.log('[bundle] Bundle created: ' + OUT_FILE);
+    console.log('[bundle]    Size: ' + sizeKB + ' KB');
   }
 }
 

@@ -37,7 +37,10 @@ preserving subdirectories (help/, win-unpacked/, _internal/, etc.).
 
 Components deployed:
   Brain, Nucleus, Sentinel, Metamorph, Conductor (+ win-unpacked),
-  Host → host/, Cortex (.blx), Setup, NSSM
+  Host → host/, Cortex (.blx), Setup, NSSM,
+  Bootstrap (server-bootstrap.js + bundle.js + bundle.js.map),
+  VSCode extension (.vsix),
+  Node (platform-aware: win64 or win32)
 
 After rollout, 'metamorph inspect' is run automatically to update
 %LOCALAPPDATA%\BloomNucleus\config\metamorph.json.
@@ -130,8 +133,19 @@ func runRollout(c *core.Core, dryRun bool) error {
 	// origin.Path already points to installer/native/bin/<platform>
 	// e.g. C:\repos\bloom\installer\native\bin\win64
 	nativeBinBase := origin.Path
+	// installerRoot = installer/  (three levels up from native/bin/<platform>)
+	installerRoot := filepath.Dir(filepath.Dir(filepath.Dir(nativeBinBase)))
 	nssmSrc := filepath.Join(filepath.Dir(filepath.Dir(nativeBinBase)), "nssm", origin.Platform, "nssm.exe")
 	cortexSrc := filepath.Join(filepath.Dir(nativeBinBase), "cortex", "bloom-cortex.blx")
+
+	// Bootstrap: installer/native/bin/bootstrap/ (not platform-specific, full directory)
+	bootstrapSrcDir := filepath.Join(filepath.Dir(nativeBinBase), "bootstrap")
+
+	// VSCode extension: installer/vscode/bloom-extension.vsix
+	vscodeSrc := filepath.Join(installerRoot, "vscode", "bloom-extension.vsix")
+
+	// Node: platform-aware source (win64 or win32), always deploys to bin/node/
+	nodeSrc := filepath.Join(installerRoot, "node", origin.Platform, "node.exe")
 
 	if !c.Config.OutputJSON {
 		fmt.Printf("  Origin: %s (%s / %s)\n\n", origin.Path, origin.Type, origin.Platform)
@@ -297,6 +311,108 @@ func runRollout(c *core.Core, dryRun bool) error {
 						verb = "Would deploy"
 					}
 					fmt.Printf("  ✔  %-14s %s → %s\n", "NSSM", verb, dst)
+				}
+			}
+		}
+	}
+
+	// Deploy Bootstrap (full directory: bundle.js, bundle.js.map, bootstrap.meta.json,
+	// server-bootstrap.js, version-bootstrap.py — whatever the build produced)
+	// Source: installer/native/bin/bootstrap/
+	// Dest:   BloomNucleus/bin/bootstrap/
+	{
+		dst := filepath.Join(appDataBin, "bootstrap")
+		if _, err := os.Stat(bootstrapSrcDir); os.IsNotExist(err) {
+			skipped = append(skipped, "Bootstrap (source not found: "+bootstrapSrcDir+")")
+			if !c.Config.OutputJSON {
+				fmt.Printf("  ⚠  %-14s skipped — source not found\n", "Bootstrap")
+			}
+		} else {
+			count, err := copyDir(bootstrapSrcDir, dst, dryRun)
+			if err != nil {
+				errors = append(errors, "Bootstrap: "+err.Error())
+				if !c.Config.OutputJSON {
+					fmt.Printf("  ✗  %-14s ERROR: %v\n", "Bootstrap", err)
+				}
+			} else {
+				deployed = append(deployed, rolloutResult{
+					Component:   "Bootstrap",
+					Source:      bootstrapSrcDir,
+					Destination: dst,
+					FilesCopied: count,
+				})
+				if !c.Config.OutputJSON {
+					verb := "Deployed"
+					if dryRun {
+						verb = "Would deploy"
+					}
+					fmt.Printf("  ✔  %-14s %s → %s (%d files)\n", "Bootstrap", verb, dst, count)
+				}
+			}
+		}
+	}
+
+	// Deploy VSCode extension (single .vsix file)
+	{
+		dst := filepath.Join(appDataBin, "vscode", "bloom-extension.vsix")
+		if _, err := os.Stat(vscodeSrc); os.IsNotExist(err) {
+			skipped = append(skipped, "VSCode (source not found: "+vscodeSrc+")")
+			if !c.Config.OutputJSON {
+				fmt.Printf("  ⚠  %-14s skipped — source not found\n", "VSCode")
+			}
+		} else {
+			count, err := copySingleFile(vscodeSrc, dst, dryRun)
+			if err != nil {
+				errors = append(errors, "VSCode: "+err.Error())
+				if !c.Config.OutputJSON {
+					fmt.Printf("  ✗  %-14s ERROR: %v\n", "VSCode", err)
+				}
+			} else {
+				deployed = append(deployed, rolloutResult{
+					Component:   "VSCode",
+					Source:      vscodeSrc,
+					Destination: dst,
+					FilesCopied: count,
+				})
+				if !c.Config.OutputJSON {
+					verb := "Deployed"
+					if dryRun {
+						verb = "Would deploy"
+					}
+					fmt.Printf("  ✔  %-14s %s → %s\n", "VSCode", verb, dst)
+				}
+			}
+		}
+	}
+
+	// Deploy Node (platform-aware: installer/node/win64/ or installer/node/win32/)
+	{
+		dst := filepath.Join(appDataBin, "node", "node.exe")
+		if _, err := os.Stat(nodeSrc); os.IsNotExist(err) {
+			skipped = append(skipped, fmt.Sprintf("Node (source not found: %s)", nodeSrc))
+			if !c.Config.OutputJSON {
+				fmt.Printf("  ⚠  %-14s skipped — source not found (%s)\n", "Node", origin.Platform)
+			}
+		} else {
+			count, err := copySingleFile(nodeSrc, dst, dryRun)
+			if err != nil {
+				errors = append(errors, "Node: "+err.Error())
+				if !c.Config.OutputJSON {
+					fmt.Printf("  ✗  %-14s ERROR: %v\n", "Node", err)
+				}
+			} else {
+				deployed = append(deployed, rolloutResult{
+					Component:   "Node",
+					Source:      nodeSrc,
+					Destination: dst,
+					FilesCopied: count,
+				})
+				if !c.Config.OutputJSON {
+					verb := "Deployed"
+					if dryRun {
+						verb = "Would deploy"
+					}
+					fmt.Printf("  ✔  %-14s %s → %s [%s]\n", "Node", verb, dst, origin.Platform)
 				}
 			}
 		}

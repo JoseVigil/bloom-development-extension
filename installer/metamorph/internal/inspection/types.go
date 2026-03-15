@@ -15,6 +15,8 @@ type ManagedBinary struct {
 	UpdatableByMetamorph bool          `json:"updatable_by_metamorph"`
 	CortexMeta           *CortexMeta   `json:"cortex_meta,omitempty"`   // populated only for .blx
 	SensorInfo           *SensorInfo   `json:"sensor_info,omitempty"`   // populated only for bloom-sensor
+	BootstrapMeta        *BootstrapMeta `json:"bootstrap_meta,omitempty"` // populated only for Bootstrap
+	VSIXMeta             *VSIXMeta     `json:"vsix_meta,omitempty"`     // populated only for VSCode extension
 }
 
 // SensorInfo contains the metadata reported by bloom-sensor's `--json info` command.

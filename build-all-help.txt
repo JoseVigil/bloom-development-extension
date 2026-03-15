@@ -1,12 +1,17 @@
-usage: build-all.py [-h] [--channel CHANNEL] [--production] [--skip-verify] [--verify-env ENV]
+usage: build-all.py [-h] [--only COMPONENTE] [--channel CHANNEL] [--production] [--skip-verify] [--verify-env ENV]
 
 Bloom Build All — Orquestador maestro de builds del ecosistema Bloom.
 
 Compila todos los componentes en orden, verifica sus versiones
 y opcionalmente valida el estado de la instalación en producción.
 
+Usa --only <componente> para correr un único build de forma aislada
+(útil para re-intentar un paso que falló en el build completo).
+
 options:
   -h, --help         show this help message and exit
+  --only COMPONENTE  Corre únicamente el build de un componente: brain, nucleus, sentinel, metamorph, conductor, sensor,
+                     vscode, vsix, bootstrap, cortex. Omite verificación post-build.
   --channel CHANNEL  Release channel para Cortex: stable (default), beta, dev
   --production       Excluye archivos .map del paquete Cortex (.blx)
   --skip-verify      Omite la FASE 3 de verificación post-build
@@ -15,6 +20,24 @@ options:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 OPCIONES — DETALLE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  --only COMPONENTE
+      Corre únicamente el build del componente indicado.
+      Ideal para re-intentar un paso fallido sin correr el all.
+      Componentes válidos:
+        brain      → build_brain.ps1
+        nucleus    → installer/nucleus/scripts/build.bat
+        sentinel   → installer/sentinel/scripts/build.bat
+        metamorph  → installer/metamorph/scripts/build.bat
+        conductor  → installer/conductor (npm run build:all)
+        sensor     → installer/sensor/scripts/build.bat
+        vscode     → npm run build (tsc + copy-assets + esbuild)
+        vsix       → npm run package:vscode (requiere plugin buildeado)
+        bootstrap  → installer/bootstrap/version-bootstrap.py
+                     (requiere plugin buildeado — necesita bundle.js)
+        cortex     → installer/cortex/build-cortex/package.py
+      Nota: --only cortex respeta --channel y --production.
+      Nota: --only omite la verificación post-build (FASE 3).
+
   --channel CHANNEL
       Release channel para el empaquetado de Cortex (.blx).
         stable   Versión de producción (default)
@@ -53,6 +76,8 @@ SECUENCIA DE BUILD
                          → installer/native/bin/bootstrap/bundle.js
             Vsix       → npm run package:vscode (vsce)
                          → installer/vscode/bloom-extension.vsix
+            Bootstrap  → installer/bootstrap/version-bootstrap.py
+                         (incrementa build_number en bootstrap.meta.json)
 
   FASE 2  Empaquetado de Cortex (.blx)
             Cortex     → installer/cortex/build-cortex/package.py
@@ -72,7 +97,7 @@ SECUENCIA DE BUILD
             Registra el log del build via nucleus telemetry register
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-EJEMPLOS
+EJEMPLOS — BUILD COMPLETO
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   # Build estándar de desarrollo (más común)
   python build-all.py
@@ -88,6 +113,25 @@ EJEMPLOS
 
   # Build completo de producción: beta, sin .map, verify-sync contra AppData
   python build-all.py --channel beta --production --verify-env prod
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+EJEMPLOS — BUILD INDIVIDUAL (--only)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # Re-intentar un componente que falló en el build all
+  python build-all.py --only brain
+  python build-all.py --only nucleus
+  python build-all.py --only sentinel
+  python build-all.py --only metamorph
+  python build-all.py --only conductor
+  python build-all.py --only sensor
+  python build-all.py --only vscode
+  python build-all.py --only vsix
+  python build-all.py --only bootstrap
+  python build-all.py --only cortex
+
+  # Cortex individual con opciones de canal
+  python build-all.py --only cortex --channel beta
+  python build-all.py --only cortex --channel beta --production
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 NOTAS

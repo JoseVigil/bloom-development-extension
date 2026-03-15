@@ -504,7 +504,7 @@
   "scripts": {
     "prepare:runtime": "node installer/scripts/setup_runtime.js",
     "clean:runtime": "rimraf installer/resources/runtime .cache",
-    "prebuild": "npm run build:bridge && npm run build:webview && npm run prepare:runtime",    
+    "prebuild": "npm run prepare:runtime",
     "install:bridge": "node scripts/bridge/postinstall.js",
     "install:python": "node scripts/python/install_python_deps.js",
     "postinstall": "npm run install:bridge && npm run install:python",

@@ -17,6 +17,8 @@ class TreeCommand(BaseCommand):
                 "brain tree",
                 "brain tree --targets src tests",
                 "brain tree --hash --export-json",
+                "brain tree --dates",
+                "brain tree --hash --dates",
                 "brain tree --output custom-tree.txt",
                 "brain tree -o report.txt --hash src package.json",
                 'brain tree --targets "C:\\Users\\AppData\\Local\\bloom-development-extension"',
@@ -56,6 +58,7 @@ class TreeCommand(BaseCommand):
             ),
             hash: bool = typer.Option(False, "--hash", help="Include MD5 hashes"),
             export_json: bool = typer.Option(False, "--export-json", help="Export JSON to disk"),
+            dates: bool = typer.Option(False, "--dates", help="Include last-modified date (YYYY-MM-DD HH:MM) next to each entry"),
             targets: Optional[List[str]] = typer.Argument(
                 None,
                 help="Specific directories or files to include (supports absolute paths)."
@@ -137,6 +140,7 @@ class TreeCommand(BaseCommand):
                     typer.echo(f"📄 Output: {output}", err=True)
                     typer.echo(f"🔑 Hash mode: {hash}", err=True)
                     typer.echo(f"📦 Export JSON: {export_json}", err=True)
+                    typer.echo(f"📅 Dates mode: {dates}", err=True)
                 
                 # LÓGICA PURA con base_dir dinámico
                 manager = TreeManager(base_dir)
@@ -144,7 +148,8 @@ class TreeCommand(BaseCommand):
                     targets=targets,
                     output_file=output,
                     use_hash=hash,
-                    use_json=export_json
+                    use_json=export_json,
+                    use_dates=dates,
                 )
                 
                 # ESTRUCTURA DE DATOS PURA
@@ -161,6 +166,7 @@ class TreeCommand(BaseCommand):
                         "targets_processed": targets or ["root"],
                         "hash_enabled": hash,
                         "json_exported": hash and export_json,
+                        "dates_enabled": dates,
                         "warnings": result.get("warnings", [])
                     }
                 }
@@ -207,6 +213,9 @@ class TreeCommand(BaseCommand):
             typer.echo(f"🔑 Hashing: Enabled")
             if result.get('project_hash'):
                 typer.echo(f"   Project Hash: {result['project_hash']}")
+        
+        if result.get('dates_enabled'):
+            typer.echo(f"📅 Dates: Enabled")
         
         if result.get('json_exported') and result.get('json_file'):
             typer.echo(f"📦 JSON export: {result['json_file']}")

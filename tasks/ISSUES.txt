@@ -33,3 +33,7 @@ https://claude.ai/chat/0721584a-192a-489c-83ae-fc2d6dd38f4c
 elias complete build plugin y bootstrap
 https://claude.ai/chat/7bf495e4-e562-4e0b-9fed-193aa1ece3b5
 
+roamtouch metamorph version-info for bootstrap and vscode
+https://claude.ai/chat/dbeda0de-09cf-44da-86b7-61458758780d
+https://claude.ai/chat/c46f27a3-e078-4f20-9123-543f61b2ef8e
+

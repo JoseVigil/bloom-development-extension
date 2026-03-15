@@ -272,7 +272,11 @@ datas.extend([
 
 # Binarios adicionales (DLLs, .so, etc.)
 from PyInstaller.utils.hooks import collect_dynamic_libs
-binaries = collect_dynamic_libs('win32')
+# FIX: collect_dynamic_libs puede fallar o escanear rutas del proyecto si pywin32 no está instalado
+try:
+    binaries = collect_dynamic_libs('win32')
+except Exception:
+    binaries = []
 
 a = Analysis(
     [str(PROJECT_ROOT / 'brain' / '__main__.py')],
@@ -339,8 +343,11 @@ coll = COLLECT(
 import shutil
 import os
 
-# Directorio destino
-DIST_DIR = PROJECT_ROOT / 'installer' / 'native' / 'bin' / 'win32' / 'brain'
+# FIX: detectar plataforma real en vez de hardcodear win32
+import platform as _platform
+_machine = _platform.machine().lower()
+_plat_dir = "win64" if _machine in ("amd64", "x86_64") else "win32"
+DIST_DIR = PROJECT_ROOT / 'installer' / 'native' / 'bin' / _plat_dir / 'brain'
 
 # Crear directorio si no existe
 DIST_DIR.mkdir(parents=True, exist_ok=True)
