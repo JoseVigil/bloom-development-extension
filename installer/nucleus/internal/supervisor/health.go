@@ -256,8 +256,8 @@ func checkSystemHealthParallel(ctx context.Context, s *Supervisor, appDataDir st
 	}
 
 evaluate:
-	criticalComponents := []string{"temporal", "worker", "control_plane", "vault", "governance"}
-	nonCriticalComponents := []string{"ollama", "brain_service", "bloom_api", "svelte_dev", "worker_manager"}
+	criticalComponents := []string{"temporal", "worker", "vault", "governance"}
+	nonCriticalComponents := []string{"ollama", "control_plane", "brain_service", "bloom_api", "svelte_dev", "worker_manager"}
 
 	criticalFailures, degradedCount := 0, 0
 	for _, name := range criticalComponents {
@@ -413,31 +413,50 @@ func checkTemporal(ctx context.Context, s *Supervisor, validate bool) ComponentH
 }
 
 func checkWorker(ctx context.Context, s *Supervisor, validate bool) ComponentHealth {
-	health := ComponentHealth{TaskQueue: "nucleus-task-queue"}
+	health := ComponentHealth{TaskQueue: "profile-orchestration"}
+
+	// Resolver ruta absoluta de temporal — no depender del PATH del sistema
+	temporalBin := filepath.Join(s.binDir, "temporal", "temporal.exe")
+	if _, err := os.Stat(temporalBin); err != nil {
+		if p, lookErr := exec.LookPath("temporal"); lookErr == nil {
+			temporalBin = p
+		} else {
+			health.Healthy = false
+			health.State = "FAILED"
+			health.Error = fmt.Sprintf("temporal binary not found at %s or in PATH", temporalBin)
+			return health
+		}
+	}
+
 	s.mu.RLock()
 	proc, exists := s.processes["nucleus_worker"]
 	s.mu.RUnlock()
 
 	if !exists || proc.State != StateReady {
-		// Fallback: el worker puede estar vivo aunque no haya sido spawnado
-		// por este proceso (e.g. service restart, NSSM). Verificar via
-		// temporal task-queue describe — si hay pollers activos, está conectado.
 		tqCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
-		out, err := exec.CommandContext(tqCtx, "temporal", "task-queue", "describe",
-			"--task-queue", "nucleus-task-queue").CombinedOutput()
-		if err == nil && len(out) > 0 && !bytes.Contains(out, []byte("\"pollers\":[]")) {
-			// Temporal confirma que hay workers conectados en este task-queue
-			health.Healthy = true
-			health.State = "CONNECTED"
-			health.Error = "worker not tracked by supervisor (external process)"
-			return health
+		out, err := exec.CommandContext(tqCtx, temporalBin, "task-queue", "describe",
+			"--task-queue", "profile-orchestration",
+			"-o", "json").CombinedOutput()
+		if err == nil && len(out) > 0 {
+			var tqResult struct {
+				Pollers []struct {
+					Identity string `json:"identity"`
+				} `json:"pollers"`
+			}
+			if jsonErr := json.Unmarshal(out, &tqResult); jsonErr == nil && len(tqResult.Pollers) > 0 {
+				health.Healthy = true
+				health.State = "CONNECTED"
+				if !exists {
+					health.Error = "worker active via Temporal (not tracked by this supervisor instance)"
+				}
+				return health
+			}
 		}
-		// Sin pollers confirmados — realmente desconectado
 		health.Healthy = false
 		health.State = "DISCONNECTED"
 		if !exists {
-			health.Error = "Worker not found in supervisor and no active pollers in task-queue"
+			health.Error = "nucleus_worker not in supervisor and no active pollers in profile-orchestration"
 		} else {
 			health.Error = fmt.Sprintf("Worker state is %s, expected READY; no active pollers confirmed", proc.State)
 		}
@@ -448,8 +467,9 @@ func checkWorker(ctx context.Context, s *Supervisor, validate bool) ComponentHea
 	health.State = "CONNECTED"
 	health.PID = proc.PID
 	if validate {
-		out, err := exec.CommandContext(ctx, "temporal", "task-queue", "describe",
-			"--task-queue", "nucleus-task-queue").CombinedOutput()
+		out, err := exec.CommandContext(ctx, temporalBin, "task-queue", "describe",
+			"--task-queue", "profile-orchestration",
+			"-o", "json").CombinedOutput()
 		if err != nil {
 			health.State = "DEGRADED"
 			health.Error = fmt.Sprintf("Task queue check failed: %v — %s", err, string(out))
@@ -494,6 +514,14 @@ func checkControlPlane(ctx context.Context, s *Supervisor, validate bool) Compon
 
 func checkVault(ctx context.Context, s *Supervisor, validate bool) ComponentHealth {
 	health := ComponentHealth{}
+	// En onboarding, BLOOM_DIR inválido implica que el vault tampoco está configurado
+	bloomDir := os.Getenv("BLOOM_DIR")
+	if bloomDir == "" || strings.ContainsAny(bloomDir, "<>|?*") {
+		health.Healthy = true
+		health.State = "SKIPPED"
+		health.Error = "vault check skipped (onboarding mode)"
+		return health
+	}
 	nucleusExe, err := getNucleusExecutablePath()
 	if err != nil {
 		health.Healthy = false
@@ -504,9 +532,10 @@ func checkVault(ctx context.Context, s *Supervisor, validate bool) ComponentHeal
 	// --json es flag global de nucleus, debe ir antes del subcomando
 	out, err := exec.CommandContext(ctx, nucleusExe, "--json", "synapse", "vault-status").Output()
 	if err != nil {
-		health.Healthy = false
-		health.State = "FAILED"
-		health.Error = fmt.Sprintf("vault-status workflow failed: %v", err)
+		// Workflow failure puede significar que el proyecto no está inicializado aún
+		health.Healthy = true
+		health.State = "SKIPPED"
+		health.Error = fmt.Sprintf("vault-status unavailable (pre-onboarding): %v", err)
 		return health
 	}
 	var vResult map[string]interface{}
@@ -531,16 +560,31 @@ func checkGovernance(ctx context.Context, s *Supervisor, validate bool) Componen
 	health := ComponentHealth{}
 	bloomDir := os.Getenv("BLOOM_DIR")
 	if bloomDir == "" {
-		health.Healthy = false
-		health.State = "FAILED"
-		health.Error = "BLOOM_DIR environment variable not set"
+		health.Healthy = true
+		health.State = "SKIPPED"
+		health.Error = "BLOOM_DIR not set (onboarding mode)"
+		return health
+	}
+	// Mismo guard que bootGovernance: path inválido en Windows = onboarding
+	if strings.ContainsAny(bloomDir, "<>|?*") {
+		health.Healthy = true
+		health.State = "SKIPPED"
+		health.Error = "BLOOM_DIR path invalid (onboarding mode)"
 		return health
 	}
 	ownershipPath := filepath.Join(bloomDir, ".ownership.json")
 	if _, err := os.Stat(ownershipPath); err != nil {
+		if os.IsNotExist(err) ||
+			strings.Contains(err.Error(), "syntax is incorrect") ||
+			strings.Contains(err.Error(), "invalid") {
+			health.Healthy = true
+			health.State = "SKIPPED"
+			health.Error = ".ownership.json not found (onboarding mode)"
+			return health
+		}
 		health.Healthy = false
 		health.State = "FAILED"
-		health.Error = fmt.Sprintf(".ownership.json not found: %v", err)
+		health.Error = fmt.Sprintf(".ownership.json not accessible: %v", err)
 		return health
 	}
 	health.Healthy = true

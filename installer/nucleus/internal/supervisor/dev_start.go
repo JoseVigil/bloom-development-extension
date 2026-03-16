@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -64,9 +65,15 @@ deterministic startup order.`,
 			binDir := getBinDir(c)
 			supervisor := NewSupervisor(logsDir, binDir)
 
+			// En modo --json los logs de progreso van a stderr para no contaminar stdout.
+			var logW io.Writer = os.Stdout
+			if outputJSON {
+				logW = os.Stderr
+			}
+
 			// Execute boot sequence
 			ctx := context.Background()
-			result, err := executeBootSequence(ctx, supervisor, simulation, skipVault, skipControlPlane)
+			result, err := executeBootSequence(ctx, supervisor, simulation, skipVault, skipControlPlane, logW)
 			if err != nil {
 				c.Logger.Printf("[ERROR] ❌ Boot sequence failed: %v", err)
 				
@@ -93,7 +100,7 @@ deterministic startup order.`,
 			c.Logger.Printf("[INFO]    Temporal: Running (port 7233)")
 			c.Logger.Printf("[INFO]    Worker: Connected")
 			c.Logger.Printf("[INFO]    Brain Server: Running (port 5678)")
-			c.Logger.Printf("[INFO]    Ollama: PID %d (port %d)", result.OllamaPID, result.OllamaPort)
+			c.Logger.Printf("[INFO]    Ollama: starting in background (port %d)", result.OllamaPort)
 			c.Logger.Printf("[INFO]    Vault: %s", result.VaultState)
 			c.Logger.Printf("[INFO]    Control Plane: PID %d", result.ControlPlanePID)
 			c.Logger.Printf("[INFO]    WebSocket: ws://localhost:4124")
@@ -123,8 +130,15 @@ type BootSequenceResult struct {
 	Timestamp       int64   `json:"timestamp"`
 }
 
-// executeBootSequence runs the complete boot sequence
-func executeBootSequence(ctx context.Context, s *Supervisor, simulation, skipVault, skipControlPlane bool) (*BootSequenceResult, error) {
+// executeBootSequence runs the complete boot sequence.
+// El parámetro logW recibe os.Stderr cuando el caller está en modo --json,
+// o os.Stdout en modo interactivo. Esto garantiza que los logs de progreso
+// nunca contaminen el JSON que lee Electron u otros callers.
+func executeBootSequence(ctx context.Context, s *Supervisor, simulation, skipVault, skipControlPlane bool, logW io.Writer) (*BootSequenceResult, error) {
+	log := func(format string, args ...interface{}) {
+		fmt.Fprintf(logW, format+"\n", args...)
+	}
+
 	startTime := time.Now()
 	
 	result := &BootSequenceResult{
@@ -135,7 +149,7 @@ func executeBootSequence(ctx context.Context, s *Supervisor, simulation, skipVau
 	// ========================================================================
 	// Phase 1: Ensure Temporal Server is running (auto-start if needed)
 	// ========================================================================
-	fmt.Println("[INFO] Ensuring Temporal Server is running...")
+	log("[INFO] Ensuring Temporal Server is running...")
 
 	nucleusExe, err := getNucleusExecutablePath()
 	if err != nil {
@@ -176,15 +190,15 @@ func executeBootSequence(ctx context.Context, s *Supervisor, simulation, skipVau
 	}
 
 	if temporalResult.Started {
-		fmt.Printf("[INFO] ✓ Temporal Server started: PID %d (port %d)\n", temporalResult.PID, temporalResult.GRPCPort)
+		log("[INFO] ✓ Temporal Server started: PID %d (port %d)", temporalResult.PID, temporalResult.GRPCPort)
 	} else {
-		fmt.Printf("[INFO] ✓ Temporal Server already running (port %d)\n", temporalResult.GRPCPort)
+		log("[INFO] ✓ Temporal Server already running (port %d)", temporalResult.GRPCPort)
 	}
 
 	// ========================================================================
 	// Phase 2: Start Worker Manager
 	// ========================================================================
-	fmt.Println("[INFO] Starting Worker Manager...")
+	log("[INFO] Starting Worker Manager...")
 
 	workerProc, err := s.startWorkerManager(ctx)
 	if err != nil {
@@ -193,12 +207,12 @@ func executeBootSequence(ctx context.Context, s *Supervisor, simulation, skipVau
 		return result, fmt.Errorf("worker manager start failed: %w", err)
 	}
 
-	fmt.Printf("[INFO] ✓ Worker Manager started: PID %d\n", workerProc.PID)
+	log("[INFO] ✓ Worker Manager started: PID %d", workerProc.PID)
 
 	// ========================================================================
 	// Phase 2.5: Start Brain Server
 	// ========================================================================
-	fmt.Println("[INFO] Starting Brain Server...")
+	log("[INFO] Starting Brain Server...")
 
 	brainProc, err := s.startBrainServer(ctx)
 	if err != nil {
@@ -210,16 +224,16 @@ func executeBootSequence(ctx context.Context, s *Supervisor, simulation, skipVau
 	// Si Brain fue recién spawnado (Cmd != nil), esperar a que el puerto esté listo.
 	// Si ya estaba corriendo (Cmd == nil), isBrainRunning() ya lo confirmó — no hay que esperar.
 	if brainProc.Cmd != nil {
-		fmt.Println("[INFO] Waiting for Brain Server to be ready on port 5678...")
+		log("[INFO] Waiting for Brain Server to be ready on port 5678...")
 		if err := s.waitForBrainReady(15 * time.Second); err != nil {
 			result.Success = false
 			result.FailedStage = "brain_server_ready"
 			return result, fmt.Errorf("brain server failed to become ready: %w", err)
 		}
-		fmt.Printf("[INFO] ✓ Brain Server ready: PID %d (port 5678)\n", brainProc.PID)
+		log("[INFO] ✓ Brain Server ready: PID %d (port 5678)", brainProc.PID)
 		result.BrainPID = brainProc.PID
 	} else {
-		fmt.Println("[INFO] ✓ Brain Server already running (port 5678)")
+		log("[INFO] ✓ Brain Server already running (port 5678)")
 	}
 
 	// Registrar en telemetry si tiene log path (proceso nuevo, no externo)
@@ -230,23 +244,23 @@ func executeBootSequence(ctx context.Context, s *Supervisor, simulation, skipVau
 	// ========================================================================
 	// Phase 3: Start Ollama (NON-BLOCKING)
 	// ========================================================================
-	fmt.Println("[INFO] Starting Ollama (non-blocking)...")
+	log("[INFO] Starting Ollama (non-blocking)...")
 	
 	// Start Ollama in background - don't fail boot if it doesn't start
 	go func() {
 		ollamaResult, err := s.StartOllama(ctx)
 		if err != nil {
-			fmt.Printf("[WARN] ⚠️  Ollama start failed (non-critical): %v\n", err)
-			fmt.Println("[INFO] Ollama can be started manually later via: sentinel ollama start")
+			fmt.Fprintf(logW, "[WARN] ⚠️  Ollama start failed (non-critical): %v\n", err)
+			fmt.Fprintf(logW, "[INFO] Ollama can be started manually later via: sentinel ollama start\n")
 		} else {
-			fmt.Printf("[INFO] ✓ Ollama started: PID %d (port %d)\n", ollamaResult.PID, ollamaResult.Port)
+			fmt.Fprintf(logW, "[INFO] ✓ Ollama started: PID %d (port %d)\n", ollamaResult.PID, ollamaResult.Port)
 		}
 	}()
 	
 	// Don't block - continue boot sequence immediately
 	result.OllamaPID = 0  // Will be populated asynchronously
 	result.OllamaPort = 11434
-	fmt.Println("[INFO] ✓ Ollama startup initiated in background")
+	log("[INFO] ✓ Ollama startup initiated in background")
 
 	// ========================================================================
 	// Phase 4: Governance validation
@@ -284,7 +298,7 @@ func executeBootSequence(ctx context.Context, s *Supervisor, simulation, skipVau
 		}
 		result.ControlPlanePID = proc.PID
 	} else {
-		fmt.Println("[INFO] ✓ Control Plane skipped (pre-onboarding mode)")
+		log("[INFO] ✓ Control Plane skipped (pre-onboarding mode)")
 	}
 
 	// Calculate boot time

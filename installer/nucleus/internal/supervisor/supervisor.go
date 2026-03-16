@@ -197,6 +197,39 @@ func (s *Supervisor) waitForTemporalReady(ctx context.Context, timeout time.Dura
 	return fmt.Errorf("temporal server not ready after %v", timeout)
 }
 
+// waitForWorkerReady polls Temporal task-queue until at least one poller is active
+// or the timeout expires. Uses absolute temporal binary path to avoid PATH issues.
+func (s *Supervisor) waitForWorkerReady(timeout time.Duration) error {
+	temporalBin := filepath.Join(s.binDir, "temporal", "temporal.exe")
+	if _, err := os.Stat(temporalBin); err != nil {
+		// Fallback to PATH
+		if p, err := exec.LookPath("temporal"); err == nil {
+			temporalBin = p
+		} else {
+			return fmt.Errorf("temporal binary not found at %s or in PATH", temporalBin)
+		}
+	}
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		out, err := exec.Command(temporalBin, "task-queue", "describe",
+			"--task-queue", "profile-orchestration",
+			"-o", "json").CombinedOutput()
+		if err == nil && len(out) > 0 {
+			var tqResult struct {
+				Pollers []struct {
+					Identity string `json:"identity"`
+				} `json:"pollers"`
+			}
+			if jsonErr := json.Unmarshal(out, &tqResult); jsonErr == nil && len(tqResult.Pollers) > 0 {
+				return nil
+			}
+		}
+		time.Sleep(1 * time.Second)
+	}
+	return fmt.Errorf("no active pollers on profile-orchestration after %v", timeout)
+}
+
 // updateTemporalTelemetry registers the Temporal Server stream via nucleus telemetry register.
 func (s *Supervisor) updateTemporalTelemetry(proc *ManagedProcess) {
 	s.registerStream(
@@ -220,7 +253,7 @@ func (s *Supervisor) startWorkerManager(ctx context.Context) (*ManagedProcess, e
 	defer s.mu.Unlock()
 
 	// Check if already running
-	if proc, exists := s.processes["worker_manager"]; exists {
+	if proc, exists := s.processes["nucleus_worker"]; exists {
 		if proc.State == StateReady {
 			return proc, nil
 		}
@@ -246,11 +279,27 @@ func (s *Supervisor) startWorkerManager(ctx context.Context) (*ManagedProcess, e
 		return nil, fmt.Errorf("failed to create worker log file: %w", err)
 	}
 
+	// Build descriptive worker identity for Temporal.
+	// Format: nucleus-worker/{version}@{hostname}/{task-queue}
+	// This replaces the default PID@hostname identity with something
+	// human-readable in the workers panel and Temporal UI.
+	// The worker Go code should read NUCLEUS_WORKER_IDENTITY via:
+	//   identity := os.Getenv("NUCLEUS_WORKER_IDENTITY")
+	//   if identity == "" { identity = fmt.Sprintf("%d@%s", os.Getpid(), hostname) }
+	//   worker.Options{ Identity: identity }
+	hostname, _ := os.Hostname()
+	nucleusVersion := os.Getenv("NUCLEUS_VERSION")
+	if nucleusVersion == "" {
+		nucleusVersion = "dev"
+	}
+	workerIdentity := fmt.Sprintf("nucleus-worker/%s@%s/profile-orchestration", nucleusVersion, hostname)
+
 	// Create command: nucleus worker start
 	cmd := exec.CommandContext(ctx, nucleusBin, "worker", "start")
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 	cmd.Dir = filepath.Dir(nucleusBin)
+	cmd.Env = append(os.Environ(), "NUCLEUS_WORKER_IDENTITY="+workerIdentity)
 
 	// Start Worker Manager
 	if err := cmd.Start(); err != nil {
@@ -259,7 +308,7 @@ func (s *Supervisor) startWorkerManager(ctx context.Context) (*ManagedProcess, e
 	}
 
 	proc := &ManagedProcess{
-		Name:      "worker_manager",
+		Name:      "nucleus_worker",
 		Cmd:       cmd,
 		PID:       cmd.Process.Pid,
 		State:     StateStarting,
@@ -267,18 +316,23 @@ func (s *Supervisor) startWorkerManager(ctx context.Context) (*ManagedProcess, e
 		StartedAt: time.Now(),
 	}
 
-	s.processes["worker_manager"] = proc
+	s.processes["nucleus_worker"] = proc
 
 	// Monitor process in background
 	go s.monitorProcess(proc, logFile)
 
-	// Wait for worker to connect to Temporal (brief delay)
-	time.Sleep(3 * time.Second)
-	
-	// Update state to ready
-	proc.mu.Lock()
-	proc.State = StateReady
-	proc.mu.Unlock()
+	// Confirm worker is connected to Temporal task-queue via real JSON poll.
+	// Timeout reduced to 10s — worker connects in <2s per logs.
+	if err := s.waitForWorkerReady(10 * time.Second); err != nil {
+		proc.mu.Lock()
+		proc.State = StateDegraded
+		proc.mu.Unlock()
+		fmt.Fprintf(os.Stderr, "[WARN] Worker not confirmed in task-queue after 10s: %v\n", err)
+	} else {
+		proc.mu.Lock()
+		proc.State = StateReady
+		proc.mu.Unlock()
+	}
 
 	// Update telemetry
 	s.updateWorkerTelemetry(proc)
@@ -343,7 +397,7 @@ func (s *Supervisor) startBrainServer(ctx context.Context) (*ManagedProcess, err
 			StartedAt: time.Now(),
 		}
 		s.processes["brain_server"] = proc
-		fmt.Println("[INFO] ✓ Brain Server already running on port 5678 — skipping start")
+		fmt.Fprintln(os.Stderr, "[INFO] ✓ Brain Server already running on port 5678 — skipping start")
 		return proc, nil
 	}
 
@@ -684,25 +738,38 @@ func (s *Supervisor) bootGovernance(ctx context.Context, simulation bool) error 
 	var ownershipPath string
 
 	if simulation {
-        ownershipPath = filepath.Join("installer", "nucleus", "scripts",
-            "simulation_env", ".bloom", ".ownership.json")
-    } else {
-        bloomDir := os.Getenv("BLOOM_DIR")
-        if bloomDir == "" {
-            // BLOOM_DIR no seteado = instalación en progreso, skip governance
-            fmt.Println("[INFO] ⚠️  BLOOM_DIR not set - skipping governance (installation mode)")
-            return nil
-        }
-        ownershipPath = filepath.Join(bloomDir, ".ownership.json")
-    }
-
-	// Durante instalación, si .ownership.json no existe, skip validation
-	if _, err := os.Stat(ownershipPath); err != nil {
-		if os.IsNotExist(err) {
-			fmt.Println("[INFO] ⚠️  .ownership.json not found - skipping governance (installation mode)")
+		ownershipPath = filepath.Join("installer", "nucleus", "scripts",
+			"simulation_env", ".bloom", ".ownership.json")
+	} else {
+		bloomDir := os.Getenv("BLOOM_DIR")
+		if bloomDir == "" {
+			// BLOOM_DIR no seteado = instalación en progreso, skip governance
+			fmt.Fprintln(os.Stderr, "[INFO] ⚠️  BLOOM_DIR not set - skipping governance (installation mode)")
 			return nil
 		}
-		// Otro tipo de error (permisos, etc)
+		// Validar que el path no tenga caracteres inválidos en Windows
+		// antes de intentar os.Stat (que devuelve un error de sintaxis, no ErrNotExist)
+		if strings.ContainsAny(bloomDir, "<>|?*") {
+			fmt.Fprintf(os.Stderr, "[INFO] ⚠️  BLOOM_DIR contains invalid characters (%q) - skipping governance (onboarding mode)\n", bloomDir)
+			return nil
+		}
+		ownershipPath = filepath.Join(bloomDir, ".ownership.json")
+	}
+
+	// Durante onboarding, si .ownership.json no existe, skip validation
+	if _, err := os.Stat(ownershipPath); err != nil {
+		if os.IsNotExist(err) {
+			fmt.Fprintln(os.Stderr, "[INFO] ⚠️  .ownership.json not found - skipping governance (onboarding mode)")
+			return nil
+		}
+		// En Windows, un path con sintaxis inválida devuelve ERROR_INVALID_NAME,
+		// que no es ErrNotExist. Lo tratamos igual: skip en modo onboarding.
+		if strings.Contains(err.Error(), "syntax is incorrect") ||
+			strings.Contains(err.Error(), "invalid") {
+			fmt.Fprintf(os.Stderr, "[INFO] ⚠️  .ownership.json path invalid (%v) - skipping governance (onboarding mode)\n", err)
+			return nil
+		}
+		// Otro tipo de error (permisos, disco, etc) — sí es un error real
 		return fmt.Errorf("ownership.json access error: %w", err)
 	}
 
@@ -731,7 +798,7 @@ func (s *Supervisor) bootControlPlane(ctx context.Context, simulation bool) (*Ma
 
 	// Wait for the API server to be ready on port 48215 (up to 15s)
 	if err := s.waitForPort("48215", 15*time.Second); err != nil {
-		fmt.Printf("[WARN] Control Plane may not be ready: %v\n", err)
+		fmt.Fprintf(os.Stderr, "[WARN] Control Plane may not be ready: %v\n", err)
 	}
 
 	return proc, nil

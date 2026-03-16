@@ -5,7 +5,6 @@ package supervisor
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -140,8 +139,9 @@ explicitly stopped.`,
 			c.Logger.Printf("[INFO]    PID: %d", os.Getpid())
 			c.Logger.Printf("[INFO]    Logs: %s", logsDir)
 
-			// Run boot sequence (reuse from dev-start)
-			bootResult, err := executeBootSequence(ctx, supervisor, false, skipVault, skipControlPlane)
+			// Run boot sequence — logs siempre a stderr en service mode
+			// (NSSM captura stderr por separado; stdout queda limpio para JSON)
+			bootResult, err := executeBootSequence(ctx, supervisor, false, skipVault, skipControlPlane, os.Stderr)
 			if err != nil {
 				c.Logger.Printf("[ERROR] ❌ Service boot failed: %v", err)
 
@@ -191,7 +191,7 @@ explicitly stopped.`,
 			c.Logger.Printf("[INFO]    Boot time: %.2fs", bootTime)
 			c.Logger.Printf("[INFO]    Temporal: Running (port 7233)")
 			c.Logger.Printf("[INFO]    Worker: Connected")
-			c.Logger.Printf("[INFO]    Ollama: PID %d (port %d)", bootResult.OllamaPID, bootResult.OllamaPort)
+			c.Logger.Printf("[INFO]    Ollama: starting in background (port %d)", bootResult.OllamaPort)
 			c.Logger.Printf("[INFO]    Vault: %s", bootResult.VaultState)
 			c.Logger.Printf("[INFO]    Control Plane: PID %d", bootResult.ControlPlanePID)
 
@@ -372,67 +372,9 @@ the health status of all components.`,
 // HELPER FUNCTIONS
 // ============================================================================
 
-// shutdownServices performs graceful shutdown of all components
+// shutdownServices performs graceful shutdown of all managed processes
+// by delegating to Supervisor.Shutdown, which sends SIGINT to each process
+// and force-kills after 10s if they don't exit cleanly.
 func shutdownServices(ctx context.Context, s *Supervisor) error {
-	var lastErr error
-
-	// Shutdown in reverse order of startup
-	// Note: These methods need to be implemented in supervisor.go
-	// For now, we'll use a simplified approach
-	
-	steps := []struct {
-		name string
-		fn   func() error
-	}{
-		{
-			"Control Plane",
-			func() error {
-				// TODO: Implement proper shutdown when supervisor.go has the method
-				// For now, just log
-				fmt.Println("[INFO] Control Plane shutdown requested")
-				return nil
-			},
-		},
-		{
-			"Ollama",
-			func() error {
-				// TODO: Implement proper shutdown when supervisor.go has the method
-				fmt.Println("[INFO] Ollama shutdown requested")
-				return nil
-			},
-		},
-		{
-			"Worker",
-			func() error {
-				// TODO: Implement proper shutdown when supervisor.go has the method
-				fmt.Println("[INFO] Worker shutdown requested")
-				return nil
-			},
-		},
-		{
-			"Temporal",
-			func() error {
-				// TODO: Implement proper shutdown when supervisor.go has the method
-				fmt.Println("[INFO] Temporal shutdown requested")
-				return nil
-			},
-		},
-	}
-
-	for _, step := range steps {
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("shutdown timeout reached")
-		default:
-			if err := step.fn(); err != nil {
-				// Log error but continue shutdown
-				fmt.Printf("[WARN] Failed to stop %s: %v\n", step.name, err)
-				lastErr = err
-			} else {
-				fmt.Printf("[INFO] ✓ %s stopped\n", step.name)
-			}
-		}
-	}
-
-	return lastErr
+	return s.Shutdown(ctx)
 }

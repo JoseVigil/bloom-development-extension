@@ -5,10 +5,6 @@ PROMPT_onboarding_logging_v3.md
 Eventos separados con logger. Problema con comando nucleus synapse identificado
 https://claude.ai/chat/11860251-cd89-4c45-b6e7-b5e1f61c3d12
 
-roamtouch
-problema de start, nucleus service start no alcanza
-https://claude.ai/chat/dbeda0de-09cf-44da-86b7-61458758780d
-
 uitool
 Verificar health check en instalador Electron
 https://claude.ai/chat/7c68cd4f-23ba-43f1-85d7-9894285f7157
@@ -33,7 +29,24 @@ https://claude.ai/chat/0721584a-192a-489c-83ae-fc2d6dd38f4c
 elias complete build plugin y bootstrap
 https://claude.ai/chat/7bf495e4-e562-4e0b-9fed-193aa1ece3b5
 
-roamtouch metamorph version-info for bootstrap and vscode
+roamtouch metamorph version-info vscode
 https://claude.ai/chat/dbeda0de-09cf-44da-86b7-61458758780d
+btips bootstrap
 https://claude.ai/chat/c46f27a3-e078-4f20-9123-543f61b2ef8e
+
+roamingpads metamorph rollout 
+https://claude.ai/chat/f9e1604e-6b93-4a03-9e54-e992c10176b1
+
+notimation telemetry cross check
+https://claude.ai/chat/15c09d84-84aa-4ae5-a9be-b58148f24cd1
+
+gestureos auditoria comandos brain para mandate
+https://claude.ai/chat/77caaf80-bced-405e-baad-a2446d3c3a4c
+
+roamingpads
+problema de start, nucleus service start no alcanza
+https://claude.ai/chat/9abd064d-a9b1-4ae4-8708-f06cacd8d340
+
+nenes workspace onboarding
+
 
