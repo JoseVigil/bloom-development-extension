@@ -528,7 +528,8 @@ def build_vsix() -> StepResult:
 def build_bootstrap() -> StepResult:
     """
     Cuatro responsabilidades:
-      1. Corre npm run build:bundle para generar bundle.js y bundle.js.map.
+      1. Corre npm run build (tsc + copy-assets + build:bundle) para compilar
+         TypeScript a out/ y luego generar bundle.js y bundle.js.map.
       2. Verifica que bundle.js y bundle.js.map fueron generados en native/.
       3. Incrementa build_number en installer/bootstrap/bootstrap.meta.json.
       4. Copia bootstrap.meta.json + version-bootstrap.py + server-bootstrap.js a
@@ -543,12 +544,14 @@ def build_bootstrap() -> StepResult:
     native_dir = ROOT / "installer/native/bin/bootstrap"               # output del build
 
     # ------------------------------------------------------------------
-    # 1. Correr npm run build:bundle para generar bundle.js
+    # 1. Correr npm run build (tsc + copy-assets + esbuild) para generar bundle.js
+    #    Es importante correr 'build' completo y no solo 'build:bundle' para que
+    #    tsc compile src/ -> out/ antes de que esbuild genere el bundle.
     # ------------------------------------------------------------------
     npm_cmd = "npm.cmd" if sys.platform == "win32" else "npm"
-    log("Ejecutando npm run build:bundle ...")
+    log("Ejecutando npm run build (tsc + copy-assets + build:bundle) ...")
     code, out, err = run(
-        [npm_cmd, "run", "build:bundle"],
+        [npm_cmd, "run", "build"],
         cwd=ROOT,
     )
     if code != 0:
@@ -561,7 +564,7 @@ def build_bootstrap() -> StepResult:
         fpath = native_dir / fname
         if not fpath.exists():
             return StepResult("Bootstrap", False,
-                              error=f"{fname} no encontrado en {native_dir} — build:bundle no generó el archivo esperado")
+                              error=f"{fname} no encontrado en {native_dir} — build no generó el archivo esperado")
         size_kb = fpath.stat().st_size / 1024
         log(f"{fname}: {size_kb:.1f} KB  ✓")
 
@@ -599,6 +602,20 @@ def build_bootstrap() -> StepResult:
             return StepResult("Bootstrap", False, error=f"Archivo fuente no encontrado: {src}")
         shutil.copy2(src, dst)
         log(f"Copiado → {dst.relative_to(ROOT)}")
+
+    # Copiar static assets requeridos por el bundle en runtime
+    # static/logo.svg es cargado por Swagger UI al inicializar el API server
+    static_src = source_dir / "static"
+    static_dst = native_dir / "static"
+    if static_src.exists():
+        if static_dst.exists():
+            shutil.rmtree(static_dst)
+        shutil.copytree(static_src, static_dst)
+        copied = list(static_dst.rglob("*"))
+        log(f"static/ → {static_dst.relative_to(ROOT)}  ({len(copied)} archivo(s))")
+    else:
+        return StepResult("Bootstrap", False,
+                          error=f"Directorio static/ no encontrado en {static_src} — crear installer/bootstrap/static/logo.svg")
 
     return StepResult("Bootstrap", True, version=version, build=build_number)
 

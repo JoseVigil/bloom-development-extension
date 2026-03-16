@@ -53,6 +53,18 @@ async function build() {
       build.onResolve({ filter: /out[\/\\]managers[\/\\]HeadlessUserManager$/ }, () => ({
         path: path.join(REPO_ROOT, 'src', 'managers', 'HeadlessUserManager.ts'),
       }));
+
+      // vscode stub — el módulo solo existe dentro del host de VS Code.
+      // En standalone (Control Plane) se reemplaza por un objeto vacío en
+      // tiempo de build para que esbuild no genere require("vscode") en el bundle.
+      build.onResolve({ filter: /^vscode$/ }, () => ({
+        path: 'vscode-stub',
+        namespace: 'vscode-stub',
+      }));
+      build.onLoad({ filter: /.*/, namespace: 'vscode-stub' }, () => ({
+        contents: 'module.exports = {};',
+        loader: 'js',
+      }));
     },
   };
 
@@ -66,8 +78,6 @@ async function build() {
     outfile: OUT_FILE,
     plugins: [aliasPlugin],
     external: [
-      // vscode API — solo existe dentro del proceso VSCode, nunca en standalone
-      'vscode',
       // cookie — dep de light-my-request (test helper de fastify), no necesaria en runtime
       'cookie',
       // Bindings nativos — deben existir en node_modules del bin en AppData

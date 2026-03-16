@@ -337,6 +337,40 @@ func outputJSONResult(v interface{}) {
 	enc.Encode(v)
 }
 
+// getBloomDir returns the root of the Bloom repo by reading nucleus.json.
+// nucleus.json lives at LOCALAPPDATA\BloomNucleus\config\nucleus.json.
+// The field installation.origin_path points to:
+//   C:\repos\...\installer\native\bin\win64
+// Walking up 4 levels yields the repo root.
+// Falls back to BLOOM_DIR env var if nucleus.json is unavailable.
+func getBloomDir() string {
+	// 1. Try reading from nucleus.json
+	localAppData := os.Getenv("LOCALAPPDATA")
+	if localAppData == "" {
+		localAppData = os.Getenv("HOME")
+	}
+	nucleusJSON := filepath.Join(localAppData, "BloomNucleus", "config", "nucleus.json")
+
+	if data, err := os.ReadFile(nucleusJSON); err == nil {
+		var cfg struct {
+			Installation struct {
+				OriginPath string `json:"origin_path"`
+			} `json:"installation"`
+		}
+		if json.Unmarshal(data, &cfg) == nil && cfg.Installation.OriginPath != "" {
+			// origin_path = .../installer/native/bin/win64 — walk up 4 levels
+			p := cfg.Installation.OriginPath
+			for i := 0; i < 4; i++ {
+				p = filepath.Dir(p)
+			}
+			return p
+		}
+	}
+
+	// 2. Fallback to BLOOM_DIR env var
+	return os.Getenv("BLOOM_DIR")
+}
+
 // getNucleusExecutablePath finds the nucleus executable
 func getNucleusExecutablePath() (string, error) {
 	// 1. Check BLOOM_BIN_DIR environment variable

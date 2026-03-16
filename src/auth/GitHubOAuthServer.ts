@@ -1,7 +1,6 @@
 // src/auth/GitHubOAuthServer.ts
 import * as http from 'http';
 import * as crypto from 'crypto';
-import * as vscode from 'vscode';
 import { spawn } from 'child_process';
 import * as os from 'os';
 import * as path from 'path';
@@ -30,18 +29,22 @@ interface GitHubOrg {
     login: string;
 }
 
+interface OutputChannel {
+    appendLine(message: string): void;
+}
+
 export class GitHubOAuthServer {
     private server: http.Server | null = null;
     private port: number = 0;
     private state: string = '';
     private timeout: NodeJS.Timeout | null = null;
-    private outputChannel: vscode.OutputChannel;
+    private outputChannel: OutputChannel;
     private userManager: UserManager;
     private wsManager: WebSocketManager | null = null;
     private pluginApiPort: number;
 
     constructor(
-        outputChannel: vscode.OutputChannel,
+        outputChannel: OutputChannel,
         userManager: UserManager,
         pluginApiPort: number
     ) {
@@ -60,12 +63,11 @@ export class GitHubOAuthServer {
     }
 
     private getOAuthConfig(): OAuthConfig {
-        const config = vscode.workspace.getConfiguration('bloom');
-        const clientId = config.get<string>('github.clientId');
-        const clientSecret = config.get<string>('github.clientSecret');
+        const clientId = process.env.BLOOM_GITHUB_CLIENT_ID;
+        const clientSecret = process.env.BLOOM_GITHUB_CLIENT_SECRET;
 
         if (!clientId || !clientSecret) {
-            throw new Error('GitHub OAuth not configured. Please set bloom.github.clientId and bloom.github.clientSecret');
+            throw new Error('GitHub OAuth not configured. Set BLOOM_GITHUB_CLIENT_ID and BLOOM_GITHUB_CLIENT_SECRET env vars.');
         }
 
         return {
@@ -587,4 +589,3 @@ export class GitHubOAuthServer {
 
 
 }
-

@@ -7,8 +7,10 @@
  */
 
 import { spawn } from 'child_process';
-import * as vscode from 'vscode';
 import * as path from 'path';
+
+let vscode: typeof import('vscode') | null = null;
+try { vscode = require('vscode'); } catch { /* standalone mode */ }
 import * as os from 'os';
 
 // ============================================================================
@@ -151,17 +153,20 @@ export class BrainExecutor {
      * Called once during extension activation
      */
     static async initialize(): Promise<void> {
-        const config = vscode.workspace.getConfiguration('bloom');
-        // Sentinel escribió esto en settings.json antes de lanzar VS Code
-        const brainPath = config.get<string>('brain.executable');
-        const pythonPath = config.get<string>('pythonPath');
-
-        if (brainPath) {
-            this.executablePath = brainPath;
-            console.log(`[Sentinel-First] Usando Brain detectado por Sentinel: ${brainPath}`);
+        if (vscode) {
+            const config = vscode.workspace.getConfiguration('bloom');
+            const brainPath = config.get<string>('brain.executable');
+            const pythonPath = config.get<string>('pythonPath');
+            if (brainPath) {
+                this.executablePath = brainPath;
+                console.log(`[Sentinel-First] Usando Brain detectado por Sentinel: ${brainPath}`);
+                return;
+            }
+            this.executablePath = pythonPath || 'python';
         } else {
-            // Fallback si no hay Sentinel
-            this.executablePath = pythonPath || "python"; 
+            // Standalone (Control Plane): no VS Code config available
+            this.executablePath = process.env.BLOOM_BRAIN_PATH || 'python';
+            console.log(`[BrainExecutor] Standalone mode — using: ${this.executablePath}`);
         }
     }
 

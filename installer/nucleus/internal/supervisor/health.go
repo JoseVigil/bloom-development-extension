@@ -496,26 +496,43 @@ func checkOllama(ctx context.Context, s *Supervisor, validate bool) ComponentHea
 }
 
 func checkControlPlane(ctx context.Context, s *Supervisor, validate bool) ComponentHealth {
-	health := ComponentHealth{}
-	s.mu.RLock()
-	proc, exists := s.processes["control_plane_api"]
-	s.mu.RUnlock()
-	if !exists {
-		health.Healthy = false
-		health.State = "DISCONNECTED"
-		health.Error = "Control plane not found in supervisor"
+	health := ComponentHealth{Port: 48215}
+	// El supervisor que corre health es una instancia nueva — no tiene el proceso
+	// en su map. La forma correcta de verificar es el puerto, igual que bloom_api.
+	start := time.Now()
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get("http://127.0.0.1:48215/api/docs")
+	health.LatencyMs = time.Since(start).Milliseconds()
+	if err != nil {
+		// Intentar también el WebSocket port como fallback
+		conn, tcpErr := net.DialTimeout("tcp", "127.0.0.1:48215", 1*time.Second)
+		if tcpErr != nil {
+			health.Healthy = false
+			health.State = "DISCONNECTED"
+			health.Error = "Port 48215 not accessible (control plane not running)"
+			return health
+		}
+		conn.Close()
+		health.Healthy = true
+		health.State = "RUNNING"
 		return health
 	}
-	health.Healthy = true
-	health.State = "RUNNING"
-	health.PID = proc.PID
+	defer resp.Body.Close()
+	if resp.StatusCode == 200 || resp.StatusCode == 302 || resp.StatusCode == 404 {
+		health.Healthy = true
+		health.State = "RUNNING"
+	} else {
+		health.Healthy = false
+		health.State = "DEGRADED"
+		health.Error = fmt.Sprintf("HTTP status %d", resp.StatusCode)
+	}
 	return health
 }
 
 func checkVault(ctx context.Context, s *Supervisor, validate bool) ComponentHealth {
 	health := ComponentHealth{}
 	// En onboarding, BLOOM_DIR inválido implica que el vault tampoco está configurado
-	bloomDir := os.Getenv("BLOOM_DIR")
+	bloomDir := getBloomDir()
 	if bloomDir == "" || strings.ContainsAny(bloomDir, "<>|?*") {
 		health.Healthy = true
 		health.State = "SKIPPED"
@@ -558,11 +575,11 @@ func checkVault(ctx context.Context, s *Supervisor, validate bool) ComponentHeal
 
 func checkGovernance(ctx context.Context, s *Supervisor, validate bool) ComponentHealth {
 	health := ComponentHealth{}
-	bloomDir := os.Getenv("BLOOM_DIR")
+	bloomDir := getBloomDir()
 	if bloomDir == "" {
 		health.Healthy = true
 		health.State = "SKIPPED"
-		health.Error = "BLOOM_DIR not set (onboarding mode)"
+		health.Error = "BLOOM_DIR not resolvable (onboarding mode)"
 		return health
 	}
 	// Mismo guard que bootGovernance: path inválido en Windows = onboarding

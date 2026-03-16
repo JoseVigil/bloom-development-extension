@@ -639,6 +639,9 @@ func (s *Supervisor) registerStream(streamID, label, logPath, description, sourc
 	}
 
 	cmd := exec.Command(nucleusBin, args...)
+	// Both stdout and stderr go to os.Stderr so telemetry/INFO lines never
+	// reach stdout and contaminate JSON output in --json mode.
+	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	cmd.Run()
 }
@@ -741,14 +744,11 @@ func (s *Supervisor) bootGovernance(ctx context.Context, simulation bool) error 
 		ownershipPath = filepath.Join("installer", "nucleus", "scripts",
 			"simulation_env", ".bloom", ".ownership.json")
 	} else {
-		bloomDir := os.Getenv("BLOOM_DIR")
+		bloomDir := getBloomDir()
 		if bloomDir == "" {
-			// BLOOM_DIR no seteado = instalación en progreso, skip governance
-			fmt.Fprintln(os.Stderr, "[INFO] ⚠️  BLOOM_DIR not set - skipping governance (installation mode)")
+			fmt.Fprintln(os.Stderr, "[INFO] ⚠️  BLOOM_DIR not resolvable - skipping governance (onboarding mode)")
 			return nil
 		}
-		// Validar que el path no tenga caracteres inválidos en Windows
-		// antes de intentar os.Stat (que devuelve un error de sintaxis, no ErrNotExist)
 		if strings.ContainsAny(bloomDir, "<>|?*") {
 			fmt.Fprintf(os.Stderr, "[INFO] ⚠️  BLOOM_DIR contains invalid characters (%q) - skipping governance (onboarding mode)\n", bloomDir)
 			return nil
@@ -791,14 +791,65 @@ func (s *Supervisor) bootControlPlane(ctx context.Context, simulation bool) (*Ma
 		"BLOOM_NUCLEUS_PATH=" + os.Getenv("BLOOM_NUCLEUS_PATH"),
 	}
 
-	proc, err := s.StartNodeProcess(ctx, "control_plane_api", bundleScript, env)
+	// Log file: logs/nucleus/control_plane/nucleus_control_plane_YYYYMMDD.log
+	// Sigue spec: {source}_{module}_{date}.log en logs/{source}/{module}/
+	today := time.Now()
+	dateStr := fmt.Sprintf("%04d%02d%02d", today.Year(), today.Month(), today.Day())
+	logDir := filepath.Join(s.logsDir, "nucleus", "control_plane")
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create control plane log directory: %w", err)
+	}
+	logPath := filepath.Join(logDir, fmt.Sprintf("nucleus_control_plane_%s.log", dateStr))
+
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create control plane log file: %w", err)
 	}
 
-	// Wait for the API server to be ready on port 48215 (up to 15s)
-	if err := s.waitForPort("48215", 15*time.Second); err != nil {
-		fmt.Fprintf(os.Stderr, "[WARN] Control Plane may not be ready: %v\n", err)
+	// Registrar stream en telemetry via registerStream (delega al CLI de nucleus)
+	s.registerStream(
+		"nucleus_control_plane",
+		"🖥️ CONTROL PLANE",
+		filepath.ToSlash(logPath),
+		"Control plane API log — Node.js bootstrap server providing HTTP :48215 and WebSocket :4124",
+		"nucleus",
+		2,
+		[]string{"nucleus"},
+	)
+
+	// Get Node.js binary
+	nodePath := filepath.Join(s.binDir, "node", "node.exe")
+	if _, err := os.Stat(nodePath); err != nil {
+		nodePath = "node" // Fallback to system Node
+	}
+
+	cmd := exec.CommandContext(ctx, nodePath, bundleScript)
+	cmd.Env = append(os.Environ(), env...)
+	cmd.Stdout = logFile
+	cmd.Stderr = logFile
+
+	if err := cmd.Start(); err != nil {
+		logFile.Close()
+		return nil, fmt.Errorf("failed to start control plane: %w", err)
+	}
+
+	proc := &ManagedProcess{
+		Name:      "control_plane_api",
+		Cmd:       cmd,
+		PID:       cmd.Process.Pid,
+		State:     StateStarting,
+		LogPath:   logPath,
+		StartedAt: time.Now(),
+	}
+
+	s.processes["control_plane_api"] = proc
+	go s.monitorProcess(proc, logFile)
+
+	// Wait for the API server to be ready on port 48215 (up to 8s).
+	// Non-fatal: if bundle crashes (e.g. missing module), boot continues.
+	// The error will be visible in nucleus_control_plane_YYYYMMDD.log.
+	if err := s.waitForPort("48215", 8*time.Second); err != nil {
+		fmt.Fprintf(os.Stderr, "[WARN] Control Plane port 48215 not ready after 8s — check logs/nucleus/control_plane/: %v\n", err)
 	}
 
 	return proc, nil

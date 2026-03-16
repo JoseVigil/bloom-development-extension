@@ -2,7 +2,6 @@ import type { FastifyPluginAsync } from 'fastify';
 import { explorerSchemas } from '../schemas/explorer.schema';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import * as vscode from 'vscode';
 
 interface BTIPNode {
   name: string;
@@ -19,7 +18,7 @@ export const explorerRoutes: FastifyPluginAsync = async (fastify) => {
   }, async (request, reply) => {
     const { path: requestedPath } = request.query as { path?: string };
     
-    const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    const workspacePath = process.env.BLOOM_NUCLEUS_PATH;
     if (!workspacePath) {
       return reply.code(404).send({
         error: 'No workspace found'

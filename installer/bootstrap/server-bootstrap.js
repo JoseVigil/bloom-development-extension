@@ -33,8 +33,13 @@ const { HeadlessUserManager } = require('../../out/managers/HeadlessUserManager'
 // ============================================
 // ENVIRONMENT VALIDATION
 // ============================================
+
+// BLOOM_USER_ROLE is optional during pre-onboarding — the role is only known
+// after the user creates or joins an organization. The Control Plane must be
+// running before that can happen, so we start with 'pre-onboarding' as the
+// default and Electron/Conductor updates nucleus.json + restarts the Bootstrap
+// once the role is established.
 const REQUIRED_ENV = [
-  'BLOOM_USER_ROLE',
   'BLOOM_VAULT_STATE',
   'BLOOM_WORKER_RUNNING'
 ];
@@ -53,8 +58,13 @@ function validateEnvironment() {
     console.error('[Bootstrap] Temporal worker is not running');
     process.exit(1);
   }
+
+  // Resolve role — fallback to 'pre-onboarding' until the user completes setup
+  const role = process.env.BLOOM_USER_ROLE || 'pre-onboarding';
+  process.env.BLOOM_USER_ROLE = role;
+
   console.log('[Bootstrap] ✅ Environment validated');
-  console.log(`[Bootstrap]    Role: ${process.env.BLOOM_USER_ROLE}`);
+  console.log(`[Bootstrap]    Role: ${role}`);
   console.log(`[Bootstrap]    Vault: ${process.env.BLOOM_VAULT_STATE}`);
   console.log(`[Bootstrap]    Simulation: ${process.env.BLOOM_SIMULATION_MODE || 'false'}`);
 }

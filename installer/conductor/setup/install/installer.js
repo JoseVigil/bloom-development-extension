@@ -137,8 +137,9 @@ async function createDirectories(win) {
       paths.profilesDir,
       paths.logsDir,
       paths.temporalDir,
-      paths.vscodeDir,    // bin/vscode — bloom-extension.vsix
-      paths.bootstrapDir, // bin/bootstrap — bootstrap files
+      paths.vscodeDir,          // bin/vscode — bloom-extension.vsix
+      paths.bootstrapDir,       // bin/bootstrap — bootstrap files
+      paths.bootstrapStaticDir, // bin/bootstrap/static — static assets (logo.svg, etc.)
     ];
 
     for (const dir of dirs) {
@@ -607,6 +608,7 @@ async function deployAllSystemBinaries(win) {
 
     if (await fs.pathExists(paths.bootstrapSource)) {
       await fs.ensureDir(paths.bootstrapDir);
+      await fs.ensureDir(paths.bootstrapStaticDir);
       let bootstrapCopied = 0;
       for (const file of bootstrapFiles) {
         const fileSrc  = path.join(paths.bootstrapSource, file);
@@ -619,7 +621,19 @@ async function deployAllSystemBinaries(win) {
           logger.warn(`  ⚠️ ${file} not found in source, skipping`);
         }
       }
-      logger.success(`✅ Bootstrap deployed (${bootstrapCopied}/${bootstrapFiles.length} files)`);
+
+      // Copiar static/logo.svg → bin/bootstrap/static/logo.svg
+      const logoSrc  = path.join(paths.bootstrapSource, 'static', 'logo.svg');
+      const logoDest = path.join(paths.bootstrapStaticDir, 'logo.svg');
+      if (await fs.pathExists(logoSrc)) {
+        await fs.copy(logoSrc, logoDest, { overwrite: true });
+        logger.info(`  ✓ static/logo.svg`);
+        bootstrapCopied++;
+      } else {
+        logger.warn(`  ⚠️ static/logo.svg not found in source, skipping`);
+      }
+
+      logger.success(`✅ Bootstrap deployed (${bootstrapCopied}/${bootstrapFiles.length + 1} files)`);
       results.bootstrap = { success: true, count: bootstrapCopied };
     } else {
       logger.warn('⚠️ Bootstrap source not found, skipping');

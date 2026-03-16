@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import swagger from '@fastify/swagger';
 import swaggerUI from '@fastify/swagger-ui';
+import path from 'path';
 import type { FastifyInstance } from 'fastify';
 import type * as vscode from 'vscode';
 import { WebSocketManager } from '../server/WebSocketManager';
@@ -25,10 +26,10 @@ import { errorHandler } from './middleware/errorHandler';
 import { UserManager } from '../managers/userManager';
 
 export interface BloomApiServerConfig {
-  context: vscode.ExtensionContext;
+  context?: vscode.ExtensionContext;
   wsManager: WebSocketManager;
-  outputChannel: vscode.OutputChannel;
-  userManager: UserManager; // ✅ REQUIRED: Pass as dependency
+  outputChannel?: vscode.OutputChannel;  // optional — not available outside VS Code
+  userManager: UserManager;
   port?: number;
 }
 
@@ -39,27 +40,43 @@ export interface BloomApiServerConfig {
 export async function createAPIServer(config: BloomApiServerConfig): Promise<FastifyInstance> {
   const port = config.port || 48215;
 
+  // When running outside VS Code (standalone bootstrap / NSSM), outputChannel
+  // is not available. Create a no-op mock so all internal code that calls
+  // appendLine() works without changes.
+  const outputChannel: vscode.OutputChannel = config.outputChannel ?? {
+    name: 'Bloom API',
+    appendLine: (value: string) => console.log(`[Bloom API] ${value}`),
+    append: (value: string) => process.stdout.write(`[Bloom API] ${value}`),
+    clear: () => {},
+    show: () => {},
+    hide: () => {},
+    dispose: () => {},
+    replace: () => {},
+  } as unknown as vscode.OutputChannel;
+
+  const resolvedConfig = { ...config, outputChannel };
+
   const fastify = Fastify({
     logger: true
   });
 
   // ✅ Get UserManager from config (passed as dependency)
-  const userManager = config.userManager;
+  const userManager = resolvedConfig.userManager;
 
   // ✅ FIX: Create GitHubOAuthServer instance during server creation
   const githubOAuthServer = new GitHubOAuthServer(
-    config.outputChannel,
+    resolvedConfig.outputChannel,
     userManager,
     port
   );
 
   // Set WebSocketManager reference
-  githubOAuthServer.setWebSocketManager(config.wsManager);
+  githubOAuthServer.setWebSocketManager(resolvedConfig.wsManager);
 
   // Inject dependencies for routes
   fastify.decorate('deps', {
-    ...config,
-    githubOAuthServer // ✅ Now properly initialized
+    ...resolvedConfig,
+    githubOAuthServer
   });
 
   // CORS - Allow VSCode webviews, localhost, and Electron static builds (file:// / null origin)
@@ -124,8 +141,12 @@ export async function createAPIServer(config: BloomApiServerConfig): Promise<Fas
   });
 
   // Swagger UI
+  // baseDir points to the bootstrap/ directory where static/ lives.
+  // Without this, fastify-swagger-ui resolves static/ relative to __dirname
+  // which in the bundle context resolves to bin/ instead of bin/bootstrap/.
   await fastify.register(swaggerUI, {
     routePrefix: '/api/docs',
+    baseDir: path.join(__dirname),
     uiConfig: {
       docExpansion: 'list',
       deepLinking: true,
@@ -202,8 +223,8 @@ export async function startAPIServer(config: BloomApiServerConfig): Promise<Fast
 
   try {
     await server.listen({ port, host: '127.0.0.1' });
-    config.outputChannel.appendLine(`[Bloom API] Server started on http://localhost:${port}`);
-    config.outputChannel.appendLine(`[Bloom API] Swagger UI: http://localhost:${port}/api/docs`);
+    config.outputChannel?.appendLine(`[Bloom API] Server started on http://localhost:${port}`);
+    config.outputChannel?.appendLine(`[Bloom API] Swagger UI: http://localhost:${port}/api/docs`);
     console.log(`✅ Bloom API Server started`);
     console.log(`📚 Swagger UI: http://localhost:${port}/api/docs`);
     return server;
