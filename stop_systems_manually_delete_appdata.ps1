@@ -112,6 +112,70 @@ if ($allChromium) {
 }
 
 # ==============================
+# MATAR bloom-conductor.exe (TODAS LAS INSTANCIAS)
+# ==============================
+Write-Host ""
+Write-Host "Cerrando bloom-conductor..."
+
+$conductorProcesses = Get-CimInstance Win32_Process | Where-Object {
+    $_.Name -eq "bloom-conductor.exe"
+}
+
+if ($conductorProcesses) {
+    foreach ($proc in $conductorProcesses) {
+        Write-Host "Matando bloom-conductor (PID $($proc.ProcessId)) - $($proc.ExecutablePath)"
+        taskkill /F /T /PID $proc.ProcessId 2>$null
+    }
+    Start-Sleep -Seconds 2
+
+    # Verificacion: matar remanentes por ruta exacta
+    $remanentes = Get-CimInstance Win32_Process | Where-Object {
+        $_.ExecutablePath -eq "C:\Users\josev\AppData\Local\BloomNucleus\bin\conductor\bloom-conductor.exe"
+    }
+    foreach ($rem in $remanentes) {
+        Write-Host "Matando remanente bloom-conductor PID $($rem.ProcessId)"
+        Stop-Process -Id $rem.ProcessId -Force -ErrorAction SilentlyContinue
+    }
+} else {
+    Write-Host "No se encontraron instancias de bloom-conductor en ejecucion."
+}
+
+# ==============================
+# MATAR Bloom Nucleus Workspace (TODAS LAS INSTANCIAS)
+# Busca por nombre de proceso conocido y por ruta dentro de BloomNucleus
+# ==============================
+Write-Host ""
+Write-Host "Cerrando Bloom Nucleus Workspace..."
+
+# Intentar por nombres de proceso comunes
+$workspaceNames = @("BloomNucleusWorkspace", "bloom-workspace", "BloomWorkspace")
+foreach ($wName in $workspaceNames) {
+    $found = Get-Process -Name $wName -ErrorAction SilentlyContinue
+    foreach ($proc in $found) {
+        Write-Host "Matando $wName (PID $($proc.Id))"
+        Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# Fallback: cualquier proceso cuya ruta sea dentro de BloomNucleus y no sea conductor ni sensor
+$workspaceProcs = Get-CimInstance Win32_Process | Where-Object {
+    $_.ExecutablePath -and
+    $_.ExecutablePath -like "*BloomNucleus*" -and
+    $_.Name -ne "bloom-conductor.exe" -and
+    $_.Name -ne "bloom-sensor.exe"
+}
+
+if ($workspaceProcs) {
+    foreach ($proc in $workspaceProcs) {
+        Write-Host "Matando proceso BloomNucleus residual: $($proc.Name) (PID $($proc.ProcessId)) - $($proc.ExecutablePath)"
+        taskkill /F /T /PID $proc.ProcessId 2>$null
+    }
+    Start-Sleep -Seconds 2
+} else {
+    Write-Host "No se encontraron instancias de Bloom Nucleus Workspace en ejecucion."
+}
+
+# ==============================
 # BORRAR CARPETAS DE BloomNucleus
 # ==============================
 Write-Host ""
