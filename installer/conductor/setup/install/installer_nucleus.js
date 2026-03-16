@@ -319,6 +319,18 @@ async function deployAllBinaries() {
   await fs.copy(nodeSource, nodeTarget, { overwrite: true });
   log.success('✓ node deployed');
 
+  // ============================================================================
+  // VSCODE (bloom-extension.vsix)
+  // ============================================================================
+  if (!fs.existsSync(paths.vscodeSource)) {
+    log.warn(`⚠️ VS Code source not found: ${paths.vscodeSource} — skipping`);
+  } else {
+    log.info('Copying vscode...');
+    await fs.ensureDir(paths.vscodeDir);
+    await fs.copy(paths.vscodeSource, paths.vscodeDir, { overwrite: true });
+    log.success('✓ vscode deployed');
+  }
+
   log.success('All binaries deployed');
 }
 

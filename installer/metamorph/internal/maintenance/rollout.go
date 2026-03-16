@@ -24,37 +24,111 @@ func init() {
 	core.RegisterCommand("MAINTENANCE", createRolloutCommand)
 }
 
+// validComponents is the canonical list of component names accepted by --only.
+// Keys are lowercase for case-insensitive matching; values are the display names
+// used in log output and JSON responses.
+var validComponents = map[string]string{
+	"brain":     "Brain",
+	"nucleus":   "Nucleus",
+	"sentinel":  "Sentinel",
+	"metamorph": "Metamorph",
+	"conductor": "Conductor",
+	"setup":     "Setup",
+	"host":      "Host",
+	"cortex":    "Cortex",
+	"nssm":      "NSSM",
+	"bootstrap": "Bootstrap",
+	"vsix":      "VSCode",
+	"node":      "Node",
+}
+
+// componentTeardown describes exactly which services and processes must be
+// stopped/killed before deploying a given component. Only entries that actually
+// hold file handles on the component's binaries are listed here.
+//
+// Design notes:
+//   - nssm.exe is the SCM wrapper (parent) for both BloomBrain and
+//     BloomNucleusService. It must be killed BEFORE its children, otherwise
+//     it restarts them mid-copy and re-acquires file handles.
+//   - bloom-host.exe holds a handle on brain/_internal/VCRUNTIME140.dll,
+//     so it appears in the Brain entry even though it is not the service itself.
+//   - Components that are never locked at runtime (cortex, nssm binary, bootstrap,
+//     vsix, node, conductor, setup, metamorph) have no entry — their slices stay
+//     nil and nothing is torn down.
+//   - Metamorph uses rename+replace (copyDirWithSelfUpdate) so no teardown is
+//     needed even for its own binary.
+type componentTeardown struct {
+	services  []string
+	processes []string
+}
+
+var processesForComponent = map[string]componentTeardown{
+	"brain": {
+		services:  []string{"BloomBrain"},
+		// nssm.exe first — it is the parent of BloomBrain and will restart
+		// brain.exe if killed after the child.
+		// bloom-host.exe holds handles on brain/_internal/VCRUNTIME140.dll.
+		processes: []string{"nssm.exe", "brain.exe", "bloom-host.exe"},
+	},
+	"nucleus": {
+		services: []string{"BloomNucleusService"},
+		// nssm.exe first for the same reason as brain.
+		// temporal.exe is a worker spawned by nucleus.exe; /T in taskkill
+		// kills the whole tree, but listing it explicitly is safer.
+		processes: []string{"nssm.exe", "nucleus.exe", "temporal.exe"},
+	},
+	"host": {
+		// bloom-host.exe is not a managed service — killed directly.
+		services:  []string{},
+		processes: []string{"bloom-host.exe"},
+	},
+	"sentinel": {
+		services:  []string{},
+		processes: []string{"bloom-sensor.exe"},
+	},
+	// brain + nucleus together (full rollout path reuses this via nil check)
+	// cortex, nssm, bootstrap, vsix, node, conductor, setup, metamorph:
+	// no runtime lock — no entry needed.
+}
+
 func createRolloutCommand(c *core.Core) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "rollout",
+		Use:   "rollout [--only <component>] [--dry-run]",
 		Short: "Deploy built binaries from repo to AppData",
-		Long: `Copy all managed binaries from the local repository (native/bin/win64/)
+		Long: `Copy managed binaries from the local repository (native/bin/win64/)
 to the BloomNucleus AppData directory, making them available at runtime.
 
-This command resolves the canonical source path automatically based on
-the location of metamorph.exe. It copies each component's full directory,
-preserving subdirectories (help/, win-unpacked/, _internal/, etc.).
+By default ALL components are deployed. Use --only to redeploy a single
+component — useful when retrying a failed component without touching the rest.
 
-Components deployed:
-  Brain, Nucleus, Sentinel, Metamorph, Conductor (+ win-unpacked),
-  Host → host/, Cortex (.blx), Setup, NSSM,
-  Bootstrap (server-bootstrap.js + bundle.js + bundle.js.map),
-  VSCode extension (.vsix),
-  Node (platform-aware: win64 or win32)
+This command resolves the canonical source path automatically from nucleus.json.
+It copies each component's full directory, preserving subdirectories
+(help/, win-unpacked/, _internal/, etc.).
 
-After rollout, 'metamorph inspect' is run automatically to update
+Components available:
+  brain      Brain service binary and dependencies
+  nucleus    Nucleus service binary and dependencies
+  sentinel   Sentinel binary
+  metamorph  Metamorph binary (self-update via rename+replace)
+  conductor  Conductor binary
+  setup      Setup binary
+  host       Host directory (bloom-host.exe + support files)
+  cortex     Cortex engine (.blx single file)
+  nssm       NSSM service wrapper (single .exe, outside platform tree)
+  bootstrap  Bootstrap server bundle (server-bootstrap.js + bundle files)
+  vsix       VSCode extension (.vsix single file)
+  node       Node.js runtime (platform-aware: win64 or win32)
+
+After a full rollout, 'metamorph inspect' is run automatically to update
 %LOCALAPPDATA%\BloomNucleus\config\metamorph.json.
 
-Use --dry-run to preview what would be copied without making changes.
-
-Example:
-  metamorph rollout
-  metamorph rollout --dry-run
-  metamorph --json rollout`,
+Use --dry-run to preview what would be copied without making changes.`,
 		Annotations: map[string]string{
 			"category": "MAINTENANCE",
 			"json_response": `{
   "status": "success",
+  "dry_run": false,
+  "only": "",
   "deployed": [
     {"component": "Brain",     "source": "...", "destination": "...", "files_copied": 12},
     {"component": "Nucleus",   "source": "...", "destination": "...", "files_copied": 4}
@@ -65,9 +139,39 @@ Example:
 		},
 		Example: `  metamorph rollout
   metamorph rollout --dry-run
-  metamorph --json rollout`,
+  metamorph rollout --only brain
+  metamorph rollout --only nucleus
+  metamorph rollout --only sentinel
+  metamorph rollout --only metamorph
+  metamorph rollout --only conductor
+  metamorph rollout --only setup
+  metamorph rollout --only host
+  metamorph rollout --only cortex
+  metamorph rollout --only nssm
+  metamorph rollout --only bootstrap
+  metamorph rollout --only vsix
+  metamorph rollout --only node
+  metamorph rollout --only brain --dry-run
+  metamorph --json rollout --only nucleus`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dryRun, _ := cmd.Flags().GetBool("dry-run")
+			only, _ := cmd.Flags().GetString("only")
+
+			// Validate --only value if provided.
+			if only != "" {
+				normalized := strings.ToLower(strings.TrimSpace(only))
+				if _, ok := validComponents[normalized]; !ok {
+					names := make([]string, 0, len(validComponents))
+					for k := range validComponents {
+						names = append(names, k)
+					}
+					return fmt.Errorf(
+						"unknown component %q — valid values: %s",
+						only, strings.Join(names, ", "),
+					)
+				}
+				only = normalized
+			}
 
 			// Rollout requires administrator privileges to stop/start services.
 			if !dryRun {
@@ -76,11 +180,12 @@ Example:
 				}
 			}
 
-			return runRollout(c, dryRun)
+			return runRollout(c, dryRun, only)
 		},
 	}
 
 	cmd.Flags().Bool("dry-run", false, "Preview what would be copied without making changes")
+	cmd.Flags().String("only", "", "Deploy a single component instead of all (brain, nucleus, sentinel, metamorph, conductor, setup, host, cortex, nssm, bootstrap, vsix, node)")
 	return cmd
 }
 
@@ -118,9 +223,18 @@ type rolloutResult struct {
 	FilesCopied int    `json:"files_copied"`
 }
 
-// runRollout resolves paths and deploys all components.
-func runRollout(c *core.Core, dryRun bool) error {
-	c.Logger.Info("rollout started — dry_run=%v", dryRun)
+// shouldDeploy returns true when the component should be included in this run.
+// If only is empty all components are included; otherwise only the matching one.
+func shouldDeploy(componentName, only string) bool {
+	if only == "" {
+		return true
+	}
+	return strings.EqualFold(componentName, validComponents[only])
+}
+
+// runRollout resolves paths and deploys all components (or the one named by only).
+func runRollout(c *core.Core, dryRun bool, only string) error {
+	c.Logger.Info("rollout started — dry_run=%v only=%q", dryRun, only)
 
 	origin, err := resolveOriginFromNucleusJSON()
 	if err != nil {
@@ -153,7 +267,11 @@ func runRollout(c *core.Core, dryRun bool) error {
 	nodeSrc := filepath.Join(installerRoot, "node", origin.Platform, "node.exe")
 
 	if !c.Config.OutputJSON {
-		fmt.Printf("  Origin: %s (%s / %s)\n\n", origin.Path, origin.Type, origin.Platform)
+		fmt.Printf("  Origin: %s (%s / %s)\n", origin.Path, origin.Type, origin.Platform)
+		if only != "" {
+			fmt.Printf("  Target: %s (--only)\n", validComponents[only])
+		}
+		fmt.Println()
 	}
 
 	if dryRun {
@@ -165,24 +283,46 @@ func runRollout(c *core.Core, dryRun bool) error {
 	var skipped []string
 	var errors []string
 
-	// Stop managed services before deploying to avoid "Access is denied" on locked files.
-	managedServices := []string{"BloomBrain", "BloomNucleusService"}
-	// allProcessesToKill are killed unconditionally before copying.
-	// Order matters: nssm.exe must die first — it is the parent process of both
-	// BloomBrain and BloomNucleusService. If killed after its children, NSSM may
-	// restart them before we copy, and keeps its own file handle on nssm.exe itself.
-	// bloom-host.exe holds handles on brain/_internal/VCRUNTIME140.dll.
-	// nucleus.exe spawns worker children; /T in taskkill kills the whole tree.
-	allProcessesToKill := []string{
-		"nssm.exe",      // first — parent of brain and nucleus, holds handle on nssm.exe
-		"brain.exe",
-		"nucleus.exe",
-		"temporal.exe",
-		"bloom-host.exe",
-		"bloom-sensor.exe",
+	// Determine which services and processes must be torn down before copying.
+	//
+	// Full rollout (only == ""): stop everything — we are touching all binaries
+	// so every service and process that could hold a file handle must be down.
+	//
+	// Targeted rollout (only != ""): consult processesForComponent and tear down
+	// only what actually blocks the requested component's files. Services and
+	// processes unrelated to the target keep running without interruption.
+	var managedServices []string
+	var allProcessesToKill []string
+
+	if only == "" {
+		// Full rollout: bring down the entire managed stack.
+		managedServices = []string{"BloomBrain", "BloomNucleusService"}
+		// Order matters: nssm.exe must die first — it is the SCM parent of both
+		// BloomBrain and BloomNucleusService. Killing children first lets NSSM
+		// restart them before we copy and re-acquire file handles.
+		// bloom-host.exe holds handles on brain/_internal/VCRUNTIME140.dll.
+		// nucleus.exe spawns worker children; /T in taskkill kills the whole tree.
+		allProcessesToKill = []string{
+			"nssm.exe",
+			"brain.exe",
+			"nucleus.exe",
+			"temporal.exe",
+			"bloom-host.exe",
+			"bloom-sensor.exe",
+		}
+	} else {
+		// Targeted rollout: only tear down what blocks this specific component.
+		if mapping, ok := processesForComponent[only]; ok {
+			managedServices = mapping.services
+			allProcessesToKill = mapping.processes
+		}
+		// Components with no entry (cortex, nssm, bootstrap, vsix, node,
+		// conductor, setup, metamorph) have no runtime lock — both slices
+		// stay nil and the teardown block below becomes a no-op.
 	}
 	if !dryRun {
-		if !c.Config.OutputJSON {
+		hasTeardown := len(managedServices) > 0 || len(allProcessesToKill) > 0
+		if hasTeardown && !c.Config.OutputJSON {
 			fmt.Println("  Stopping services and killing processes...")
 		}
 		// Step 1: stop services via SCM.
@@ -222,6 +362,10 @@ func runRollout(c *core.Core, dryRun bool) error {
 
 	// Deploy standard per-platform components
 	for _, entry := range getRolloutEntries() {
+		if !shouldDeploy(entry.component, only) {
+			continue
+		}
+
 		src := filepath.Join(nativeBinBase, entry.src)
 		dst := filepath.Join(appDataBin, entry.dst)
 
@@ -270,7 +414,7 @@ func runRollout(c *core.Core, dryRun bool) error {
 	}
 
 	// Deploy Cortex (.blx single file)
-	{
+	if shouldDeploy("Cortex", only) {
 		dst := filepath.Join(appDataBin, "cortex", "bloom-cortex.blx")
 		if _, err := os.Stat(cortexSrc); os.IsNotExist(err) {
 			skipped = append(skipped, "Cortex (source not found: "+cortexSrc+")")
@@ -306,7 +450,7 @@ func runRollout(c *core.Core, dryRun bool) error {
 	}
 
 	// Deploy NSSM (single file, outside the platform bin tree)
-	{
+	if shouldDeploy("NSSM", only) {
 		dst := filepath.Join(appDataBin, "nssm", "nssm.exe")
 		if _, err := os.Stat(nssmSrc); os.IsNotExist(err) {
 			skipped = append(skipped, "NSSM (source not found: "+nssmSrc+")")
@@ -342,7 +486,7 @@ func runRollout(c *core.Core, dryRun bool) error {
 	}
 
 	// Deploy Bootstrap (full directory)
-	{
+	if shouldDeploy("Bootstrap", only) {
 		dst := filepath.Join(appDataBin, "bootstrap")
 		if _, err := os.Stat(bootstrapSrcDir); os.IsNotExist(err) {
 			skipped = append(skipped, "Bootstrap (source not found: "+bootstrapSrcDir+")")
@@ -378,7 +522,7 @@ func runRollout(c *core.Core, dryRun bool) error {
 	}
 
 	// Deploy VSCode extension (single .vsix file)
-	{
+	if shouldDeploy("VSCode", only) {
 		dst := filepath.Join(appDataBin, "vscode", "bloom-extension.vsix")
 		if _, err := os.Stat(vscodeSrc); os.IsNotExist(err) {
 			skipped = append(skipped, "VSCode (source not found: "+vscodeSrc+")")
@@ -414,7 +558,7 @@ func runRollout(c *core.Core, dryRun bool) error {
 	}
 
 	// Deploy Node (platform-aware)
-	{
+	if shouldDeploy("Node", only) {
 		dst := filepath.Join(appDataBin, "node", "node.exe")
 		if _, err := os.Stat(nodeSrc); os.IsNotExist(err) {
 			skipped = append(skipped, fmt.Sprintf("Node (source not found: %s)", nodeSrc))
@@ -494,12 +638,14 @@ func runRollout(c *core.Core, dryRun bool) error {
 		status = "failed"
 	}
 
-	c.Logger.Info("rollout complete — status=%s deployed=%d skipped=%d errors=%d dry_run=%v", status, len(deployed), len(skipped), len(errors), dryRun)
+	c.Logger.Info("rollout complete — status=%s deployed=%d skipped=%d errors=%d dry_run=%v only=%q",
+		status, len(deployed), len(skipped), len(errors), dryRun, only)
 
 	if c.Config.OutputJSON {
 		c.OutputJSON(map[string]interface{}{
 			"status":   status,
 			"dry_run":  dryRun,
+			"only":     only,
 			"deployed": deployed,
 			"skipped":  skipped,
 			"errors":   errors,

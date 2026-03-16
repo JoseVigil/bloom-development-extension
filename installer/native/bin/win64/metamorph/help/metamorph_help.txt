@@ -256,19 +256,40 @@
   > ROLLOUT
     Deploy built binaries from repo to AppData
 
-    Usage: metamorph rollout
+    Usage: metamorph rollout [--only <component>] [--dry-run]
+
+    Arguments:
+      [--only               required
+      <component>]          required
+      --dry-run             optional
 
     Flags:
       --dry-run                  Preview what would be copied without making changes
+      --only                     Deploy a single component instead of all (brain, nucleus, sentinel, metamorph, conductor, setup, host, cortex, nssm, bootstrap, vsix, node)
 
     Example:
         metamorph rollout
         metamorph rollout --dry-run
-        metamorph --json rollout
+        metamorph rollout --only brain
+        metamorph rollout --only nucleus
+        metamorph rollout --only sentinel
+        metamorph rollout --only metamorph
+        metamorph rollout --only conductor
+        metamorph rollout --only setup
+        metamorph rollout --only host
+        metamorph rollout --only cortex
+        metamorph rollout --only nssm
+        metamorph rollout --only bootstrap
+        metamorph rollout --only vsix
+        metamorph rollout --only node
+        metamorph rollout --only brain --dry-run
+        metamorph --json rollout --only nucleus
 
     JSON Response:
       {
         "status": "success",
+        "dry_run": false,
+        "only": "",
         "deployed": [
           {"component": "Brain",     "source": "...", "destination": "...", "files_copied": 12},
           {"component": "Nucleus",   "source": "...", "destination": "...", "files_copied": 4}

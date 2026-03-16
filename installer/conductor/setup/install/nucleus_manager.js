@@ -284,6 +284,19 @@ const EMPTY_NUCLEUS = {
         result: null
       },
       error: null
+    },
+
+    vscode_extension: {
+      status: 'pending',
+      started_at: null,
+      completed_at: null,
+      verification: {
+        method: 'file_exists',
+        targets: ['bin/vscode'],
+        result: null
+      },
+      error: null,
+      non_critical: true  // No bloquea la instalación si falla
     }
   }
 };
@@ -585,6 +598,7 @@ class NucleusManager {
       'brain_service_install',     // 6/10
       'nucleus_service_install',   // 6/10 - Arranca Temporal
       'sensor_install',            // 7/10 - Session agent (non-critical)
+      'vscode_extension',          // 7.5/10 - VS Code extension (non-critical)
       'certification',             // 8/10 - Verifica Temporal ready
       'nucleus_seed',              // 9/10 - Usa Temporal
       'nucleus_launch',            // 10/10 - Heartbeat final

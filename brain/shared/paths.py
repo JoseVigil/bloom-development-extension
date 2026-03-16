@@ -214,6 +214,22 @@ class Paths:
     def _resolve_base_directory(self) -> Path:
         is_frozen = getattr(sys, 'frozen', False)
 
+        if is_frozen:
+            exe_path = Path(sys.executable).resolve()
+            # Estructura: BloomNucleus/bin/brain/brain.exe
+            # brain.exe → brain/ → bin/ → BloomNucleus/
+            base = exe_path.parent.parent.parent
+
+            logger.info(f"🔍 [PATHS] Modo Frozen detectado")
+            logger.info(f"🔍 [PATHS] Ejecutable: {exe_path}")
+            logger.info(f"🔍 [PATHS] BASE CALCULADA: {base}")
+
+            for dirname in ['bin', 'config', 'profiles', 'workers', 'logs']:
+                (base / dirname).mkdir(parents=True, exist_ok=True)
+
+            return base
+
+        # Modo desarrollo
         system = platform.system()
         if system == "Windows":
             localappdata = os.environ.get("LOCALAPPDATA")
@@ -232,14 +248,6 @@ class Paths:
                 else Path.home() / ".local" / "share" / "BloomNucleus"
             )
 
-        if is_frozen:
-            logger.info(f"🔍 [PATHS] Modo Frozen detectado")
-            logger.info(f"🔍 [PATHS] Ejecutable: {Path(sys.executable).resolve()}")
-            logger.info(f"🔍 [PATHS] BASE (AppData): {base}")
-        else:
-            logger.info(f"🔧 [PATHS] Modo Desarrollo: {base}")
-
-        for dirname in ['bin', 'config', 'profiles', 'workers', 'logs']:
-            (base / dirname).mkdir(parents=True, exist_ok=True)
-
+        logger.info(f"🔧 [PATHS] Modo Desarrollo: {base}")
+        base.mkdir(parents=True, exist_ok=True)
         return base

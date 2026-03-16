@@ -152,31 +152,40 @@ func HandleSeed(c *core.Core, alias string, isMaster bool) (string, string, erro
 	c.Logger.Info("[SEED] Cortex version: %s (build: %s)", metadata.Version, metadata.BuildDate)
 
 	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-	// 🔧 NUEVO: Desempaquetar .blx a bin/extension ANTES de llamar a brain
+	// 🔧 Desempaquetar .blx a bin/extension (directorio TEMPORAL)
+	// Se borra automáticamente al terminar, sin importar si hay error.
 	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 	baseExtensionDir := filepath.Join(bloomBaseDir, "bin", "extension")
-	
-	c.Logger.Info("[SEED] Deploying base extension to: %s", baseExtensionDir)
-	
-	// Limpiar directorio si existe
+
+	c.Logger.Info("[SEED] Deploying base extension to (temp): %s", baseExtensionDir)
+
+	// Limpiar si ya existía de una ejecución anterior fallida
 	if _, err := os.Stat(baseExtensionDir); err == nil {
-		c.Logger.Info("[SEED] Removing existing base extension directory")
+		c.Logger.Info("[SEED] Removing stale base extension directory")
 		if err := os.RemoveAll(baseExtensionDir); err != nil {
-			return "", "", fmt.Errorf("failed to remove existing extension: %v", err)
+			return "", "", fmt.Errorf("failed to remove stale extension dir: %v", err)
 		}
 	}
-	
-	// Crear directorio
+
+	// Crear directorio temporal
 	if err := os.MkdirAll(baseExtensionDir, 0755); err != nil {
 		return "", "", fmt.Errorf("failed to create base extension dir: %v", err)
 	}
-	
+
+	// Garantizar limpieza al salir de HandleSeed, con o sin error
+	defer func() {
+		c.Logger.Info("[SEED] Cleaning up temp extension dir: %s", baseExtensionDir)
+		if removeErr := os.RemoveAll(baseExtensionDir); removeErr != nil {
+			c.Logger.Error("[SEED] Failed to remove temp extension dir: %v", removeErr)
+		}
+	}()
+
 	// Desempaquetar cortex a bin/extension
 	if err := deployCortexPackage(blxPath, baseExtensionDir, c); err != nil {
 		return "", "", fmt.Errorf("failed to deploy base extension: %v", err)
 	}
-	
-	c.Logger.Info("[SEED] ✓ Base extension deployed to bin/extension")
+
+	c.Logger.Info("[SEED] ✓ Base extension deployed (temp)")
 
 	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 	// 3️⃣ CREACIÓN DEL PERFIL (ahora brain puede copiar desde bin/extension)
