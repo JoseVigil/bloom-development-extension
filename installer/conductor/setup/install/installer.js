@@ -582,8 +582,8 @@ async function deployAllSystemBinaries(win) {
     // ========================================================================
     logger.info('\n🧩 VSCODE PLUGIN');
 
-    const vsixSrc = paths.vscodeSource; // installer/vscode/bloom-extension.vsix
-    const vsixDest = path.join(paths.vscodeDir, 'bloom-extension.vsix');
+    const vsixSrc  = path.join(paths.vscodeSource, 'bloom-extension.vsix'); // native/bin/vscode/bloom-extension.vsix
+    const vsixDest = path.join(paths.vscodeDir,    'bloom-extension.vsix'); // appdata/bin/vscode/bloom-extension.vsix
 
     if (await fs.pathExists(vsixSrc)) {
       results.vscode = await copyFileSafe(vsixSrc, vsixDest, 'bloom-extension.vsix');
