@@ -415,43 +415,25 @@ func checkTemporal(ctx context.Context, s *Supervisor, validate bool) ComponentH
 func checkWorker(ctx context.Context, s *Supervisor, validate bool) ComponentHealth {
 	health := ComponentHealth{TaskQueue: "profile-orchestration"}
 
-	// Resolver ruta absoluta de temporal — no depender del PATH del sistema
-	temporalBin := filepath.Join(s.binDir, "temporal", "temporal.exe")
-	if _, err := os.Stat(temporalBin); err != nil {
-		if p, lookErr := exec.LookPath("temporal"); lookErr == nil {
-			temporalBin = p
-		} else {
-			health.Healthy = false
-			health.State = "FAILED"
-			health.Error = fmt.Sprintf("temporal binary not found at %s or in PATH", temporalBin)
-			return health
-		}
-	}
-
 	s.mu.RLock()
 	proc, exists := s.processes["nucleus_worker"]
 	s.mu.RUnlock()
 
 	if !exists || proc.State != StateReady {
-		tqCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-		defer cancel()
-		out, err := exec.CommandContext(tqCtx, temporalBin, "task-queue", "describe",
-			"--task-queue", "profile-orchestration",
-			"-o", "json").CombinedOutput()
-		if err == nil && len(out) > 0 {
-			var tqResult struct {
-				Pollers []struct {
-					Identity string `json:"identity"`
-				} `json:"pollers"`
+		pollers, _, err := getTaskQueuePollers(ctx, s.binDir)
+		if err != nil {
+			health.Healthy = false
+			health.State = "FAILED"
+			health.Error = err.Error()
+			return health
+		}
+		if len(pollers) > 0 {
+			health.Healthy = true
+			health.State = "CONNECTED"
+			if !exists {
+				health.Error = "worker active via Temporal (not tracked by this supervisor instance)"
 			}
-			if jsonErr := json.Unmarshal(out, &tqResult); jsonErr == nil && len(tqResult.Pollers) > 0 {
-				health.Healthy = true
-				health.State = "CONNECTED"
-				if !exists {
-					health.Error = "worker active via Temporal (not tracked by this supervisor instance)"
-				}
-				return health
-			}
+			return health
 		}
 		health.Healthy = false
 		health.State = "DISCONNECTED"
@@ -467,12 +449,13 @@ func checkWorker(ctx context.Context, s *Supervisor, validate bool) ComponentHea
 	health.State = "CONNECTED"
 	health.PID = proc.PID
 	if validate {
-		out, err := exec.CommandContext(ctx, temporalBin, "task-queue", "describe",
-			"--task-queue", "profile-orchestration",
-			"-o", "json").CombinedOutput()
+		pollers, _, err := getTaskQueuePollers(ctx, s.binDir)
 		if err != nil {
 			health.State = "DEGRADED"
-			health.Error = fmt.Sprintf("Task queue check failed: %v — %s", err, string(out))
+			health.Error = fmt.Sprintf("Task queue check failed: %v", err)
+		} else if len(pollers) == 0 {
+			health.State = "DEGRADED"
+			health.Error = "process running but no active pollers found in profile-orchestration"
 		}
 	}
 	return health

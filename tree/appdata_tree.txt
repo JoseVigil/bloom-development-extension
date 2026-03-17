@@ -6,6 +6,8 @@ BloomNucleus/
 │   │   ├── bundle.js
 │   │   ├── bundle.js.map
 │   │   ├── server-bootstrap.js
+│   │   ├── static/
+│   │   │   └── logo.svg
 │   │   └── version-bootstrap.py
 │   ├── brain/
 │   │   ├── _internal/ [... dependencies]
@@ -187,7 +189,9 @@ BloomNucleus/
 │   │   │   ├── brain_server_event_bus_20260316.log
 │   │   │   └── brain_server_manager_20260316.log
 │   │   └── service/
-│   │       └── brain_service.log
+│   │       ├── brain_service.log
+│   │       └── brain_service_20260316.log
+│   ├── build/ [... build output]
 │   ├── chromium/
 │   ├── conductor/
 │   │   └── setup/
@@ -202,8 +206,11 @@ BloomNucleus/
 │   │               └── nm_init_diag_001_8b8ec0f1_094212.log
 │   ├── metamorph/
 │   │   ├── metamorph_core_20260316.log
-│   │   └── metamorph_inspection_20260316.log
+│   │   ├── metamorph_inspection_20260316.log
+│   │   └── metamorph_operations_20260316.log
 │   ├── nucleus/
+│   │   ├── control_plane/
+│   │   │   └── nucleus_control_plane_20260316.log
 │   │   ├── nucleus_orchestration_20260316.log
 │   │   ├── nucleus_synapse_20260316.log
 │   │   ├── nucleus_temporal_20260316.log
@@ -212,6 +219,7 @@ BloomNucleus/
 │   │   ├── telemetry/
 │   │   │   └── nucleus_telemetry_20260316.log
 │   │   └── worker/
+│   │       ├── nucleus_workers_snapshot_20260316.log
 │   │       └── worker_manager_20260316.log
 │   ├── sensor/
 │   │   └── sensor_20260316.log
@@ -507,8 +515,8 @@ BloomNucleus/
 │   ├── downloads/
 │   ├── snapshots/
 │   └── temp/
+├── users/
 └── workers/
     └── brain/
         ├── events.jsonl
-        ├── service.pid
-        └── tcp_traffic.log
+        └── service.pid

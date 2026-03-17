@@ -2,11 +2,13 @@ package temporal
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
@@ -90,6 +92,48 @@ func (wm *WorkerManager) StartAll(ctx context.Context) error {
 func (wm *WorkerManager) StopAll() {
 	for _, w := range wm.workers {
 		w.Stop()
+	}
+}
+
+
+// ───────────────────────────────────────────────────────────────────────────
+// WORKER CAPABILITIES — registry file written on startup
+// ───────────────────────────────────────────────────────────────────────────
+
+// WorkerCapabilities describe exactamente qué workflows y activities maneja
+// este worker. Se escribe en config/worker_capabilities.json al arrancar
+// y es leído por `nucleus workers list` para enriquecer el panel.
+type WorkerCapabilities struct {
+	PID          int      `json:"pid"`
+	RegisteredAt string   `json:"registered_at"`
+	TaskQueue    string   `json:"task_queue"`
+	Workflows    []string `json:"workflows"`
+	Activities   []string `json:"activities"`
+}
+
+// writeWorkerCapabilities escribe el registry de capabilities en disco.
+// Path: <appDataDir>/config/worker_capabilities.json
+// Sobreescribe en cada arranque — siempre refleja el worker activo.
+// Error es no-fatal: el worker arranca igual aunque falle la escritura.
+func writeWorkerCapabilities(configDir string, taskQueue string, workflows, activities []string) {
+	caps := WorkerCapabilities{
+		PID:          os.Getpid(),
+		RegisteredAt: time.Now().UTC().Format(time.RFC3339),
+		TaskQueue:    taskQueue,
+		Workflows:    workflows,
+		Activities:   activities,
+	}
+
+	data, err := json.MarshalIndent(caps, "", "  ")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[worker] WARNING: failed to marshal capabilities: %v\n", err)
+		return
+	}
+
+	path := filepath.Join(configDir, fmt.Sprintf("capabilities_%d.json", caps.PID))
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		fmt.Fprintf(os.Stderr, "[worker] WARNING: failed to write capabilities_%d.json: %v\n", caps.PID, err)
+		return
 	}
 }
 
@@ -206,6 +250,32 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 			}
 
 			logger.Success("✅ Worker iniciado exitosamente")
+
+			// Escribir capabilities registry — leído por `nucleus workers list`
+			historyWorkersDir := filepath.Join(filepath.Dir(c.Paths.LogsDir), "history", "workers")
+			if err := os.MkdirAll(historyWorkersDir, 0755); err != nil {
+				logger.Warning("⚠️  Failed to create history/workers dir: %v", err)
+			}
+			writeWorkerCapabilities(historyWorkersDir, taskQueue,
+				[]string{
+					"ProfileLifecycleWorkflow",
+					"RecoveryFlowWorkflow",
+					"StartOllamaWorkflow",
+					"VaultStatusWorkflow",
+					"ShutdownAllWorkflow",
+					"SeedWorkflow",
+					"OnboardingWorkflow",
+				},
+				[]string{
+					"sentinel.LaunchSentinel",
+					"sentinel.StopSentinel",
+					"sentinel.StartOllama",
+					"sentinel.SeedProfile",
+					"sentinel.SendOnboardingNavigate",
+					"RunPostLaunchHooksActivity",
+				},
+			)
+
 			logger.Info("Escuchando en task queue: %s", taskQueue)
 			logger.Info("Presione Ctrl+C para detener")
 
