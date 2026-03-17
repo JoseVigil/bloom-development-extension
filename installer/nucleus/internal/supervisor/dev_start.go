@@ -301,6 +301,29 @@ func executeBootSequence(ctx context.Context, s *Supervisor, simulation, skipVau
 		log("[INFO] ✓ Control Plane skipped (pre-onboarding mode)")
 	}
 
+	// ========================================================================
+	// Phase 7: Svelte Dev Server (NON-BLOCKING — non-critical)
+	// ========================================================================
+	log("[INFO] Starting Svelte Dev Server...")
+
+	svelteProc, svelteErr := s.startSvelteDev(ctx)
+	if svelteErr != nil {
+		// Non-critical: warn but don't abort boot
+		log("[WARN] ⚠️  Svelte dev server failed to start (non-critical): %v", svelteErr)
+		log("[INFO] UI can be started manually later via: npm run dev")
+	} else if svelteProc.Cmd == nil {
+		// Proceso externo ya estaba corriendo
+		log("[INFO] ✓ Svelte dev server already running (port 5173)")
+	} else {
+		// Proceso recién spawnado — esperar a que esté listo (hasta 30s, Vite necesita compilar)
+		log("[INFO] Waiting for Svelte dev server to be ready on port 5173...")
+		if err := s.waitForSvelteReady(30 * time.Second); err != nil {
+			log("[WARN] ⚠️  Svelte dev server started (PID %d) but port 5173 not ready after 30s: %v", svelteProc.PID, err)
+		} else {
+			log("[INFO] ✓ Svelte dev server ready: PID %d (port 5173)", svelteProc.PID)
+		}
+	}
+
 	// Calculate boot time
 	result.BootTime = time.Since(startTime).Seconds()
 

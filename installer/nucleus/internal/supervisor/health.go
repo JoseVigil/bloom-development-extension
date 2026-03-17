@@ -363,14 +363,88 @@ func applyFixes(result *HealthResult) {
 		if exeErr != nil {
 			worker.FixResult = fmt.Sprintf("FAILED: nucleus not found: %v", exeErr)
 		} else {
-			out, err := exec.CommandContext(ctx, nucleusExe, "worker", "start").CombinedOutput()
-			if err != nil {
-				worker.FixResult = fmt.Sprintf("FAILED: %v — %s", err, string(out))
+			// Spawn nucleus worker start detached — must outlive this process.
+			// Using exec.Command without context so the child is not killed
+			// when the health check context expires.
+			cmd := exec.Command(nucleusExe, "worker", "start")
+			cmd.Stdout = nil
+			cmd.Stderr = nil
+			setSvelteProcAttr(cmd) // detach from our process group
+			if err := cmd.Start(); err != nil {
+				worker.FixResult = fmt.Sprintf("FAILED: %v", err)
 			} else {
-				worker.FixResult = "SUCCESS: nucleus worker start executed"
+				go cmd.Wait() //nolint:errcheck
+				// Verify worker connected to Temporal task-queue (up to 10s)
+				binDir := filepath.Dir(filepath.Dir(nucleusExe))
+				temporalBin := filepath.Join(binDir, "temporal", "temporal.exe")
+				if _, statErr := os.Stat(temporalBin); statErr != nil {
+					if p, lookErr := exec.LookPath("temporal"); lookErr == nil {
+						temporalBin = p
+					}
+				}
+				connected := false
+				deadline := time.Now().Add(10 * time.Second)
+				for time.Now().Before(deadline) {
+					out, err := exec.CommandContext(ctx, temporalBin,
+						"task-queue", "describe",
+						"--task-queue", "profile-orchestration",
+						"-o", "json").CombinedOutput()
+					if err == nil {
+						var tq struct {
+							Pollers []struct{ Identity string `json:"identity"` } `json:"pollers"`
+						}
+						if json.Unmarshal(out, &tq) == nil && len(tq.Pollers) > 0 {
+							connected = true
+							break
+						}
+					}
+					time.Sleep(1 * time.Second)
+				}
+				if connected {
+					worker.FixResult = fmt.Sprintf("SUCCESS: worker started (PID %d) and connected to profile-orchestration", cmd.Process.Pid)
+					worker.Healthy = true
+					worker.State = "CONNECTED"
+					worker.Error = ""
+				} else {
+					worker.FixResult = fmt.Sprintf("PARTIAL: worker started (PID %d) but not yet confirmed in task-queue", cmd.Process.Pid)
+				}
 			}
 		}
 		result.Components["worker"] = worker
+	}
+
+	// Fix control_plane: relaunch bootstrap via nucleus service restart-bootstrap
+	if cp, ok := result.Components["control_plane"]; ok && !cp.Healthy {
+		cp.FixAttempted = true
+		nucleusExe, exeErr := getNucleusExecutablePath()
+		if exeErr != nil {
+			cp.FixResult = fmt.Sprintf("FAILED: nucleus not found: %v", exeErr)
+		} else {
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			out, err := exec.CommandContext(ctx, nucleusExe, "--json", "service", "restart-bootstrap").CombinedOutput()
+			if err != nil {
+				cp.FixResult = fmt.Sprintf("FAILED: %v — %s", err, string(out))
+			} else {
+				// Parse JSON response from restart-bootstrap
+				var restartResult struct {
+					Success bool   `json:"success"`
+					PID     int    `json:"pid"`
+					Error   string `json:"error"`
+				}
+				if jsonErr := json.Unmarshal(out, &restartResult); jsonErr == nil && restartResult.Success {
+					cp.FixResult = fmt.Sprintf("SUCCESS: Control Plane restarted (PID %d) on port 48215", restartResult.PID)
+					cp.Healthy = true
+					cp.State = "RUNNING"
+					cp.Error = ""
+				} else if jsonErr == nil && !restartResult.Success {
+					cp.FixResult = fmt.Sprintf("FAILED: %s", restartResult.Error)
+				} else {
+					cp.FixResult = fmt.Sprintf("FAILED: unexpected response: %s", string(out))
+				}
+			}
+		}
+		result.Components["control_plane"] = cp
 	}
 
 	if ollama, ok := result.Components["ollama"]; ok && !ollama.Healthy {
@@ -460,8 +534,8 @@ func fixSvelteDev() error {
 	// Detach — we don't own this process after this point
 	go cmd.Wait() //nolint:errcheck
 
-	// Wait until port 5173 is accepting connections (up to 30s — Vite needs time to compile)
-	if err := waitForPortOpen("127.0.0.1:5173", 30*time.Second); err != nil {
+	// Usar "localhost" en lugar de "127.0.0.1" — Vite en Windows escucha en IPv6.
+	if err := waitForPortOpen("localhost:5173", 30*time.Second); err != nil {
 		return fmt.Errorf("npm run dev started (PID %d) but port 5173 not ready after 30s: %v", cmd.Process.Pid, err)
 	}
 
@@ -803,7 +877,9 @@ func checkBloomAPI(ctx context.Context, s *Supervisor, validate bool) ComponentH
 func checkSvelteDev(ctx context.Context, s *Supervisor, validate bool) ComponentHealth {
 	health := ComponentHealth{Port: 5173}
 	start := time.Now()
-	conn, err := net.DialTimeout("tcp", "127.0.0.1:5173", 2*time.Second)
+	// Vite en Windows escucha en IPv6 ([::1]:5173), no en IPv4 (127.0.0.1:5173).
+	// Usar "localhost" permite que el resolver del SO elija la familia correcta.
+	conn, err := net.DialTimeout("tcp", "localhost:5173", 2*time.Second)
 	health.LatencyMs = time.Since(start).Milliseconds()
 	if err != nil {
 		health.Healthy = false

@@ -1,0 +1,8 @@
+Tengo un proyecto de envio de sms legacy con tecnologia un poco mas vieja pero funcionan los workers y por dia envia unos 20 mil sms con un synway de 32 canales, no puede ser actualizado por que es monolitico y esta freezado en su desarrollo pero cumple, levanta campañas de un excel y con un panel que muestra datos reales a mi cliente (aka cliente 1) le sirve por que manda mensajes de cobranzas. He instalado asterisk para comenzar a intercalar llamadas con envios de sms y ese proyecto esta standby, estan los tres servidores frontend, backend y call con asterisk en proxmox listos para dar un paso mas en automatizacion y la posibilidad de obtener mas resultados de la infraestructura. Este proyecto esta brevemente descripto en Proyecto_Natimation_SMS.cmd.    
+
+Por otro lado un nuevo cliente (aka cliente 2) me solicita un requerimiento de automatizacion para call center descripto en Sistema de automatización de llamadas salientes con inteligencia artificial para un call center a gran escala.md. Asimismo tambien le gustaria que sus mas de 30 synways no solo hagan llamadas sino tambien sms para poder aprovechar el lucro cesante. 
+
+Lo que comparten ambos proyectos es la optimizacion en el envio de sms y la posibilidad de proyectar un sistema que pueda permitir el envio de sms no filtrados por distintas estrategias. Para eso te adjunto un documento adjunto tambien Optimizando Tu Plan para Máxima Eficacia en Cobranza.md que lo que estimula es el desarrollo de tecnologia disruptiva para el sector. 
+
+Tengo muchas inquietudes. Para empezar como pensar en una solucion que integre el legacy solo el core de envio y una nueva arquitectura que contemple los nuevos requerimientos + una plan de eficiencia de envio. 
+

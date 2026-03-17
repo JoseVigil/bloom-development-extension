@@ -99,6 +99,55 @@ async function updateTelemetry(streamId, data) {
 }
 
 // ============================================
+// SVELTE DEV SERVER
+// ============================================
+
+function startSvelteDevServer() {
+  const { spawn } = require('child_process');
+
+  // La UI vive en <repoRoot>/webview/app.
+  // BLOOM_NUCLEUS_PATH apunta a <repoRoot>/.bloom — subiendo un nivel llegamos a repoRoot.
+  // Fallback: BLOOM_DIR si está seteado directamente.
+  const bloomNucleusPath = process.env.BLOOM_NUCLEUS_PATH || '';
+  const bloomDir = process.env.BLOOM_DIR || '';
+
+  let repoRoot = '';
+  if (bloomDir) {
+    repoRoot = bloomDir;
+  } else if (bloomNucleusPath) {
+    repoRoot = path.dirname(bloomNucleusPath);
+  }
+
+  if (!repoRoot) {
+    console.warn('[Bootstrap] ⚠️  Cannot locate repo root for Svelte dev server (BLOOM_DIR and BLOOM_NUCLEUS_PATH not set)');
+    return null;
+  }
+
+  const svelteDir = path.join(repoRoot, 'webview', 'app');
+
+  if (!fs.existsSync(path.join(svelteDir, 'vite.config.ts'))) {
+    console.warn(`[Bootstrap] ⚠️  Svelte dev dir not found at ${svelteDir} — skipping`);
+    return null;
+  }
+
+  // npm.cmd en Windows, npm en Unix
+  const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+
+  const child = spawn(npmCmd, ['run', 'dev'], {
+    cwd: svelteDir,
+    detached: true,   // sobrevive si el padre termina
+    stdio: 'ignore',  // no heredar stdin/stdout del bootstrap
+  });
+
+  child.unref(); // el event loop del padre no espera a este hijo
+
+  console.log(`[Bootstrap] ✅ Svelte dev server starting: PID ${child.pid} (port 5173)`);
+  console.log(`[Bootstrap]    CWD: ${svelteDir}`);
+
+  return child;
+}
+
+// ============================================
 // HEADLESS FILE WATCHER
 // ============================================
 function startHeadlessFileWatcher(wsManager) {
@@ -172,15 +221,20 @@ async function bootstrap() {
   });
 
   const fileWatcher = startHeadlessFileWatcher(wsManager);
+  const svelteServer = startSvelteDevServer();
 
   console.log('[Bootstrap] ✅ Control Plane ready');
   console.log('[Bootstrap]    WebSocket: ws://localhost:4124');
   console.log('[Bootstrap]    API: http://localhost:48215');
   console.log('[Bootstrap]    Swagger: http://localhost:48215/api/docs');
+  if (svelteServer) {
+    console.log('[Bootstrap]    UI: http://localhost:5173');
+  }
 
   process.on('SIGINT', async () => {
     console.log('[Bootstrap] 🛑 Shutting down...');
     if (fileWatcher) fileWatcher.close();
+    if (svelteServer) svelteServer.kill();
     await wsManager.stop();
     await apiServer.close();
     process.exit(0);

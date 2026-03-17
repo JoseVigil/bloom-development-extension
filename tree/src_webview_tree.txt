@@ -1,0 +1,232 @@
+bloom-development-extension/
+├── src/
+│   ├── UNKNOWN.egg-info/
+│   │   ├── PKG-INFO
+│   │   ├── SOURCES.txt
+│   │   ├── dependency_links.txt
+│   │   └── top_level.txt
+│   ├── ai/
+│   │   ├── AiAccountChecker.ts
+│   │   ├── adapters/
+│   │   │   ├── ChatGPTAdapter.ts
+│   │   │   ├── ClaudeAdapter.ts
+│   │   │   ├── GeminiAdapter.ts
+│   │   │   ├── GrokAdapter.ts
+│   │   │   └── OllamaNativeAdapter.ts
+│   │   └── index.ts
+│   ├── api/
+│   │   ├── adapters/
+│   │   │   ├── AIRuntimeAdapter.ts
+│   │   │   ├── BrainApiAdapter.ts
+│   │   │   └── routes/
+│   │   │       └── auth.routes.ts
+│   │   ├── index.ts
+│   │   ├── middleware/
+│   │   │   ├── errorHandler.ts
+│   │   │   └── validation.ts
+│   │   ├── routes/
+│   │   │   ├── auth.routes.ts
+│   │   │   ├── explorer.routes.ts
+│   │   │   ├── health.routes.ts
+│   │   │   ├── intent.routes.ts
+│   │   │   ├── nucleus.routes.ts
+│   │   │   ├── profile.routes.ts
+│   │   │   └── project.routes.ts
+│   │   ├── schemas/
+│   │   │   ├── auth.schema.ts
+│   │   │   ├── explorer.schema.ts
+│   │   │   ├── intent.schema.ts
+│   │   │   ├── nucleus.schema.ts
+│   │   │   ├── profile.schema.ts
+│   │   │   └── project.schema.ts
+│   │   ├── server.ts
+│   │   └── types/
+│   │       └── brain.types.ts
+│   ├── auth/
+│   │   ├── GitHubOAuthServer.ts
+│   │   └── TwitterOAuthServer.ts
+│   ├── commands/
+│   │   ├── addToIntent.ts
+│   │   ├── auth/
+│   │   │   └── startGithubOAuth.ts
+│   │   ├── changeIntentStatus.ts
+│   │   ├── configureIntentProfile.ts
+│   │   ├── copyContextToClipboard.ts
+│   │   ├── createBTIPProject.ts
+│   │   ├── createNucleusProject.ts
+│   │   ├── debug/
+│   │   │   └── debugCommands.ts
+│   │   ├── deleteIntent.ts
+│   │   ├── deleteIntentFromForm.ts
+│   │   ├── duplicateIntent.ts
+│   │   ├── editIntent.ts
+│   │   ├── generateIntent.ts
+│   │   ├── generateQuestions.ts
+│   │   ├── git/
+│   │   │   └── gitCommands.ts
+│   │   ├── intent/
+│   │   │   ├── __tests__/
+│   │   │   │   └── createIntentDev.test.ts
+│   │   │   └── createIntentDev.ts
+│   │   ├── linkToNucleus.ts
+│   │   ├── manageProject.ts
+│   │   ├── nucleus/
+│   │   │   └── nucleusCommands.ts
+│   │   ├── openFileInVSCode.ts
+│   │   ├── openIntent.ts
+│   │   ├── openIntentInBrowser.ts
+│   │   ├── openMarkdownPreview.ts
+│   │   ├── profile/
+│   │   │   ├── addAiAccount.ts
+│   │   │   ├── checkAiAccounts.ts
+│   │   │   └── profileCommands.ts
+│   │   ├── regenerateContext.ts
+│   │   ├── reloadIntentForm.ts
+│   │   ├── revealInFinder.ts
+│   │   ├── searchIntents.ts
+│   │   └── submitAnswers.ts
+│   ├── context/
+│   │   └── ContextCollector.ts
+│   ├── core/
+│   │   ├── chromeProfileManager.ts
+│   │   ├── claudeApiClient.ts
+│   │   ├── codebaseGenerator.ts
+│   │   ├── contextGatherer.ts
+│   │   ├── filePackager.ts
+│   │   ├── gitOrchestrator.ts
+│   │   ├── intentAutoSaver.ts
+│   │   ├── intentGenerator.ts
+│   │   ├── intentSession.ts
+│   │   ├── metadataManager.ts
+│   │   ├── nucleusManager.ts
+│   │   └── validator.ts
+│   ├── extension.ts
+│   ├── helpers/
+│   │   └── chromeProfileHelper.ts
+│   ├── initialization/
+│   │   ├── commandRegistry.ts
+│   │   ├── contextInitializer.ts
+│   │   ├── criticalCommandsInitializer.ts
+│   │   ├── initializeProfileAccounts.ts
+│   │   ├── managersInitializer.ts
+│   │   ├── providersInitializer.ts
+│   │   ├── registerProfileCommands.ts
+│   │   └── serverAndUiInitializer.ts
+│   ├── managers/
+│   │   ├── HeadlessUserManager.ts
+│   │   ├── userManager.ts
+│   │   └── workspaceManager.ts
+│   ├── models/
+│   │   ├── bloomConfig.ts
+│   │   ├── codebaseStrategy.ts
+│   │   ├── contextLayer.ts
+│   │   └── intent.ts
+│   ├── processor/
+│   │   └── ArtifactProcessor.ts
+│   ├── providers/
+│   │   ├── intentTreeProvider.ts
+│   │   ├── nucleusTreeProvider.ts
+│   │   └── profileTreeProvider.ts
+│   ├── server/
+│   │   ├── BTIPExplorerController.ts
+│   │   ├── PluginApiServer.ts
+│   │   ├── WebSocketManager.ts
+│   │   └── index.ts
+│   ├── strategies/
+│   │   ├── AndroidStrategy.ts
+│   │   ├── GenericStrategy.ts
+│   │   ├── IOSStrategy.ts
+│   │   ├── NucleusStrategy.ts
+│   │   ├── ProjectDetector.ts
+│   │   ├── ReactStrategy.ts
+│   │   ├── WebStrategy.ts
+│   │   └── helpers.ts
+│   ├── types/
+│   │   ├── api-contracts.ts
+│   │   ├── brain-schemas.ts
+│   │   └── ws-events.ts
+│   ├── ui/
+│   │   ├── ClaudeBridgePanel.ts
+│   │   ├── intent/
+│   │   │   ├── intentForm.css
+│   │   │   ├── intentForm.html
+│   │   │   ├── intentForm.js
+│   │   │   └── intentFormPanel.ts
+│   │   ├── markdownPreviewPanel.ts
+│   │   ├── nucleus/
+│   │   │   └── NucleusSetupPanel.ts
+│   │   └── profile/
+│   │       ├── profileManager.css
+│   │       ├── profileManager.html
+│   │       ├── profileManager.js
+│   │       └── profileManagerPanel.ts
+│   └── utils/
+│       ├── brainExecutor.ts
+│       ├── gitExecutor.ts
+│       ├── gitManager.ts
+│       ├── gitPathResolver.ts
+│       ├── github.ts
+│       ├── githubApi.ts
+│       ├── githubOAuth.ts
+│       ├── logger.ts
+│       ├── runtimeResolver.ts
+│       ├── tokenEstimator.ts
+│       └── uriHelper.ts
+└── webview/
+    └── app/
+        ├── .svelte-kit/ [... svelte build]
+        ├── node_modules/ [... dependencies]
+        ├── package-lock.json
+        ├── package.json
+        ├── src/
+        │   ├── app.html
+        │   ├── lib/
+        │   │   ├── api.ts
+        │   │   ├── components/
+        │   │   │   ├── BriefingEditor.svelte
+        │   │   │   ├── ChatBTIP.svelte
+        │   │   │   ├── FileTree.svelte
+        │   │   │   ├── GeminiTokenForm.svelte
+        │   │   │   ├── GithubAuthButton.svelte
+        │   │   │   ├── IntentsLink.svelte
+        │   │   │   ├── NucleusPanel.svelte
+        │   │   │   ├── OnboardingWizard.svelte
+        │   │   │   ├── ProjectsPanel.svelte
+        │   │   │   ├── SystemStatus.svelte
+        │   │   │   ├── TipsChat.svelte
+        │   │   │   └── TokenEstimator.svelte
+        │   │   ├── stores/
+        │   │   │   ├── auth.ts
+        │   │   │   ├── intents.ts
+        │   │   │   ├── navigation.ts
+        │   │   │   ├── onboarding.ts
+        │   │   │   ├── system.ts
+        │   │   │   ├── theme.ts
+        │   │   │   └── websocket.ts
+        │   │   ├── types.ts
+        │   │   └── ws.ts
+        │   └── routes/
+        │       ├── +layout.svelte
+        │       ├── +page.svelte
+        │       ├── genesis/
+        │       │   └── +page.svelte
+        │       ├── home/
+        │       │   └── +page.svelte
+        │       ├── intents/
+        │       │   ├── +page.svelte
+        │       │   ├── [id]/
+        │       │   │   ├── +page.svelte
+        │       │   │   └── response
+        │       │   ├── dev/
+        │       │   │   └── [id]/
+        │       │   │       └── +page.svelte
+        │       │   └── doc/
+        │       │       └── [id]/
+        │       │           └── +page.svelte
+        │       ├── onboarding/
+        │       │   └── +page.svelte
+        │       └── welcome/
+        │           └── +page.svelte
+        ├── svelte.config.js
+        ├── tsconfig.json
+        └── vite.config.ts

@@ -26,6 +26,7 @@ func DefaultNucleusConfig() HelpConfig {
 			"TELEMETRY",
 			"TEMPORAL_SERVER",
 			"ORCHESTRATION",
+			"SERVICE",
 			"MANDATES",
 		},
 		CategoryDescs: map[string]string{
@@ -39,7 +40,8 @@ func DefaultNucleusConfig() HelpConfig {
 			"TELEMETRY":       "Centralized log stream registration",
 			"TEMPORAL_SERVER": "Temporal server management and diagnostics",
 			"ORCHESTRATION":   "Workflow orchestration and automation",
-			"MANDATES": "Mandate hooks and orchestration",
+			"SERVICE":         "Nucleus service lifecycle management",
+			"MANDATES":        "Mandate hooks and orchestration",
 		},
 	}
 }

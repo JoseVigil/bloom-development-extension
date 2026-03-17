@@ -10,8 +10,8 @@ Usa --only <componente> para correr un único build de forma aislada
 
 options:
   -h, --help         show this help message and exit
-  --only COMPONENTE  Corre únicamente el build de un componente: brain, nucleus, sentinel, metamorph, conductor, sensor, vsix,
-                     bootstrap, cortex. Omite verificación post-build.
+  --only COMPONENTE  Corre únicamente el build de un componente: brain, nucleus, sentinel, metamorph, conductor, sensor, vsix, bootstrap,
+                     cortex. Omite verificación post-build.
   --channel CHANNEL  Release channel para Cortex: stable (default), beta, dev
   --production       Excluye archivos .map del paquete Cortex (.blx)
   --skip-verify      Omite la FASE 3 de verificación post-build
