@@ -11,9 +11,11 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"nucleus/internal/core"
@@ -454,11 +456,15 @@ func (s *Supervisor) startBrainServer(ctx context.Context) (*ManagedProcess, err
 		return nil, fmt.Errorf("failed to create brain log file: %w", err)
 	}
 
-	// brain.exe service start — bloqueante, spawn desacoplado con Start()
-	cmd := exec.CommandContext(ctx, brainBin, "service", "start")
+	// brain.exe service start — proceso de larga duración, DEBE sobrevivir al
+	// contexto de boot. Usar exec.Command SIN contexto, igual que startSvelteDev.
+	// Si usáramos exec.CommandContext(bootCtx, ...), Go mandaría SIGKILL a Brain
+	// cuando bootCtx expire a los 120s — matando el servicio silenciosamente.
+	cmd := exec.Command(brainBin, "service", "start")
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 	cmd.Dir = filepath.Dir(brainBin)
+	setSvelteProcAttr(cmd) // detach del grupo de procesos del padre
 
 	if err := cmd.Start(); err != nil {
 		logFile.Close()
@@ -822,6 +828,10 @@ func (s *Supervisor) bootControlPlane(ctx context.Context, simulation bool) (*Ma
 		fmt.Sprintf("BLOOM_SIMULATION_MODE=%t", simulation),
 		"BLOOM_LOGS_DIR=" + s.logsDir,
 		"BLOOM_NUCLEUS_PATH=" + os.Getenv("BLOOM_NUCLEUS_PATH"),
+		// BLOOM_DIR: fuente canónica para que bundle.js resuelva webview/app.
+		// getBloomDir() lee installation.origin_path de nucleus.json (sube 4 niveles)
+		// o cae al env BLOOM_DIR. Si ambos fallan, bundle.js lo ignorará gracefully.
+		"BLOOM_DIR=" + getBloomDir(),
 	}
 
 	// Log file: logs/nucleus/control_plane/nucleus_control_plane_YYYYMMDD.log
@@ -1141,51 +1151,102 @@ func createServiceStartCmd(c *core.Core) *cobra.Command {
 			logsDir := getLogsDir(c)
 			binDir := getBinDir(c)
 			sup := NewSupervisor(logsDir, binDir)
-			ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-			defer cancel()
+			// Boot usa timeout de 120s. El proceso principal NO usa contexto
+			// con timeout — debe vivir indefinidamente bajo NSSM.
+			bootCtx, bootCancel := context.WithTimeout(context.Background(), 120*time.Second)
+			defer bootCancel()
 			result := &ServiceStartResult{Timestamp: time.Now().Unix()}
 
-			if err := sup.bootGovernance(ctx, simulation); err != nil {
+			if err := sup.bootGovernance(bootCtx, simulation); err != nil {
 				result.Success = false
 				result.State = "FAILED"
 				result.Error = fmt.Sprintf("governance: %v", err)
 				outputServiceStartResult(c, outputJSON, result)
-				return
+				os.Exit(1)
 			}
-			if _, err := sup.startTemporalServer(ctx); err != nil {
+			if _, err := sup.startTemporalServer(bootCtx); err != nil {
 				result.Success = false
 				result.State = "FAILED"
 				result.Error = fmt.Sprintf("temporal: %v", err)
 				outputServiceStartResult(c, outputJSON, result)
-				return
+				os.Exit(1)
 			}
-			if err := sup.waitForTemporalReady(ctx, 60*time.Second); err != nil {
+			if err := sup.waitForTemporalReady(bootCtx, 60*time.Second); err != nil {
 				result.Success = false
 				result.State = "FAILED"
 				result.Error = fmt.Sprintf("temporal not ready: %v", err)
 				outputServiceStartResult(c, outputJSON, result)
-				return
+				os.Exit(1)
 			}
-			if _, err := sup.startWorkerManager(ctx); err != nil {
+			if _, err := sup.startWorkerManager(bootCtx); err != nil {
 				result.Success = false
 				result.State = "FAILED"
 				result.Error = fmt.Sprintf("worker: %v", err)
 				outputServiceStartResult(c, outputJSON, result)
-				return
+				os.Exit(1)
 			}
-			if _, err := sup.bootControlPlane(ctx, simulation); err != nil {
+			// Brain Server — crítico, debe estar up antes del Control Plane.
+			// Si ya está corriendo (puerto 5678), startBrainServer lo detecta y no lo toca.
+			brainProc, err := sup.startBrainServer(bootCtx)
+			if err != nil {
+				result.Success = false
+				result.State = "FAILED"
+				result.Error = fmt.Sprintf("brain_server: %v", err)
+				outputServiceStartResult(c, outputJSON, result)
+				os.Exit(1)
+			}
+			// Solo esperar si fue recién spawnado (Cmd != nil).
+			// Si Cmd == nil, isBrainRunning() ya lo confirmó — no hay que esperar.
+			if brainProc.Cmd != nil {
+				if err := sup.waitForBrainReady(15 * time.Second); err != nil {
+					result.Success = false
+					result.State = "FAILED"
+					result.Error = fmt.Sprintf("brain_server not ready: %v", err)
+					outputServiceStartResult(c, outputJSON, result)
+					os.Exit(1)
+				}
+			}
+			if brainProc.LogPath != "" {
+				sup.updateBrainTelemetry(brainProc)
+			}
+			if _, err := sup.bootControlPlane(bootCtx, simulation); err != nil {
 				c.Logger.Printf("[WARN] Control plane failed to start: %v", err)
 			}
-			if _, err := sup.startSvelteDev(ctx); err != nil {
+			if _, err := sup.startSvelteDev(bootCtx); err != nil {
 				c.Logger.Printf("[WARN] Svelte dev server failed to start: %v", err)
 			} else {
 				if err := sup.waitForSvelteReady(30 * time.Second); err != nil {
 					c.Logger.Printf("[WARN] Svelte dev server not ready after 30s: %v", err)
 				}
 			}
+
+			// Boot completado. Reportar estado y BLOQUEAR.
+			//
+			// CRÍTICO: nucleus service start corre bajo NSSM con política Restart.
+			// Si este proceso termina, NSSM lo reinicia en 5s y lanza una nueva
+			// instancia de Temporal que choca con la existente:
+			//   - "shard status unknown" en SQLite (dos procesos acceden a temporal.db)
+			//   - worker expulsado cada ~6s con wsarecv connection forcibly closed
+			//   - loop infinito de reinicios
+			//
+			// Quedarse bloqueado hasta SIGINT/SIGTERM. NSSM envía SIGTERM al hacer
+			// "nssm stop BloomNucleusService" o al detener el servicio desde SCM.
 			result.Success = true
 			result.State = "RUNNING"
 			outputServiceStartResult(c, outputJSON, result)
+
+			sigCh := make(chan os.Signal, 1)
+			signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+			c.Logger.Printf("[INFO] Nucleus service running — waiting for shutdown signal (SIGTERM)")
+			<-sigCh
+
+			c.Logger.Printf("[INFO] Shutdown signal received — stopping all processes")
+			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer shutdownCancel()
+			if err := sup.Shutdown(shutdownCtx); err != nil {
+				c.Logger.Printf("[WARN] Shutdown error: %v", err)
+			}
+			c.Logger.Printf("[INFO] Nucleus service stopped")
 		},
 	}
 	cmd.Flags().BoolVar(&outputJSON, "json", false, "Output result as JSON")

@@ -96,14 +96,15 @@ brain filesystem tree installer/conductor -o tree/conductor_tree.txt
 
 brain filesystem tree installer/conductor/workspace -o tree/workspace_tree.txt
 
+brain filesystem tree installer/cortex -o tree/cortex_tree.txt
+
 brain filesystem tree installer/chrome-extension/src -o tree/chrome_extension_src_tree.txt
 
 brain filesystem tree C:\Users\josev\AppData\Local\BloomNucleus -o tree/appdata_tree.txt
 
 brain filesystem tree installer -o tree/installer_tree.txt
 
-
-
+brain filesystem tree src webview -o tree/src_webview_tree.txt
 
 Push help
 git add -f installer/native/bin/win64/nucleus/help

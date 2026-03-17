@@ -340,10 +340,17 @@ func applyFixes(result *HealthResult) {
 		if err := nssmStart("BloomBrainService", 10*time.Second); err != nil {
 			brain.FixResult = fmt.Sprintf("FAILED: %v", err)
 		} else {
-			brain.FixResult = "SUCCESS: BloomBrainService started via NSSM"
-			brain.Healthy = true
-			brain.State = "RUNNING"
-			brain.Error = ""
+			// NSSM puede retornar OK aunque el proceso tarde en arrancar o crashee
+			// silenciosamente. Verificar que el puerto realmente está escuchando.
+			if portErr := waitForPortOpen("127.0.0.1:5678", 15*time.Second); portErr != nil {
+				brain.FixResult = "PARTIAL: BloomBrainService started via NSSM but port 5678 not ready after 15s — process may have crashed on startup"
+				// No marcar como healthy: el puerto no responde
+			} else {
+				brain.FixResult = "SUCCESS: BloomBrainService started via NSSM"
+				brain.Healthy = true
+				brain.State = "RUNNING"
+				brain.Error = ""
+			}
 		}
 		result.Components["brain_service"] = brain
 	}
@@ -353,6 +360,38 @@ func applyFixes(result *HealthResult) {
 		gov.FixResult = "Set BLOOM_DIR: System Properties > Environment Variables\n" +
 			"  Variable: BLOOM_DIR\n  Value: <path to Bloom project root>\n  Then restart your terminal."
 		result.Components["governance"] = gov
+	}
+
+	// Fix temporal: must run BEFORE worker fix — worker depends on Temporal being up.
+	// Uses `nucleus temporal ensure` which is idempotent and automation-safe.
+	if temporal, ok := result.Components["temporal"]; ok && !temporal.Healthy {
+		temporal.FixAttempted = true
+		nucleusExe, exeErr := getNucleusExecutablePath()
+		if exeErr != nil {
+			temporal.FixResult = fmt.Sprintf("FAILED: nucleus not found: %v", exeErr)
+		} else {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			out, err := exec.CommandContext(ctx, nucleusExe, "temporal", "ensure").CombinedOutput()
+			if err != nil {
+				temporal.FixResult = fmt.Sprintf("FAILED: temporal ensure: %v — %s", err, string(out))
+			} else {
+				var ensureResult struct {
+					Success bool   `json:"success"`
+					State   string `json:"state"`
+					PID     int    `json:"pid"`
+				}
+				if jsonErr := json.Unmarshal(out, &ensureResult); jsonErr == nil && ensureResult.Success {
+					temporal.FixResult = fmt.Sprintf("SUCCESS: Temporal started (PID %d) on port 7233", ensureResult.PID)
+					temporal.Healthy = true
+					temporal.State = "RUNNING"
+					temporal.Error = ""
+				} else {
+					temporal.FixResult = fmt.Sprintf("FAILED: temporal ensure returned: %s", string(out))
+				}
+			}
+		}
+		result.Components["temporal"] = temporal
 	}
 
 	if worker, ok := result.Components["worker"]; ok && !worker.Healthy {

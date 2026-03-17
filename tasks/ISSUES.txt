@@ -52,5 +52,11 @@ https://claude.ai/chat/5d21844f-af30-4f59-82c1-b502ac8205b8
 nenes nucleus workers
 https://claude.ai/chat/f231783b-57da-4484-809f-60757cebd114
 
+padkite intent plan 
+https://chat.deepseek.com/a/chat/s/a2ed472c-82f0-4d39-8fc9-6b936c98c6a4
+
+bloomaut health check
+https://claude.ai/chat/a5ada256-c2de-4432-b9fa-73da9522b62a
+
 
 

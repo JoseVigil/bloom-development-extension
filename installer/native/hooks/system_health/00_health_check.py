@@ -37,6 +37,7 @@ FIXABLE_COMPONENTS = {
     "brain_service",   # nssm BloomBrainService
     "ollama",          # ollama serve
     "svelte_dev",      # npm run dev -- gestionado por supervisor via nucleus health --fix
+    "temporal",        # nucleus temporal ensure -- CRÍTICO: debe corregirse antes que worker
 }
 
 # Componentes non-critical que NO deben disparar el auto-fix.
