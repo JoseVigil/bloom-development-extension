@@ -10,7 +10,7 @@
 //   2. NATIVE → build-all.py copia este archivo a installer/native/bin/bootstrap/
 //              como referencia. No se ejecuta desde ahí.
 //   3. RUNTIME → Nucleus (supervisor.go) lanza bundle.js, NUNCA este archivo.
-//              Ver: internal/supervisor/supervisor.go → bootControlPlane()
+//              Ver: internal/supervisor/service.go → bootControlPlane()
 //
 // Para buildear:
 //   npm run build          (produce bundle.js en installer/native/bin/bootstrap/)
@@ -22,6 +22,7 @@
 
 const path = require('path');
 const fs = require('fs');
+const net = require('net');
 
 // ── Módulos compilados (TypeScript → JS) ────────────────────────────────────
 // En build: esbuild resuelve estos paths y los incrusta en bundle.js.
@@ -50,13 +51,28 @@ function validateEnvironment() {
     console.error('[Bootstrap] Missing environment variables:', missing);
     process.exit(1);
   }
+
   if (process.env.BLOOM_VAULT_STATE === 'LOCKED') {
     console.error('[Bootstrap] Vault is LOCKED - cannot start control plane');
     process.exit(1);
   }
-  if (process.env.BLOOM_WORKER_RUNNING !== 'true') {
-    console.error('[Bootstrap] Temporal worker is not running');
-    process.exit(1);
+
+  // CORRECCIÓN: El worker puede estar en proceso de conectarse cuando Go lanza
+  // bundle.js. En ese caso Go pasa BLOOM_WORKER_RUNNING=false (valor real) en
+  // lugar del "true" hardcodeado anterior. Rechazar el arranque por esto causaba
+  // un loop: bundle crasheaba → health check lo relanzaba → volvía a crashear.
+  //
+  // El valor correcto es: arrancar igual y loguear un warning. El Control Plane
+  // puede funcionar en modo degradado hasta que el worker se conecte. Las rutas
+  // que dependen del worker fallarán con su propio error, que es más informativo.
+  //
+  // Sólo bloqueamos si BLOOM_WORKER_RUNNING es exactamente el string 'false'.
+  // Si no está seteado (vacío, undefined), también arrancamos — puede ser una
+  // sesión de desarrollo sin worker completo.
+  if (process.env.BLOOM_WORKER_RUNNING === 'false') {
+    console.warn('[Bootstrap] ⚠️  Temporal worker not connected — Control Plane starting in degraded mode');
+    console.warn('[Bootstrap]    Workflow dispatch will fail until worker connects');
+    // No hacer process.exit(1) — arrancar de todas formas
   }
 
   // Resolve role — fallback to 'pre-onboarding' until the user completes setup
@@ -99,17 +115,65 @@ async function updateTelemetry(streamId, data) {
 }
 
 // ============================================
+// PORT CHECK HELPER
+// ============================================
+
+// isPortOpen hace un check TCP sincrónico-compatible vía Promise.
+// Se usa en bootstrap() que ya es async, por lo que podemos await acá.
+// Timeout de 500ms — si el puerto no responde en ese tiempo, lo consideramos libre.
+function isPortOpen(port) {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    socket.setTimeout(500);
+    socket.once('connect', () => {
+      socket.destroy();
+      resolve(true);   // puerto ocupado — alguien está escuchando
+    });
+    socket.once('timeout', () => {
+      socket.destroy();
+      resolve(false);  // timeout — puerto libre
+    });
+    socket.once('error', () => {
+      socket.destroy();
+      resolve(false);  // error de conexión — puerto libre
+    });
+    socket.connect(port, 'localhost');
+  });
+}
+
+// ============================================
 // SVELTE DEV SERVER
 // ============================================
 
-function startSvelteDevServer() {
+// CORRECCIÓN 1 — Guard de puerto:
+//   Go (nucleus service start) ya levanta Svelte antes de lanzar bundle.js.
+//   Sin este guard, bundle.js intentaba hacer spawn de un segundo proceso npm,
+//   fallando con EINVAL (bajo NSSM) o EADDRINUSE (si llegaba a bindear).
+//   Ahora verificamos el puerto 5173 antes de hacer cualquier spawn.
+//
+// CORRECCIÓN 2 — detached: false:
+//   spawn('npm.cmd', ..., { detached: true, stdio: 'ignore' }) falla con
+//   EINVAL en Windows cuando el proceso padre fue iniciado por NSSM (sin
+//   terminal asignada). Es un bug conocido de Node.js en Win32: detached+
+//   stdio:ignore en un proceso sin consola = error -4071 EINVAL.
+//   Con detached: false el spawn funciona correctamente. Svelte igual
+//   sobrevive al padre porque Go lo lanzó con CREATE_NEW_PROCESS_GROUP
+//   (setSvelteProcAttr en service.go).
+async function startSvelteDevServer() {
   const { spawn } = require('child_process');
 
+  // Guard: si ya hay algo en puerto 5173, Svelte está corriendo — no spawnar.
+  const svelteRunning = await isPortOpen(5173);
+  if (svelteRunning) {
+    console.log('[Bootstrap] ℹ️  Svelte dev server already running on port 5173 — skipping spawn');
+    return null;
+  }
+
   // La UI vive en <repoRoot>/webview/app.
-  // BLOOM_NUCLEUS_PATH apunta a <repoRoot>/.bloom — subiendo un nivel llegamos a repoRoot.
-  // Fallback: BLOOM_DIR si está seteado directamente.
-  const bloomNucleusPath = process.env.BLOOM_NUCLEUS_PATH || '';
+  // BLOOM_DIR apunta directamente a la raíz del repo (calculado desde nucleus.json).
+  // Fallback: BLOOM_NUCLEUS_PATH apunta a <repoRoot> directamente (no a .bloom).
   const bloomDir = process.env.BLOOM_DIR || '';
+  const bloomNucleusPath = process.env.BLOOM_NUCLEUS_PATH || '';
 
   let repoRoot = '';
   if (bloomDir) {
@@ -135,7 +199,7 @@ function startSvelteDevServer() {
 
   const child = spawn(npmCmd, ['run', 'dev'], {
     cwd: svelteDir,
-    detached: true,   // sobrevive si el padre termina
+    detached: false,  // CORRECCIÓN: true causa EINVAL bajo NSSM en Windows
     stdio: 'ignore',  // no heredar stdin/stdout del bootstrap
   });
 
@@ -221,7 +285,10 @@ async function bootstrap() {
   });
 
   const fileWatcher = startHeadlessFileWatcher(wsManager);
-  const svelteServer = startSvelteDevServer();
+
+  // startSvelteDevServer es ahora async (usa await isPortOpen).
+  // bootstrap() ya es async — podemos await acá sin cambiar la firma externa.
+  const svelteServer = await startSvelteDevServer();
 
   console.log('[Bootstrap] ✅ Control Plane ready');
   console.log('[Bootstrap]    WebSocket: ws://localhost:4124');
