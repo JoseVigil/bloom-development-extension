@@ -372,6 +372,115 @@ func applyFixes(result *HealthResult) {
 		}
 		result.Components["worker"] = worker
 	}
+
+	if ollama, ok := result.Components["ollama"]; ok && !ollama.Healthy {
+		ollama.FixAttempted = true
+		ollamaBin := resolveOllamaBin()
+		if ollamaBin == "" {
+			ollama.FixResult = "FAILED: ollama binary not found (checked bin/ollama/ and PATH)"
+		} else {
+			cmd := exec.Command(ollamaBin, "serve")
+			cmd.Stdout = nil
+			cmd.Stderr = nil
+			setSvelteProcAttr(cmd) // detach del proceso padre igual que svelte_dev
+			if err := cmd.Start(); err != nil {
+				ollama.FixResult = fmt.Sprintf("FAILED: ollama serve: %v", err)
+			} else {
+				go cmd.Wait() //nolint:errcheck
+				if portErr := waitForPortOpen("localhost:11434", 20*time.Second); portErr != nil {
+					ollama.FixResult = fmt.Sprintf("FAILED: ollama started (PID %d) but port 11434 not ready after 20s: %v", cmd.Process.Pid, portErr)
+				} else {
+					ollama.FixResult = "SUCCESS: ollama serve started"
+					ollama.Healthy = true
+					ollama.State = "RUNNING"
+					ollama.Error = ""
+				}
+			}
+		}
+		result.Components["ollama"] = ollama
+	}
+
+	if svelte, ok := result.Components["svelte_dev"]; ok && !svelte.Healthy {
+		svelte.FixAttempted = true
+		if err := fixSvelteDev(); err != nil {
+			svelte.FixResult = fmt.Sprintf("FAILED: %v", err)
+		} else {
+			svelte.FixResult = "SUCCESS: svelte dev server started"
+			svelte.Healthy = true
+			svelte.State = "RUNNING"
+			svelte.Error = ""
+		}
+		result.Components["svelte_dev"] = svelte
+	}
+}
+
+// fixSvelteDev attempts to start the Svelte dev server and waits for port 5173.
+// It looks for the project root via BLOOM_DIR or falls back to the nucleus binary's
+// parent tree, then runs `npm run dev` detached so the child outlives this process.
+func fixSvelteDev() error {
+	// Resolve project root: BLOOM_DIR is the canonical source
+	projectRoot := getBloomDir()
+	if projectRoot == "" {
+		// Fallback: locate nucleus binary and walk up to find package.json
+		if exe, err := os.Executable(); err == nil {
+			dir := filepath.Dir(exe)
+			for i := 0; i < 5; i++ {
+				if _, err := os.Stat(filepath.Join(dir, "package.json")); err == nil {
+					projectRoot = dir
+					break
+				}
+				dir = filepath.Dir(dir)
+			}
+		}
+	}
+	if projectRoot == "" {
+		return fmt.Errorf("cannot locate project root (BLOOM_DIR not set and package.json not found)")
+	}
+
+	// Resolve npm binary — prefer bundled node, fall back to PATH
+	npmBin, err := exec.LookPath("npm")
+	if err != nil {
+		return fmt.Errorf("npm not found in PATH: %v", err)
+	}
+
+	// Spawn `npm run dev` detached (no context — we don't want to kill it when
+	// the health check context expires)
+	cmd := exec.Command(npmBin, "run", "dev")
+	cmd.Dir = projectRoot
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	// SysProcAttr is set in a platform-specific file (health_windows.go / health_unix.go)
+	// to ensure the child process is detached from our process group.
+	setSvelteProcAttr(cmd)
+
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to spawn npm run dev in %s: %v", projectRoot, err)
+	}
+
+	// Detach — we don't own this process after this point
+	go cmd.Wait() //nolint:errcheck
+
+	// Wait until port 5173 is accepting connections (up to 30s — Vite needs time to compile)
+	if err := waitForPortOpen("127.0.0.1:5173", 30*time.Second); err != nil {
+		return fmt.Errorf("npm run dev started (PID %d) but port 5173 not ready after 30s: %v", cmd.Process.Pid, err)
+	}
+
+	return nil
+}
+
+// waitForPortOpen polls addr (host:port) until it accepts a TCP connection
+// or the timeout expires. addr must be in "host:port" form.
+func waitForPortOpen(addr string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		conn, err := net.DialTimeout("tcp", addr, 500*time.Millisecond)
+		if err == nil {
+			conn.Close()
+			return nil
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	return fmt.Errorf("%s not ready after %s", addr, timeout)
 }
 
 func nssmStart(serviceName string, timeout time.Duration) error {
@@ -382,6 +491,37 @@ func nssmStart(serviceName string, timeout time.Duration) error {
 		return fmt.Errorf("nssm start %s: %v — %s", serviceName, err, string(out))
 	}
 	return nil
+}
+
+// resolveOllamaBin localiza el binario de ollama.
+// Orden de prioridad:
+//  1. <LOCALAPPDATA>/BloomNucleus/bin/ollama/ollama.exe — instalación BloomNucleus estándar
+//  2. ollama en PATH — instalación standalone del sistema
+func resolveOllamaBin() string {
+	// Resolver appDataDir igual que InitPaths — siempre LOCALAPPDATA, nunca APPDATA
+	localAppData := os.Getenv("LOCALAPPDATA")
+	if localAppData == "" {
+		localAppData = filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Local")
+	}
+	appDataDir := os.Getenv("BLOOM_APPDATA_DIR")
+	if appDataDir == "" {
+		appDataDir = filepath.Join(localAppData, "BloomNucleus")
+	}
+
+	candidates := []string{
+		filepath.Join(appDataDir, "bin", "ollama", "ollama.exe"),
+		filepath.Join(appDataDir, "bin", "ollama", "ollama"),
+	}
+	for _, p := range candidates {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	// Fallback: PATH
+	if p, err := exec.LookPath("ollama"); err == nil {
+		return p
+	}
+	return ""
 }
 
 // ── Individual component checks ───────────────────────────────────────────────

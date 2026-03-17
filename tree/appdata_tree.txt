@@ -169,15 +169,17 @@ BloomNucleus/
 │   │       └── ignition_spec.json
 │   └── profiles.json
 ├── history/
-│   └── profiles/
-│       └── 8b8ec0f1-2c28-4534-9422-ef97952f7310/
-│           ├── launches/
-│           │   └── 20260316.ndjson
-│           └── sessions/
-│               └── 001_8b8ec0f1_094212.ndjson
+│   ├── profiles/
+│   │   └── 8b8ec0f1-2c28-4534-9422-ef97952f7310/
+│   │       ├── launches/
+│   │       │   └── 20260316.ndjson
+│   │       └── sessions/
+│   │           └── 001_8b8ec0f1_094212.ndjson
+│   └── workers/
+│       ├── capabilities_20860.json
+│       └── capabilities_20880.json
 ├── hooks/
-│   └── post_launch/
-│       └── 00_generate_synapse_trace.py
+│   └── system_health/
 ├── logs/
 │   ├── brain/
 │   │   ├── core/
@@ -205,8 +207,6 @@ BloomNucleus/
 │   │               ├── host_boot_001_8b8ec0f1_094212.log
 │   │               └── nm_init_diag_001_8b8ec0f1_094212.log
 │   ├── metamorph/
-│   │   ├── metamorph_core_20260316.log
-│   │   ├── metamorph_inspection_20260316.log
 │   │   └── metamorph_operations_20260316.log
 │   ├── nucleus/
 │   │   ├── control_plane/
@@ -222,7 +222,8 @@ BloomNucleus/
 │   │       ├── nucleus_workers_snapshot_20260316.log
 │   │       └── worker_manager_20260316.log
 │   ├── sensor/
-│   │   └── sensor_20260316.log
+│   │   ├── sensor_20260316.log
+│   │   └── sensor_20260317.log
 │   ├── sentinel/
 │   │   ├── profiles/
 │   │   │   ├── 8b8ec0f1-2c28-4534-9422-ef97952f7310/

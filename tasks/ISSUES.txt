@@ -43,10 +43,14 @@ https://claude.ai/chat/15c09d84-84aa-4ae5-a9be-b58148f24cd1
 gestureos auditoria comandos brain para mandate
 https://claude.ai/chat/77caaf80-bced-405e-baad-a2446d3c3a4c
 
-roamingpads
-problema de start, nucleus service start no alcanza
+roamingpads nucleus service start
 https://claude.ai/chat/9abd064d-a9b1-4ae4-8708-f06cacd8d340
 
 nenes workspace onboarding
+https://claude.ai/chat/5d21844f-af30-4f59-82c1-b502ac8205b8
+
+nenes nucleus workers
+https://claude.ai/chat/f231783b-57da-4484-809f-60757cebd114
+
 
 

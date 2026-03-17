@@ -17,6 +17,7 @@ import (
 	"nucleus/internal/core"
 	"nucleus/internal/mandates"
 	"nucleus/internal/orchestration/activities"
+	"nucleus/internal/orchestration/temporal/bootstrap"
 	temporalworkflows "nucleus/internal/orchestration/temporal/workflows"
 	"github.com/spf13/cobra"
 )
@@ -192,6 +193,9 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 			// Workflow de onboarding navigate
 			w.RegisterWorkflow(temporalworkflows.OnboardingWorkflow)
 
+			// Workflow de system health (invocado por Schedule cada 60s)
+			w.RegisterWorkflow(temporalworkflows.SystemHealthWorkflow)
+
 			logger.Success("✅ Workflows registrados")
 
 			// ✅ REGISTRAR ACTIVITIES
@@ -240,6 +244,9 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 			// Registrar mandate activities (hooks post-launch)
 			w.RegisterActivity(mandates.RunPostLaunchHooksActivity)
 
+			// Registrar activity de system health (hooks periódicos de monitoreo)
+			w.RegisterActivity(mandates.RunSystemHealthActivity)
+
 			logger.Success("✅ Activities registradas")
 
 			// Iniciar worker
@@ -250,6 +257,17 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 			}
 
 			logger.Success("✅ Worker iniciado exitosamente")
+
+			// Crear Schedule de system health (idempotente — no falla si ya existe)
+			go func() {
+				// Breve delay para que el worker esté completamente listo
+				time.Sleep(2 * time.Second)
+				if err := bootstrap.EnsureSystemHealthSchedule(ctx, temporalClient.GetClient()); err != nil {
+					logger.Warning("⚠️  Failed to create system health schedule: %v", err)
+				} else {
+					logger.Success("✅ System health schedule active (every 60s)")
+				}
+			}()
 
 			// Escribir capabilities registry — leído por `nucleus workers list`
 			historyWorkersDir := filepath.Join(filepath.Dir(c.Paths.LogsDir), "history", "workers")
@@ -265,6 +283,7 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 					"ShutdownAllWorkflow",
 					"SeedWorkflow",
 					"OnboardingWorkflow",
+					"SystemHealthWorkflow",
 				},
 				[]string{
 					"sentinel.LaunchSentinel",
@@ -273,6 +292,7 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 					"sentinel.SeedProfile",
 					"sentinel.SendOnboardingNavigate",
 					"RunPostLaunchHooksActivity",
+					"RunSystemHealthActivity",
 				},
 			)
 

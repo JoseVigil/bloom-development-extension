@@ -94,10 +94,10 @@
       },
       {
         "name": "only",
-        "usage": "Deploy a single component instead of all (brain, nucleus, sentinel, metamorph, conductor, setup, host, cortex, nssm, bootstrap, vsix, node)"
+        "usage": "Deploy a single component instead of all (brain, nucleus, sentinel, metamorph, conductor, setup, host, cortex, nssm, bootstrap, vsix, node, hook)"
       }
     ],
-    "example": "  metamorph rollout\n  metamorph rollout --dry-run\n  metamorph rollout --only brain\n  metamorph rollout --only nucleus\n  metamorph rollout --only sentinel\n  metamorph rollout --only metamorph\n  metamorph rollout --only conductor\n  metamorph rollout --only setup\n  metamorph rollout --only host\n  metamorph rollout --only cortex\n  metamorph rollout --only nssm\n  metamorph rollout --only bootstrap\n  metamorph rollout --only vsix\n  metamorph rollout --only node\n  metamorph rollout --only brain --dry-run\n  metamorph --json rollout --only nucleus",
+    "example": "  metamorph rollout\n  metamorph rollout --dry-run\n  metamorph rollout --only brain\n  metamorph rollout --only nucleus\n  metamorph rollout --only sentinel\n  metamorph rollout --only metamorph\n  metamorph rollout --only conductor\n  metamorph rollout --only setup\n  metamorph rollout --only host\n  metamorph rollout --only cortex\n  metamorph rollout --only nssm\n  metamorph rollout --only bootstrap\n  metamorph rollout --only vsix\n  metamorph rollout --only node\n  metamorph rollout --only hook\n  metamorph rollout --only brain --dry-run\n  metamorph --json rollout --only nucleus",
     "json_response": "{\n  \"status\": \"success\",\n  \"dry_run\": false,\n  \"only\": \"\",\n  \"deployed\": [\n    {\"component\": \"Brain\",     \"source\": \"...\", \"destination\": \"...\", \"files_copied\": 12},\n    {\"component\": \"Nucleus\",   \"source\": \"...\", \"destination\": \"...\", \"files_copied\": 4}\n  ],\n  \"skipped\": [],\n  \"errors\": []\n}"
   },
   {

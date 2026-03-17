@@ -41,7 +41,8 @@ bloom-development-extension/
     │   │   ├── mandate_hooks_cmd.go
     │   │   ├── mandate_logger.go
     │   │   ├── mandate_runner.go
-    │   │   └── mandate_types.go
+    │   │   ├── mandate_types.go
+    │   │   └── system_health_activity.go
     │   ├── orchestration/
     │   │   ├── activities/
     │   │   │   └── sentinel_activities.go
@@ -66,12 +67,14 @@ bloom-development-extension/
     │   │   │   │   ├── pid.go
     │   │   │   │   ├── ports.go
     │   │   │   │   ├── process.go
+    │   │   │   │   ├── schedule_bootstrap.go
     │   │   │   │   └── temporal_health.go
     │   │   │   ├── temporal_client.go
     │   │   │   ├── worker.go
     │   │   │   └── workflows/
     │   │   │       ├── onboarding_workflow.go
     │   │   │       ├── profile_lifecycle.go
+    │   │   │       ├── system_health_workflow.go
     │   │   │       └── system_workflows.go
     │   │   ├── types/
     │   │   │   └── orchestration.go
@@ -83,7 +86,8 @@ bloom-development-extension/
     │   │   ├── health.go
     │   │   ├── logs.go
     │   │   ├── service.go
-    │   │   └── supervisor.go
+    │   │   ├── supervisor.go
+    │   │   └── workers.go
     │   ├── system/
     │   │   ├── info.go
     │   │   └── version.go
