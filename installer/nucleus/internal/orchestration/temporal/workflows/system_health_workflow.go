@@ -27,14 +27,23 @@ type SystemHealthActivityResult struct {
 // y no bloquea al scheduler si la Activity tarda.
 //
 // Diseño:
-//   - StartToCloseTimeout: 30s — nucleus health tarda < 3s; 30s es holgado
-//   - MaximumAttempts: 2 — reintentar una vez en caso de fallo transitorio
+//   - StartToCloseTimeout: 90s — presupuesto real:
+//       • nucleus health (sin fix):    ~3s  (HEALTH_CHECK_TIMEOUT_S = 15s)
+//       • nucleus health --fix:        ~45s (HEALTH_FIX_TIMEOUT_S = 45s)
+//       • temporal ensure (peor caso): ~30s dentro del fix
+//       • margen:                      ~12s
+//     Total worst-case: 45 + 30 + 12 = ~87s → redondeado a 90s.
+//     El timeout anterior de 30s mataba la activity mientras --fix corría,
+//     causando que el worker muriera en loop cada vez que Temporal se recuperaba.
+//   - MaximumAttempts: 1 — sin retry inmediato: si la activity falla, el
+//     Schedule la reintenta en el próximo ciclo de 60s. Reintentar de inmediato
+//     con --fix activo duplica la carga sobre un sistema ya degradado.
 //   - El workflow en sí no hace retry (eso lo maneja el Schedule con overlap SKIP)
 func SystemHealthWorkflow(ctx workflow.Context) error {
 	ao := workflow.ActivityOptions{
-		StartToCloseTimeout: 30 * time.Second,
+		StartToCloseTimeout: 90 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
-			MaximumAttempts: 2,
+			MaximumAttempts: 1,
 		},
 	}
 	ctx = workflow.WithActivityOptions(ctx, ao)

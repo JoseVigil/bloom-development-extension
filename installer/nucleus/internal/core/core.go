@@ -8,10 +8,11 @@ import (
 
 // Core estructura central de Nucleus
 type Core struct {
-	Logger *log.Logger
-	Config map[string]interface{}
-	Paths  Paths
-	IsJSON bool
+	Logger   *log.Logger
+	Config   map[string]interface{}
+	Paths    Paths
+	Settings Settings
+	IsJSON   bool
 }
 
 // NewCore inicializa la estructura Core
@@ -24,10 +25,11 @@ func NewCore(output io.Writer) (*Core, error) {
 	logger := log.New(output, "[nucleus] ", log.LstdFlags)
 
 	return &Core{
-		Logger: logger,
-		Config: make(map[string]interface{}),
-		Paths:  *paths,
-		IsJSON: false,
+		Logger:   logger,
+		Config:   make(map[string]interface{}),
+		Paths:    *paths,
+		Settings: LoadSettings(paths.AppDataDir),
+		IsJSON:   false,
 	}, nil
 }
 
@@ -42,10 +44,11 @@ func NewCoreSilent() (*Core, error) {
 	logger := log.New(io.Discard, "[nucleus] ", log.LstdFlags)
 
 	return &Core{
-		Logger: logger,
-		Config: make(map[string]interface{}),
-		Paths:  *paths,
-		IsJSON: false,
+		Logger:   logger,
+		Config:   make(map[string]interface{}),
+		Paths:    *paths,
+		Settings: LoadSettings(paths.AppDataDir),
+		IsJSON:   false,
 	}, nil
 }
 

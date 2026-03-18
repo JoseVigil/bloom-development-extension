@@ -183,7 +183,7 @@ Effects:  Read-only (unless --fix is used)`,
 
 			result := checkSystemHealthParallel(ctx, supervisor, appDataDir, validate, component, logsDir)
 
-			if fix {
+			if fix || c.Settings.Health.AutoFix {
 				applyFixes(result)
 			}
 

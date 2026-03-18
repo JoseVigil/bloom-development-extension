@@ -463,14 +463,19 @@ async function deployAllSystemBinaries(win) {
     // ========================================================================
     logger.info('\n🟢 NODE.JS RUNTIME');
     
-    if (await fs.pathExists(paths.nodeSource)) {
-      results.node = await copyDirectorySafe(
-        paths.nodeSource,
-        paths.nodeDir,
-        'Node.js'
+    // paths.nodeSource apunta a la carpeta de plataforma (win64 o win32)
+    // Copiamos solo node.exe directamente a bin/node/node.exe
+    const nodeExeSrc  = path.join(paths.nodeSource, 'node.exe');
+    const nodeExeDest = path.join(paths.nodeDir, 'node.exe');
+
+    if (await fs.pathExists(nodeExeSrc)) {
+      results.node = await copyFileSafe(
+        nodeExeSrc,
+        nodeExeDest,
+        'node.exe'
       );
     } else {
-      logger.warn('⚠️ Node.js source not found, skipping');
+      logger.warn('⚠️ node.exe source not found, skipping');
       results.node = { success: false, skipped: true };
     }
     
@@ -638,6 +643,42 @@ async function deployAllSystemBinaries(win) {
     } else {
       logger.warn('⚠️ Bootstrap source not found, skipping');
       results.bootstrap = { success: false, skipped: true };
+    }
+
+    // ========================================================================
+    // 15. CONFIG FILES (installer/native/config/* → appdata/config/)
+    // ========================================================================
+    logger.info('\n⚙️ CONFIG FILES');
+
+    if (await fs.pathExists(paths.nativeConfigSource)) {
+      await fs.ensureDir(paths.configDir);
+
+      const configEntries = await fs.readdir(paths.nativeConfigSource, { withFileTypes: true });
+      const configFiles = configEntries.filter(e => e.isFile());
+
+      if (configFiles.length === 0) {
+        logger.warn('⚠️ No config files found in source, skipping');
+        results.config = { success: false, skipped: true };
+      } else {
+        let configCopied = 0;
+        for (const file of configFiles) {
+          const fileSrc  = path.join(paths.nativeConfigSource, file.name);
+          const fileDest = path.join(paths.configDir, file.name);
+          // Only copy if destination doesn't exist (preserve user changes)
+          if (!await fs.pathExists(fileDest)) {
+            await fs.copy(fileSrc, fileDest, { overwrite: false });
+            logger.info(`  ✓ ${file.name} (new)`);
+          } else {
+            logger.info(`  ⟳ ${file.name} (already exists, skipped)`);
+          }
+          configCopied++;
+        }
+        logger.success(`✅ Config files processed (${configCopied} files)`);
+        results.config = { success: true, count: configCopied };
+      }
+    } else {
+      logger.warn('⚠️ Native config source not found, skipping');
+      results.config = { success: false, skipped: true };
     }
 
     // ========================================================================

@@ -176,6 +176,59 @@ if ($workspaceProcs) {
 }
 
 # ==============================
+# MATAR node.exe (Svelte server de BloomNucleus)
+# Identifica por ruta ejecutable o directorio de trabajo
+# para no tocar otros procesos Node del sistema
+# ==============================
+Write-Host ""
+Write-Host "Cerrando servidor Svelte (node.exe de BloomNucleus)..."
+
+$nodeProcs = Get-CimInstance Win32_Process | Where-Object {
+    $_.Name -eq "node.exe"
+}
+
+foreach ($node in $nodeProcs) {
+    $isBloom = $false
+
+    # Caso 1: el ejecutable node.exe esta dentro de la carpeta BloomNucleus
+    if ($node.ExecutablePath -and $node.ExecutablePath -like "*BloomNucleus*") {
+        $isBloom = $true
+    }
+
+    # Caso 2: el CommandLine apunta a BloomNucleus
+    if (-not $isBloom -and $node.CommandLine -and $node.CommandLine -like "*BloomNucleus*") {
+        $isBloom = $true
+    }
+
+    # Caso 3: servidor Vite/Svelte de bloom-development-extension
+    if (-not $isBloom -and $node.CommandLine -and $node.CommandLine -like "*bloom-development-extension*") {
+        $isBloom = $true
+    }
+
+    if ($isBloom) {
+        Write-Host "Matando node.exe de BloomNucleus (PID $($node.ProcessId)) - $($node.CommandLine)"
+        taskkill /F /T /PID $node.ProcessId 2>$null
+    }
+}
+
+# Verificacion: remanentes por CommandLine
+Start-Sleep -Seconds 2
+$remanentesNode = Get-CimInstance Win32_Process | Where-Object {
+    $_.Name -eq "node.exe" -and $_.CommandLine -and (
+        $_.CommandLine -like "*BloomNucleus*" -or
+        $_.CommandLine -like "*bloom-development-extension*"
+    )
+}
+foreach ($rem in $remanentesNode) {
+    Write-Host "Matando remanente node.exe PID $($rem.ProcessId)"
+    Stop-Process -Id $rem.ProcessId -Force -ErrorAction SilentlyContinue
+}
+
+if (-not $nodeProcs) {
+    Write-Host "No se encontraron instancias de node.exe de BloomNucleus en ejecucion."
+}
+
+# ==============================
 # BORRAR CARPETAS DE BloomNucleus
 # ==============================
 Write-Host ""

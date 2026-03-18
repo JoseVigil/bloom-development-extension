@@ -188,6 +188,7 @@ BloomNucleus/
 │       ├── capabilities_10636.json
 │       ├── capabilities_10712.json
 │       ├── capabilities_10764.json
+│       ├── capabilities_10768.json
 │       ├── capabilities_10780.json
 │       ├── capabilities_10800.json
 │       ├── capabilities_10824.json
@@ -237,6 +238,7 @@ BloomNucleus/
 │       ├── capabilities_14048.json
 │       ├── capabilities_14252.json
 │       ├── capabilities_14400.json
+│       ├── capabilities_14428.json
 │       ├── capabilities_14436.json
 │       ├── capabilities_14440.json
 │       ├── capabilities_14612.json
@@ -255,6 +257,7 @@ BloomNucleus/
 │       ├── capabilities_15792.json
 │       ├── capabilities_15876.json
 │       ├── capabilities_15892.json
+│       ├── capabilities_15920.json
 │       ├── capabilities_15940.json
 │       ├── capabilities_16020.json
 │       ├── capabilities_16056.json
@@ -475,6 +478,7 @@ BloomNucleus/
 │       ├── capabilities_3140.json
 │       ├── capabilities_3252.json
 │       ├── capabilities_3348.json
+│       ├── capabilities_3388.json
 │       ├── capabilities_3416.json
 │       ├── capabilities_3648.json
 │       ├── capabilities_3716.json
@@ -507,6 +511,7 @@ BloomNucleus/
 │       ├── capabilities_5964.json
 │       ├── capabilities_6032.json
 │       ├── capabilities_6052.json
+│       ├── capabilities_6092.json
 │       ├── capabilities_6096.json
 │       ├── capabilities_6152.json
 │       ├── capabilities_6168.json
@@ -531,6 +536,7 @@ BloomNucleus/
 │       ├── capabilities_7272.json
 │       ├── capabilities_7312.json
 │       ├── capabilities_7316.json
+│       ├── capabilities_7472.json
 │       ├── capabilities_7560.json
 │       ├── capabilities_7580.json
 │       ├── capabilities_7636.json
@@ -552,7 +558,9 @@ BloomNucleus/
 │       ├── capabilities_8896.json
 │       ├── capabilities_8916.json
 │       ├── capabilities_9040.json
+│       ├── capabilities_9084.json
 │       ├── capabilities_9096.json
+│       ├── capabilities_912.json
 │       ├── capabilities_9304.json
 │       ├── capabilities_9372.json
 │       ├── capabilities_9408.json
@@ -568,10 +576,7 @@ BloomNucleus/
 │       ├── capabilities_9864.json
 │       └── capabilities_9880.json
 ├── hooks/
-│   ├── post_launch/
-│   │   └── 00_generate_synapse_trace.py
 │   └── system_health/
-│       └── 00_health_check.py
 ├── logs/
 │   ├── brain/
 │   │   ├── core/

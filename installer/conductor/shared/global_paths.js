@@ -70,7 +70,7 @@ const getResourcePath = (resourceName) => {
     case 'ollama':
       return path.join(workspaceRoot, '..', 'ollama');
     case 'node':
-      return path.join(workspaceRoot, '..', 'node');
+      return path.join(workspaceRoot, '..', 'node', arch);
     case 'conductor':
       return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'conductor');
     case 'launcher':
@@ -86,7 +86,9 @@ const getResourcePath = (resourceName) => {
     case 'vscode':
       return path.join(workspaceRoot, '..', 'native', 'bin', 'vscode');
     case 'hooks':
-      return path.join(workspaceRoot, '..', 'native', 'hooks');  
+      return path.join(workspaceRoot, '..', 'native', 'hooks');
+    case 'native-config':
+      return path.join(workspaceRoot, '..', 'native', 'config');
     case 'temporal':
       return path.join(workspaceRoot, '..', 'temporal');
     case 'chrome-win':
@@ -273,12 +275,16 @@ const paths = {
   chromeWinSource: getResourcePath('chrome-win'),
   hooksSource: getResourcePath('hooks'),
   hooksDir: path.join(baseDir, 'hooks'),
-  bootstrapDir:    path.join(baseDir, 'bin', 'bootstrap'),
-  bootstrapSource: getResourcePath('bootstrap'),
+  bootstrapDir:       path.join(baseDir, 'bin', 'bootstrap'),
+  bootstrapStaticDir: path.join(baseDir, 'bin', 'bootstrap', 'static'),
+  bootstrapSource:    getResourcePath('bootstrap'),
 
   // VS Code Extension (bloom-extension.vsix)
   vscodeDir:       path.join(baseDir, 'bin', 'vscode'),
   vscodeSource:    getResourcePath('vscode'),
+
+  // Native config source (installer/native/config/ -> appdata/config/)
+  nativeConfigSource: getResourcePath('native-config'),
 };
 
 // ============================================================================

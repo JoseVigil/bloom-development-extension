@@ -58,6 +58,7 @@ type Supervisor struct {
 	mu              sync.RWMutex
 	supervisorCtx   context.Context // lives for the duration of the service; used by watchWorker
 	workerWatchOnce sync.Once       // ensures only one watchWorker goroutine runs per supervisor
+	log             *core.Logger    // structured logger — nil until initLogger() is called
 }
 
 // NewSupervisor creates a new process supervisor
@@ -67,6 +68,42 @@ func NewSupervisor(logsDir, binDir string) *Supervisor {
 		logsDir:       logsDir,
 		binDir:        binDir,
 		supervisorCtx: context.Background(), // overridden by service start before boot
+	}
+}
+
+// initLogger initialises the structured service logger using InitServiceLogger.
+// Must be called once before boot, after Paths are resolved.
+// Falls back to stderr silently if the logger cannot be created — boot must not
+// fail because of a logging error.
+func (s *Supervisor) initLogger(c *core.Core) {
+	l, err := core.InitServiceLogger(&c.Paths, c.IsJSON)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[WARN] supervisor: could not init service logger: %v\n", err)
+		return
+	}
+	s.log = l
+}
+
+// slog emits a leveled log line through the structured service logger when
+// available, falling back to stderr so nothing is ever lost.
+// level must be one of: INFO, WARN, ERROR, SUCCESS.
+func (s *Supervisor) slog(level, format string, args ...any) {
+	if s.log == nil {
+		ts := time.Now().UTC().Format("2006/01/02 15:04:05")
+		fmt.Fprintf(os.Stderr, "%s [%s] "+format+"\n", append([]any{ts, level}, args...)...)
+		return
+	}
+	switch level {
+	case "INFO":
+		s.log.Info(format, args...)
+	case "WARN":
+		s.log.Warning(format, args...)
+	case "ERROR":
+		s.log.Error(format, args...)
+	case "SUCCESS":
+		s.log.Success(format, args...)
+	default:
+		s.log.Info(format, args...)
 	}
 }
 
@@ -117,7 +154,7 @@ func (s *Supervisor) startTemporalServer(ctx context.Context) (*ManagedProcess, 
 			StartedAt: time.Now(),
 		}
 		s.processes["temporal_server"] = proc
-		fmt.Fprintln(os.Stderr, "[INFO] ✓ Temporal server already running on port 7233 — skipping start")
+		s.slog("INFO", "✓ Temporal server already running on port 7233 — skipping start")
 		return proc, nil
 	}
 
@@ -293,7 +330,7 @@ func (s *Supervisor) startWorkerManager(ctx context.Context) (*ManagedProcess, e
 			StartedAt: time.Now(),
 		}
 		s.processes["nucleus_worker"] = proc
-		fmt.Fprintln(os.Stderr, "[INFO] ✓ Worker already active in profile-orchestration — skipping start")
+		s.slog("INFO", "✓ Worker already active in profile-orchestration — skipping start")
 		return proc, nil
 	}
 
@@ -365,7 +402,7 @@ func (s *Supervisor) startWorkerManager(ctx context.Context) (*ManagedProcess, e
 		proc.mu.Lock()
 		proc.State = StateDegraded
 		proc.mu.Unlock()
-		fmt.Fprintf(os.Stderr, "[WARN] Worker not confirmed in task-queue after 10s: %v\n", err)
+		s.slog("WARN", "Worker not confirmed in task-queue after 10s: %v", err)
 	} else {
 		proc.mu.Lock()
 		proc.State = StateReady
@@ -444,7 +481,7 @@ func (s *Supervisor) startBrainServer(ctx context.Context) (*ManagedProcess, err
 			StartedAt: time.Now(),
 		}
 		s.processes["brain_server"] = proc
-		fmt.Fprintln(os.Stderr, "[INFO] ✓ Brain Server already running on port 5678 — skipping start")
+		s.slog("INFO", "✓ Brain Server already running on port 5678 — skipping start")
 		return proc, nil
 	}
 
@@ -755,7 +792,7 @@ func (s *Supervisor) watchWorker() {
 		// Check if supervisor is shutting down — don't restart in that case.
 		select {
 		case <-s.supervisorCtx.Done():
-			fmt.Fprintln(os.Stderr, "[INFO] watchWorker: supervisor shutting down — stopping watch loop")
+		s.slog("INFO", "watchWorker: supervisor shutting down — stopping watch loop")
 			return
 		default:
 		}
@@ -770,7 +807,7 @@ func (s *Supervisor) watchWorker() {
 			state := proc.State
 			proc.mu.RUnlock()
 			if state == StateStopped {
-				fmt.Fprintln(os.Stderr, "[INFO] watchWorker: worker stopped cleanly — no restart")
+			s.slog("INFO", "watchWorker: worker stopped cleanly — no restart")
 				return
 			}
 		}
@@ -781,21 +818,47 @@ func (s *Supervisor) watchWorker() {
 			backoff = 5 * time.Second
 		}
 
-		fmt.Fprintf(os.Stderr, "[WARN] watchWorker: nucleus_worker exited unexpectedly — restarting in %v\n", backoff)
+		s.slog("WARN", "watchWorker: nucleus_worker exited unexpectedly — restarting in %v", backoff)
 
 		// Wait before restarting, but respect supervisor shutdown.
 		select {
 		case <-s.supervisorCtx.Done():
-			fmt.Fprintln(os.Stderr, "[INFO] watchWorker: supervisor shutting down during backoff — stopping watch loop")
+			s.slog("INFO", "watchWorker: supervisor shutting down during backoff — stopping watch loop")
 			return
 		case <-time.After(backoff):
 		}
 
-		fmt.Fprintln(os.Stderr, "[INFO] watchWorker: relaunching nucleus_worker...")
-		if _, err := s.startWorkerManager(s.supervisorCtx); err != nil {
-			fmt.Fprintf(os.Stderr, "[ERROR] watchWorker: failed to relaunch worker: %v\n", err)
+		s.slog("INFO", "watchWorker: relaunching nucleus_worker...")
+
+		// BUG-11 fix: before relaunching the worker, verify Temporal is reachable.
+		// The most common cause of repeated worker crashes is Temporal being down —
+		// the worker connects, Temporal is gone, worker exits immediately, watchdog
+		// relaunches in a tight loop. Instead: check port 7233, and if unreachable
+		// run `temporal ensure` (idempotent) before spawning a new worker process.
+		if conn, tcpErr := net.DialTimeout("tcp", "localhost:7233", 1*time.Second); tcpErr != nil {
+			s.slog("WARN", "watchWorker: Temporal not reachable before worker restart — attempting temporal ensure")
+			nucleusBin := filepath.Join(s.binDir, "nucleus", "nucleus.exe")
+			if _, statErr := os.Stat(nucleusBin); statErr != nil {
+				if p, lookErr := exec.LookPath("nucleus"); lookErr == nil {
+					nucleusBin = p
+				}
+			}
+			ensureCtx, ensureCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			out, ensureErr := exec.CommandContext(ensureCtx, nucleusBin, "temporal", "ensure").CombinedOutput()
+			ensureCancel()
+			if ensureErr != nil {
+				s.slog("ERROR", "watchWorker: temporal ensure failed: %v — %s", ensureErr, strings.TrimSpace(string(out)))
+			} else {
+				s.slog("INFO", "watchWorker: temporal ensure succeeded — proceeding with worker restart")
+			}
 		} else {
-			fmt.Fprintln(os.Stderr, "[INFO] watchWorker: nucleus_worker relaunched successfully")
+			conn.Close()
+		}
+
+		if _, err := s.startWorkerManager(s.supervisorCtx); err != nil {
+			s.slog("ERROR", "watchWorker: failed to relaunch worker: %v", err)
+		} else {
+			s.slog("INFO", "watchWorker: nucleus_worker relaunched successfully")
 		}
 
 		// Exponential backoff with cap
@@ -1045,7 +1108,7 @@ func (s *Supervisor) startSvelteDev(ctx context.Context) (*ManagedProcess, error
 			StartedAt: time.Now(),
 		}
 		s.processes["svelte_dev"] = proc
-		fmt.Fprintln(os.Stderr, "[INFO] ✓ Svelte dev server already running on port 5173 — skipping start")
+		s.slog("INFO", "✓ Svelte dev server already running on port 5173 — skipping start")
 		return proc, nil
 	}
 
@@ -1257,6 +1320,9 @@ func createServiceStartCmd(c *core.Core) *cobra.Command {
 			// watchWorker uses it to know when to stop restarting the worker.
 			// This is intentionally context.Background() — no timeout.
 			sup.supervisorCtx = context.Background()
+			// Init structured logger — writes to nucleus_service_YYYYMMDD.log with
+			// timestamps (log.Ldate|log.Ltime) and registers the stream in telemetry.
+			sup.initLogger(c)
 			// Boot usa timeout de 120s. El proceso principal NO usa contexto
 			// con timeout — debe vivir indefinidamente bajo NSSM.
 			bootCtx, bootCancel := context.WithTimeout(context.Background(), 120*time.Second)
@@ -1351,6 +1417,9 @@ func createServiceStartCmd(c *core.Core) *cobra.Command {
 			defer shutdownCancel()
 			if err := sup.Shutdown(shutdownCtx); err != nil {
 				c.Logger.Printf("[WARN] Shutdown error: %v", err)
+			}
+			if sup.log != nil {
+				sup.log.Close()
 			}
 			c.Logger.Printf("[INFO] Nucleus service stopped")
 		},

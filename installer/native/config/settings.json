@@ -1,0 +1,36 @@
+{
+  "_comment": "Nucleus local settings — edit to customize behavior. All values have safe defaults.",
+  "_version": "1.0",
+
+  "health": {
+    "_comment": "Controls the behavior of `nucleus health` and the automatic 60s schedule",
+    "auto_fix": false,
+    "interval_seconds": 60
+  },
+
+  "memory": {
+    "_comment": "RAM thresholds in MB. Must match your system — lower if you have 8GB or less",
+    "degraded_mb": 2000,
+    "pressure_mb": 1000
+  },
+
+  "watchdog": {
+    "_comment": "Worker restart policy. backoff doubles on each failure up to max",
+    "backoff_initial_seconds": 5,
+    "backoff_max_seconds": 60,
+    "stable_threshold_seconds": 30
+  },
+
+  "timeouts": {
+    "_comment": "Boot timeouts in seconds. Increase on slow machines",
+    "temporal_boot_seconds": 60,
+    "brain_boot_seconds": 15,
+    "health_check_seconds": 15,
+    "health_fix_seconds": 45
+  },
+
+  "logging": {
+    "_comment": "daily = one file per day (default). single = one file forever (legacy behavior)",
+    "rotation": "daily"
+  }
+}
