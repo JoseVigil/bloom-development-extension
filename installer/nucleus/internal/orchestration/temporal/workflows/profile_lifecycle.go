@@ -13,13 +13,23 @@ import (
 	"nucleus/internal/orchestration/types"
 )
 
+// maxLaunchesBeforeReset define cuántos launches se acumulan antes de hacer ContinueAsNew.
+// Temporal tiene un límite de ~50k eventos por run. Cada launch genera aprox. 400-600 eventos
+// (activity scheduling, heartbeats, signals, timers). Con 75 launches tenemos margen holgado.
+const maxLaunchesBeforeReset = 75
+
 // ProfileLifecycleWorkflow es el workflow principal que orquesta el ciclo de vida de un perfil.
 // Este workflow es de larga duración y representa el "actor persistente" del perfil.
 // Un perfil puede ser lanzado y detenido cientos de veces — el workflow NUNCA termina
 // por un shutdown normal. Solo termina si se recibe una señal de eliminación definitiva.
+//
+// ContinueAsNew: cada maxLaunchesBeforeReset launches, el workflow se reinicia con un historial
+// limpio preservando el estado actual en ProfileLifecycleInput.LaunchCount.
 func ProfileLifecycleWorkflow(ctx workflow.Context, input types.ProfileLifecycleInput) error {
 	logger := workflow.GetLogger(ctx)
-	logger.Info("ProfileLifecycleWorkflow started", "profile_id", input.ProfileID)
+	logger.Info("ProfileLifecycleWorkflow started",
+		"profile_id", input.ProfileID,
+		"launch_count_offset", input.LaunchCount)
 
 	// Estado mutable del workflow
 	state := types.ProfileStatus{
@@ -31,6 +41,11 @@ func ProfileLifecycleWorkflow(ctx workflow.Context, input types.ProfileLifecycle
 
 	// Detalles completos de Sentinel cuando esté lanzado
 	var sentinelDetails *types.SentinelLaunchResult
+
+	// launchCount acumula el total de launches en este run.
+	// Se inicializa desde input.LaunchCount para que el conteo sea correcto
+	// tras un ContinueAsNew (el campo preserva el offset del run anterior).
+	launchCount := input.LaunchCount
 
 	// Channels para signals
 	launchSignalChan := workflow.GetSignalChannel(ctx, signals.SignalLaunch)
@@ -77,8 +92,8 @@ func ProfileLifecycleWorkflow(ctx workflow.Context, input types.ProfileLifecycle
 	// antes de crear uno nuevo, evitando la acumulación de timers.
 	var cancelHeartbeatTimer func()
 
-	// Loop principal — permanece activo mientras el perfil existe
-	// Un perfil puede ser lanzado y detenido N veces sin que el workflow termine
+	// Loop principal — permanece activo mientras el perfil existe.
+	// Un perfil puede ser lanzado y detenido N veces sin que el workflow termine.
 	for {
 		selector := workflow.NewSelector(ctx)
 
@@ -146,10 +161,15 @@ func ProfileLifecycleWorkflow(ctx workflow.Context, input types.ProfileLifecycle
 				chromePID = launchResult.ChromePID
 				lastHeartbeat = workflow.Now(ctx)
 
+				// Incrementar contador de launches. Cuando alcance maxLaunchesBeforeReset
+				// el loop principal triggerea ContinueAsNew para limpiar el historial.
+				launchCount++
+
 				logger.Info("Sentinel launched successfully",
 					"chrome_pid", launchResult.ChromePID,
 					"debug_port", launchResult.DebugPort,
-					"extension_loaded", launchResult.ExtensionLoaded)
+					"extension_loaded", launchResult.ExtensionLoaded,
+					"launch_count", launchCount)
 
 				// ── POST-LAUNCH HOOKS ─────────────────────────────────────────────
 				// Best-effort: los hooks no bloquean el workflow si fallan.
@@ -180,8 +200,9 @@ func ProfileLifecycleWorkflow(ctx workflow.Context, input types.ProfileLifecycle
 			state.LastUpdate = workflow.Now(ctx)
 		})
 
-		// Signal: SHUTDOWN — Detener Sentinel y volver a SEEDED para próximo launch
+		// Signal: SHUTDOWN — Detener Sentinel y volver a SEEDED para próximo launch.
 		// CRÍTICO: NO termina el workflow. El perfil puede relanzarse N veces.
+		// El loop continúa esperando el próximo LAUNCH signal.
 		selector.AddReceive(shutdownChan, func(c workflow.ReceiveChannel, more bool) {
 			var shutdownSignal interface{}
 			c.Receive(ctx, &shutdownSignal)
@@ -211,6 +232,12 @@ func ProfileLifecycleWorkflow(ctx workflow.Context, input types.ProfileLifecycle
 				}
 			}
 
+			// Cancelar el timer de heartbeat si hay uno pendiente
+			if cancelHeartbeatTimer != nil {
+				cancelHeartbeatTimer()
+				cancelHeartbeatTimer = nil
+			}
+
 			// Resetear sesión — listo para próximo LAUNCH
 			state.State = types.StateSeeded
 			state.SentinelRunning = false
@@ -220,7 +247,9 @@ func ProfileLifecycleWorkflow(ctx workflow.Context, input types.ProfileLifecycle
 			sentinelDetails = nil
 			state.LastUpdate = workflow.Now(ctx)
 
-			logger.Info("Profile stopped and ready for relaunch", "profile_id", input.ProfileID)
+			logger.Info("Profile stopped and ready for relaunch",
+				"profile_id", input.ProfileID,
+				"launch_count", launchCount)
 			// NO hay return — el loop continúa esperando el próximo LAUNCH signal
 		})
 
@@ -321,7 +350,7 @@ func ProfileLifecycleWorkflow(ctx workflow.Context, input types.ProfileLifecycle
 			}
 		})
 
-		// Timer: Verificación periódica de heartbeat cuando Sentinel está corriendo
+		// Timer: Verificación periódica de heartbeat cuando Sentinel está corriendo.
 		// CRÍTICO: cancelar el timer del ciclo anterior antes de crear uno nuevo.
 		// Sin esto, cada iteración del loop acumula un timer pendiente y eventualmente
 		// uno dispara aunque los heartbeats lleguen correctamente.
@@ -355,11 +384,26 @@ func ProfileLifecycleWorkflow(ctx workflow.Context, input types.ProfileLifecycle
 
 		selector.Select(ctx)
 
-		// El workflow solo termina si el estado es TERMINATED
-		// TERMINATED es reservado para eliminación definitiva del perfil — nunca para shutdown normal
+		// El workflow solo termina definitivamente si el estado es TERMINATED.
+		// TERMINATED es reservado para eliminación permanente del perfil — nunca para shutdown normal.
 		if state.State == types.StateTerminated {
 			logger.Info("ProfileLifecycleWorkflow terminated definitively", "profile_id", input.ProfileID)
 			return nil
+		}
+
+		// ContinueAsNew periódico para evitar el límite de ~50k eventos de historial de Temporal.
+		// Solo se triggerea entre sesiones (Sentinel detenido) para no cortar un run activo a mitad.
+		// El estado completo se preserva en ProfileLifecycleInput para el nuevo run.
+		if launchCount >= maxLaunchesBeforeReset && !state.SentinelRunning {
+			logger.Info("ContinueAsNew triggered — resetting history",
+				"launch_count", launchCount,
+				"profile_id", input.ProfileID)
+
+			return workflow.NewContinueAsNewError(ctx, ProfileLifecycleWorkflow, types.ProfileLifecycleInput{
+				ProfileID:   input.ProfileID,
+				Environment: input.Environment,
+				LaunchCount: launchCount,
+			})
 		}
 	}
 }

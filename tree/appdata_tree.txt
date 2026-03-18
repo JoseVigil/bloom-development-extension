@@ -174,11 +174,40 @@ BloomNucleus/
 │   │       └── sessions/
 │   │           └── 001_25d15cca_012021.ndjson
 │   └── workers/
+│       ├── capabilities_10056.json
+│       ├── capabilities_10312.json
+│       ├── capabilities_10864.json
 │       ├── capabilities_11164.json
+│       ├── capabilities_11200.json
+│       ├── capabilities_11204.json
+│       ├── capabilities_1132.json
+│       ├── capabilities_11988.json
+│       ├── capabilities_12232.json
+│       ├── capabilities_12564.json
+│       ├── capabilities_12624.json
+│       ├── capabilities_12808.json
+│       ├── capabilities_13212.json
+│       ├── capabilities_13256.json
+│       ├── capabilities_16016.json
 │       ├── capabilities_16236.json
+│       ├── capabilities_16972.json
+│       ├── capabilities_16980.json
+│       ├── capabilities_17140.json
+│       ├── capabilities_17148.json
+│       ├── capabilities_17184.json
+│       ├── capabilities_1880.json
+│       ├── capabilities_2184.json
 │       ├── capabilities_3340.json
+│       ├── capabilities_4044.json
+│       ├── capabilities_4192.json
+│       ├── capabilities_4332.json
+│       ├── capabilities_4384.json
 │       ├── capabilities_4464.json
-│       └── capabilities_4896.json
+│       ├── capabilities_4760.json
+│       ├── capabilities_4896.json
+│       ├── capabilities_5544.json
+│       ├── capabilities_6576.json
+│       └── capabilities_9076.json
 ├── hooks/
 │   ├── post_launch/
 │   │   └── 00_generate_synapse_trace.py

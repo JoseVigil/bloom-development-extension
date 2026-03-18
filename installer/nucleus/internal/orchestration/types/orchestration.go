@@ -33,6 +33,10 @@ type BrainEvent struct {
 type ProfileLifecycleInput struct {
 	ProfileID   string `json:"profile_id"`
 	Environment string `json:"environment"`
+	// LaunchCount acumula el total de launches realizados por este perfil.
+	// Se preserva entre runs de ContinueAsNew para mantener el conteo global
+	// y triggerear el reset de historial en el momento correcto.
+	LaunchCount int `json:"launch_count"`
 }
 
 // ProfileStatus es el estado retornado por queries

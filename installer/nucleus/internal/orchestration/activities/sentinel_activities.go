@@ -77,14 +77,14 @@ func (a *SentinelActivities) LaunchSentinel(ctx context.Context, input types.Sen
 		args = append(args, "--override-extension", input.OverrideExtension)
 	}
 
-	// --override-heartbeat
-	if input.OverrideHeartbeat != "" {
-		args = append(args, "--override-heartbeat", input.OverrideHeartbeat)
+	// --override-heartbeat (BoolVar: presencia = true, ausencia = false)
+	if input.OverrideHeartbeat == "true" {
+		args = append(args, "--override-heartbeat")
 	}
 
-	// --override-register
-	if input.OverrideRegister != "" {
-		args = append(args, "--override-register", input.OverrideRegister)
+	// --override-register (BoolVar: presencia = true, ausencia = false)
+	if input.OverrideRegister == "true" {
+		args = append(args, "--override-register")
 	}
 
 	// --override-role

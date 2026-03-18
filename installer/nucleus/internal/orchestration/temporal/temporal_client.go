@@ -120,6 +120,7 @@ func (c *Client) ExecuteSeedWorkflow(ctx context.Context, logger *core.Logger, a
 	profileInput := types.ProfileLifecycleInput{
 		ProfileID:   seedResult.ProfileID,
 		Environment: "production",
+		LaunchCount: 0,
 	}
 
 	profileWE, err := c.client.ExecuteWorkflow(ctx, profileWorkflowOptions, "ProfileLifecycleWorkflow", profileInput)
@@ -153,74 +154,15 @@ type LaunchOverrides struct {
 	AddAccounts       []string
 }
 
-// ExecuteLaunchWorkflow ejecuta el launch de un perfil existente usando señales
+// ExecuteLaunchWorkflow ejecuta el launch de un perfil existente usando SignalWithStart.
+// SignalWithStart garantiza atomicidad: crea el workflow si no existe, o le envía
+// la señal si ya está corriendo — sin race condition entre ambas operaciones.
+// Elimina la necesidad de DescribeWorkflowExecution + restart manual previos.
 func (c *Client) ExecuteLaunchWorkflow(ctx context.Context, logger *core.Logger, profileID string, mode string, overrides LaunchOverrides) (*LaunchResult, error) {
 	workflowID := fmt.Sprintf("profile-lifecycle-%s", profileID)
 
 	logger.Info("Executing launch for profile: %s (workflow: %s)", profileID, workflowID)
 
-	// Verificar que el workflow existe y está corriendo
-	descResp, err := c.client.DescribeWorkflowExecution(ctx, workflowID, "")
-	if err != nil {
-		// Workflow no existe en absoluto — no hay perfil creado
-		return nil, fmt.Errorf("workflow not found (profile may not exist): %w", err)
-	}
-
-	// Si el workflow NO está RUNNING (ej: Completed por bug previo), reiniciarlo
-	if descResp.WorkflowExecutionInfo.Status != enums.WORKFLOW_EXECUTION_STATUS_RUNNING {
-		logger.Info("Workflow not running (status: %v), restarting lifecycle...", descResp.WorkflowExecutionInfo.Status)
-
-		profileWorkflowOptions := client.StartWorkflowOptions{
-			ID:                    workflowID,
-			TaskQueue:             "profile-orchestration",
-			WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-		}
-		profileInput := types.ProfileLifecycleInput{
-			ProfileID:   profileID,
-			Environment: "production",
-		}
-
-		_, err = c.client.ExecuteWorkflow(ctx, profileWorkflowOptions, "ProfileLifecycleWorkflow", profileInput)
-		if err != nil {
-			return nil, fmt.Errorf("failed to restart lifecycle workflow: %w", err)
-		}
-
-		// Dar tiempo al worker para que registre el workflow y esté listo para recibir signals
-		logger.Info("Lifecycle workflow restarted, waiting for it to be ready...")
-		time.Sleep(2 * time.Second)
-	}
-
-	// Verificar estado actual del perfil
-	// Retry porque un workflow recién arrancado puede tardar un momento en registrar el query handler
-	var currentStatus types.ProfileStatus
-	var queryErr error
-	for attempt := 0; attempt < 5; attempt++ {
-		if attempt > 0 {
-			time.Sleep(500 * time.Millisecond)
-		}
-		queryErr = c.QueryWorkflow(ctx, workflowID, "", queries.QueryStatus, &currentStatus)
-		if queryErr == nil {
-			break
-		}
-		logger.Warning("Query status attempt %d/5 failed: %v", attempt+1, queryErr)
-	}
-	if queryErr != nil {
-		return nil, fmt.Errorf("failed to query profile status after retries: %w", queryErr)
-	}
-
-	// Validar que el perfil está en estado apropiado para launch
-	if currentStatus.State != types.StateSeeded &&
-		currentStatus.State != types.StateReady &&
-		currentStatus.State != types.StateIdle {
-		return nil, fmt.Errorf("profile cannot be launched in state: %s (must be SEEDED, READY, or IDLE)", currentStatus.State)
-	}
-
-	// Si está ya corriendo, retornar error
-	if currentStatus.SentinelRunning {
-		return nil, fmt.Errorf("sentinel is already running for this profile")
-	}
-
-	// Enviar señal de LAUNCH
 	launchSignal := types.LaunchSignal{
 		Mode:              mode,
 		ConfigOverride:    overrides.ConfigFile,
@@ -236,27 +178,68 @@ func (c *Client) ExecuteLaunchWorkflow(ctx context.Context, logger *core.Logger,
 		AddAccounts:       overrides.AddAccounts,
 	}
 
-	if err := c.SignalWorkflow(ctx, workflowID, "", signals.SignalLaunch, launchSignal); err != nil {
-		return nil, fmt.Errorf("failed to send launch signal: %w", err)
+	profileInput := types.ProfileLifecycleInput{
+		ProfileID:   profileID,
+		Environment: "production",
+		LaunchCount: 0, // El workflow lo preserva internamente vía ContinueAsNew
 	}
 
-	logger.Info("Launch signal sent, waiting for Sentinel to start...")
+	workflowOptions := client.StartWorkflowOptions{
+		ID:        workflowID,
+		TaskQueue: "profile-orchestration",
+		// ALLOW_DUPLICATE permite que SignalWithStart cree un nuevo run si el workflow
+		// terminó (ej: reinicio del servidor, crash). Si ya está RUNNING, solo envía la señal.
+		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+	}
 
-	// Polling para esperar que Sentinel arranque
+	// SignalWithStart es atómico: no hay ventana entre "verificar si existe" y "señalizar/crear".
+	// Si el workflow está RUNNING  → envía la señal al run activo.
+	// Si el workflow no existe     → lo crea con profileInput y entrega la señal al arrancar.
+	// Si el workflow está COMPLETED/FAILED → crea un nuevo run (ALLOW_DUPLICATE).
+	if _, err := c.client.SignalWithStartWorkflow(
+		ctx,
+		workflowID,
+		signals.SignalLaunch,
+		launchSignal,
+		workflowOptions,
+		"ProfileLifecycleWorkflow",
+		profileInput,
+	); err != nil {
+		return nil, fmt.Errorf("failed to signal-with-start lifecycle workflow: %w", err)
+	}
+
+	logger.Info("Launch signal sent via SignalWithStart, waiting for Sentinel to start...")
+
+	// Polling para esperar que Sentinel arranque.
+	// Los primeros queries pueden fallar si el workflow fue recién creado y aún no registró
+	// el query handler — el retry cubre esa ventana sin sleep fijo previo.
 	maxAttempts := 60
 	pollInterval := 1 * time.Second
 
 	for i := 0; i < maxAttempts; i++ {
 		time.Sleep(pollInterval)
 
-		// Query estado actual
 		var status types.ProfileStatus
 		if err := c.QueryWorkflow(ctx, workflowID, "", queries.QueryStatus, &status); err != nil {
 			logger.Warning("Query failed (attempt %d/%d): %v", i+1, maxAttempts, err)
 			continue
 		}
 
-		// Si pasó a FAILED, retornar error
+		// En el primer query con estado conocido, validar que el perfil puede lanzarse.
+		// Se chequea aquí (post-señal) en lugar de antes para evitar el DescribeWorkflow previo.
+		if i == 0 || status.State == types.StateLaunching {
+			if status.SentinelRunning {
+				return nil, fmt.Errorf("sentinel is already running for this profile")
+			}
+			if status.State != types.StateSeeded &&
+				status.State != types.StateReady &&
+				status.State != types.StateIdle &&
+				status.State != types.StateLaunching {
+				return nil, fmt.Errorf("profile cannot be launched in state: %s (must be SEEDED, READY, IDLE, or LAUNCHING)", status.State)
+			}
+		}
+
+		// Si pasó a FAILED, retornar error inmediatamente
 		if status.State == types.StateFailed {
 			return &LaunchResult{
 				Success:   false,
@@ -267,7 +250,7 @@ func (c *Client) ExecuteLaunchWorkflow(ctx context.Context, logger *core.Logger,
 			}, fmt.Errorf("launch failed: %s", status.ErrorMessage)
 		}
 
-		// Si Sentinel está corriendo, obtener detalles
+		// Sentinel corriendo y estado RUNNING — obtener detalles completos
 		if status.SentinelRunning && status.State == types.StateRunning {
 			var details types.SentinelLaunchResult
 			if err := c.QueryWorkflow(ctx, workflowID, "", queries.QuerySentinelDetails, &details); err == nil {
