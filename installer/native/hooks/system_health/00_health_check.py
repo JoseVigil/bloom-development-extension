@@ -44,6 +44,19 @@ FIXABLE_COMPONENTS = {
 # bloom_api, governance, vault: aliases o capas que nucleus no puede fixear directamente.
 SKIP_FIX = {"bloom_api", "governance", "vault"}
 
+# ── Memory pressure thresholds ───────────────────────────────────────────────
+# memory es un ciudadano de primera clase del sistema — se reporta como
+# componente en el JSON de health igual que worker, temporal, etc.
+#
+# Dos niveles:
+#   DEGRADED  → < 2000 MB libres  — "ojo, se viene el problema"
+#   PRESSURE  → < 1000 MB libres  — "ya estás en peligro real"
+#
+# El hook OBSERVA y REPORTA. Nucleus decide si actúa.
+# El hook NUNCA falla por memoria baja — eso sería un error conceptual.
+MEMORY_DEGRADED_MB = 2000   # < 2GB → DEGRADED ⚠️
+MEMORY_PRESSURE_MB = 1000   # < 1GB → PRESSURE 🔴
+
 # Timeout para nucleus health sin --fix (chequeo rapido de puertos, <3s por diseno)
 HEALTH_CHECK_TIMEOUT_S = 15
 
@@ -144,6 +157,106 @@ def run_nucleus_health(nucleus_bin: str, fix: bool = False) -> dict:
         }
 
 
+def check_memory() -> dict:
+    """
+    Verifica la memoria RAM libre del sistema y retorna un ComponentHealth
+    compatible con el modelo de componentes de nucleus health.
+
+    Estados posibles:
+      OK       -> >= 2000 MB libres  -- operacion normal
+      DEGRADED -> [1000, 2000) MB    -- presion, riesgo de crash en Temporal
+      PRESSURE -> < 1000 MB          -- peligro real, crash inminente
+
+    El hook NUNCA lanza excepcion por esto -- si el chequeo falla, retorna
+    estado UNKNOWN con el error descripto. No es motivo para fallar el hook.
+    """
+    try:
+        free_mb = _get_free_memory_mb()
+    except Exception as e:
+        return {
+            "healthy": True,   # no sabemos -- no degradamos por incertidumbre
+            "state":   "UNKNOWN",
+            "error":   f"memory check failed: {e}",
+        }
+
+    if free_mb < MEMORY_PRESSURE_MB:
+        state   = "PRESSURE"
+        healthy = False
+        msg     = f"Critical memory pressure -- {free_mb} MB free (threshold: {MEMORY_PRESSURE_MB} MB)"
+    elif free_mb < MEMORY_DEGRADED_MB:
+        state   = "DEGRADED"
+        healthy = False
+        msg     = f"Low memory -- {free_mb} MB free (threshold: {MEMORY_DEGRADED_MB} MB)"
+    else:
+        state   = "OK"
+        healthy = True
+        msg     = f"{free_mb} MB free"
+
+    return {
+        "healthy": healthy,
+        "state":   state,
+        "free_mb": free_mb,
+        "message": msg,
+    }
+
+
+def _get_free_memory_mb() -> int:
+    """
+    Retorna la memoria RAM disponible en MB.
+    Usa la API nativa de cada plataforma sin dependencias externas.
+    """
+    import platform
+    system = platform.system()
+
+    if system == "Windows":
+        # GlobalMemoryStatusEx -- disponible en todas las versiones de Windows,
+        # no requiere ninguna dependencia adicional.
+        import ctypes
+
+        class MEMORYSTATUSEX(ctypes.Structure):
+            _fields_ = [
+                ("dwLength",                ctypes.c_ulong),
+                ("dwMemoryLoad",            ctypes.c_ulong),
+                ("ullTotalPhys",            ctypes.c_ulonglong),
+                ("ullAvailPhys",            ctypes.c_ulonglong),
+                ("ullTotalPageFile",        ctypes.c_ulonglong),
+                ("ullAvailPageFile",        ctypes.c_ulonglong),
+                ("ullTotalVirtual",         ctypes.c_ulonglong),
+                ("ullAvailVirtual",         ctypes.c_ulonglong),
+                ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+            ]
+
+        stat = MEMORYSTATUSEX()
+        stat.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+        ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat))
+        return int(stat.ullAvailPhys / (1024 * 1024))
+
+    elif system == "Linux":
+        # MemAvailable es la metrica correcta desde kernel 3.14+
+        # (no MemFree, que ignora caches reclaimables)
+        with open("/proc/meminfo", "r") as f:
+            for line in f:
+                if line.startswith("MemAvailable:"):
+                    kb = int(line.split()[1])
+                    return kb // 1024
+        raise RuntimeError("MemAvailable not found in /proc/meminfo")
+
+    elif system == "Darwin":
+        import subprocess as sp
+        vm = sp.run(["vm_stat"], capture_output=True, text=True, timeout=5)
+        page_size = 4096
+        free_pages = 0
+        for line in vm.stdout.splitlines():
+            if "page size of" in line:
+                page_size = int(line.split()[-2])
+            elif line.startswith("Pages free:") or line.startswith("Pages inactive:"):
+                free_pages += int(line.split()[-1].rstrip("."))
+        return (free_pages * page_size) // (1024 * 1024)
+
+    else:
+        raise RuntimeError(f"Unsupported platform: {system}")
+
+
 def main():
     # 0. Leer HookContext desde stdin
     try:
@@ -184,12 +297,23 @@ def main():
             error = comp.get("error", "")
             write_log(log_path, "WARN", f"  {name}: {comp_state} -- {error}")
 
+    # 2. Chequeo de memoria — ciudadano de primera clase del sistema.
+    #    Se ejecuta SIEMPRE, independientemente del estado de nucleus health.
+    #    No es fixable — el hook observa y reporta, Nucleus decide si actua.
+    mem = check_memory()
+    components_summary["memory"] = mem.get("state", "UNKNOWN")
+    if not mem.get("healthy", True):
+        level = "ERROR" if mem["state"] == "PRESSURE" else "WARN"
+        write_log(log_path, level, f"  memory: {mem['state']} -- {mem.get('message', '')}")
+    else:
+        write_log(log_path, "INFO", f"  memory: {mem['state']} -- {mem.get('message', '')}")
+
     fix_attempted = False
     fix_applied   = False
 
-    # 2. Solo intentar fix si hay componentes FIXABLE caidos.
-    #    Componentes en SKIP_FIX (bloom_api, governance, vault) no tienen
-    #    mecanismo de restart automatico -- nucleus --fix no puede ayudarlos.
+    # 3. Solo intentar fix si hay componentes FIXABLE caidos.
+    #    memory NO esta en FIXABLE_COMPONENTS — no hay fix automatico para RAM.
+    #    Componentes en SKIP_FIX (bloom_api, governance, vault) tampoco.
     fixable_failures = [
         name for name, comp in health.get("components", {}).items()
         if not comp.get("healthy", True) and name in FIXABLE_COMPONENTS
@@ -259,16 +383,23 @@ def main():
 
     write_log(log_path, "INFO", "=== Health check completed ===")
 
-    # 3. Construir metadata extendida para la Activity Go
+    # 4. Construir metadata extendida para la Activity Go
+    # memory_detail expone free_mb para que el Conductor UI pueda mostrarlo
+    # como metrica numerica ademas del estado categorico del componente.
     metadata = {
         "health_state":  state,
         "fix_attempted": fix_attempted,
         "fix_applied":   fix_applied,
         "components":    components_summary,
+        "memory_detail": {
+            "free_mb":  mem.get("free_mb"),
+            "state":    mem.get("state", "UNKNOWN"),
+            "message":  mem.get("message", ""),
+        },
         "timestamp":     utc_now(),
     }
 
-    # 4. Devolver HookResult JSON a stdout
+    # 5. Devolver HookResult JSON a stdout
     hook_result = {
         "hook":    "00_health_check.py",
         "success": True,
