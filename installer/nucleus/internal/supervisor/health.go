@@ -37,8 +37,25 @@ type HealthResult struct {
 	State           string                     `json:"state"` // HEALTHY | DEGRADED | FAILED
 	Error           string                     `json:"error,omitempty"`
 	Components      map[string]ComponentHealth `json:"components"`
+	Resources       *ResourceHealth            `json:"resources,omitempty"`
 	Timestamp       int64                      `json:"timestamp"`
 	BrainLastErrors *BrainLastErrors           `json:"brain_last_errors,omitempty"`
+}
+
+// ResourceHealth agrupa metricas de recursos del sistema (memoria, disco, CPU).
+// Disenado para crecer -- memory es el primer ciudadano.
+type ResourceHealth struct {
+	Memory MemoryHealth `json:"memory"`
+}
+
+// MemoryHealth describe el estado de la RAM disponible.
+// Estados: OK | DEGRADED | PRESSURE | UNKNOWN
+type MemoryHealth struct {
+	State   string `json:"state"`
+	FreeMB  int64  `json:"free_mb,omitempty"`
+	TotalMB int64  `json:"total_mb,omitempty"`
+	Message string `json:"message,omitempty"`
+	Error   string `json:"error,omitempty"`
 }
 
 // ComponentHealth describe el estado de un componente individual
@@ -253,6 +270,11 @@ func checkSystemHealthParallel(ctx context.Context, s *Supervisor, appDataDir st
 		for r := range resultsCh {
 			result.Components[r.name] = r.health
 		}
+	}
+
+	// Chequeo de recursos -- fuera del pool paralelo, es local e instantaneo.
+	result.Resources = &ResourceHealth{
+		Memory: checkMemory(),
 	}
 
 evaluate:
@@ -524,6 +546,50 @@ func applyFixes(result *HealthResult) {
 			svelte.Error = ""
 		}
 		result.Components["svelte_dev"] = svelte
+	}
+
+	// Recalculate top-level success/state/error after all fixes have been applied.
+	// Without this, result.Success and result.State reflect the pre-fix snapshot
+	// even when all components recovered — causing confusing FAILED responses
+	// after a successful --fix run.
+	recalculateHealthState(result)
+}
+
+// recalculateHealthState recomputes result.Success, result.State and result.Error
+// from the current state of result.Components. Called after applyFixes() so the
+// top-level fields reflect post-fix reality.
+//
+// Mirror of the evaluate: block in checkSystemHealthParallel — must stay in sync
+// if the criticality lists change.
+func recalculateHealthState(result *HealthResult) {
+	criticalComponents    := []string{"temporal", "worker", "vault", "governance"}
+	nonCriticalComponents := []string{"ollama", "control_plane", "brain_service", "bloom_api", "svelte_dev", "worker_manager"}
+
+	criticalFailures, degradedCount := 0, 0
+	for _, name := range criticalComponents {
+		if comp, ok := result.Components[name]; ok && !comp.Healthy {
+			criticalFailures++
+		}
+	}
+	for _, name := range nonCriticalComponents {
+		if comp, ok := result.Components[name]; ok && !comp.Healthy {
+			degradedCount++
+		}
+	}
+
+	switch {
+	case criticalFailures > 0:
+		result.Success = false
+		result.State   = "FAILED"
+		result.Error   = fmt.Sprintf("%d critical components unhealthy", criticalFailures)
+	case degradedCount > 0:
+		result.Success = false
+		result.State   = "DEGRADED"
+		result.Error   = fmt.Sprintf("%d non-critical components unhealthy", degradedCount)
+	default:
+		result.Success = true
+		result.State   = "HEALTHY"
+		result.Error   = ""
 	}
 }
 
