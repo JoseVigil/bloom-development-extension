@@ -7,30 +7,29 @@ import (
 
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	temporalworkflows "nucleus/internal/orchestration/temporal/workflows"
 )
 
-// SystemHealthScheduleID es el identificador estable del Schedule en Temporal.
-// Nunca renombrarlo — Temporal lo usa como clave primaria del Schedule.
 const SystemHealthScheduleID = "nucleus-system-health-schedule"
 
-// EnsureSystemHealthSchedule crea o verifica el Schedule de health check.
+// EnsureSystemHealthSchedule crea o actualiza el Schedule de health check.
 //
-// Es idempotente — si el Schedule ya existe con la misma configuración
-// simplemente retorna nil. No falla si Temporal ya lo tiene registrado.
-//
-// Diseño del Schedule:
-//   - Interval: 60s — estándar de la industria para health checks de infra.
-//     nucleus health tarda < 3s; 30s daría overhead innecesario en Temporal history.
-//   - Overlap: SKIP — si el workflow anterior todavía está corriendo (poco probable
-//     dado el timeout de 30s), el siguiente tick se descarta en lugar de acumular.
-//   - MaximumAttempts: 1 — el Schedule reintenta en el próximo tick (60s);
-//     no tiene sentido reintentar inmediatamente un health check fallido.
-func EnsureSystemHealthSchedule(ctx context.Context, c client.Client) error {
+// Es idempotente y tolerante a reinicios del worker:
+//   - Si el schedule no existe → lo crea con el intervalo indicado.
+//   - Si ya existe → lo actualiza con el nuevo intervalo (no-op si no cambió).
+//   - Nunca retorna error si el schedule ya existe — el worker lo adopta.
+func EnsureSystemHealthSchedule(ctx context.Context, c client.Client, intervalSeconds int) error {
+	if intervalSeconds <= 0 {
+		intervalSeconds = 60
+	}
+	interval := time.Duration(intervalSeconds) * time.Second
+
 	spec := client.ScheduleSpec{
 		Intervals: []client.ScheduleIntervalSpec{
-			{Every: 60 * time.Second},
+			{Every: interval},
 		},
 	}
 
@@ -48,25 +47,37 @@ func EnsureSystemHealthSchedule(ctx context.Context, c client.Client) error {
 		Action: action,
 	})
 	if err != nil {
-		// Ya existe — no es un error, el Schedule sigue activo
-		if isScheduleAlreadyExists(err) {
-			return nil
+		if !isAlreadyExists(err) {
+			return err
 		}
-		return err
+		// Schedule ya existe — actualizar el intervalo para que refleje settings.json
+		existing := c.ScheduleClient().GetHandle(ctx, SystemHealthScheduleID)
+		return existing.Update(ctx, client.ScheduleUpdateOptions{
+			DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
+				input.Description.Schedule.Spec = &spec
+				return &client.ScheduleUpdate{Schedule: &input.Description.Schedule}, nil
+			},
+		})
 	}
 
 	_ = handle
 	return nil
 }
 
-// isScheduleAlreadyExists detecta el error que Temporal devuelve cuando
-// el Schedule ya fue creado previamente. Temporal no expone un tipo tipado
-// para este caso, así que hacemos string matching sobre el mensaje.
-func isScheduleAlreadyExists(err error) bool {
+// isAlreadyExists detecta el error de schedule ya existente.
+// Temporal puede devolver el error como gRPC AlreadyExists o como mensaje de texto.
+func isAlreadyExists(err error) bool {
 	if err == nil {
 		return false
 	}
-	msg := err.Error()
+	// Chequeo por código gRPC (más robusto)
+	if s, ok := status.FromError(err); ok {
+		if s.Code() == codes.AlreadyExists {
+			return true
+		}
+	}
+	// Fallback por string matching
+	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "already exists") ||
-		strings.Contains(msg, "ALREADY_EXISTS")
+		strings.Contains(msg, "already_exists")
 }

@@ -161,508 +161,98 @@ BloomNucleus/
 │   ├── metamorph.json
 │   ├── nucleus.json
 │   ├── profile/
-│   │   └── 8b8ec0f1-2c28-4534-9422-ef97952f7310/
-│   │       ├── com.bloom.synapse.8b8ec0f1.json
+│   │   └── 25d15cca-9937-45d7-8c51-00b48256efbf/
+│   │       ├── com.bloom.synapse.25d15cca.json
 │   │       └── ignition_spec.json
-│   └── profiles.json
+│   ├── profiles.json
+│   └── settings.json
 ├── history/
 │   ├── profiles/
-│   │   └── 8b8ec0f1-2c28-4534-9422-ef97952f7310/
+│   │   └── 25d15cca-9937-45d7-8c51-00b48256efbf/
 │   │       ├── launches/
-│   │       │   └── 20260316.ndjson
+│   │       │   └── 20260318.ndjson
 │   │       └── sessions/
-│   │           └── 001_8b8ec0f1_094212.ndjson
+│   │           └── 001_25d15cca_012021.ndjson
 │   └── workers/
-│       ├── capabilities_10012.json
-│       ├── capabilities_10016.json
-│       ├── capabilities_10040.json
-│       ├── capabilities_10092.json
-│       ├── capabilities_10232.json
-│       ├── capabilities_10244.json
-│       ├── capabilities_10260.json
-│       ├── capabilities_10352.json
-│       ├── capabilities_10404.json
-│       ├── capabilities_10424.json
-│       ├── capabilities_10520.json
-│       ├── capabilities_10592.json
-│       ├── capabilities_10636.json
-│       ├── capabilities_10712.json
-│       ├── capabilities_10764.json
-│       ├── capabilities_10768.json
-│       ├── capabilities_10780.json
-│       ├── capabilities_10800.json
-│       ├── capabilities_10824.json
-│       ├── capabilities_10848.json
-│       ├── capabilities_10932.json
-│       ├── capabilities_11040.json
-│       ├── capabilities_11072.json
-│       ├── capabilities_11248.json
-│       ├── capabilities_11300.json
-│       ├── capabilities_11772.json
-│       ├── capabilities_11860.json
-│       ├── capabilities_11908.json
-│       ├── capabilities_1204.json
-│       ├── capabilities_12076.json
-│       ├── capabilities_12080.json
-│       ├── capabilities_12084.json
-│       ├── capabilities_12124.json
-│       ├── capabilities_12136.json
-│       ├── capabilities_12152.json
-│       ├── capabilities_12388.json
-│       ├── capabilities_12408.json
-│       ├── capabilities_12548.json
-│       ├── capabilities_12580.json
-│       ├── capabilities_12600.json
-│       ├── capabilities_12656.json
-│       ├── capabilities_12744.json
-│       ├── capabilities_12800.json
-│       ├── capabilities_12836.json
-│       ├── capabilities_12848.json
-│       ├── capabilities_12896.json
-│       ├── capabilities_12912.json
-│       ├── capabilities_12944.json
-│       ├── capabilities_13012.json
-│       ├── capabilities_13040.json
-│       ├── capabilities_13048.json
-│       ├── capabilities_13064.json
-│       ├── capabilities_13232.json
-│       ├── capabilities_13324.json
-│       ├── capabilities_13532.json
-│       ├── capabilities_13640.json
-│       ├── capabilities_13760.json
-│       ├── capabilities_13796.json
-│       ├── capabilities_13860.json
-│       ├── capabilities_14032.json
-│       ├── capabilities_14036.json
-│       ├── capabilities_14044.json
-│       ├── capabilities_14048.json
-│       ├── capabilities_14252.json
-│       ├── capabilities_14400.json
-│       ├── capabilities_14428.json
-│       ├── capabilities_14436.json
-│       ├── capabilities_14440.json
-│       ├── capabilities_14612.json
-│       ├── capabilities_14796.json
-│       ├── capabilities_14808.json
-│       ├── capabilities_14880.json
-│       ├── capabilities_14896.json
-│       ├── capabilities_14956.json
-│       ├── capabilities_15320.json
-│       ├── capabilities_15460.json
-│       ├── capabilities_15632.json
-│       ├── capabilities_15644.json
-│       ├── capabilities_15692.json
-│       ├── capabilities_15720.json
-│       ├── capabilities_15744.json
-│       ├── capabilities_15792.json
-│       ├── capabilities_15876.json
-│       ├── capabilities_15892.json
-│       ├── capabilities_15920.json
-│       ├── capabilities_15940.json
-│       ├── capabilities_16020.json
-│       ├── capabilities_16056.json
-│       ├── capabilities_16072.json
-│       ├── capabilities_16084.json
-│       ├── capabilities_16096.json
-│       ├── capabilities_16200.json
-│       ├── capabilities_1628.json
-│       ├── capabilities_16332.json
-│       ├── capabilities_16456.json
-│       ├── capabilities_16636.json
-│       ├── capabilities_16644.json
-│       ├── capabilities_16672.json
-│       ├── capabilities_16716.json
-│       ├── capabilities_16728.json
-│       ├── capabilities_16772.json
-│       ├── capabilities_16932.json
-│       ├── capabilities_16944.json
-│       ├── capabilities_16948.json
-│       ├── capabilities_17040.json
-│       ├── capabilities_17092.json
-│       ├── capabilities_17228.json
-│       ├── capabilities_17280.json
-│       ├── capabilities_17344.json
-│       ├── capabilities_17560.json
-│       ├── capabilities_17624.json
-│       ├── capabilities_17904.json
-│       ├── capabilities_17912.json
-│       ├── capabilities_17916.json
-│       ├── capabilities_18116.json
-│       ├── capabilities_18124.json
-│       ├── capabilities_18148.json
-│       ├── capabilities_1816.json
-│       ├── capabilities_18192.json
-│       ├── capabilities_18232.json
-│       ├── capabilities_18344.json
-│       ├── capabilities_18404.json
-│       ├── capabilities_18440.json
-│       ├── capabilities_18488.json
-│       ├── capabilities_18536.json
-│       ├── capabilities_18552.json
-│       ├── capabilities_18604.json
-│       ├── capabilities_18676.json
-│       ├── capabilities_18776.json
-│       ├── capabilities_18816.json
-│       ├── capabilities_1888.json
-│       ├── capabilities_18908.json
-│       ├── capabilities_19128.json
-│       ├── capabilities_19148.json
-│       ├── capabilities_19160.json
-│       ├── capabilities_19188.json
-│       ├── capabilities_1924.json
-│       ├── capabilities_19348.json
-│       ├── capabilities_19396.json
-│       ├── capabilities_19428.json
-│       ├── capabilities_19484.json
-│       ├── capabilities_19492.json
-│       ├── capabilities_19500.json
-│       ├── capabilities_19700.json
-│       ├── capabilities_19952.json
-│       ├── capabilities_19988.json
-│       ├── capabilities_20080.json
-│       ├── capabilities_20172.json
-│       ├── capabilities_20228.json
-│       ├── capabilities_20316.json
-│       ├── capabilities_20460.json
-│       ├── capabilities_20540.json
-│       ├── capabilities_20584.json
-│       ├── capabilities_20588.json
-│       ├── capabilities_20604.json
-│       ├── capabilities_20608.json
-│       ├── capabilities_20672.json
-│       ├── capabilities_20732.json
-│       ├── capabilities_20744.json
-│       ├── capabilities_20764.json
-│       ├── capabilities_20788.json
-│       ├── capabilities_20860.json
-│       ├── capabilities_2088.json
-│       ├── capabilities_20880.json
-│       ├── capabilities_20916.json
-│       ├── capabilities_21052.json
-│       ├── capabilities_21088.json
-│       ├── capabilities_21144.json
-│       ├── capabilities_21156.json
-│       ├── capabilities_21164.json
-│       ├── capabilities_21288.json
-│       ├── capabilities_21300.json
-│       ├── capabilities_21344.json
-│       ├── capabilities_21360.json
-│       ├── capabilities_21388.json
-│       ├── capabilities_21408.json
-│       ├── capabilities_21460.json
-│       ├── capabilities_21516.json
-│       ├── capabilities_21528.json
-│       ├── capabilities_2164.json
-│       ├── capabilities_21644.json
-│       ├── capabilities_21760.json
-│       ├── capabilities_21824.json
-│       ├── capabilities_21848.json
-│       ├── capabilities_21880.json
-│       ├── capabilities_22244.json
-│       ├── capabilities_22256.json
-│       ├── capabilities_22264.json
-│       ├── capabilities_22312.json
-│       ├── capabilities_22344.json
-│       ├── capabilities_22416.json
-│       ├── capabilities_2248.json
-│       ├── capabilities_22492.json
-│       ├── capabilities_22500.json
-│       ├── capabilities_22504.json
-│       ├── capabilities_22596.json
-│       ├── capabilities_22612.json
-│       ├── capabilities_22640.json
-│       ├── capabilities_22752.json
-│       ├── capabilities_2276.json
-│       ├── capabilities_22828.json
-│       ├── capabilities_22860.json
-│       ├── capabilities_22916.json
-│       ├── capabilities_22944.json
-│       ├── capabilities_22972.json
-│       ├── capabilities_23088.json
-│       ├── capabilities_23104.json
-│       ├── capabilities_23128.json
-│       ├── capabilities_23164.json
-│       ├── capabilities_23276.json
-│       ├── capabilities_23316.json
-│       ├── capabilities_23400.json
-│       ├── capabilities_23420.json
-│       ├── capabilities_23424.json
-│       ├── capabilities_23432.json
-│       ├── capabilities_23452.json
-│       ├── capabilities_23456.json
-│       ├── capabilities_23568.json
-│       ├── capabilities_23592.json
-│       ├── capabilities_23596.json
-│       ├── capabilities_23636.json
-│       ├── capabilities_23668.json
-│       ├── capabilities_23672.json
-│       ├── capabilities_23708.json
-│       ├── capabilities_23768.json
-│       ├── capabilities_23780.json
-│       ├── capabilities_23800.json
-│       ├── capabilities_23808.json
-│       ├── capabilities_23840.json
-│       ├── capabilities_23904.json
-│       ├── capabilities_23948.json
-│       ├── capabilities_23964.json
-│       ├── capabilities_2416.json
-│       ├── capabilities_24188.json
-│       ├── capabilities_24204.json
-│       ├── capabilities_24212.json
-│       ├── capabilities_24284.json
-│       ├── capabilities_24332.json
-│       ├── capabilities_24360.json
-│       ├── capabilities_24420.json
-│       ├── capabilities_24424.json
-│       ├── capabilities_24544.json
-│       ├── capabilities_24608.json
-│       ├── capabilities_24752.json
-│       ├── capabilities_24772.json
-│       ├── capabilities_24784.json
-│       ├── capabilities_24944.json
-│       ├── capabilities_24956.json
-│       ├── capabilities_24968.json
-│       ├── capabilities_25008.json
-│       ├── capabilities_25016.json
-│       ├── capabilities_25068.json
-│       ├── capabilities_25088.json
-│       ├── capabilities_25104.json
-│       ├── capabilities_25144.json
-│       ├── capabilities_25192.json
-│       ├── capabilities_25208.json
-│       ├── capabilities_25228.json
-│       ├── capabilities_25252.json
-│       ├── capabilities_25284.json
-│       ├── capabilities_25292.json
-│       ├── capabilities_25364.json
-│       ├── capabilities_25400.json
-│       ├── capabilities_25408.json
-│       ├── capabilities_25432.json
-│       ├── capabilities_25440.json
-│       ├── capabilities_25460.json
-│       ├── capabilities_25504.json
-│       ├── capabilities_25508.json
-│       ├── capabilities_25516.json
-│       ├── capabilities_25536.json
-│       ├── capabilities_25564.json
-│       ├── capabilities_25580.json
-│       ├── capabilities_25676.json
-│       ├── capabilities_25716.json
-│       ├── capabilities_25736.json
-│       ├── capabilities_25768.json
-│       ├── capabilities_25772.json
-│       ├── capabilities_25804.json
-│       ├── capabilities_25880.json
-│       ├── capabilities_25884.json
-│       ├── capabilities_26036.json
-│       ├── capabilities_26060.json
-│       ├── capabilities_26096.json
-│       ├── capabilities_26108.json
-│       ├── capabilities_26124.json
-│       ├── capabilities_26176.json
-│       ├── capabilities_26236.json
-│       ├── capabilities_26260.json
-│       ├── capabilities_26320.json
-│       ├── capabilities_26356.json
-│       ├── capabilities_26372.json
-│       ├── capabilities_26444.json
-│       ├── capabilities_26452.json
-│       ├── capabilities_26480.json
-│       ├── capabilities_26548.json
-│       ├── capabilities_26568.json
-│       ├── capabilities_26576.json
-│       ├── capabilities_26584.json
-│       ├── capabilities_2692.json
-│       ├── capabilities_2764.json
-│       ├── capabilities_2964.json
-│       ├── capabilities_3140.json
-│       ├── capabilities_3252.json
-│       ├── capabilities_3348.json
-│       ├── capabilities_3388.json
-│       ├── capabilities_3416.json
-│       ├── capabilities_3648.json
-│       ├── capabilities_3716.json
-│       ├── capabilities_3752.json
-│       ├── capabilities_3924.json
-│       ├── capabilities_3928.json
-│       ├── capabilities_3992.json
-│       ├── capabilities_4116.json
-│       ├── capabilities_4152.json
-│       ├── capabilities_4252.json
-│       ├── capabilities_4292.json
-│       ├── capabilities_4296.json
-│       ├── capabilities_4348.json
-│       ├── capabilities_4456.json
-│       ├── capabilities_4504.json
-│       ├── capabilities_4668.json
-│       ├── capabilities_4676.json
-│       ├── capabilities_4748.json
-│       ├── capabilities_4944.json
-│       ├── capabilities_5016.json
-│       ├── capabilities_5144.json
-│       ├── capabilities_5152.json
-│       ├── capabilities_5240.json
-│       ├── capabilities_5348.json
-│       ├── capabilities_544.json
-│       ├── capabilities_5500.json
-│       ├── capabilities_5676.json
-│       ├── capabilities_5680.json
-│       ├── capabilities_576.json
-│       ├── capabilities_5964.json
-│       ├── capabilities_6032.json
-│       ├── capabilities_6052.json
-│       ├── capabilities_6092.json
-│       ├── capabilities_6096.json
-│       ├── capabilities_6152.json
-│       ├── capabilities_6168.json
-│       ├── capabilities_6232.json
-│       ├── capabilities_6252.json
-│       ├── capabilities_6260.json
-│       ├── capabilities_6316.json
-│       ├── capabilities_6336.json
-│       ├── capabilities_6420.json
-│       ├── capabilities_6532.json
-│       ├── capabilities_6800.json
-│       ├── capabilities_6828.json
-│       ├── capabilities_6872.json
-│       ├── capabilities_6920.json
-│       ├── capabilities_6928.json
-│       ├── capabilities_7020.json
-│       ├── capabilities_7044.json
-│       ├── capabilities_7080.json
-│       ├── capabilities_7212.json
-│       ├── capabilities_7216.json
-│       ├── capabilities_7236.json
-│       ├── capabilities_7272.json
-│       ├── capabilities_7312.json
-│       ├── capabilities_7316.json
-│       ├── capabilities_7472.json
-│       ├── capabilities_7560.json
-│       ├── capabilities_7580.json
-│       ├── capabilities_7636.json
-│       ├── capabilities_7740.json
-│       ├── capabilities_7784.json
-│       ├── capabilities_7980.json
-│       ├── capabilities_8044.json
-│       ├── capabilities_8140.json
-│       ├── capabilities_8200.json
-│       ├── capabilities_8204.json
-│       ├── capabilities_8408.json
-│       ├── capabilities_8416.json
-│       ├── capabilities_8488.json
-│       ├── capabilities_8612.json
-│       ├── capabilities_8640.json
-│       ├── capabilities_8760.json
-│       ├── capabilities_8784.json
-│       ├── capabilities_8872.json
-│       ├── capabilities_8896.json
-│       ├── capabilities_8916.json
-│       ├── capabilities_9040.json
-│       ├── capabilities_9084.json
-│       ├── capabilities_9096.json
-│       ├── capabilities_912.json
-│       ├── capabilities_9304.json
-│       ├── capabilities_9372.json
-│       ├── capabilities_9408.json
-│       ├── capabilities_9444.json
-│       ├── capabilities_9468.json
-│       ├── capabilities_9544.json
-│       ├── capabilities_9564.json
-│       ├── capabilities_9696.json
-│       ├── capabilities_9700.json
-│       ├── capabilities_9736.json
-│       ├── capabilities_9760.json
-│       ├── capabilities_9772.json
-│       ├── capabilities_9864.json
-│       └── capabilities_9880.json
+│       ├── capabilities_11164.json
+│       ├── capabilities_16236.json
+│       ├── capabilities_3340.json
+│       ├── capabilities_4464.json
+│       └── capabilities_4896.json
 ├── hooks/
+│   ├── post_launch/
+│   │   └── 00_generate_synapse_trace.py
 │   └── system_health/
+│       └── 00_health_check.py
 ├── logs/
 │   ├── brain/
 │   │   ├── core/
-│   │   │   ├── brain_core_20260316.log
-│   │   │   └── brain_core_20260317.log
+│   │   │   └── brain_core_20260318.log
 │   │   ├── profile/
-│   │   │   ├── brain_profile_20260316.log
-│   │   │   └── brain_profile_20260317.log
+│   │   │   └── brain_profile_20260318.log
 │   │   ├── server/
-│   │   │   ├── brain_server_20260316.log
-│   │   │   ├── brain_server_20260317.log
-│   │   │   ├── brain_server_event_bus_20260316.log
-│   │   │   ├── brain_server_event_bus_20260317.log
-│   │   │   ├── brain_server_manager_20260316.log
-│   │   │   └── brain_server_manager_20260317.log
+│   │   │   ├── brain_server_20260318.log
+│   │   │   ├── brain_server_event_bus_20260318.log
+│   │   │   └── brain_server_manager_20260318.log
 │   │   └── service/
 │   │       ├── brain_service.log
-│   │       └── brain_service_20260317.log
+│   │       └── brain_service_20260318.log
 │   ├── build/ [... build output]
 │   ├── chromium/
 │   ├── conductor/
 │   │   └── setup/
-│   │       └── conductor_setup_20260316.log
+│   │       └── conductor_setup_20260318.log
 │   ├── host/
 │   │   └── profiles/
-│   │       └── 8b8ec0f1-2c28-4534-9422-ef97952f7310/
-│   │           └── 001_8b8ec0f1_094212/
-│   │               ├── cortex_extension_20260316.log
-│   │               ├── host_20260316.log
-│   │               ├── host_boot_001_8b8ec0f1_094212.log
-│   │               └── nm_init_diag_001_8b8ec0f1_094212.log
+│   │       └── 25d15cca-9937-45d7-8c51-00b48256efbf/
+│   │           └── 001_25d15cca_012021/
+│   │               ├── cortex_extension_20260318.log
+│   │               ├── host_20260318.log
+│   │               ├── host_boot_001_25d15cca_012021.log
+│   │               └── nm_init_diag_001_25d15cca_012021.log
 │   ├── metamorph/
-│   │   ├── metamorph_core_20260316.log
-│   │   ├── metamorph_core_20260317.log
-│   │   ├── metamorph_inspection_20260316.log
-│   │   ├── metamorph_operations_20260316.log
-│   │   └── metamorph_operations_20260317.log
+│   │   ├── metamorph_core_20260318.log
+│   │   ├── metamorph_inspection_20260318.log
+│   │   └── metamorph_operations_20260318.log
 │   ├── nucleus/
 │   │   ├── control_plane/
-│   │   │   └── nucleus_control_plane_20260317.log
-│   │   ├── nucleus_orchestration_20260316.log
-│   │   ├── nucleus_orchestration_20260317.log
-│   │   ├── nucleus_synapse_20260316.log
-│   │   ├── nucleus_temporal_20260316.log
-│   │   ├── nucleus_temporal_20260317.log
-│   │   ├── nucleus_temporal_server_20260317.log
+│   │   │   └── nucleus_control_plane_20260318.log
+│   │   ├── nucleus_orchestration_20260318.log
+│   │   ├── nucleus_synapse_20260318.log
+│   │   ├── nucleus_temporal_20260318.log
 │   │   ├── service/
-│   │   │   └── nucleus_service.log
+│   │   │   ├── nucleus_service.log
+│   │   │   └── nucleus_service_20260318.log
 │   │   ├── svelte_dev/
-│   │   │   └── nucleus_svelte_dev_20260317.log
+│   │   │   └── nucleus_svelte_dev_20260318.log
 │   │   ├── system_health/
-│   │   │   └── nucleus_system_health_20260317.log
-│   │   ├── telemetry/
-│   │   │   ├── nucleus_telemetry_20260316.log
-│   │   │   └── nucleus_telemetry_20260317.log
+│   │   │   └── nucleus_system_health_20260318.log
 │   │   └── worker/
-│   │       ├── nucleus_workers_snapshot_20260316.log
-│   │       ├── nucleus_workers_snapshot_20260317.log
-│   │       ├── worker_manager_20260316.log
-│   │       └── worker_manager_20260317.log
+│   │       ├── nucleus_workers_snapshot_20260318.log
+│   │       └── worker_manager_20260318.log
 │   ├── sensor/
-│   │   ├── sensor_20260316.log
-│   │   └── sensor_20260317.log
+│   │   └── sensor_20260318.log
 │   ├── sentinel/
 │   │   ├── profiles/
-│   │   │   ├── 8b8ec0f1-2c28-4534-9422-ef97952f7310/
-│   │   │   │   ├── 001_8b8ec0f1_094212_debug.log
-│   │   │   │   ├── 001_8b8ec0f1_094212_engine_mining.log
-│   │   │   │   ├── 001_8b8ec0f1_094212_engine_read.log
-│   │   │   │   └── 001_8b8ec0f1_094212_netlog.json
-│   │   │   └── sentinel_8b8ec0f1-2c28-4534-9422-ef97952f7310_20260316.log
-│   │   └── sentinel_core_20260316.log
+│   │   │   ├── 25d15cca-9937-45d7-8c51-00b48256efbf/
+│   │   │   │   ├── 001_25d15cca_012021_debug.log
+│   │   │   │   ├── 001_25d15cca_012021_engine_mining.log
+│   │   │   │   ├── 001_25d15cca_012021_engine_read.log
+│   │   │   │   └── 001_25d15cca_012021_netlog.json
+│   │   │   └── sentinel_25d15cca-9937-45d7-8c51-00b48256efbf_20260318.log
+│   │   └── sentinel_core_20260318.log
 │   ├── synapse_trace/
-│   │   └── synapse_trace_001_8b8ec0f1_094212.log
+│   │   └── synapse_trace_001_25d15cca_012021.log
 │   ├── telemetry.json
 │   └── temporal/
 │       ├── server/
-│       │   └── temporal_server_20260317.log
+│       │   └── temporal_server_20260318.log
 │       ├── temporal.db
 │       └── temporal.pid
 ├── profiles/
-│   └── 8b8ec0f1-2c28-4534-9422-ef97952f7310/
+│   └── 25d15cca-9937-45d7-8c51-00b48256efbf/
 │       ├── ActorSafetyLists/
 │       ├── AmountExtractionHeuristicRegexes/
-│       ├── BrowserMetrics/
-│       │   └── BrowserMetrics-69B7FAA5-41E8.pma
 │       ├── CertificateRevocation/
 │       ├── Crashpad/
 │       │   ├── attachments/
@@ -675,6 +265,9 @@ BloomNucleus/
 │       │   ├── Affiliation Database
 │       │   ├── Affiliation Database-journal
 │       │   ├── BookmarkMergedSurfaceOrdering
+│       │   ├── BrowsingTopicsSiteData
+│       │   ├── BrowsingTopicsSiteData-journal
+│       │   ├── BrowsingTopicsState
 │       │   ├── Cache/
 │       │   │   ├── Cache_Data/
 │       │   │   │   ├── index
@@ -691,6 +284,12 @@ BloomNucleus/
 │       │   │   └── pc/
 │       │   │       ├── 05_@;2t2fb2=a6@=`6`2`25[.9092[9660;65-[99164=57144=815`2.db
 │       │   │       └── 05_@;2t2fb2=a6@=`6`2`25[.9092[9660;65-[99164=57144=815`2.journal
+│       │   ├── Collaboration/
+│       │   │   ├── MessageDB
+│       │   │   └── MessageDB-journal
+│       │   ├── DataSharing/
+│       │   │   ├── DataSharingDB
+│       │   │   └── DataSharingDB-journal
 │       │   ├── DawnGraphiteCache/
 │       │   │   ├── data_0
 │       │   │   ├── data_1
@@ -764,6 +363,8 @@ BloomNucleus/
 │       │   │   ├── TransportSecurity
 │       │   │   ├── Trust Tokens
 │       │   │   └── Trust Tokens-journal
+│       │   ├── Network Action Predictor
+│       │   ├── Network Action Predictor-journal
 │       │   ├── PersistentOriginTrials/
 │       │   │   ├── LOCK
 │       │   │   └── LOG
@@ -805,8 +406,8 @@ BloomNucleus/
 │       │   │   ├── LOG
 │       │   │   └── MANIFEST-000001
 │       │   ├── Sessions/
-│       │   │   ├── Session_13418138536688283
-│       │   │   └── Tabs_13418138547460762
+│       │   │   ├── Session_13418281225979779
+│       │   │   └── Tabs_13418281233149198
 │       │   ├── Shared Dictionary/
 │       │   │   ├── cache/
 │       │   │   │   ├── index
@@ -835,6 +436,8 @@ BloomNucleus/
 │       │   ├── WebStorage/
 │       │   │   ├── QuotaManager
 │       │   │   └── QuotaManager-journal
+│       │   ├── blob_storage/
+│       │   │   └── 05e1dd90-d4e4-467e-846f-12e1a6532987/
 │       │   ├── chrome_cart_db/
 │       │   │   ├── LOCK
 │       │   │   └── LOG
@@ -847,6 +450,8 @@ BloomNucleus/
 │       │   ├── discounts_db/
 │       │   │   ├── LOCK
 │       │   │   └── LOG
+│       │   ├── heavy_ad_intervention_opt_out.db
+│       │   ├── heavy_ad_intervention_opt_out.db-journal
 │       │   ├── parcel_tracking_db/
 │       │   │   ├── LOCK
 │       │   │   └── LOG
@@ -868,6 +473,7 @@ BloomNucleus/
 │       │   └── trusted_vault.pb
 │       ├── DevToolsActivePort
 │       ├── FileTypePolicies/
+│       ├── FirstPartySetsPreloaded/
 │       ├── GPUPersistentCache/
 │       │   └── DawnGraphiteCache/
 │       │       └── AD277SZPBPK7F6SGJV5FTCFBB7NJ7QPK/
@@ -926,6 +532,8 @@ BloomNucleus/
 │       │   ├── discovery.synapse.config.js
 │       │   ├── landing/
 │       │   └── manifest.json
+│       ├── extensions_crx_cache/
+│       │   └── metadata.json
 │       ├── hyphen-data/
 │       └── segmentation_platform/
 │           ├── ukm_db

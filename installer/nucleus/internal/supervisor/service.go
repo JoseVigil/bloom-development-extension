@@ -57,7 +57,8 @@ type Supervisor struct {
 	binDir          string
 	mu              sync.RWMutex
 	supervisorCtx   context.Context // lives for the duration of the service; used by watchWorker
-	workerWatchOnce sync.Once       // ensures only one watchWorker goroutine runs per supervisor
+	workerWatchOnce   sync.Once       // ensures only one watchWorker goroutine runs per supervisor
+	temporalWatchOnce sync.Once       // ensures only one watchTemporal goroutine runs per supervisor
 	log             *core.Logger    // structured logger — nil until initLogger() is called
 }
 
@@ -208,6 +209,12 @@ func (s *Supervisor) startTemporalServer(ctx context.Context) (*ManagedProcess, 
 
 	// Monitor process in background
 	go s.monitorProcess(proc, logFile)
+
+	// Launch Temporal watchdog — relaunches Temporal if it dies unexpectedly.
+	// Same pattern as workerWatchOnce: only one goroutine per supervisor lifetime.
+	s.temporalWatchOnce.Do(func() {
+		go s.watchTemporal()
+	})
 
 	return proc, nil
 }
@@ -754,6 +761,102 @@ func (s *Supervisor) monitorProcess(proc *ManagedProcess, logFile *os.File) {
 	s.updateTelemetry(proc)
 }
 
+// watchTemporal monitors the temporal_server process and relaunches it if it
+// dies unexpectedly, as long as the supervisor itself is still running.
+//
+// When Temporal dies the worker loses its connection and enters a crash loop.
+// Restarting Temporal first breaks that cycle — the worker watchdog then
+// reconnects cleanly on its next attempt.
+//
+// Restart policy mirrors watchWorker:
+//   - Exponential backoff: 5s → 10s → 20s → 40s → capped at 60s
+//   - Resets to 5s after a stable run longer than stableThreshold (30s)
+//   - No restart if Temporal stopped cleanly (StateStopped)
+//   - No restart if supervisorCtx is cancelled (service shutting down)
+func (s *Supervisor) watchTemporal() {
+	backoff := 5 * time.Second
+	maxBackoff := 60 * time.Second
+	stableThreshold := 30 * time.Second
+
+	for {
+		s.mu.RLock()
+		proc, exists := s.processes["temporal_server"]
+		s.mu.RUnlock()
+
+		var startedAt time.Time
+		if exists && proc.Cmd != nil {
+			startedAt = proc.StartedAt
+			proc.Cmd.Wait() // blocks until Temporal exits
+		} else {
+			// Cmd:nil means Temporal was already running when the supervisor
+			// started (external process). Nothing to watch — exit the loop.
+			return
+		}
+
+		// Stop if supervisor is shutting down.
+		select {
+		case <-s.supervisorCtx.Done():
+			s.slog("INFO", "watchTemporal: supervisor shutting down — stopping watch loop")
+			return
+		default:
+		}
+
+		// Stop if Temporal exited cleanly (SIGTERM from Shutdown()).
+		s.mu.RLock()
+		proc, exists = s.processes["temporal_server"]
+		s.mu.RUnlock()
+		if exists {
+			proc.mu.RLock()
+			state := proc.State
+			proc.mu.RUnlock()
+			if state == StateStopped {
+				s.slog("INFO", "watchTemporal: temporal_server stopped cleanly — no restart")
+				return
+			}
+		}
+
+		// Reset backoff if Temporal ran long enough before dying.
+		if !startedAt.IsZero() && time.Since(startedAt) > stableThreshold {
+			backoff = 5 * time.Second
+		}
+
+		s.slog("WARN", "watchTemporal: temporal_server exited unexpectedly — restarting in %v", backoff)
+
+		select {
+		case <-s.supervisorCtx.Done():
+			s.slog("INFO", "watchTemporal: supervisor shutting down during backoff — stopping watch loop")
+			return
+		case <-time.After(backoff):
+		}
+
+		s.slog("INFO", "watchTemporal: relaunching temporal_server...")
+
+		// Clear the dead process so startTemporalServer spawns a real one
+		// instead of returning early on the port-7233 check (port may still
+		// be in TIME_WAIT for a few seconds after Temporal dies).
+		s.mu.Lock()
+		delete(s.processes, "temporal_server")
+		s.mu.Unlock()
+
+		if _, err := s.startTemporalServer(s.supervisorCtx); err != nil {
+			s.slog("ERROR", "watchTemporal: failed to relaunch temporal_server: %v", err)
+		} else {
+			// Wait for Temporal to be ready before letting the worker reconnect.
+			if err := s.waitForTemporalReady(s.supervisorCtx, 60*time.Second); err != nil {
+				s.slog("WARN", "watchTemporal: temporal_server restarted but not ready after 60s: %v", err)
+			} else {
+				s.slog("INFO", "watchTemporal: temporal_server relaunched successfully")
+			}
+		}
+
+		// Exponential backoff with cap.
+		backoff *= 2
+		if backoff > maxBackoff {
+			backoff = maxBackoff
+		}
+	}
+}
+
 // watchWorker monitors the nucleus_worker process and relaunches it if it dies
 // unexpectedly, as long as the supervisor itself is still running.
 //
@@ -829,6 +932,17 @@ func (s *Supervisor) watchWorker() {
 		}
 
 		s.slog("INFO", "watchWorker: relaunching nucleus_worker...")
+
+		// Limpiar el proceso muerto del mapa antes de relanzar.
+		// Sin este delete, startWorkerManager puede encontrar pollers residuales
+		// de Temporal (persisten ~10s tras la muerte del worker) y retornar un
+		// ManagedProcess con Cmd:nil sin spawnear nada. watchWorker detecta
+		// Cmd:nil, duerme 2s y vuelve a llamar startWorkerManager — loop infinito.
+		// Con el delete, startWorkerManager cae directo al spawn real ignorando
+		// los pollers residuales.
+		s.mu.Lock()
+		delete(s.processes, "nucleus_worker")
+		s.mu.Unlock()
 
 		// BUG-11 fix: before relaunching the worker, verify Temporal is reachable.
 		// The most common cause of repeated worker crashes is Temporal being down —

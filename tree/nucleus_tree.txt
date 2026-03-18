@@ -27,6 +27,7 @@ bloom-development-extension/
     │   │   ├── metadata.go
     │   │   ├── paths.go
     │   │   ├── registry.go
+    │   │   ├── settings.go
     │   │   ├── telemetry.go
     │   │   └── version.go
     │   ├── governance/
@@ -84,9 +85,12 @@ bloom-development-extension/
     │   ├── supervisor/
     │   │   ├── dev_start.go
     │   │   ├── health.go
+    │   │   ├── health_resources_unix.go
+    │   │   ├── health_resources_windows.go
+    │   │   ├── health_unix.go
+    │   │   ├── health_windows.go
     │   │   ├── logs.go
     │   │   ├── service.go
-    │   │   ├── supervisor.go
     │   │   └── workers.go
     │   ├── system/
     │   │   ├── info.go

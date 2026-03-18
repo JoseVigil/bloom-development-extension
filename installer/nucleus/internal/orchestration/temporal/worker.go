@@ -96,7 +96,6 @@ func (wm *WorkerManager) StopAll() {
 	}
 }
 
-
 // ───────────────────────────────────────────────────────────────────────────
 // WORKER CAPABILITIES — registry file written on startup
 // ───────────────────────────────────────────────────────────────────────────
@@ -258,14 +257,24 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 
 			logger.Success("✅ Worker iniciado exitosamente")
 
-			// Crear Schedule de system health (idempotente — no falla si ya existe)
+			// Asegurar Schedule de system health — crea si no existe, actualiza si
+			// el intervalo en settings.json cambió desde la última vez.
+			// Nunca falla si el schedule ya existe — el worker nuevo lo adopta.
 			go func() {
-				// Breve delay para que el worker esté completamente listo
+				// Breve delay para que el worker esté completamente listo y los
+				// pollers estén registrados en Temporal antes de que el schedule
+				// dispare el próximo tick.
 				time.Sleep(2 * time.Second)
-				if err := bootstrap.EnsureSystemHealthSchedule(ctx, temporalClient.GetClient()); err != nil {
-					logger.Warning("⚠️  Failed to create system health schedule: %v", err)
+
+				intervalSec := c.Settings.Health.IntervalSeconds
+				if intervalSec <= 0 {
+					intervalSec = 60
+				}
+
+				if err := bootstrap.EnsureSystemHealthSchedule(ctx, temporalClient.GetClient(), intervalSec); err != nil {
+					logger.Warning("⚠️  Failed to ensure system health schedule: %v", err)
 				} else {
-					logger.Success("✅ System health schedule active (every 60s)")
+					logger.Success("✅ System health schedule active (every %ds)", intervalSec)
 				}
 			}()
 
