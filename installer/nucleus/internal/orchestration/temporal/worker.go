@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -101,7 +103,7 @@ func (wm *WorkerManager) StopAll() {
 // ───────────────────────────────────────────────────────────────────────────
 
 // WorkerCapabilities describe exactamente qué workflows y activities maneja
-// este worker. Se escribe en config/worker_capabilities.json al arrancar
+// este worker. Se escribe en history/workers/capabilities_<PID>.json al arrancar
 // y es leído por `nucleus workers list` para enriquecer el panel.
 type WorkerCapabilities struct {
 	PID          int      `json:"pid"`
@@ -112,7 +114,7 @@ type WorkerCapabilities struct {
 }
 
 // writeWorkerCapabilities escribe el registry de capabilities en disco.
-// Path: <appDataDir>/config/worker_capabilities.json
+// Path: <appDataDir>/history/workers/capabilities_<PID>.json
 // Sobreescribe en cada arranque — siempre refleja el worker activo.
 // Error es no-fatal: el worker arranca igual aunque falle la escritura.
 func writeWorkerCapabilities(configDir string, taskQueue string, workflows, activities []string) {
@@ -135,6 +137,29 @@ func writeWorkerCapabilities(configDir string, taskQueue string, workflows, acti
 		fmt.Fprintf(os.Stderr, "[worker] WARNING: failed to write capabilities_%d.json: %v\n", caps.PID, err)
 		return
 	}
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// PID HELPERS
+// ───────────────────────────────────────────────────────────────────────────
+
+// isPIDAlive verifica si un proceso con el PID dado está corriendo.
+// En Windows, os.FindProcess siempre retorna éxito y Signal(0) no está
+// implementado de forma confiable, por lo que se usa tasklist como
+// mecanismo de verificación — funciona sin CGO ni imports externos.
+func isPIDAlive(pid int) bool {
+	out, err := exec.Command(
+		"tasklist",
+		"/FI", fmt.Sprintf("PID eq %d", pid),
+		"/NH",
+		"/FO", "CSV",
+	).Output()
+	if err != nil {
+		return false
+	}
+	// tasklist devuelve una línea con el PID entre comillas si el proceso existe,
+	// o "INFO: No tasks are running which match the specified criteria." si no.
+	return strings.Contains(string(out), fmt.Sprintf(`"%d"`, pid))
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -163,7 +188,65 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 			logger.Info("Iniciando Temporal Worker...")
 			logger.Info("Task Queue: %s", taskQueue)
 
-			ctx := context.Background()
+			// ── PID file guard ───────────────────────────────────────────────
+			// Evita que health --fix levante una segunda instancia mientras
+			// el worker anterior todavía está corriendo.
+			// Usa tasklist para verificar el PID en Windows — Signal(0) no
+			// funciona de forma confiable en Windows sin CGO.
+			pidDir := filepath.Join(filepath.Dir(c.Paths.LogsDir), "history", "workers")
+			if err := os.MkdirAll(pidDir, 0755); err != nil {
+				logger.Warning("⚠️  Failed to create pid dir: %v", err)
+			}
+			pidFile := filepath.Join(pidDir, "nucleus_worker.pid")
+
+			if pidData, pidErr := os.ReadFile(pidFile); pidErr == nil {
+				var existingPID int
+				if _, scanErr := fmt.Sscanf(strings.TrimSpace(string(pidData)), "%d", &existingPID); scanErr == nil && existingPID > 0 {
+					if isPIDAlive(existingPID) {
+						logger.Warning("⚠️  Worker already running (PID %d) — exiting to avoid duplicate", existingPID)
+						return
+					}
+				}
+				logger.Info("Stale PID file found (%s) — previous worker gone, starting fresh", strings.TrimSpace(string(pidData)))
+			}
+
+			if err := os.WriteFile(pidFile, []byte(fmt.Sprintf("%d", os.Getpid())), 0644); err != nil {
+				logger.Warning("⚠️  Failed to write PID file: %v", err)
+			} else {
+				logger.Info("PID file written (PID %d): %s", os.Getpid(), pidFile)
+			}
+			defer func() {
+				os.Remove(pidFile)
+				logger.Info("PID file removed: %s", pidFile)
+			}()
+			// ── fin PID file guard ───────────────────────────────────────────
+
+			// ── capabilities stale cleanup ───────────────────────────────────
+			// Al arrancar, eliminar los capabilities_<PID>.json de workers que
+			// ya no están corriendo. El archivo del PID actual se escribe más
+			// adelante en writeWorkerCapabilities — no hay riesgo de borrarlo acá.
+			if entries, globErr := filepath.Glob(filepath.Join(pidDir, "capabilities_*.json")); globErr == nil {
+				cleaned := 0
+				for _, entry := range entries {
+					base := filepath.Base(entry)
+					var capPID int
+					if _, parseErr := fmt.Sscanf(base, "capabilities_%d.json", &capPID); parseErr == nil {
+						if !isPIDAlive(capPID) {
+							if removeErr := os.Remove(entry); removeErr == nil {
+								cleaned++
+							}
+						}
+					}
+				}
+				if cleaned > 0 {
+					logger.Info("Cleaned up %d stale capabilities file(s)", cleaned)
+				}
+			}
+			// ── fin capabilities stale cleanup ───────────────────────────────
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
 			temporalClient, err := NewClient(ctx, &c.Paths, false)
 			if err != nil {
 				logger.Error("Fallo al conectar con Temporal: %v", err)
@@ -246,6 +329,10 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 			// Registrar activity de system health (hooks periódicos de monitoreo)
 			w.RegisterActivity(mandates.RunSystemHealthActivity)
 
+			// Registrar activity de profile_disconnected
+			// Invocada por brain_poller cuando Brain emite PROFILE_DISCONNECTED.
+			w.RegisterActivity(mandates.RunProfileDisconnectedHooksActivity)
+
 			logger.Success("✅ Activities registradas")
 
 			// Iniciar worker
@@ -256,6 +343,17 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 			}
 
 			logger.Success("✅ Worker iniciado exitosamente")
+
+			// Lanzar Brain Poller
+			// Se conecta a Brain TCP como cliente CLI y escucha broadcasts de
+			// PROFILE_DISCONNECTED. Cuando recibe uno, dispara RunEvent("profile_disconnected")
+			// que ejecuta 00_notify_temporal.py → nucleus synapse shutdown <profile_id>.
+			// El contexto cancelable garantiza que el poller para cuando el worker para.
+			go activities.StartBrainPoller(ctx, activities.BrainPollerConfig{
+				LogsDir:    logsDir,
+				NucleusBin: nucleusExe,
+			})
+			logger.Info("🔌 Brain poller started (listening for PROFILE_DISCONNECTED)")
 
 			// Asegurar Schedule de system health — crea si no existe, actualiza si
 			// el intervalo en settings.json cambió desde la última vez.
@@ -302,6 +400,7 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 					"sentinel.SendOnboardingNavigate",
 					"RunPostLaunchHooksActivity",
 					"RunSystemHealthActivity",
+					"RunProfileDisconnectedHooksActivity",
 				},
 			)
 
@@ -314,6 +413,9 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 
 			<-sigChan
 			logger.Info("Señal de interrupción recibida, deteniendo worker...")
+
+			// Cancelar el contexto del worker — para el brain_poller y otras goroutines
+			cancel()
 
 			w.Stop()
 			logger.Success("✅ Worker detenido exitosamente")

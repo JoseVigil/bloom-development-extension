@@ -94,13 +94,13 @@ brain filesystem tree installer/sensor -o tree/sensor_tree.txt
 
 brain filesystem tree installer/conductor -o tree/conductor_tree.txt
 
-brain filesystem tree installer/conductor/workspace -o tree/workspace_tree.txt
-
 brain filesystem tree installer/cortex -o tree/cortex_tree.txt
 
 brain filesystem tree installer/chrome-extension/src -o tree/chrome_extension_src_tree.txt
 
 brain filesystem tree C:\Users\josev\AppData\Local\BloomNucleus -o tree/appdata_tree.txt
+
+brain filesystem tree C:\Users\josev\AppData\Local\BloomNucleus\logs -o tree/appdata_logs_tree.txt
 
 brain filesystem tree installer -o tree/installer_tree.txt
 
@@ -132,10 +132,12 @@ Conecta a: API 48215 + WS 4124
 Borrar todas las keys 
 Get-ChildItem "HKCU:\Software\Google\Chrome\NativeMessagingHosts" | Where-Object { $_.PSChildName -like "com.bloom.synapse*" } | Remove-Item -Recurse -Force -Verbose
 
-
 "C:\Users\josev\AppData\Local\BloomNucleus\bin\chrome-win\chrome.exe" --user-data-dir="C:\Users\josev\AppData\Local\BloomNucleus\profiles\9daa58a0-7d2f-404c-ad2f-41f7a7556a2b" --profile-directory=Default --no-first-run --no-default-browser-check --disable-default-apps --disable-session-crashed-bubble --disable-features=ChromeWhatsNewUI --load-extension="C:\Users\josev\AppData\Local\BloomNucleus\profiles\9daa58a0-7d2f-404c-ad2f-41f7a7556a2b\extension" "chrome-extension://hpblclepliicmihaplldignhjdggnkdh/discovery/index.html"
 
 & "C:\Users\josev\AppData\Local\BloomNucleus\bin\chrome-win\chrome.exe" --user-data-dir="C:\Users\josev\AppData\Local\BloomNucleus\profiles\14c11dbf-7f2a-43be-beba-7ae757cc7486" --profile-directory=Default --no-first-run --no-default-browser-check --disable-default-apps --disable-session-crashed-bubble --disable-features=ChromeWhatsNewUI --load-extension="C:\Users\josev\AppData\Local\BloomNucleus\profiles\14c11dbf-7f2a-43be-beba-7ae757cc7486\extension" "chrome-extension://hpblclepliicmihaplldignhjdggnkdh/landing/index.html"
+
+start temporal worklows web http://localhost:8233/namespaces/default/workflows?query=WorkflowId%3D%22profile-lifecycle-25d15cca-9937-45d7-8c51-00b48256efbf%22
+
 
 Kill
 taskkill /IM brain.exe /F

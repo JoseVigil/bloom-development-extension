@@ -77,14 +77,17 @@ func (a *SentinelActivities) LaunchSentinel(ctx context.Context, input types.Sen
 		args = append(args, "--override-extension", input.OverrideExtension)
 	}
 
-	// --override-heartbeat (BoolVar: presencia = true, ausencia = false)
-	if input.OverrideHeartbeat == "true" {
-		args = append(args, "--override-heartbeat")
+	// FIX: --override-heartbeat y --override-register son StringVar en Sentinel,
+	// no BoolVar. Pasar el valor como argumento del flag, no como flag de presencia.
+	// El código anterior pasaba solo "--override-heartbeat" sin valor, lo que
+	// causaba que Cobra emitiera "flag needs an argument" a stderr y Sentinel
+	// terminara con exit status 1 sin escribir ningún JSON a stdout.
+	if input.OverrideHeartbeat != "" {
+		args = append(args, "--override-heartbeat", input.OverrideHeartbeat)
 	}
 
-	// --override-register (BoolVar: presencia = true, ausencia = false)
-	if input.OverrideRegister == "true" {
-		args = append(args, "--override-register")
+	if input.OverrideRegister != "" {
+		args = append(args, "--override-register", input.OverrideRegister)
 	}
 
 	// --override-role
@@ -117,9 +120,6 @@ func (a *SentinelActivities) LaunchSentinel(ctx context.Context, input types.Sen
 
 	// Si config-file es "-", pasar ConfigOverride por stdin (contenido JSON directo)
 	if input.ConfigOverride == "-" {
-		// En este caso el caller debe haber puesto el JSON en un campo separado.
-		// Por ahora stdin queda vacío — el soporte de piping JSON inline
-		// se puede agregar cuando se exponga --config-inline en nucleus.
 		cmd.Stdin = strings.NewReader("")
 	}
 

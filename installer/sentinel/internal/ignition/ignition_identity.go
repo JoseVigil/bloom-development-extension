@@ -1,48 +1,99 @@
 package ignition
 
 import (
-    "encoding/json"
-    "fmt"
-    "os"
-    "path/filepath"
-    "time"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"time"
 
-    "golang.org/x/sys/windows/registry"
+	"golang.org/x/sys/windows/registry"
 )
 
+// generateLogicalLaunchID genera el ID lógico del launch.
+// NO incrementa launch_count — solo lee el valor actual para construir el ID.
+// El incremento real ocurre en commitLaunchCount(), que se llama únicamente
+// desde Launch() después de que execute() retorna sin error (PID confirmado).
+// Esto evita que los retries del worker Temporal corrompan el contador cuando
+// la activity falla y Temporal la reintenta con el mismo input.
 func (ig *Ignition) generateLogicalLaunchID(profileID string) string {
-	shortUUID := profileID[:8]
+	shortUUID := profileID
+	if len(profileID) > 8 {
+		shortUUID = profileID[:8]
+	}
 	timestamp := time.Now().Format("150405")
 
 	profilesPath := filepath.Join(ig.Core.Paths.AppDataDir, "config", "profiles.json")
-	data, _ := os.ReadFile(profilesPath)
+	data, err := os.ReadFile(profilesPath)
+	if err != nil {
+		ig.Core.Logger.Info("[WARN] generateLogicalLaunchID: no se pudo leer profiles.json: %v", err)
+		return fmt.Sprintf("001_%s_%s", shortUUID, timestamp)
+	}
 
 	var root struct {
 		Profiles []map[string]interface{} `json:"profiles"`
 	}
-	json.Unmarshal(data, &root)
+	if err := json.Unmarshal(data, &root); err != nil {
+		ig.Core.Logger.Info("[WARN] generateLogicalLaunchID: JSON inválido en profiles.json: %v", err)
+		return fmt.Sprintf("001_%s_%s", shortUUID, timestamp)
+	}
 
+	// Leer el counter actual SIN incrementarlo.
+	// El incremento real se hace en commitLaunchCount() tras éxito confirmado.
 	counter := 1
-	var launchID string
-
-	for i, p := range root.Profiles {
+	for _, p := range root.Profiles {
 		if p["id"] == profileID {
 			if val, ok := p["launch_count"].(float64); ok {
 				counter = int(val) + 1
 			}
-			
-			launchID = fmt.Sprintf("%03d_%s_%s", counter, shortUUID, timestamp)
-			
-			root.Profiles[i]["launch_count"] = counter
-			root.Profiles[i]["last_launch_id"] = launchID
 			break
 		}
 	}
 
-	updatedData, _ := json.MarshalIndent(root, "", "  ")
-	_ = os.WriteFile(profilesPath, updatedData, 0644)
+	return fmt.Sprintf("%03d_%s_%s", counter, shortUUID, timestamp)
+}
 
-	return launchID
+// commitLaunchCount persiste el incremento de launch_count y el last_launch_id
+// SOLO tras un launch exitoso. Llamado desde Launch() después de execute() OK.
+// Garantiza que los retries de Temporal no incrementan el contador múltiples veces.
+func (ig *Ignition) commitLaunchCount(profileID string, launchID string) error {
+	profilesPath := filepath.Join(ig.Core.Paths.AppDataDir, "config", "profiles.json")
+	data, err := os.ReadFile(profilesPath)
+	if err != nil {
+		return fmt.Errorf("no se pudo leer profiles.json: %v", err)
+	}
+
+	var root struct {
+		Profiles []map[string]interface{} `json:"profiles"`
+	}
+	if err := json.Unmarshal(data, &root); err != nil {
+		return fmt.Errorf("JSON inválido en profiles.json: %v", err)
+	}
+
+	found := false
+	for i, p := range root.Profiles {
+		if p["id"] == profileID {
+			counter := 1
+			if val, ok := p["launch_count"].(float64); ok {
+				counter = int(val) + 1
+			}
+			root.Profiles[i]["launch_count"] = counter
+			root.Profiles[i]["last_launch_id"] = launchID
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return fmt.Errorf("perfil %s no encontrado en profiles.json", profileID)
+	}
+
+	updatedData, _ := json.MarshalIndent(root, "", "  ")
+	if err := os.WriteFile(profilesPath, updatedData, 0644); err != nil {
+		return fmt.Errorf("error escribiendo profiles.json: %v", err)
+	}
+
+	return nil
 }
 
 // prepareSessionFiles genera los archivos de configuración para la sesión
@@ -57,7 +108,7 @@ func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profi
 
 	var spec IgnitionSpec
 	if err := json.Unmarshal(specData, &spec); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ignition_spec JSON inválido: %v", err)
 	}
 
 	spec.LaunchID = launchID
@@ -70,8 +121,6 @@ func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profi
 	}
 
 	// Limpiar siempre el ConfigOverride antes de repoblarlo.
-	// Garantiza que un launch sin overrides no hereda los del launch anterior
-	// aunque el struct haya sido deserializado desde un spec previo.
 	spec.ConfigOverride = nil
 
 	if configOverride != "" {
@@ -85,11 +134,14 @@ func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profi
 
 	updatedSpec, _ := json.MarshalIndent(spec, "", "  ")
 	if err := os.WriteFile(ig.SpecPath, updatedSpec, 0644); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error escribiendo ignition_spec: %v", err)
 	}
 
 	// === 2. CONSTRUIR CONFIGURACIÓN BASE (desde profiles.json) ===
-	shortID := profileID[:8]
+	shortID := profileID
+	if len(profileID) > 8 {
+		shortID = profileID[:8]
+	}
 	extDir := spec.Paths.Extension
 
 	configData := map[string]interface{}{
@@ -101,32 +153,24 @@ func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profi
 		"extension_id":  ig.Core.Config.Provisioning.ExtensionID,
 		"register":      getBoolField(profileData, "register", false),
 		"heartbeat":     getBoolField(profileData, "heartbeat", true),
-		// step: paso de onboarding activo para este perfil.
-		// Usado por discovery.js para reanudar el flujo correcto tras un reload.
-		// Valor 0 = sin onboarding activo (modo normal de discovery/heartbeat).
-		"step": getIntField(profileData, "step", 0),
+		"step":          getIntField(profileData, "step", 0),
 	}
 
 	// === 3. AGREGAR CAMPOS ESPECÍFICOS DE LANDING (desde profiles.json) ===
 	if mode == "landing" {
-		// Campos numéricos
 		configData["total_launches"] = getIntField(profileData, "launch_count", 0)
-		configData["intents_done"] = getIntField(profileData, "intents_done", 0)
-		configData["uptime"] = calculateUptime(profileData)
-		
-		// Strings
-		configData["role"] = getStringField(profileData, "role", "Worker")
-		configData["last_synch"] = getStringField(profileData, "last_synch", time.Now().Format(time.RFC3339))
-		
-		// Timestamps
-		configData["created_at"] = getStringField(profileData, "created_at", time.Now().Format(time.RFC3339))
+		configData["intents_done"]   = getIntField(profileData, "intents_done", 0)
+		configData["uptime"]         = calculateUptime(profileData)
+
+		configData["role"]           = getStringField(profileData, "role", "Worker")
+		configData["last_synch"]     = getStringField(profileData, "last_synch", time.Now().Format(time.RFC3339))
+
+		configData["created_at"]     = getStringField(profileData, "created_at", time.Now().Format(time.RFC3339))
 		configData["last_launch_at"] = time.Now().Format(time.RFC3339)
-		
-		// Linked accounts (array complejo)
+
 		if accounts, ok := profileData["linked_accounts"].([]interface{}); ok {
 			configData["linked_accounts"] = accounts
 		} else {
-			// Default vacío si no existe
 			configData["linked_accounts"] = []interface{}{}
 		}
 	}
@@ -134,9 +178,9 @@ func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profi
 	// === 4. APLICAR OVERRIDES ===
 	if configOverride != "" {
 		var overrides map[string]interface{}
-		
+
 		if err := json.Unmarshal([]byte(configOverride), &overrides); err != nil {
-			return nil, fmt.Errorf("config-override inválido: %v", err)
+			return nil, fmt.Errorf("config-override inválido al aplicar: %v", err)
 		}
 
 		for k, v := range overrides {
@@ -147,12 +191,8 @@ func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profi
 	}
 
 	// === 5. GENERAR ARCHIVO SYNAPSE.CONFIG.JS ===
-	// IMPORTANTE: Este es el ÚNICO lugar donde se genera este archivo
-	// Python ya NO lo genera - evita race conditions y duplicación
 	configJSON, _ := json.MarshalIndent(configData, "", "  ")
-
-	var jsContent string
-	jsContent = fmt.Sprintf(`self.SYNAPSE_CONFIG = %s;`, string(configJSON))
+	jsContent := fmt.Sprintf(`self.SYNAPSE_CONFIG = %s;`, string(configJSON))
 
 	configPath := filepath.Join(extDir, fmt.Sprintf("%s.synapse.config.js", mode))
 	if err := os.WriteFile(configPath, []byte(jsContent), 0644); err != nil {
@@ -163,13 +203,12 @@ func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profi
 	if _, err := os.Stat(configPath); err != nil {
 		return nil, fmt.Errorf("validación fallida: config no generado correctamente en %s: %v", configPath, err)
 	}
-	
-	// Verificar que el contenido sea válido (opcional pero recomendado)
+
 	generatedContent, err := os.ReadFile(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("validación fallida: no se puede leer config generado: %v", err)
 	}
-	
+
 	if len(generatedContent) == 0 {
 		return nil, fmt.Errorf("validación fallida: config generado está vacío")
 	}
@@ -178,7 +217,17 @@ func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profi
 
 	// === 6. ACTUALIZAR NATIVE HOST MANIFEST ===
 	manifestName := fmt.Sprintf("com.bloom.synapse.%s.json", shortID)
-	manifestPath := filepath.Join(profileData["config_dir"].(string), manifestName)
+
+	configDirRaw, ok := profileData["config_dir"]
+	if !ok {
+		return nil, fmt.Errorf("campo config_dir ausente en profileData para perfil %s", profileID)
+	}
+	configDir, ok := configDirRaw.(string)
+	if !ok || configDir == "" {
+		return nil, fmt.Errorf("campo config_dir inválido en profileData para perfil %s", profileID)
+	}
+
+	manifestPath := filepath.Join(configDir, manifestName)
 
 	mData, err := os.ReadFile(manifestPath)
 	if err != nil {
@@ -186,7 +235,9 @@ func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profi
 	}
 
 	var manifest map[string]interface{}
-	json.Unmarshal(mData, &manifest)
+	if err := json.Unmarshal(mData, &manifest); err != nil {
+		return nil, fmt.Errorf("manifiesto nativo JSON inválido: %v", err)
+	}
 	manifest["args"] = []string{
 		"--profile-id",    profileID,
 		"--launch-id",     launchID,
@@ -195,14 +246,11 @@ func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profi
 
 	updatedManifest, _ := json.MarshalIndent(manifest, "", "  ")
 	if err := os.WriteFile(manifestPath, updatedManifest, 0644); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error escribiendo manifiesto nativo: %v", err)
 	}
 
 	// === 6.1 REGISTRAR CLAVE DE WINDOWS ===
-	// Nucleus corre como servicio SYSTEM. Sentinel hereda ese token.
-	// Para escribir en HKCU del usuario interactivo hay que obtener su token
-	// via WTSQueryUserToken y hacer impersonation antes de escribir registry.
-	hostName := fmt.Sprintf("com.bloom.synapse.%s", shortID)
+	hostName   := fmt.Sprintf("com.bloom.synapse.%s", shortID)
 	regKeyPath := `SOFTWARE\Google\Chrome\NativeMessagingHosts\` + hostName
 
 	if err := registerNativeHostHKCU(regKeyPath, manifestPath, ig.Core.Logger); err != nil {
@@ -211,20 +259,19 @@ func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profi
 		ig.Core.Logger.Info("[IGNITION] ✅ Registry key registrada en HKCU: %s", regKeyPath)
 	}
 
-	// Eliminar HKLM si existe
 	hklmKey, err := registry.OpenKey(registry.LOCAL_MACHINE, regKeyPath, registry.SET_VALUE|registry.QUERY_VALUE)
 	if err == nil {
 		hklmKey.Close()
 		registry.DeleteKey(registry.LOCAL_MACHINE, regKeyPath)
 		ig.Core.Logger.Info("[IGNITION] ✅ HKLM key eliminada: %s", regKeyPath)
-	}	
+	}
 
 	ig.Core.Logger.Info("[IGNITION] 🆔 Identidad [%s] inyectada en Spec, JS y Native Host.", launchID)
 	ig.Core.Logger.Info("[IGNITION] 📁 Archivos de sesión preparados:")
 	ig.Core.Logger.Info("           - ignition_spec.json: ✅")
 	ig.Core.Logger.Info("           - %s.synapse.config.js: ✅", mode)
 	ig.Core.Logger.Info("           - native host manifest: ✅")
-	
+
 	return configData, nil
 }
 
@@ -235,53 +282,42 @@ func (ig *Ignition) updateProfileWithOverrides(profileID string, overrides map[s
 	if err != nil {
 		return fmt.Errorf("no se pudo leer profiles.json: %v", err)
 	}
-	
+
 	var root struct {
 		Profiles []map[string]interface{} `json:"profiles"`
 	}
 	if err := json.Unmarshal(data, &root); err != nil {
 		return fmt.Errorf("JSON inválido en profiles.json: %v", err)
 	}
-	
+
 	found := false
 	for i, p := range root.Profiles {
 		if p["id"] == profileID {
 			found = true
-			
-			// Aplicar cada override
 			for k, v := range overrides {
-				// Mapear nombres de campos si es necesario
 				fieldName := k
-				
-				// Mapeo especial para campos específicos
 				switch k {
 				case "profile_alias":
 					fieldName = "alias"
 				case "extension_id":
-					// Este NO se guarda en profiles.json, es global
 					continue
 				}
-				
 				root.Profiles[i][fieldName] = v
 			}
-			
-			// Actualizar timestamp de modificación
 			root.Profiles[i]["updated_at"] = time.Now().Format(time.RFC3339)
-			
 			break
 		}
 	}
-	
+
 	if !found {
 		return fmt.Errorf("perfil %s no encontrado en profiles.json", profileID)
 	}
-	
-	// Escribir archivo actualizado
+
 	updatedData, _ := json.MarshalIndent(root, "", "  ")
 	if err := os.WriteFile(profilesPath, updatedData, 0644); err != nil {
 		return fmt.Errorf("error escribiendo profiles.json: %v", err)
 	}
-	
+
 	return nil
 }
 
@@ -289,14 +325,14 @@ func (ig *Ignition) getProfileData(profileID string) (map[string]interface{}, er
 	profilesPath := filepath.Join(ig.Core.Paths.AppDataDir, "config", "profiles.json")
 	data, err := os.ReadFile(profilesPath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("no se pudo leer profiles.json: %v", err)
 	}
 
 	var root struct {
 		Profiles []map[string]interface{} `json:"profiles"`
 	}
 	if err := json.Unmarshal(data, &root); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("JSON inválido en profiles.json: %v", err)
 	}
 
 	for _, p := range root.Profiles {
@@ -304,7 +340,7 @@ func (ig *Ignition) getProfileData(profileID string) (map[string]interface{}, er
 			return p, nil
 		}
 	}
-	return nil, fmt.Errorf("perfil no registrado")
+	return nil, fmt.Errorf("perfil no registrado: %s", profileID)
 }
 
 func (ig *Ignition) updateProfilesConfig(profileID string, physicalID string, debugLog string, netLog string) error {
@@ -317,13 +353,15 @@ func (ig *Ignition) updateProfilesConfig(profileID string, physicalID string, de
 	var root struct {
 		Profiles []map[string]interface{} `json:"profiles"`
 	}
-	json.Unmarshal(data, &root)
+	if err := json.Unmarshal(data, &root); err != nil {
+		return err
+	}
 
 	for i, p := range root.Profiles {
 		if p["id"] == profileID {
 			root.Profiles[i]["last_physical_id"] = physicalID
-			root.Profiles[i]["last_logical_id"] = ig.Session.LaunchID
-			root.Profiles[i]["last_launch_id"] = ig.Session.LaunchID
+			root.Profiles[i]["last_logical_id"]  = ig.Session.LaunchID
+			root.Profiles[i]["last_launch_id"]   = ig.Session.LaunchID
 			root.Profiles[i]["log_files"] = map[string]string{
 				"debug_log": debugLog,
 				"net_log":   netLog,
@@ -338,7 +376,6 @@ func (ig *Ignition) updateProfilesConfig(profileID string, physicalID string, de
 
 // ========== HELPER FUNCTIONS ==========
 
-// getBoolField obtiene un campo bool con fallback
 func getBoolField(data map[string]interface{}, field string, defaultValue bool) bool {
 	if val, ok := data[field].(bool); ok {
 		return val
@@ -346,7 +383,6 @@ func getBoolField(data map[string]interface{}, field string, defaultValue bool) 
 	return defaultValue
 }
 
-// getStringField obtiene un campo string con fallback
 func getStringField(data map[string]interface{}, field string, defaultValue string) string {
 	if val, ok := data[field].(string); ok {
 		return val
@@ -354,7 +390,6 @@ func getStringField(data map[string]interface{}, field string, defaultValue stri
 	return defaultValue
 }
 
-// getIntField obtiene un campo int con fallback
 func getIntField(data map[string]interface{}, field string, defaultValue int) int {
 	if val, ok := data[field].(float64); ok {
 		return int(val)
@@ -362,17 +397,14 @@ func getIntField(data map[string]interface{}, field string, defaultValue int) in
 	return defaultValue
 }
 
-// calculateUptime calcula el uptime desde created_at
 func calculateUptime(profileData map[string]interface{}) int {
 	createdAtStr := getStringField(profileData, "created_at", "")
 	if createdAtStr == "" {
 		return 0
 	}
-	
 	createdAt, err := time.Parse(time.RFC3339, createdAtStr)
 	if err != nil {
 		return 0
 	}
-	
 	return int(time.Since(createdAt).Seconds())
 }

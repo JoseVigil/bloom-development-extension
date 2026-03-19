@@ -70,15 +70,23 @@ func ProfileLifecycleWorkflow(ctx workflow.Context, input types.ProfileLifecycle
 		return fmt.Errorf("failed to register sentinel-details query: %w", err)
 	}
 
-	// Activity options con timeouts y retries apropiados
+	// Activity options para LaunchSentinel con retry policy conservadora.
+	// InitialInterval de 15s evita que los retries rápidos dejen recursos
+	// parcialmente ocupados (puertos, locks, procesos zombie) entre intentos.
+	// NonRetryableErrorTypes evita reintentos en errores estructurales que
+	// no se van a resolver solos independientemente de cuántas veces se reintente.
 	activityOptions := workflow.ActivityOptions{
 		StartToCloseTimeout: 5 * time.Minute,
 		HeartbeatTimeout:    30 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
 			MaximumAttempts:    3,
-			InitialInterval:    time.Second,
+			InitialInterval:    15 * time.Second,
 			BackoffCoefficient: 2.0,
-			MaximumInterval:    30 * time.Second,
+			MaximumInterval:    2 * time.Minute,
+			NonRetryableErrorTypes: []string{
+				"ProfileNotFoundError",
+				"InvalidConfigError",
+			},
 		},
 	}
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
@@ -106,10 +114,31 @@ func ProfileLifecycleWorkflow(ctx workflow.Context, input types.ProfileLifecycle
 				"profile_id", input.ProfileID,
 				"mode", launchSignal.Mode)
 
-			// Validar que no esté ya corriendo
+			// Si SentinelRunning=true, puede ser un estado legítimo (doble launch)
+			// o un estado huérfano (shutdown perdido durante restart del worker).
+			// En lugar de ignorar, forzar reset y continuar — el launch va a
+			// fallar igual si Sentinel realmente sigue corriendo (puerto ocupado,
+			// proceso vivo), pero evita bloqueos permanentes por señales perdidas.
 			if state.SentinelRunning {
-				logger.Warn("Sentinel already running, ignoring launch signal")
-				return
+				logger.Warn("SentinelRunning=true on LAUNCH — forcing reset (possible lost shutdown signal)",
+					"profile_id", input.ProfileID,
+					"chrome_pid", chromePID)
+				state.SentinelRunning = false
+				state.State = types.StateSeeded
+				chromePID = 0
+				currentCommandID = ""
+				sentinelDetails = nil
+			}
+
+			// FIX: Si el estado es StateFailed (de un intento anterior fallido),
+			// resetear antes de intentar un nuevo launch. Sin este reset, el workflow
+			// queda bloqueado en StateFailed tras 3 intentos fallidos de la activity
+			// y no acepta nuevos lanzamientos hasta un restart manual del workflow.
+			if state.State == types.StateFailed {
+				logger.Info("Resetting from StateFailed to attempt new launch",
+					"profile_id", input.ProfileID)
+				state.ErrorMessage = ""
+				sentinelDetails = nil
 			}
 
 			// Transición a LAUNCHING

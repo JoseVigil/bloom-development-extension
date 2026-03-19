@@ -103,9 +103,12 @@ class DiscoveryFlow {
       console.log('[Discovery] Storage read:', result);
       
       if (synapseConfig) {
-        this.requiresRegistration = synapseConfig.register === true;
-        this.heartbeatMode = synapseConfig.heartbeat === true;
-        this.serviceTarget = synapseConfig.service || null;
+        // Soporte para estructura legacy (flags a nivel raíz)
+        const flags = synapseConfig.flags || synapseConfig;
+
+        this.requiresRegistration = flags.register === true;
+        this.heartbeatMode = flags.heartbeat === true;
+        this.serviceTarget = flags.service || null;
         this.userEmail = synapseConfig.email || null;
         
         console.log('[Discovery] Config loaded - register:', this.requiresRegistration);
@@ -113,18 +116,23 @@ class DiscoveryFlow {
         console.log('[Discovery] Config loaded - service:', this.serviceTarget);
         console.log('[Discovery] Config loaded - email:', this.userEmail);
       } else {
-        this.requiresRegistration = self.SYNAPSE_CONFIG?.register === true;
-        this.heartbeatMode = self.SYNAPSE_CONFIG?.heartbeat === true;
-        this.serviceTarget = self.SYNAPSE_CONFIG?.service || null;
+        // Fallback a SYNAPSE_CONFIG con soporte para nodo flags
+        const flags = self.SYNAPSE_CONFIG?.flags || self.SYNAPSE_CONFIG;
+
+        this.requiresRegistration = flags?.register === true;
+        this.heartbeatMode = flags?.heartbeat === true;
+        this.serviceTarget = flags?.service || null;
         this.userEmail = self.SYNAPSE_CONFIG?.email || null;
         
         console.warn('[Discovery] Fallback to SYNAPSE_CONFIG');
       }
     } catch (error) {
       console.error('[Discovery] Error loading config:', error);
-      this.requiresRegistration = self.SYNAPSE_CONFIG?.register === true;
-      this.heartbeatMode = self.SYNAPSE_CONFIG?.heartbeat === true;
-      this.serviceTarget = self.SYNAPSE_CONFIG?.service || null;
+      const flags = self.SYNAPSE_CONFIG?.flags || self.SYNAPSE_CONFIG;
+
+      this.requiresRegistration = flags?.register === true;
+      this.heartbeatMode = flags?.heartbeat === true;
+      this.serviceTarget = flags?.service || null;
       this.userEmail = self.SYNAPSE_CONFIG?.email || null;
     }
   }

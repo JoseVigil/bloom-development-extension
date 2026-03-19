@@ -17,6 +17,9 @@ class LandingFlow {
     this.profileData = null;
     this.checkInterval = null;
     this.isInitialized = false;
+    this.requiresRegistration = false;
+    this.heartbeatMode = false;
+    this.serviceTarget = null;
   }
 
   // ═══════════════════════════════════════════════════════════════════
@@ -85,6 +88,15 @@ class LandingFlow {
       if (result.synapseConfig?.extension_id && !this.extensionId) {
         this.extensionId = result.synapseConfig.extension_id;
         console.log('[Landing] ✓ Extension ID from storage');
+      }
+
+      // Soporte para nodo flags (backward compatible con estructura legacy)
+      if (result.synapseConfig) {
+        const flags = result.synapseConfig.flags || result.synapseConfig;
+        this.requiresRegistration = flags.register === true;
+        this.heartbeatMode = flags.heartbeat === true;
+        this.serviceTarget = flags.service || null;
+        console.log('[Landing] ✓ Flags loaded - register:', this.requiresRegistration, '| heartbeat:', this.heartbeatMode, '| service:', this.serviceTarget);
       }
     } catch (error) {
       console.warn('[Landing] Storage read failed:', error);

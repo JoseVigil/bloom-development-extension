@@ -14,8 +14,10 @@ import (
 	"sentinel/internal/eventbus"
 )
 
-// Launch ejecuta la secuencia de lanzamiento del perfil
-// Sentinel lanza, el Brain gobierna
+// Launch ejecuta la secuencia de lanzamiento del perfil.
+// Sentinel lanza, el Brain gobierna.
+// INVARIANTE: cuando IsJSON=true, SIEMPRE imprime JSON válido en stdout,
+// tanto en éxito como en error. Nunca sale en silencio con exit 1.
 func (ig *Ignition) Launch(profileID string, mode string, configOverride string) (int, int, bool, map[string]interface{}, error) {
 	ig.Core.Logger.Info("[IGNITION] 🚀 Iniciando secuencia soberana de lanzamiento (Modo: %s)", mode)
 
@@ -24,7 +26,18 @@ func (ig *Ignition) Launch(profileID string, mode string, configOverride string)
 		return 0, 0, false, nil, fmt.Errorf("error crítico de inventario: %v", err)
 	}
 
-	ig.SpecPath = profileData["spec_path"].(string)
+	specPathRaw, ok := profileData["spec_path"]
+	if !ok {
+		return 0, 0, false, nil, fmt.Errorf("campo spec_path ausente en profileData para perfil %s", profileID)
+	}
+	specPath, ok := specPathRaw.(string)
+	if !ok || specPath == "" {
+		return 0, 0, false, nil, fmt.Errorf("campo spec_path inválido en profileData para perfil %s", profileID)
+	}
+	ig.SpecPath = specPath
+
+	// generateLogicalLaunchID NO incrementa el contador todavía.
+	// El incremento ocurre en commitLaunchCount() tras éxito real.
 	launchID := ig.generateLogicalLaunchID(profileID)
 	ig.Session.LaunchID = launchID
 
@@ -47,6 +60,12 @@ func (ig *Ignition) Launch(profileID string, mode string, configOverride string)
 	ig.Session.BrowserPID = chromePID
 	ig.Session.LaunchedAt = time.Now().UTC()
 
+	// Confirmar el incremento de launch_count SOLO tras éxito real del launch.
+	// Esto evita que los retries del worker Temporal corrompan el contador.
+	if commitErr := ig.commitLaunchCount(profileID, launchID); commitErr != nil {
+		ig.Core.Logger.Info("[WARN] No se pudo persistir launch_count: %v", commitErr)
+	}
+
 	// ── HISTORY: abrir registro y preparar session log ────────────────────────
 	if err := ig.OpenLaunchRecord(profileID, launchID, mode, chromePID, effectiveConfig); err != nil {
 		ig.Core.Logger.Info("[WARN] No se pudo abrir launch record: %v", err)
@@ -58,10 +77,6 @@ func (ig *Ignition) Launch(profileID string, mode string, configOverride string)
 	}
 	// ─────────────────────────────────────────────────────────────────────────
 
-	if ig.Core.IsJSON {
-		return chromePID, 9222, true, effectiveConfig, nil
-	}
-
 	ig.Core.Logger.Success("[IGNITION] 🔥 Sistema en línea (PID: %d)", chromePID)
 	return chromePID, 9222, true, effectiveConfig, nil
 }
@@ -69,8 +84,8 @@ func (ig *Ignition) Launch(profileID string, mode string, configOverride string)
 // applyMissionTargetURL aplica la lógica de TargetURL según los flags de misión
 func (ig *Ignition) applyMissionTargetURL(spec *IgnitionSpec, profileData map[string]interface{}) {
 	heartbeat, _ := profileData["heartbeat"].(bool)
-	register, _ := profileData["register"].(bool)
-	service, _ := profileData["service"].(string)
+	register, _  := profileData["register"].(bool)
+	service, _   := profileData["service"].(string)
 
 	if heartbeat && !register {
 		spec.TargetURL = "about:blank"
@@ -95,13 +110,11 @@ func (ig *Ignition) applyMissionTargetURL(spec *IgnitionSpec, profileData map[st
 	}
 }
 
-// El contrato hacia arriba (Launch → execute → int PID) no cambia.
+// execute delega el lanzamiento a Brain via EventBus y retorna el PID real de Chrome.
 func (ig *Ignition) execute(profileID string, mode string, profileData map[string]interface{}) (int, error) {
 	ig.Core.Logger.Info("[EXECUTE] Delegando lanzamiento a Brain via EventBus...")
 
 	// ── 1. Validar SpecPath ───────────────────────────────────────────────────
-	// Seteado en Launch() → getProfileData() antes de llegar aquí.
-	// Es la ruta al ignition_spec.json que prepareSessionFiles() ya actualizó.
 	if ig.SpecPath == "" {
 		return 0, fmt.Errorf(
 			"SpecPath vacío para perfil %s — getProfileData() debe ejecutarse antes de execute()",
@@ -110,19 +123,11 @@ func (ig *Ignition) execute(profileID string, mode string, profileData map[strin
 	}
 
 	// ── 2. Pre-inicializar bloom-host ─────────────────────────────────────────
-	// Chrome lanza bloom-host.exe con un token de seguridad restringido que NO
-	// puede crear directorios. Sentinel (token completo) debe crear la estructura
-	// de logs ANTES del handoff para que bloom-host los encuentre listos.
-	//
-	// Fallo aquí → lanzamiento abortado. NO enviar LAUNCH_PROFILE a Brain si
-	// la inicialización del host no completó con exit 0.
 	if err := ig.initBloomHost(profileID, ig.Session.LaunchID); err != nil {
 		return 0, fmt.Errorf("fallo en inicialización de bloom-host: %v", err)
 	}
 
 	// ── 3. Conectar con Brain ─────────────────────────────────────────────────
-	// Brain corre como servicio Windows (NSSM) en 127.0.0.1:5678.
-	// Conexión efímera: se abre para este launch y se cierra al terminar.
 	const brainAddr = "127.0.0.1:5678"
 
 	client := eventbus.NewSentinelClient(brainAddr, ig.Core.Logger)
@@ -141,8 +146,6 @@ func (ig *Ignition) execute(profileID string, mode string, profileData map[strin
 	ig.Core.Logger.Info("[EXECUTE] Conectado con Brain. Enviando LAUNCH_PROFILE...")
 
 	// ── 4. LaunchProfileSync ──────────────────────────────────────────────────
-	// Bloquea hasta recibir LAUNCH_PROFILE_ACK con PID real de Chrome,
-	// o hasta timeout (60s).
 	const launchTimeout = 120 * time.Second
 
 	chromePID, err := client.LaunchProfileSync(
@@ -161,8 +164,6 @@ func (ig *Ignition) execute(profileID string, mode string, profileData map[strin
 	}
 
 	// ── 5. Verificar proceso vivo ─────────────────────────────────────────────
-	// Brain verifica internamente, pero hacemos doble check para detectar
-	// muertes inmediatas post-launch desde el lado de Sentinel.
 	time.Sleep(500 * time.Millisecond)
 	if !ig.isProcessAlive(chromePID) {
 		return 0, fmt.Errorf(
@@ -195,8 +196,6 @@ func (ig *Ignition) execute(profileID string, mode string, profileData map[strin
 		},
 	)
 
-	// El log de Chromium ahora lo crea bloom-launcher en Session 1.
-	// Registramos el path esperado para que Nucleus pueda seguirlo en telemetría.
 	logDir := filepath.Join(ig.Core.Paths.AppDataDir, "logs", "chromium")
 	_ = os.MkdirAll(logDir, 0755)
 	logFilePath := filepath.Join(logDir, fmt.Sprintf("%s_%s.log", profileID, time.Now().Format("20060102_150405")))
@@ -243,12 +242,10 @@ func (ig *Ignition) preFlight(profileID string) {
 		}
 	}
 
-	// ── HISTORY: detectar crashes anteriores y limpiar registros viejos ─────────
 	ig.DetectOrphanedLaunches(profileID)
 	if err := ig.PruneHistory(profileID, 30); err != nil {
 		ig.Core.Logger.Info("[WARN] No se pudo ejecutar pruning de history: %v", err)
 	}
-	// ─────────────────────────────────────────────────────────────────────────
 }
 
 // freePortQuirurgico libera el puerto especificado matando procesos que lo ocupan

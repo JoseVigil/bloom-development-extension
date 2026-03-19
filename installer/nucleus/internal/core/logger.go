@@ -114,7 +114,9 @@ func getNucleusIcon(category string) string {
 		return "👷"
 	case "MANDATE":
 		return "📋"
-	case "TELEMETRY": // ← NUEVO
+	case "BRAIN_POLLER":
+		return "🔌"
+	case "TELEMETRY":
 		return "📡"
 	default:
 		return "⚙️"
@@ -143,6 +145,8 @@ func getNucleusStreamDescription(category string) string {
 		return "Synapse orchestration log — records the full launch chain for a browser profile"
 	case "MANDATE":
 		return "Nucleus mandate log — captures hook execution and mandate orchestration events"
+	case "BRAIN_POLLER":
+		return "Nucleus brain_poller log — captures Brain TCP connection lifecycle, PROFILE_DISCONNECTED events received, and hook dispatch results"
 	case "TELEMETRY": // ← NUEVO
 		return "Nucleus telemetry log — captures all reads, writes, errors, parse failures and lock issues related to telemetry.json"
 	default:

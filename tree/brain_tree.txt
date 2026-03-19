@@ -179,7 +179,8 @@ bloom-development-extension/
     │   ├── synapse/
     │   │   ├── __init__.py
     │   │   ├── __pycache__/ [... cache]
-    │   │   └── synapse_host_cli.py
+    │   │   ├── synapse_host_cli.py
+    │   │   └── synapse_host_init_cli.py
     │   ├── system/
     │   │   ├── __init__.py
     │   │   ├── __pycache__/ [... cache]
@@ -332,8 +333,10 @@ bloom-development-extension/
     │   │   ├── __init__.py
     │   │   ├── __pycache__/ [... cache]
     │   │   ├── handlers/
+    │   │   │   ├── __pycache__/ [... cache]
     │   │   │   └── api_key_handler.py
     │   │   ├── synapse_exceptions.py
+    │   │   ├── synapse_host_init_manager.py
     │   │   ├── synapse_manager.py
     │   │   └── synapse_protocol.py
     │   ├── system/

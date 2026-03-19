@@ -1,0 +1,114 @@
+logs/
+├── brain/
+│   ├── core/
+│   │   └── brain_core_20260319.log
+│   ├── profile/
+│   │   └── brain_profile_20260319.log
+│   ├── server/
+│   │   ├── brain_server_20260319.log
+│   │   ├── brain_server_event_bus_20260319.log
+│   │   └── brain_server_manager_20260319.log
+│   └── service/
+│       ├── brain_service.log
+│       └── brain_service_20260319.log
+├── build/ [... build output]
+├── chromium/
+├── conductor/
+│   └── setup/
+│       └── conductor_setup_20260319.log
+├── host/
+│   └── profiles/
+│       └── 8aafd714-9034-4f27-833a-8452259aef65/
+│           ├── 001_8aafd714_082739/
+│           │   ├── cortex_extension_20260319.log
+│           │   ├── host_20260319.log
+│           │   ├── host_boot_001_8aafd714_082739.log
+│           │   └── nm_init_diag_001_8aafd714_082739.log
+│           ├── 002_8aafd714_084650/
+│           │   ├── cortex_extension_20260319.log
+│           │   ├── host_20260319.log
+│           │   ├── host_boot_002_8aafd714_084650.log
+│           │   └── nm_init_diag_002_8aafd714_084650.log
+│           ├── 004_8aafd714_103409/
+│           │   ├── cortex_extension_20260319.log
+│           │   ├── host_20260319.log
+│           │   ├── host_boot_004_8aafd714_103409.log
+│           │   └── nm_init_diag_004_8aafd714_103409.log
+│           ├── 005_8aafd714_105942/
+│           │   ├── cortex_extension_20260319.log
+│           │   ├── host_20260319.log
+│           │   ├── host_boot_005_8aafd714_105942.log
+│           │   └── nm_init_diag_005_8aafd714_105942.log
+│           ├── 006_8aafd714_172343/
+│           │   ├── cortex_extension_20260319.log
+│           │   ├── host_20260319.log
+│           │   ├── host_boot_006_8aafd714_172343.log
+│           │   └── nm_init_diag_006_8aafd714_172343.log
+│           ├── 007_8aafd714_184812/
+│           │   ├── cortex_extension_20260319.log
+│           │   ├── host_20260319.log
+│           │   ├── host_boot_007_8aafd714_184812.log
+│           │   └── nm_init_diag_007_8aafd714_184812.log
+│           ├── 008_8aafd714_190450/
+│           │   ├── cortex_extension_20260319.log
+│           │   ├── host_20260319.log
+│           │   ├── host_boot_008_8aafd714_190450.log
+│           │   └── nm_init_diag_008_8aafd714_190450.log
+│           ├── 009_8aafd714_190929/
+│           │   ├── cortex_extension_20260319.log
+│           │   ├── host_20260319.log
+│           │   ├── host_boot_009_8aafd714_190929.log
+│           │   └── nm_init_diag_009_8aafd714_190929.log
+│           └── 010_8aafd714_193434/
+│               ├── cortex_extension_20260319.log
+│               ├── host_20260319.log
+│               ├── host_boot_010_8aafd714_193434.log
+│               └── nm_init_diag_010_8aafd714_193434.log
+├── metamorph/
+│   ├── metamorph_core_20260319.log
+│   ├── metamorph_inspection_20260319.log
+│   └── metamorph_operations_20260319.log
+├── nucleus/
+│   ├── control_plane/
+│   │   └── nucleus_control_plane_20260319.log
+│   ├── nucleus_brain_poller_20260319.log
+│   ├── nucleus_orchestration_20260319.log
+│   ├── nucleus_synapse_20260319.log
+│   ├── nucleus_temporal_20260319.log
+│   ├── service/
+│   │   ├── nucleus_service.log
+│   │   └── nucleus_service_20260319.log
+│   ├── svelte_dev/
+│   │   └── nucleus_svelte_dev_20260319.log
+│   ├── system_health/
+│   │   └── nucleus_system_health_20260319.log
+│   └── worker/
+│       └── worker_manager_20260319.log
+├── sensor/
+│   └── sensor_20260319.log
+├── sentinel/
+│   ├── profiles/
+│   │   ├── 8aafd714-9034-4f27-833a-8452259aef65/
+│   │   │   ├── 001_8aafd714_082739_debug.log
+│   │   │   ├── 001_8aafd714_082739_engine_mining.log
+│   │   │   ├── 001_8aafd714_082739_engine_network.log
+│   │   │   ├── 001_8aafd714_082739_engine_read.log
+│   │   │   ├── 001_8aafd714_082739_netlog.json
+│   │   │   ├── 002_8aafd714_084650_debug.log
+│   │   │   ├── 002_8aafd714_084650_netlog.json
+│   │   │   ├── 004_8aafd714_103409_debug.log
+│   │   │   └── 004_8aafd714_103409_netlog.json
+│   │   └── sentinel_8aafd714-9034-4f27-833a-8452259aef65_20260319.log
+│   └── sentinel_core_20260319.log
+├── synapse_trace/
+│   ├── synapse_trace_001_8aafd714_082739.log
+│   ├── synapse_trace_007_8aafd714_184812.log
+│   ├── synapse_trace_008_8aafd714_190450.log
+│   ├── synapse_trace_009_8aafd714_190929.log
+│   └── synapse_trace_010_8aafd714_193434.log
+├── telemetry.json
+└── temporal/
+    ├── server/
+    │   └── temporal_server_20260319.log
+    ├── temporal.db
+    └── temporal.pid

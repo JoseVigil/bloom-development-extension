@@ -39,12 +39,15 @@ bloom-development-extension/
     │   │   ├── protocol.go
     │   │   ├── sentinel_client.go
     │   │   └── synapse_handshake.go
+    │   ├── health/
+    │   │   └── health.go
     │   ├── ignition/
     │   │   ├── ignition.go
     │   │   ├── ignition_history.go
     │   │   ├── ignition_host_init.go
     │   │   ├── ignition_identity.go
     │   │   ├── ignition_lifecycle.go
+    │   │   ├── ignition_registry_windows.go
     │   │   ├── ignition_spec.go
     │   │   ├── launch_commands.go
     │   │   ├── monitor.go
