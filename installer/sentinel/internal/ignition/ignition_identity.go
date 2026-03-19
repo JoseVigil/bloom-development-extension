@@ -69,6 +69,20 @@ func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profi
 		spec.TargetURL = fmt.Sprintf("chrome-extension://%s/discovery/index.html", ig.Core.Config.Provisioning.ExtensionID)
 	}
 
+	// Limpiar siempre el ConfigOverride antes de repoblarlo.
+	// Garantiza que un launch sin overrides no hereda los del launch anterior
+	// aunque el struct haya sido deserializado desde un spec previo.
+	spec.ConfigOverride = nil
+
+	if configOverride != "" {
+		var overridesMap map[string]interface{}
+		if err := json.Unmarshal([]byte(configOverride), &overridesMap); err != nil {
+			return nil, fmt.Errorf("config-override inválido al poblar spec: %v", err)
+		}
+		spec.ConfigOverride = overridesMap
+		ig.Core.Logger.Info("[IGNITION] 📦 configOverride escrito en ignition_spec.json: %s", configOverride)
+	}
+
 	updatedSpec, _ := json.MarshalIndent(spec, "", "  ")
 	if err := os.WriteFile(ig.SpecPath, updatedSpec, 0644); err != nil {
 		return nil, err

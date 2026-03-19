@@ -48,10 +48,15 @@ type IgnitionSpec struct {
 		LogsBase  string `json:"logs_base"`
 		UserData  string `json:"user_data"`
 	} `json:"paths"`
-	TargetURL   string   `json:"target_url"`
-	CustomFlags []string `json:"custom_flags"`
-	LaunchID    string   `json:"launch_id"`
-	ProfileID   string   `json:"profile_id"`
+	TargetURL      string                 `json:"target_url"`
+	CustomFlags    []string               `json:"custom_flags"`
+	LaunchID       string                 `json:"launch_id"`
+	ProfileID      string                 `json:"profile_id"`
+	// ConfigOverride transporta el mapa de overrides activos de este launch
+	// para que Brain pueda leerlos y tomar decisiones de routing (ej: Human Registration).
+	// omitempty garantiza que launches normales (sin overrides) no escriban el campo,
+	// manteniendo el spec limpio y sin acumulación entre lanzamientos.
+	ConfigOverride map[string]interface{} `json:"configOverride,omitempty"`
 }
 
 func init() {
