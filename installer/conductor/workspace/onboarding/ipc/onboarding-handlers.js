@@ -40,26 +40,45 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow) {
   // ── HANDLER: Enviar step de onboarding a Chrome ─────────────────────────
   ipcMain.handle('onboarding:navigate', async (event, { step, email, service }) => {
     log.info('[IPC] onboarding:navigate — step:', step);
+
+    // Helper para persistir el step en nucleus.json (siempre, independiente de nucleus)
+    const persistStep = (step) => {
+      try {
+        const data = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
+        data.onboarding = data.onboarding || {};
+        data.onboarding.started      = true;
+        data.onboarding.current_step = step;
+        data.onboarding.updated_at   = new Date().toISOString();
+        if (!data.onboarding.started_at) {
+          data.onboarding.started_at = new Date().toISOString();
+        }
+        fs.writeFileSync(NUCLEUS_JSON, JSON.stringify(data, null, 2));
+      } catch (e) {
+        log.warn('[IPC] onboarding:navigate — failed to persist step locally:', e.message);
+      }
+    };
+
     try {
       const nucleusData = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
       const profileId = nucleusData.master_profile;
+      if (!profileId) throw new Error('master_profile not found');
 
-      log.warn('[IPC] onboarding:navigate — nucleus synapse onboarding not yet implemented, persisting step locally only');
-      const success = true;
+      // nucleus --json synapse onboarding <profileId> --step <step>
+      const result = await execNucleus(
+        ['--json', 'synapse', 'onboarding', profileId, '--step', step],
+        10000
+      );
 
-      nucleusData.onboarding = nucleusData.onboarding || {};
-      nucleusData.onboarding.started      = true;
-      nucleusData.onboarding.current_step = step;
-      nucleusData.onboarding.updated_at   = new Date().toISOString();
-      if (!nucleusData.onboarding.started_at) {
-        nucleusData.onboarding.started_at = new Date().toISOString();
-      }
-      fs.writeFileSync(NUCLEUS_JSON, JSON.stringify(nucleusData, null, 2));
+      // result esperado: { success: true, profile_id, step, request_id, status: "routed" }
+      const success = result.success !== false && result.status === 'routed';
 
-      log.success('[IPC] onboarding:navigate — ok (step persisted)');
-      return { success };
+      persistStep(step);
+      log.success('[IPC] onboarding:navigate — ok:', JSON.stringify(result));
+      return { success, result };
     } catch (err) {
       log.error('[IPC] onboarding:navigate — FAILED:', err.message);
+      // Persistir localmente igual para no perder el estado de UI
+      persistStep(step);
       return { success: false, error: err.message };
     }
   });
@@ -69,23 +88,11 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow) {
     log.info('[IPC] onboarding:poll-identity');
     try {
       const nucleusData = JSON.parse(fs.readFileSync(NUCLEUS_JSON, 'utf8'));
-      const profileId = nucleusData.master_profile;
 
-      try {
-        const result = await execNucleus(
-          ['--json', 'synapse', 'status', profileId], 8000
-        );
-        const raw = result.identity || {};
-        if (Object.keys(raw).length > 0) {
-          const accounts = {
-            google: raw.google?.status === 'active',
-            gemini: raw.gemini?.status === 'active',
-            github: raw.github?.status === 'active'
-          };
-          log.success('[IPC] onboarding:poll-identity — ok:', JSON.stringify(accounts));
-          return { success: true, accounts };
-        }
-      } catch (_) {}
+      // NOTA: nucleus --json synapse status NO devuelve campo identity.
+      // Su response es: { success, status: { profile_id, state, sentinel_running, ... } }
+      // Las cuentas autenticadas las escribe Brain en nucleus.json bajo onboarding.accounts[]
+      // cuando el usuario se autentica en Chrome via Cortex. Leemos directo de ahi.
 
       const accounts = nucleusData.onboarding?.accounts || [];
       const resolved = {
@@ -93,7 +100,8 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow) {
         gemini: accounts.some(a => a.provider === 'gemini' && a.status === 'active'),
         github: accounts.some(a => a.provider === 'github' && a.status === 'active')
       };
-      log.success('[IPC] onboarding:poll-identity — ok (fallback):', JSON.stringify(resolved));
+
+      log.success('[IPC] onboarding:poll-identity — ok:', JSON.stringify(resolved));
       return { success: true, accounts: resolved };
     } catch (err) {
       log.error('[IPC] onboarding:poll-identity — FAILED:', err.message);

@@ -59,14 +59,18 @@ func init() {
 		var mode string
 		var saveOverrides bool
 
-		var overrideAlias string
-		var overrideRole string
-		var overrideEmail string
+		var overrideAlias     string
+		var overrideRole      string
+		var overrideEmail     string
 		var overrideExtension string
-		var overrideService string
-		var overrideRegister bool
-		var overrideHeartbeat bool
-		var overrideStep int
+		var overrideService   string
+		// FIX: register y heartbeat se declaran como string en lugar de bool.
+		// Con BoolVar el default false es indistinguible de pasar --flag false
+		// porque Cobra marca Changed=false en ambos casos (false == default).
+		// Con StringVar el default "" es inequívoco: "" = no pasado, "true"/"false" = pasado.
+		var overrideRegister  string // "" | "true" | "false"
+		var overrideHeartbeat string // "" | "true" | "false"
+		var overrideStep      int
 
 		var linkedAccounts arrayFlags
 
@@ -80,11 +84,11 @@ func init() {
 				profileID := args[0]
 				ig := New(c)
 
+				// FIX: ya no se necesita Changed() para register ni heartbeat;
+				// el string vacío es la señal inequívoca de "no pasado".
 				overrides := buildOverridesFromFlags(
 					overrideAlias, overrideRole, overrideEmail, overrideExtension, overrideService,
 					overrideRegister, overrideHeartbeat, overrideStep,
-					cmd.Flags().Changed("override-register"),
-					cmd.Flags().Changed("override-heartbeat"),
 				)
 
 				if len(linkedAccounts) > 0 {
@@ -160,16 +164,18 @@ func init() {
 
 		cmd.Flags().StringVar(&mode, "mode", "landing", "Modo de lanzamiento (landing o discovery)")
 		cmd.Flags().BoolVar(&saveOverrides, "save", false, "Persistir overrides en profiles.json")
-		cmd.Flags().StringVar(&overrideAlias, "override-alias", "", "Sobrescribir alias del perfil")
-		cmd.Flags().StringVar(&overrideRole, "override-role", "", "Sobrescribir rol")
-		cmd.Flags().StringVar(&overrideEmail, "override-email", "", "Sobrescribir email")
-		cmd.Flags().StringVar(&overrideExtension, "override-extension", "", "Sobrescribir extension ID")
-		cmd.Flags().StringVar(&overrideService, "override-service", "", "Sobrescribir servicio de registro (google, twitter, github, etc)")
-		cmd.Flags().BoolVar(&overrideRegister, "override-register", false, "Sobrescribir flag de registro")
-		cmd.Flags().BoolVar(&overrideHeartbeat, "override-heartbeat", false, "Sobrescribir flag de heartbeat")
-		cmd.Flags().IntVar(&overrideStep, "override-step", 0, "Sobrescribir step actual")
-		cmd.Flags().Var(&linkedAccounts, "add-account", "Agregar linked account (provider,email_or_username,status). Repetible")
-		cmd.Flags().StringVar(&configFile, "config-file", "", "Cargar overrides desde JSON (@archivo o - para stdin)")
+		cmd.Flags().StringVar(&overrideAlias,     "override-alias",      "", "Sobrescribir alias del perfil")
+		cmd.Flags().StringVar(&overrideRole,      "override-role",       "", "Sobrescribir rol")
+		cmd.Flags().StringVar(&overrideEmail,     "override-email",      "", "Sobrescribir email")
+		cmd.Flags().StringVar(&overrideExtension, "override-extension",  "", "Sobrescribir extension ID")
+		cmd.Flags().StringVar(&overrideService,   "override-service",    "", "Sobrescribir servicio de registro (google, twitter, github, etc)")
+		// FIX: StringVar en lugar de BoolVar para poder distinguir omitido vs false explícito.
+		// Uso: --override-register true | --override-register false
+		cmd.Flags().StringVar(&overrideRegister,  "override-register",   "", "Sobrescribir flag de registro (true/false)")
+		cmd.Flags().StringVar(&overrideHeartbeat, "override-heartbeat",  "", "Sobrescribir flag de heartbeat (true/false)")
+		cmd.Flags().IntVar(&overrideStep,         "override-step",       0,  "Sobrescribir step actual")
+		cmd.Flags().Var(&linkedAccounts,          "add-account",             "Agregar linked account (provider,email_or_username,status). Repetible")
+		cmd.Flags().StringVar(&configFile,        "config-file",         "", "Cargar overrides desde JSON (@archivo o - para stdin)")
 
 		return cmd
 	})
@@ -192,16 +198,41 @@ func (i *arrayFlags) Type() string {
 	return "string"
 }
 
-func buildOverridesFromFlags(alias, role, email, extension, service string, register, heartbeat bool, step int, registerChanged, heartbeatChanged bool) map[string]interface{} {
+// parseBoolFlag convierte el string de un flag booleano al valor bool correspondiente.
+// Retorna (value, wasProvided): wasProvided=false cuando el flag fue omitido (s == "").
+func parseBoolFlag(s string) (value bool, wasProvided bool) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "true", "1", "yes":
+		return true, true
+	case "false", "0", "no":
+		return false, true
+	default:
+		// "" u otro valor no reconocido → flag no fue pasado
+		return false, false
+	}
+}
+
+// buildOverridesFromFlags construye el mapa de overrides a partir de los flags de CLI.
+// register y heartbeat son strings: "" significa "no pasado", "true"/"false" significa
+// que el usuario lo especificó explícitamente, incluyendo false.
+func buildOverridesFromFlags(alias, role, email, extension, service string, registerStr, heartbeatStr string, step int) map[string]interface{} {
 	overrides := make(map[string]interface{})
-	if alias != "" { overrides["profile_alias"] = alias }
-	if role != "" { overrides["role"] = role }
-	if email != "" { overrides["email"] = email }
+
+	if alias != ""     { overrides["profile_alias"] = alias }
+	if role != ""      { overrides["role"] = role }
+	if email != ""     { overrides["email"] = email }
 	if extension != "" { overrides["extension_id"] = extension }
-	if service != "" { overrides["service"] = service }
-	if registerChanged { overrides["register"] = register }
-	if heartbeatChanged { overrides["heartbeat"] = heartbeat }
-	if step > 0 { overrides["step"] = step }
+	if service != ""   { overrides["service"] = service }
+	if step > 0        { overrides["step"] = step }
+
+	// FIX: usar parseBoolFlag para distinguir "no pasado" de "pasado como false"
+	if val, ok := parseBoolFlag(registerStr); ok {
+		overrides["register"] = val
+	}
+	if val, ok := parseBoolFlag(heartbeatStr); ok {
+		overrides["heartbeat"] = val
+	}
+
 	return overrides
 }
 
@@ -212,9 +243,9 @@ func parseLinkedAccounts(inputs []string) ([]map[string]interface{}, error) {
 		if len(parts) != 3 {
 			return nil, fmt.Errorf("formato inválido: %q (esperado provider,identifier,status)", input)
 		}
-		provider := strings.TrimSpace(parts[0])
+		provider   := strings.TrimSpace(parts[0])
 		identifier := strings.TrimSpace(parts[1])
-		status := strings.TrimSpace(parts[2])
+		status     := strings.TrimSpace(parts[2])
 
 		if status != "active" && status != "inactive" && status != "error" {
 			return nil, fmt.Errorf("status inválido: %s", status)
@@ -259,7 +290,7 @@ func loadOverridesFromFile(path string) (map[string]interface{}, error) {
 
 func mergeOverrides(base, priority map[string]interface{}) map[string]interface{} {
 	result := make(map[string]interface{}, len(base)+len(priority))
-	for k, v := range base { result[k] = v }
+	for k, v := range base    { result[k] = v }
 	for k, v := range priority { result[k] = v }
 	return result
 }
@@ -323,7 +354,7 @@ func (ig *Ignition) isBloomProcess(pid int) bool {
 	if err != nil {
 		return false
 	}
-	path := strings.ToLower(string(output))
+	path      := strings.ToLower(string(output))
 	bloomPath := strings.ToLower(filepath.Join(ig.Core.Paths.BinDir, "chrome-win"))
 	return strings.Contains(path, bloomPath)
 }

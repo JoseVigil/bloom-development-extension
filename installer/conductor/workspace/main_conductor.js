@@ -9,11 +9,11 @@ const os   = require('os');
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const { spawn, execFile } = require('child_process');
 const { promisify } = require('util');
-// shared/ está en ../shared/ en dev y en ./shared/ dentro del asar empaquetado
-const _sharedDir = require('path').join(
-  require('electron').app.isPackaged ? __dirname : path.join(__dirname, '..'),
-  'shared'
-);
+// shared/ está en ../shared/ en dev y en resources/shared/ cuando está empaquetado
+// extraFiles copia shared/ a resources/shared/ fuera del asar
+const _sharedDir = require('electron').app.isPackaged
+  ? path.join(process.resourcesPath, 'shared')
+  : path.join(__dirname, '..', 'shared');
 const { getLogger } = require(path.join(_sharedDir, 'logger'));
 const { paths } = require(path.join(_sharedDir, 'global_paths'));
 const { registerOnboardingHandlers } = require('./onboarding/ipc/onboarding-handlers');

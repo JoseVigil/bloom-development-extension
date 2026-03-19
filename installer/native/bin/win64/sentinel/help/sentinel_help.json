@@ -85,13 +85,11 @@
       },
       {
         "name": "override-heartbeat",
-        "usage": "Sobrescribir flag de heartbeat",
-        "default": "false"
+        "usage": "Sobrescribir flag de heartbeat (true/false)"
       },
       {
         "name": "override-register",
-        "usage": "Sobrescribir flag de registro",
-        "default": "false"
+        "usage": "Sobrescribir flag de registro (true/false)"
       },
       {
         "name": "override-role",

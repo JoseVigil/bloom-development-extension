@@ -540,5 +540,12 @@ https://chatgpt.com/c/69b947e8-f938-83e9-9b5e-b2f14d1ca42a
 
 roamtouch temporal Batch Operations, Worker Deployments y  Nexus Endpoints
 https://chatgpt.com/c/69bab3e9-060c-83e9-9f69-99f2ebb1df73
-Roamtouch BTIPS and Temporal Extendes uses
+BTIPS and Temporal Extendes uses
 https://chatgpt.com/c/69bab694-ec18-83e9-bbb6-736dd895049b
+BTIPS CRYPTO type Marketplace https://chatgpt.com/c/69bac584-214c-83e9-b16b-9db530fe39d6
+BTIPS research prompts
+https://chatgpt.com/c/69bac394-4b58-83e9-90f3-4ddbd001c0ed
+padkite Batch operations en Temporal para operar miles de workflows
+https://claude.ai/chat/3ef48204-6636-4c04-a257-208dc4809708
+padkite Worker deployments en Temporal para workflows de larga duración
+https://claude.ai/chat/8fca38f2-00c1-4a02-96a1-2ab686808fdd
