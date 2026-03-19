@@ -58,14 +58,25 @@ var validComponents = map[string]string{
 //     nil and nothing is torn down.
 //   - Metamorph uses rename+replace (copyDirWithSelfUpdate) so no teardown is
 //     needed even for its own binary.
+//   - gracefulFirst lists processes that must receive a graceful termination
+//     request (taskkill without /F) BEFORE services are stopped. This allows
+//     those processes to close their open TCP connections cleanly so that the
+//     other side (e.g. Brain) receives the TCP FIN instead of a hard reset.
+//     After a short grace period the process is force-killed if still alive.
 type componentTeardown struct {
-	services  []string
-	processes []string
+	services     []string
+	processes    []string
+	gracefulFirst []string // closed gently before service stop; force-killed after grace period
 }
 
 var processesForComponent = map[string]componentTeardown{
 	"brain": {
-		services:  []string{"BloomBrain"},
+		services: []string{"BloomBrain"},
+		// bloom-sensor.exe (Sentinel) holds active TCP connections to Brain on
+		// 127.0.0.1:5678. It must receive a graceful termination request first so
+		// it can close its sockets cleanly and Brain gets the TCP FIN. Without this,
+		// Windows kills the process hard and Brain sees WinError 64 / ConnectionReset.
+		gracefulFirst: []string{"bloom-sensor.exe"},
 		// nssm.exe first — it is the parent of BloomBrain and will restart
 		// brain.exe if killed after the child.
 		// bloom-host.exe holds handles on brain/_internal/VCRUNTIME140.dll.
@@ -300,10 +311,14 @@ func runRollout(c *core.Core, dryRun bool, only string) error {
 	// processes unrelated to the target keep running without interruption.
 	var managedServices []string
 	var allProcessesToKill []string
+	var gracefulFirst []string
 
 	if only == "" {
 		// Full rollout: bring down the entire managed stack.
 		managedServices = []string{"BloomBrain", "BloomNucleusService"}
+		// bloom-sensor.exe (Sentinel) holds TCP connections to Brain — graceful
+		// stop first so Brain gets the TCP FIN before the service is killed.
+		gracefulFirst = []string{"bloom-sensor.exe"}
 		// Order matters: nssm.exe must die first — it is the SCM parent of both
 		// BloomBrain and BloomNucleusService. Killing children first lets NSSM
 		// restart them before we copy and re-acquire file handles.
@@ -322,17 +337,30 @@ func runRollout(c *core.Core, dryRun bool, only string) error {
 		if mapping, ok := processesForComponent[only]; ok {
 			managedServices = mapping.services
 			allProcessesToKill = mapping.processes
+			gracefulFirst = mapping.gracefulFirst
 		}
 		// Components with no entry (cortex, nssm, bootstrap, vsix, node,
 		// conductor, setup, metamorph) have no runtime lock — both slices
 		// stay nil and the teardown block below becomes a no-op.
 	}
 	if !dryRun {
-		hasTeardown := len(managedServices) > 0 || len(allProcessesToKill) > 0
+		hasTeardown := len(managedServices) > 0 || len(allProcessesToKill) > 0 || len(gracefulFirst) > 0
 		if hasTeardown && !c.Config.OutputJSON {
 			fmt.Println("  Stopping services and killing processes...")
 		}
-		// Step 1: stop services via SCM.
+		// Step 1: gracefully stop processes that hold open TCP connections to the
+		// service being replaced. This lets them close their sockets cleanly so
+		// the other side receives the TCP FIN instead of a hard reset (WinError 64).
+		// After a short grace period, force-kill any that did not exit on their own.
+		const gracePeriod = 3 * time.Second
+		for _, procName := range gracefulFirst {
+			c.Logger.Info("graceful stop: %s (grace=%s)", procName, gracePeriod)
+			if !c.Config.OutputJSON {
+				fmt.Printf("  ⏳ %-20s graceful stop (waiting %s)...\n", procName, gracePeriod)
+			}
+			gracefulStop(procName, gracePeriod)
+		}
+		// Step 2: stop services via SCM.
 		for _, svcName := range managedServices {
 			if err := controlService(svcName, false); err != nil {
 				c.Logger.Warning("could not stop service %s: %v", svcName, err)
@@ -346,14 +374,14 @@ func runRollout(c *core.Core, dryRun bool, only string) error {
 				}
 			}
 		}
-		// Step 2: force-kill all known processes and their trees.
+		// Step 3: force-kill all known processes and their trees.
 		// This catches workers running outside services and releases all
 		// file handles including DLL locks like VCRUNTIME140.dll.
 		for _, procName := range allProcessesToKill {
 			c.Logger.Info("killing process: %s", procName)
 			killProcess(procName)
 		}
-		// Step 3: pause to let Windows release all file handles.
+		// Step 4: pause to let Windows release all file handles.
 		time.Sleep(1 * time.Second)
 		// Step 4: remove legacy bin/native/ dir created by old incorrect rollout.
 		nativeLegacyDir := filepath.Join(appDataBin, "native")
@@ -928,6 +956,35 @@ func waitForServiceState(s *mgr.Service, desired svc.State, timeout time.Duratio
 
 // killProcess force-kills all instances of a process by name using taskkill /F /T.
 func killProcess(name string) {
+	_ = exec.Command("taskkill", "/F", "/IM", name, "/T").Run()
+}
+
+// gracefulStop sends a graceful termination request to all instances of a process
+// by name (taskkill without /F), waits up to the given grace period for them to
+// exit on their own, then force-kills any that are still alive.
+//
+// This allows processes that hold open TCP connections (e.g. Sentinel / bloom-sensor.exe
+// connected to Brain on 127.0.0.1:5678) to close their sockets cleanly before the
+// service they talk to is stopped. Without this, Windows terminates the process
+// hard and the remote side sees a connection reset (WinError 64) instead of a
+// clean TCP FIN.
+func gracefulStop(name string, grace time.Duration) {
+	// Ask the process to terminate gracefully (no /F = gentle signal).
+	_ = exec.Command("taskkill", "/IM", name, "/T").Run()
+
+	// Poll until no instance remains or the grace period expires.
+	deadline := time.Now().Add(grace)
+	for time.Now().Before(deadline) {
+		// tasklist /FI exits with 0 and prints the header even when no process
+		// matches, so we check the output for the process name instead.
+		out, err := exec.Command("tasklist", "/FI", "IMAGENAME eq "+name, "/NH").Output()
+		if err != nil || !strings.Contains(strings.ToLower(string(out)), strings.ToLower(name)) {
+			return // process is gone — nothing left to force-kill
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+
+	// Grace period elapsed — force-kill whatever is still alive.
 	_ = exec.Command("taskkill", "/F", "/IM", name, "/T").Run()
 }
 
