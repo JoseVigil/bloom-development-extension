@@ -464,6 +464,26 @@ class ServerManager:
 
                     await self._send_to_writer(writer, response)
 
+                elif msg_type == 'UNREGISTER_HOST':
+                    # bloom-host.exe signals intentional shutdown before closing socket.
+                    # Payload: { type, profile_id, launch_id, reason, timestamp }
+                    # We break the read loop cleanly — no exception, no reconnect.
+                    profile_id = msg.get('profile_id')
+                    launch_id  = msg.get('launch_id')
+                    reason     = msg.get('reason', 'UNREGISTER_HOST')
+
+                    logger.info(
+                        f"🔌 [{conn_id}] UNREGISTER_HOST: profile={profile_id[:8] if profile_id else '?'} "
+                        f"launch={launch_id} reason={reason}"
+                    )
+
+                    # Mark client info so _cleanup_client emits the right reason
+                    if writer in self.clients:
+                        self.clients[writer]['unregister_reason'] = reason
+
+                    # Exit the read loop gracefully — host is closing intentionally
+                    break
+
                 else:
                     # === ROUTING LOGIC ===
                     target_profile = msg.get('target_profile')
@@ -596,15 +616,20 @@ class ServerManager:
             if client_type == 'host' and p_id:
                 # Update profile state (offline)
                 await self.profile_manager.set_profile_offline(p_id)
-                
+
+                # Use explicit reason from UNREGISTER_HOST if available
+                disconnect_reason = info.get('unregister_reason', 'CONNECTION_LOST')
+
                 # Emit disconnect event
                 event = await self.event_bus.add_event(
                     'PROFILE_DISCONNECTED',
                     {
                         'profile_id': p_id,
-                        'conn_id': info.get('conn_id')
+                        'conn_id': info.get('conn_id'),
+                        'reason': disconnect_reason
                     }
                 )
+                logger.info(f"📤 PROFILE_DISCONNECTED profile={p_id[:8]} reason={disconnect_reason}")
                 
                 # Broadcast to sentinels
                 await self._broadcast_event(event)

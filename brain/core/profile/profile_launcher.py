@@ -162,7 +162,32 @@ class ProfileLauncher:
                     "Spec-driven mode required. Convention mode deprecated since v2.0.",
                     self.ERROR_SPEC_INVALID
                 )
-            
+
+            # ── HUMAN REGISTRATION GATE ─────────────────────────────────────
+            # Si el spec lleva configOverride con register=true y service=google
+            # desviamos a un lanzamiento limpio (sin flags de automatización)
+            # para que Google no detecte el navegador como bot durante el login.
+            config_override = spec_data.get('configOverride', {})
+            is_register_mode = config_override.get('register', False) is True
+            is_google_service = str(config_override.get('service', '')).lower() == 'google'
+
+            # ── DIAGNÓSTICO DE FLAGS RECIBIDOS ───────────────────────────────
+            # Se loguean SIEMPRE (no solo cuando el gate es True) para poder
+            # confirmar en el log que los flags llegaron correctamente a este
+            # punto, independientemente del camino de ejecución que se tome.
+            logger.info("🔍 GATE CHECK — configOverride recibido en spec:")
+            logger.info(f"   configOverride (raw)  : {config_override!r}")
+            logger.info(f"   override.register     : {config_override.get('register', '<ausente>')!r}  →  is_register_mode={is_register_mode}")
+            logger.info(f"   override.service      : {config_override.get('service',  '<ausente>')!r}  →  is_google_service={is_google_service}")
+            logger.info(f"   override.heartbeat    : {config_override.get('heartbeat', '<ausente>')!r}")
+            logger.info(f"   DECISION              : {'✅ HUMAN REGISTRATION' if (is_register_mode and is_google_service) else '➡️  SPEC-DRIVEN normal'}")
+            # ────────────────────────────────────────────────────────────────
+
+            if is_register_mode and is_google_service:
+                logger.info("👤 MODO REGISTRO HUMANO detectado → desviando a _launch_human_registration")
+                return self._launch_human_registration(profile, spec_data)
+            # ────────────────────────────────────────────────────────────────
+
             logger.info("📋 Modo SPEC-DRIVEN")
             return self._launch_spec_driven(profile, spec_data)
             
@@ -177,6 +202,122 @@ class ProfileLauncher:
                 {"original_error": str(e)}
             )
     
+    def _launch_human_registration(self, profile: Dict[str, Any], spec: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Lanzamiento en MODO HUMANO para registro/login de cuentas Google.
+
+        Objetivo: evadir el sistema anti-bot de Google durante el flujo de
+        autenticación. El usuario hace el login manualmente con su teclado y
+        ratón reales. Una vez completado, la cookie queda persistida en el
+        user_data_dir y los lanzamientos posteriores (modo WORKER normal)
+        entran directamente sin pasar por accounts.google.com.
+
+        Diferencias clave respecto a _launch_spec_driven:
+        ─────────────────────────────────────────────────
+        • PROHIBIDO: --disable-web-security, --test-type,
+                     --remote-debugging-port, --enable-automation
+        • SÍ se carga la extensión (--load-extension) para que el perfil
+          quede correctamente inicializado.
+        • No se agregan engine_flags ni custom_flags del spec (podrían
+          contener flags de automatización).
+        • La URL destino es siempre la puerta principal de Google:
+          https://accounts.google.com/ServiceLogin
+        • No se adjuntan flags de logging (--log-net-log, etc.) para
+          reducir la huella del proceso al mínimo.
+
+        Raises:
+            LaunchError: Con código específico del error.
+        """
+        logger.info("👤 Ejecutando lanzamiento MODO HUMANO (Human Registration)")
+        logger.info("   → Sin flags de automatización — Google anti-bot bypass activo")
+
+        HUMAN_REGISTRATION_URL = "https://accounts.google.com/ServiceLogin"
+
+        try:
+            engine_config = spec.get('engine', {})
+            paths_config  = spec.get('paths', {})
+
+            exe    = engine_config.get('executable')
+            u_data = paths_config.get('user_data')
+            ext    = paths_config.get('extension')
+            logs_base = paths_config.get('logs_base')   # necesario para launch_id
+
+            # Validación mínima de campos requeridos
+            if not all([exe, u_data, ext]):
+                missing = []
+                if not exe:    missing.append('engine.executable')
+                if not u_data: missing.append('paths.user_data')
+                if not ext:    missing.append('paths.extension')
+                raise LaunchError(
+                    f"Spec incompleto para modo registro. Campos faltantes: {', '.join(missing)}",
+                    self.ERROR_SPEC_INVALID,
+                    {"missing_fields": missing}
+                )
+
+            # Resolución de rutas
+            exec_path      = self.paths.base_dir / exe    if not os.path.isabs(exe)    else Path(exe)
+            user_data_path = self.paths.base_dir / u_data if not os.path.isabs(u_data) else Path(u_data)
+            extension_path = self.paths.base_dir / ext    if not os.path.isabs(ext)    else Path(ext)
+
+            logger.debug(f"🔧 Rutas (Human Registration):")
+            logger.debug(f"   Executable: {exec_path}")
+            logger.debug(f"   User Data:  {user_data_path}")
+            logger.debug(f"   Extension:  {extension_path}")
+            logger.info (f"   Target URL: {HUMAN_REGISTRATION_URL}")
+
+            if not exec_path.exists():
+                raise LaunchError(
+                    f"Chrome executable not found: {exec_path}",
+                    self.ERROR_CHROME_NOT_FOUND,
+                    {"path": str(exec_path)}
+                )
+
+            if not extension_path.exists():
+                raise LaunchError(
+                    f"Extension directory not found: {extension_path}",
+                    self.ERROR_EXTENSION_NOT_FOUND,
+                    {"path": str(extension_path)}
+                )
+
+            # ── FLAGS LIMPIOS ────────────────────────────────────────────────
+            # Solo los estrictamente necesarios. Ninguno delata automatización.
+            # Referencia: Protocolo de Registro Seguro - Human Onboarding Mode
+            args = [
+                str(exec_path),
+                f"--user-data-dir={user_data_path}",
+                f"--load-extension={extension_path}",   # extensión SÍ se carga
+                "--no-first-run",
+                "--no-default-browser-check",
+                "--disable-sync",
+                "--disable-session-crashed-bubble",
+                HUMAN_REGISTRATION_URL,
+            ]
+            # ── FIN FLAGS LIMPIOS ────────────────────────────────────────────
+
+            # launch_id: tomar del spec si Sentinel lo proveyó
+            launch_id = spec.get('launch_id')
+
+            # Logs: omitidos intencionalmente en modo humano para reducir huella.
+            # Si se necesitan en el futuro, agregar aquí con el mismo patrón
+            # de _launch_spec_driven pero solo con --log-file (nunca --log-net-log
+            # junto a --enable-logging=stderr).
+            log_files = {}
+
+            logger.info("✅ Args limpios construidos — entregando a handoff")
+            logger.debug(f"   Total args: {len(args)}")
+
+            return self._execute_handoff(args, profile['id'], log_files, launch_id)
+
+        except LaunchError:
+            raise
+        except Exception as e:
+            logger.error(f"❌ Error en human registration launch: {e}", exc_info=True)
+            raise LaunchError(
+                f"Human registration launch failed: {str(e)}",
+                self.ERROR_LAUNCH_FAILED,
+                {"stage": "human_registration", "error": str(e)}
+            )
+
     def _launch_spec_driven(self, profile: Dict[str, Any], spec: Dict[str, Any]) -> Dict[str, Any]:
         """
         Lanzamiento spec-driven: JSON define TODO (executable, paths, flags, url).

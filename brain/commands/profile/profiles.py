@@ -257,12 +257,16 @@ class ProfilesLaunchCommand(BaseCommand):
         return CommandMetadata(
             name="launch",
             category=CommandCategory.PROFILE,
-            version="2.4.0",  # Version bump por error handling
-            description="Lanza Chrome con un perfil de Worker usando spec-driven mode",
+            version="2.5.0",  # Version bump: Human Registration mode
+            description="Lanza Chrome con un perfil de Worker usando spec-driven mode. "
+                        "Con --override-register true --override-service google activa el "
+                        "Modo Registro Humano (flags limpios, sin automatización, evasión anti-bot de Google).",
             examples=[
                 "brain profile launch <id> --spec /path/to/spec.json --mode discovery",
                 "brain profile launch abc12345 --spec ignition_spec.json --mode landing",
-                "brain profile launch abc12345 --spec spec.json -m discovery --json"
+                "brain profile launch abc12345 --spec spec.json -m discovery --json",
+                "brain profile launch abc12345 --spec spec.json -m discovery --override-register true --override-service google",
+                "brain profile launch abc12345 --spec spec.json -m discovery --override-heartbeat false --override-register true --override-service google"
             ]
         )
 
@@ -272,9 +276,20 @@ class ProfilesLaunchCommand(BaseCommand):
             ctx: typer.Context,
             profile_id: str = typer.Argument(..., help="ID del perfil a lanzar"),
             spec: str = typer.Option(..., "--spec", "-s", help="Archivo JSON con especificación completa de lanzamiento (REQUERIDO)"),
-            mode: str = typer.Option("discovery", "--mode", "-m", help="Modo de página: 'discovery' (onboarding) o 'landing' (dashboard)")
+            mode: str = typer.Option("discovery", "--mode", "-m", help="Modo de página: 'discovery' (onboarding) o 'landing' (dashboard)"),
+            override_heartbeat: Optional[bool] = typer.Option(None, "--override-heartbeat", help="Override heartbeat (true/false). Pisa el valor del perfil en el config JS antes de lanzar."),
+            override_register: Optional[bool] = typer.Option(None, "--override-register", help="Override registro (true/false). true activa el Modo Registro Humano (flags limpios, sin automatización)."),
+            override_service: Optional[str] = typer.Option(None, "--override-service", help="Servicio destino del registro: google | twitter | github | etc. Requerido junto a --override-register true.")
         ):
-            """Lanza Chrome con el perfil especificado usando spec-driven mode."""
+            """Lanza Chrome con el perfil especificado usando spec-driven mode.
+
+            Modo normal: requiere --spec y --mode (discovery o landing).
+
+            Modo Registro Humano: añadir --override-register true --override-service google.
+            Lanza Chromium sin flags de automatización para que Google no detecte bot.
+            El usuario hace el login manualmente; la cookie queda persistida para siempre.
+            Lanzamientos posteriores (modo worker) entran directamente sin pasar por Google.
+            """
             logger.info(f"🚀 Comando: profile launch - ID: {profile_id[:8]}, Mode: {mode}")
             
             gc = ctx.obj
@@ -286,7 +301,27 @@ class ProfilesLaunchCommand(BaseCommand):
             logger.debug(f"  → Verbose: {gc.verbose}")
             logger.debug(f"  → Spec: {spec}")
             logger.debug(f"  → Mode: {mode}")
-            
+            logger.debug(f"  → override_heartbeat: {override_heartbeat}")
+            logger.debug(f"  → override_register: {override_register}")
+            logger.debug(f"  → override_service: {override_service}")
+
+            # Construir mapa de overrides a partir de los flags recibidos.
+            # Solo se incluyen los flags que fueron explícitamente provistos
+            # (valor distinto de None), respetando el contrato de Sentinel.
+            def buildOverridesFromFlags() -> dict:
+                overrides = {}
+                if override_heartbeat is not None:
+                    overrides["heartbeat"] = override_heartbeat
+                if override_register is not None:
+                    overrides["register"] = override_register
+                if override_service is not None:
+                    overrides["service"] = override_service
+                return overrides
+
+            config_overrides = buildOverridesFromFlags()
+            if config_overrides:
+                logger.info(f"⚙️  Config overrides activos: {config_overrides}")
+
             # Validación de mode
             valid_modes = ['discovery', 'landing']
             if mode not in valid_modes:
@@ -336,6 +371,15 @@ class ProfilesLaunchCommand(BaseCommand):
                 
                 logger.info(f"✓ Mode '{mode}' inyectado en page_config")
                 logger.debug(f"  → page_config: {spec_data['page_config']}")
+
+                # 🆕 INYECTAR CONFIG OVERRIDES EN EL SPEC
+                # Sentinel (prepareSessionFiles) leerá este mapa y lo pisará
+                # sobre los valores base del perfil al escribir el *.synapse.config.js.
+                # Solo se serializa si hay al menos un override activo.
+                if config_overrides:
+                    spec_data['configOverride'] = config_overrides
+                    logger.info(f"✓ configOverride inyectado en spec: {config_overrides}")
+                    logger.debug(f"  → configOverride: {spec_data['configOverride']}")
                 
             except json.JSONDecodeError as e:
                 logger.error(f"❌ JSON inválido en spec: {e}")
@@ -352,6 +396,8 @@ class ProfilesLaunchCommand(BaseCommand):
                     mode_desc = "ONBOARDING" if mode == "discovery" else "DASHBOARD"
                     typer.echo(f"📋 Lanzando con spec: {spec_path}", err=True)
                     typer.echo(f"📄 Página: {mode} ({mode_desc})", err=True)
+                    if config_overrides.get("register") and config_overrides.get("service"):
+                        typer.echo(f"👤 MODO REGISTRO HUMANO — servicio: {config_overrides['service'].upper()}", err=True)
                 
                 logger.debug("Inicializando ProfileManager...")
                 pm = ProfileManager()

@@ -229,12 +229,6 @@ class DiscoveryFlow {
     // Complete searching stage
     this.completeCurrentStage();
     await this.delay(400);
-
-    // Transition circle to .synapse state (state 2 — sentinel active, awaiting handshake)
-    if (this.statusCircleEl) {
-      this.statusCircleEl.classList.remove('connected');
-      this.statusCircleEl.classList.add('synapse');
-    }
     
     // Stage 3: Handshake
     this.showStage(2);
@@ -291,16 +285,9 @@ class DiscoveryFlow {
     this.discoveryCompleted = true;
     this.isConnected = true;
     
-    // Transition circle to .connected state (state 3 — handshake validated)
+    // Transform circle to green with checkmark
     if (this.statusCircleEl) {
-      this.statusCircleEl.classList.remove('synapse');
-      this.statusCircleEl.classList.add('connected');
-    }
-
-    // Show success message below circle
-    const successMsg = document.getElementById('handshake-success-msg');
-    if (successMsg) {
-      successMsg.classList.add('show');
+      this.statusCircleEl.classList.add('success');
     }
     
     // Show connection info
@@ -311,7 +298,7 @@ class DiscoveryFlow {
       }
       
       if (this.connectedTimeEl) {
-        this.connectedTimeEl.textContent = `Established: ${new Date().toLocaleTimeString()}`;
+        this.connectedTimeEl.textContent = `Conectado: ${new Date().toLocaleTimeString()}`;
       }
       
       this.connectionRowEl.style.display = 'flex';
@@ -338,15 +325,37 @@ class DiscoveryFlow {
 
   transitionToOnboarding() {
     console.log('[Discovery] transitionToOnboarding() called');
-    
+    console.log('[Discovery] serviceTarget:', this.serviceTarget);
+
     chrome.runtime.sendMessage({
       event: 'onboarding_started'
     });
 
     setTimeout(() => {
-      console.log('[Discovery] Showing onboarding-welcome screen');
-      this.showScreen('onboarding-welcome');
+      this.routeToServiceFlow(this.serviceTarget);
     }, 2000);
+  }
+
+  routeToServiceFlow(service) {
+    console.log('[Discovery] routeToServiceFlow() - service:', service);
+
+    switch (service) {
+      case 'google':
+        console.log('[Discovery] Routing to Google flow');
+        this.showScreen('onboarding-welcome');
+        break;
+
+      // Próximos services se agregan aquí:
+      // case 'openai':
+      // case 'claude':
+      // case 'xai':
+
+      default:
+        // Sin service definido → el usuario elige el provider
+        console.log('[Discovery] No service specified, routing to provider-select');
+        this.showScreen('provider-select');
+        break;
+    }
   }
 
   autoCloseDiscovery() {
@@ -361,7 +370,7 @@ class DiscoveryFlow {
   }
 
   startCountdown() {
-    let count = 7;
+    let count = 5;
     
     // Get countdown element
     let countdownEl = document.getElementById('countdown-value');
@@ -563,102 +572,31 @@ class OnboardingFlow {
         this.syncWithState(state);
       }
     });
-
-    // Listener para señales de navegación remotas desde background.js
-    // Originadas en: nucleus synapse onboarding <profile_id> --step <step>
-    // Ruta: Brain TCP → bloom-host → background.js → chrome.runtime.sendMessage
-    chrome.runtime.onMessage.addListener((msg) => {
-      if (msg.command === 'onboarding_navigate' && msg.payload) {
-        this.handleOnboardingNavigate(msg.payload);
-      }
-    });
   }
 
   async checkResume() {
     const result = await chrome.storage.local.get('onboarding_state');
     const state = result.onboarding_state;
 
-    // ── Prioridad 1: estado persistido en storage (reanudación tras reload) ──
-    if (state && state.active) {
-      if (state.googleEmail && !state.geminiKeyValidated) {
-        this.googleEmail = state.googleEmail;
-        this.showScreen('gemini-api');
-        return;
-      } else if (state.geminiKeyValidated) {
-        this.showScreen('onboarding-success');
-        return;
-      }
-    }
+    if (!state || !state.active) return;
 
-    // ── Prioridad 2: step inyectado por Ignition en SYNAPSE_CONFIG ──
-    // Ignition escribe `step` en el configData cuando lanza en modo registro.
-    // Valores esperados:
-    //   0 o ausente → sin onboarding activo, no hacer nada
-    //   1           → welcome screen (inicio limpio)
-    //   2           → google-login (ya tiene step previo)
-    //   3           → gemini-api (Google auth completado, falta Gemini key)
-    //   4           → provider-select (flujo multi-provider)
-    const step = self.SYNAPSE_CONFIG?.step ?? 0;
-    if (step > 0) {
-      console.log('[Onboarding] checkResume: step desde SYNAPSE_CONFIG =', step);
-      const stepScreenMap = {
-        1: 'onboarding-welcome',
-        2: 'google-login',
-        3: 'gemini-api',
-        4: 'provider-select'
-      };
-      const targetScreen = stepScreenMap[step];
-      if (targetScreen) {
-        this.showScreen(targetScreen);
-        return;
-      }
-    }
-
-    // ── Prioridad 3: pre-selección de service desde SYNAPSE_CONFIG ──
-    // Si Ignition inyectó `service` (ej: "google,gemini") y register=true,
-    // mostrar directamente el primer proveedor correspondiente.
-    const serviceTarget = self.SYNAPSE_CONFIG?.service;
-    const requiresRegistration = self.SYNAPSE_CONFIG?.register === true;
-    if (requiresRegistration && serviceTarget && step === 0) {
-      const firstService = serviceTarget.split(',')[0]?.trim();
-      if (firstService === 'google') {
-        // Flujo estándar Bloom: Google primero
-        this.showScreen('onboarding-welcome');
-        return;
-      } else if (firstService) {
-        // Multi-provider: ir directo al selector
-        this.showScreen('provider-select');
-        return;
-      }
+    if (state.googleEmail && !state.geminiKeyValidated) {
+      this.googleEmail = state.googleEmail;
+      this.showScreen('gemini-api');
+    } else if (state.geminiKeyValidated) {
+      this.showScreen('onboarding-success');
     }
   }
 
   syncWithState(state) {
     if (state.googleEmail && !this.googleEmail) {
       this.googleEmail = state.googleEmail;
-      // ── Emitir ACCOUNT_REGISTERED para Google ──
-      this.sendAccountRegistered('google', state.googleEmail);
       this.showScreen('gemini-api');
     }
     
     if (state.geminiKeyValidated && !this.apiKeyValidated) {
       this.handleApiKeyValidated();
     }
-  }
-
-  // handleOnboardingNavigate procesa señales de navegación remotas enviadas
-  // por `nucleus synapse onboarding <profile_id> --step <step>`.
-  // Llama showScreen() con el step recibido.
-  // No envía ACK — Brain ya recibió el ACK de routing antes de llegar aquí.
-  handleOnboardingNavigate(payload) {
-    const step = payload?.step;
-    if (!step) {
-      console.warn('[Onboarding] handleOnboardingNavigate: missing step in payload', payload);
-      return;
-    }
-
-    console.log('[Onboarding] Remote navigate →', step);
-    this.showScreen(step);
   }
 
   showScreen(screenName) {
@@ -682,20 +620,20 @@ class OnboardingFlow {
 
   openGoogleLogin() {
     const email = this.userEmail || '';
-    
-    const loginUrl = email 
-        ? `https://accounts.google.com/ServiceLogin?Email=${encodeURIComponent(email)}&continue=https://myaccount.google.com/`
-        : 'https://accounts.google.com/ServiceLogin?continue=https://myaccount.google.com/';
+
+    const loginUrl = email
+      ? `https://accounts.google.com/ServiceLogin?Email=${encodeURIComponent(email)}&continue=https://myaccount.google.com/`
+      : 'https://accounts.google.com/ServiceLogin?continue=https://myaccount.google.com/';
 
     chrome.tabs.create({ url: loginUrl });
     this.showScreen('google-waiting');
 
     chrome.storage.local.set({
-        onboarding_state: {
+      onboarding_state: {
         active: true,
         currentStep: 'google_login_waiting',
         startedAt: Date.now()
-        }
+      }
     });
   }
 
@@ -724,9 +662,6 @@ class OnboardingFlow {
     if (emailEl) {
       emailEl.textContent = this.googleEmail || '-';
     }
-
-    // ── Emitir ACCOUNT_REGISTERED para Gemini ──
-    this.sendAccountRegistered('gemini', this.googleEmail || '');
     
     this.showScreen('onboarding-success');
 
@@ -743,44 +678,6 @@ class OnboardingFlow {
         window.close();
       }, 3000);
     }, 2000);
-  }
-
-  // ── sendAccountRegistered ────────────────────────────────────────────────
-  // Envía ACCOUNT_REGISTERED a background.js, que lo forwardea al native
-  // host. Nucleus lo procesa para actualizar el campo `identity` del perfil,
-  // que es lo que el polling del Conductor (onboarding:poll-identity) necesita.
-  //
-  // CONTRATO (debe mantenerse sincronizado con background.js y Nucleus):
-  //   profile_id  → SYNAPSE_CONFIG.profileId  (inyectado por Ignition)
-  //   launch_id   → SYNAPSE_CONFIG.launchId   (inyectado por Ignition)
-  //   service     → 'google' | 'gemini' | 'github'
-  //   email       → cuenta registrada
-  //
-  // Si SYNAPSE_CONFIG no tiene profileId/launchId, background.js usa
-  // los valores de su propio config como fallback — no se bloquea el flujo.
-  // ─────────────────────────────────────────────────────────────────────────
-  sendAccountRegistered(service, email) {
-    const profileId = self.SYNAPSE_CONFIG?.profileId || '';
-    const launchId  = self.SYNAPSE_CONFIG?.launchId  || '';
-
-    if (!profileId || !launchId) {
-      console.warn('[Onboarding] sendAccountRegistered: SYNAPSE_CONFIG sin profileId/launchId — background usará fallback');
-    }
-
-    chrome.runtime.sendMessage({
-      event:      'ACCOUNT_REGISTERED',
-      profile_id: profileId,
-      launch_id:  launchId,
-      service:    service,
-      email:      email,
-      timestamp:  Date.now()
-    }, (response) => {
-      if (chrome.runtime.lastError) {
-        console.error('[Onboarding] ACCOUNT_REGISTERED send error:', chrome.runtime.lastError.message);
-        return;
-      }
-      console.log('[Onboarding] ✓ ACCOUNT_REGISTERED enviado — service:', service, '| ack:', response?.received);
-    });
   }
 }
 
@@ -899,26 +796,6 @@ class MultiProviderOnboarding extends OnboardingFlow {
         this.showScreen('provider-select');
       });
     }
-
-    // ── Pre-selección de provider desde SYNAPSE_CONFIG.service ──
-    // Si Ignition inyectó `service` (ej: "google,gemini" o "claude"),
-    // pre-marcar visualmente el primer provider no-google de la lista.
-    // Google siempre se maneja por el flujo de login estándar — se ignora
-    // en la selección de API provider (que aplica a proveedores de LLM).
-    const serviceTarget = self.SYNAPSE_CONFIG?.service || '';
-    if (serviceTarget) {
-      const services = serviceTarget.split(',').map(s => s.trim());
-      // Filtrar 'google' — no es un API provider en este selector
-      const apiProviders = services.filter(s => s !== 'google' && PROVIDER_CONFIG[s]);
-      if (apiProviders.length > 0) {
-        const preselected = apiProviders[0];
-        const card = document.querySelector(`.provider-card[data-provider="${preselected}"]`);
-        if (card) {
-          card.classList.add('preselected');
-          console.log('[Onboarding] Provider pre-seleccionado desde SYNAPSE_CONFIG.service:', preselected);
-        }
-      }
-    }
   }
 
   setupAPIKeyListeners() {
@@ -964,11 +841,6 @@ class MultiProviderOnboarding extends OnboardingFlow {
 
     // Stop clipboard monitoring
     chrome.runtime.sendMessage({ action: 'stopClipboardMonitoring' });
-
-    // ── Emitir ACCOUNT_REGISTERED para el proveedor confirmado ──
-    // El email no está disponible en este punto para providers no-Google;
-    // se envía vacío — Nucleus lo actualiza con los datos del vault.
-    this.sendAccountRegistered(provider, '');
 
     // Update success screen
     document.getElementById('success-provider-name').textContent = config.displayName;
