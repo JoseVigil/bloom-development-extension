@@ -1568,7 +1568,33 @@ int main(int argc, char* argv[]) {
         if (g_logger.is_ready()) {
             g_logger.log_native("INFO", "SHUTDOWN StdinMessages=" + std::to_string(stdin_messages));
         }
-        
+
+        // ── GRACEFUL DISCONNECT ───────────────────────────────────────────────
+        // Notificar a Brain ANTES de cerrar el socket para que pueda cerrar
+        // la conexión desde su lado limpiamente (evita WinError 64 en readexactly).
+        // Se envía directamente al socket sin pasar por write_to_service
+        // para evitar el lock de service_mutex que puede estar tomado por otro thread.
+        {
+            socket_t sock_notify = service_socket.load();
+            if (sock_notify != INVALID_SOCK) {
+                json unreg;
+                unreg["type"]       = "UNREGISTER_HOST";
+                unreg["profile_id"] = g_profile_id;
+                unreg["launch_id"]  = g_launch_id;
+                unreg["reason"]     = "STDIN_EOF";
+                unreg["timestamp"]  = get_timestamp_ms();
+                std::string unreg_str = unreg.dump();
+                uint32_t net_len = htonl(static_cast<uint32_t>(unreg_str.size()));
+                send(sock_notify, (const char*)&net_len, 4, 0);
+                send(sock_notify, unreg_str.c_str(), unreg_str.size(), 0);
+                std::cerr << "[HOST] UNREGISTER_HOST sent to Brain (graceful disconnect)" << std::endl;
+                if (g_logger.is_ready()) {
+                    g_logger.log_native("INFO", "UNREGISTER_HOST_SENT reason=STDIN_EOF");
+                }
+            }
+        }
+        // ─────────────────────────────────────────────────────────────────────
+
         socket_t sock = service_socket.load();
         if (sock != INVALID_SOCK) {
             std::cerr << "[HOST] Closing service socket " << sock << std::endl;
