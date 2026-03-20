@@ -653,23 +653,39 @@ async function deployAllSystemBinaries(win) {
     if (await fs.pathExists(paths.nativeConfigSource)) {
       await fs.ensureDir(paths.configDir);
 
-      const configEntries = await fs.readdir(paths.nativeConfigSource, { withFileTypes: true });
-      const configFiles = configEntries.filter(e => e.isFile());
+      // Collect all files recursively (including subdirectories like onboarding/)
+      const getAllFiles = async (dir, base) => {
+        const entries = await fs.readdir(dir, { withFileTypes: true });
+        const files = [];
+        for (const entry of entries) {
+          const relPath = base ? path.join(base, entry.name) : entry.name;
+          if (entry.isDirectory()) {
+            const nested = await getAllFiles(path.join(dir, entry.name), relPath);
+            files.push(...nested);
+          } else {
+            files.push(relPath);
+          }
+        }
+        return files;
+      };
 
-      if (configFiles.length === 0) {
+      const allConfigFiles = await getAllFiles(paths.nativeConfigSource, '');
+
+      if (allConfigFiles.length === 0) {
         logger.warn('⚠️ No config files found in source, skipping');
         results.config = { success: false, skipped: true };
       } else {
         let configCopied = 0;
-        for (const file of configFiles) {
-          const fileSrc  = path.join(paths.nativeConfigSource, file.name);
-          const fileDest = path.join(paths.configDir, file.name);
+        for (const relPath of allConfigFiles) {
+          const fileSrc  = path.join(paths.nativeConfigSource, relPath);
+          const fileDest = path.join(paths.configDir, relPath);
           // Only copy if destination doesn't exist (preserve user changes)
           if (!await fs.pathExists(fileDest)) {
+            await fs.ensureDir(path.dirname(fileDest));
             await fs.copy(fileSrc, fileDest, { overwrite: false });
-            logger.info(`  ✓ ${file.name} (new)`);
+            logger.info(`  ✓ ${relPath} (new)`);
           } else {
-            logger.info(`  ⟳ ${file.name} (already exists, skipped)`);
+            logger.info(`  ⟳ ${relPath} (already exists, skipped)`);
           }
           configCopied++;
         }

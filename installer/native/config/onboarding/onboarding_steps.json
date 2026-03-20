@@ -1,0 +1,66 @@
+{
+  "_version": "1.0.0",
+  "_comment": "Fuente de verdad única de los steps de onboarding de Bloom Conductor. Paso 1: github_auth. Modificado: agrega github_auth como primer step, steps como strings con metadatos completos.",
+  "steps": [
+    {
+      "id": "github_auth",
+      "label": "Conectar GitHub",
+      "screen": "github-login",
+      "vault_required": false,
+      "requires": [],
+      "produces": "github_token",
+      "storage": "chrome.storage.bloom_vault_temp",
+      "description": "Conecta tu cuenta de GitHub para que Bloom pueda acceder a tus repositorios y organizaciones."
+    },
+    {
+      "id": "nucleus_create",
+      "label": "Crear Nucleus",
+      "screen": "nucleus-create",
+      "vault_required": false,
+      "requires": ["github_token"],
+      "produces": "nucleus_path",
+      "storage": "chrome.storage.bloom_vault_temp",
+      "description": "Inicializa el directorio .bloom local donde se almacenará la configuración de tu espacio de trabajo."
+    },
+    {
+      "id": "vault_init",
+      "label": "Inicializar Vault",
+      "screen": "vault-init",
+      "vault_required": false,
+      "requires": ["github_token", "nucleus_path"],
+      "produces": "vault_initialized",
+      "storage": "chrome.storage.bloom_vault",
+      "description": "Crea el vault seguro donde se guardarán tus credenciales, cifradas por el sistema operativo."
+    },
+    {
+      "id": "google_auth",
+      "label": "Conectar Google",
+      "screen": "google-login",
+      "vault_required": true,
+      "requires": ["vault_initialized"],
+      "produces": "google_account",
+      "storage": "chrome.storage.bloom_vault",
+      "description": "Conecta tu cuenta de Google para acceder a los servicios de Google Cloud y AI Studio."
+    },
+    {
+      "id": "ai_provider_setup",
+      "label": "Configurar proveedor de IA",
+      "screen": "provider-select",
+      "vault_required": true,
+      "requires": ["vault_initialized"],
+      "produces": "ai_provider_key",
+      "storage": "chrome.storage.bloom_vault",
+      "description": "Agrega la API key de tu proveedor de IA preferido (Gemini, Claude, OpenAI, Grok)."
+    },
+    {
+      "id": "project_create",
+      "label": "Crear proyecto",
+      "screen": "project-create",
+      "vault_required": true,
+      "requires": ["vault_initialized", "github_token"],
+      "produces": "project_mandate",
+      "storage": "chrome.storage.bloom_vault",
+      "description": "Crea tu primer proyecto Bloom conectado a un repositorio de GitHub."
+    }
+  ]
+}
