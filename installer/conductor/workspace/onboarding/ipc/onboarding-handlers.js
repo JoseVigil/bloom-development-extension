@@ -24,7 +24,8 @@ function registerOnboardingHandlers(execNucleus, NUCLEUS_JSON, getWindow) {
         '--json', 'synapse', 'launch', profileId,
         '--mode', 'discovery',
         '--override-register', 'true',
-        '--override-heartbeat', 'false'
+        '--override-heartbeat', 'false',
+        '--override-service', 'google'   
       ];
       if (email) args.push('--override-email', email);
 

@@ -46,9 +46,6 @@ https://claude.ai/chat/77caaf80-bced-405e-baad-a2446d3c3a4c
 roamingpads nucleus service start
 https://claude.ai/chat/9abd064d-a9b1-4ae4-8708-f06cacd8d340
 
-roamtouch workspace onboarding
-https://claude.ai/chat/5d21844f-af30-4f59-82c1-b502ac8205b8
-
 nenes nucleus workers
 https://claude.ai/chat/f231783b-57da-4484-809f-60757cebd114
 
@@ -62,6 +59,7 @@ roamtouch worker desconectado dehalth check
 https://claude.ai/chat/8887e208-62f4-4ef1-96dc-e0ff0d825e79
 
 roamtouch comando launch lts con temporal
+roamtouch workspace onboarding
 https://claude.ai/chat/5d21844f-af30-4f59-82c1-b502ac8205b8
 
 nenes discovery services override
@@ -72,5 +70,17 @@ https://claude.ai/chat/faadbe79-078d-494b-b4a9-7c2d2de314b6
 
 uitool brain launch register https://claude.ai/chat/a67db154-5352-4854-ba03-334b550fff30
 
+elias Corregir error JSON en Sentinel BloomNucleus
+https://claude.ai/chat/9b27dbdf-3e84-406f-89fc-adb42d9a6783
 
+notimation Verificar carga de discovery.synapse.config.js
+https://claude.ai/chat/bc394c65-9dc6-4ecd-9146-48da4c95c8d4
 
+btimps Implementing logging infrastructure corrections
+https://claude.ai/chat/b3d07d85-9e28-4e8f-9072-f7cb46405bc7
+
+roamingpads Documentar mecanismo de hooks con nucleus
+https://claude.ai/chat/819832a2-5079-4d3b-bb78-79a40e3889f5
+
+btips Implementing logging infrastructure corrections
+https://claude.ai/chat/b3d07d85-9e28-4e8f-9072-f7cb46405bc7
