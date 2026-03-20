@@ -144,6 +144,27 @@ func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profi
 	}
 	extDir := spec.Paths.Extension
 
+	// launch_flags agrupa todos los flags del comando launch.
+	// El JS (discovery.js / landing.js) los lee desde este nodo.
+	launchFlags := map[string]interface{}{
+		"register":       getBoolField(profileData, "register", false),
+		"heartbeat":      getBoolField(profileData, "heartbeat", true),
+		"service":        getStringField(profileData, "service", ""),
+		"step":           getIntField(profileData, "step", 0),
+		"alias":          getStringField(profileData, "alias", "MasterWorker"),
+		"role":           getStringField(profileData, "role", "Worker"),
+		"email":          getStringField(profileData, "email", ""),
+		"extension":      ig.Core.Config.Provisioning.ExtensionID,
+		"mode":           mode,
+	}
+
+	// linked_accounts dentro de launch_flags
+	if accounts, ok := profileData["linked_accounts"].([]interface{}); ok {
+		launchFlags["linked_accounts"] = accounts
+	} else {
+		launchFlags["linked_accounts"] = []interface{}{}
+	}
+
 	configData := map[string]interface{}{
 		"profileId":     profileID,
 		"bridge_name":   fmt.Sprintf("com.bloom.synapse.%s", shortID),
@@ -151,9 +172,7 @@ func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profi
 		"profile_alias": getStringField(profileData, "alias", "MasterWorker"),
 		"mode":          mode,
 		"extension_id":  ig.Core.Config.Provisioning.ExtensionID,
-		"register":      getBoolField(profileData, "register", false),
-		"heartbeat":     getBoolField(profileData, "heartbeat", true),
-		"step":          getIntField(profileData, "step", 0),
+		"launch_flags":  launchFlags,
 	}
 
 	// === 3. AGREGAR CAMPOS ESPECÍFICOS DE LANDING (desde profiles.json) ===
@@ -161,21 +180,14 @@ func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profi
 		configData["total_launches"] = getIntField(profileData, "launch_count", 0)
 		configData["intents_done"]   = getIntField(profileData, "intents_done", 0)
 		configData["uptime"]         = calculateUptime(profileData)
-
-		configData["role"]           = getStringField(profileData, "role", "Worker")
 		configData["last_synch"]     = getStringField(profileData, "last_synch", time.Now().Format(time.RFC3339))
-
 		configData["created_at"]     = getStringField(profileData, "created_at", time.Now().Format(time.RFC3339))
 		configData["last_launch_at"] = time.Now().Format(time.RFC3339)
-
-		if accounts, ok := profileData["linked_accounts"].([]interface{}); ok {
-			configData["linked_accounts"] = accounts
-		} else {
-			configData["linked_accounts"] = []interface{}{}
-		}
 	}
 
 	// === 4. APLICAR OVERRIDES ===
+	// Los overrides de flags de launch se enrutan dentro de launch_flags.
+	// El resto de overrides se aplican en la raíz de configData.
 	if configOverride != "" {
 		var overrides map[string]interface{}
 
@@ -183,9 +195,24 @@ func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profi
 			return nil, fmt.Errorf("config-override inválido al aplicar: %v", err)
 		}
 
-		for k, v := range overrides {
-			configData[k] = v
+		// Campos que pertenecen a launch_flags
+		launchFlagKeys := map[string]bool{
+			"register": true, "heartbeat": true, "service": true,
+			"step": true, "alias": true, "role": true,
+			"email": true, "extension": true, "mode": true,
+			"linked_accounts": true,
 		}
+
+		for k, v := range overrides {
+			if launchFlagKeys[k] {
+				launchFlags[k] = v
+			} else {
+				configData[k] = v
+			}
+		}
+
+		// Reasignar launch_flags actualizado
+		configData["launch_flags"] = launchFlags
 
 		ig.Core.Logger.Info("[IGNITION] 🔧 %d overrides aplicados", len(overrides))
 	}

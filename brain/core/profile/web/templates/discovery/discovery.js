@@ -103,37 +103,56 @@ class DiscoveryFlow {
       console.log('[Discovery] Storage read:', result);
       
       if (synapseConfig) {
-        // Soporte para estructura legacy (flags a nivel raíz)
-        const flags = synapseConfig.flags || synapseConfig;
+        // launch_flags es el nodo canónico; raíz como fallback legacy
+        const flags = synapseConfig.launch_flags || synapseConfig;
 
         this.requiresRegistration = flags.register === true;
-        this.heartbeatMode = flags.heartbeat === true;
-        this.serviceTarget = flags.service || null;
-        this.userEmail = synapseConfig.email || null;
-        
+        this.heartbeatMode        = flags.heartbeat === true;
+        this.serviceTarget        = flags.service || null;
+        this.stepCurrent          = flags.step ?? 0;
+        this.profileAlias         = flags.alias || null;
+        this.profileRole          = flags.role || null;
+        this.userEmail            = flags.email || synapseConfig.email || null;
+        this.extensionOverride    = flags.extension || null;
+        this.launchMode           = flags.mode || null;
+        this.linkedAccounts       = flags.linked_accounts || [];
+
         console.log('[Discovery] Config loaded - register:', this.requiresRegistration);
         console.log('[Discovery] Config loaded - heartbeat:', this.heartbeatMode);
         console.log('[Discovery] Config loaded - service:', this.serviceTarget);
+        console.log('[Discovery] Config loaded - step:', this.stepCurrent);
         console.log('[Discovery] Config loaded - email:', this.userEmail);
       } else {
-        // Fallback a SYNAPSE_CONFIG con soporte para nodo flags
-        const flags = self.SYNAPSE_CONFIG?.flags || self.SYNAPSE_CONFIG;
+        // Fallback a SYNAPSE_CONFIG
+        const flags = self.SYNAPSE_CONFIG?.launch_flags || self.SYNAPSE_CONFIG;
 
         this.requiresRegistration = flags?.register === true;
-        this.heartbeatMode = flags?.heartbeat === true;
-        this.serviceTarget = flags?.service || null;
-        this.userEmail = self.SYNAPSE_CONFIG?.email || null;
-        
+        this.heartbeatMode        = flags?.heartbeat === true;
+        this.serviceTarget        = flags?.service || null;
+        this.stepCurrent          = flags?.step ?? 0;
+        this.profileAlias         = flags?.alias || null;
+        this.profileRole          = flags?.role || null;
+        this.userEmail            = flags?.email || self.SYNAPSE_CONFIG?.email || null;
+        this.extensionOverride    = flags?.extension || null;
+        this.launchMode           = flags?.mode || null;
+        this.linkedAccounts       = flags?.linked_accounts || [];
+
         console.warn('[Discovery] Fallback to SYNAPSE_CONFIG');
       }
     } catch (error) {
       console.error('[Discovery] Error loading config:', error);
-      const flags = self.SYNAPSE_CONFIG?.flags || self.SYNAPSE_CONFIG;
+      const flags = self.SYNAPSE_CONFIG?.launch_flags || self.SYNAPSE_CONFIG;
 
       this.requiresRegistration = flags?.register === true;
-      this.heartbeatMode = flags?.heartbeat === true;
-      this.serviceTarget = flags?.service || null;
-      this.userEmail = self.SYNAPSE_CONFIG?.email || null;
+      this.heartbeatMode        = flags?.heartbeat === true;
+      this.serviceTarget        = flags?.service || null;
+      this.stepCurrent          = flags?.step ?? 0;
+      this.profileAlias         = flags?.alias || null;
+      this.profileRole          = flags?.role || null;
+      this.userEmail            = flags?.email || self.SYNAPSE_CONFIG?.email || null;
+      this.extensionOverride    = flags?.extension || null;
+      this.launchMode           = flags?.mode || null;
+      this.linkedAccounts       = flags?.linked_accounts || [];
     }
   }
 

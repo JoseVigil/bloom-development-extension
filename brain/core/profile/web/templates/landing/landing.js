@@ -90,13 +90,20 @@ class LandingFlow {
         console.log('[Landing] ✓ Extension ID from storage');
       }
 
-      // Soporte para nodo flags (backward compatible con estructura legacy)
+      // launch_flags es el nodo canónico; raíz como fallback legacy
       if (result.synapseConfig) {
-        const flags = result.synapseConfig.flags || result.synapseConfig;
+        const flags = result.synapseConfig.launch_flags || result.synapseConfig;
         this.requiresRegistration = flags.register === true;
-        this.heartbeatMode = flags.heartbeat === true;
-        this.serviceTarget = flags.service || null;
-        console.log('[Landing] ✓ Flags loaded - register:', this.requiresRegistration, '| heartbeat:', this.heartbeatMode, '| service:', this.serviceTarget);
+        this.heartbeatMode        = flags.heartbeat === true;
+        this.serviceTarget        = flags.service || null;
+        this.stepCurrent          = flags.step ?? 0;
+        this.profileAlias         = flags.alias || null;
+        this.profileRole          = flags.role || null;
+        this.userEmail            = flags.email || result.synapseConfig.email || null;
+        this.extensionOverride    = flags.extension || null;
+        this.launchMode           = flags.mode || null;
+        this.linkedAccounts       = flags.linked_accounts || [];
+        console.log('[Landing] ✓ Flags loaded - register:', this.requiresRegistration, '| heartbeat:', this.heartbeatMode, '| service:', this.serviceTarget, '| step:', this.stepCurrent);
       }
     } catch (error) {
       console.warn('[Landing] Storage read failed:', error);

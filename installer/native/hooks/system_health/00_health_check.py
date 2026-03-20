@@ -60,6 +60,8 @@ MEMORY_PRESSURE_MB = 1000   # < 1GB → PRESSURE 🔴
 # Timeout para nucleus health sin --fix (chequeo rapido de puertos, <3s por diseno)
 HEALTH_CHECK_TIMEOUT_S = 15
 
+EVENT_NAME = "system_health"
+
 # Timeout para nucleus health --fix: svelte_dev necesita hasta 30s para que
 # Vite compile TypeScript en el primer arranque. Los demas fixes (nssm, worker)
 # toman <10s. 45s da margen suficiente sin bloquear Temporal indefinidamente.
@@ -72,7 +74,7 @@ def utc_now() -> str:
 
 def get_log_path(log_base_dir: str) -> Path:
     date_str = datetime.now().strftime("%Y%m%d")
-    log_dir = Path(log_base_dir) / "nucleus" / "system_health"
+    log_dir = Path(log_base_dir) / "nucleus" / "hooks" / "system_health"
     log_dir.mkdir(parents=True, exist_ok=True)
     return log_dir / f"nucleus_system_health_{date_str}.log"
 
@@ -91,14 +93,14 @@ def register_telemetry(nucleus_bin: str, log_path: Path) -> None:
         subprocess.run(
             [
                 nucleus_bin, "telemetry", "register",
-                "--stream",      "nucleus_system_health",
-                "--label",       "SYSTEM HEALTH",
+                "--stream",      "nucleus_hook_system_health",
+                "--label",       "SYSTEM HEALTH HOOK",
                 "--path",        str(log_path).replace("\\", "/"),
                 "--priority",    "1",
                 "--category",    "nucleus",
                 "--source",      "nucleus",
                 "--description", (
-                    "System health monitor log -- periodic health checks, "
+                    "system_health hook log — periodic health checks, "
                     "degradation events and auto-fix attempts"
                 ),
             ],

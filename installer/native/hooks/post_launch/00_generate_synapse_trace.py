@@ -12,6 +12,43 @@ import json
 import subprocess
 import pathlib
 import time
+from datetime import datetime, timezone
+from pathlib import Path
+
+EVENT_NAME = "post_launch"
+
+
+def get_log_path(log_base_dir: str) -> Path:
+    date_str = datetime.now().strftime("%Y%m%d")
+    log_dir = Path(log_base_dir) / "nucleus" / "hooks" / "post_launch"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    return log_dir / f"nucleus_post_launch_{date_str}.log"
+
+
+def register_telemetry(nucleus_bin: str, log_path: Path) -> None:
+    try:
+        subprocess.run(
+            [
+                nucleus_bin, "telemetry", "register",
+                "--stream",      "nucleus_hook_post_launch",
+                "--label",       "POST LAUNCH HOOK",
+                "--path",        str(log_path).replace("\\", "/"),
+                "--priority",    "2",
+                "--category",    "nucleus",
+                "--source",      "nucleus",
+                "--description", "post_launch hook log — synapse trace generation after Chrome profile launch",
+            ],
+            capture_output=True,
+            timeout=10,
+        )
+    except Exception:
+        pass
+
+
+def write_log(log_path: Path, level: str, message: str) -> None:
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    with open(log_path, "a", encoding="utf-8") as f:
+        f.write(f"[{ts}] {level:<7} {message}\n")
 
 
 def wait_for_chrome_logs(log_base_dir: str, launch_id: str, timeout: int = 30, interval: int = 2) -> bool:
@@ -71,6 +108,10 @@ def main():
         }))
         sys.exit(1)
 
+    log_path = get_log_path(log_base_dir)
+    register_telemetry(nucleus_bin, log_path)
+    write_log(log_path, "INFO", "=== post_launch hook started ===")
+
     found = wait_for_chrome_logs(log_base_dir, launch_id)
     if not found:
         base = pathlib.Path(log_base_dir)
@@ -88,12 +129,22 @@ def main():
             f"en {log_base_dir} — archivos no encontrados: {', '.join(missing)} "
             f"— ejecutando nucleus de todas formas\n"
         )
+        write_log(log_path, "WARN", f"Timeout waiting for Chrome logs for {launch_id} — proceeding anyway. Missing: {', '.join(missing)}")
+    else:
+        write_log(log_path, "INFO", f"Chrome logs found for {launch_id} — proceeding with synapse trace")
 
     result = subprocess.run(
         [nucleus_bin, "--json", "logs", "synapse"],
         capture_output=True,
         text=True,
     )
+
+    if result.returncode == 0:
+        write_log(log_path, "INFO", "nucleus logs synapse completed successfully")
+    else:
+        write_log(log_path, "ERROR", f"nucleus logs synapse failed (exit {result.returncode}): {result.stderr.strip()}")
+
+    write_log(log_path, "INFO", "=== post_launch hook completed ===")
 
     print(json.dumps({
         "hook":    "00_generate_synapse_trace",
