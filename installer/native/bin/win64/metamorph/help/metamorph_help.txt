@@ -265,7 +265,7 @@
 
     Flags:
       --dry-run                  Preview what would be copied without making changes
-      --only                     Deploy a single component instead of all (brain, nucleus, sentinel, metamorph, conductor, setup, host, cortex, nssm, bootstrap, vsix, node, hook)
+      --only                     Deploy a single component instead of all (brain, nucleus, sentinel, metamorph, conductor, setup, host, cortex, nssm, bootstrap, vsix, node, hook, config)
 
     Example:
         metamorph rollout
@@ -283,6 +283,7 @@
         metamorph rollout --only vsix
         metamorph rollout --only node
         metamorph rollout --only hook
+        metamorph rollout --only config
         metamorph rollout --only brain --dry-run
         metamorph --json rollout --only nucleus
 

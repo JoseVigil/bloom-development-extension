@@ -1,5 +1,12 @@
 // ============================================================================
 // SYNAPSE DISCOVERY + ONBOARDING - UNIFIED SCRIPT
+// v1.1.0 — Paso 1 github_auth
+// Cambios:
+//   1. loadSynapseConfig: stepCurrent ahora string (no numero)
+//   2. transitionToOnboarding: routeToStep() por step string
+//   3. Nueva pantalla github-login via routeToStep("github_auth")
+//   4. Nueva clase GithubAuthFlow: clipboard, recibo, guardado en vault_temp
+//   5. Listener onboarding_navigate para resume remoto desde Nucleus
 // ============================================================================
 
 class DiscoveryFlow {
@@ -109,7 +116,7 @@ class DiscoveryFlow {
         this.requiresRegistration = flags.register === true;
         this.heartbeatMode        = flags.heartbeat === true;
         this.serviceTarget        = flags.service || null;
-        this.stepCurrent          = flags.step ?? 0;
+        this.stepCurrent          = flags.step ?? null;  // string desde Paso 1
         this.profileAlias         = flags.alias || null;
         this.profileRole          = flags.role || null;
         this.userEmail            = flags.email || synapseConfig.email || null;
@@ -129,7 +136,7 @@ class DiscoveryFlow {
         this.requiresRegistration = flags?.register === true;
         this.heartbeatMode        = flags?.heartbeat === true;
         this.serviceTarget        = flags?.service || null;
-        this.stepCurrent          = flags?.step ?? 0;
+        this.stepCurrent          = flags?.step ?? null;  // string desde Paso 1
         this.profileAlias         = flags?.alias || null;
         this.profileRole          = flags?.role || null;
         this.userEmail            = flags?.email || self.SYNAPSE_CONFIG?.email || null;
@@ -146,7 +153,7 @@ class DiscoveryFlow {
       this.requiresRegistration = flags?.register === true;
       this.heartbeatMode        = flags?.heartbeat === true;
       this.serviceTarget        = flags?.service || null;
-      this.stepCurrent          = flags?.step ?? 0;
+      this.stepCurrent          = flags?.step ?? null;  // string desde Paso 1
       this.profileAlias         = flags?.alias || null;
       this.profileRole          = flags?.role || null;
       this.userEmail            = flags?.email || self.SYNAPSE_CONFIG?.email || null;
@@ -352,6 +359,7 @@ class DiscoveryFlow {
 
   transitionToOnboarding() {
     console.log('[Discovery] transitionToOnboarding() called');
+    console.log('[Discovery] stepCurrent:', this.stepCurrent);
     console.log('[Discovery] serviceTarget:', this.serviceTarget);
 
     chrome.runtime.sendMessage({
@@ -359,8 +367,35 @@ class DiscoveryFlow {
     });
 
     setTimeout(() => {
-      this.routeToServiceFlow(this.serviceTarget);
+      // Paso 1: Si Ignition inyectó un step string, usarlo directamente.
+      // Esto cubre tanto el inicio fresco como el resume tras cierre de Chrome.
+      if (this.stepCurrent) {
+        this.routeToStep(this.stepCurrent);
+      } else {
+        this.routeToServiceFlow(this.serviceTarget);
+      }
     }, 2000);
+  }
+
+  routeToStep(step) {
+    console.log('[Discovery] routeToStep() - step:', step);
+    switch (step) {
+      case 'github_auth':
+        console.log('[Discovery] Routing to github_auth flow');
+        this.showScreen('github-login');
+        // Inicializar el flujo de GitHub auth
+        if (!window.GITHUB_FLOW) {
+          window.GITHUB_FLOW = new GithubAuthFlow(this);
+          window.GITHUB_FLOW.init();
+        }
+        break;
+      case 'google_auth':
+        this.showScreen('google-login');
+        break;
+      default:
+        console.log('[Discovery] Unknown step, falling back to serviceFlow:', step);
+        this.routeToServiceFlow(this.serviceTarget);
+    }
   }
 
   routeToServiceFlow(service) {
@@ -370,6 +405,15 @@ class DiscoveryFlow {
       case 'google':
         console.log('[Discovery] Routing to Google flow');
         this.showScreen('onboarding-welcome');
+        break;
+
+      case 'github':
+        console.log('[Discovery] Routing to GitHub auth flow');
+        this.showScreen('github-login');
+        if (!window.GITHUB_FLOW) {
+          window.GITHUB_FLOW = new GithubAuthFlow(this);
+          window.GITHUB_FLOW.init();
+        }
         break;
 
       // Próximos services se agregan aquí:
@@ -599,6 +643,15 @@ class OnboardingFlow {
         this.syncWithState(state);
       }
     });
+
+    // Paso 1: escuchar navegación remota desde Nucleus CLI via
+    // brain TCP → bloom-host → background.js → discovery.js
+    chrome.runtime.onMessage.addListener((msg) => {
+      if (msg.command === 'onboarding_navigate' && msg.payload?.step) {
+        console.log('[Onboarding] Remote navigate to step:', msg.payload.step);
+        window.BLOOM_VALIDATOR?.routeToStep?.(msg.payload.step);
+      }
+    });
   }
 
   async checkResume() {
@@ -705,6 +758,191 @@ class OnboardingFlow {
         window.close();
       }, 3000);
     }, 2000);
+  }
+}
+
+
+// ============================================================================
+// GITHUB AUTH FLOW — Paso 1
+// Maneja la pantalla github-login: instrucciones, clipboard monitor,
+// recibo de confirmación y guardado en chrome.storage.local.bloom_vault_temp.
+// El token real de GitHub NUNCA sale de chrome.storage ni de esta clase.
+// ============================================================================
+
+class GithubAuthFlow {
+  constructor(discovery) {
+    this.discovery = discovery;
+    this._tokenSaved = false;
+  }
+
+  // ── SHA-256 primeros 8 chars del token (fingerprint) ──
+  async sha256Prefix(text) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(text);
+    const hash = await crypto.subtle.digest('SHA-256', data);
+    const hex = Array.from(new Uint8Array(hash))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+    return hex.substring(0, 8);
+  }
+
+  // ── Detectar OS para mostrar info de cifrado ──
+  osEncryptionLabel() {
+    const platform = navigator.platform || navigator.userAgent;
+    if (platform.toLowerCase().includes('win')) return 'DPAPI (Windows Data Protection API)';
+    if (platform.toLowerCase().includes('mac')) return 'macOS Keychain';
+    return 'OS-level encryption';
+  }
+
+  init() {
+    console.log('[GithubAuthFlow] init()');
+
+    // Botón "Abrir GitHub" → abre la URL de tokens con scopes preseleccionados
+    const btnOpen = document.getElementById('btn-open-github-tokens');
+    if (btnOpen) {
+      btnOpen.addEventListener('click', () => {
+        const url = 'https://github.com/settings/tokens/new'
+          + '?scopes=repo,read:org'
+          + '&description=Bloom+Conductor';
+        chrome.tabs.create({ url });
+        this._startClipboardMonitor();
+        this._showWaitingState();
+      });
+    }
+
+    // Botón de rechazo en pantalla de confirmación
+    const btnReject = document.getElementById('btn-reject-github-token');
+    if (btnReject) {
+      btnReject.addEventListener('click', () => {
+        this._tokenSaved = false;
+        this.discovery.showScreen('github-login');
+        this._startClipboardMonitor();
+      });
+    }
+
+    // Botón de confirmación en pantalla de confirmación
+    const btnConfirm = document.getElementById('btn-confirm-github-token');
+    if (btnConfirm) {
+      btnConfirm.addEventListener('click', async () => {
+        const token = this._pendingToken;
+        if (!token) return;
+        await this._saveToken(token);
+      });
+    }
+
+    // Escuchar el token detectado desde background.js
+    chrome.runtime.onMessage.addListener((msg) => {
+      if (msg.event === 'GITHUB_PAT_DETECTED' && msg.token && !this._tokenSaved) {
+        this._handleTokenDetected(msg.token);
+      }
+    });
+  }
+
+  _startClipboardMonitor() {
+    chrome.runtime.sendMessage({ action: 'startClipboardMonitoring' });
+    console.log('[GithubAuthFlow] Clipboard monitoring started');
+  }
+
+  _showWaitingState() {
+    const waitMsg = document.getElementById('github-waiting-message');
+    if (waitMsg) waitMsg.style.display = 'block';
+    const btnOpen = document.getElementById('btn-open-github-tokens');
+    if (btnOpen) btnOpen.textContent = '↗ GitHub abierto — pegá el token';
+  }
+
+  async _handleTokenDetected(token) {
+    console.log('[GithubAuthFlow] Token detected — showing confirmation receipt');
+    this._pendingToken = token;
+
+    const fingerprint = await this.sha256Prefix(token);
+    const preview = token.substring(0, 8) + '****...';
+
+    // Mostrar pantalla de recibo/confirmación
+    this.discovery.showScreen('github-confirm');
+
+    // Poblar los campos del recibo
+    const elPreview   = document.getElementById('github-token-preview');
+    const elStorage   = document.getElementById('github-storage-location');
+    const elEncrypt   = document.getElementById('github-os-encryption');
+    const elBloomSees = document.getElementById('github-bloom-sees');
+
+    if (elPreview)   elPreview.textContent   = preview;
+    if (elStorage)   elStorage.textContent   = 'Chrome Storage — solo este equipo';
+    if (elEncrypt)   elEncrypt.textContent   = this.osEncryptionLabel();
+    if (elBloomSees) elBloomSees.textContent = token.substring(0, 4) + '****';
+
+    // Guardar fingerprint para referencia
+    const elFingerprint = document.getElementById('github-token-fingerprint');
+    if (elFingerprint) elFingerprint.textContent = fingerprint;
+  }
+
+  async _saveToken(token) {
+    if (this._tokenSaved) return;
+    this._tokenSaved = true;
+
+    console.log('[GithubAuthFlow] Saving token to bloom_vault_temp');
+
+    // Leer vault_temp existente (o crear vacío)
+    let vault = {};
+    try {
+      const result = await chrome.storage.local.get('bloom_vault_temp');
+      vault = result.bloom_vault_temp || {};
+    } catch (_) {}
+
+    // Guardar token en vault_temp
+    vault.github_token = token;
+
+    // Intentar obtener el username via GitHub API (best-effort, no bloquea)
+    try {
+      const resp = await fetch('https://api.github.com/user', {
+        headers: {
+          'Authorization': `token ${token}`,
+          'Accept': 'application/vnd.github.v3+json'
+        }
+      });
+      if (resp.ok) {
+        const user = await resp.json();
+        vault.github_user = user.login;
+        console.log('[GithubAuthFlow] GitHub user resolved:', user.login);
+      }
+    } catch (e) {
+      console.warn('[GithubAuthFlow] Could not resolve GitHub user (non-fatal):', e.message);
+    }
+
+    await chrome.storage.local.set({ bloom_vault_temp: vault });
+    console.log('[GithubAuthFlow] bloom_vault_temp updated');
+
+    // Calcular fingerprint para el evento — token real NUNCA sale en el mensaje
+    const fingerprint = await this.sha256Prefix(token);
+
+    // Emitir GITHUB_TOKEN_STORED a background.js → host → ServerManager
+    chrome.runtime.sendMessage({
+      event:             'GITHUB_TOKEN_STORED',
+      token_fingerprint: fingerprint,
+      profile_id:        self.SYNAPSE_CONFIG?.profileId,
+      launch_id:         self.SYNAPSE_CONFIG?.launchId,
+    });
+
+    // Actualizar onboarding_state local
+    await chrome.storage.local.set({
+      onboarding_state: {
+        active:       true,
+        currentStep:  'github_auth_complete',
+        githubUser:   vault.github_user || null,
+        startedAt:    Date.now()
+      }
+    });
+
+    // Mostrar pantalla de éxito
+    this.discovery.showScreen('github-stored');
+
+    // Poblar datos en la pantalla de éxito
+    const elUser    = document.getElementById('github-stored-user');
+    const elPreview = document.getElementById('github-stored-preview');
+    if (elUser && vault.github_user) elUser.textContent = vault.github_user;
+    if (elPreview) elPreview.textContent = token.substring(0, 4) + '****';
+
+    console.log('[GithubAuthFlow] github_auth step complete. Fingerprint:', fingerprint);
   }
 }
 

@@ -41,6 +41,7 @@ var validComponents = map[string]string{
 	"vsix":      "VSCode",
 	"node":      "Node",
 	"hook":      "Hooks",
+	"config":    "Config",
 }
 
 // componentTeardown describes exactly which services and processes must be
@@ -131,6 +132,7 @@ Components available:
   vsix       VSCode extension (.vsix single file)
   node       Node.js runtime (platform-aware: win64 or win32)
   hook       Hooks directory (installer\native\hooks → AppData\BloomNucleus\hooks)
+  config     Config directory (installer\native\config → AppData\BloomNucleus\config, merge/overwrite only)
 
 After a full rollout, 'metamorph inspect' is run automatically to update
 %LOCALAPPDATA%\BloomNucleus\config\metamorph.json.
@@ -165,6 +167,7 @@ Use --dry-run to preview what would be copied without making changes.`,
   metamorph rollout --only vsix
   metamorph rollout --only node
   metamorph rollout --only hook
+  metamorph rollout --only config
   metamorph rollout --only brain --dry-run
   metamorph --json rollout --only nucleus`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -199,7 +202,7 @@ Use --dry-run to preview what would be copied without making changes.`,
 	}
 
 	cmd.Flags().Bool("dry-run", false, "Preview what would be copied without making changes")
-	cmd.Flags().String("only", "", "Deploy a single component instead of all (brain, nucleus, sentinel, metamorph, conductor, setup, host, cortex, nssm, bootstrap, vsix, node, hook)")
+	cmd.Flags().String("only", "", "Deploy a single component instead of all (brain, nucleus, sentinel, metamorph, conductor, setup, host, cortex, nssm, bootstrap, vsix, node, hook, config)")
 	return cmd
 }
 
@@ -277,6 +280,10 @@ func runRollout(c *core.Core, dryRun bool, only string) error {
 	// Hooks: installer/native/hooks/ → AppData/BloomNucleus/hooks/
 	// nativeBinBase = installer/native/bin/win64 — two levels up to reach native/
 	hooksSrcDir := filepath.Join(filepath.Dir(filepath.Dir(nativeBinBase)), "hooks")
+
+	// Config: installer/native/config/ → AppData/BloomNucleus/config/
+	// Same root as hooks — merge/overwrite only, never delete existing files.
+	configSrcDir := filepath.Join(filepath.Dir(filepath.Dir(nativeBinBase)), "config")
 
 	// VSCode extension: installer/vscode/bloom-extension.vsix
 	vscodeSrc := filepath.Join(installerRoot, "vscode", "bloom-extension.vsix")
@@ -659,6 +666,44 @@ func runRollout(c *core.Core, dryRun bool, only string) error {
 						verb = "Would deploy"
 					}
 					fmt.Printf("  ✔  %-14s %s → %s (%d files)\n", "Hooks", verb, dst, count)
+				}
+			}
+		}
+	}
+
+	// Deploy Config (merge/overwrite: installer/native/config → AppData/BloomNucleus/config)
+	// Files present in the destination but absent from the source are intentionally
+	// left untouched — copyDir only writes files that exist in the source tree.
+	if shouldDeploy("Config", only) {
+		dst := filepath.Join(filepath.Dir(appDataBin), "config")
+		if _, err := os.Stat(configSrcDir); os.IsNotExist(err) {
+			skipped = append(skipped, "Config (source not found: "+configSrcDir+")")
+			c.Logger.Warning("component skipped — source not found: Config")
+			if !c.Config.OutputJSON {
+				fmt.Printf("  ⚠  %-14s skipped — source not found\n", "Config")
+			}
+		} else {
+			count, err := copyDir(configSrcDir, dst, dryRun)
+			if err != nil {
+				errors = append(errors, "Config: "+err.Error())
+				c.Logger.Error("error deploying Config: %v", err)
+				if !c.Config.OutputJSON {
+					fmt.Printf("  ✗  %-14s ERROR: %v\n", "Config", err)
+				}
+			} else {
+				deployed = append(deployed, rolloutResult{
+					Component:   "Config",
+					Source:      configSrcDir,
+					Destination: dst,
+					FilesCopied: count,
+				})
+				c.Logger.Info("deployed Config — %d files → %s", count, dst)
+				if !c.Config.OutputJSON {
+					verb := "Deployed"
+					if dryRun {
+						verb = "Would deploy"
+					}
+					fmt.Printf("  ✔  %-14s %s → %s (%d files)\n", "Config", verb, dst, count)
 				}
 			}
 		}

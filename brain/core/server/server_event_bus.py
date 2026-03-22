@@ -2,6 +2,10 @@
 Event Bus Core - The Historian
 Manages event queue, persistence to events.jsonl, and event filtering.
 Independent of network layer - only handles event lifecycle.
+
+v1.1.0 — Paso 1 github_auth
+Cambios: agrega ONBOARDING_STEP_COMPLETE a CRITICAL_EVENTS para que los
+steps completados se persistan en events.jsonl y permitan resume del onboarding.
 """
 
 import json
@@ -46,6 +50,7 @@ class EventBus:
         # Critical events requiring immediate disk persistence
         self.CRITICAL_EVENTS = {
             'ONBOARDING_COMPLETE',
+            'ONBOARDING_STEP_COMPLETE',   # Paso 1: persiste cada step para permitir resume
             'INTENT_COMPLETE',
             'INTENT_FAILED',
             'EXTENSION_ERROR',

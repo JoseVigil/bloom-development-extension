@@ -1,9 +1,15 @@
-"""Nucleus onboarding complete command."""
+"""Nucleus onboarding complete command.
+
+v1.1.0 — Paso 1 github_auth
+Cambios: valida --step contra onboarding_steps.json en AppData/BloomNucleus/config/
+en lugar de aceptar cualquier string arbitrario.
+"""
 import typer
 from pathlib import Path
 from typing import Optional
 from brain.cli.base import BaseCommand, CommandMetadata
 from brain.cli.categories import CommandCategory
+from brain.commands.nucleus.onboarding_steps_loader import get_loader as _get_steps_loader
 
 
 class NucleusOnboardingCompleteCommand(BaseCommand):
@@ -12,7 +18,7 @@ class NucleusOnboardingCompleteCommand(BaseCommand):
         return CommandMetadata(
             name="onboarding-complete",
             category=CommandCategory.NUCLEUS,
-            version="1.0.0",
+            version="1.1.0",
             description="Mark an onboarding step or entire onboarding as completed",
             examples=[
                 "brain nucleus onboarding-complete --step github_auth",
@@ -62,6 +68,25 @@ class NucleusOnboardingCompleteCommand(BaseCommand):
                     else:
                         typer.echo(f"🎯 Marking step '{step}' as completed at {target_path}...", err=True)
                 
+                # 3b. Validate step against onboarding_steps.json
+                #     Fails fast with a clear error before touching disk.
+                if step:
+                    try:
+                        steps_loader = _get_steps_loader()
+                        step_def = steps_loader.validate_step(step)
+                        if gc.verbose:
+                            typer.echo(
+                                f"✓ Step '{step}' valid: {step_def['label']} "
+                                f"(produces: {step_def['produces']})",
+                                err=True
+                            )
+                    except FileNotFoundError as e:
+                        # onboarding_steps.json no existe — advertir pero no bloquear
+                        # para no romper entornos sin el instalador completo
+                        typer.echo(f"⚠️  Warning: {e}", err=True)
+                    except ValueError as e:
+                        self._handle_error(gc, str(e))
+
                 # 4. Execute business logic
                 manager = NucleusManager(target_path)
                 
@@ -92,7 +117,16 @@ class NucleusOnboardingCompleteCommand(BaseCommand):
         if result_data.get("completed_all"):
             typer.echo(f"   All steps marked as completed")
         else:
-            typer.echo(f"   Step '{result_data.get('step')}' marked as completed")
+            completed_step = result_data.get("step")
+            typer.echo(f"   Step '{completed_step}' marked as completed")
+            # Show step metadata from onboarding_steps.json if available
+            try:
+                step_def = _get_steps_loader().get(completed_step)
+                if step_def:
+                    typer.echo(f"   Produces artifact: {step_def['produces']}")
+                    typer.echo(f"   Storage: {step_def['storage']}")
+            except Exception:
+                pass  # non-fatal
         
         typer.echo(f"   Overall completion: {'✅ Complete' if result_data.get('onboarding', {}).get('completed') else '⏳ In Progress'}")
         

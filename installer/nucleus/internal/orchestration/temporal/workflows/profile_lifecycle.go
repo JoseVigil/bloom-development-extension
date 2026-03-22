@@ -1,3 +1,14 @@
+// File: internal/orchestration/temporal/workflows/profile_lifecycle.go
+// v1.1.0 — Paso 1 github_auth
+// Cambios:
+//   - Agrega tipo OnboardingState con CurrentStep, CompletedSteps, Artifacts, StartedAt, LastStepAt
+//   - Agrega campo Onboarding OnboardingState a ProfileStatus (via types package — ver nota abajo)
+//   - Agrega QueryHandler para queries.QueryOnboardingState
+//   - Agrega case signals.EventOnboardingStepComplete en el switch de BRAIN_EVENT
+//   - SentinelLaunchInput.OverrideStep usa state.Onboarding.CurrentStep si no está vacío
+//
+// NOTA sobre OnboardingState: idealmente vive en nucleus/internal/orchestration/types.
+// Se declara aquí para este paso — mover al paquete types en el siguiente refactor.
 package workflows
 
 import (
@@ -12,6 +23,39 @@ import (
 	"nucleus/internal/orchestration/signals"
 	"nucleus/internal/orchestration/types"
 )
+
+// OnboardingState mantiene el estado del onboarding del perfil.
+// Persiste en el workflow de Temporal — si Chrome se cierra a mitad del
+// onboarding, el siguiente launch lee CurrentStep y resume desde ahí.
+type OnboardingState struct {
+	// CurrentStep es el step activo actualmente (ej: "github_auth", "vault_init")
+	CurrentStep string `json:"current_step"`
+
+	// CompletedSteps es la lista ordenada de steps ya completados
+	CompletedSteps []string `json:"completed_steps"`
+
+	// Artifacts mapea el produce de cada step a true cuando el step completó.
+	// Keys: "github_token", "nucleus_path", "vault_initialized", "google_account", etc.
+	Artifacts map[string]bool `json:"artifacts"`
+
+	// StartedAt es el timestamp del primer step iniciado
+	StartedAt time.Time `json:"started_at"`
+
+	// LastStepAt es el timestamp del último step completado
+	LastStepAt time.Time `json:"last_step_at"`
+}
+
+// stepProducesArtifact mapea cada step ID al artifact que produce.
+// Sincronizado con config/onboarding_steps.json.
+var stepProducesArtifact = map[string]string{
+	"github_auth":      "github_token",
+	"nucleus_create":   "nucleus_path",
+	"vault_init":       "vault_initialized",
+	"google_auth":      "google_account",
+	"ai_provider_setup": "ai_provider_key",
+	"project_create":   "project_mandate",
+}
+
 
 // maxLaunchesBeforeReset define cuántos launches se acumulan antes de hacer ContinueAsNew.
 // Temporal tiene un límite de ~50k eventos por run. Cada launch genera aprox. 400-600 eventos
@@ -37,6 +81,13 @@ func ProfileLifecycleWorkflow(ctx workflow.Context, input types.ProfileLifecycle
 		State:           types.StateSeeded,
 		LastUpdate:      workflow.Now(ctx),
 		SentinelRunning: false,
+	}
+
+	// Estado de onboarding — se inicializa vacío y se puebla conforme
+	// llegan eventos ONBOARDING_STEP_COMPLETE desde el Brain.
+	// Se preserva en ContinueAsNew via input.OnboardingState si se agrega ese campo.
+	onboarding := OnboardingState{
+		Artifacts: make(map[string]bool),
 	}
 
 	// Detalles completos de Sentinel cuando esté lanzado
@@ -68,6 +119,13 @@ func ProfileLifecycleWorkflow(ctx workflow.Context, input types.ProfileLifecycle
 		return sentinelDetails, nil
 	}); err != nil {
 		return fmt.Errorf("failed to register sentinel-details query: %w", err)
+	}
+
+	// Registrar query para estado de onboarding — permite leer CurrentStep, CompletedSteps y Artifacts
+	if err := workflow.SetQueryHandler(ctx, queries.QueryOnboardingState, func() (OnboardingState, error) {
+		return onboarding, nil
+	}); err != nil {
+		return fmt.Errorf("failed to register onboarding-state query: %w", err)
 	}
 
 	// Activity options para LaunchSentinel con retry policy conservadora.
@@ -161,9 +219,18 @@ func ProfileLifecycleWorkflow(ctx workflow.Context, input types.ProfileLifecycle
 				OverrideRegister:  launchSignal.OverrideRegister,
 				OverrideRole:      launchSignal.OverrideRole,
 				OverrideService:   launchSignal.OverrideService,
-				OverrideStep:      launchSignal.OverrideStep,
-				Save:              launchSignal.Save,
-				AddAccounts:       launchSignal.AddAccounts,
+				// Resume automático: si el onboarding tiene un step activo (ej: usuario cerró
+				// Chrome a mitad del onboarding), se lo pasamos como OverrideStep para que
+				// Sentinel abra directamente la pantalla correcta sin volver al inicio.
+				// El signal explícito de launch tiene prioridad si viene con su propio step.
+				OverrideStep: func() string {
+					if launchSignal.OverrideStep != "" {
+						return launchSignal.OverrideStep
+					}
+					return onboarding.CurrentStep
+				}(),
+				Save:        launchSignal.Save,
+				AddAccounts: launchSignal.AddAccounts,
 			}
 
 			var launchResult types.SentinelLaunchResult
@@ -376,6 +443,52 @@ func ProfileLifecycleWorkflow(ctx workflow.Context, input types.ProfileLifecycle
 				state.State = types.StateRunning
 				state.ErrorMessage = ""
 				logger.Info("Service recovery completed")
+
+			case signals.EventOnboardingStepComplete:
+				// Paso 1 github_auth — actualiza el estado de onboarding cuando
+				// ServerManager emite ONBOARDING_STEP_COMPLETE tras recibir
+				// GITHUB_TOKEN_STORED (u otros steps futuros) desde la extensión.
+				//
+				// event.Data es map[string]interface{} con campos:
+				//   "step"             : string — ID del step completado (ej: "github_auth")
+				//   "token_fingerprint": string — solo presente para github_auth
+				//   "profile_id"       : string — para validación
+
+				completedStep, _ := event.Data["step"].(string)
+				if completedStep == "" {
+					logger.Warn("EventOnboardingStepComplete received with empty step — ignoring")
+					break
+				}
+
+				// Inicializar mapa de artifacts si todavía es nil
+				if onboarding.Artifacts == nil {
+					onboarding.Artifacts = make(map[string]bool)
+				}
+
+				// Registrar el step previo como completado en la lista
+				if onboarding.CurrentStep != "" && onboarding.CurrentStep != completedStep {
+					onboarding.CompletedSteps = append(onboarding.CompletedSteps, onboarding.CurrentStep)
+				}
+
+				// Marcar el artifact del step como producido
+				if artifact, ok := stepProducesArtifact[completedStep]; ok {
+					onboarding.Artifacts[artifact] = true
+				}
+
+				// El step completado pasa a ser el "paso recién terminado"
+				// CurrentStep se actualizará al siguiente step cuando Ignition lo navegue
+				onboarding.CompletedSteps = append(onboarding.CompletedSteps, completedStep)
+				onboarding.CurrentStep = completedStep
+				onboarding.LastStepAt = workflow.Now(ctx)
+				if onboarding.StartedAt.IsZero() {
+					onboarding.StartedAt = workflow.Now(ctx)
+				}
+
+				logger.Info("Onboarding step complete recorded",
+					"step", completedStep,
+					"completed_count", len(onboarding.CompletedSteps),
+					"artifacts", onboarding.Artifacts,
+				)
 			}
 		})
 

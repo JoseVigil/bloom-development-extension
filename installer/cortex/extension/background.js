@@ -1,5 +1,11 @@
 // ============================================================================
 // SYNAPSE THIN CLIENT - ROUTER CON HANDSHAKE DE 3 FASES
+// v1.1.0 — Paso 1 github_auth
+// Cambios:
+//   1. github agregado a API_KEY_PATTERNS (ghp_...)
+//   2. step matcher: captura string en lugar de entero
+//   3. Clipboard monitor: GitHub PAT -> GITHUB_PAT_DETECTED a discovery.js
+//   4. Nuevo handler GITHUB_TOKEN_STORED: forwardea fingerprint al host
 // ============================================================================
 
 let nativePort = null;
@@ -142,7 +148,7 @@ async function loadConfig() {
 
     // step: paso de onboarding activo inyectado por Ignition (Gap 2)
     const stepMatcher = {
-      step: /"step"\s*:\s*(\d+)/
+      step: /"step"\s*:\s*"([^"]+)"/
     };
 
     // service: providers de registro activos inyectados por Ignition
@@ -230,7 +236,7 @@ async function loadConfig() {
             let value;
             if (key === 'register') {
               value = match[1] === 'true';
-            } else if (['total_launches', 'uptime', 'intents_done', 'step'].includes(key)) {
+            } else if (['total_launches', 'uptime', 'intents_done'].includes(key)) { // 'step' is now a string — not parsed as int
               value = parseInt(match[1], 10);
             } else {
               value = match[1];
@@ -851,6 +857,28 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
     return true;
   }
 
+  // ─────────────────────────────────────────────────────────────────────
+  // GITHUB_TOKEN_STORED — discovery.js guardó el PAT en bloom_vault_temp.
+  // Solo el fingerprint (SHA256 primeros 8 chars) llega aquí.
+  // Token real NUNCA incluido en el mensaje al host.
+  // ─────────────────────────────────────────────────────────────────────
+  if (event === 'GITHUB_TOKEN_STORED') {
+    if (!msg.token_fingerprint) {
+      console.warn('[Synapse] ⚠️ GITHUB_TOKEN_STORED sin fingerprint — ignorado');
+      sendResp({ received: false });
+      return true;
+    }
+    console.log('[Synapse] ✓ GITHUB_TOKEN_STORED — forwarding fingerprint to host');
+    sendToHost({
+      type:              'GITHUB_TOKEN_STORED',
+      profile_id:        msg.profile_id       || config?.profileId,
+      launch_id:         msg.launch_id        || config?.launchId,
+      token_fingerprint: msg.token_fingerprint
+    });
+    sendResp({ received: true });
+    return true;
+  }
+
   // Heartbeat success
   if (event === 'HEARTBEAT_SUCCESS') {
     console.log('[Synapse] ✓ Heartbeat validation successful');
@@ -1031,6 +1059,11 @@ if (typeof self !== 'undefined' && self.location?.href?.includes('debug=true')) 
  * API Key pattern matchers for all supported providers
  */
 const API_KEY_PATTERNS = {
+  github: {
+    regex: /^ghp_[A-Za-z0-9_]{36,}$/,
+    name: 'GitHub',
+    console_url: 'https://github.com/settings/tokens/new'
+  },
   gemini: {
     regex: /^AIzaSy[A-Za-z0-9_-]{33}$/,
     name: 'Gemini',
@@ -1128,7 +1161,18 @@ function startClipboardMonitoring() {
         clipboardMonitor.detectedKeys.add(keyHash);
         console.log('[Clipboard] ✓ API Key detected:', detected.name);
 
-        // Send to host via Native Messaging
+        // GitHub PAT: notificar a discovery.js para recibo y guardado seguro.
+        // El token real NUNCA viaja al host — solo el fingerprint.
+        if (detected.provider === 'github') {
+          chrome.runtime.sendMessage({
+            event: 'GITHUB_PAT_DETECTED',
+            token: detected.key
+          });
+          stopClipboardMonitoring();
+          return;
+        }
+
+        // Otros providers: flujo original hacia el host
         sendToHost({
           event: 'API_KEY_DETECTED',
           provider: detected.provider,

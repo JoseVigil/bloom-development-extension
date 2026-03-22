@@ -84,3 +84,12 @@ https://claude.ai/chat/819832a2-5079-4d3b-bb78-79a40e3889f5
 
 btips Implementing logging infrastructure corrections
 https://claude.ai/chat/b3d07d85-9e28-4e8f-9072-f7cb46405bc7
+
+elias onboarding - Construcción de Bloom Conductor
+https://claude.ai/chat/2fccb8dd-ba93-4237-b03e-437676dec7fd
+
+nenes Configuración de autenticación GitHub
+https://claude.ai/chat/6bf0f9e8-b7d6-458a-b8f1-f8ab6bd0673a
+
+roamingpads troubleshooting de onboarding
+https://claude.ai/chat/7f7ccc41-decd-4bcc-acde-a056e0e0e512

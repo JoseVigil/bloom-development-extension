@@ -2,6 +2,11 @@
 Server Manager Core - The TCP Concierge
 Minimal network layer that coordinates ProfileStateManager and EventBus.
 Handles asyncio server, 4-byte BigEndian protocol, and message routing.
+
+v1.1.0 — Paso 1 github_auth
+Cambios: agrega handler explícito para msg_type == 'GITHUB_TOKEN_STORED'.
+Emite ONBOARDING_STEP_COMPLETE al EventBus y hace broadcast a Sentinels.
+El token real de GitHub nunca aparece en logs, eventos ni mensajes.
 """
 
 import asyncio
@@ -463,6 +468,41 @@ class ServerManager:
                         }
 
                     await self._send_to_writer(writer, response)
+
+                elif msg_type == 'GITHUB_TOKEN_STORED':
+                    # Paso 1 github_auth — Cortex detectó y almacenó un GitHub PAT.
+                    #
+                    # Contrato de entrada:
+                    #   profile_id        : str — UUID del perfil Chrome
+                    #   launch_id         : str — ID del launch activo
+                    #   token_fingerprint : str — SHA256 primeros 8 chars del token
+                    #
+                    # El token real NUNCA aparece en este handler, en los logs,
+                    # ni en el evento emitido al EventBus. Solo el fingerprint.
+                    profile_id        = msg.get('profile_id')
+                    launch_id         = msg.get('launch_id')
+                    token_fingerprint = msg.get('token_fingerprint')
+
+                    logger.info(
+                        f"🔑 [{conn_id}] GITHUB_TOKEN_STORED: "
+                        f"profile={profile_id[:8] if profile_id else '?'} "
+                        f"fingerprint={token_fingerprint}"
+                    )
+
+                    event = await self.event_bus.add_event(
+                        'ONBOARDING_STEP_COMPLETE',
+                        {
+                            'profile_id':        profile_id,
+                            'step':              'github_auth',
+                            'token_fingerprint': token_fingerprint,
+                        }
+                    )
+                    await self._broadcast_event(event)
+
+                    await self._send_to_writer(writer, {
+                        'type':   'GITHUB_TOKEN_STORED_ACK',
+                        'status': 'ok',
+                    })
 
                 elif msg_type == 'UNREGISTER_HOST':
                     # bloom-host.exe signals intentional shutdown before closing socket.

@@ -549,3 +549,13 @@ padkite Batch operations en Temporal para operar miles de workflows
 https://claude.ai/chat/3ef48204-6636-4c04-a257-208dc4809708
 padkite Worker deployments en Temporal para workflows de larga duración
 https://claude.ai/chat/8fca38f2-00c1-4a02-96a1-2ab686808fdd
+temporal server remoto con nexus
+https://chatgpt.com/c/69bd4ba4-0854-83e9-85d1-8b9b10954a64
+
+
+notimation synway vendido con fallas
+https://claude.ai/chat/1e5f3516-ad4e-4b52-97bc-be38c246cb9b
+grock contnuidad 
+https://grok.com/c/dff42af2-03d2-471e-9051-12435ffa8117?rid=037fa28f-ed8f-485d-9876-590c9b186b1b
+grock elias + continuidad 
+https://grok.com/c/702aa315-3e62-4848-bbf4-555582b1bb85?rid=d9631454-fca3-424b-9af5-ecc8c9d649cf

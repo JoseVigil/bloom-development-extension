@@ -1,4 +1,9 @@
 // File: internal/orchestration/temporal/workflows/onboarding_workflow.go
+// v1.1.0 — Paso 1 github_auth
+// Cambios: Step ya era string — sin cambios de lógica requeridos. El archivo
+// original ya usa Step string en OnboardingNavigateInput y OnboardingNavigateResult.
+// Verificado compatible con step "github_auth" y todos los steps string del nuevo flujo.
+//
 // Workflow de Temporal para ejecutar la activity de navegación de onboarding.
 //
 // Workflow ID convención: onboarding_{profile_id}_{timestamp_unix_nano}
