@@ -9,7 +9,7 @@ bloom-development-extension/
     │   ├── ipc/
     │   │   ├── health-handlers.js
     │   │   └── profiles-handlers.js
-    │   └── preload_conductor.js
+    │   └── preload_core.js
     ├── main_conductor.js
     ├── node_modules/ [... dependencies]
     ├── onboarding/

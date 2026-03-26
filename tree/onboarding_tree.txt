@@ -1,0 +1,7 @@
+bloom-development-extension/
+└── onboarding/
+    ├── ipc/
+    │   └── onboarding-handlers.js
+    ├── onboarding.html
+    ├── onboarding.js
+    └── preload_onboarding.js

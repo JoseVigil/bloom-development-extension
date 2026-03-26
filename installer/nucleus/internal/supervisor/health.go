@@ -665,7 +665,24 @@ func waitForPortOpen(addr string, timeout time.Duration) error {
 func nssmStart(serviceName string, timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, "nssm", "start", serviceName).CombinedOutput()
+
+	// Resolver ruta absoluta de nssm — mismo patrón que resolveOllamaBin.
+	// nssm no está en PATH del sistema; vive en BloomNucleus/bin/nssm/nssm.exe.
+	nssmBin := "nssm" // fallback a PATH
+	localAppData := os.Getenv("LOCALAPPDATA")
+	if localAppData == "" {
+		localAppData = filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Local")
+	}
+	appDataDir := os.Getenv("BLOOM_APPDATA_DIR")
+	if appDataDir == "" {
+		appDataDir = filepath.Join(localAppData, "BloomNucleus")
+	}
+	candidate := filepath.Join(appDataDir, "bin", "nssm", "nssm.exe")
+	if _, err := os.Stat(candidate); err == nil {
+		nssmBin = candidate
+	}
+
+	out, err := exec.CommandContext(ctx, nssmBin, "start", serviceName).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("nssm start %s: %v — %s", serviceName, err, string(out))
 	}

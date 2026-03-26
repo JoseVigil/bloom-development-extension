@@ -132,6 +132,10 @@ DEV FRIENDLY REMINDER
 Las horas de la mañana debes aprovecharlas para resolver los problemas mas grandes, grandes features, refactorizaciones y exploraciones. Por la tarde troubleshooting y testing. 
 
 
+Recomendación para la escritura de comandos en comandos.txt
+Cada comando debe estar escrito en una única línea, sin saltos de línea ni caracteres de continuación (\). El script procesa cada línea decodificada como un comando independiente, por lo que un comando partido en varias líneas se enviará al gateway en partes separadas, dejando el shell remoto en estado de espera indefinida y eventualmente provocando el cierre de la conexión. Si un comando es largo, simplemente extendelo en la misma línea sin importar su longitud. Lo mismo aplica para pipes (|), redirecciones y cualquier otro operador: todo debe quedar en una sola línea continua antes de ser codificado en Base32.
+
+
 
 
 
