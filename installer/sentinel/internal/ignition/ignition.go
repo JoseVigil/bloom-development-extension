@@ -75,7 +75,7 @@ func init() {
 		// Con StringVar el default "" es inequívoco: "" = no pasado, "true"/"false" = pasado.
 		var overrideRegister  string // "" | "true" | "false"
 		var overrideHeartbeat string // "" | "true" | "false"
-		var overrideStep      int
+		var overrideStep      string // string enum: "github_auth", "google_auth", etc.
 
 		var linkedAccounts arrayFlags
 
@@ -178,7 +178,7 @@ func init() {
 		// Uso: --override-register true | --override-register false
 		cmd.Flags().StringVar(&overrideRegister,  "override-register",   "", "Sobrescribir flag de registro (true/false)")
 		cmd.Flags().StringVar(&overrideHeartbeat, "override-heartbeat",  "", "Sobrescribir flag de heartbeat (true/false)")
-		cmd.Flags().IntVar(&overrideStep,         "override-step",       0,  "Sobrescribir step actual")
+		cmd.Flags().StringVar(&overrideStep,        "override-step",       "", "Sobrescribir step actual (string enum: github_auth, nucleus_create, vault_init, google_auth, ai_provider_setup, project_create)")
 		cmd.Flags().Var(&linkedAccounts,          "add-account",             "Agregar linked account (provider,email_or_username,status). Repetible")
 		cmd.Flags().StringVar(&configFile,        "config-file",         "", "Cargar overrides desde JSON (@archivo o - para stdin)")
 
@@ -220,7 +220,7 @@ func parseBoolFlag(s string) (value bool, wasProvided bool) {
 // buildOverridesFromFlags construye el mapa de overrides a partir de los flags de CLI.
 // register y heartbeat son strings: "" significa "no pasado", "true"/"false" significa
 // que el usuario lo especificó explícitamente, incluyendo false.
-func buildOverridesFromFlags(alias, role, email, extension, service string, registerStr, heartbeatStr string, step int) map[string]interface{} {
+func buildOverridesFromFlags(alias, role, email, extension, service string, registerStr, heartbeatStr string, step string) map[string]interface{} {
 	overrides := make(map[string]interface{})
 
 	if alias != ""     { overrides["profile_alias"] = alias }
@@ -228,7 +228,7 @@ func buildOverridesFromFlags(alias, role, email, extension, service string, regi
 	if email != ""     { overrides["email"] = email }
 	if extension != "" { overrides["extension_id"] = extension }
 	if service != ""   { overrides["service"] = service }
-	if step > 0        { overrides["step"] = step }
+	if step != ""      { overrides["step"] = step }
 
 	// FIX: usar parseBoolFlag para distinguir "no pasado" de "pasado como false"
 	if val, ok := parseBoolFlag(registerStr); ok {

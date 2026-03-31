@@ -150,7 +150,7 @@ func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profi
 		"register":       getBoolField(profileData, "register", false),
 		"heartbeat":      getBoolField(profileData, "heartbeat", true),
 		"service":        getStringField(profileData, "service", ""),
-		"step":           getIntField(profileData, "step", 0),
+		"step":           getStringField(profileData, "step", ""),
 		"alias":          getStringField(profileData, "alias", "MasterWorker"),
 		"role":           getStringField(profileData, "role", "Worker"),
 		"email":          getStringField(profileData, "email", ""),

@@ -95,14 +95,40 @@ https://claude.ai/chat/7f7ccc41-decd-4bcc-acde-a056e0e0e512
 btips Implementing logging infrastructure corrections
 https://claude.ai/chat/b3d07d85-9e28-4e8f-9072-f7cb46405bc7
 
-elias synway hard reset
-https://claude.ai/chat/7e5ed88f-d1f5-4e0d-9e69-209ed2a59f22
-
 roamingpads onboarding github_auth
 https://claude.ai/chat/4206875a-c7aa-4495-a1c2-8ef89669cee7
 
-notimation onboarding 
-https://claude.ai/chat/6d2b573a-8bf4-45a5-aa83-3a799b455b08
+notimation gmail onboarding 
+https://claude.ai/chat/5abc4865-0d28-4887-825c-50b268470708
+
+elias synway hard reset
+https://claude.ai/chat/7e5ed88f-d1f5-4e0d-9e69-209ed2a59f22
+uitool post hard reset
+https://claude.ai/chat/5373ad93-543a-41dd-9a72-3ba92ab8be4c
+btips
+https://claude.ai/chat/10b06c7c-a33c-430d-bde0-68aa32813a77
+roamtouch
+https://claude.ai/chat/38a0822e-b645-4c86-b39b-62f4afe93aa7
+synway bajar archivos de maestro server
+https://claude.ai/chat/f883b2b1-52d0-4d5f-acac-bae9209dda2a
+
+notimationi synway patch2
+https://claude.ai/chat/219afb12-30cf-46d8-b6e5-48286b517b10
+
+uitool synway patch2 review resolve
+https://claude.ai/chat/0f94690b-c88c-4e53-9285-25343d5c544e
+
+jose gmail telemetry download
+https://claude.ai/chat/be7f3259-c646-4db3-afaa-7968a3758526
+uitool file download
+https://claude.ai/chat/5d06bfc6-37c5-47b9-8020-88fc3868198c
+
+noti gmail claricacion onboarding
+https://claude.ai/chat/5abc4865-0d28-4887-825c-50b268470708
+
+gestureos cortex discovery para onboarding
+https://claude.ai/chat/928c8919-4901-4820-804e-220a13ad302b
+
 
 
 

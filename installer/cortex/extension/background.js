@@ -1,11 +1,5 @@
 // ============================================================================
 // SYNAPSE THIN CLIENT - ROUTER CON HANDSHAKE DE 3 FASES
-// v1.1.0 — Paso 1 github_auth
-// Cambios:
-//   1. github agregado a API_KEY_PATTERNS (ghp_...)
-//   2. step matcher: captura string en lugar de entero
-//   3. Clipboard monitor: GitHub PAT -> GITHUB_PAT_DETECTED a discovery.js
-//   4. Nuevo handler GITHUB_TOKEN_STORED: forwardea fingerprint al host
 // ============================================================================
 
 let nativePort = null;
@@ -148,7 +142,7 @@ async function loadConfig() {
 
     // step: paso de onboarding activo inyectado por Ignition (Gap 2)
     const stepMatcher = {
-      step: /"step"\s*:\s*"([^"]+)"/
+      step: /"step"\s*:\s*(\d+)/
     };
 
     // service: providers de registro activos inyectados por Ignition
@@ -236,7 +230,7 @@ async function loadConfig() {
             let value;
             if (key === 'register') {
               value = match[1] === 'true';
-            } else if (['total_launches', 'uptime', 'intents_done'].includes(key)) { // 'step' is now a string — not parsed as int
+            } else if (['total_launches', 'uptime', 'intents_done', 'step'].includes(key)) {
               value = parseInt(match[1], 10);
             } else {
               value = match[1];
@@ -385,7 +379,7 @@ function connectNative() {
     nativePort.onMessage.addListener(handleHostMessage);
     nativePort.onDisconnect.addListener(handleDisconnect);
 
-    // 🔒 FASE 1: Extension → Host (extension_ready)
+    // � FASE 1: Extension → Host (extension_ready)
     // FIX: Construir el mensaje explícitamente y loguearlo antes de enviarlo.
     // Si profile_id o launch_id son undefined, JSON.stringify los omite
     // silenciosamente y el host recibe un objeto sin esos campos —
@@ -442,7 +436,7 @@ function scheduleReconnect() {
   console.log(`[Synapse] ⏱️ Reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT})`);
 
   setTimeout(() => {
-    console.log('[Synapse] 🔄 Attempting reconnect...');
+    console.log('[Synapse] � Attempting reconnect...');
     connectNative();
   }, delay);
 }
@@ -454,13 +448,13 @@ function scheduleReconnect() {
 function handleHostMessage(msg) {
   console.log('[Synapse] ← Host message received:', msg);
 
-  // 🔒 FASE 2: Host → Extension (host_ready)
+  // � FASE 2: Host → Extension (host_ready)
   if (msg.command === 'host_ready' || msg.event === 'host_ready') {
 
     console.log('[HANDSHAKE] FASE 2: Host → Extension (host_ready) ✓');
     handshakeState = 'HOST_READY';
     
-    // 🔒 FASE 3: Extension → Host (handshake_confirm)
+    // � FASE 3: Extension → Host (handshake_confirm)
     console.log('[HANDSHAKE] FASE 3: Extension → Host (handshake_confirm)');
     
     nativePort.postMessage({
@@ -566,7 +560,10 @@ function handleHostMessage(msg) {
   // Ruta: Brain TCP → bloom-host → Native Messaging → background.js → discovery.js
   // Usar `return` para prevenir reenvío al Brain (loop prevention).
   if (msg.command === 'onboarding_navigate') {
-    chrome.tabs.query({ url: chrome.runtime.getURL('discovery.html') }, (tabs) => {
+    // FIX: La URL real de la tab es discovery/index.html, no discovery.html.
+    // getURL('discovery.html') resuelve a una ruta que no existe — la query
+    // devolvía array vacío en todos los casos y el navigate se perdía silenciosamente.
+    chrome.tabs.query({ url: chrome.runtime.getURL('discovery/index.html') }, (tabs) => {
       if (!tabs || tabs.length === 0) {
         console.warn('[BG] onboarding_navigate: no discovery tab found');
         return;
@@ -857,28 +854,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
     return true;
   }
 
-  // ─────────────────────────────────────────────────────────────────────
-  // GITHUB_TOKEN_STORED — discovery.js guardó el PAT en bloom_vault_temp.
-  // Solo el fingerprint (SHA256 primeros 8 chars) llega aquí.
-  // Token real NUNCA incluido en el mensaje al host.
-  // ─────────────────────────────────────────────────────────────────────
-  if (event === 'GITHUB_TOKEN_STORED') {
-    if (!msg.token_fingerprint) {
-      console.warn('[Synapse] ⚠️ GITHUB_TOKEN_STORED sin fingerprint — ignorado');
-      sendResp({ received: false });
-      return true;
-    }
-    console.log('[Synapse] ✓ GITHUB_TOKEN_STORED — forwarding fingerprint to host');
-    sendToHost({
-      type:              'GITHUB_TOKEN_STORED',
-      profile_id:        msg.profile_id       || config?.profileId,
-      launch_id:         msg.launch_id        || config?.launchId,
-      token_fingerprint: msg.token_fingerprint
-    });
-    sendResp({ received: true });
-    return true;
-  }
-
   // Heartbeat success
   if (event === 'HEARTBEAT_SUCCESS') {
     console.log('[Synapse] ✓ Heartbeat validation successful');
@@ -945,7 +920,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
 
 function sendToHost(msg) {
   if (nativePort && connectionState === 'CONNECTED') {
-    // 🔒 Validar handshake antes de enviar mensajes críticos
+    // � Validar handshake antes de enviar mensajes críticos
     if (handshakeState !== 'CONFIRMED' && handshakeState !== 'HOST_READY') {
       console.warn('[Synapse] ⚠️ Message blocked - Handshake not confirmed:', msg.event || msg.type);
       return;
@@ -973,7 +948,7 @@ function setupKeepalive() {
   chrome.alarms.onAlarm.addListener((a) => {
     if (a.name !== 'keepalive') return;
 
-    console.log('[Synapse] 💓 Keepalive tick - Handshake:', handshakeState, '| Connection:', connectionState);
+    console.log('[Synapse] � Keepalive tick - Handshake:', handshakeState, '| Connection:', connectionState);
 
     // Enviar heartbeat real al host solo si el canal está establecido.
     // El host (bloom-host / Sentinel) forwardea esto como SignalHeartbeat al workflow de Temporal.
@@ -986,7 +961,7 @@ function setupKeepalive() {
         timestamp: Date.now(),
         status: 'alive'
       });
-      console.log('[Synapse] 💓 Heartbeat sent to host for profile:', config?.profileId);
+      console.log('[Synapse] � Heartbeat sent to host for profile:', config?.profileId);
     } else {
       console.warn('[Synapse] ⚠️ Heartbeat skipped - channel not ready (handshake:', handshakeState, ')');
     }
@@ -998,12 +973,12 @@ function setupKeepalive() {
 // ============================================================================
 
 chrome.runtime.onInstalled.addListener(() => {
-  console.log('[Synapse] 🔧 Extension installed/updated');
+  console.log('[Synapse] � Extension installed/updated');
   initialize();
 });
 
 chrome.runtime.onStartup.addListener(() => {
-  console.log('[Synapse] 🚀 Browser startup');
+  console.log('[Synapse] � Browser startup');
   initialize();
 });
 
@@ -1022,7 +997,7 @@ chrome.runtime.onStartup.addListener(() => {
 initialize();
 
 chrome.runtime.onSuspend?.addListener(() => {
-  console.log('[Synapse] 💤 Service worker suspending');
+  console.log('[Synapse] � Service worker suspending');
 });
 
 // ============================================================================
@@ -1030,7 +1005,7 @@ chrome.runtime.onSuspend?.addListener(() => {
 // ============================================================================
 
 if (typeof self !== 'undefined' && self.location?.href?.includes('debug=true')) {
-  console.log('[Synapse] 🐛 Debug mode enabled');
+  console.log('[Synapse] � Debug mode enabled');
   
   self.SYNAPSE_DEBUG = {
     getState: () => ({
@@ -1059,11 +1034,6 @@ if (typeof self !== 'undefined' && self.location?.href?.includes('debug=true')) 
  * API Key pattern matchers for all supported providers
  */
 const API_KEY_PATTERNS = {
-  github: {
-    regex: /^ghp_[A-Za-z0-9_]{36,}$/,
-    name: 'GitHub',
-    console_url: 'https://github.com/settings/tokens/new'
-  },
   gemini: {
     regex: /^AIzaSy[A-Za-z0-9_-]{33}$/,
     name: 'Gemini',
@@ -1161,18 +1131,7 @@ function startClipboardMonitoring() {
         clipboardMonitor.detectedKeys.add(keyHash);
         console.log('[Clipboard] ✓ API Key detected:', detected.name);
 
-        // GitHub PAT: notificar a discovery.js para recibo y guardado seguro.
-        // El token real NUNCA viaja al host — solo el fingerprint.
-        if (detected.provider === 'github') {
-          chrome.runtime.sendMessage({
-            event: 'GITHUB_PAT_DETECTED',
-            token: detected.key
-          });
-          stopClipboardMonitoring();
-          return;
-        }
-
-        // Otros providers: flujo original hacia el host
+        // Send to host via Native Messaging
         sendToHost({
           event: 'API_KEY_DETECTED',
           provider: detected.provider,

@@ -76,7 +76,7 @@ func temporalStartCommand(c *core.Core) *cobra.Command {
 
 		Annotations: map[string]string{
 			"category": "TEMPORAL",
-			"requires": `- Modo Dev: temporalite.exe en bin/
+			"requires": `- Modo Dev: tempora.exe en bin/
 - Modo Prod: Servidor Temporal accesible en puerto configurado
 - Permisos de escritura en AppData/Bloom/temporal/`,
 		},

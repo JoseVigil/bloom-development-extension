@@ -936,16 +936,24 @@ body::after {
   </div>
 </div>
 
-<!-- Info Popup -->
+<!-- Info Popup — contenido dinámico según el step actual (manejado por onboarding.js) -->
 <div id="info-popup">
   <div class="info-backdrop" onclick="closeInfo()"></div>
   <div class="info-panel">
-    <div class="info-panel-label">Identity — Architecture</div>
-    <div class="info-panel-title">How identity works<br>in BTIPS.</div>
-    <div class="info-panel-body">
-      BTIPS does not create accounts or store credentials. Identity is established through a <strong>master Chromium profile</strong> where you register trusted accounts — Google, Gemini, and GitHub.<br><br>
-      These accounts are secured by the <strong>browser vault</strong> and hardware encryption on your device. BTIPS simply detects the existing identity layer and uses it.<br><br>
-      The <strong>Discovery page</strong> runs inside your browser profile and guides you through registering each account. Once all three are confirmed, your sovereign identity is anchored to this machine.
+    <div class="info-panel-label" id="info-panel-label">Step 1 — GitHub</div>
+    <div class="info-panel-title" id="info-panel-title">Creating a Personal<br>Access Token.</div>
+    <div class="info-panel-body" id="info-panel-body">
+      Bloom necesita un <strong>token clásico</strong> de GitHub con dos permisos:<br>
+      <strong>repo</strong> y <strong>read:org</strong>.<br><br>
+      Cómo crearlo:<br>
+      1. Abrí GitHub → avatar → <strong>Settings</strong><br>
+      2. Bajá hasta <strong>Developer settings</strong> (último ítem)<br>
+      3. <strong>Personal access tokens → Tokens (classic)</strong><br>
+      4. <strong>Generate new token (classic)</strong><br>
+      5. Marcá <strong>repo</strong> y <strong>read:org</strong><br>
+      6. Generá y <strong>copiá</strong> el token<br><br>
+      ⚠ Usá <em>Tokens (classic)</em>, no Fine-grained.<br>
+      El token empieza con <strong>ghp_</strong> — la extensión lo detecta automáticamente al copiarlo.
     </div>
     <button class="info-close" onclick="closeInfo()">Close</button>
   </div>
@@ -972,7 +980,7 @@ body::after {
 
       <div class="identity-explain">
         <span>Connect trusted accounts through your master Chromium profile.</span>
-        <button class="info-btn" onclick="openInfo()">i</button>
+        <button class="info-btn" onclick="openInfo('github')">i</button>
       </div>
 
       <div class="account-icons">
@@ -1132,25 +1140,10 @@ body::after {
 
       <div class="question-label">Choose a repository from the organization</div>
       <div class="project-grid" id="project-grid">
-        <div class="project-card" onclick="selectProject(this)">
-          <div class="project-card-name">btips-core</div>
-          <div class="project-card-type">Repository</div>
-        </div>
-        <div class="project-card" onclick="selectProject(this)">
-          <div class="project-card-name">research-engine</div>
-          <div class="project-card-type">Repository</div>
-        </div>
-        <div class="project-card" onclick="selectProject(this)">
-          <div class="project-card-name">trade-framework</div>
-          <div class="project-card-type">Repository</div>
-        </div>
-        <div class="project-card" onclick="selectProject(this)">
-          <div class="project-card-name">+ Local folder</div>
-          <div class="project-card-type">Select path</div>
-        </div>
+        <!-- Poblado dinámicamente por loadRepos() en onboarding.js -->
       </div>
 
-      <button class="btn-primary" id="btn-create-mandate" onclick="goTo(6)" disabled>Create Mandate</button>
+      <button class="btn-primary" id="btn-create-mandate" disabled>Create Mandate</button>
     </div>
   </div>
 

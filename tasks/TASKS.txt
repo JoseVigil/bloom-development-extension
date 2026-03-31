@@ -80,8 +80,49 @@ roamtouch
 https://claude.ai/chat/82ef510a-8b41-4662-9dc8-205596bcc0ac
 roamipads
 https://claude.ai/chat/da2c8b3f-e56f-4cbb-b0cf-8be5cce13e0b
-jose gmail
+
+jose gmail post venta y envio, no levantan puertos
 https://aistudio.google.com/prompts/1OBxT9YwRYr_Q83kcIXm4OPwI-chMJmkp
+
+notimation synway vendido con fallas
+https://claude.ai/chat/1e5f3516-ad4e-4b52-97bc-be38c246cb9b
+grock contnuidad 
+https://grok.com/c/dff42af2-03d2-471e-9051-12435ffa8117?rid=037fa28f-ed8f-485d-9876-590c9b186b1b
+grock elias + continuidad 
+https://grok.com/c/702aa315-3e62-4848-bbf4-555582b1bb85?rid=d9631454-fca3-424b-9af5-ecc8c9d649cf
+jose gmail deepseek synway
+https://chat.deepseek.com/a/chat/s/9587c5dd-cac4-457f-8050-90a52c8c7063
+blooaut firmware#19
+https://claude.ai/chat/c6997bc4-9c28-4840-8b32-b00128f31138
+elias firmware #20
+https://claude.ai/chat/85214af1-03e4-4e9d-9bb8-47ca971e8508
+gestureos hallazgo mailbox firmware
+https://claude.ai/chat/b7152b37-ddf8-4270-9055-048e66f8eaf7
+padkite #23
+https://claude.ai/chat/362eb104-1b63-4f2e-aa44-e038621dcc18
+padkite patch
+https://claude.ai/chat/cc2d7ac5-b353-4cc2-a488-487a9b00d52a
+Eslias libshdpci.so patch 
+https://claude.ai/chat/9cf3ec1b-2751-46e7-ac23-f25895d96708
+noti gmail libshpa3.so initial patch
+https://grok.com/c/7d825cd4-c50a-4062-a8af-719632c762a2?rid=e12d9c25-2653-48c2-b03c-45d63bf5193f
+noti gmail libshpa3.so patch
+https://claude.ai/chat/68a5bc24-5253-43e3-b67d-d3c05981402e
+nenes parche libshdpci funciono
+https://grok.com/c/7d8a6ba8-3c7e-4799-998e-749e377c2cf0?rid=efa71af9-fc4c-4d81-8672-f055b064eec5
+btips libshpa3 patch calculation initial
+https://claude.ai/chat/341bd921-dcf3-4dc9-88fa-f5fbfe79220f
+nenes hito historico - 
+https://claude.ai/chat/e0c7c936-24b6-45ee-b0c2-698bf551df42
+uitool patch aplicado
+https://claude.ai/chat/b581dac8-2de3-43fa-a2c9-e99416ac50d3
+nenes diagnostico final
+https://claude.ai/chat/a00e435f-9cda-4210-b673-2fa6df028c92
+elias analisis shdpci.ko FALLIDO
+https://claude.ai/chat/a218cea2-b61e-407e-9716-cced3f6b4d42
+bloomaut session nocturna
+https://claude.ai/chat/bc3392a9-c25c-4f33-b280-af1166b661ed
+
 
 btip tree 
 https://claude.ai/chat/ac053287-db26-4a06-ac8f-98c1a8e392e7
@@ -522,6 +563,7 @@ https://claude.ai/chat/18d86c8a-f724-47c0-a0fd-482834928a6b
 jose gmail CMU course
 https://modernaicourse.org/
 
+
 elias langchain
 https://claude.ai/chat/0433d96d-d5ec-44a3-a3b2-eddf9f525b0f
 
@@ -553,9 +595,14 @@ temporal server remoto con nexus
 https://chatgpt.com/c/69bd4ba4-0854-83e9-85d1-8b9b10954a64
 
 
-notimation synway vendido con fallas
-https://claude.ai/chat/1e5f3516-ad4e-4b52-97bc-be38c246cb9b
-grock contnuidad 
-https://grok.com/c/dff42af2-03d2-471e-9051-12435ffa8117?rid=037fa28f-ed8f-485d-9876-590c9b186b1b
-grock elias + continuidad 
-https://grok.com/c/702aa315-3e62-4848-bbf4-555582b1bb85?rid=d9631454-fca3-424b-9af5-ecc8c9d649cf
+
+
+
+gestureos Auditoría de comandos BTIPS en brain
+https://claude.ai/chat/77caaf80-bced-405e-baad-a2446d3c3a4c
+
+Automatizar conexión a gateway a través de tunnel Cloudflare
+https://claude.ai/chat/32a589c0-4aca-4c38-8d34-105a5e4ebc5a
+
+padkite Automatizar conexión a gateway a través de tunnel Cloudflare
+https://claude.ai/chat/32a589c0-4aca-4c38-8d34-105a5e4ebc5a

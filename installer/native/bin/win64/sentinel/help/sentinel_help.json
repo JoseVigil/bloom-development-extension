@@ -101,8 +101,7 @@
       },
       {
         "name": "override-step",
-        "usage": "Sobrescribir step actual",
-        "default": "0"
+        "usage": "Sobrescribir step actual (string enum: github_auth, nucleus_create, vault_init, google_auth, ai_provider_setup, project_create)"
       },
       {
         "name": "save",

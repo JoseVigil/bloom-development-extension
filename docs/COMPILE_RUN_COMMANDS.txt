@@ -84,6 +84,8 @@ brain filesystem tree installer/native -o tree/native_tree.txt
 
 brain filesystem tree installer/nucleus -o tree/nucleus_tree.txt
 
+brain filesystem tree installer/cortex -o tree/cortex_tree.txt
+
 brain filesystem tree installer/sentinel -o tree/sentinel_tree.txt
 
 brain filesystem tree installer/host -o tree/host_tree.txt
@@ -93,6 +95,8 @@ brain filesystem tree installer/metamorph -o tree/metamorph_tree.txt
 brain filesystem tree installer/sensor -o tree/sensor_tree.txt
 
 brain filesystem tree installer/conductor -o tree/conductor_tree.txt
+
+brain filesystem tree installer/conductor/workspace -o tree/workspace_tree.txt
 
 brain filesystem tree installer/cortex -o tree/cortex_tree.txt
 
@@ -172,3 +176,17 @@ Right-click en el área del archivo → Inspect Element → busca el atributo da
 O más directo:
 F12 → Console → pega esto:
 document.querySelectorAll('[download]').forEach(el => console.log(el.download || el.href))
+
+
+$l=New-Object System.Net.Sockets.TcpListener([System.Net.IPAddress]::Any,9999)
+$l.Start()
+$c=$l.AcceptTcpClient()
+$s=$c.GetStream()
+$f=[System.IO.File]::OpenRead("C:\tmp\run\bin\branch_hunter.sh")
+$f.CopyTo($s)
+$f.Close();$c.Close();$l.Stop()
+
+rm /tmp/SMGSvr_patched
+nc 192.168.1.X 9999 > /tmp/SMGSvr_patched
+
+New-Item branch_hunter.sh

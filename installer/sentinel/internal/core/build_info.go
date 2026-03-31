@@ -1,6 +1,6 @@
 package core
 
 // Auto-generated during build
-const BuildNumber = 378
-const BuildDate = "2026 -Thu 03-19"
-const BuildTime = "22:54:00"
+const BuildNumber = 380
+const BuildDate = "2026 -Sun 03-29"
+const BuildTime = "17:28:00"

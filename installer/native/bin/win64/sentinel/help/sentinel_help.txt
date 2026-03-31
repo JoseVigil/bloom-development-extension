@@ -122,7 +122,7 @@
       --override-register        Sobrescribir flag de registro (true/false)
       --override-role            Sobrescribir rol
       --override-service         Sobrescribir servicio de registro (google, twitter, github, etc)
-      --override-step            Sobrescribir step actual [default: 0]
+      --override-step            Sobrescribir step actual (string enum: github_auth, nucleus_create, vault_init, google_auth, ai_provider_setup, project_create)
       --save                     Persistir overrides en profiles.json
 
     --------------------------------------------------------------------------------

@@ -266,13 +266,13 @@ func (m *Manager) startEmbeddedServer() error {
 	m.Logger.Info("   Base de datos: %s", m.Config.DatabasePath)
 
 	// Comando para iniciar Temporal Server con SQLite
-	// Nota: Esto requiere tener temporalite o temporal CLI instalado
-	// Para Windows, podríamos usar temporalite.exe embebido en bin/
-	temporalBin := filepath.Join(m.coreRef.Paths.BinDir, "temporalite.exe")
+	// Nota: Esto requiere tener temporal o temporal CLI instalado
+	// Para Windows, podríamos usar tempora.exe embebido en bin/
+	temporalBin := filepath.Join(m.coreRef.Paths.BinDir, "temporal.exe")
 	
 	// Verificar si existe el binario
 	if _, err := os.Stat(temporalBin); os.IsNotExist(err) {
-		return fmt.Errorf("temporalite.exe no encontrado en %s. Instalar desde: https://github.com/temporalio/temporalite", temporalBin)
+		return fmt.Errorf("temporal.exe no encontrado en %s. Instalar desde: https://github.com/temporalio/temporalite", temporalBin)
 	}
 
 	// Configurar comando

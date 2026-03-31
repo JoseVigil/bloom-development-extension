@@ -1,5 +1,11 @@
-// onboarding.js — BTIPS Conductor (Synapse Protocol v4.0)
-// Script completo del onboarding. Cargado por onboarding.html via <script src="onboarding.js">.
+// onboarding.js — Bloom Conductor (Synapse Protocol v4.0)
+// Correcciones aplicadas:
+//   Fix 1: REQUIRED_ACCOUNTS = ['github'] — GitHub primero, Google/Gemini después del vault
+//   Fix 2: navigate manda 'github_auth', no 'google_login'
+//   Fix 3: poll mapea result.steps.github_auth, no result.accounts
+//   Fix 4: goTo(4) llama runNucleusTerminal()
+//   Fix 5: toggleAccount() desactivado — los íconos los activa solo el poll
+//   Fix 6: info popup dinámico por step, contenido desde STEP_INFO[]
 
 // ── LOGGING ────────────────────────────────────────────────────────────────
 function log(level, msg) {
@@ -11,16 +17,83 @@ function log(level, msg) {
   }
 }
 
+// ── INFO POPUP — contenido por cuenta ─────────────────────────────────────
+// Fuente de verdad para los popups de ayuda durante el onboarding.
+// Refleja onboarding_steps.json pero con instrucciones de usuario concretas.
+// Si GitHub cambia su UI, solo hay que actualizar este objeto.
+const STEP_INFO = {
+  github: {
+    label:  'Step 1 — GitHub',
+    title:  'Creating a Personal\nAccess Token.',
+    body: `
+      Bloom necesita un <strong>token clásico</strong> de GitHub con dos permisos:<br>
+      <strong>repo</strong> y <strong>read:org</strong>.<br><br>
+      Cómo crearlo:<br>
+      1. Abrí GitHub → avatar → <strong>Settings</strong><br>
+      2. Bajá hasta <strong>Developer settings</strong> (último ítem)<br>
+      3. <strong>Personal access tokens → Tokens (classic)</strong><br>
+      4. <strong>Generate new token (classic)</strong><br>
+      5. Marcá <strong>repo</strong> y <strong>read:org</strong><br>
+      6. Generá y <strong>copiá</strong> el token<br><br>
+      ⚠ Usá <em>Tokens (classic)</em>, no Fine-grained.<br>
+      El token empieza con <strong>ghp_</strong> — la extensión lo detecta automáticamente al copiarlo.
+    `
+  },
+  google: {
+    label:  'Step 4 — Google',
+    title:  'Connecting your\nGoogle account.',
+    body: `
+      Bloom usará tu cuenta de Google para acceder a <strong>Google Cloud</strong> y <strong>AI Studio</strong>.<br><br>
+      La ventana de Discovery va a pedirte que inicies sesión con tu cuenta Google.<br>
+      Solo necesitás confirmar el acceso — no se almacenan contraseñas en Bloom.
+    `
+  },
+  gemini: {
+    label:  'Step 5 — AI Provider',
+    title:  'Configuring your\nAI provider.',
+    body: `
+      Podés usar Gemini, Claude, OpenAI o Grok.<br><br>
+      Para Gemini: abrí <strong>aistudio.google.com</strong> → Get API key → copiala.<br>
+      Para otros proveedores: ingresá a su plataforma y generá una API key.<br><br>
+      La extensión detecta la key al copiarla y la guarda en el vault cifrado.<br>
+      Bloom nunca ve la key en texto plano.
+    `
+  }
+};
+
+// Estado actual del popup — para abrir el correcto según el flujo
+let currentInfoStep = 'github';
+
+function openInfo(step) {
+  currentInfoStep = step || currentInfoStep;
+  const info = STEP_INFO[currentInfoStep];
+  if (!info) return;
+
+  document.getElementById('info-panel-label').textContent  = info.label;
+  document.getElementById('info-panel-title').innerHTML    = info.title.replace('\n', '<br>');
+  document.getElementById('info-panel-body').innerHTML     = info.body;
+  document.getElementById('info-popup').classList.add('open');
+}
+
+function closeInfo() {
+  document.getElementById('info-popup').classList.remove('open');
+}
+
 // ── STATE ──────────────────────────────────────────────────────────────────
-const activeAccounts    = new Set();
-const REQUIRED_ACCOUNTS = ['google', 'gemini']; // GitHub es opcional en esta etapa
+const activeAccounts = new Set();
+
+// Fix 1: Solo GitHub en Screen 1. Google y Gemini van después del vault
+// (onboarding_steps.json: google_auth requiere vault_initialized)
+const REQUIRED_ACCOUNTS = ['github'];
+
 let selectedOrg         = null;
 let selectedFolderPath  = null;
 let folderSelected      = false;
 let selectedProjectEl   = null;
 let selectedProject     = null; // { name, path }
 let identityPollTimer   = null;
-let userEmail           = null; // email del usuario (capturado en Screen 1 si aplica)
+let identityTimeoutId   = null;
+let userEmail           = null;
 
 // ── SCREEN MAP ─────────────────────────────────────────────────────────────
 const SCREEN_IDS = [
@@ -38,9 +111,7 @@ const SCREEN_IDS = [
 async function goTo(n) {
   log('info', `goTo(${n}) — screen-${SCREEN_IDS[n]}`);
 
-  // Ocultar todas las screens
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  // Mostrar la screen objetivo por id
   const target = document.getElementById('screen-' + SCREEN_IDS[n]);
   if (target) {
     target.classList.add('active');
@@ -48,24 +119,38 @@ async function goTo(n) {
     log('error', `screen-${SCREEN_IDS[n]} NOT FOUND in DOM`);
   }
 
-  // Actualizar stepper (si existe)
   document.querySelectorAll('.step-node').forEach((node, i) => {
     node.classList.toggle('active', i === n);
-    node.classList.toggle('done',   i < n);
+    node.classList.toggle('done', i < n);
   });
 
   // Efectos por pantalla
   if (n === 1) {
+    // Hacer visible el system-layer lateral (opacity 0 → 1)
+    document.getElementById('system-layer')?.classList.add('visible');
+    // Activar el nodo Identity
     setTimeout(() => {
       document.getElementById('sn-identity')?.classList.add('active');
     }, 400);
-    // kickoffDiscovery() NO va aquí — se llama desde handleIdentityBtn()
+    // kickoffDiscovery() se llama desde handleIdentityBtn(), no aquí
   }
   if (n === 3) loadOrgs();
+
+  // Fix 4: faltaba este case — el terminal nunca arrancaba
+  if (n === 4) runNucleusTerminal();
+
   if (n === 5) loadRepos();
   if (n === 6) runLaunchSequence();
+  if (n === 6) {
+    // Revelar el botón Enter System después de que los nodos animaron
+    setTimeout(() => {
+      const enterBtn = document.getElementById('enter-btn');
+      if (enterBtn) enterBtn.style.opacity = '1';
+    }, 1200);
+  }
 }
 
+// ── CORTEX BAR ─────────────────────────────────────────────────────────────
 function showCortex(msg) {
   const el = document.getElementById('cortex-text');
   if (!el) return;
@@ -77,83 +162,124 @@ function hideCortex() {
   document.getElementById('cortex-bar')?.classList.remove('visible');
 }
 
-// ── INFO POPUP ─────────────────────────────────────────────────────────────
-function openInfo()  { document.getElementById('info-popup').classList.add('open'); }
-function closeInfo() { document.getElementById('info-popup').classList.remove('open'); }
-
 // ── SCREEN 1 — Identity ────────────────────────────────────────────────────
+
+// Fix 5: toggleAccount() ya no hace nada — los íconos los activa solo el poll.
+// El onclick en el HTML queda por compatibilidad pero no cambia estado.
+function toggleAccount(name) {
+  // No-op: el estado de las cuentas lo maneja exclusivamente el poll.
+  // Esta función existe solo para no romper los onclick del HTML.
+  log('info', `toggleAccount(${name}) ignorado — estado manejado por pollIdentity`);
+}
+
 async function handleIdentityBtn() {
-  log('info', 'click — btn-continue-identity (Validate)');
+  log('info', 'click — btn-continue-identity');
 
   const btn = document.getElementById('btn-continue-identity');
-  btn.textContent = 'Awaiting accounts…';
+  btn.textContent = 'Awaiting GitHub…';
   btn.disabled = true;
-  btn.onclick = null;
+  btn.onclick  = null;
 
-  showCortex("Register your accounts in the Discovery window.");
+  // Actualizar el info popup al step actual (github) antes de abrir Discovery
+  currentInfoStep = 'github';
 
-  // Lanzar Chrome en modo discovery — AQUÍ y solo aquí
   await kickoffDiscovery();
-
-  // Arrancar polling de cuentas cada 3 segundos
-  identityPollTimer = setInterval(async () => {
-    const result = await window.onboarding.pollIdentity();
-    if (!result.success) return;
-
-    ['google', 'gemini', 'github'].forEach(name => {
-      if (result.accounts[name] && !activeAccounts.has(name)) {
-        activeAccounts.add(name);
-        document.getElementById('acc-' + name)?.classList.add('active');
-        log('info', `account confirmed: ${name}`);
-      }
-    });
-
-    if (REQUIRED_ACCOUNTS.every(a => activeAccounts.has(a))) {
-      clearInterval(identityPollTimer);
-      identityPollTimer = null;
-      checkIdentityReady();
-    }
-  }, 3000);
 }
 
 async function kickoffDiscovery() {
+  // Fase 1: lanzar Discovery
+  showCortex("Opening Discovery window…");
   log('info', 'IPC → onboarding:launch-discovery — email: ' + (userEmail || '(none)'));
+
   const result = await window.onboarding.launchDiscovery({ email: userEmail });
-  log(result.success ? 'info' : 'error', `IPC ← onboarding:launch-discovery — success: ${result.success}`);
+  log(result.success ? 'info' : 'error',
+      `IPC ← onboarding:launch-discovery — success: ${result.success}`);
 
   if (!result.success) {
     showCortex("Could not launch Discovery. Retry.");
     const btn = document.getElementById('btn-continue-identity');
     btn.textContent = 'Validate';
-    btn.disabled = false;
-    btn.onclick = handleIdentityBtn;
+    btn.disabled    = false;
+    btn.onclick     = handleIdentityBtn;
     return;
   }
 
-  // Enviar step google_login a Chrome
-  log('info', 'IPC → onboarding:navigate — step: google_login');
-  const navResult = await window.onboarding.navigate({ step: 'google_login', email: userEmail });
-  log(navResult.success ? 'info' : 'error', `IPC ← onboarding:navigate — success: ${navResult.success}`);
+  // Fase 2: navegar a github_auth en Chrome
+  // Fix 2: era 'google_login' — ese step ID no existe en onboarding_steps.json
+  showCortex("Connecting to GitHub…");
+  log('info', 'IPC → onboarding:navigate — step: github_auth');
+
+  const navResult = await window.onboarding.navigate({
+    step: 'github_auth',
+    email: userEmail
+  });
+  log(navResult.success ? 'info' : 'error',
+      `IPC ← onboarding:navigate — success: ${navResult.success}`);
+
+  if (!navResult.success) {
+    showCortex(
+      "Navigation failed — Chrome may not have opened. Retry or check the (?) for help."
+    );
+    const btn = document.getElementById('btn-continue-identity');
+    btn.textContent = 'Validate';
+    btn.disabled    = false;
+    btn.onclick     = handleIdentityBtn;
+    return;
+  }
+
+  // Fase 3: instrucción al usuario — qué tiene que hacer en Chrome
+  showCortex(
+    "In Chrome: Settings → Developer Settings → Personal access tokens → Tokens (classic) → Generate → select repo & read:org → copy."
+  );
+
+  // Timeout de 3 minutos — mensaje de ayuda si el usuario tarda
+  identityTimeoutId = setTimeout(() => {
+    if (activeAccounts.has('github')) return; // ya confirmado, no mostrar
+    showCortex(
+      "Taking longer than expected. Click (?) for step-by-step instructions."
+    );
+  }, 3 * 60 * 1000);
+
+  // Fase 4: poll cada 3 segundos
+  // Fix 3: era result.accounts[name] — ese campo no existe.
+  // El handler devuelve result.steps con IDs del JSON (github_auth, google_auth…)
+  identityPollTimer = setInterval(async () => {
+    const pollResult = await window.onboarding.pollIdentity();
+    if (!pollResult.success) return;
+
+    if (pollResult.steps?.github_auth && !activeAccounts.has('github')) {
+      activeAccounts.add('github');
+      document.getElementById('acc-github')?.classList.add('active');
+      log('info', 'account confirmed: github');
+      checkIdentityReady();
+    }
+  }, 3000);
 }
 
 function checkIdentityReady() {
   const allDone = REQUIRED_ACCOUNTS.every(a => activeAccounts.has(a));
   if (!allDone) return;
 
-  log('info', 'all required accounts confirmed — identity ready');
+  // Limpiar timers
+  clearInterval(identityPollTimer);
+  clearTimeout(identityTimeoutId);
+  identityPollTimer = null;
+  identityTimeoutId = null;
+
+  log('info', 'github confirmed — identity ready');
   document.getElementById('sn-identity')?.classList.add('established');
-  showCortex("Identity confirmed. Vault layer next.");
+  showCortex("GitHub connected. Vault layer next.");
 
   const btn = document.getElementById('btn-continue-identity');
   btn.textContent = 'Continue';
-  btn.disabled = false;
-  btn.onclick = () => goTo(2);
+  btn.disabled    = false;
+  btn.onclick     = () => goTo(2);
 }
 
 // ── SCREEN 3 — Nucleus ─────────────────────────────────────────────────────
 async function loadOrgs() {
   const result = await window.onboarding.listOrgs();
-  const list = document.getElementById('org-list');
+  const list   = document.getElementById('org-list');
   if (!list) return;
   list.innerHTML = '';
 
@@ -205,7 +331,7 @@ function checkNucleusReady() {
 
 function initNucleus() {
   log('info', `initNucleus — org: ${selectedOrg} | path: ${selectedFolderPath}`);
-  goTo(4);
+  goTo(4); // Fix 4 se activa aquí: goTo(4) llama runNucleusTerminal()
 }
 
 // ── SCREEN 4 — Nucleus Init Terminal ───────────────────────────────────────
@@ -228,7 +354,8 @@ function runNucleusTerminal() {
     org:  selectedOrg,
     path: selectedFolderPath
   }).then(result => {
-    log(result.success ? 'info' : 'error', `IPC ← onboarding:init-nucleus — success: ${result.success}`);
+    log(result.success ? 'info' : 'error',
+        `IPC ← onboarding:init-nucleus — success: ${result.success}`);
     if (result.success) {
       const done = document.createElement('div');
       done.className = 'terminal-line done';
@@ -316,12 +443,14 @@ async function createMandateAndContinue() {
     project:     selectedProject.name,
     projectPath: selectedProject.path || ''
   });
-  log(result.success ? 'info' : 'error', `IPC ← onboarding:create-mandate — success: ${result.success}`);
+  log(result.success ? 'info' : 'error',
+      `IPC ← onboarding:create-mandate — success: ${result.success}`);
 
   if (result.success) {
     log('info', 'IPC → onboarding:navigate — step: success');
     const navResult = await window.onboarding.navigate({ step: 'success' });
-    log(navResult.success ? 'info' : 'error', `IPC ← onboarding:navigate — success: ${navResult.success}`);
+    log(navResult.success ? 'info' : 'error',
+        `IPC ← onboarding:navigate — success: ${navResult.success}`);
     goTo(6);
   } else {
     if (btn) {
@@ -364,13 +493,13 @@ async function completeOnboarding() {
     workspaceUrl: 'http://localhost:3000'
   });
 
-  log(result.success ? 'info' : 'error', `IPC ← onboarding:complete — success: ${result.success}`);
+  log(result.success ? 'info' : 'error',
+      `IPC ← onboarding:complete — success: ${result.success}`);
   if (!result.success) {
     log('error', `completeOnboarding failed: ${result.error}`);
     showCortex('Handoff failed: ' + result.error);
   }
-  // Si success: Electron redimensiona y carga la URL.
-  // El renderer no necesita hacer nada más.
+  // Si success: Electron redimensiona y carga la URL — el renderer no hace nada más.
 }
 
 // ── INIT ───────────────────────────────────────────────────────────────────
