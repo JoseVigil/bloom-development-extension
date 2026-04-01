@@ -122,6 +122,10 @@ elias analisis shdpci.ko FALLIDO
 https://claude.ai/chat/a218cea2-b61e-407e-9716-cced3f6b4d42
 bloomaut session nocturna
 https://claude.ai/chat/bc3392a9-c25c-4f33-b280-af1166b661ed
+btips cron logging
+https://claude.ai/chat/608c3857-afe7-49be-bc9a-f3cfcd10631e
+bloomaut synway telemetry
+https://claude.ai/chat/e89cab76-3186-4a45-a3e6-e656af4a2029
 
 
 btip tree 
@@ -595,9 +599,6 @@ temporal server remoto con nexus
 https://chatgpt.com/c/69bd4ba4-0854-83e9-85d1-8b9b10954a64
 
 
-
-
-
 gestureos Auditoría de comandos BTIPS en brain
 https://claude.ai/chat/77caaf80-bced-405e-baad-a2446d3c3a4c
 
@@ -606,3 +607,11 @@ https://claude.ai/chat/32a589c0-4aca-4c38-8d34-105a5e4ebc5a
 
 padkite Automatizar conexión a gateway a través de tunnel Cloudflare
 https://claude.ai/chat/32a589c0-4aca-4c38-8d34-105a5e4ebc5a
+
+harness 
+elias
+https://claude.ai/chat/18e0fe9b-89cf-4189-b824-188968580cf2
+
+harness-ionpump research
+bloomaut 
+https://claude.ai/chat/b623f3aa-e9bb-4e2c-992f-2efa6ffc0b9b

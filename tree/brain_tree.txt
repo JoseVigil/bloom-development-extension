@@ -151,6 +151,7 @@ bloom-development-extension/
     │   │   ├── list_projects.py
     │   │   ├── onboarding_complete.py
     │   │   ├── onboarding_status.py
+    │   │   ├── onboarding_steps_loader.py
     │   │   ├── project_info.py
     │   │   ├── status.py
     │   │   └── sync.py

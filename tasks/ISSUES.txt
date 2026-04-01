@@ -109,7 +109,8 @@ btips
 https://claude.ai/chat/10b06c7c-a33c-430d-bde0-68aa32813a77
 roamtouch
 https://claude.ai/chat/38a0822e-b645-4c86-b39b-62f4afe93aa7
-synway bajar archivos de maestro server
+
+synway bajar archivos de maestro server ubuntu
 https://claude.ai/chat/f883b2b1-52d0-4d5f-acac-bae9209dda2a
 
 notimationi synway patch2
@@ -117,6 +118,9 @@ https://claude.ai/chat/219afb12-30cf-46d8-b6e5-48286b517b10
 
 uitool synway patch2 review resolve
 https://claude.ai/chat/0f94690b-c88c-4e53-9285-25343d5c544e
+
+noti gmail port state visible doc #44
+https://claude.ai/chat/0353f0a1-9bb4-45d2-862d-b4ed509d5d0c
 
 jose gmail telemetry download
 https://claude.ai/chat/be7f3259-c646-4db3-afaa-7968a3758526
@@ -128,6 +132,16 @@ https://claude.ai/chat/5abc4865-0d28-4887-825c-50b268470708
 
 gestureos cortex discovery para onboarding
 https://claude.ai/chat/928c8919-4901-4820-804e-220a13ad302b
+
+btips
+synway crear telemetry con cron
+https://claude.ai/chat/608c3857-afe7-49be-bc9a-f3cfcd10631e
+
+noti gmail
+Diagnóstico de telemetría y salud del gateway Synway
+https://claude.ai/chat/aae900f2-ca46-4e27-a21d-42197930dd6c
+
+
 
 
 
