@@ -119,6 +119,10 @@ https://claude.ai/chat/219afb12-30cf-46d8-b6e5-48286b517b10
 uitool synway patch2 review resolve
 https://claude.ai/chat/0f94690b-c88c-4e53-9285-25343d5c544e
 
+nenes 
+board patch 
+https://claude.ai/chat/a0b46691-a73d-4573-b640-d9c856d49ca2
+
 noti gmail port state visible doc #44
 https://claude.ai/chat/0353f0a1-9bb4-45d2-862d-b4ed509d5d0c
 
@@ -137,9 +141,36 @@ btips
 synway crear telemetry con cron
 https://claude.ai/chat/608c3857-afe7-49be-bc9a-f3cfcd10631e
 
+jose gmail
+Análisis completo del watchdog WD v10
+https://claude.ai/chat/5f8f6433-6693-44a7-af5c-8fef460eb73a
+
+roamingpaths 
+Watchdog Deep Monitor 
+https://claude.ai/chat/b0760eeb-a342-4a76-8b87-4fc9e7b785f6
+
 noti gmail
 Diagnóstico de telemetría y salud del gateway Synway
 https://claude.ai/chat/aae900f2-ca46-4e27-a21d-42197930dd6c
+
+nenes 
+c8_watchdog
+https://claude.ai/chat/bc555645-c8e5-435e-b4d3-c69113f9dea7
+
+
+padkite
+doc #60 hito Watchdog system deployment options
+https://claude.ai/chat/3c51a111-e0f7-4211-98a4-f9c246a2798c
+
+elias
+ctiinit resuelto 
+https://claude.ai/chat/02fd26d3-e311-4ac5-9a6e-051131908f27
+
+
+
+
+
+
 
 
 

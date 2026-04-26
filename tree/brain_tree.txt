@@ -134,6 +134,15 @@ bloom-development-extension/
     │   │   ├── unlock.py
     │   │   ├── update.py
     │   │   └── validate.py
+    │   ├── ionpump/
+    │   │   ├── __init__.py
+    │   │   ├── auth.ion
+    │   │   ├── ion.manifest.json
+    │   │   ├── ionpump_inspect.py
+    │   │   ├── ionpump_reload.py
+    │   │   ├── ionpump_test.py
+    │   │   ├── ionpump_validate.py
+    │   │   └── versions.json
     │   ├── logs/
     │   │   └── logs.py
     │   ├── nucleus/
@@ -272,6 +281,17 @@ bloom-development-extension/
     │   │   ├── staging_manager.py
     │   │   └── validation_manager.py
     │   ├── intent_manager.py
+    │   ├── ionpump/
+    │   │   ├── __init__.py
+    │   │   ├── ionpump_executor.py
+    │   │   ├── ionpump_ipc.py
+    │   │   ├── ionpump_loader.py
+    │   │   ├── ionpump_manager.py
+    │   │   ├── ionpump_models.py
+    │   │   ├── ionpump_registry.py
+    │   │   ├── ionpump_state.py
+    │   │   ├── ionpump_validator.py
+    │   │   └── synapse_ipc_server.py
     │   ├── logs/
     │   │   └── logs_manager.py
     │   ├── nucleus_inspector.py
@@ -296,6 +316,7 @@ bloom-development-extension/
     │   │       ├── __init__.py
     │   │       ├── __pycache__/ [... cache]
     │   │       ├── discovery_generator.py
+    │   │       ├── harness_generator.py
     │   │       ├── landing_generator.py
     │   │       └── templates/
     │   │           ├── __init__.py
@@ -310,6 +331,11 @@ bloom-development-extension/
     │   │           │   ├── onboarding.js
     │   │           │   ├── script.js
     │   │           │   └── styles.css
+    │   │           ├── harness/
+    │   │           │   ├── __init__.py
+    │   │           │   ├── index.html
+    │   │           │   ├── ion.manifest.json
+    │   │           │   └── ionpump_protocol.js
     │   │           └── landing/
     │   │               ├── __init__.py
     │   │               ├── __pycache__/ [... cache]

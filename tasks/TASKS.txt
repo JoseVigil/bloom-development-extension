@@ -128,6 +128,14 @@ bloomaut synway telemetry
 https://claude.ai/chat/e89cab76-3186-4a45-a3e6-e656af4a2029
 
 
+notimation
+Estrategias para evitar patches driver - watchdog HwCloseBoard
+https://grok.com/c/0bce5114-6121-45c7-b7c4-30cfc3025afe?rid=76fd1cad-1133-4150-b302-f4393aa4f622
+
+noti gmail synway watchdog
+https://grok.com/c/c376934c-4abd-4f24-9037-c8a3d76be6da?rid=2149c622-28ec-4382-81e7-224d8ad6c513
+
+
 btip tree 
 https://claude.ai/chat/ac053287-db26-4a06-ac8f-98c1a8e392e7
 
@@ -567,7 +575,6 @@ https://claude.ai/chat/18d86c8a-f724-47c0-a0fd-482834928a6b
 jose gmail CMU course
 https://modernaicourse.org/
 
-
 elias langchain
 https://claude.ai/chat/0433d96d-d5ec-44a3-a3b2-eddf9f525b0f
 
@@ -598,7 +605,6 @@ https://claude.ai/chat/8fca38f2-00c1-4a02-96a1-2ab686808fdd
 temporal server remoto con nexus
 https://chatgpt.com/c/69bd4ba4-0854-83e9-85d1-8b9b10954a64
 
-
 gestureos Auditoría de comandos BTIPS en brain
 https://claude.ai/chat/77caaf80-bced-405e-baad-a2446d3c3a4c
 
@@ -611,7 +617,31 @@ https://claude.ai/chat/32a589c0-4aca-4c38-8d34-105a5e4ebc5a
 harness 
 elias
 https://claude.ai/chat/18e0fe9b-89cf-4189-b824-188968580cf2
-
 harness-ionpump research
 bloomaut 
 https://claude.ai/chat/b623f3aa-e9bb-4e2c-992f-2efa6ffc0b9b
+retomar onboarding
+nenes
+https://claude.ai/chat/bc66f2ba-4621-49ae-9812-ebf8100f2ee0
+
+uitool
+busybox  firmware  synway 
+https://chatgpt.com/c/69cfda09-02cc-83e9-9491-8d2f6ff35b98
+
+elias 
+hasp libhasp_linux.so
+https://claude.ai/chat/a05d889b-8db6-4f5e-8907-8e457abd6a56
+
+roamtocuh 
+synway panel web
+https://claude.ai/chat/b7e49779-72e1-4f2a-b03b-3c8c628300d6
+
+jose gmail 
+web watchdog
+https://claude.ai/chat/bb6539f0-527c-4e89-91e4-ddaad49ce940
+
+elias
+gsm_runtime
+https://grok.com/c/cca39139-846e-4f06-9503-0a8649fae674?rid=6528c93b-74b9-498a-b2bd-da35cd122f29
+
+

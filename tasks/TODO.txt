@@ -1,9 +1,20 @@
-- Compile
-Compilar el nuevo plugin bundle npm run build
-installer/native/bin/bootstrap/bundle.js
-- Startup 
-nucleus correr comando launch y verificar que funciona. Recordar que el pronlema de fondo del comando es que no estaban levantando los servicios.
+- Correr comandos nucleus para onboarding, probarlos. No son faciles por que tienen 
 
-- Onboarding
-Remover hearbeat del launch register, seguir este prompt despues de 3pm
-https://claude.ai/chat/5d21844f-af30-4f59-82c1-b502ac8205b8
+gestureos
+Flujo de autenticación GitHub en Cortex: investigación de onboarding
+https://claude.ai/chat/928c8919-4901-4820-804e-220a13ad302b
+
+roamtouch
+Análisis de Temporal en Nucleus y troubleshooting con Sentinel
+https://claude.ai/chat/8fe886e7-c00b-43f6-b806-9140eeff6f6e
+
+noti grmail
+Migración de Sentinel y Temporal a arquitectura en la nube
+https://claude.ai/chat/52b34bf6-a893-442b-aa75-368e116577b4
+
+Dificultad: 
+Se me hace muy dificil hacer todo el flujo de debugging cuando cortex tiene una complejidad sofisticada y nuecleus tambien, hay muchos elementos en la cadena y necesitamos un medio de control de messaing. Una consola de debugging. Por ejemmplo que nucleus pueda disparar un comando de onboarding, le contestemos lo que es esperable simulando lo que el usuario va a hacer o interactuar, trabajar sobre la respues an nucleus mientras cortex trabaja en generar esa respuesta genuinamente por el usuario. No tenemos canal de debugging. 
+
+Necesitamos identificar para el proceso de onboarding un mecanismo que podamos identificar la trasnmision de mensaje de synapse facilmente. Es decir crear un nuevo canal que sea para por ejemplo un chat o que sea solo de control para ver si funciona, tambien que pueda contestarle a el comando synapse de nucleus onboardin respuestas hardcodeadas para simular el flujo. De lo contrario se hace muy dificil teniendo que escuchar la validacion, teniendo que poner a trabajar cortex en entender los botones etc. Creo que en este momento lo mejor es crear un mecanismo de despuesta a todos los comandos para poder contestar sobre pruebas y eso nos sacaria del cuello de botella. Se me ocurre que en discovery la misma pagina podemos hacer un debugger, un input de respuesta que muestra el comando que se esta enviando y la informacion que se solicita y se pueda responder lo que la ui despues va a terminar haciendo, sino va a ser demasiado dificil tener que poner a trabajar todo. Podemos crear el protocolo, probarlo y despues una vez esta instrumentado aplicarlo a una web especifica. 
+
+Quiero crear un comando 

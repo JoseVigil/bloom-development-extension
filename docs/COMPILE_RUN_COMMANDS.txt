@@ -178,15 +178,308 @@ F12 → Console → pega esto:
 document.querySelectorAll('[download]').forEach(el => console.log(el.download || el.href))
 
 
-$l=New-Object System.Net.Sockets.TcpListener([System.Net.IPAddress]::Any,9999)
-$l.Start()
-$c=$l.AcceptTcpClient()
-$s=$c.GetStream()
-$f=[System.IO.File]::OpenRead("C:\tmp\run\bin\branch_hunter.sh")
-$f.CopyTo($s)
-$f.Close();$c.Close();$l.Stop()
 
-rm /tmp/SMGSvr_patched
-nc 192.168.1.X 9999 > /tmp/SMGSvr_patched
+NotiFirmware:
 
-New-Item branch_hunter.sh
+ Get-FileHash "C:\tmp\run\bin\liblantiq.so*" -Algorithm MD5 | Format-Table -AutoSize
+
+ Get-FileHash "C:\tmp\run\bin\shdpci*" -Algorithm MD5 | Format-Table -AutoSize
+
+ Get-FileHash "C:\tmp\run\bin\shdpci.*" -Algorithm MD5 | Format-Table -AutoSize
+ 
+  Get-FileHash "create_installer-v3.ps1" -Algorithm MD5 | Format-Table -AutoSize
+ 
+  Get-FileHash "firmware\noti-firmware-v14.tar.gz" -Algorithm MD5 | Format-Table -AutoSize
+  
+  Get-FileHash "C:\tmp\run\bin\shdpci.ko*" -Algorithm MD5 | Format-Table -AutoSize
+
+
+
+Get-FileHash "C:\tmp\run\bin\libshdpci.*" -Algorithm MD5 | Format-Table -AutoSize
+
+
+INSTALLER 
+
+WINDOWS 1
+
+powershell -ExecutionPolicy Bypass -File .\packer.ps1 --pack
+
+powershell -ExecutionPolicy Bypass -File .\packer.ps1 --copy 0
+
+Unblock-File .\packer.ps1
+
+.\packer.ps1 --pack
+
+.\packer.ps1 --copy 0
+
+WINDOWS 2
+
+.\packer.ps1 --input
+
+powershell -ExecutionPolicy Bypass -File create_installer-v3.ps1
+
+Get-FileHash "firmware\noti-firmware-v16.tar.gz" -Algorithm MD5
+
+Get-FileHash "shdpci.ko" -Algorithm MD5
+
+SEND RECEIVE BINARIES
+
+Windows origen
+
+.\sopack.ps1 --file C:\tmp\run\bin\liblantiq.so
+
+.\sopack.ps1 --copy 0   
+.\sopack.ps1 --copy 1
+.\sopack.ps1 --copy 2
+# ... etc
+
+Windows destino
+
+Unblock-File .\sopack.ps1
+
+.\sopack.ps1 --receive
+
+Get-FileHash "libshdpci.so" -Algorithm MD5
+
+Get-FileHash "shdpci.ko" -Algorithm MD5
+
+ls -la /mnt/flash/synway/shdcti/shdpci.ko.bak_DRIVER_20260414_0248
+
+
+4f54af54bd79ad48317b6f0ecd0d44b2
+
+Get-FileHash "C:\tmp\run\bin\liblantiq.so.patched" -Algorithm MD5
+
+
+
+nc 192.168.1.102 9996 > /usr/lib/liblantiq.so
+ls -la /usr/lib/liblantiq.so
+md5sum /usr/lib/liblantiq.so
+chmod +x /usr/lib/liblantiq.so
+
+
+nc 192.168.1.102 9996 > /mnt/flash/install/strace_5.10-1_mips_24kc.ipk
+ls -la /mnt/flash/install/strace_5.10-1_mips_24kc.ipk
+md5sum /mnt/flash/install/strace_5.10-1_mips_24kc.ipk
+chmod +x /mnt/flash/install/strace_5.10-1_mips_24kc.ipk
+
+
+$LauncherFile = "C:\tmp\run\files\received\strace_5.10-1_mips_24kc.ipk"
+Remove-NetFirewallRule -DisplayName "Gateway Upload 9996" -ErrorAction SilentlyContinue
+New-NetFirewallRule -DisplayName "Gateway Upload 9996" `
+    -Direction Inbound -Protocol TCP -LocalPort 9996 -Action Allow
+$listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Any, 9996)
+$listener.Start()
+$client = $listener.AcceptTcpClient()
+$stream = $client.GetStream()
+$file = [System.IO.File]::OpenRead($LauncherFile)
+$file.CopyTo($stream)
+$file.Close()
+$client.Close()
+$listener.Stop()
+Get-FileHash $LauncherFile -Algorithm MD5
+
+
+opkg install --force-depends /mnt/flash/install/strace_5.10-1_mipsel_24kc.ipk
+strace -V
+ 
+cp /mnt/flash/install/strace_5.10-1_mips_24kc.ipk /tmp/  
+
+/mnt/flash/install/strace_5.10-1_mips_24kc.ipk
+
+chmod +x usr/bin/strace
+
+usr/bin/strace -V
+
+
+
+
+Get-FileHash "C:\tmp\run\bin\shdpci.ko*" -Algorithm MD5 | Format-Table -AutoSize
+
+Get-FileHash "C:\tmp\run\bin\shdpci.ko" -Algorithm MD5
+
+
+nc 192.168.1.102 9996 > /usr/lib/liblantiq.so
+
+ls -la /usr/lib/liblantiq.so
+md5sum /usr/lib/liblantiq.so
+
+nc 192.168.1.102 9996 > /mnt/flash/synway/liblantiq.so
+
+ls -la /mnt/flash/synway/liblantiq.so
+md5sum /mnt/flash/synway/liblantiq.so
+
+chmod +x /usr/lib/liblantiq.so
+
+
+$LauncherFile = "C:\tmp\run\bin\shdpci.ko"
+Remove-NetFirewallRule -DisplayName "Gateway Upload 9996" -ErrorAction SilentlyContinue
+New-NetFirewallRule -DisplayName "Gateway Upload 9996" `
+    -Direction Inbound -Protocol TCP -LocalPort 9996 -Action Allow
+$listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Any, 9996)
+$listener.Start()
+$client = $listener.AcceptTcpClient()
+$stream = $client.GetStream()
+$file = [System.IO.File]::OpenRead($LauncherFile)
+$file.CopyTo($stream)
+$file.Close()
+$client.Close()
+$listener.Stop()
+Get-FileHash $LauncherFile -Algorithm MD5
+
+
+C:\tmp\run\bin\out\liblantiq.so.patch6B
+5C83D685ACB31C139798F992A6D64791
+
+
+/mnt/flash/shdpci_patch10.ko
+
+
+ls -la /mnt/flash/synway/shdcti/shdpci.ko.bak_DRIVER_20260414_0248
+
+nc 192.168.1.102 9996 > /mnt/flash/shdpci_patch10.ko
+
+ls -la /mnt/flash/shdpci_patch10.ko
+md5sum /mnt/flash/shdpci_patch10.ko
+chmod +x /mnt/flash/shdpci_patch10.ko
+
+
+nc 192.168.1.102 9996 > /mnt/flash/synway/shdcti/shdpci.ko
+
+ls -la /mnt/flash/synway/shdcti/shdpci.ko
+md5sum /mnt/flash/synway/shdcti/shdpci.ko
+chmod +x /mnt/flash/synway/shdcti/shdpci.ko
+
+
+$LauncherFile = "C:\tmp\run\bin\shdpci.ko"
+Remove-NetFirewallRule -DisplayName "Gateway Upload 9996" -ErrorAction SilentlyContinue
+New-NetFirewallRule -DisplayName "Gateway Upload 9996" `
+    -Direction Inbound -Protocol TCP -LocalPort 9996 -Action Allow
+$listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Any, 9996)
+$listener.Start()
+$client = $listener.AcceptTcpClient()
+$stream = $client.GetStream()
+$file = [System.IO.File]::OpenRead($LauncherFile)
+$file.CopyTo($stream)
+$file.Close()
+$client.Close()
+$listener.Stop()
+Get-FileHash $LauncherFile -Algorithm MD5
+
+
+
+
+
+
+
+sh /mnt/flash/d.sh /mnt/flash/cron/ShConfigKing.ini
+
+ls -la /mnt/flash/cron/ShConfigKing.ini
+
+nc 192.168.1.102 9996 > /mnt/flash/cron/ShConfigKing.ini
+
+$LauncherFile = "C:\tmp\run\files\ShConfigKing.ini"
+Remove-NetFirewallRule -DisplayName "Gateway Upload 9996" -ErrorAction SilentlyContinue
+New-NetFirewallRule -DisplayName "Gateway Upload 9996" `
+    -Direction Inbound -Protocol TCP -LocalPort 9996 -Action Allow
+$listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Any, 9996)
+$listener.Start()
+$client = $listener.AcceptTcpClient()
+$stream = $client.GetStream()
+$file = [System.IO.File]::OpenRead($LauncherFile)
+$file.CopyTo($stream)
+$file.Close()
+$client.Close()
+$listener.Stop()
+Get-FileHash $LauncherFile -Algorithm MD5
+
+
+
+
+
+# md5sum /usr/lib/libshpa3.so
+5293209af1c9678e0ada6342f52d8343  /usr/lib/libshpa3.so
+
+
+
+Get-FileHash "C:\tmp\run\bin\libshpa3-patch4B.so" -Algorithm MD5 | Format-Table -AutoSize
+C73ACFB8A1BFA6B8A4527B2DE3D6B7EF
+
+
+
+cp /usr/lib/libshpa3.so /usr/lib/libshpa3.pre4B.so
+
+sh /mnt/flash/d.sh /usr/lib/libshpa3.so
+
+ls -la /usr/lib/libshpa3.so
+
+nc 192.168.1.102 9996 > /mnt/flash/synway/libshpa3.so
+
+$LauncherFile = "C:\tmp\run\bin\libshpa3-pathc4C.so"
+Remove-NetFirewallRule -DisplayName "Gateway Upload 9996" -ErrorAction SilentlyContinue
+New-NetFirewallRule -DisplayName "Gateway Upload 9996" `
+    -Direction Inbound -Protocol TCP -LocalPort 9996 -Action Allow
+$listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Any, 9996)
+$listener.Start()
+$client = $listener.AcceptTcpClient()
+$stream = $client.GetStream()
+$file = [System.IO.File]::OpenRead($LauncherFile)
+$file.CopyTo($stream)
+$file.Close()
+$client.Close()
+$listener.Stop()
+Get-FileHash $LauncherFile -Algorithm MD5
+
+
+
+
+
+ 
+
+
+
+Get-FileHash "C:\tmp\run\bin\libshdpci.so" -Algorithm MD5 | Format-Table -AutoSize
+
+
+sh /mnt/flash/d.sh /mnt/flash/synway/libshdpci.so
+
+cp /mnt/flash/synway/libshdpci.so /mnt/flash/synway/libshdpci.pre7B.so
+
+nc 192.168.1.102 9996 > /mnt/flash/synway/libshdpci.so
+
+ls -la /mnt/flash/synway/libshdpci.so
+md5sum /mnt/flash/synway/libshdpci.so
+
+$LauncherFile = "C:\tmp\run\bin\libshdpci.so"
+Remove-NetFirewallRule -DisplayName "Gateway Upload 9996" -ErrorAction SilentlyContinue
+New-NetFirewallRule -DisplayName "Gateway Upload 9996" `
+    -Direction Inbound -Protocol TCP -LocalPort 9996 -Action Allow
+$listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Any, 9996)
+$listener.Start()
+$client = $listener.AcceptTcpClient()
+$stream = $client.GetStream()
+$file = [System.IO.File]::OpenRead($LauncherFile)
+$file.CopyTo($stream)
+$file.Close()
+$client.Close()
+$listener.Stop()
+Get-FileHash $LauncherFile -Algorithm MD5
+
+
+# md5sum /mnt/flash/synway/libshdpci.so
+  7978ca18dfdea7bd28eabd8d10e84116  /mnt/flash/synway/libshdpci.so
+  
+  7978CA18DFDEA7BD28EABD8D10E84116
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+ sh /mnt/flash/d.sh /mnt/flash/smgp_patch2
