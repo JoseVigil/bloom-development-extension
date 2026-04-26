@@ -22,17 +22,19 @@ import (
 
 func init() {
 	core.RegisterCommand("IDENTITY", func(c *core.Core) *cobra.Command {
+		var devMode bool // NUEVO
 		cmd := &cobra.Command{
 			Use:   "seed [alias] [is_master]",
 			Short: "Registra una nueva identidad de perfil",
 			Args:  cobra.ExactArgs(2),
 			Example: `  sentinel seed profile_001 true
+  sentinel seed dev_profile false --dev
   sentinel --json seed burner_temp false | jq .`,
 			Run: func(cmd *cobra.Command, args []string) {
 				alias := args[0]
 				isMaster, _ := strconv.ParseBool(args[1])
 
-				uuid, profilePath, err := HandleSeed(c, alias, isMaster)
+				uuid, profilePath, err := HandleSeed(c, alias, isMaster, devMode) // MODIFICADO
 				if err != nil {
 					if c.IsJSON {
 						outputSeedError(err)
@@ -49,6 +51,10 @@ func init() {
 				}
 			},
 		}
+
+		// NUEVO: flag --dev
+		cmd.Flags().BoolVar(&devMode, "dev", false,
+			"Enable dev mode: deploys Harness UI to extension via Brain")
 
 		if cmd.Annotations == nil {
 			cmd.Annotations = make(map[string]string)
@@ -119,7 +125,7 @@ type CortexMetadata struct {
 	Compatibility string `json:"compatibility"`
 }
 
-func HandleSeed(c *core.Core, alias string, isMaster bool) (string, string, error) {
+func HandleSeed(c *core.Core, alias string, isMaster bool, devMode bool) (string, string, error) {
 	// Verificar alias duplicado
 	registry_data := loadProfilesRegistry(c)
 	for _, p := range registry_data.Profiles {
@@ -193,6 +199,9 @@ func HandleSeed(c *core.Core, alias string, isMaster bool) (string, string, erro
 	args := []string{"--json", "profile", "create", alias}
 	if isMaster {
 		args = append(args, "--master")
+	}
+	if devMode {
+		args = append(args, "--dev") // NUEVO: pasa el flag a Brain
 	}
 
 	c.Logger.Info("[SEED] Executing: %s %v", sm.BrainPath, args)

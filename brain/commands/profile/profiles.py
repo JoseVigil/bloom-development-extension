@@ -257,13 +257,14 @@ class ProfilesLaunchCommand(BaseCommand):
         return CommandMetadata(
             name="launch",
             category=CommandCategory.PROFILE,
-            version="2.5.0",  # Version bump: Human Registration mode
+            version="2.6.0",  # Version bump: Harness mode support
             description="Lanza Chrome con un perfil de Worker usando spec-driven mode. "
                         "Con --override-register true --override-service google activa el "
                         "Modo Registro Humano (flags limpios, sin automatización, evasión anti-bot de Google).",
             examples=[
                 "brain profile launch <id> --spec /path/to/spec.json --mode discovery",
                 "brain profile launch abc12345 --spec ignition_spec.json --mode landing",
+                "brain profile launch abc12345 --spec spec.json --mode harness",
                 "brain profile launch abc12345 --spec spec.json -m discovery --json",
                 "brain profile launch abc12345 --spec spec.json -m discovery --override-register true --override-service google",
                 "brain profile launch abc12345 --spec spec.json -m discovery --override-heartbeat false --override-register true --override-service google"
@@ -276,14 +277,14 @@ class ProfilesLaunchCommand(BaseCommand):
             ctx: typer.Context,
             profile_id: str = typer.Argument(..., help="ID del perfil a lanzar"),
             spec: str = typer.Option(..., "--spec", "-s", help="Archivo JSON con especificación completa de lanzamiento (REQUERIDO)"),
-            mode: str = typer.Option("discovery", "--mode", "-m", help="Modo de página: 'discovery' (onboarding) o 'landing' (dashboard)"),
+            mode: str = typer.Option("discovery", "--mode", "-m", help="Modo de página: 'discovery' (onboarding), 'landing' (dashboard) o 'harness' (dev/test)"),
             override_heartbeat: Optional[bool] = typer.Option(None, "--override-heartbeat", help="Override heartbeat (true/false). Pisa el valor del perfil en el config JS antes de lanzar."),
             override_register: Optional[bool] = typer.Option(None, "--override-register", help="Override registro (true/false). true activa el Modo Registro Humano (flags limpios, sin automatización)."),
             override_service: Optional[str] = typer.Option(None, "--override-service", help="Servicio destino del registro: google | twitter | github | etc. Requerido junto a --override-register true.")
         ):
             """Lanza Chrome con el perfil especificado usando spec-driven mode.
 
-            Modo normal: requiere --spec y --mode (discovery o landing).
+            Modo normal: requiere --spec y --mode (discovery, landing o harness).
 
             Modo Registro Humano: añadir --override-register true --override-service google.
             Lanza Chromium sin flags de automatización para que Google no detecte bot.
@@ -323,14 +324,15 @@ class ProfilesLaunchCommand(BaseCommand):
                 logger.info(f"⚙️  Config overrides activos: {config_overrides}")
 
             # Validación de mode
-            valid_modes = ['discovery', 'landing']
+            valid_modes = ['discovery', 'landing', 'harness']
             if mode not in valid_modes:
                 logger.error(f"❌ Modo inválido: {mode}")
                 error_msg = (
                     f"⚙️ Modo '{mode}' no es válido\n\n"
                     "Modos disponibles:\n"
                     "  • discovery - Página de onboarding y validación inicial\n"
-                    "  • landing   - Dashboard del perfil (panel de control)\n\n"
+                    "  • landing   - Dashboard del perfil (panel de control)\n"
+                    "  • harness   - Entorno de pruebas y desarrollo (dev_mode)\n\n"
                     "Ejemplo:\n"
                     "  brain profile launch abc12345 --spec spec.json --mode discovery\n"
                 )
@@ -393,7 +395,7 @@ class ProfilesLaunchCommand(BaseCommand):
                 from brain.core.profile.profile_launcher import LaunchError
                 
                 if gc.verbose:
-                    mode_desc = "ONBOARDING" if mode == "discovery" else "DASHBOARD"
+                    mode_desc = "ONBOARDING" if mode == "discovery" else ("DASHBOARD" if mode == "landing" else "HARNESS")
                     typer.echo(f"📋 Lanzando con spec: {spec_path}", err=True)
                     typer.echo(f"📄 Página: {mode} ({mode_desc})", err=True)
                     if config_overrides.get("register") and config_overrides.get("service"):
@@ -456,8 +458,8 @@ class ProfilesLaunchCommand(BaseCommand):
         profile_id = launch_data.get('profile_id', 'N/A')
         mode = data.get('mode', 'unknown')
         
-        mode_emoji = "🔎" if mode == "discovery" else "🏠"
-        mode_desc = "ONBOARDING" if mode == "discovery" else "DASHBOARD"
+        mode_emoji = "🔎" if mode == "discovery" else ("🏠" if mode == "landing" else "🔬")
+        mode_desc = "ONBOARDING" if mode == "discovery" else ("DASHBOARD" if mode == "landing" else "HARNESS")
         
         typer.echo(f"\n✅ Perfil lanzado exitosamente")
         typer.echo(f"   ID:     {profile_id}")

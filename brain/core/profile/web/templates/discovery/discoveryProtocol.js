@@ -265,3 +265,235 @@ if (typeof window !== 'undefined') {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = PROTOCOL;
 }
+// ============================================================================
+// DISCOVERY PROTOCOL MANIFEST
+// Autodescriptive contract for the Harness ProtocolReader.
+// Append-only — does NOT modify the PROTOCOL object above.
+// ============================================================================
+
+if (typeof self !== 'undefined') {
+  self.DISCOVERY_PROTOCOL_MANIFEST = {
+    version: "1.0.0",
+    protocol: "discovery",
+    description: "Onboarding flow — extension handshake, GitHub auth, API key detection, account registration",
+
+    messages: [
+      {
+        id: "onboarding_navigate",
+        type: "command",
+        direction: "harness_to_background",
+        channel: "runtime",
+        description: "Navigate Discovery to a specific onboarding step",
+        payload_template: {
+          command: "onboarding_navigate",
+          payload: { step: "$STEP" }
+        },
+        parameters: [
+          {
+            name: "step",
+            type: "enum",
+            variable: "$STEP",
+            options: ["welcome", "github_auth", "github_confirm", "api_key", "complete"]
+          }
+        ]
+      },
+      {
+        id: "github_pat_detected",
+        type: "event",
+        direction: "harness_to_background",
+        channel: "runtime",
+        description: "Simulate clipboard monitor detecting a GitHub PAT",
+        payload_template: {
+          event: "GITHUB_PAT_DETECTED",
+          token: "$TOKEN"
+        },
+        parameters: [
+          {
+            name: "token",
+            type: "string",
+            variable: "$TOKEN",
+            default: "ghp_simulatedToken123456789"
+          }
+        ]
+      },
+      {
+        id: "github_token_stored",
+        type: "event",
+        direction: "harness_to_background",
+        channel: "runtime",
+        description: "Simulate user confirming GitHub token storage",
+        payload_template: {
+          event: "GITHUB_TOKEN_STORED",
+          token_fingerprint: "$FINGERPRINT",
+          profile_id: "$PROFILE_ID",
+          launch_id: "$LAUNCH_ID"
+        },
+        parameters: [
+          {
+            name: "token_fingerprint",
+            type: "string",
+            variable: "$FINGERPRINT",
+            default: "ghp_...abc123"
+          },
+          {
+            name: "profile_id",
+            type: "auto",
+            variable: "$PROFILE_ID",
+            source: "HARNESS_CONFIG.profileId"
+          },
+          {
+            name: "launch_id",
+            type: "auto",
+            variable: "$LAUNCH_ID",
+            source: "SYNAPSE_CONFIG.launchId"
+          }
+        ]
+      },
+      {
+        id: "api_key_registered",
+        type: "event",
+        direction: "harness_to_background",
+        channel: "runtime",
+        description: "Simulate successful API key registration",
+        payload_template: {
+          event: "API_KEY_REGISTERED",
+          key_fingerprint: "$KEY_FINGERPRINT",
+          profile_id: "$PROFILE_ID",
+          launch_id: "$LAUNCH_ID"
+        },
+        parameters: [
+          {
+            name: "key_fingerprint",
+            type: "string",
+            variable: "$KEY_FINGERPRINT",
+            default: "sk-...xyz789"
+          },
+          {
+            name: "profile_id",
+            type: "auto",
+            variable: "$PROFILE_ID",
+            source: "HARNESS_CONFIG.profileId"
+          },
+          {
+            name: "launch_id",
+            type: "auto",
+            variable: "$LAUNCH_ID",
+            source: "SYNAPSE_CONFIG.launchId"
+          }
+        ]
+      },
+      {
+        id: "account_registered",
+        type: "event",
+        direction: "harness_to_background",
+        channel: "runtime",
+        description: "Simulate account registration completion",
+        payload_template: {
+          event: "ACCOUNT_REGISTERED",
+          profile_id: "$PROFILE_ID",
+          launch_id: "$LAUNCH_ID"
+        },
+        parameters: [
+          {
+            name: "profile_id",
+            type: "auto",
+            variable: "$PROFILE_ID",
+            source: "HARNESS_CONFIG.profileId"
+          },
+          {
+            name: "launch_id",
+            type: "auto",
+            variable: "$LAUNCH_ID",
+            source: "SYNAPSE_CONFIG.launchId"
+          }
+        ]
+      },
+      {
+        id: "discovery_complete",
+        type: "event",
+        direction: "harness_to_background",
+        channel: "runtime",
+        description: "Simulate full discovery/onboarding flow completion",
+        payload_template: {
+          event: "DISCOVERY_COMPLETE",
+          profile_id: "$PROFILE_ID",
+          launch_id: "$LAUNCH_ID"
+        },
+        parameters: [
+          {
+            name: "profile_id",
+            type: "auto",
+            variable: "$PROFILE_ID",
+            source: "HARNESS_CONFIG.profileId"
+          },
+          {
+            name: "launch_id",
+            type: "auto",
+            variable: "$LAUNCH_ID",
+            source: "SYNAPSE_CONFIG.launchId"
+          }
+        ]
+      },
+      {
+        id: "handshake_confirmed",
+        type: "event",
+        direction: "harness_to_background",
+        channel: "runtime",
+        description: "Simulate extension handshake confirmation",
+        payload_template: {
+          event: "HANDSHAKE_CONFIRMED",
+          profile_id: "$PROFILE_ID",
+          launch_id: "$LAUNCH_ID"
+        },
+        parameters: [
+          {
+            name: "profile_id",
+            type: "auto",
+            variable: "$PROFILE_ID",
+            source: "HARNESS_CONFIG.profileId"
+          },
+          {
+            name: "launch_id",
+            type: "auto",
+            variable: "$LAUNCH_ID",
+            source: "SYNAPSE_CONFIG.launchId"
+          }
+        ]
+      },
+      {
+        id: "host_ready",
+        type: "event",
+        direction: "harness_to_background",
+        channel: "runtime",
+        description: "Simulate bloom-host signaling it is ready to receive commands",
+        payload_template: {
+          event: "HOST_READY",
+          profile_id: "$PROFILE_ID",
+          launch_id: "$LAUNCH_ID"
+        },
+        parameters: [
+          {
+            name: "profile_id",
+            type: "auto",
+            variable: "$PROFILE_ID",
+            source: "HARNESS_CONFIG.profileId"
+          },
+          {
+            name: "launch_id",
+            type: "auto",
+            variable: "$LAUNCH_ID",
+            source: "SYNAPSE_CONFIG.launchId"
+          }
+        ]
+      }
+    ],
+
+    observable_events: [
+      "HOST_READY",
+      "HANDSHAKE_CONFIRMED",
+      "API_KEY_REGISTERED",
+      "ACCOUNT_REGISTERED",
+      "DISCOVERY_COMPLETE"
+    ]
+  };
+}

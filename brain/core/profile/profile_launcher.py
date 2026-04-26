@@ -383,6 +383,9 @@ class ProfileLauncher:
             elif page_type == 'landing':
                 logger.info(f"🏠 Lanzando en modo LANDING")
                 logger.info(f"   → Dashboard del perfil")
+            elif page_type == 'harness':
+                logger.info(f"🔬 Lanzando en modo HARNESS")
+                logger.info(f"   → Entorno de pruebas y desarrollo")
             else:
                 logger.info(f"🎯 Lanzando en modo CUSTOM")
             
@@ -524,7 +527,7 @@ class ProfileLauncher:
             auto_generate = page_config.get('auto_generate', False)
             
             # Validar page_type
-            valid_types = ['discovery', 'landing', 'custom']
+            valid_types = ['discovery', 'landing', 'harness', 'custom']
             if page_type not in valid_types:
                 raise LaunchError(
                     f"Invalid page_config.type: '{page_type}'",
@@ -533,7 +536,7 @@ class ProfileLauncher:
                 )
             
             # Caso 1: target_url no especificado + page_type específico → auto
-            if not target_url_raw and page_type in ['discovery', 'landing']:
+            if not target_url_raw and page_type in ['discovery', 'landing', 'harness']:
                 logger.debug(f"  → Auto-generando URL para page_type={page_type}")
                 auto_generate = True
             
@@ -551,7 +554,7 @@ class ProfileLauncher:
                     raise LaunchError(
                         "Cannot auto-generate URL for page_config.type='custom'",
                         self.ERROR_SPEC_INVALID,
-                        {"suggestion": "Use 'discovery' or 'landing', or provide manual target_url"}
+                        {"suggestion": "Use 'discovery', 'landing' or 'harness', or provide manual target_url"}
                     )
                 
                 extension_id = self.paths.get_extension_id()
@@ -564,6 +567,10 @@ class ProfileLauncher:
                     url = f"chrome-extension://{extension_id}/landing/index.html"
                     logger.info(f"🏠 Modo LANDING: {url}")
                     logger.info("   → Dashboard del perfil (panel de control)")
+                elif page_type == 'harness':
+                    url = f"chrome-extension://{extension_id}/harness/index.html"
+                    logger.info(f"🔬 Modo HARNESS: {url}")
+                    logger.info("   → Entorno de pruebas y desarrollo")
                 
                 return url
             

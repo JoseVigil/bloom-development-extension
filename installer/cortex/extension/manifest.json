@@ -63,16 +63,19 @@
       "resources": [
         "discovery.synapse.config.js",
         "landing.synapse.config.js",
+        "harness.synapse.config.js",
         "discovery/*",
         "landing/*",
-        "discovery.synapse.config.js",
-        "landing.synapse.config.js",
         "discovery/index.html",
         "discovery/styles.css",
         "discovery/discovery.js",
+        "discovery/discoveryProtocol.js",
+        "discovery/ionpump_protocol.js",
         "landing/index.html",
         "landing/styles.css",
-        "landing/landing.js"
+        "landing/landing.js",
+        "harness/index.html",
+        "harness/*"
       ]
     }
   ],

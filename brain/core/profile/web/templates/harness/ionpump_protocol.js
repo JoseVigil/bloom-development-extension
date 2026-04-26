@@ -1,0 +1,339 @@
+// ============================================================================
+// IONPUMP PROTOCOL
+// Runtime protocol for IonPump web automation commands.
+// ============================================================================
+
+// ============================================================================
+// IONPUMP PROTOCOL MANIFEST
+// Autodescriptive contract for the Harness ProtocolReader.
+// Append-only — does NOT modify any existing PROTOCOL object.
+// ============================================================================
+
+if (typeof self !== 'undefined') {
+  self.IONPUMP_PROTOCOL_MANIFEST = {
+    version: "1.0.0",
+    protocol: "ionpump",
+    description: "IonPump runtime — web automation DOM commands and event triggers for registered ion sites",
+
+    messages: [
+      {
+        id: "dom_click",
+        type: "command",
+        direction: "harness_to_background",
+        channel: "runtime",
+        description: "Simulate a DOM_CLICK command on a CSS selector in a given tab",
+        payload_template: {
+          command: "DOM_CLICK",
+          tab_id: "$TAB_ID",
+          params: {
+            selector: "$SELECTOR"
+          }
+        },
+        parameters: [
+          {
+            name: "tab_id",
+            type: "string",
+            variable: "$TAB_ID",
+            default: "1"
+          },
+          {
+            name: "selector",
+            type: "string",
+            variable: "$SELECTOR",
+            default: "button[type='submit']"
+          }
+        ]
+      },
+      {
+        id: "dom_type",
+        type: "command",
+        direction: "harness_to_background",
+        channel: "runtime",
+        description: "Simulate a DOM_TYPE command — focus a field and type a value",
+        payload_template: {
+          command: "DOM_TYPE",
+          tab_id: "$TAB_ID",
+          params: {
+            selector: "$SELECTOR",
+            value: "$VALUE"
+          }
+        },
+        parameters: [
+          {
+            name: "tab_id",
+            type: "string",
+            variable: "$TAB_ID",
+            default: "1"
+          },
+          {
+            name: "selector",
+            type: "string",
+            variable: "$SELECTOR",
+            default: "input[name='username']"
+          },
+          {
+            name: "value",
+            type: "string",
+            variable: "$VALUE",
+            default: "test-value"
+          }
+        ]
+      },
+      {
+        id: "dom_wait",
+        type: "command",
+        direction: "harness_to_background",
+        channel: "runtime",
+        description: "Simulate a DOM_WAIT command — wait for a selector to appear in the DOM",
+        payload_template: {
+          command: "DOM_WAIT",
+          tab_id: "$TAB_ID",
+          params: {
+            selector: "$SELECTOR",
+            timeout_ms: "$TIMEOUT_MS"
+          }
+        },
+        parameters: [
+          {
+            name: "tab_id",
+            type: "string",
+            variable: "$TAB_ID",
+            default: "1"
+          },
+          {
+            name: "selector",
+            type: "string",
+            variable: "$SELECTOR",
+            default: "#app"
+          },
+          {
+            name: "timeout_ms",
+            type: "string",
+            variable: "$TIMEOUT_MS",
+            default: "5000"
+          }
+        ]
+      },
+      {
+        id: "dom_focus",
+        type: "command",
+        direction: "harness_to_background",
+        channel: "runtime",
+        description: "Simulate a DOM_FOCUS command — focus a specific element",
+        payload_template: {
+          command: "DOM_FOCUS",
+          tab_id: "$TAB_ID",
+          params: {
+            selector: "$SELECTOR"
+          }
+        },
+        parameters: [
+          {
+            name: "tab_id",
+            type: "string",
+            variable: "$TAB_ID",
+            default: "1"
+          },
+          {
+            name: "selector",
+            type: "string",
+            variable: "$SELECTOR",
+            default: "input[name='password']"
+          }
+        ]
+      },
+      {
+        id: "dom_scroll",
+        type: "command",
+        direction: "harness_to_background",
+        channel: "runtime",
+        description: "Simulate a DOM_SCROLL command — scroll to a position or element",
+        payload_template: {
+          command: "DOM_SCROLL",
+          tab_id: "$TAB_ID",
+          params: {
+            selector: "$SELECTOR",
+            behavior: "$BEHAVIOR"
+          }
+        },
+        parameters: [
+          {
+            name: "tab_id",
+            type: "string",
+            variable: "$TAB_ID",
+            default: "1"
+          },
+          {
+            name: "selector",
+            type: "string",
+            variable: "$SELECTOR",
+            default: "#submit-section"
+          },
+          {
+            name: "behavior",
+            type: "enum",
+            variable: "$BEHAVIOR",
+            options: ["smooth", "instant", "auto"]
+          }
+        ]
+      },
+      {
+        id: "dom_extract",
+        type: "command",
+        direction: "harness_to_background",
+        channel: "runtime",
+        description: "Simulate a DOM_EXTRACT command — extract text or attribute from an element",
+        payload_template: {
+          command: "DOM_EXTRACT",
+          tab_id: "$TAB_ID",
+          params: {
+            selector: "$SELECTOR",
+            attribute: "$ATTRIBUTE"
+          }
+        },
+        parameters: [
+          {
+            name: "tab_id",
+            type: "string",
+            variable: "$TAB_ID",
+            default: "1"
+          },
+          {
+            name: "selector",
+            type: "string",
+            variable: "$SELECTOR",
+            default: ".token-value"
+          },
+          {
+            name: "attribute",
+            type: "enum",
+            variable: "$ATTRIBUTE",
+            options: ["textContent", "value", "href", "data-id", "innerText"]
+          }
+        ]
+      },
+      {
+        id: "event_emit",
+        type: "event",
+        direction: "harness_to_background",
+        channel: "runtime",
+        description: "Simulate an EVENT_EMIT — trigger a named event in a tab context",
+        payload_template: {
+          command: "EVENT_EMIT",
+          tab_id: "$TAB_ID",
+          params: {
+            event: "$EVENT_NAME",
+            payload: {}
+          }
+        },
+        parameters: [
+          {
+            name: "tab_id",
+            type: "string",
+            variable: "$TAB_ID",
+            default: "1"
+          },
+          {
+            name: "event_name",
+            type: "enum",
+            variable: "$EVENT_NAME",
+            options: [
+              "GITHUB_PAT_DETECTED",
+              "GITHUB_TOKEN_STORED",
+              "ION_FLOW_STARTED",
+              "ION_FLOW_COMPLETED",
+              "ION_FLOW_ERROR"
+            ]
+          }
+        ]
+      },
+      {
+        id: "ion_execute_flow",
+        type: "command",
+        direction: "harness_to_background",
+        channel: "runtime",
+        description: "Trigger IonPump to execute a registered flow for a site",
+        payload_template: {
+          command: "ION_EXECUTE_FLOW",
+          site: "$SITE",
+          flow: "$FLOW",
+          tab_id: "$TAB_ID",
+          launch_id: "$LAUNCH_ID",
+          context: {}
+        },
+        parameters: [
+          {
+            name: "site",
+            type: "enum",
+            variable: "$SITE",
+            options: ["github.com", "claude.ai", "anthropic.com"]
+          },
+          {
+            name: "flow",
+            type: "enum",
+            variable: "$FLOW",
+            options: ["bootstrap", "handle_pat_detected", "await_confirmation", "send_prompt"]
+          },
+          {
+            name: "tab_id",
+            type: "string",
+            variable: "$TAB_ID",
+            default: "1"
+          },
+          {
+            name: "launch_id",
+            type: "auto",
+            variable: "$LAUNCH_ID",
+            source: "SYNAPSE_CONFIG.launchId"
+          }
+        ]
+      },
+      {
+        id: "ion_reload",
+        type: "command",
+        direction: "harness_to_background",
+        channel: "runtime",
+        description: "Force IonPump to hot-reload recipes for a specific site or all sites",
+        payload_template: {
+          command: "ION_RELOAD",
+          site: "$SITE"
+        },
+        parameters: [
+          {
+            name: "site",
+            type: "enum",
+            variable: "$SITE",
+            options: ["github.com", "--all"]
+          }
+        ]
+      },
+      {
+        id: "ion_inspect",
+        type: "command",
+        direction: "harness_to_background",
+        channel: "runtime",
+        description: "Request the current IonPump registry state — registered sites and loaded recipes",
+        payload_template: {
+          command: "ION_INSPECT",
+          launch_id: "$LAUNCH_ID"
+        },
+        parameters: [
+          {
+            name: "launch_id",
+            type: "auto",
+            variable: "$LAUNCH_ID",
+            source: "SYNAPSE_CONFIG.launchId"
+          }
+        ]
+      }
+    ],
+
+    observable_events: [
+      "ION_FLOW_STARTED",
+      "ION_FLOW_COMPLETED",
+      "ION_FLOW_ERROR",
+      "ION_RELOAD_DONE",
+      "ION_RELOAD_FAILED"
+    ]
+  };
+}

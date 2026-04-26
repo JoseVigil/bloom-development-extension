@@ -1,0 +1,1565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bloom Harness</title>
+  <style>
+    /* ===================================================================
+       RESET & BASE
+    =================================================================== */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg-primary:    #0d1117;
+      --bg-secondary:  #161b22;
+      --bg-tertiary:   #21262d;
+      --bg-hover:      #30363d;
+      --border:        #30363d;
+      --border-muted:  #21262d;
+      --text-primary:  #e6edf3;
+      --text-secondary:#8b949e;
+      --text-muted:    #484f58;
+      --accent:        #58a6ff;
+      --accent-hover:  #79c0ff;
+      --success:       #3fb950;
+      --warning:       #d29922;
+      --error:         #f85149;
+      --purple:        #bc8cff;
+      --orange:        #ffa657;
+      --font-mono:     'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      --font-sans:     -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      --radius:        6px;
+      --radius-lg:     12px;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    /* ===================================================================
+       LAYOUT
+    =================================================================== */
+    #harness-root {
+      display: grid;
+      grid-template-rows: 48px 1fr;
+      grid-template-columns: 280px 1fr 320px;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ===================================================================
+       TOP BAR
+    =================================================================== */
+    #topbar {
+      grid-column: 1 / -1;
+      grid-row: 1;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 16px;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border);
+      z-index: 10;
+    }
+
+    #topbar .logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--text-primary);
+    }
+
+    #topbar .logo svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    #topbar .badge {
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      background: rgba(188, 140, 255, 0.15);
+      color: var(--purple);
+      border: 1px solid rgba(188, 140, 255, 0.3);
+    }
+
+    #topbar .spacer { flex: 1; }
+
+    #connection-status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    .status-dot.connected    { background: var(--success); box-shadow: 0 0 6px var(--success); }
+    .status-dot.disconnected { background: var(--error); }
+    .status-dot.waiting      { background: var(--warning); animation: pulse 1.5s infinite; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.4; }
+    }
+
+    #profile-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+    }
+
+    /* ===================================================================
+       LEFT PANEL — PROTOCOL READER
+    =================================================================== */
+    #panel-protocols {
+      grid-column: 1;
+      grid-row: 2;
+      background: var(--bg-secondary);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .panel-header {
+      padding: 12px 14px 10px;
+      border-bottom: 1px solid var(--border-muted);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .panel-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-secondary);
+    }
+
+    .panel-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 0;
+    }
+
+    .panel-body::-webkit-scrollbar { width: 4px; }
+    .panel-body::-webkit-scrollbar-track { background: transparent; }
+    .panel-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* Protocol sections */
+    .protocol-section {
+      margin-bottom: 4px;
+    }
+
+    .protocol-section-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      cursor: pointer;
+      color: var(--text-secondary);
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      user-select: none;
+      border-radius: 0;
+      transition: background 0.1s;
+    }
+
+    .protocol-section-header:hover { background: var(--bg-hover); }
+
+    .protocol-section-header .chevron {
+      width: 12px;
+      height: 12px;
+      transition: transform 0.2s;
+      flex-shrink: 0;
+    }
+
+    .protocol-section-header.collapsed .chevron {
+      transform: rotate(-90deg);
+    }
+
+    .protocol-section-body {
+      overflow: hidden;
+    }
+
+    .protocol-section-body.collapsed { display: none; }
+
+    /* Message items */
+    .message-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 6px 14px 6px 24px;
+      cursor: pointer;
+      border-radius: 0;
+      transition: background 0.1s;
+      border-left: 2px solid transparent;
+    }
+
+    .message-item:hover {
+      background: var(--bg-hover);
+      border-left-color: var(--accent);
+    }
+
+    .message-item.selected {
+      background: rgba(88, 166, 255, 0.08);
+      border-left-color: var(--accent);
+    }
+
+    .message-item .msg-type-badge {
+      flex-shrink: 0;
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      margin-top: 1px;
+    }
+
+    .msg-type-badge.command {
+      background: rgba(88, 166, 255, 0.15);
+      color: var(--accent);
+    }
+
+    .msg-type-badge.event {
+      background: rgba(63, 185, 80, 0.15);
+      color: var(--success);
+    }
+
+    .message-item .msg-label {
+      font-size: 12px;
+      color: var(--text-primary);
+      line-height: 1.4;
+    }
+
+    .message-item .msg-desc {
+      font-size: 10px;
+      color: var(--text-muted);
+      line-height: 1.3;
+    }
+
+    /* ===================================================================
+       CENTER PANEL — SIMULATE
+    =================================================================== */
+    #panel-simulate {
+      grid-column: 2;
+      grid-row: 2;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--bg-primary);
+    }
+
+    #simulate-empty {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      color: var(--text-muted);
+    }
+
+    #simulate-empty svg {
+      width: 40px;
+      height: 40px;
+      opacity: 0.3;
+    }
+
+    #simulate-empty p {
+      font-size: 13px;
+    }
+
+    #simulate-form {
+      display: none;
+      flex-direction: column;
+      height: 100%;
+    }
+
+    #simulate-form.active {
+      display: flex;
+    }
+
+    .simulate-header {
+      padding: 14px 20px 12px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .simulate-header .msg-id {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .simulate-header .msg-description {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .simulate-header .msg-meta {
+      display: flex;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .meta-chip {
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 10px;
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+    }
+
+    .meta-chip.command { border-color: rgba(88,166,255,0.3); color: var(--accent); }
+    .meta-chip.event   { border-color: rgba(63,185,80,0.3);  color: var(--success); }
+
+    .simulate-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .simulate-body::-webkit-scrollbar { width: 4px; }
+    .simulate-body::-webkit-scrollbar-track { background: transparent; }
+    .simulate-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* Payload preview */
+    .payload-preview {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .payload-preview-header {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border-muted);
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    #payload-preview-code {
+      padding: 12px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-primary);
+      white-space: pre;
+      overflow-x: auto;
+      line-height: 1.6;
+    }
+
+    /* Parameter fields */
+    .field-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .field-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .field-label .field-type {
+      font-weight: 400;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      font-size: 10px;
+    }
+
+    .field-label .field-auto {
+      font-size: 9px;
+      padding: 1px 5px;
+      border-radius: 3px;
+      background: rgba(188, 140, 255, 0.1);
+      color: var(--purple);
+      font-weight: 600;
+    }
+
+    .field-input {
+      padding: 7px 10px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      outline: none;
+      transition: border-color 0.15s;
+      width: 100%;
+    }
+
+    .field-input:focus {
+      border-color: var(--accent);
+    }
+
+    .field-input:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .field-select {
+      padding: 7px 10px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      outline: none;
+      transition: border-color 0.15s;
+      width: 100%;
+      cursor: pointer;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238b949e' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 8px center;
+      padding-right: 28px;
+    }
+
+    .field-select:focus {
+      border-color: var(--accent);
+    }
+
+    .field-auto-value {
+      padding: 7px 10px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-muted);
+      border-radius: var(--radius);
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .field-auto-source {
+      font-size: 10px;
+      color: var(--text-muted);
+      opacity: 0.7;
+    }
+
+    .simulate-footer {
+      padding: 12px 20px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .btn {
+      padding: 7px 14px;
+      border-radius: var(--radius);
+      border: 1px solid transparent;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #0d1117;
+      border-color: var(--accent);
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: var(--accent-hover);
+      border-color: var(--accent-hover);
+    }
+
+    .btn-secondary {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      border-color: var(--border);
+    }
+
+    .btn-secondary:hover:not(:disabled) { background: var(--bg-hover); }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--text-secondary);
+      border-color: transparent;
+    }
+
+    .btn-ghost:hover:not(:disabled) { background: var(--bg-tertiary); }
+
+    #send-status {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-left: auto;
+    }
+
+    #send-status.ok    { color: var(--success); }
+    #send-status.error { color: var(--error); }
+
+    /* ===================================================================
+       RIGHT PANEL — CONFIG + LOG
+    =================================================================== */
+    #panel-right {
+      grid-column: 3;
+      grid-row: 2;
+      background: var(--bg-secondary);
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      padding: 0 8px;
+    }
+
+    .tab {
+      padding: 10px 12px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: color 0.15s, border-color 0.15s;
+      margin-bottom: -1px;
+      user-select: none;
+    }
+
+    .tab:hover { color: var(--text-secondary); }
+
+    .tab.active {
+      color: var(--text-primary);
+      border-bottom-color: var(--accent);
+    }
+
+    .tab-panel {
+      display: none;
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    .tab-panel.active {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .tab-panel::-webkit-scrollbar { width: 4px; }
+    .tab-panel::-webkit-scrollbar-track { background: transparent; }
+    .tab-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* Config panel */
+    #tab-config {
+      padding: 14px;
+      gap: 12px;
+    }
+
+    .config-section {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-muted);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .config-section-header {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border-muted);
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.7px;
+      color: var(--text-muted);
+    }
+
+    .config-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border-muted);
+    }
+
+    .config-row:last-child { border-bottom: none; }
+
+    .config-key {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-secondary);
+      flex-shrink: 0;
+    }
+
+    .config-val {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-primary);
+      text-align: right;
+      word-break: break-all;
+    }
+
+    .config-val.missing {
+      color: var(--text-muted);
+      font-style: italic;
+    }
+
+    .config-val.ok    { color: var(--success); }
+    .config-val.warn  { color: var(--warning); }
+
+    #config-raw-toggle {
+      margin: 10px 14px 0;
+      font-size: 11px;
+      color: var(--text-muted);
+      cursor: pointer;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    #config-raw {
+      display: none;
+      margin: 8px 14px 14px;
+      padding: 10px;
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-secondary);
+      white-space: pre;
+      overflow-x: auto;
+    }
+
+    /* Log panel */
+    #tab-log {
+      padding: 0;
+    }
+
+    #log-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border-muted);
+      flex-shrink: 0;
+    }
+
+    #log-filter {
+      flex: 1;
+      padding: 4px 8px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text-primary);
+      font-size: 11px;
+      font-family: var(--font-mono);
+      outline: none;
+    }
+
+    #log-filter:focus { border-color: var(--accent); }
+
+    #log-clear {
+      padding: 4px 8px;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text-secondary);
+      font-size: 10px;
+      cursor: pointer;
+    }
+
+    #log-clear:hover { background: var(--bg-hover); }
+
+    #log-entries {
+      flex: 1;
+      overflow-y: auto;
+      padding: 4px 0;
+    }
+
+    .log-entry {
+      display: grid;
+      grid-template-columns: 52px 40px 1fr;
+      gap: 6px;
+      padding: 4px 10px;
+      border-bottom: 1px solid var(--border-muted);
+      font-size: 10px;
+      font-family: var(--font-mono);
+      line-height: 1.5;
+      animation: fadeIn 0.15s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-2px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .log-entry:last-child { border-bottom: none; }
+
+    .log-time  { color: var(--text-muted); }
+    .log-level { font-weight: 700; }
+
+    .log-level.SEND  { color: var(--accent); }
+    .log-level.ACK   { color: var(--success); }
+    .log-level.RECV  { color: var(--purple); }
+    .log-level.ERR   { color: var(--error); }
+    .log-level.INFO  { color: var(--text-muted); }
+
+    .log-body { color: var(--text-secondary); word-break: break-all; }
+
+    .log-entry.hidden { display: none; }
+
+    #log-empty {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 32px 16px;
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+
+    /* ===================================================================
+       NOTIFICATIONS
+    =================================================================== */
+    #notifications {
+      position: fixed;
+      bottom: 16px;
+      right: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 100;
+    }
+
+    .notif {
+      padding: 10px 14px;
+      border-radius: var(--radius);
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      animation: slideUp 0.2s ease;
+      max-width: 300px;
+      border: 1px solid var(--border);
+    }
+
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .notif.success { background: rgba(63,185,80,0.1);  border-color: rgba(63,185,80,0.4); color: var(--success); }
+    .notif.error   { background: rgba(248,81,73,0.1);  border-color: rgba(248,81,73,0.4); color: var(--error); }
+    .notif.info    { background: rgba(88,166,255,0.1); border-color: rgba(88,166,255,0.4); color: var(--accent); }
+
+    /* ===================================================================
+       UTILITIES
+    =================================================================== */
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+<div id="harness-root">
+
+  <!-- ================================================================
+       TOP BAR
+  ================================================================ -->
+  <header id="topbar">
+    <div class="logo">
+      <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="10" cy="10" r="9" stroke="#58a6ff" stroke-width="1.5"/>
+        <path d="M6 10 L10 6 L14 10 L10 14 Z" fill="#58a6ff" opacity="0.7"/>
+        <circle cx="10" cy="10" r="2" fill="#58a6ff"/>
+      </svg>
+      Bloom Harness
+    </div>
+    <span class="badge">dev</span>
+    <div class="spacer"></div>
+    <span id="profile-label">—</span>
+    <div id="connection-status">
+      <div class="status-dot waiting" id="conn-dot"></div>
+      <span id="conn-label">Waiting for config…</span>
+    </div>
+  </header>
+
+  <!-- ================================================================
+       LEFT PANEL — PROTOCOL READER
+  ================================================================ -->
+  <aside id="panel-protocols">
+    <div class="panel-header">
+      <span class="panel-title">Protocol Reader</span>
+    </div>
+    <div class="panel-body" id="protocol-list">
+      <!-- Populated by ProtocolReader.render() -->
+    </div>
+  </aside>
+
+  <!-- ================================================================
+       CENTER PANEL — SIMULATE
+  ================================================================ -->
+  <main id="panel-simulate">
+
+    <!-- Empty state -->
+    <div id="simulate-empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+           xmlns="http://www.w3.org/2000/svg">
+        <path stroke-linecap="round" stroke-linejoin="round"
+              d="M15.59 14.37a6 6 0 01-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.63 1.7a14.98 14.98 0 00-4.85 8.28"/>
+        <path stroke-linecap="round" stroke-linejoin="round"
+              d="M3.75 4.75l4.5 4.5M3.75 4.75h4.5v4.5"/>
+      </svg>
+      <p>Select a message to simulate</p>
+    </div>
+
+    <!-- Simulate form (shown when a message is selected) -->
+    <div id="simulate-form">
+      <div class="simulate-header">
+        <div class="msg-id" id="sim-msg-id">—</div>
+        <div class="msg-description" id="sim-msg-desc">—</div>
+        <div class="msg-meta">
+          <span class="meta-chip" id="sim-type-chip">—</span>
+          <span class="meta-chip" id="sim-direction-chip">—</span>
+          <span class="meta-chip" id="sim-channel-chip">—</span>
+        </div>
+      </div>
+
+      <div class="simulate-body" id="sim-params">
+        <!-- Parameter fields injected by Simulator -->
+      </div>
+
+      <!-- Payload preview -->
+      <div style="padding: 0 20px 12px;">
+        <div class="payload-preview">
+          <div class="payload-preview-header">
+            Live Payload Preview
+            <span id="preview-copy-btn"
+                  style="cursor:pointer; color: var(--accent); font-size:10px;"
+                  onclick="Harness.copyPayload()">Copy</span>
+          </div>
+          <div id="payload-preview-code">{}</div>
+        </div>
+      </div>
+
+      <div class="simulate-footer">
+        <button class="btn btn-secondary" id="btn-reset" onclick="Harness.resetForm()">
+          Reset
+        </button>
+        <button class="btn btn-primary" id="btn-send" onclick="Harness.sendMessage()">
+          ▶ Send
+        </button>
+        <span id="send-status"></span>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ================================================================
+       RIGHT PANEL — CONFIG + LOG
+  ================================================================ -->
+  <aside id="panel-right">
+    <div class="tabs">
+      <div class="tab active" data-tab="config" onclick="Harness.switchTab('config')">Config</div>
+      <div class="tab" data-tab="log" onclick="Harness.switchTab('log')">
+        Log <span id="log-badge" style="display:none; background:var(--accent); color:#0d1117;
+          border-radius:999px; padding:0 5px; font-size:9px; margin-left:4px;" id="log-count">0</span>
+      </div>
+    </div>
+
+    <!-- Config tab -->
+    <div class="tab-panel active" id="tab-config">
+
+      <div class="config-section">
+        <div class="config-section-header">HARNESS_CONFIG</div>
+        <div class="config-row">
+          <span class="config-key">profileId</span>
+          <span class="config-val missing" id="cfg-profile-id">—</span>
+        </div>
+        <div class="config-row">
+          <span class="config-key">profileAlias</span>
+          <span class="config-val missing" id="cfg-profile-alias">—</span>
+        </div>
+        <div class="config-row">
+          <span class="config-key">extensionId</span>
+          <span class="config-val missing" id="cfg-extension-id">—</span>
+        </div>
+        <div class="config-row">
+          <span class="config-key">devMode</span>
+          <span class="config-val missing" id="cfg-dev-mode">—</span>
+        </div>
+      </div>
+
+      <div class="config-section">
+        <div class="config-section-header">SYNAPSE_CONFIG</div>
+        <div class="config-row">
+          <span class="config-key">launchId</span>
+          <span class="config-val missing" id="cfg-launch-id">—</span>
+        </div>
+        <div class="config-row">
+          <span class="config-key">channel</span>
+          <span class="config-val missing" id="cfg-channel">—</span>
+        </div>
+        <div class="config-row">
+          <span class="config-key">status</span>
+          <span class="config-val missing" id="cfg-status">—</span>
+        </div>
+      </div>
+
+      <div class="config-section">
+        <div class="config-section-header">Protocols Loaded</div>
+        <div id="cfg-protocols-list" style="padding: 8px 12px;">
+          <span style="color: var(--text-muted); font-size: 11px;">Scanning…</span>
+        </div>
+      </div>
+
+      <div id="config-raw-toggle" onclick="Harness.toggleRawConfig()">
+        Show raw config
+      </div>
+      <pre id="config-raw"></pre>
+
+    </div>
+
+    <!-- Log tab -->
+    <div class="tab-panel" id="tab-log">
+      <div id="log-toolbar">
+        <input id="log-filter" type="text" placeholder="Filter logs…"
+               oninput="Harness.filterLog(this.value)" />
+        <button id="log-clear" onclick="Harness.clearLog()">Clear</button>
+      </div>
+      <div id="log-entries">
+        <div id="log-empty">No messages yet.</div>
+      </div>
+    </div>
+
+  </aside>
+
+</div><!-- /#harness-root -->
+
+<div id="notifications"></div>
+
+<!-- ================================================================
+     HARNESS RUNTIME
+================================================================ -->
+<script>
+'use strict';
+
+// ============================================================================
+// ProtocolReader
+// Discovers PROTOCOL_MANIFEST objects injected by each protocol script.
+// ============================================================================
+const ProtocolReader = {
+  manifests: [],
+
+  /**
+   * Scans window for all *_PROTOCOL_MANIFEST globals and registers them.
+   * Called once on DOMContentLoaded, then again after a short delay
+   * to catch async-loaded scripts.
+   */
+  discover() {
+    const candidates = [
+      'DISCOVERY_PROTOCOL_MANIFEST',
+      'LANDING_PROTOCOL_MANIFEST',
+      'IONPUMP_PROTOCOL_MANIFEST',
+    ];
+
+    this.manifests = [];
+
+    for (const key of candidates) {
+      const manifest = (typeof self !== 'undefined' && self[key])
+                    || (typeof window !== 'undefined' && window[key]);
+      if (manifest) {
+        this.manifests.push({ key, manifest });
+        console.log(`[ProtocolReader] ✓ Found: ${key} (${manifest.messages?.length || 0} messages)`);
+      }
+    }
+
+    console.log(`[ProtocolReader] Loaded ${this.manifests.length} protocol(s).`);
+    return this.manifests;
+  },
+
+  /**
+   * Renders the protocol list into #protocol-list.
+   * Each message is a clickable item that populates the Simulator.
+   */
+  render() {
+    const container = document.getElementById('protocol-list');
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    if (this.manifests.length === 0) {
+      container.innerHTML = '<div style="padding: 16px 14px; color: var(--text-muted); font-size: 11px;">No protocol manifests found.</div>';
+      return;
+    }
+
+    for (const { manifest } of this.manifests) {
+      const section = document.createElement('div');
+      section.className = 'protocol-section';
+
+      const headerEl = document.createElement('div');
+      headerEl.className = 'protocol-section-header';
+      headerEl.innerHTML = `
+        <svg class="chevron" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5">
+          <polyline points="2,4 6,8 10,4"/>
+        </svg>
+        ${manifest.protocol?.toUpperCase() || 'UNKNOWN'}
+        <span style="margin-left:auto; font-weight:400; color:var(--text-muted); font-size:10px; text-transform:none; letter-spacing:0;">
+          ${manifest.messages?.length || 0} msgs
+        </span>
+      `;
+
+      const body = document.createElement('div');
+      body.className = 'protocol-section-body';
+
+      headerEl.addEventListener('click', () => {
+        headerEl.classList.toggle('collapsed');
+        body.classList.toggle('collapsed');
+      });
+
+      for (const msg of (manifest.messages || [])) {
+        const item = document.createElement('div');
+        item.className = 'message-item';
+        item.dataset.msgId = msg.id;
+        item.dataset.protocol = manifest.protocol;
+        item.innerHTML = `
+          <span class="msg-type-badge ${msg.type}">${msg.type}</span>
+          <div>
+            <div class="msg-label">${msg.id}</div>
+            <div class="msg-desc">${msg.description || ''}</div>
+          </div>
+        `;
+        item.addEventListener('click', () => {
+          document.querySelectorAll('.message-item').forEach(el => el.classList.remove('selected'));
+          item.classList.add('selected');
+          Simulator.load(msg);
+        });
+        body.appendChild(item);
+      }
+
+      section.appendChild(headerEl);
+      section.appendChild(body);
+      container.appendChild(section);
+    }
+
+    // Update config protocols list
+    const cfgProtocols = document.getElementById('cfg-protocols-list');
+    if (cfgProtocols) {
+      cfgProtocols.innerHTML = this.manifests.map(({ manifest }) => `
+        <div style="display:flex; justify-content:space-between; padding: 3px 0; border-bottom: 1px solid var(--border-muted);">
+          <span style="font-family: var(--font-mono); font-size:11px; color:var(--text-secondary);">${manifest.protocol}</span>
+          <span style="font-size:10px; color:var(--success);">v${manifest.version} · ${manifest.messages?.length || 0} msgs</span>
+        </div>
+      `).join('') || '<span style="color: var(--text-muted); font-size: 11px;">None</span>';
+    }
+  }
+};
+
+// ============================================================================
+// Simulator
+// Builds the parameter form and sends messages via chrome.runtime.
+// ============================================================================
+const Simulator = {
+  currentMessage: null,
+  currentValues: {},
+
+  load(msg) {
+    this.currentMessage = msg;
+    this.currentValues = {};
+
+    // Pre-fill defaults
+    for (const param of (msg.parameters || [])) {
+      if (param.default !== undefined) {
+        this.currentValues[param.variable] = param.default;
+      }
+    }
+
+    this._renderHeader(msg);
+    this._renderParams(msg);
+    this._updatePreview();
+
+    document.getElementById('simulate-empty').classList.add('hidden');
+    document.getElementById('simulate-form').classList.add('active');
+    document.getElementById('send-status').textContent = '';
+    document.getElementById('send-status').className = '';
+  },
+
+  _renderHeader(msg) {
+    document.getElementById('sim-msg-id').textContent = msg.id;
+    document.getElementById('sim-msg-desc').textContent = msg.description || '';
+
+    const typeChip = document.getElementById('sim-type-chip');
+    typeChip.textContent = msg.type;
+    typeChip.className = `meta-chip ${msg.type}`;
+
+    document.getElementById('sim-direction-chip').textContent = msg.direction || '—';
+    document.getElementById('sim-channel-chip').textContent = msg.channel || '—';
+  },
+
+  _renderParams(msg) {
+    const container = document.getElementById('sim-params');
+    container.innerHTML = '';
+
+    if (!msg.parameters || msg.parameters.length === 0) {
+      container.innerHTML = '<p style="color: var(--text-muted); font-size: 12px;">No parameters.</p>';
+      return;
+    }
+
+    for (const param of msg.parameters) {
+      const group = document.createElement('div');
+      group.className = 'field-group';
+
+      const label = document.createElement('div');
+      label.className = 'field-label';
+
+      if (param.type === 'auto') {
+        label.innerHTML = `
+          ${param.name}
+          <span class="field-type">${param.type}</span>
+          <span class="field-auto">AUTO</span>
+        `;
+
+        const autoVal = document.createElement('div');
+        autoVal.className = 'field-auto-value';
+        autoVal.innerHTML = `
+          <span id="auto-val-${param.variable.replace('$', '')}">resolving…</span>
+          <span class="field-auto-source">${param.source || ''}</span>
+        `;
+
+        // Resolve auto value from config
+        const resolved = this._resolveAutoParam(param);
+        autoVal.querySelector('span').textContent = resolved || '(not available)';
+        this.currentValues[param.variable] = resolved;
+
+        group.appendChild(label);
+        group.appendChild(autoVal);
+
+      } else if (param.type === 'enum') {
+        label.innerHTML = `${param.name} <span class="field-type">enum</span>`;
+
+        const select = document.createElement('select');
+        select.className = 'field-select';
+        for (const opt of (param.options || [])) {
+          const o = document.createElement('option');
+          o.value = opt;
+          o.textContent = opt;
+          select.appendChild(o);
+        }
+
+        if (param.default) select.value = param.default;
+        this.currentValues[param.variable] = select.value;
+
+        select.addEventListener('change', () => {
+          this.currentValues[param.variable] = select.value;
+          this._updatePreview();
+        });
+
+        group.appendChild(label);
+        group.appendChild(select);
+
+      } else {
+        // string or unknown
+        label.innerHTML = `${param.name} <span class="field-type">${param.type || 'string'}</span>`;
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'field-input';
+        input.value = param.default || '';
+        input.placeholder = param.variable;
+
+        this.currentValues[param.variable] = input.value;
+
+        input.addEventListener('input', () => {
+          this.currentValues[param.variable] = input.value;
+          this._updatePreview();
+        });
+
+        group.appendChild(label);
+        group.appendChild(input);
+      }
+
+      container.appendChild(group);
+    }
+  },
+
+  _resolveAutoParam(param) {
+    if (!param.source) return null;
+    try {
+      const parts = param.source.split('.');
+      let obj = window;
+      for (const part of parts) {
+        obj = obj?.[part];
+      }
+      return typeof obj === 'string' ? obj : JSON.stringify(obj);
+    } catch (e) {
+      return null;
+    }
+  },
+
+  _buildPayload() {
+    if (!this.currentMessage) return {};
+
+    let template = JSON.stringify(this.currentMessage.payload_template || {});
+
+    for (const [variable, value] of Object.entries(this.currentValues)) {
+      const safeVal = typeof value === 'string' ? value : JSON.stringify(value);
+      // Replace quoted variables (in JSON context): "$VAR" → "value"
+      template = template.split(`"${variable}"`).join(`"${safeVal}"`);
+      // Replace unquoted references
+      template = template.split(variable).join(safeVal);
+    }
+
+    try {
+      return JSON.parse(template);
+    } catch (e) {
+      return { _raw: template, _parseError: e.message };
+    }
+  },
+
+  _updatePreview() {
+    const payload = this._buildPayload();
+    const el = document.getElementById('payload-preview-code');
+    if (el) {
+      el.textContent = JSON.stringify(payload, null, 2);
+    }
+  },
+
+  send() {
+    const msg = this.currentMessage;
+    if (!msg) return;
+
+    const payload = this._buildPayload();
+    const statusEl = document.getElementById('send-status');
+
+    // Determine channel
+    const channel = msg.channel || 'runtime';
+
+    if (channel === 'runtime') {
+      // Send via chrome.runtime.sendMessage to background
+      const extensionId = window.HARNESS_CONFIG?.extensionId;
+
+      if (typeof chrome === 'undefined' || !chrome.runtime) {
+        Logger.log('ERR', `chrome.runtime not available`);
+        statusEl.textContent = '✗ chrome.runtime unavailable';
+        statusEl.className = 'error';
+        Harness.notify('chrome.runtime not available — are you inside the extension?', 'error');
+        return;
+      }
+
+      const target = extensionId || chrome.runtime.id;
+      Logger.log('SEND', `→ ${msg.id} [${channel}] ${JSON.stringify(payload)}`);
+
+      try {
+        chrome.runtime.sendMessage(target, payload, (response) => {
+          if (chrome.runtime.lastError) {
+            Logger.log('ERR', chrome.runtime.lastError.message);
+            statusEl.textContent = '✗ Error';
+            statusEl.className = 'error';
+            Harness.notify(chrome.runtime.lastError.message, 'error');
+          } else {
+            Logger.log('ACK', JSON.stringify(response));
+            statusEl.textContent = '✓ Sent';
+            statusEl.className = 'ok';
+            Harness.notify(`${msg.id} sent`, 'success');
+          }
+        });
+      } catch (e) {
+        Logger.log('ERR', e.message);
+        statusEl.textContent = '✗ Exception';
+        statusEl.className = 'error';
+        Harness.notify(e.message, 'error');
+      }
+
+    } else {
+      Logger.log('ERR', `Unknown channel: ${channel}`);
+      statusEl.textContent = `✗ Unknown channel: ${channel}`;
+      statusEl.className = 'error';
+    }
+  },
+
+  reset() {
+    if (!this.currentMessage) return;
+    this.load(this.currentMessage);
+  }
+};
+
+// ============================================================================
+// Logger
+// ============================================================================
+const Logger = {
+  entries: [],
+  filterText: '',
+
+  log(level, body) {
+    const now = new Date();
+    const time = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+    const entry = { time, level, body };
+    this.entries.push(entry);
+
+    const container = document.getElementById('log-entries');
+    const empty = document.getElementById('log-empty');
+    if (empty) empty.style.display = 'none';
+
+    const el = document.createElement('div');
+    el.className = `log-entry${this.filterText && !body.toLowerCase().includes(this.filterText) ? ' hidden' : ''}`;
+    el.innerHTML = `
+      <span class="log-time">${time}</span>
+      <span class="log-level ${level}">${level}</span>
+      <span class="log-body">${this._escape(body)}</span>
+    `;
+    container.appendChild(el);
+    container.scrollTop = container.scrollHeight;
+
+    // Update badge
+    const badge = document.getElementById('log-badge');
+    if (badge) {
+      badge.style.display = 'inline';
+      badge.textContent = this.entries.length;
+    }
+  },
+
+  _escape(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  },
+
+  filter(text) {
+    this.filterText = text.toLowerCase();
+    const entries = document.querySelectorAll('.log-entry');
+    entries.forEach(el => {
+      const body = el.querySelector('.log-body')?.textContent || '';
+      el.classList.toggle('hidden', !!this.filterText && !body.toLowerCase().includes(this.filterText));
+    });
+  },
+
+  clear() {
+    this.entries = [];
+    const container = document.getElementById('log-entries');
+    if (container) container.innerHTML = '<div id="log-empty">No messages yet.</div>';
+    const badge = document.getElementById('log-badge');
+    if (badge) { badge.style.display = 'none'; badge.textContent = '0'; }
+  }
+};
+
+// ============================================================================
+// ConfigReader
+// Reads HARNESS_CONFIG and SYNAPSE_CONFIG injected by Sentinel.
+// ============================================================================
+const ConfigReader = {
+  harnessConfig: null,
+  synapseConfig: null,
+
+  read() {
+    this.harnessConfig = window.HARNESS_CONFIG || null;
+    this.synapseConfig = window.SYNAPSE_CONFIG || null;
+    return { harness: this.harnessConfig, synapse: this.synapseConfig };
+  },
+
+  render() {
+    const h = this.harnessConfig;
+    const s = this.synapseConfig;
+
+    const set = (id, value, cls) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (value !== null && value !== undefined) {
+        el.textContent = String(value);
+        el.className = `config-val ${cls || 'ok'}`;
+      } else {
+        el.textContent = '—';
+        el.className = 'config-val missing';
+      }
+    };
+
+    set('cfg-profile-id',    h?.profileId);
+    set('cfg-profile-alias', h?.profileAlias);
+    set('cfg-extension-id',  h?.extensionId);
+    set('cfg-dev-mode',      h?.devMode);
+    set('cfg-launch-id',     s?.launchId);
+    set('cfg-channel',       s?.channel);
+    set('cfg-status',        s?.status);
+
+    // Topbar
+    if (h?.profileAlias || h?.profileId) {
+      const label = document.getElementById('profile-label');
+      if (label) label.textContent = h.profileAlias || h.profileId;
+    }
+
+    // Raw config
+    const raw = document.getElementById('config-raw');
+    if (raw) {
+      raw.textContent = JSON.stringify({ HARNESS_CONFIG: h, SYNAPSE_CONFIG: s }, null, 2);
+    }
+
+    // Connection status
+    const dot = document.getElementById('conn-dot');
+    const lbl = document.getElementById('conn-label');
+    if (h && s) {
+      dot.className = 'status-dot connected';
+      lbl.textContent = 'Config loaded';
+      Logger.log('INFO', `HARNESS_CONFIG loaded — profile: ${h.profileId}`);
+      Logger.log('INFO', `SYNAPSE_CONFIG loaded — launchId: ${s.launchId}`);
+    } else if (h && !s) {
+      dot.className = 'status-dot waiting';
+      lbl.textContent = 'SYNAPSE_CONFIG missing';
+      Logger.log('INFO', 'HARNESS_CONFIG loaded, SYNAPSE_CONFIG not found');
+    } else {
+      dot.className = 'status-dot disconnected';
+      lbl.textContent = 'No config (dev only)';
+      Logger.log('INFO', 'No HARNESS_CONFIG — running without Sentinel config');
+    }
+  }
+};
+
+// ============================================================================
+// Harness — top-level coordinator
+// ============================================================================
+const Harness = {
+  _activeTab: 'config',
+  _rawConfigVisible: false,
+
+  init() {
+    Logger.log('INFO', 'Harness booting…');
+
+    // 1. Read config (injected by Sentinel)
+    ConfigReader.read();
+    ConfigReader.render();
+
+    // 2. Discover and render protocols
+    ProtocolReader.discover();
+    ProtocolReader.render();
+
+    // 3. Schedule a second discovery pass for late-loading scripts
+    setTimeout(() => {
+      const before = ProtocolReader.manifests.length;
+      ProtocolReader.discover();
+      if (ProtocolReader.manifests.length !== before) {
+        ProtocolReader.render();
+        Logger.log('INFO', `Late discovery: ${ProtocolReader.manifests.length} protocol(s) total`);
+      }
+    }, 500);
+
+    Logger.log('INFO', 'Harness ready.');
+  },
+
+  // ── Public API called from inline handlers ────────────────────────────────
+
+  switchTab(name) {
+    this._activeTab = name;
+    document.querySelectorAll('.tab').forEach(t => {
+      t.classList.toggle('active', t.dataset.tab === name);
+    });
+    document.querySelectorAll('.tab-panel').forEach(p => {
+      p.classList.toggle('active', p.id === `tab-${name}`);
+    });
+  },
+
+  sendMessage() {
+    Simulator.send();
+  },
+
+  resetForm() {
+    Simulator.reset();
+  },
+
+  copyPayload() {
+    const code = document.getElementById('payload-preview-code');
+    if (!code) return;
+    navigator.clipboard.writeText(code.textContent).then(() => {
+      this.notify('Payload copied', 'info');
+    }).catch(() => {
+      this.notify('Copy failed', 'error');
+    });
+  },
+
+  filterLog(text) {
+    Logger.filter(text);
+  },
+
+  clearLog() {
+    Logger.clear();
+  },
+
+  toggleRawConfig() {
+    this._rawConfigVisible = !this._rawConfigVisible;
+    const el = document.getElementById('config-raw');
+    const toggle = document.getElementById('config-raw-toggle');
+    if (el) el.style.display = this._rawConfigVisible ? 'block' : 'none';
+    if (toggle) toggle.textContent = this._rawConfigVisible ? 'Hide raw config' : 'Show raw config';
+  },
+
+  notify(message, type = 'info') {
+    const container = document.getElementById('notifications');
+    if (!container) return;
+
+    const n = document.createElement('div');
+    n.className = `notif ${type}`;
+    n.textContent = message;
+    container.appendChild(n);
+
+    setTimeout(() => {
+      n.style.opacity = '0';
+      n.style.transition = 'opacity 0.3s';
+      setTimeout(() => n.remove(), 300);
+    }, 3000);
+  }
+};
+
+// ============================================================================
+// Boot
+// ============================================================================
+document.addEventListener('DOMContentLoaded', () => {
+  Harness.init();
+});
+</script>
+
+</body>
+</html>

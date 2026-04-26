@@ -242,6 +242,13 @@ func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profi
 
 	ig.Core.Logger.Info("[IGNITION] ✅ Config generado y validado: %s (%d bytes)", configPath, len(generatedContent))
 
+	// === 5.2 ESCRIBIR HARNESS CONFIG (solo perfiles --dev) ===
+	profileAlias := getStringField(profileData, "alias", "MasterWorker")
+	if err := writeHarnessConfig(profileID, launchID, profileAlias, extDir); err != nil {
+		// No fatal — el harness simplemente no tendrá config en esta sesión
+		ig.Core.Logger.Info("[WARN] Could not write harness config: %v", err)
+	}
+
 	// === 6. ACTUALIZAR NATIVE HOST MANIFEST ===
 	manifestName := fmt.Sprintf("com.bloom.synapse.%s.json", shortID)
 
@@ -399,6 +406,40 @@ func (ig *Ignition) updateProfilesConfig(profileID string, physicalID string, de
 
 	updatedData, _ := json.MarshalIndent(root, "", "  ")
 	return os.WriteFile(profilesPath, updatedData, 0644)
+}
+
+// writeHarnessConfig escribe harness.synapse.config.js en extensionDir.
+//
+// Es un no-op silencioso si harness/index.html no existe en extensionDir,
+// lo que garantiza que solo actúa en perfiles creados con `sentinel seed --dev`.
+//
+// No es fatal: un error solo emite Warning y no interrumpe el launch.
+func writeHarnessConfig(profileID, launchID, profileAlias, extensionDir string) error {
+	// Detección de dev mode: la presencia del archivo harness/index.html
+	// es la señal canónica — solo existe en perfiles creados con --dev.
+	harnessPage := filepath.Join(extensionDir, "harness", "index.html")
+	if _, err := os.Stat(harnessPage); os.IsNotExist(err) {
+		// Perfil prod — no-op normal
+		return nil
+	}
+
+	config := fmt.Sprintf(
+		`// harness.synapse.config.js — generado por Sentinel en launch
+// No editar manualmente — se sobreescribe en cada launch
+self.HARNESS_CONFIG = {
+  profileId:    %q,
+  launchId:     %q,
+  profileAlias: %q,
+  generatedAt:  %q
+};`,
+		profileID,
+		launchID,
+		profileAlias,
+		time.Now().UTC().Format(time.RFC3339),
+	)
+
+	configPath := filepath.Join(extensionDir, "harness.synapse.config.js")
+	return os.WriteFile(configPath, []byte(config), 0644)
 }
 
 // ========== HELPER FUNCTIONS ==========

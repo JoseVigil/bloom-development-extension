@@ -1,0 +1,121 @@
+version: "1.0.0"
+site: "github.com"
+description: "GitHub PAT authentication flow for Bloom onboarding"
+
+# ---------------------------------------------------------------------------
+# Variables
+# PAT_TOKEN is sourced from the runtime context (clipboard_content).
+# Declared here so the validator and executor can resolve ${PAT_TOKEN}.
+# ---------------------------------------------------------------------------
+variables:
+  PAT_TOKEN: "$CONTEXT.clipboard_content"
+
+# ---------------------------------------------------------------------------
+# Entrypoints — maps trigger names to flow names
+# ---------------------------------------------------------------------------
+entrypoints:
+  on_load: bootstrap
+  on_pat_clipboard: handle_pat_detected
+
+# ---------------------------------------------------------------------------
+# Flows
+# ---------------------------------------------------------------------------
+flows:
+
+  # -------------------------------------------------------------------------
+  # bootstrap
+  # Runs when the GitHub tab loads.
+  # Verifies the user is on /settings/tokens and signals readiness.
+  # -------------------------------------------------------------------------
+  bootstrap:
+    description: >
+      Wait for the GitHub settings/tokens page to be ready,
+      then emit page_ready so dependent flows can proceed.
+    steps:
+      - action: wait
+        selector: "body"
+        timeout: 10000
+
+      - action: wait
+        selector: "a[href='/settings/tokens']"
+        timeout: 8000
+
+      - action: focus
+        selector: "a[href='/settings/tokens']"
+
+      - action: emit
+        event: "page_ready"
+
+      - action: transition
+        to: "handle_pat_detected"
+        state: "idle"
+
+  # -------------------------------------------------------------------------
+  # handle_pat_detected
+  # Triggered when a PAT is detected in the clipboard.
+  # Types the token into the PAT input field and submits the form.
+  # Requires: page_ready must have been emitted by bootstrap.
+  # -------------------------------------------------------------------------
+  handle_pat_detected:
+    description: >
+      Receive the PAT from clipboard, enter it into the token input field,
+      click submit, and emit pat_submitted.
+    requires:
+      - page_ready
+    steps:
+      - action: wait
+        selector: "#pat-input"
+        timeout: 8000
+
+      - action: focus
+        selector: "#pat-input"
+
+      - action: type
+        selector: "#pat-input"
+        text: "${PAT_TOKEN}"
+
+      - action: click
+        selector: "button[type='submit']"
+
+      - action: emit
+        event: "pat_submitted"
+
+      - action: transition
+        to: "await_confirmation"
+        state: "executing"
+
+  # -------------------------------------------------------------------------
+  # await_confirmation
+  # Waits for the server to confirm the PAT, extracts the generated token,
+  # and signals that onboarding is complete.
+  # Requires: pat_submitted must have been emitted by handle_pat_detected.
+  # -------------------------------------------------------------------------
+  await_confirmation:
+    description: >
+      Wait for the PAT confirmation response, extract the generated token
+      value from the page, and emit onboarding_complete.
+    requires:
+      - pat_submitted
+    steps:
+      - action: wait
+        selector: ".flash-success, .token-result"
+        timeout: 15000
+
+      - action: extract
+        selector: ".token-result code, input#new-token-value"
+        variable: "generated_token"
+
+      - action: emit
+        event: "onboarding_complete"
+
+# ---------------------------------------------------------------------------
+# Error handlers
+# ---------------------------------------------------------------------------
+error_handlers:
+  timeout:
+    retry: 2
+    fallback: "emit_error"
+
+  dom_error:
+    retry: 1
+    fallback: "emit_error"
