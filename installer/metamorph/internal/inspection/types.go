@@ -70,3 +70,26 @@ type inspectionCache struct {
 	result    *InspectionResult
 	timestamp time.Time
 }
+
+// IonRecipeInfo represents an ion recipe installed in ionsites/{site}/
+type IonRecipeInfo struct {
+	Site         string   `json:"site"`
+	Version      string   `json:"version"`
+	Description  string   `json:"description"`
+	Entrypoint   string   `json:"entrypoint"`
+	FlowCount    int      `json:"flow_count"`
+	Capabilities []string `json:"capabilities"`
+	SizeBytes    int64    `json:"size_bytes"`
+	LastModified string   `json:"last_modified"`
+	Status       string   `json:"status"`       // "healthy" | "missing" | "corrupted"
+	ManifestHash string   `json:"manifest_hash"`
+}
+
+// IonRecipesResult is the aggregated result of inspecting all ion recipes.
+type IonRecipesResult struct {
+	Recipes    []IonRecipeInfo `json:"recipes"`
+	BasePath   string          `json:"base_path"`
+	TotalSites int             `json:"total_sites"`
+	TotalFlows int             `json:"total_flows"`
+	Timestamp  string          `json:"timestamp"`
+}

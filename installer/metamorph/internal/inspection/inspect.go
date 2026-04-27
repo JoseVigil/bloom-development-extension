@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/bloom/metamorph/internal/core"
@@ -85,17 +86,19 @@ Example:
 		RunE: func(cmd *cobra.Command, args []string) error {
 			includeExternal, _ := cmd.Flags().GetBool("all")
 			nativeMode, _ := cmd.Flags().GetBool("native")
-			return runInspection(c, includeExternal, nativeMode)
+			includeIonRecipes, _ := cmd.Flags().GetBool("ion-recipes")
+			return runInspection(c, includeExternal, nativeMode, includeIonRecipes)
 		},
 	}
 
 	cmd.Flags().BoolP("all", "a", false, "Include external binaries (Temporal, Ollama, Chromium, Node)")
 	cmd.Flags().Bool("native", false, "Inspect native/bin/<platform>/ build output instead of AppData")
+	cmd.Flags().Bool("ion-recipes", false, "Inspect ion automation recipes")
 	return cmd
 }
 
 // runInspection performs the inspection, writes the result JSON, and outputs results.
-func runInspection(c *core.Core, includeExternal bool, nativeMode bool) error {
+func runInspection(c *core.Core, includeExternal bool, nativeMode bool, includeIonRecipes bool) error {
 	var basePath string
 	var bootstrapBase string
 
@@ -173,6 +176,23 @@ func runInspection(c *core.Core, includeExternal bool, nativeMode bool) error {
 		c.OutputJSON(result)
 	} else {
 		printInspectionTable(result, includeExternal)
+	}
+
+	// Ion recipes — independent of managed/external inspection
+	if includeIonRecipes {
+		ionsitesPath := resolveIonSitesPath(c.Config)
+		ionResult, err := InspectAllIonRecipes(ionsitesPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warning: ion recipes inspection: %v\n", err)
+		} else {
+			if c.Config.OutputJSON {
+				c.OutputJSON(map[string]interface{}{
+					"ion_recipes": ionResult,
+				})
+			} else {
+				printIonRecipesTable(ionResult)
+			}
+		}
 	}
 
 	return nil
@@ -526,4 +546,45 @@ func resolveNativeMetamorphConfigPath() (string, error) {
 	}
 
 	return filepath.Join(localAppData, "BloomNucleus", "config", "native", "native_metamorph.json"), nil
+}
+
+// ─── Ion Recipes helpers ──────────────────────────────────────────────────────
+
+// resolveIonSitesPath constructs the path to ionsites/ inside BloomNucleus.
+// Uses the same base path as managed/external binaries.
+func resolveIonSitesPath(cfg *core.Config) string {
+	base := GetBasePath()
+	return filepath.Join(base, "cortex", "ionsites")
+}
+
+// printIonRecipesTable formats the human-readable output for ion recipes.
+// Style is consistent with the managed/external binaries table.
+func printIonRecipesTable(result *IonRecipesResult) {
+	fmt.Printf("\nIon Automation Recipes\n")
+	fmt.Printf("Base: %s\n", result.BasePath)
+	fmt.Println(strings.Repeat("─", 70))
+
+	if len(result.Recipes) == 0 {
+		fmt.Println("  No ion recipes installed.")
+	} else {
+		for _, recipe := range result.Recipes {
+			statusLabel := "✓ Healthy"
+			if recipe.Status == "missing" {
+				statusLabel = "✗ Missing"
+			} else if recipe.Status == "corrupted" {
+				statusLabel = "⚠ Corrupted"
+			}
+			size := FormatSize(recipe.SizeBytes)
+			fmt.Printf("%-20s v%-10s %2d flows  %8s  %s\n",
+				recipe.Site,
+				recipe.Version,
+				recipe.FlowCount,
+				size,
+				statusLabel,
+			)
+		}
+	}
+
+	fmt.Println(strings.Repeat("─", 70))
+	fmt.Printf("Total: %d sites, %d flows\n", result.TotalSites, result.TotalFlows)
 }

@@ -5,7 +5,8 @@ Coordina el protocolo Native Messaging y despacha las acciones.
 
 import logging
 import time
-from typing import Dict, Any, Callable
+from pathlib import Path
+from typing import Dict, Any, Callable, Optional
 
 # Imports usando la nueva nomenclatura explícita
 from brain.core.synapse.synapse_protocol import SynapseProtocol
@@ -17,20 +18,29 @@ class SynapseManager:
     Actúa como servidor (Host) escuchando a Chrome.
     """
     
-    def __init__(self):
+    def __init__(self, launch_id: str = "", run_dir: Optional[Path] = None):
         self.protocol = SynapseProtocol()
         # Logger específico para no ensuciar stdout (que es para Chrome)
         self.logger = logging.getLogger("brain.core.synapse.manager")
+        self._launch_id = launch_id
+        self._run_dir = run_dir
         
         # 🗺️ MAPA DE ACCIONES (Dispatcher)
         # Aquí registramos qué función maneja cada tipo de mensaje.
         # Esto permite escalar a cientos de comandos sin llenar de if/else el código.
         self._action_map: Dict[str, Callable] = {
-            "SYSTEM_HELLO": self._handle_handshake,
-            "HEARTBEAT":    self._handle_heartbeat,
-            "LOG_ENTRY":    self._handle_log_entry,
-            # Futuros comandos se agregan aquí:
-            # "DOM_EVENT": self._handle_dom_event,
+            "SYSTEM_HELLO":     self._handle_handshake,
+            "HEARTBEAT":        self._handle_heartbeat,
+            "LOG_ENTRY":        self._handle_log_entry,
+            # Comandos DOM para IonPump:
+            "DOM_FOCUS":        self._handle_dom_passthrough,
+            "DOM_TYPE":         self._handle_dom_passthrough,
+            "DOM_CLICK":        self._handle_dom_passthrough,
+            "DOM_WAIT":         self._handle_dom_passthrough,
+            "DOM_SCROLL":       self._handle_dom_passthrough,
+            "DOM_EXTRACT":      self._handle_dom_passthrough,
+            "EVENT_EMIT":       self._handle_dom_passthrough,
+            "STATE_TRANSITION": self._handle_state_transition,
         }
 
     def run_host_loop(self) -> None:
@@ -39,7 +49,15 @@ class SynapseManager:
         Este método es BLOQUEANTE y se ejecuta cuando Chrome invoca a brain.exe.
         """
         self.logger.info("🚀 Iniciando Synapse Host Loop...")
-        
+
+        # Iniciar IPC server si tenemos launch_id y run_dir
+        ipc_server = None
+        if self._launch_id and self._run_dir:
+            from brain.core.synapse.synapse_ipc_server import SynapseIPCServer
+            ipc_server = SynapseIPCServer(self.protocol, self._launch_id, self._run_dir)
+            ipc_server.start()
+            self.logger.info(f"🔌 IPC server started for launch {self._launch_id}")
+
         try:
             while True:
                 # 1. Leer mensaje (Bloqueante)
@@ -56,6 +74,10 @@ class SynapseManager:
         except Exception as e:
             self.logger.error(f"💥 Error fatal en el loop: {e}", exc_info=True)
             # No hacemos raise para intentar cerrar limpio si es posible
+        finally:
+            if ipc_server:
+                ipc_server.stop()
+                self.logger.info("🔌 IPC server stopped")
 
     def _dispatch_message(self, message: Dict[str, Any]):
         """
@@ -106,6 +128,17 @@ class SynapseManager:
         level = message.get("level", "INFO")
         text = message.get("message", "")
         self.logger.info(f"[EXT-LOG] {level}: {text}")
+
+    def _handle_dom_passthrough(self, message: Dict[str, Any]) -> None:
+        """Reenvía comandos DOM de IonPump hacia Chrome. No modifica el mensaje."""
+        self.protocol.send_message(message)
+
+    def _handle_state_transition(self, message: Dict[str, Any]) -> None:
+        """
+        STATE_TRANSITION no va a Chrome — es una transición interna de IonPump.
+        Por ahora loggea la transición. IonStateManager la maneja en el proceso IonPump.
+        """
+        self.logger.debug(f"🔄 STATE_TRANSITION: {message.get('to', 'unknown')}")
 
     # =========================================================================
     # MÉTODOS DE UTILIDAD (Para usar desde el CLI 'brain synapse close')

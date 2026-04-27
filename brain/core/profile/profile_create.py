@@ -36,7 +36,8 @@ class ProfileCreator:
         self,
         profile_id: Optional[str] = None,
         name: Optional[str] = None,
-        master: bool = False
+        master: bool = False,
+        dev_mode: bool = False
     ) -> Dict[str, Any]:
         """
         Create a new Chrome profile with Bloom extension.
@@ -84,7 +85,7 @@ class ProfileCreator:
         logger.info(f"🧩 Extension copied to: {extension_path}")
 
         # 5. Generate discovery and landing pages
-        self._generate_profile_pages(profile_id, profile_name)
+        self._generate_profile_pages(profile_id, profile_name, dev_mode=dev_mode)
         logger.info(f"📄 Discovery/Landing pages generated")
 
         # 6. Build profile data
@@ -216,7 +217,7 @@ class ProfileCreator:
             logger.error(f"❌ Failed to copy extension: {e}")
             raise
 
-    def _generate_profile_pages(self, profile_id: str, profile_name: str) -> None:
+    def _generate_profile_pages(self, profile_id: str, profile_name: str, dev_mode: bool = False) -> None:
         """
         Generate discovery and landing pages for the profile.
         
@@ -226,6 +227,7 @@ class ProfileCreator:
         Args:
             profile_id: Profile identifier (UUID)
             profile_name: Profile display name
+            dev_mode: Whether to generate harness page in dev mode
             
         Raises:
             ImportError: If page generators are not available
@@ -237,6 +239,7 @@ class ProfileCreator:
         try:
             from brain.core.profile.web.discovery_generator import generate_discovery_page
             from brain.core.profile.web.landing_generator import generate_profile_landing
+            from brain.core.profile.web.harness_generator import generate_harness_page
         except ImportError as e:
             logger.error(f"❌ Page generators not available: {e}")
             raise ImportError(f"Cannot import page generators: {e}")
@@ -278,6 +281,15 @@ class ProfileCreator:
         except Exception as e:
             logger.error(f"❌ Failed to generate landing page: {e}", exc_info=True)
             raise Exception(f"Landing page generation failed: {e}")
+
+        # Generate harness page
+        try:
+            generate_harness_page(extension_dir, profile_data, dev_mode=dev_mode)
+            if dev_mode:
+                logger.info(f"✅ Harness page generated (dev mode)")
+        except Exception as e:
+            logger.error(f"❌ Failed to generate harness page: {e}", exc_info=True)
+            raise Exception(f"Harness page generation failed: {e}")
 
     def _get_master_profile(self) -> Dict[str, Any]:
         """

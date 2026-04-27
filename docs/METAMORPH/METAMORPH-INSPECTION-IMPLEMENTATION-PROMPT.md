@@ -556,4 +556,512 @@ metamorph inspect --help
 
 ---
 
-**Start with Phase 1 and proceed sequentially. Good luck!**
+---
+
+# IonPump Reconciliation System — Implementation Prompt
+## The High-Frequency Update Path
+
+---
+
+## Why IonPump Is Different
+
+Every other component Metamorph manages — Brain, Sentinel, Nucleus, Conductor — updates on a **release cadence**: days or weeks between versions. A bad update is rare, and the cost of a flawed rollout is bounded.
+
+IonPump (Brain's `cortex/ionsites/` recipes) operates on a fundamentally different cycle. Ion recipes encode automation behaviors that respond to live product changes on third-party sites (GitHub, Jira, etc.). When GitHub changes a UI flow, a recipe update may need to ship **the same day**. This means:
+
+- Metamorph may be invoked to reconcile `ionsites/` multiple times per day on an active installation.
+- A corrupted or partially-written recipe directory causes **silent automation failures** — Brain loads the recipe, finds it structurally valid, but it misbehaves at runtime because a file is stale or truncated.
+- A failed mid-swap leaves `ionsites/` in an indeterminate state that persists across reboots until the next reconciliation.
+- Brain (IonPump) holds recipes **in memory after loading** — a swap while Brain is running produces a split state where the running behavior and the on-disk state diverge.
+
+These properties demand a reconciliation model that is more defensive than what Metamorph uses for binary updates. The following sections specify that model.
+
+---
+
+## Architecture Invariants (Non-Negotiable)
+
+These invariants must hold at every point in the reconciliation lifecycle. Any implementation that violates one is incorrect regardless of whether it produces correct output on the happy path.
+
+| # | Invariant |
+|---|-----------|
+| I-1 | **Only Metamorph writes to `ionsites/`**. Brain (IonPump), Sentinel, Nucleus, and any other process read from it. No other process may create, modify, or delete files under `ionsites/`. |
+| I-2 | **Metamorph never writes directly to a live site directory**. All mutations go through a staging area first (`ionsites/_staging/`). The live directory is only touched during the atomic swap step. |
+| I-3 | **A swap is all-or-nothing per site**. After a swap, the site directory contains either 100% the new version or 100% the previous version. A partially-written state is never left visible to readers. |
+| I-4 | **SHA-256 of every file is verified against the manifest before any swap is initiated**. A download that passes size checks but fails hash verification is discarded without touching the live directory. |
+| I-5 | **Rollback restores the previous version from backup, never re-downloads**. Network availability must not be a precondition for rollback. |
+| I-6 | **Metamorph signals Brain before and after every swap**. Brain must quiesce its use of the affected site before the swap begins. The signal protocol is defined below and must not be bypassed even in forced-update mode. |
+| I-7 | **The `_meta/versions.json` file is updated atomically as part of the same swap**. It never reflects a version that is not actually present on disk. |
+
+---
+
+## Directory Layout
+
+```
+BloomNucleus/bin/cortex/ionsites/
+├── github.com/
+│   ├── ion.manifest.json        ← recipe manifest (source of truth for version + file list)
+│   └── auth.ion                 ← recipe file declared in manifest
+├── jira.atlassian.com/
+│   ├── ion.manifest.json
+│   └── (recipe files...)
+├── _staging/                    ← Metamorph's working area — Brain never reads here
+│   └── github.com/              ← staging directory for a pending update
+│       ├── ion.manifest.json
+│       └── auth.ion
+├── _backup/                     ← previous version of a site, kept until next successful swap
+│   └── github.com/              ← one subdirectory per site, replaced on each swap
+│       ├── ion.manifest.json
+│       └── auth.ion
+└── _meta/
+    └── versions.json            ← authoritative version registry, updated atomically with each swap
+```
+
+**Why `_staging/` and `_backup/` use the same site name as the live directories:** using identical directory names allows the atomic swap to be a rename-pair operation (rename live → `_backup/{site}`, rename `_staging/{site}` → live), which is atomic at the filesystem level on all supported platforms when source and destination are on the same volume.
+
+---
+
+## Reconciliation Flow
+
+The full reconciliation for a single site proceeds through these phases in strict order. Any phase failure aborts reconciliation for that site and triggers the recovery path. Other sites in the same reconciliation run are not affected.
+
+```
+Phase 1: Inspect
+  └─ Read current ion.manifest.json from live site directory
+  └─ Compare version + manifest_sha256 against the incoming update manifest
+  └─ If versions match AND manifest hash matches → skip (already up to date)
+
+Phase 2: Download
+  └─ Create _staging/{site}/ if not present
+  └─ Download each file listed in the update manifest to _staging/{site}/
+  └─ Write a .tmp suffix during download; rename to final name on completion
+  └─ On any download failure → leave _staging/{site}/ as-is (resume on next run)
+
+Phase 3: Verify
+  └─ For each file in update manifest:
+      └─ Verify SHA-256 matches manifest-declared hash
+      └─ Verify file size matches manifest-declared size
+  └─ Verify ion.manifest.json itself matches manifest-declared sha256_manifest
+  └─ If ANY verification fails → delete _staging/{site}/ entirely, abort this site
+
+Phase 4: Signal Brain (Pre-Swap)
+  └─ POST to IonPump local API: { "action": "quiesce_site", "site": "github.com" }
+  └─ Wait up to 5 seconds for acknowledgement
+  └─ If Brain does not acknowledge → abort this site (do NOT swap while Brain is active)
+  └─ Record quiesce start time for post-swap signal timeout
+
+Phase 5: Atomic Swap
+  └─ If _backup/{site}/ exists → delete it
+  └─ rename(ionsites/{site}/, ionsites/_backup/{site}/)       ← live → backup
+  └─ rename(ionsites/_staging/{site}/, ionsites/{site}/)      ← staging → live
+  └─ If second rename fails → rename(ionsites/_backup/{site}/, ionsites/{site}/)  ← restore
+  └─ Update _meta/versions.json atomically (write .tmp, rename)
+
+Phase 6: Signal Brain (Post-Swap)
+  └─ POST to IonPump local API: { "action": "reload_site", "site": "github.com", "version": "1.1.0" }
+  └─ Wait up to 10 seconds for Brain to report successful reload
+  └─ If Brain reports reload failure → trigger rollback (Phase 7)
+
+Phase 7: Rollback (only if Phase 6 fails or Phase 5 partially fails)
+  └─ rename(ionsites/{site}/, ionsites/_staging/{site}/)      ← current → staging (preserve for diagnosis)
+  └─ rename(ionsites/_backup/{site}/, ionsites/{site}/)       ← backup → live
+  └─ POST to IonPump local API: { "action": "reload_site", "site": "github.com", "version": "<previous>" }
+  └─ Update _meta/versions.json to reflect rolled-back version
+  └─ Emit structured error to stderr and to metamorph's operation log
+```
+
+---
+
+## `_meta/versions.json` Schema
+
+This file is the authoritative record of what version is live for each site. It is the first thing Nucleus reads when deciding whether a recipe update is needed, and the first thing Metamorph reads when determining whether a reconciliation is a no-op.
+
+```json
+{
+  "schema_version": 1,
+  "last_updated": "2026-04-01T12:00:00Z",
+  "sites": {
+    "github.com": {
+      "version": "1.1.0",
+      "manifest_sha256": "abc123...",
+      "swapped_at": "2026-04-01T12:00:00Z",
+      "swap_count": 4,
+      "previous_version": "1.0.0",
+      "status": "healthy"
+    }
+  }
+}
+```
+
+`status` values: `"healthy"` (last swap completed and Brain confirmed reload), `"rollback"` (live version is a rollback — Nucleus should investigate), `"pending"` (swap in progress — Metamorph crashed mid-swap if this persists after restart).
+
+**If Metamorph starts and finds any site with `"status": "pending"`**, it must treat this as a crash-recovery scenario: check whether `_staging/{site}/` and `_backup/{site}/` exist and determine which of the two rename operations completed. Recovery logic is below.
+
+---
+
+## Crash Recovery
+
+If Metamorph is killed during Phase 5 (between the two renames), `ionsites/` is left in one of three states:
+
+| Observed state | Interpretation | Recovery action |
+|---|---|---|
+| `_backup/{site}/` exists, live `{site}/` is the **old** version | First rename did not complete | Delete `_backup/{site}/`, abort this reconciliation |
+| `_backup/{site}/` exists, live `{site}/` is the **new** version | Both renames completed, `versions.json` may be stale | Update `versions.json` to reflect new version, signal Brain to reload |
+| `_backup/{site}/` missing, live `{site}/` is the **old** version | Neither rename completed | Nothing to recover, re-run reconciliation normally |
+| `_backup/{site}/` missing, live `{site}/` is the **new** version | Already swapped, `_backup` was cleaned up | Nothing to recover |
+
+Recovery state is determined by comparing `version` fields between `live/{site}/ion.manifest.json`, `_backup/{site}/ion.manifest.json`, and `_staging/{site}/ion.manifest.json`.
+
+On startup, if `_meta/versions.json` shows any site with `"status": "pending"`, Metamorph runs crash-recovery for that site before accepting any new reconciliation requests.
+
+---
+
+## `ionrecipes.go` — Extensions for Reconciliation (Phase 2+)
+
+The inspection functions from the GitHub Onboarding milestone (`InspectIonRecipe`, `InspectAllIonRecipes`) are stable and do not change. Reconciliation is added as a separate concern in new functions.
+
+### New functions to implement
+
+```go
+// ReconcileIonRecipe reconciles a single site against the provided update manifest entry.
+// It runs all phases (inspect → download → verify → signal → swap → post-signal).
+// Returns a ReconcileResult describing the outcome.
+func ReconcileIonRecipe(ionsitesPath string, update IonRecipeUpdate, ionpumpClient IonPumpClient) ReconcileResult
+
+// ReconcileAllIonRecipes reconciles all sites listed in the update manifest.
+// Sites not in the manifest are not touched (additive-only reconciliation unless --prune is set).
+// Returns aggregate results and a boolean indicating whether any site failed.
+func ReconcileAllIonRecipes(ionsitesPath string, manifest IonRecipeManifest, ionpumpClient IonPumpClient) ([]ReconcileResult, bool)
+
+// downloadIonRecipeToStaging downloads all files for a recipe update into _staging/{site}/.
+// Uses .tmp suffix during download and renames on completion.
+// Resumes partial downloads if _staging/{site}/ already has matching .tmp files.
+func downloadIonRecipeToStaging(stagingDir string, update IonRecipeUpdate) error
+
+// verifyIonRecipeStaging verifies all files in _staging/{site}/ against the update manifest.
+// Returns a non-nil error describing the first verification failure found.
+func verifyIonRecipeStaging(stagingDir string, update IonRecipeUpdate) error
+
+// atomicSwap performs the two-rename swap: live → _backup, staging → live.
+// Returns swapState indicating which renames completed, for crash-recovery use.
+func atomicSwap(ionsitesPath, site string) (swapState, error)
+
+// rollbackSwap reverses a completed or partially-completed swap.
+// Uses the backup directory exclusively — never re-downloads.
+func rollbackSwap(ionsitesPath, site string) error
+
+// recoverPendingSwap resolves a site left with status "pending" from a previous crash.
+func recoverPendingSwap(ionsitesPath, site string, versions *VersionsFile) error
+
+// updateVersionsJSON atomically updates _meta/versions.json after a swap.
+func updateVersionsJSON(ionsitesPath string, site string, entry VersionEntry) error
+```
+
+### New types
+
+```go
+// IonRecipeUpdate is a single entry in the reconciliation manifest sent by Nucleus.
+type IonRecipeUpdate struct {
+    Site            string              `json:"site"`
+    Version         string              `json:"version"`
+    SHA256Manifest  string              `json:"sha256_manifest"`
+    SHA256Archive   string              `json:"sha256_archive,omitempty"`
+    DownloadURL     string              `json:"download_url"`
+    Files           []IonRecipeFile     `json:"files"`
+}
+
+// IonRecipeFile is a single file entry within an IonRecipeUpdate.
+type IonRecipeFile struct {
+    Path   string `json:"path"`
+    SHA256 string `json:"sha256"`
+    Bytes  int64  `json:"bytes"`
+}
+
+// IonRecipeManifest is the full reconciliation payload from Nucleus.
+type IonRecipeManifest struct {
+    IonRecipes []IonRecipeUpdate `json:"ion_recipes"`
+    IssuedAt   string            `json:"issued_at"`
+    IssuedBy   string            `json:"issued_by"`
+}
+
+// ReconcileResult captures the outcome of reconciling a single site.
+type ReconcileResult struct {
+    Site            string        `json:"site"`
+    PreviousVersion string        `json:"previous_version"`
+    NewVersion      string        `json:"new_version"`
+    Action          string        `json:"action"` // "skipped" | "swapped" | "rolled_back" | "failed"
+    Phase           string        `json:"phase"`  // phase where failure occurred, if any
+    Error           string        `json:"error,omitempty"`
+    Duration        time.Duration `json:"duration_ms"`
+    SwappedAt       string        `json:"swapped_at,omitempty"`
+}
+
+// VersionEntry is a single site's record in versions.json.
+type VersionEntry struct {
+    Version          string `json:"version"`
+    ManifestSHA256   string `json:"manifest_sha256"`
+    SwappedAt        string `json:"swapped_at"`
+    SwapCount        int    `json:"swap_count"`
+    PreviousVersion  string `json:"previous_version"`
+    Status           string `json:"status"` // "healthy" | "rollback" | "pending"
+}
+
+// VersionsFile is the parsed _meta/versions.json.
+type VersionsFile struct {
+    SchemaVersion int                     `json:"schema_version"`
+    LastUpdated   string                  `json:"last_updated"`
+    Sites         map[string]VersionEntry `json:"sites"`
+}
+
+// swapState captures how far a two-rename swap progressed (for crash recovery).
+type swapState int
+const (
+    swapStateNone        swapState = iota // neither rename completed
+    swapStateBackupDone                   // live → _backup completed; staging → live did not
+    swapStateBothDone                     // both renames completed
+)
+```
+
+---
+
+## IonPump Signal Protocol
+
+Before any swap, Metamorph must coordinate with Brain's IonPump runtime. IonPump exposes a local HTTP API (loopback only) for this purpose.
+
+### Quiesce request (pre-swap)
+
+```
+POST http://127.0.0.1:{ionpump_port}/ionsites/quiesce
+Content-Type: application/json
+
+{ "site": "github.com", "reason": "metamorph_swap", "timeout_ms": 5000 }
+```
+
+Expected response (200 OK):
+```json
+{ "status": "quiesced", "site": "github.com", "active_flows": 0 }
+```
+
+If IonPump has flows actively running for this site, it should wait up to `timeout_ms` for them to complete naturally, then respond. If flows do not complete within the timeout, it should respond with:
+```json
+{ "status": "timeout", "site": "github.com", "active_flows": 2 }
+```
+
+Metamorph treats a `"timeout"` response as an abort condition. It does **not** force the swap. This is intentional: forcing a swap while flows are active risks data corruption in the flow's in-memory state.
+
+### Reload request (post-swap)
+
+```
+POST http://127.0.0.1:{ionpump_port}/ionsites/reload
+Content-Type: application/json
+
+{ "site": "github.com", "version": "1.1.0", "reason": "metamorph_swap" }
+```
+
+Expected response (200 OK):
+```json
+{ "status": "reloaded", "site": "github.com", "version": "1.1.0" }
+```
+
+If Brain fails to load the new recipe (parse error, missing entrypoint, etc.), it responds:
+```json
+{ "status": "error", "site": "github.com", "error": "entrypoint auth.ion not found" }
+```
+
+Metamorph treats any non-`"reloaded"` response as a reload failure and initiates rollback.
+
+### IonPumpClient interface
+
+The signal protocol is abstracted behind an interface to enable testing without a running Brain:
+
+```go
+type IonPumpClient interface {
+    QuiesceSite(site string, timeoutMs int) (QuiesceResult, error)
+    ReloadSite(site string, version string) (ReloadResult, error)
+}
+
+type QuiesceResult struct {
+    Status      string `json:"status"`       // "quiesced" | "timeout"
+    ActiveFlows int    `json:"active_flows"`
+}
+
+type ReloadResult struct {
+    Status  string `json:"status"` // "reloaded" | "error"
+    Version string `json:"version"`
+    Error   string `json:"error,omitempty"`
+}
+```
+
+The production implementation (`HttpIonPumpClient`) reads the IonPump port from Nucleus's shared config file. The test implementation (`NoopIonPumpClient`) always returns `"quiesced"` and `"reloaded"` without making network calls.
+
+---
+
+## CLI Integration
+
+### New command: `metamorph reconcile-ion-recipes`
+
+This command receives the reconciliation manifest from stdin (or `--manifest` file path) and executes the full reconciliation lifecycle.
+
+```bash
+# Nucleus pipes the manifest:
+echo '{"ion_recipes": [...]}' | metamorph reconcile-ion-recipes
+
+# Or from file:
+metamorph reconcile-ion-recipes --manifest /path/to/manifest.json
+
+# Dry run — inspect + verify but do not swap:
+metamorph reconcile-ion-recipes --manifest manifest.json --dry-run
+
+# Force swap even if Brain does not quiesce (emergency use only — unsafe):
+metamorph reconcile-ion-recipes --manifest manifest.json --force-swap
+
+# JSON output:
+metamorph --json reconcile-ion-recipes --manifest manifest.json
+```
+
+JSON output schema:
+
+```json
+{
+  "reconcile_results": [
+    {
+      "site": "github.com",
+      "previous_version": "1.0.0",
+      "new_version": "1.1.0",
+      "action": "swapped",
+      "phase": "",
+      "duration_ms": 342,
+      "swapped_at": "2026-04-02T09:15:00Z"
+    }
+  ],
+  "summary": {
+    "total_sites": 1,
+    "skipped": 0,
+    "swapped": 1,
+    "rolled_back": 0,
+    "failed": 0
+  },
+  "timestamp": "2026-04-02T09:15:00Z"
+}
+```
+
+### Extended `metamorph inspect --ion-recipes`
+
+The existing `--ion-recipes` flag (implemented in milestone GitHub Onboarding) is extended with:
+
+```bash
+# Show pending status (sites in _staging/ or with status "pending" in versions.json):
+metamorph inspect --ion-recipes --show-pending
+
+# Show backup versions:
+metamorph inspect --ion-recipes --show-backups
+```
+
+---
+
+## Error Handling Rules
+
+These rules define the precise behavior at each failure point. They are exhaustive — any failure scenario not listed here should be treated as `action: "failed"`, phase set to where the failure occurred, with no swap attempted.
+
+| Failure point | Rule |
+|---|---|
+| `ionsites/` directory missing | Return informative error to caller. Do not create the directory. Creation is Nucleus's responsibility. |
+| `_staging/` directory creation fails | Log and abort this site. Do not continue to download. |
+| Download of individual file fails | Leave `_staging/{site}/` intact (partial download). Abort this site. Next run will retry. |
+| SHA-256 verification fails for any file | Delete `_staging/{site}/` entirely. Abort this site with `phase: "verify"`. |
+| Brain does not respond to quiesce request | Abort this site. Do not swap. Log Brain's non-response separately. |
+| Brain returns `"timeout"` on quiesce | Abort this site. Do not swap. Do not retry automatically. |
+| First rename (live → backup) fails | No state change. Abort this site with `phase: "swap"`. |
+| Second rename (staging → live) fails | Reverse first rename immediately. Abort with `phase: "swap"`. |
+| `versions.json` update fails | The swap already completed. Log the `versions.json` failure but do NOT roll back — the on-disk state is correct. Schedule a `versions.json` repair on next startup. |
+| Brain returns `"error"` on reload | Initiate rollback (Phase 7). |
+| Rollback rename fails | This is a critical failure. Log with maximum severity. Do not attempt further automatic recovery. Alert Nucleus via its own error channel. |
+| `versions.json` update after rollback fails | Same as above: rollback is complete on disk. Log failure, do not re-reverse. |
+
+---
+
+## Testing Requirements
+
+Because IonPump recipes update daily, the reconciliation path must have higher test coverage than any other Metamorph subsystem. The following test cases are mandatory before the reconciliation feature ships.
+
+### Unit tests (`ionrecipes_test.go`)
+
+- `TestInspectIonRecipe_Healthy` — valid manifest, entrypoint exists, hash matches
+- `TestInspectIonRecipe_MissingManifest` — site directory exists, no `ion.manifest.json`
+- `TestInspectIonRecipe_ManifestUnparseable` — `ion.manifest.json` is invalid JSON
+- `TestInspectIonRecipe_EntrypointMissing` — manifest declares entrypoint, file absent
+- `TestInspectIonRecipe_SkipsMetaDir` — `_meta/`, `_staging/`, `_backup/` are not returned
+- `TestVerifyIonRecipeStaging_AllPass` — all files match hashes
+- `TestVerifyIonRecipeStaging_HashMismatch` — one file hash wrong → error
+- `TestVerifyIonRecipeStaging_FileMissing` — declared file absent → error
+- `TestAtomicSwap_BothRenames` — both renames succeed, state is `swapStateBothDone`
+- `TestAtomicSwap_SecondRenameFails` — second rename fails, first is reversed
+- `TestRollbackSwap_RestoresFromBackup` — backup present, rollback restores it
+- `TestRollbackSwap_NoBackup` — no backup directory → error, live not touched
+- `TestRecoverPendingSwap_BackupDoneNewLive` — crash after both renames → update versions.json
+- `TestRecoverPendingSwap_BackupDoneOldLive` — crash after first rename → delete backup, abort
+- `TestUpdateVersionsJSON_Atomic` — write + rename, file never in inconsistent state
+- `TestUpdateVersionsJSON_SwapCountIncrement` — swap_count increments correctly
+
+### Integration tests (`ionrecipes_integration_test.go`)
+
+Uses a temporary directory as `ionsitesPath` and a `NoopIonPumpClient`. No network calls.
+
+- `TestReconcileIonRecipe_SkippedIfUpToDate` — same version + same hash → action: "skipped"
+- `TestReconcileIonRecipe_HappyPath` — full flow, Brain confirms reload → action: "swapped"
+- `TestReconcileIonRecipe_BrainRefusesQuiesce` — Brain returns timeout → action: "failed", phase: "signal_pre"
+- `TestReconcileIonRecipe_BrainFailsReload` → rollback executed → action: "rolled_back"
+- `TestReconcileIonRecipe_VerificationFail` — hash mismatch → staging deleted → action: "failed", phase: "verify"
+- `TestReconcileAllIonRecipes_OneSiteFailsOthersContinue` — failure isolation
+
+---
+
+## Acceptance Criteria
+
+### Inspection milestone (GitHub Onboarding — already implemented)
+
+- [x] `IonRecipeInfo` and `IonRecipesResult` added to `types.go`
+- [x] `ionrecipes.go` created with `InspectIonRecipe`, `InspectAllIonRecipes`, `calculateDirSize`
+- [x] `CalculateSHA256` and `FormatSize` from `utils.go` reused — not reimplemented
+- [x] Flag `--ion-recipes` added to `inspect.go`
+- [x] `resolveIonSitesPath()` uses `GetBasePath()` — no hardcoded paths
+- [x] `printIonRecipesTable()` shows "No ion recipes installed." when list is empty
+- [x] `metamorph inspect --ion-recipes` returns 0 recipes (no error) if `ionsites/` empty
+- [x] `metamorph inspect --ion-recipes` returns informative warning if `ionsites/` missing
+- [x] JSON `"recipes"` field is always `[]`, never `null`
+- [x] `calculateDirSize` is unexported
+
+### Reconciliation milestone (next phase — not yet implemented)
+
+- [ ] `ReconcileIonRecipe` implements all 7 phases in order
+- [ ] No swap is ever attempted without SHA-256 verification passing for all files
+- [ ] No swap is ever attempted without Brain acknowledging quiesce
+- [ ] `atomicSwap` uses two renames — never copies in-place
+- [ ] Second rename failure reverses first rename before returning
+- [ ] Rollback uses `_backup/` exclusively — never re-downloads
+- [ ] `_meta/versions.json` is updated atomically (write `.tmp`, rename)
+- [ ] `versions.json` update failure after a successful swap does NOT trigger rollback
+- [ ] Crash recovery runs at Metamorph startup if any site has `"status": "pending"`
+- [ ] `IonPumpClient` is an interface — production and noop implementations both exist
+- [ ] `metamorph reconcile-ion-recipes --dry-run` makes no filesystem writes
+- [ ] All unit and integration tests listed above pass
+- [ ] A reconciliation run where all sites are already up to date completes in under 200ms
+
+---
+
+## Implementation Order for Reconciliation Milestone
+
+Implement in this strict order. Do not skip ahead — each phase depends on the previous being correct.
+
+1. **`types.go`** — Add `IonRecipeUpdate`, `IonRecipeFile`, `IonRecipeManifest`, `ReconcileResult`, `VersionEntry`, `VersionsFile`, `swapState`, `IonPumpClient`, `QuiesceResult`, `ReloadResult`
+2. **`ionpump_client.go`** — Implement `HttpIonPumpClient` and `NoopIonPumpClient`
+3. **`ionrecipes.go`** — Add `downloadIonRecipeToStaging`, `verifyIonRecipeStaging`, `atomicSwap`, `rollbackSwap`, `updateVersionsJSON` (no reconcile orchestration yet — just the primitives)
+4. **`ionrecipes_test.go`** — Write all unit tests against the primitives. All must pass before proceeding.
+5. **`ionrecipes.go`** — Add `ReconcileIonRecipe` and `ReconcileAllIonRecipes` using the verified primitives
+6. **`ionrecipes_integration_test.go`** — Write integration tests. All must pass before proceeding.
+7. **`ionrecipes.go`** — Add `recoverPendingSwap`, integrate into startup path
+8. **`inspect.go`** — Add `reconcile-ion-recipes` command, `--dry-run` flag, `--force-swap` flag
+9. **End-to-end validation** — Manually run against a real `ionsites/github.com/` seed directory, verify all phases execute and `versions.json` reflects the correct state
+
+---
+
+*This is Metamorph's highest-risk update path. Every shortcut taken here has a proportionally higher chance of leaving a user's automation silently broken. Build it to be boring and correct, not fast and clever.*
