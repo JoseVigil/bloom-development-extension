@@ -497,6 +497,8 @@ gmail notimation ionpump
 https://chatgpt.com/c/69923d1e-f3ac-8331-a77a-5562755eac62
 roamingpads
 https://claude.ai/chat/07ed9861-ad5f-4be8-92a8-fb72eb812848
+gestureos Organización de perfiles Chromium en múltiples pantallas
+https://claude.ai/chat/05bff2ae-59ab-4927-a867-f8c9a48c2d7c
 
 roamtouch market rollout merge como primer skill
 https://chatgpt.com/c/6993b1cf-9434-8329-993b-a77350b7b392
@@ -617,12 +619,18 @@ https://claude.ai/chat/32a589c0-4aca-4c38-8d34-105a5e4ebc5a
 harness 
 elias
 https://claude.ai/chat/18e0fe9b-89cf-4189-b824-188968580cf2
-harness-ionpump research
-bloomaut 
+
+bloomaut
+harness-ionpump research 
 https://claude.ai/chat/b623f3aa-e9bb-4e2c-992f-2efa6ffc0b9b
-retomar onboarding
+
 nenes
+retomar onboarding
 https://claude.ai/chat/bc66f2ba-4621-49ae-9812-ebf8100f2ee0
+
+padkite
+Secuencia de desarrollo para IonPump y Harness en BTIPS
+https://claude.ai/chat/f09dccb2-4145-471a-8dfc-b325aa95fa16
 
 uitool
 busybox  firmware  synway 

@@ -290,8 +290,7 @@ bloom-development-extension/
     │   │   ├── ionpump_models.py
     │   │   ├── ionpump_registry.py
     │   │   ├── ionpump_state.py
-    │   │   ├── ionpump_validator.py
-    │   │   └── synapse_ipc_server.py
+    │   │   └── ionpump_validator.py
     │   ├── logs/
     │   │   └── logs_manager.py
     │   ├── nucleus_inspector.py
@@ -364,6 +363,7 @@ bloom-development-extension/
     │   │   │   └── api_key_handler.py
     │   │   ├── synapse_exceptions.py
     │   │   ├── synapse_host_init_manager.py
+    │   │   ├── synapse_ipc_server.py
     │   │   ├── synapse_manager.py
     │   │   └── synapse_protocol.py
     │   ├── system/

@@ -292,9 +292,11 @@ chmod +x usr/bin/strace
 usr/bin/strace -V
 
 
+Get-FileHash "C:\tmp\run\bin\libshdpci.so*" -Algorithm MD5 | Format-Table -AutoSize
 
+Get-FileHash "C:\tmp\run\files\libshpa3.so*" -Algorithm MD5 | Format-Table -AutoSize
 
-Get-FileHash "C:\tmp\run\bin\shdpci.ko*" -Algorithm MD5 | Format-Table -AutoSize
+Get-FileHash "C:\tmp\run\files\libshdpci.so" -Algorithm MD5 | Format-Table -AutoSize
 
 Get-FileHash "C:\tmp\run\bin\shdpci.ko" -Algorithm MD5
 
@@ -311,6 +313,10 @@ md5sum /mnt/flash/synway/liblantiq.so
 
 chmod +x /usr/lib/liblantiq.so
 
+nc 192.168.1.102 9996 > /mnt/flash/shdpci.ko
+
+ls -la /mnt/flash/shdpci.ko
+md5sum /mnt/flash/shdpci.ko
 
 $LauncherFile = "C:\tmp\run\bin\shdpci.ko"
 Remove-NetFirewallRule -DisplayName "Gateway Upload 9996" -ErrorAction SilentlyContinue
@@ -445,10 +451,10 @@ sh /mnt/flash/d.sh /mnt/flash/synway/libshdpci.so
 
 cp /mnt/flash/synway/libshdpci.so /mnt/flash/synway/libshdpci.pre7B.so
 
-nc 192.168.1.102 9996 > /mnt/flash/synway/libshdpci.so
+nc 192.168.1.102 9996 > /mnt/flash/libshdpci.so
 
-ls -la /mnt/flash/synway/libshdpci.so
-md5sum /mnt/flash/synway/libshdpci.so
+ls -la /mnt/flash/libshdpci.so
+md5sum /mnt/flash/libshdpci.so
 
 $LauncherFile = "C:\tmp\run\bin\libshdpci.so"
 Remove-NetFirewallRule -DisplayName "Gateway Upload 9996" -ErrorAction SilentlyContinue
