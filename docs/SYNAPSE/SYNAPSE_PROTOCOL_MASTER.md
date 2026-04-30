@@ -519,6 +519,25 @@ Prerequisito: Test 4 pasado.
 
 Logs a revisar: `brain.core.synapse.manager`
 
+### `SYNAPSE_DEBUG` — Helper de diagnóstico en Service Worker
+
+Disponible en DevTools del Service Worker del Harness en builds `--dev`.  
+Acceso: `chrome://extensions` → Bloom Cortex → Service Worker → Consola.
+
+```javascript
+self.SYNAPSE_DEBUG.getState()
+// Retorna: { connected, launch_id, protocols_loaded, last_message, ipc_port }
+
+self.SYNAPSE_DEBUG.getProtocols()
+// Retorna: lista de manifests cargados con version y message count
+
+self.SYNAPSE_DEBUG.getLastError()
+// Retorna: último error registrado por SynapseManager
+```
+
+> Solo disponible con `--dev`. En builds de producción `self.SYNAPSE_DEBUG` es `undefined`.  
+> Documentación completa: `BTIPS-CORTEX-REFERENCE-v1_0.md` §17.
+
 ---
 
 ## 7. GAPS CONOCIDOS Y TRABAJO PENDIENTE
@@ -562,7 +581,7 @@ Brain debe responder con datos reales cuando la extensión los solicita:
 
 La integración IonPump ↔ IntentExecutor está deferred hasta confirmar qué archivo
 despacha la ejecución de intents en `brain/core/intent/`.
-Ver `IONPUMP_IMPLEMENTATION_PROMPT_v2.md` sección Phase 3.
+Ver `IONPUMP_IMPLEMENTATION_PROMPT_v3.md` sección Phase 3.
 
 ### Bloqueado: Metamorph reconcile
 

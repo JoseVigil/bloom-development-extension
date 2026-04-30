@@ -118,6 +118,7 @@ extension/
 │
 ├── discovery.synapse.config.js      ← Config de sesión para modo discovery (generado por Sentinel)
 ├── landing.synapse.config.js        ← Config de sesión para modo landing (generado por Sentinel)
+├── harness.synapse.config.js        ← Config de sesión para el Harness (generado por Sentinel, solo builds dev)
 │
 └── assets/
     ├── icon16.png
@@ -928,22 +929,26 @@ self.LANDING_PROTOCOL_MANIFEST = { ... };
 self.IONPUMP_PROTOCOL_MANIFEST = { ... };
 ```
 
-El `ProtocolReader` del Harness carga todos los manifests disponibles al inicializarse:
+El `ProtocolReader` del Harness carga todos los manifests disponibles al inicializarse. El mecanismo es un **escaneo de `self.*`**: itera sobre el contexto global buscando cualquier objeto que tenga la forma `{ version, protocol, messages: [] }`. No existe un array hardcodeado de nombres de protocolo en `harness/index.html`.
 
 ```javascript
 class ProtocolReader {
   async loadAll() {
-    const available = [
-      { key: 'discovery', global: 'DISCOVERY_PROTOCOL_MANIFEST' },
-      { key: 'landing',   global: 'LANDING_PROTOCOL_MANIFEST'   },
-      { key: 'ionpump',   global: 'IONPUMP_PROTOCOL_MANIFEST'   }
-    ];
-    for (const { key, global } of available) {
-      if (self[global]) this.protocols[key] = self[global];
+    // Escanea self.* en busca de objetos con la forma de un manifest
+    for (const key of Object.keys(self)) {
+      const val = self[key];
+      if (
+        val && typeof val === 'object' &&
+        val.version && val.protocol && Array.isArray(val.messages)
+      ) {
+        this.protocols[val.protocol] = val;
+      }
     }
   }
 }
 ```
+
+Esta arquitectura garantiza que **agregar un nuevo protocolo no requiere modificar `harness/index.html`**. El Harness detecta automáticamente cualquier `*_PROTOCOL_MANIFEST` que esté presente en el contexto global — siempre que el archivo que lo define sea accesible desde el Service Worker del Harness y esté incluido en `web_accessible_resources` del `manifest.json`.
 
 ### Panel Simulate — UI generada dinámicamente
 
@@ -1323,8 +1328,12 @@ El Harness se extiende automáticamente cuando se agrega un nuevo `*_PROTOCOL_MA
 
 Para agregar soporte de un nuevo protocolo:
 1. Crear el manifest en el archivo JS correspondiente: `self.NUEVO_PROTOCOL_MANIFEST = { ... }`.
-2. Agregar la entrada en el array `available` del `ProtocolReader` en `harness/index.html`.
-3. Re-seed del perfil.
+2. Asegurarse de que el archivo que define el manifest esté incluido en `web_accessible_resources`
+   del `manifest.json` de la extensión.
+3. Re-seed del perfil — el `ProtocolReader` lo detectará automáticamente.
+
+> ❌ **No modificar `harness/index.html`.** El `ProtocolReader` escanea `self.*` en el contexto
+> global — no requiere registro manual de ningún protocolo.
 
 ---
 
