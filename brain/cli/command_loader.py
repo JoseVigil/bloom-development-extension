@@ -293,6 +293,33 @@ def load_all_commands_explicit() -> CommandRegistry:
         print(f"Warning: Could not load ValidateCommand: {e}")
     
     # =================================================================
+    # IONPUMP
+    # =================================================================
+    try:
+        from brain.commands.ionpump.ionpump_inspect import IonPumpInspectCommand
+        registry.register(IonPumpInspectCommand())
+    except ImportError as e:
+        print(f"Warning: Could not load IonPumpInspectCommand: {e}")
+    
+    try:
+        from brain.commands.ionpump.ionpump_reload import IonPumpReloadCommand
+        registry.register(IonPumpReloadCommand())
+    except ImportError as e:
+        print(f"Warning: Could not load IonPumpReloadCommand: {e}")
+    
+    try:
+        from brain.commands.ionpump.ionpump_test import IonPumpTestCommand
+        registry.register(IonPumpTestCommand())
+    except ImportError as e:
+        print(f"Warning: Could not load IonPumpTestCommand: {e}")
+    
+    try:
+        from brain.commands.ionpump.ionpump_validate import IonPumpValidateCommand
+        registry.register(IonPumpValidateCommand())
+    except ImportError as e:
+        print(f"Warning: Could not load IonPumpValidateCommand: {e}")
+    
+    # =================================================================
     # LOGS
     # =================================================================
     try:
@@ -666,6 +693,10 @@ def get_hiddenimports_list():
         'brain.commands.intent.unlock',
         'brain.commands.intent.update',
         'brain.commands.intent.validate',
+        'brain.commands.ionpump.ionpump_inspect',
+        'brain.commands.ionpump.ionpump_reload',
+        'brain.commands.ionpump.ionpump_test',
+        'brain.commands.ionpump.ionpump_validate',
         'brain.commands.logs.logs',
         'brain.commands.nucleus.create',
         'brain.commands.nucleus.create_exp_intent',

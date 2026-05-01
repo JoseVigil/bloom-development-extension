@@ -33,17 +33,6 @@ hiddenimports = [
     'brain.cli.help_renderer',
     'brain.shared',
     'brain.shared.context',
-    'brain.shared.credentials',
-    'brain.shared.credentials.base',
-    'brain.shared.credentials.claude_manager',
-    'brain.shared.credentials.openai_manager',
-    'brain.shared.credentials.unified_manager',
-    'brain.shared.credentials.xai_manager',
-    'brain.shared.environment',
-    'brain.shared.github_types',
-    'brain.shared.logger',
-    'brain.shared.paths',
-    'brain.shared.runtime_resolver',
     'brain.commands',
 
     # Typer y dependencias
@@ -55,31 +44,6 @@ hiddenimports = [
     'rich.markdown',
 
     # Comandos (Auto-generado por update_spec_hiddenimports.py)
-    'brain.commands.ai',
-    'brain.commands.ai.claude',
-    'brain.commands.ai.claude.claude_keys_add',
-    'brain.commands.ai.claude.claude_keys_delete',
-    'brain.commands.ai.claude.claude_keys_list',
-    'brain.commands.ai.claude.claude_keys_stats',
-    'brain.commands.ai.claude.claude_keys_validate',
-    'brain.commands.ai.gemini',
-    'brain.commands.ai.gemini.gemini_keys_add',
-    'brain.commands.ai.gemini.gemini_keys_delete',
-    'brain.commands.ai.gemini.gemini_keys_list',
-    'brain.commands.ai.gemini.gemini_keys_stats',
-    'brain.commands.ai.gemini.gemini_keys_validate',
-    'brain.commands.ai.openai',
-    'brain.commands.ai.openai.openai_keys_add',
-    'brain.commands.ai.openai.openai_keys_delete',
-    'brain.commands.ai.openai.openai_keys_list',
-    'brain.commands.ai.openai.openai_keys_stats',
-    'brain.commands.ai.openai.openai_keys_validate',
-    'brain.commands.ai.xai',
-    'brain.commands.ai.xai.xai_keys_add',
-    'brain.commands.ai.xai.xai_keys_delete',
-    'brain.commands.ai.xai.xai_keys_list',
-    'brain.commands.ai.xai.xai_keys_stats',
-    'brain.commands.ai.xai.xai_keys_validate',
     'brain.commands.chrome.chrome',
     'brain.commands.context.generate',
     'brain.commands.extension.backups',
@@ -138,7 +102,6 @@ hiddenimports = [
     'brain.commands.nucleus.list_projects',
     'brain.commands.nucleus.onboarding_complete',
     'brain.commands.nucleus.onboarding_status',
-    'brain.commands.nucleus.onboarding_steps_loader',
     'brain.commands.nucleus.project_info',
     'brain.commands.nucleus.status',
     'brain.commands.nucleus.sync',
@@ -248,6 +211,7 @@ hiddenimports = [
     'brain.core.profile.web.landing_generator',
     'brain.core.profile.web.templates',
     'brain.core.profile.web.templates.discovery',
+    'brain.core.profile.web.templates.harness',
     'brain.core.profile.web.templates.landing',
     'brain.core.project',
     'brain.core.project.clone_manager',
@@ -310,9 +274,10 @@ datas = [
     (str(PROJECT_ROOT / 'brain' / 'commands' / 'ionpump' / 'ion.manifest.json'), 'brain/commands/ionpump'),
     (str(PROJECT_ROOT / 'brain' / 'commands' / 'ionpump' / 'versions.json'), 'brain/commands/ionpump'),
 
-    # Version y build
-    (r'C:/repos/bloom-videos/bloom-development-extension/brain/VERSION', '.'),
-    (r'C:/repos/bloom-videos/bloom-development-extension/brain/__build__.py', '.'), 
+    # Version y build — paths relativos a PROJECT_ROOT (multiplataforma)
+    (str(PROJECT_ROOT / 'brain' / '__build__.py'), '.'),
+    (r'/Users/josevigil/repos/bloom-development-extension/brain/VERSION', '.'),
+    (r'/Users/josevigil/repos/bloom-development-extension/brain/__build__.py', '.'),
 ]
 
 # Forzar la estructura física de core/profile para evitar el bug de colisión de nombres
@@ -407,10 +372,18 @@ coll = COLLECT(
 import shutil
 import os
 
-# FIX: detectar plataforma real en vez de hardcodear win32
+# Detectar plataforma y arquitectura para el directorio de output
 import platform as _platform
-_machine = _platform.machine().lower()
-_plat_dir = "win64" if _machine in ("amd64", "x86_64") else "win32"
+_system  = _platform.system().lower()   # 'windows', 'darwin', 'linux'
+_machine = _platform.machine().lower()  # 'x86_64', 'arm64', 'amd64'
+
+if _system == 'windows':
+    _plat_dir = 'win64' if _machine in ('amd64', 'x86_64') else 'win32'
+elif _system == 'darwin':
+    _plat_dir = 'macos_arm64' if _machine == 'arm64' else 'macos64'
+else:  # linux
+    _plat_dir = 'linux64'
+
 DIST_DIR = PROJECT_ROOT / 'installer' / 'native' / 'bin' / _plat_dir / 'brain'
 
 # Crear directorio si no existe

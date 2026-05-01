@@ -6,3 +6,5 @@ watchdog>=3.0.0
 colorama>=0.4.6
 websockets>=10.0
 pywin32; sys_platform == "win32"
+tomli; python_version < "3.11"
+tomli-w
