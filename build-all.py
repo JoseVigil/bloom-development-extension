@@ -1,1309 +1,555 @@
+#!/usr/bin/env python3
 """
-Bloom Build All
-===============
-Orquestador maestro de builds para todos los componentes del ecosistema Bloom.
+BloomNucleus — Cross-Platform Build Orchestrator
+Soporta: Windows | macOS | Linux
 
-Secuencia de ejecución:
-  1. Brain        → builds/windows/brain.ps1
-  2. Nucleus      → builds/windows/build-component.bat nucleus
-  3. Sentinel     → builds/windows/build-component.bat sentinel
-  4. Host         → skipped on Windows (Linux build via installer/host/build.sh)
-  5. Conductor    → cd installer/conductor && npm run build:all
-                    (buildea sensor + setup en un solo paso)
-  6. Metamorph    → builds/windows/build-component.bat metamorph
-  7. Sensor       → builds/windows/build-component.bat sensor
-  8. Plugin       → npm run build (tsc + copy-assets + esbuild bundle)
-                    Output: installer/native/bin/bootstrap/bundle.js
-  9. Vsix         → npm run package:vscode (vsce package)
-                    Output: installer/vscode/bloom-extension.vsix
-  10. Bootstrap   → installer/bootstrap/version-bootstrap.py
-                    (incrementa build_number en bootstrap.meta.json)
-                    copia bootstrap.meta.json + version-bootstrap.py
-                    a installer/native/bin/bootstrap/
-  11. Cortex      → installer/cortex/build-cortex/package.py
-                    (lee cortex.meta.json, incrementa build_number, produce .blx)
+Estructura esperada:
+  root/
+  ├── build-all.py               ← este archivo
+  ├── builds/
+  │   ├── windows/
+  │   │   ├── build-component.bat
+  │   │   └── brain.ps1
+  │   └── macos/
+  │       ├── build-component.sh
+  │       └── build-host.sh
+  └── installer/
+      ├── nucleus/
+      ├── sentinel/
+      ├── metamorph/
+      ├── sensor/
+      ├── conductor/
+      ├── cortex/
+      └── bootstrap/
 
-Luego de buildear los ejecutables, interroga cada uno para verificar versión
-y reporta un resumen final del estado de todos los componentes.
-
-Uso:
-  python build-all.py [--channel stable|beta|dev] [--production] [--skip-verify]
-
-Requisitos: Python 3.9+ stdlib only. Windows.
+USO:
+  python3 build-all.py                   # build completo
+  python3 build-all.py --only nucleus    # solo un componente Go
+  python3 build-all.py --skip host       # saltar host (C++)
 """
+
+from __future__ import annotations
 
 import argparse
 import json
 import os
+import platform as _platform
 import subprocess
 import sys
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+import textwrap
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Callable
 
-# ---------------------------------------------------------------------------
-# Telemetría — paths y constantes siguiendo BLOOM_NUCLEUS_LOGGING_SPEC
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
+# CONSTANTES DE PLATAFORMA
+# ─────────────────────────────────────────────────────────────────────────────
 
-APPDATA        = Path(os.environ.get("LOCALAPPDATA",
-                    Path.home() / "AppData/Local"))
-NUCLEUS_HOME   = Path(os.environ.get("BLOOM_NUCLEUS_HOME",
-                    APPDATA / "BloomNucleus"))
-NUCLEUS_EXE    = NUCLEUS_HOME / "bin/nucleus/nucleus.exe"
-LOGS_BUILD_DIR = NUCLEUS_HOME / "logs/build"
+IS_WINDOWS = sys.platform == "win32"
+IS_MACOS   = sys.platform == "darwin"
+IS_LINUX   = sys.platform.startswith("linux")
 
-BUILD_ALL_STREAM   = "build_all"
-BUILD_ALL_LABEL    = "🔨 BUILD ALL"
-BUILD_ALL_PRIORITY = 2
+ROOT = Path(__file__).resolve().parent
 
 
-def get_log_path() -> Path:
-    """
-    Genera el path del log con fecha del dia: build_all_YYYYMMDD.log
-    Multiples runs del mismo dia hacen append al mismo archivo.
-    El stream_id es fijo (build_all) — nucleus sobreescribe el path en cada registro.
-    """
-    ts = datetime.now(timezone.utc).strftime("%Y%m%d")
-    return LOGS_BUILD_DIR / f"build_all_{ts}.log"
+# ─────────────────────────────────────────────────────────────────────────────
+# CORRECCIÓN 1 — Paths de NUCLEUS_HOME por plataforma
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _resolve_nucleus_home() -> Path:
+    if IS_WINDOWS:
+        appdata = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData/Local"))
+        return Path(os.environ.get("BLOOM_NUCLEUS_HOME", appdata / "BloomNucleus"))
+    elif IS_MACOS:
+        return Path(os.environ.get(
+            "BLOOM_NUCLEUS_HOME",
+            Path.home() / "Library" / "Application Support" / "BloomNucleus"
+        ))
+    else:  # Linux
+        xdg = os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local/share"))
+        return Path(os.environ.get("BLOOM_NUCLEUS_HOME", Path(xdg) / "BloomNucleus"))
 
 
-def write_log(log_path: Path, build_results: list, verify_results: list,
-              channel: str, verify_env: str) -> None:
-    """
-    Escribe el log de build siguiendo el spec:
-    - Directorio: logs/build/
-    - Nombre: build_all_YYYYMMDD.log  (append, no reemplaza)
-    - Formato: timestamp + severity + mensaje
-    """
-    LOGS_BUILD_DIR.mkdir(parents=True, exist_ok=True)
-
-    ts_run = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-    lines = []
-    lines.append(f"[{ts_run}] INFO  ============================================")
-    lines.append(f"[{ts_run}] INFO  BUILD ALL  channel={channel}  verify={verify_env}")
-    lines.append(f"[{ts_run}] INFO  ============================================")
-
-    # Resultados de build
-    lines.append(f"[{ts_run}] INFO  --- BUILD ---")
-    for r in build_results:
-        if r.skipped:
-            lines.append(f"[{ts_run}] INFO  SKIP  {r.component}: {r.skip_reason}")
-        elif r.success:
-            ver = f" v{r.version} build {r.build}" if r.version else ""
-            lines.append(f"[{ts_run}] INFO  OK    {r.component}{ver}")
-        else:
-            lines.append(f"[{ts_run}] ERROR FAIL  {r.component}: {(r.error or '').splitlines()[0]}")
-
-    # Resultados de verificación
-    verify_map = {vr.component: vr for vr in verify_results}
-    if verify_map:
-        lines.append(f"[{ts_run}] INFO  --- VERIFY ---")
-        for r in build_results:
-            vr = verify_map.get(r.component)
-            if vr is None:
-                continue
-            if vr.success:
-                lines.append(f"[{ts_run}] INFO  OK    {vr.component} v{vr.version} build {vr.build}")
-            else:
-                lines.append(f"[{ts_run}] ERROR FAIL  {vr.component}: {vr.error or 'unknown'}")
-
-    # Resultado final
-    failed = [r for r in build_results if not r.success and not r.skipped]
-    outcome = "SUCCESS" if not failed else "FAILED"
-    lines.append(f"[{ts_run}] INFO  RESULT: {outcome}")
-    lines.append("")
-
-    with log_path.open("a", encoding="utf-8") as f:
-        f.write('\n'.join(lines) + '\n')
+def _exe(stem: str) -> str:
+    """Retorna el nombre del ejecutable con extensión correcta para la plataforma."""
+    return stem + (".exe" if IS_WINDOWS else "")
 
 
-def register_telemetry(log_path: Path, build_results: list) -> None:
-    """
-    Registra el stream en telemetry.json via nucleus telemetry register.
-    Nucleus es el UNICO escritor de telemetry.json — nunca escribir directo.
-
-    Convenciones aplicadas (BLOOM_NUCLEUS_LOGGING_SPEC):
-      - stream_id : build_all  (fijo — nucleus sobreescribe el path en cada registro)
-      - category  : build
-      - source    : omitido — build-all.py es un script externo, no un binario del ecosistema
-      - path      : archivo diario con append — multiples runs del mismo dia en el mismo archivo
-      - priority  : 2 (Important — pipeline principal de compilacion)
-      - timestamps: UTC en el archivo de log
-    """
-    if not NUCLEUS_EXE.exists():
-        print(f"  {YELLOW}[telemetry] nucleus.exe no encontrado en {NUCLEUS_EXE} — registro omitido{RESET}", flush=True)
-        return
-
-    # Categorías: "build" siempre + categoría válida de cada componente buildeado exitosamente
-    COMPONENT_CATEGORY = {
-        "Brain":     "brain",
-        "Nucleus":   "nucleus",
-        "Sentinel":  "sentinel",
-        "Metamorph": "metamorph",
-        "Conductor": "conductor",
-        "Sensor":    "sensor",
-        "Vsix":      "vsix",
-        "Bootstrap": "bootstrap",
-        "Cortex":    "cortex",
-    }
-    extra_categories = [
-        COMPONENT_CATEGORY[r.component]
-        for r in build_results
-        if r.component in COMPONENT_CATEGORY and (r.success or r.skipped)
-    ]
-    categories = ["build"] + extra_categories
-
-    cmd = [
-        str(NUCLEUS_EXE),
-        "telemetry", "register",
-        "--stream",      BUILD_ALL_STREAM,
-        "--label",       BUILD_ALL_LABEL,
-        "--path",        str(log_path).replace(chr(92), "/"),
-        "--priority",    str(BUILD_ALL_PRIORITY),
-        "--description", "build-all.py pipeline log — registra resultado de cada fase (compilacion, empaquetado, verificacion) por run del orquestador maestro",
-    ]
-    for cat in categories:
-        cmd += ["--category", cat]
+NUCLEUS_HOME = _resolve_nucleus_home()
+NUCLEUS_EXE  = NUCLEUS_HOME / "bin" / "nucleus" / _exe("nucleus")
 
 
-    try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=10,
-        )
-        if result.returncode == 0:
-            print(f"  {GREEN}[telemetry] stream '{BUILD_ALL_STREAM}' registrado correctamente{RESET}", flush=True)
-        else:
-            print(f"  {YELLOW}[telemetry] registro fallido (code {result.returncode}): {result.stderr.strip()}{RESET}", flush=True)
-    except Exception as e:
-        print(f"  {YELLOW}[telemetry] error al registrar: {e}{RESET}", flush=True)
+# ─────────────────────────────────────────────────────────────────────────────
+# CORRECCIÓN 2 — _DEV_BIN_BASE: detectar arquitectura en macOS
+# ─────────────────────────────────────────────────────────────────────────────
 
-ROOT = Path(__file__).parent.resolve()
+def _get_dev_bin_base() -> Path:
+    if IS_WINDOWS:
+        return ROOT / "installer/native/bin/win64"
+    elif IS_MACOS:
+        arch = _platform.machine()  # 'arm64' o 'x86_64'
+        folder = "darwin_arm64" if arch == "arm64" else "darwin_x64"
+        return ROOT / "installer/native/bin" / folder
+    else:  # Linux
+        return ROOT / "installer/native/bin/linux_x64"
 
-# ---------------------------------------------------------------------------
-# Paths de binarios y fuentes por entorno
-# ---------------------------------------------------------------------------
-_DEV_BIN_BASE  = ROOT / "installer/native/bin/win64"
+
+_DEV_BIN_BASE  = _get_dev_bin_base()
 _PROD_BIN_BASE = NUCLEUS_HOME / "bin"
 
-CORTEX_SOURCE  = ROOT / "installer/cortex/extension"
-CORTEX_OUTPUT  = ROOT / "installer/native/bin/win64/cortex"
 
-BUILDS = {
-    "brain":      ROOT / "builds/windows/brain.ps1",
-    # nucleus, sentinel, metamorph y sensor usan un único script parametrizado
-    "component":  ROOT / "builds/windows/build-component.bat",
-    "conductor":  ROOT / "installer/conductor",          # cwd para npm
-    "cortex":     ROOT / "installer/cortex/build-cortex/package.py",
-    # Bootstrap — genera bundle.js + meta + copia todo a installer/native/bin/bootstrap/
-    "bootstrap":  ROOT / "installer/bootstrap/version-bootstrap.py",
-    # Vsix — empaqueta la extensión instalable para VSCode (.vsix)
-    # Requiere que bootstrap haya corrido antes (necesita out/ y bundle.js)
-    "vsix":       ROOT,                                  # cwd para npm run package:vscode
+# ─────────────────────────────────────────────────────────────────────────────
+# CORRECCIÓN 3 — BUILDS: seleccionar .bat vs .sh por plataforma
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _build_script_dir() -> Path:
+    """Carpeta de scripts de build para la plataforma actual."""
+    return ROOT / "builds" / ("windows" if IS_WINDOWS else "macos")
+
+
+_BUILD_DIR = _build_script_dir()
+
+# npm / node: usar "npm.cmd" en Windows, "npm" en unix
+_NPM = "npm.cmd" if IS_WINDOWS else "npm"
+
+BUILDS: dict[str, Path | None] = {
+    # Brain: PowerShell en Windows, bash en macOS/Linux
+    "brain": (
+        ROOT / "builds/windows/brain.ps1"
+        if IS_WINDOWS
+        else ROOT / "builds/macos/build-brain.sh"
+    ),
+
+    # Host (C++): solo macOS/Linux — None en Windows indica skip explícito
+    "host": (
+        None
+        if IS_WINDOWS
+        else _BUILD_DIR / "build-host.sh"
+    ),
+
+    # Go components: un solo script genérico por plataforma
+    "nucleus":   _BUILD_DIR / ("build-component.bat" if IS_WINDOWS else "build-component.sh"),
+    "sentinel":  _BUILD_DIR / ("build-component.bat" if IS_WINDOWS else "build-component.sh"),
+    "metamorph": _BUILD_DIR / ("build-component.bat" if IS_WINDOWS else "build-component.sh"),
+    "sensor":    _BUILD_DIR / ("build-component.bat" if IS_WINDOWS else "build-component.sh"),
+
+    # JS/Node: paths a sus directorios de proyecto
+    # ¡NO usar build_script() para estos — tienen build_node() propio!
+    "conductor": ROOT / "installer/conductor",
+    "cortex":    ROOT / "installer/cortex",
+    "bootstrap": ROOT / "installer/bootstrap",
+    "vsix":      ROOT,
 }
 
-def get_bin_base(verify_env: str) -> Path:
-    """Retorna el directorio raíz de binarios según el entorno de verificación."""
-    if verify_env == "prod":
-        return _PROD_BIN_BASE
-    return _DEV_BIN_BASE  # dev: installer/native/bin/win64
 
-@dataclass
-class BinaryContract:
-    name: str
-    bin_path: Path           # ruta al ejecutable
-    version_cmd: list[str]   # comando completo para obtener versión
-    info_cmd: list[str]      # comando completo para obtener info
-    version_field: str       # dotpath al campo de versión en la respuesta JSON
-    build_field: str         # dotpath al campo de build_number en la respuesta JSON
-
-def dotget(data: dict, path: str):
-    """Accede a campos anidados con notación 'data.version' → data['data']['version']."""
-    for key in path.split("."):
-        if isinstance(data, dict):
-            data = data.get(key)
-        else:
-            return None
-    return data
-
-def get_contracts(verify_env: str) -> list[BinaryContract]:
-    """
-    Retorna los contratos de verificación apuntando al entorno correcto.
-      dev  → installer/native/bin/win64/   (binarios recién buildeados)
-      prod → BloomNucleus/bin/             (binarios instalados en producción)
-
-    IMPORTANTE: version_cmd usa el path absoluto del binario como primer elemento.
-    Cada binario tiene su propia convención de flags, tomada literalmente
-    de los outputs verificados el 2026-02-18.
-    """
-    b = get_bin_base(verify_env)
-    brain     = str(b / "brain/brain.exe")
-    nucleus   = str(b / "nucleus/nucleus.exe")
-    sentinel  = str(b / "sentinel/sentinel.exe")
-    host      = str(b / "host/bloom-host.exe")
-    metamorph = str(b / "metamorph/metamorph.exe")
-    sensor    = str(b / "sensor/bloom-sensor.exe")
-    ps1       = str(b / "conductor/win-unpacked/bloom-conductor-version.ps1")
-    ps1_setup = str(b / "setup/win-unpacked/bloom-setup-version.ps1")
-
-    # Plugin: bundle.js siempre vive en bootstrap/ dentro del bin base
-    # dev  → installer/native/bin/bootstrap/bundle.js
-    # prod → AppData/Local/BloomNucleus/bin/bootstrap/bundle.js
-    plugin_bundle = b / "bootstrap/bundle.js"
-
-    # Vsix: solo existe en dev (installer/vscode/). En prod ya fue instalado por code CLI.
-    vsix_path = ROOT / "installer/vscode"
-
-    return [
-        BinaryContract(
-            name         = "Brain",
-            bin_path     = b / "brain/brain.exe",
-            version_cmd  = [brain, "--json", "--version"],
-            info_cmd     = [brain, "--json", "--info"],
-            version_field= "data.app_release",
-            build_field  = "data.build_counter",
-        ),
-        BinaryContract(
-            name         = "Nucleus",
-            bin_path     = b / "nucleus/nucleus.exe",
-            version_cmd  = [nucleus, "--json", "version"],
-            info_cmd     = [nucleus, "--json", "info"],
-            version_field= "version",
-            build_field  = "build_number",
-        ),
-        BinaryContract(
-            name         = "Sentinel",
-            bin_path     = b / "sentinel/sentinel.exe",
-            version_cmd  = [sentinel, "--json", "version"],
-            info_cmd     = [sentinel, "--json", "info"],
-            version_field= "version",
-            build_field  = "build",
-        ),
-        BinaryContract(
-            name         = "Host",
-            bin_path     = b / "host/bloom-host.exe",
-            version_cmd  = [host, "--version", "--json"],
-            info_cmd     = [host, "--info", "--json"],
-            version_field= "version",
-            build_field  = "build",
-        ),
-        BinaryContract(
-            name         = "Conductor",
-            bin_path     = b / "conductor/bloom-conductor.exe",
-            version_cmd  = ["powershell", "-ExecutionPolicy", "Bypass", "-File", ps1, "--json"],
-            info_cmd     = ["powershell", "-ExecutionPolicy", "Bypass", "-File", ps1, "--json"],
-            version_field= "version",
-            build_field  = "build",
-        ),
-        BinaryContract(
-            name         = "Metamorph",
-            bin_path     = b / "metamorph/metamorph.exe",
-            version_cmd  = [metamorph, "--json", "version"],
-            info_cmd     = [metamorph, "--json", "info"],
-            version_field= "version",
-            build_field  = "build_number",
-        ),
-        BinaryContract(
-            # build_number es string en la salida de sensor (ej: "0"),
-            # verify_binary lo maneja via _parse_build() que acepta str y float.
-            name         = "Sensor",
-            bin_path     = b / "sensor/bloom-sensor.exe",
-            version_cmd  = [sensor, "--json", "version"],
-            info_cmd     = [sensor, "--json", "info"],
-            version_field= "version",
-            build_field  = "build",
-        ),
-        BinaryContract(
-            name         = "Setup",
-            bin_path     = b / "setup/bloom-setup.exe",
-            version_cmd  = ["powershell", "-ExecutionPolicy", "Bypass", "-File", ps1_setup, "--json"],
-            info_cmd     = ["powershell", "-ExecutionPolicy", "Bypass", "-File", ps1_setup, "--json"],
-            version_field= "version",
-            build_field  = "build",
-        ),
-    ]
-
-# ---------------------------------------------------------------------------
-# Resultado de cada step
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
+# HELPERS DE EJECUCIÓN
+# ─────────────────────────────────────────────────────────────────────────────
 
 @dataclass
 class StepResult:
-    component: str
-    success: bool
-    version: Optional[str]   = None
-    build:   Optional[int]   = None
-    error:   Optional[str]   = None
-    skipped: bool            = False
-    skip_reason: str         = ""
+    name:    str
+    ok:      bool
+    output:  str = ""
+    error:   str = ""
+    skipped: bool = False
+    skip_reason: str = ""
 
-# ---------------------------------------------------------------------------
-# Utilidades
-# ---------------------------------------------------------------------------
-
-BOLD  = "\033[1m"
-GREEN = "\033[92m"
-RED   = "\033[91m"
-YELLOW= "\033[93m"
-RESET = "\033[0m"
 
 def log(msg: str) -> None:
-    ts = datetime.now().strftime("%H:%M:%S")
-    print(f"  [{ts}] {msg}", flush=True)
+    print(f"  {msg}")
 
-def header(title: str) -> None:
-    print(flush=True)
-    print(f"{BOLD}{'─' * 60}{RESET}", flush=True)
-    print(f"{BOLD}  {title}{RESET}", flush=True)
-    print(f"{BOLD}{'─' * 60}{RESET}", flush=True)
 
-def run(cmd: list[str], cwd: Optional[Path] = None, timeout: int = 300) -> tuple[int, str, str]:
+def run(cmd: list[str], cwd: Path | None = None) -> tuple[int, str, str]:
     """
-    Ejecuta un comando mostrando su output en tiempo real (streaming).
-    Retorna (returncode, stdout_completo, stderr_completo).
-    Fuerza UTF-8 con reemplazo de caracteres inválidos para evitar
-    UnicodeDecodeError en consolas Windows con codepage CP1252.
+    Ejecuta un comando y retorna (returncode, stdout, stderr).
+    stdout y stderr se capturan por separado y se combinan en el output
+    para diagnóstico — soluciona el problema de scripts bash que redirigen
+    stderr al log file, dejando run() con stderr vacío.
     """
-    if cwd is None:
-        cwd = ROOT
-    stdout_lines: list[str] = []
-    stderr_lines: list[str] = []
-
-    env = os.environ.copy()
-    env["PYTHONIOENCODING"] = "utf-8"
-
-    proc = subprocess.Popen(
+    proc = subprocess.run(
         cmd,
-        cwd=str(cwd),
+        cwd=cwd,
         stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        encoding="utf-8",
-        errors="replace",
-        env=env,
+        stderr=subprocess.STDOUT,   # ← CORRECCIÓN: merge stderr→stdout
+        text=True,
     )
+    return proc.returncode, proc.stdout.strip(), ""
 
-    import threading
 
-    def stream(pipe, store: list, prefix: str):
-        for line in pipe:
-            line = line.rstrip()
-            if line:
-                store.append(line)
-                print(f"    {prefix}{line}", flush=True)
-
-    t_out = threading.Thread(target=stream, args=(proc.stdout, stdout_lines, ""))
-    t_err = threading.Thread(target=stream, args=(proc.stderr, stderr_lines, ""))
-    t_out.start()
-    t_err.start()
-
-    try:
-        proc.wait(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        t_out.join()
-        t_err.join()
-        raise
-
-    t_out.join()
-    t_err.join()
-
-    return proc.returncode, "\n".join(stdout_lines), "\n".join(stderr_lines)
-
-def parse_json_output(raw: str) -> Optional[dict]:
-    """Extrae el primer bloque JSON válido del output (ignora logs previos)."""
-    raw = raw.strip()
-    # Algunos binarios emiten logs antes del JSON (ej: sentinel)
-    # Buscamos el primer '{'
-    idx = raw.find("{")
-    if idx == -1:
-        return None
-    try:
-        return json.loads(raw[idx:])
-    except json.JSONDecodeError:
-        return None
-
-# ---------------------------------------------------------------------------
-# Build steps
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
+# CORRECCIÓN 4 — build_brain(): seleccionar PowerShell vs bash
+# ─────────────────────────────────────────────────────────────────────────────
 
 def build_brain() -> StepResult:
-    brain_ps1 = BUILDS["brain"]
-    if not brain_ps1.exists():
-        return StepResult("Brain", False, error=f"Script no encontrado: {brain_ps1}")
-    log("Ejecutando build_brain.ps1 ...")
-    code, out, err = run(
-        ["powershell", "-ExecutionPolicy", "Bypass", "-File", brain_ps1.name],
-        cwd=brain_ps1.parent,
-    )
+    brain_script = BUILDS["brain"]
+    if not brain_script or not brain_script.exists():
+        return StepResult("Brain", False, error=f"Script no encontrado: {brain_script}")
+
+    if IS_WINDOWS:
+        log("Ejecutando brain.ps1 ...")
+        cmd = ["powershell", "-ExecutionPolicy", "Bypass", "-File", brain_script.name]
+    else:
+        log("Ejecutando build-brain.sh ...")
+        cmd = ["bash", brain_script.name]
+
+    code, out, _ = run(cmd, cwd=brain_script.parent)
     if code != 0:
-        return StepResult("Brain", False, error=err or out)
-    return StepResult("Brain", True)
+        return StepResult("Brain", False, error=out)
+    return StepResult("Brain", True, output=out)
 
 
-def build_bat(component: str, bat_path: Path) -> StepResult:
+# ─────────────────────────────────────────────────────────────────────────────
+# CORRECCIÓN 5 — build_go_component(): pasa el nombre del componente como arg
+#                El script de build redirige stderr al log file propio,
+#                por eso usamos stderr=STDOUT en run() para capturar todo.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def build_go_component(component: str) -> StepResult:
     """
-    Ejecuta builds/windows/build-component.bat <component>.
-    El bat recibe el nombre del componente como %1 y deriva todas las rutas de él.
+    Compila un componente Go usando el script genérico de la plataforma.
+    El nombre del componente se pasa como primer argumento al script.
     """
-    if not bat_path.exists():
-        return StepResult(component, False, error=f"Script no encontrado: {bat_path}")
-    log(f"Ejecutando {bat_path.name} {component.lower()} ...")
-    code, out, err = run(
-        ["cmd", "/c", bat_path.name, component.lower()],
-        cwd=bat_path.parent,
-    )
+    script_path = BUILDS[component]
+    if not script_path or not script_path.exists():
+        return StepResult(
+            component.capitalize(), False,
+            error=f"Script no encontrado: {script_path}"
+        )
+
+    log(f"Compilando {component} con {script_path.name} ...")
+
+    if IS_WINDOWS:
+        cmd = ["cmd", "/c", script_path.name, component]
+    else:
+        cmd = ["bash", script_path.name, component]
+
+    code, out, _ = run(cmd, cwd=script_path.parent)
     if code != 0:
-        return StepResult(component, False, error=err or out)
-    return StepResult(component, True)
+        # Mostrar las últimas líneas del output para diagnóstico
+        tail = "\n".join(out.splitlines()[-20:]) if out else "(sin output)"
+        return StepResult(component.capitalize(), False, error=tail)
+    return StepResult(component.capitalize(), True, output=out)
 
 
-def build_conductor() -> StepResult:
-    conductor_dir = BUILDS["conductor"]
-    if not conductor_dir.is_dir():
-        return StepResult("Conductor", False, error=f"Directorio no encontrado: {conductor_dir}")
-    log("Ejecutando npm run build:all (sensor + setup) ...")
-    # En Windows npm es npm.cmd, no un ejecutable directo
-    npm_cmd = "npm.cmd" if sys.platform == "win32" else "npm"
-    code, out, err = run(
-        [npm_cmd, "run", "build:all"],
-        cwd=conductor_dir,
-    )
-    if code != 0:
-        return StepResult("Conductor", False, error=err or out)
-    return StepResult("Conductor", True)
-
-
-def build_sensor() -> StepResult:
-    return build_bat("Sensor", BUILDS["component"])
-
-
-def build_vsix() -> StepResult:
+def build_host() -> StepResult:
     """
-    Empaqueta la extensión como .vsix usando vsce.
-    Output: installer/vscode/bloom-extension.vsix
-    Requiere que build_bootstrap() haya corrido antes (necesita out/ y bundle.js).
+    Compila bloom-host (C++). Solo en macOS/Linux.
+    En Windows: skip explícito con cartel informativo.
     """
-    plugin_dir = BUILDS["vsix"]
-    npm_cmd = "npm.cmd" if sys.platform == "win32" else "npm"
-    log("Ejecutando npm run package:vscode (vsce package) ...")
-    code, out, err = run(
-        [npm_cmd, "run", "package:vscode"],
-        cwd=plugin_dir,
-    )
+    if IS_WINDOWS:
+        return StepResult(
+            "Host",
+            ok=True,
+            skipped=True,
+            skip_reason=(
+                "bloom-host (C++) no compila en Windows. "
+                "Compilar desde macOS o Linux."
+            ),
+        )
+
+    host_script = BUILDS["host"]
+    if not host_script or not host_script.exists():
+        return StepResult("Host", False, error=f"Script no encontrado: {host_script}")
+
+    log(f"Ejecutando {host_script.name} ...")
+    code, out, _ = run(["bash", host_script.name], cwd=host_script.parent)
     if code != 0:
-        return StepResult("Vsix", False, error=err or out)
+        tail = "\n".join(out.splitlines()[-20:]) if out else "(sin output)"
+        return StepResult("Host", False, error=tail)
+    return StepResult("Host", True, output=out)
 
-    # Verificar que el .vsix fue generado
-    vsix_dir = plugin_dir / "installer/vscode"
-    vsix_files = list(vsix_dir.glob("*.vsix")) if vsix_dir.exists() else []
-    if not vsix_files:
-        return StepResult("Vsix", False,
-                          error=f"vsce OK pero no se encontró .vsix en {vsix_dir}")
 
-    # El más reciente en caso de que haya varios
-    vsix_file = max(vsix_files, key=lambda p: p.stat().st_mtime)
-    size_kb = vsix_file.stat().st_size / 1024
-    log(f".vsix generado: {vsix_file.name} ({size_kb:.1f} KB)")
+# ─────────────────────────────────────────────────────────────────────────────
+# CORRECCIÓN 6 — Pasos Node/npm: usar npm run, no bash sobre un directorio
+# ─────────────────────────────────────────────────────────────────────────────
 
-    # Copiar a installer/native/bin/vscode/ para deploy
-    import shutil
-    native_vsix_dir = ROOT / "installer/native/bin/vscode"
-    native_vsix_dir.mkdir(parents=True, exist_ok=True)
-    dst = native_vsix_dir / vsix_file.name
-    shutil.copy2(vsix_file, dst)
-    log(f"Copiado → {dst.relative_to(ROOT)}")
+def build_node(name: str, project_dir: Path, npm_script: str) -> StepResult:
+    """
+    Ejecuta 'npm run <npm_script>' en project_dir.
+    Reemplaza el uso incorrecto de build_script() sobre directorios.
+    """
+    if not project_dir.exists():
+        return StepResult(name, False, error=f"Directorio no encontrado: {project_dir}")
 
-    return StepResult("Vsix", True)
+    pkg_json = project_dir / "package.json"
+    if not pkg_json.exists():
+        return StepResult(name, False, error=f"package.json no encontrado en: {project_dir}")
+
+    log(f"Ejecutando npm run {npm_script} en {project_dir.name}/ ...")
+    cmd = [_NPM, "run", npm_script]
+    code, out, _ = run(cmd, cwd=project_dir)
+    if code != 0:
+        tail = "\n".join(out.splitlines()[-20:]) if out else "(sin output)"
+        return StepResult(name, False, error=tail)
+    return StepResult(name, True, output=out)
+
+
+def build_cortex() -> StepResult:
+    """
+    Cortex: ejecuta package.py con python3, no con bash.
+    El script está en installer/cortex/build-cortex/package.py
+    """
+    cortex_dir   = BUILDS["cortex"]
+    package_py   = cortex_dir / "build-cortex" / "package.py"  # type: ignore[operator]
+
+    if not package_py.exists():
+        # Fallback: buscar package.py directamente en cortex_dir
+        package_py = cortex_dir / "package.py"                 # type: ignore[operator]
+        if not package_py.exists():
+            return StepResult("Cortex", False,
+                              error=f"package.py no encontrado en: {cortex_dir}")
+
+    log(f"Ejecutando python3 {package_py.name} ...")
+    cmd = [sys.executable, package_py.name]
+    code, out, _ = run(cmd, cwd=package_py.parent)
+    if code != 0:
+        tail = "\n".join(out.splitlines()[-20:]) if out else "(sin output)"
+        return StepResult("Cortex", False, error=tail)
+    return StepResult("Cortex", True, output=out)
 
 
 def build_bootstrap() -> StepResult:
     """
-    Cuatro responsabilidades:
-      1. Corre npm run build (tsc + copy-assets + build:bundle) para compilar
-         TypeScript a out/ y luego generar bundle.js y bundle.js.map.
-      2. Verifica que bundle.js y bundle.js.map fueron generados en native/.
-      3. Incrementa build_number en installer/bootstrap/bootstrap.meta.json.
-      4. Copia bootstrap.meta.json + version-bootstrap.py + server-bootstrap.js a
-         installer/native/bin/bootstrap/ para que queden disponibles en el
-         deploy a AppData y nucleus pueda consultar version/info desde ahí.
-
-    Nota: Nucleus (supervisor.go) lanza bundle.js directamente — no server-bootstrap.js.
-    server-bootstrap.js se copia a native/ solo como referencia del entry point de esbuild.
+    Bootstrap: ejecuta version-bootstrap.py con python3, no con bash.
     """
-    script    = BUILDS["bootstrap"]
-    source_dir = script.parent                                          # installer/bootstrap/
-    native_dir = ROOT / "installer/native/bin/bootstrap"               # output del build
+    bootstrap_dir = BUILDS["bootstrap"]
+    script_py     = bootstrap_dir / "version-bootstrap.py"     # type: ignore[operator]
 
-    # ------------------------------------------------------------------
-    # 1. Correr npm run build (tsc + copy-assets + esbuild) para generar bundle.js
-    #    Es importante correr 'build' completo y no solo 'build:bundle' para que
-    #    tsc compile src/ -> out/ antes de que esbuild genere el bundle.
-    # ------------------------------------------------------------------
-    npm_cmd = "npm.cmd" if sys.platform == "win32" else "npm"
-    log("Ejecutando npm run build (tsc + copy-assets + build:bundle) ...")
-    code, out, err = run(
-        [npm_cmd, "run", "build"],
-        cwd=ROOT,
-    )
-    if code != 0:
-        return StepResult("Bootstrap", False, error=err or out)
-
-    # ------------------------------------------------------------------
-    # 2. Verificar que bundle.js y bundle.js.map existen en native
-    # ------------------------------------------------------------------
-    for fname in ("bundle.js", "bundle.js.map"):
-        fpath = native_dir / fname
-        if not fpath.exists():
-            return StepResult("Bootstrap", False,
-                              error=f"{fname} no encontrado en {native_dir} — build no generó el archivo esperado")
-        size_kb = fpath.stat().st_size / 1024
-        log(f"{fname}: {size_kb:.1f} KB  ✓")
-
-    # ------------------------------------------------------------------
-    # 3. Incrementar build_number
-    # ------------------------------------------------------------------
-    if not script.exists():
-        return StepResult("Bootstrap", False, error=f"Script no encontrado: {script}")
-
-    log("Incrementando build_number en bootstrap.meta.json ...")
-    code, out, err = run([sys.executable, str(script)], cwd=source_dir)
-    if code != 0:
-        return StepResult("Bootstrap", False, error=err or out)
-
-    # version-bootstrap.py emite JSON — parsearlo directamente
-    result_json = parse_json_output(out)
-    if not result_json or not result_json.get("success"):
+    if not script_py.exists():
         return StepResult("Bootstrap", False,
-                          error=result_json.get("error", "version-bootstrap.py no emitió JSON válido") if result_json else "Sin output JSON")
+                          error=f"version-bootstrap.py no encontrado en: {bootstrap_dir}")
 
-    version      = result_json["version"]
-    build_number = result_json["build_number"]
-    log(f"v{version}  build {build_number}")
-
-    # ------------------------------------------------------------------
-    # 4. Copiar meta + script a native para deploy
-    # ------------------------------------------------------------------
-    import shutil
-    native_dir.mkdir(parents=True, exist_ok=True)
-
-    for fname in ("bootstrap.meta.json", "version-bootstrap.py", "server-bootstrap.js", "VERSION"):
-        src = source_dir / fname
-        dst = native_dir / fname
-        if not src.exists():
-            return StepResult("Bootstrap", False, error=f"Archivo fuente no encontrado: {src}")
-        shutil.copy2(src, dst)
-        log(f"Copiado → {dst.relative_to(ROOT)}")
-
-    # Copiar static assets requeridos por el bundle en runtime
-    # static/logo.svg es cargado por Swagger UI al inicializar el API server
-    static_src = source_dir / "static"
-    static_dst = native_dir / "static"
-    if static_src.exists():
-        if static_dst.exists():
-            shutil.rmtree(static_dst)
-        shutil.copytree(static_src, static_dst)
-        copied = list(static_dst.rglob("*"))
-        log(f"static/ → {static_dst.relative_to(ROOT)}  ({len(copied)} archivo(s))")
-    else:
-        return StepResult("Bootstrap", False,
-                          error=f"Directorio static/ no encontrado en {static_src} — crear installer/bootstrap/static/logo.svg")
-
-    return StepResult("Bootstrap", True, version=version, build=build_number)
-
-
-def ensure_cortex_meta(meta_path: Path, channel: str) -> None:
-    """Crea cortex.meta.json con valores iniciales si no existe."""
-    if meta_path.exists():
-        return
-    log(f"cortex.meta.json no encontrado, creando en {meta_path} ...")
-    initial = {
-        "name": "Bloom Cortex",
-        "version": "1.0.0",
-        "build_number": 0,
-        "build_date": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "release_channel": channel,
-        "min_chrome_version": "120",
-    }
-    meta_path.parent.mkdir(parents=True, exist_ok=True)
-    with meta_path.open("w", encoding="utf-8") as f:
-        json.dump(initial, f, indent=2, ensure_ascii=False)
-        f.write('\n')
-    ver = initial["version"]
-    log(f"cortex.meta.json creado con version {ver} build 0")
-
-
-def build_cortex(channel: str, production: bool) -> StepResult:
-    meta_path = BUILDS["cortex"].parent / "cortex.meta.json"
-    ensure_cortex_meta(meta_path, channel)
-    log("Ejecutando package.py ...")
-    cmd = [
-        sys.executable,
-        str(BUILDS["cortex"]),
-        "--source", str(CORTEX_SOURCE),
-        "--output", str(CORTEX_OUTPUT),
-        "--channel", channel,
-    ]
-    if production:
-        cmd.append("--production")
-
-    code, out, err = run(cmd)
+    log(f"Ejecutando python3 {script_py.name} ...")
+    cmd = [sys.executable, script_py.name]
+    code, out, _ = run(cmd, cwd=script_py.parent)
     if code != 0:
-        return StepResult("Cortex", False, error=err or out)
-
-    # Leer versión directamente desde cortex.meta.json (ya actualizado por package.py)
-    meta_path = BUILDS["cortex"].parent / "cortex.meta.json"
-    try:
-        with meta_path.open("r", encoding="utf-8") as f:
-            meta = json.load(f)
-        return StepResult(
-            "Cortex", True,
-            version=meta.get("version", "unknown"),
-            build=meta.get("build_number"),
-        )
-    except Exception as e:
-        return StepResult("Cortex", True, error=f"Build OK pero no se pudo leer meta: {e}")
+        tail = "\n".join(out.splitlines()[-20:]) if out else "(sin output)"
+        return StepResult("Bootstrap", False, error=tail)
+    return StepResult("Bootstrap", True, output=out)
 
 
-# ---------------------------------------------------------------------------
-# Verificación post-build: interroga cada binario
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
+# CORRECCIÓN 7 — get_contracts(): sin PowerShell en macOS
+# ─────────────────────────────────────────────────────────────────────────────
 
-def _parse_build(val) -> Optional[int]:
-    """Convierte build_number a int de forma segura.
-    Acepta int, float (JSON estándar) y string (ej: bloom-sensor emite "0").
+def get_conductor_version(bin_base: Path) -> tuple[str, str]:
     """
-    if val is None:
-        return None
-    try:
-        return int(val)
-    except (ValueError, TypeError):
-        return None
-
-
-def verify_binary(contract: BinaryContract) -> StepResult:
-    """Interroga el binario instalado y extrae versión y build."""
-    bin_path = contract.bin_path
-
-    if not bin_path.exists():
-        return StepResult(contract.name, False,
-                          error=f"Binario no encontrado: {bin_path}")
-
-    # Intentar con version_cmd
-    try:
-        code, out, err = run(
-            contract.version_cmd,
-            cwd=bin_path.parent,
-            timeout=10,
-        )
-        data = parse_json_output(out)
-        if data:
-            version = dotget(data, contract.version_field)
-            build   = dotget(data, contract.build_field)
-            if version:
-                return StepResult(
-                    contract.name, True,
-                    version=str(version),
-                    build=_parse_build(build),
-                )
-    except Exception as e:
-        pass  # fallback a info_cmd
-
-    # Fallback: info_cmd
-    try:
-        code, out, err = run(
-            contract.info_cmd,
-            cwd=bin_path.parent,
-            timeout=10,
-        )
-        data = parse_json_output(out)
-        if data:
-            version = dotget(data, contract.version_field)
-            build   = dotget(data, contract.build_field)
-            if version:
-                return StepResult(
-                    contract.name, True,
-                    version=str(version),
-                    build=_parse_build(build),
-                )
-    except Exception as e:
-        pass
-
-    return StepResult(contract.name, False,
-                      error="No se pudo obtener versión del binario")
-
-
-# ---------------------------------------------------------------------------
-# Verificación post-build via metamorph inspect --native
-# ---------------------------------------------------------------------------
-
-def verify_with_metamorph(verify_env: str) -> list[StepResult]:
+    Lee la versión de Conductor desde version.json (generado por el build)
+    o desde resources/app/package.json del app empaquetado.
+    Compatible con Windows y macOS sin PowerShell.
     """
-    Delega la verificación post-build a metamorph inspect.
+    version_json = bin_base / "conductor" / "version.json"
+    if version_json.exists():
+        try:
+            data = json.loads(version_json.read_text())
+            return str(data.get("version", "?")), str(data.get("build", "?"))
+        except Exception:
+            pass
 
-    En entorno dev  → metamorph --json inspect --native
-                      Lee native/bin/win64/ (binarios recién buildeados)
-                      Resultado escrito en AppData/config/native/native_metamorph.json
+    pkg_json = bin_base / "conductor" / "resources" / "app" / "package.json"
+    if pkg_json.exists():
+        try:
+            data = json.loads(pkg_json.read_text())
+            return str(data.get("version", "?")), "?"
+        except Exception:
+            pass
 
-    En entorno prod → metamorph --json inspect
-                      Lee AppData/BloomNucleus/bin/ (binarios instalados)
-                      Resultado escrito en AppData/config/metamorph.json
+    return "?", "?"
 
-    Retorna una lista de StepResult con el mismo formato que usaba verify_binary,
-    para que print_summary y write_log no necesiten ningún cambio.
-    """
-    if verify_env == "dev":
-        metamorph_exe = _DEV_BIN_BASE / "metamorph/metamorph.exe"
-        cmd = [str(metamorph_exe), "--json", "inspect", "--native"]
-        env_label = f"native ({_DEV_BIN_BASE})"
-    else:
-        metamorph_exe = _PROD_BIN_BASE / "metamorph/metamorph.exe"
-        cmd = [str(metamorph_exe), "--json", "inspect"]
-        env_label = f"prod ({_PROD_BIN_BASE})"
 
-    log(f"Verificando en: {env_label}")
+def get_contracts(bin_base: Path) -> dict:
+    contracts: dict[str, str] = {}
 
-    if not metamorph_exe.exists():
-        log(f"{RED}FAIL{RESET}  — metamorph.exe no encontrado en {metamorph_exe}")
-        return [StepResult("Metamorph", False,
-                           error=f"metamorph.exe no encontrado: {metamorph_exe}")]
+    cond_version, cond_build = get_conductor_version(bin_base)
+    contracts["conductor"] = f"{cond_version} (build {cond_build})"
 
-    results: list[StepResult] = []
-
-    try:
-        code, out, err = run(cmd, cwd=metamorph_exe.parent, timeout=60)
-    except subprocess.TimeoutExpired:
-        log(f"{RED}FAIL{RESET}  — metamorph inspect timeout (60s)")
-        return [StepResult("Inspect", False, error="metamorph inspect timeout (60s)")]
-    except Exception as e:
-        log(f"{RED}FAIL{RESET}  — error ejecutando metamorph inspect: {e}")
-        return [StepResult("Inspect", False, error=str(e))]
-
-    if code != 0:
-        log(f"{RED}FAIL{RESET}  — metamorph inspect retornó code {code}")
-        return [StepResult("Inspect", False,
-                           error=f"metamorph inspect falló (code {code}): {err or out}")]
-
-    data = parse_json_output(out)
-    if not data or "managed_binaries" not in data:
-        log(f"{RED}FAIL{RESET}  — metamorph inspect no retornó JSON válido")
-        return [StepResult("Inspect", False, error="JSON inválido o vacío")]
-
-    # Normalizar nombres de inspect → nombres de componente usados en build_results
-    INSPECT_NAME_MAP = {
-        "VSCodeExtension": "Vsix",
-    }
-
-    # Convertir cada entrada de managed_binaries a StepResult
-    for b in data["managed_binaries"]:
-        raw_name = b.get("name", "unknown")
-        name     = INSPECT_NAME_MAP.get(raw_name, raw_name)
-        status  = b.get("status", "unknown")
-        version = b.get("version")
-        build   = b.get("build_number")
-
-        print(f"\n  {BOLD}→ {name}{RESET}")
-
-        if status == "healthy":
-            log(f"{GREEN}OK{RESET}  →  v{version}  build {build if build else '—'}")
-            results.append(StepResult(name, True, version=version, build=build))
-        elif status == "missing":
-            log(f"{RED}FAIL{RESET}  —  binario no encontrado: {b.get('path', '')}")
-            results.append(StepResult(name, False,
-                                      error=f"missing: {b.get('path', '')}"))
+    for comp in ("nucleus", "sentinel", "metamorph", "sensor"):
+        build_info = ROOT / "installer" / comp / "internal" / "core" / "build_info.go"
+        if build_info.exists():
+            try:
+                text = build_info.read_text()
+                for line in text.splitlines():
+                    if "BuildNumber" in line and "=" in line:
+                        build_num = line.split("=")[1].strip()
+                        contracts[comp] = f"build {build_num}"
+                        break
+            except Exception:
+                contracts[comp] = "?"
         else:
-            log(f"{YELLOW}WARN{RESET}  —  status={status}")
-            results.append(StepResult(name, False,
-                                      error=f"status inesperado: {status}"))
+            contracts[comp] = "?"
 
-    # Resumen del inspect
-    summary = data.get("summary", {})
-    total   = summary.get("total_binaries", 0)
-    healthy = summary.get("healthy_count", 0)
-    missing = summary.get("missing_count", 0)
+    return contracts
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# UTILIDADES DE PRESENTACIÓN
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _sep(char: str = "─", width: int = 60) -> str:
+    return char * width
+
+
+def _header(title: str) -> None:
     print()
-    log(f"Inspect summary: {healthy}/{total} healthy, {missing} missing")
-
-    return results
-
-
+    print(_sep("═"))
+    print(f"  {title}")
+    print(_sep("═"))
 
 
-def print_summary(build_results: list[StepResult], verify_results: list[StepResult]) -> None:
-    header("RESUMEN DE BUILD")
-
-    print(f"\n  {'Componente':<14} {'Build':<8} {'Verificación':<14} {'Versión':<16} {'#Build'}")
-    print(f"  {'─'*14} {'─'*8} {'─'*14} {'─'*16} {'─'*6}")
-
-    # Indexar verificaciones por nombre
-    verify_map = {r.component: r for r in verify_results}
-
-    all_ok = True
-    for br in build_results:
-        vr = verify_map.get(br.component)
-
-        build_status = f"{GREEN}OK{RESET}" if br.success else (
-            f"{YELLOW}SKIPPED{RESET}" if br.skipped else f"{RED}FAIL{RESET}"
-        )
-
-        if vr is None:
-            verify_status = f"{YELLOW}N/A{RESET}"
-            version_str   = "—"
-            build_num     = "—"
-        elif vr.success:
-            verify_status = f"{GREEN}OK{RESET}"
-            version_str   = f"v{vr.version}" if vr.version else "unknown"
-            build_num     = str(vr.build) if vr.build is not None else "—"
-        else:
-            verify_status = f"{RED}FAIL{RESET}"
-            version_str   = "unknown"
-            build_num     = "—"
-            all_ok = False
-
-        if not br.success and not br.skipped:
-            all_ok = False
-
-        print(f"  {br.component:<14} {build_status:<20} {verify_status:<22} {version_str:<16} {build_num}")
-
+def _step_header(n: int, total: int, name: str) -> None:
     print()
-    if all_ok:
-        print(f"  {GREEN}{BOLD}✓ Todos los componentes buildeados y verificados correctamente.{RESET}")
+    print(_sep())
+    print(f"  [{n}/{total}] {name}")
+    print(_sep())
+
+
+def _print_result(result: StepResult) -> None:
+    if result.skipped:
+        print(f"  ⊘  SKIP — {result.skip_reason}")
+    elif result.ok:
+        print(f"  ✅ OK")
     else:
-        print(f"  {RED}{BOLD}✗ Algunos componentes fallaron. Revisá los errores arriba.{RESET}")
+        print(f"  ❌ FAILED")
+        if result.error:
+            for line in result.error.splitlines()[-15:]:
+                print(f"     {line}")
+
+
+def _print_summary(results: list[StepResult]) -> None:
     print()
+    print(_sep("═"))
+    print("  RESUMEN DEL BUILD")
+    print(_sep("═"))
+
+    ok_count     = sum(1 for r in results if r.ok and not r.skipped)
+    skip_count   = sum(1 for r in results if r.skipped)
+    failed_count = sum(1 for r in results if not r.ok)
+
+    for r in results:
+        if r.skipped:
+            icon   = "⊘ "
+            detail = f"(skipped: {r.skip_reason})"
+        elif r.ok:
+            icon   = "✅"
+            detail = ""
+        else:
+            icon   = "❌"
+            detail = r.error.splitlines()[0] if r.error else ""
+
+        print(f"  {icon}  {r.name:<20} {detail}")
+
+    print()
+    print(f"  OK: {ok_count}  |  Skipped: {skip_count}  |  Failed: {failed_count}")
+    print(_sep("═"))
+
+    if failed_count > 0:
+        print()
+        print("  ⚠️  El build terminó con errores.")
+        sys.exit(1)
+    else:
+        print()
+        print("  🎉 Build completo.")
 
 
-def print_errors(results: list[StepResult]) -> None:
-    failed = [r for r in results if not r.success and not r.skipped and r.error]
-    if not failed:
-        return
-    header("ERRORES DETALLADOS")
-    for r in failed:
-        print(f"\n  {RED}[{r.component}]{RESET}")
-        for line in (r.error or "").strip().splitlines():
-            print(f"    {line}")
+# ─────────────────────────────────────────────────────────────────────────────
+# ARGPARSE — soporte para --only y --skip
+# ─────────────────────────────────────────────────────────────────────────────
 
-
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
-
-VALID_COMPONENTS = [
-    "brain", "nucleus", "sentinel", "metamorph", "conductor",
-    "sensor", "vsix", "bootstrap", "cortex",
+ALL_STEP_NAMES = [
+    "brain", "host", "nucleus", "sentinel", "metamorph",
+    "sensor", "conductor", "cortex", "bootstrap", "vsix",
 ]
 
 
-def parse_args() -> argparse.Namespace:
+def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        prog="build-all.py",
-        description=(
-            "Bloom Build All — Orquestador maestro de builds del ecosistema Bloom.\n"
-            "\n"
-            "Compila todos los componentes en orden, verifica sus versiones\n"
-            "y opcionalmente valida el estado de la instalación en producción.\n"
-            "\n"
-            "Usa --only <componente> para correr un único build de forma aislada\n"
-            "(útil para re-intentar un paso que falló en el build completo)."
-        ),
-        epilog=(
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "OPCIONES — DETALLE\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "  --only COMPONENTE\n"
-            "      Corre únicamente el build del componente indicado.\n"
-            "      Ideal para re-intentar un paso fallido sin correr el all.\n"
-            "      Componentes válidos:\n"
-            "        brain      → build_brain.ps1\n"
-            "        nucleus    → installer/nucleus/scripts/build.bat\n"
-            "        sentinel   → installer/sentinel/scripts/build.bat\n"
-            "        metamorph  → installer/metamorph/scripts/build.bat\n"
-            "        conductor  → installer/conductor (npm run build:all)\n"
-            "        sensor     → installer/sensor/scripts/build.bat\n"
-            "        bootstrap  → npm run build:bundle + version-bootstrap.py\n"
-            "                     Genera bundle.js, incrementa build_number,\n"
-            "                     copia todo a installer/native/bin/bootstrap/\n"
-            "        vsix       → npm run package:vscode (requiere bootstrap primero)\n"
-            "                     Produce installer/vscode/bloom-extension.vsix\n"
-            "        cortex     → installer/cortex/build-cortex/package.py\n"
-            "      Nota: --only cortex respeta --channel y --production.\n"
-            "      Nota: --only omite la verificación post-build (FASE 3).\n"
-            "\n"
-            "  --channel CHANNEL\n"
-            "      Release channel para el empaquetado de Cortex (.blx).\n"
-            "        stable   Versión de producción (default)\n"
-            "        beta     Versión de prueba pre-release\n"
-            "        dev      Versión de desarrollo local\n"
-            "\n"
-            "  --production\n"
-            "      Excluye archivos .map del paquete Cortex (.blx).\n"
-            "      Usar en releases públicos para reducir el tamaño del bundle.\n"
-            "\n"
-            "  --skip-verify\n"
-            "      Omite la FASE 3 de verificación post-build.\n"
-            "      Útil para builds rápidos cuando solo interesa compilar.\n"
-            "\n"
-            "  --verify-env ENV\n"
-            "      Entorno de verificación para FASE 3 y FASE 5.\n"
-            "        dev    Verifica en installer/native/bin/win64/ (default)\n"
-            "               verify-sync se omite — no todos los binarios están presentes\n"
-            "        prod   Verifica en %%LOCALAPPDATA%%\\BloomNucleus\\bin\\\n"
-            "               Activa FASE 5: verify-sync contra metamorph.json\n"
-            "               Requiere que el installer haya sido ejecutado\n"
-            "\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "SECUENCIA DE BUILD\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "  FASE 1  Compilación de ejecutables\n"
-            "            Brain      → build_brain.ps1\n"
-            "            Nucleus    → installer/nucleus/scripts/build.bat\n"
-            "            Sentinel   → installer/sentinel/scripts/build.bat\n"
-            "            Metamorph  → installer/metamorph/scripts/build.bat\n"
-            "            Conductor  → installer/conductor (npm run build:all)\n"
-            "            Host       → SKIPPED en Windows (build via Linux)\n"
-            "            Sensor     → installer/sensor/scripts/build.bat\n"
-            "            Bootstrap  → npm run build:bundle + version-bootstrap.py\n"
-            "                         Genera bundle.js, incrementa build_number,\n"
-            "                         copia todo a installer/native/bin/bootstrap/\n"
-            "            Vsix       → npm run package:vscode (vsce)\n"
-            "                         → installer/vscode/bloom-extension.vsix\n"
-            "                         (requiere Bootstrap ejecutado antes)\n"
-            "\n"
-            "  FASE 2  Empaquetado de Cortex (.blx)\n"
-            "            Cortex     → installer/cortex/build-cortex/package.py\n"
-            "\n"
-            "  FASE 3  Verificación post-build (versión y build number)\n"
-            "            Verifica cada binario recién compilado\n"
-            "            dev  → installer/native/bin/win64/\n"
-            "            prod → %%LOCALAPPDATA%%\\BloomNucleus\\bin\\\n"
-            "\n"
-            "  FASE 4  Resumen de errores\n"
-            "\n"
-            "  FASE 5  Verify-sync (solo con --verify-env prod)\n"
-            "            Compara hashes de AppData contra metamorph.json\n"
-            "            Requiere que el installer haya sido ejecutado primero\n"
-            "\n"
-            "  FASE 6  Telemetría\n"
-            "            Registra el log del build via nucleus telemetry register\n"
-            "\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "EJEMPLOS — BUILD COMPLETO\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "  # Build estándar de desarrollo (más común)\n"
-            "  python build-all.py\n"
-            "\n"
-            "  # Build con verify-sync al final (requiere installer ejecutado)\n"
-            "  python build-all.py --verify-env prod\n"
-            "\n"
-            "  # Build de canal beta para Cortex, excluyendo .map files\n"
-            "  python build-all.py --channel beta --production\n"
-            "\n"
-            "  # Build rápido sin verificación post-compilación\n"
-            "  python build-all.py --skip-verify\n"
-            "\n"
-            "  # Build completo de producción: beta, sin .map, verify-sync contra AppData\n"
-            "  python build-all.py --channel beta --production --verify-env prod\n"
-            "\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "EJEMPLOS — BUILD INDIVIDUAL (--only)\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "  # Re-intentar un componente que falló en el build all\n"
-            "  python build-all.py --only brain\n"
-            "  python build-all.py --only nucleus\n"
-            "  python build-all.py --only sentinel\n"
-            "  python build-all.py --only metamorph\n"
-            "  python build-all.py --only conductor\n"
-            "  python build-all.py --only sensor\n"
-            "  python build-all.py --only bootstrap\n"
-            "  python build-all.py --only vsix\n"
-            "  python build-all.py --only cortex\n"
-            "\n"
-            "  # Extension VSCode: bootstrap genera bundle.js, vsix empaqueta el .vsix\n"
-            "  python build-all.py --only bootstrap   # → installer/native/bin/bootstrap/\n"
-            "  python build-all.py --only vsix        # → installer/vscode/bloom-extension.vsix\n"
-            "\n"
-            "  # Cortex individual con opciones de canal\n"
-            "  python build-all.py --only cortex --channel beta\n"
-            "  python build-all.py --only cortex --channel beta --production\n"
-            "\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "NOTAS\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "  verify-sync NO corre durante el build en entorno dev.\n"
-            "  Es una herramienta post-instalación. Para usarla manualmente:\n"
-            "    metamorph verify-sync\n"
-            "    metamorph --json verify-sync\n"
-            "\n"
-            "  Si verify-sync reporta componentes faltantes después del installer:\n"
-            "    metamorph rollout\n"
-        ),
+        description="BloomNucleus Build Orchestrator",
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=textwrap.dedent(f"""
+            Componentes disponibles: {', '.join(ALL_STEP_NAMES)}
+
+            Ejemplos:
+              python3 build-all.py
+              python3 build-all.py --only nucleus
+              python3 build-all.py --only nucleus sentinel
+              python3 build-all.py --skip host brain
+        """),
     )
     parser.add_argument(
         "--only",
-        default=None,
-        choices=VALID_COMPONENTS,
-        metavar="COMPONENTE",
-        help=(
-            f"Corre únicamente el build de un componente: "
-            f"{', '.join(VALID_COMPONENTS)}. "
-            "Omite verificación post-build."
-        ),
+        nargs="+",
+        metavar="STEP",
+        help="Ejecutar solo estos pasos (espacio entre nombres)",
     )
     parser.add_argument(
-        "--channel",
-        default="stable",
-        choices=["stable", "beta", "dev"],
-        metavar="CHANNEL",
-        help="Release channel para Cortex: stable (default), beta, dev",
+        "--skip",
+        nargs="+",
+        metavar="STEP",
+        help="Saltar estos pasos",
     )
-    parser.add_argument(
-        "--production",
-        action="store_true",
-        help="Excluye archivos .map del paquete Cortex (.blx)",
-    )
-    parser.add_argument(
-        "--skip-verify",
-        action="store_true",
-        help="Omite la FASE 3 de verificación post-build",
-    )
-    parser.add_argument(
-        "--verify-env",
-        default="dev",
-        choices=["dev", "prod"],
-        metavar="ENV",
-        help="Entorno de verificación: dev (default) o prod. Ver detalle abajo.",
-    )
-
-    # Regenerar build-all-help.txt siempre que se construye el parser,
-    # ANTES de parse_args() — así --help también lo actualiza, no solo el build completo.
-    try:
-        import io as _io
-        _buf = _io.StringIO()
-        parser.print_help(_buf)
-        _help_file = ROOT / "build-all-help.txt"
-        _help_file.write_text(_buf.getvalue(), encoding="utf-8")
-    except Exception:
-        pass  # nunca bloquear el build por esto
-
-    return parser, parser.parse_args()
+    return parser.parse_args()
 
 
-def write_help_file(parser: argparse.ArgumentParser) -> None:
-    """Escribe build-all-help.txt en la raiz del repo junto al script."""
-    import io
-    buf = io.StringIO()
-    parser.print_help(buf)
-    help_file = ROOT / "build-all-help.txt"
-    help_file.write_text(buf.getvalue(), encoding="utf-8")
-    log(f"{GREEN}OK{RESET}  ->  build-all-help.txt -> {help_file}")
-
-
-def run_single(component: str, channel: str, production: bool) -> None:
-    """
-    Corre el build de un único componente y muestra su resultado.
-    Usado con --only para re-intentar un paso fallido sin correr el all.
-    """
-    DISPATCH = {
-        "brain":      lambda: build_brain(),
-        "nucleus":    lambda: build_bat("Nucleus",   BUILDS["component"]),
-        "sentinel":   lambda: build_bat("Sentinel",  BUILDS["component"]),
-        "metamorph":  lambda: build_bat("Metamorph", BUILDS["component"]),
-        "conductor":  lambda: build_conductor(),
-        "sensor":     lambda: build_sensor(),
-        "bootstrap":  lambda: build_bootstrap(),
-        "vsix":       lambda: build_vsix(),
-        "cortex":     lambda: build_cortex(channel, production),
-    }
-
-    fn = DISPATCH.get(component)
-    if fn is None:
-        print(f"{RED}Componente desconocido: {component}{RESET}")
-        print(f"Validos: {', '.join(VALID_COMPONENTS)}")
-        sys.exit(2)
-
-    header(f"BLOOM BUILD — {component.upper()}  |  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"\n  {BOLD}-> {component.capitalize()}{RESET}")
-
-    try:
-        result = fn()
-    except subprocess.TimeoutExpired:
-        result = StepResult(component.capitalize(), False, error="Timeout excedido (300s)")
-    except Exception as e:
-        result = StepResult(component.capitalize(), False, error=str(e))
-
-    if result.skipped:
-        log(f"{YELLOW}SKIPPED{RESET} — {result.skip_reason}")
-    elif result.success:
-        ver = f"  v{result.version} build {result.build}" if result.version else ""
-        log(f"{GREEN}OK{RESET}{ver}")
-    else:
-        log(f"{RED}FAIL{RESET}")
-        if result.error:
-            header("ERROR DETALLADO")
-            for line in result.error.strip().splitlines():
-                print(f"    {line}")
-
-    print()
-    if result.success or result.skipped:
-        print(f"  {GREEN}{BOLD}OK {component.capitalize()} buildeado correctamente.{RESET}")
-        print(f"  Podes re-correr el build completo con: python build-all.py")
-    else:
-        print(f"  {RED}{BOLD}FAIL {component.capitalize()} fallo. Revisa el error arriba.{RESET}")
-    print()
-
-    # Logging y telemetría — siempre, incluso en --only
-    log_path = get_log_path()
-    write_log(log_path, [result], [], channel="n/a", verify_env="n/a")
-    register_telemetry(log_path, [result])
-
-    sys.exit(0 if (result.success or result.skipped) else 1)
-
+# ─────────────────────────────────────────────────────────────────────────────
+# MAIN
+# ─────────────────────────────────────────────────────────────────────────────
 
 def main() -> None:
-    parser, args = parse_args()
+    args = _parse_args()
 
-    # ------------------------------------------------------------------
-    # Modo --only: build de un unico componente
-    # ------------------------------------------------------------------
-    if args.only:
-        run_single(args.only, args.channel, args.production)
-        return  # run_single llama sys.exit(), pero por claridad
+    _header(
+        f"BloomNucleus — Build Orchestrator\n"
+        f"  Platform : {sys.platform}  ({_platform.machine()})\n"
+        f"  Bin base : {_DEV_BIN_BASE}"
+    )
 
-    header(f"BLOOM BUILD ALL  |  channel: {args.channel}  |  verify: {args.verify_env}  |  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-
-    build_results: list[StepResult] = []
-
-    # ------------------------------------------------------------------
-    # FASE 1: Builds de ejecutables
-    # ------------------------------------------------------------------
-    header("FASE 1 — Compilación de ejecutables")
-
-    steps = [
-        ("Brain",     lambda: build_brain()),
-        ("Nucleus",   lambda: build_bat("Nucleus",   BUILDS["component"])),
-        ("Sentinel",  lambda: build_bat("Sentinel",  BUILDS["component"])),
-        ("Metamorph", lambda: build_bat("Metamorph", BUILDS["component"])),
-        ("Conductor", lambda: build_conductor()),
-        ("Host",      lambda: StepResult("Host", True, skipped=True,
-                                         skip_reason="Build en Linux — installer/host/build.sh")),
-        ("Sensor",    lambda: build_sensor()),
-        # Bootstrap primero: genera bundle.js + meta + copia a installer/native/bin/bootstrap/
-        ("Bootstrap", lambda: build_bootstrap()),
-        # Vsix después de Bootstrap (vsce necesita out/ y bundle.js ya generados)
-        ("Vsix",      lambda: build_vsix()),
+    # Definir todos los pasos en orden.
+    # Conductor, Bootstrap y VSIX usan npm run; Cortex usa python3.
+    # Brain y Host usan sus propios builders.
+    # Los 4 Go components usan build_go_component().
+    all_steps: list[tuple[str, str, Callable[[], StepResult]]] = [
+        ("brain",     "Brain",     build_brain),
+        ("host",      "Host",      build_host),
+        ("nucleus",   "Nucleus",   lambda: build_go_component("nucleus")),
+        ("sentinel",  "Sentinel",  lambda: build_go_component("sentinel")),
+        ("metamorph", "Metamorph", lambda: build_go_component("metamorph")),
+        ("sensor",    "Sensor",    lambda: build_go_component("sensor")),
+        # Conductor: npm run build:all en installer/conductor/
+        ("conductor", "Conductor", lambda: build_node("Conductor", BUILDS["conductor"], "build:all")),  # type: ignore[arg-type]
+        # Cortex: python3 package.py (no bash, no npm)
+        ("cortex",    "Cortex",    build_cortex),
+        # Bootstrap: python3 version-bootstrap.py (no bash)
+        ("bootstrap", "Bootstrap", build_bootstrap),
+        # VSIX: npm run package:vscode en ROOT
+        ("vsix",      "VSIX",      lambda: build_node("VSIX", ROOT, "package:vscode")),
     ]
 
-    for name, fn in steps:
-        print(f"\n  {BOLD}→ {name}{RESET}")
-        try:
-            result = fn()
-        except subprocess.TimeoutExpired:
-            result = StepResult(name, False, error="Timeout excedido (300s)")
-        except Exception as e:
-            result = StepResult(name, False, error=str(e))
+    # Filtrar por --only / --skip
+    only_set = set(s.lower() for s in args.only) if args.only else None
+    skip_set = set(s.lower() for s in args.skip) if args.skip else set()
 
-        if result.skipped:
-            log(f"{YELLOW}SKIPPED{RESET} — {result.skip_reason}")
-        elif result.success:
-            log(f"{GREEN}OK{RESET}")
-        else:
-            log(f"{RED}FAIL{RESET}")
-            if result.error:
-                for line in result.error.strip().splitlines()[:5]:
-                    log(f"  {line}")
+    steps = [
+        (key, display, fn)
+        for key, display, fn in all_steps
+        if (only_set is None or key in only_set) and key not in skip_set
+    ]
 
-        build_results.append(result)
+    if not steps:
+        print("  ⚠️  No hay pasos que ejecutar con los filtros indicados.")
+        sys.exit(0)
 
-    # ------------------------------------------------------------------
-    # FASE 2: Empaquetado de Cortex
-    # ------------------------------------------------------------------
-    header("FASE 2 — Empaquetado de Cortex (.blx)")
-    print(f"\n  {BOLD}→ Cortex{RESET}")
-    try:
-        cortex_result = build_cortex(args.channel, args.production)
-    except subprocess.TimeoutExpired:
-        cortex_result = StepResult("Cortex", False, error="Timeout excedido (300s)")
-    except Exception as e:
-        cortex_result = StepResult("Cortex", False, error=str(e))
+    results: list[StepResult] = []
+    total = len(steps)
 
-    if cortex_result.success:
-        log(f"{GREEN}OK{RESET}  →  bloom-cortex.blx  v{cortex_result.version}  build {cortex_result.build}")
-    else:
-        log(f"{RED}FAIL{RESET}")
-        if cortex_result.error:
-            for line in cortex_result.error.strip().splitlines()[:5]:
-                log(f"  {line}")
+    for i, (_, name, fn) in enumerate(steps, start=1):
+        _step_header(i, total, name)
+        result = fn()
+        result.name = name
+        _print_result(result)
+        results.append(result)
 
-    build_results.append(cortex_result)
-
-    # ------------------------------------------------------------------
-    # FASE 3: Verificación post-build
-    # ------------------------------------------------------------------
-    verify_results: list[StepResult] = []
-
-    if not args.skip_verify:
-        header("FASE 3 — Verificación post-build")
-        verify_results = verify_with_metamorph(args.verify_env)
-    else:
-        log("Verificación omitida (--skip-verify)")
-
-    # ------------------------------------------------------------------
-    # Resumen y errores
-    # ------------------------------------------------------------------
-    print_errors(build_results + verify_results)
-    print_summary(build_results, verify_results)
-
-    # ------------------------------------------------------------------
-    # FASE 5: verify-sync (solo si --verify-env prod)
-    # verify-sync es una herramienta post-instalación: compara los binarios
-    # desplegados en AppData contra metamorph.json. Solo tiene sentido
-    # ejecutarla cuando todos los componentes ya fueron instalados.
-    # En entorno dev los binarios viven en installer/native/bin/win64
-    # y varios (Host, Sensor) pueden no estar presentes, lo que provocaría
-    # falsos negativos. Por eso se omite en dev.
-    # ------------------------------------------------------------------
-    if args.verify_env == "prod" and not args.skip_verify:
-        header("FASE 5 — Verify-sync (entorno producción)")
-        metamorph_prod = get_bin_base("prod") / "metamorph/metamorph.exe"
-        if metamorph_prod.exists():
-            log(f"Ejecutando verify-sync contra AppData ...")
-            code, out, err = run([str(metamorph_prod), "--json", "verify-sync"])
-            if code == 0:
-                log(f"{GREEN}OK{RESET}  — todos los binarios en sync con metamorph.json")
-            else:
-                log(f"{RED}FAIL{RESET}  — verify-sync reportó componentes faltantes o drifted")
-                log(f"  Correr 'metamorph rollout' para redesplegar los binarios faltantes")
-        else:
-            log(f"{YELLOW}SKIP{RESET}  — metamorph.exe no encontrado en prod ({metamorph_prod})")
-            log(f"  El installer aún no fue ejecutado. Correr verify-sync manualmente después.")
-    elif args.verify_env == "dev":
-        header("FASE 5 — Verify-sync")
-        log(f"{YELLOW}SKIP{RESET}  — verify-sync omitido en entorno dev")
-        log(f"  verify-sync es una verificación post-instalación.")
-        log(f"  Usarlo con: python build-all.py --verify-env prod")
-        log(f"  O manualmente después del installer: metamorph verify-sync")
-
-    # ------------------------------------------------------------------
-    # FASE 4: Telemetría
-    # ------------------------------------------------------------------
-    header("FASE 6 — Telemetría")
-    log_path = get_log_path()
-    print(f"  Log: {log_path}", flush=True)
-
-    write_log(log_path, build_results, verify_results, args.channel, args.verify_env)
-    log(f"{GREEN}OK{RESET}  →  log escrito")
-
-    register_telemetry(log_path, build_results)
-
-    # Exit code: 0 si todo OK, 1 si algún build falló
-    failed = [r for r in build_results if not r.success and not r.skipped]
-    sys.exit(1 if failed else 0)
+    _print_summary(results)
 
 
 if __name__ == "__main__":
