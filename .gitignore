@@ -4,6 +4,15 @@ node_modules
 .vscode-test/
 *.vsix
 
+# Entornos virtuales
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.pyc
+
 # BTIP Explorer Webview
 webview/build/
 webview/node_modules/
