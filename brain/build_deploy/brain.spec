@@ -33,6 +33,17 @@ hiddenimports = [
     'brain.cli.help_renderer',
     'brain.shared',
     'brain.shared.context',
+    'brain.shared.credentials',
+    'brain.shared.credentials.base',
+    'brain.shared.credentials.claude_manager',
+    'brain.shared.credentials.openai_manager',
+    'brain.shared.credentials.unified_manager',
+    'brain.shared.credentials.xai_manager',
+    'brain.shared.environment',
+    'brain.shared.github_types',
+    'brain.shared.logger',
+    'brain.shared.paths',
+    'brain.shared.runtime_resolver',
     'brain.commands',
 
     # Typer y dependencias
@@ -44,6 +55,31 @@ hiddenimports = [
     'rich.markdown',
 
     # Comandos (Auto-generado por update_spec_hiddenimports.py)
+    'brain.commands.ai',
+    'brain.commands.ai.claude',
+    'brain.commands.ai.claude.claude_keys_add',
+    'brain.commands.ai.claude.claude_keys_delete',
+    'brain.commands.ai.claude.claude_keys_list',
+    'brain.commands.ai.claude.claude_keys_stats',
+    'brain.commands.ai.claude.claude_keys_validate',
+    'brain.commands.ai.gemini',
+    'brain.commands.ai.gemini.gemini_keys_add',
+    'brain.commands.ai.gemini.gemini_keys_delete',
+    'brain.commands.ai.gemini.gemini_keys_list',
+    'brain.commands.ai.gemini.gemini_keys_stats',
+    'brain.commands.ai.gemini.gemini_keys_validate',
+    'brain.commands.ai.openai',
+    'brain.commands.ai.openai.openai_keys_add',
+    'brain.commands.ai.openai.openai_keys_delete',
+    'brain.commands.ai.openai.openai_keys_list',
+    'brain.commands.ai.openai.openai_keys_stats',
+    'brain.commands.ai.openai.openai_keys_validate',
+    'brain.commands.ai.xai',
+    'brain.commands.ai.xai.xai_keys_add',
+    'brain.commands.ai.xai.xai_keys_delete',
+    'brain.commands.ai.xai.xai_keys_list',
+    'brain.commands.ai.xai.xai_keys_stats',
+    'brain.commands.ai.xai.xai_keys_validate',
     'brain.commands.chrome.chrome',
     'brain.commands.context.generate',
     'brain.commands.extension.backups',
@@ -85,6 +121,10 @@ hiddenimports = [
     'brain.commands.intent.unlock',
     'brain.commands.intent.update',
     'brain.commands.intent.validate',
+    'brain.commands.ionpump.ionpump_inspect',
+    'brain.commands.ionpump.ionpump_reload',
+    'brain.commands.ionpump.ionpump_test',
+    'brain.commands.ionpump.ionpump_validate',
     'brain.commands.logs.logs',
     'brain.commands.nucleus.create',
     'brain.commands.nucleus.create_exp_intent',
@@ -98,6 +138,7 @@ hiddenimports = [
     'brain.commands.nucleus.list_projects',
     'brain.commands.nucleus.onboarding_complete',
     'brain.commands.nucleus.onboarding_status',
+    'brain.commands.nucleus.onboarding_steps_loader',
     'brain.commands.nucleus.project_info',
     'brain.commands.nucleus.status',
     'brain.commands.nucleus.sync',
@@ -177,6 +218,15 @@ hiddenimports = [
     'brain.core.intent.staging_manager',
     'brain.core.intent.validation_manager',
     'brain.core.intent_manager',
+    'brain.core.ionpump',
+    'brain.core.ionpump.ionpump_executor',
+    'brain.core.ionpump.ionpump_ipc',
+    'brain.core.ionpump.ionpump_loader',
+    'brain.core.ionpump.ionpump_manager',
+    'brain.core.ionpump.ionpump_models',
+    'brain.core.ionpump.ionpump_registry',
+    'brain.core.ionpump.ionpump_state',
+    'brain.core.ionpump.ionpump_validator',
     'brain.core.logs.logs_manager',
     'brain.core.nucleus_inspector',
     'brain.core.nucleus_manager',
@@ -194,6 +244,7 @@ hiddenimports = [
     'brain.core.profile.session1_launcher',
     'brain.core.profile.web',
     'brain.core.profile.web.discovery_generator',
+    'brain.core.profile.web.harness_generator',
     'brain.core.profile.web.landing_generator',
     'brain.core.profile.web.templates',
     'brain.core.profile.web.templates.discovery',
@@ -210,6 +261,7 @@ hiddenimports = [
     'brain.core.synapse.handlers.api_key_handler',
     'brain.core.synapse.synapse_exceptions',
     'brain.core.synapse.synapse_host_init_manager',
+    'brain.core.synapse.synapse_ipc_server',
     'brain.core.synapse.synapse_manager',
     'brain.core.synapse.synapse_protocol',
     'brain.core.system',
@@ -243,13 +295,24 @@ datas = [
     (str(templates_src / 'landing' / 'landingProtocol.js'), 'brain/core/profile/web/templates/landing'),
     (str(templates_src / 'landing' / 'script.js'), 'brain/core/profile/web/templates/landing'),
     (str(templates_src / 'landing' / 'styles.css'), 'brain/core/profile/web/templates/landing'),
+
+    # Templates - Harness (NUEVO)
+    (str(templates_src / 'harness' / '__init__.py'), 'brain/core/profile/web/templates/harness'),
+    (str(templates_src / 'harness' / 'index.html'), 'brain/core/profile/web/templates/harness'),
+    (str(templates_src / 'harness' / 'ion.manifest.json'), 'brain/core/profile/web/templates/harness'),
+    (str(templates_src / 'harness' / 'ionpump_protocol.js'), 'brain/core/profile/web/templates/harness'),
     
     # Templates - Base __init__.py
     (str(templates_src / '__init__.py'), 'brain/core/profile/web/templates'),
 
-    # Version
+    # ionpump - archivos de datos (NUEVO)
+    (str(PROJECT_ROOT / 'brain' / 'commands' / 'ionpump' / 'auth.ion'), 'brain/commands/ionpump'),
+    (str(PROJECT_ROOT / 'brain' / 'commands' / 'ionpump' / 'ion.manifest.json'), 'brain/commands/ionpump'),
+    (str(PROJECT_ROOT / 'brain' / 'commands' / 'ionpump' / 'versions.json'), 'brain/commands/ionpump'),
+
+    # Version y build
     (r'C:/repos/bloom-videos/bloom-development-extension/brain/VERSION', '.'),
-       (r'C:/repos/bloom-videos/bloom-development-extension/brain/__build__.py', '.'), 
+    (r'C:/repos/bloom-videos/bloom-development-extension/brain/__build__.py', '.'), 
 ]
 
 # Forzar la estructura física de core/profile para evitar el bug de colisión de nombres
@@ -267,6 +330,7 @@ datas.extend([
     (str(core_profile_src / 'logic' / 'synapse_handler.py'), 'brain/core/profile/logic'),
     (str(core_profile_src / 'web' / '__init__.py'), 'brain/core/profile/web'),
     (str(core_profile_src / 'web' / 'discovery_generator.py'), 'brain/core/profile/web'),
+    (str(core_profile_src / 'web' / 'harness_generator.py'), 'brain/core/profile/web'),  # NUEVO
     (str(core_profile_src / 'web' / 'landing_generator.py'), 'brain/core/profile/web'),
 ])
 
