@@ -36,6 +36,11 @@
         "default": "false"
       },
       {
+        "name": "ion-recipes",
+        "usage": "Inspect ion automation recipes",
+        "default": "false"
+      },
+      {
         "name": "native",
         "usage": "Inspect native/bin/\u003cplatform\u003e/ build output instead of AppData",
         "default": "false"

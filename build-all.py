@@ -4,14 +4,14 @@ Bloom Build All
 Orquestador maestro de builds para todos los componentes del ecosistema Bloom.
 
 Secuencia de ejecución:
-  1. Brain        → build_brain.ps1
-  2. Nucleus      → installer/nucleus/scripts/build.bat
-  3. Sentinel     → installer/sentinel/scripts/build.bat
+  1. Brain        → builds/windows/brain.ps1
+  2. Nucleus      → builds/windows/build-component.bat nucleus
+  3. Sentinel     → builds/windows/build-component.bat sentinel
   4. Host         → skipped on Windows (Linux build via installer/host/build.sh)
   5. Conductor    → cd installer/conductor && npm run build:all
                     (buildea sensor + setup en un solo paso)
-  6. Metamorph    → installer/metamorph/scripts/build.bat
-  7. Sensor       → installer/sensor/scripts/build.bat
+  6. Metamorph    → builds/windows/build-component.bat metamorph
+  7. Sensor       → builds/windows/build-component.bat sensor
   8. Plugin       → npm run build (tsc + copy-assets + esbuild bundle)
                     Output: installer/native/bin/bootstrap/bundle.js
   9. Vsix         → npm run package:vscode (vsce package)
@@ -196,12 +196,10 @@ CORTEX_SOURCE  = ROOT / "installer/cortex/extension"
 CORTEX_OUTPUT  = ROOT / "installer/native/bin/win64/cortex"
 
 BUILDS = {
-    "brain":      ROOT / "build_brain.ps1",
-    "nucleus":    ROOT / "installer/nucleus/scripts/build.bat",
-    "sentinel":   ROOT / "installer/sentinel/scripts/build.bat",
-    "metamorph":  ROOT / "installer/metamorph/scripts/build.bat",
+    "brain":      ROOT / "builds/windows/brain.ps1",
+    # nucleus, sentinel, metamorph y sensor usan un único script parametrizado
+    "component":  ROOT / "builds/windows/build-component.bat",
     "conductor":  ROOT / "installer/conductor",          # cwd para npm
-    "sensor":     ROOT / "installer/sensor/scripts/build.bat",
     "cortex":     ROOT / "installer/cortex/build-cortex/package.py",
     # Bootstrap — genera bundle.js + meta + copia todo a installer/native/bin/bootstrap/
     "bootstrap":  ROOT / "installer/bootstrap/version-bootstrap.py",
@@ -449,11 +447,17 @@ def build_brain() -> StepResult:
 
 
 def build_bat(component: str, bat_path: Path) -> StepResult:
+    """
+    Ejecuta builds/windows/build-component.bat <component>.
+    El bat recibe el nombre del componente como %1 y deriva todas las rutas de él.
+    """
     if not bat_path.exists():
         return StepResult(component, False, error=f"Script no encontrado: {bat_path}")
-    log(f"Ejecutando {bat_path.name} ...")
-    # cwd = directorio del .bat para que sus rutas relativas internas resuelvan correctamente
-    code, out, err = run(["cmd", "/c", bat_path.name], cwd=bat_path.parent)
+    log(f"Ejecutando {bat_path.name} {component.lower()} ...")
+    code, out, err = run(
+        ["cmd", "/c", bat_path.name, component.lower()],
+        cwd=bat_path.parent,
+    )
     if code != 0:
         return StepResult(component, False, error=err or out)
     return StepResult(component, True)
@@ -476,14 +480,7 @@ def build_conductor() -> StepResult:
 
 
 def build_sensor() -> StepResult:
-    sensor_bat = BUILDS["sensor"]
-    if not sensor_bat.exists():
-        return StepResult("Sensor", False, error=f"Script no encontrado: {sensor_bat}")
-    log("Ejecutando build.bat ...")
-    code, out, err = run(["cmd", "/c", sensor_bat.name], cwd=sensor_bat.parent)
-    if code != 0:
-        return StepResult("Sensor", False, error=err or out)
-    return StepResult("Sensor", True)
+    return build_bat("Sensor", BUILDS["component"])
 
 
 def build_vsix() -> StepResult:
@@ -1114,9 +1111,9 @@ def run_single(component: str, channel: str, production: bool) -> None:
     """
     DISPATCH = {
         "brain":      lambda: build_brain(),
-        "nucleus":    lambda: build_bat("Nucleus",   BUILDS["nucleus"]),
-        "sentinel":   lambda: build_bat("Sentinel",  BUILDS["sentinel"]),
-        "metamorph":  lambda: build_bat("Metamorph", BUILDS["metamorph"]),
+        "nucleus":    lambda: build_bat("Nucleus",   BUILDS["component"]),
+        "sentinel":   lambda: build_bat("Sentinel",  BUILDS["component"]),
+        "metamorph":  lambda: build_bat("Metamorph", BUILDS["component"]),
         "conductor":  lambda: build_conductor(),
         "sensor":     lambda: build_sensor(),
         "bootstrap":  lambda: build_bootstrap(),
@@ -1189,9 +1186,9 @@ def main() -> None:
 
     steps = [
         ("Brain",     lambda: build_brain()),
-        ("Nucleus",   lambda: build_bat("Nucleus",   BUILDS["nucleus"])),
-        ("Sentinel",  lambda: build_bat("Sentinel",  BUILDS["sentinel"])),
-        ("Metamorph", lambda: build_bat("Metamorph", BUILDS["metamorph"])),
+        ("Nucleus",   lambda: build_bat("Nucleus",   BUILDS["component"])),
+        ("Sentinel",  lambda: build_bat("Sentinel",  BUILDS["component"])),
+        ("Metamorph", lambda: build_bat("Metamorph", BUILDS["component"])),
         ("Conductor", lambda: build_conductor()),
         ("Host",      lambda: StepResult("Host", True, skipped=True,
                                          skip_reason="Build en Linux — installer/host/build.sh")),

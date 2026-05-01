@@ -89,6 +89,7 @@
 
     Flags:
       --all, -a                  Include external binaries (Temporal, Ollama, Chromium, Node)
+      --ion-recipes              Inspect ion automation recipes
       --native                   Inspect native/bin/<platform>/ build output instead of AppData
 
     Example:

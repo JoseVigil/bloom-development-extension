@@ -1,4 +1,4 @@
-usage: build-all.py [-h] [--only COMPONENTE] [--channel CHANNEL] [--production] [--skip-verify] [--verify-env ENV]
+[1;34musage: [0m[1;35mbuild-all.py[0m [[32m-h[0m] [[36m--only [33mCOMPONENTE[0m] [[36m--channel [33mCHANNEL[0m] [[36m--production[0m] [[36m--skip-verify[0m] [[36m--verify-env [33mENV[0m]
 
 Bloom Build All — Orquestador maestro de builds del ecosistema Bloom.
 
@@ -8,14 +8,14 @@ y opcionalmente valida el estado de la instalación en producción.
 Usa --only <componente> para correr un único build de forma aislada
 (útil para re-intentar un paso que falló en el build completo).
 
-options:
-  -h, --help         show this help message and exit
-  --only COMPONENTE  Corre únicamente el build de un componente: brain, nucleus, sentinel, metamorph, conductor,
-                     sensor, vsix, bootstrap, cortex. Omite verificación post-build.
-  --channel CHANNEL  Release channel para Cortex: stable (default), beta, dev
-  --production       Excluye archivos .map del paquete Cortex (.blx)
-  --skip-verify      Omite la FASE 3 de verificación post-build
-  --verify-env ENV   Entorno de verificación: dev (default) o prod. Ver detalle abajo.
+[1;34moptions:[0m
+  [1;32m-h[0m, [1;36m--help[0m         show this help message and exit
+  [1;36m--only[0m [1;33mCOMPONENTE[0m  Corre únicamente el build de un componente: brain, nucleus, sentinel, metamorph, conductor, sensor, vsix,
+                     bootstrap, cortex. Omite verificación post-build.
+  [1;36m--channel[0m [1;33mCHANNEL[0m  Release channel para Cortex: stable (default), beta, dev
+  [1;36m--production[0m       Excluye archivos .map del paquete Cortex (.blx)
+  [1;36m--skip-verify[0m      Omite la FASE 3 de verificación post-build
+  [1;36m--verify-env[0m [1;33mENV[0m   Entorno de verificación: dev (default) o prod. Ver detalle abajo.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 OPCIONES — DETALLE
