@@ -408,7 +408,6 @@ bloom-development-extension/
 │   │   ├── main.go
 │   │   ├── metamorph-config.json
 │   │   └── scripts/
-│   │       ├── build.bat
 │   │       └── build_number.txt
 │   ├── mobile/
 │   │   ├── .env.local
@@ -456,13 +455,18 @@ bloom-development-extension/
 │   │   │   ├── logs/
 │   │   │   │   └── brain/
 │   │   │   │       ├── core/
-│   │   │   │       │   └── brain_core_20260320.log
+│   │   │   │       │   ├── brain_core_20260320.log
+│   │   │   │       │   └── brain_core_20260501.log
 │   │   │   │       ├── profile/
-│   │   │   │       │   └── brain_profile_20260320.log
+│   │   │   │       │   ├── brain_profile_20260320.log
+│   │   │   │       │   └── brain_profile_20260501.log
 │   │   │   │       └── server/
 │   │   │   │           ├── brain_server_20260320.log
+│   │   │   │           ├── brain_server_20260501.log
 │   │   │   │           ├── brain_server_event_bus_20260320.log
-│   │   │   │           └── brain_server_manager_20260320.log
+│   │   │   │           ├── brain_server_event_bus_20260501.log
+│   │   │   │           ├── brain_server_manager_20260320.log
+│   │   │   │           └── brain_server_manager_20260501.log
 │   │   │   ├── profiles/
 │   │   │   ├── vscode/
 │   │   │   │   └── bloom-extension.vsix
@@ -815,7 +819,6 @@ bloom-development-extension/
 │   │   └── scripts/
 │   │       ├── build-darwin.sh
 │   │       ├── build-linux.sh
-│   │       ├── build.bat
 │   │       ├── build_number.txt
 │   │       ├── extract_go_files.py
 │   │       ├── simulate_environment.py
@@ -927,6 +930,7 @@ bloom-development-extension/
 │   │   │   ├── cmdregistry/
 │   │   │   │   └── cmdregistry.go
 │   │   │   ├── core/
+│   │   │   │   ├── build_info.go
 │   │   │   │   └── core.go
 │   │   │   ├── input/
 │   │   │   │   └── idle.go
@@ -949,7 +953,6 @@ bloom-development-extension/
 │   │   │   └── events/
 │   │   │       └── events.go
 │   │   └── scripts/
-│   │       ├── build.bat
 │   │       └── build_number.txt
 │   ├── sentinel/
 │   │   ├── VERSION
@@ -1026,7 +1029,6 @@ bloom-development-extension/
 │   │   ├── scripts/
 │   │   │   ├── build-darwin.sh
 │   │   │   ├── build-linux.sh
-│   │   │   ├── build.bat
 │   │   │   ├── build_number.txt
 │   │   │   ├── extract_go_files.py
 │   │   │   └── tree/
