@@ -502,7 +502,19 @@ def build_cortex() -> StepResult:
 
     log(f"Ejecutando python3 {package_py.name} ...")
     env = inject_build_number_env("cortex")
-    cmd = [sys.executable, package_py.name]
+
+    # --source: raíz de la Chrome Extension (donde está manifest.json)
+    # --output: carpeta de destino del .blx en el bin base
+    cortex_source = ROOT / "installer" / "cortex" / "extension"
+    # bloom-cortex.blx es multiplataforma (ZIP), va en bin/cortex/ sin subfolder de arquitectura
+    cortex_output = ROOT / "installer" / "native" / "bin" / "cortex"
+    cortex_output.mkdir(parents=True, exist_ok=True)
+
+    cmd = [
+        sys.executable, package_py.name,
+        "--source", str(cortex_source),
+        "--output", str(cortex_output),
+    ]
     code, out, _ = run(cmd, cwd=package_py.parent, env=env)
     if code != 0:
         tail = "\n".join(out.splitlines()[-20:]) if out else "(sin output)"
@@ -708,6 +720,16 @@ def main() -> None:
     # Mostrar build numbers efectivos para la plataforma actual
     print(f"  Build numbers ({_PLATFORM_SUFFIX}):")
     for comp in ("nucleus", "sentinel", "metamorph", "sensor", "host", "cortex", "conductor"):
+        if comp == "cortex":
+            # Cortex gestiona su propio build number en cortex.meta.json (no en .txt)
+            meta_path = _BUILD_NUMBER_DIRS["cortex"] / "cortex.meta.json"
+            try:
+                meta_data = json.loads(meta_path.read_text(encoding="utf-8"))
+                cortex_build = meta_data.get("build_number", "?")
+            except (FileNotFoundError, json.JSONDecodeError):
+                cortex_build = "?"
+            print(f"    {comp:<12} {cortex_build}")
+            continue
         scripts_dir = _BUILD_NUMBER_DIRS.get(comp)
         if scripts_dir:
             base   = _read_int(scripts_dir / "build_number.txt", 0)

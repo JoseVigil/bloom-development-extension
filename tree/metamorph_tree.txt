@@ -22,6 +22,7 @@ bloom-development-extension/
     │   │   ├── formatting.go
     │   │   ├── inspect.go
     │   │   ├── inspection_test.go
+    │   │   ├── ionrecipes.go
     │   │   ├── managed.go
     │   │   ├── status.go
     │   │   ├── types.go
@@ -41,5 +42,7 @@ bloom-development-extension/
     ├── main.go
     ├── metamorph-config.json
     └── scripts/
-        ├── build.bat
-        └── build_number.txt
+        ├── build_number.darwin.txt
+        ├── build_number.effective.txt
+        ├── build_number.txt
+        └── build_number.windows.txt
