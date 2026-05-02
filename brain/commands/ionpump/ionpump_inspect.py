@@ -20,7 +20,7 @@ class IonPumpInspectCommand(BaseCommand):
     def metadata(self) -> CommandMetadata:
         return CommandMetadata(
             name="inspect",
-            category=CommandCategory.INTENT,
+            category=CommandCategory.IONPUMP,
             version="1.0.0",
             description="Inspect the IonPump registry — list sites or show site detail.",
             examples=[

@@ -118,14 +118,16 @@ def _ensure_build_number_files(scripts_dir: Path, component: str) -> None:
         log(f"  ⚠ No se pudo crear directorio {scripts_dir}: {exc}")
         return
 
-    base_file = scripts_dir / "build_number.txt"
-    if not base_file.exists():
-        base_file.write_text("0", encoding="utf-8")
-        try:
-            rel = base_file.relative_to(ROOT)
-        except ValueError:
-            rel = base_file
-        log(f"  📄 Creado {rel} (valor inicial: 0)")
+    # Conductor usa build_info.json y brain usa solo archivos de plataforma — no crear build_number.txt base
+    if component not in ("conductor", "conductor_setup", "brain"):
+        base_file = scripts_dir / "build_number.txt"
+        if not base_file.exists():
+            base_file.write_text("0", encoding="utf-8")
+            try:
+                rel = base_file.relative_to(ROOT)
+            except ValueError:
+                rel = base_file
+            log(f"  📄 Creado {rel} (valor inicial: 0)")
 
     for platform_suffix in ("windows", "darwin"):
         offset_file = scripts_dir / f"build_number.{platform_suffix}.txt"
@@ -247,7 +249,7 @@ _PROD_BIN_BASE = NUCLEUS_HOME / "bin"
 
 def _build_script_dir() -> Path:
     """Carpeta de scripts de build para la plataforma actual."""
-    return ROOT / "builds" / ("windows" if IS_WINDOWS else "macos")
+    return ROOT / "builds" / ("windows" if IS_WINDOWS else "darwin")
 
 
 _BUILD_DIR = _build_script_dir()
@@ -260,7 +262,7 @@ BUILDS: dict[str, Path | None] = {
     "brain": (
         ROOT / "builds/windows/brain.ps1"
         if IS_WINDOWS
-        else ROOT / "builds/macos/build-brain.sh"
+        else ROOT / "builds/darwin/build-brain.sh"
     ),
 
     # Host (C++): solo macOS/Linux — None en Windows indica skip explícito
@@ -339,21 +341,26 @@ def build_brain() -> StepResult:
     # Garantizar que existen build_number.txt / .windows.txt / .darwin.txt en brain/
     _ensure_build_number_files(_BUILD_NUMBER_DIRS["brain"], "brain")
 
+    # Garantizar que el directorio de output existe antes de compilar
+    brain_out = _DEV_BIN_BASE / "brain"
+    brain_out.mkdir(parents=True, exist_ok=True)
+
     if IS_WINDOWS:
         log("Ejecutando brain.ps1 ...")
         cmd = [
             "powershell",
             "-ExecutionPolicy", "Bypass",
-            "-NonInteractive",          # ← evita prompts interactivos
+            "-NonInteractive",
             "-File", brain_script.name,
         ]
-        # Indicarle al PS1 que estamos en modo CI/capturado
-        # (para que pueda omitir Clear-Host y secuencias ANSI si lo desea)
-        env = {**os.environ, "CI": "1", "TERM": "dumb"}
+        # CI/TERM: evita Clear-Host y secuencias ANSI en subprocess
+        # BLOOM_PROJECT_ROOT: build.py lo usa para resolver rutas cuando corre
+        #   dentro de Start-Job de PowerShell con cwd distinto a la raiz del repo
+        env = {**os.environ, "CI": "1", "TERM": "dumb", "BLOOM_PROJECT_ROOT": str(ROOT)}
     else:
         log("Ejecutando build-brain.sh ...")
         cmd = ["bash", brain_script.name]
-        env = None
+        env = {**os.environ, "BLOOM_PROJECT_ROOT": str(ROOT)}
 
     code, out, _ = run(cmd, cwd=brain_script.parent, env=env)
     if code != 0:

@@ -26,7 +26,7 @@ class IonPumpTestCommand(BaseCommand):
     def metadata(self) -> CommandMetadata:
         return CommandMetadata(
             name="test",
-            category=CommandCategory.INTENT,
+            category=CommandCategory.IONPUMP,
             version="1.0.0",
             description="Execute or dry-run a named IonPump flow.",
             examples=[

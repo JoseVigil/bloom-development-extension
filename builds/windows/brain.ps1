@@ -118,55 +118,49 @@ Write-Step "Ejecutando compilacion..."
 Write-Separator
 
 $pythonExe = (Get-Command python -ErrorAction SilentlyContinue).Source
-$buildJob = Start-Job -ScriptBlock {
-    param($pythonPath, $workingDir, $logPath, $repoRoot)
-    Set-Location $workingDir
-    $env:BUILD_LOG_PATH = $logPath
-    & $pythonPath -u "$repoRoot\installer\brain\build_multiplatform\build.py" 2>&1
-} -ArgumentList $pythonExe, $REPO_ROOT, $logFile, $REPO_ROOT
+if (-not $pythonExe) { Write-Error "Python no encontrado en el PATH" }
 
-$spinnerIndex = 0
+$env:BUILD_LOG_PATH     = $logFile
+$env:BLOOM_PROJECT_ROOT = $REPO_ROOT
+
+# Spinner en thread separado mientras build.py corre en primer plano
+$spinnerIndex   = 0
 $currentPercent = 0
+$spinnerActive  = $true
 
-while ($buildJob.State -eq "Running") {
-    # 1. Recibir salida
-    $jobOutput = Receive-Job -Job $buildJob -Keep
-    
-    # 2. Buscar último progreso reportado
-    if ($jobOutput) {
-        $lastProg = $jobOutput | Where-Object { $_ -match "\[PROG:(\d+)\]" } | Select-Object -Last 1
-        if ($lastProg -and $lastProg -match "\[PROG:(\d+)\]") {
-            $currentPercent = [int]$matches[1]
-        }
+$spinnerJob = [System.Threading.Tasks.Task]::Run([Action]{
+    $frames = @("|", "/", "-", "\", "|", "/", "-", "\")
+    $idx = 0
+    while ($script:spinnerActive) {
+        [Console]::Write("`r   " + $frames[$idx] + " Compilando con PyInstaller... [" + $script:currentPercent + "%]          ")
+        $idx = ($idx + 1) % $frames.Count
+        Start-Sleep -Milliseconds 150
     }
+})
 
-    # 3. Dibujar Spinner. Si el progreso es 0, mostramos que está iniciando.
-    $frame = $SPINNER[$spinnerIndex]
+# Correr build.py directamente — hereda PATH, env vars y credenciales
+$buildLines = & $pythonExe -u "$REPO_ROOT\brain\build_multiplatform\build.py" 2>&1
 
-    Write-Host "`r   " -NoNewline
-    Write-Host $frame -NoNewline -ForegroundColor Yellow
-    Write-Host " Compilando con PyInstaller... " -NoNewline -ForegroundColor Cyan
-    Write-Host "[$currentPercent%]" -NoNewline -ForegroundColor Magenta
-    Write-Host " ".PadRight(10) -NoNewline
-    
-    $spinnerIndex = ($spinnerIndex + 1) % $SPINNER.Count
-    Start-Sleep -Milliseconds 150
+$buildExitCode = $LASTEXITCODE
+
+# Detener spinner
+$script:spinnerActive = $false
+try { $spinnerJob.Wait(2000) | Out-Null } catch {}
+
+# Leer progreso final del output
+$buildOutput = $buildLines
+foreach ($line in $buildOutput) {
+    if ($line -match "\[PROG:(\d+)\]") {
+        $currentPercent = [int]$matches[1]
+    }
 }
 
-# 4. Obtener resultado final ANTES de imprimir el 100%
-$buildOutput = Receive-Job -Job $buildJob
-$buildExitCode = if ($buildJob.ChildJobs[0].State -eq "Completed") { 0 } else { 1 }
-
-# Verificar si realmente terminó bien leyendo la última línea de progreso del output total
-$finalProg = $buildOutput | Where-Object { $_ -match "\[PROG:(\d+)\]" } | Select-Object -Last 1
-if ($finalProg -match "\[PROG:100\]" -and $buildExitCode -eq 0) {
-    Write-Host "`r   $($EMO.ok) Compilando con PyInstaller... [100%]" -ForegroundColor Green
+if ($currentPercent -eq 100 -and $buildExitCode -eq 0) {
+    Write-Host "`r   $($EMO.ok) Compilando con PyInstaller... [100%]          " -ForegroundColor Green
 } else {
-    Write-Host "`r   $($EMO.fail) Compilacion interrumpida o fallida [$currentPercent%]" -ForegroundColor Red
+    Write-Host "`r   $($EMO.fail) Compilacion interrumpida o fallida [$currentPercent%]          " -ForegroundColor Red
 }
 Write-Host ""
-
-Remove-Job -Job $buildJob -Force
 
 # --- RESUMEN DE HITOS ---
 Write-Host ""
@@ -201,7 +195,14 @@ foreach ($rawLine in $importantLines) {
 
 Write-Separator
 
-if ($buildExitCode -ne 0) { Write-Error "Build fallo catastróficamente." }
+if ($buildExitCode -ne 0) {
+    Write-Host ""
+    Write-Host "   $($EMO.fail) Build fallo. Revisa el log: $logFile" -ForegroundColor Red
+    Write-Host ""
+    # Mostrar ultimas lineas del output para diagnostico
+    $buildOutput | Select-Object -Last 20 | ForEach-Object { Write-Host "     $_" -ForegroundColor DarkGray }
+    exit 1
+}
 
 # =========================================
 # VERIFICAR EJECUTABLE

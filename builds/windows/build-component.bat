@@ -23,12 +23,11 @@ for %%C in (nucleus sentinel metamorph sensor) do (
 )
 if "%VALID%"=="0" (
     echo Componente desconocido: %COMPONENT%
-    echo    Componentes validos: nucleus, sentinel, metamorph, sensor
     exit /b 1
 )
 
 :: ============================================
-:: PROJECT ROOT (ABSOLUTO, CANONICO)
+:: PROJECT ROOT
 :: Script en builds/windows/ -> dos niveles arriba es la raiz
 :: ============================================
 set "PROJECT_ROOT=%~dp0..\.."
@@ -37,7 +36,7 @@ for %%I in ("%PROJECT_ROOT%") do set "PROJECT_ROOT=%%~fI"
 :: ============================================
 :: CONFIGURAR LOG
 :: ============================================
-set LOG_BASE_DIR=%LOCALAPPDATA%\BloomNucleus\logs\build
+set LOG_BASE_DIR=%LOCALAPPDATA%\BloomNucleus\logsuild
 set LOG_FILE=%LOG_BASE_DIR%\%COMPONENT%_build.log
 
 if not exist "%LOG_BASE_DIR%" mkdir "%LOG_BASE_DIR%"
@@ -69,7 +68,6 @@ if "%PROCESSOR_ARCHITECTURE%"=="AMD64" (
     set GOARCH=386
 )
 
-:: Limitacion de recursos para evitar OOM
 set GOMEMLIMIT=512MiB
 
 echo Environment: >> "%LOG_FILE%"
@@ -81,11 +79,11 @@ echo. >> "%LOG_FILE%"
 :: PATHS DERIVADOS DEL COMPONENTE
 :: ============================================
 set "APP_FOLDER=%COMPONENT%"
-set "OUTPUT_BASE=%PROJECT_ROOT%\installer\native\bin\%PLATFORM%\%APP_FOLDER%"
+set "OUTPUT_BASE=%PROJECT_ROOT%\installer
+ativein\%PLATFORM%\%APP_FOLDER%"
 set "OUTPUT_DIR=%OUTPUT_BASE%"
 set "HELP_DIR=%OUTPUT_DIR%\help"
 
-:: Nombre del ejecutable segun componente
 if /i "%COMPONENT%"=="sensor" (
     set "EXE_NAME=bloom-sensor.exe"
 ) else (
@@ -93,7 +91,6 @@ if /i "%COMPONENT%"=="sensor" (
 )
 set "OUTPUT_FILE=%OUTPUT_DIR%\%EXE_NAME%"
 
-:: Crear directorios de salida
 if not exist "%OUTPUT_BASE%" mkdir "%OUTPUT_BASE%"
 if not exist "%HELP_DIR%"    mkdir "%HELP_DIR%"
 
@@ -101,11 +98,11 @@ if not exist "%HELP_DIR%"    mkdir "%HELP_DIR%"
 :: INCREMENTAR BUILD NUMBER
 :: ============================================
 if /i "%COMPONENT%"=="sensor" (
-    set "BUILD_FILE=%PROJECT_ROOT%\sensor\scripts\build_number.txt"
-    set "BUILD_INFO=%PROJECT_ROOT%\sensor\internal\core\build_info.go"
+    set "BUILD_FILE=%PROJECT_ROOT%\installer\sensor\scriptsuild_number.txt"
+    set "BUILD_INFO=%PROJECT_ROOT%\installer\sensor\internal\coreuild_info.go"
 ) else (
-    set "BUILD_FILE=%PROJECT_ROOT%\installer\%COMPONENT%\scripts\build_number.txt"
-    set "BUILD_INFO=%PROJECT_ROOT%\installer\%COMPONENT%\internal\core\build_info.go"
+    set "BUILD_FILE=%PROJECT_ROOT%\installer\%COMPONENT%\scriptsuild_number.txt"
+    set "BUILD_INFO=%PROJECT_ROOT%\installer\%COMPONENT%\internal\coreuild_info.go"
 )
 
 if not exist "%BUILD_FILE%" echo 0 > "%BUILD_FILE%"
@@ -133,7 +130,6 @@ echo.
 echo Compiling %EXE_NAME% [%PLATFORM%]...
 echo Compiling %EXE_NAME% - %OUTPUT_FILE% ... >> "%LOG_FILE%"
 
-:: Para sensor el modulo vive en la raiz del proyecto; los demas en installer\<component>
 if /i "%COMPONENT%"=="sensor" (
     set "BUILD_DIR=%PROJECT_ROOT%\installer\sensor"
     set "BUILD_PKG=.\cmd"
@@ -154,9 +150,8 @@ if %BUILD_RC% NEQ 0 (
 
 echo OK - Compilation successful: %OUTPUT_FILE%
 
-:: Copiar <component>-config.json si existe
 if exist "%PROJECT_ROOT%\installer\%COMPONENT%\%COMPONENT%-config.json" (
-    copy /Y "%PROJECT_ROOT%\installer\%COMPONENT%\%COMPONENT%-config.json" "%OUTPUT_DIR%\" >nul
+    copy /Y "%PROJECT_ROOT%\installer\%COMPONENT%\%COMPONENT%-config.json" "%OUTPUT_DIR%" >nul
 )
 
 :: ============================================
@@ -167,13 +162,16 @@ for %%F in ("%OUTPUT_FILE%") do set "OUTPUT_FILE_ABS=%%~fF"
 "%OUTPUT_FILE_ABS%" --help      > "%HELP_DIR%\%COMPONENT%_help.txt"  2>> "%LOG_FILE%"
 
 :: ============================================
-:: REGISTRAR STREAM EN TELEMETRY (NUCLEUS CLI)
+:: REGISTRAR TELEMETRY
 :: ============================================
 echo.
 echo Registrando Telemetria via Nucleus...
 echo Registrando Telemetria via Nucleus... >> "%LOG_FILE%"
 
-set "NUCLEUS_EXE=%PROJECT_ROOT%\installer\native\bin\%PLATFORM%\nucleus\nucleus.exe"
+set "NUCLEUS_EXE=%PROJECT_ROOT%\installer
+ativein\%PLATFORM%
+ucleus
+ucleus.exe"
 
 if exist "%NUCLEUS_EXE%" (
     set "NORM_LOG_PATH=%LOG_FILE:\=/%"
@@ -192,7 +190,7 @@ if exist "%NUCLEUS_EXE%" (
         echo   Error al registrar telemetria (Nucleus RC: %ERRORLEVEL%)
     )
 ) else (
-    echo   No se pudo registrar telemetria: No se encontro Nucleus en %NUCLEUS_EXE%
+    echo   Nucleus no encontrado en %NUCLEUS_EXE%
     echo   Nucleus.exe missing at: %NUCLEUS_EXE% >> "%LOG_FILE%"
 )
 

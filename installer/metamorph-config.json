@@ -1,0 +1,32 @@
+{
+  "version": "1.0.0",
+  "settings": {
+    "staging_dir": "staging",
+    "max_snapshots": 5,
+    "download_timeout_seconds": 300,
+    "service_stop_timeout_seconds": 30,
+    "service_start_timeout_seconds": 60,
+    "enable_auto_rollback": true,
+    "log_level": "info"
+  },
+  "paths": {
+    "nucleus_exe": "nucleus/nucleus.exe",
+    "brain_exe": "brain/brain.exe",
+    "sentinel_exe": "sentinel/sentinel.exe",
+    "host_exe": "host/bloom-host.exe",
+    "conductor_exe": "conductor/bloom-conductor.exe",
+    "cortex_blx": "cortex/bloom-cortex.blx"
+  },
+  "services": {
+    "brain": {
+      "service_name": "BloomBrain",
+      "display_name": "Bloom Brain Service",
+      "required": true
+    },
+    "host": {
+      "service_name": "BloomHost",
+      "display_name": "Bloom Host Service",
+      "required": true
+    }
+  }
+}

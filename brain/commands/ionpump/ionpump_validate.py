@@ -22,7 +22,7 @@ class IonPumpValidateCommand(BaseCommand):
     def metadata(self) -> CommandMetadata:
         return CommandMetadata(
             name="validate",
-            category=CommandCategory.INTENT,
+            category=CommandCategory.IONPUMP,
             version="1.0.0",
             description="Validate .ion recipe files for syntax and semantic correctness.",
             examples=[

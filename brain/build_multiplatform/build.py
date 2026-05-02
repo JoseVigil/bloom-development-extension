@@ -32,7 +32,10 @@ except ImportError:
 # CONFIGURACIÓN MULTIPLATAFORMA
 # ========================================
 # Detectar ubicación del proyecto
-if Path(__file__).parent.name == "build_multiplatform":
+if os.environ.get("BLOOM_PROJECT_ROOT"):
+    # Inyectado por build-all.py — garantiza el path correcto bajo Start-Job de PowerShell
+    PROJECT_ROOT = Path(os.environ["BLOOM_PROJECT_ROOT"]).resolve()
+elif Path(__file__).parent.name == "build_multiplatform":
     # Nuevo: brain/build_multiplatform/build.py
     PROJECT_ROOT = Path(__file__).parent.parent.parent
 else:

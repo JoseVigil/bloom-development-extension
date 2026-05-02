@@ -20,7 +20,7 @@ class IonPumpReloadCommand(BaseCommand):
     def metadata(self) -> CommandMetadata:
         return CommandMetadata(
             name="reload",
-            category=CommandCategory.INTENT,
+            category=CommandCategory.IONPUMP,
             version="1.0.0",
             description="Force hot-reload of a site's .ion recipe or all registered sites.",
             examples=[
