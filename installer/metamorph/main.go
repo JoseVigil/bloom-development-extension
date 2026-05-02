@@ -10,6 +10,7 @@ import (
 	_ "github.com/bloom/metamorph/internal/reconciliation"
 	_ "github.com/bloom/metamorph/internal/rollback"
 	_ "github.com/bloom/metamorph/internal/system"
+	_ "github.com/bloom/metamorph/internal/inspection"
 )
 
 func main() {

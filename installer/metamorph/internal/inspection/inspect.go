@@ -87,18 +87,22 @@ Example:
 			includeExternal, _ := cmd.Flags().GetBool("all")
 			nativeMode, _ := cmd.Flags().GetBool("native")
 			includeIonRecipes, _ := cmd.Flags().GetBool("ion-recipes")
-			return runInspection(c, includeExternal, nativeMode, includeIonRecipes)
+			showPending, _ := cmd.Flags().GetBool("show-pending")
+			showBackups, _ := cmd.Flags().GetBool("show-backups")
+			return runInspection(c, includeExternal, nativeMode, includeIonRecipes, showPending, showBackups)
 		},
 	}
 
 	cmd.Flags().BoolP("all", "a", false, "Include external binaries (Temporal, Ollama, Chromium, Node)")
 	cmd.Flags().Bool("native", false, "Inspect native/bin/<platform>/ build output instead of AppData")
 	cmd.Flags().Bool("ion-recipes", false, "Inspect ion automation recipes")
+	cmd.Flags().Bool("show-pending", false, "Show sites with pending status (use with --ion-recipes)")
+	cmd.Flags().Bool("show-backups", false, "Show available backup versions (use with --ion-recipes)")
 	return cmd
 }
 
 // runInspection performs the inspection, writes the result JSON, and outputs results.
-func runInspection(c *core.Core, includeExternal bool, nativeMode bool, includeIonRecipes bool) error {
+func runInspection(c *core.Core, includeExternal bool, nativeMode bool, includeIonRecipes bool, showPending bool, showBackups bool) error {
 	var basePath string
 	var bootstrapBase string
 
@@ -190,7 +194,7 @@ func runInspection(c *core.Core, includeExternal bool, nativeMode bool, includeI
 					"ion_recipes": ionResult,
 				})
 			} else {
-				printIonRecipesTable(ionResult)
+				printIonRecipesTable(ionResult, showPending, showBackups)
 			}
 		}
 	}
@@ -554,12 +558,12 @@ func resolveNativeMetamorphConfigPath() (string, error) {
 // Uses the same base path as managed/external binaries.
 func resolveIonSitesPath(cfg *core.Config) string {
 	base := GetBasePath()
-	return filepath.Join(base, "cortex", "ionsites")
+	return filepath.Join(base, "bin", "cortex", "ionsites")
 }
 
 // printIonRecipesTable formats the human-readable output for ion recipes.
 // Style is consistent with the managed/external binaries table.
-func printIonRecipesTable(result *IonRecipesResult) {
+func printIonRecipesTable(result *IonRecipesResult, showPending bool, showBackups bool) {
 	fmt.Printf("\nIon Automation Recipes\n")
 	fmt.Printf("Base: %s\n", result.BasePath)
 	fmt.Println(strings.Repeat("─", 70))
@@ -569,22 +573,45 @@ func printIonRecipesTable(result *IonRecipesResult) {
 	} else {
 		for _, recipe := range result.Recipes {
 			statusLabel := "✓ Healthy"
-			if recipe.Status == "missing" {
+			if recipe.Status == "missing_manifest" || recipe.Status == "missing_entrypoint" {
 				statusLabel = "✗ Missing"
-			} else if recipe.Status == "corrupted" {
-				statusLabel = "⚠ Corrupted"
+			} else if recipe.Status == "invalid_manifest" {
+				statusLabel = "⚠ Invalid"
 			}
 			size := FormatSize(recipe.SizeBytes)
-			fmt.Printf("%-20s v%-10s %2d flows  %8s  %s\n",
+			fmt.Printf("%-20s v%-10s %2d actions  %d pages  %8s  %s\n",
 				recipe.Site,
 				recipe.Version,
-				recipe.FlowCount,
+				len(recipe.PublicActions),
+				recipe.PageCount,
 				size,
 				statusLabel,
 			)
 		}
+
+		fmt.Println(strings.Repeat("─", 70))
+		fmt.Printf("Total: %d sites\n", len(result.Recipes))
 	}
 
 	fmt.Println(strings.Repeat("─", 70))
 	fmt.Printf("Total: %d sites, %d flows\n", result.TotalSites, result.TotalFlows)
+
+	if showPending {
+		fmt.Println("\nPENDING (interrupted reconciliation):")
+		for _, r := range result.Recipes {
+			if r.Status == "pending" {
+				fmt.Printf("  ⏳ %s\n", r.Site)
+			}
+		}
+	}
+
+	if showBackups {
+		fmt.Println("\nBACKUPS AVAILABLE:")
+		for _, r := range result.Recipes {
+			backupDir := filepath.Join(filepath.Dir(result.BasePath), ionBackupDir, r.Site)
+			if _, err := os.Stat(backupDir); err == nil {
+				fmt.Printf("  💾 %s\n", r.Site)
+			}
+		}
+	}
 }

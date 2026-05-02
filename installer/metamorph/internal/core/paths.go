@@ -81,3 +81,15 @@ func (p *PathConfig) GetNucleusConfigPath() string {
 func (p *PathConfig) GetMetamorphConfigPath() string {
 	return p.GetConfigPath("metamorph.json")
 }
+
+// GetIonSitePath retorna la ruta del directorio instalado de un site específico.
+// Ejemplo: bin/cortex/ionsites/github.com/
+func (p *PathConfig) GetIonSitePath(domain string) string {
+	return filepath.Join(p.BinDir, "cortex", "ionsites", domain)
+}
+
+// GetIonStagingPath retorna la ruta de staging para un site durante reconciliación.
+// Ejemplo: bin/cortex/ionsites/_staging/github.com/
+func (p *PathConfig) GetIonStagingPath(domain string) string {
+	return filepath.Join(p.BinDir, "cortex", "ionsites", "_staging", domain)
+}
