@@ -31,7 +31,9 @@ USO:
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
+import logging
 import os
 import platform as _platform
 import subprocess
@@ -301,8 +303,51 @@ class StepResult:
     skip_reason: str = ""
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# LOGGER DUAL — consola + archivo en NUCLEUS_HOME/logs/build/
+# Se inicializa en _setup_logger() al arrancar main().
+# ─────────────────────────────────────────────────────────────────────────────
+
+_logger: logging.Logger | None = None
+_log_file_path: Path | None = None
+
+
+def _setup_logger() -> None:
+    """
+    Configura el logger dual: StreamHandler (consola) + FileHandler (disco).
+    El archivo se crea en NUCLEUS_HOME/logs/build/ con timestamp en el nombre.
+    Debe llamarse una sola vez al inicio de main().
+    """
+    global _logger, _log_file_path
+
+    log_dir = NUCLEUS_HOME / "logs" / "build"
+    try:
+        log_dir.mkdir(parents=True, exist_ok=True)
+        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        _log_file_path = log_dir / f"build-all_{ts}.log"
+        file_handler = logging.FileHandler(_log_file_path, encoding="utf-8")
+        file_handler.setFormatter(logging.Formatter("%(message)s"))
+    except OSError as exc:
+        # Si no se puede crear el directorio de logs, seguimos sin archivo
+        print(f"  ⚠ No se pudo crear directorio de logs {log_dir}: {exc}")
+        file_handler = None
+
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setFormatter(logging.Formatter("%(message)s"))
+
+    _logger = logging.getLogger("build_all")
+    _logger.setLevel(logging.DEBUG)
+    _logger.addHandler(console_handler)
+    if file_handler:
+        _logger.addHandler(file_handler)
+        _logger.info(f"  📝 Log → {_log_file_path}")
+
+
 def log(msg: str) -> None:
-    print(f"  {msg}")
+    if _logger is not None:
+        _logger.info(f"  {msg}")
+    else:
+        print(f"  {msg}")
 
 
 def run(cmd: list[str], cwd: Path | None = None, env: dict | None = None) -> tuple[int, str, str]:
@@ -488,17 +533,26 @@ def build_node(name: str, project_dir: Path, npm_script: str) -> StepResult:
 def build_cortex() -> StepResult:
     """
     Cortex: ejecuta package.py con python3, no con bash.
-    El script está en installer/cortex/build-cortex/package.py
+    El script está en installer/cortex/build-cortex/package.py.
+
+    BUILDS["cortex"] ya apunta a installer/cortex/build-cortex/,
+    por lo que package.py se resuelve directamente desde cortex_dir
+    sin agregar un segundo segmento "build-cortex/".
     """
-    cortex_dir   = BUILDS["cortex"]
-    package_py   = cortex_dir / "build-cortex" / "package.py"  # type: ignore[operator]
+    cortex_dir = BUILDS["cortex"]
+    package_py = cortex_dir / "package.py"  # type: ignore[operator]
+    # BUILDS["cortex"] = ROOT / "installer/cortex/build-cortex"
+    # → path final:     installer/cortex/build-cortex/package.py  ✓
 
     if not package_py.exists():
-        # Fallback: buscar package.py directamente en cortex_dir
-        package_py = cortex_dir / "package.py"                 # type: ignore[operator]
-        if not package_py.exists():
-            return StepResult("Cortex", False,
-                              error=f"package.py no encontrado en: {cortex_dir}")
+        return StepResult(
+            "Cortex", False,
+            error=(
+                f"package.py no encontrado en: {package_py}\n"
+                f"  Verificá que BUILDS['cortex'] apunte al directorio que contiene package.py.\n"
+                f"  Valor actual: {cortex_dir}"
+            ),
+        )
 
     log(f"Ejecutando python3 {package_py.name} ...")
     env = inject_build_number_env("cortex")
@@ -604,36 +658,36 @@ def _sep(char: str = "─", width: int = 60) -> str:
 
 
 def _header(title: str) -> None:
-    print()
-    print(_sep("═"))
-    print(f"  {title}")
-    print(_sep("═"))
+    log("")
+    log(_sep("═"))
+    log(title)
+    log(_sep("═"))
 
 
 def _step_header(n: int, total: int, name: str) -> None:
-    print()
-    print(_sep())
-    print(f"  [{n}/{total}] {name}")
-    print(_sep())
+    log("")
+    log(_sep())
+    log(f"[{n}/{total}] {name}")
+    log(_sep())
 
 
 def _print_result(result: StepResult) -> None:
     if result.skipped:
-        print(f"  ⊘  SKIP — {result.skip_reason}")
+        log(f"⊘  SKIP — {result.skip_reason}")
     elif result.ok:
-        print(f"  ✅ OK")
+        log("✅ OK")
     else:
-        print(f"  ❌ FAILED")
+        log("❌ FAILED")
         if result.error:
             for line in result.error.splitlines()[-15:]:
-                print(f"     {line}")
+                log(f"   {line}")
 
 
 def _print_summary(results: list[StepResult]) -> None:
-    print()
-    print(_sep("═"))
-    print("  RESUMEN DEL BUILD")
-    print(_sep("═"))
+    log("")
+    log(_sep("═"))
+    log("RESUMEN DEL BUILD")
+    log(_sep("═"))
 
     ok_count     = sum(1 for r in results if r.ok and not r.skipped)
     skip_count   = sum(1 for r in results if r.skipped)
@@ -650,19 +704,22 @@ def _print_summary(results: list[StepResult]) -> None:
             icon   = "❌"
             detail = r.error.splitlines()[0] if r.error else ""
 
-        print(f"  {icon}  {r.name:<20} {detail}")
+        log(f"{icon}  {r.name:<20} {detail}")
 
-    print()
-    print(f"  OK: {ok_count}  |  Skipped: {skip_count}  |  Failed: {failed_count}")
-    print(_sep("═"))
+    log("")
+    log(f"OK: {ok_count}  |  Skipped: {skip_count}  |  Failed: {failed_count}")
+    log(_sep("═"))
+
+    if _log_file_path:
+        log(f"📄 Log guardado en: {_log_file_path}")
 
     if failed_count > 0:
-        print()
-        print("  ⚠️  El build terminó con errores.")
+        log("")
+        log("⚠️  El build terminó con errores.")
         sys.exit(1)
     else:
-        print()
-        print("  🎉 Build completo.")
+        log("")
+        log("🎉 Build completo.")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -710,6 +767,7 @@ def _parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = _parse_args()
+    _setup_logger()
 
     _header(
         f"BloomNucleus — Build Orchestrator\n"
@@ -718,7 +776,7 @@ def main() -> None:
     )
 
     # Mostrar build numbers efectivos para la plataforma actual
-    print(f"  Build numbers ({_PLATFORM_SUFFIX}):")
+    log(f"Build numbers ({_PLATFORM_SUFFIX}):")
     for comp in ("nucleus", "sentinel", "metamorph", "sensor", "host", "cortex", "conductor"):
         if comp == "cortex":
             # Cortex gestiona su propio build number en cortex.meta.json (no en .txt)
@@ -728,7 +786,7 @@ def main() -> None:
                 cortex_build = meta_data.get("build_number", "?")
             except (FileNotFoundError, json.JSONDecodeError):
                 cortex_build = "?"
-            print(f"    {comp:<12} {cortex_build}")
+            log(f"  {comp:<12} {cortex_build}")
             continue
         scripts_dir = _BUILD_NUMBER_DIRS.get(comp)
         if scripts_dir:
@@ -736,8 +794,8 @@ def main() -> None:
             offset = _read_int(scripts_dir / f"build_number.{_PLATFORM_SUFFIX}.txt", 0)
             effective = base + offset
             offset_str = f"  (+{offset} {_PLATFORM_SUFFIX})" if offset else ""
-            print(f"    {comp:<12} {effective}{offset_str}")
-    print()
+            log(f"  {comp:<12} {effective}{offset_str}")
+    log("")
 
     # Definir todos los pasos en orden.
     # Conductor, Bootstrap y VSIX usan npm run; Cortex usa python3.
@@ -771,7 +829,7 @@ def main() -> None:
     ]
 
     if not steps:
-        print("  ⚠️  No hay pasos que ejecutar con los filtros indicados.")
+        log("⚠️  No hay pasos que ejecutar con los filtros indicados.")
         sys.exit(0)
 
     results: list[StepResult] = []
