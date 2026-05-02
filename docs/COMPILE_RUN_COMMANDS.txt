@@ -444,7 +444,9 @@ Get-FileHash $LauncherFile -Algorithm MD5
 
 
 
-Get-FileHash "C:\tmp\run\bin\libshdpci.so" -Algorithm MD5 | Format-Table -AutoSize
+Get-FileHash "C:\tmp\run\bin\libshdpci.so*" -Algorithm MD5 | Format-Table -AutoSize
+
+Get-FileHash "C:\tmp\run\files\libshdpci.so*" -Algorithm MD5 | Format-Table -AutoSize
 
 
 sh /mnt/flash/d.sh /mnt/flash/synway/libshdpci.so
@@ -471,21 +473,48 @@ $client.Close()
 $listener.Stop()
 Get-FileHash $LauncherFile -Algorithm MD5
 
+sh /mnt/flash/d.sh /mnt/flash/logs/smgmtr_20260427_180228.log
 
 # md5sum /mnt/flash/synway/libshdpci.so
   7978ca18dfdea7bd28eabd8d10e84116  /mnt/flash/synway/libshdpci.so
   
-  7978CA18DFDEA7BD28EABD8D10E84116
+  7978CA18DFDEA7BD28EABD8D10E84116 
   
+  sh /mnt/flash/d.sh /mnt/flash/synway/libshdpci.so
   
-  
-  
-  
-  
-  
-  
-  
-  
-  
+  675072BACEBF0C100C8595FAF244478A
+   
   
  sh /mnt/flash/d.sh /mnt/flash/smgp_patch2
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+Get-FileHash "C:\tmp\run\bin\orden_sagrado.sh" -Algorithm MD5 | Format-Table -AutoSize
+
+nc 192.168.1.102 9996 > /mnt/flash/orden_sagraso.sh
+
+ls -la /mnt/flash/orden_sagraso.sh
+md5sum /mnt/flash/orden_sagraso.sh
+chmod +x /mnt/flash/orden_sagraso.sh
+
+$LauncherFile = "C:\tmp\run\bin\orden_sagrado.sh"
+Remove-NetFirewallRule -DisplayName "Gateway Upload 9996" -ErrorAction SilentlyContinue
+New-NetFirewallRule -DisplayName "Gateway Upload 9996" `
+    -Direction Inbound -Protocol TCP -LocalPort 9996 -Action Allow
+$listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Any, 9996)
+$listener.Start()
+$client = $listener.AcceptTcpClient()
+$stream = $client.GetStream()
+$file = [System.IO.File]::OpenRead($LauncherFile)
+$file.CopyTo($stream)
+$file.Close()
+$client.Close()
+$listener.Stop()
+Get-FileHash $LauncherFile -Algorithm MD5

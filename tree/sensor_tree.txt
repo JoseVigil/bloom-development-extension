@@ -15,6 +15,7 @@ bloom-development-extension/
     │   ├── cmdregistry/
     │   │   └── cmdregistry.go
     │   ├── core/
+    │   │   ├── build_info.go
     │   │   └── core.go
     │   ├── input/
     │   │   └── idle.go
@@ -37,5 +38,7 @@ bloom-development-extension/
     │   └── events/
     │       └── events.go
     └── scripts/
-        ├── build.bat
-        └── build_number.txt
+        ├── build_number.darwin.txt
+        ├── build_number.effective.txt
+        ├── build_number.txt
+        └── build_number.windows.txt

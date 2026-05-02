@@ -94,12 +94,21 @@ if IS_WINDOWS:
         kernel32 = ctypes.windll.kernel32
         kernel32.SetConsoleCP(65001)
         kernel32.SetConsoleOutputCP(65001)
-    except:
+    except Exception:
         pass
-    
-    if hasattr(sys.stdout, 'buffer'):
-        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+
+    # Cuando build.py corre dentro de un Start-Job de PowerShell, stdout es un
+    # PSDataStream — no tiene .buffer y el rewrap falla con AttributeError antes
+    # de llegar a main(), matando el proceso sin escribir nada al log.
+    try:
+        if hasattr(sys.stdout, 'buffer'):
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+        if hasattr(sys.stderr, 'buffer'):
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    except Exception:
+        # Si falla el rewrap (ej: bajo Start-Job), seguimos con el stdout original.
+        # setup_log() escribe al archivo en disco, no a stdout, así que el log funciona igual.
+        pass
 
 # ========================================
 # SISTEMA DE LOGGING

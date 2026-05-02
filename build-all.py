@@ -53,6 +53,149 @@ ROOT = Path(__file__).resolve().parent
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# VERSIONADO POR PLATAFORMA
+#
+# Cada componente puede tener tres archivos en su carpeta scripts/:
+#   build_number.txt          ← número base (fuente de verdad, siempre existe)
+#   build_number.windows.txt  ← offset para Windows  (opcional)
+#   build_number.darwin.txt   ← offset para macOS     (opcional)
+#
+# Build number efectivo = base + offset_plataforma
+# Si el archivo de offset no existe, se asume 0 (sin diferencia).
+#
+# Convención de paths por componente:
+#   Go    → installer/<comp>/scripts/build_number*.txt
+#   host  → installer/host/build_number*.txt   (sin subdirectorio scripts/)
+#   cortex→ installer/cortex/build-cortex/build_number*.txt
+#   conductor → installer/conductor/workspace/build_info.json  (JSON especial)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Sufijo de plataforma para los archivos de override
+_PLATFORM_SUFFIX = (
+    "windows" if IS_WINDOWS else
+    "darwin"  if IS_MACOS   else
+    "linux"
+)
+
+# Directorio de scripts de build_number por componente
+_BUILD_NUMBER_DIRS: dict[str, Path] = {
+    "nucleus":          ROOT / "installer/nucleus/scripts",
+    "sentinel":         ROOT / "installer/sentinel/scripts",
+    "metamorph":        ROOT / "installer/metamorph/scripts",
+    "sensor":           ROOT / "installer/sensor/scripts",
+    "host":             ROOT / "installer/host",
+    "cortex":           ROOT / "installer/cortex/build-cortex",
+    "conductor":        ROOT / "installer/conductor/workspace",  # usa build_info.json, no .txt
+    "conductor_setup":  ROOT / "installer/conductor/setup",      # segunda app de Conductor
+    "brain":            ROOT / "brain",                          # build_number.txt en brain/
+}
+
+
+def _read_int(path: Path, default: int = 0) -> int:
+    """Lee un entero de un archivo de texto. Retorna default si no existe o es inválido."""
+    try:
+        return int(path.read_text(encoding="utf-8").strip())
+    except (FileNotFoundError, ValueError):
+        return default
+
+
+def _ensure_build_number_files(scripts_dir: Path, component: str) -> None:
+    """
+    Garantiza que los tres archivos de versionado existen en scripts_dir.
+    Si alguno falta, lo crea con valor 0 (sin offset).
+
+    Archivos que se crean si no existen:
+      build_number.txt          → número base (fuente de verdad)
+      build_number.windows.txt  → offset para Windows
+      build_number.darwin.txt   → offset para macOS
+
+    Una vez creados, el operador puede editarlos manualmente para ajustar offsets
+    (ej: darwin=100 para separar builds macOS de Windows).
+    """
+    try:
+        scripts_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        log(f"  ⚠ No se pudo crear directorio {scripts_dir}: {exc}")
+        return
+
+    base_file = scripts_dir / "build_number.txt"
+    if not base_file.exists():
+        base_file.write_text("0", encoding="utf-8")
+        try:
+            rel = base_file.relative_to(ROOT)
+        except ValueError:
+            rel = base_file
+        log(f"  📄 Creado {rel} (valor inicial: 0)")
+
+    for platform_suffix in ("windows", "darwin"):
+        offset_file = scripts_dir / f"build_number.{platform_suffix}.txt"
+        if not offset_file.exists():
+            offset_file.write_text("0", encoding="utf-8")
+            try:
+                rel = offset_file.relative_to(ROOT)
+            except ValueError:
+                rel = offset_file
+            log(f"  📄 Creado {rel} (offset inicial: 0)")
+
+
+def resolve_build_number(component: str) -> int:
+    """
+    Resuelve el build number efectivo para un componente en la plataforma actual.
+
+    Crea los archivos de versión si no existen (con valor 0 como punto de partida).
+    Luego lee:
+      build_number.txt              → base
+      build_number.<platform>.txt   → offset de plataforma (opcional, suma al base)
+
+    Ejemplo con base=384 y darwin offset=100:
+      Windows → 384 + 0   = 384
+      macOS   → 384 + 100 = 484
+    """
+    scripts_dir = _BUILD_NUMBER_DIRS.get(component)
+    if scripts_dir is None:
+        return 0
+
+    # Crear archivos faltantes antes de leer
+    _ensure_build_number_files(scripts_dir, component)
+
+    base      = _read_int(scripts_dir / "build_number.txt", default=0)
+    offset    = _read_int(scripts_dir / f"build_number.{_PLATFORM_SUFFIX}.txt", default=0)
+    effective = base + offset
+
+    if offset != 0:
+        log(f"  build_number [{component}]: {base} + {offset} ({_PLATFORM_SUFFIX}) = {effective}")
+    else:
+        log(f"  build_number [{component}]: {effective} (sin offset de plataforma)")
+
+    return effective
+
+
+def inject_build_number_env(component: str, base_env: dict | None = None) -> dict:
+    """
+    Retorna un dict de entorno con BLOOM_BUILD_NUMBER inyectado.
+    Los scripts de build (bat/sh/py) deben leer esta variable para respetar
+    el override de plataforma en lugar de leer build_number.txt directamente.
+
+    Además escribe build_number.effective.txt en la misma carpeta, para
+    herramientas que leen el archivo en disco (ej: generador de build_info.go).
+    Los archivos de versión se crean automáticamente si no existen.
+    """
+    env = {**(base_env or os.environ)}
+    build_num = resolve_build_number(component)
+    env["BLOOM_BUILD_NUMBER"] = str(build_num)
+
+    scripts_dir = _BUILD_NUMBER_DIRS.get(component)
+    if scripts_dir and scripts_dir.exists():
+        effective_file = scripts_dir / "build_number.effective.txt"
+        try:
+            effective_file.write_text(str(build_num), encoding="utf-8")
+        except OSError:
+            pass  # No es crítico si falla la escritura
+
+    return env
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # CORRECCIÓN 1 — Paths de NUCLEUS_HOME por plataforma
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -160,19 +303,26 @@ def log(msg: str) -> None:
     print(f"  {msg}")
 
 
-def run(cmd: list[str], cwd: Path | None = None) -> tuple[int, str, str]:
+def run(cmd: list[str], cwd: Path | None = None, env: dict | None = None) -> tuple[int, str, str]:
     """
     Ejecuta un comando y retorna (returncode, stdout, stderr).
     stdout y stderr se capturan por separado y se combinan en el output
     para diagnóstico — soluciona el problema de scripts bash que redirigen
     stderr al log file, dejando run() con stderr vacío.
+
+    Se fuerza UTF-8 explícitamente para evitar UnicodeDecodeError en Windows
+    cuando subprocesos (ej: PowerShell con OutputEncoding=UTF8) emiten
+    caracteres que cp1252 no puede decodificar.
+    errors="replace" como red de seguridad ante bytes inválidos residuales.
     """
     proc = subprocess.run(
         cmd,
         cwd=cwd,
+        env=env,                        # ← None = heredar entorno del padre
         stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,   # ← CORRECCIÓN: merge stderr→stdout
-        text=True,
+        stderr=subprocess.STDOUT,   # ← merge stderr→stdout
+        encoding="utf-8",           # ← forzar UTF-8 (evita cp1252 en Windows)
+        errors="replace",           # ← reemplazar bytes inválidos en lugar de crashear
     )
     return proc.returncode, proc.stdout.strip(), ""
 
@@ -186,14 +336,26 @@ def build_brain() -> StepResult:
     if not brain_script or not brain_script.exists():
         return StepResult("Brain", False, error=f"Script no encontrado: {brain_script}")
 
+    # Garantizar que existen build_number.txt / .windows.txt / .darwin.txt en brain/
+    _ensure_build_number_files(_BUILD_NUMBER_DIRS["brain"], "brain")
+
     if IS_WINDOWS:
         log("Ejecutando brain.ps1 ...")
-        cmd = ["powershell", "-ExecutionPolicy", "Bypass", "-File", brain_script.name]
+        cmd = [
+            "powershell",
+            "-ExecutionPolicy", "Bypass",
+            "-NonInteractive",          # ← evita prompts interactivos
+            "-File", brain_script.name,
+        ]
+        # Indicarle al PS1 que estamos en modo CI/capturado
+        # (para que pueda omitir Clear-Host y secuencias ANSI si lo desea)
+        env = {**os.environ, "CI": "1", "TERM": "dumb"}
     else:
         log("Ejecutando build-brain.sh ...")
         cmd = ["bash", brain_script.name]
+        env = None
 
-    code, out, _ = run(cmd, cwd=brain_script.parent)
+    code, out, _ = run(cmd, cwd=brain_script.parent, env=env)
     if code != 0:
         return StepResult("Brain", False, error=out)
     return StepResult("Brain", True, output=out)
@@ -219,12 +381,14 @@ def build_go_component(component: str) -> StepResult:
 
     log(f"Compilando {component} con {script_path.name} ...")
 
+    env = inject_build_number_env(component)
+
     if IS_WINDOWS:
         cmd = ["cmd", "/c", script_path.name, component]
     else:
         cmd = ["bash", script_path.name, component]
 
-    code, out, _ = run(cmd, cwd=script_path.parent)
+    code, out, _ = run(cmd, cwd=script_path.parent, env=env)
     if code != 0:
         # Mostrar las últimas líneas del output para diagnóstico
         tail = "\n".join(out.splitlines()[-20:]) if out else "(sin output)"
@@ -253,7 +417,8 @@ def build_host() -> StepResult:
         return StepResult("Host", False, error=f"Script no encontrado: {host_script}")
 
     log(f"Ejecutando {host_script.name} ...")
-    code, out, _ = run(["bash", host_script.name], cwd=host_script.parent)
+    env = inject_build_number_env("host")
+    code, out, _ = run(["bash", host_script.name], cwd=host_script.parent, env=env)
     if code != 0:
         tail = "\n".join(out.splitlines()[-20:]) if out else "(sin output)"
         return StepResult("Host", False, error=tail)
@@ -267,7 +432,8 @@ def build_host() -> StepResult:
 def build_node(name: str, project_dir: Path, npm_script: str) -> StepResult:
     """
     Ejecuta 'npm run <npm_script>' en project_dir.
-    Reemplaza el uso incorrecto de build_script() sobre directorios.
+    Para Conductor, actualiza build_info.json con el build number efectivo
+    antes de invocar npm, de modo que el empaquetado Electron incluya el número correcto.
     """
     if not project_dir.exists():
         return StepResult(name, False, error=f"Directorio no encontrado: {project_dir}")
@@ -276,9 +442,36 @@ def build_node(name: str, project_dir: Path, npm_script: str) -> StepResult:
     if not pkg_json.exists():
         return StepResult(name, False, error=f"package.json no encontrado en: {project_dir}")
 
+    # Para Conductor: parchear build_info.json con el build number de plataforma
+    # antes de lanzar el build de npm.
+    env = {**os.environ}
+    if name == "Conductor":
+        build_num = resolve_build_number("conductor") if "conductor" in _BUILD_NUMBER_DIRS else None
+        # Garantizar archivos de versionado en workspace/ y setup/
+        _ensure_build_number_files(_BUILD_NUMBER_DIRS["conductor"], "conductor")
+        _ensure_build_number_files(_BUILD_NUMBER_DIRS["conductor_setup"], "conductor_setup")
+        # conductor usa installer/conductor/workspace/build_info.json
+        # y también installer/conductor/setup/build_info.json
+        for rel in ("workspace/build_info.json", "setup/build_info.json"):
+            bi_path = project_dir / rel
+            if bi_path.exists():
+                try:
+                    data = json.loads(bi_path.read_text(encoding="utf-8"))
+                    if build_num is not None:
+                        data["buildNumber"] = build_num
+                        bi_path.write_text(
+                            json.dumps(data, indent=2, ensure_ascii=False),
+                            encoding="utf-8",
+                        )
+                        log(f"  build_info.json [{rel}] → buildNumber={build_num}")
+                except Exception as exc:
+                    log(f"  ⚠ No se pudo parchear {rel}: {exc}")
+        if build_num is not None:
+            env["BLOOM_BUILD_NUMBER"] = str(build_num)
+
     log(f"Ejecutando npm run {npm_script} en {project_dir.name}/ ...")
     cmd = [_NPM, "run", npm_script]
-    code, out, _ = run(cmd, cwd=project_dir)
+    code, out, _ = run(cmd, cwd=project_dir, env=env)
     if code != 0:
         tail = "\n".join(out.splitlines()[-20:]) if out else "(sin output)"
         return StepResult(name, False, error=tail)
@@ -301,8 +494,9 @@ def build_cortex() -> StepResult:
                               error=f"package.py no encontrado en: {cortex_dir}")
 
     log(f"Ejecutando python3 {package_py.name} ...")
+    env = inject_build_number_env("cortex")
     cmd = [sys.executable, package_py.name]
-    code, out, _ = run(cmd, cwd=package_py.parent)
+    code, out, _ = run(cmd, cwd=package_py.parent, env=env)
     if code != 0:
         tail = "\n".join(out.splitlines()[-20:]) if out else "(sin output)"
         return StepResult("Cortex", False, error=tail)
@@ -503,6 +697,18 @@ def main() -> None:
         f"  Platform : {sys.platform}  ({_platform.machine()})\n"
         f"  Bin base : {_DEV_BIN_BASE}"
     )
+
+    # Mostrar build numbers efectivos para la plataforma actual
+    print(f"  Build numbers ({_PLATFORM_SUFFIX}):")
+    for comp in ("nucleus", "sentinel", "metamorph", "sensor", "host", "cortex", "conductor"):
+        scripts_dir = _BUILD_NUMBER_DIRS.get(comp)
+        if scripts_dir:
+            base   = _read_int(scripts_dir / "build_number.txt", 0)
+            offset = _read_int(scripts_dir / f"build_number.{_PLATFORM_SUFFIX}.txt", 0)
+            effective = base + offset
+            offset_str = f"  (+{offset} {_PLATFORM_SUFFIX})" if offset else ""
+            print(f"    {comp:<12} {effective}{offset_str}")
+    print()
 
     # Definir todos los pasos en orden.
     # Conductor, Bootstrap y VSIX usan npm run; Cortex usa python3.

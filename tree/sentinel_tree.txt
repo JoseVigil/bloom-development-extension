@@ -3,7 +3,6 @@ bloom-development-extension/
     ├── VERSION
     ├── cli/
     │   └── help_renderer.go
-    ├── codebase/
     ├── docs/
     │   ├── Sentinel - Fase 2 Discovery - Health Modular.md
     │   ├── Sentinel Base.md
@@ -75,8 +74,10 @@ bloom-development-extension/
     ├── scripts/
     │   ├── build-darwin.sh
     │   ├── build-linux.sh
-    │   ├── build.bat
+    │   ├── build_number.darwin.txt
+    │   ├── build_number.effective.txt
     │   ├── build_number.txt
+    │   ├── build_number.windows.txt
     │   ├── extract_go_files.py
     │   └── tree/
     │       └── conductor_tree.txt

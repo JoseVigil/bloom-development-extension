@@ -168,17 +168,67 @@ def update_spec_metadata():
 
 
 def run_command(cmd, description):
-    """Ejecuta un comando y maneja errores"""
+    """
+    Ejecuta un comando y maneja errores.
+
+    Usa Popen + lectura línea a línea en lugar de capture_output=True para
+    evitar el deadlock de pipe-buffer que congela PyInstaller a 0%:
+    con capture_output=True, subprocess espera a que el proceso termine
+    antes de leer el pipe, pero PyInstaller llena el buffer del pipe (~65 KB)
+    y se bloquea esperando que alguien lo drene → deadlock.
+    """
     print(f"Ejecutando: {description}")
     print(f"  $ {' '.join(str(c) for c in cmd)}")
-    
-    result = subprocess.run(cmd, capture_output=True, text=True, cwd=PROJECT_ROOT)
-    
-    if result.returncode != 0:
-        print_error(f"Error en: {description}")
-        print(result.stderr)
+
+    stdout_lines: list[str] = []
+    stderr_lines: list[str] = []
+
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            cwd=PROJECT_ROOT,
+        )
+
+        # Drenar stdout y stderr en paralelo para evitar deadlock
+        import threading
+
+        def _read_stream(stream, accumulator: list[str]) -> None:
+            for line in stream:
+                line = line.rstrip("\n")
+                accumulator.append(line)
+                # Emitir [PROG:N] si la línea viene de build.py (pasamos la señal hacia arriba)
+                if line.startswith("[PROG:"):
+                    print(line, flush=True)
+
+        t_out = threading.Thread(target=_read_stream, args=(proc.stdout, stdout_lines), daemon=True)
+        t_err = threading.Thread(target=_read_stream, args=(proc.stderr, stderr_lines), daemon=True)
+        t_out.start()
+        t_err.start()
+        proc.wait()
+        t_out.join()
+        t_err.join()
+
+    except Exception as exc:
+        print_error(f"No se pudo lanzar '{description}': {exc}")
         return False
-    
+
+    rc = proc.returncode
+    combined_out = "\n".join(stdout_lines)
+    combined_err = "\n".join(stderr_lines)
+
+    if rc != 0:
+        print_error(f"Error en: {description}")
+        # Mostrar las últimas 40 líneas de stderr para diagnóstico
+        tail = stderr_lines[-40:] if stderr_lines else stdout_lines[-40:]
+        for line in tail:
+            print(f"  {line}")
+        return False
+
     print_success(f"Completado: {description}")
     return True
 

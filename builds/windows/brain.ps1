@@ -73,7 +73,10 @@ function Write-Separator() {
 # =========================================
 # INICIO
 # =========================================
-Clear-Host
+# Clear-Host solo en terminal interactiva — en CI/subprocess se omite para
+# evitar secuencias ANSI que Python no puede decodificar.
+$isCI = $env:CI -eq "1" -or $env:TERM -eq "dumb" -or -not [System.Environment]::UserInteractive
+if (-not $isCI) { Clear-Host }
 Write-Header "$($EMO.brain) BLOOM BRAIN BUILD"
 
 # =========================================

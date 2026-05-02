@@ -296,6 +296,12 @@ def load_all_commands_explicit() -> CommandRegistry:
     # IONPUMP
     # =================================================================
     try:
+        from brain.commands.ionpump.ionpump import IonPumpCommand
+        registry.register(IonPumpCommand())
+    except ImportError as e:
+        print(f"Warning: Could not load IonPumpCommand: {e}")
+    
+    try:
         from brain.commands.ionpump.ionpump_inspect import IonPumpInspectCommand
         registry.register(IonPumpInspectCommand())
     except ImportError as e:
@@ -693,6 +699,7 @@ def get_hiddenimports_list():
         'brain.commands.intent.unlock',
         'brain.commands.intent.update',
         'brain.commands.intent.validate',
+        'brain.commands.ionpump.ionpump',
         'brain.commands.ionpump.ionpump_inspect',
         'brain.commands.ionpump.ionpump_reload',
         'brain.commands.ionpump.ionpump_test',

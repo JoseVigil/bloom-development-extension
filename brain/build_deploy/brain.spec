@@ -85,6 +85,7 @@ hiddenimports = [
     'brain.commands.intent.unlock',
     'brain.commands.intent.update',
     'brain.commands.intent.validate',
+    'brain.commands.ionpump.ionpump',
     'brain.commands.ionpump.ionpump_inspect',
     'brain.commands.ionpump.ionpump_reload',
     'brain.commands.ionpump.ionpump_test',
@@ -276,8 +277,8 @@ datas = [
 
     # Version y build — paths relativos a PROJECT_ROOT (multiplataforma)
     (str(PROJECT_ROOT / 'brain' / '__build__.py'), '.'),
-    (r'/Users/josevigil/repos/bloom-development-extension/brain/VERSION', '.'),
-    (r'/Users/josevigil/repos/bloom-development-extension/brain/__build__.py', '.'),
+    (r'C:/repos/bloom-videos/bloom-development-extension/brain/VERSION', '.'),
+    (r'C:/repos/bloom-videos/bloom-development-extension/brain/__build__.py', '.'),
 ]
 
 # Forzar la estructura física de core/profile para evitar el bug de colisión de nombres

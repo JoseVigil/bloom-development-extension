@@ -77,8 +77,12 @@
       alias                 optional
       is_master             optional
 
+    Flags:
+      --dev                      Enable dev mode: deploys Harness UI to extension via Brain
+
     Example:
         sentinel seed profile_001 true
+        sentinel seed dev_profile false --dev
         sentinel --json seed burner_temp false | jq .
 
     Requirements:

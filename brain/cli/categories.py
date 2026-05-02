@@ -31,6 +31,7 @@ class CommandCategory(Enum):
     SYSTEM = ("system", "Runtime and system introspection")
     SYNAPSE = ("synapse", "Chrome Native Messaging Bridge and protocol management")
     LOGS = ("logs", "Log stream reading, synapse trace and diagnostics")
+    IONPUMP = ("ionpump", "IonPump site recipe management — inspect, reload, test, validate")
 
     def __init__(self, name: str, description: str):
         self.category_name = name
@@ -83,3 +84,4 @@ SYSTEM = CommandCategory.SYSTEM
 TWITTER = CommandCategory.TWITTER
 SYNAPSE = CommandCategory.SYNAPSE
 LOGS = CommandCategory.LOGS
+IONPUMP = CommandCategory.IONPUMP

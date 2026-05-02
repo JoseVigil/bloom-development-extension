@@ -1,0 +1,5 @@
+Temoral
+https://github.com/temporalio/cli/releases/tag/v1.5.1
+
+node 
+https://nodejs.org/en/download

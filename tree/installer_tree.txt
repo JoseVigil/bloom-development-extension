@@ -37,6 +37,8 @@ bloom-development-extension/
     │   ├── bootstrap.meta.json
     │   ├── bundle-bootstrap.js
     │   ├── server-bootstrap.js
+    │   ├── static/
+    │   │   └── logo.svg
     │   └── version-bootstrap.py
     ├── chrome/
     │   ├── chrome-mac.zip
@@ -213,6 +215,7 @@ bloom-development-extension/
     │   │   │   ├── formatting.go
     │   │   │   ├── inspect.go
     │   │   │   ├── inspection_test.go
+    │   │   │   ├── ionrecipes.go
     │   │   │   ├── managed.go
     │   │   │   ├── status.go
     │   │   │   ├── types.go
@@ -232,7 +235,6 @@ bloom-development-extension/
     │   ├── main.go
     │   ├── metamorph-config.json
     │   └── scripts/
-    │       ├── build.bat
     │       └── build_number.txt
     ├── mobile/
     │   ├── .env.local
@@ -255,12 +257,17 @@ bloom-development-extension/
     │   ├── .DS_Store
     │   ├── bin/
     │   │   ├── .DS_Store
+    │   │   ├── bin/
     │   │   ├── bootstrap/
+    │   │   │   ├── VERSION
     │   │   │   ├── bootstrap.meta.json
     │   │   │   ├── bundle.js
     │   │   │   ├── bundle.js.map
     │   │   │   ├── server-bootstrap.js
+    │   │   │   ├── static/
+    │   │   │   │   └── logo.svg
     │   │   │   └── version-bootstrap.py
+    │   │   ├── config/
     │   │   ├── cortex/
     │   │   │   └── bloom-cortex.blx
     │   │   ├── darwin/
@@ -272,6 +279,24 @@ bloom-development-extension/
     │   │   │       ├── bloom-host
     │   │   │       └── help/
     │   │   │           └── help.txt
+    │   │   ├── logs/
+    │   │   │   └── brain/
+    │   │   │       ├── core/
+    │   │   │       │   ├── brain_core_20260320.log
+    │   │   │       │   └── brain_core_20260501.log
+    │   │   │       ├── profile/
+    │   │   │       │   ├── brain_profile_20260320.log
+    │   │   │       │   └── brain_profile_20260501.log
+    │   │   │       └── server/
+    │   │   │           ├── brain_server_20260320.log
+    │   │   │           ├── brain_server_20260501.log
+    │   │   │           ├── brain_server_event_bus_20260320.log
+    │   │   │           ├── brain_server_event_bus_20260501.log
+    │   │   │           ├── brain_server_manager_20260320.log
+    │   │   │           └── brain_server_manager_20260501.log
+    │   │   ├── profiles/
+    │   │   ├── vscode/
+    │   │   │   └── bloom-extension.vsix
     │   │   ├── win32/
     │   │   │   ├── brain/
     │   │   │   │   ├── _internal/ [... dependencies]
@@ -316,172 +341,195 @@ bloom-development-extension/
     │   │   │       │   └── sentinel_help.txt
     │   │   │       ├── sentinel-config.json
     │   │   │       └── sentinel.exe
-    │   │   └── win64/
-    │   │       ├── brain/
-    │   │       │   ├── _internal/ [... dependencies]
-    │   │       │   └── brain.exe
-    │   │       ├── conductor/
-    │   │       │   ├── bloom-conductor.exe
-    │   │       │   ├── builder-debug.yml
-    │   │       │   ├── builder-effective-config.yaml
-    │   │       │   └── win-unpacked/
-    │   │       │       ├── LICENSE.electron.txt
-    │   │       │       ├── LICENSES.chromium.html
-    │   │       │       ├── chrome_100_percent.pak
-    │   │       │       ├── chrome_200_percent.pak
-    │   │       │       ├── d3dcompiler_47.dll
-    │   │       │       ├── electron.exe
-    │   │       │       ├── ffmpeg.dll
-    │   │       │       ├── icudtl.dat
-    │   │       │       ├── libEGL.dll
-    │   │       │       ├── libGLESv2.dll
-    │   │       │       ├── locales/ [... localization files]
-    │   │       │       ├── resources/
-    │   │       │       │   └── app.asar.unpacked/
-    │   │       │       │       └── build_info.json
-    │   │       │       ├── resources.pak
-    │   │       │       ├── snapshot_blob.bin
-    │   │       │       ├── v8_context_snapshot.bin
-    │   │       │       ├── vk_swiftshader.dll
-    │   │       │       ├── vk_swiftshader_icd.json
-    │   │       │       └── vulkan-1.dll
-    │   │       ├── host/
-    │   │       │   ├── bloom-host.exe
-    │   │       │   ├── help/
-    │   │       │   │   └── help.txt
-    │   │       │   ├── libgcc_s_seh-1.dll
-    │   │       │   ├── libstdc++-6.dll
-    │   │       │   └── libwinpthread-1.dll
-    │   │       ├── metamorph/
-    │   │       │   ├── help/
-    │   │       │   │   ├── metamorph_help.json
-    │   │       │   │   ├── metamorph_help.txt
-    │   │       │   │   └── metamorph_info.json
-    │   │       │   ├── metamorph-config.json
-    │   │       │   └── metamorph.exe
-    │   │       ├── nucleus/
-    │   │       │   ├── help/
-    │   │       │   │   ├── nucleus_help.json
-    │   │       │   │   └── nucleus_help.txt
-    │   │       │   ├── nucleus-governance.json
-    │   │       │   └── nucleus.exe
-    │   │       ├── sensor/
-    │   │       │   ├── bloom-sensor.exe
-    │   │       │   └── help/
-    │   │       │       ├── sensor_help.json
-    │   │       │       └── sensor_help.txt
-    │   │       ├── sentinel/
-    │   │       │   ├── help/
-    │   │       │   │   ├── sentinel_help.json
-    │   │       │   │   └── sentinel_help.txt
-    │   │       │   ├── sentinel-config.json
-    │   │       │   └── sentinel.exe
-    │   │       └── setup/
-    │   │           ├── bloom-setup.exe
-    │   │           ├── bloom-setup.exe.blockmap
-    │   │           ├── builder-debug.yml
-    │   │           ├── builder-effective-config.yaml
-    │   │           └── win-unpacked/
-    │   │               ├── Bloom Nucleus Installer.exe
-    │   │               ├── LICENSE.electron.txt
-    │   │               ├── LICENSES.chromium.html
-    │   │               ├── bloom-setup-version.ps1
-    │   │               ├── chrome_100_percent.pak
-    │   │               ├── chrome_200_percent.pak
-    │   │               ├── d3dcompiler_47.dll
-    │   │               ├── ffmpeg.dll
-    │   │               ├── icudtl.dat
-    │   │               ├── libEGL.dll
-    │   │               ├── libGLESv2.dll
-    │   │               ├── locales/ [... localization files]
-    │   │               ├── resources/
-    │   │               │   ├── app.asar
-    │   │               │   ├── app.asar.unpacked/
-    │   │               │   │   └── build_info.json
-    │   │               │   ├── brain/
-    │   │               │   │   ├── _internal/ [... dependencies]
-    │   │               │   │   ├── brain.exe
-    │   │               │   │   └── help/
-    │   │               │   │       ├── brain-ai-full.json
-    │   │               │   │       ├── brain-ai-schema.json
-    │   │               │   │       ├── brain-legacy.json
-    │   │               │   │       ├── help-full.txt
-    │   │               │   │       └── help.txt
-    │   │               │   ├── cortex/
-    │   │               │   │   └── bloom-cortex.blx
-    │   │               │   ├── elevate.exe
-    │   │               │   ├── metamorph/
-    │   │               │   │   ├── help/
-    │   │               │   │   │   ├── metamorph_help.json
-    │   │               │   │   │   ├── metamorph_help.txt
-    │   │               │   │   │   └── metamorph_info.json
-    │   │               │   │   ├── metamorph-config.json
-    │   │               │   │   └── metamorph.exe
-    │   │               │   ├── native/
-    │   │               │   │   ├── bloom-host.exe
-    │   │               │   │   ├── help/
-    │   │               │   │   │   └── help.txt
-    │   │               │   │   ├── libgcc_s_seh-1.dll
-    │   │               │   │   ├── libstdc++-6.dll
-    │   │               │   │   └── libwinpthread-1.dll
-    │   │               │   ├── nssm/
-    │   │               │   │   └── nssm.exe
-    │   │               │   ├── nucleus/
-    │   │               │   │   ├── help/
-    │   │               │   │   │   ├── nucleus_help.json
-    │   │               │   │   │   └── nucleus_help.txt
-    │   │               │   │   ├── nucleus-governance.json
-    │   │               │   │   └── nucleus.exe
-    │   │               │   ├── runtime/
-    │   │               │   │   ├── LICENSE.txt
-    │   │               │   │   ├── _asyncio.pyd
-    │   │               │   │   ├── _bz2.pyd
-    │   │               │   │   ├── _ctypes.pyd
-    │   │               │   │   ├── _decimal.pyd
-    │   │               │   │   ├── _elementtree.pyd
-    │   │               │   │   ├── _hashlib.pyd
-    │   │               │   │   ├── _lzma.pyd
-    │   │               │   │   ├── _msi.pyd
-    │   │               │   │   ├── _multiprocessing.pyd
-    │   │               │   │   ├── _overlapped.pyd
-    │   │               │   │   ├── _queue.pyd
-    │   │               │   │   ├── _socket.pyd
-    │   │               │   │   ├── _sqlite3.pyd
-    │   │               │   │   ├── _ssl.pyd
-    │   │               │   │   ├── _uuid.pyd
-    │   │               │   │   ├── _zoneinfo.pyd
-    │   │               │   │   ├── libcrypto-1_1.dll
-    │   │               │   │   ├── libffi-7.dll
-    │   │               │   │   ├── libssl-1_1.dll
-    │   │               │   │   ├── pyexpat.pyd
-    │   │               │   │   ├── python.cat
-    │   │               │   │   ├── python.exe
-    │   │               │   │   ├── python3.dll
-    │   │               │   │   ├── python310._pth
-    │   │               │   │   ├── python310.dll
-    │   │               │   │   ├── python310.zip
-    │   │               │   │   ├── pythonw.exe
-    │   │               │   │   ├── select.pyd
-    │   │               │   │   ├── sqlite3.dll
-    │   │               │   │   ├── unicodedata.pyd
-    │   │               │   │   ├── vcruntime140.dll
-    │   │               │   │   ├── vcruntime140_1.dll
-    │   │               │   │   └── winsound.pyd
-    │   │               │   └── sentinel/
-    │   │               │       ├── help/
-    │   │               │       │   ├── sentinel_help.json
-    │   │               │       │   └── sentinel_help.txt
-    │   │               │       ├── sentinel-config.json
-    │   │               │       └── sentinel.exe
-    │   │               ├── resources.pak
-    │   │               ├── snapshot_blob.bin
-    │   │               ├── v8_context_snapshot.bin
-    │   │               ├── vk_swiftshader.dll
-    │   │               ├── vk_swiftshader_icd.json
-    │   │               └── vulkan-1.dll
+    │   │   ├── win64/
+    │   │   │   ├── brain/
+    │   │   │   │   ├── _internal/ [... dependencies]
+    │   │   │   │   ├── brain.exe
+    │   │   │   │   └── help/
+    │   │   │   │       ├── brain-ai-full.json
+    │   │   │   │       ├── brain-ai-schema.json
+    │   │   │   │       ├── brain-legacy.json
+    │   │   │   │       ├── help-full.txt
+    │   │   │   │       └── help.txt
+    │   │   │   ├── conductor/
+    │   │   │   │   ├── bloom-conductor.exe
+    │   │   │   │   ├── builder-debug.yml
+    │   │   │   │   ├── builder-effective-config.yaml
+    │   │   │   │   └── win-unpacked/
+    │   │   │   │       ├── Bloom Nucleus Workspace.exe
+    │   │   │   │       ├── LICENSE.electron.txt
+    │   │   │   │       ├── LICENSES.chromium.html
+    │   │   │   │       ├── bloom-conductor-version.ps1
+    │   │   │   │       ├── chrome_100_percent.pak
+    │   │   │   │       ├── chrome_200_percent.pak
+    │   │   │   │       ├── d3dcompiler_47.dll
+    │   │   │   │       ├── ffmpeg.dll
+    │   │   │   │       ├── icudtl.dat
+    │   │   │   │       ├── libEGL.dll
+    │   │   │   │       ├── libGLESv2.dll
+    │   │   │   │       ├── locales/ [... localization files]
+    │   │   │   │       ├── resources/
+    │   │   │   │       │   ├── app.asar
+    │   │   │   │       │   ├── app.asar.unpacked/
+    │   │   │   │       │   │   └── build_info.json
+    │   │   │   │       │   └── elevate.exe
+    │   │   │   │       ├── resources.pak
+    │   │   │   │       ├── shared/
+    │   │   │   │       │   ├── global_paths.js
+    │   │   │   │       │   └── logger.js
+    │   │   │   │       ├── snapshot_blob.bin
+    │   │   │   │       ├── v8_context_snapshot.bin
+    │   │   │   │       ├── vk_swiftshader.dll
+    │   │   │   │       ├── vk_swiftshader_icd.json
+    │   │   │   │       └── vulkan-1.dll
+    │   │   │   ├── cortex/
+    │   │   │   │   └── bloom-cortex.blx
+    │   │   │   ├── host/
+    │   │   │   │   ├── bloom-host.exe
+    │   │   │   │   ├── help/
+    │   │   │   │   │   └── help.txt
+    │   │   │   │   ├── libgcc_s_seh-1.dll
+    │   │   │   │   ├── libstdc++-6.dll
+    │   │   │   │   └── libwinpthread-1.dll
+    │   │   │   ├── metamorph/
+    │   │   │   │   ├── help/
+    │   │   │   │   │   ├── metamorph_help.json
+    │   │   │   │   │   ├── metamorph_help.txt
+    │   │   │   │   │   └── metamorph_info.json
+    │   │   │   │   ├── metamorph-config.json
+    │   │   │   │   └── metamorph.exe
+    │   │   │   ├── nucleus/
+    │   │   │   │   ├── help/
+    │   │   │   │   │   ├── nucleus_help.json
+    │   │   │   │   │   └── nucleus_help.txt
+    │   │   │   │   ├── nucleus-governance.json
+    │   │   │   │   └── nucleus.exe
+    │   │   │   ├── sensor/
+    │   │   │   │   ├── bloom-sensor.exe
+    │   │   │   │   └── help/
+    │   │   │   │       ├── sensor_help.json
+    │   │   │   │       └── sensor_help.txt
+    │   │   │   ├── sentinel/
+    │   │   │   │   ├── help/
+    │   │   │   │   │   ├── sentinel_help.json
+    │   │   │   │   │   └── sentinel_help.txt
+    │   │   │   │   ├── sentinel-config.json
+    │   │   │   │   └── sentinel.exe
+    │   │   │   └── setup/
+    │   │   │       ├── bloom-setup.exe
+    │   │   │       ├── bloom-setup.exe.blockmap
+    │   │   │       ├── builder-debug.yml
+    │   │   │       ├── builder-effective-config.yaml
+    │   │   │       └── win-unpacked/
+    │   │   │           ├── Bloom Nucleus Installer.exe
+    │   │   │           ├── LICENSE.electron.txt
+    │   │   │           ├── LICENSES.chromium.html
+    │   │   │           ├── bloom-setup-version.ps1
+    │   │   │           ├── chrome_100_percent.pak
+    │   │   │           ├── chrome_200_percent.pak
+    │   │   │           ├── d3dcompiler_47.dll
+    │   │   │           ├── ffmpeg.dll
+    │   │   │           ├── icudtl.dat
+    │   │   │           ├── libEGL.dll
+    │   │   │           ├── libGLESv2.dll
+    │   │   │           ├── locales/ [... localization files]
+    │   │   │           ├── resources/
+    │   │   │           │   ├── app.asar
+    │   │   │           │   ├── app.asar.unpacked/
+    │   │   │           │   │   └── build_info.json
+    │   │   │           │   ├── brain/
+    │   │   │           │   │   ├── _internal/ [... dependencies]
+    │   │   │           │   │   ├── brain.exe
+    │   │   │           │   │   └── help/
+    │   │   │           │   │       ├── brain-ai-full.json
+    │   │   │           │   │       ├── brain-ai-schema.json
+    │   │   │           │   │       ├── brain-legacy.json
+    │   │   │           │   │       ├── help-full.txt
+    │   │   │           │   │       └── help.txt
+    │   │   │           │   ├── cortex/
+    │   │   │           │   │   └── bloom-cortex.blx
+    │   │   │           │   ├── elevate.exe
+    │   │   │           │   ├── metamorph/
+    │   │   │           │   │   ├── help/
+    │   │   │           │   │   │   ├── metamorph_help.json
+    │   │   │           │   │   │   ├── metamorph_help.txt
+    │   │   │           │   │   │   └── metamorph_info.json
+    │   │   │           │   │   ├── metamorph-config.json
+    │   │   │           │   │   └── metamorph.exe
+    │   │   │           │   ├── native/
+    │   │   │           │   │   ├── bloom-host.exe
+    │   │   │           │   │   ├── help/
+    │   │   │           │   │   │   └── help.txt
+    │   │   │           │   │   ├── libgcc_s_seh-1.dll
+    │   │   │           │   │   ├── libstdc++-6.dll
+    │   │   │           │   │   └── libwinpthread-1.dll
+    │   │   │           │   ├── nssm/
+    │   │   │           │   │   └── nssm.exe
+    │   │   │           │   ├── nucleus/
+    │   │   │           │   │   ├── help/
+    │   │   │           │   │   │   ├── nucleus_help.json
+    │   │   │           │   │   │   └── nucleus_help.txt
+    │   │   │           │   │   ├── nucleus-governance.json
+    │   │   │           │   │   └── nucleus.exe
+    │   │   │           │   ├── runtime/
+    │   │   │           │   │   ├── LICENSE.txt
+    │   │   │           │   │   ├── _asyncio.pyd
+    │   │   │           │   │   ├── _bz2.pyd
+    │   │   │           │   │   ├── _ctypes.pyd
+    │   │   │           │   │   ├── _decimal.pyd
+    │   │   │           │   │   ├── _elementtree.pyd
+    │   │   │           │   │   ├── _hashlib.pyd
+    │   │   │           │   │   ├── _lzma.pyd
+    │   │   │           │   │   ├── _msi.pyd
+    │   │   │           │   │   ├── _multiprocessing.pyd
+    │   │   │           │   │   ├── _overlapped.pyd
+    │   │   │           │   │   ├── _queue.pyd
+    │   │   │           │   │   ├── _socket.pyd
+    │   │   │           │   │   ├── _sqlite3.pyd
+    │   │   │           │   │   ├── _ssl.pyd
+    │   │   │           │   │   ├── _uuid.pyd
+    │   │   │           │   │   ├── _zoneinfo.pyd
+    │   │   │           │   │   ├── libcrypto-1_1.dll
+    │   │   │           │   │   ├── libffi-7.dll
+    │   │   │           │   │   ├── libssl-1_1.dll
+    │   │   │           │   │   ├── pyexpat.pyd
+    │   │   │           │   │   ├── python.cat
+    │   │   │           │   │   ├── python.exe
+    │   │   │           │   │   ├── python3.dll
+    │   │   │           │   │   ├── python310._pth
+    │   │   │           │   │   ├── python310.dll
+    │   │   │           │   │   ├── python310.zip
+    │   │   │           │   │   ├── pythonw.exe
+    │   │   │           │   │   ├── select.pyd
+    │   │   │           │   │   ├── sqlite3.dll
+    │   │   │           │   │   ├── unicodedata.pyd
+    │   │   │           │   │   ├── vcruntime140.dll
+    │   │   │           │   │   ├── vcruntime140_1.dll
+    │   │   │           │   │   └── winsound.pyd
+    │   │   │           │   └── sentinel/
+    │   │   │           │       ├── help/
+    │   │   │           │       │   ├── sentinel_help.json
+    │   │   │           │       │   └── sentinel_help.txt
+    │   │   │           │       ├── sentinel-config.json
+    │   │   │           │       └── sentinel.exe
+    │   │   │           ├── resources.pak
+    │   │   │           ├── snapshot_blob.bin
+    │   │   │           ├── v8_context_snapshot.bin
+    │   │   │           ├── vk_swiftshader.dll
+    │   │   │           ├── vk_swiftshader_icd.json
+    │   │   │           └── vulkan-1.dll
+    │   │   └── workers/
+    │   ├── config/
+    │   │   ├── onboarding/
+    │   │   │   └── onboarding_steps.json
+    │   │   └── settings.json
     │   ├── hooks/
-    │   │   └── post_launch/
-    │   │       └── 00_generate_synapse_trace.py
+    │   │   ├── post_launch/
+    │   │   │   └── 00_generate_synapse_trace.py
+    │   │   ├── profile_disconnected/
+    │   │   │   └── 00_notify_temporal.py
+    │   │   └── system_health/
+    │   │       └── 00_health_check.py
     │   └── nssm/
     │       ├── win32/
     │       │   └── nssm.exe
@@ -521,6 +569,7 @@ bloom-development-extension/
     │   │   │   ├── metadata.go
     │   │   │   ├── paths.go
     │   │   │   ├── registry.go
+    │   │   │   ├── settings.go
     │   │   │   ├── telemetry.go
     │   │   │   └── version.go
     │   │   ├── governance/
@@ -535,9 +584,11 @@ bloom-development-extension/
     │   │   │   ├── mandate_hooks_cmd.go
     │   │   │   ├── mandate_logger.go
     │   │   │   ├── mandate_runner.go
-    │   │   │   └── mandate_types.go
+    │   │   │   ├── mandate_types.go
+    │   │   │   └── system_health_activity.go
     │   │   ├── orchestration/
     │   │   │   ├── activities/
+    │   │   │   │   ├── brain_poller.go
     │   │   │   │   └── sentinel_activities.go
     │   │   │   ├── commands/
     │   │   │   │   ├── synapse.go
@@ -560,12 +611,14 @@ bloom-development-extension/
     │   │   │   │   │   ├── pid.go
     │   │   │   │   │   ├── ports.go
     │   │   │   │   │   ├── process.go
+    │   │   │   │   │   ├── schedule_bootstrap.go
     │   │   │   │   │   └── temporal_health.go
     │   │   │   │   ├── temporal_client.go
     │   │   │   │   ├── worker.go
     │   │   │   │   └── workflows/
     │   │   │   │       ├── onboarding_workflow.go
     │   │   │   │       ├── profile_lifecycle.go
+    │   │   │   │       ├── system_health_workflow.go
     │   │   │   │       └── system_workflows.go
     │   │   │   ├── types/
     │   │   │   │   └── orchestration.go
@@ -575,9 +628,13 @@ bloom-development-extension/
     │   │   ├── supervisor/
     │   │   │   ├── dev_start.go
     │   │   │   ├── health.go
+    │   │   │   ├── health_resources_unix.go
+    │   │   │   ├── health_resources_windows.go
+    │   │   │   ├── health_unix.go
+    │   │   │   ├── health_windows.go
     │   │   │   ├── logs.go
     │   │   │   ├── service.go
-    │   │   │   └── supervisor.go
+    │   │   │   └── workers.go
     │   │   ├── system/
     │   │   │   ├── info.go
     │   │   │   └── version.go
@@ -589,7 +646,6 @@ bloom-development-extension/
     │   └── scripts/
     │       ├── build-darwin.sh
     │       ├── build-linux.sh
-    │       ├── build.bat
     │       ├── build_number.txt
     │       ├── extract_go_files.py
     │       ├── simulate_environment.py
@@ -611,13 +667,7 @@ bloom-development-extension/
     │                   │   │   └── .code-standards.bl
     │                   │   └── .security/
     │                   │       └── .security-standards.bl
-    │                   ├── .intents/
-    │                   │   ├── .cor/
-    │                   │   └── .exp/
-    │                   ├── .ownership.json
-    │                   ├── .relations/
-    │                   └── reports/
-    │                       └── exports/
+    │                   └── .ownership.json
     ├── ollama/
     │   ├── lib/
     │   │   └── ollama/
@@ -707,6 +757,7 @@ bloom-development-extension/
     │   │   ├── cmdregistry/
     │   │   │   └── cmdregistry.go
     │   │   ├── core/
+    │   │   │   ├── build_info.go
     │   │   │   └── core.go
     │   │   ├── input/
     │   │   │   └── idle.go
@@ -729,13 +780,11 @@ bloom-development-extension/
     │   │   └── events/
     │   │       └── events.go
     │   └── scripts/
-    │       ├── build.bat
     │       └── build_number.txt
     ├── sentinel/
     │   ├── VERSION
     │   ├── cli/
     │   │   └── help_renderer.go
-    │   ├── codebase/
     │   ├── docs/
     │   │   ├── Sentinel - Fase 2 Discovery - Health Modular.md
     │   │   ├── Sentinel Base.md
@@ -807,7 +856,6 @@ bloom-development-extension/
     │   ├── scripts/
     │   │   ├── build-darwin.sh
     │   │   ├── build-linux.sh
-    │   │   ├── build.bat
     │   │   ├── build_number.txt
     │   │   ├── extract_go_files.py
     │   │   └── tree/

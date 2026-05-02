@@ -38,7 +38,7 @@ func init() {
 							Master bool
 						}
 						json.Unmarshal(req.Params, &params)
-						uuid, path, err := seed.HandleSeed(c, params.Alias, params.Master)
+						uuid, path, err := seed.HandleSeed(c, params.Alias, params.Master, false)
 						if err != nil {
 							sendError("SEED_ERROR", err.Error())
 						} else {
