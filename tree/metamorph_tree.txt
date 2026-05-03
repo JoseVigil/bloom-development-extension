@@ -22,8 +22,12 @@ bloom-development-extension/
     │   │   ├── formatting.go
     │   │   ├── inspect.go
     │   │   ├── inspection_test.go
+    │   │   ├── ionpump_client.go
     │   │   ├── ionrecipes.go
+    │   │   ├── ionrecipes_integration_test.go
+    │   │   ├── ionrecipes_test.go
     │   │   ├── managed.go
+    │   │   ├── reconcile.go
     │   │   ├── status.go
     │   │   ├── types.go
     │   │   ├── utils.go

@@ -44,6 +44,16 @@
         "name": "native",
         "usage": "Inspect native/bin/\u003cplatform\u003e/ build output instead of AppData",
         "default": "false"
+      },
+      {
+        "name": "show-backups",
+        "usage": "Show available backup versions (use with --ion-recipes)",
+        "default": "false"
+      },
+      {
+        "name": "show-pending",
+        "usage": "Show sites with pending status (use with --ion-recipes)",
+        "default": "false"
       }
     ],
     "example": "  metamorph inspect\n  metamorph inspect --all\n  metamorph inspect --native\n  metamorph inspect --native --all\n  metamorph --json inspect\n  metamorph --json inspect --native\n  metamorph --json inspect --all",
@@ -63,6 +73,31 @@
     ],
     "example": "  metamorph reconcile --manifest manifest.json\n  metamorph --json reconcile --manifest manifest.json",
     "json_response": "{\"status\": \"success\", \"changes\": []}"
+  },
+  {
+    "name": "reconcile-ion-recipes",
+    "use": "reconcile-ion-recipes",
+    "short": "Reconcile ion recipe packages from manifest",
+    "category": "GOVERNANCE",
+    "options": [
+      {
+        "name": "dry-run",
+        "usage": "Inspect and verify without swapping",
+        "default": "false"
+      },
+      {
+        "name": "force-swap",
+        "usage": "Swap without waiting for Brain quiesce (unsafe)",
+        "default": "false"
+      },
+      {
+        "name": "manifest",
+        "shorthand": "m",
+        "usage": "Path to reconciliation manifest JSON file (reads stdin if omitted)"
+      }
+    ],
+    "example": "  metamorph reconcile-ion-recipes --manifest manifest.json\n  metamorph reconcile-ion-recipes --dry-run\n  metamorph reconcile-ion-recipes --manifest manifest.json --force-swap\n  metamorph --json reconcile-ion-recipes --manifest manifest.json\n  echo '{\"ion_recipes\":[...]}' | metamorph reconcile-ion-recipes",
+    "json_response": "{\n  \"reconcile_results\": [\n    {\n      \"site\": \"github.com\",\n      \"previous_version\": \"1.0.0\",\n      \"new_version\": \"1.1.0\",\n      \"action\": \"swapped\",\n      \"phase\": \"\",\n      \"duration_ms\": 342,\n      \"swapped_at\": \"2026-05-02T12:00:00Z\"\n    }\n  ],\n  \"summary\": {\n    \"total_sites\": 1,\n    \"skipped\": 0,\n    \"swapped\": 1,\n    \"rolled_back\": 0,\n    \"failed\": 0\n  },\n  \"timestamp\": \"2026-05-02T12:00:00Z\"\n}"
   },
   {
     "name": "rollback",

@@ -6,33 +6,57 @@ package inspection
 
 // ManagedBinary represents a BTIPS component managed (updatable) by Metamorph.
 type ManagedBinary struct {
-	Name        string      `json:"name"`
-	Path        string      `json:"path"`
-	Version     string      `json:"version"`
-	BuildNumber int         `json:"build_number"`
-	Hash        string      `json:"hash"`
-	SizeBytes   int64       `json:"size_bytes"`
-	LastModified string     `json:"last_modified"`
-	Status      string      `json:"status"` // "healthy" | "missing" | "corrupted" | "unknown"
-	Updatable   bool        `json:"updatable_by_metamorph"` // always true
-	Capabilities []string   `json:"capabilities,omitempty"`
-	CortexMeta  *CortexMeta `json:"cortex_meta,omitempty"`
+	Name                 string         `json:"name"`
+	Path                 string         `json:"path"`
+	Version              string         `json:"version"`
+	BuildNumber          int            `json:"build_number"`
+	Hash                 string         `json:"hash"`
+	SizeBytes            int64          `json:"size_bytes"`
+	LastModified         string         `json:"last_modified"`
+	Status               string         `json:"status"` // "healthy" | "missing" | "corrupted" | "unknown"
+	UpdatableByMetamorph bool           `json:"updatable_by_metamorph"` // always true
+	Capabilities         []string       `json:"capabilities,omitempty"`
+	CortexMeta           *CortexMeta    `json:"cortex_meta,omitempty"`
+	BootstrapMeta        *BootstrapMeta `json:"bootstrap_meta,omitempty"`
+	VSIXMeta             *VSIXMeta      `json:"vsix_meta,omitempty"`
+	SensorInfo           *SensorInfo    `json:"sensor_info,omitempty"`
+}
+
+// SensorInfo holds extended metadata returned by bloom-sensor --json info.
+type SensorInfo struct {
+	Channel      string            `json:"channel,omitempty"`
+	Capabilities []string          `json:"capabilities,omitempty"`
+	Requires     map[string]string `json:"requires,omitempty"`
 }
 
 // ExternalBinary represents a third-party binary auditable but not managed by Metamorph.
 type ExternalBinary struct {
-	Name            string `json:"name"`
-	Path            string `json:"path"`
-	Version         string `json:"version"`
-	Hash            string `json:"hash"`
-	SizeBytes       int64  `json:"size_bytes"`
-	LastModified    string `json:"last_modified"`
-	Status          string `json:"status"` // "healthy" | "missing" | "unknown"
-	Updatable       bool   `json:"updatable_by_metamorph"` // always false
-	Source          string `json:"source"`
-	UpdateMethod    string `json:"update_method"`
-	LatestVersion   string `json:"latest_version,omitempty"`
-	UpdateAvailable bool   `json:"update_available"`
+	Name                 string `json:"name"`
+	Path                 string `json:"path"`
+	Version              string `json:"version"`
+	Hash                 string `json:"hash"`
+	SizeBytes            int64  `json:"size_bytes"`
+	LastModified         string `json:"last_modified"`
+	Status               string `json:"status"` // "healthy" | "missing" | "unknown"
+	UpdatableByMetamorph bool   `json:"updatable_by_metamorph"` // always false
+	Source               string `json:"source"`
+	UpdateMethod         string `json:"update_method"`
+	LatestVersion        string `json:"latest_version,omitempty"`
+	UpdateAvailable      bool   `json:"update_available"`
+}
+
+// InspectionSummary aggregates counts and totals across the full inspection run.
+type InspectionSummary struct {
+	TotalBinaries     int   `json:"total_binaries"`
+	TotalSizeBytes    int64 `json:"total_size_bytes"`
+	ManagedCount      int   `json:"managed_count"`
+	ManagedSizeBytes  int64 `json:"managed_size_bytes"`
+	ExternalCount     int   `json:"external_count"`
+	ExternalSizeBytes int64 `json:"external_size_bytes"`
+	HealthyCount      int   `json:"healthy_count"`
+	UpdatesAvailable  int   `json:"updates_available"`
+	MissingCount      int   `json:"missing_count"`
+	CorruptedCount    int   `json:"corrupted_count"`
 }
 
 // InspectionResult is the top-level payload returned by the inspect command.
@@ -40,6 +64,7 @@ type InspectionResult struct {
 	ManagedBinaries  []ManagedBinary  `json:"managed_binaries"`
 	ExternalBinaries []ExternalBinary `json:"external_binaries,omitempty"`
 	TotalSizeBytes   int64            `json:"total_size_bytes"`
+	Summary          InspectionSummary `json:"summary"`
 	Timestamp        string           `json:"timestamp"`
 }
 
@@ -93,8 +118,11 @@ type IonRecipeInfo struct {
 
 // IonRecipesResult is the payload returned by --ion-recipes inspection.
 type IonRecipesResult struct {
-	Recipes   []IonRecipeInfo `json:"recipes"`   // never null — empty slice if none installed
-	Timestamp string          `json:"timestamp"`
+	BasePath   string          `json:"base_path"`
+	Recipes    []IonRecipeInfo `json:"recipes"`   // never null — empty slice if none installed
+	TotalSites int             `json:"total_sites"`
+	TotalFlows int             `json:"total_flows"`
+	Timestamp  string          `json:"timestamp"`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

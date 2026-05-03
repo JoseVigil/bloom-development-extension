@@ -91,6 +91,8 @@
       --all, -a                  Include external binaries (Temporal, Ollama, Chromium, Node)
       --ion-recipes              Inspect ion automation recipes
       --native                   Inspect native/bin/<platform>/ build output instead of AppData
+      --show-backups             Show available backup versions (use with --ion-recipes)
+      --show-pending             Show sites with pending status (use with --ion-recipes)
 
     Example:
         metamorph inspect

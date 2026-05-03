@@ -2,7 +2,6 @@ package inspection
 
 import (
 	"archive/zip"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bloom/metamorph/internal/core"
 )
 
 const (
@@ -628,16 +626,6 @@ func RecoverPendingSwaps(ionsitesPath string, client IonPumpClient) error {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// resolveIonSitesPath — single source of truth for ionsites location
-// ─────────────────────────────────────────────────────────────────────────────
-
-// resolveIonSitesPath returns the canonical ionsites path using core.GetBasePath().
-// No paths are hardcoded here or anywhere else in this package.
-func resolveIonSitesPath(c *core.Core) string {
-	return filepath.Join(c.Paths.GetBinaryPath("cortex", ""), "ionsites")
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -655,20 +643,4 @@ func calculateDirSize(dir string) int64 {
 		return nil
 	})
 	return total
-}
-
-// CalculateSHA256 returns the hex-encoded SHA-256 hash of the file at path.
-func CalculateSHA256(path string) (string, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return "", fmt.Errorf("cannot open file for hashing: %w", err)
-	}
-	defer f.Close()
-
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", fmt.Errorf("failed to hash file: %w", err)
-	}
-
-	return fmt.Sprintf("%x", h.Sum(nil)), nil
 }

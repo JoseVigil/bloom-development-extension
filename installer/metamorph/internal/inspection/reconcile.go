@@ -140,7 +140,7 @@ func runReconcileIonRecipes(
 	}
 
 	// ── Resolve ionsites path ────────────────────────────────────────────────
-	ionsitesPath := resolveIonSitesPath(c)
+	ionsitesPath := resolveIonSitesPath(c.Config)
 
 	if _, err := os.Stat(ionsitesPath); os.IsNotExist(err) {
 		return nil, fmt.Errorf("ionsites directory not found: %s (Nucleus must create it)", ionsitesPath)
@@ -150,7 +150,7 @@ func runReconcileIonRecipes(
 	// forceSwap replaces the real client with Noop so Brain is never signaled.
 	var client IonPumpClient
 	if forceSwap {
-		c.Logger.Warn("⚠️  --force-swap: Brain quiesce/reload signals skipped")
+		c.Logger.Info("⚠️  --force-swap: Brain quiesce/reload signals skipped")
 		client = &NoopIonPumpClient{}
 	} else {
 		port := resolveIonPumpPort(c)

@@ -286,7 +286,6 @@ func inspectBootstrap(basePath string) (ManagedBinary, error) {
 			Path:                 scriptPath,
 			Version:              "unknown",
 			Status:               "unhealthy",
-			UpdatableByMetamorph: true,
 		}, fmt.Errorf("script not found: %w", err)
 	}
 
@@ -302,7 +301,6 @@ func inspectBootstrap(basePath string) (ManagedBinary, error) {
 			Path:                 scriptPath,
 			Version:              "unknown",
 			Status:               "unhealthy",
-			UpdatableByMetamorph: true,
 		}, fmt.Errorf("script execution failed: %v — stderr: %s", err, stderr.String())
 	}
 
@@ -313,7 +311,6 @@ func inspectBootstrap(basePath string) (ManagedBinary, error) {
 			Path:                 scriptPath,
 			Version:              "unknown",
 			Status:               "unhealthy",
-			UpdatableByMetamorph: true,
 		}, fmt.Errorf("could not parse script output: %w", err)
 	}
 
@@ -323,7 +320,6 @@ func inspectBootstrap(basePath string) (ManagedBinary, error) {
 			Path:                 scriptPath,
 			Version:              "unknown",
 			Status:               "unhealthy",
-			UpdatableByMetamorph: true,
 		}, fmt.Errorf("script reported success=false")
 	}
 
@@ -338,7 +334,6 @@ func inspectBootstrap(basePath string) (ManagedBinary, error) {
 		SizeBytes:            stat.Size(),
 		LastModified:         stat.ModTime().UTC().Format(time.RFC3339),
 		Status:               "healthy",
-		UpdatableByMetamorph: true,
 		BootstrapMeta: &BootstrapMeta{
 			BuildDate: out.BuildDate,
 			Info:      out.Info,
@@ -379,7 +374,6 @@ func inspectVSCodeExtension(basePath string) (ManagedBinary, error) {
 			Path:                 vsixPath,
 			Version:              "unknown",
 			Status:               "unhealthy",
-			UpdatableByMetamorph: true,
 		}, fmt.Errorf("file not found: %w", err)
 	}
 
@@ -390,7 +384,6 @@ func inspectVSCodeExtension(basePath string) (ManagedBinary, error) {
 			Path:                 vsixPath,
 			Version:              "unknown",
 			Status:               "unhealthy",
-			UpdatableByMetamorph: true,
 		}, fmt.Errorf("could not read package.json from vsix: %w", err)
 	}
 
@@ -404,7 +397,6 @@ func inspectVSCodeExtension(basePath string) (ManagedBinary, error) {
 		SizeBytes:            stat.Size(),
 		LastModified:         stat.ModTime().UTC().Format(time.RFC3339),
 		Status:               "healthy",
-		UpdatableByMetamorph: true,
 		VSIXMeta: &VSIXMeta{
 			Publisher:   pkg.Publisher,
 			DisplayName: pkg.DisplayName,
