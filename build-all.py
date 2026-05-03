@@ -423,6 +423,10 @@ def build_go_component(component: str) -> StepResult:
     """
     Compila un componente Go usando el script genérico de la plataforma.
     El nombre del componente se pasa como primer argumento al script.
+
+    Después de la compilación, recolecta el log individual escrito por
+    build-component.bat/.sh y lo appendea al log central de build-all.py,
+    de modo que todos los logs queden en NUCLEUS_HOME/logs/build/.
     """
     script_path = BUILDS[component]
     if not script_path or not script_path.exists():
@@ -441,6 +445,22 @@ def build_go_component(component: str) -> StepResult:
         cmd = ["bash", script_path.name, component]
 
     code, out, _ = run(cmd, cwd=script_path.parent, env=env)
+
+    # ── Recolectar log individual del bat/sh y copiarlo a logs/build/ ──
+    # build-component.bat escribe a LOCALAPPDATA\BloomNucleus\logs\build\<comp>_build.log
+    # build-component.sh  escribe al mismo path equivalente en la plataforma.
+    component_log_src = NUCLEUS_HOME / "logs" / "build" / f"{component}_build.log"
+    if component_log_src.exists() and _log_file_path:
+        try:
+            comp_content = component_log_src.read_text(encoding="utf-8", errors="replace")
+            separator = f"\n{'─'*60}\n  LOG INDIVIDUAL: {component}_build.log\n{'─'*60}\n"
+            with _log_file_path.open("a", encoding="utf-8") as f:
+                f.write(separator)
+                f.write(comp_content)
+            log(f"  📎 Log de {component} appendeado desde {component_log_src.name}")
+        except OSError as exc:
+            log(f"  ⚠ No se pudo leer {component_log_src}: {exc}")
+
     if code != 0:
         # Mostrar las últimas líneas del output para diagnóstico
         tail = "\n".join(out.splitlines()[-20:]) if out else "(sin output)"
@@ -535,20 +555,32 @@ def build_cortex() -> StepResult:
     Cortex: ejecuta package.py con python3, no con bash.
     El script está en installer/cortex/build-cortex/package.py.
 
-    BUILDS["cortex"] ya apunta a installer/cortex/build-cortex/,
-    por lo que package.py se resuelve directamente desde cortex_dir
-    sin agregar un segundo segmento "build-cortex/".
+    BUILDS["cortex"] debe apuntar a installer/cortex/build-cortex/,
+    pero como resguardo también se busca en installer/cortex/build-cortex/
+    relativo a la raíz si BUILDS["cortex"] apunta un nivel más arriba.
     """
     cortex_dir = BUILDS["cortex"]
-    package_py = cortex_dir / "package.py"  # type: ignore[operator]
-    # BUILDS["cortex"] = ROOT / "installer/cortex/build-cortex"
-    # → path final:     installer/cortex/build-cortex/package.py  ✓
 
-    if not package_py.exists():
+    # Candidatos en orden de preferencia
+    candidates: list[Path] = []
+    if cortex_dir is not None:
+        candidates.append(cortex_dir / "package.py")               # correcto: build-cortex/package.py
+        candidates.append(cortex_dir / "build-cortex" / "package.py")  # resguardo: apunta a cortex/
+    # Siempre agregar la ruta canónica desde ROOT como último recurso
+    candidates.append(ROOT / "installer" / "cortex" / "build-cortex" / "package.py")
+
+    package_py: Path | None = None
+    for candidate in candidates:
+        if candidate.exists():
+            package_py = candidate
+            break
+
+    if package_py is None:
+        checked = "\n    ".join(str(c) for c in candidates)
         return StepResult(
             "Cortex", False,
             error=(
-                f"package.py no encontrado en: {package_py}\n"
+                f"package.py no encontrado. Paths verificados:\n    {checked}\n"
                 f"  Verificá que BUILDS['cortex'] apunte al directorio que contiene package.py.\n"
                 f"  Valor actual: {cortex_dir}"
             ),

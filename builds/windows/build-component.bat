@@ -36,7 +36,7 @@ for %%I in ("%PROJECT_ROOT%") do set "PROJECT_ROOT=%%~fI"
 :: ============================================
 :: CONFIGURAR LOG
 :: ============================================
-set LOG_BASE_DIR=%LOCALAPPDATA%\BloomNucleus\logsuild
+set LOG_BASE_DIR=%LOCALAPPDATA%\BloomNucleus\logs\build
 set LOG_FILE=%LOG_BASE_DIR%\%COMPONENT%_build.log
 
 if not exist "%LOG_BASE_DIR%" mkdir "%LOG_BASE_DIR%"
@@ -79,8 +79,7 @@ echo. >> "%LOG_FILE%"
 :: PATHS DERIVADOS DEL COMPONENTE
 :: ============================================
 set "APP_FOLDER=%COMPONENT%"
-set "OUTPUT_BASE=%PROJECT_ROOT%\installer
-ativein\%PLATFORM%\%APP_FOLDER%"
+set "OUTPUT_BASE=%PROJECT_ROOT%\installer\native\bin\%PLATFORM%\%APP_FOLDER%"
 set "OUTPUT_DIR=%OUTPUT_BASE%"
 set "HELP_DIR=%OUTPUT_DIR%\help"
 
@@ -98,11 +97,11 @@ if not exist "%HELP_DIR%"    mkdir "%HELP_DIR%"
 :: INCREMENTAR BUILD NUMBER
 :: ============================================
 if /i "%COMPONENT%"=="sensor" (
-    set "BUILD_FILE=%PROJECT_ROOT%\installer\sensor\scriptsuild_number.txt"
-    set "BUILD_INFO=%PROJECT_ROOT%\installer\sensor\internal\coreuild_info.go"
+    set "BUILD_FILE=%PROJECT_ROOT%\installer\sensor\scripts\build_number.txt"
+    set "BUILD_INFO=%PROJECT_ROOT%\installer\sensor\internal\core\build_info.go"
 ) else (
-    set "BUILD_FILE=%PROJECT_ROOT%\installer\%COMPONENT%\scriptsuild_number.txt"
-    set "BUILD_INFO=%PROJECT_ROOT%\installer\%COMPONENT%\internal\coreuild_info.go"
+    set "BUILD_FILE=%PROJECT_ROOT%\installer\%COMPONENT%\scripts\build_number.txt"
+    set "BUILD_INFO=%PROJECT_ROOT%\installer\%COMPONENT%\internal\core\build_info.go"
 )
 
 if not exist "%BUILD_FILE%" echo 0 > "%BUILD_FILE%"
@@ -168,10 +167,7 @@ echo.
 echo Registrando Telemetria via Nucleus...
 echo Registrando Telemetria via Nucleus... >> "%LOG_FILE%"
 
-set "NUCLEUS_EXE=%PROJECT_ROOT%\installer
-ativein\%PLATFORM%
-ucleus
-ucleus.exe"
+set "NUCLEUS_EXE=%PROJECT_ROOT%\installer\native\bin\%PLATFORM%\nucleus\nucleus.exe"
 
 if exist "%NUCLEUS_EXE%" (
     set "NORM_LOG_PATH=%LOG_FILE:\=/%"
