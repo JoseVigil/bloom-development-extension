@@ -129,6 +129,14 @@ installer/temporal/temporal.exe
 # Node
 installer/node/node.exe
 
+# Binarios grandes
+installer/node/node
+installer/termporal/temporal
+
+# opcional más general
+installer/node/
+installer/termporal/
+
 # ===============================
 # Electron / Native artifacts
 # ===============================

@@ -27,13 +27,8 @@ func InitPaths() (*Paths, error) {
 	sentinelDir := filepath.Dir(exe)
 	binDir := filepath.Dir(sentinelDir)
 
-	localAppData := os.Getenv("LOCALAPPDATA")
-	if localAppData == "" {
-		localAppData = filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Local")
-	}
-	appDataDir := filepath.Join(localAppData, "BloomNucleus")
-
-	nucleusBin := filepath.Join(binDir, "nucleus", "nucleus.exe")
+	appDataDir := resolveAppDataDir()   // defined in paths_windows.go / paths_darwin.go
+	nucleusBin := filepath.Join(binDir, "nucleus", nucleusBinaryName())
 
 	paths := &Paths{
 		BinDir:       binDir,

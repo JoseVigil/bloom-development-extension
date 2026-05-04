@@ -9,7 +9,13 @@ const os = require('os');
 
 const platform = os.platform();
 const homeDir = os.homedir();
-const arch = os.arch() === 'x64' ? 'win64' : 'win32';
+
+function getPlatformArch() {
+  if (platform === 'win32') return os.arch() === 'x64' ? 'win64' : 'win32';
+  if (platform === 'darwin') return os.arch() === 'arm64' ? 'darwin_arm64' : 'darwin_x64';
+  return os.arch(); // linux fallback
+}
+const arch = getPlatformArch();
 
 // ============================================================================
 // BASE DIRECTORY - Cross-platform (Windows, macOS, Linux)
@@ -218,10 +224,12 @@ const paths = {
     : path.join(baseDir, 'bin', 'temporal', 'temporal'),
   
   // Chrome
-  chromeDir: path.join(baseDir, 'bin', 'chrome-win'),
+  chromeDir: platform === 'win32'
+    ? path.join(baseDir, 'bin', 'chrome-win')
+    : path.join(baseDir, 'bin', 'chrome-mac'),
   chromeExe: platform === 'win32'
     ? path.join(baseDir, 'bin', 'chrome-win', 'chrome.exe')
-    : null,
+    : path.join(baseDir, 'bin', 'chrome-mac', 'Chromium.app', 'Contents', 'MacOS', 'Chromium'),
   
   // Extension template (copied per-profile by Brain)
   extensionDir: path.join(baseDir, 'bin', 'extension'),

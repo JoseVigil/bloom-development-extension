@@ -279,6 +279,8 @@ datas = [
     (str(PROJECT_ROOT / 'brain' / '__build__.py'), '.'),
     (r'C:/repos/bloom-videos/bloom-development-extension/brain/VERSION', '.'),
     (r'C:/repos/bloom-videos/bloom-development-extension/brain/__build__.py', '.'),
+    (r'/Users/josevigil/repos/bloom-development-extension/brain/VERSION', '.'),
+    (r'/Users/josevigil/repos/bloom-development-extension/brain/__build__.py', '.'),
 ]
 
 # Forzar la estructura física de core/profile para evitar el bug de colisión de nombres

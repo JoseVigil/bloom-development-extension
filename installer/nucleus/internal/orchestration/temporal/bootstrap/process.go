@@ -7,9 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
-	"syscall"
 	"time"
 
 	"nucleus/internal/core"
@@ -61,7 +59,7 @@ func (tp *TemporalProcess) Start(ctx context.Context, logger *core.Logger) error
 	// Crear archivo de log con timestamp
 	timestamp := time.Now().Format("2006-01-02_15-04-05")
 	logPath := filepath.Join(temporalLogsDir, fmt.Sprintf("nucleus_temporal_orchestrator_%s.log", timestamp))
-	
+
 	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
 		return fmt.Errorf("failed to create temporal log file: %w", err)
@@ -80,7 +78,7 @@ func (tp *TemporalProcess) Start(ctx context.Context, logger *core.Logger) error
 	initialLog += fmt.Sprintf("UI Port: 8233\n")
 	initialLog += fmt.Sprintf("gRPC Port: 7233 (default)\n")
 	initialLog += strings.Repeat("=", 80) + "\n"
-	
+
 	if _, err := tp.logFile.WriteString(initialLog); err != nil {
 		logger.Warning("Failed to write initial log: %v", err)
 	}
@@ -89,24 +87,19 @@ func (tp *TemporalProcess) Start(ctx context.Context, logger *core.Logger) error
 	logger.Info("Temporal log file: %s", logPath)
 
 	// Preparar comando temporal server start-dev
-	tp.cmd = exec.CommandContext(ctx, tp.executablePath, 
+	tp.cmd = exec.CommandContext(ctx, tp.executablePath,
 		"server", "start-dev",
 		"--db-filename", tp.dbPath,
 		"--ui-port", "8233",
 		"--log-format", "pretty",
 		"--log-level", "info")
-	
+
 	// Redirigir stdout y stderr al archivo de log
 	tp.cmd.Stdout = tp.logFile
 	tp.cmd.Stderr = tp.logFile
-	
-	// Configurar para Windows
-	if runtime.GOOS == "windows" {
-		tp.cmd.SysProcAttr = &syscall.SysProcAttr{
-			HideWindow:    true,
-			CreationFlags: 0x08000000, // CREATE_NO_WINDOW
-		}
-	}
+
+	// Configurar atributos de proceso según plataforma
+	setPlatformSysProcAttr(tp.cmd)
 
 	// Iniciar proceso
 	logger.Info("Launching Temporal process...")
@@ -155,26 +148,26 @@ func (tp *TemporalProcess) waitForReady(ctx context.Context, logger *core.Logger
 
 		case <-ticker.C:
 			attemptCount++
-			
+
 			grpcReady := checkGRPCHealth()
 			uiReady := checkUIHealth()
-			
-			if attemptCount % 5 == 0 {
+
+			if attemptCount%5 == 0 {
 				logger.Info("Health check attempt %d - gRPC: %v, UI: %v", attemptCount, grpcReady, uiReady)
 			}
 
 			if uiReady {
 				logger.Success("Temporal UI ready on port 8233")
-				
+
 				if grpcReady {
 					logger.Success("Temporal gRPC server responding on port 7233")
 				} else {
 					logger.Info("Temporal gRPC on port 7233 (start-dev mode, no TCP probe)")
 				}
-				
+
 				return nil
 			}
-			
+
 			// Fallback: si proceso está estable >15s sin crashear, asumir ready
 			if attemptCount > 15 && tp.cmd.ProcessState == nil {
 				logger.Warning("UI not responding but process stable for %v, assuming ready", time.Since(startTime))
@@ -192,7 +185,7 @@ func (tp *TemporalProcess) readLastLogLines(n int) string {
 	}
 
 	tp.logFile.Sync()
-	
+
 	readFile, err := os.Open(tp.logFile.Name())
 	if err != nil {
 		return fmt.Sprintf("(error reading log: %v)", err)
@@ -305,13 +298,8 @@ func startTemporalBackground(c *core.Core, executablePath string) (int, error) {
 	cmd.Stderr = nil
 	cmd.Stdin = nil
 
-	// Windows: Crear proceso en nuevo grupo
-	if runtime.GOOS == "windows" {
-		cmd.SysProcAttr = &syscall.SysProcAttr{
-			CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP,
-			HideWindow:    true,
-		}
-	}
+	// Configurar atributos de proceso según plataforma
+	setPlatformSysProcAttr(cmd)
 
 	// Iniciar proceso
 	if err := cmd.Start(); err != nil {
