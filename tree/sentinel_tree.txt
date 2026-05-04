@@ -28,6 +28,8 @@ bloom-development-extension/
     │   │   ├── logger_helpers.go
     │   │   ├── metadata.go
     │   │   ├── paths.go
+    │   │   ├── paths_darwin.go
+    │   │   ├── paths_windows.go
     │   │   ├── telemetry.go
     │   │   └── version_reader.go
     │   ├── discovery/
