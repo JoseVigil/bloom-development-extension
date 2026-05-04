@@ -3,7 +3,6 @@ bloom-development-extension/
     ├── .gitignore
     ├── README.md
     ├── VERSION
-    ├── build_number.txt
     ├── codebase/
     │   └── go_files_2026-02-16_20-17-22.txt
     ├── docs/
@@ -46,6 +45,7 @@ bloom-development-extension/
     │   │   └── system_health_activity.go
     │   ├── orchestration/
     │   │   ├── activities/
+    │   │   │   ├── brain_poller.go
     │   │   │   └── sentinel_activities.go
     │   │   ├── commands/
     │   │   │   ├── synapse.go
@@ -103,8 +103,10 @@ bloom-development-extension/
     └── scripts/
         ├── build-darwin.sh
         ├── build-linux.sh
-        ├── build.bat
+        ├── build_number.darwin.txt
+        ├── build_number.effective.txt
         ├── build_number.txt
+        ├── build_number.windows.txt
         ├── extract_go_files.py
         ├── simulate_environment.py
         └── simulation_env/
@@ -125,10 +127,4 @@ bloom-development-extension/
                     │   │   └── .code-standards.bl
                     │   └── .security/
                     │       └── .security-standards.bl
-                    ├── .intents/
-                    │   ├── .cor/
-                    │   └── .exp/
-                    ├── .ownership.json
-                    ├── .relations/
-                    └── reports/
-                        └── exports/
+                    └── .ownership.json
