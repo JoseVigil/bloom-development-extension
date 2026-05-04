@@ -6,8 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"time"
-
-	"golang.org/x/sys/windows/registry"
 )
 
 // generateLogicalLaunchID genera el ID lógico del launch.
@@ -147,15 +145,15 @@ func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profi
 	// launch_flags agrupa todos los flags del comando launch.
 	// El JS (discovery.js / landing.js) los lee desde este nodo.
 	launchFlags := map[string]interface{}{
-		"register":       getBoolField(profileData, "register", false),
-		"heartbeat":      getBoolField(profileData, "heartbeat", true),
-		"service":        getStringField(profileData, "service", ""),
-		"step":           getStringField(profileData, "step", ""),
-		"alias":          getStringField(profileData, "alias", "MasterWorker"),
-		"role":           getStringField(profileData, "role", "Worker"),
-		"email":          getStringField(profileData, "email", ""),
-		"extension":      ig.Core.Config.Provisioning.ExtensionID,
-		"mode":           mode,
+		"register":  getBoolField(profileData, "register", false),
+		"heartbeat": getBoolField(profileData, "heartbeat", true),
+		"service":   getStringField(profileData, "service", ""),
+		"step":      getStringField(profileData, "step", ""),
+		"alias":     getStringField(profileData, "alias", "MasterWorker"),
+		"role":      getStringField(profileData, "role", "Worker"),
+		"email":     getStringField(profileData, "email", ""),
+		"extension": ig.Core.Config.Provisioning.ExtensionID,
+		"mode":      mode,
 	}
 
 	// linked_accounts dentro de launch_flags
@@ -233,14 +231,9 @@ func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profi
 
 	generatedContent, err := os.ReadFile(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("validación fallida: no se puede leer config generado: %v", err)
+		return nil, fmt.Errorf("validación fallida: no se pudo releer config: %v", err)
 	}
-
-	if len(generatedContent) == 0 {
-		return nil, fmt.Errorf("validación fallida: config generado está vacío")
-	}
-
-	ig.Core.Logger.Info("[IGNITION] ✅ Config generado y validado: %s (%d bytes)", configPath, len(generatedContent))
+	ig.Core.Logger.Info("[IGNITION] ✅ Config generado (%d bytes): %s", len(generatedContent), configPath)
 
 	// === 5.2 ESCRIBIR HARNESS CONFIG (solo perfiles --dev) ===
 	profileAlias := getStringField(profileData, "alias", "MasterWorker")
@@ -284,6 +277,9 @@ func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profi
 	}
 
 	// === 6.1 REGISTRAR CLAVE DE WINDOWS ===
+	// registerNativeHost es una función multiplataforma definida en:
+	//   ignition_registry_windows.go  → implementación real (solo Windows)
+	//   ignition_registry_unix.go     → no-op (Darwin / Linux)
 	hostName   := fmt.Sprintf("com.bloom.synapse.%s", shortID)
 	regKeyPath := `SOFTWARE\Google\Chrome\NativeMessagingHosts\` + hostName
 
@@ -293,12 +289,9 @@ func (ig *Ignition) prepareSessionFiles(profileID string, launchID string, profi
 		ig.Core.Logger.Info("[IGNITION] ✅ Registry key registrada en HKCU: %s", regKeyPath)
 	}
 
-	hklmKey, err := registry.OpenKey(registry.LOCAL_MACHINE, regKeyPath, registry.SET_VALUE|registry.QUERY_VALUE)
-	if err == nil {
-		hklmKey.Close()
-		registry.DeleteKey(registry.LOCAL_MACHINE, regKeyPath)
-		ig.Core.Logger.Info("[IGNITION] ✅ HKLM key eliminada: %s", regKeyPath)
-	}
+	// cleanupHKLM elimina la clave HKLM residual si existe.
+	// En Darwin/Linux es un no-op (ver ignition_registry_unix.go).
+	cleanupHKLM(regKeyPath, ig.Core.Logger)
 
 	ig.Core.Logger.Info("[IGNITION] 🆔 Identidad [%s] inyectada en Spec, JS y Native Host.", launchID)
 	ig.Core.Logger.Info("[IGNITION] 📁 Archivos de sesión preparados:")

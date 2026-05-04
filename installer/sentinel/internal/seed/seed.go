@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/sys/windows/registry"
 )
 
 func init() {
@@ -120,8 +119,8 @@ type ProfilesRegistry struct {
 }
 
 type CortexMetadata struct {
-	Version      string `json:"version"`
-	BuildDate    string `json:"build_date"`
+	Version       string `json:"version"`
+	BuildDate     string `json:"build_date"`
 	Compatibility string `json:"compatibility"`
 }
 
@@ -260,6 +259,9 @@ func HandleSeed(c *core.Core, alias string, isMaster bool, devMode bool) (string
 		return "", "", err
 	}
 
+	// registerInWindows está definido en:
+	//   seed_windows.go → implementación real con registry
+	//   seed_unix.go    → no-op para Darwin/Linux
 	if err := registerInWindows(hostName, manifestPath); err != nil {
 		c.Logger.Error("[SEED] No se pudo registrar Native Messaging: %v", err)
 	}
@@ -396,20 +398,6 @@ func writeNativeManifest(c *core.Core, path, hostName, uuid string) error {
 	}
 	data, _ := json.MarshalIndent(manifest, "", "  ")
 	return os.WriteFile(path, data, 0644)
-}
-
-func registerInWindows(hostName, manifestPath string) error {
-	// HKLM en lugar de HKCU: Sentinel es invocado por Nucleus que corre como servicio
-	// de Windows (SYSTEM). Escribir en CURRENT_USER desde SYSTEM apunta al hive de
-	// SYSTEM, no al del usuario interactivo. LOCAL_MACHINE aplica a todos los usuarios
-	// y es accesible desde cualquier contexto de ejecución.
-	keyPath := `SOFTWARE\Google\Chrome\NativeMessagingHosts\` + hostName
-	k, _, err := registry.CreateKey(registry.LOCAL_MACHINE, keyPath, registry.ALL_ACCESS)
-	if err != nil {
-		return err
-	}
-	defer k.Close()
-	return k.SetStringValue("", manifestPath)
 }
 
 func writeIgnitionSpec(c *core.Core, sm *discovery.SystemMap, uuid, profileDir, extDir, logsDir, specPath string) error {

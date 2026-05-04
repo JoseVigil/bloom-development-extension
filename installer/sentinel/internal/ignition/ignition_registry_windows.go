@@ -1,3 +1,5 @@
+//go:build windows
+
 package ignition
 
 import (
@@ -15,13 +17,13 @@ type coreLogger interface {
 
 func registerNativeHostHKCU(regKeyPath string, manifestPath string, logger coreLogger) error {
 	var (
-		modadvapi32              = windows.NewLazySystemDLL("advapi32.dll")
-		modkernel32              = windows.NewLazySystemDLL("kernel32.dll")
-		modwtsapi32              = windows.NewLazySystemDLL("wtsapi32.dll")
-		procImpersonateLoggedOn  = modadvapi32.NewProc("ImpersonateLoggedOnUser")
-		procRevertToSelf         = modadvapi32.NewProc("RevertToSelf")
-		procWTSGetActiveSession  = modkernel32.NewProc("WTSGetActiveConsoleSessionId")
-		procWTSQueryUserToken    = modwtsapi32.NewProc("WTSQueryUserToken")
+		modadvapi32             = windows.NewLazySystemDLL("advapi32.dll")
+		modkernel32             = windows.NewLazySystemDLL("kernel32.dll")
+		modwtsapi32             = windows.NewLazySystemDLL("wtsapi32.dll")
+		procImpersonateLoggedOn = modadvapi32.NewProc("ImpersonateLoggedOnUser")
+		procRevertToSelf        = modadvapi32.NewProc("RevertToSelf")
+		procWTSGetActiveSession = modkernel32.NewProc("WTSGetActiveConsoleSessionId")
+		procWTSQueryUserToken   = modwtsapi32.NewProc("WTSQueryUserToken")
 	)
 
 	// 1. Obtener sesión activa del usuario interactivo
@@ -66,4 +68,14 @@ func registerNativeHostHKCU(regKeyPath string, manifestPath string, logger coreL
 	}
 
 	return nil
+}
+
+// cleanupHKLM elimina la clave HKLM residual si existe (Windows).
+func cleanupHKLM(regKeyPath string, logger coreLogger) {
+	hklm, err := registry.OpenKey(registry.LOCAL_MACHINE, regKeyPath, registry.SET_VALUE|registry.QUERY_VALUE)
+	if err == nil {
+		hklm.Close()
+		registry.DeleteKey(registry.LOCAL_MACHINE, regKeyPath)
+		logger.Info("[IGNITION] ✅ HKLM key eliminada: %s", regKeyPath)
+	}
 }
