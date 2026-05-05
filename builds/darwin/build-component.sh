@@ -144,11 +144,19 @@ fi
 BINARY_NAME="${COMPONENT}"
 OUTPUT_BINARY="${OUTPUT_DIR}/${BINARY_NAME}"
 
+# sensor tiene su main.go en cmd/, el resto lo tiene en la raíz
+case "${COMPONENT}" in
+    sensor) BUILD_TARGET="./cmd" ;;
+    *)      BUILD_TARGET="."     ;;
+esac
+
+echo "Build target: ${BUILD_TARGET}" >> "${LOG_FILE}"
+
 # go build con ldflags para reducir tamaño del binario
 go build \
     -ldflags="-s -w" \
     -o "${OUTPUT_BINARY}" \
-    . >> "${LOG_FILE}" 2>&1
+    "${BUILD_TARGET}" >> "${LOG_FILE}" 2>&1
 
 BUILD_RC=$?
 
