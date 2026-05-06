@@ -240,9 +240,7 @@ hiddenimports = [
 templates_src = PROJECT_ROOT / 'brain' / 'core' / 'profile' / 'web' / 'templates'
 
 datas = [
-        (str(PROJECT_ROOT / 'brain' / 'VERSION'), '.'),
-    
-    # Templates - Discovery
+# Templates - Discovery
     (str(templates_src / 'discovery' / '__init__.py'), 'brain/core/profile/web/templates/discovery'),
     (str(templates_src / 'discovery' / 'index.html'), 'brain/core/profile/web/templates/discovery'),
     (str(templates_src / 'discovery' / 'script.js'), 'brain/core/profile/web/templates/discovery'),
@@ -276,11 +274,8 @@ datas = [
     (str(PROJECT_ROOT / 'brain' / 'commands' / 'ionpump' / 'versions.json'), 'brain/commands/ionpump'),
 
     # Version y build — paths relativos a PROJECT_ROOT (multiplataforma)
-    (str(PROJECT_ROOT / 'brain' / '__build__.py'), '.'),
-    (r'C:/repos/bloom-videos/bloom-development-extension/brain/VERSION', '.'),
-    (r'C:/repos/bloom-videos/bloom-development-extension/brain/__build__.py', '.'),
-    (r'/Users/josevigil/repos/bloom-development-extension/brain/VERSION', '.'),
-    (r'/Users/josevigil/repos/bloom-development-extension/brain/__build__.py', '.'),
+(str(PROJECT_ROOT / 'brain' / '__build__.py'), '.'),
+    (str(PROJECT_ROOT / 'brain' / 'VERSION'), '.'),
 ]
 
 # Forzar la estructura física de core/profile para evitar el bug de colisión de nombres

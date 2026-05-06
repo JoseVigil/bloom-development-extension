@@ -312,15 +312,34 @@ _logger: logging.Logger | None = None
 _log_file_path: Path | None = None
 
 
+def _resolve_log_dir() -> Path:
+    """
+    Retorna el directorio de logs según la convención de cada plataforma:
+      Windows  → %LOCALAPPDATA%\BloomNucleus\logs\build\
+      macOS    → ~/Library/Logs/BloomNucleus/build/
+      Linux    → ~/.local/share/BloomNucleus/logs/build/  (XDG_DATA_HOME)
+    """
+    if IS_WINDOWS:
+        return NUCLEUS_HOME / "logs" / "build"
+    elif IS_MACOS:
+        return Path.home() / "Library" / "Logs" / "BloomNucleus" / "build"
+    else:  # Linux
+        xdg = os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local/share"))
+        return Path(xdg) / "BloomNucleus" / "logs" / "build"
+
+
 def _setup_logger() -> None:
     """
     Configura el logger dual: StreamHandler (consola) + FileHandler (disco).
-    El archivo se crea en NUCLEUS_HOME/logs/build/ con timestamp en el nombre.
+    El archivo se crea en el directorio de logs de la plataforma con timestamp en el nombre:
+      Windows  → %LOCALAPPDATA%\BloomNucleus\logs\build\
+      macOS    → ~/Library/Logs/BloomNucleus/build/
+      Linux    → $XDG_DATA_HOME/BloomNucleus/logs/build/
     Debe llamarse una sola vez al inicio de main().
     """
     global _logger, _log_file_path
 
-    log_dir = NUCLEUS_HOME / "logs" / "build"
+    log_dir = _resolve_log_dir()
     try:
         log_dir.mkdir(parents=True, exist_ok=True)
         ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
