@@ -97,9 +97,9 @@ OUT_DIR="$PROJECT_ROOT/installer/native/bin"
 
 # Crear carpetas separadas por arquitectura
 mkdir -p "$OUT_DIR/win64/host" \
-         "$OUT_DIR/linux/host" \
-         "$OUT_DIR/darwin/arm64/host" \
-         "$OUT_DIR/darwin/x64/host"
+         "$OUT_DIR/linux_x64/host" \
+         "$OUT_DIR/darwin_arm64/host" \
+         "$OUT_DIR/darwin_x64/host"
 
 # Descargar json.hpp si no existe
 if [ ! -f "$HEADER_DIR/json.hpp" ]; then
@@ -352,9 +352,9 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
         echo -e "${YELLOW}  Compiling for macOS (ARM64)...${NC}"
         clang++ -arch arm64 -std=c++20 -O2 -I. -I"$MACOS_OPENSSL_INCLUDE" \
             "${SOURCE_FILES[@]}" \
-            -o "$OUT_DIR/darwin/arm64/host/bloom-host" \
+            -o "$OUT_DIR/darwin_arm64/host/bloom-host" \
             -L"$MACOS_OPENSSL_LIB" -lssl -lcrypto
-        chmod +x "$OUT_DIR/darwin/arm64/host/bloom-host"
+        chmod +x "$OUT_DIR/darwin_arm64/host/bloom-host"
         echo -e "${GREEN}✓ ARM64 binary created${NC}"
     else
         echo -e "${YELLOW}⊘ Skipping ARM64 build (OpenSSL not available for this arch)${NC}"
@@ -367,9 +367,9 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
         echo -e "${YELLOW}  Compiling for macOS (x64)...${NC}"
         clang++ -arch x86_64 -std=c++20 -O2 -I. -I"$MACOS_OPENSSL_INCLUDE" \
             "${SOURCE_FILES[@]}" \
-            -o "$OUT_DIR/darwin/x64/host/bloom-host" \
+            -o "$OUT_DIR/darwin_x64/host/bloom-host" \
             -L"$MACOS_OPENSSL_LIB" -lssl -lcrypto
-        chmod +x "$OUT_DIR/darwin/x64/host/bloom-host"
+        chmod +x "$OUT_DIR/darwin_x64/host/bloom-host"
         echo -e "${GREEN}✓ x86_64 binary created${NC}"
     else
         echo -e "${YELLOW}⊘ Skipping x86_64 build (OpenSSL not available for this arch)${NC}"
@@ -392,9 +392,9 @@ if [[ "$OSTYPE" == "linux-gnu"* ]] && command -v g++ &> /dev/null; then
     echo -e "${YELLOW}� Compiling for Linux...${NC}"
     g++ -std=c++20 -O2 -I. \
         "${SOURCE_FILES[@]}" \
-        -o "$OUT_DIR/linux/host/bloom-host" \
+        -o "$OUT_DIR/linux_x64/host/bloom-host" \
         -lpthread -lssl -lcrypto -static-libgcc -static-libstdc++
-    chmod +x "$OUT_DIR/linux/host/bloom-host"
+    chmod +x "$OUT_DIR/linux_x64/host/bloom-host"
     echo -e "${GREEN}✓ bloom-host created${NC}"
 fi
 
@@ -418,21 +418,21 @@ if [ -d "$OUT_DIR/win64/host" ] && [ "$(ls -A $OUT_DIR/win64/host 2>/dev/null)" 
     echo ""
 fi
 
-if [ -d "$OUT_DIR/darwin/arm64/host" ] && [ "$(ls -A $OUT_DIR/darwin/arm64/host 2>/dev/null)" ]; then
+if [ -d "$OUT_DIR/darwin_arm64/host" ] && [ "$(ls -A $OUT_DIR/darwin_arm64/host 2>/dev/null)" ]; then
     echo -e "${YELLOW}� macOS ARM64 build:${NC}"
-    ls -lh "$OUT_DIR/darwin/arm64/host/"
+    ls -lh "$OUT_DIR/darwin_arm64/host/"
     echo ""
 fi
 
-if [ -d "$OUT_DIR/darwin/x64/host" ] && [ "$(ls -A $OUT_DIR/darwin/x64/host 2>/dev/null)" ]; then
+if [ -d "$OUT_DIR/darwin_x64/host" ] && [ "$(ls -A $OUT_DIR/darwin_x64/host 2>/dev/null)" ]; then
     echo -e "${YELLOW}� macOS x86_64 build:${NC}"
-    ls -lh "$OUT_DIR/darwin/x64/host/"
+    ls -lh "$OUT_DIR/darwin_x64/host/"
     echo ""
 fi
 
-if [ -d "$OUT_DIR/linux/host" ] && [ "$(ls -A $OUT_DIR/linux/host 2>/dev/null)" ]; then
+if [ -d "$OUT_DIR/linux_x64/host" ] && [ "$(ls -A $OUT_DIR/linux_x64/host 2>/dev/null)" ]; then
     echo -e "${YELLOW}� Linux build:${NC}"
-    ls -lh "$OUT_DIR/linux/host/"
+    ls -lh "$OUT_DIR/linux_x64/host/"
     echo ""
 fi
 
@@ -449,16 +449,16 @@ echo -e "${YELLOW}� Generating help documentation...${NC}"
 
 NATIVE_BIN=""
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    NATIVE_BIN="$OUT_DIR/linux/host/bloom-host"
+    NATIVE_BIN="$OUT_DIR/linux_x64/host/bloom-host"
 elif [[ "$OSTYPE" == "darwin"* ]]; then
     # Preferir el binario de la arquitectura nativa
     NATIVE_ARCH=$(uname -m)
-    if [ "$NATIVE_ARCH" = "arm64" ] && [ -f "$OUT_DIR/darwin/arm64/host/bloom-host" ]; then
-        NATIVE_BIN="$OUT_DIR/darwin/arm64/host/bloom-host"
-    elif [ -f "$OUT_DIR/darwin/x64/host/bloom-host" ]; then
-        NATIVE_BIN="$OUT_DIR/darwin/x64/host/bloom-host"
-    elif [ -f "$OUT_DIR/darwin/arm64/host/bloom-host" ]; then
-        NATIVE_BIN="$OUT_DIR/darwin/arm64/host/bloom-host"
+    if [ "$NATIVE_ARCH" = "arm64" ] && [ -f "$OUT_DIR/darwin_arm64/host/bloom-host" ]; then
+        NATIVE_BIN="$OUT_DIR/darwin_arm64/host/bloom-host"
+    elif [ -f "$OUT_DIR/darwin_x64/host/bloom-host" ]; then
+        NATIVE_BIN="$OUT_DIR/darwin_x64/host/bloom-host"
+    elif [ -f "$OUT_DIR/darwin_arm64/host/bloom-host" ]; then
+        NATIVE_BIN="$OUT_DIR/darwin_arm64/host/bloom-host"
     fi
 fi
 
@@ -474,28 +474,20 @@ else
         echo -e "${GREEN}✓ Help content captured${NC}"
 
         # Escribir help.txt en cada plataforma que tenga su binario
-        declare -A PLATFORM_BINS=(
-            ["Windows"]="$OUT_DIR/win64/host/bloom-host.exe"
-            ["macOS ARM64"]="$OUT_DIR/darwin/arm64/host/bloom-host"
-            ["macOS x86_64"]="$OUT_DIR/darwin/x64/host/bloom-host"
-            ["Linux"]="$OUT_DIR/linux/host/bloom-host"
-        )
-        declare -A PLATFORM_DIRS=(
-            ["Windows"]="$OUT_DIR/win64/host"
-            ["macOS ARM64"]="$OUT_DIR/darwin/arm64/host"
-            ["macOS x86_64"]="$OUT_DIR/darwin/x64/host"
-            ["Linux"]="$OUT_DIR/linux/host"
-        )
-
-        for PLATFORM in "Windows" "macOS ARM64" "macOS x86_64" "Linux"; do
-            BIN="${PLATFORM_BINS[$PLATFORM]}"
-            DIR="${PLATFORM_DIRS[$PLATFORM]}"
-            if [ -f "$BIN" ]; then
-                mkdir -p "$DIR/help"
-                echo "$HELP_CONTENT" > "$DIR/help/help.txt"
-                echo -e "${GREEN}✓ $PLATFORM → $DIR/help/help.txt${NC}"
+        # (bash 3 compatible — sin declare -A)
+        _write_help() {
+            local bin="$1" dir="$2" label="$3"
+            if [ -f "$bin" ]; then
+                mkdir -p "$dir/help"
+                echo "$HELP_CONTENT" > "$dir/help/help.txt"
+                echo -e "${GREEN}✓ $label → $dir/help/help.txt${NC}"
             fi
-        done
+        }
+
+        _write_help "$OUT_DIR/win64/host/bloom-host.exe"      "$OUT_DIR/win64/host"      "Windows"
+        _write_help "$OUT_DIR/darwin_arm64/host/bloom-host"   "$OUT_DIR/darwin_arm64/host" "macOS ARM64"
+        _write_help "$OUT_DIR/darwin_x64/host/bloom-host"     "$OUT_DIR/darwin_x64/host"   "macOS x86_64"
+        _write_help "$OUT_DIR/linux_x64/host/bloom-host"      "$OUT_DIR/linux_x64/host"    "Linux"
     fi
 fi
 

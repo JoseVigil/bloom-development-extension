@@ -271,7 +271,7 @@ BUILDS: dict[str, Path | None] = {
     "host": (
         None
         if IS_WINDOWS
-        else _BUILD_DIR / "build-host.sh"
+        else ROOT / "installer/host/build.sh"
     ),
 
     # Go components: un solo script genérico por plataforma
@@ -400,9 +400,10 @@ def run_streaming(
 ) -> tuple[int, str]:
     """
     Ejecuta un comando escribiendo cada línea al log en tiempo real (streaming).
-    Úsalo para procesos largos como electron-builder / npm donde el silencio
-    hace imposible distinguir entre "trabajando" y "colgado".
-
+    Úsalo para procesos largos como electron-builder / npm / bash donde el
+    silencio hace imposible distinguir entre "trabajando" y "colgado".
+    Hace flush del logger en cada línea para que el archivo de log se actualice
+    en tiempo real y no quede truncado si el proceso muere.
     Retorna (returncode, output_completo).
     """
     proc = subprocess.Popen(
@@ -420,6 +421,10 @@ def run_streaming(
         line = raw_line.rstrip()
         lines.append(line)
         log(line)
+        # Flush explícito para que el FileHandler escriba al disco en tiempo real
+        if _logger:
+            for handler in _logger.handlers:
+                handler.flush()
     proc.wait()
     return proc.returncode, "\n".join(lines)
 
@@ -540,7 +545,7 @@ def build_host() -> StepResult:
 
     log(f"Ejecutando {host_script.name} ...")
     env = inject_build_number_env("host")
-    code, out, _ = run(["bash", host_script.name], cwd=host_script.parent, env=env)
+    code, out = run_streaming(["bash", host_script.name], cwd=host_script.parent, env=env)
     if code != 0:
         tail = "\n".join(out.splitlines()[-20:]) if out else "(sin output)"
         return StepResult("Host", False, error=tail)
@@ -593,8 +598,6 @@ def build_node(name: str, project_dir: Path, npm_script: str) -> StepResult:
 
     log(f"Ejecutando npm run {npm_script} en {project_dir.name}/ ...")
     cmd = [_NPM, "run", npm_script]
-    # run_streaming: escribe cada línea al log en tiempo real para que
-    # procesos largos como electron-builder sean visibles y no parezcan colgados.
     code, out = run_streaming(cmd, cwd=project_dir, env=env)
     if code != 0:
         tail = "\n".join(out.splitlines()[-20:]) if out else "(sin output)"
