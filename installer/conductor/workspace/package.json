@@ -10,10 +10,12 @@
   },
   "license": "MIT",
   "scripts": {
-    "prebuild":      "node ../shared/bump-version.js",
-    "build":         "electron-builder --win --x64",
-    "build:darwin":  "electron-builder --mac --x64",
-    "dev":           "electron .",
+    "prebuild":         "node ../shared/bump-version.js",
+    "build":            "electron-builder --win --x64",
+    "build:darwin":     "electron-builder --mac --x64 && electron-builder --mac --arm64",
+    "build:darwin:x64": "electron-builder --mac --x64",
+    "build:darwin:arm": "electron-builder --mac --arm64",
+    "dev":              "electron .",
     "version:bump":  "node ../shared/bump-version.js",
     "version:patch": "node ../shared/bump-version.js --patch",
     "version:minor": "node ../shared/bump-version.js --minor",
@@ -41,17 +43,21 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["x64", "arm64"]
+          "arch": ["x64"]
+        },
+        {
+          "target": "dmg",
+          "arch": ["arm64"]
         }
       ],
       "icon": "assets/bloom.icns",
       "category": "public.app-category.utilities",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
-      "artifactName": "bloom-conductor.dmg"
+      "artifactName": "bloom-conductor-${arch}.dmg"
     },
     "dmg": {
-      "artifactName": "bloom-conductor.dmg",
+      "artifactName": "bloom-conductor-${arch}.dmg",
       "sign": false
     },
     "files": [

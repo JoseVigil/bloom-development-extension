@@ -393,6 +393,37 @@ def run(cmd: list[str], cwd: Path | None = None, env: dict | None = None) -> tup
     return proc.returncode, proc.stdout.strip(), ""
 
 
+def run_streaming(
+    cmd: list[str],
+    cwd: Path | None = None,
+    env: dict | None = None,
+) -> tuple[int, str]:
+    """
+    Ejecuta un comando escribiendo cada línea al log en tiempo real (streaming).
+    Úsalo para procesos largos como electron-builder / npm donde el silencio
+    hace imposible distinguir entre "trabajando" y "colgado".
+
+    Retorna (returncode, output_completo).
+    """
+    proc = subprocess.Popen(
+        cmd,
+        cwd=cwd,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        encoding="utf-8",
+        errors="replace",
+    )
+    lines: list[str] = []
+    assert proc.stdout is not None
+    for raw_line in proc.stdout:
+        line = raw_line.rstrip()
+        lines.append(line)
+        log(line)
+    proc.wait()
+    return proc.returncode, "\n".join(lines)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # CORRECCIÓN 4 — build_brain(): seleccionar PowerShell vs bash
 # ─────────────────────────────────────────────────────────────────────────────
@@ -562,7 +593,9 @@ def build_node(name: str, project_dir: Path, npm_script: str) -> StepResult:
 
     log(f"Ejecutando npm run {npm_script} en {project_dir.name}/ ...")
     cmd = [_NPM, "run", npm_script]
-    code, out, _ = run(cmd, cwd=project_dir, env=env)
+    # run_streaming: escribe cada línea al log en tiempo real para que
+    # procesos largos como electron-builder sean visibles y no parezcan colgados.
+    code, out = run_streaming(cmd, cwd=project_dir, env=env)
     if code != 0:
         tail = "\n".join(out.splitlines()[-20:]) if out else "(sin output)"
         return StepResult(name, False, error=tail)
