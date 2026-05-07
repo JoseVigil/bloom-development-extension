@@ -1,6 +1,6 @@
 // internal/startup/startup_unix.go
 
-//go:build !windows
+//go:build !windows && !darwin
 
 package startup
 

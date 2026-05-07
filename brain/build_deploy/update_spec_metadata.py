@@ -146,8 +146,7 @@ def main() -> int:
         print("\n❌ Failed to update brain.spec")
         return 1
 
-    print("\n✅ brain.spec updated su
-    .ccessfully")
+    print("\n✅ brain.spec updated successfully")
     return 0
 
 

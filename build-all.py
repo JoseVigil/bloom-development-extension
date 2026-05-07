@@ -462,7 +462,7 @@ def build_brain() -> StepResult:
         cmd = ["bash", brain_script.name]
         env = {**os.environ, "BLOOM_PROJECT_ROOT": str(ROOT)}
 
-    code, out, _ = run(cmd, cwd=brain_script.parent, env=env)
+    code, out = run_streaming(cmd, cwd=brain_script.parent, env=env)
     if code != 0:
         return StepResult("Brain", False, error=out)
     return StepResult("Brain", True, output=out)

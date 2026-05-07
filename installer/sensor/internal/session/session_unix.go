@@ -1,11 +1,11 @@
 // internal/session/unix.go
 
-//go:build !windows
+//go:build !windows && !darwin
 
 package session
 
 // Manager gestiona la detección del estado de sesión.
-// En plataformas no-Windows, asume sesión siempre activa.
+// En plataformas no-Windows/no-darwin, asume sesión siempre activa.
 type Manager struct{}
 
 func NewManager() *Manager { return &Manager{} }
