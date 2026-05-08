@@ -6,9 +6,13 @@ set -euo pipefail
 # Equivalente de: builds/windows/build-component.bat
 #
 # Uso (llamado por build-all.py):
-#   bash builds/macos/build-component.sh <component>
+#   bash builds/darwin/build-component.sh <component>
 #
 #   <component> es uno de: nucleus | sentinel | metamorph | sensor
+#
+# Variables de entorno inyectadas por build-all.py:
+#   BLOOM_BUILD_NUMBER   → build number efectivo (base + offset plataforma)
+#   BLOOM_PROJECT_ROOT   → raíz del repo
 #
 # Requiere: go (en PATH)
 # Output:   installer/native/bin/<arch>/
@@ -52,8 +56,9 @@ esac
 # ───────────────────────────────────────────────────────────────
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# builds/macos/ → repo root es ../..
-PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+# builds/darwin/ → repo root es ../..
+# BLOOM_PROJECT_ROOT tiene precedencia si build-all.py lo inyecta
+PROJECT_ROOT="${BLOOM_PROJECT_ROOT:-"$(cd "${SCRIPT_DIR}/../.." && pwd)"}"
 
 COMPONENT_DIR="${PROJECT_ROOT}/installer/${COMPONENT}"
 OUTPUT_DIR="${PROJECT_ROOT}/installer/native/bin/${BIN_ARCH}/${COMPONENT}"
@@ -93,7 +98,6 @@ echo "============================================="
 # VERIFICACIONES PREVIAS
 # ───────────────────────────────────────────────────────────────
 
-# Validar que el componente sea conocido
 case "${COMPONENT}" in
     nucleus|sentinel|metamorph|sensor)
         ;;
@@ -125,6 +129,25 @@ echo "Go: ${GO_VERSION}"
 echo "Go: ${GO_VERSION}" >> "${LOG_FILE}"
 
 # ───────────────────────────────────────────────────────────────
+# BUILD NUMBER
+# ───────────────────────────────────────────────────────────────
+# build-all.py inyecta BLOOM_BUILD_NUMBER con el valor efectivo
+# (base + offset de plataforma). Si el script se corre manualmente
+# sin build-all.py, leer build_number.effective.txt como fallback.
+
+if [[ -z "${BLOOM_BUILD_NUMBER:-}" ]]; then
+    EFFECTIVE_FILE="${PROJECT_ROOT}/installer/${COMPONENT}/scripts/build_number.effective.txt"
+    if [[ -f "${EFFECTIVE_FILE}" ]]; then
+        BLOOM_BUILD_NUMBER="$(cat "${EFFECTIVE_FILE}")"
+    else
+        BLOOM_BUILD_NUMBER="0"
+    fi
+fi
+
+echo "Build number: ${BLOOM_BUILD_NUMBER}"
+echo "Build number: ${BLOOM_BUILD_NUMBER}" >> "${LOG_FILE}"
+
+# ───────────────────────────────────────────────────────────────
 # COMPILACIÓN CON go build
 # ───────────────────────────────────────────────────────────────
 
@@ -134,7 +157,6 @@ echo "Compilando ${COMPONENT}..." >> "${LOG_FILE}"
 
 cd "${COMPONENT_DIR}"
 
-# Verificar que hay go.mod
 if [[ ! -f "go.mod" ]]; then
     echo "❌ Error: go.mod no encontrado en ${COMPONENT_DIR}"
     echo "❌ go.mod no encontrado en ${COMPONENT_DIR}" >> "${LOG_FILE}"
@@ -152,9 +174,8 @@ esac
 
 echo "Build target: ${BUILD_TARGET}" >> "${LOG_FILE}"
 
-# go build con ldflags para reducir tamaño del binario
 go build \
-    -ldflags="-s -w" \
+    -ldflags="-s -w -X main.BuildNumber=${BLOOM_BUILD_NUMBER}" \
     -o "${OUTPUT_BINARY}" \
     "${BUILD_TARGET}" >> "${LOG_FILE}" 2>&1
 

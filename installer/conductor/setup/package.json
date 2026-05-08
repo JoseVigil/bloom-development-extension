@@ -10,30 +10,39 @@
   },
   "license": "MIT",
   "scripts": {
-    "prebuild":         "node ../shared/bump-version.js",
-    "build":            "electron-builder --win --x64",
-    "build:darwin":     "electron-builder --mac --x64 && electron-builder --mac --arm64",
+    "prebuild": "node ../shared/bump-version.js",
+    "build": "electron-builder --win --x64",
+    "build:darwin": "electron-builder --mac --x64 && electron-builder --mac --arm64",
     "build:darwin:x64": "electron-builder --mac --x64",
     "build:darwin:arm": "electron-builder --mac --arm64",
-    "build:win32":      "node ../shared/bump-version.js && electron-builder --win --ia32",
-    "build:win64":      "node ../shared/bump-version.js && electron-builder --win --x64",
-    "dev":              "run-admin.bat",
-    "dev:no-admin":     "electron .",
-    "version:bump":     "node ../shared/bump-version.js",
-    "version:patch":    "node ../shared/bump-version.js --patch",
-    "version:minor":    "node ../shared/bump-version.js --minor",
-    "version:major":    "node ../shared/bump-version.js --major",
-    "version:info":     "node -e \"const i=require('./build_info.json'); console.log(i.product_name, i.full_version, '|', i.built_at);\""
+    "build:win32": "node ../shared/bump-version.js && electron-builder --win --ia32",
+    "build:win64": "node ../shared/bump-version.js && electron-builder --win --x64",
+    "dev": "run-admin.bat",
+    "dev:no-admin": "electron .",
+    "version:bump": "node ../shared/bump-version.js",
+    "version:patch": "node ../shared/bump-version.js --patch",
+    "version:minor": "node ../shared/bump-version.js --minor",
+    "version:major": "node ../shared/bump-version.js --major",
+    "version:info": "node -e \"const i=require('./build_info.json'); console.log(i.product_name, i.full_version, '|', i.built_at);\""
   },
   "build": {
     "appId": "com.bloom.nucleus.installer",
     "productName": "Bloom Nucleus Installer",
     "copyright": "Copyright © 2024 BTIP Studio",
-
     "win": {
       "target": [
-        { "target": "nsis",     "arch": ["x64"] },
-        { "target": "portable", "arch": ["x64"] }
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "icon": "assets/bloom.ico",
       "requestedExecutionLevel": "requireAdministrator",
@@ -42,18 +51,36 @@
       "verifyUpdateCodeSignature": false,
       "signAndEditExecutable": false,
       "extraResources": [
-        { "from": "../../native/bin/win64/ollama", "to": "ollama" },
-        { "from": "../../native/nssm/win64",       "to": "nssm"   }
+        {
+          "from": "../../native/bin/win64/ollama",
+          "to": "ollama"
+        },
+        {
+          "from": "../../native/nssm/win64",
+          "to": "nssm"
+        }
       ],
       "extraFiles": [
-        { "from": "bloom-setup-version.ps1", "to": "bloom-setup-version.ps1" }
+        {
+          "from": "bloom-setup-version.ps1",
+          "to": "bloom-setup-version.ps1"
+        }
       ]
     },
-
     "mac": {
       "target": [
-        { "target": "dmg", "arch": ["x64"]   },
-        { "target": "dmg", "arch": ["arm64"] }
+        {
+          "target": "dmg",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
       ],
       "icon": "assets/bloom.icns",
       "category": "public.app-category.utilities",
@@ -61,12 +88,10 @@
       "gatekeeperAssess": false,
       "artifactName": "bloom-setup-${arch}.dmg"
     },
-
     "dmg": {
       "artifactName": "bloom-setup-${arch}.dmg",
       "sign": false
     },
-
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
@@ -82,11 +107,9 @@
       "perMachine": false,
       "deleteAppDataOnUninstall": false
     },
-
     "portable": {
       "artifactName": "bloom-setup.exe"
     },
-
     "files": [
       "main.js",
       "preload.js",
@@ -106,23 +129,44 @@
       "!node_modules/**/*",
       "!**/*.map"
     ],
-
     "extraResources": [
-      { "from": "../../resources/runtime",                    "to": "runtime"    },
-      { "from": "../../native/bin/${os}_${arch}/nucleus",     "to": "nucleus"    },
-      { "from": "../../native/bin/${os}_${arch}/sentinel",    "to": "sentinel"   },
-      { "from": "../../native/bin/${os}_${arch}/metamorph",   "to": "metamorph"  },
-      { "from": "../../native/bin/${os}_${arch}/brain",       "to": "brain"      },
-      { "from": "../../native/bin/${os}_${arch}/host",        "to": "native"     },
-      { "from": "../../native/bin/cortex",                    "to": "cortex"     },
-      { "from": "../../native/bin/${os}_${arch}/conductor",   "to": "conductor"  }
+      {
+        "from": "../../resources/runtime",
+        "to": "runtime"
+      },
+      {
+        "from": "../../native/bin/${os}_${arch}/nucleus",
+        "to": "nucleus"
+      },
+      {
+        "from": "../../native/bin/${os}_${arch}/sentinel",
+        "to": "sentinel"
+      },
+      {
+        "from": "../../native/bin/${os}_${arch}/metamorph",
+        "to": "metamorph"
+      },
+      {
+        "from": "../../native/bin/${os}_${arch}/brain",
+        "to": "brain"
+      },
+      {
+        "from": "../../native/bin/${os}_${arch}/host",
+        "to": "native"
+      },
+      {
+        "from": "../../native/bin/cortex",
+        "to": "cortex"
+      },
+      {
+        "from": "../../native/bin/${os}_${arch}/conductor",
+        "to": "conductor"
+      }
     ],
-
     "directories": {
       "output": "../../native/bin/${os}_${arch}/setup",
       "buildResources": "assets"
     },
-
     "compression": "maximum",
     "asar": true,
     "asarUnpack": [
@@ -143,6 +187,7 @@
     "unzipper": "^0.12.3"
   },
   "devDependencies": {
+    "@electron-forge/maker-dmg": "^7.11.1",
     "electron": "^28.0.0",
     "electron-builder": "^24.9.1"
   }

@@ -2,9 +2,9 @@
 // Integrated with Nucleus Manager - Atomic Milestones
 // FIXED: Temporal initialization with correct PATH
 //
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // 🔴 TELEMETRY POLICY — CRITICAL
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //
 // ❌ FORBIDDEN in Electron:
 //    - Writing telemetry.json directly
@@ -20,7 +20,7 @@
 //
 // If logs show "telemetry.json.tmp" or "rename telemetry" → IMPLEMENTATION IS INVALID
 //
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 const path = require('path');
 const fs = require('fs-extra');
@@ -34,16 +34,24 @@ const logger = getLogger('installer');
 
 const { preInstallCleanup } = require('./pre-install-cleanup.js');
 
+// ── Brain service installer — condicional por plataforma ──────────────────────
 const {
   cleanupOldServices,
   installWindowsService,
   startService,
+  removeService,
   NEW_SERVICE_NAME
-} = require('./service-installer-brain.js');
+} = process.platform === 'darwin'
+  ? require('./service-installer-brain-darwin.js')
+  : require('./service-installer-brain.js');
 
 const { installRuntime } = require('./runtime-installer');
 const { installChromium } = require('./chromium-installer');
-const { installSensor } = require('./service-installer-sensor');
+
+// ── Sensor installer — condicional por plataforma ─────────────────────────────
+const { installSensor } = process.platform === 'darwin'
+  ? require('./service-installer-sensor-darwin.js')
+  : require('./service-installer-sensor');
 
 const {
   nucleusHealth,
@@ -56,8 +64,8 @@ const {
 // ⚠️ DEPRECADO: deployAllBinaries, deployConductor, deployMetamorph
 // Todas las copias de binarios están ahora en deployAllSystemBinaries()
 
-const SENSOR_EXE_NAME = 'bloom-sensor.exe';
-const SETUP_EXE_NAME  = 'bloom-setup.exe';
+const SENSOR_EXE_NAME = process.platform === 'darwin' ? 'bloom-sensor' : 'bloom-sensor.exe';
+const SETUP_EXE_NAME  = process.platform === 'darwin' ? 'bloom-setup'  : 'bloom-setup.exe';
 
 // ============================================================================
 // PROGRESS REPORTING
@@ -194,8 +202,6 @@ async function runRuntimeInstall(win) {
 
   try {
     // Remover servicio antes de instalar runtime (si existe)
-    const { removeService } = require('./service-installer-brain.js');
-    
     logger.info('Stopping Brain Service before runtime install...');
     await removeService(NEW_SERVICE_NAME);
     await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2s
@@ -344,11 +350,13 @@ async function deployAllSystemBinaries(win) {
       'Python Runtime'
     );
     
-    // Configurar Python en modo aislado
-    const pthFile = path.join(paths.runtimeDir, 'python310._pth');
-    const pthContent = ['.', 'python310.zip', 'Lib', 'Lib\\site-packages'].join('\n');
-    await fs.writeFile(pthFile, pthContent, 'utf8');
-    logger.success('✅ Python configured in ISOLATED mode');
+    // Configurar Python — sólo en Windows necesita el .pth de modo aislado
+    if (process.platform === 'win32') {
+      const pthFile = path.join(paths.runtimeDir, 'python310._pth');
+      const pthContent = ['.', 'python310.zip', 'Lib', 'Lib\\site-packages'].join('\n');
+      await fs.writeFile(pthFile, pthContent, 'utf8');
+      logger.success('✅ Python configured in ISOLATED mode');
+    }
     
     // ========================================================================
     // 2. BRAIN SERVICE (incluye _internal/)
@@ -360,9 +368,14 @@ async function deployAllSystemBinaries(win) {
       'Brain Service'
     );
     
-    // Verificar que brain.exe existe
+    // Verificar que el binario de brain existe (sin extensión en macOS)
     if (!await fs.pathExists(paths.brainExe)) {
-      throw new Error(`brain.exe not found after copy: ${paths.brainExe}`);
+      throw new Error(`brain binary not found after copy: ${paths.brainExe}`);
+    }
+
+    // En macOS asegurar permisos de ejecución (PyInstaller a veces los pierde)
+    if (process.platform === 'darwin') {
+      await fs.chmod(paths.brainExe, 0o755);
     }
     
     // Verificar _internal (PyInstaller dependencies)
@@ -374,63 +387,69 @@ async function deployAllSystemBinaries(win) {
     }
     
     // ========================================================================
-    // 3. NATIVE HOST + DLLs
+    // 3. NATIVE HOST + DLLs (solo Windows)
     // ========================================================================
-    logger.info('\n🔗 NATIVE HOST');
-    
-    // paths.nativeSource apunta a .../native/bin/win64/host/
-    const hostExeSrc = path.join(paths.hostSource, 'bloom-host.exe');
-    
-    results.nativeHost = await copyFileSafe(
-      hostExeSrc,
-      paths.hostBinary,
-      'bloom-host.exe'
-    );
-    
-    // Copiar DLLs asociados del mismo directorio
-    results.hostDLLs = await copyDLLs(
-      paths.hostSource,
-      paths.hostDir,
-      'Host DLLs'
-    );
+    if (process.platform === 'win32') {
+      logger.info('\n🔗 NATIVE HOST');
+      
+      const hostExeSrc = path.join(paths.hostSource, 'bloom-host.exe');
+      
+      results.nativeHost = await copyFileSafe(
+        hostExeSrc,
+        paths.hostBinary,
+        'bloom-host.exe'
+      );
+      
+      results.hostDLLs = await copyDLLs(
+        paths.hostSource,
+        paths.hostDir,
+        'Host DLLs'
+      );
+    }
     
     // ========================================================================
-    // 4. NSSM (Service Manager)
+    // 4. NSSM (solo Windows)
     // ========================================================================
-    logger.info('\n⚙️ NSSM SERVICE MANAGER');
-    
-    const nssmSrc = path.join(paths.nssmSource, 'nssm.exe');
-    results.nssm = await copyFileSafe(
-      nssmSrc,
-      paths.nssmExe,
-      'nssm.exe'
-    );
+    if (process.platform === 'win32') {
+      logger.info('\n⚙️ NSSM SERVICE MANAGER');
+      
+      const nssmSrc = path.join(paths.nssmSource, 'nssm.exe');
+      results.nssm = await copyFileSafe(
+        nssmSrc,
+        paths.nssmExe,
+        'nssm.exe'
+      );
+    }
     
     // ========================================================================
     // 5. NUCLEUS SUITE (Governance)
     // ========================================================================
     logger.info('\n⚖️ NUCLEUS SUITE');
     
-    // Nucleus
     results.nucleus = await copyDirectorySafe(
       paths.nucleusSource,
       paths.nucleusDir,
       'Nucleus'
     );
     
-    // Sentinel
     results.sentinel = await copyDirectorySafe(
       paths.sentinelSource,
       paths.sentinelDir,
       'Sentinel'
     );
     
-    // Metamorph
     results.metamorph = await copyDirectorySafe(
       paths.metamorphSource,
       paths.metamorphDir,
       'Metamorph'
     );
+
+    // En macOS asegurar permisos en todos los binarios Go
+    if (process.platform === 'darwin') {
+      for (const bin of [paths.nucleusExe, paths.sentinelExe, paths.metamorphExe]) {
+        if (await fs.pathExists(bin)) await fs.chmod(bin, 0o755);
+      }
+    }
     
     // ========================================================================
     // 6. CORTEX (Extension Package)
@@ -463,19 +482,15 @@ async function deployAllSystemBinaries(win) {
     // ========================================================================
     logger.info('\n🟢 NODE.JS RUNTIME');
     
-    // paths.nodeSource apunta a la carpeta de plataforma (win64 o win32)
-    // Copiamos solo node.exe directamente a bin/node/node.exe
-    const nodeExeSrc  = path.join(paths.nodeSource, 'node.exe');
-    const nodeExeDest = path.join(paths.nodeDir, 'node.exe');
+    const nodeExeName  = process.platform === 'win32' ? 'node.exe' : 'node';
+    const nodeExeSrc   = path.join(paths.nodeSource, nodeExeName);
+    const nodeExeDest  = path.join(paths.nodeDir, nodeExeName);
 
     if (await fs.pathExists(nodeExeSrc)) {
-      results.node = await copyFileSafe(
-        nodeExeSrc,
-        nodeExeDest,
-        'node.exe'
-      );
+      results.node = await copyFileSafe(nodeExeSrc, nodeExeDest, nodeExeName);
+      if (process.platform === 'darwin') await fs.chmod(nodeExeDest, 0o755);
     } else {
-      logger.warn('⚠️ node.exe source not found, skipping');
+      logger.warn('⚠️ node binary source not found, skipping');
       results.node = { success: false, skipped: true };
     }
     
@@ -496,20 +511,22 @@ async function deployAllSystemBinaries(win) {
     }
     
     // ========================================================================
-    // 10. CONDUCTOR (Wokspace)
+    // 10. CONDUCTOR (Workspace)
     // ========================================================================
     logger.info('\n🎮 CONDUCTOR WORKSPACE');
     
-    const conductorExeSrc = path.join(paths.conductorSource, 'bloom-conductor.exe');
+    const conductorExeName = process.platform === 'darwin' ? 'bloom-conductor' : 'bloom-conductor.exe';
+    const conductorExeSrc  = path.join(paths.conductorSource, conductorExeName);
     
     if (await fs.pathExists(conductorExeSrc)) {
       results.conductor = await copyFileSafe(
         conductorExeSrc,
         paths.conductorExe,
-        'bloom-conductor.exe'
+        conductorExeName
       );
+      if (process.platform === 'darwin') await fs.chmod(paths.conductorExe, 0o755);
     } else {
-      logger.warn('⚠️ bloom-conductor.exe not found, skipping');
+      logger.warn('⚠️ bloom-conductor binary not found, skipping');
       results.conductor = { success: false, skipped: true };
     }
 
@@ -526,8 +543,9 @@ async function deployAllSystemBinaries(win) {
         paths.sensorExe,
         SENSOR_EXE_NAME
       );
+      if (process.platform === 'darwin') await fs.chmod(paths.sensorExe, 0o755);
     } else {
-      logger.warn('⚠️ bloom-sensor.exe not found, skipping');
+      logger.warn('⚠️ bloom-sensor binary not found, skipping');
       results.sensor = { success: false, skipped: true };
     }
 
@@ -544,18 +562,18 @@ async function deployAllSystemBinaries(win) {
         paths.setupExe,
         SETUP_EXE_NAME
       );
+      if (process.platform === 'darwin') await fs.chmod(paths.setupExe, 0o755);
     } else {
       logger.warn(`⚠️ ${SETUP_EXE_NAME} not found, skipping`);
       results.setup = { success: false, skipped: true };
     }
 
     // ========================================================================
-    // 12. PYTHON HOOKS
+    // 13. PYTHON HOOKS
     // ========================================================================
     logger.info('\n🪝 PYTHON HOOKS');
 
     if (await fs.pathExists(paths.hooksSource)) {
-      // Fresh copy: limpiar destino primero
       if (await fs.pathExists(paths.hooksDir)) {
         await fs.remove(paths.hooksDir);
         logger.info('  Cleaned existing hooks directory');
@@ -570,7 +588,7 @@ async function deployAllSystemBinaries(win) {
         results.hooks = { success: false, skipped: true };
       } else {
         for (const folder of hookFolders) {
-          const folderSrc = path.join(paths.hooksSource, folder.name);
+          const folderSrc  = path.join(paths.hooksSource, folder.name);
           const folderDest = path.join(paths.hooksDir, folder.name);
           await fs.copy(folderSrc, folderDest, { overwrite: true });
           logger.info(`  ✓ ${folder.name}`);
@@ -584,12 +602,12 @@ async function deployAllSystemBinaries(win) {
     }
     
     // ========================================================================
-    // 13. VSCODE PLUGIN (bloom-extension.vsix → bin/vscode)
+    // 14. VSCODE PLUGIN (bloom-extension.vsix → bin/vscode)
     // ========================================================================
     logger.info('\n🧩 VSCODE PLUGIN');
 
-    const vsixSrc  = path.join(paths.vscodeSource, 'bloom-extension.vsix'); // native/bin/vscode/bloom-extension.vsix
-    const vsixDest = path.join(paths.vscodeDir,    'bloom-extension.vsix'); // appdata/bin/vscode/bloom-extension.vsix
+    const vsixSrc  = path.join(paths.vscodeSource, 'bloom-extension.vsix');
+    const vsixDest = path.join(paths.vscodeDir,    'bloom-extension.vsix');
 
     if (await fs.pathExists(vsixSrc)) {
       results.vscode = await copyFileSafe(vsixSrc, vsixDest, 'bloom-extension.vsix');
@@ -598,790 +616,10 @@ async function deployAllSystemBinaries(win) {
       results.vscode = { success: false, skipped: true };
     }
 
-    // ========================================================================
-    // 14. BOOTSTRAP (installer/bootstrap/* → bin/bootstrap)
-    // ========================================================================
-    logger.info('\n🥾 BOOTSTRAP');
-
-    const bootstrapFiles = [
-      'bootstrap.meta.json',
-      'bundle.js',
-      'bundle.js.map',
-      'server-bootstrap.js',
-      'version-bootstrap.py'
-    ];
-
-    if (await fs.pathExists(paths.bootstrapSource)) {
-      await fs.ensureDir(paths.bootstrapDir);
-      await fs.ensureDir(paths.bootstrapStaticDir);
-      let bootstrapCopied = 0;
-      for (const file of bootstrapFiles) {
-        const fileSrc  = path.join(paths.bootstrapSource, file);
-        const fileDest = path.join(paths.bootstrapDir, file);
-        if (await fs.pathExists(fileSrc)) {
-          await fs.copy(fileSrc, fileDest, { overwrite: true });
-          logger.info(`  ✓ ${file}`);
-          bootstrapCopied++;
-        } else {
-          logger.warn(`  ⚠️ ${file} not found in source, skipping`);
-        }
-      }
-
-      // Copiar static/logo.svg → bin/bootstrap/static/logo.svg
-      const logoSrc  = path.join(paths.bootstrapSource, 'static', 'logo.svg');
-      const logoDest = path.join(paths.bootstrapStaticDir, 'logo.svg');
-      if (await fs.pathExists(logoSrc)) {
-        await fs.copy(logoSrc, logoDest, { overwrite: true });
-        logger.info(`  ✓ static/logo.svg`);
-        bootstrapCopied++;
-      } else {
-        logger.warn(`  ⚠️ static/logo.svg not found in source, skipping`);
-      }
-
-      logger.success(`✅ Bootstrap deployed (${bootstrapCopied}/${bootstrapFiles.length + 1} files)`);
-      results.bootstrap = { success: true, count: bootstrapCopied };
-    } else {
-      logger.warn('⚠️ Bootstrap source not found, skipping');
-      results.bootstrap = { success: false, skipped: true };
-    }
-
-    // ========================================================================
-    // 15. CONFIG FILES (installer/native/config/* → appdata/config/)
-    // ========================================================================
-    logger.info('\n⚙️ CONFIG FILES');
-
-    if (await fs.pathExists(paths.nativeConfigSource)) {
-      await fs.ensureDir(paths.configDir);
-
-      // Collect all files recursively (including subdirectories like onboarding/)
-      const getAllFiles = async (dir, base) => {
-        const entries = await fs.readdir(dir, { withFileTypes: true });
-        const files = [];
-        for (const entry of entries) {
-          const relPath = base ? path.join(base, entry.name) : entry.name;
-          if (entry.isDirectory()) {
-            const nested = await getAllFiles(path.join(dir, entry.name), relPath);
-            files.push(...nested);
-          } else {
-            files.push(relPath);
-          }
-        }
-        return files;
-      };
-
-      const allConfigFiles = await getAllFiles(paths.nativeConfigSource, '');
-
-      if (allConfigFiles.length === 0) {
-        logger.warn('⚠️ No config files found in source, skipping');
-        results.config = { success: false, skipped: true };
-      } else {
-        let configCopied = 0;
-        for (const relPath of allConfigFiles) {
-          const fileSrc  = path.join(paths.nativeConfigSource, relPath);
-          const fileDest = path.join(paths.configDir, relPath);
-          // Only copy if destination doesn't exist (preserve user changes)
-          if (!await fs.pathExists(fileDest)) {
-            await fs.ensureDir(path.dirname(fileDest));
-            await fs.copy(fileSrc, fileDest, { overwrite: false });
-            logger.info(`  ✓ ${relPath} (new)`);
-          } else {
-            logger.info(`  ⟳ ${relPath} (already exists, skipped)`);
-          }
-          configCopied++;
-        }
-        logger.success(`✅ Config files processed (${configCopied} files)`);
-        results.config = { success: true, count: configCopied };
-      }
-    } else {
-      logger.warn('⚠️ Native config source not found, skipping');
-      results.config = { success: false, skipped: true };
-    }
-
-    // ========================================================================
-    // RESUMEN FINAL
-    // ========================================================================
-    logger.separator('BINARY DEPLOYMENT SUMMARY');
-    
-    const deployed = Object.entries(results)
-      .filter(([_, r]) => r.success && !r.skipped)
-      .map(([name]) => name);
-    
-    const skipped = Object.entries(results)
-      .filter(([_, r]) => r.skipped)
-      .map(([name]) => name);
-    
-    logger.success(`✅ Deployed: ${deployed.length} components`);
-    deployed.forEach(name => logger.info(`   ✓ ${name}`));
-    
-    if (skipped.length > 0) {
-      logger.warn(`⚠️ Skipped: ${skipped.length} components`);
-      skipped.forEach(name => logger.warn(`   - ${name}`));
-    }
-
-    // ========================================================================
-    // GUARDAR ORIGEN DE BINARIOS
-    // Permite a metamorph rollout y otras herramientas saber dónde buscar
-    // los binarios fuente sin depender de variables de entorno.
-    // paths.nucleusSource apunta a .../native/bin/<arch>/nucleus —
-    // su directorio padre es la carpeta de plataforma que usamos como origen.
-    // ========================================================================
-    const originPath = path.dirname(paths.nucleusSource); // .../native/bin/win64
-    const originPlatform = path.basename(originPath);     // 'win64' o 'win32'
-    const { app: electronApp } = require('electron');
-    const originType = (electronApp && electronApp.isPackaged) ? 'remote_release' : 'local_repo';
-
-    nucleusManager.state.installation.origin_path = originPath;
-    nucleusManager.state.installation.origin_type = originType;
-    nucleusManager.state.installation.origin_platform = originPlatform;
-
-    logger.info(`📍 Binary origin recorded: ${originPath} (${originType}, ${originPlatform})`);
-
-    await nucleusManager.completeMilestone(MILESTONE, {
-      deployed: deployed.length,
-      skipped: skipped.length,
-      components: deployed
-    });
-    
+    await nucleusManager.completeMilestone(MILESTONE, results);
     return { success: true, results };
-    
-  } catch (error) {
-    await nucleusManager.failMilestone(MILESTONE, error.message);
-    throw error;
-  }
-}
-
-async function runBinariesDeploy(win) {
-  // Wrapper que llama a la función unificada
-  return await deployAllSystemBinaries(win);
-}
-
-// ============================================================================
-// VSCODE EXTENSION INSTALLER
-// ============================================================================
-
-/**
- * Instala o actualiza bloom-extension.vsix en VS Code.
- * Requiere que el .vsix ya esté deployado en bin/vscode/ (runBinariesDeploy).
- * 
- * Estrategia:
- *  - Busca `code` en PATH y en rutas estándar de instalación de VS Code.
- *  - Ejecuta: code --install-extension <vsix> --force
- *    El flag --force actualiza la extensión si ya está instalada.
- *  - No es un milestone crítico: un fallo loguea warning pero no aborta la instalación.
- */
-async function installVSCodeExtension(win) {
-  const MILESTONE = 'vscode_extension';
-
-  if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
-    logger.info(`⭐️ ${MILESTONE} completed, skipping`);
-    return { success: true, skipped: true };
-  }
-
-  await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 4.5, 11, 'Installing VS Code extension...');
-
-  try {
-    logger.separator('INSTALLING VSCODE EXTENSION');
-
-    const vsixPath = path.join(paths.vscodeDir, 'bloom-extension.vsix');
-
-    if (!await fs.pathExists(vsixPath)) {
-      logger.warn(`⚠️ bloom-extension.vsix not found at: ${vsixPath}`);
-      await nucleusManager.completeMilestone(MILESTONE, { skipped: true, reason: 'vsix_not_found' });
-      return { success: true, skipped: true };
-    }
-
-    // Candidatos para el ejecutable de VS Code en Windows
-    const codeCandidates = [
-      'code',   // code en PATH (instalación de usuario o sistema)
-      path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Microsoft VS Code', 'bin', 'code.cmd'),
-      path.join(process.env.ProgramFiles  || '', 'Microsoft VS Code',            'bin', 'code.cmd'),
-      path.join(process.env['ProgramFiles(x86)'] || '', 'Microsoft VS Code',     'bin', 'code.cmd'),
-    ];
-
-    let codeExe = null;
-    for (const candidate of codeCandidates) {
-      // Para 'code' (sin path absoluto) confiamos en PATH; para el resto verificamos existencia
-      if (candidate === 'code') {
-        codeExe = candidate;
-        break;
-      }
-      if (await fs.pathExists(candidate)) {
-        codeExe = candidate;
-        break;
-      }
-    }
-
-    if (!codeExe) {
-      logger.warn('⚠️ VS Code CLI not found — extension will not be installed automatically');
-      await nucleusManager.completeMilestone(MILESTONE, { skipped: true, reason: 'code_cli_not_found' });
-      return { success: true, skipped: true };
-    }
-
-    logger.info(`Using VS Code CLI: ${codeExe}`);
-    logger.info(`Installing extension from: ${vsixPath}`);
-
-    // --force permite instalar aunque la versión ya esté presente (actualiza si hay nueva)
-    const result = await new Promise((resolve) => {
-      const child = spawn(codeExe, ['--install-extension', vsixPath, '--force'], {
-        windowsHide: true,
-        timeout: 60000,
-        shell: true   // necesario para .cmd en Windows
-      });
-
-      let stdout = '';
-      let stderr = '';
-
-      child.stdout.on('data', (data) => {
-        stdout += data.toString();
-        logger.debug(`  [code] ${data.toString().trim()}`);
-      });
-      child.stderr.on('data', (data) => {
-        stderr += data.toString();
-      });
-
-      child.on('close', (code) => {
-        resolve({ exitCode: code, stdout, stderr });
-      });
-
-      child.on('error', (err) => {
-        resolve({ exitCode: -1, stdout, stderr, error: err.message });
-      });
-    });
-
-    if (result.exitCode === 0) {
-      logger.success('✅ bloom-extension installed/updated in VS Code');
-      await nucleusManager.completeMilestone(MILESTONE, {
-        vsix_path: vsixPath,
-        code_cli: codeExe,
-        exit_code: result.exitCode
-      });
-      return { success: true };
-    } else {
-      // No es fatal — el usuario puede no tener VS Code instalado
-      logger.warn(`⚠️ VS Code extension install returned exit code ${result.exitCode}`);
-      if (result.stderr) logger.warn(`   stderr: ${result.stderr.trim()}`);
-      await nucleusManager.completeMilestone(MILESTONE, {
-        skipped: true,
-        reason: `exit_code_${result.exitCode}`,
-        stderr: result.stderr
-      });
-      return { success: true, skipped: true };
-    }
 
   } catch (error) {
-    // No abortar la instalación por fallos del plugin de VS Code
-    logger.warn(`⚠️ VS Code extension install warning: ${error.message}`);
-    await nucleusManager.failMilestone(MILESTONE, error.message);
-    return { success: false, non_critical: true };
-  }
-}
-
-// ============================================================================
-// HOOKS DEPLOY
-// ============================================================================
-
-async function deployHooks() {
-  logger.info('Deploying Python hooks...');
-
-  const src = paths.hooksSource;
-  const dest = paths.hooksDir;
-
-  if (!await fs.pathExists(src)) {
-    logger.warn(`⚠️ Hooks source not found, skipping: ${src}`);
-    return;
-  }
-
-  // Fresh copy: borrar destino y copiar limpio
-  if (await fs.pathExists(dest)) {
-    await fs.remove(dest);
-    logger.info(`  Cleaned existing hooks dir: ${dest}`);
-  }
-
-  await fs.ensureDir(dest);
-
-  // Copiar solo las subcarpetas (y sus contenidos) que haya en src
-  const entries = await fs.readdir(src, { withFileTypes: true });
-  const folders = entries.filter(e => e.isDirectory());
-
-  if (folders.length === 0) {
-    logger.warn('⚠️ No hook folders found in source, skipping');
-    return;
-  }
-
-  for (const folder of folders) {
-    const folderSrc = path.join(src, folder.name);
-    const folderDest = path.join(dest, folder.name);
-    await fs.copy(folderSrc, folderDest, { overwrite: true });
-    logger.info(`  ✓ Copied hook: ${folder.name}`);
-  }
-
-  logger.success(`✅ Hooks deployed to: ${dest}`);
-}
-
-async function runConductorDeploy(win) {
-  const MILESTONE = 'conductor';
-  
-  if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
-    logger.info(`⭐️ ${MILESTONE} completed, skipping`);
-    return { success: true, skipped: true };
-  }
-
-  emitProgress(win, 5, 9, 'Deploying Conductor...');
-
-  try {
-    const result = await deployConductor(win);
-    return result;
-
-  } catch (error) {
-    throw error;
-  }
-}
-
-async function runMetamorphDeploy(win) {
-  const MILESTONE = 'metamorph';
-  
-  if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
-    logger.info(`⭐️ ${MILESTONE} completed, skipping`);
-    return { success: true, skipped: true };
-  }
-
-  emitProgress(win, 6, 9, 'Deploying Metamorph...');
-
-  try {
-    const result = await deployMetamorph(win);
-    return result;
-
-  } catch (error) {
-    throw error;
-  }
-}
-
-// ============================================================================
-// METAMORPH AUDIT - Snapshot de versiones post-deploy
-// ============================================================================
-
-async function runMetamorphAudit(win) {
-  const MILESTONE = 'metamorph_audit';
-
-  if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
-    logger.info(`⭐️ ${MILESTONE} completed, skipping`);
-    return { success: true, skipped: true };
-  }
-
-  await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 5, 11, 'Auditing deployed binaries...');
-
-  const metamorphExe = paths.metamorphExe;
-
-  if (!fs.existsSync(metamorphExe)) {
-    // No es fatal — metamorph puede no estar deployado en todos los entornos
-    logger.warn('⚠️ metamorph.exe not found, skipping audit');
-    await nucleusManager.completeMilestone(MILESTONE, { skipped: true, reason: 'metamorph_not_found' });
-    return { success: true, skipped: true };
-  }
-
-  try {
-    logger.separator('METAMORPH AUDIT');
-
-    // inspect --all : genera config/metamorph.json con versiones y hashes de todos los binarios.
-    // Este es el snapshot inicial post-install. verify-sync NO se usa aquí — ese comando es para
-    // detectar drift en producción (comparando source vs destino). En instalación fresca, el
-    // source de verdad es el deploy que acabamos de hacer, no un hash comparison contra staging.
-    logger.info('🔍 Running metamorph inspect --all...');
-    const inspectResult = await executeMetamorphCommand(['--json', 'inspect', '--all']);
-
-    const managed  = inspectResult.summary?.managed_count  ?? 0;
-    const external = inspectResult.summary?.external_count ?? 0;
-    const healthy  = inspectResult.summary?.healthy_count  ?? 0;
-    const missing  = inspectResult.summary?.missing_count  ?? 0;
-
-    logger.success(`   ✓ Snapshot saved — managed: ${managed}, external: ${external}, healthy: ${healthy}, missing: ${missing}`);
-
-    // Validar que los binarios críticos (managed) están presentes en disco.
-    // Un binario con hash vacío o size 0 significa que metamorph no pudo leerlo.
-    // No exigimos 'healthy' porque algunos binarios válidos (Host, Conductor, Setup)
-    // no exponen versión semántica y quedan en status 'unknown' — eso es esperado.
-    const CRITICAL_MANAGED = ['Brain', 'Nucleus', 'Sentinel', 'Host', 'Metamorph', 'Sentinel', 'Cortex'];
-    const notFound = (inspectResult.managed_binaries || []).filter(b => {
-      return CRITICAL_MANAGED.includes(b.name) && b.size_bytes === 0;
-    });
-
-    if (notFound.length > 0) {
-      const names = notFound.map(b => b.name).join(', ');
-      throw new Error(`Critical binaries not found on disk after deploy: ${names}`);
-    }
-
-    logger.success(`   ✓ All critical binaries present on disk`);
-
-    await nucleusManager.completeMilestone(MILESTONE, {
-      managed,
-      external,
-      healthy,
-      missing,
-    });
-
-    return { success: true, managed, healthy };
-
-  } catch (error) {
-    await nucleusManager.failMilestone(MILESTONE, error.message);
-    throw error;
-  }
-}
-
-async function executeMetamorphCommand(args) {
-  return new Promise((resolve, reject) => {
-    const { spawn } = require('child_process');
-
-    const child = spawn(paths.metamorphExe, args, {
-      cwd: paths.metamorphDir,
-      env: { ...process.env },
-      shell: false,
-      windowsHide: true,
-      stdio: ['ignore', 'pipe', 'pipe']
-    });
-
-    let stdout = '';
-    let stderr = '';
-
-    child.stdout.setEncoding('utf8');
-    child.stderr.setEncoding('utf8');
-    child.stdout.on('data', d => { stdout += d; });
-    child.stderr.on('data', d => { stderr += d; });
-
-    child.on('close', () => {
-      try {
-        // Parser multilínea: acumular líneas desde el primer { o [
-        // hasta que las llaves/corchetes queden balanceados
-        const lines = stdout.split('\n');
-        let inJson = false;
-        let braceCount = 0;
-        let jsonLines = [];
-
-        for (const line of lines) {
-          const t = line.trim();
-
-          if (!inJson && (t.startsWith('{') || t.startsWith('['))) {
-            inJson = true;
-          }
-
-          if (inJson) {
-            jsonLines.push(line);
-            for (const char of t) {
-              if (char === '{' || char === '[') braceCount++;
-              if (char === '}' || char === ']') braceCount--;
-            }
-            if (braceCount === 0) break;
-          }
-        }
-
-        if (jsonLines.length === 0) {
-          throw new Error(`No JSON found in output. stdout: ${stdout.slice(0, 200)}`);
-        }
-
-        resolve(JSON.parse(jsonLines.join('\n')));
-      } catch (e) {
-        if (stderr) logger.warn('[Metamorph stderr]', stderr.trim());
-        reject(new Error(`metamorph JSON parse failed: ${e.message}`));
-      }
-    });
-
-    child.on('error', err => reject(err));
-
-    const timeoutHandle = setTimeout(() => {
-      if (!child.killed) {
-        child.kill();
-        reject(new Error('metamorph command timeout'));
-      }
-    }, 30000);
-
-    child.on('close', () => clearTimeout(timeoutHandle));
-  });
-}
-
-async function installBrainService(win) {
-  const MILESTONE = 'brain_service_install';
-  
-  if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
-    logger.info(`⭐️ ${MILESTONE} completed, skipping`);
-    return { success: true, skipped: true };
-  }
-
-  await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 6, 11, 'Installing Brain Service...');
-
-  try {
-    logger.separator('INSTALLING BRAIN SERVICE');
-
-    // Usar el método JavaScript puro que funcionaba antes
-    await installWindowsService();
-    const started = await startService();
-    
-    if (!started) {
-      throw new Error('Brain Service failed to start');
-    }
-
-    logger.success('✅ Brain Service installed and running');
-
-    await nucleusManager.completeMilestone(MILESTONE, { service_running: true });
-    return { success: true };
-
-  } catch (error) {
-    await nucleusManager.failMilestone(MILESTONE, error.message);
-    throw error;
-  }
-}
-
-// ============================================================================
-// NUCLEUS SERVICE BOOT SEQUENCE
-// ============================================================================
-
-async function seedMasterProfile(win) {
-  const MILESTONE = 'nucleus_seed';
-  
-  if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
-    logger.info(`⭐️ ${MILESTONE} completed, skipping`);
-    return { success: true, skipped: true };
-  }
-
-  await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 10, 11, 'Seeding Master Profile...');
-
-  try {
-    logger.separator('SEEDING MASTER PROFILE');
-
-    // Usar Nucleus synapse seed para CREAR/REGISTRAR el perfil
-    const result = await executeNucleusCommand([
-      '--json',
-      'synapse',
-      'seed',
-      'MasterWorker',
-      'true'
-    ]);
-
-    // Validar estructura de respuesta de nucleus synapse seed
-    // Nucleus retorna: { success, profile_id, alias, is_master, workflow_id, ... }
-    if (!result.success || !result.profile_id) {
-      throw new Error('Seed failed: no UUID returned in response');
-    }
-
-    const uuid = result.profile_id;
-
-    logger.success(`✔ Master profile UUID: ${uuid}`);
-    logger.info(`   Alias: ${result.alias}`);
-    logger.info(`   Is Master: ${result.is_master}`);
-    logger.info(`   Workflow: ${result.workflow_id}`);
-
-    await nucleusManager.setMasterProfile(uuid);
-    await nucleusManager.completeMilestone(MILESTONE, { 
-      uuid,
-      alias: result.alias,
-      is_master: result.is_master,
-      workflow_id: result.workflow_id
-    });
-
-    return { 
-      success: true, 
-      uuid,
-      alias: result.alias,
-      is_master: result.is_master
-    };
-
-  } catch (error) {
-    await nucleusManager.failMilestone(MILESTONE, error.message);
-    throw error;
-  }
-}
-
-async function launchMasterProfile(win) {
-  const MILESTONE = 'nucleus_launch';
-
-  if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
-    logger.info(`⭐️ ${MILESTONE} completed, skipping`);
-    return { success: true, skipped: true };
-  }
-
-  await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 11, 11, 'Launching Master Profile...');
-
-  // ── Señal inmediata al renderer para mostrar pantalla heartbeat ──
-  const profileUuidEarly = nucleusManager.state.master_profile;
-  if (win && win.webContents) {
-    win.webContents.send('heartbeat:starting', { profile_id: profileUuidEarly });
-  }
-
-  // ── Reposicionar ventana al borde izquierdo, centrada verticalmente ──
-  try {
-    const { screen } = require('electron');
-    const display = screen.getPrimaryDisplay();
-    const { height: sh } = display.workAreaSize;
-    const [, wh] = win.getSize();
-
-    const x = 32;
-    const y = Math.round((sh - wh) / 2);
-
-    win.setPosition(x, y, true);
-    win.setAlwaysOnTop(true, 'floating');
-    logger.info(`🪟 Installer anchored to left edge: x=${x}, y=${y}`);
-  } catch (posErr) {
-    logger.warn(`⚠️ Could not reposition window: ${posErr.message}`);
-  }
-
-  try {
-    logger.separator('NUCLEUS LAUNCH - HEARTBEAT VALIDATION');
-
-    const profileUuid = nucleusManager.state.master_profile;
-    if (!profileUuid) {
-      throw new Error('Master profile UUID not found. Run seed first.');
-    }
-
-    logger.info(`Profile UUID: ${profileUuid}`);
-
-    // =========================================================================
-    // PASO 1: Asegurar que Temporal está activo
-    // =========================================================================
-    logger.info('Step 1/3: Ensuring Temporal is ready...');
-
-    const ensureResult = await executeNucleusCommand([
-      '--json',
-      'temporal',
-      'ensure'
-    ]);
-
-    if (!ensureResult.success) {
-      throw new Error(`Temporal ensure failed: ${ensureResult.error || 'Unknown error'}`);
-    }
-
-    logger.success('✓ Temporal server active');
-
-    // =========================================================================
-    // PASO 2: synapse launch — lanza Sentinel con Chromium
-    // =========================================================================
-    logger.info('Step 2/3: Launching Sentinel...');
-
-    const launchResult = await executeNucleusCommand([
-      '--json',
-      'synapse',
-      'launch',
-      profileUuid,
-      '--mode', 'discovery'
-    ]);
-
-    if (!launchResult.success) {
-      throw new Error(`Launch failed: ${launchResult.error || 'Unknown error'}`);
-    }
-
-    if (!launchResult.extension_loaded) {
-      throw new Error('Extension not loaded after launch');
-    }
-
-    logger.success('✓ Sentinel launched');
-    logger.info(`   PID: ${launchResult.chrome_pid}`);
-    logger.info(`   Debug port: ${launchResult.debug_port}`);
-    logger.info(`   Extension loaded: ${launchResult.extension_loaded}`);
-
-    // Sentinel activo + extensión cargada → señal de que el handshake puede comenzar
-    if (win && win.webContents) {
-      win.webContents.send('heartbeat:launch-done', {
-        profile_id: profileUuid,
-        chrome_pid: launchResult.chrome_pid,
-        extension_loaded: launchResult.extension_loaded
-      });
-    }
-
-    // =========================================================================
-    // PASO 3: synapse status — verifica que el workflow del perfil está READY
-    // Usa polling con reintentos para dar tiempo a Temporal de procesar el launch.
-    // NOTA: No usamos `nucleus heartbeat` aquí porque requiere org inicializada,
-    // y durante install la org todavía no existe (se crea en onboarding).
-    // synapse status solo consulta el estado del workflow en Temporal — no requiere org.
-    // =========================================================================
-    logger.info('Step 3/3: Verifying profile status (polling up to 30s)...');
-    let profileState = null;
-    let lastSentinelRunning = false;  // Track sentinel_running across iterations
-    const maxAttempts = 10;
-    const delayMs = 3000;
-
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      await new Promise(resolve => setTimeout(resolve, delayMs));
-
-      const statusResult = await executeNucleusCommand([
-        '--json',
-        'synapse',
-        'status',
-        profileUuid
-      ]);
-
-      if (!statusResult.success) {
-        throw new Error(`Profile status check failed: ${statusResult.error || 'Unknown error'}`);
-      }
-
-      // nucleus --json synapse status retorna: { success: true, status: { profile_id, state, sentinel_running, ... } }
-      const rawState = statusResult.state || statusResult.status;
-      const stateObj = typeof rawState === 'object' ? rawState : null;
-      const stateName = stateObj?.state || stateObj?.name || (typeof rawState === 'string' ? rawState : JSON.stringify(rawState));
-      const sentinelRunning = stateObj?.sentinel_running ?? statusResult.sentinel_running ?? false;
-      profileState = stateName;
-      lastSentinelRunning = sentinelRunning;  // Persist for post-loop check
-      logger.info(`  Attempt ${attempt}/${maxAttempts}: state = ${JSON.stringify(rawState)}`);
-
-      if (profileState === 'DEGRADED' || profileState === 'FAILED') {
-        throw new Error(`Profile entered terminal state during launch: ${profileState}. Check sentinel logs.`);
-      }
-
-      // READY   = onboarding completado (re-instalaciones / flows post-onboarding)
-      // RUNNING + sentinel_running = Sentinel activo durante instalación fresca.
-      // READY solo lo asigna Brain via EventOnboardingComplete, que ocurre DESPUÉS
-      // de la instalación. En el primer boot, RUNNING+sentinel_running es el éxito correcto.
-      if (profileState === 'READY') { break; }
-      if (profileState === 'RUNNING' && sentinelRunning) { break; }
-    }
-
-    // Determinar si el estado final es operativo.
-    // lastSentinelRunning se actualizó en el loop con cada respuesta de status.
-    const isProfileOperational = profileState === 'READY' || (profileState === 'RUNNING' && lastSentinelRunning);
-
-    if (!isProfileOperational) {
-      throw new Error(`Profile not operational after launch (state: ${JSON.stringify(profileState)}). Expected RUNNING+sentinel or READY.`);
-    }
-
-    // =========================================================================
-    // VALIDACIÓN EXITOSA
-    // =========================================================================
-    logger.success('\u2705 LAUNCH VALIDATED');
-    logger.info(`   Profile: ${profileUuid}`);
-    logger.info(`   Chrome PID: ${launchResult.chrome_pid}`);
-    logger.info(`   Extension: LOADED`);
-    logger.info(`   Workflow state: ${profileState}`);
-    logger.info('   \u2713 Temporal workflows operational');
-    logger.info('   \u2713 Sentinel launched successfully');
-    logger.info('   \u2713 Profile READY in Temporal');
-
-    // Señal final al renderer: handshake completo → círculo verde
-    if (win && win.webContents) {
-      win.webContents.send('heartbeat:validated', {
-        profile_id: profileUuid,
-        profile_state: profileState,
-        chrome_pid: launchResult.chrome_pid
-      });
-    }
-
-    await nucleusManager.completeMilestone(MILESTONE, {
-      profile_id: profileUuid,
-      chrome_pid: launchResult.chrome_pid,
-      extension_loaded: launchResult.extension_loaded,
-      debug_port: launchResult.debug_port,
-      profile_state: profileState
-    });
-
-    return {
-      success: true,
-      launch_validated: true,
-      launch_result: launchResult
-    };
-
-  } catch (error) {
-    logger.error('❌ Launch/Heartbeat failed:', error.message);
     await nucleusManager.failMilestone(MILESTONE, error.message);
     throw error;
   }
@@ -1401,17 +639,17 @@ async function installNucleusService(win) {
   try {
     logger.separator('INSTALLING NUCLEUS SERVICE (CRITICAL 24/7)');
 
+    // ── Nucleus installer — condicional por plataforma ─────────────────────
     const { 
       installNucleusService: installNucleus,
       startNucleusService
-    } = require('./service-installer-nucleus');
+    } = process.platform === 'darwin'
+      ? require('./service-installer-nucleus-darwin.js')
+      : require('./service-installer-nucleus');
 
-    // Instalar servicio Windows con NSSM
-    logger.info('Installing Windows service via NSSM...');
+    logger.info('Installing service...');
     await installNucleus();
     
-    // Iniciar servicio (internamente ejecuta: nucleus service start)
-    // service start internamente ejecuta dev-start para arrancar componentes
     logger.info('Starting Nucleus Service...');
     const started = await startNucleusService();
     
@@ -1451,7 +689,6 @@ async function runCertification(win) {
     logger.info('Waiting for Nucleus Service to complete component initialization...');
     logger.info('Service is booting: Temporal, Brain');
     
-    // Esperar 15 segundos para que service start complete el boot de componentes básicos
     const bootWaitTime = 15;
     for (let i = 1; i <= bootWaitTime; i++) {
       if (i % 5 === 0) {
@@ -1463,19 +700,12 @@ async function runCertification(win) {
     logger.info('Running health check...');
     const healthResult = await nucleusHealth();
 
-    // CRÍTICO: nucleusHealth ahora devuelve un objeto estructurado incluso en caso de error
-    // Formato: { success: boolean, state: string, components: {...}, error: string, timestamp: number }
-    
     if (!healthResult || !healthResult.components) {
       throw new Error('Invalid health result structure');
     }
 
-    // Log del estado general
     logger.info(`Health check returned: ${healthResult.state || 'UNKNOWN'}`);
     
-    // CRÍTICO: Solo verificar componentes mínimos necesarios para SEED
-    // - brain_service: necesario para operaciones básicas
-    // - temporal: necesario para ejecutar workflows (seed usa workflows)
     const critical = ['brain_service', 'temporal'];
     const unhealthy = [];
     
@@ -1499,10 +729,6 @@ async function runCertification(win) {
     }
 
     logger.success('✅ SYSTEM CERTIFIED (Pre-Seed Phase)');
-    logger.info('  Minimum components ready for seed:');
-    logger.info('    ✓ brain_service: RUNNING');
-    logger.info('    ✓ temporal: RUNNING');
-    logger.info('  Additional components will be verified after seed completes');
 
     await nucleusManager.completeMilestone(MILESTONE, {
       pre_seed_certification: true,
@@ -1538,7 +764,6 @@ async function installSessionSensor(win) {
     const started = await installSensor();
 
     if (!started) {
-      // No es fatal — el sensor puede no tener sesión interactiva durante CI/install remoto
       logger.warn('⚠️ bloom-sensor did not confirm RUNNING — may start on next user login');
     }
 
@@ -1546,7 +771,6 @@ async function installSessionSensor(win) {
     return { success: true };
 
   } catch (error) {
-    // No lanzar — sensor no es crítico para completar la instalación
     logger.warn(`⚠️ Session sensor install warning: ${error.message}`);
     await nucleusManager.failMilestone(MILESTONE, error.message);
     return { success: false, non_critical: true };

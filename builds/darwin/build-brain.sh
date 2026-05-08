@@ -6,7 +6,10 @@ set -euo pipefail
 # Equivalente de: builds/windows/brain.ps1
 #
 # Uso (llamado por build-all.py):
-#   bash builds/macos/build-brain.sh
+#   bash builds/darwin/build-brain.sh
+#
+# Variables de entorno inyectadas por build-all.py:
+#   BLOOM_PROJECT_ROOT   → raíz del repo
 #
 # Delega en: brain/build_multiplatform/build.py
 # Requiere:  python3, pip, pyinstaller
@@ -20,8 +23,9 @@ DETECTED_ARCH=$(uname -m)
 # ───────────────────────────────────────────────────────────────
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# builds/macos/ → repo root es ../..
-PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+# builds/darwin/ → repo root es ../..
+# BLOOM_PROJECT_ROOT tiene precedencia si build-all.py lo inyecta
+PROJECT_ROOT="${BLOOM_PROJECT_ROOT:-"$(cd "${SCRIPT_DIR}/../.." && pwd)"}"
 
 BRAIN_DIR="${PROJECT_ROOT}/brain"
 BUILD_SCRIPT="${BRAIN_DIR}/build_multiplatform/build.py"

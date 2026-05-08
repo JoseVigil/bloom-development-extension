@@ -815,7 +815,7 @@ def _print_summary(results: list[StepResult]) -> None:
 
 ALL_STEP_NAMES = [
     "brain", "host", "nucleus", "sentinel", "metamorph",
-    "sensor", "conductor", "cortex", "bootstrap", "vsix",
+    "sensor", "conductor", "conductor_pkg", "cortex", "bootstrap", "vsix",
 ]
 
 
@@ -846,6 +846,61 @@ def _parse_args() -> argparse.Namespace:
         help="Saltar estos pasos",
     )
     return parser.parse_args()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# build_conductor_package — electron-builder en setup/ y workspace/
+# Genera el instalador nativo: .exe en Windows, .dmg en macOS.
+# Se ejecuta DESPUÉS de conductor (build:all) para que el código esté compilado.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def build_conductor_package() -> StepResult:
+    """
+    Ejecuta el script de packaging nativo en installer/conductor/setup/
+    y installer/conductor/workspace/.
+    - macOS: npm run build:darwin
+    - Windows: npm run build  (build:win64)
+    """
+    conductor_root = ROOT / "installer" / "conductor"
+    targets = [
+        conductor_root / "setup",
+        conductor_root / "workspace",
+    ]
+
+    npm_script = "build:darwin" if IS_MACOS else "build"
+
+    env = {**os.environ}
+    build_num = resolve_build_number("conductor") if "conductor" in _BUILD_NUMBER_DIRS else None
+    if build_num is not None:
+        env["BLOOM_BUILD_NUMBER"] = str(build_num)
+
+    all_output: list[str] = []
+
+    for target in targets:
+        if not target.exists():
+            log(f"  ⚠ Directorio no encontrado, saltando: {target.name}/")
+            continue
+
+        pkg_json = target / "package.json"
+        if not pkg_json.exists():
+            log(f"  ⚠ package.json no encontrado en {target.name}/, saltando")
+            continue
+
+        log(f"Ejecutando npm run {npm_script} en {target.name}/ ...")
+        cmd = [_NPM, "run", npm_script]
+        code, out = run_streaming(cmd, cwd=target, env=env)
+        all_output.append(out)
+
+        if code != 0:
+            tail = "\n".join(out.splitlines()[-20:]) if out else "(sin output)"
+            return StepResult(
+                "ConductorPkg", False,
+                error=f"npm run {npm_script} falló en {target.name}/:\n{tail}"
+            )
+
+        log(f"✅ package completado en {target.name}/")
+
+    return StepResult("ConductorPkg", True, output="\n".join(all_output))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -896,7 +951,9 @@ def main() -> None:
         ("metamorph", "Metamorph", lambda: build_go_component("metamorph")),
         ("sensor",    "Sensor",    lambda: build_go_component("sensor")),
         # Conductor: npm run build:all en installer/conductor/
-        ("conductor", "Conductor", lambda: build_node("Conductor", BUILDS["conductor"], "build:all")),  # type: ignore[arg-type]
+        ("conductor",     "Conductor",    lambda: build_node("Conductor", BUILDS["conductor"], "build:all")),  # type: ignore[arg-type]
+        # ConductorPkg: electron-builder en setup/ y workspace/ → genera .dmg / .exe
+        ("conductor_pkg", "ConductorPkg", build_conductor_package),
         # Cortex: python3 package.py (no bash, no npm)
         ("cortex",    "Cortex",    build_cortex),
         # Bootstrap: python3 version-bootstrap.py (no bash)
