@@ -31,7 +31,9 @@ bloom-development-extension/
     │       ├── __pycache__/ [... cache]
     │       ├── platform_detector.py
     │       └── telemetry_helper.py
+    ├── build_number.darwin.txt
     ├── build_number.txt
+    ├── build_number.windows.txt
     ├── cli/
     │   ├── __init__.py
     │   ├── __pycache__/ [... cache]
@@ -136,8 +138,10 @@ bloom-development-extension/
     │   │   └── validate.py
     │   ├── ionpump/
     │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
     │   │   ├── auth.ion
     │   │   ├── ion.manifest.json
+    │   │   ├── ionpump.py
     │   │   ├── ionpump_inspect.py
     │   │   ├── ionpump_reload.py
     │   │   ├── ionpump_test.py
@@ -283,6 +287,7 @@ bloom-development-extension/
     │   ├── intent_manager.py
     │   ├── ionpump/
     │   │   ├── __init__.py
+    │   │   ├── __pycache__/ [... cache]
     │   │   ├── ionpump_executor.py
     │   │   ├── ionpump_ipc.py
     │   │   ├── ionpump_loader.py
@@ -332,6 +337,7 @@ bloom-development-extension/
     │   │           │   └── styles.css
     │   │           ├── harness/
     │   │           │   ├── __init__.py
+    │   │           │   ├── __pycache__/ [... cache]
     │   │           │   ├── index.html
     │   │           │   ├── ion.manifest.json
     │   │           │   └── ionpump_protocol.js

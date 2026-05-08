@@ -652,4 +652,10 @@ elias
 gsm_runtime
 https://grok.com/c/cca39139-846e-4f06-9503-0a8649fae674?rid=6528c93b-74b9-498a-b2bd-da35cd122f29
 
+gestureos 
+buidl mac
+https://claude.ai/chat/ef700fa7-4f15-4e09-bf7f-27995e9c27af
 
+JV
+migracion windows a darwin
+https://claude.ai/chat/bbb7240a-9b49-418b-8720-a3a113071e9e

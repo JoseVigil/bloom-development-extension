@@ -14,6 +14,7 @@ bloom-development-extension/
     │   ├── clean_chrome_cache.ps1
     │   ├── cleanup_zombies.ps1
     │   ├── fix_bridge_id.py
+    │   ├── make_icns.sh
     │   └── sanitize_manifest.py
     ├── setup/
     │   ├── app.manifest
@@ -22,6 +23,8 @@ bloom-development-extension/
     │   │   └── installer.gif
     │   ├── bloom-setup-version.ps1
     │   ├── build_info.json
+    │   ├── build_number.darwin.txt
+    │   ├── build_number.windows.txt
     │   ├── config/
     │   │   ├── constants.js
     │   │   └── paths.js
@@ -40,8 +43,11 @@ bloom-development-extension/
     │   │   ├── nucleus_manager.js
     │   │   ├── pre-install-cleanup.js
     │   │   ├── runtime-installer.js
+    │   │   ├── service-installer-brain-darwin.js
     │   │   ├── service-installer-brain.js
+    │   │   ├── service-installer-nucleus-darwin.js
     │   │   ├── service-installer-nucleus.js
+    │   │   ├── service-installer-sensor-darwin.js
     │   │   └── service-installer-sensor.js
     │   ├── ipc/
     │   │   ├── install-handlers.js
@@ -80,22 +86,30 @@ bloom-development-extension/
     ├── shared/
     │   ├── build-info.js
     │   ├── bump-version.js
+    │   ├── global_paths.js
     │   └── logger.js
     └── workspace/
         ├── assets/
+        │   ├── bloom.icns
         │   └── bloom.ico
         ├── bloom-conductor-version.ps1
         ├── build_info.json
-        ├── conductor.html
-        ├── ipc/
-        │   ├── health-handlers.js
-        │   └── profiles-handlers.js
+        ├── build_number.darwin.txt
+        ├── build_number.windows.txt
+        ├── core/
+        │   ├── core.html
+        │   ├── ipc/
+        │   │   ├── health-handlers.js
+        │   │   └── profiles-handlers.js
+        │   └── preload_core.js
         ├── main_conductor.js
         ├── node_modules/ [... dependencies]
-        ├── onboarding.html
-        ├── onboarding.js
+        ├── onboarding/
+        │   ├── ipc/
+        │   │   └── onboarding-handlers.js
+        │   ├── onboarding.html
+        │   ├── onboarding.js
+        │   └── preload_onboarding.js
         ├── package-lock.json
         ├── package.json
-        ├── preload_conductor.js
-        ├── preload_onboarding.js
         └── version.json
