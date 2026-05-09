@@ -854,6 +854,51 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
     return true;
   }
 
+  // ── GITHUB_PAT_DETECTED ────────────────────────────────────────────────────
+  // Recibido desde el Harness (simulación) o desde discovery.js cuando el
+  // clipboard monitor detecta un GitHub Personal Access Token (formato ghp_...).
+  if (event === 'GITHUB_PAT_DETECTED') {
+    console.log('[Synapse] 📥 GITHUB_PAT_DETECTED recibido');
+
+    // Validar que el token existe y tiene el prefijo correcto
+    if (!msg.token || !msg.token.startsWith('ghp_')) {
+      console.warn('[Synapse] ⚠️  GITHUB_PAT_DETECTED — token inválido o ausente:', msg.token);
+    }
+
+    // Forwardear a Brain vía Native Messaging
+    sendToHost({
+      event:      'GITHUB_PAT_DETECTED',
+      token:      msg.token,
+      profile_id: msg.profile_id  || config?.profileId,
+      launch_id:  msg.launch_id   || config?.launchId,
+      timestamp:  msg.timestamp   || Date.now()
+    });
+
+    console.log('[Synapse] ✓ GITHUB_PAT_DETECTED → forwarding to native host');
+    sendResp({ received: true });
+    return true;
+  }
+
+  // ── GITHUB_TOKEN_STORED ────────────────────────────────────────────────────
+  // Emitido por discovery.js cuando el usuario confirma el token GitHub en la
+  // UI de onboarding y Brain lo almacena en Nucleus.
+  if (event === 'GITHUB_TOKEN_STORED') {
+    console.log('[Synapse] 📥 GITHUB_TOKEN_STORED recibido');
+
+    // Forwardear a Brain — Brain registra el token en Nucleus
+    sendToHost({
+      event:             'GITHUB_TOKEN_STORED',
+      token_fingerprint: msg.token_fingerprint,
+      profile_id:        msg.profile_id  || config?.profileId,
+      launch_id:         msg.launch_id   || config?.launchId,
+      timestamp:         msg.timestamp   || Date.now()
+    });
+
+    console.log('[Synapse] ✓ GITHUB_TOKEN_STORED → forwarding to native host');
+    sendResp({ received: true });
+    return true;
+  }
+
   // Heartbeat success
   if (event === 'HEARTBEAT_SUCCESS') {
     console.log('[Synapse] ✓ Heartbeat validation successful');
