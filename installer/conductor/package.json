@@ -4,19 +4,27 @@
   "private": true,
   "description": "Bloom Nucleus Workspace - Installer and Launcher",
   "scripts": {
-    "install:all":       "npm install --prefix workspace && npm install --prefix setup",
-    "build:workspace":   "npm run build --prefix workspace",
-    "build:setup":       "npm run build --prefix setup",
+    "install:all": "npm install --prefix workspace && npm install --prefix setup",
+    "build:workspace": "npm run build --prefix workspace",
+    "build:setup": "npm run build --prefix setup",
     "build:workspace:darwin": "npm run build:darwin --prefix workspace",
-    "build:setup:darwin":     "npm run build:darwin --prefix setup",
-    "build:all":         "node -e \"const darwin = process.platform === 'darwin'; const s = require('child_process'); s.execSync(darwin ? 'npm run build:workspace:darwin && npm run build:setup:darwin' : 'npm run build:workspace && npm run build:setup', {stdio: 'inherit'})\"",
+    "build:setup:darwin": "npm run build:darwin --prefix setup",
+    "build:all": "node -e \"const darwin = process.platform === 'darwin'; const s = require('child_process'); s.execSync(darwin ? 'npm run build:workspace:darwin && npm run build:setup:darwin' : 'npm run build:workspace && npm run build:setup', {stdio: 'inherit'})\"",
     "version:workspace": "npm run version:info --prefix workspace",
-    "version:setup":     "npm run version:info --prefix setup",
-    "version:all":       "npm run version:workspace && npm run version:setup",
-    "clean":             "rimraf workspace/dist workspace/out setup/dist setup/out",
-    "clean:all":         "npm run clean && rimraf workspace/node_modules setup/node_modules"
+    "version:setup": "npm run version:info --prefix setup",
+    "version:all": "npm run version:workspace && npm run version:setup",
+    "clean": "rimraf workspace/dist workspace/out setup/dist setup/out",
+    "clean:all": "npm run clean && rimraf workspace/node_modules setup/node_modules"
   },
   "devDependencies": {
     "rimraf": "^5.0.5"
+  },
+  "main": "main.js",
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "fs-extra": "^11.3.5",
+    "unzipper": "^0.12.3"
   }
 }

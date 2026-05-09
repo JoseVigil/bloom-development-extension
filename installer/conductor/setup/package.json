@@ -18,6 +18,7 @@
     "build:win32": "node ../shared/bump-version.js && electron-builder --win --ia32",
     "build:win64": "node ../shared/bump-version.js && electron-builder --win --x64",
     "dev": "run-admin.bat",
+    "dev:darwin": "electron .",
     "dev:no-admin": "electron .",
     "version:bump": "node ../shared/bump-version.js",
     "version:patch": "node ../shared/bump-version.js --patch",
@@ -183,7 +184,7 @@
     ]
   },
   "dependencies": {
-    "fs-extra": "^11.3.3",
+    "fs-extra": "^11.3.5",
     "unzipper": "^0.12.3"
   },
   "devDependencies": {

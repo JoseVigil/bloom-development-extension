@@ -64,6 +64,47 @@ const {
 // ⚠️ DEPRECADO: deployAllBinaries, deployConductor, deployMetamorph
 // Todas las copias de binarios están ahora en deployAllSystemBinaries()
 
+// ============================================================================
+// STUBS — funciones pendientes de implementar
+// TODO: mover a sus archivos correspondientes cuando estén listos
+// ============================================================================
+
+async function installVSCodeExtension(win) {
+  // TODO: instalar bloom-extension.vsix en VS Code via CLI
+  // `code --install-extension <path>/bloom-extension.vsix`
+  logger.warn('⚠️ installVSCodeExtension: not yet implemented, skipping');
+  return { success: true, skipped: true };
+}
+
+async function runMetamorphAudit(win) {
+  // TODO: invocar metamorph snapshot + verify-sync
+  // metamorph audit --snapshot --verify
+  logger.warn('⚠️ runMetamorphAudit: not yet implemented, skipping');
+  return { success: true, skipped: true };
+}
+
+async function installBrainService(win) {
+  // TODO: registrar Brain como LaunchAgent (darwin) o NSSM service (win32)
+  // En darwin: usar service-installer-brain-darwin.js → installWindowsService()
+  logger.warn('⚠️ installBrainService: not yet implemented, skipping');
+  return { success: true, skipped: true };
+}
+
+async function seedMasterProfile(win) {
+  // TODO: verificar si seedMasterProfile existe en installer_nucleus.js y hacer el require ahí
+  // Si existe: const { seedMasterProfile } = require('./installer_nucleus');
+  // Si no: implementar seed via executeNucleusCommand('profile seed --master')
+  logger.warn('⚠️ seedMasterProfile: not yet implemented, skipping');
+  return { success: true, skipped: true };
+}
+
+async function launchMasterProfile(win) {
+  // TODO: arrancar el perfil master después de seed
+  // Probablemente: nucleus profile launch <master_profile_id>
+  logger.warn('⚠️ launchMasterProfile: not yet implemented, skipping');
+  return { success: true, skipped: true };
+}
+
 const SENSOR_EXE_NAME = process.platform === 'darwin' ? 'bloom-sensor' : 'bloom-sensor.exe';
 const SETUP_EXE_NAME  = process.platform === 'darwin' ? 'bloom-setup'  : 'bloom-setup.exe';
 
@@ -797,7 +838,7 @@ async function installService(win) {
     await createDirectories(win);           // 1/11
     await runChromiumInstall(win);          // 2/11
     await runRuntimeInstall(win);           // 3/11
-    await runBinariesDeploy(win);           // 4/11 - Incluye bootstrap y vsix deploy
+    await deployAllSystemBinaries(win);      // 4/11 - Incluye bootstrap y vsix deploy
     await installVSCodeExtension(win);      // 4.5/11 - Instala/actualiza extensión en VS Code (non-critical)
     await runMetamorphAudit(win);           // 5/11 - Snapshot + verify-sync
     await installBrainService(win);         // 6/11
