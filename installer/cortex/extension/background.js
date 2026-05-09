@@ -500,6 +500,15 @@ function handleHostMessage(msg) {
     return;
   }
 
+  // Landing responses — forward a la landing page
+  // .catch(() => {}) es intencional: la landing puede no estar abierta cuando llega la respuesta.
+  if (['PROFILE_LOADED', 'HEALTH_CHECK_RESULT',
+       'NUCLEUS_SYNC_RESULT', 'INTENT_LIST_RESULT'].includes(msg.event)) {
+    console.log('[Synapse] Landing response → forwarding to landing page:', msg.event);
+    chrome.runtime.sendMessage(msg).catch(() => {});
+    return;
+  }
+
   // ─────────────────────────────────────────────────────────────────────
   // ACCOUNT_REGISTERED — confirmación de cuenta registrada desde Sentinel
   //
@@ -714,9 +723,67 @@ async function forwardToContent(msg) {
 chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
   const { event, command } = msg;
 
-  // Handler para comandos ejecutados desde landing
+  // ─────────────────────────────────────────────────────────────────────
+  // LANDING COMMAND HANDLERS — Contrato explícito Landing ↔ Brain
+  // Estos handlers deben ir ANTES del fallback genérico executeBrainCommand.
+  // ─────────────────────────────────────────────────────────────────────
+
+  // Landing: profile_load — carga el perfil completo al abrir el dashboard
+  if (command === 'profile_load') {
+    console.log('[Synapse] Landing → PROFILE_LOAD');
+    sendToHost({
+      command:    'PROFILE_LOAD',
+      profile_id: msg.profile_id || config?.profileId,
+      launch_id:  msg.launch_id  || config?.launchId,
+      timestamp:  Date.now()
+    });
+    sendResp({ received: true });
+    return true;
+  }
+
+  // Landing: health_check — estado de salud del sistema
+  if (command === 'health_check') {
+    console.log('[Synapse] Landing → HEALTH_CHECK (scope:', msg.scope || 'full-stack', ')');
+    sendToHost({
+      command:    'HEALTH_CHECK',
+      scope:      msg.scope || 'full-stack',
+      profile_id: config?.profileId,
+      launch_id:  config?.launchId,
+      timestamp:  Date.now()
+    });
+    sendResp({ received: true });
+    return true;
+  }
+
+  // Landing: nucleus_sync — fuerza sincronización con Nucleus
+  if (command === 'nucleus_sync') {
+    console.log('[Synapse] Landing → NUCLEUS_SYNC');
+    sendToHost({
+      command:    'NUCLEUS_SYNC',
+      profile_id: config?.profileId,
+      launch_id:  config?.launchId,
+      timestamp:  Date.now()
+    });
+    sendResp({ received: true });
+    return true;
+  }
+
+  // Landing: intent_list — lista de intents activos del perfil
+  if (command === 'intent_list') {
+    console.log('[Synapse] Landing → INTENT_LIST');
+    sendToHost({
+      command:    'INTENT_LIST',
+      profile_id: config?.profileId,
+      launch_id:  config?.launchId,
+      timestamp:  Date.now()
+    });
+    sendResp({ received: true });
+    return true;
+  }
+
+  // Handler genérico para landing — fallback para comandos no reconocidos
   if (msg.action === 'executeBrainCommand') {
-    console.log('[Synapse] Brain command received:', msg.command);
+    console.log('[Synapse] Brain command received (fallback):', msg.command);
     
     sendToHost({
       type: 'BRAIN_COMMAND',

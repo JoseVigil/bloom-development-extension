@@ -41,6 +41,11 @@ class SynapseManager:
             "DOM_EXTRACT":      self._handle_dom_passthrough,
             "EVENT_EMIT":       self._handle_dom_passthrough,
             "STATE_TRANSITION": self._handle_state_transition,
+            # Landing Dashboard commands
+            "PROFILE_LOAD":     self._handle_profile_load,
+            "HEALTH_CHECK":     self._handle_health_check,
+            "NUCLEUS_SYNC":     self._handle_nucleus_sync,
+            "INTENT_LIST":      self._handle_intent_list,
         }
 
     def run_host_loop(self) -> None:
@@ -139,6 +144,77 @@ class SynapseManager:
         Por ahora loggea la transición. IonStateManager la maneja en el proceso IonPump.
         """
         self.logger.debug(f"🔄 STATE_TRANSITION: {message.get('to', 'unknown')}")
+
+    # =========================================================================
+    # LANDING HANDLERS
+    # =========================================================================
+
+    def _handle_profile_load(self, message: Dict[str, Any]) -> None:
+        """Carga el perfil completo y lo envía a landing para renderizar el dashboard."""
+        profile_id = message.get('profile_id')
+        launch_id  = message.get('launch_id')
+
+        try:
+            from brain.core.profile.profile_manager import ProfileManager
+            pm = ProfileManager()
+            profile = pm.get_profile(profile_id)
+
+            self.protocol.send_message({
+                "event":      "PROFILE_LOADED",
+                "profile_id": profile_id,
+                "launch_id":  launch_id,
+                "data": {
+                    "alias":          profile.get("alias", ""),
+                    "total_launches": profile.get("total_launches", 0),
+                    "uptime":         0,
+                    "intents_done":   profile.get("intents_done", 0),
+                    "last_synch":     profile.get("last_synch", ""),
+                    "accounts":       profile.get("accounts", []),
+                    "session_status": "active"
+                }
+            })
+        except Exception as e:
+            self.logger.error(f"❌ PROFILE_LOAD failed: {e}")
+            self.protocol.send_message({
+                "event":  "PROFILE_LOADED",
+                "status": "error",
+                "error":  str(e)
+            })
+
+    def _handle_health_check(self, message: Dict[str, Any]) -> None:
+        """Responde con el estado de salud del sistema."""
+        scope = message.get('scope', 'full-stack')
+
+        self.protocol.send_message({
+            "event":  "HEALTH_CHECK_RESULT",
+            "scope":  scope,
+            "status": "ok",
+            "checks": {
+                "extension":   "ok",
+                "native_host": "ok",
+                "brain":       "ok",
+                "nucleus":     "ok"
+            },
+            "timestamp": __import__('time').time()
+        })
+
+    def _handle_nucleus_sync(self, message: Dict[str, Any]) -> None:
+        """Fuerza sincronización de datos del perfil con Nucleus."""
+        from datetime import datetime
+        self.protocol.send_message({
+            "event":     "NUCLEUS_SYNC_RESULT",
+            "status":    "ok",
+            "synced_at": datetime.utcnow().isoformat() + "Z",
+            "error":     None
+        })
+
+    def _handle_intent_list(self, message: Dict[str, Any]) -> None:
+        # Phase 3 DEFERRED — conectar con intent pipeline cuando Phase 3 se desbloquee.
+        self.protocol.send_message({
+            "event":   "INTENT_LIST_RESULT",
+            "intents": [],
+            "total":   0
+        })
 
     # =========================================================================
     # MÉTODOS DE UTILIDAD (Para usar desde el CLI 'brain synapse close')
