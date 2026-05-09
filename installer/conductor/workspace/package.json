@@ -41,18 +41,12 @@
     },
     "mac": {
       "target": [
-        {
-          "target": "dmg",
-          "arch": ["x64"]
-        },
-        {
-          "target": "dmg",
-          "arch": ["arm64"]
-        }
+        { "target": "dmg", "arch": ["x64"] },
+        { "target": "dmg", "arch": ["arm64"] }
       ],
       "icon": "assets/bloom.icns",
       "category": "public.app-category.utilities",
-      "hardenedRuntime": true,
+      "hardenedRuntime": false,
       "gatekeeperAssess": false,
       "artifactName": "bloom-conductor-${arch}.dmg"
     },
