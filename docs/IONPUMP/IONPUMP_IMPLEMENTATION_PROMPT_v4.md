@@ -1,4 +1,11 @@
-# 🧠 IONPUMP IMPLEMENTATION PROMPT - Complete Specification v3.0
+# 🧠 IONPUMP IMPLEMENTATION PROMPT - Complete Specification v4.0
+
+> **CHANGELOG v4.0** — Post-implementación Prompts A, B, C. Mayo 2026.
+> Cambios respecto a v3.0: (1) Integration Points actualizado: `synapse_manager.py`
+> ya tiene los cambios de Phase 2 aplicados. (2) Constraint #7 aclarado: aplica a
+> `content.js`, NO a `background.js`. (3) Phase 2 checklist actualizado: items de
+> `SynapseManager` ya completados. (4) Nota de `background.js` agregada en Integration Points.
+> Sin cambios a la arquitectura ni a los contratos de implementación.
 
 > **CHANGELOG v3.0** — Auditoría de estado pre-harness. Abril 2026.  
 > Cambios respecto a v2.0: (1) Sección de estado de implementación agregada en cada Phase.
