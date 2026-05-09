@@ -510,6 +510,68 @@ function handleHostMessage(msg) {
   }
 
   // ─────────────────────────────────────────────────────────────────────
+  // Categoría 3: IonPump events — forward al Harness y landing
+  //
+  // Brain emite estos eventos cuando IonPump completa un flujo, recarga
+  // recipes o responde a un inspect. El Harness los escucha en su Feed.
+  // ─────────────────────────────────────────────────────────────────────
+  const IONPUMP_EVENTS = [
+    'ION_FLOW_STARTED',
+    'ION_FLOW_COMPLETED',
+    'ION_FLOW_ERROR',
+    'ION_RELOAD_DONE',
+    'ION_RELOAD_FAILED',
+    'ION_INSPECT_RESULT'
+  ];
+
+  if (IONPUMP_EVENTS.includes(msg.event)) {
+    console.log('[IonPump] ←', msg.event, msg.site || '');
+    chrome.runtime.sendMessage(msg).catch(() => {});
+    return;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Categoría 4: IonPump DOM commands — forward a content.js en la tab
+  //
+  // IonPump genera estos comandos para operar el DOM de una tab concreta.
+  // background los recibe via Native Messaging y los despacha al
+  // content script correcto con chrome.tabs.sendMessage (NO runtime).
+  // El ACK de content.js se reenvía de vuelta al host para que IonPump
+  // pueda continuar el flujo.
+  // ─────────────────────────────────────────────────────────────────────
+  const DOM_COMMANDS = [
+    'DOM_CLICK', 'DOM_TYPE', 'DOM_WAIT',
+    'DOM_FOCUS', 'DOM_SCROLL', 'DOM_EXTRACT'
+  ];
+
+  if (DOM_COMMANDS.includes(msg.command)) {
+    const tabId = msg.tab_id;
+
+    if (!tabId) {
+      console.warn('[IonPump] ⚠️ DOM command sin tab_id:', msg.command);
+      return;
+    }
+
+    console.log('[IonPump] DOM →', msg.command, 'tab:', tabId);
+
+    chrome.tabs.sendMessage(tabId, msg, (response) => {
+      // Forwarda el ACK de content.js de vuelta al host para que IonPump lo reciba.
+      // Best-effort: si content.js no responde, no bloquear.
+      if (response) {
+        sendToHost({
+          event:     'DOM_COMMAND_ACK',
+          command:   msg.command,
+          tab_id:    tabId,
+          response:  response,
+          timestamp: Date.now()
+        });
+      }
+    });
+
+    return;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
   // ACCOUNT_REGISTERED — confirmación de cuenta registrada desde Sentinel
   //
   // Flujo: discovery.js → ACCOUNT_REGISTERED → background.js (aquí)
@@ -1020,6 +1082,61 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
   if (msg.action === 'stopClipboardMonitoring') {
     stopClipboardMonitoring();
     sendResp({ monitoring: false });
+    return true;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // IONPUMP COMMAND HANDLERS — Harness → background → Brain/IonPump
+  //
+  // Estos handlers reciben comandos IonPump simulados desde el Harness
+  // y los forwadean al host nativo para que SynapseManager los enrute
+  // al proceso IonPump via TCP IPC.
+  //
+  // Categoría 1: Flow execution
+  // ─────────────────────────────────────────────────────────────────────
+
+  if (command === 'ION_EXECUTE_FLOW') {
+    console.log('[IonPump] ▶ ION_EXECUTE_FLOW:', msg.site, '/', msg.flow);
+
+    sendToHost({
+      command:   'ION_EXECUTE_FLOW',
+      site:      msg.site,
+      flow:      msg.flow,
+      tab_id:    msg.tab_id,
+      launch_id: msg.launch_id || config?.launchId,
+      context:   msg.context   || {}
+    });
+
+    sendResp({ received: true });
+    return true;
+  }
+
+  // Categoría 2: Admin commands (debug/dev)
+
+  if (command === 'ION_RELOAD') {
+    console.log('[IonPump] 🔄 ION_RELOAD:', msg.site);
+
+    sendToHost({
+      command:   'ION_RELOAD',
+      site:      msg.site,
+      launch_id: config?.launchId,
+      timestamp: Date.now()
+    });
+
+    sendResp({ received: true });
+    return true;
+  }
+
+  if (command === 'ION_INSPECT') {
+    console.log('[IonPump] 🔍 ION_INSPECT');
+
+    sendToHost({
+      command:   'ION_INSPECT',
+      launch_id: msg.launch_id || config?.launchId,
+      timestamp: Date.now()
+    });
+
+    sendResp({ received: true });
     return true;
   }
 
