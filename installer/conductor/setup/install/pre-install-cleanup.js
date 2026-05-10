@@ -85,27 +85,43 @@ async function removeAllBloomServices(logger) {
 async function killBloomProcesses(logger) {
   logger.info('💀 Killing Bloom processes...');
   
-  const processes = [
-    'brain.exe',
-    'nucleus.exe',
-    'sentinel.exe',
-    'bloom-host.exe',
-    'bloom-conductor.exe',
-    'bloom-sensor.exe',   // CRÍTICO: liberar antes del deploy de binarios
-    'temporal.exe',       // CRÍTICO: liberar temporal.exe
-    'ollama.exe'          // CRÍTICO: liberar ollama.exe
-    // ❌ NO INCLUIR node.exe - el instalador Electron lo usa
-    // ❌ NO INCLUIR nssm.exe - puede causar problemas si servicios están activos
-  ];
+  const processes = process.platform === 'win32'
+    ? [
+        'brain.exe',
+        'nucleus.exe',
+        'sentinel.exe',
+        'bloom-host.exe',
+        'bloom-conductor.exe',
+        'bloom-sensor.exe',   // CRÍTICO: liberar antes del deploy de binarios
+        'temporal.exe',       // CRÍTICO: liberar temporal.exe
+        'ollama.exe'          // CRÍTICO: liberar ollama.exe
+        // ❌ NO INCLUIR node.exe - el instalador Electron lo usa
+        // ❌ NO INCLUIR nssm.exe - puede causar problemas si servicios están activos
+      ]
+    : [
+        'brain',
+        'nucleus',
+        'sentinel',
+        'bloom-host',
+        'bloom-conductor',
+        'bloom-sensor',            // CRÍTICO: liberar antes del deploy de binarios
+        'Bloom Nucleus Workspace', // nombre del proceso en macOS
+        'temporal',                // CRÍTICO: liberar temporal
+        'ollama'                   // CRÍTICO: liberar ollama
+        // ❌ NO INCLUIR node - el instalador Electron lo usa
+      ];
   
   for (const proc of processes) {
     try {
       // CRÍTICO: Envolver con manejo de errores robusto
       try {
-        execSync(`taskkill /F /IM ${proc} /T`, { 
+        const killCmd = process.platform === 'win32'
+          ? `taskkill /F /IM ${proc} /T`
+          : `pkill -9 -f "${proc}"`;
+        execSync(killCmd, { 
           stdio: 'pipe',
           timeout: 3000,
-          windowsHide: true  // Prevenir popups
+          ...(process.platform === 'win32' && { windowsHide: true })  // Prevenir popups (solo Windows)
         });
         logger.info(`  ✓ ${proc} killed`);
       } catch (killError) {
@@ -278,20 +294,33 @@ async function safeCopyFile(src, dest, logger, options = {}) {
  * Mata un proceso específico por nombre de archivo
  */
 async function killSpecificProcess(filename, logger) {
-  const processMap = {
-    'brain.exe': 'brain.exe',
-    'nucleus.exe': 'nucleus.exe',
-    'sentinel.exe': 'sentinel.exe',
-    'temporal.exe': 'temporal.exe',
-    'ollama.exe': 'ollama.exe'
-    // NO incluir node.exe - el instalador lo usa
-  };
-  
+  const processMap = process.platform === 'win32'
+    ? {
+        'brain.exe': 'brain.exe',
+        'nucleus.exe': 'nucleus.exe',
+        'sentinel.exe': 'sentinel.exe',
+        'temporal.exe': 'temporal.exe',
+        'ollama.exe': 'ollama.exe'
+        // NO incluir node.exe - el instalador lo usa
+      }
+    : {
+        'brain': 'brain',
+        'nucleus': 'nucleus',
+        'sentinel': 'sentinel',
+        'temporal': 'temporal',
+        'ollama': 'ollama',
+        'Bloom Nucleus Workspace': 'Bloom Nucleus Workspace'
+        // NO incluir node - el instalador lo usa
+      };
+
   const processName = processMap[filename];
   
   if (processName) {
     try {
-      execSync(`taskkill /F /IM ${processName} /T`, { stdio: 'ignore' });
+      const killCmd = process.platform === 'win32'
+        ? `taskkill /F /IM ${processName} /T`
+        : `pkill -9 -f "${processName}"`;
+      execSync(killCmd, { stdio: 'ignore' });
       logger.info(`  🔪 Killed ${processName} to unlock file`);
       return true;
     } catch (e) {

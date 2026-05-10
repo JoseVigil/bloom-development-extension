@@ -52,11 +52,11 @@ def detect_platform_dir():
     
     elif system == "darwin":
         if machine in ("x86_64", "amd64"):
-            return "macos64"
+            return "darwin_x64"
         elif machine in ("arm64", "aarch64"):
-            return "macos_arm64"
+            return "darwin_arm64"
         else:
-            return "macos_arm64"  # Default Apple Silicon
+            return "darwin_arm64"  # Default Apple Silicon
     
     else:
         raise RuntimeError(f"Sistema no soportado: {system}")

@@ -189,6 +189,9 @@ async function createDirectories(win) {
       paths.vscodeDir,          // bin/vscode — bloom-extension.vsix
       paths.bootstrapDir,       // bin/bootstrap — bootstrap files
       paths.bootstrapStaticDir, // bin/bootstrap/static — static assets (logo.svg, etc.)
+      path.join(paths.logsDir, 'conductor'),        // logs/conductor
+      path.join(paths.logsDir, 'conductor', 'setup'), // logs/conductor/setup
+      path.join(paths.logsDir, 'install'),           // logs/install
     ];
 
     for (const dir of dirs) {
@@ -417,6 +420,16 @@ async function deployAllSystemBinaries(win) {
     // En macOS asegurar permisos de ejecución (PyInstaller a veces los pierde)
     if (process.platform === 'darwin') {
       await fs.chmod(paths.brainExe, 0o755);
+      
+      // Agregar Brain al PATH del sistema vía /etc/paths.d/
+      const pathsFile = '/etc/paths.d/bloom-nucleus';
+      try {
+        await fs.ensureDir('/etc/paths.d');
+        await fs.writeFile(pathsFile, paths.brainDir + '\n', 'utf8');
+        logger.success('✅ Brain added to system PATH');
+      } catch (err) {
+        logger.warn(`⚠️ Could not write to ${pathsFile}: ${err.message}`);
+      }
     }
     
     // Verificar _internal (PyInstaller dependencies)
@@ -555,20 +568,43 @@ async function deployAllSystemBinaries(win) {
     // 10. CONDUCTOR (Workspace)
     // ========================================================================
     logger.info('\n🎮 CONDUCTOR WORKSPACE');
-    
-    const conductorExeName = process.platform === 'darwin' ? 'bloom-conductor' : 'bloom-conductor.exe';
-    const conductorExeSrc  = path.join(paths.conductorSource, conductorExeName);
-    
-    if (await fs.pathExists(conductorExeSrc)) {
-      results.conductor = await copyFileSafe(
-        conductorExeSrc,
-        paths.conductorExe,
-        conductorExeName
-      );
-      if (process.platform === 'darwin') await fs.chmod(paths.conductorExe, 0o755);
+    if (process.platform === 'darwin') {
+      // En darwin: copiar el .app completo a /Applications/
+      const appSrc = paths.conductorSource; // .../mac_x64/conductor/mac/ o mac-arm64/
+      const appName = 'Bloom Nucleus Workspace.app';
+      const appSrcPath = path.join(appSrc, appName);
+      const appDest = path.join('/Applications', appName);
+      if (await fs.pathExists(appSrcPath)) {
+        logger.info(`📦 Installing ${appName} to /Applications/...`);
+        logger.debug(`   Source: ${appSrcPath}`);
+        logger.debug(`   Dest: ${appDest}`);
+        // Remover versión anterior si existe
+        if (await fs.pathExists(appDest)) {
+          await fs.remove(appDest);
+          logger.info('  Removed previous version');
+        }
+        await fs.copy(appSrcPath, appDest, { overwrite: true, dereference: false });
+        await fs.chmod(path.join(appDest, 'Contents', 'MacOS', 'Bloom Nucleus Workspace'), 0o755);
+        logger.success(`✅ Bloom Nucleus Workspace.app installed to /Applications/`);
+        results.conductor = { success: true, dest: appDest };
+      } else {
+        logger.warn(`⚠️ Conductor .app not found at: ${appSrcPath}`);
+        results.conductor = { success: false, skipped: true };
+      }
     } else {
-      logger.warn('⚠️ bloom-conductor binary not found, skipping');
-      results.conductor = { success: false, skipped: true };
+      // Windows — comportamiento original intacto
+      const conductorExeName = 'bloom-conductor.exe';
+      const conductorExeSrc  = path.join(paths.conductorSource, conductorExeName);
+      if (await fs.pathExists(conductorExeSrc)) {
+        results.conductor = await copyFileSafe(
+          conductorExeSrc,
+          paths.conductorExe,
+          conductorExeName
+        );
+      } else {
+        logger.warn('⚠️ bloom-conductor binary not found, skipping');
+        results.conductor = { success: false, skipped: true };
+      }
     }
 
     // ========================================================================

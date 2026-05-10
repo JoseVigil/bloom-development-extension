@@ -72,16 +72,32 @@ const getResourcePath = (resourceName) => {
     case 'metamorph':
       return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'metamorph');
     case 'brain':
+      if (platform === 'darwin') {
+        // build_main.py deposits into macos64 / macos_arm64 — until the build is fixed
+        const brainDir = os.arch() === 'arm64' ? 'macos_arm64' : 'macos64';
+        return path.join(workspaceRoot, '..', 'native', 'bin', brainDir, 'brain');
+      }
       return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'brain');
     case 'host':
       return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'host');
     case 'nssm':
       return path.join(workspaceRoot, '..', 'native', 'nssm', arch);
     case 'ollama':
-      return path.join(workspaceRoot, '..', 'ollama');
+      if (platform === 'darwin') {
+        return path.join(workspaceRoot, '..', 'ollama', 'darwin');
+      }
+      return path.join(workspaceRoot, '..', 'ollama', arch);
     case 'node':
+      if (platform === 'darwin') {
+        return path.join(workspaceRoot, '..', 'node', 'darwin');
+      }
       return path.join(workspaceRoot, '..', 'node', arch);
     case 'conductor':
+      if (platform === 'darwin') {
+        const conductorArch = os.arch() === 'arm64' ? 'mac_arm64' : 'mac_x64';
+        const conductorSubdir = os.arch() === 'arm64' ? 'mac-arm64' : 'mac';
+        return path.join(workspaceRoot, '..', 'native', 'bin', conductorArch, 'conductor', conductorSubdir);
+      }
       return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'conductor');
     case 'launcher':
       return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'launcher');
@@ -89,6 +105,11 @@ const getResourcePath = (resourceName) => {
       return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'sensor');
     case 'setup':
       return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'setup');
+    case 'temporal':
+      if (platform === 'darwin') {
+        return path.join(workspaceRoot, '..', 'termporal', 'darwin'); // typo matches disk layout
+      }
+      return path.join(workspaceRoot, '..', 'temporal', arch);
     case 'cortex':
       return path.join(workspaceRoot, '..', 'native', 'bin', 'cortex');
     case 'bootstrap':
@@ -194,10 +215,18 @@ const paths = {
     : path.join(baseDir, 'bin', 'ollama', 'ollama'),
   
   // Conductor (Launcher - deployed by installer)
-  conductorDir: path.join(baseDir, 'bin', 'conductor'),
+  conductorDir: platform === 'darwin'
+    ? '/Applications/Bloom Nucleus Workspace.app'
+    : path.join(baseDir, 'bin', 'conductor'),
   conductorExe: platform === 'win32'
     ? path.join(baseDir, 'bin', 'conductor', 'bloom-conductor.exe')
-    : path.join(baseDir, 'bin', 'conductor', 'bloom-conductor'),
+    : platform === 'darwin'
+      ? '/Applications/Bloom Nucleus Workspace.app/Contents/MacOS/Bloom Nucleus Workspace'
+      : path.join(baseDir, 'bin', 'conductor', 'bloom-conductor'),
+  // Internal binary path for launchd / PATH usage on macOS
+  conductorBin: platform === 'darwin'
+    ? '/Applications/Bloom Nucleus Workspace.app/Contents/MacOS/Bloom Nucleus Workspace'
+    : null,
 
   // Bloom Sensor (Session Agent - replaces bloom-launcher)
   sensorDir: path.join(baseDir, 'bin', 'sensor'),
