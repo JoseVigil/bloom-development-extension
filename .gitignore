@@ -55,6 +55,10 @@ wheels/
 *.egg
 MANIFEST
 
+# Python runtime binaries darwin
+resources/runtime/
+resources/runtime-darwin/
+
 # Entornos virtuales
 .vscode/
 .idea/

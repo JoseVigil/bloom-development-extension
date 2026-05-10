@@ -659,3 +659,7 @@ https://claude.ai/chat/ef700fa7-4f15-4e09-bf7f-27995e9c27af
 JV
 migracion windows a darwin
 https://claude.ai/chat/bbb7240a-9b49-418b-8720-a3a113071e9e
+
+noti gmail 
+neutralizar inicializadores y reinstalarlos
+https://claude.ai/chat/d3a85d3e-6194-4fa6-b3c5-32f3e86df6f6

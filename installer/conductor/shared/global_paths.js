@@ -60,6 +60,10 @@ const getResourcePath = (resourceName) => {
 
   switch (resourceName) {
     case 'runtime':
+      if (platform === 'darwin') {
+        const darwinArch = os.arch() === 'arm64' ? 'arm64' : 'x86_64';
+        return path.join(workspaceRoot, '..', 'resources', 'runtime-darwin', darwinArch);
+      }
       return path.join(workspaceRoot, '..', 'resources', 'runtime');
     case 'nucleus':
       return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'nucleus');
@@ -115,7 +119,7 @@ const getResourcePath = (resourceName) => {
 // ============================================================================
 const pythonExe = platform === 'win32'
   ? path.join(baseDir, 'bin', 'engine', 'runtime', 'python.exe')
-  : path.join(baseDir, 'bin', 'engine', 'runtime', 'bin', 'python3');
+  : path.join(baseDir, 'bin', 'engine', 'runtime', 'bin', 'python3.10');
 
 const brainExe = platform === 'win32'
   ? path.join(baseDir, 'bin', 'brain', 'brain.exe')
