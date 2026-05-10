@@ -3,3 +3,14 @@ https://github.com/temporalio/cli/releases/tag/v1.5.1
 
 node 
 https://nodejs.org/en/download
+
+
+Python Build Standalone (Astral) — macOS Runtime para Bloom
+Runtime embebido de Python 3.10 para macOS, equivalente al embeddable package de Windows. Dos tarballs install_only_stripped: uno para aarch64 (Apple Silicon) y otro para x86_64 (Intel). Release activa: 20260414 → CPython 3.10.20.
+https://github.com/astral-sh/python-build-standalone/releases/download
+uitool
+https://claude.ai/chat/2894c85a-4e31-4ef3-bd00-6915b24335a2
+
+
+Synergy
+https://github.com/DEAKSoftware/Synergy-Binaries/releases/tag/1.14.6.19-stable

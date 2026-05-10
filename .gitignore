@@ -56,8 +56,7 @@ wheels/
 MANIFEST
 
 # Python runtime binaries darwin
-resources/runtime/
-resources/runtime-darwin/
+installer/resources/runtime-darwin/
 
 # Entornos virtuales
 .vscode/
@@ -126,6 +125,7 @@ installer/chrome/chrome-mac.zip
 # Ollama
 installer/ollama/ollama.exe  
 installer/ollama/lib
+installer/ollama/
 
 # Temporal
 installer/temporal/temporal.exe
