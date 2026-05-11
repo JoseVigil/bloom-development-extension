@@ -420,15 +420,15 @@ async function deployAllSystemBinaries(win) {
     // En macOS asegurar permisos de ejecución (PyInstaller a veces los pierde)
     if (process.platform === 'darwin') {
       await fs.chmod(paths.brainExe, 0o755);
-      
-      // Agregar Brain al PATH del sistema vía /etc/paths.d/
-      const pathsFile = '/etc/paths.d/bloom-nucleus';
+    }
+
+    // En macOS registrar brainDir en el PATH del sistema vía /etc/paths.d/
+    if (process.platform === 'darwin') {
       try {
-        await fs.ensureDir('/etc/paths.d');
-        await fs.writeFile(pathsFile, paths.brainDir + '\n', 'utf8');
-        logger.success('✅ Brain added to system PATH');
+        await fs.writeFile('/etc/paths.d/bloom-nucleus', paths.brainDir + '\n', 'utf8');
+        logger.success('✅ brain added to system PATH (/etc/paths.d/bloom-nucleus)');
       } catch (err) {
-        logger.warn(`⚠️ Could not write to ${pathsFile}: ${err.message}`);
+        logger.warn(`⚠️ Could not write to /etc/paths.d/bloom-nucleus (needs sudo): ${err.message}`);
       }
     }
     

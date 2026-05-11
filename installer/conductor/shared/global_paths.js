@@ -73,9 +73,7 @@ const getResourcePath = (resourceName) => {
       return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'metamorph');
     case 'brain':
       if (platform === 'darwin') {
-        // build_main.py deposits into macos64 / macos_arm64 — until the build is fixed
-        const brainDir = os.arch() === 'arm64' ? 'macos_arm64' : 'macos64';
-        return path.join(workspaceRoot, '..', 'native', 'bin', brainDir, 'brain');
+        return path.join(workspaceRoot, '..', 'native', 'bin', os.arch() === 'arm64' ? 'darwin_arm64' : 'darwin_x64', 'brain');
       }
       return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'brain');
     case 'host':
