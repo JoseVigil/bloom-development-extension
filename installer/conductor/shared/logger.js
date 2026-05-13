@@ -107,11 +107,21 @@ class Logger {
     this.streamId    = null;
     this.streamLabel = null;
     this.streamMeta  = null;
-    this.basePath = basePath || path.join(
-      process.env.LOCALAPPDATA || path.join(require('os').homedir(), 'AppData', 'Local'),
-      'BloomNucleus',
-      'logs'
-    );
+    if (basePath) {
+      this.basePath = basePath;
+    } else {
+      const home = require('os').homedir();
+      let dataRoot;
+      if (process.platform === 'win32') {
+        dataRoot = process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local');
+      } else if (process.platform === 'darwin') {
+        dataRoot = path.join(home, 'Library', 'Application Support');
+      } else {
+        // linux + cualquier otro POSIX
+        dataRoot = process.env.XDG_DATA_HOME || path.join(home, '.local', 'share');
+      }
+      this.basePath = path.join(dataRoot, 'BloomNucleus', 'logs');
+    }
   }
 
   /**
@@ -176,10 +186,11 @@ class Logger {
    */
   async _registerTelemetry() {
     try {
-      const nucleusExe = path.join(
-        process.env.LOCALAPPDATA || path.join(require('os').homedir(), 'AppData', 'Local'),
-        'BloomNucleus', 'bin', 'nucleus', 'nucleus.exe'
-      );
+      // Derivar el directorio base del binario desde this.basePath
+      // (this.basePath = <dataRoot>/BloomNucleus/logs → subimos dos niveles)
+      const nucleusDir = path.join(this.basePath, '..', '..', 'bin', 'nucleus');
+      const nucleusBin = process.platform === 'win32' ? 'nucleus.exe' : 'nucleus';
+      const nucleusExe = path.resolve(nucleusDir, nucleusBin);
 
       if (!fs.existsSync(nucleusExe)) {
         console.log(`${COLORS.gray}[Logger]${COLORS.reset} Nucleus not available yet, skipping telemetry registration`);

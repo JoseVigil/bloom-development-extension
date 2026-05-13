@@ -65,17 +65,51 @@ const getResourcePath = (resourceName) => {
         return path.join(workspaceRoot, '..', 'resources', 'runtime-darwin', darwinArch);
       }
       return path.join(workspaceRoot, '..', 'resources', 'runtime');
-    case 'nucleus':
-      return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'nucleus');
-    case 'sentinel':
-      return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'sentinel');
-    case 'metamorph':
-      return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'metamorph');
-    case 'brain':
+    case 'nucleus': {
+      const primaryNucleus = path.join(workspaceRoot, '..', 'native', 'bin', arch, 'nucleus');
       if (platform === 'darwin') {
-        return path.join(workspaceRoot, '..', 'native', 'bin', os.arch() === 'arm64' ? 'darwin_arm64' : 'darwin_x64', 'brain');
+        const fs = require('fs');
+        if (!fs.existsSync(primaryNucleus)) {
+          const altArch = arch === 'darwin_arm64' ? 'darwin_x64' : 'darwin_arm64';
+          return path.join(workspaceRoot, '..', 'native', 'bin', altArch, 'nucleus');
+        }
+      }
+      return primaryNucleus;
+    }
+    case 'sentinel': {
+      const primarySentinel = path.join(workspaceRoot, '..', 'native', 'bin', arch, 'sentinel');
+      if (platform === 'darwin') {
+        const fs = require('fs');
+        if (!fs.existsSync(primarySentinel)) {
+          const altArch = arch === 'darwin_arm64' ? 'darwin_x64' : 'darwin_arm64';
+          return path.join(workspaceRoot, '..', 'native', 'bin', altArch, 'sentinel');
+        }
+      }
+      return primarySentinel;
+    }
+    case 'metamorph': {
+      const primaryMetamorph = path.join(workspaceRoot, '..', 'native', 'bin', arch, 'metamorph');
+      if (platform === 'darwin') {
+        const fs = require('fs');
+        if (!fs.existsSync(primaryMetamorph)) {
+          const altArch = arch === 'darwin_arm64' ? 'darwin_x64' : 'darwin_arm64';
+          return path.join(workspaceRoot, '..', 'native', 'bin', altArch, 'metamorph');
+        }
+      }
+      return primaryMetamorph;
+    }
+    case 'brain': {
+      if (platform === 'darwin') {
+        const fs = require('fs');
+        const primaryBrain = path.join(workspaceRoot, '..', 'native', 'bin', arch, 'brain');
+        if (!fs.existsSync(primaryBrain)) {
+          const altArch = arch === 'darwin_arm64' ? 'darwin_x64' : 'darwin_arm64';
+          return path.join(workspaceRoot, '..', 'native', 'bin', altArch, 'brain');
+        }
+        return primaryBrain;
       }
       return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'brain');
+    }
     case 'host':
       return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'host');
     case 'nssm':
@@ -105,7 +139,7 @@ const getResourcePath = (resourceName) => {
       return path.join(workspaceRoot, '..', 'native', 'bin', arch, 'setup');
     case 'temporal':
       if (platform === 'darwin') {
-        return path.join(workspaceRoot, '..', 'termporal', 'darwin'); // typo matches disk layout
+        return path.join(workspaceRoot, '..', 'temporal', 'darwin');
       }
       return path.join(workspaceRoot, '..', 'temporal', arch);
     case 'cortex':
@@ -118,8 +152,6 @@ const getResourcePath = (resourceName) => {
       return path.join(workspaceRoot, '..', 'native', 'hooks');
     case 'native-config':
       return path.join(workspaceRoot, '..', 'native', 'config');
-    case 'temporal':
-      return path.join(workspaceRoot, '..', 'temporal');
     case 'chrome-win':
       return path.join(workspaceRoot, '..', 'chrome', 'chrome-win.zip');
     case 'chrome-mac':
