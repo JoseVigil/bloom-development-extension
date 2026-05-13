@@ -110,17 +110,17 @@ class Logger {
     if (basePath) {
       this.basePath = basePath;
     } else {
-      const home = require('os').homedir();
-      let dataRoot;
-      if (process.platform === 'win32') {
-        dataRoot = process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local');
-      } else if (process.platform === 'darwin') {
-        dataRoot = path.join(home, 'Library', 'Application Support');
-      } else {
-        // linux + cualquier otro POSIX
-        dataRoot = process.env.XDG_DATA_HOME || path.join(home, '.local', 'share');
-      }
-      this.basePath = path.join(dataRoot, 'BloomNucleus', 'logs');
+      const _os       = require('os');
+      const _homeDir  = _os.homedir();
+      const _platform = process.platform;
+
+      const defaultLogsBase = _platform === 'darwin'
+        ? path.join(_homeDir, 'Library', 'Application Support', 'BloomNucleus', 'logs')
+        : _platform === 'win32'
+          ? path.join(process.env.LOCALAPPDATA || path.join(_homeDir, 'AppData', 'Local'), 'BloomNucleus', 'logs')
+          : path.join(process.env.XDG_DATA_HOME || path.join(_homeDir, '.local', 'share'), 'BloomNucleus', 'logs');
+
+      this.basePath = defaultLogsBase;
     }
   }
 
@@ -186,11 +186,16 @@ class Logger {
    */
   async _registerTelemetry() {
     try {
-      // Derivar el directorio base del binario desde this.basePath
-      // (this.basePath = <dataRoot>/BloomNucleus/logs → subimos dos niveles)
-      const nucleusDir = path.join(this.basePath, '..', '..', 'bin', 'nucleus');
+      // Derivar el directorio base de BloomNucleus según plataforma
+      const _os = require('os');
+      const _nucleusBase = process.platform === 'darwin'
+        ? path.join(_os.homedir(), 'Library', 'Application Support', 'BloomNucleus')
+        : process.platform === 'win32'
+          ? path.join(process.env.LOCALAPPDATA || path.join(_os.homedir(), 'AppData', 'Local'), 'BloomNucleus')
+          : path.join(process.env.XDG_DATA_HOME || path.join(_os.homedir(), '.local', 'share'), 'BloomNucleus');
+
       const nucleusBin = process.platform === 'win32' ? 'nucleus.exe' : 'nucleus';
-      const nucleusExe = path.resolve(nucleusDir, nucleusBin);
+      const nucleusExe = path.join(_nucleusBase, 'bin', 'nucleus', nucleusBin);
 
       if (!fs.existsSync(nucleusExe)) {
         console.log(`${COLORS.gray}[Logger]${COLORS.reset} Nucleus not available yet, skipping telemetry registration`);

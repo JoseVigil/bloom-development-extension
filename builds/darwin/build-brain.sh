@@ -31,10 +31,11 @@ BRAIN_DIR="${PROJECT_ROOT}/brain"
 BUILD_SCRIPT="${BRAIN_DIR}/build_multiplatform/build.py"
 
 # Arquitectura → carpeta de output (para el log)
+# Nombres alineados con build-all.py y build_main.py
 case "${DETECTED_ARCH}" in
-    arm64)   BIN_ARCH="macos_arm64" ;;
-    x86_64)  BIN_ARCH="macos64"     ;;
-    *)        BIN_ARCH="linux64"     ;;
+    arm64)   BIN_ARCH="darwin_arm64" ;;
+    x86_64)  BIN_ARCH="darwin_x64"   ;;
+    *)        BIN_ARCH="linux_x64"    ;;
 esac
 
 # ───────────────────────────────────────────────────────────────

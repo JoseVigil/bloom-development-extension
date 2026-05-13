@@ -12,7 +12,7 @@ const homeDir = os.homedir();
 
 function getPlatformArch() {
   if (platform === 'win32') return os.arch() === 'x64' ? 'win64' : 'win32';
-  if (platform === 'darwin') return os.arch() === 'arm64' ? 'darwin_arm64' : 'darwin_x64';
+  if (platform === 'darwin') return os.arch() === 'x64' ? 'darwin_x64' : 'darwin_arm64';
   return os.arch(); // linux fallback
 }
 const arch = getPlatformArch();

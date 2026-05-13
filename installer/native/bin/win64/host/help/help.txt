@@ -1,8 +1,8 @@
-[PRE_BOOT] MAIN_ENTERED pid=93805 build=114 argc=2 exe=/Users/josevigil/repos/bloom-development-extension/installer/host/../../installer/native/bin/darwin_x64/host/bloom-host
+[PRE_BOOT] MAIN_ENTERED pid=76695 build=115 argc=2 exe=/Users/josevigil/repos/bloom-development-extension/installer/host/../../installer/native/bin/darwin_x64/host/bloom-host
 [PRE_BOOT] Entering CLIParser::parse_and_execute
 
                                              BLOOM-HOST
-                      Synapse Native Messaging Bridge  |  v2.1.0  |  build 114
+                      Synapse Native Messaging Bridge  |  v2.1.0  |  build 115
 
 
 ----------------------------------------------------------------------------------------------------
