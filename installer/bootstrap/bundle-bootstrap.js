@@ -45,13 +45,13 @@ async function build() {
     name: 'bloom-alias',
     setup(build) {
       build.onResolve({ filter: /out[\/\\]server[\/\\]WebSocketManager$/ }, () => ({
-        path: path.join(outDir, 'server', 'WebSocketManager.js'),
+        path: path.join(outDir, 'src', 'server', 'WebSocketManager.js'),
       }));
       build.onResolve({ filter: /out[\/\\]api[\/\\]server$/ }, () => ({
-        path: path.join(outDir, 'api', 'server.js'),
+        path: path.join(outDir, 'src', 'api', 'server.js'),
       }));
       build.onResolve({ filter: /out[\/\\]managers[\/\\]HeadlessUserManager$/ }, () => ({
-        path: path.join(REPO_ROOT, 'src', 'managers', 'HeadlessUserManager.ts'),
+        path: path.join(outDir, 'src', 'managers', 'HeadlessUserManager.js'),
       }));
 
       // vscode stub — el módulo solo existe dentro del host de VS Code.

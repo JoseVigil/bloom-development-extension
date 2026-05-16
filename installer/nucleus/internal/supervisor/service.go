@@ -129,6 +129,66 @@ type StartOllamaResult struct {
 }
 
 // ============================================================================
+// BINARY RESOLUTION HELPERS
+// ============================================================================
+
+// resolveTemporalBin returns the absolute path to the temporal binary.
+// Tries without extension first (macOS/Linux), then with .exe (Windows),
+// then falls back to PATH.
+func resolveTemporalBin(binDir string) (string, error) {
+	candidates := []string{
+		filepath.Join(binDir, "temporal", "temporal"),     // macOS / Linux
+		filepath.Join(binDir, "temporal", "temporal.exe"), // Windows
+	}
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			return c, nil
+		}
+	}
+	if p, err := exec.LookPath("temporal"); err == nil {
+		return p, nil
+	}
+	return "", fmt.Errorf("temporal binary not found at %s or in PATH",
+		filepath.Join(binDir, "temporal", "temporal[.exe]"))
+}
+
+// resolveNucleusBin returns the absolute path to the nucleus binary.
+// Tries without extension first (macOS/Linux), then with .exe (Windows),
+// then falls back to PATH.
+func resolveNucleusBin(binDir string) (string, error) {
+	candidates := []string{
+		filepath.Join(binDir, "nucleus", "nucleus"),     // macOS / Linux
+		filepath.Join(binDir, "nucleus", "nucleus.exe"), // Windows
+	}
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			return c, nil
+		}
+	}
+	if p, err := exec.LookPath("nucleus"); err == nil {
+		return p, nil
+	}
+	return "", fmt.Errorf("nucleus binary not found at %s or in PATH",
+		filepath.Join(binDir, "nucleus", "nucleus[.exe]"))
+}
+
+// resolveNodeBin returns the absolute path to the node binary.
+// Tries without extension first (macOS/Linux), then with .exe (Windows),
+// then falls back to "node" (system PATH).
+func resolveNodeBin(binDir string) string {
+	candidates := []string{
+		filepath.Join(binDir, "node", "node"),     // macOS / Linux
+		filepath.Join(binDir, "node", "node.exe"), // Windows
+	}
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			return c
+		}
+	}
+	return "node" // fallback to system PATH
+}
+
+// ============================================================================
 // TEMPORAL SERVER MANAGEMENT
 // ============================================================================
 
@@ -159,15 +219,10 @@ func (s *Supervisor) startTemporalServer(ctx context.Context) (*ManagedProcess, 
 		return proc, nil
 	}
 
-	// Find Temporal binary
-	temporalBin := filepath.Join(s.binDir, "temporal", "temporal.exe")
-	if _, err := os.Stat(temporalBin); err != nil {
-		// Fallback to system PATH
-		if binPath, err := exec.LookPath("temporal"); err == nil {
-			temporalBin = binPath
-		} else {
-			return nil, fmt.Errorf("temporal binary not found at %s or in PATH", temporalBin)
-		}
+	// Find Temporal binary (cross-platform: tries without .exe first)
+	temporalBin, err := resolveTemporalBin(s.binDir)
+	if err != nil {
+		return nil, err
 	}
 
 	// Generate log filename with date
@@ -268,14 +323,10 @@ func (s *Supervisor) waitForTemporalReady(ctx context.Context, timeout time.Dura
 // waitForWorkerReady polls Temporal task-queue until at least one poller is active
 // or the timeout expires. Uses absolute temporal binary path to avoid PATH issues.
 func (s *Supervisor) waitForWorkerReady(timeout time.Duration) error {
-	temporalBin := filepath.Join(s.binDir, "temporal", "temporal.exe")
-	if _, err := os.Stat(temporalBin); err != nil {
-		// Fallback to PATH
-		if p, err := exec.LookPath("temporal"); err == nil {
-			temporalBin = p
-		} else {
-			return fmt.Errorf("temporal binary not found at %s or in PATH", temporalBin)
-		}
+	// Find Temporal binary (cross-platform: tries without .exe first)
+	temporalBin, err := resolveTemporalBin(s.binDir)
+	if err != nil {
+		return err
 	}
 
 	deadline := time.Now().Add(timeout)
@@ -341,10 +392,10 @@ func (s *Supervisor) startWorkerManager(ctx context.Context) (*ManagedProcess, e
 		return proc, nil
 	}
 
-	// Find nucleus binary
-	nucleusBin := filepath.Join(s.binDir, "nucleus", "nucleus.exe")
-	if _, err := os.Stat(nucleusBin); err != nil {
-		return nil, fmt.Errorf("nucleus binary not found at %s", nucleusBin)
+	// Find nucleus binary (cross-platform: tries without .exe first)
+	nucleusBin, err := resolveNucleusBin(s.binDir)
+	if err != nil {
+		return nil, err
 	}
 
 	// Generate log filename with date
@@ -492,10 +543,13 @@ func (s *Supervisor) startBrainServer(ctx context.Context) (*ManagedProcess, err
 		return proc, nil
 	}
 
-	// Resolver ruta del binario: binDir/brain/brain.exe
-	brainBin := filepath.Join(s.binDir, "brain", "brain.exe")
+	// Resolver ruta del binario: binDir/brain/brain (macOS/Linux) o brain.exe (Windows)
+	brainBin := filepath.Join(s.binDir, "brain", "brain")
 	if _, err := os.Stat(brainBin); err != nil {
-		return nil, fmt.Errorf("brain binary not found at %s", brainBin)
+		brainBin = filepath.Join(s.binDir, "brain", "brain.exe")
+		if _, err := os.Stat(brainBin); err != nil {
+			return nil, fmt.Errorf("brain binary not found at %s", filepath.Join(s.binDir, "brain", "brain[.exe]"))
+		}
 	}
 
 	// Log file con fecha
@@ -582,17 +636,12 @@ func (s *Supervisor) updateBrainTelemetry(proc *ManagedProcess) {
 
 // CheckVaultStatus queries the vault status via Synapse
 func (s *Supervisor) CheckVaultStatus(ctx context.Context) (*VaultStatusResult, error) {
-	// Find nucleus binary - CRITICAL: Use absolute path for service mode
-	nucleusBin := filepath.Join(s.binDir, "nucleus", "nucleus.exe")
-	if _, err := os.Stat(nucleusBin); err != nil {
-		// Fallback to PATH (for development mode)
-		if binPath, err := exec.LookPath("nucleus"); err == nil {
-			nucleusBin = binPath
-		} else {
-			return nil, fmt.Errorf("nucleus binary not found at %s or in PATH", nucleusBin)
-		}
+	// Find nucleus binary (cross-platform: tries without .exe first)
+	nucleusBin, err := resolveNucleusBin(s.binDir)
+	if err != nil {
+		return nil, err
 	}
-	
+
 	cmd := exec.CommandContext(ctx, nucleusBin, "--json", "synapse", "vault-status")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -618,17 +667,12 @@ func (s *Supervisor) CheckVaultStatus(ctx context.Context) (*VaultStatusResult, 
 
 // StartOllama starts Ollama service via Synapse
 func (s *Supervisor) StartOllama(ctx context.Context) (*StartOllamaResult, error) {
-	// Find nucleus binary - CRITICAL: Use absolute path for service mode
-	nucleusBin := filepath.Join(s.binDir, "nucleus", "nucleus.exe")
-	if _, err := os.Stat(nucleusBin); err != nil {
-		// Fallback to PATH (for development mode)
-		if binPath, err := exec.LookPath("nucleus"); err == nil {
-			nucleusBin = binPath
-		} else {
-			return nil, fmt.Errorf("nucleus binary not found at %s or in PATH", nucleusBin)
-		}
+	// Find nucleus binary (cross-platform: tries without .exe first)
+	nucleusBin, err := resolveNucleusBin(s.binDir)
+	if err != nil {
+		return nil, err
 	}
-	
+
 	cmd := exec.CommandContext(ctx, nucleusBin, "--json", "synapse", "start-ollama")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -674,11 +718,8 @@ func (s *Supervisor) StartNodeProcess(ctx context.Context, name string, scriptPa
 		return nil, fmt.Errorf("failed to create log file: %w", err)
 	}
 
-	// Get Node.js binary
-	nodePath := filepath.Join(s.binDir, "node", "node.exe")
-	if _, err := os.Stat(nodePath); err != nil {
-		nodePath = "node" // Fallback to system Node
-	}
+	// Get Node.js binary (cross-platform: tries without .exe first)
+	nodePath := resolveNodeBin(s.binDir)
 
 	// Create command
 	cmd := exec.CommandContext(ctx, nodePath, scriptPath)
@@ -713,8 +754,8 @@ func (s *Supervisor) StartNodeProcess(ctx context.Context, name string, scriptPa
 // Es la única forma correcta de escribir a telemetry.json desde el supervisor —
 // delega en registerStreamCLI que maneja locking, merge atómico y verificación post-write.
 func (s *Supervisor) registerStream(streamID, label, logPath, description, source string, priority int, categories []string) {
-	nucleusBin := filepath.Join(s.binDir, "nucleus", "nucleus.exe")
-	if _, err := os.Stat(nucleusBin); err != nil {
+	nucleusBin, err := resolveNucleusBin(s.binDir)
+	if err != nil {
 		return // nucleus no disponible — no crítico
 	}
 
@@ -951,12 +992,7 @@ func (s *Supervisor) watchWorker() {
 		// run `temporal ensure` (idempotent) before spawning a new worker process.
 		if conn, tcpErr := net.DialTimeout("tcp", "localhost:7233", 1*time.Second); tcpErr != nil {
 			s.slog("WARN", "watchWorker: Temporal not reachable before worker restart — attempting temporal ensure")
-			nucleusBin := filepath.Join(s.binDir, "nucleus", "nucleus.exe")
-			if _, statErr := os.Stat(nucleusBin); statErr != nil {
-				if p, lookErr := exec.LookPath("nucleus"); lookErr == nil {
-					nucleusBin = p
-				}
-			}
+			nucleusBin, _ := resolveNucleusBin(s.binDir)
 			ensureCtx, ensureCancel := context.WithTimeout(context.Background(), 30*time.Second)
 			out, ensureErr := exec.CommandContext(ensureCtx, nucleusBin, "temporal", "ensure").CombinedOutput()
 			ensureCancel()
@@ -1139,11 +1175,8 @@ func (s *Supervisor) bootControlPlane(ctx context.Context, simulation bool) (*Ma
 		[]string{"nucleus"},
 	)
 
-	// Get Node.js binary
-	nodePath := filepath.Join(s.binDir, "node", "node.exe")
-	if _, err := os.Stat(nodePath); err != nil {
-		nodePath = "node" // Fallback to system Node
-	}
+	// Get Node.js binary (cross-platform: tries without .exe first)
+	nodePath := resolveNodeBin(s.binDir)
 
 	cmd := exec.CommandContext(ctx, nodePath, bundleScript)
 	cmd.Env = append(os.Environ(), env...)

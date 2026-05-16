@@ -665,7 +665,11 @@ def build_cortex() -> StepResult:
 
 def build_bootstrap() -> StepResult:
     """
-    Bootstrap: ejecuta version-bootstrap.py con python3, no con bash.
+    Bootstrap: cuatro pasos en orden:
+      1. version-bootstrap.py  — incrementa build_number en bootstrap.meta.json
+      2. npm run compile        — compila TypeScript → out/  (requerido por esbuild)
+      3. npm run build:bundle   — genera installer/native/bin/bootstrap/bundle.js
+      4. copiar static/         — assets estáticos (swagger-ui, etc.) junto al bundle
     """
     bootstrap_dir = BUILDS["bootstrap"]
     script_py     = bootstrap_dir / "version-bootstrap.py"     # type: ignore[operator]
@@ -674,13 +678,45 @@ def build_bootstrap() -> StepResult:
         return StepResult("Bootstrap", False,
                           error=f"version-bootstrap.py no encontrado en: {bootstrap_dir}")
 
-    log(f"Ejecutando python3 {script_py.name} ...")
+    # Paso 1: versionar
+    log("Paso 1/4: Incrementando build number ...")
     cmd = [sys.executable, script_py.name]
     code, out, _ = run(cmd, cwd=script_py.parent)
     if code != 0:
         tail = "\n".join(out.splitlines()[-20:]) if out else "(sin output)"
-        return StepResult("Bootstrap", False, error=tail)
-    return StepResult("Bootstrap", True, output=out)
+        return StepResult("Bootstrap", False, error=f"version-bootstrap.py falló:\n{tail}")
+
+    # Paso 2: compilar TypeScript (bundle.js depende de out/)
+    log("Paso 2/4: Compilando TypeScript (npm run compile) ...")
+    cmd2 = [_NPM, "run", "compile"]
+    code2, out2 = run_streaming(cmd2, cwd=ROOT)
+    if code2 != 0:
+        tail = "\n".join(out2.splitlines()[-20:]) if out2 else "(sin output)"
+        return StepResult("Bootstrap", False, error=f"npm run compile falló:\n{tail}")
+
+    # Paso 3: generar bundle.js
+    log("Paso 3/4: Generando bundle.js (npm run build:bundle) ...")
+    cmd3 = [_NPM, "run", "build:bundle"]
+    code3, out3 = run_streaming(cmd3, cwd=ROOT)
+    if code3 != 0:
+        tail = "\n".join(out3.splitlines()[-20:]) if out3 else "(sin output)"
+        return StepResult("Bootstrap", False, error=f"npm run build:bundle falló:\n{tail}")
+
+    bundle_path = ROOT / "installer/native/bin/bootstrap/bundle.js"
+    size_kb = f"{bundle_path.stat().st_size / 1024:.1f} KB" if bundle_path.exists() else "no encontrado"
+
+    # Paso 4: copiar assets estáticos junto al bundle
+    import shutil
+    log("Paso 4/4: Copiando assets estáticos ...")
+    static_src  = ROOT / "installer" / "bootstrap" / "static"
+    static_dest = ROOT / "installer" / "native" / "bin" / "bootstrap" / "static"
+    if static_src.exists():
+        shutil.copytree(static_src, static_dest, dirs_exist_ok=True)
+        log(f"  static/ → {static_dest}")
+    else:
+        log(f"  ⚠ {static_src} no encontrado — swagger-ui puede fallar en runtime")
+
+    return StepResult("Bootstrap", True, output=f"bundle.js → {size_kb}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

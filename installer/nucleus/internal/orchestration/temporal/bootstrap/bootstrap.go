@@ -26,7 +26,7 @@ const (
 // SHARED UTILITIES
 // ────────────────────────────────────────────────────────────────
 
-// getTemporalExecutablePath devuelve la ruta al ejecutable temporal.exe
+// getTemporalExecutablePath devuelve la ruta al ejecutable temporal (sin extensión en macOS/Linux, con .exe en Windows)
 func getTemporalExecutablePath() (string, error) {
 	userHome, err := os.UserHomeDir()
 	if err != nil {
@@ -44,13 +44,18 @@ func getTemporalExecutablePath() (string, error) {
 		basePath = filepath.Join(userHome, ".bloom-nucleus", "bin", "temporal")
 	}
 
-	executablePath := filepath.Join(basePath, "temporal.exe")
-	
-	if _, err := os.Stat(executablePath); err != nil {
-		return "", fmt.Errorf("temporal executable not found at %s", executablePath)
+	// Try without extension first (macOS/Linux), then with .exe (Windows)
+	candidates := []string{
+		filepath.Join(basePath, "temporal"),
+		filepath.Join(basePath, "temporal.exe"),
+	}
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			return c, nil
+		}
 	}
 
-	return executablePath, nil
+	return "", fmt.Errorf("temporal executable not found at %s", basePath)
 }
 
 // getPIDFilePath devuelve la ruta al archivo PID

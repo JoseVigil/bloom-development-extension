@@ -507,7 +507,7 @@
     "prebuild": "npm run prepare:runtime",
     "install:bridge": "node scripts/bridge/postinstall.js",
     "install:python": "node scripts/python/install_python_deps.js",
-    "postinstall": "npm run install:bridge && npm run install:python",
+    "postinstall": "npm run install:python",
     "vscode:prepublish": "npm run compile && npm run copy-assets && npm run build:bundle",
     "compile": "tsc -p ./",
     "copy-assets": "node -e \"require('fs').cpSync('src/ui', 'out/ui', {recursive: true})\"",

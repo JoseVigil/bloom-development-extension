@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -169,11 +170,21 @@ Effects:  Read-only (unless --fix is used)`,
 
 			appDataDir := os.Getenv("BLOOM_APPDATA_DIR")
 			if appDataDir == "" {
-				localAppData := os.Getenv("LOCALAPPDATA")
-				if localAppData == "" {
-					localAppData = os.Getenv("HOME")
+				home, _ := os.UserHomeDir()
+				if runtime.GOOS == "windows" {
+					localAppData := os.Getenv("LOCALAPPDATA")
+					if localAppData == "" {
+						localAppData = filepath.Join(home, "AppData", "Local")
+					}
+					appDataDir = filepath.Join(localAppData, "BloomNucleus")
+				} else {
+					macOSPath := filepath.Join(home, "Library", "Application Support", "BloomNucleus")
+					if _, statErr := os.Stat(filepath.Join(home, "Library")); statErr == nil {
+						appDataDir = macOSPath
+					} else {
+						appDataDir = filepath.Join(home, ".bloom-nucleus")
+					}
 				}
-				appDataDir = filepath.Join(localAppData, "BloomNucleus")
 			}
 
 			supervisor := NewSupervisor(logsDir, binDir)
@@ -388,7 +399,7 @@ func applyFixes(result *HealthResult) {
 	// Uses `nucleus temporal ensure` which is idempotent and automation-safe.
 	if temporal, ok := result.Components["temporal"]; ok && !temporal.Healthy {
 		temporal.FixAttempted = true
-		nucleusExe, exeErr := getNucleusExecutablePath()
+		nucleusExe, exeErr := resolveNucleusExe()
 		if exeErr != nil {
 			temporal.FixResult = fmt.Sprintf("FAILED: nucleus not found: %v", exeErr)
 		} else {
@@ -420,7 +431,7 @@ func applyFixes(result *HealthResult) {
 		worker.FixAttempted = true
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		nucleusExe, exeErr := getNucleusExecutablePath()
+		nucleusExe, exeErr := resolveNucleusExe()
 		if exeErr != nil {
 			worker.FixResult = fmt.Sprintf("FAILED: nucleus not found: %v", exeErr)
 		} else {
@@ -437,12 +448,7 @@ func applyFixes(result *HealthResult) {
 				go cmd.Wait() //nolint:errcheck
 				// Verify worker connected to Temporal task-queue (up to 10s)
 				binDir := filepath.Dir(filepath.Dir(nucleusExe))
-				temporalBin := filepath.Join(binDir, "temporal", "temporal.exe")
-				if _, statErr := os.Stat(temporalBin); statErr != nil {
-					if p, lookErr := exec.LookPath("temporal"); lookErr == nil {
-						temporalBin = p
-					}
-				}
+				temporalBin, _ := resolveTemporalExe(binDir)
 				connected := false
 				deadline := time.Now().Add(10 * time.Second)
 				for time.Now().Before(deadline) {
@@ -477,7 +483,7 @@ func applyFixes(result *HealthResult) {
 	// Fix control_plane: relaunch bootstrap via nucleus service restart-bootstrap
 	if cp, ok := result.Components["control_plane"]; ok && !cp.Healthy {
 		cp.FixAttempted = true
-		nucleusExe, exeErr := getNucleusExecutablePath()
+		nucleusExe, exeErr := resolveNucleusExe()
 		if exeErr != nil {
 			cp.FixResult = fmt.Sprintf("FAILED: nucleus not found: %v", exeErr)
 		} else {
@@ -669,13 +675,23 @@ func nssmStart(serviceName string, timeout time.Duration) error {
 	// Resolver ruta absoluta de nssm — mismo patrón que resolveOllamaBin.
 	// nssm no está en PATH del sistema; vive en BloomNucleus/bin/nssm/nssm.exe.
 	nssmBin := "nssm" // fallback a PATH
-	localAppData := os.Getenv("LOCALAPPDATA")
-	if localAppData == "" {
-		localAppData = filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Local")
-	}
 	appDataDir := os.Getenv("BLOOM_APPDATA_DIR")
 	if appDataDir == "" {
-		appDataDir = filepath.Join(localAppData, "BloomNucleus")
+		home, _ := os.UserHomeDir()
+		if runtime.GOOS == "windows" {
+			localAppData := os.Getenv("LOCALAPPDATA")
+			if localAppData == "" {
+				localAppData = filepath.Join(home, "AppData", "Local")
+			}
+			appDataDir = filepath.Join(localAppData, "BloomNucleus")
+		} else {
+			macOSPath := filepath.Join(home, "Library", "Application Support", "BloomNucleus")
+			if _, statErr := os.Stat(filepath.Join(home, "Library")); statErr == nil {
+				appDataDir = macOSPath
+			} else {
+				appDataDir = filepath.Join(home, ".bloom-nucleus")
+			}
+		}
 	}
 	candidate := filepath.Join(appDataDir, "bin", "nssm", "nssm.exe")
 	if _, err := os.Stat(candidate); err == nil {
@@ -691,17 +707,26 @@ func nssmStart(serviceName string, timeout time.Duration) error {
 
 // resolveOllamaBin localiza el binario de ollama.
 // Orden de prioridad:
-//  1. <LOCALAPPDATA>/BloomNucleus/bin/ollama/ollama.exe — instalación BloomNucleus estándar
+//  1. <AppDataDir>/bin/ollama/ollama (macOS/Linux) o ollama.exe (Windows)
 //  2. ollama en PATH — instalación standalone del sistema
 func resolveOllamaBin() string {
-	// Resolver appDataDir igual que InitPaths — siempre LOCALAPPDATA, nunca APPDATA
-	localAppData := os.Getenv("LOCALAPPDATA")
-	if localAppData == "" {
-		localAppData = filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Local")
-	}
 	appDataDir := os.Getenv("BLOOM_APPDATA_DIR")
 	if appDataDir == "" {
-		appDataDir = filepath.Join(localAppData, "BloomNucleus")
+		home, _ := os.UserHomeDir()
+		if runtime.GOOS == "windows" {
+			localAppData := os.Getenv("LOCALAPPDATA")
+			if localAppData == "" {
+				localAppData = filepath.Join(home, "AppData", "Local")
+			}
+			appDataDir = filepath.Join(localAppData, "BloomNucleus")
+		} else {
+			macOSPath := filepath.Join(home, "Library", "Application Support", "BloomNucleus")
+			if _, statErr := os.Stat(filepath.Join(home, "Library")); statErr == nil {
+				appDataDir = macOSPath
+			} else {
+				appDataDir = filepath.Join(home, ".bloom-nucleus")
+			}
+		}
 	}
 
 	candidates := []string{
@@ -721,6 +746,71 @@ func resolveOllamaBin() string {
 }
 
 // ── Individual component checks ───────────────────────────────────────────────
+
+// resolveNucleusExe returns the absolute path to the nucleus binary.
+// Tries without extension first (macOS/Linux), then with .exe (Windows),
+// then falls back to PATH. Used by applyFixes and checkVault which don't
+// have access to a Supervisor instance.
+func resolveNucleusExe() (string, error) {
+	// Resolve appDataDir the same way resolveOllamaBin does — env vars only,
+	// no *core.Core available here.
+	appDataDir := os.Getenv("BLOOM_APPDATA_DIR")
+	if appDataDir == "" {
+		localAppData := os.Getenv("LOCALAPPDATA")
+		if localAppData == "" {
+			userHome, _ := os.UserHomeDir()
+			// macOS/Linux: ~/.bloom-nucleus; Windows fallback
+			if home := filepath.Join(userHome, ".bloom-nucleus"); fileExists(home) {
+				appDataDir = home
+			} else {
+				appDataDir = filepath.Join(userHome, "AppData", "Local", "BloomNucleus")
+			}
+		} else {
+			appDataDir = filepath.Join(localAppData, "BloomNucleus")
+		}
+	}
+	binDir := filepath.Join(appDataDir, "bin")
+	candidates := []string{
+		filepath.Join(binDir, "nucleus", "nucleus"),     // macOS / Linux
+		filepath.Join(binDir, "nucleus", "nucleus.exe"), // Windows
+	}
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			return c, nil
+		}
+	}
+	if p, err := exec.LookPath("nucleus"); err == nil {
+		return p, nil
+	}
+	return "", fmt.Errorf("nucleus binary not found at %s or in PATH",
+		filepath.Join(binDir, "nucleus", "nucleus[.exe]"))
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+// resolveTemporalExe returns the absolute path to the temporal binary.
+// Tries without extension first (macOS/Linux), then with .exe (Windows),
+// then falls back to PATH.
+func resolveTemporalExe(binDir string) (string, error) {
+	candidates := []string{
+		filepath.Join(binDir, "temporal", "temporal"),     // macOS / Linux
+		filepath.Join(binDir, "temporal", "temporal.exe"), // Windows
+	}
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			return c, nil
+		}
+	}
+	if p, err := exec.LookPath("temporal"); err == nil {
+		return p, nil
+	}
+	return "", fmt.Errorf("temporal binary not found at %s or in PATH",
+		filepath.Join(binDir, "temporal", "temporal[.exe]"))
+}
+
 
 func checkTemporal(ctx context.Context, s *Supervisor, validate bool) ComponentHealth {
 	health := ComponentHealth{Port: 7233, GRPCURL: "localhost:7233"}
@@ -858,7 +948,7 @@ func checkVault(ctx context.Context, s *Supervisor, validate bool) ComponentHeal
 		health.Error = "vault check skipped (onboarding mode)"
 		return health
 	}
-	nucleusExe, err := getNucleusExecutablePath()
+	nucleusExe, err := resolveNucleusExe()
 	if err != nil {
 		health.Healthy = false
 		health.State = "FAILED"

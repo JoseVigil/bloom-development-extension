@@ -84,10 +84,41 @@ async function runMetamorphAudit(win) {
 }
 
 async function installBrainService(win) {
-  // TODO: registrar Brain como LaunchAgent (darwin) o NSSM service (win32)
-  // En darwin: usar service-installer-brain-darwin.js → installWindowsService()
-  logger.warn('⚠️ installBrainService: not yet implemented, skipping');
-  return { success: true, skipped: true };
+  const MILESTONE = 'brain_service_install';
+
+  if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
+    logger.info(`⭐️ ${MILESTONE} completed, skipping`);
+    return { success: true, skipped: true };
+  }
+
+  await nucleusManager.startMilestone(MILESTONE);
+  emitProgress(win, 6, 11, 'Installing Brain Service...');
+
+  try {
+    logger.separator('INSTALLING BRAIN SERVICE');
+
+    logger.info('Installing Brain LaunchAgent...');
+    await installWindowsService();
+
+    logger.info('Starting Brain Service...');
+    const started = await startService();
+
+    if (!started) {
+      throw new Error('Brain Service failed to start');
+    }
+
+    logger.success('✅ Brain Service started');
+
+    await nucleusManager.completeMilestone(MILESTONE, {
+      service_running: true
+    });
+
+    return { success: true };
+
+  } catch (error) {
+    await nucleusManager.failMilestone(MILESTONE, error.message);
+    throw error;
+  }
 }
 
 async function seedMasterProfile(win) {

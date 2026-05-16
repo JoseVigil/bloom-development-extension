@@ -31,6 +31,19 @@ const { WebSocketManager } = require('../../out/server/WebSocketManager');
 const { startAPIServer } = require('../../out/api/server');
 const { HeadlessUserManager } = require('../../out/managers/HeadlessUserManager');
 
+// ── App data directory (cross-platform) ─────────────────────────────────────
+// LOCALAPPDATA solo existe en Windows. En macOS/Linux se resuelve via HOME.
+const os = require('os');
+function resolveAppDataDir() {
+  if (process.env.LOCALAPPDATA) return process.env.LOCALAPPDATA;
+  const home = os.homedir();
+  if (process.platform === 'darwin') {
+    return path.join(home, 'Library', 'Application Support');
+  }
+  return path.join(home, '.local', 'share');
+}
+const APP_DATA = resolveAppDataDir();
+
 // ============================================
 // ENVIRONMENT VALIDATION
 // ============================================
@@ -91,9 +104,14 @@ function validateEnvironment() {
 async function updateTelemetry(streamId, data) {
   const lockfile = require('proper-lockfile');
   const logsDir = process.env.BLOOM_LOGS_DIR ||
-    path.join(process.env.LOCALAPPDATA, 'BloomNucleus', 'logs');
+    path.join(APP_DATA, 'BloomNucleus', 'logs');
   const telemetryPath = path.join(logsDir, 'telemetry.json');
 
+  // Antes de llamar a lockfile.lock, garantizar que el archivo existe
+  if (!fs.existsSync(telemetryPath)) {
+    fs.mkdirSync(path.dirname(telemetryPath), { recursive: true });
+    fs.writeFileSync(telemetryPath, JSON.stringify({ active_streams: {} }, null, 2));
+  }
   const release = await lockfile.lock(telemetryPath, {
     retries: { retries: 5, minTimeout: 50, maxTimeout: 200 }
   });
@@ -253,7 +271,7 @@ async function bootstrap() {
 
   const wsManager = WebSocketManager.getInstance();
   const userManager = new HeadlessUserManager({
-    storageDir: path.join(process.env.LOCALAPPDATA, 'BloomNucleus', 'users')
+    storageDir: path.join(APP_DATA, 'BloomNucleus', 'users')
   });
 
   console.log('[Bootstrap] Starting WebSocket server (port 4124)...');

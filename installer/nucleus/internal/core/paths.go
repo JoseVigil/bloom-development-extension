@@ -3,6 +3,7 @@ package core
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -27,13 +28,34 @@ func InitPaths() (*Paths, error) {
 	sentinelDir := filepath.Dir(exe)
 	binDir := filepath.Dir(sentinelDir)
 
-	localAppData := os.Getenv("LOCALAPPDATA")
-	if localAppData == "" {
-		localAppData = filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Local")
+	// Resolve appDataDir cross-platform: BLOOM_APPDATA_DIR overrides everything.
+	// On Windows use LOCALAPPDATA; on macOS/Linux use ~/Library/Application Support.
+	appDataDir := os.Getenv("BLOOM_APPDATA_DIR")
+	if appDataDir == "" {
+		home, _ := os.UserHomeDir()
+		if runtime.GOOS == "windows" {
+			localAppData := os.Getenv("LOCALAPPDATA")
+			if localAppData == "" {
+				localAppData = filepath.Join(home, "AppData", "Local")
+			}
+			appDataDir = filepath.Join(localAppData, "BloomNucleus")
+		} else {
+			// macOS: ~/Library/Application Support/BloomNucleus
+			// Linux: ~/.bloom-nucleus (fallback)
+			macOSPath := filepath.Join(home, "Library", "Application Support", "BloomNucleus")
+			if _, err := os.Stat(filepath.Join(home, "Library")); err == nil {
+				appDataDir = macOSPath
+			} else {
+				appDataDir = filepath.Join(home, ".bloom-nucleus")
+			}
+		}
 	}
-	appDataDir := filepath.Join(localAppData, "BloomNucleus")
 
-	nucleusBin := filepath.Join(binDir, "nucleus", "nucleus.exe")
+	// Resolve nucleus binary: try without extension first (macOS/Linux), then .exe (Windows).
+	nucleusBin := filepath.Join(binDir, "nucleus", "nucleus")
+	if _, err := os.Stat(nucleusBin); err != nil {
+		nucleusBin = filepath.Join(binDir, "nucleus", "nucleus.exe")
+	}
 
 	paths := &Paths{
 		BinDir:       binDir,
