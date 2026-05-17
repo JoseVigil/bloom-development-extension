@@ -70,9 +70,9 @@ mkdir -p "${OUTPUT_DIR}"
 # ───────────────────────────────────────────────────────────────
 
 if [[ "${DETECTED_OS}" == "Darwin" ]]; then
-    LOG_BASE_DIR="${HOME}/Library/Logs/BloomNucleus/build"
+    LOG_BASE_DIR="${HOME}/Library/Application Support/BloomNucleus/logs/build"
 else
-    LOG_BASE_DIR="${HOME}/.local/share/BloomNucleus/build/logs"
+    LOG_BASE_DIR="${HOME}/.local/share/BloomNucleus/logs/build"
 fi
 
 LOG_FILE="${LOG_BASE_DIR}/${COMPONENT}_build_${BIN_ARCH}.log"
@@ -193,6 +193,33 @@ echo "✅ ${COMPONENT} compilado → ${OUTPUT_BINARY}"
 echo "✅ ${COMPONENT} compilado → ${OUTPUT_BINARY}" >> "${LOG_FILE}"
 
 # ───────────────────────────────────────────────────────────────
+# COPIA DE ARCHIVOS DE HELP
+# Los archivos de help viven en installer/<component>/help/ y deben
+# copiarse a installer/native/bin/<arch>/<component>/help/ — usando
+# el mismo BIN_ARCH que resolvió la compilación arriba (darwin_arm64,
+# darwin_x64, linux_x64). Nunca se hardcodea "win64" u otro arch.
+# ───────────────────────────────────────────────────────────────
+
+HELP_SRC_DIR="${PROJECT_ROOT}/installer/${COMPONENT}/help"
+HELP_OUT_DIR="${OUTPUT_DIR}/help"
+
+echo ""
+echo "Copiando archivos de help..."
+echo "Copiando archivos de help..." >> "${LOG_FILE}"
+echo "  Origen : ${HELP_SRC_DIR}"  >> "${LOG_FILE}"
+echo "  Destino: ${HELP_OUT_DIR}"  >> "${LOG_FILE}"
+
+if [[ -d "${HELP_SRC_DIR}" ]]; then
+    mkdir -p "${HELP_OUT_DIR}"
+    cp -r "${HELP_SRC_DIR}/." "${HELP_OUT_DIR}/"
+    echo "✅ Help files → ${HELP_OUT_DIR}"
+    echo "✅ Help files copiados → ${HELP_OUT_DIR}" >> "${LOG_FILE}"
+else
+    echo "⚠  Directorio de help no encontrado, saltando: ${HELP_SRC_DIR}"
+    echo "⚠  Help dir no encontrado: ${HELP_SRC_DIR}" >> "${LOG_FILE}"
+fi
+
+# ───────────────────────────────────────────────────────────────
 # RESUMEN
 # ───────────────────────────────────────────────────────────────
 
@@ -203,6 +230,7 @@ echo "============================================="
 echo ""
 echo "📦 Output: ${OUTPUT_DIR}/"
 echo "  • Executable : ${BINARY_NAME}"
+echo "  • Help files : help/"
 echo ""
 echo "📋 Build log: ${LOG_FILE}"
 echo ""
@@ -213,6 +241,7 @@ echo ""
     echo "🎉 ${COMPONENT} Build [${BIN_ARCH}] completed"
     echo "============================================="
     echo "Output: ${OUTPUT_BINARY}"
+    echo "Help:   ${HELP_OUT_DIR}"
 } >> "${LOG_FILE}"
 
 exit 0

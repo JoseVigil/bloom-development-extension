@@ -3,14 +3,13 @@ package main
 import (
 	"fmt"
 	"os"
+
 	"github.com/bloom/metamorph/internal/cli"
 	"github.com/bloom/metamorph/internal/core"
 	_ "github.com/bloom/metamorph/internal/inspection"
 	_ "github.com/bloom/metamorph/internal/maintenance"
-	_ "github.com/bloom/metamorph/internal/reconciliation"
 	_ "github.com/bloom/metamorph/internal/rollback"
 	_ "github.com/bloom/metamorph/internal/system"
-	_ "github.com/bloom/metamorph/internal/inspection"
 )
 
 func main() {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/bloom/metamorph/internal/core"
@@ -100,7 +101,6 @@ Use --force-swap to skip Brain quiesce signaling (emergency use only — unsafe)
 // Core logic
 // ─────────────────────────────────────────────────────────────────────────────
 
-// reconcileManifest is the JSON envelope received from Nucleus.
 type reconcileManifest struct {
 	IonRecipes []IonRecipeUpdate `json:"ion_recipes"`
 }
@@ -111,7 +111,6 @@ func runReconcileIonRecipes(
 	dryRun bool,
 	forceSwap bool,
 ) (*ReconcileAllResult, error) {
-	// ── Read manifest ────────────────────────────────────────────────────────
 	var data []byte
 	var err error
 
@@ -139,25 +138,21 @@ func runReconcileIonRecipes(
 		}, nil
 	}
 
-	// ── Resolve ionsites path ────────────────────────────────────────────────
 	ionsitesPath := resolveIonSitesPath(c.Config)
 
 	if _, err := os.Stat(ionsitesPath); os.IsNotExist(err) {
 		return nil, fmt.Errorf("ionsites directory not found: %s (Nucleus must create it)", ionsitesPath)
 	}
 
-	// ── Build IonPump client ─────────────────────────────────────────────────
-	// forceSwap replaces the real client with Noop so Brain is never signaled.
 	var client IonPumpClient
 	if forceSwap {
 		c.Logger.Info("⚠️  --force-swap: Brain quiesce/reload signals skipped")
 		client = &NoopIonPumpClient{}
 	} else {
-		port := resolveIonPumpPort(c)
+		port := resolveIonPumpPort()
 		client = NewHttpIonPumpClient(port)
 	}
 
-	// ── Execute reconciliation ───────────────────────────────────────────────
 	if dryRun {
 		c.Logger.Info("🔍 Dry run — no filesystem changes will be made")
 	}
@@ -168,10 +163,10 @@ func runReconcileIonRecipes(
 
 // resolveIonPumpPort reads the Brain/IonPump port from the shared Nucleus config.
 // Falls back to 7700 (default IonPump port) if the config is unavailable.
-func resolveIonPumpPort(c *core.Core) int {
+func resolveIonPumpPort() int {
 	const defaultPort = 7700
 
-	configPath := c.Paths.GetNucleusConfigPath()
+	configPath := filepath.Join(core.GetConfigPath(), "nucleus.json")
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return defaultPort
@@ -202,7 +197,7 @@ func printReconcileResult(c *core.Core, result *ReconcileAllResult, dryRun bool)
 		header += " (dry run)"
 	}
 
-	c.Logger.Info("") 
+	c.Logger.Info("")
 	c.Logger.Info(header)
 	c.Logger.Info("────────────────────────────────────────────────────────────")
 

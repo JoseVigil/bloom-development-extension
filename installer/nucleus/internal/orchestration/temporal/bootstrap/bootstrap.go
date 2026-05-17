@@ -40,8 +40,10 @@ func getTemporalExecutablePath() (string, error) {
 			localAppData = filepath.Join(userHome, "AppData", "Local")
 		}
 		basePath = filepath.Join(localAppData, "BloomNucleus", "bin", "temporal")
+	} else if runtime.GOOS == "darwin" {
+		basePath = filepath.Join(userHome, "Library", "Application Support", "BloomNucleus", "bin", "temporal")
 	} else {
-		basePath = filepath.Join(userHome, ".bloom-nucleus", "bin", "temporal")
+		basePath = filepath.Join(userHome, ".local", "share", "BloomNucleus", "bin", "temporal")
 	}
 
 	// Try without extension first (macOS/Linux), then with .exe (Windows)

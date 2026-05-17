@@ -63,7 +63,10 @@ type temporalDescribeResult struct {
 // Timeout: 5 s for the subprocess.
 // Used by workers list, workers describe, and checkWorker in health.go.
 func getTaskQueuePollers(ctx context.Context, binDir string) ([]PollerInfo, []TaskQueueStats, error) {
-	temporalBin := filepath.Join(binDir, "temporal", "temporal.exe")
+	temporalBin := filepath.Join(binDir, "temporal", "temporal")
+	if _, err := os.Stat(temporalBin); err != nil {
+		temporalBin = filepath.Join(binDir, "temporal", "temporal.exe")
+	}
 	if _, err := os.Stat(temporalBin); err != nil {
 		if p, lookErr := exec.LookPath("temporal"); lookErr == nil {
 			temporalBin = p

@@ -1,95 +1,76 @@
 package core
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 )
 
-// PathConfig contiene todas las rutas del sistema
-type PathConfig struct {
-	Root    string // C:\Users\josev\AppData\Local\BloomNucleus
-	BinDir  string // C:\Users\josev\AppData\Local\BloomNucleus\bin
-	Logs    string // C:\Users\josev\AppData\Local\BloomNucleus\logs
-	Config  string // C:\Users\josev\AppData\Local\BloomNucleus\config
-	Staging string // C:\Users\josev\AppData\Local\BloomNucleus\staging
-}
-
-// InitPaths inicializa y valida la estructura de directorios
-func InitPaths() (*PathConfig, error) {
-	// Obtener LocalAppData
-	localAppData := os.Getenv("LOCALAPPDATA")
-	if localAppData == "" {
-		return nil, fmt.Errorf("LOCALAPPDATA environment variable not set")
-	}
-
-	root := filepath.Join(localAppData, "BloomNucleus")
-
-	paths := &PathConfig{
-		Root:    root,
-		BinDir:  filepath.Join(root, "bin"),
-		Logs:    filepath.Join(root, "logs"),
-		Config:  filepath.Join(root, "config"),
-		Staging: filepath.Join(root, "staging"),
-	}
-
-	// Crear directorios si no existen
-	dirs := []string{
-		paths.Logs,
-		paths.Config,
-		paths.Staging,
-		filepath.Join(paths.Staging, "downloads"),
-		filepath.Join(paths.Staging, "snapshots"),
-		filepath.Join(paths.Staging, "temp"),
-	}
-
-	for _, dir := range dirs {
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			return nil, fmt.Errorf("failed to create directory %s: %w", dir, err)
+// GetBaseAppDataPath returns the platform-correct root for BloomNucleus.
+//
+//   Windows : %LOCALAPPDATA%\BloomNucleus
+//   macOS   : ~/Library/Application Support/BloomNucleus
+//   Linux   : ~/.local/share/BloomNucleus
+func GetBaseAppDataPath() string {
+	switch runtime.GOOS {
+	case "windows":
+		localAppData := os.Getenv("LOCALAPPDATA")
+		if localAppData == "" {
+			home, _ := os.UserHomeDir()
+			localAppData = filepath.Join(home, "AppData", "Local")
 		}
+		return filepath.Join(localAppData, "BloomNucleus")
+
+	case "darwin":
+		home, _ := os.UserHomeDir()
+		return filepath.Join(home, "Library", "Application Support", "BloomNucleus")
+
+	default: // linux and anything else
+		home, _ := os.UserHomeDir()
+		return filepath.Join(home, ".local", "share", "BloomNucleus")
 	}
-
-	return paths, nil
 }
 
-// GetBinaryPath retorna la ruta completa de un binario
-func (p *PathConfig) GetBinaryPath(name, binary string) string {
-	return filepath.Join(p.BinDir, name, binary)
+// GetBinPath returns <base>/bin — where all managed and external binaries live.
+func GetBinPath() string {
+	return filepath.Join(GetBaseAppDataPath(), "bin")
 }
 
-// GetStagingDownloadPath retorna la ruta de staging para un archivo
-func (p *PathConfig) GetStagingDownloadPath(filename string) string {
-	return filepath.Join(p.Staging, "downloads", filename)
+// GetConfigPath returns <base>/config — where metamorph.json and friends live.
+func GetConfigPath() string {
+	return filepath.Join(GetBaseAppDataPath(), "config")
 }
 
-// GetSnapshotDir retorna la ruta de un snapshot específico
-func (p *PathConfig) GetSnapshotDir(snapshotID string) string {
-	return filepath.Join(p.Staging, "snapshots", snapshotID)
+// GetStagingPath returns <base>/staging — Metamorph's transient work area.
+func GetStagingPath() string {
+	return filepath.Join(GetBaseAppDataPath(), "staging")
 }
 
-// GetConfigPath retorna la ruta de un archivo de configuración
-func (p *PathConfig) GetConfigPath(filename string) string {
-	return filepath.Join(p.Config, filename)
+// GetLogsPath returns <base>/logs — where all log files are written.
+func GetLogsPath() string {
+	return filepath.Join(GetBaseAppDataPath(), "logs")
 }
 
-// GetNucleusConfigPath retorna la ruta del nucleus.json
-func (p *PathConfig) GetNucleusConfigPath() string {
-	return p.GetConfigPath("nucleus.json")
+// ExeName appends ".exe" on Windows and returns the name unchanged on every
+// other platform. Use this whenever you need to resolve a binary file name.
+//
+//	ExeName("brain")      → "brain"      (macOS/Linux)
+//	ExeName("brain")      → "brain.exe"  (Windows)
+func ExeName(name string) string {
+	if runtime.GOOS == "windows" {
+		return name + ".exe"
+	}
+	return name
 }
 
-// GetMetamorphConfigPath retorna la ruta del metamorph.json
-func (p *PathConfig) GetMetamorphConfigPath() string {
-	return p.GetConfigPath("metamorph.json")
-}
-
-// GetIonSitePath retorna la ruta del directorio instalado de un site específico.
-// Ejemplo: bin/cortex/ionsites/github.com/
-func (p *PathConfig) GetIonSitePath(domain string) string {
-	return filepath.Join(p.BinDir, "cortex", "ionsites", domain)
-}
-
-// GetIonStagingPath retorna la ruta de staging para un site durante reconciliación.
-// Ejemplo: bin/cortex/ionsites/_staging/github.com/
-func (p *PathConfig) GetIonStagingPath(domain string) string {
-	return filepath.Join(p.BinDir, "cortex", "ionsites", "_staging", domain)
+// NativeBinDir returns the path to the native build output directory for the
+// current platform, rooted at repoRoot.
+//
+// Layout expected by the build system:
+//
+//	<repoRoot>/native/bin/darwin/
+//	<repoRoot>/native/bin/windows/
+//	<repoRoot>/native/bin/linux/
+func NativeBinDir(repoRoot string) string {
+	return filepath.Join(repoRoot, "native", "bin", runtime.GOOS)
 }

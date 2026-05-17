@@ -10,7 +10,6 @@ import (
 type Core struct {
 	Config   *Config
 	Logger   *Logger
-	Paths    *PathConfig
 	jsonMode bool // guardado para InitLoggerForCategory
 }
 
@@ -25,18 +24,12 @@ type Config struct {
 // una vez que Cobra sabe qué comando se va a ejecutar, para que cada
 // categoría de comando escriba en su propio archivo de log.
 func NewCore(jsonMode bool) (*Core, error) {
-	paths, err := InitPaths()
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize paths: %w", err)
-	}
-
 	return &Core{
 		Config: &Config{
 			OutputJSON: jsonMode,
 			Verbose:    false,
 		},
 		Logger:   &Logger{}, // logger vacío hasta InitLoggerForCategory
-		Paths:    paths,
 		jsonMode: jsonMode,
 	}, nil
 }
@@ -49,7 +42,7 @@ func (c *Core) InitLoggerForCategory(category string) error {
 		return nil // ya inicializado
 	}
 
-	logger, err := InitLogger(c.Paths, category, c.jsonMode)
+	logger, err := InitLogger(category, c.jsonMode)
 	if err != nil {
 		return fmt.Errorf("failed to initialize logger for category %s: %w", category, err)
 	}
@@ -60,14 +53,9 @@ func (c *Core) InitLoggerForCategory(category string) error {
 
 // NewCoreSilent crea Core sin logger (para --help)
 func NewCoreSilent() (*Core, error) {
-	paths, err := InitPaths()
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize paths: %w", err)
-	}
 	return &Core{
 		Config: &Config{},
 		Logger: &Logger{},
-		Paths:  paths,
 	}, nil
 }
 

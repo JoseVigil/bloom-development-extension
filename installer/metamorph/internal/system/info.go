@@ -2,8 +2,11 @@ package system
 
 import (
 	"fmt"
+	"os"
+	"runtime"
 
 	"github.com/bloom/metamorph/internal/core"
+
 	"github.com/spf13/cobra"
 )
 
@@ -11,87 +14,79 @@ func init() {
 	core.RegisterCommand("SYSTEM", createInfoCommand)
 }
 
+type systemInfo struct {
+	Name         string            `json:"name"`
+	Version      string            `json:"version"`
+	BuildNumber  int               `json:"build_number"`
+	OS           string            `json:"os"`
+	Arch         string            `json:"arch"`
+	GoVersion    string            `json:"go_version"`
+	Capabilities []string          `json:"capabilities"`
+	Paths        map[string]string `json:"paths"`
+}
+
 func createInfoCommand(c *core.Core) *cobra.Command {
 	return &cobra.Command{
 		Use:   "info",
 		Short: "Display detailed system information",
-		Long: `Display comprehensive system information including version, capabilities,
-runtime environment, and configured paths.
 
-Example:
-  metamorph info
-  metamorph info --json`,
 		Annotations: map[string]string{
 			"category": "SYSTEM",
 			"json_response": `{
   "name": "Metamorph",
   "version": "1.0.0",
   "build_number": 2,
+  "os": "darwin",
+  "arch": "arm64",
+  "go_version": "go1.22.0",
   "capabilities": ["state_inspection", "manifest_reconciliation"],
-  "paths": {...}
+  "paths": {
+    "base":    "~/Library/Application Support/BloomNucleus",
+    "bin":     "~/Library/Application Support/BloomNucleus/bin",
+    "config":  "~/Library/Application Support/BloomNucleus/config",
+    "staging": "~/Library/Application Support/BloomNucleus/staging"
+  }
 }`,
 		},
+
 		Example: `  metamorph info
   metamorph --json info`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if c.Config.OutputJSON {
-				return printInfoJSON(c)
+
+		Run: func(cmd *cobra.Command, args []string) {
+			base := core.GetBaseAppDataPath()
+			info := systemInfo{
+				Name:        "Metamorph",
+				Version:     core.Version,
+				BuildNumber: core.BuildNumber,
+				OS:          runtime.GOOS,
+				Arch:        runtime.GOARCH,
+				GoVersion:   runtime.Version(),
+				Capabilities: []string{
+					"state_inspection",
+					"manifest_reconciliation",
+				},
+				Paths: map[string]string{
+					"base":    base,
+					"bin":     core.GetBinPath(),
+					"config":  core.GetConfigPath(),
+					"staging": core.GetStagingPath(),
+				},
 			}
-			return printInfoText(c)
+
+			if c.Config.OutputJSON {
+				c.OutputJSON(info)
+				return
+			}
+
+			fmt.Fprintf(os.Stdout, "Name        : %s\n", info.Name)
+			fmt.Fprintf(os.Stdout, "Version     : %s (build %d)\n", info.Version, info.BuildNumber)
+			fmt.Fprintf(os.Stdout, "OS / Arch   : %s / %s\n", info.OS, info.Arch)
+			fmt.Fprintf(os.Stdout, "Go version  : %s\n", info.GoVersion)
+			fmt.Fprintf(os.Stdout, "\nPaths:\n")
+			fmt.Fprintf(os.Stdout, "  Base      : %s\n", info.Paths["base"])
+			fmt.Fprintf(os.Stdout, "  Bin       : %s\n", info.Paths["bin"])
+			fmt.Fprintf(os.Stdout, "  Config    : %s\n", info.Paths["config"])
+			fmt.Fprintf(os.Stdout, "  Staging   : %s\n", info.Paths["staging"])
 		},
 	}
-}
-
-func printInfoJSON(c *core.Core) error {
-	data := map[string]interface{}{
-		"name":         core.AppName,
-		"version":      core.Version,
-		"build_number": core.BuildNumber,
-		"build_date":   core.BuildDate,
-		"channel":      "stable",
-		"capabilities": []string{
-			"state_inspection",
-			"manifest_reconciliation",
-			"atomic_updates",
-			"service_management",
-			"rollback",
-		},
-		"requires": map[string]string{},
-		"runtime": map[string]string{
-			"os":   "windows",
-			"arch": "amd64",
-		},
-		"paths": map[string]string{
-			"root":    c.Paths.Root,
-			"bin":     c.Paths.BinDir,
-			"logs":    c.Paths.Logs,
-			"config":  c.Paths.Config,
-			"staging": c.Paths.Staging,
-		},
-	}
-	c.OutputJSON(data)
-	return nil
-}
-
-func printInfoText(c *core.Core) error {
-	fmt.Println("Metamorph System Information")
-	fmt.Println("=============================")
-	fmt.Printf("Version: v%s-build.%d\n", core.Version, core.BuildNumber)
-	fmt.Printf("Build: %d\n", core.BuildNumber)
-	fmt.Printf("Channel: stable\n")
-	fmt.Println()
-	fmt.Println("Capabilities:")
-	fmt.Println("  • State inspection")
-	fmt.Println("  • Manifest reconciliation")
-	fmt.Println("  • Atomic updates")
-	fmt.Println("  • Service management")
-	fmt.Println("  • Rollback")
-	fmt.Println()
-	fmt.Println("Paths:")
-	fmt.Printf("  Root:    %s\n", c.Paths.Root)
-	fmt.Printf("  Bin:     %s\n", c.Paths.BinDir)
-	fmt.Printf("  Logs:    %s\n", c.Paths.Logs)
-	fmt.Printf("  Config:  %s\n", c.Paths.Config)
-	fmt.Printf("  Staging: %s\n", c.Paths.Staging)
-	return nil
 }

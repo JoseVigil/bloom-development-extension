@@ -36,10 +36,10 @@ func NewLogger(output io.Writer) *Logger {
 	}
 }
 
-// InitLogger crea un logger que escribe a archivo y consola
-// En modo JSON, los logs van a stderr; en modo normal, a stdout
-func InitLogger(paths *PathConfig, category string, jsonMode bool) (*Logger, error) {
-	targetDir := filepath.Join(paths.Logs, "metamorph")
+// InitLogger crea un logger que escribe a archivo y consola.
+// En modo JSON, los logs van a stderr; en modo normal, a stdout.
+func InitLogger(category string, jsonMode bool) (*Logger, error) {
+	targetDir := filepath.Join(GetLogsPath(), "metamorph")
 	if err := os.MkdirAll(targetDir, 0755); err != nil {
 		return nil, fmt.Errorf("error creando directorio %s: %w", targetDir, err)
 	}
@@ -57,7 +57,6 @@ func InitLogger(paths *PathConfig, category string, jsonMode bool) (*Logger, err
 		return nil, fmt.Errorf("file handle es nil despues de OpenFile")
 	}
 
-	// Decision unica de routing
 	var consoleWriter io.Writer
 	if jsonMode {
 		// Modo JSON: logs van a stderr para no contaminar stdout
@@ -90,7 +89,7 @@ func InitLogger(paths *PathConfig, category string, jsonMode bool) (*Logger, err
 
 	// Registrar stream en telemetry usando Nucleus CLI
 	streamID := "metamorph_" + strings.ToLower(category)
-	nucleusExe := filepath.Join(paths.BinDir, "nucleus", "nucleus.exe")
+	nucleusExe := filepath.Join(GetBinPath(), "nucleus", ExeName("nucleus"))
 	registerTelemetry(streamID, label, filepath.ToSlash(logPath), nucleusExe, 2, file)
 
 	return logger, nil
@@ -133,7 +132,7 @@ func getMetamorphDescription(category string) string {
 // registerTelemetry registra el stream en el sistema de telemetria usando Nucleus CLI.
 // Los errores se escriben solo al archivo de log — nunca a consola — para no
 // contaminar stdout en modo JSON ni generar ruido en modo normal.
-// nucleusExe debe ser la ruta absoluta a nucleus.exe (no depende del PATH del sistema).
+// nucleusExe debe ser la ruta absoluta a nucleus (no depende del PATH del sistema).
 func registerTelemetry(streamID, label, path, nucleusExe string, priority int, logFile *os.File) {
 	description := getMetamorphDescription(
 		strings.ToUpper(strings.TrimPrefix(streamID, "metamorph_")),
@@ -152,8 +151,6 @@ func registerTelemetry(streamID, label, path, nucleusExe string, priority int, l
 
 	if err := cmd.Run(); err != nil {
 		if logFile != nil {
-			// Si nucleus.exe no existe aún (primer run antes del rollout),
-			// no hay nada útil que loguear — ignorar silenciosamente.
 			if !os.IsNotExist(err) {
 				ts := time.Now().UTC().Format(time.RFC3339)
 				fmt.Fprintf(logFile, "%s Warning: failed to register telemetry for %s: %v\n", ts, streamID, err)
@@ -173,10 +170,8 @@ func (l *Logger) reconfigure() {
 	var dest io.Writer
 
 	if l.silentMode {
-		// Modo silencioso: solo archivo
 		dest = l.file
 	} else {
-		// Decision segun modo JSON (configurado en Init)
 		var consoleWriter io.Writer
 		if l.isJSONMode {
 			consoleWriter = os.Stderr
@@ -214,7 +209,7 @@ func (l *Logger) Error(f string, v ...any) {
 		return
 	}
 	l.logger.Printf("[ERROR] "+f, v...)
-	l.Flush() // Errores se escriben inmediatamente
+	l.Flush()
 }
 
 func (l *Logger) Warning(f string, v ...any) {
@@ -271,8 +266,6 @@ func (l *Logger) OutputJSON(data interface{}) error {
 	if err != nil {
 		return fmt.Errorf("error marshaling JSON: %w", err)
 	}
-
-	// JSON SIEMPRE a stdout, independiente del logger
 	fmt.Fprintln(os.Stdout, string(bytes))
 	return nil
 }
@@ -281,9 +274,7 @@ func (l *Logger) OutputJSON(data interface{}) error {
 func (l *Logger) OutputResult(jsonData interface{}, interactiveMessage string) error {
 	if l.isJSONMode {
 		return l.OutputJSON(jsonData)
-	} else {
-		// En modo interactivo, usa el mismo canal que los logs (stdout)
-		fmt.Fprintln(os.Stdout, interactiveMessage)
-		return nil
 	}
+	fmt.Fprintln(os.Stdout, interactiveMessage)
+	return nil
 }

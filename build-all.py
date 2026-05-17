@@ -314,18 +314,13 @@ _log_file_path: Path | None = None
 
 def _resolve_log_dir() -> Path:
     """
-    Retorna el directorio de logs según la convención de cada plataforma:
+    Retorna el directorio de logs bajo NUCLEUS_HOME, consistente en todas las
+    plataformas con el resto de la aplicación:
       Windows  → %LOCALAPPDATA%\BloomNucleus\logs\build\
-      macOS    → ~/Library/Logs/BloomNucleus/build/
-      Linux    → ~/.local/share/BloomNucleus/logs/build/  (XDG_DATA_HOME)
+      macOS    → ~/Library/Application Support/BloomNucleus/logs/build/
+      Linux    → ~/.local/share/BloomNucleus/logs/build/
     """
-    if IS_WINDOWS:
-        return NUCLEUS_HOME / "logs" / "build"
-    elif IS_MACOS:
-        return Path.home() / "Library" / "Logs" / "BloomNucleus" / "build"
-    else:  # Linux
-        xdg = os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local/share"))
-        return Path(xdg) / "BloomNucleus" / "logs" / "build"
+    return NUCLEUS_HOME / "logs" / "build"
 
 
 def _setup_logger() -> None:
@@ -481,7 +476,7 @@ def build_go_component(component: str) -> StepResult:
 
     Después de la compilación, recolecta el log individual escrito por
     build-component.bat/.sh y lo appendea al log central de build-all.py,
-    de modo que todos los logs queden en NUCLEUS_HOME/logs/build/.
+    de modo que todos los logs queden en el directorio de logs centralizado.
     """
     script_path = BUILDS[component]
     if not script_path or not script_path.exists():
@@ -492,7 +487,12 @@ def build_go_component(component: str) -> StepResult:
 
     log(f"Compilando {component} con {script_path.name} ...")
 
+    # BUG FIX 2 — inyectar BLOOM_PROJECT_ROOT además de BLOOM_BUILD_NUMBER.
+    # Sin esta variable, build-component.sh no puede resolver PROJECT_ROOT
+    # correctamente cuando es invocado desde build-all.py (cwd = builds/darwin/),
+    # y cae al fallback cd "${SCRIPT_DIR}/../.." que puede apuntar a un path incorrecto.
     env = inject_build_number_env(component)
+    env["BLOOM_PROJECT_ROOT"] = str(ROOT)
 
     if IS_WINDOWS:
         cmd = ["cmd", "/c", script_path.name, component]
@@ -501,20 +501,42 @@ def build_go_component(component: str) -> StepResult:
 
     code, out, _ = run(cmd, cwd=script_path.parent, env=env)
 
-    # ── Recolectar log individual del bat/sh y copiarlo a logs/build/ ──
-    # build-component.bat escribe a LOCALAPPDATA\BloomNucleus\logs\build\<comp>_build.log
-    # build-component.sh  escribe al mismo path equivalente en la plataforma.
-    component_log_src = NUCLEUS_HOME / "logs" / "build" / f"{component}_build.log"
+    # ── Recolectar log individual del bat/sh y appendearlo al log central ──
+    #
+    # BUG FIX 1 — el nombre del archivo de log que escribe build-component.sh
+    # incluye el sufijo de arquitectura: <comp>_build_<BIN_ARCH>.log
+    # (ej: metamorph_build_darwin_arm64.log), y se escribe en Library/Logs/,
+    # NO en Application Support/. El código anterior buscaba en NUCLEUS_HOME
+    # (Application Support) con el nombre sin sufijo, por lo que nunca encontraba
+    # el archivo y el log individual jamás se appendeaba al log central.
+    #
+    # En Windows el .bat escribe: NUCLEUS_HOME/logs/build/<comp>_build.log (sin arch)
+    # En macOS/Linux el .sh escribe: Library/Logs/BloomNucleus/build/<comp>_build_<arch>.log
+    if IS_WINDOWS:
+        component_log_src = NUCLEUS_HOME / "logs" / "build" / f"{component}_build.log"
+    else:
+        # Reconstruir BIN_ARCH con la misma lógica que usa build-component.sh
+        machine = _platform.machine()
+        if IS_MACOS:
+            _bin_arch = "darwin_arm64" if machine == "arm64" else "darwin_x64"
+        else:  # Linux
+            _bin_arch = "linux_x64"
+        # Usar NUCLEUS_HOME como base, igual que Windows y el resto de la app.
+        # build-component.sh también debe escribir su log aquí (no en Library/Logs).
+        component_log_src = NUCLEUS_HOME / "logs" / "build" / f"{component}_build_{_bin_arch}.log"
+
     if component_log_src.exists() and _log_file_path:
         try:
             comp_content = component_log_src.read_text(encoding="utf-8", errors="replace")
-            separator = f"\n{'─'*60}\n  LOG INDIVIDUAL: {component}_build.log\n{'─'*60}\n"
+            separator = f"\n{'─'*60}\n  LOG INDIVIDUAL: {component_log_src.name}\n{'─'*60}\n"
             with _log_file_path.open("a", encoding="utf-8") as f:
                 f.write(separator)
                 f.write(comp_content)
             log(f"  📎 Log de {component} appendeado desde {component_log_src.name}")
         except OSError as exc:
             log(f"  ⚠ No se pudo leer {component_log_src}: {exc}")
+    else:
+        log(f"  ⚠ Log individual no encontrado: {component_log_src}")
 
     if code != 0:
         # Mostrar las últimas líneas del output para diagnóstico
