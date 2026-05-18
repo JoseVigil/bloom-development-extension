@@ -174,3 +174,6 @@ Thumbs.db
 
 # Native Electron build outputs
 native/bin/
+
+# Native Electron build outputs
+native/bin/
