@@ -177,3 +177,4 @@ native/bin/
 
 # Native Electron build outputs
 native/bin/
+.DS_Store
