@@ -171,3 +171,6 @@ installer/native/bin/**
 # OS
 .DS_Store
 Thumbs.db
+
+# Native Electron build outputs
+native/bin/
