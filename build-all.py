@@ -1088,6 +1088,16 @@ def build_conductor_package() -> StepResult:
         code, out = run_streaming(cmd, cwd=target, env=env)
         all_output.append(out)
 
+        # Escribir log individual en logs/build/
+        if _log_file_path:
+            ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            individual_log = _log_file_path.parent / f"conductor_{target.name}_{ts}.log"
+            try:
+                individual_log.write_text(out, encoding="utf-8")
+                log(f"  📄 Log guardado en: {individual_log.name}")
+            except OSError as exc:
+                log(f"  ⚠ No se pudo escribir log individual: {exc}")
+
         if code != 0:
             tail = "\n".join(out.splitlines()[-20:]) if out else "(sin output)"
             return StepResult(

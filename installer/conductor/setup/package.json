@@ -12,9 +12,9 @@
   "scripts": {
     "prebuild": "node ../shared/bump-version.js",
     "build": "electron-builder --win --x64",
-    "build:darwin": "electron-builder --mac --x64 && electron-builder --mac --arm64",
-    "build:darwin:x64": "electron-builder --mac --x64",
-    "build:darwin:arm": "electron-builder --mac --arm64",
+    "build:darwin": "npm run build:darwin:x64 && npm run build:darwin:arm",
+    "build:darwin:x64": "electron-builder --mac --x64 -c.directories.output=../../native/bin/darwin_x64/setup",
+    "build:darwin:arm": "electron-builder --mac --arm64 -c.directories.output=../../native/bin/darwin_arm64/setup",
     "build:win32": "node ../shared/bump-version.js && electron-builder --win --ia32",
     "build:win64": "node ../shared/bump-version.js && electron-builder --win --x64",
     "dev": "run-admin.bat",
@@ -34,15 +34,11 @@
       "target": [
         {
           "target": "nsis",
-          "arch": [
-            "x64"
-          ]
+          "arch": ["x64"]
         },
         {
           "target": "portable",
-          "arch": [
-            "x64"
-          ]
+          "arch": ["x64"]
         }
       ],
       "icon": "assets/bloom.ico",
@@ -72,22 +68,52 @@
       "target": [
         {
           "target": "dmg",
-          "arch": [
-            "x64"
-          ]
+          "arch": ["x64"]
         },
         {
           "target": "dmg",
-          "arch": [
-            "arm64"
-          ]
+          "arch": ["arm64"]
         }
       ],
       "icon": "assets/bloom.icns",
       "category": "public.app-category.utilities",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
-      "artifactName": "bloom-setup-${arch}.dmg"
+      "artifactName": "bloom-setup-${arch}.dmg",
+      "extraResources": [
+        {
+          "from": "../../resources/runtime",
+          "to": "runtime"
+        },
+        {
+          "from": "../../native/bin/darwin_${arch}/nucleus",
+          "to": "nucleus"
+        },
+        {
+          "from": "../../native/bin/darwin_${arch}/sentinel",
+          "to": "sentinel"
+        },
+        {
+          "from": "../../native/bin/darwin_${arch}/metamorph",
+          "to": "metamorph"
+        },
+        {
+          "from": "../../native/bin/darwin_${arch}/brain",
+          "to": "brain"
+        },
+        {
+          "from": "../../native/bin/darwin_${arch}/host",
+          "to": "native"
+        },
+        {
+          "from": "../../native/bin/cortex",
+          "to": "cortex"
+        },
+        {
+          "from": "../../native/bin/darwin_${arch}/conductor",
+          "to": "conductor"
+        }
+      ]
     },
     "dmg": {
       "artifactName": "bloom-setup-${arch}.dmg",
@@ -136,23 +162,23 @@
         "to": "runtime"
       },
       {
-        "from": "../../native/bin/${os}_${arch}/nucleus",
+        "from": "../../native/bin/win64/nucleus",
         "to": "nucleus"
       },
       {
-        "from": "../../native/bin/${os}_${arch}/sentinel",
+        "from": "../../native/bin/win64/sentinel",
         "to": "sentinel"
       },
       {
-        "from": "../../native/bin/${os}_${arch}/metamorph",
+        "from": "../../native/bin/win64/metamorph",
         "to": "metamorph"
       },
       {
-        "from": "../../native/bin/${os}_${arch}/brain",
+        "from": "../../native/bin/win64/brain",
         "to": "brain"
       },
       {
-        "from": "../../native/bin/${os}_${arch}/host",
+        "from": "../../native/bin/win64/host",
         "to": "native"
       },
       {
@@ -160,12 +186,12 @@
         "to": "cortex"
       },
       {
-        "from": "../../native/bin/${os}_${arch}/conductor",
+        "from": "../../native/bin/win64/conductor",
         "to": "conductor"
       }
     ],
     "directories": {
-      "output": "../../native/bin/${os}_${arch}/setup",
+      "output": "../../native/bin/win64/setup",
       "buildResources": "assets"
     },
     "compression": "maximum",

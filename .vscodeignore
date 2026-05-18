@@ -99,4 +99,4 @@ node_modules/**
 !node_modules/to-regex-range/**
 !node_modules/binary-extensions/**
 EOF
-vsce ls | wc -l
+native/**

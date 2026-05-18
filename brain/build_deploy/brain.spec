@@ -274,8 +274,8 @@ datas = [
     (str(PROJECT_ROOT / 'brain' / 'commands' / 'ionpump' / 'versions.json'), 'brain/commands/ionpump'),
 
     # Version y build — paths relativos a PROJECT_ROOT (multiplataforma)
-(str(PROJECT_ROOT / 'brain' / '__build__.py'), '.'),
-    (str(PROJECT_ROOT / 'brain' / 'VERSION'), '.'),
+(str(PROJECT_ROOT / 'brain' / 'VERSION'), '.'),
+    (str(PROJECT_ROOT / 'brain' / '__build__.py'), '.'),
 ]
 
 # Forzar la estructura física de core/profile para evitar el bug de colisión de nombres

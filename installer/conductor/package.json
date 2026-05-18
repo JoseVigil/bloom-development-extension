@@ -1,30 +1,223 @@
 {
-  "name": "bloom-conductor-workspace",
+  "name": "bloom-nucleus-installer",
+  "productName": "Bloom Nucleus Installer",
   "version": "1.0.0",
-  "private": true,
-  "description": "Bloom Nucleus Workspace - Installer and Launcher",
-  "scripts": {
-    "install:all": "npm install --prefix workspace && npm install --prefix setup",
-    "build:workspace": "npm run build --prefix workspace",
-    "build:setup": "npm run build --prefix setup",
-    "build:workspace:darwin": "npm run build:darwin --prefix workspace",
-    "build:setup:darwin": "npm run build:darwin --prefix setup",
-    "build:all": "node -e \"const darwin = process.platform === 'darwin'; const s = require('child_process'); s.execSync(darwin ? 'npm run build:workspace:darwin && npm run build:setup:darwin' : 'npm run build:workspace && npm run build:setup', {stdio: 'inherit'})\"",
-    "version:workspace": "npm run version:info --prefix workspace",
-    "version:setup": "npm run version:info --prefix setup",
-    "version:all": "npm run version:workspace && npm run version:setup",
-    "clean": "rimraf workspace/dist workspace/out setup/dist setup/out",
-    "clean:all": "npm run clean && rimraf workspace/node_modules setup/node_modules"
-  },
-  "devDependencies": {
-    "rimraf": "^5.0.5"
-  },
+  "description": "Bloom Nucleus Setup - Complete system installer",
   "main": "main.js",
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "author": {
+    "name": "BTIP Studio",
+    "email": "support@btip.studio"
+  },
+  "license": "MIT",
+  "scripts": {
+    "prebuild": "node ../shared/bump-version.js",
+    "build": "electron-builder --win --x64",
+    "build:all": "npm run build:darwin",
+    "build:darwin": "npm run build:darwin:x64 && npm run build:darwin:arm",
+    "build:darwin:x64": "electron-builder --mac --x64 -c.directories.output=../../native/bin/darwin_x64/setup",
+    "build:darwin:arm": "electron-builder --mac --arm64 -c.directories.output=../../native/bin/darwin_arm64/setup",
+    "build:win32": "node ../shared/bump-version.js && electron-builder --win --ia32",
+    "build:win64": "node ../shared/bump-version.js && electron-builder --win --x64",
+    "dev": "run-admin.bat",
+    "dev:darwin": "electron .",
+    "dev:no-admin": "electron .",
+    "version:bump": "node ../shared/bump-version.js",
+    "version:patch": "node ../shared/bump-version.js --patch",
+    "version:minor": "node ../shared/bump-version.js --minor",
+    "version:major": "node ../shared/bump-version.js --major",
+    "version:info": "node -e \"const i=require('./build_info.json'); console.log(i.product_name, i.full_version, '|', i.built_at);\""
+  },
+  "build": {
+    "appId": "com.bloom.nucleus.installer",
+    "productName": "Bloom Nucleus Installer",
+    "copyright": "Copyright © 2024 BTIP Studio",
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "assets/bloom.ico",
+      "requestedExecutionLevel": "requireAdministrator",
+      "artifactName": "bloom-setup.exe",
+      "publisherName": "BTIP Studio",
+      "verifyUpdateCodeSignature": false,
+      "signAndEditExecutable": false,
+      "extraResources": [
+        {
+          "from": "../../native/bin/win64/ollama",
+          "to": "ollama"
+        },
+        {
+          "from": "../../native/nssm/win64",
+          "to": "nssm"
+        }
+      ],
+      "extraFiles": [
+        {
+          "from": "bloom-setup-version.ps1",
+          "to": "bloom-setup-version.ps1"
+        }
+      ]
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64"]
+        },
+        {
+          "target": "dmg",
+          "arch": ["arm64"]
+        }
+      ],
+      "icon": "assets/bloom.icns",
+      "category": "public.app-category.utilities",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "artifactName": "bloom-setup-${arch}.dmg",
+      "extraResources": [
+        {
+          "from": "../../resources/runtime",
+          "to": "runtime"
+        },
+        {
+          "from": "../../native/bin/darwin_${arch}/nucleus",
+          "to": "nucleus"
+        },
+        {
+          "from": "../../native/bin/darwin_${arch}/sentinel",
+          "to": "sentinel"
+        },
+        {
+          "from": "../../native/bin/darwin_${arch}/metamorph",
+          "to": "metamorph"
+        },
+        {
+          "from": "../../native/bin/darwin_${arch}/brain",
+          "to": "brain"
+        },
+        {
+          "from": "../../native/bin/darwin_${arch}/host",
+          "to": "native"
+        },
+        {
+          "from": "../../native/bin/cortex",
+          "to": "cortex"
+        },
+        {
+          "from": "../../native/bin/darwin_${arch}/conductor",
+          "to": "conductor"
+        }
+      ]
+    },
+    "dmg": {
+      "artifactName": "bloom-setup-${arch}.dmg",
+      "sign": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Bloom Nucleus Setup",
+      "runAfterFinish": true,
+      "installerIcon": "assets/bloom.ico",
+      "uninstallerIcon": "assets/bloom.ico",
+      "installerHeader": "assets/bloom.ico",
+      "installerHeaderIcon": "assets/bloom.ico",
+      "perMachine": false,
+      "deleteAppDataOnUninstall": false
+    },
+    "portable": {
+      "artifactName": "bloom-setup.exe"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "core/**/*",
+      "install/**/*",
+      "ipc/**/*",
+      "config/**/*",
+      "utils/**/*",
+      "scripts/**/*",
+      "registry-scripts/**/*",
+      "assets/**/*",
+      "build_info.json",
+      "version.json",
+      "app.manifest",
+      "package.json",
+      "!node_modules/**/*",
+      "!**/*.map"
+    ],
+    "extraResources": [
+      {
+        "from": "../../resources/runtime",
+        "to": "runtime"
+      },
+      {
+        "from": "../../native/bin/win64/nucleus",
+        "to": "nucleus"
+      },
+      {
+        "from": "../../native/bin/win64/sentinel",
+        "to": "sentinel"
+      },
+      {
+        "from": "../../native/bin/win64/metamorph",
+        "to": "metamorph"
+      },
+      {
+        "from": "../../native/bin/win64/brain",
+        "to": "brain"
+      },
+      {
+        "from": "../../native/bin/win64/host",
+        "to": "native"
+      },
+      {
+        "from": "../../native/bin/cortex",
+        "to": "cortex"
+      },
+      {
+        "from": "../../native/bin/win64/conductor",
+        "to": "conductor"
+      }
+    ],
+    "directories": {
+      "output": "../../native/bin/win64/setup",
+      "buildResources": "assets"
+    },
+    "compression": "maximum",
+    "asar": true,
+    "asarUnpack": [
+      "**/*.node",
+      "**/nucleus/**/*",
+      "**/sentinel/**/*",
+      "**/metamorph/**/*",
+      "**/brain/**/*",
+      "**/runtime/**/*",
+      "**/native/**/*",
+      "**/cortex/**/*",
+      "**/conductor/**/*",
+      "build_info.json"
+    ]
+  },
   "dependencies": {
     "fs-extra": "^11.3.5",
     "unzipper": "^0.12.3"
+  },
+  "devDependencies": {
+    "@electron-forge/maker-dmg": "^7.11.1",
+    "@vscode/vsce": "^3.9.1",
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1"
   }
 }

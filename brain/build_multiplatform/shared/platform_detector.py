@@ -6,6 +6,7 @@ Brain CLI - Platform Detector
 Detecta plataforma y arquitectura automáticamente.
 Usado por todos los scripts de build multiplataforma.
 """
+import os
 import platform
 import sys
 from pathlib import Path
@@ -27,21 +28,27 @@ class PlatformInfo:
         self.os_name = self._detect_os_name()
         
     def _detect_platform_dir(self) -> str:
-        """Retorna el directorio de destino según plataforma/arquitectura."""
+        """
+        Retorna el directorio de destino según plataforma/arquitectura.
+
+        Convención (alineada con build-all.py y build-component.sh):
+          Windows x64  → win64
+          macOS x64    → darwin_x64
+          macOS arm64  → darwin_arm64
+          Linux x64    → linux_x64
+          Linux arm64  → linux_arm64
+        """
         if self.is_windows:
-            # En Windows, sys.platform siempre es 'win32' incluso en 64-bit
-            # Usamos platform.machine() para detectar la arquitectura real
             if self.machine in ("amd64", "x86_64"):
                 return "win64"
             elif self.machine in ("x86", "i386", "i686"):
                 return "win32"
             else:
-                # Por defecto asumimos 64-bit (es el estándar moderno)
                 return "win64"
         
         elif self.is_linux:
             if self.machine in ("x86_64", "amd64"):
-                return "linux64"
+                return "linux_x64"       # corregido: era "linux64"
             elif self.machine in ("aarch64", "arm64"):
                 return "linux_arm64"
             else:
@@ -52,9 +59,9 @@ class PlatformInfo:
         
         elif self.is_darwin:
             if self.machine in ("x86_64", "amd64"):
-                return "macos64"
+                return "darwin_x64"      # corregido: era "macos64"
             elif self.machine in ("arm64", "aarch64"):
-                return "macos_arm64"
+                return "darwin_arm64"    # corregido: era "macos_arm64"
             else:
                 raise RuntimeError(
                     f"Arquitectura macOS no soportada: {self.machine}\n"
@@ -77,49 +84,80 @@ class PlatformInfo:
             return "darwin"
         else:
             return self.system
-    
-    def get_log_directory(self) -> Path:
-        """Retorna directorio de logs según BloomNucleus Spec."""
+
+    def _get_nucleus_home(self) -> Path:
+        """
+        Retorna la raíz canónica de BloomNucleus para la plataforma actual.
+        Respeta BLOOM_NUCLEUS_HOME si está definida en el entorno.
+
+          Windows → %LOCALAPPDATA%\\BloomNucleus
+          macOS   → ~/Library/BloomNucleus
+          Linux   → $XDG_DATA_HOME/BloomNucleus  (default ~/.local/share/BloomNucleus)
+        """
         if self.is_windows:
-            # Windows: %LOCALAPPDATA%\BloomNucleus\logs\build
-            local_appdata = Path(os.environ.get('LOCALAPPDATA', Path.home() / 'AppData/Local'))
-            return local_appdata / "BloomNucleus/logs/build"
-        
-        elif self.is_linux:
-            # Linux: ~/.local/share/BloomNucleus/logs/build
-            return Path.home() / ".local/share/BloomNucleus/logs/build"
-        
+            local_appdata = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData/Local"))
+            return Path(os.environ.get("BLOOM_NUCLEUS_HOME", local_appdata / "BloomNucleus"))
         elif self.is_darwin:
-            # macOS: ~/Library/Logs/BloomNucleus/logs/build
-            return Path.home() / "Library/Logs/BloomNucleus/logs/build"
-        
-        else:
-            # Fallback
-            return Path.home() / ".bloom/logs/build"
+            return Path(os.environ.get(
+                "BLOOM_NUCLEUS_HOME",
+                Path.home() / "Library" / "BloomNucleus"
+            ))
+        else:  # Linux
+            xdg = os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local/share"))
+            return Path(os.environ.get("BLOOM_NUCLEUS_HOME", Path(xdg) / "BloomNucleus"))
+
+    def get_log_directory(self) -> Path:
+        """
+        Retorna directorio de logs bajo la raíz canónica de BloomNucleus.
+
+          Windows → %LOCALAPPDATA%\\BloomNucleus\\logs\\build
+          macOS   → ~/Library/BloomNucleus/logs/build       (corregido: era ~/Library/Logs/BloomNucleus/logs/build)
+          Linux   → ~/.local/share/BloomNucleus/logs/build
+        """
+        return self._get_nucleus_home() / "logs" / "build"
     
     def get_log_filename(self) -> str:
-        """Retorna nombre de archivo de log según BloomNucleus Spec."""
-        if self.is_windows:
-            return "brain.build.log"
-        elif self.is_linux:
-            return "brain_build_linux.log"
-        elif self.is_darwin:
-            return "brain_build_darwin.log"
-        else:
-            return "brain_build.log"
+        """
+        Retorna nombre de archivo de log con sufijo de arquitectura.
+        El nombre incluye platform_dir para que coincida con lo que escribe
+        build-brain.sh (ej: brain_build_darwin_x64.log) y build-all.py
+        pueda appendear el log individual al log central sin errores.
+
+          Windows      → brain_build_win64.log     (era: brain.build.log)
+          macOS x64    → brain_build_darwin_x64.log (era: brain_build_darwin.log)
+          macOS arm64  → brain_build_darwin_arm64.log
+          Linux x64    → brain_build_linux_x64.log  (era: brain_build_linux.log)
+        """
+        return f"brain_build_{self.platform_dir}.log"
     
     def get_executable_name(self) -> str:
         """Retorna nombre del ejecutable según plataforma."""
         return "brain.exe" if self.is_windows else "brain"
     
     def get_nucleus_path(self, project_root: Path) -> Path:
-        """Retorna ruta a Nucleus CLI según plataforma."""
-        nucleus_dir = project_root / "installer/native/bin" / self.platform_dir / "nucleus"
-        
-        if self.is_windows:
-            return nucleus_dir / "nucleus.exe"
-        else:
-            return nucleus_dir / "nucleus"
+        """
+        Retorna la ruta al binario de Nucleus CLI.
+
+        Prioridad:
+          1. NUCLEUS_HOME/bin/nucleus/nucleus  — instalación via rollout (siempre
+             disponible si hubo al menos un build completo previo, independiente
+             del orden de pasos en la corrida actual).
+          2. project_root/installer/native/bin/<platform_dir>/nucleus/nucleus —
+             fallback al repo (puede no existir si brain corre antes que nucleus).
+
+        Antes buscaba directamente en el repo con el arch incorrecto "macos64",
+        lo que causaba el error:
+          ⚠️  Nucleus CLI no encontrado: .../bin/macos64/nucleus/nucleus
+        """
+        nucleus_exe = "nucleus.exe" if self.is_windows else "nucleus"
+
+        # Opción 1: NUCLEUS_HOME (rollout de build previo — más estable)
+        candidate_home = self._get_nucleus_home() / "bin" / "nucleus" / nucleus_exe
+        if candidate_home.exists():
+            return candidate_home
+
+        # Opción 2: repo con arch correcto (build de esta misma corrida)
+        return project_root / "installer/native/bin" / self.platform_dir / "nucleus" / nucleus_exe
     
     def __str__(self) -> str:
         """Representación string."""
@@ -132,7 +170,6 @@ class PlatformInfo:
 
 
 # Instancia global para fácil importación
-import os
 PLATFORM = PlatformInfo()
 
 
@@ -151,4 +188,5 @@ if __name__ == "__main__":
     print(f"Log Directory: {PLATFORM.get_log_directory()}")
     print(f"Log Filename:  {PLATFORM.get_log_filename()}")
     print(f"Executable:    {PLATFORM.get_executable_name()}")
+    print(f"Nucleus Path:  {PLATFORM.get_nucleus_path(Path('.'))}")
     print("=" * 60)

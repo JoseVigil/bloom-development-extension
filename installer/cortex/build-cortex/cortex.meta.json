@@ -1,8 +1,8 @@
 {
   "name": "Bloom Cortex",
   "version": "1.0.0",
-  "build_number": 126,
-  "build_date": "2026-05-18T00:46:05Z",
+  "build_number": 131,
+  "build_date": "2026-05-18T22:21:11Z",
   "release_channel": "stable",
   "min_chrome_version": "120"
 }
