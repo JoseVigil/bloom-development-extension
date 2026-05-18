@@ -40,12 +40,13 @@ esac
 
 # ───────────────────────────────────────────────────────────────
 # LOGGING
+# Misma estructura que Windows: ~/Library/BloomNucleus/logs/build
 # ───────────────────────────────────────────────────────────────
 
 if [[ "${DETECTED_OS}" == "Darwin" ]]; then
-    LOG_BASE_DIR="${HOME}/Library/Logs/BloomNucleus/build"
+    LOG_BASE_DIR="${HOME}/Library/BloomNucleus/logs/build"
 else
-    LOG_BASE_DIR="${HOME}/.local/share/BloomNucleus/build/logs"
+    LOG_BASE_DIR="${HOME}/.local/share/BloomNucleus/logs/build"
 fi
 
 LOG_FILE="${LOG_BASE_DIR}/brain_build_${BIN_ARCH}.log"

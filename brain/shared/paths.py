@@ -90,28 +90,33 @@ class Paths:
         return self.config_dir / "nucleus.json"
 
     # -------------------------------------------------------------------------
-    # Binary executables
+    # Binary executables — extensión condicional por plataforma
     # -------------------------------------------------------------------------
 
     @property
+    def _exe_ext(self) -> str:
+        """Extensión de ejecutables según plataforma (.exe en Windows, vacío en macOS/Linux)."""
+        return ".exe" if platform.system() == "Windows" else ""
+
+    @property
     def nucleus_exe(self) -> Path:
-        """bin/nucleus/nucleus.exe"""
-        return self.bin_dir / "nucleus" / "nucleus.exe"
+        """bin/nucleus/nucleus[.exe]"""
+        return self.bin_dir / "nucleus" / f"nucleus{self._exe_ext}"
 
     @property
     def sentinel_exe(self) -> Path:
-        """bin/sentinel/sentinel.exe"""
-        return self.bin_dir / "sentinel" / "sentinel.exe"
+        """bin/sentinel/sentinel[.exe]"""
+        return self.bin_dir / "sentinel" / f"sentinel{self._exe_ext}"
 
     @property
     def conductor_exe(self) -> Path:
-        """bin/conductor/bloom-conductor.exe"""
-        return self.bin_dir / "conductor" / "bloom-conductor.exe"
+        """bin/conductor/bloom-conductor[.exe]"""
+        return self.bin_dir / "conductor" / f"bloom-conductor{self._exe_ext}"
 
     @property
     def sensor_exe(self) -> Path:
-        """bin/sensor/bloom-sensor.exe"""
-        return self.bin_dir / "sensor" / "bloom-sensor.exe"
+        """bin/sensor/bloom-sensor[.exe]"""
+        return self.bin_dir / "sensor" / f"bloom-sensor{self._exe_ext}"
 
     # -------------------------------------------------------------------------
     # Log directories
@@ -216,8 +221,8 @@ class Paths:
 
         if is_frozen:
             exe_path = Path(sys.executable).resolve()
-            # Estructura: BloomNucleus/bin/brain/brain.exe
-            # brain.exe → brain/ → bin/ → BloomNucleus/
+            # Estructura: BloomNucleus/bin/brain/brain[.exe]
+            # brain → brain/ → bin/ → BloomNucleus/
             base = exe_path.parent.parent.parent
 
             logger.info(f"🔍 [PATHS] Modo Frozen detectado")
@@ -239,7 +244,8 @@ class Paths:
                 else Path.home() / "AppData" / "Local" / "BloomNucleus"
             )
         elif system == "Darwin":
-            base = Path.home() / "Library" / "Application Support" / "BloomNucleus"
+            # ~/Library/BloomNucleus — misma estructura que Windows
+            base = Path.home() / "Library" / "BloomNucleus"
         else:
             xdg = os.environ.get("XDG_DATA_HOME")
             base = (

@@ -210,7 +210,7 @@ def _resolve_nucleus_home() -> Path:
     elif IS_MACOS:
         return Path(os.environ.get(
             "BLOOM_NUCLEUS_HOME",
-            Path.home() / "Library" / "Application Support" / "BloomNucleus"
+            Path.home() / "Library" / "BloomNucleus"
         ))
     else:  # Linux
         xdg = os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local/share"))
@@ -317,7 +317,7 @@ def _resolve_log_dir() -> Path:
     Retorna el directorio de logs bajo NUCLEUS_HOME, consistente en todas las
     plataformas con el resto de la aplicación:
       Windows  → %LOCALAPPDATA%\BloomNucleus\logs\build\
-      macOS    → ~/Library/Application Support/BloomNucleus/logs/build/
+      macOS    → ~/Library/BloomNucleus/logs/build/
       Linux    → ~/.local/share/BloomNucleus/logs/build/
     """
     return NUCLEUS_HOME / "logs" / "build"
@@ -328,7 +328,7 @@ def _setup_logger() -> None:
     Configura el logger dual: StreamHandler (consola) + FileHandler (disco).
     El archivo se crea en el directorio de logs de la plataforma con timestamp en el nombre:
       Windows  → %LOCALAPPDATA%\BloomNucleus\logs\build\
-      macOS    → ~/Library/Logs/BloomNucleus/build/
+      macOS    → ~/Library/BloomNucleus/logs/build/
       Linux    → $XDG_DATA_HOME/BloomNucleus/logs/build/
     Debe llamarse una sola vez al inicio de main().
     """
@@ -458,6 +458,38 @@ def build_brain() -> StepResult:
         env = {**os.environ, "BLOOM_PROJECT_ROOT": str(ROOT)}
 
     code, out = run_streaming(cmd, cwd=brain_script.parent, env=env)
+
+    # Appendear log individual de brain al log central (mismo patrón que build_go_component).
+    # build-brain.sh escribe en Library/BloomNucleus/logs/build/ en macOS.
+    if IS_WINDOWS:
+        brain_log_src = NUCLEUS_HOME / "logs" / "build" / "brain_build.log"
+    else:
+        machine = _platform.machine()
+        _bin_arch = (
+            "darwin_arm64" if (IS_MACOS and machine == "arm64") else
+            "darwin_x64"   if IS_MACOS else
+            "linux_x64"
+        )
+        brain_log_src = NUCLEUS_HOME / "logs" / "build" / f"brain_build_{_bin_arch}.log"
+        if not brain_log_src.exists():
+            brain_log_src = (
+                Path.home() / "Library" / "BloomNucleus" / "logs" / "build"
+                / f"brain_build_{_bin_arch}.log"
+            )
+
+    if brain_log_src.exists() and _log_file_path:
+        try:
+            comp_content = brain_log_src.read_text(encoding="utf-8", errors="replace")
+            separator = f"\n{'─'*60}\n  LOG INDIVIDUAL: {brain_log_src.name}\n{'─'*60}\n"
+            with _log_file_path.open("a", encoding="utf-8") as f:
+                f.write(separator)
+                f.write(comp_content)
+            log(f"  📎 Log de brain appendeado desde {brain_log_src.name}")
+        except OSError as exc:
+            log(f"  ⚠ No se pudo leer {brain_log_src}: {exc}")
+    else:
+        log(f"  ⚠ Log individual de brain no encontrado en: {brain_log_src}")
+
     if code != 0:
         return StepResult("Brain", False, error=out)
     return StepResult("Brain", True, output=out)
@@ -511,7 +543,7 @@ def build_go_component(component: str) -> StepResult:
     # el archivo y el log individual jamás se appendeaba al log central.
     #
     # En Windows el .bat escribe: NUCLEUS_HOME/logs/build/<comp>_build.log (sin arch)
-    # En macOS/Linux el .sh escribe: Library/Logs/BloomNucleus/build/<comp>_build_<arch>.log
+    # En macOS/Linux el .sh escribe: ~/Library/BloomNucleus/logs/build/<comp>_build_<arch>.log
     if IS_WINDOWS:
         component_log_src = NUCLEUS_HOME / "logs" / "build" / f"{component}_build.log"
     else:
@@ -619,12 +651,119 @@ def build_node(name: str, project_dir: Path, npm_script: str) -> StepResult:
             env["BLOOM_BUILD_NUMBER"] = str(build_num)
 
     log(f"Ejecutando npm run {npm_script} en {project_dir.name}/ ...")
+
+    if name == "VSIX":
+        vsix_out_dir = ROOT / "installer" / "vscode"
+        vsix_out_dir.mkdir(parents=True, exist_ok=True)
+        log(f"  📁 Directorio de salida garantizado: {vsix_out_dir}")
+
     cmd = [_NPM, "run", npm_script]
     code, out = run_streaming(cmd, cwd=project_dir, env=env)
     if code != 0:
         tail = "\n".join(out.splitlines()[-20:]) if out else "(sin output)"
         return StepResult(name, False, error=tail)
     return StepResult(name, True, output=out)
+
+
+import shutil as _shutil
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ROLLOUT — copia de binarios desde _DEV_BIN_BASE a NUCLEUS_HOME/bin/
+#
+# No se usa `metamorph rollout` porque sus SourceFn en rollout.go asumen paths
+# que no coinciden con donde build-component.sh y build-brain.sh dejan los
+# binarios (ej: busca nucleus/dist/nucleus, pero el output real es
+# installer/native/bin/darwin_x64/nucleus/nucleus).
+#
+# Se copia directamente desde _DEV_BIN_BASE/<comp>/ → NUCLEUS_HOME/bin/<comp>/
+# para todos los componentes. Esto es independiente de rollout.go y siempre
+# funciona sin importar cambios futuros en el script Go.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def rollout_component(component: str) -> StepResult:
+    """
+    Copia _DEV_BIN_BASE/<component>/ → NUCLEUS_HOME/bin/<component>/.
+    Reemplaza archivos existentes (dirs_exist_ok=True).
+    """
+    src = _DEV_BIN_BASE / component
+    dst = NUCLEUS_HOME / "bin" / component
+
+    if not src.exists():
+        return StepResult(
+            f"Rollout:{component}", False,
+            error=f"Output de '{component}' no encontrado en {src}. ¿Falló el build?",
+        )
+
+    log(f"Copiando {component}: {src} → {dst}")
+    try:
+        dst.mkdir(parents=True, exist_ok=True)
+        _shutil.copytree(src, dst, dirs_exist_ok=True)
+    except OSError as exc:
+        return StepResult(f"Rollout:{component}", False, error=f"Error copiando {component}: {exc}")
+
+    copied = sum(1 for f in dst.rglob("*") if f.is_file())
+    log(f"  ✅ {component}: {copied} archivo(s) → {dst}")
+    return StepResult(f"Rollout:{component}", True, output=f"{copied} archivos → {dst}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PATH — ~/.zshrc y ~/.zshenv
+# ─────────────────────────────────────────────────────────────────────────────
+
+_PATH_COMPONENTS    = ("metamorph", "brain", "nucleus", "sentinel")
+_ZSHRC_MARKER_BEGIN = "# >>> BloomNucleus PATH (managed by build-all.py) >>>"
+_ZSHRC_MARKER_END   = "# <<< BloomNucleus PATH <<<"
+
+
+def _write_path_block(target_file: Path) -> None:
+    path_lines = [
+        f'export PATH="{NUCLEUS_HOME / "bin" / comp}:$PATH"'
+        for comp in _PATH_COMPONENTS
+    ]
+    block = (
+        f"{_ZSHRC_MARKER_BEGIN}\n"
+        + "\n".join(path_lines)
+        + f"\n{_ZSHRC_MARKER_END}\n"
+    )
+    try:
+        current = target_file.read_text(encoding="utf-8") if target_file.exists() else ""
+    except OSError as exc:
+        log(f"  ⚠ No se pudo leer {target_file.name}: {exc}")
+        return
+
+    if _ZSHRC_MARKER_BEGIN in current:
+        import re
+        pattern = re.compile(
+            rf"{re.escape(_ZSHRC_MARKER_BEGIN)}.*?{re.escape(_ZSHRC_MARKER_END)}\n?",
+            re.DOTALL,
+        )
+        new_content = pattern.sub(block, current)
+        verb = "actualizado"
+    else:
+        separator = "\n" if current and not current.endswith("\n") else ""
+        new_content = current + separator + block
+        verb = "añadido"
+
+    try:
+        target_file.write_text(new_content, encoding="utf-8")
+        log(f"  ✅ PATH {verb} en ~/{target_file.name}")
+    except OSError as exc:
+        log(f"  ⚠ No se pudo escribir {target_file.name}: {exc}")
+
+
+def ensure_path_in_zshrc() -> None:
+    if IS_WINDOWS:
+        return
+    path_lines = [
+        f'export PATH="{NUCLEUS_HOME / "bin" / comp}:$PATH"'
+        for comp in _PATH_COMPONENTS
+    ]
+    _write_path_block(Path.home() / ".zshrc")
+    _write_path_block(Path.home() / ".zshenv")
+    log(f"  📋 Entradas registradas:")
+    for p in path_lines:
+        log(f"     {p}")
+    log(f"  💡 Abrí una terminal nueva — los comandos estarán disponibles.")
 
 
 def build_cortex() -> StepResult:
@@ -1034,15 +1173,31 @@ def main() -> None:
         log("⚠️  No hay pasos que ejecutar con los filtros indicados.")
         sys.exit(0)
 
+    _ROLLOUT_GO_COMPONENTS = ("metamorph", "nucleus", "brain", "sentinel")
+
     results: list[StepResult] = []
     total = len(steps)
 
-    for i, (_, name, fn) in enumerate(steps, start=1):
+    for i, (key, name, fn) in enumerate(steps, start=1):
         _step_header(i, total, name)
         result = fn()
         result.name = name
         _print_result(result)
         results.append(result)
+
+        if result.ok and not result.skipped and key in _ROLLOUT_GO_COMPONENTS:
+            log("")
+            log(f"── Rollout: desplegando '{key}' a NUCLEUS_HOME ──")
+            rollout_result = rollout_component(key)
+            rollout_result.name = f"Rollout:{name}"
+            _print_result(rollout_result)
+            results.append(rollout_result)
+
+    log("")
+    log(_sep())
+    log("Registrando PATH en ~/.zshrc y ~/.zshenv ...")
+    log(_sep())
+    ensure_path_in_zshrc()
 
     _print_summary(results)
 

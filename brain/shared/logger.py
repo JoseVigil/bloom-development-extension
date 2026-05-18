@@ -235,7 +235,7 @@ class BrainLogger:
                     if existing:
                         current_path = str(log_path).replace("\\", "/")
                         same_path = existing.get("path", "") == current_path
-                        
+
                         # Parsear last_update
                         last_update_str = existing.get("last_update", "")
                         if same_path and last_update_str:
@@ -269,7 +269,7 @@ class BrainLogger:
         except subprocess.TimeoutExpired:
             sys.stderr.write(f"WARNING: nucleus telemetry register timeout para '{stream_id}'\n")
         except FileNotFoundError:
-            sys.stderr.write(f"WARNING: nucleus.exe no encontrado para '{stream_id}'\n")
+            sys.stderr.write(f"WARNING: nucleus no encontrado para '{stream_id}'\n")
         except Exception as e:
             sys.stderr.write(f"WARNING: Error al registrar telemetría para '{stream_id}': {e}\n")
 
@@ -292,7 +292,8 @@ class BrainLogger:
                 if app_data:
                     return Path(app_data) / "BloomNucleus" / "logs" / "brain"
             elif sys.platform == "darwin":
-                return Path.home() / "Library" / "Logs" / "BloomNucleus" / "brain"
+                # ~/Library/BloomNucleus/logs/brain — misma estructura que Windows
+                return Path.home() / "Library" / "BloomNucleus" / "logs" / "brain"
             else:
                 xdg = os.environ.get('XDG_DATA_HOME')
                 if xdg:

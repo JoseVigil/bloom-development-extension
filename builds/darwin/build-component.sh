@@ -70,7 +70,7 @@ mkdir -p "${OUTPUT_DIR}"
 # ───────────────────────────────────────────────────────────────
 
 if [[ "${DETECTED_OS}" == "Darwin" ]]; then
-    LOG_BASE_DIR="${HOME}/Library/Application Support/BloomNucleus/logs/build"
+    LOG_BASE_DIR="${HOME}/Library/BloomNucleus/logs/build"
 else
     LOG_BASE_DIR="${HOME}/.local/share/BloomNucleus/logs/build"
 fi

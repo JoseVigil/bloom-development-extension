@@ -48,7 +48,7 @@ fi
 # ───────────────────────────────────────────────────────────────
 
 if [[ "${DETECTED_OS}" == "Darwin" ]]; then
-    LOG_BASE_DIR="${HOME}/Library/Logs/BloomNucleus/build"
+    LOG_BASE_DIR="${HOME}/Library/BloomNucleus/logs/build"
 else
     LOG_BASE_DIR="${HOME}/.local/share/BloomNucleus/build/logs"
 fi

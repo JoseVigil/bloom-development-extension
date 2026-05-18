@@ -29,7 +29,7 @@ func InitPaths() (*Paths, error) {
 	binDir := filepath.Dir(sentinelDir)
 
 	// Resolve appDataDir cross-platform: BLOOM_APPDATA_DIR overrides everything.
-	// On Windows use LOCALAPPDATA; on macOS/Linux use ~/Library/Application Support.
+	// On Windows use LOCALAPPDATA; on macOS use ~/Library/BloomNucleus; on Linux ~/.bloom-nucleus.
 	appDataDir := os.Getenv("BLOOM_APPDATA_DIR")
 	if appDataDir == "" {
 		home, _ := os.UserHomeDir()
@@ -40,9 +40,9 @@ func InitPaths() (*Paths, error) {
 			}
 			appDataDir = filepath.Join(localAppData, "BloomNucleus")
 		} else {
-			// macOS: ~/Library/Application Support/BloomNucleus
+			// macOS: ~/Library/BloomNucleus
 			// Linux: ~/.bloom-nucleus (fallback)
-			macOSPath := filepath.Join(home, "Library", "Application Support", "BloomNucleus")
+			macOSPath := filepath.Join(home, "Library", "BloomNucleus")
 			if _, err := os.Stat(filepath.Join(home, "Library")); err == nil {
 				appDataDir = macOSPath
 			} else {
