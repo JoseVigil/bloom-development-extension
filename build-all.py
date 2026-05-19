@@ -460,22 +460,9 @@ def build_brain() -> StepResult:
     code, out = run_streaming(cmd, cwd=brain_script.parent, env=env)
 
     # Appendear log individual de brain al log central (mismo patrón que build_go_component).
-    # build-brain.sh escribe en Library/BloomNucleus/logs/build/ en macOS.
-    if IS_WINDOWS:
-        brain_log_src = NUCLEUS_HOME / "logs" / "build" / "brain_build.log"
-    else:
-        machine = _platform.machine()
-        _bin_arch = (
-            "darwin_arm64" if (IS_MACOS and machine == "arm64") else
-            "darwin_x64"   if IS_MACOS else
-            "linux_x64"
-        )
-        brain_log_src = NUCLEUS_HOME / "logs" / "build" / f"brain_build_{_bin_arch}.log"
-        if not brain_log_src.exists():
-            brain_log_src = (
-                Path.home() / "Library" / "BloomNucleus" / "logs" / "build"
-                / f"brain_build_{_bin_arch}.log"
-            )
+    # build-brain.sh escribe brain.build.log (sin arch) en ambas plataformas
+    # para paridad de stream_id cross-platform.
+    brain_log_src = NUCLEUS_HOME / "logs" / "build" / "brain.build.log"
 
     if brain_log_src.exists() and _log_file_path:
         try:
@@ -534,28 +521,9 @@ def build_go_component(component: str) -> StepResult:
     code, out, _ = run(cmd, cwd=script_path.parent, env=env)
 
     # ── Recolectar log individual del bat/sh y appendearlo al log central ──
-    #
-    # BUG FIX 1 — el nombre del archivo de log que escribe build-component.sh
-    # incluye el sufijo de arquitectura: <comp>_build_<BIN_ARCH>.log
-    # (ej: metamorph_build_darwin_arm64.log), y se escribe en Library/Logs/,
-    # NO en Application Support/. El código anterior buscaba en NUCLEUS_HOME
-    # (Application Support) con el nombre sin sufijo, por lo que nunca encontraba
-    # el archivo y el log individual jamás se appendeaba al log central.
-    #
-    # En Windows el .bat escribe: NUCLEUS_HOME/logs/build/<comp>_build.log (sin arch)
-    # En macOS/Linux el .sh escribe: ~/Library/BloomNucleus/logs/build/<comp>_build_<arch>.log
-    if IS_WINDOWS:
-        component_log_src = NUCLEUS_HOME / "logs" / "build" / f"{component}_build.log"
-    else:
-        # Reconstruir BIN_ARCH con la misma lógica que usa build-component.sh
-        machine = _platform.machine()
-        if IS_MACOS:
-            _bin_arch = "darwin_arm64" if machine == "arm64" else "darwin_x64"
-        else:  # Linux
-            _bin_arch = "linux_x64"
-        # Usar NUCLEUS_HOME como base, igual que Windows y el resto de la app.
-        # build-component.sh también debe escribir su log aquí (no en Library/Logs).
-        component_log_src = NUCLEUS_HOME / "logs" / "build" / f"{component}_build_{_bin_arch}.log"
+    # Tanto Windows (.bat) como Darwin (.sh) escriben <comp>_build.log sin arch,
+    # alineados con el stream_id cross-platform <comp>_build en telemetry.json.
+    component_log_src = NUCLEUS_HOME / "logs" / "build" / f"{component}_build.log"
 
     if component_log_src.exists() and _log_file_path:
         try:
@@ -1114,6 +1082,105 @@ def build_conductor_package() -> StepResult:
 # MAIN
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _register_build_telemetry() -> None:
+    """
+    Registra los streams de build en telemetry.json via nucleus.
+
+    Se llama al FINAL del build, después del rollout de nucleus, cuando el
+    binario ya existe en NUCLEUS_HOME/bin/nucleus/ y está disponible en PATH.
+
+    Streams registrados acá:
+      - brain_build  → build-brain.sh no puede auto-registrarlo porque nucleus
+                       no existe todavía cuando brain se compila (brain va después
+                       de nucleus en all_steps, pero el rollout ocurre entre pasos).
+      - build_all    → stream del orquestador, solo build-all.py sabe su path.
+
+    Los componentes Go (nucleus, sentinel, metamorph, sensor) se auto-registran
+    dentro de build-component.sh, después del rollout de nucleus.
+    """
+    # Buscar nucleus: primero el recién compilado en NUCLEUS_HOME, luego en PATH
+    nucleus_exe: Path | None = None
+    candidate = NUCLEUS_HOME / "bin" / "nucleus" / _exe("nucleus")
+    if candidate.exists():
+        nucleus_exe = candidate
+    else:
+        import shutil as _sh
+        found = _sh.which("nucleus")
+        if found:
+            nucleus_exe = Path(found)
+
+    if nucleus_exe is None:
+        log("⚠️  nucleus no encontrado — telemetry de build_all y brain_build no registrado.")
+        log("    Ejecutá manualmente después de instalar nucleus:")
+        log("    nucleus telemetry register --stream brain_build ...")
+        return
+
+    log("")
+    log(_sep())
+    log("Registrando streams de build en telemetry.json ...")
+    log(_sep())
+
+    log_dir = NUCLEUS_HOME / "logs" / "build"
+
+    streams = [
+        {
+            "stream":      "brain_build",
+            "label":       "📦 BRAIN BUILD",
+            "path":        log_dir / "brain.build.log",
+            "priority":    "3",
+            "category":    "build",
+            "description": "Brain build pipeline output - compiler and bundler logs for the Brain module",
+        },
+        {
+            "stream":      "build_all",
+            "label":       "🔨 BUILD ALL",
+            "path":        _log_file_path or (log_dir / "build_all.log"),
+            "priority":    "2",
+            "category":    ["build", "cortex"],
+            "description": "build-all.py pipeline log — registra resultado de cada fase "
+                           "(compilacion, empaquetado, verificacion) por run del orquestador maestro",
+        },
+    ]
+
+    for s in streams:
+        path = s["path"]
+        if not Path(path).exists():
+            log(f"  ⚠  Log no encontrado, saltando registro de {s['stream']}: {path}")
+            continue
+
+        norm_path = str(path).replace("\\", "/")
+        categories = s["category"] if isinstance(s["category"], list) else [s["category"]]
+        category_flags: list[str] = []
+        for cat in categories:
+            category_flags += ["--category", cat]
+
+        cmd = [
+            str(nucleus_exe), "telemetry", "register",
+            "--stream",      s["stream"],
+            "--label",       s["label"],
+            "--path",        norm_path,
+            "--priority",    s["priority"],
+            "--description", s["description"],
+        ] + category_flags
+
+        try:
+            result = subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                encoding="utf-8",
+                errors="replace",
+            )
+            if result.returncode == 0:
+                log(f"  ✅ Telemetry registrado: {s['stream']}")
+            else:
+                log(f"  ⚠  nucleus telemetry register [{s['stream']}] RC={result.returncode}")
+                if result.stdout:
+                    log(f"     {result.stdout.strip()[:120]}")
+        except OSError as exc:
+            log(f"  ⚠  No se pudo ejecutar nucleus para {s['stream']}: {exc}")
+
+
 def main() -> None:
     args = _parse_args()
     _setup_logger()
@@ -1151,9 +1218,11 @@ def main() -> None:
     # Brain y Host usan sus propios builders.
     # Los 4 Go components usan build_go_component().
     all_steps: list[tuple[str, str, Callable[[], StepResult]]] = [
+        # nucleus va primero: su rollout deja el binario en PATH antes de que
+        # cualquier otro componente intente llamar `nucleus telemetry register`.
+        ("nucleus",   "Nucleus",   lambda: build_go_component("nucleus")),
         ("brain",     "Brain",     build_brain),
         ("host",      "Host",      build_host),
-        ("nucleus",   "Nucleus",   lambda: build_go_component("nucleus")),
         ("sentinel",  "Sentinel",  lambda: build_go_component("sentinel")),
         ("metamorph", "Metamorph", lambda: build_go_component("metamorph")),
         ("sensor",    "Sensor",    lambda: build_go_component("sensor")),
@@ -1208,6 +1277,12 @@ def main() -> None:
     log("Registrando PATH en ~/.zshrc y ~/.zshenv ...")
     log(_sep())
     ensure_path_in_zshrc()
+
+    # ── Registrar streams de telemetría que dependen de nucleus en PATH ──
+    # brain_build no puede auto-registrarse durante su build porque nucleus
+    # todavía no existe. Lo registramos acá, después del rollout de nucleus.
+    # build_all se registra también acá como stream del orquestador.
+    _register_build_telemetry()
 
     _print_summary(results)
 

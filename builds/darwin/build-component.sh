@@ -67,6 +67,9 @@ mkdir -p "${OUTPUT_DIR}"
 
 # ───────────────────────────────────────────────────────────────
 # LOGGING
+# Nombre sin arch para paridad con Windows (<component>_build.log).
+# El stream_id <component>_build es el mismo en todas las plataformas,
+# lo que permite análisis de telemetría cross-platform.
 # ───────────────────────────────────────────────────────────────
 
 if [[ "${DETECTED_OS}" == "Darwin" ]]; then
@@ -75,7 +78,8 @@ else
     LOG_BASE_DIR="${HOME}/.local/share/BloomNucleus/logs/build"
 fi
 
-LOG_FILE="${LOG_BASE_DIR}/${COMPONENT}_build_${BIN_ARCH}.log"
+# Sin sufijo de arch — alineado con Windows: <component>_build.log
+LOG_FILE="${LOG_BASE_DIR}/${COMPONENT}_build.log"
 mkdir -p "${LOG_BASE_DIR}"
 
 {
@@ -217,6 +221,51 @@ if [[ -d "${HELP_SRC_DIR}" ]]; then
 else
     echo "⚠  Directorio de help no encontrado, saltando: ${HELP_SRC_DIR}"
     echo "⚠  Help dir no encontrado: ${HELP_SRC_DIR}" >> "${LOG_FILE}"
+fi
+
+# ───────────────────────────────────────────────────────────────
+# REGISTRAR STREAM EN TELEMETRY
+# Stream_id y label idénticos a Windows (build-component.bat) para
+# permitir análisis cross-platform. Nucleus se busca en PATH igual
+# que en brain.ps1 — en Darwin no hay un .exe en bin/ hasta que
+# nucleus mismo fue compilado, así que PATH es la fuente correcta.
+# ───────────────────────────────────────────────────────────────
+
+echo ""
+echo "Registrando telemetry via nucleus..."
+echo "Registrando telemetry via nucleus..." >> "${LOG_FILE}"
+
+NUCLEUS_EXE=""
+if command -v nucleus &>/dev/null; then
+    NUCLEUS_EXE="$(command -v nucleus)"
+fi
+
+if [[ -z "${NUCLEUS_EXE}" ]]; then
+    echo "⚠️  nucleus no encontrado en PATH. Telemetry no se registró."
+    echo "⚠️  nucleus no encontrado en PATH" >> "${LOG_FILE}"
+else
+    # Forward slashes — nucleus espera paths con / igual que en Windows
+    NORM_LOG_PATH="${LOG_FILE//\\/\/}"
+
+    "${NUCLEUS_EXE}" telemetry register \
+        --stream      "${COMPONENT}_build" \
+        --label       "${COMPONENT} BUILD" \
+        --path        "${NORM_LOG_PATH}" \
+        --priority    3 \
+        --category    build \
+        --description "${COMPONENT} build pipeline output" \
+        >> "${LOG_FILE}" 2>&1
+
+    TELEMETRY_RC=$?
+    if [[ ${TELEMETRY_RC} -eq 0 ]]; then
+        echo "✅ Telemetry registrado correctamente"
+        echo "     Stream: ${COMPONENT}_build"
+        echo "     Path  : ${NORM_LOG_PATH}"
+        echo "✅ Telemetry registrado: ${COMPONENT}_build" >> "${LOG_FILE}"
+    else
+        echo "⚠️  nucleus telemetry register terminó con código ${TELEMETRY_RC}"
+        echo "⚠️  telemetry register RC=${TELEMETRY_RC}" >> "${LOG_FILE}"
+    fi
 fi
 
 # ───────────────────────────────────────────────────────────────

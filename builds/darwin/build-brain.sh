@@ -30,7 +30,7 @@ PROJECT_ROOT="${BLOOM_PROJECT_ROOT:-"$(cd "${SCRIPT_DIR}/../.." && pwd)"}"
 BRAIN_DIR="${PROJECT_ROOT}/brain"
 BUILD_SCRIPT="${BRAIN_DIR}/build_multiplatform/build.py"
 
-# Arquitectura → carpeta de output (para el log)
+# Arquitectura → carpeta de output del binario
 # Nombres alineados con build-all.py y build_main.py
 case "${DETECTED_ARCH}" in
     arm64)   BIN_ARCH="darwin_arm64" ;;
@@ -40,7 +40,9 @@ esac
 
 # ───────────────────────────────────────────────────────────────
 # LOGGING
-# Misma estructura que Windows: ~/Library/BloomNucleus/logs/build
+# Nombre sin arch para paridad con Windows (brain.build.log).
+# El stream_id brain_build es el mismo en todas las plataformas,
+# lo que permite análisis de telemetría cross-platform.
 # ───────────────────────────────────────────────────────────────
 
 if [[ "${DETECTED_OS}" == "Darwin" ]]; then
@@ -49,7 +51,8 @@ else
     LOG_BASE_DIR="${HOME}/.local/share/BloomNucleus/logs/build"
 fi
 
-LOG_FILE="${LOG_BASE_DIR}/brain_build_${BIN_ARCH}.log"
+# Sin sufijo de arch — alineado con Windows: brain.build.log
+LOG_FILE="${LOG_BASE_DIR}/brain.build.log"
 mkdir -p "${LOG_BASE_DIR}"
 
 {
@@ -161,10 +164,43 @@ if [[ ${BUILD_RC} -ne 0 ]]; then
 fi
 
 # ───────────────────────────────────────────────────────────────
-# RESUMEN
+# VERIFICAR EJECUTABLE
+# Espeja la lógica de brain.ps1 — busca en el output path primario
+# y en el path legacy de dist/ como fallback.
 # ───────────────────────────────────────────────────────────────
 
 OUTPUT_DIR="${PROJECT_ROOT}/installer/native/bin/${BIN_ARCH}/brain"
+EXE_PATH=""
+
+for candidate in \
+    "${OUTPUT_DIR}/brain" \
+    "${PROJECT_ROOT}/brain/dist/brain/brain"; do
+    if [[ -f "${candidate}" ]]; then
+        EXE_PATH="${candidate}"
+        break
+    fi
+done
+
+if [[ -z "${EXE_PATH}" ]]; then
+    echo "⚠️  Ejecutable brain no encontrado en paths esperados"
+    echo "⚠️  Ejecutable no encontrado" >> "${LOG_FILE}"
+else
+    echo "✅ Ejecutable: ${EXE_PATH}"
+    echo "✅ Ejecutable: ${EXE_PATH}" >> "${LOG_FILE}"
+
+    # Verificación funcional — no fatal si falla
+    if "${EXE_PATH}" --help >> "${LOG_FILE}" 2>&1; then
+        echo "✅ Ejecutable funcional"
+        echo "✅ Ejecutable funcional" >> "${LOG_FILE}"
+    else
+        echo "⚠️  No se pudo verificar ejecutable (continuando)"
+        echo "⚠️  --help falló" >> "${LOG_FILE}"
+    fi
+fi
+
+# ───────────────────────────────────────────────────────────────
+# RESUMEN
+# ───────────────────────────────────────────────────────────────
 
 echo ""
 echo "============================================="
