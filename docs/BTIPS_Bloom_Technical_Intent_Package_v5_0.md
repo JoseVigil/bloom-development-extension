@@ -137,6 +137,8 @@ flowchart LR
         Metamorph -.actualiza.-> IonSites
 
         VS --> Brain
+        VS <--> Workspace
+        VS <--> ProjectFolder
 
         BloomSensor --presence events--> Sentinel
         NucleusExe -.supervisa via eventos.-> BloomSensor
@@ -151,8 +153,7 @@ flowchart LR
         NucleusExe -.crea y firma.-> MandatesFolder
 
         Workspace <--> ProjectFolder
-        Workspace <--> NucleusFolder
-        VS <--> ProjectFolder
+        Workspace <--> NucleusFolder        
 
         Ext --> ChatGPTSite
         Ext --> ClaudeSite
@@ -279,7 +280,121 @@ Esto convierte conflictos técnicos en **decisiones asistidas por IA**, no en ba
 
 ---
 
-### 2.5️⃣ Brain (Python Engine)
+### 2.5️⃣ Bloom VS Code Plugin — Developer Intent Interface
+
+El **Bloom VS Code Plugin** (`bloom-nucleus-installer`) es la interfaz del desarrollador dentro del editor de código. Donde el Conductor es la terminal de gobernanza estratégica standalone, el plugin es la superficie operativa del día a día: el lugar donde el código vive, donde el contexto real del proyecto existe, y donde los intents y Mandates nacen en contacto directo con el filesystem del desarrollador.
+
+El plugin no es un cliente liviano. Internamente levanta su propio **stack de servidores** que forma parte del Control Plane de Nucleus: un servidor WebSocket, una API HTTP con contrato Swagger, y un FileSystemWatcher activo sobre `.bloom/`. Este stack existe independientemente de si VS Code está en foco — puede correr vía Bootstrap standalone cuando el editor está cerrado.
+
+#### La Filosofía del Plugin
+
+El plugin opera bajo el mismo principio stateless que el Conductor: la verdad del sistema vive en el filesystem (`.bloom/`), no en memoria del editor. Al activarse, reconstruye su estado escaneando los intents existentes en disco. No acumula estado propio ni duplica lo que Nucleus ya sabe.
+
+Su ventaja diferencial frente al Conductor es el **contexto de código en tiempo real**: el plugin tiene acceso directo a la selección activa del editor, al árbol de archivos del workspace, a las operaciones git del repositorio y a la estructura real del proyecto en el momento en que el desarrollador está trabajando. Esa información es el insumo que hace que un intent sea preciso.
+
+#### Stack de Servidores Internos
+
+El plugin levanta tres componentes de red al activarse:
+
+| Componente | Puerto | Rol |
+|---|---|---|
+| **WebSocket Server** | `:4124` | Control Plane de Nucleus. Canal de eventos en tiempo real entre el plugin, la webview y cualquier consumer del ecosistema. Propiedad de Nucleus, no de VS Code. |
+| **API HTTP (Fastify)** | `:48215` | REST API del plugin con contrato Swagger autodocumentado. Expone operaciones sobre intents, perfiles y estado del sistema. |
+| **Swagger UI** | `:48215/api/docs` | Contrato vivo de la API. Permite inspeccionar y testear todos los endpoints disponibles. |
+
+El WebSocket no depende del lifecycle de VS Code. Su ownership es el Control Plane de Nucleus — el plugin se conecta como cliente pasivo. Esto garantiza que la comunicación del ecosistema no se interrumpa si el editor pierde foco o se reinicia.
+
+#### Capacidades Principales
+
+* **Intent Creator con contexto real**: Crea intents `dev` y `doc` usando los archivos activos del editor como contexto directo, sin necesidad de selección manual
+* **Mandate Trigger**: Inicia Mandates desde el workspace, que son luego gobernados y firmados por Nucleus
+* **BTIP Explorer**: Navega y gestiona los intents existentes en `.bloom/intents/` directamente desde el Activity Bar de VS Code
+* **Nucleus Project Browser**: Visualiza la jerarquía de proyectos de la organización y su estado
+* **Chrome Profile Manager**: Gestiona los perfiles de Chromium asociados a cada cuenta AI del desarrollador
+* **GitHub OAuth**: Autenticación de identidad del desarrollador integrada al flujo de registro
+* **FileSystem Observer**: Detecta cambios en `.bloom/**` y propaga eventos `btip:updated` / `btip:deleted` al WebSocket en tiempo real
+
+#### Los Dos Flujos de Intents y Mandates
+
+Un intent o un Mandate pueden originarse en cualquiera de los dos extremos del sistema. Ambos flujos son válidos y equivalentes en autoridad:
+
+```
+FLUJO A — Plugin → Workspace
+─────────────────────────────────────────────────────────────
+Desarrollador crea el intent desde VS Code
+    │  selecciona archivos, describe el problema,
+    │  define comportamiento esperado
+    ▼
+Plugin genera intent.bl + codebase.bl en .bloom/intents/
+    │  Brain CLI ejecuta la generación del contexto
+    ▼
+Nucleus detecta el nuevo intent en el filesystem
+    │  valida, firma, registra
+    ▼
+Intent disponible en el Conductor y en el Workspace
+    │  el equipo puede observarlo, coordinarlo, ejecutarlo
+
+FLUJO B — Workspace → Plugin
+─────────────────────────────────────────────────────────────
+Intent o Mandate creado en el Conductor o vía Alfred
+    │  Nucleus lo persiste en .bloom/intents/
+    ▼
+FileSystemWatcher del plugin detecta el cambio
+    │  broadcast 'btip:updated' vía WebSocket
+    ▼
+Plugin actualiza su vista de intents en tiempo real
+    │  el desarrollador ve el intent disponible en VS Code
+    ▼
+Desarrollador abre el intent en el editor
+    │  trabaja el código dentro del contexto definido
+    │  los archivos modificados quedan en el workspace
+```
+
+El Mandate sigue el mismo principio: puede nacer en el plugin como intención del desarrollador que sube al Conductor para ser firmada por Nucleus, o puede llegar desde el Conductor ya firmado y el plugin lo recibe como contexto de trabajo. En ambos casos, **Nucleus es quien firma y valida — el plugin y el Conductor son los canales de entrada de la intención humana**.
+
+#### Relación con el Ecosistema
+
+```
+Developer (VS Code)
+    │
+    ▼
+VS Code Plugin
+    │
+    ├──[Brain CLI]──────────────→ Brain (Python Engine)
+    │   crea intents, genera             ejecuta pipelines
+    │   codebase, inicia Mandates
+    │
+    ├──[WebSocket :4124]────────→ Nucleus / Conductor / Webview
+    │   eventos en tiempo real           sincronización de estado
+    │
+    ├──[API HTTP :48215]────────→ Consumers externos
+    │   REST + Swagger                   integraciones, debug
+    │
+    └──[FileSystem]─────────────→ .bloom/ (ProjectFolder)
+        lee y escribe intents            fuente de verdad compartida
+        y metadata directamente
+```
+
+El plugin nunca opera como autoridad. Lee el filesystem, genera artefactos, dispara Brain CLI y propaga eventos — pero toda firma, validación y gobernanza de intents y Mandates pasa por Nucleus.
+
+#### Conductor vs Plugin — Cuándo Usar Cada Uno
+
+| Contexto | Conductor | VS Code Plugin |
+|---|---|---|
+| Crear un intent con contexto de código activo | — | ✅ |
+| Crear un Mandate estratégico multi-proyecto | ✅ | — |
+| Observar el Event Bus en tiempo real | ✅ | Parcial (webview) |
+| Gestionar intents `exp` y `cor` organizacionales | ✅ | — |
+| Trabajar dentro de un intent `dev` o `doc` | ✅ | ✅ |
+| Navegar el filesystem de intents del workspace | — | ✅ |
+| Gestionar perfiles Chrome y cuentas AI | — | ✅ |
+| Operar sin abrir el editor de código | ✅ | — |
+
+Ambas interfaces leen el mismo filesystem. Un intent creado en el plugin aparece inmediatamente en el Conductor, y viceversa. No hay sincronización — comparten la fuente de verdad.
+
+---
+
+### 2.6️⃣ Brain (Python Engine)
 
 **Brain** es el motor de ejecución Python que materializa las intenciones técnicas en acciones concretas. Opera como un servidor TCP persistente que acepta comandos del Event Bus (Sentinel) y ejecuta pipelines declarativos en el contexto de Projects y Nucleus.
 
