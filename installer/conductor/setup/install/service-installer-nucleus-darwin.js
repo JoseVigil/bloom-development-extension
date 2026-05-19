@@ -39,9 +39,9 @@ function generatePlist(binaryPath, logPath) {
         <key>HOME</key>
         <string>${os.homedir()}</string>
         <key>BLOOM_ROOT</key>
-        <string>${path.join(os.homedir(), 'Library', 'Application Support', 'BloomNucleus')}</string>
+        <string>${path.join(os.homedir(), 'Library', 'BloomNucleus')}</string>
         <key>BLOOM_LOGS</key>
-        <string>${path.join(os.homedir(), 'Library', 'Application Support', 'BloomNucleus', 'logs')}</string>
+        <string>${path.join(os.homedir(), 'Library', 'BloomNucleus', 'logs')}</string>
     </dict>
     <key>RunAtLoad</key>
     <true/>
