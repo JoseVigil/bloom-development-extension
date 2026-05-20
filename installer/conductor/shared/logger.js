@@ -115,7 +115,7 @@ class Logger {
       const _platform = process.platform;
 
       const defaultLogsBase = _platform === 'darwin'
-        ? path.join(_homeDir, 'Library', 'Application Support', 'BloomNucleus', 'logs')
+        ? path.join(_homeDir, 'Library', 'BloomNucleus', 'logs')
         : _platform === 'win32'
           ? path.join(process.env.LOCALAPPDATA || path.join(_homeDir, 'AppData', 'Local'), 'BloomNucleus', 'logs')
           : path.join(process.env.XDG_DATA_HOME || path.join(_homeDir, '.local', 'share'), 'BloomNucleus', 'logs');
@@ -189,7 +189,7 @@ class Logger {
       // Derivar el directorio base de BloomNucleus según plataforma
       const _os = require('os');
       const _nucleusBase = process.platform === 'darwin'
-        ? path.join(_os.homedir(), 'Library', 'Application Support', 'BloomNucleus')
+        ? path.join(_os.homedir(), 'Library', 'BloomNucleus')
         : process.platform === 'win32'
           ? path.join(process.env.LOCALAPPDATA || path.join(_os.homedir(), 'AppData', 'Local'), 'BloomNucleus')
           : path.join(process.env.XDG_DATA_HOME || path.join(_os.homedir(), '.local', 'share'), 'BloomNucleus');

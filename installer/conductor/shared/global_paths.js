@@ -24,7 +24,7 @@ const getBaseDir = () => {
   if (platform === 'win32') {
     return path.join(process.env.LOCALAPPDATA || path.join(homeDir, 'AppData', 'Local'), 'BloomNucleus');
   } else if (platform === 'darwin') {
-    return path.join(homeDir, 'Library', 'Application Support', 'BloomNucleus');
+    return path.join(homeDir, 'Library', 'BloomNucleus');
   } else {
     return path.join(homeDir, '.local', 'share', 'BloomNucleus');
   }
@@ -289,10 +289,10 @@ const paths = {
   // Chrome
   chromeDir: platform === 'win32'
     ? path.join(baseDir, 'bin', 'chrome-win')
-    : path.join(baseDir, 'bin', 'chrome-mac'),
+    : path.join(baseDir, 'bin', 'chrome'),
   chromeExe: platform === 'win32'
     ? path.join(baseDir, 'bin', 'chrome-win', 'chrome.exe')
-    : path.join(baseDir, 'bin', 'chrome-mac', 'Chromium.app', 'Contents', 'MacOS', 'Chromium'),
+    : path.join(baseDir, 'bin', 'chrome', 'Chromium.app', 'Contents', 'MacOS', 'Chromium'),
   
   // Extension template (copied per-profile by Brain)
   extensionDir: path.join(baseDir, 'bin', 'extension'),
@@ -410,7 +410,6 @@ const criticalPaths = [
   'metamorphDir', 'metamorphExe',
   'brainDir', 'brainExe',
   'hostDir', 'hostBinary',
-  'nssmDir',
   'ollamaDir', 'ollamaExe',
   'nodeDir', 'nodeExe',
   'temporalDir', 'temporalExe',

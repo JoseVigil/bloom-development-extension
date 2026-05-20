@@ -36,7 +36,7 @@ function getBloomBasePathCLI() {
   if (process.platform === 'win32') {
     return path.join(homeDir, 'AppData', 'Local', 'BloomNucleus');
   } else if (process.platform === 'darwin') {
-    return path.join(homeDir, 'Library', 'Application Support', 'BloomNucleus');
+    return path.join(homeDir, 'Library', 'BloomNucleus');
   } else {
     return path.join(homeDir, '.local', 'share', 'BloomNucleus');
   }
@@ -259,7 +259,7 @@ function getBloomBasePath() {
   if (platform === 'win32') {
     return path.join(homeDir, 'AppData', 'Local', 'BloomNucleus');
   } else if (platform === 'darwin') {
-    return path.join(homeDir, 'Library', 'Application Support', 'BloomNucleus');
+    return path.join(homeDir, 'Library', 'BloomNucleus');
   } else {
     return path.join(homeDir, '.local', 'share', 'BloomNucleus');
   }

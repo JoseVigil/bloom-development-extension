@@ -10,7 +10,7 @@ const path         = require('path');
 const { execSync, spawn } = require('child_process');
 const { paths }    = require('../config/paths');
 
-const SENSOR_BIN_NAME = 'bloom-sensor';
+const SENSOR_BIN_NAME = 'sensor'; // darwin binary name (no 'bloom-' prefix)
 
 async function installSensor() {
   console.log('\n🌉 INSTALANDO AGENTE DE SESIÓN: bloom-sensor (macOS)\n');

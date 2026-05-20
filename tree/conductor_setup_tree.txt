@@ -1,0 +1,75 @@
+bloom-development-extension/
+└── setup/
+    ├── .DS_Store
+    ├── AppData/
+    │   └── Local/
+    │       └── BloomNucleus/
+    │           ├── logs/
+    │           │   └── telemetry.json
+    │           └── profiles/
+    ├── app.manifest
+    ├── assets/
+    │   ├── bloom.ico
+    │   └── installer.gif
+    ├── bloom-setup-version.ps1
+    ├── build_info.json
+    ├── build_number.darwin.txt
+    ├── build_number.windows.txt
+    ├── config/
+    │   ├── constants.js
+    │   └── paths.js
+    ├── core/
+    │   ├── admin-utils.js
+    │   ├── menu-builder.js
+    │   └── window-manager.js
+    ├── install/
+    │   ├── .DS_Store
+    │   ├── chromium-installer.js
+    │   ├── diagnose/
+    │   │   ├── diagnose-service.js
+    │   │   └── service-diagnostics.js
+    │   ├── installer.js
+    │   ├── installer_nucleus.js
+    │   ├── nucleus_manager.js
+    │   ├── pre-install-cleanup.js
+    │   ├── runtime-installer.js
+    │   ├── service-installer-brain-darwin.js
+    │   ├── service-installer-brain.js
+    │   ├── service-installer-nucleus-darwin.js
+    │   ├── service-installer-nucleus.js
+    │   ├── service-installer-sensor-darwin.js
+    │   └── service-installer-sensor.js
+    ├── ipc/
+    │   ├── install-handlers.js
+    │   ├── launch-handlers.js
+    │   └── shared-handlers.js
+    ├── main.js
+    ├── node_modules/ [... dependencies]
+    ├── package-lock.json
+    ├── package.json
+    ├── preload.js
+    ├── registry-scripts/
+    │   ├── cleanup.ps1
+    │   └── hkcu.ps1
+    ├── run-admin.bat
+    ├── scripts/
+    │   ├── check-status.bat
+    │   ├── clean_chrome_cache.ps1
+    │   ├── cleanup_zombies.ps1
+    │   ├── emergency-cleanup.bat
+    │   ├── fix_bridge_id.py
+    │   ├── install-brain-service.bat
+    │   ├── install-nucleus-service.bat
+    │   ├── reinstall-brain-service.bat
+    │   ├── reinstall-nucleus-service.bat
+    │   ├── sanitize_manifest.py
+    │   ├── uninstall-brain-service.bat
+    │   └── uninstall-nucleus-service.bat
+    ├── src/
+    │   ├── index.html
+    │   ├── renderer.js
+    │   └── styles.css
+    ├── utils/
+    │   ├── exec-helper.js
+    │   └── repair-tools.js
+    └── version.json

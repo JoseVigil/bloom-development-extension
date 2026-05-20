@@ -15,8 +15,70 @@ const logger = getLogger('installer');
 
 const NUCLEUS_SCHEMA_VERSION = 1;
 
+// ── Platform-aware milestone schemas ─────────────────────────────────────────
+const _isDarwin = process.platform === 'darwin';
+const _isWin    = process.platform === 'win32';
+
+const _directoriesTargets = _isDarwin
+  ? ['bin', 'bin/nucleus', 'bin/sentinel', 'bin/brain',
+     'bin/host', 'bin/cortex', 'bin/ollama', 'bin/conductor',
+     'bin/chrome-mac', 'config', 'profiles', 'logs']
+  : ['bin', 'bin/nucleus', 'bin/sentinel', 'bin/brain',
+     'bin/host', 'bin/cortex', 'bin/ollama', 'bin/conductor',
+     'bin/chrome-win', 'config', 'engine/runtime', 'profiles', 'logs'];
+
+const _chromiumVerification = _isDarwin
+  ? { method: 'file_exists_and_smoke', targets: ['bin/chrome-mac/Chromium.app/Contents/MacOS/Chromium'], smoke_test: '--version', result: null }
+  : { method: 'file_exists_and_smoke', targets: ['bin/chrome-win/chrome.exe'], smoke_test: '--version', result: null };
+
+const _brainRuntimeVerification = _isDarwin
+  ? { method: 'file_exists', targets: ['bin/brain/brain'], result: null }           // Darwin: Python embebido en brain, no runtime suelto
+  : { method: 'file_exists', targets: ['engine/runtime/python.exe'], result: null };
+
+const _binariesComponents = _isDarwin
+  ? {
+      brain:     ['brain', '_internal'],
+      host:      ['bloom-host'],
+      nucleus:   ['nucleus', 'nucleus-governance.json'],
+      sentinel:  ['sentinel', 'sentinel-config.json'],
+      metamorph: ['metamorph'],
+      cortex:    ['bloom-cortex.blx'],
+      ollama:    ['ollama'],
+      node:      ['node'],
+      temporal:  ['temporal'],
+      conductor: ['Bloom Nucleus Workspace.app']
+    }
+  : {
+      runtime:   ['python.exe', 'Lib', 'python310._pth'],
+      brain:     ['brain.exe', '_internal'],
+      host:      ['bloom-host.exe', 'libwinpthread-1.dll'],
+      nssm:      ['nssm.exe'],
+      nucleus:   ['nucleus.exe', 'nucleus-governance.json', 'help'],
+      sentinel:  ['sentinel.exe', 'sentinel-config.json', 'help'],
+      metamorph: ['metamorph.exe', 'help', 'metamorph-config.json'],
+      cortex:    ['bloom-cortex.blx'],
+      ollama:    ['ollama.exe', 'lib'],
+      node:      ['node.exe', 'npm.cmd'],
+      temporal:  ['temporal.exe'],
+      conductor: ['bloom-conductor.exe']
+    };
+
+const _brainServiceVerification = _isDarwin
+  ? { method: 'launchd_service_check', service_name: 'com.bloom.brain',   expected_state: 'running', result: null }
+  : { method: 'nssm_service_check',    service_name: 'BloomBrain',        expected_state: 'SERVICE_RUNNING', result: null };
+
+const _nucleusServiceVerification = _isDarwin
+  ? { method: 'launchd_service_check', service_name: 'com.bloom.nucleus', expected_state: 'running', result: null }
+  : { method: 'nssm_service_check',    service_name: 'BloomNucleusService', expected_state: 'SERVICE_RUNNING', result: null };
+
+const _sensorVerification = _isDarwin
+  ? { method: 'launchd_service_check', service_name: 'com.bloom.sensor',  expected_state: 'running', result: null }
+  : { method: 'process_running', target: 'bloom-sensor.exe', registry_key: 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run', registry_value: 'BloomSensor', result: null };
+
+// ── Schema base (plataforma-neutral) ─────────────────────────────────────────
 const EMPTY_NUCLEUS = {
   version: NUCLEUS_SCHEMA_VERSION,
+  platform: process.platform,
   created_at: null,
   updated_at: null,
 
@@ -26,7 +88,7 @@ const EMPTY_NUCLEUS = {
     completed_at: null,
     origin_path: null,
     origin_type: null,
-    origin_platform: null
+    origin_platform: process.platform
   },
 
   onboarding: {
@@ -35,16 +97,16 @@ const EMPTY_NUCLEUS = {
   },
 
   system_map: {
-    bloom_base: paths.baseDir,
-    nucleus_exe: paths.nucleusExe,
+    bloom_base:   paths.baseDir,
+    nucleus_exe:  paths.nucleusExe,
     sentinel_exe: paths.sentinelExe,
-    brain_exe: paths.brainExe,
+    brain_exe:    paths.brainExe,
     chromium_exe: paths.chromeExe,
     conductor_exe: paths.conductorExe,
-    sensor_exe: paths.sensorExe,
-    cortex_blx: paths.cortexBlx,
-    ollama_exe: paths.ollamaExe,
-    host_exe: paths.hostBinary
+    sensor_exe:   paths.sensorExe,
+    cortex_blx:   paths.cortexBlx,
+    ollama_exe:   paths.ollamaExe,
+    host_exe:     paths.hostBinary
   },
 
   binary_versions: {
@@ -63,15 +125,7 @@ const EMPTY_NUCLEUS = {
       status: 'pending',
       started_at: null,
       completed_at: null,
-      verification: {
-        method: 'file_exists',
-        targets: [
-          'bin', 'bin/nucleus', 'bin/sentinel', 'bin/brain', 
-          'bin/host', 'bin/cortex', 'bin/ollama', 'bin/conductor', 
-          'bin/chrome-win', 'config', 'engine/runtime', 'profiles', 'logs'
-        ],
-        result: null
-      },
+      verification: { method: 'file_exists', targets: _directoriesTargets, result: null },
       error: null
     },
 
@@ -79,12 +133,7 @@ const EMPTY_NUCLEUS = {
       status: 'pending',
       started_at: null,
       completed_at: null,
-      verification: {
-        method: 'file_exists_and_smoke',
-        targets: ['bin/chrome-win/chrome.exe'],
-        smoke_test: '--version',
-        result: null
-      },
+      verification: _chromiumVerification,
       error: null
     },
 
@@ -92,11 +141,7 @@ const EMPTY_NUCLEUS = {
       status: 'pending',
       started_at: null,
       completed_at: null,
-      verification: {
-        method: 'file_exists',
-        targets: ['engine/runtime/python.exe'],
-        result: null
-      },
+      verification: _brainRuntimeVerification,
       error: null
     },
 
@@ -104,24 +149,7 @@ const EMPTY_NUCLEUS = {
       status: 'pending',
       started_at: null,
       completed_at: null,
-      verification: {
-        method: 'sovereign_manifest',
-        components: {
-          runtime:   ['python.exe', 'Lib', 'python310._pth'],
-          brain:     ['brain.exe', '_internal'],
-          host:      ['bloom-host.exe', 'libwinpthread-1.dll'],
-          nssm:      ['nssm.exe'],
-          nucleus:   ['nucleus.exe', 'nucleus-governance.json', 'help'],
-          sentinel:  ['sentinel.exe', 'sentinel-config.json', 'help'],
-          metamorph: ['metamorph.exe', 'help', 'metamorph-config.json'],
-          cortex:    ['bloom-cortex.blx'],
-          ollama:    ['ollama.exe', 'lib'],
-          node:      ['node.exe', 'npm.cmd'],
-          temporal:  ['temporal.exe'],
-          conductor: ['bloom-conductor.exe']
-        },
-        result: null
-      },
+      verification: { method: 'sovereign_manifest', components: _binariesComponents, result: null },
       error: null
     },
 
@@ -138,44 +166,11 @@ const EMPTY_NUCLEUS = {
       error: null
     },
 
-    // ⚠️ DEPRECADO - Conductor ahora se verifica en milestone 'binaries'
-    conductor: {
-      status: 'pending',
-      started_at: null,
-      completed_at: null,
-      verification: {
-        method: 'file_exists',
-        targets: ['bin/conductor/bloom-conductor.exe'],
-        result: null
-      },
-      error: null,
-      deprecated: true  // ✅ Marcado como deprecado
-    },
-
-    // ⚠️ DEPRECADO - Metamorph ahora se verifica en milestone 'binaries'
-    metamorph: {
-      status: 'pending',
-      started_at: null,
-      completed_at: null,
-      verification: {
-        method: 'file_exists',
-        targets: ['bin/metamorph/metamorph.exe', 'bin/metamorph/help'],
-        result: null
-      },
-      error: null,
-      deprecated: true  // ✅ Marcado como deprecado
-    },
-
     brain_service_install: {
       status: 'pending',
       started_at: null,
       completed_at: null,
-      verification: {
-        method: 'nssm_service_check',
-        service_name: 'BloomBrain',
-        expected_state: 'SERVICE_RUNNING',
-        result: null
-      },
+      verification: _brainServiceVerification,
       error: null
     },
 
@@ -183,65 +178,17 @@ const EMPTY_NUCLEUS = {
       status: 'pending',
       started_at: null,
       completed_at: null,
-      verification: {
-        method: 'nssm_service_check',
-        service_name: 'BloomNucleusService',
-        expected_state: 'SERVICE_RUNNING',
-        result: null
-      },
+      verification: _nucleusServiceVerification,
       error: null
     },
 
-    orchestration_init: {
+    sensor_install: {
       status: 'pending',
       started_at: null,
       completed_at: null,
-      verification: {
-        method: 'nucleus_command',
-        command: 'nucleus --json temporal ensure',
-        expected_success: true,
-        expected_state: 'RUNNING',
-        result: null
-      },
-      error: null
-    },
-
-    nucleus_seed: {
-      status: 'pending',
-      started_at: null,
-      completed_at: null,
-      verification: {
-        method: 'sentinel_command',
-        command: 'sentinel --json seed MasterWorker true',
-        expected_output: 'profile_id',
-        result: null
-      },
-      error: null
-    },
-
-    ollama_init: {
-      status: 'pending',
-      started_at: null,
-      completed_at: null,
-      verification: {
-        method: 'sentinel_command',
-        command: 'sentinel --json ollama healthcheck',
-        expected_status: 'healthy',
-        result: null
-      },
-      error: null
-    },
-
-    shortcuts: {
-      status: 'pending',
-      started_at: null,
-      completed_at: null,
-      verification: {
-        method: 'file_exists',
-        targets: ['shortcuts/Bloom Nucleus.lnk'],
-        result: null
-      },
-      error: null
+      verification: _sensorVerification,
+      error: null,
+      non_critical: true
     },
 
     certification: {
@@ -258,13 +205,26 @@ const EMPTY_NUCLEUS = {
       error: null
     },
 
+    nucleus_seed: {
+      status: 'pending',
+      started_at: null,
+      completed_at: null,
+      verification: {
+        method: 'nucleus_command',
+        command: 'nucleus --json synapse seed MasterWorker true',
+        expected_output: 'profile_id',
+        result: null
+      },
+      error: null
+    },
+
     nucleus_launch: {
       status: 'pending',
       started_at: null,
       completed_at: null,
       verification: {
         method: 'nucleus_command',
-        command: 'nucleus --json synapse launch [uuid] --mode discovery --heartbeat',
+        command: 'nucleus --json synapse launch [uuid] --mode discovery',
         expected_success: true,
         expected_extension_loaded: true,
         result: null
@@ -272,32 +232,30 @@ const EMPTY_NUCLEUS = {
       error: null
     },
 
-    sensor_install: {
-      status: 'pending',
-      started_at: null,
-      completed_at: null,
-      verification: {
-        method: 'process_running',
-        target: 'bloom-sensor.exe',
-        registry_key: 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run',
-        registry_value: 'BloomSensor',
-        result: null
+    // ── Windows-only milestones (presentes pero no ejecutados en Darwin) ──────
+    ...(!_isDarwin && {
+      orchestration_init: {
+        status: 'pending', started_at: null, completed_at: null,
+        verification: { method: 'nucleus_command', command: 'nucleus --json temporal ensure', expected_success: true, expected_state: 'RUNNING', result: null },
+        error: null
       },
-      error: null
-    },
-
-    vscode_extension: {
-      status: 'pending',
-      started_at: null,
-      completed_at: null,
-      verification: {
-        method: 'file_exists',
-        targets: ['bin/vscode'],
-        result: null
+      ollama_init: {
+        status: 'pending', started_at: null, completed_at: null,
+        verification: { method: 'sentinel_command', command: 'sentinel --json ollama healthcheck', expected_status: 'healthy', result: null },
+        error: null
       },
-      error: null,
-      non_critical: true  // No bloquea la instalación si falla
-    }
+      shortcuts: {
+        status: 'pending', started_at: null, completed_at: null,
+        verification: { method: 'file_exists', targets: ['shortcuts/Bloom Nucleus.lnk'], result: null },
+        error: null
+      },
+      vscode_extension: {
+        status: 'pending', started_at: null, completed_at: null,
+        verification: { method: 'file_exists', targets: ['bin/vscode'], result: null },
+        error: null,
+        non_critical: true
+      }
+    })
   }
 };
 
@@ -589,23 +547,39 @@ class NucleusManager {
    * @returns {string|null} - Nombre del hito o null si todos completados
    */
   getNextPendingMilestone() {
-    const milestoneOrder = [
-      'directories',               // 1/10
-      'chromium',                  // 2/10
-      'brain_runtime',             // 3/10
-      'binaries',                  // 4/10
-      'metamorph_audit',           // 5/10 - Snapshot + verify-sync
-      'brain_service_install',     // 6/10
-      'nucleus_service_install',   // 6/10 - Arranca Temporal
-      'sensor_install',            // 7/10 - Session agent (non-critical)
-      'vscode_extension',          // 7.5/10 - VS Code extension (non-critical)
-      'certification',             // 8/10 - Verifica Temporal ready
-      'nucleus_seed',              // 9/10 - Usa Temporal
-      'nucleus_launch',            // 10/10 - Heartbeat final
-      'orchestration_init',        // (opcional, post-instalación)
-      'ollama_init',               // (opcional, post-instalación)
-      'shortcuts'                  // (opcional, post-instalación)
+    const darwinOrder = [
+      'directories',
+      'chromium',
+      'brain_runtime',
+      'binaries',
+      'metamorph_audit',
+      'brain_service_install',
+      'nucleus_service_install',
+      'sensor_install',
+      'certification',
+      'nucleus_seed',
+      'nucleus_launch'
     ];
+
+    const windowsOrder = [
+      'directories',
+      'chromium',
+      'brain_runtime',
+      'binaries',
+      'metamorph_audit',
+      'brain_service_install',
+      'nucleus_service_install',
+      'sensor_install',
+      'vscode_extension',
+      'certification',
+      'nucleus_seed',
+      'nucleus_launch',
+      'orchestration_init',
+      'ollama_init',
+      'shortcuts'
+    ];
+
+    const milestoneOrder = process.platform === 'darwin' ? darwinOrder : windowsOrder;
 
     for (const name of milestoneOrder) {
       if (this.state.milestones[name].status !== 'passed') {

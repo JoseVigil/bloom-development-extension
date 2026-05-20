@@ -85,7 +85,11 @@ class ServerManager:
         self.message_counter = 0
         
         # Control signals
-        self.shutdown_event = asyncio.Event()
+        # NOTE: shutdown_event MUST be created inside start_blocking(), after
+        # asyncio.set_event_loop(loop) — creating asyncio.Event() here (before
+        # any loop exists) causes "Future attached to a different loop" on
+        # Python 3.10+ when start_blocking() later calls new_event_loop().
+        self.shutdown_event = None  # initialized in start_blocking()
         self.server = None
         
         logger.info(f"🚀 ServerManager initialized")
@@ -784,6 +788,11 @@ class ServerManager:
         
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
+
+        # Create shutdown_event AFTER set_event_loop so it binds to the correct loop.
+        # asyncio.Event() created before a loop exists causes "Future attached to a
+        # different loop" on Python 3.10+ — that is why __init__ leaves this as None.
+        self.shutdown_event = asyncio.Event()
         
         # Setup signal handlers
         self._setup_signal_handlers(loop)

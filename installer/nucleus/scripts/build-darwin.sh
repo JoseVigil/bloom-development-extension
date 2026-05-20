@@ -23,11 +23,11 @@ fi
 case "${DETECTED_ARCH}" in
     x86_64)
         GOARCH=amd64
-        PLATFORM=macos64
+        PLATFORM=darwin_x64
         ;;
     arm64)
         GOARCH=arm64
-        PLATFORM=macos_arm64
+        PLATFORM=darwin_arm64
         ;;
     *)
         echo "❌ Arquitectura no soportada: ${DETECTED_ARCH}"

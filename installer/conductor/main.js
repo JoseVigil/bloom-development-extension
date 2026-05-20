@@ -35,7 +35,7 @@ function getBloomBasePathCLI() {
   if (process.platform === 'win32') {
     return path.join(homeDir, 'AppData', 'Local', 'BloomNucleus');
   } else if (process.platform === 'darwin') {
-    return path.join(homeDir, 'Library', 'Application Support', 'BloomNucleus');
+    return path.join(homeDir, 'Library', 'BloomNucleus');
   } else {
     return path.join(homeDir, '.local', 'share', 'BloomNucleus');
   }
@@ -69,14 +69,24 @@ function handleCLICommands() {
   // --binaries
   if (args.includes('--binaries')) {
     const bloomBase = getBloomBasePathCLI();
+    const isDarwin = process.platform === 'darwin';
+    const isWin = process.platform === 'win32';
     const binaries = {
-      nucleus: path.join(bloomBase, 'bin', 'nucleus', 'nucleus.exe'),
-      sentinel: path.join(bloomBase, 'bin', 'sentinel', 'sentinel.exe'),
-      brain: path.join(bloomBase, 'bin', 'brain', 'brain.exe'),
-      host: path.join(bloomBase, 'bin', 'native', 'bloom-host.exe'),
-      ollama: path.join(bloomBase, 'bin', 'ollama', 'ollama.exe'),
-      conductor: path.join(bloomBase, 'bin', 'conductor', 'bloom-conductor.exe'),
-      chromium: path.join(bloomBase, 'bin', 'chrome-win', 'chrome.exe')
+      nucleus:  path.join(bloomBase, 'bin', 'nucleus',  isWin ? 'nucleus.exe'  : 'nucleus'),
+      sentinel: path.join(bloomBase, 'bin', 'sentinel', isWin ? 'sentinel.exe' : 'sentinel'),
+      brain:    path.join(bloomBase, 'bin', 'brain',    isWin ? 'brain.exe'    : 'brain'),
+      host:     path.join(bloomBase, 'bin', 'host',     isWin ? 'bloom-host.exe' : 'bloom-host'),
+      ollama:   path.join(bloomBase, 'bin', 'ollama',   isWin ? 'ollama.exe'   : 'ollama'),
+      conductor: isWin
+        ? path.join(bloomBase, 'bin', 'conductor', 'bloom-conductor.exe')
+        : isDarwin
+          ? '/Applications/Bloom Nucleus Workspace.app/Contents/MacOS/Bloom Nucleus Workspace'
+          : path.join(bloomBase, 'bin', 'conductor', 'bloom-conductor'),
+      chromium: isDarwin
+        ? path.join(bloomBase, 'bin', 'chrome-mac', 'Chromium.app', 'Contents', 'MacOS', 'Chromium')
+        : isWin
+          ? path.join(bloomBase, 'bin', 'chrome-win', 'chrome.exe')
+          : path.join(bloomBase, 'bin', 'chrome-linux', 'chromium')
     };
 
     const result = {};
@@ -95,7 +105,9 @@ function handleCLICommands() {
   if (args.includes('--health')) {
     const { spawn } = require('child_process');
     const bloomBase = getBloomBasePathCLI();
-    const nucleusExe = path.join(bloomBase, 'bin', 'nucleus', 'nucleus.exe');
+    const nucleusExe = process.platform === 'win32'
+      ? path.join(bloomBase, 'bin', 'nucleus', 'nucleus.exe')
+      : path.join(bloomBase, 'bin', 'nucleus', 'nucleus');
 
     if (!fs.existsSync(nucleusExe)) {
       console.log(JSON.stringify({
@@ -183,7 +195,7 @@ function getBloomBasePath() {
   if (platform === 'win32') {
     return path.join(homeDir, 'AppData', 'Local', 'BloomNucleus');
   } else if (platform === 'darwin') {
-    return path.join(homeDir, 'Library', 'Application Support', 'BloomNucleus');
+    return path.join(homeDir, 'Library', 'BloomNucleus');
   } else {
     return path.join(homeDir, '.local', 'share', 'BloomNucleus');
   }
