@@ -20,6 +20,21 @@ def load_all_commands_explicit() -> CommandRegistry:
     registry = CommandRegistry()
     
     # =================================================================
+    # BISP
+    # =================================================================
+    try:
+        from brain.commands.bisp.semantic_query import BISPSemanticQueryCommand
+        registry.register(BISPSemanticQueryCommand())
+    except ImportError as e:
+        print(f"Warning: Could not load BISPSemanticQueryCommand: {e}")
+    
+    try:
+        from brain.commands.bisp.vectorize import BISPVectorizeCommand
+        registry.register(BISPVectorizeCommand())
+    except ImportError as e:
+        print(f"Warning: Could not load BISPVectorizeCommand: {e}")
+    
+    # =================================================================
     # CHROME
     # =================================================================
     try:
@@ -657,6 +672,8 @@ def get_hiddenimports_list():
         Lista de strings con los import paths
     """
     return [
+        'brain.commands.bisp.semantic_query',
+        'brain.commands.bisp.vectorize',
         'brain.commands.chrome.chrome',
         'brain.commands.context.generate',
         'brain.commands.extension.backups',

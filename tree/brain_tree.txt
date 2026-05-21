@@ -76,6 +76,9 @@ bloom-development-extension/
     │   │       ├── xai_keys_list.py
     │   │       ├── xai_keys_stats.py
     │   │       └── xai_keys_validate.py
+    │   ├── bisp/
+    │   │   ├── semantic_query.py
+    │   │   └── vectorize.py
     │   ├── chrome/
     │   │   └── chrome.py
     │   ├── context/
@@ -211,6 +214,10 @@ bloom-development-extension/
     ├── core/
     │   ├── __init__.py
     │   ├── __pycache__/ [... cache]
+    │   ├── bisp/
+    │   │   ├── chroma_client.py
+    │   │   ├── embedding_generator.py
+    │   │   └── ollama_manager.py
     │   ├── bloom_project_inspector.py
     │   ├── chrome/
     │   │   ├── __init__.py

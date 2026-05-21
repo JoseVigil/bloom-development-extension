@@ -2,26 +2,23 @@
 """
 Brain PyInstaller Spec File
 Configuración para compilar Brain CLI a ejecutable standalone
-
-Este archivo está en brain/build_deploy/ pero PyInstaller lo ejecuta desde la raíz
 """
 import sys
 import io
 from pathlib import Path
 
-# Forzar UTF-8 en Windows para evitar errores de codificación
+# Forzar UTF-8 en Windows
 if sys.platform == "win32":
     if hasattr(sys.stdout, 'buffer'):
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
         sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
-# SPECPATH es la carpeta donde está este .spec (brain/build_deploy/)
-# Necesitamos ir a la raíz del proyecto
 PROJECT_ROOT = Path(SPECPATH).parent.parent
-
 block_cipher = None
 
-# Imports ocultos necesarios para Brain
+# =============================================================================
+# HIDDEN IMPORTS
+# =============================================================================
 hiddenimports = [
     # Core Brain
     'brain',
@@ -44,6 +41,8 @@ hiddenimports = [
     'rich.markdown',
 
     # Comandos (Auto-generado por update_spec_hiddenimports.py)
+    'brain.commands.bisp.semantic_query',
+    'brain.commands.bisp.vectorize',
     'brain.commands.chrome.chrome',
     'brain.commands.context.generate',
     'brain.commands.extension.backups',
@@ -126,6 +125,9 @@ hiddenimports = [
     'brain.commands.system.version_flags',
     'brain.commands.twitter.auth',
     'brain.core',
+    'brain.core.bisp.chroma_client',
+    'brain.core.bisp.embedding_generator',
+    'brain.core.bisp.ollama_manager',
     'brain.core.bloom_project_inspector',
     'brain.core.chrome',
     'brain.core.chrome.log_reader',
@@ -236,11 +238,13 @@ hiddenimports = [
     'brain.core.twitter.auth_manager',
 ]
 
-# Datos adicionales que deben incluirse (configs, templates, etc.)
+# =============================================================================
+# DATAS (Archivos adicionales)
+# =============================================================================
 templates_src = PROJECT_ROOT / 'brain' / 'core' / 'profile' / 'web' / 'templates'
 
 datas = [
-# Templates - Discovery
+    # === Templates ===
     (str(templates_src / 'discovery' / '__init__.py'), 'brain/core/profile/web/templates/discovery'),
     (str(templates_src / 'discovery' / 'index.html'), 'brain/core/profile/web/templates/discovery'),
     (str(templates_src / 'discovery' / 'script.js'), 'brain/core/profile/web/templates/discovery'),
@@ -249,8 +253,7 @@ datas = [
     (str(templates_src / 'discovery' / 'discovery.js'), 'brain/core/profile/web/templates/discovery'),
     (str(templates_src / 'discovery' / 'discoveryProtocol.js'), 'brain/core/profile/web/templates/discovery'),
     (str(templates_src / 'discovery' / 'onboarding.js'), 'brain/core/profile/web/templates/discovery'),
-    
-    # Templates - Landing
+
     (str(templates_src / 'landing' / '__init__.py'), 'brain/core/profile/web/templates/landing'),
     (str(templates_src / 'landing' / 'index.html'), 'brain/core/profile/web/templates/landing'),
     (str(templates_src / 'landing' / 'data-loader.js'), 'brain/core/profile/web/templates/landing'),
@@ -259,47 +262,44 @@ datas = [
     (str(templates_src / 'landing' / 'script.js'), 'brain/core/profile/web/templates/landing'),
     (str(templates_src / 'landing' / 'styles.css'), 'brain/core/profile/web/templates/landing'),
 
-    # Templates - Harness (NUEVO)
     (str(templates_src / 'harness' / '__init__.py'), 'brain/core/profile/web/templates/harness'),
     (str(templates_src / 'harness' / 'index.html'), 'brain/core/profile/web/templates/harness'),
     (str(templates_src / 'harness' / 'ion.manifest.json'), 'brain/core/profile/web/templates/harness'),
     (str(templates_src / 'harness' / 'ionpump_protocol.js'), 'brain/core/profile/web/templates/harness'),
-    
-    # Templates - Base __init__.py
+
     (str(templates_src / '__init__.py'), 'brain/core/profile/web/templates'),
 
-    # ionpump - archivos de datos (NUEVO)
+    # === ionpump data ===
     (str(PROJECT_ROOT / 'brain' / 'commands' / 'ionpump' / 'auth.ion'), 'brain/commands/ionpump'),
     (str(PROJECT_ROOT / 'brain' / 'commands' / 'ionpump' / 'ion.manifest.json'), 'brain/commands/ionpump'),
     (str(PROJECT_ROOT / 'brain' / 'commands' / 'ionpump' / 'versions.json'), 'brain/commands/ionpump'),
 
-    # Version y build — paths relativos a PROJECT_ROOT (multiplataforma)
-(str(PROJECT_ROOT / 'brain' / 'VERSION'), '.'),
-    (str(PROJECT_ROOT / 'brain' / '__build__.py'), '.'),
+    # Version files
+(str(PROJECT_ROOT / 'brain' / '__build__.py'), '.'),
+    (str(PROJECT_ROOT / 'brain' / 'VERSION'), '.'),
 ]
 
-# Forzar la estructura física de core/profile para evitar el bug de colisión de nombres
+# Forzar inclusión de archivos críticos de profile
 core_profile_src = PROJECT_ROOT / 'brain' / 'core' / 'profile'
-
 datas.extend([
     (str(core_profile_src / '__init__.py'), 'brain/core/profile'),
     (str(core_profile_src / 'profile_manager.py'), 'brain/core/profile'),
     (str(core_profile_src / 'profile_launcher.py'), 'brain/core/profile'),
-
-    # No olvides la lógica interna y web (si no PyInstaller los ignorará)
     (str(core_profile_src / 'logic' / '__init__.py'), 'brain/core/profile/logic'),
     (str(core_profile_src / 'logic' / 'profile_store.py'), 'brain/core/profile/logic'),
     (str(core_profile_src / 'logic' / 'chrome_resolver.py'), 'brain/core/profile/logic'),
     (str(core_profile_src / 'logic' / 'synapse_handler.py'), 'brain/core/profile/logic'),
     (str(core_profile_src / 'web' / '__init__.py'), 'brain/core/profile/web'),
     (str(core_profile_src / 'web' / 'discovery_generator.py'), 'brain/core/profile/web'),
-    (str(core_profile_src / 'web' / 'harness_generator.py'), 'brain/core/profile/web'),  # NUEVO
+    (str(core_profile_src / 'web' / 'harness_generator.py'), 'brain/core/profile/web'),
     (str(core_profile_src / 'web' / 'landing_generator.py'), 'brain/core/profile/web'),
 ])
 
-# Binarios adicionales (DLLs, .so, etc.)
+# =============================================================================
+# ANALYSIS + BUILD
+# =============================================================================
 from PyInstaller.utils.hooks import collect_dynamic_libs
-# FIX: collect_dynamic_libs puede fallar o escanear rutas del proyecto si pywin32 no está instalado
+
 try:
     binaries = collect_dynamic_libs('win32')
 except Exception:
@@ -313,28 +313,14 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[
-        'matplotlib',
-        'numpy',
-        'scipy',
-        'pandas',
-        'PIL',
-        'tkinter',
-        'test',
-        'unittest',
-        'pytest',
-    ],
+    excludes=['matplotlib', 'numpy', 'scipy', 'pandas', 'PIL', 'tkinter', 'test', 'unittest', 'pytest'],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
     noarchive=False,
 )
 
-pyz = PYZ(
-    a.pure,
-    a.zipped_data,
-    cipher=block_cipher
-)
+pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 exe = EXE(
     pyz,
@@ -347,12 +333,7 @@ exe = EXE(
     strip=False,
     upx=False,
     console=True,
-    disable_windowed_traceback=False,
-    argv_emulation=False,
-    target_arch='x86_64', 
-    codesign_identity=None,
-    entitlements_file=None,
-    icon=None,
+    target_arch='x86_64',
 )
 
 coll = COLLECT(
@@ -362,38 +343,35 @@ coll = COLLECT(
     a.datas,
     strip=False,
     upx=False,
-    upx_exclude=[],
     name='brain'
 )
 
-# Configurar directorio de salida personalizado
+# =============================================================================
+# COPIA A DIRECTORIO FINAL
+# =============================================================================
 import shutil
-import os
-
-# Detectar plataforma y arquitectura para el directorio de output
 import platform as _platform
-_system  = _platform.system().lower()   # 'windows', 'darwin', 'linux'
-_machine = _platform.machine().lower()  # 'x86_64', 'arm64', 'amd64'
+
+_system = _platform.system().lower()
+_machine = _platform.machine().lower()
 
 if _system == 'windows':
     _plat_dir = 'win64' if _machine in ('amd64', 'x86_64') else 'win32'
 elif _system == 'darwin':
     _plat_dir = 'macos_arm64' if _machine == 'arm64' else 'macos64'
-else:  # linux
+else:
     _plat_dir = 'linux64'
 
 DIST_DIR = PROJECT_ROOT / 'installer' / 'native' / 'bin' / _plat_dir / 'brain'
-
-# Crear directorio si no existe
 DIST_DIR.mkdir(parents=True, exist_ok=True)
 
-# Copiar archivos compilados al directorio correcto
 SOURCE_DIR = PROJECT_ROOT / 'dist' / 'brain'
+
 if SOURCE_DIR.exists():
     print(f"\n{'='*70}")
-    print(f"Copiando archivos a: {DIST_DIR}")
+    print(f"Copiando compilación a: {DIST_DIR}")
     print(f"{'='*70}\n")
-    
+
     # Limpiar destino
     if DIST_DIR.exists():
         for item in DIST_DIR.iterdir():
@@ -401,13 +379,13 @@ if SOURCE_DIR.exists():
                 item.unlink()
             elif item.is_dir():
                 shutil.rmtree(item)
-    
+
     # Copiar todo
     for item in SOURCE_DIR.iterdir():
-        dest_item = DIST_DIR / item.name
+        dest = DIST_DIR / item.name
         if item.is_dir():
-            shutil.copytree(item, dest_item, dirs_exist_ok=True)
+            shutil.copytree(item, dest, dirs_exist_ok=True)
         else:
-            shutil.copy2(item, dest_item)
-    
-    print(f"[OK] Compilacion completada en: {DIST_DIR}\n")
+            shutil.copy2(item, dest)
+
+    print(f"[OK] Compilación completada en: {DIST_DIR}\n")

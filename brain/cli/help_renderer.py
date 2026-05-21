@@ -157,8 +157,8 @@ def _discover_commands_from_class(cmd: BaseCommand, category: CommandCategory) -
     temp_app = typer.Typer()
     cmd.register(temp_app)
     discovered = []
-    if not temp_app.registered_commands:
-        return discovered
+
+    # Direct commands registered with @app.command(...)
     for registered_cmd in temp_app.registered_commands:
         cmd_name = registered_cmd.name
         callback = registered_cmd.callback
@@ -175,6 +175,40 @@ def _discover_commands_from_class(cmd: BaseCommand, category: CommandCategory) -
             source_class=cmd,
             category=category
         ))
+
+    # Nested sub-typers registered with app.add_typer(..., name="...")
+    # Used by BISP commands (vectorize, semantic) and any future grouped commands.
+    #
+    # Guard: skip groups whose name matches the category name.
+    # Those are wiring containers (e.g. IonPumpCommand → add_typer("ionpump"))
+    # whose sub-commands are already registered individually in the loader.
+    # Traversing them would produce duplicates with wrong syntax
+    # (e.g. "brain ionpump ionpump inspect").
+    # BISP sub-typers ("vectorize", "semantic") differ from their category ("bisp"),
+    # so they are correctly traversed.
+    for group_info in getattr(temp_app, 'registered_groups', []):
+        sub_typer = group_info.typer_instance
+        group_name = group_info.name or ""
+        if group_name == category.category_name:
+            continue
+        for sub_cmd in sub_typer.registered_commands:
+            sub_cmd_name = sub_cmd.name or ""
+            full_name = f"{group_name} {sub_cmd_name}".strip() if group_name else sub_cmd_name
+            callback = sub_cmd.callback
+            description = ""
+            if callback and callback.__doc__:
+                description = callback.__doc__.strip().split('\n')[0]
+            if not description:
+                meta = cmd.metadata()
+                description = meta.description
+            discovered.append(DiscoveredCommand(
+                name=full_name,
+                callback=callback,
+                description=description,
+                source_class=cmd,
+                category=category
+            ))
+
     return discovered
 
 
@@ -847,7 +881,8 @@ def render_help(registry: CommandRegistry, json_mode: bool = False, ai_native: b
             CommandCategory.SYNAPSE, CommandCategory.SERVICE, CommandCategory.RUNTIME,
             CommandCategory.CONTEXT, CommandCategory.INTENT, CommandCategory.FILESYSTEM,
             CommandCategory.GITHUB, CommandCategory.AI, CommandCategory.TWITTER,
-            CommandCategory.CHROME,
+            CommandCategory.CHROME, CommandCategory.IONPUMP, CommandCategory.LOGS,
+            CommandCategory.BISP,
         ]
         
         # Convertir a set para búsqueda eficiente
