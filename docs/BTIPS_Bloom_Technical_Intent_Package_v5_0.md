@@ -79,12 +79,13 @@ flowchart LR
 
         subgraph LocalFS["📂 Disco Local"]
             subgraph BloomFS["📂 .bloom/  (repo GitHub)"]
-                NucleusFolder["📦 .nucleus-{organization}/
+                subgraph NucleusFolder["📦 .nucleus-{organization}/
                 Pipelines"]
+                    MandatesFolder["🏛️ .mandates/
+                    Contratos firmados"]
+                end
                 ProjectFolder["🐍 .project-{name}/
                 Pipelines"]
-                MandatesFolder["🏛️ .mandates/
-                Contratos firmados"]
             end
 
             IonSites["📁 ionsites/

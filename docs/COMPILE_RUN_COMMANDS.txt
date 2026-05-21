@@ -179,6 +179,50 @@ document.querySelectorAll('[download]').forEach(el => console.log(el.download ||
 
 
 
+
+CONDUCTOR 
+
+Correcto, para desarrollo no necesitás el DMG. Usás:
+
+```bash
+cd installer/conductor/setup
+npx electron .
+```
+
+o si tiene el script `dev:no-admin`:
+
+```bash
+npm run dev:no-admin
+```
+
+Y para `workspace`:
+```bash
+cd installer/conductor/workspace
+npm run dev
+```
+
+El DMG es solo para distribución. En desarrollo Electron levanta la app directamente desde el código fuente, sin empaquetar nada.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 NotiFirmware:
 
  Get-FileHash "C:\tmp\run\bin\liblantiq.so*" -Algorithm MD5 | Format-Table -AutoSize
@@ -192,6 +236,8 @@ NotiFirmware:
   Get-FileHash "firmware\noti-firmware-v14.tar.gz" -Algorithm MD5 | Format-Table -AutoSize
   
   Get-FileHash "C:\tmp\run\bin\shdpci.ko*" -Algorithm MD5 | Format-Table -AutoSize
+  
+  Get-FileHash "C:\tmp\run\files\SmgMonitor" -Algorithm MD5 | Format-Table -AutoSize
 
 
 
@@ -245,6 +291,12 @@ Get-FileHash "shdpci.ko" -Algorithm MD5
 
 ls -la /mnt/flash/synway/shdcti/shdpci.ko.bak_DRIVER_20260414_0248
 
+🖥️ En Windows 2
+.\sopack.ps1 --file C:\tmp\run\files\jals_lib.txt
+.\sopack.ps1 --copy 0
+
+🖥️ En Windows 1
+.\sopack.ps1 --receive
 
 4f54af54bd79ad48317b6f0ecd0d44b2
 
@@ -600,8 +652,6 @@ $listener.Stop()
 Get-FileHash $LauncherFile -Algorithm MD5
 
 
-
-
 nc 192.168.1.102 9996 > /mnt/flash/scripts/smg_iterate_v5.sh
 
 $LauncherFile = "C:\tmp\run\bin\smg_iterate_v5.sh"
@@ -623,3 +673,235 @@ Get-FileHash $LauncherFile -Algorithm MD5
 
 
 chmod +x /mnt/flash/cron/smg_iterate.sh
+
+
+
+Get-FileHash "C:\tmp\run\files\SMGSvr\SMGServer_ORIGINAL\www\Config\*" -Algorithm MD5 | Format-Table -AutoSize
+
+
+cp /tmp/SmgMonitor_orig /mnt/flash/smgp_patch2 
+cp /mnt/flash/smgp_patch2  /mnt/flash/synway/SMGSvr
+
+
+nc 192.168.1.102 9996 > /mnt/flash/smgp_patch8
+
+chmod +x /mnt/flash/smgp_patch8
+ls -la /mnt/flash/smgp_patch8
+md5sum /mnt/flash/smgp_patch8
+
+$LauncherFile = "C:\tmp\run\files\smgp_patch8"
+Remove-NetFirewallRule -DisplayName "Gateway Upload 9996" -ErrorAction SilentlyContinue
+New-NetFirewallRule -DisplayName "Gateway Upload 9996" `
+    -Direction Inbound -Protocol TCP -LocalPort 9996 -Action Allow
+$listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Any, 9996)
+$listener.Start()
+$client = $listener.AcceptTcpClient()
+$stream = $client.GetStream()
+$file = [System.IO.File]::OpenRead($LauncherFile)
+$file.CopyTo($stream)
+$file.Close()
+$client.Close()
+$listener.Stop()
+Get-FileHash $LauncherFile -Algorithm MD5
+
+
+Get-FileHash "C:\tmp\run\bin\smgp_patch2" -Algorithm MD5 | Format-Table -AutoSize
+
+cp /mnt/flash/smgp_patch2 /mnt/flash/smgp_patch2_pre_check
+
+cp /mnt/flash/runtime/Config/SMGSvr /mnt/flash/smgp_patch2
+
+
+
+
+
+nc 192.168.1.102 9996 > /mnt/flash/watch_smg_unified_v3.3.lua
+
+chmod +x /mnt/flash/watch_smg_unified_v3.3.lua
+ls -la /mnt/flash/watch_smg_unified_v3.3.lua
+md5sum /mnt/flash/watch_smg_unified_v3.3.lua
+
+$LauncherFile = "C:\tmp\run\files\watch_smg_unified_v3.3.lua"
+Remove-NetFirewallRule -DisplayName "Gateway Upload 9996" -ErrorAction SilentlyContinue
+New-NetFirewallRule -DisplayName "Gateway Upload 9996" `
+    -Direction Inbound -Protocol TCP -LocalPort 9996 -Action Allow
+$listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Any, 9996)
+$listener.Start()
+$client = $listener.AcceptTcpClient()
+$stream = $client.GetStream()
+$file = [System.IO.File]::OpenRead($LauncherFile)
+$file.CopyTo($stream)
+$file.Close()
+$client.Close()
+$listener.Stop()
+Get-FileHash $LauncherFile -Algorithm MD5
+
+
+
+
+
+nc 192.168.1.102 9996 > /mnt/flash/lanzamiento_v4.2.sh
+
+chmod +x /mnt/flash/lanzamiento_v4.2.sh
+ls -la /mnt/flash/lanzamiento_v4.2.sh
+md5sum /mnt/flash/lanzamiento_v4.2.sh
+
+$LauncherFile = "C:\tmp\run\files\lanzamiento_v4.2.sh"
+Remove-NetFirewallRule -DisplayName "Gateway Upload 9996" -ErrorAction SilentlyContinue
+New-NetFirewallRule -DisplayName "Gateway Upload 9996" `
+    -Direction Inbound -Protocol TCP -LocalPort 9996 -Action Allow
+$listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Any, 9996)
+$listener.Start()
+$client = $listener.AcceptTcpClient()
+$stream = $client.GetStream()
+$file = [System.IO.File]::OpenRead($LauncherFile)
+$file.CopyTo($stream)
+$file.Close()
+$client.Close()
+$listener.Stop()
+Get-FileHash $LauncherFile -Algorithm MD5
+
+
+
+Get-FileHash "C:\tmp\run\files\smgp_*" -Algorithm MD5 | Format-Table -AutoSize
+
+Get-FileHash "C:\tmp\run\bin\libshdpci*" -Algorithm MD5 | Format-Table -AutoSize
+
+nc 192.168.1.102 9996 > /mnt/flash/smgp_patch7_voip_ch
+
+chmod +x /mnt/flash/smgp_patch7_voip_ch
+ls -la /mnt/flash/smgp_patch7_voip_ch
+md5sum /mnt/flash/smgp_patch7_voip_ch
+
+$LauncherFile = "C:\tmp\run\bin\smgp_patch7_voip_ch"
+Remove-NetFirewallRule -DisplayName "Gateway Upload 9996" -ErrorAction SilentlyContinue
+New-NetFirewallRule -DisplayName "Gateway Upload 9996" `
+    -Direction Inbound -Protocol TCP -LocalPort 9996 -Action Allow
+$listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Any, 9996)
+$listener.Start()
+$client = $listener.AcceptTcpClient()
+$stream = $client.GetStream()
+$file = [System.IO.File]::OpenRead($LauncherFile)
+$file.CopyTo($stream)
+$file.Close()
+$client.Close()
+$listener.Stop()
+Get-FileHash $LauncherFile -Algorithm MD5
+
+
+
+
+
+nc 192.168.1.102 9996 > /mnt/flash/libshdpci_patch1_voip.so
+
+chmod +x /mnt/flash/libshdpci_patch1_voip.so
+ls -la /mnt/flash/libshdpci_patch1_voip.so
+md5sum /mnt/flash/libshdpci_patch1_voip.so
+
+$LauncherFile = "C:\tmp\run\bin\libshdpci_patch1_voip.so"
+Remove-NetFirewallRule -DisplayName "Gateway Upload 9996" -ErrorAction SilentlyContinue
+New-NetFirewallRule -DisplayName "Gateway Upload 9996" `
+    -Direction Inbound -Protocol TCP -LocalPort 9996 -Action Allow
+$listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Any, 9996)
+$listener.Start()
+$client = $listener.AcceptTcpClient()
+$stream = $client.GetStream()
+$file = [System.IO.File]::OpenRead($LauncherFile)
+$file.CopyTo($stream)
+$file.Close()
+$client.Close()
+$listener.Stop()
+Get-FileHash $LauncherFile -Algorithm MD5
+
+
+
+nc 192.168.1.102 9996 > /mnt/flash/shdpci_patch2_voip_hwset.ko
+
+chmod +x /mnt/flash/shdpci_patch2_voip_hwset.ko
+ls -la /mnt/flash/shdpci_patch2_voip_hwset.ko
+md5sum /mnt/flash/shdpci_patch2_voip_hwset.ko
+
+$LauncherFile = "C:\tmp\run\bin\shdpci_patch2_voip_hwset.ko"
+Remove-NetFirewallRule -DisplayName "Gateway Upload 9996" -ErrorAction SilentlyContinue
+New-NetFirewallRule -DisplayName "Gateway Upload 9996" `
+    -Direction Inbound -Protocol TCP -LocalPort 9996 -Action Allow
+$listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Any, 9996)
+$listener.Start()
+$client = $listener.AcceptTcpClient()
+$stream = $client.GetStream()
+$file = [System.IO.File]::OpenRead($LauncherFile)
+$file.CopyTo($stream)
+$file.Close()
+$client.Close()
+$listener.Stop()
+Get-FileHash $LauncherFile -Algorithm MD5
+
+
+
+
+nc 192.168.1.102 9996 > /mnt/flash/smgp_patch7_cti
+
+chmod +x /mnt/flash/smgp_patch7_cti
+ls -la /mnt/flash/smgp_patch7_cti
+md5sum /mnt/flash/smgp_patch7_cti
+
+$LauncherFile = "C:\tmp\run\bin\smgp_patch7_cti"
+Remove-NetFirewallRule -DisplayName "Gateway Upload 9996" -ErrorAction SilentlyContinue
+New-NetFirewallRule -DisplayName "Gateway Upload 9996" `
+    -Direction Inbound -Protocol TCP -LocalPort 9996 -Action Allow
+$listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Any, 9996)
+$listener.Start()
+$client = $listener.AcceptTcpClient()
+$stream = $client.GetStream()
+$file = [System.IO.File]::OpenRead($LauncherFile)
+$file.CopyTo($stream)
+$file.Close()
+$client.Close()
+$listener.Stop()
+Get-FileHash $LauncherFile -Algorithm MD5
+
+
+
+nc 192.168.1.102 9996 > /mnt/flash/smgp_patch7_cti
+
+chmod +x /mnt/flash/smgp_patch7_cti
+ls -la /mnt/flash/smgp_patch7_cti
+md5sum /mnt/flash/smgp_patch7_cti
+
+$LauncherFile = "C:\tmp\run\bin\smgp_patch7_cti"
+Remove-NetFirewallRule -DisplayName "Gateway Upload 9996" -ErrorAction SilentlyContinue
+New-NetFirewallRule -DisplayName "Gateway Upload 9996" `
+    -Direction Inbound -Protocol TCP -LocalPort 9996 -Action Allow
+$listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Any, 9996)
+$listener.Start()
+$client = $listener.AcceptTcpClient()
+$stream = $client.GetStream()
+$file = [System.IO.File]::OpenRead($LauncherFile)
+$file.CopyTo($stream)
+$file.Close()
+$client.Close()
+$listener.Stop()
+Get-FileHash $LauncherFile -Algorithm MD5
+
+
+
+nc 192.168.1.102 9996 > /mnt/flash/d.sh
+
+chmod +x /mnt/flash/d.sh
+ls -la /mnt/flash/d.sh
+md5sum /mnt/flash/d.sh
+
+$LauncherFile = "C:\tmp\run\files\d.sh"
+Remove-NetFirewallRule -DisplayName "Gateway Upload 9996" -ErrorAction SilentlyContinue
+New-NetFirewallRule -DisplayName "Gateway Upload 9996" `
+    -Direction Inbound -Protocol TCP -LocalPort 9996 -Action Allow
+$listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Any, 9996)
+$listener.Start()
+$client = $listener.AcceptTcpClient()
+$stream = $client.GetStream()
+$file = [System.IO.File]::OpenRead($LauncherFile)
+$file.CopyTo($stream)
+$file.Close()
+$client.Close()
+$listener.Stop()
+Get-FileHash $LauncherFile -Algorithm MD5

@@ -173,6 +173,11 @@
     │                       ├── .raw_output.txt
     │                       ├── .report.json
     │                       └── .staging/
+	│
+	├── .mandates/                          
+    │   └── .{mandate-id-uuid}/
+    │       ├── mandate.json
+    │       └── mandate_state.json
     │
     ├── .cache/
     │   ├── .projects-snapshot.json
