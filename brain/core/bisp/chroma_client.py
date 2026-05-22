@@ -32,12 +32,9 @@ logger = logging.getLogger(__name__)
 # Constantes
 # ---------------------------------------------------------------------------
 
-CHROMA_SUBPATH = ".cache/chroma"
-SEMANTIC_INDEX_PATH = ".cache/.semantic-index.json"
 DEFAULT_SIMILARITY_THRESHOLD = 0.40
 EMBEDDING_MODEL = "nomic-embed-text"
 EMBEDDING_DIM = 768
-
 
 # ---------------------------------------------------------------------------
 # BISPChromaClient
@@ -85,10 +82,12 @@ class BISPChromaClient:
     """
 
     def __init__(self, nucleus_path: str | Path) -> None:
+        from brain.shared.paths import Paths
+        paths = Paths()
         self.nucleus_path = Path(nucleus_path)
-        self.chroma_path = self.nucleus_path / CHROMA_SUBPATH
-        self.semantic_index_path = self.nucleus_path / SEMANTIC_INDEX_PATH
-        self._client: Any = None  # lazy init
+        self.chroma_path = paths.chroma_dir
+        self.semantic_index_path = paths.bin_dir / "chromadb" / ".semantic-index.json"
+        self._client: Any = None
 
     # ------------------------------------------------------------------
     # ChromaDB init (lazy)

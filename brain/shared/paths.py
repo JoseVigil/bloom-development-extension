@@ -118,6 +118,11 @@ class Paths:
         """bin/sensor/bloom-sensor[.exe]"""
         return self.bin_dir / "sensor" / f"bloom-sensor{self._exe_ext}"
 
+    @property
+    def chroma_dir(self) -> Path:
+        """bin/chromadb/ — ChromaDB persistent storage."""
+        return self.bin_dir / "chromadb"
+
     # -------------------------------------------------------------------------
     # Log directories
     # -------------------------------------------------------------------------
