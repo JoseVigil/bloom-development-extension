@@ -8,3 +8,8 @@ websockets>=10.0
 pywin32; sys_platform == "win32"
 tomli; python_version < "3.11"
 tomli-w
+requests>=2.31.0
+platformdirs>=4.0.0
+chromadb>=0.4.0
+psutil; sys_platform == "win32"
+psutil; sys_platform == "darwin"

@@ -241,6 +241,8 @@ hiddenimports = [
 # =============================================================================
 # DATAS (Archivos adicionales)
 # =============================================================================
+from PyInstaller.utils.hooks import collect_data_files
+
 templates_src = PROJECT_ROOT / 'brain' / 'core' / 'profile' / 'web' / 'templates'
 
 datas = [
@@ -275,9 +277,11 @@ datas = [
     (str(PROJECT_ROOT / 'brain' / 'commands' / 'ionpump' / 'versions.json'), 'brain/commands/ionpump'),
 
     # Version files
-(str(PROJECT_ROOT / 'brain' / '__build__.py'), '.'),
-    (str(PROJECT_ROOT / 'brain' / 'VERSION'), '.'),
+(str(PROJECT_ROOT / 'brain' / 'VERSION'), '.'),
+    (str(PROJECT_ROOT / 'brain' / '__build__.py'), '.'),
 ]
+
+datas += collect_data_files('chromadb')
 
 # Forzar inclusión de archivos críticos de profile
 core_profile_src = PROJECT_ROOT / 'brain' / 'core' / 'profile'
