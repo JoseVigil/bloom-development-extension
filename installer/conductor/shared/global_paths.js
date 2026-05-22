@@ -158,6 +158,8 @@ const getResourcePath = (resourceName) => {
       return path.join(workspaceRoot, '..', 'chrome', 'chrome-mac.zip');
     case 'chrome-linux':
       return path.join(workspaceRoot, '..', 'chrome', 'chrome-linux.zip');
+    case 'nucleus-governance':
+      return path.join(workspaceRoot, '..', 'nucleus', 'nucleus-governance.json');
     case 'assets':
       return path.join(workspaceRoot, 'setup', 'assets');
     default:
@@ -329,6 +331,7 @@ const paths = {
   // ============================================================================
   runtimeSource: getResourcePath('runtime'),
   nucleusSource: getResourcePath('nucleus'),
+  nucleusGovernanceSource: getResourcePath('nucleus-governance'),
   sentinelSource: getResourcePath('sentinel'),
   metamorphSource: getResourcePath('metamorph'),
   brainSource: getResourcePath('brain'),

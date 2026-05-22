@@ -465,7 +465,7 @@ class NucleusManager {
     this.state.milestones[milestoneName].completed_at = new Date().toISOString();
     this.state.milestones[milestoneName].error = null;
     
-    if (verificationResult) {
+    if (verificationResult && this.state.milestones[milestoneName].verification) {
       this.state.milestones[milestoneName].verification.result = verificationResult;
     }
     
@@ -527,7 +527,7 @@ class NucleusManager {
       milestone.started_at = null;
       milestone.completed_at = null;
       milestone.error = null;
-      milestone.verification.result = null;
+      if (milestone.verification) milestone.verification.result = null;
     }
 
     this.state.installation.force_reinstall = false;

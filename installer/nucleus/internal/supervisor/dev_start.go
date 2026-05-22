@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"nucleus/internal/core"
@@ -76,7 +77,7 @@ deterministic startup order.`,
 			result, err := executeBootSequence(ctx, supervisor, simulation, skipVault, skipControlPlane, logW)
 			if err != nil {
 				c.Logger.Printf("[ERROR] ❌ Boot sequence failed: %v", err)
-				
+
 				// JSON output on failure
 				if outputJSON {
 					outputJSONResult(map[string]interface{}{
@@ -140,7 +141,7 @@ func executeBootSequence(ctx context.Context, s *Supervisor, simulation, skipVau
 	}
 
 	startTime := time.Now()
-	
+
 	result := &BootSequenceResult{
 		Success:   true,
 		Timestamp: time.Now().Unix(),
@@ -245,7 +246,7 @@ func executeBootSequence(ctx context.Context, s *Supervisor, simulation, skipVau
 	// Phase 3: Start Ollama (NON-BLOCKING)
 	// ========================================================================
 	log("[INFO] Starting Ollama (non-blocking)...")
-	
+
 	// Start Ollama in background - don't fail boot if it doesn't start
 	go func() {
 		ollamaResult, err := s.StartOllama(ctx)
@@ -256,9 +257,9 @@ func executeBootSequence(ctx context.Context, s *Supervisor, simulation, skipVau
 			fmt.Fprintf(logW, "[INFO] ✓ Ollama started: PID %d (port %d)\n", ollamaResult.PID, ollamaResult.Port)
 		}
 	}()
-	
+
 	// Don't block - continue boot sequence immediately
-	result.OllamaPID = 0  // Will be populated asynchronously
+	result.OllamaPID = 0 // Will be populated asynchronously
 	result.OllamaPort = 11434
 	log("[INFO] ✓ Ollama startup initiated in background")
 
@@ -336,22 +337,14 @@ func getLogsDir(c *core.Core) string {
 	if dir := os.Getenv("BLOOM_LOGS_DIR"); dir != "" {
 		return dir
 	}
-	localAppData := os.Getenv("LOCALAPPDATA")
-	if localAppData == "" {
-		localAppData = os.Getenv("HOME")
-	}
-	return filepath.Join(localAppData, "BloomNucleus", "logs")
+	return filepath.Join(getBloomNucleusBase(), "logs")
 }
 
 func getBinDir(c *core.Core) string {
 	if dir := os.Getenv("BLOOM_BIN_DIR"); dir != "" {
 		return dir
 	}
-	localAppData := os.Getenv("LOCALAPPDATA")
-	if localAppData == "" {
-		localAppData = os.Getenv("HOME")
-	}
-	return filepath.Join(localAppData, "BloomNucleus", "bin")
+	return filepath.Join(getBloomNucleusBase(), "bin")
 }
 
 func outputJSONResult(v interface{}) {
@@ -360,19 +353,40 @@ func outputJSONResult(v interface{}) {
 	enc.Encode(v)
 }
 
-// getBloomDir returns the root of the Bloom repo by reading nucleus.json.
-// nucleus.json lives at LOCALAPPDATA\BloomNucleus\config\nucleus.json.
-// The field installation.origin_path points to:
-//   C:\repos\...\installer\native\bin\win64
-// Walking up 4 levels yields the repo root.
-// Falls back to BLOOM_DIR env var if nucleus.json is unavailable.
-func getBloomDir() string {
-	// 1. Try reading from nucleus.json
-	localAppData := os.Getenv("LOCALAPPDATA")
-	if localAppData == "" {
-		localAppData = os.Getenv("HOME")
+// getBloomNucleusBase returns the platform-correct base directory for BloomNucleus.
+//
+//   - Darwin:  $HOME/Library/BloomNucleus
+//   - Windows: $LOCALAPPDATA/BloomNucleus
+//   - Linux:   $HOME/BloomNucleus
+//
+// This is the single source of truth for the base path — used by getLogsDir,
+// getBinDir, and getBloomDir to avoid per-function platform divergence.
+func getBloomNucleusBase() string {
+	switch runtime.GOOS {
+	case "darwin":
+		home, _ := os.UserHomeDir()
+		return filepath.Join(home, "Library", "BloomNucleus")
+	case "windows":
+		if localAppData := os.Getenv("LOCALAPPDATA"); localAppData != "" {
+			return filepath.Join(localAppData, "BloomNucleus")
+		}
+		home, _ := os.UserHomeDir()
+		return filepath.Join(home, "BloomNucleus")
+	default: // linux
+		home, _ := os.UserHomeDir()
+		return filepath.Join(home, "BloomNucleus")
 	}
-	nucleusJSON := filepath.Join(localAppData, "BloomNucleus", "config", "nucleus.json")
+}
+
+// getBloomDir returns the root of the Bloom repo by reading nucleus.json.
+// nucleus.json lives at <BloomNucleusBase>/config/nucleus.json.
+// The field installation.origin_path points to the installer bin dir —
+// walking up 4 levels yields the repo root.
+// Falls back to BLOOM_DIR env var if nucleus.json is unavailable or
+// origin_path is null/empty (e.g. during initial install).
+func getBloomDir() string {
+	// 1. Try reading origin_path from nucleus.json
+	nucleusJSON := filepath.Join(getBloomNucleusBase(), "config", "nucleus.json")
 
 	if data, err := os.ReadFile(nucleusJSON); err == nil {
 		var cfg struct {
@@ -381,7 +395,7 @@ func getBloomDir() string {
 			} `json:"installation"`
 		}
 		if json.Unmarshal(data, &cfg) == nil && cfg.Installation.OriginPath != "" {
-			// origin_path = .../installer/native/bin/win64 — walk up 4 levels
+			// origin_path = .../installer/native/bin/<platform> — walk up 4 levels
 			p := cfg.Installation.OriginPath
 			for i := 0; i < 4; i++ {
 				p = filepath.Dir(p)
@@ -398,26 +412,33 @@ func getBloomDir() string {
 func getNucleusExecutablePath() (string, error) {
 	// 1. Check BLOOM_BIN_DIR environment variable
 	if binDir := os.Getenv("BLOOM_BIN_DIR"); binDir != "" {
-		nucleusPath := filepath.Join(binDir, "nucleus", "nucleus.exe")
+		nucleusPath := filepath.Join(binDir, "nucleus", "nucleus")
+		if _, err := os.Stat(nucleusPath); err == nil {
+			return nucleusPath, nil
+		}
+		// Windows fallback
+		nucleusPath = filepath.Join(binDir, "nucleus", "nucleus.exe")
 		if _, err := os.Stat(nucleusPath); err == nil {
 			return nucleusPath, nil
 		}
 	}
-	
-	// 2. Check LOCALAPPDATA\BloomNucleus\bin\nucleus
-	localAppData := os.Getenv("LOCALAPPDATA")
-	if localAppData != "" {
-		nucleusPath := filepath.Join(localAppData, "BloomNucleus", "bin", "nucleus", "nucleus.exe")
-		if _, err := os.Stat(nucleusPath); err == nil {
-			return nucleusPath, nil
-		}
-	}
-	
-	// 3. Try PATH
-	nucleusPath, err := exec.LookPath("nucleus")
-	if err == nil {
+
+	// 2. Check platform-correct BloomNucleus base
+	binDir := filepath.Join(getBloomNucleusBase(), "bin")
+	nucleusPath := filepath.Join(binDir, "nucleus", "nucleus")
+	if _, err := os.Stat(nucleusPath); err == nil {
 		return nucleusPath, nil
 	}
-	
-	return "", fmt.Errorf("nucleus.exe not found in BLOOM_BIN_DIR, LOCALAPPDATA, or PATH")
+	// Windows fallback
+	nucleusPath = filepath.Join(binDir, "nucleus", "nucleus.exe")
+	if _, err := os.Stat(nucleusPath); err == nil {
+		return nucleusPath, nil
+	}
+
+	// 3. Try PATH
+	if p, err := exec.LookPath("nucleus"); err == nil {
+		return p, nil
+	}
+
+	return "", fmt.Errorf("nucleus binary not found in BLOOM_BIN_DIR, %s, or PATH", binDir)
 }

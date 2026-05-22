@@ -516,6 +516,18 @@ async function deployAllSystemBinaries(win) {
       paths.nucleusDir,
       'Nucleus'
     );
+
+    // Copiar nucleus-governance.json desde fuente independiente
+    {
+      const govSrc  = paths.nucleusGovernanceSource;
+      const govDest = path.join(paths.nucleusDir, 'nucleus-governance.json');
+      if (await fs.pathExists(govSrc)) {
+        await copyFileSafe(govSrc, govDest, 'nucleus-governance.json');
+        logger.success('✅ nucleus-governance.json deployed');
+      } else {
+        logger.warn('⚠️ nucleus-governance.json not found, skipping');
+      }
+    }
     
     results.sentinel = await copyDirectorySafe(
       paths.sentinelSource,
