@@ -741,6 +741,7 @@ async function deployAllSystemBinaries(win) {
       results.vscode = { success: false, skipped: true };
     }
 
+    await nucleusManager.setOriginPath(paths.nucleusSource);
     await nucleusManager.completeMilestone(MILESTONE, results);
     return { success: true, results };
 

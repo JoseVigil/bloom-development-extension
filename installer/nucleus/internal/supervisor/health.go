@@ -170,21 +170,7 @@ Effects:  Read-only (unless --fix is used)`,
 
 			appDataDir := os.Getenv("BLOOM_APPDATA_DIR")
 			if appDataDir == "" {
-				home, _ := os.UserHomeDir()
-				if runtime.GOOS == "windows" {
-					localAppData := os.Getenv("LOCALAPPDATA")
-					if localAppData == "" {
-						localAppData = filepath.Join(home, "AppData", "Local")
-					}
-					appDataDir = filepath.Join(localAppData, "BloomNucleus")
-				} else {
-					macOSPath := filepath.Join(home, "Library", "Application Support", "BloomNucleus")
-					if _, statErr := os.Stat(filepath.Join(home, "Library")); statErr == nil {
-						appDataDir = macOSPath
-					} else {
-						appDataDir = filepath.Join(home, ".bloom-nucleus")
-					}
-				}
+				appDataDir = getBloomNucleusBase()
 			}
 
 			supervisor := NewSupervisor(logsDir, binDir)
@@ -389,20 +375,23 @@ func tailFile(path string, n int) []string {
 func applyFixes(result *HealthResult) {
 	if brain, ok := result.Components["brain_service"]; ok && !brain.Healthy {
 		brain.FixAttempted = true
-		if err := nssmStart("BloomBrainService", 10*time.Second); err != nil {
-			brain.FixResult = fmt.Sprintf("FAILED: %v", err)
-		} else {
-			// NSSM puede retornar OK aunque el proceso tarde en arrancar o crashee
-			// silenciosamente. Verificar que el puerto realmente está escuchando.
-			if portErr := waitForPortOpen("127.0.0.1:5678", 15*time.Second); portErr != nil {
-				brain.FixResult = "PARTIAL: BloomBrainService started via NSSM but port 5678 not ready after 15s — process may have crashed on startup"
-				// No marcar como healthy: el puerto no responde
+		if runtime.GOOS == "windows" {
+			if err := nssmStart("BloomBrainService", 10*time.Second); err != nil {
+				brain.FixResult = fmt.Sprintf("FAILED: %v", err)
 			} else {
-				brain.FixResult = "SUCCESS: BloomBrainService started via NSSM"
-				brain.Healthy = true
-				brain.State = "RUNNING"
-				brain.Error = ""
+				if portErr := waitForPortOpen("127.0.0.1:5678", 15*time.Second); portErr != nil {
+					brain.FixResult = "PARTIAL: BloomBrainService started via NSSM but port 5678 not ready after 15s — process may have crashed on startup"
+				} else {
+					brain.FixResult = "SUCCESS: BloomBrainService started via NSSM"
+					brain.Healthy = true
+					brain.State = "RUNNING"
+					brain.Error = ""
+				}
 			}
+		} else {
+			// darwin/linux: Brain runs as a plain process managed by Nucleus supervisor.
+			// Auto-fix via NSSM is not available — instruct the user to restart manually.
+			brain.FixResult = "MANUAL: run 'nucleus dev-start' or restart the Brain server manually (NSSM is Windows-only)"
 		}
 		result.Components["brain_service"] = brain
 	}
@@ -713,21 +702,7 @@ func nssmStart(serviceName string, timeout time.Duration) error {
 	nssmBin := "nssm" // fallback a PATH
 	appDataDir := os.Getenv("BLOOM_APPDATA_DIR")
 	if appDataDir == "" {
-		home, _ := os.UserHomeDir()
-		if runtime.GOOS == "windows" {
-			localAppData := os.Getenv("LOCALAPPDATA")
-			if localAppData == "" {
-				localAppData = filepath.Join(home, "AppData", "Local")
-			}
-			appDataDir = filepath.Join(localAppData, "BloomNucleus")
-		} else {
-			macOSPath := filepath.Join(home, "Library", "Application Support", "BloomNucleus")
-			if _, statErr := os.Stat(filepath.Join(home, "Library")); statErr == nil {
-				appDataDir = macOSPath
-			} else {
-				appDataDir = filepath.Join(home, ".bloom-nucleus")
-			}
-		}
+		appDataDir = getBloomNucleusBase()
 	}
 	candidate := filepath.Join(appDataDir, "bin", "nssm", "nssm.exe")
 	if _, err := os.Stat(candidate); err == nil {
@@ -748,21 +723,7 @@ func nssmStart(serviceName string, timeout time.Duration) error {
 func resolveOllamaBin() string {
 	appDataDir := os.Getenv("BLOOM_APPDATA_DIR")
 	if appDataDir == "" {
-		home, _ := os.UserHomeDir()
-		if runtime.GOOS == "windows" {
-			localAppData := os.Getenv("LOCALAPPDATA")
-			if localAppData == "" {
-				localAppData = filepath.Join(home, "AppData", "Local")
-			}
-			appDataDir = filepath.Join(localAppData, "BloomNucleus")
-		} else {
-			macOSPath := filepath.Join(home, "Library", "Application Support", "BloomNucleus")
-			if _, statErr := os.Stat(filepath.Join(home, "Library")); statErr == nil {
-				appDataDir = macOSPath
-			} else {
-				appDataDir = filepath.Join(home, ".bloom-nucleus")
-			}
-		}
+		appDataDir = getBloomNucleusBase()
 	}
 
 	candidates := []string{
@@ -788,22 +749,9 @@ func resolveOllamaBin() string {
 // then falls back to PATH. Used by applyFixes and checkVault which don't
 // have access to a Supervisor instance.
 func resolveNucleusExe() (string, error) {
-	// Resolve appDataDir the same way resolveOllamaBin does — env vars only,
-	// no *core.Core available here.
 	appDataDir := os.Getenv("BLOOM_APPDATA_DIR")
 	if appDataDir == "" {
-		localAppData := os.Getenv("LOCALAPPDATA")
-		if localAppData == "" {
-			userHome, _ := os.UserHomeDir()
-			// macOS/Linux: ~/.bloom-nucleus; Windows fallback
-			if home := filepath.Join(userHome, ".bloom-nucleus"); fileExists(home) {
-				appDataDir = home
-			} else {
-				appDataDir = filepath.Join(userHome, "AppData", "Local", "BloomNucleus")
-			}
-		} else {
-			appDataDir = filepath.Join(localAppData, "BloomNucleus")
-		}
+		appDataDir = getBloomNucleusBase()
 	}
 	binDir := filepath.Join(appDataDir, "bin")
 	candidates := []string{

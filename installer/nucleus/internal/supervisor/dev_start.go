@@ -383,9 +383,7 @@ func getBloomNucleusBase() string {
 	switch runtime.GOOS {
 	case "darwin":
 		home, _ := os.UserHomeDir()
-		// Correcto: macOS usa "Application Support", no "Library" directamente.
-		// health.go usa el mismo path — deben ser idénticos.
-		return filepath.Join(home, "Library", "Application Support", "BloomNucleus")
+		return filepath.Join(home, "Library", "BloomNucleus")
 	case "windows":
 		if localAppData := os.Getenv("LOCALAPPDATA"); localAppData != "" {
 			return filepath.Join(localAppData, "BloomNucleus")

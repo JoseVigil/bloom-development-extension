@@ -41,7 +41,7 @@ func getTemporalExecutablePath() (string, error) {
 		}
 		basePath = filepath.Join(localAppData, "BloomNucleus", "bin", "temporal")
 	} else if runtime.GOOS == "darwin" {
-		basePath = filepath.Join(userHome, "Library", "Application Support", "BloomNucleus", "bin", "temporal")
+		basePath = filepath.Join(userHome, "Library", "BloomNucleus", "bin", "temporal")
 	} else {
 		basePath = filepath.Join(userHome, ".local", "share", "BloomNucleus", "bin", "temporal")
 	}

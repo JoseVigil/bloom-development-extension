@@ -619,6 +619,17 @@ class NucleusManager {
   }
 
   /**
+   * Registra el path de origen de los binarios (usado por getBloomDir en Go)
+   * @param {string} originPath - Path absoluto a la carpeta de binarios fuente
+   */
+  async setOriginPath(originPath) {
+    this.state.installation.origin_path = originPath;
+    this.state.installation.origin_type = 'dev_repo';
+    await writeNucleus(this.state);
+    logger.info(`origin_path registrado: ${originPath}`);
+  }
+
+  /**
    * Guarda el ID del perfil maestro
    * @param {string} profileId - UUID del perfil maestro
    */
