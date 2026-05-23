@@ -55,6 +55,11 @@ deterministic startup order.`,
   nucleus dev-start --skip-vault`,
 
 		Run: func(cmd *cobra.Command, args []string) {
+			// Inherit global --json flag (same pattern as all other nucleus commands)
+			if c.IsJSON {
+				outputJSON = true
+			}
+
 			// Verify authorization (dev-start requires Master role)
 			if err := governance.RequireMaster(c); err != nil {
 				c.Logger.Printf("[ERROR] ⛔ dev-start requires Master role: %v", err)
@@ -208,6 +213,11 @@ func executeBootSequence(ctx context.Context, s *Supervisor, simulation, skipVau
 		return result, fmt.Errorf("worker manager start failed: %w", err)
 	}
 
+	// Registrar telemetry si es un proceso recién spawnado (no externo)
+	if workerProc.LogPath != "" {
+		s.updateWorkerTelemetry(workerProc)
+	}
+
 	log("[INFO] ✓ Worker Manager started: PID %d", workerProc.PID)
 
 	// ========================================================================
@@ -276,13 +286,21 @@ func executeBootSequence(ctx context.Context, s *Supervisor, simulation, skipVau
 	// Phase 5: Vault check (optional)
 	// ========================================================================
 	if !skipVault {
-		vaultResult, err := s.CheckVaultStatus(ctx)
-		if err != nil {
-			result.Success = false
-			result.FailedStage = "vault_check"
-			return result, fmt.Errorf("vault check failed: %w", err)
+		// Durante onboarding, BLOOM_DIR no está seteado — vault-status requiere
+		// un proyecto inicializado. Saltear igual que checkVault en health.go.
+		bloomDir := getBloomDir()
+		if bloomDir == "" {
+			log("[INFO] ✓ Vault check skipped (onboarding mode — BLOOM_DIR not set)")
+			result.VaultState = "SKIPPED"
+		} else {
+			vaultResult, err := s.CheckVaultStatus(ctx)
+			if err != nil {
+				result.Success = false
+				result.FailedStage = "vault_check"
+				return result, fmt.Errorf("vault check failed: %w", err)
+			}
+			result.VaultState = vaultResult.VaultState
 		}
-		result.VaultState = vaultResult.VaultState
 	} else {
 		result.VaultState = "SKIPPED"
 	}
@@ -365,7 +383,9 @@ func getBloomNucleusBase() string {
 	switch runtime.GOOS {
 	case "darwin":
 		home, _ := os.UserHomeDir()
-		return filepath.Join(home, "Library", "BloomNucleus")
+		// Correcto: macOS usa "Application Support", no "Library" directamente.
+		// health.go usa el mismo path — deben ser idénticos.
+		return filepath.Join(home, "Library", "Application Support", "BloomNucleus")
 	case "windows":
 		if localAppData := os.Getenv("LOCALAPPDATA"); localAppData != "" {
 			return filepath.Join(localAppData, "BloomNucleus")

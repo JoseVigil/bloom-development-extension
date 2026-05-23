@@ -557,6 +557,7 @@ class NucleusManager {
       'nucleus_service_install',
       'sensor_install',
       'certification',
+      'orchestration_init', 
       'nucleus_seed',
       'nucleus_launch'
     ];

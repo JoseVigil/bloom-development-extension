@@ -38,7 +38,7 @@ function resolveAppDataDir() {
   if (process.env.LOCALAPPDATA) return process.env.LOCALAPPDATA;
   const home = os.homedir();
   if (process.platform === 'darwin') {
-    return path.join(home, 'Library', 'Application Support');
+    return path.join(home, 'Library');
   }
   return path.join(home, '.local', 'share');
 }

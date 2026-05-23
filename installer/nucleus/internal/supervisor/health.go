@@ -293,10 +293,29 @@ evaluate:
 	nonCriticalComponents := []string{"ollama", "control_plane", "brain_service", "bloom_api", "svelte_dev", "worker_manager"}
 
 	criticalFailures, degradedCount := 0, 0
+
+	// Determinar si Temporal está caído — en ese caso, el worker fallará por
+	// dependencia (no puede conectarse a Temporal). Contar sólo UN fallo crítico
+	// en lugar de dos, para que el mensaje de error sea más preciso y la
+	// remediación via --fix sea más clara (arreglar Temporal primero).
+	temporalHealthy := true
+	if t, ok := result.Components["temporal"]; ok && !t.Healthy {
+		temporalHealthy = false
+	}
+
 	for _, name := range criticalComponents {
-		if comp, ok := result.Components[name]; ok && !comp.Healthy {
-			criticalFailures++
+		comp, ok := result.Components[name]
+		if !ok || comp.Healthy {
+			continue
 		}
+		// Si el worker falla y Temporal también está caído, el worker es un efecto
+		// secundario. Lo contamos como degraded (no crítico adicional) para evitar
+		// reportar "2 critical" cuando sólo hay 1 causa raíz.
+		if name == "worker" && !temporalHealthy {
+			degradedCount++
+			continue
+		}
+		criticalFailures++
 	}
 	for _, name := range nonCriticalComponents {
 		if comp, ok := result.Components[name]; ok && !comp.Healthy {
@@ -487,7 +506,10 @@ func applyFixes(result *HealthResult) {
 		if exeErr != nil {
 			cp.FixResult = fmt.Sprintf("FAILED: nucleus not found: %v", exeErr)
 		} else {
-			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			// restart-bootstrap mata el proceso existente y relanza bundle.js.
+			// El supervisor que corre health es una instancia nueva — no tiene
+			// control_plane_api en su map. restart-bootstrap lo maneja internamente.
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 			defer cancel()
 			out, err := exec.CommandContext(ctx, nucleusExe, "--json", "service", "restart-bootstrap").CombinedOutput()
 			if err != nil {
@@ -572,10 +594,24 @@ func recalculateHealthState(result *HealthResult) {
 	nonCriticalComponents := []string{"ollama", "control_plane", "brain_service", "bloom_api", "svelte_dev", "worker_manager"}
 
 	criticalFailures, degradedCount := 0, 0
+
+	// Mismo guard que el evaluate: block — si Temporal está caído, el worker
+	// es un efecto secundario, no un segundo fallo crítico independiente.
+	temporalHealthy := true
+	if t, ok := result.Components["temporal"]; ok && !t.Healthy {
+		temporalHealthy = false
+	}
+
 	for _, name := range criticalComponents {
-		if comp, ok := result.Components[name]; ok && !comp.Healthy {
-			criticalFailures++
+		comp, ok := result.Components[name]
+		if !ok || comp.Healthy {
+			continue
 		}
+		if name == "worker" && !temporalHealthy {
+			degradedCount++
+			continue
+		}
+		criticalFailures++
 	}
 	for _, name := range nonCriticalComponents {
 		if comp, ok := result.Components[name]; ok && !comp.Healthy {
@@ -848,6 +884,11 @@ func checkWorker(ctx context.Context, s *Supervisor, validate bool) ComponentHea
 	if !exists || proc.State != StateReady {
 		pollers, _, err := getTaskQueuePollers(ctx, s.binDir)
 		if err != nil {
+			// Distinguir entre "Temporal caído" y "worker realmente muerto".
+			// Si el error es de conexión a Temporal (puerto 7233 rechazado), reportar
+			// FAILED con mensaje descriptivo. Si Temporal está caído, ese componente
+			// ya aparece como crítico por sí mismo — no apilar un segundo crítico
+			// por el worker que es consecuencia del mismo problema raíz.
 			health.Healthy = false
 			health.State = "FAILED"
 			health.Error = err.Error()

@@ -9,7 +9,7 @@ import (
 // GetBaseAppDataPath returns the platform-correct root for BloomNucleus.
 //
 //   Windows : %LOCALAPPDATA%\BloomNucleus
-//   macOS   : ~/Library/Application Support/BloomNucleus
+//   macOS   : ~/Library/BloomNucleus
 //   Linux   : ~/.local/share/BloomNucleus
 func GetBaseAppDataPath() string {
 	switch runtime.GOOS {
@@ -23,7 +23,7 @@ func GetBaseAppDataPath() string {
 
 	case "darwin":
 		home, _ := os.UserHomeDir()
-		return filepath.Join(home, "Library", "Application Support", "BloomNucleus")
+		return filepath.Join(home, "Library", "BloomNucleus")
 
 	default: // linux and anything else
 		home, _ := os.UserHomeDir()
@@ -68,9 +68,17 @@ func ExeName(name string) string {
 //
 // Layout expected by the build system:
 //
-//	<repoRoot>/native/bin/darwin/
-//	<repoRoot>/native/bin/windows/
-//	<repoRoot>/native/bin/linux/
+//	<repoRoot>/installer/native/bin/darwin_arm64/
+//	<repoRoot>/installer/native/bin/darwin_x64/
+//	<repoRoot>/installer/native/bin/windows/
+//	<repoRoot>/installer/native/bin/linux/
 func NativeBinDir(repoRoot string) string {
-	return filepath.Join(repoRoot, "native", "bin", runtime.GOOS)
+	if runtime.GOOS == "darwin" {
+		arch := "darwin_x64"
+		if runtime.GOARCH == "arm64" {
+			arch = "darwin_arm64"
+		}
+		return filepath.Join(repoRoot, "installer", "native", "bin", arch)
+	}
+	return filepath.Join(repoRoot, "installer", "native", "bin", runtime.GOOS)
 }

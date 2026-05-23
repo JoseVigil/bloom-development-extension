@@ -167,14 +167,18 @@ if [[ ! -f "go.mod" ]]; then
     exit 1
 fi
 
-BINARY_NAME="${COMPONENT}"
-OUTPUT_BINARY="${OUTPUT_DIR}/${BINARY_NAME}"
-
-# sensor tiene su main.go en cmd/, el resto lo tiene en la raíz
+# sensor produce "bloom-sensor" igual que en Windows (bloom-sensor.exe)
 case "${COMPONENT}" in
-    sensor) BUILD_TARGET="./cmd" ;;
-    *)      BUILD_TARGET="."     ;;
+    sensor)
+        BINARY_NAME="bloom-sensor"
+        BUILD_TARGET="./cmd"
+        ;;
+    *)
+        BINARY_NAME="${COMPONENT}"
+        BUILD_TARGET="."
+        ;;
 esac
+OUTPUT_BINARY="${OUTPUT_DIR}/${BINARY_NAME}"
 
 echo "Build target: ${BUILD_TARGET}" >> "${LOG_FILE}"
 
@@ -197,31 +201,40 @@ echo "✅ ${COMPONENT} compilado → ${OUTPUT_BINARY}"
 echo "✅ ${COMPONENT} compilado → ${OUTPUT_BINARY}" >> "${LOG_FILE}"
 
 # ───────────────────────────────────────────────────────────────
-# COPIA DE ARCHIVOS DE HELP
-# Los archivos de help viven en installer/<component>/help/ y deben
-# copiarse a installer/native/bin/<arch>/<component>/help/ — usando
-# el mismo BIN_ARCH que resolvió la compilación arriba (darwin_arm64,
-# darwin_x64, linux_x64). Nunca se hardcodea "win64" u otro arch.
+# GENERACIÓN DE ARCHIVOS DE HELP
+# Idéntico a Windows: se ejecuta el binario recién compilado con
+# --json-help y --help para producir los archivos de documentación.
+# Los archivos no son assets estáticos — los genera el propio binario.
 # ───────────────────────────────────────────────────────────────
 
-HELP_SRC_DIR="${PROJECT_ROOT}/installer/${COMPONENT}/help"
 HELP_OUT_DIR="${OUTPUT_DIR}/help"
+mkdir -p "${HELP_OUT_DIR}"
 
 echo ""
-echo "Copiando archivos de help..."
-echo "Copiando archivos de help..." >> "${LOG_FILE}"
-echo "  Origen : ${HELP_SRC_DIR}"  >> "${LOG_FILE}"
-echo "  Destino: ${HELP_OUT_DIR}"  >> "${LOG_FILE}"
+echo "Generando archivos de help..."
+echo "Generando archivos de help..." >> "${LOG_FILE}"
+echo "  Binario: ${OUTPUT_BINARY}" >> "${LOG_FILE}"
+echo "  Destino: ${HELP_OUT_DIR}" >> "${LOG_FILE}"
 
-if [[ -d "${HELP_SRC_DIR}" ]]; then
-    mkdir -p "${HELP_OUT_DIR}"
-    cp -r "${HELP_SRC_DIR}/." "${HELP_OUT_DIR}/"
-    echo "✅ Help files → ${HELP_OUT_DIR}"
-    echo "✅ Help files copiados → ${HELP_OUT_DIR}" >> "${LOG_FILE}"
-else
-    echo "⚠  Directorio de help no encontrado, saltando: ${HELP_SRC_DIR}"
-    echo "⚠  Help dir no encontrado: ${HELP_SRC_DIR}" >> "${LOG_FILE}"
+"${OUTPUT_BINARY}" --json-help > "${HELP_OUT_DIR}/${COMPONENT}_help.json" 2>> "${LOG_FILE}"
+HELP_JSON_RC=$?
+
+"${OUTPUT_BINARY}" --help > "${HELP_OUT_DIR}/${COMPONENT}_help.txt" 2>> "${LOG_FILE}"
+HELP_TXT_RC=$?
+
+if [[ ${HELP_JSON_RC} -ne 0 ]]; then
+    echo "⚠️  --json-help terminó con código ${HELP_JSON_RC} para ${COMPONENT}"
+    echo "⚠️  --json-help RC=${HELP_JSON_RC}" >> "${LOG_FILE}"
 fi
+
+if [[ ${HELP_TXT_RC} -ne 0 ]]; then
+    echo "⚠️  --help terminó con código ${HELP_TXT_RC} para ${COMPONENT}"
+    echo "⚠️  --help RC=${HELP_TXT_RC}" >> "${LOG_FILE}"
+fi
+
+echo "✅ ${COMPONENT}_help.json → ${HELP_OUT_DIR}/"
+echo "✅ ${COMPONENT}_help.txt  → ${HELP_OUT_DIR}/"
+echo "✅ Help generado: ${COMPONENT}_help.json + ${COMPONENT}_help.txt" >> "${LOG_FILE}"
 
 # ───────────────────────────────────────────────────────────────
 # REGISTRAR STREAM EN TELEMETRY

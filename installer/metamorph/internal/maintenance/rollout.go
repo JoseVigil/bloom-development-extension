@@ -1,6 +1,7 @@
 package maintenance
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -30,6 +31,9 @@ var allComponents = []component{
 	{
 		Key: "brain",
 		SourceFn: func(r string) string {
+			if runtime.GOOS == "darwin" {
+				return filepath.Join(core.NativeBinDir(r), "brain", exe("brain"))
+			}
 			return filepath.Join(r, "brain", "dist", exe("brain"))
 		},
 		DestFn: func(b string) string { return filepath.Join(b, "bin", "brain") },
@@ -37,6 +41,9 @@ var allComponents = []component{
 	{
 		Key: "nucleus",
 		SourceFn: func(r string) string {
+			if runtime.GOOS == "darwin" {
+				return filepath.Join(core.NativeBinDir(r), "nucleus", exe("nucleus"))
+			}
 			return filepath.Join(r, "nucleus", "dist", exe("nucleus"))
 		},
 		DestFn: func(b string) string { return filepath.Join(b, "bin", "nucleus") },
@@ -44,6 +51,9 @@ var allComponents = []component{
 	{
 		Key: "sentinel",
 		SourceFn: func(r string) string {
+			if runtime.GOOS == "darwin" {
+				return filepath.Join(core.NativeBinDir(r), "sentinel", exe("sentinel"))
+			}
 			return filepath.Join(r, "sentinel", "dist", exe("sentinel"))
 		},
 		DestFn: func(b string) string { return filepath.Join(b, "bin", "sentinel") },
@@ -51,6 +61,9 @@ var allComponents = []component{
 	{
 		Key: "metamorph",
 		SourceFn: func(r string) string {
+			if runtime.GOOS == "darwin" {
+				return filepath.Join(core.NativeBinDir(r), "metamorph", exe("metamorph"))
+			}
 			return filepath.Join(r, "metamorph", exe("metamorph"))
 		},
 		DestFn: func(b string) string { return filepath.Join(b, "bin", "metamorph") },
@@ -100,6 +113,9 @@ var allComponents = []component{
 	{
 		Key: "hook",
 		SourceFn: func(r string) string {
+			if runtime.GOOS == "darwin" {
+				return filepath.Join(core.NativeBinDir(r), "hook", exe("hook"))
+			}
 			return filepath.Join(r, "hook", "dist", exe("hook"))
 		},
 		DestFn: func(b string) string { return filepath.Join(b, "bin", "hook") },
@@ -120,10 +136,13 @@ var allComponents = []component{
 	{
 		Key: "bootstrap",
 		SourceFn: func(r string) string {
+			if runtime.GOOS == "darwin" {
+				return filepath.Join(r, "installer", "native", "bin", "bootstrap")
+			}
 			return filepath.Join(r, "bootstrap", "dist", "bootstrap.exe")
 		},
 		DestFn:    func(b string) string { return filepath.Join(b, "bin", "bootstrap") },
-		Platforms: []string{"windows"},
+		Platforms: []string{"windows", "darwin"},
 	},
 	{
 		Key: "vsix",
@@ -325,15 +344,37 @@ func runRollout(c *core.Core, dryRun bool, only string) error {
 	return nil
 }
 
-// resolveRepoRoot resolves the repository root. Checks BLOOM_REPO_ROOT first
-// so CI and local overrides work without recompiling. Falls back to the
-// executable's directory as a heuristic.
+// resolveRepoRoot resolves the repository root (today) or the standalone
+// installer root (production). Resolution order:
+//
+//  1. BLOOM_REPO_ROOT env var — CI / local override, no recompile needed.
+//  2. nucleus.json installation.origin_path — canonical source of truth.
+//     origin_path points to installer/native/bin/<platform>; walking up
+//     4 levels yields the repo/installer root. Mirrors the logic in
+//     internal/supervisor/dev_start.go:getBloomDir().
+//  3. BLOOM_DIR env var — last-resort fallback used by dev_start.go.
 func resolveRepoRoot() string {
 	if r := os.Getenv("BLOOM_REPO_ROOT"); r != "" {
 		return r
 	}
-	ex, _ := os.Executable()
-	return filepath.Dir(filepath.Dir(ex))
+
+	nucleusJSON := filepath.Join(core.GetBaseAppDataPath(), "config", "nucleus.json")
+	if data, err := os.ReadFile(nucleusJSON); err == nil {
+		var cfg struct {
+			Installation struct {
+				OriginPath string `json:"origin_path"`
+			} `json:"installation"`
+		}
+		if json.Unmarshal(data, &cfg) == nil && cfg.Installation.OriginPath != "" {
+			p := cfg.Installation.OriginPath
+			for i := 0; i < 4; i++ {
+				p = filepath.Dir(p)
+			}
+			return p
+		}
+	}
+
+	return os.Getenv("BLOOM_DIR")
 }
 
 func titleCase(s string) string {

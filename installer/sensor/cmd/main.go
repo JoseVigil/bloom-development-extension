@@ -40,17 +40,26 @@ func main() {
 }
 
 func buildRootCommand(c *core.Core) *cobra.Command {
+	var jsonHelp bool
+
 	root := &cobra.Command{
 		Use:           "bloom-sensor",
 		Short:         "Human presence runtime for the Bloom ecosystem",
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		PersistentPreRun: func(cmd *cobra.Command, args []string) {
+			if jsonHelp {
+				cli.RenderHelpJSON(cmd.Root())
+				os.Exit(0)
+			}
+		},
 	}
 
 	root.PersistentFlags().BoolVar(&c.Config.Debug, "debug", false, "Enable debug logging")
 	root.PersistentFlags().StringVar(&c.Config.Channel, "channel", "stable", "Release channel (stable|beta)")
 	root.PersistentFlags().StringVar(&c.Config.ConfigPath, "config", "", "Config file path")
 	root.PersistentFlags().BoolVar(&c.Config.OutputJSON, "json", false, "Output in JSON format")
+	root.PersistentFlags().BoolVar(&jsonHelp, "json-help", false, "Output full command reference as JSON")
 
 	for _, factory := range cmdregistry.Commands() {
 		root.AddCommand(factory())
@@ -60,6 +69,14 @@ func buildRootCommand(c *core.Core) *cobra.Command {
 	root.SetHelpFunc(func(cmd *cobra.Command, args []string) {
 		cli.RenderFullHelp(root, renderer)
 	})
+
+	// Interceptar --json-help antes de que cobra requiera un subcomando
+	for _, arg := range os.Args[1:] {
+		if arg == "--json-help" {
+			cli.RenderHelpJSON(root)
+			os.Exit(0)
+		}
+	}
 
 	return root
 }

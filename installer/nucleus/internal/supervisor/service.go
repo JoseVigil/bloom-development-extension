@@ -239,8 +239,10 @@ func (s *Supervisor) startTemporalServer(ctx context.Context) (*ManagedProcess, 
 		return nil, fmt.Errorf("failed to create temporal log file: %w", err)
 	}
 
-	// Create command: temporal server start-dev
-	cmd := exec.CommandContext(ctx, temporalBin, "server", "start-dev")
+	// CRÍTICO: exec.Command SIN contexto — Temporal es un servidor de larga duración
+	// que debe sobrevivir al bootCtx (120s). Con CommandContext, Go lo mataría cuando
+	// el ctx del boot expire, causando que el worker pierda conexión silenciosamente.
+	cmd := exec.Command(temporalBin, "server", "start-dev")
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 	cmd.Dir = filepath.Dir(temporalBin) // Set working directory
@@ -280,23 +282,22 @@ func (s *Supervisor) waitForTemporalReady(ctx context.Context, timeout time.Dura
 	hostPort := "localhost:7233"
 
 	for time.Now().Before(deadline) {
-		// Try to dial with a short timeout
-		dialCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-		conn, err := grpc.DialContext(dialCtx, hostPort,
+		// grpc.NewClient es el reemplazo de grpc.Dial (no deprecado desde gRPC-Go v1.63+).
+		// No usamos grpc.WithBlock — preferimos reintentar el health check manualmente
+		// para tener control sobre el timeout por intento sin bloquear el goroutine
+		// indefinidamente si gRPC nunca resuelve el host.
+		conn, err := grpc.NewClient(hostPort,
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
-			grpc.WithBlock(),
 		)
-		cancel()
-
 		if err == nil {
-			// Connection successful, try health check
+			// Connection object created, try health check with short timeout
 			healthClient := healthpb.NewHealthClient(conn)
 			checkCtx, checkCancel := context.WithTimeout(ctx, 2*time.Second)
-			resp, err := healthClient.Check(checkCtx, &healthpb.HealthCheckRequest{})
+			resp, checkErr := healthClient.Check(checkCtx, &healthpb.HealthCheckRequest{})
 			checkCancel()
 			conn.Close()
 
-			if err == nil && resp.Status == healthpb.HealthCheckResponse_SERVING {
+			if checkErr == nil && resp.Status == healthpb.HealthCheckResponse_SERVING {
 				// Update process state and telemetry
 				if proc, exists := s.processes["temporal_server"]; exists {
 					proc.mu.Lock()
@@ -427,8 +428,10 @@ func (s *Supervisor) startWorkerManager(ctx context.Context) (*ManagedProcess, e
 	}
 	workerIdentity := fmt.Sprintf("nucleus-worker/%s@%s/profile-orchestration", nucleusVersion, hostname)
 
-	// Create command: nucleus worker start
-	cmd := exec.CommandContext(ctx, nucleusBin, "worker", "start")
+	// CRÍTICO: exec.Command SIN contexto — el worker es un proceso de larga duración
+	// que debe sobrevivir al ctx del boot (120s). Con CommandContext, Go lo mataría
+	// cuando bootCtx expire. Mismo patrón que startBrainServer.
+	cmd := exec.Command(nucleusBin, "worker", "start")
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 	cmd.Dir = filepath.Dir(nucleusBin)
@@ -1178,7 +1181,12 @@ func (s *Supervisor) bootControlPlane(ctx context.Context, simulation bool) (*Ma
 	// Get Node.js binary (cross-platform: tries without .exe first)
 	nodePath := resolveNodeBin(s.binDir)
 
-	cmd := exec.CommandContext(ctx, nodePath, bundleScript)
+	// CRÍTICO: exec.Command SIN contexto (no exec.CommandContext).
+	// bootCtx tiene timeout de 120s — si usáramos CommandContext, Go mandaría
+	// SIGKILL al proceso Node cuando el ctx expire, matando el Control Plane
+	// silenciosamente. El Control Plane es un servidor de larga duración que debe
+	// sobrevivir al boot. Mismo patrón que startBrainServer (L570).
+	cmd := exec.Command(nodePath, bundleScript)
 	cmd.Env = append(os.Environ(), env...)
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile

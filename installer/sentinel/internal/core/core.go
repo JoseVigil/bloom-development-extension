@@ -72,12 +72,27 @@ func Initialize() (*Core, error) {
 }
 
 func InitializeSilent() (*Core, error) {
-	c, err := Initialize()
+	paths, err := InitPaths()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error al inicializar rutas: %w", err)
 	}
-	c.Logger.SetSilentMode(true)
-	return c, nil
+
+	logger, err := InitLogger(paths, "sentinel_core", "SENTINEL CORE", 1, &LoggerOptions{
+		Categories:  []string{"sentinel"},
+		Description: "Sentinel core log — system-critical log tracking browser process management, crashes and security events",
+		JSONMode:    false,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("error al inicializar logger: %w", err)
+	}
+	logger.SetSilentMode(true)
+
+	return &Core{
+		Paths:  paths,
+		Config: &Config{Version: "dev"},
+		Logger: logger,
+		IsJSON: false,
+	}, nil
 }
 
 func (c *Core) SetJSONMode(enabled bool) {

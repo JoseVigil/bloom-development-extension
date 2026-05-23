@@ -1,47 +1,44 @@
+// internal/startup/startup_darwin.go
+
 //go:build darwin
 
 package startup
 
 import (
-	"bytes"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"text/template"
+	"time"
 
 	"bloom-sensor/internal/cmdregistry"
 	"bloom-sensor/internal/core"
 	"github.com/spf13/cobra"
 )
 
-// plistLabel es el identificador único del LaunchAgent.
-// Equivale a la clave de HKCU\Software\Microsoft\Windows\CurrentVersion\Run en Windows.
-const plistLabel = "com.bloom.sensor"
+// En macOS el mecanismo de autostart equivalente a HKCU\Run de Windows
+// es un LaunchAgent: un archivo .plist en ~/Library/LaunchAgents/.
+// launchd lo carga automáticamente al iniciar sesión el usuario.
 
-// plistPath devuelve la ruta canónica del plist del LaunchAgent.
-// ~/Library/LaunchAgents/ es el directorio estándar para servicios de usuario en macOS.
-func plistPath() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, "Library", "LaunchAgents", plistLabel+".plist")
+const plistName = "com.bloom.sensor.plist"
+
+func launchAgentPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("no se pudo obtener el home del usuario: %w", err)
+	}
+	return filepath.Join(home, "Library", "LaunchAgents", plistName), nil
 }
 
-// plistTemplate es el XML del LaunchAgent.
-//
-// Notas de diseño:
-//   - RunAtLoad: true → el servicio arranca inmediatamente al cargar el plist
-//     (equivale a "inicio con Windows" del Registry)
-//   - KeepAlive.SuccessfulExit: false → launchd reinicia el proceso si crashea,
-//     pero no si termina limpiamente (ej: bloom-sensor stop)
-//   - ThrottleInterval: 10 → evita restart-loops en caso de crash temprano
-//   - StandardOutPath / StandardErrorPath → logs persistentes en ~/Library/Logs/
-const plistTemplate = `<?xml version="1.0" encoding="UTF-8"?>
+// plistTemplate genera el XML del LaunchAgent.
+// RunAtLoad=true replica el comportamiento de HKCU\Run (ejecuta al login).
+var plistTemplate = template.Must(template.New("plist").Parse(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
-  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+    "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>{{.Label}}</string>
+    <string>com.bloom.sensor</string>
     <key>ProgramArguments</key>
     <array>
         <string>{{.ExePath}}</string>
@@ -50,117 +47,90 @@ const plistTemplate = `<?xml version="1.0" encoding="UTF-8"?>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
-    <dict>
-        <key>SuccessfulExit</key>
-        <false/>
-    </dict>
-    <key>ThrottleInterval</key>
-    <integer>10</integer>
+    <false/>
     <key>StandardOutPath</key>
-    <string>{{.LogPath}}</string>
+    <string>{{.LogDir}}/bloom-sensor.stdout.log</string>
     <key>StandardErrorPath</key>
-    <string>{{.LogPath}}</string>
+    <string>{{.LogDir}}/bloom-sensor.stderr.log</string>
 </dict>
-</plist>`
+</plist>
+`))
 
-type plistData struct {
-	Label   string
-	ExePath string
-	LogPath string
-}
-
-// Enable instala el LaunchAgent para bloom-sensor y lo carga en launchd.
-//
-// installPath es el directorio donde está el binario bloom-sensor
-// (equivale al path del ejecutable que se escribe en el Registry en Windows).
-//
-// Flujo:
-//  1. Preparar paths de log y LaunchAgents
-//  2. Generar el plist desde template
-//  3. Escribir el plist en ~/Library/LaunchAgents/
-//  4. Cargar con `launchctl load` (efecto inmediato en sesión actual)
+// Enable instala el LaunchAgent para autostart al login.
+// Equivalente a escribir BloomSensor en HKCU\Run en Windows.
 func Enable(installPath string) error {
 	exePath := filepath.Join(installPath, "bloom-sensor")
-	home, _ := os.UserHomeDir()
-	logDir := filepath.Join(home, "Library", "Logs", "BloomNucleus")
-	logPath := filepath.Join(logDir, "bloom-sensor.log")
 
-	// 1. Crear directorio de logs
-	if err := os.MkdirAll(logDir, 0755); err != nil {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("no se pudo obtener el home del usuario: %w", err)
+	}
+	logDir := filepath.Join(home, "Library", "Logs", "BloomSensor")
+	if err := os.MkdirAll(logDir, 0o755); err != nil {
 		return fmt.Errorf("no se pudo crear directorio de logs: %w", err)
 	}
 
-	// 2. Crear ~/Library/LaunchAgents/ si no existe (raro pero posible en VMs)
-	launchAgentsDir := filepath.Dir(plistPath())
-	if err := os.MkdirAll(launchAgentsDir, 0755); err != nil {
-		return fmt.Errorf("no se pudo crear directorio LaunchAgents: %w", err)
+	agentDir := filepath.Join(home, "Library", "LaunchAgents")
+	if err := os.MkdirAll(agentDir, 0o755); err != nil {
+		return fmt.Errorf("no se pudo crear ~/Library/LaunchAgents: %w", err)
 	}
 
-	// 3. Si ya hay un plist previo, descargarlo antes de sobreescribir
-	if _, err := os.Stat(plistPath()); err == nil {
-		_ = exec.Command("launchctl", "unload", plistPath()).Run()
-	}
-
-	// 4. Renderizar template
-	tmpl, err := template.New("plist").Parse(plistTemplate)
+	plistPath, err := launchAgentPath()
 	if err != nil {
-		return fmt.Errorf("error parseando template plist: %w", err)
+		return err
 	}
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, plistData{
-		Label:   plistLabel,
+
+	f, err := os.Create(plistPath)
+	if err != nil {
+		return fmt.Errorf("no se pudo crear %s: %w", plistPath, err)
+	}
+	defer f.Close()
+
+	data := struct {
+		ExePath string
+		LogDir  string
+	}{
 		ExePath: exePath,
-		LogPath: logPath,
-	}); err != nil {
-		return fmt.Errorf("error renderizando plist: %w", err)
+		LogDir:  logDir,
 	}
-
-	// 5. Escribir plist
-	if err := os.WriteFile(plistPath(), buf.Bytes(), 0644); err != nil {
-		return fmt.Errorf("no se pudo escribir plist: %w", err)
-	}
-
-	// 6. Cargar en launchd — efecto inmediato sin necesidad de reiniciar
-	// Si falla (ej: sesión de CI sin windowserver), el plist ya está escrito
-	// y cargará en el próximo login de usuario.
-	if err := exec.Command("launchctl", "load", plistPath()).Run(); err != nil {
-		fmt.Printf("⚠️  launchctl load warning (el plist se cargará en el próximo login): %v\n", err)
+	if err := plistTemplate.Execute(f, data); err != nil {
+		return fmt.Errorf("error generando plist: %w", err)
 	}
 
 	return nil
 }
 
-// Disable descarga el LaunchAgent de launchd y elimina el plist.
-// Equivale a borrar la clave de HKCU Run en Windows.
+// Disable elimina el LaunchAgent.
+// Equivalente a borrar BloomSensor de HKCU\Run en Windows.
+// Es idempotente — no falla si el archivo no existe.
 func Disable() error {
-	p := plistPath()
-
-	// Descargar de launchd (silencioso si no estaba cargado)
-	_ = exec.Command("launchctl", "unload", p).Run()
-
-	// Eliminar el plist
-	if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("no se pudo eliminar plist: %w", err)
+	plistPath, err := launchAgentPath()
+	if err != nil {
+		return err
+	}
+	err = os.Remove(plistPath)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("no se pudo eliminar %s: %w", plistPath, err)
 	}
 	return nil
 }
 
-// IsEnabled verifica si el LaunchAgent está registrado (plist existe en disco).
-// Retorna (true, path) si está habilitado, (false, "") si no.
-//
-// Nota: la presencia del plist indica que está configurado para autostart,
-// independientemente de si launchd lo tiene cargado en este momento.
+// IsEnabled devuelve si el LaunchAgent existe y el path del plist.
+// Equivalente a leer BloomSensor de HKCU\Run en Windows.
 func IsEnabled() (bool, string) {
-	p := plistPath()
-	if _, err := os.Stat(p); os.IsNotExist(err) {
+	plistPath, err := launchAgentPath()
+	if err != nil {
 		return false, ""
 	}
-	return true, p
+	if _, err := os.Stat(plistPath); err != nil {
+		return false, ""
+	}
+	return true, plistPath
 }
 
-// RegisterCommands registra los subcomandos startup en el CLI de bloom-sensor.
-// El contrato es idéntico al de startup_windows.go — solo cambia la implementación
-// de Enable/Disable/IsEnabled arriba.
+// ─── Comandos ────────────────────────────────────────────────────────────────
+
+// RegisterCommands registra los comandos de startup en el registry global.
 func RegisterCommands(c *core.Core) {
 	cmdregistry.Register(func() *cobra.Command { return newStatusCommand(c) })
 	cmdregistry.Register(func() *cobra.Command { return newEnableCommand(c) })
@@ -169,49 +139,109 @@ func RegisterCommands(c *core.Core) {
 
 func newStatusCommand(c *core.Core) *cobra.Command {
 	return &cobra.Command{
-		Use:   "startup-status",
-		Short: "Muestra si bloom-sensor está configurado para iniciar automáticamente",
+		Use:   "status",
+		Short: "Report current sensor process, autostart and Sentinel connection status",
+		Annotations: map[string]string{
+			"category": "RUNTIME",
+			"json_response": `{
+  "process_running": true,
+  "pid": 1234,
+  "autostart_registered": true,
+  "sentinel_connected": true,
+  "last_state_update": "2026-02-24T15:04:05Z"
+}`,
+		},
+		Example: `bloom-sensor status
+bloom-sensor --json status`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			enabled, location := IsEnabled()
-			if enabled {
-				fmt.Printf("✅ autostart habilitado\n   LaunchAgent: %s\n", location)
-			} else {
-				fmt.Println("❌ autostart deshabilitado")
+			enabled, _ := IsEnabled()
+			var lastStateUpdate string
+			if c.CurrentState != nil && !c.CurrentState.Timestamp.IsZero() {
+				lastStateUpdate = c.CurrentState.Timestamp.UTC().Format(time.RFC3339)
 			}
-			return nil
+			status := map[string]interface{}{
+				"process_running":      true,
+				"pid":                  os.Getpid(),
+				"autostart_registered": enabled,
+				"sentinel_connected":   c.SentinelClient.IsConnected(),
+				"last_state_update":    lastStateUpdate,
+			}
+			return cmdregistry.PrintJSON(status)
 		},
 	}
 }
 
 func newEnableCommand(c *core.Core) *cobra.Command {
 	return &cobra.Command{
-		Use:   "startup-enable",
-		Short: "Registra bloom-sensor como LaunchAgent (autostart en login)",
+		Use:   "enable",
+		Short: "Register bloom-sensor for automatic startup at user login (LaunchAgent)",
+		Long: `Installs a LaunchAgent plist at ~/Library/LaunchAgents/com.bloom.sensor.plist.
+
+The plist runs:
+  /path/to/bloom-sensor run
+
+at login with RunAtLoad=true. This is the macOS equivalent of the
+Windows HKCU\Software\Microsoft\Windows\CurrentVersion\Run registry key.
+The operation is idempotent — safe to run multiple times.`,
+		Annotations: map[string]string{
+			"category": "LIFECYCLE",
+			"json_response": `{
+  "success": true,
+  "plist_path": "~/Library/LaunchAgents/com.bloom.sensor.plist",
+  "exe_path": "/path/to/bloom-sensor"
+}`,
+		},
+		Example: `bloom-sensor enable
+bloom-sensor --json enable`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			exe, err := os.Executable()
+			exePath, err := os.Executable()
 			if err != nil {
+				return fmt.Errorf("could not determine executable path: %w", err)
+			}
+			dir := filepath.Dir(exePath)
+			if err := Enable(dir); err != nil {
 				return err
 			}
-			installPath := filepath.Dir(exe)
-			if err := Enable(installPath); err != nil {
-				return fmt.Errorf("error habilitando autostart: %w", err)
+			c.Logger.Info("autostart enabled: %s", dir)
+			plistPath, _ := launchAgentPath()
+			result := map[string]interface{}{
+				"success":    true,
+				"plist_path": plistPath,
+				"exe_path":   exePath + " run",
 			}
-			fmt.Printf("✅ autostart habilitado\n   LaunchAgent: %s\n", plistPath())
-			return nil
+			return cmdregistry.PrintJSON(result)
 		},
 	}
 }
 
 func newDisableCommand(c *core.Core) *cobra.Command {
 	return &cobra.Command{
-		Use:   "startup-disable",
-		Short: "Elimina el LaunchAgent de bloom-sensor",
+		Use:   "disable",
+		Short: "Remove bloom-sensor from automatic startup (LaunchAgent)",
+		Long: `Deletes ~/Library/LaunchAgents/com.bloom.sensor.plist.
+
+Does NOT kill the running process. The current session continues until
+the process exits normally or is stopped externally.
+The operation is idempotent — safe to run even if the plist does not exist.`,
+		Annotations: map[string]string{
+			"category": "LIFECYCLE",
+			"json_response": `{
+  "success": true,
+  "removed": true
+}`,
+		},
+		Example: `bloom-sensor disable
+bloom-sensor --json disable`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := Disable(); err != nil {
-				return fmt.Errorf("error deshabilitando autostart: %w", err)
+				return err
 			}
-			fmt.Println("✅ autostart deshabilitado")
-			return nil
+			c.Logger.Info("autostart disabled")
+			result := map[string]interface{}{
+				"success": true,
+				"removed": true,
+			}
+			return cmdregistry.PrintJSON(result)
 		},
 	}
 }
