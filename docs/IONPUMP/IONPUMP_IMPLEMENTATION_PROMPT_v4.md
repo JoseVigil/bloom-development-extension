@@ -649,12 +649,12 @@ func InspectIonRecipes(basePath string) ([]IonRecipe, error) {
 
 ### **Phase 6b — Reconcile (BLOCKED — do not implement yet):**
 
-> ⛔ **Blocked until Bartcave server exists.**  
-> The `download_url` field references `https://bartcave.bloom/recipes/...` which is not a live
-> server. Implement `metamorph reconcile --manifest ion-recipes.json` only after Bartcave is
+> ⛔ **Blocked until Batcave server exists.**  
+> The `download_url` field references `https://batcave.bloom/recipes/...` which is not a live
+> server. Implement `metamorph reconcile --manifest ion-recipes.json` only after Batcave is
 > deployed and the manifest endpoint is defined.
 
-**Manifest format (for reference — implement with Bartcave):**
+**Manifest format (for reference — implement with Batcave):**
 
 ```json
 {
@@ -666,7 +666,7 @@ func InspectIonRecipes(basePath string) ([]IonRecipe, error) {
       "domain": "claude.ai",
       "version": "1.3.0",
       "sha256": "abc123...",
-      "download_url": "https://bartcave.bloom/recipes/claude.ai-v1.3.0.ion",
+      "download_url": "https://batcave.bloom/recipes/claude.ai-v1.3.0.ion",
       "flows": ["bootstrap", "send_prompt", "wait_response", "extract_code"]
     }
   ]
@@ -818,9 +818,9 @@ brain ionpump test chatgpt.com bootstrap --dry-run --json
 ---
 
 ### **Phase 6b: Metamorph Reconcile — ⛔ BLOCKED**
-**Estado:** `[!]` Bloqueado — esperando Bartcave
+**Estado:** `[!]` Bloqueado — esperando Batcave
 
-> Blocked until Bartcave server is deployed and the manifest endpoint is defined.
+> Blocked until Batcave server is deployed and the manifest endpoint is defined.
 
 ---
 
@@ -910,7 +910,7 @@ brain ionpump test chatgpt.com bootstrap --dry-run --json
 
 5. **Metamorph:**
    - [ ] inspect reads from `cortex/ionsites/` path (same as IonLoader)
-   - [ ] reconcile NOT implemented until Bartcave exists
+   - [ ] reconcile NOT implemented until Batcave exists
 
 ---
 

@@ -1,6 +1,6 @@
 # Guía Operacional — Deploy de Ion Sites con Metamorph
 
-**Versión:** Phase 6a (inspección activa) · Phase 6b (reconciliación) en espera de Bartcave  
+**Versión:** Phase 6a (inspección activa) · Phase 6b (reconciliación) en espera de Batcave  
 **Audiencia:** Bloom Platform Engineering  
 **Fecha:** Mayo 2026
 
@@ -65,9 +65,9 @@ cd github.com && zip -r ../github.com.ion.zip . && cd ..
 shasum -a 256 github.com.ion.zip
 ```
 
-### Phase 6b — Automático desde Bartcave (futuro, bloqueado)
+### Phase 6b — Automático desde Batcave (futuro, bloqueado)
 
-Nucleus consulta Bartcave, obtiene el manifest de versiones, y llama a
+Nucleus consulta Batcave, obtiene el manifest de versiones, y llama a
 `metamorph reconcile-ion-recipes` automáticamente. No requiere intervención manual.
 
 ---

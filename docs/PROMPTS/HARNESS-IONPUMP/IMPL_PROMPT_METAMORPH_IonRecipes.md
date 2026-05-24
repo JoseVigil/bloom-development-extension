@@ -316,7 +316,7 @@ Cuando Nucleus decide actualizar los ion recipes, envía a Metamorph un manifest
       "version": "1.1.0",
       "sha256_manifest": "def456...",
       "sha256_archive": "ghi789...",
-      "download_url": "https://bartcave.internal/recipes/github.com-1.1.0.tar.gz",
+      "download_url": "https://batcave.internal/recipes/github.com-1.1.0.tar.gz",
       "files": [
         { "path": "ion.manifest.json", "sha256": "..." },
         { "path": "auth.ion",          "sha256": "..." }

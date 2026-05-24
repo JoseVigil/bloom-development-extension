@@ -598,7 +598,7 @@ datos reales después de Test 5.
 
 ### Bloqueado — Metamorph reconcile
 
-El download y swap automático de recipes `.ion` está bloqueado hasta que Bartcave
+El download y swap automático de recipes `.ion` está bloqueado hasta que Batcave
 esté desplegado. Copia manual mientras tanto.
 
 ### Deferred — Phase 3 IonPump (IntentExecutor)

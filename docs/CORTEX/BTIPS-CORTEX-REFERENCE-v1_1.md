@@ -1165,7 +1165,7 @@ Cortex se distribuye como un artefacto `.blx` — un formato empaquetado propio 
 ### Ciclo de vida
 
 ```
-Bartcave (remoto)
+Batcave (remoto)
   └─ Genera manifest firmado con hash SHA256 del .blx
        └─ Nucleus valida firma y ACL
             └─ Metamorph descarga y verifica el .blx

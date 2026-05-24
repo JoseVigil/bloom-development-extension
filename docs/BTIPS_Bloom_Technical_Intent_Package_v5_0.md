@@ -202,7 +202,7 @@ Nucleus es la autoridad de mando y el árbitro de identidad del sistema. Actúa 
 *   **Identity & Role Management:** Gestiona la jerarquía de poder (Master/Architect/Specialist), validando quién tiene permiso para ejecutar acciones sensibles.
 *   **Vault Authority:** Es el único componente capaz de autorizar el flujo de llaves (API Keys/OAuth) desde el almacenamiento seguro de Chrome hacia el motor de ejecución.
 *   **Organizacional Truth:** Nucleus firma digitalmente el estado de los proyectos en el filesystem, asegurando que la configuración de la organización sea inalterable para colaboradores no autorizados.
-*   **System State Authority:** Único componente autorizado para invocar actualizaciones de binarios del sistema vía Metamorph, validando manifests firmados provenientes de Bartcave.
+*   **System State Authority:** Único componente autorizado para invocar actualizaciones de binarios del sistema vía Metamorph, validando manifests firmados provenientes de Batcave.
 
 ---
 
@@ -582,7 +582,7 @@ Metamorph **jamás se conecta a internet**. Solo opera sobre manifests pre-valid
 El flujo de actualización sigue una cadena de validación estricta:
 
 ```
-Bartcave (Backend Remoto)
+Batcave (Backend Remoto)
     ↓ genera manifest firmado
 Nucleus (Governance Local)
     ↓ valida firma digital + ACL
@@ -593,7 +593,7 @@ Sistema Actualizado
 
 **Responsabilidades por Componente:**
 
-1. **Bartcave:** Genera manifests firmados digitalmente con información de versiones, hashes SHA256 y URLs de descarga
+1. **Batcave:** Genera manifests firmados digitalmente con información de versiones, hashes SHA256 y URLs de descarga
 2. **Nucleus:** Valida la firma, verifica ACL (quién puede actualizar qué), y autoriza la invocación de Metamorph
 3. **Metamorph:** Ejecuta la reconciliación sin validar firmas (confía en Nucleus como autoridad upstream)
 
@@ -762,7 +762,7 @@ claude.ai     v1.2.0    5 flows   12.1 KB   ✓ Healthy
 Total: 2 sites, 8 flows
 ```
 
-La reconciliación completa (download + swap automático desde Bartcave) requiere que Bartcave esté desplegado. Hasta entonces, la copia de recipes es manual y Metamorph cubre la inspección.
+La reconciliación completa (download + swap automático desde Batcave) requiere que Batcave esté desplegado. Hasta entonces, la copia de recipes es manual y Metamorph cubre la inspección.
 
 #### Filosofía de Diseño
 
@@ -1044,7 +1044,7 @@ Batcave es multi-tenant por diseño. Cada organización tiene su propio namespac
 Batcave extiende la cadena de autoridad del sistema Bloom hacia el exterior, sin romperla:
 
 ```
-Bartcave (Backend Remoto)
+Batcave (Backend Remoto)
     ↓ genera manifest firmado
 Nucleus (Governance Local)
     ↓ valida firma digital + ACL

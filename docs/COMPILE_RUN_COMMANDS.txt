@@ -80,6 +80,8 @@ brain filesystem tree webview -o tree/webview_tree.txt
 
 brain filesystem tree installer/electron-app -o tree/electron_tree.txt
 
+brain filesystem tree installer/bartcave -o tree/bartcave_tree.txt
+
 brain filesystem tree installer/native -o tree/native_tree.txt
 
 brain filesystem tree installer/nucleus -o tree/nucleus_tree.txt
@@ -96,6 +98,8 @@ brain filesystem tree installer/sensor -o tree/sensor_tree.txt
 
 brain filesystem tree installer/conductor -o tree/conductor_tree.txt
 
+brain filesystem tree installer/conductor/setup -o tree/conductor_setup_tree.txt
+
 brain filesystem tree installer/conductor/workspace -o tree/workspace_tree.txt
 
 brain filesystem tree installer/cortex -o tree/cortex_tree.txt
@@ -103,6 +107,8 @@ brain filesystem tree installer/cortex -o tree/cortex_tree.txt
 brain filesystem tree installer/chrome-extension/src -o tree/chrome_extension_src_tree.txt
 
 brain filesystem tree C:\Users\josev\AppData\Local\BloomNucleus -o tree/appdata_tree.txt
+
+brain filesystem tree /Users/josevigil/Library/BloomNucleus -o tree/appdata_tree.txt
 
 brain filesystem tree C:\Users\josev\AppData\Local\BloomNucleus\logs -o tree/appdata_logs_tree.txt
 
@@ -298,9 +304,12 @@ ls -la /mnt/flash/synway/shdcti/shdpci.ko.bak_DRIVER_20260414_0248
 🖥️ En Windows 1
 .\sopack.ps1 --receive
 
-4f54af54bd79ad48317b6f0ecd0d44b2
+
+
 
 Get-FileHash "C:\tmp\run\bin\liblantiq.so.patched" -Algorithm MD5
+
+Get-FileHash "C:\tmp\run\bin\libshdpci.so*" -Algorithm MD5
 
 
 
