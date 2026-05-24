@@ -40,7 +40,7 @@ const _binariesComponents = _isDarwin
       brain:     ['brain', '_internal'],
       host:      ['bloom-host'],
       nucleus:   ['nucleus', 'nucleus-governance.json'],
-      sentinel:  ['sentinel', 'sentinel-config.json'],
+      sentinel:  ['sentinel'],  // solo el binario — config en config/sentinel/, verificada aparte
       metamorph: ['metamorph'],
       cortex:    ['bloom-cortex.blx'],
       ollama:    ['ollama'],
@@ -557,7 +557,6 @@ class NucleusManager {
       'nucleus_service_install',
       'sensor_install',
       'certification',
-      'orchestration_init', 
       'nucleus_seed',
       'nucleus_launch'
     ];

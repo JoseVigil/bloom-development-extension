@@ -19,15 +19,14 @@ type SystemMap struct {
 
 func DiscoverSystem(binDir string) (*SystemMap, error) {
 	sm := &SystemMap{}
-	localAppData := os.Getenv("LOCALAPPDATA")
 
-	// 1. Rutas de Binarios (Prioridad AppData/Local)
-	sm.BrainPath = filepath.Join(localAppData, "BloomNucleus", "bin", "brain", "brain.exe")
-	sm.ChromePath = filepath.Join(localAppData, "BloomNucleus", "bin", "chrome-win", "chrome.exe")
+	// 1. Rutas de Binarios — cross-platform usando binDir canónico
+	sm.BrainPath = filepath.Join(binDir, "brain", brainExeName())
+	sm.ChromePath = chromiumPath(binDir)
 
 	// 2. Scanner Proactivo de VSCode
-	userProfile := os.Getenv("USERPROFILE")
-	extensionsDir := filepath.Join(userProfile, ".vscode", "extensions")
+	home, _ := os.UserHomeDir()
+	extensionsDir := filepath.Join(home, ".vscode", "extensions")
 
 	if entries, err := os.ReadDir(extensionsDir); err == nil {
 		for _, entry := range entries {
@@ -86,4 +85,26 @@ func FindVSCodeBinary() (string, error) {
 
 	return "", fmt.Errorf("VS Code (code o code.cmd) no encontrado.\n" +
 		"Asegúrate de tener VS Code instalado y accesible desde el PATH")
+}
+// brainExeName devuelve el nombre del ejecutable de Brain según la plataforma.
+func brainExeName() string {
+	if runtime.GOOS == "windows" {
+		return "brain.exe"
+	}
+	return "brain"
+}
+
+// chromiumPath devuelve el path al ejecutable de Chromium según la plataforma.
+// En Windows: bin/chrome-win/chrome.exe
+// En macOS:   bin/chrome-mac/Chromium.app/Contents/MacOS/Chromium
+// En Linux:   bin/chrome-linux/chrome
+func chromiumPath(binDir string) string {
+	switch runtime.GOOS {
+	case "windows":
+		return filepath.Join(binDir, "chrome-win", "chrome.exe")
+	case "darwin":
+		return filepath.Join(binDir, "chrome-mac", "Chromium.app", "Contents", "MacOS", "Chromium")
+	default:
+		return filepath.Join(binDir, "chrome-linux", "chrome")
+	}
 }

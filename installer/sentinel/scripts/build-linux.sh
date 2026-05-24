@@ -176,6 +176,13 @@ chmod +x "${OUTPUT_FILE}"
 # Copiar Archivo de Configuración
 # ───────────────────────────────────────────────────────────────
 
+# NOTA ARQUITECTÓNICA:
+# sentinel-config.json en el output (bin/<platform>/sentinel/) es un FALLBACK para desarrollo
+# local. En producción, el installer lee la config desde:
+#   installer/native/config/sentinel-config.json   ← fuente canónica
+# y la despliega en:
+#   ~/.local/share/BloomNucleus/config/sentinel/sentinel-config.json
+# No usar la config del directorio del binario como fuente de verdad en el installer.
 CONFIG_SOURCE="${SCRIPT_DIR}/../sentinel-config.json"
 if [[ -f "${CONFIG_SOURCE}" ]]; then
     cp -f "${CONFIG_SOURCE}" "${OUTPUT_DIR}/sentinel-config.json"
@@ -184,6 +191,17 @@ if [[ -f "${CONFIG_SOURCE}" ]]; then
 else
     echo "⚠️  sentinel-config.json no encontrado"
     echo "⚠️  sentinel-config.json no encontrado" >> "${LOG_FILE}"
+fi
+
+# Verificar que la fuente canónica para el installer existe
+CANONICAL_CONFIG="${PROJECT_ROOT}/installer/native/config/sentinel-config.json"
+if [[ ! -f "${CANONICAL_CONFIG}" ]]; then
+    echo "⚠️  ATENCIÓN: installer/native/config/sentinel-config.json no existe."
+    echo "   El installer usará fallback desde bin/sentinel/. Ejecutar PROMPT 1 para crearlo."
+    echo "⚠️  Canonical config missing" >> "${LOG_FILE}"
+else
+    echo "✅ Canonical sentinel-config.json present at native/config/"
+    echo "✅ Canonical config OK" >> "${LOG_FILE}"
 fi
 
 # ───────────────────────────────────────────────────────────────

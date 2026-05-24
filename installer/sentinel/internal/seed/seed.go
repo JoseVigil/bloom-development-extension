@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"runtime"
 	"path/filepath"
 	"sentinel/internal/core"
 	"sentinel/internal/discovery"
@@ -138,8 +139,7 @@ func HandleSeed(c *core.Core, alias string, isMaster bool, devMode bool) (string
 	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 	// 1️⃣ PRECONDICIÓN: Verificar existencia del .blx
 	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-	bloomBaseDir := filepath.Join(os.Getenv("LOCALAPPDATA"), "BloomNucleus")
-	blxPath := filepath.Join(bloomBaseDir, "bin", "cortex", "bloom-cortex.blx")
+	blxPath := filepath.Join(c.Paths.BinDir, "cortex", "bloom-cortex.blx")
 	if _, err := os.Stat(blxPath); os.IsNotExist(err) {
 		return "", "", fmt.Errorf("cortex_missing: %s no encontrado", blxPath)
 	}
@@ -160,7 +160,7 @@ func HandleSeed(c *core.Core, alias string, isMaster bool, devMode bool) (string
 	// 🔧 Desempaquetar .blx a bin/extension (directorio TEMPORAL)
 	// Se borra automáticamente al terminar, sin importar si hay error.
 	// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-	baseExtensionDir := filepath.Join(bloomBaseDir, "bin", "extension")
+	baseExtensionDir := filepath.Join(c.Paths.BinDir, "extension")
 
 	c.Logger.Info("[SEED] Deploying base extension to (temp): %s", baseExtensionDir)
 
@@ -383,8 +383,7 @@ func deployCortexPackage(blxPath, destDir string, c *core.Core) error {
 }
 
 func writeNativeManifest(c *core.Core, path, hostName, uuid string) error {
-	bloomBaseDir := filepath.Join(os.Getenv("LOCALAPPDATA"), "BloomNucleus")
-	bridgePath := filepath.Join(bloomBaseDir, "bin", "host", "bloom-host.exe")
+	bridgePath := filepath.Join(c.Paths.BinDir, "host", hostExeName())
 
 	manifest := map[string]interface{}{
 		"name":        hostName,
@@ -480,4 +479,13 @@ func loadProfilesRegistry(c *core.Core) ProfilesRegistry {
 		registry_data.Profiles = list
 	}
 	return registry_data
+}
+
+// hostExeName devuelve el nombre del ejecutable bloom-host según la plataforma.
+// En Windows incluye la extensión .exe; en macOS/Linux la omite.
+func hostExeName() string {
+	if runtime.GOOS == "windows" {
+		return "bloom-host.exe"
+	}
+	return "bloom-host"
 }

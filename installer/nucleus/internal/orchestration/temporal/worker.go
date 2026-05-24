@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -147,24 +148,42 @@ func writeWorkerCapabilities(configDir string, taskQueue string, workflows, acti
 // En Windows, os.FindProcess siempre retorna éxito y Signal(0) no está
 // implementado de forma confiable, por lo que se usa tasklist como
 // mecanismo de verificación — funciona sin CGO ni imports externos.
+// En macOS/Linux se usa kill -0 vía os.Process.Signal(0).
 func isPIDAlive(pid int) bool {
-	out, err := exec.Command(
-		"tasklist",
-		"/FI", fmt.Sprintf("PID eq %d", pid),
-		"/NH",
-		"/FO", "CSV",
-	).Output()
+	if runtime.GOOS == "windows" {
+		out, err := exec.Command(
+			"tasklist",
+			"/FI", fmt.Sprintf("PID eq %d", pid),
+			"/NH",
+			"/FO", "CSV",
+		).Output()
+		if err != nil {
+			return false
+		}
+		// tasklist devuelve una línea con el PID entre comillas si el proceso existe,
+		// o "INFO: No tasks are running which match the specified criteria." si no.
+		return strings.Contains(string(out), fmt.Sprintf(`"%d"`, pid))
+	}
+	// Unix/macOS: Signal(0) verifica existencia sin enviar señal real.
+	proc, err := os.FindProcess(pid)
 	if err != nil {
 		return false
 	}
-	// tasklist devuelve una línea con el PID entre comillas si el proceso existe,
-	// o "INFO: No tasks are running which match the specified criteria." si no.
-	return strings.Contains(string(out), fmt.Sprintf(`"%d"`, pid))
+	return proc.Signal(syscall.Signal(0)) == nil
 }
 
 // ───────────────────────────────────────────────────────────────────────────
 // CLI COMMANDS
 // ───────────────────────────────────────────────────────────────────────────
+
+// exeName devuelve el nombre del ejecutable con la extensión correcta según
+// la plataforma. En Windows agrega .exe; en macOS/Linux lo omite.
+func exeName(base string) string {
+	if runtime.GOOS == "windows" {
+		return base + ".exe"
+	}
+	return base
+}
 
 func init() {
 	core.RegisterCommand("ORCHESTRATION", workerStartCmd)
@@ -285,8 +304,8 @@ func workerStartCmd(c *core.Core) *cobra.Command {
 
 			// Construir paths usando PathConfig disponible
 			logsDir     := c.Paths.LogsDir
-			nucleusExe  := filepath.Join(c.Paths.BinDir, "nucleus", "nucleus.exe")
-			sentinelExe := filepath.Join(c.Paths.BinDir, "sentinel", "sentinel.exe")
+			nucleusExe  := filepath.Join(c.Paths.BinDir, "nucleus", exeName("nucleus"))
+			sentinelExe := filepath.Join(c.Paths.BinDir, "sentinel", exeName("sentinel"))
 
 			// Verificar que sentinel existe
 			if _, err := os.Stat(sentinelExe); os.IsNotExist(err) {

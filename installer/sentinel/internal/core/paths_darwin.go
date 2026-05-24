@@ -12,7 +12,7 @@ func resolveAppDataDir() string {
 	if home == "" {
 		home = os.Getenv("HOME")
 	}
-	return filepath.Join(home, "Library", "Application Support", "BloomNucleus")
+	return filepath.Join(home, "Library", "BloomNucleus")
 }
 
 func nucleusBinaryName() string { return "nucleus" }

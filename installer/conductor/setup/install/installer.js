@@ -534,6 +534,35 @@ async function deployAllSystemBinaries(win) {
       paths.sentinelDir,
       'Sentinel'
     );
+
+    // ── sentinel-config.json → config/sentinel/ (ubicación canónica) ──────────
+    logger.info('\n⚙️ SENTINEL CONFIG');
+    await fs.ensureDir(paths.sentinelConfigDir);
+
+    const _sentinelCfgSrc      = paths.sentinelConfigSource;
+    const _sentinelCfgFallback = path.join(paths.sentinelSource, 'sentinel-config.json');
+
+    if (await fs.pathExists(_sentinelCfgSrc)) {
+      await copyFileSafe(_sentinelCfgSrc, paths.sentinelConfig, 'sentinel-config.json');
+      logger.success('✅ sentinel-config.json deployed to config/sentinel/');
+    } else if (await fs.pathExists(_sentinelCfgFallback)) {
+      await copyFileSafe(_sentinelCfgFallback, paths.sentinelConfig, 'sentinel-config.json (fallback)');
+      logger.warn('⚠️ sentinel-config.json deployed from bin source — agregar a native/config/');
+    } else {
+      throw new Error('sentinel-config.json not found in native/config nor in sentinel source dir');
+    }
+
+    // Parchear paths dinámicos con valores del entorno del usuario
+    try {
+      const _cfg = await fs.readJson(paths.sentinelConfig);
+      _cfg.settings.extensionPath = paths.cortexBlx;
+      _cfg.settings.testWorkspace = paths.profilesDir;
+      _cfg.bloom_base = paths.bloomBase; 
+      await fs.writeJson(paths.sentinelConfig, _cfg, { spaces: 2 });
+      logger.success('✅ sentinel-config.json patched with runtime paths');
+    } catch (patchErr) {
+      logger.warn(`⚠️ Could not patch sentinel-config.json: ${patchErr.message}`);
+    }
     
     results.metamorph = await copyDirectorySafe(
       paths.metamorphSource,

@@ -32,7 +32,7 @@ var allComponents = []component{
 		Key: "brain",
 		SourceFn: func(r string) string {
 			if runtime.GOOS == "darwin" {
-				return filepath.Join(core.NativeBinDir(r), "brain", exe("brain"))
+				return filepath.Join(r, "installer", "native", "bin", "darwin_x64", "brain")
 			}
 			return filepath.Join(r, "brain", "dist", exe("brain"))
 		},
@@ -42,7 +42,7 @@ var allComponents = []component{
 		Key: "nucleus",
 		SourceFn: func(r string) string {
 			if runtime.GOOS == "darwin" {
-				return filepath.Join(core.NativeBinDir(r), "nucleus", exe("nucleus"))
+				return filepath.Join(r, "installer", "native", "bin", "darwin_x64", "nucleus")
 			}
 			return filepath.Join(r, "nucleus", "dist", exe("nucleus"))
 		},
@@ -52,7 +52,7 @@ var allComponents = []component{
 		Key: "sentinel",
 		SourceFn: func(r string) string {
 			if runtime.GOOS == "darwin" {
-				return filepath.Join(core.NativeBinDir(r), "sentinel", exe("sentinel"))
+				return filepath.Join(r, "installer", "native", "bin", "darwin_x64", "sentinel")
 			}
 			return filepath.Join(r, "sentinel", "dist", exe("sentinel"))
 		},
@@ -62,7 +62,7 @@ var allComponents = []component{
 		Key: "metamorph",
 		SourceFn: func(r string) string {
 			if runtime.GOOS == "darwin" {
-				return filepath.Join(core.NativeBinDir(r), "metamorph", exe("metamorph"))
+				return filepath.Join(r, "installer", "native", "bin", "darwin_x64", "metamorph")
 			}
 			return filepath.Join(r, "metamorph", exe("metamorph"))
 		},
@@ -114,7 +114,7 @@ var allComponents = []component{
 		Key: "hook",
 		SourceFn: func(r string) string {
 			if runtime.GOOS == "darwin" {
-				return filepath.Join(core.NativeBinDir(r), "hook", exe("hook"))
+				return filepath.Join(r, "installer", "native", "bin", "darwin_x64", "hook")
 			}
 			return filepath.Join(r, "hook", "dist", exe("hook"))
 		},
@@ -349,8 +349,8 @@ func runRollout(c *core.Core, dryRun bool, only string) error {
 //
 //  1. BLOOM_REPO_ROOT env var — CI / local override, no recompile needed.
 //  2. nucleus.json installation.origin_path — canonical source of truth.
-//     origin_path points to installer/native/bin/<platform>; walking up
-//     4 levels yields the repo/installer root. Mirrors the logic in
+//     origin_path points to installer/native/bin/<platform>/<component>; walking up
+//     5 levels yields the repo root. Mirrors the logic in
 //     internal/supervisor/dev_start.go:getBloomDir().
 //  3. BLOOM_DIR env var — last-resort fallback used by dev_start.go.
 func resolveRepoRoot() string {
@@ -367,7 +367,7 @@ func resolveRepoRoot() string {
 		}
 		if json.Unmarshal(data, &cfg) == nil && cfg.Installation.OriginPath != "" {
 			p := cfg.Installation.OriginPath
-			for i := 0; i < 4; i++ {
+			for i := 0; i < 5; i++ {
 				p = filepath.Dir(p)
 			}
 			return p

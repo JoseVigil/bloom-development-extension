@@ -162,6 +162,8 @@ const getResourcePath = (resourceName) => {
       return path.join(workspaceRoot, '..', 'nucleus', 'nucleus-governance.json');
     case 'assets':
       return path.join(workspaceRoot, 'setup', 'assets');
+    case 'sentinel-config':
+      return path.join(workspaceRoot, '..', 'native', 'config', 'sentinel-config.json');
     default:
       return path.join(workspaceRoot, '..', 'resources', resourceName);
   }
@@ -219,7 +221,11 @@ const paths = {
   sentinelExe: platform === 'win32'
     ? path.join(baseDir, 'bin', 'sentinel', 'sentinel.exe')
     : path.join(baseDir, 'bin', 'sentinel', 'sentinel'),
-  sentinelConfig: path.join(baseDir, 'bin', 'sentinel', 'sentinel-config.json'),
+  // Config de Sentinel — ubicación canónica separada del binario
+  sentinelConfigDir: path.join(baseDir, 'config', 'sentinel'),
+  sentinelConfig: path.join(baseDir, 'config', 'sentinel', 'sentinel-config.json'),
+  // Legacy: config junto al binario — mantener para referencia durante migración
+  sentinelConfigLegacy: path.join(baseDir, 'bin', 'sentinel', 'sentinel-config.json'),
   
   // Metamorph (System Reconciliation)
   metamorphDir: path.join(baseDir, 'bin', 'metamorph'),
@@ -333,6 +339,7 @@ const paths = {
   nucleusSource: getResourcePath('nucleus'),
   nucleusGovernanceSource: getResourcePath('nucleus-governance'),
   sentinelSource: getResourcePath('sentinel'),
+  sentinelConfigSource: getResourcePath('sentinel-config'),
   metamorphSource: getResourcePath('metamorph'),
   brainSource: getResourcePath('brain'),
   hostSource: getResourcePath('host'),
@@ -409,7 +416,7 @@ function getSynapseManifestPath(profileId) {
 const criticalPaths = [
   'baseDir', 'bloomBase', 'binDir',
   'nucleusDir', 'nucleusExe',
-  'sentinelDir', 'sentinelExe',
+  'sentinelDir', 'sentinelExe', 'sentinelConfigDir',
   'metamorphDir', 'metamorphExe',
   'brainDir', 'brainExe',
   'hostDir', 'hostBinary',

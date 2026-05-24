@@ -10,14 +10,30 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 )
 
-const (
-	memoryDegradedMB = 2000
-	memoryPressureMB = 1000
-)
+// memoryThresholds returns platform-appropriate memory thresholds in MB.
+//
+// Windows: high thresholds — Temporal's VirtualAlloc is aggressive and crashes
+// under low memory. 2000/1000 MB are the safe minimums observed in production.
+//
+// macOS: lower thresholds — darwin's memory compression (Compressed Memory) and
+// unified memory architecture make the kernel a much better steward of RAM than
+// Windows. Temporal on darwin runs comfortably with less headroom. VSCode and
+// other dev tools regularly consume RAM that macOS reclaims on demand, so a
+// strict 2000 MB threshold produces false PRESSURE alerts during normal dev work.
+//
+// Linux: conservative thresholds, same as Windows — Linux does not compress
+// memory by default and server workloads expect headroom.
+func memoryThresholds() (degradedMB, pressureMB int64) {
+	if runtime.GOOS == "darwin" {
+		return 1000, 500 // darwin: DEGRADED < 1GB, PRESSURE < 500MB
+	}
+	return 2000, 1000 // windows/linux: DEGRADED < 2GB, PRESSURE < 1GB
+}
 
 // checkMemory reads available RAM and returns a MemoryHealth.
 // On Linux uses /proc/meminfo (MemAvailable — correct metric since kernel 3.14+).
@@ -32,20 +48,22 @@ func checkMemory() MemoryHealth {
 		}
 	}
 
+	degradedMB, pressureMB := memoryThresholds()
+
 	switch {
-	case freeMB < memoryPressureMB:
+	case freeMB < pressureMB:
 		return MemoryHealth{
 			State:   "PRESSURE",
 			FreeMB:  freeMB,
 			TotalMB: totalMB,
-			Message: fmt.Sprintf("Critical memory pressure — %d MB free of %d MB total (threshold: %d MB)", freeMB, totalMB, memoryPressureMB),
+			Message: fmt.Sprintf("Critical memory pressure — %d MB free of %d MB total (threshold: %d MB)", freeMB, totalMB, pressureMB),
 		}
-	case freeMB < memoryDegradedMB:
+	case freeMB < degradedMB:
 		return MemoryHealth{
 			State:   "DEGRADED",
 			FreeMB:  freeMB,
 			TotalMB: totalMB,
-			Message: fmt.Sprintf("Low memory — %d MB free of %d MB total (threshold: %d MB)", freeMB, totalMB, memoryDegradedMB),
+			Message: fmt.Sprintf("Low memory — %d MB free of %d MB total (threshold: %d MB)", freeMB, totalMB, degradedMB),
 		}
 	default:
 		return MemoryHealth{

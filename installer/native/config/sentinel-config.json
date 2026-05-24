@@ -1,0 +1,23 @@
+{
+  "version": "1.0.0",
+  "profiles": [],
+  "settings": {
+    "autoStart": false,
+    "minimizeToTray": true,
+    "checkInterval": 30,
+    "maxRestarts": 3,
+    "restartDelay": 5,
+    "extensionPath": "",
+    "testWorkspace": "",
+    "BrowserEngine": "chromium"
+  },
+  "monitoring": {
+    "enabled": true,
+    "logLevel": "info",
+    "maxLogSize": 10,
+    "maxLogFiles": 5
+  },
+  "provisioning": {
+    "golden_key": ""
+  }
+}
