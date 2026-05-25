@@ -122,18 +122,70 @@ async function installBrainService(win) {
 }
 
 async function seedMasterProfile(win) {
-  // TODO: verificar si seedMasterProfile existe en installer_nucleus.js y hacer el require ahí
-  // Si existe: const { seedMasterProfile } = require('./installer_nucleus');
-  // Si no: implementar seed via executeNucleusCommand('profile seed --master')
-  logger.warn('⚠️ seedMasterProfile: not yet implemented, skipping');
-  return { success: true, skipped: true };
+  const MILESTONE = 'nucleus_seed';
+
+  if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
+    logger.info(`⭐️ ${MILESTONE} completed, skipping`);
+    return { success: true, skipped: true };
+  }
+
+  await nucleusManager.startMilestone(MILESTONE);
+  emitProgress(win, 10, 11, 'Seeding master profile...');
+
+  try {
+    const { seedMasterProfile: _seed } = require('./installer_nucleus');
+    const result = await _seed();
+
+    if (result && result.profile_id) {
+      await nucleusManager.setMasterProfile(result.profile_id);
+    }
+
+    await nucleusManager.completeMilestone(MILESTONE, {
+      profile_id: result.profile_id,
+      alias: result.alias
+    });
+
+    return result;
+
+  } catch (error) {
+    await nucleusManager.failMilestone(MILESTONE, error.message);
+    throw error;
+  }
 }
 
 async function launchMasterProfile(win) {
-  // TODO: arrancar el perfil master después de seed
-  // Probablemente: nucleus profile launch <master_profile_id>
-  logger.warn('⚠️ launchMasterProfile: not yet implemented, skipping');
-  return { success: true, skipped: true };
+  const MILESTONE = 'nucleus_launch';
+
+  if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
+    logger.info(`⭐️ ${MILESTONE} completed, skipping`);
+    return { success: true, skipped: true };
+  }
+
+  await nucleusManager.startMilestone(MILESTONE);
+  emitProgress(win, 11, 11, 'Preparing master profile for launch...');
+
+  try {
+    const profileId = nucleusManager.state.master_profile;
+    if (!profileId) {
+      throw new Error('master_profile not set — seed must have failed');
+    }
+
+    // El launch real lo hace el Conductor al primer arranque via onboarding-handlers.js
+    // El installer solo verifica que el seed dejó el master_profile en nucleus.json
+    logger.info(`✅ Master profile ready: ${profileId}`);
+    logger.info('   Conductor will launch on first start');
+
+    await nucleusManager.completeMilestone(MILESTONE, {
+      profile_id: profileId,
+      launch_delegated_to: 'conductor'
+    });
+
+    return { success: true, profile_id: profileId };
+
+  } catch (error) {
+    await nucleusManager.failMilestone(MILESTONE, error.message);
+    throw error;
+  }
 }
 
 const SENSOR_EXE_NAME = process.platform === 'darwin' ? 'sensor' : 'bloom-sensor.exe';
@@ -472,27 +524,34 @@ async function deployAllSystemBinaries(win) {
     }
     
     // ========================================================================
-    // 3. NATIVE HOST + DLLs (solo Windows)
+    // 3. NATIVE HOST + DLLs
     // ========================================================================
+    logger.info('\n🔗 NATIVE HOST');
+
     if (process.platform === 'win32') {
-      logger.info('\n🔗 NATIVE HOST');
-      
       const hostExeSrc = path.join(paths.hostSource, 'bloom-host.exe');
-      
       results.nativeHost = await copyFileSafe(
         hostExeSrc,
         paths.hostBinary,
         'bloom-host.exe'
       );
-      
       results.hostDLLs = await copyDLLs(
         paths.hostSource,
         paths.hostDir,
         'Host DLLs'
       );
+    } else {
+      const hostExeSrc = path.join(paths.hostSource, 'bloom-host');
+      results.nativeHost = await copyFileSafe(
+        hostExeSrc,
+        paths.hostBinary,
+        'bloom-host'
+      );
+      await fs.chmod(paths.hostBinary, 0o755);
+      logger.success('✅ bloom-host deployed and marked executable');
     }
-    
-    // ========================================================================
+
+        // ========================================================================
     // 4. NSSM (solo Windows)
     // ========================================================================
     if (process.platform === 'win32') {
@@ -518,12 +577,16 @@ async function deployAllSystemBinaries(win) {
     );
 
     // Copiar nucleus-governance.json desde fuente independiente
+    // Destino canónico: config/nucleus/nucleus-governance.json
+    // (NO bin/nucleus/ — ese directorio es solo para el binario)
     {
       const govSrc  = paths.nucleusGovernanceSource;
-      const govDest = path.join(paths.nucleusDir, 'nucleus-governance.json');
+      const govConfigDir = path.join(paths.configDir, 'nucleus');
+      const govDest = path.join(govConfigDir, 'nucleus-governance.json');
+      await fs.ensureDir(govConfigDir);
       if (await fs.pathExists(govSrc)) {
         await copyFileSafe(govSrc, govDest, 'nucleus-governance.json');
-        logger.success('✅ nucleus-governance.json deployed');
+        logger.success('✅ nucleus-governance.json deployed to config/nucleus/');
       } else {
         logger.warn('⚠️ nucleus-governance.json not found, skipping');
       }
@@ -555,11 +618,15 @@ async function deployAllSystemBinaries(win) {
     // Parchear paths dinámicos con valores del entorno del usuario
     try {
       const _cfg = await fs.readJson(paths.sentinelConfig);
+      const _govPath = path.join(paths.configDir, 'nucleus', 'nucleus-governance.json');
+      const _gov = await fs.readJson(_govPath);
       _cfg.settings.extensionPath = paths.cortexBlx;
       _cfg.settings.testWorkspace = paths.profilesDir;
-      _cfg.bloom_base = paths.bloomBase; 
+      _cfg.bloom_base = paths.bloomBase;
+      _cfg.provisioning.extension_id = _gov.provisioning?.extension_id || '';
       await fs.writeJson(paths.sentinelConfig, _cfg, { spaces: 2 });
       logger.success('✅ sentinel-config.json patched with runtime paths');
+      logger.info(`   extension_id: ${_cfg.provisioning.extension_id || '(vacío — governance sin extension_id)'}`);
     } catch (patchErr) {
       logger.warn(`⚠️ Could not patch sentinel-config.json: ${patchErr.message}`);
     }

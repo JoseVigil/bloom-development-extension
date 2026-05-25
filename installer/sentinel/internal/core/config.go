@@ -85,6 +85,11 @@ func GetConfigDir() (string, error) {
 //  2. Fallback al directorio del binario (binDir) para compatibilidad con
 //     instalaciones legacy, en particular durante la migración en Windows.
 //
+// Si una ubicación parsea correctamente pero ExtensionID queda vacío,
+// se continúa con la siguiente ubicación para intentar obtener un config
+// más completo. Esto cubre el caso en que el installer aún no compiló
+// el patch de extension_id al archivo canónico.
+//
 // Si ninguna de las dos rutas contiene el archivo, retorna un error
 // indicando ambas rutas intentadas.
 func LoadConfig(binDir string) (*Config, error) {
@@ -95,6 +100,9 @@ func LoadConfig(binDir string) (*Config, error) {
 
 	canonicalPath := filepath.Join(canonicalDir, "sentinel-config.json")
 	legacyPath := filepath.Join(binDir, "sentinel-config.json")
+
+	var lastConfig *Config
+	var triedPaths []string
 
 	for _, path := range []string{canonicalPath, legacyPath} {
 		data, err := os.ReadFile(path)
@@ -109,7 +117,23 @@ func LoadConfig(binDir string) (*Config, error) {
 		if err := json.Unmarshal(data, &config); err != nil {
 			return nil, fmt.Errorf("error al parsear sentinel-config.json en %q: %w", path, err)
 		}
-		return &config, nil
+
+		triedPaths = append(triedPaths, path)
+		lastConfig = &config
+
+		// Config completo: retornar inmediatamente.
+		if config.Provisioning.ExtensionID != "" {
+			return &config, nil
+		}
+
+		// ExtensionID vacío: loguear y continuar al siguiente candidato.
+		// No retornamos todavía — puede que el fallback tenga el ID.
+	}
+
+	// Si encontramos al menos un config válido (aunque incompleto), retornarlo
+	// con una advertencia implícita. El caller (seed.go) logueará el valor.
+	if lastConfig != nil {
+		return lastConfig, nil
 	}
 
 	return nil, fmt.Errorf(

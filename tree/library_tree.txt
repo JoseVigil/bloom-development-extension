@@ -1,0 +1,141 @@
+BloomNucleus/
+├── .DS_Store
+├── bin/
+│   ├── bootstrap/
+│   │   └── static/
+│   ├── brain/
+│   │   ├── _internal/ [... dependencies]
+│   │   ├── brain
+│   │   └── help/
+│   │       ├── brain-ai-full.json
+│   │       ├── brain-ai-schema.json
+│   │       ├── brain-legacy.json
+│   │       ├── help-full.txt
+│   │       └── help.txt
+│   ├── chrome/
+│   ├── chrome-mac/
+│   │   └── Chromium.app/
+│   │       └── Contents/
+│   │           └──  Frameworks/
+│   ├── cortex/
+│   │   └── bloom-cortex.blx
+│   ├── engine/
+│   │   └── runtime/
+│   ├── host/
+│   │   └── bloom-host
+│   ├── metamorph/
+│   │   ├── .DS_Store
+│   │   ├── help/
+│   │   │   ├── metamorph_help.json
+│   │   │   └── metamorph_help.txt
+│   │   └── metamorph
+│   ├── node/
+│   │   └── node
+│   ├── nucleus/
+│   │   ├── help/
+│   │   │   ├── nucleus_help.json
+│   │   │   └── nucleus_help.txt
+│   │   ├── nucleus
+│   │   └── nucleus-governance.json
+│   ├── ollama/
+│   │   └── ollama
+│   ├── sensor/
+│   │   └── bloom-sensor
+│   ├── sentinel/
+│   │   ├── help/
+│   │   │   ├── sentinel_help.json
+│   │   │   └── sentinel_help.txt
+│   │   └── sentinel
+│   ├── temporal/
+│   │   ├── .DS_Store
+│   │   └── temporal
+│   └── vscode/
+├── config/
+│   ├── nucleus/
+│   │   └── nucleus-governance.json
+│   ├── nucleus.json
+│   ├── profile/
+│   │   └── cd82c807-3204-4145-8d98-bc15ed59c162/
+│   │       ├── com.bloom.synapse.cd82c807.json
+│   │       └── ignition_spec.json
+│   ├── profiles.json
+│   └── sentinel/
+│       └── sentinel-config.json
+├── history/
+│   └── workers/
+│       ├── capabilities_58926.json
+│       └── nucleus_worker.pid
+├── hooks/
+│   ├── post_launch/
+│   │   └── 00_generate_synapse_trace.py
+│   ├── profile_disconnected/
+│   │   └── 00_notify_temporal.py
+│   └── system_health/
+│       └── 00_health_check.py
+├── logs/
+│   ├── brain/
+│   │   ├── core/
+│   │   │   └── brain_core_20260524.log
+│   │   ├── profile/
+│   │   │   └── brain_profile_20260524.log
+│   │   ├── server/
+│   │   │   ├── brain_server_20260524.log
+│   │   │   ├── brain_server_event_bus_20260524.log
+│   │   │   └── brain_server_manager_20260524.log
+│   │   └── service/
+│   │       ├── brain_service.log
+│   │       └── brain_service_20260524.log
+│   ├── conductor/
+│   │   └── setup/
+│   │       └── conductor_setup_20260525.log
+│   ├── install/
+│   ├── nucleus/
+│   │   ├── control_plane/
+│   │   │   └── nucleus_control_plane_20260524.log
+│   │   ├── nucleus_brain_poller_20260524.log
+│   │   ├── nucleus_orchestration_20260524.log
+│   │   ├── nucleus_synapse_20260524.log
+│   │   ├── nucleus_temporal_20260524.log
+│   │   ├── service/
+│   │   │   ├── nucleus_service.log
+│   │   │   └── nucleus_service_20260524.log
+│   │   └── worker/
+│   │       └── worker_manager_20260524.log
+│   ├── sentinel/
+│   │   ├── profiles/
+│   │   │   └── cd82c807-3204-4145-8d98-bc15ed59c162/
+│   │   └── sentinel_core_20260524.log
+│   ├── telemetry.json
+│   └── temporal/
+│       └── server/
+│           └── temporal_server_20260524.log
+├── profiles/
+│   ├── .DS_Store
+│   └── cd82c807-3204-4145-8d98-bc15ed59c162/
+│       └── extension/
+│           ├── .DS_Store
+│           ├── assets/
+│           │   ├── 128x128.png
+│           │   ├── icon128.png
+│           │   └── icon16.png
+│           ├── background.js
+│           ├── content.js
+│           ├── discovery/
+│           │   ├── content-aistudio.js
+│           │   ├── discovery.js
+│           │   ├── discoveryProtocol.js
+│           │   ├── index.html
+│           │   ├── onboarding.js
+│           │   ├── script.js
+│           │   └── styles.css
+│           ├── harness/
+│           │   ├── index.html
+│           │   ├── ion.manifest.json
+│           │   └── ionpump_protocol.js
+│           ├── landing/
+│           └── manifest.json
+└── workers/
+    └── brain/
+        ├── events.jsonl
+        ├── service.pid
+        └── tcp_traffic.log

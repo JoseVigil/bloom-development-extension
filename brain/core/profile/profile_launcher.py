@@ -41,7 +41,11 @@ from typing import Dict, Any, Optional
 from datetime import datetime
 
 from brain.shared.logger import get_logger
-from brain.core.profile.session1_launcher import launch_in_user_session
+
+if sys.platform == "win32":
+    from brain.core.profile.session1_launcher import launch_in_user_session
+else:
+    launch_in_user_session = None  # No disponible en macOS/Linux
 
 logger = get_logger("brain.profile.launcher")
 

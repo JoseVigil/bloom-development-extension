@@ -23,6 +23,14 @@ API Win32 utilizada:
 Dependencias: solo ctypes (stdlib) — sin pywin32, sin Go, sin pipes.
 """
 
+import sys
+
+if sys.platform != "win32":
+    raise ImportError(
+        "session1_launcher solo es compatible con Windows. "
+        "En macOS/Linux se usa subprocess.Popen directamente."
+    )
+
 import ctypes
 import ctypes.wintypes as wt
 import os

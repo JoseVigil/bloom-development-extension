@@ -261,8 +261,8 @@ func HandleSeed(c *core.Core, alias string, isMaster bool, devMode bool) (string
 
 	// registerInWindows está definido en:
 	//   seed_windows.go → implementación real con registry
-	//   seed_unix.go    → no-op para Darwin/Linux
-	if err := registerInWindows(hostName, manifestPath); err != nil {
+	//   seed_unix.go    → copia manifest a NativeMessagingHosts estándar Y al user-data-dir del perfil
+	if err := registerInWindows(hostName, manifestPath, profileDir); err != nil {
 		c.Logger.Error("[SEED] No se pudo registrar Native Messaging: %v", err)
 	}
 

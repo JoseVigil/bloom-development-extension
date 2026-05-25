@@ -18,6 +18,7 @@
     "maxLogFiles": 5
   },
   "provisioning": {
-    "golden_key": ""
+    "golden_key": "",
+    "extension_id": "hpblclepliicmihaplldignhjdggnkdh"
   }
 }
