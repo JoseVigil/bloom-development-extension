@@ -48,6 +48,16 @@ const {
 const { installRuntime } = require('./runtime-installer');
 const { installChromium } = require('./chromium-installer');
 
+// ── Ollama service installer — condicional por plataforma ────────────────────
+const {
+  installOllamaService,
+  startOllamaService,
+  OLLAMA_SERVICE_NAME,
+  OLLAMA_DISPLAY_NAME
+} = process.platform === 'darwin'
+  ? require('./service-installer-ollama-darwin.js')
+  : require('./service-installer-ollama');
+
 // ── Sensor installer — condicional por plataforma ─────────────────────────────
 const { installSensor } = process.platform === 'darwin'
   ? require('./service-installer-sensor-darwin.js')
@@ -837,6 +847,26 @@ async function deployAllSystemBinaries(win) {
       results.vscode = { success: false, skipped: true };
     }
 
+    // ========================================================================
+    // 15. BOOTSTRAP CONTROL PLANE (bundle.js para Nucleus)
+    // ========================================================================
+    logger.info('\n🔌 BOOTSTRAP CONTROL PLANE');
+    if (await fs.pathExists(paths.bootstrapSource)) {
+      results.bootstrap = await copyDirectorySafe(
+        paths.bootstrapSource,
+        paths.bootstrapDir,
+        'Bootstrap Control Plane'
+      );
+      const bundlePath = path.join(paths.bootstrapDir, 'bundle.js');
+      if (!await fs.pathExists(bundlePath)) {
+        throw new Error(`bundle.js not found after bootstrap copy: ${bundlePath}`);
+      }
+      logger.success('✅ bootstrap/bundle.js verified');
+    } else {
+      logger.warn('⚠️ Bootstrap source not found, skipping');
+      results.bootstrap = { success: false, skipped: true };
+    }
+
     await nucleusManager.setOriginPath(paths.nucleusSource);
     await nucleusManager.completeMilestone(MILESTONE, results);
     return { success: true, results };
@@ -887,6 +917,45 @@ async function installNucleusService(win) {
       service_running: true
     });
     
+    return { success: true };
+
+  } catch (error) {
+    await nucleusManager.failMilestone(MILESTONE, error.message);
+    throw error;
+  }
+}
+
+async function installOllamaServiceStep(win) {
+  const MILESTONE = 'ollama_service_install';
+
+  if (nucleusManager.isMilestoneCompleted(MILESTONE)) {
+    logger.info(`⭐️ ${MILESTONE} completed, skipping`);
+    return { success: true, skipped: true };
+  }
+
+  await nucleusManager.startMilestone(MILESTONE);
+  emitProgress(win, 8, 12, 'Installing Ollama Service...');
+
+  try {
+    logger.separator('INSTALLING OLLAMA SERVICE');
+
+    logger.info('Installing Ollama LaunchAgent...');
+    await installOllamaService();
+
+    logger.info('Starting Ollama Service...');
+    const started = await startOllamaService();
+
+    if (!started) {
+      throw new Error('Ollama Service failed to start');
+    }
+
+    logger.success('✅ Ollama Service started');
+
+    await nucleusManager.completeMilestone(MILESTONE, {
+      service_running: true,
+      verify: { type: 'launchd_service_check', service: OLLAMA_SERVICE_NAME }
+    });
+
     return { success: true };
 
   } catch (error) {
@@ -1028,6 +1097,7 @@ async function installService(win) {
     // NOTA: Nucleus Service DEBE arrancar ANTES de seed
     // porque seed necesita Temporal workflows
     await installNucleusService(win);       // 7/11 - Arranca Temporal
+    await installOllamaServiceStep(win);    // 8/12 - Arranca Ollama
     await installSessionSensor(win);        // 8/11 — non-critical, cannot abort
     await runCertification(win);            // 9/11 - Verifica Temporal ready
     await seedMasterProfile(win);           // 10/11 - Usa Temporal

@@ -227,8 +227,8 @@ func checkSystemHealthParallel(ctx context.Context, s *Supervisor, appDataDir st
 		{"worker", func(ctx context.Context) ComponentHealth { return checkWorker(ctx, s, validate) }},
 		{"ollama", func(ctx context.Context) ComponentHealth { return checkOllama(ctx, s, validate) }},
 		{"control_plane", func(ctx context.Context) ComponentHealth { return checkControlPlane(ctx, s, validate) }},
-		{"vault", func(ctx context.Context) ComponentHealth { return checkVault(ctx, s, validate) }},
-		{"governance", func(ctx context.Context) ComponentHealth { return checkGovernance(ctx, s, validate) }},
+		{"vault", func(ctx context.Context) ComponentHealth { return checkVault(ctx, s, appDataDir, validate) }},
+		{"governance", func(ctx context.Context) ComponentHealth { return checkGovernance(ctx, s, appDataDir, validate) }},
 		{"brain_service", func(ctx context.Context) ComponentHealth { return checkBrainService(ctx, s, validate) }},
 		{"bloom_api", func(ctx context.Context) ComponentHealth { return checkBloomAPI(ctx, s, validate) }},
 		{"svelte_dev", func(ctx context.Context) ComponentHealth { return checkSvelteDev(ctx, s, validate) }},
@@ -927,16 +927,19 @@ func checkControlPlane(ctx context.Context, s *Supervisor, validate bool) Compon
 	return health
 }
 
-func checkVault(ctx context.Context, s *Supervisor, validate bool) ComponentHealth {
+func checkVault(ctx context.Context, s *Supervisor, appDataDir string, validate bool) ComponentHealth {
 	health := ComponentHealth{}
-	// En onboarding, BLOOM_DIR inválido implica que el vault tampoco está configurado
-	bloomDir := getBloomDir()
-	if bloomDir == "" || strings.ContainsAny(bloomDir, "<>|?*") {
+
+	// Check onboarding state first — vault does not exist until the user registers
+	// an account during onboarding. Attempting vault-status before that kills the
+	// subprocess ("signal: killed") because the vault binary / config is absent.
+	// nucleus.json is the authoritative source; if unreadable, fail-safe to PRE_ONBOARDING.
+	if !loadOnboardingCompleted(appDataDir) {
 		health.Healthy = true
-		health.State = "SKIPPED"
-		health.Error = "vault check skipped (onboarding mode)"
+		health.State = "PRE_ONBOARDING"
 		return health
 	}
+
 	nucleusExe, err := resolveNucleusExe()
 	if err != nil {
 		health.Healthy = false
@@ -947,10 +950,10 @@ func checkVault(ctx context.Context, s *Supervisor, validate bool) ComponentHeal
 	// --json es flag global de nucleus, debe ir antes del subcomando
 	out, err := exec.CommandContext(ctx, nucleusExe, "--json", "synapse", "vault-status").Output()
 	if err != nil {
-		// Workflow failure puede significar que el proyecto no está inicializado aún
-		health.Healthy = true
-		health.State = "SKIPPED"
-		health.Error = fmt.Sprintf("vault-status unavailable (pre-onboarding): %v", err)
+		// Onboarding is complete but vault-status still failed — report the real error.
+		health.Healthy = false
+		health.State = "FAILED"
+		health.Error = fmt.Sprintf("vault-status exited: %v", err)
 		return health
 	}
 	var vResult map[string]interface{}
@@ -971,8 +974,40 @@ func checkVault(ctx context.Context, s *Supervisor, validate bool) ComponentHeal
 	return health
 }
 
-func checkGovernance(ctx context.Context, s *Supervisor, validate bool) ComponentHealth {
+// loadOnboardingCompleted reads nucleus.json from appDataDir/config/nucleus.json
+// and returns the value of onboarding.completed. Returns false (fail-safe) if the
+// file cannot be read or the field is absent — treating an unreadable state file
+// the same as "onboarding not yet done" so we never produce false-positive errors.
+func loadOnboardingCompleted(appDataDir string) bool {
+	nucleusStatePath := filepath.Join(appDataDir, "config", "nucleus.json")
+	data, err := os.ReadFile(nucleusStatePath)
+	if err != nil {
+		return false // fail-safe: treat unreadable as pre-onboarding
+	}
+	var state struct {
+		Onboarding struct {
+			Completed bool `json:"completed"`
+		} `json:"onboarding"`
+	}
+	if err := json.Unmarshal(data, &state); err != nil {
+		return false // fail-safe: malformed file → pre-onboarding
+	}
+	return state.Onboarding.Completed
+}
+
+func checkGovernance(ctx context.Context, s *Supervisor, appDataDir string, validate bool) ComponentHealth {
 	health := ComponentHealth{}
+
+	// Check onboarding state first — it is the authoritative source of truth.
+	// If onboarding has not been completed, .ownership.json is legitimately absent:
+	// return PRE_ONBOARDING (healthy, no error) without touching the filesystem.
+	// If nucleus.json cannot be read we also default to PRE_ONBOARDING (fail-safe).
+	if !loadOnboardingCompleted(appDataDir) {
+		health.Healthy = true
+		health.State = "PRE_ONBOARDING"
+		return health
+	}
+
 	bloomDir := getBloomDir()
 	if bloomDir == "" {
 		health.Healthy = true

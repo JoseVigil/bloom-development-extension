@@ -1,5 +1,5 @@
-// service-installer-nucleus-darwin.js
-// Equivalente macOS de service-installer-nucleus.js
+// service-installer-ollama-darwin.js
+// Equivalente macOS de service-installer-nucleus-darwin.js para Ollama
 
 'use strict';
 
@@ -9,9 +9,9 @@ const { execSync } = require('child_process');
 const { paths }    = require('../config/paths');
 const os           = require('os');
 
-const NUCLEUS_SERVICE_NAME = 'com.bloom.nucleus';
-const NUCLEUS_DISPLAY_NAME = 'Bloom Nucleus Service';
-const PLIST_NAME           = `${NUCLEUS_SERVICE_NAME}.plist`;
+const OLLAMA_SERVICE_NAME = 'com.bloom.ollama';
+const OLLAMA_DISPLAY_NAME = 'Bloom Ollama Service';
+const PLIST_NAME          = `${OLLAMA_SERVICE_NAME}.plist`;
 
 function getPlistPath() {
   return path.join(os.homedir(), 'Library', 'LaunchAgents', PLIST_NAME);
@@ -25,12 +25,11 @@ function generatePlist(binaryPath, logPath) {
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>${NUCLEUS_SERVICE_NAME}</string>
+    <string>${OLLAMA_SERVICE_NAME}</string>
     <key>ProgramArguments</key>
     <array>
         <string>${binaryPath}</string>
-        <string>service</string>
-        <string>start</string>
+        <string>serve</string>
     </array>
     <key>WorkingDirectory</key>
     <string>${workDir}</string>
@@ -38,10 +37,10 @@ function generatePlist(binaryPath, logPath) {
     <dict>
         <key>HOME</key>
         <string>${os.homedir()}</string>
-        <key>BLOOM_ROOT</key>
-        <string>${path.join(os.homedir(), 'Library', 'BloomNucleus')}</string>
-        <key>BLOOM_LOGS</key>
-        <string>${path.join(os.homedir(), 'Library', 'BloomNucleus', 'logs')}</string>
+        <key>OLLAMA_HOST</key>
+        <string>127.0.0.1:11434</string>
+        <key>OLLAMA_MODELS</key>
+        <string>${path.join(os.homedir(), 'Library', 'BloomNucleus', 'models')}</string>
     </dict>
     <key>RunAtLoad</key>
     <true/>
@@ -57,20 +56,20 @@ function generatePlist(binaryPath, logPath) {
 </plist>`;
 }
 
-async function installNucleusService() {
-  console.log('\n🧠 INSTALANDO NUCLEUS SERVICE (macOS LaunchAgent)\n');
+async function installOllamaService() {
+  console.log('\n🦙 INSTALANDO OLLAMA SERVICE (macOS LaunchAgent)\n');
 
-  const nucleusExe = path.join(paths.binDir, 'nucleus', 'nucleus');
+  const ollamaExe = path.join(paths.binDir, 'ollama', 'ollama');
 
-  if (!await fs.pathExists(nucleusExe)) {
-    throw new Error(`Nucleus binary not found: ${nucleusExe}`);
+  if (!await fs.pathExists(ollamaExe)) {
+    throw new Error(`Ollama binary not found: ${ollamaExe}`);
   }
 
-  await fs.chmod(nucleusExe, 0o755);
+  await fs.chmod(ollamaExe, 0o755);
 
-  const logDir     = path.join(paths.logsDir, 'nucleus', 'service');
+  const logDir     = path.join(paths.logsDir, 'ollama', 'service');
   await fs.ensureDir(logDir);
-  const serviceLog = path.join(logDir, 'nucleus_service.log');
+  const serviceLog = path.join(logDir, 'ollama_service.log');
 
   const launchAgentsDir = path.join(os.homedir(), 'Library', 'LaunchAgents');
   await fs.ensureDir(launchAgentsDir);
@@ -82,12 +81,12 @@ async function installNucleusService() {
     await fs.remove(plistPath);
   }
 
-  await fs.writeFile(plistPath, generatePlist(nucleusExe, serviceLog), 'utf8');
-  console.log(`✅ Nucleus LaunchAgent plist escrito: ${plistPath}`);
+  await fs.writeFile(plistPath, generatePlist(ollamaExe, serviceLog), 'utf8');
+  console.log(`✅ Ollama LaunchAgent plist escrito: ${plistPath}`);
   return true;
 }
 
-async function startNucleusService() {
+async function startOllamaService() {
   const plistPath = getPlistPath();
   try {
     execSync(`launchctl load "${plistPath}"`, { stdio: 'pipe' });
@@ -95,15 +94,15 @@ async function startNucleusService() {
     let pid = '-';
     try {
       const listOutput = execSync(
-        `launchctl list ${NUCLEUS_SERVICE_NAME}`,
+        `launchctl list ${OLLAMA_SERVICE_NAME}`,
         { encoding: 'utf8', stdio: 'pipe' }
       );
       pid = listOutput.trim().split('\t')[0];
     } catch (_) {}
     if (pid && pid !== '-') {
-      console.log(`✅ Nucleus LaunchAgent corriendo (PID: ${pid})`);
+      console.log(`✅ Ollama LaunchAgent corriendo (PID: ${pid})`);
     } else {
-      console.log('✅ Nucleus LaunchAgent cargado (PID pendiente — RunAtLoad lo arrancará)');
+      console.log('✅ Ollama LaunchAgent cargado (PID pendiente — RunAtLoad lo arrancará)');
     }
     return true;
   } catch (e) {
@@ -112,16 +111,16 @@ async function startNucleusService() {
   }
 }
 
-async function removeNucleusService() {
+async function removeOllamaService() {
   const plistPath = getPlistPath();
   try { execSync(`launchctl unload "${plistPath}"`, { stdio: 'ignore' }); } catch (_) {}
   try { await fs.remove(plistPath); } catch (_) {}
 }
 
 module.exports = {
-  installNucleusService,
-  startNucleusService,
-  removeNucleusService,
-  NUCLEUS_SERVICE_NAME,
-  NUCLEUS_DISPLAY_NAME,
+  installOllamaService,
+  startOllamaService,
+  removeOllamaService,
+  OLLAMA_SERVICE_NAME,
+  OLLAMA_DISPLAY_NAME,
 };

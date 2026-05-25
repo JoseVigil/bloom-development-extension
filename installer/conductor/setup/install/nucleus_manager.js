@@ -182,6 +182,14 @@ const EMPTY_NUCLEUS = {
       error: null
     },
 
+    ollama_service_install: {
+      status: 'pending',
+      started_at: null,
+      completed_at: null,
+      verification: { method: 'launchd_service_check', service_name: 'com.bloom.ollama', expected_state: 'running', result: null },
+      error: null
+    },
+
     sensor_install: {
       status: 'pending',
       started_at: null,
@@ -555,6 +563,7 @@ class NucleusManager {
       'metamorph_audit',
       'brain_service_install',
       'nucleus_service_install',
+      'ollama_service_install',
       'sensor_install',
       'certification',
       'nucleus_seed',
