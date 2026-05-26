@@ -297,10 +297,10 @@ const paths = {
   // Chrome
   chromeDir: platform === 'win32'
     ? path.join(baseDir, 'bin', 'chrome-win')
-    : path.join(baseDir, 'bin', 'chrome'),
+    : path.join(baseDir, 'bin', 'chrome-mac'),
   chromeExe: platform === 'win32'
     ? path.join(baseDir, 'bin', 'chrome-win', 'chrome.exe')
-    : path.join(baseDir, 'bin', 'chrome', 'Chromium.app', 'Contents', 'MacOS', 'Chromium'),
+    : path.join(baseDir, 'bin', 'chrome-mac', 'Chromium.app', 'Contents', 'MacOS', 'Chromium'),
   
   // Extension template (copied per-profile by Brain)
   extensionDir: path.join(baseDir, 'bin', 'extension'),

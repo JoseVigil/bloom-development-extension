@@ -99,7 +99,7 @@ var allComponents = []component{
 	{
 		Key: "cortex",
 		SourceFn: func(r string) string {
-			return filepath.Join(r, "cortex", "dist", "bloom-cortex.crx")
+			return filepath.Join(r, "installer", "native", "bin", "cortex", "bloom-cortex.blx")
 		},
 		DestFn: func(b string) string { return filepath.Join(b, "bin", "cortex") },
 	},

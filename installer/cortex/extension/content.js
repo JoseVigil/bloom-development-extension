@@ -1,6 +1,11 @@
 // ============================================================================
-// BLOOM NUCLEUS: SYNAPSE ACTUATOR v2.2 (content.js)
+// BLOOM NUCLEUS: SYNAPSE ACTUATOR v2.3 (content.js)
 // Filosofía: Músculo ciego. Ejecuta comandos primitivos sin pensar.
+//
+// CHANGELOG v2.3
+// Agrega handlers explícitos para IONPUMP_PROTOCOL_MANIFEST v2.0:
+//   DOM_FOCUS   — foco en elemento sin click ni typing (handler propio)
+//   DOM_EXTRACT — alias explícito de DOM_READ (Brain/IonPump usa este nombre)
 //
 // CHANGELOG v2.2
 // Agrega soporte para Ion SDK v2.0:
@@ -9,7 +14,7 @@
 //   DOM_WATCH_URL — detecta cambios de URL en SPAs (pushState + popstate)
 //   DOM_UNWATCH   — limpia todos los observers activos al salir de página
 //
-// Sin cambios en comandos existentes. Retrocompatible con v2.1.
+// Sin cambios en comandos existentes. Retrocompatible con v2.2.
 // ============================================================================
 
 console.log("⚡ [Synapse Actuator] Injected");
@@ -478,6 +483,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           result = executeRead(payload.selector, payload.options);
           break;
 
+        // DOM_EXTRACT — alias de DOM_READ para compatibilidad con IONPUMP_PROTOCOL_MANIFEST v2.0
+        // Brain/IonPump envía DOM_EXTRACT; content.js lo resuelve igual que DOM_READ.
+        case "DOM_EXTRACT":
+          result = executeRead(payload.selector, payload.options);
+          break;
+
         case "DOM_UPLOAD":
           result = executeUpload(payload.selector, payload.files);
           break;
@@ -485,6 +496,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         case "DOM_SCROLL":
           result = executeScroll(payload.target, payload.options);
           break;
+
+        // DOM_FOCUS — foco en un elemento sin click ni typing
+        case "DOM_FOCUS": {
+          const focusEl = document.querySelector(payload.selector);
+          if (!focusEl) throw new Error(`Element not found: ${payload.selector}`);
+          focusEl.focus();
+          result = { focused: true, selector: payload.selector };
+          break;
+        }
 
         case "DOM_WAIT":
           result = await executeWait(payload.selector, payload.options);
@@ -553,5 +573,5 @@ chrome.runtime.sendMessage({
   timestamp: Date.now()
 });
 
-console.log("✅ [Synapse Actuator] Ready — v2.2 (Ion SDK support)");
+console.log("✅ [Synapse Actuator] Ready — v2.3 (DOM_FOCUS + DOM_EXTRACT + Ion SDK support)");
 console.log(`🔒 [Synapse Actuator] Slave mode timeout: ${SLAVE_MODE_TIMEOUT_MS}ms`);

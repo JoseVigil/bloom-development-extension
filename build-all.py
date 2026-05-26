@@ -836,10 +836,8 @@ def build_bootstrap() -> StepResult:
             cmd0 = [_NPM, "install"]
             code0, out0 = run_streaming(cmd0, cwd=webview_app_dir)
             if code0 != 0:
-                tail = "
-".join(out0.splitlines()[-20:]) if out0 else "(sin output)"
-                return StepResult("Bootstrap", False, error=f"npm install en webview/app fallo:
-{tail}")
+                tail = "\n".join(out0.splitlines()[-20:]) if out0 else "(sin output)"
+                return StepResult("Bootstrap", False, error=f"npm install en webview/app fallo:\n{tail}")
             log("  webview/app node_modules instalados")
         else:
             log("Paso 0/5: webview/app node_modules up-to-date - skipping npm install")

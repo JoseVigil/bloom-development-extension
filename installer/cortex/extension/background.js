@@ -141,13 +141,17 @@ async function loadConfig() {
     };
 
     // step: paso de onboarding activo inyectado por Ignition (Gap 2)
+    // FIX Bug 1 (v3.0): step es un string ("" o "github_auth"), no un entero.
+    // La regex anterior (\d+) fallaba silenciosamente con cualquier valor string.
     const stepMatcher = {
-      step: /"step"\s*:\s*(\d+)/
+      step: /"step"\s*:\s*"([^"]*)"/
     };
 
     // service: providers de registro activos inyectados por Ignition
+    // FIX Bug 2 (v3.0): [^"]+ requería al menos un carácter — fallaba con service:"".
+    // Cambiado a [^"]* para aceptar string vacío.
     const serviceMatcher = {
-      service: /"service"\s*:\s*"([^"]+)"/
+      service: /"service"\s*:\s*"([^"]*)"/
     };
 
     const landingMatchers = {
@@ -230,7 +234,8 @@ async function loadConfig() {
             let value;
             if (key === 'register') {
               value = match[1] === 'true';
-            } else if (['total_launches', 'uptime', 'intents_done', 'step'].includes(key)) {
+            } else if (['total_launches', 'uptime', 'intents_done'].includes(key)) {
+              // FIX (v3.0): 'step' removido de esta lista — es string, no entero.
               value = parseInt(match[1], 10);
             } else {
               value = match[1];
@@ -286,6 +291,13 @@ async function loadConfig() {
       enforceDiscoveryWindowSize();
     }
 
+    // ── HARNESS SIEMPRE ACTIVO ────────────────────────────────────────────
+    // Intentar cargar harness.synapse.config.js independientemente del modo
+    // y del flag --dev. Si el archivo no existe la extensión simplemente
+    // omite el Harness sin romper nada. Si existe, el Harness queda operativo
+    // en cualquier perfil, incluyendo producción.
+    await loadHarnessConfig();
+
   } catch (e) {
     console.error('[Synapse] ✗ Config load failed:', e);
     console.error('[Synapse] Stack trace:', e.stack);
@@ -293,8 +305,80 @@ async function loadConfig() {
 }
 
 // ============================================================================
-// WINDOW SIZE ENFORCEMENT
+// HARNESS CONFIG — siempre activo (no requiere --dev)
 // ============================================================================
+
+/**
+ * loadHarnessConfig()
+ *
+ * Intenta cargar harness.synapse.config.js via fetch.
+ * Si el archivo no existe (perfil sin Harness) falla silenciosamente.
+ * Si existe, expone self.HARNESS_CONFIG y lo almacena en config.harness
+ * para que el Harness pueda leerlo.
+ *
+ * NOTA: importScripts no se usa aquí porque en Service Workers post-instalación
+ * falla con el mismo error que el config principal. fetch es el camino seguro.
+ */
+async function loadHarnessConfig() {
+  const harnessFile = 'harness.synapse.config.js';
+
+  try {
+    const url = chrome.runtime.getURL(harnessFile);
+    const resp = await fetch(url);
+
+    if (!resp.ok) {
+      // 404 esperado en perfiles sin harness/index.html — no es un error.
+      console.log('[Harness] harness.synapse.config.js not found — Harness inactive');
+      return;
+    }
+
+    const text = await resp.text();
+    console.log('[Harness] ✓ harness.synapse.config.js found — activating Harness');
+
+    // Evaluar el script para que registre self.HARNESS_CONFIG
+    try {
+      // eslint-disable-next-line no-new-func
+      new Function(text)();
+    } catch (evalErr) {
+      console.warn('[Harness] Could not eval harness config, attempting regex parse:', evalErr.message);
+    }
+
+    // Si eval funcionó, self.HARNESS_CONFIG está disponible.
+    // Si no, hacer parse manual de los campos críticos.
+    if (self.HARNESS_CONFIG) {
+      config.harness = { ...self.HARNESS_CONFIG };
+      console.log('[Harness] ✓ HARNESS_CONFIG loaded via self:', config.harness);
+    } else {
+      // Fallback: regex parse de profileId y launchId para el Harness Feed
+      const harnessConfig = {};
+      const harnessMatchers = {
+        profileId: /"profileId"\s*:\s*"([^"]+)"/,
+        launchId:  /"launchId"\s*:\s*"([^"]+)"/,
+        bridge_name: /"bridge_name"\s*:\s*"([^"]+)"/
+      };
+      for (const [key, regex] of Object.entries(harnessMatchers)) {
+        const m = text.match(regex);
+        if (m) harnessConfig[key] = m[1];
+      }
+      config.harness = harnessConfig;
+      console.log('[Harness] ✓ HARNESS_CONFIG loaded via regex fallback:', config.harness);
+    }
+
+    // Notificar a cualquier página del Harness que ya esté abierta
+    chrome.runtime.sendMessage({
+      event: 'HARNESS_CONFIG_READY',
+      harness: config.harness
+    }).catch(() => {
+      // Silently fail — el Harness puede no estar abierto aún
+    });
+
+  } catch (err) {
+    // Red error distinto de 404 — loguear pero no interrumpir el boot
+    console.warn('[Harness] Could not load harness config:', err.message);
+  }
+}
+
+
 
 /**
  * applyWindowLayout(layout)
