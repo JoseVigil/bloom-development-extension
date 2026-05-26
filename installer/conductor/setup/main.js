@@ -812,12 +812,12 @@ function registerInstallHandlers() {
   ipcMain.handle('extension:heartbeat', async () => {
     try {
       const status = await checkHostStatus();
-
       return {
         success: true,
         chromeConnected: status.connected,
         port: status.port,
-        profiles: status.profiles_registered
+        profiles: status.profiles_registered,
+        services: status.services
       };
     } catch (error) {
       return {

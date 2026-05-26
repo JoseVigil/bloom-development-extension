@@ -1,12 +1,5 @@
 bloom-development-extension/
 └── setup/
-    ├── .DS_Store
-    ├── AppData/
-    │   └── Local/
-    │       └── BloomNucleus/
-    │           ├── logs/
-    │           │   └── telemetry.json
-    │           └── profiles/
     ├── app.manifest
     ├── assets/
     │   ├── bloom.ico
@@ -22,8 +15,8 @@ bloom-development-extension/
     │   ├── admin-utils.js
     │   ├── menu-builder.js
     │   └── window-manager.js
+    ├── dist/ [... build output]
     ├── install/
-    │   ├── .DS_Store
     │   ├── chromium-installer.js
     │   ├── diagnose/
     │   │   ├── diagnose-service.js
@@ -37,6 +30,7 @@ bloom-development-extension/
     │   ├── service-installer-brain.js
     │   ├── service-installer-nucleus-darwin.js
     │   ├── service-installer-nucleus.js
+    │   ├── service-installer-ollama-darwin.js
     │   ├── service-installer-sensor-darwin.js
     │   └── service-installer-sensor.js
     ├── ipc/
@@ -69,6 +63,8 @@ bloom-development-extension/
     │   ├── index.html
     │   ├── renderer.js
     │   └── styles.css
+    ├── tree/
+    │   └── brain_tree.txt
     ├── utils/
     │   ├── exec-helper.js
     │   └── repair-tools.js

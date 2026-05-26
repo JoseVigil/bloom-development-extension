@@ -682,3 +682,20 @@ ionpump metamorph
 https://claude.ai/chat/038042a8-1d83-4d31-af05-d0a89567f06d
 uitool
 https://claude.ai/chat/c8d0a563-0d46-45b7-a4a9-d93b8f449fab
+
+elias
+BISP Vectors Document
+https://claude.ai/chat/21fd29dc-9bf6-44e2-a85c-605cf23a69d1
+roamtouch
+https://claude.ai/chat/15a47352-6141-4346-a1d9-2756cbc083d4
+
+bloomaut
+temporal backup with hook
+https://claude.ai/chat/f6b15827-8a9f-4fed-a7fe-dbd4e5fef4c8
+
+notimation
+brain intent state 
+https://claude.ai/chat/9ca55c39-13ac-4d62-9bb9-8715bfcc21cd
+nenes 
+implementacion de intent en brain con bsip
+https://claude.ai/chat/a64aea0a-848f-455b-859b-e5c735b70b58
