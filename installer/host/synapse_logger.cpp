@@ -108,7 +108,12 @@ std::string SynapseLogManager::get_base_log_directory() {
     }
     return "";
 #else
-    return "/tmp/bloom-nucleus/logs";
+    // macOS: canonical base is ~/Library/BloomNucleus/logs
+    const char* home = std::getenv("HOME");
+    if (home && home[0] != '\0') {
+        return std::string(home) + "/Library/BloomNucleus/logs";
+    }
+    return "/tmp/bloom-nucleus/logs"; // last-resort fallback
 #endif
 }
 
@@ -141,7 +146,12 @@ std::string SynapseLogManager::get_bloom_root() {
     p = strip_last_component(p); // → .../BloomNucleus
     return p;
 #else
-    return "/tmp/bloom-nucleus";
+    // macOS: canonical root is ~/Library/BloomNucleus
+    const char* home = std::getenv("HOME");
+    if (home && home[0] != '\0') {
+        return std::string(home) + "/Library/BloomNucleus";
+    }
+    return "/tmp/bloom-nucleus"; // last-resort fallback
 #endif
 }
 
@@ -215,7 +225,14 @@ void SynapseLogManager::initialize(const std::string& p_profile_id,
                 target = user_base_dir + "/logs/nm_init_diag.log";
 #endif
             } else {
+#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
                 target = "C:\\Windows\\Temp\\nm_init_diag.log";
+#else
+                const char* home = std::getenv("HOME");
+                target = (home && home[0] != '\0')
+                    ? std::string(home) + "/Library/BloomNucleus/logs/nm_init_diag.log"
+                    : "/tmp/bloom-nucleus/nm_init_diag.log";
+#endif
             }
         }
         std::ofstream df(target, std::ios::app);

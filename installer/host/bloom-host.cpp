@@ -1036,9 +1036,15 @@ int main(int argc, char* argv[]) {
                         ? pre_user_base
                         : strip_last(strip_last(strip_last(exe_path)));
                     if (base.empty() || base == exe_path) {
+#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
                         const char* appdata = std::getenv("LOCALAPPDATA");
                         if (appdata && appdata[0] != '\0')
                             base = std::string(appdata) + "\\BloomNucleus";
+#else
+                        const char* home = std::getenv("HOME");
+                        if (home && home[0] != '\0')
+                            base = std::string(home) + "/Library/BloomNucleus";
+#endif
                     }
                     if (!base.empty()) {
 #ifdef _WIN32
@@ -1325,8 +1331,13 @@ int main(int argc, char* argv[]) {
                 std::string base = !cli_user_base_dir.empty()
                     ? cli_user_base_dir
                     : ([]() -> std::string {
+#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
                         const char* a = std::getenv("LOCALAPPDATA");
                         return a ? std::string(a) + "\\BloomNucleus" : "";
+#else
+                        const char* h = std::getenv("HOME");
+                        return h ? std::string(h) + "/Library/BloomNucleus" : "";
+#endif
                       })();
                 if (!base.empty()) {
 #ifdef _WIN32
@@ -1390,7 +1401,11 @@ int main(int argc, char* argv[]) {
                 }
 
                 if (!telemetry_base.empty()) {
+#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
                     std::string telemetry_path = telemetry_base + "\\logs\\telemetry.json";
+#else
+                    std::string telemetry_path = telemetry_base + "/logs/telemetry.json";
+#endif
                     std::cerr << "[HOST] attempting initialize_from_telemetry: '" << telemetry_path << "'" << std::endl;
                     logger_initialized = g_logger.initialize_from_telemetry(cli_launch_id, telemetry_path);
                     if (!logger_initialized) {
