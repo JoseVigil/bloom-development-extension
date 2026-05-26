@@ -738,30 +738,35 @@ function registerLaunchHandlers() {
 // IPC HANDLERS - INSTALL MODE
 // ============================================================================
 function registerInstallHandlers() {
-  ipcMain.handle('install:start', async (event, options = {}) => {
-    try { 
-      log('🚀 Starting installation...');
 
+  ipcMain.handle('install:start', async (event, options = {}) => {
+    try {
       const { installService } = require('./install/installer');
       const result = await installService(BrowserWindow.getAllWindows()[0]);
 
       if (result.success) {
-        log('✅ Installation completed successfully');
+        // ── NUEVO: emitir los dos eventos que el renderer espera ──────────────
+        const win = BrowserWindow.getAllWindows()[0];
+        if (win && !win.isDestroyed()) {
+          win.webContents.send('heartbeat:starting', {
+            profile_id: result.profile_id
+          });
+          // Dar 500ms para que el renderer muestre la pantalla de heartbeat
+          await new Promise(r => setTimeout(r, 500));
+          win.webContents.send('heartbeat:validated', {
+            profile_id: result.profile_id
+          });
+        }
+        // ─────────────────────────────────────────────────────────────────────
 
         setTimeout(() => {
-          log('💓 Starting heartbeat after installation');
           startHeartbeat();
         }, 2000);
       }
 
       return result;
     } catch (error) {
-      console.error('❌ Installation failed:', error.message);
-      return {
-        success: false,
-        error: error.message,
-        stack: error.stack
-      };
+      return { success: false, error: error.message };
     }
   });
 
