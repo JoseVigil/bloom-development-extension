@@ -344,13 +344,14 @@ func runRollout(c *core.Core, dryRun bool, only string) error {
 	return nil
 }
 
-// resolveRepoRoot resolves the repository root. Resolution order:
+// resolveRepoRoot resolves the repository root (today) or the standalone
+// installer root (production). Resolution order:
 //
 //  1. BLOOM_REPO_ROOT env var — CI / local override, no recompile needed.
 //  2. nucleus.json installation.origin_path — canonical source of truth.
-//     CONTRATO: origin_path apunta a la raíz del repo directamente
-//     (normalizado por setOriginPath en nucleus_manager.js). Sin traversal.
-//     Mirrors the logic in internal/supervisor/dev_start.go:getBloomDir().
+//     origin_path points to installer/native/bin/<platform>/<component>; walking up
+//     5 levels yields the repo root. Mirrors the logic in
+//     internal/supervisor/dev_start.go:getBloomDir().
 //  3. BLOOM_DIR env var — last-resort fallback used by dev_start.go.
 func resolveRepoRoot() string {
 	if r := os.Getenv("BLOOM_REPO_ROOT"); r != "" {
@@ -365,8 +366,11 @@ func resolveRepoRoot() string {
 			} `json:"installation"`
 		}
 		if json.Unmarshal(data, &cfg) == nil && cfg.Installation.OriginPath != "" {
-			// origin_path ya apunta a la raíz del repo — sin traversal.
-			return cfg.Installation.OriginPath
+			p := cfg.Installation.OriginPath
+			for i := 0; i < 5; i++ {
+				p = filepath.Dir(p)
+			}
+			return p
 		}
 	}
 

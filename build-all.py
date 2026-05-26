@@ -794,22 +794,31 @@ def build_cortex() -> StepResult:
 
 def build_bootstrap() -> StepResult:
     """
-    Bootstrap: cinco pasos en orden:
+    Bootstrap: cinco pasos que dejan el resultado completo en installer/native/bin/bootstrap/.
+    El rollout a NUCLEUS_HOME es un paso POSTERIOR y separado (rollout_bootstrap).
+
+    Pasos:
       1. version-bootstrap.py  — incrementa build_number en bootstrap.meta.json
       2. npm run compile        — compila TypeScript → out/  (requerido por esbuild)
-      3. npm run build:bundle   — genera installer/native/bin/bootstrap/bundle.js
-      4. copiar static/         — assets estáticos (swagger-ui, etc.) junto al bundle
-      5. rollout a NUCLEUS_HOME — despliega bundle.js + archivos fuente + static/
-                                  a NUCLEUS_HOME/bin/bootstrap/ (paridad con Windows)
+      3. npm run build:bundle   — el bundler escribe bundle.js en installer/native/bin/bootstrap/
+      4. copiar static/         — assets estáticos desde installer/bootstrap/static/ al bin nativo
+      5. copiar fuentes runtime — bootstrap.meta.json, server-bootstrap.js, VERSION, etc.
+                                  desde installer/bootstrap/ al bin nativo
+
+    Directorio de origen de fuentes : installer/bootstrap/
+    Directorio de build (bin nativo): installer/native/bin/bootstrap/
     """
-    bootstrap_dir = BUILDS["bootstrap"]
-    script_py     = bootstrap_dir / "version-bootstrap.py"     # type: ignore[operator]
+    import shutil
+
+    bootstrap_src_dir = BUILDS["bootstrap"]                                    # installer/bootstrap/
+    bootstrap_bin_dir = ROOT / "installer" / "native" / "bin" / "bootstrap"   # bin nativo (fijo, sin arch)
+    script_py         = bootstrap_src_dir / "version-bootstrap.py"             # type: ignore[operator]
 
     if not script_py.exists():
         return StepResult("Bootstrap", False,
-                          error=f"version-bootstrap.py no encontrado en: {bootstrap_dir}")
+                          error=f"version-bootstrap.py no encontrado en: {bootstrap_src_dir}")
 
-    # Paso 1: versionar
+    # Paso 1: versionar (escribe bootstrap.meta.json en installer/bootstrap/)
     log("Paso 1/5: Incrementando build number ...")
     cmd = [sys.executable, script_py.name]
     code, out, _ = run(cmd, cwd=script_py.parent)
@@ -825,7 +834,7 @@ def build_bootstrap() -> StepResult:
         tail = "\n".join(out2.splitlines()[-20:]) if out2 else "(sin output)"
         return StepResult("Bootstrap", False, error=f"npm run compile falló:\n{tail}")
 
-    # Paso 3: generar bundle.js
+    # Paso 3: generar bundle.js → el bundler escribe directamente en bootstrap_bin_dir
     log("Paso 3/5: Generando bundle.js (npm run build:bundle) ...")
     cmd3 = [_NPM, "run", "build:bundle"]
     code3, out3 = run_streaming(cmd3, cwd=ROOT)
@@ -833,74 +842,96 @@ def build_bootstrap() -> StepResult:
         tail = "\n".join(out3.splitlines()[-20:]) if out3 else "(sin output)"
         return StepResult("Bootstrap", False, error=f"npm run build:bundle falló:\n{tail}")
 
-    bundle_path = ROOT / "installer/native/bin/bootstrap/bundle.js"
+    bundle_path = bootstrap_bin_dir / "bundle.js"
     size_kb = f"{bundle_path.stat().st_size / 1024:.1f} KB" if bundle_path.exists() else "no encontrado"
 
-    # Paso 4: copiar assets estáticos junto al bundle
-    import shutil
+    # Paso 4: copiar assets estáticos al bin nativo
     log("Paso 4/5: Copiando assets estáticos ...")
-    static_src  = ROOT / "installer" / "bootstrap" / "static"
-    static_dest = ROOT / "installer" / "native" / "bin" / "bootstrap" / "static"
+    static_src  = bootstrap_src_dir / "static"          # type: ignore[operator]
+    static_dest = bootstrap_bin_dir / "static"
     if static_src.exists():
         shutil.copytree(static_src, static_dest, dirs_exist_ok=True)
         log(f"  static/ → {static_dest}")
     else:
         log(f"  ⚠ {static_src} no encontrado — swagger-ui puede fallar en runtime")
 
-    # Paso 5: rollout a NUCLEUS_HOME
-    # Copia installer/native/bin/bootstrap/ (bundle.js, static/) +
-    # los archivos fuente de installer/bootstrap/ (bootstrap.meta.json,
-    # bundle.js.map, server-bootstrap.js, VERSION, version-bootstrap.py)
-    # → NUCLEUS_HOME/bin/bootstrap/
-    # Necesario porque bootControlPlane() en service.go busca el bundle en
-    # NUCLEUS_HOME/bin/bootstrap/bundle.js, no en el repo. Sin este paso el
-    # Control Plane (puertos 48215 y 4124) nunca levanta.
-    # Los archivos fuente se incluyen para paridad con el deploy de Windows.
-    log("Paso 5/5: Desplegando bootstrap a NUCLEUS_HOME ...")
-    bundle_src_dir = ROOT / "installer" / "native" / "bin" / "bootstrap"
-    bundle_dst_dir = NUCLEUS_HOME / "bin" / "bootstrap"
+    # Paso 5: copiar archivos de runtime desde installer/bootstrap/ al bin nativo
+    # Estos son los archivos que el bundler NO genera; viven en el directorio fuente
+    # y deben estar presentes en el bin nativo para que el rollout a NUCLEUS_HOME
+    # pueda copiar un directorio completo y autosuficiente.
+    log("Paso 5/5: Copiando archivos de runtime al bin nativo ...")
+    src_files = [
+        ("bootstrap.meta.json",  False),   # metadata de versión (generado en paso 1)
+        ("bundle.js.map",        False),   # sourcemap (puede no existir en CI)
+        ("server-bootstrap.js",  True),    # crítico: requerido por bootControlPlane
+        ("VERSION",              True),    # crítico: leído por nucleus en startup
+        ("version-bootstrap.py", False),   # utilidad de versionado
+    ]
+    missing_critical: list[str] = []
+    for fname, critical in src_files:
+        src_f = bootstrap_src_dir / fname   # type: ignore[operator]
+        dst_f = bootstrap_bin_dir / fname
+        if src_f.exists():
+            shutil.copy2(src_f, dst_f)
+            log(f"  {fname} → {dst_f}")
+        elif critical:
+            log(f"  ❌ {fname} no encontrado en installer/bootstrap/ — REQUERIDO")
+            missing_critical.append(fname)
+        else:
+            log(f"  ⚠ {fname} no encontrado en installer/bootstrap/ — omitido")
+
+    if missing_critical:
+        return StepResult(
+            "Bootstrap", False,
+            error=(
+                f"Archivos críticos faltantes en {bootstrap_src_dir}:\n"
+                + "\n".join(f"  • {f}" for f in missing_critical)
+                + "\nVerificá que installer/bootstrap/ está completo en el repo."
+            ),
+        )
+
+    built = sum(1 for f in bootstrap_bin_dir.rglob("*") if f.is_file())
+    log(f"  ✅ bootstrap build: {built} archivo(s) → {bootstrap_bin_dir}")
+    return StepResult("Bootstrap", True, output=f"bundle.js ({size_kb}) → {bootstrap_bin_dir}")
+
+
+def rollout_bootstrap() -> StepResult:
+    """
+    Sincroniza installer/native/bin/bootstrap/ → NUCLEUS_HOME/bin/bootstrap/.
+
+    Se llama automáticamente después de build_bootstrap() (igual que rollout_component
+    para los componentes Go). El directorio nativo ya contiene todo: bundle.js,
+    static/, server-bootstrap.js, VERSION, bootstrap.meta.json — no hay que volver
+    a copiar desde installer/bootstrap/.
+
+    Necesario porque bootControlPlane() en service.go busca el bundle en
+    NUCLEUS_HOME/bin/bootstrap/bundle.js. Sin este paso el Control Plane
+    (puertos 48215 y 4124) nunca levanta.
+    """
+    import shutil
+
+    bootstrap_bin_dir = ROOT / "installer" / "native" / "bin" / "bootstrap"
+    bundle_dst_dir    = NUCLEUS_HOME / "bin" / "bootstrap"
+
+    if not bootstrap_bin_dir.exists():
+        return StepResult(
+            "Rollout:Bootstrap", False,
+            error=(
+                f"Directorio de build no encontrado: {bootstrap_bin_dir}\n"
+                "¿Corriste build_bootstrap() antes de rollout_bootstrap()?"
+            ),
+        )
+
+    log(f"Copiando bootstrap: {bootstrap_bin_dir} → {bundle_dst_dir}")
     try:
         bundle_dst_dir.mkdir(parents=True, exist_ok=True)
-        # Copiar bundle.js + static/ desde el directorio de build
-        shutil.copytree(bundle_src_dir, bundle_dst_dir, dirs_exist_ok=True)
-        # Copiar archivos fuente desde installer/bootstrap/ para paridad con Windows:
-        # bootstrap.meta.json, bundle.js.map, server-bootstrap.js, VERSION, version-bootstrap.py
-        #
-        # Archivos marcados como críticos son requeridos para que el Control Plane
-        # (bootControlPlane en service.go) levante correctamente. Si faltan, el
-        # paso retorna error en lugar de continuar silenciosamente.
-        src_files = [
-            ("bootstrap.meta.json",  False),
-            ("bundle.js.map",        False),
-            ("server-bootstrap.js",  True),   # crítico: requerido por bootControlPlane
-            ("VERSION",              True),   # crítico: leído por nucleus en startup
-            ("version-bootstrap.py", False),
-        ]
-        missing_critical: list[str] = []
-        for fname, critical in src_files:
-            src_f = bootstrap_dir / fname          # type: ignore[operator]
-            if src_f.exists():
-                shutil.copy2(src_f, bundle_dst_dir / fname)
-            elif critical:
-                log(f"  ❌ {fname} no encontrado en installer/bootstrap/ — REQUERIDO")
-                missing_critical.append(fname)
-            else:
-                log(f"  ⚠ {fname} no encontrado en installer/bootstrap/ — omitido")
-        if missing_critical:
-            return StepResult(
-                "Bootstrap", False,
-                error=(
-                    f"Archivos críticos de bootstrap faltantes en {bootstrap_dir}:\n"
-                    + "\n".join(f"  • {f}" for f in missing_critical)
-                    + "\nVerificá que installer/bootstrap/ está completo en el repo."
-                ),
-            )
+        shutil.copytree(bootstrap_bin_dir, bundle_dst_dir, dirs_exist_ok=True)
         deployed = sum(1 for f in bundle_dst_dir.rglob("*") if f.is_file())
         log(f"  ✅ bootstrap: {deployed} archivo(s) → {bundle_dst_dir}")
     except OSError as exc:
-        return StepResult("Bootstrap", False, error=f"Rollout a NUCLEUS_HOME falló: {exc}")
+        return StepResult("Rollout:Bootstrap", False, error=f"Rollout a NUCLEUS_HOME falló: {exc}")
 
-    return StepResult("Bootstrap", True, output=f"bundle.js ({size_kb}) → {bundle_dst_dir}")
+    return StepResult("Rollout:Bootstrap", True, output=f"{deployed} archivos → {bundle_dst_dir}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1324,6 +1355,13 @@ def main() -> None:
             log(f"── Rollout: desplegando '{key}' a NUCLEUS_HOME ──")
             rollout_result = rollout_component(key)
             rollout_result.name = f"Rollout:{name}"
+            _print_result(rollout_result)
+            results.append(rollout_result)
+
+        if result.ok and not result.skipped and key == "bootstrap":
+            log("")
+            log("── Rollout: sincronizando bootstrap a NUCLEUS_HOME ──")
+            rollout_result = rollout_bootstrap()
             _print_result(rollout_result)
             results.append(rollout_result)
 
