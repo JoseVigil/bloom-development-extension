@@ -18,7 +18,23 @@ function getPlistPath() {
 }
 
 function generatePlist(binaryPath, logPath) {
-  const workDir = path.dirname(binaryPath);
+  const workDir   = path.dirname(binaryPath);
+  const bloomRoot = path.join(os.homedir(), 'Library', 'BloomNucleus');
+
+  // PATH compuesto para el LaunchAgent:
+  //   - /usr/local/bin + /opt/homebrew/bin  → Homebrew (Intel y Apple Silicon)
+  //   - /usr/bin:/bin                        → sistema base (launchctl, etc.)
+  //   - paths.nodeDir                        → node bundleado de Bloom (npm/npx)
+  //   - path.dirname(binaryPath)             → nucleus propio
+  const servicePath = [
+    '/usr/local/bin',
+    '/opt/homebrew/bin',
+    '/usr/bin',
+    '/bin',
+    paths.nodeDir,
+    workDir,
+  ].join(':');
+
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -36,12 +52,14 @@ function generatePlist(binaryPath, logPath) {
     <string>${workDir}</string>
     <key>EnvironmentVariables</key>
     <dict>
+        <key>PATH</key>
+        <string>${servicePath}</string>
         <key>HOME</key>
         <string>${os.homedir()}</string>
         <key>BLOOM_ROOT</key>
-        <string>${path.join(os.homedir(), 'Library', 'BloomNucleus')}</string>
+        <string>${bloomRoot}</string>
         <key>BLOOM_LOGS</key>
-        <string>${path.join(os.homedir(), 'Library', 'BloomNucleus', 'logs')}</string>
+        <string>${path.join(bloomRoot, 'logs')}</string>
     </dict>
     <key>RunAtLoad</key>
     <true/>

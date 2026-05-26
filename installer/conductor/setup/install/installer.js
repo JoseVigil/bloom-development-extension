@@ -172,25 +172,52 @@ async function launchMasterProfile(win) {
   }
 
   await nucleusManager.startMilestone(MILESTONE);
-  emitProgress(win, 11, 11, 'Preparing master profile for launch...');
+  emitProgress(win, 11, 11, 'Launching master profile...');
 
   try {
+    logger.separator('LAUNCHING MASTER PROFILE');
+
     const profileId = nucleusManager.state.master_profile;
     if (!profileId) {
       throw new Error('master_profile not set — seed must have failed');
     }
 
-    // El launch real lo hace el Conductor al primer arranque via onboarding-handlers.js
-    // El installer solo verifica que el seed dejó el master_profile en nucleus.json
-    logger.info(`✅ Master profile ready: ${profileId}`);
-    logger.info('   Conductor will launch on first start');
+    logger.info(`Launching profile: ${profileId}`);
+    logger.info('   Running: nucleus --json synapse launch <profileId> --mode discovery');
+
+    // Invocar el launch real. Temporal debe estar activo (garantizado por certification).
+    // Sentinel + Chromium tardan ~5-10s en levantar; usar timeout generoso.
+    const result = await executeNucleusCommand(
+      ['--json', 'synapse', 'launch', profileId, '--mode', 'discovery']
+    );
+
+    if (!result || !result.success) {
+      throw new Error(`Launch failed: ${result?.error || JSON.stringify(result)}`);
+    }
+
+    if (!result.extension_loaded) {
+      throw new Error(
+        `Extension not loaded after launch — chrome_pid: ${result.chrome_pid}, state: ${result.state}`
+      );
+    }
+
+    logger.success(`✅ Master profile launched`);
+    logger.info(`   profile_id:      ${result.profile_id}`);
+    logger.info(`   launch_id:       ${result.launch_id}`);
+    logger.info(`   chrome_pid:      ${result.chrome_pid}`);
+    logger.info(`   debug_port:      ${result.debug_port}`);
+    logger.info(`   extension_loaded: ${result.extension_loaded}`);
+    logger.info(`   state:           ${result.state}`);
 
     await nucleusManager.completeMilestone(MILESTONE, {
-      profile_id: profileId,
-      launch_delegated_to: 'conductor'
+      profile_id:       result.profile_id,
+      launch_id:        result.launch_id,
+      chrome_pid:       result.chrome_pid,
+      extension_loaded: result.extension_loaded,
+      state:            result.state,
     });
 
-    return { success: true, profile_id: profileId };
+    return result;
 
   } catch (error) {
     await nucleusManager.failMilestone(MILESTONE, error.message);
