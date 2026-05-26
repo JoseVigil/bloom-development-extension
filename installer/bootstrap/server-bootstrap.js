@@ -212,13 +212,54 @@ async function startSvelteDevServer() {
     return null;
   }
 
-  // npm.cmd en Windows, npm en Unix
-  const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+  // Resolver el path absoluto de npm.
+  // El Node embebido de Nucleus (bin/node/node) puede no tener en su PATH
+  // el directorio de nvm/homebrew donde vive npm. Estrategia en orden:
+  //   1. which/where con env: process.env (hereda PATH del proceso padre)
+  //   2. NVM_BIN env var (seteado por nvm cuando cargó el entorno)
+  //   3. Paths conocidos de homebrew y sistema
+  //   4. Fallback a 'npm'/'npm.cmd' (último recurso)
+  const { execSync } = require('child_process');
+  let npmCmd;
+  if (process.platform === 'win32') {
+    try {
+      npmCmd = execSync('where npm', { encoding: 'utf8', env: process.env }).split('\n')[0].trim();
+    } catch (_) {
+      npmCmd = 'npm.cmd';
+    }
+  } else {
+    try {
+      // env: process.env es crítico — sin esto execSync corre con PATH mínimo
+      // y no encuentra npm de nvm aunque esté disponible en el shell padre.
+      npmCmd = execSync('which npm', { encoding: 'utf8', env: process.env }).trim();
+    } catch (_) {
+      const candidates = [
+        process.env.NVM_BIN ? `${process.env.NVM_BIN}/npm` : null,
+        '/opt/homebrew/bin/npm',
+        '/usr/local/bin/npm',
+        '/usr/bin/npm',
+        'npm',
+      ].filter(Boolean);
+      npmCmd = candidates.find(p => {
+        try { fs.accessSync(p, fs.constants.X_OK); return true; } catch { return false; }
+      }) || 'npm';
+    }
+  }
+
+  console.log(`[Bootstrap] ℹ️  npm resolved: ${npmCmd}`);
 
   const child = spawn(npmCmd, ['run', 'dev'], {
     cwd: svelteDir,
     detached: false,  // CORRECCIÓN: true causa EINVAL bajo NSSM en Windows
     stdio: 'ignore',  // no heredar stdin/stdout del bootstrap
+  });
+
+  // CRÍTICO: sin este handler, ENOENT (npm no encontrado) emite un unhandled
+  // error event que mata el proceso Node entero — y con él el Control Plane.
+  child.on('error', (err) => {
+    console.warn(`[Bootstrap] ⚠️  Svelte dev server failed to spawn: ${err.message}`);
+    console.warn(`[Bootstrap]    npm path used: ${npmCmd}`);
+    console.warn('[Bootstrap]    Control Plane continues without Svelte dev server');
   });
 
   child.unref(); // el event loop del padre no espera a este hijo

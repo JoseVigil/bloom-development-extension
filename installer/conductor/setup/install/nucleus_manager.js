@@ -659,8 +659,10 @@ class NucleusManager {
     }
 
     // Paso 2: subir por el árbol buscando la raíz del repo.
-    // Marcadores que sólo existen en la raíz del repo, no en subdirectorios.
-    const ROOT_MARKERS = ['go.work', 'package.json', '.git'];
+    // Usar solo .git — es el único marcador que existe exclusivamente en la raíz.
+    // package.json y go.work aparecen en subdirectorios (installer/, webview/app/, etc.)
+    // y causan que el walk se detenga prematuramente en el subdirectorio incorrecto.
+    const ROOT_MARKERS = ['.git'];
     let candidate = resolved;
     let found = false;
 
