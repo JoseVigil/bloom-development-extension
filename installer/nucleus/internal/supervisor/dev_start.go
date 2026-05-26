@@ -398,8 +398,10 @@ func getBloomNucleusBase() string {
 
 // getBloomDir returns the root of the Bloom repo by reading nucleus.json.
 // nucleus.json lives at <BloomNucleusBase>/config/nucleus.json.
-// The field installation.origin_path points to the installer bin dir —
-// walking up 4 levels yields the repo root.
+//
+// CONTRATO: installation.origin_path contiene la raíz del repo directamente
+// (normalizado por setOriginPath en nucleus_manager.js). No se sube ningún nivel.
+//
 // Falls back to BLOOM_DIR env var if nucleus.json is unavailable or
 // origin_path is null/empty (e.g. during initial install).
 func getBloomDir() string {
@@ -413,12 +415,8 @@ func getBloomDir() string {
 			} `json:"installation"`
 		}
 		if json.Unmarshal(data, &cfg) == nil && cfg.Installation.OriginPath != "" {
-			// origin_path = .../installer/native/bin/<platform> — walk up 4 levels
-			p := cfg.Installation.OriginPath
-			for i := 0; i < 4; i++ {
-				p = filepath.Dir(p)
-			}
-			return p
+			// origin_path ya apunta a la raíz del repo — sin traversal.
+			return cfg.Installation.OriginPath
 		}
 	}
 

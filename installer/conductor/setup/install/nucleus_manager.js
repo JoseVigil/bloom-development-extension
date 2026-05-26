@@ -627,14 +627,75 @@ class NucleusManager {
   }
 
   /**
-   * Registra el path de origen de los binarios (usado por getBloomDir en Go)
-   * @param {string} originPath - Path absoluto a la carpeta de binarios fuente
+   * Registra el path de origen del repo (usado por getBloomDir en Go y rollout.go).
+   *
+   * CONTRATO: origin_path almacena SIEMPRE la raíz del repo, no un subdirectorio.
+   * Los consumidores en Go leen origin_path y lo usan directamente sin traversal.
+   *
+   * El caller puede pasar cualquiera de estos formatos — todos se normalizan aquí:
+   *   • El ejecutable:       .../installer/native/bin/darwin_x64/nucleus/nucleus
+   *   • El dir del binario:  .../installer/native/bin/darwin_x64/nucleus
+   *   • La raíz del repo:    .../bloom-development-extension          (ya correcto)
+   *
+   * La heurística para detectar la raíz: subir directorios hasta encontrar un
+   * marcador inequívoco del repo (go.work, package.json, .git en la raíz).
+   * Si no se encuentra el marcador, subir 5 niveles desde el directorio del binario
+   * como fallback (paridad con rollout.go: 5 niveles desde <platform>/<component>).
+   *
+   * @param {string} originPath - Path absoluto, cualquier nivel dentro del repo.
    */
   async setOriginPath(originPath) {
-    this.state.installation.origin_path = originPath;
+    let resolved = originPath;
+
+    // Paso 1: si es un archivo, tomar su directorio contenedor.
+    try {
+      const stat = fs.statSync(resolved);
+      if (stat.isFile()) {
+        resolved = path.dirname(resolved);
+        logger.warn(`setOriginPath: path era ejecutable, tomando dirname → ${resolved}`);
+      }
+    } catch (_) {
+      // No existe en disco (edge case en tests) — continuar con el valor tal cual.
+    }
+
+    // Paso 2: subir por el árbol buscando la raíz del repo.
+    // Marcadores que sólo existen en la raíz del repo, no en subdirectorios.
+    const ROOT_MARKERS = ['go.work', 'package.json', '.git'];
+    let candidate = resolved;
+    let found = false;
+
+    for (let depth = 0; depth < 10; depth++) {
+      const hasMarker = ROOT_MARKERS.some(m => {
+        try { fs.statSync(path.join(candidate, m)); return true; } catch { return false; }
+      });
+      if (hasMarker) {
+        resolved = candidate;
+        found = true;
+        break;
+      }
+      const parent = path.dirname(candidate);
+      if (parent === candidate) break; // llegamos al filesystem root
+      candidate = parent;
+    }
+
+    // Paso 3: fallback — subir 5 niveles desde el directorio del binario
+    // (paridad con rollout.go: installer/native/bin/<platform>/<component> → raíz).
+    if (!found) {
+      logger.warn(`setOriginPath: marcador de raíz no encontrado en ${resolved}; aplicando fallback de 5 niveles`);
+      resolved = originPath;
+      try {
+        const stat = fs.statSync(resolved);
+        if (stat.isFile()) resolved = path.dirname(resolved);
+      } catch (_) {}
+      for (let i = 0; i < 5; i++) resolved = path.dirname(resolved);
+    }
+
+    logger.info(`setOriginPath: origin_path → ${resolved}${found ? ' (via marcador)' : ' (via fallback 5 niveles)'}`);
+
+    this.state.installation.origin_path = resolved;
     this.state.installation.origin_type = 'dev_repo';
     await writeNucleus(this.state);
-    logger.info(`origin_path registrado: ${originPath}`);
+    logger.info(`origin_path registrado: ${resolved}`);
   }
 
   /**

@@ -865,19 +865,36 @@ def build_bootstrap() -> StepResult:
         shutil.copytree(bundle_src_dir, bundle_dst_dir, dirs_exist_ok=True)
         # Copiar archivos fuente desde installer/bootstrap/ para paridad con Windows:
         # bootstrap.meta.json, bundle.js.map, server-bootstrap.js, VERSION, version-bootstrap.py
+        #
+        # Archivos marcados como críticos son requeridos para que el Control Plane
+        # (bootControlPlane en service.go) levante correctamente. Si faltan, el
+        # paso retorna error en lugar de continuar silenciosamente.
         src_files = [
-            "bootstrap.meta.json",
-            "bundle.js.map",
-            "server-bootstrap.js",
-            "VERSION",
-            "version-bootstrap.py",
+            ("bootstrap.meta.json",  False),
+            ("bundle.js.map",        False),
+            ("server-bootstrap.js",  True),   # crítico: requerido por bootControlPlane
+            ("VERSION",              True),   # crítico: leído por nucleus en startup
+            ("version-bootstrap.py", False),
         ]
-        for fname in src_files:
+        missing_critical: list[str] = []
+        for fname, critical in src_files:
             src_f = bootstrap_dir / fname          # type: ignore[operator]
             if src_f.exists():
                 shutil.copy2(src_f, bundle_dst_dir / fname)
+            elif critical:
+                log(f"  ❌ {fname} no encontrado en installer/bootstrap/ — REQUERIDO")
+                missing_critical.append(fname)
             else:
                 log(f"  ⚠ {fname} no encontrado en installer/bootstrap/ — omitido")
+        if missing_critical:
+            return StepResult(
+                "Bootstrap", False,
+                error=(
+                    f"Archivos críticos de bootstrap faltantes en {bootstrap_dir}:\n"
+                    + "\n".join(f"  • {f}" for f in missing_critical)
+                    + "\nVerificá que installer/bootstrap/ está completo en el repo."
+                ),
+            )
         deployed = sum(1 for f in bundle_dst_dir.rglob("*") if f.is_file())
         log(f"  ✅ bootstrap: {deployed} archivo(s) → {bundle_dst_dir}")
     except OSError as exc:
