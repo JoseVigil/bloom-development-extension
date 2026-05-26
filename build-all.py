@@ -818,6 +818,34 @@ def build_bootstrap() -> StepResult:
         return StepResult("Bootstrap", False,
                           error=f"version-bootstrap.py no encontrado en: {bootstrap_src_dir}")
 
+    # Paso 0: garantizar node_modules en webview/app (Svelte dev server)
+    # npm install solo corre si node_modules no existe o package.json es mas nuevo.
+    # Sin esto, vite no se encuentra y el dev server falla con sh: vite: command not found.
+    webview_app_dir = ROOT / "webview" / "app"
+    webview_node_modules = webview_app_dir / "node_modules"
+    webview_pkg = webview_app_dir / "package.json"
+    if webview_pkg.exists():
+        lock_file = webview_node_modules / ".package-lock.json"
+        needs_install = (
+            not webview_node_modules.exists() or
+            not lock_file.exists() or
+            webview_pkg.stat().st_mtime > lock_file.stat().st_mtime
+        )
+        if needs_install:
+            log("Paso 0/5: Instalando dependencias de webview/app (npm install) ...")
+            cmd0 = [_NPM, "install"]
+            code0, out0 = run_streaming(cmd0, cwd=webview_app_dir)
+            if code0 != 0:
+                tail = "
+".join(out0.splitlines()[-20:]) if out0 else "(sin output)"
+                return StepResult("Bootstrap", False, error=f"npm install en webview/app fallo:
+{tail}")
+            log("  webview/app node_modules instalados")
+        else:
+            log("Paso 0/5: webview/app node_modules up-to-date - skipping npm install")
+    else:
+        log(f"Paso 0/5: webview/app/package.json no encontrado en {webview_app_dir} - skipping")
+
     # Paso 1: versionar (escribe bootstrap.meta.json en installer/bootstrap/)
     log("Paso 1/5: Incrementando build number ...")
     cmd = [sys.executable, script_py.name]
