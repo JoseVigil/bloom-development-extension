@@ -158,6 +158,70 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 // ============================================================================
+// SYNAPSE API — window.bloomSynapse
+// Namespace dedicado para el protocolo Synapse. No colisiona con window.api
+// ni window.electronAPI porque usa un nombre propio.
+//
+// IMPORTANTE: contextBridge.exposeInMainWorld() solo puede llamarse una vez
+// por nombre. Si en algún momento se fusionan preloads, usar el merge manual
+// del documento SYNAPSE_BRIDGE_IMPLEMENTATION.md (sección 3.2).
+// ============================================================================
+
+const { SYNAPSE_IPC_CHANNEL } = require('../shared/synapse-bridge');
+
+contextBridge.exposeInMainWorld('bloomSynapse', {
+
+  /**
+   * Suscripción a eventos Synapse en tiempo real.
+   * Retorna una función para cancelar la suscripción (call en beforeunload).
+   *
+   * Tipos de evento disponibles: STATUS, HEARTBEAT, HANDSHAKE, HOST_READY,
+   * INTENT, ION, PROFILE, SYNAPSE_EVENT, ERROR.
+   * Ver SYNAPSE_BRIDGE_IMPLEMENTATION.md §5 para la estructura completa.
+   *
+   * @param   {(event: object) => void} callback
+   * @returns {() => void}  unsub
+   *
+   * Ejemplo:
+   *   const off = window.bloomSynapse.onEvent(e => {
+   *     if (e.type === 'HANDSHAKE') console.log('conectado', e._profileId);
+   *   });
+   *   window.addEventListener('beforeunload', off);
+   */
+  onEvent(callback) {
+    const handler = (_ipcEvent, payload) => callback(payload);
+    ipcRenderer.on(SYNAPSE_IPC_CHANNEL, handler);
+    return () => ipcRenderer.removeListener(SYNAPSE_IPC_CHANNEL, handler);
+  },
+
+  /**
+   * Seed + launch de un perfil nuevo.
+   * Emite eventos de progreso via onEvent() mientras el Promise está pendiente.
+   *
+   * @param   {string}  alias
+   * @param   {object}  [options]
+   * @param   {boolean} [options.master=false]
+   * @param   {string}  [options.mode='discovery']
+   * @returns {Promise<{ success: boolean, profileId?: string, launchId?: string, error?: string }>}
+   */
+  seedAndLaunch(alias, options = {}) {
+    return ipcRenderer.invoke('synapse:seedAndLaunch', { alias, options });
+  },
+
+  /**
+   * Launch de un perfil ya existente.
+   *
+   * @param   {string}  profileIdOrAlias
+   * @param   {object}  [options]
+   * @param   {string}  [options.mode='landing']
+   * @returns {Promise<{ success: boolean, profileId?: string, launchId?: string, error?: string }>}
+   */
+  launch(profileIdOrAlias, options = {}) {
+    return ipcRenderer.invoke('synapse:launch', { profileIdOrAlias, options });
+  },
+});
+
+// ============================================================================
 // LOGGING
 // ============================================================================
 

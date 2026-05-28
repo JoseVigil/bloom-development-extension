@@ -196,6 +196,11 @@ function handleCLIOutput(onDone) {
 const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const { spawn } = require('child_process');
 const { paths } = require('./config/paths');
+const { SynapseBridge } = require('../shared/synapse-bridge');
+
+// Bridge activo durante la fase post-instalación (conectToBrain → PROFILE_CONNECTED).
+// Una sola instancia a la vez; se destruye al recibir HANDSHAKE o ERROR.
+let _installBridge = null;
 
 // ── CLI MODE gate ─────────────────────────────────────────────────────────────
 if (IS_CLI_MODE) {
@@ -502,10 +507,18 @@ function updateUIStatus(status) {
   mainWin.webContents.send('server-status', status);
 }
 
+
 // ============================================================================
-// SYNAPSE POLL — Polling real post-instalación
-// Consulta nucleus --json synapse status <profileId> hasta que la extensión
-// haga handshake con el host, luego emite heartbeat:validated (real).
+// SYNAPSE POLL — DEPRECADO: reemplazado por SynapseBridge.connectToBrain()
+//
+// Esta función usaba polling CLI (nucleus --json synapse status) para detectar
+// PROFILE_CONNECTED. El bridge TCP push-based en install:start la reemplaza:
+// - Más rápido: recibe el evento en ~0ms vs el próximo ciclo de 3s
+// - Sin race condition: Brain emite el evento al momento del handshake
+// - Sin carga de subprocesos: una conexión TCP vs N invocaciones de nucleus
+//
+// Se conserva como fallback de emergencia. Para habilitarlo reemplazar
+// _installBridge.connectToBrain() en install:start por esta función.
 // ============================================================================
 async function _pollSynapseUntilConnected(win, profileId) {
   const MAX_ATTEMPTS = 40;  // 40 × 3s = 120s máximo
@@ -831,20 +844,83 @@ function registerInstallHandlers() {
       if (result.success) {
         const profileId = result.profile_id;
 
-        // installService() ya confirmó extension_loaded: true en el paso 11/11
-        // (nucleus --json synapse launch retorna el estado real del perfil lanzado).
-        // No hay nada que poll-ear: la información está en result ahora mismo.
-
         if (win && !win.isDestroyed()) {
-          // Anunciar inicio — la pantalla heartbeat-screen muestra el círculo
           win.webContents.send('heartbeat:starting', { profile_id: profileId });
         }
 
-        // Siempre usar polling real — extension_loaded del launch solo confirma Chrome spawneó,
-        // NO confirma PROFILE_CONNECTED (handshake completo con el host).
-        // El log muestra que PROFILE_CONNECTED ocurre ~22s después del launch.
-        log(`💓 [install:start] Iniciando synapse poll para confirmar PROFILE_CONNECTED`);
-        await _pollSynapseUntilConnected(win, profileId);
+        // ── Bridge TCP: reemplaza _pollSynapseUntilConnected ─────────────────
+        // installService() ya lanzó Chrome+Sentinel via nucleus launch.
+        // Ahora conectamos al ServerManager de Brain (puerto 5678) y esperamos
+        // el broadcast PROFILE_CONNECTED — señal push que Brain emite cuando
+        // Cortex hace REGISTER_HOST exitosamente. Sin polling, sin race condition.
+        log(`🔗 [Synapse Bridge] Conectando a Brain para perfil: ${profileId}`);
+
+        // Destruir bridge anterior si quedó colgado de una instalación previa
+        if (_installBridge) { _installBridge.destroy(); _installBridge = null; }
+
+        _installBridge = new SynapseBridge({
+          mainWindow:    win,
+          nucleusBinary: NUCLEUS_EXE,
+          verbose:       IS_DEV,
+        });
+
+        // Traducir eventos del bridge → canales heartbeat:* existentes en el renderer
+        _installBridge.on('synapse:event', (payload) => {
+          if (!win || win.isDestroyed()) {
+            if (_installBridge) { _installBridge.destroy(); _installBridge = null; }
+            return;
+          }
+
+          switch (payload.type) {
+
+            // Fases internas del bridge → mantener animación del heartbeat-screen
+            case 'STATUS':
+              win.webContents.send('heartbeat:launch-done', {
+                profile_id: profileId,
+                state:            payload.phase    || 'CONNECTING',
+                extension_loaded: false,
+              });
+              break;
+
+            // REGISTER_ACK: Brain confirmó que somos un Sentinel activo
+            // (no es el handshake completo aún; solo mantener UI animada)
+            case 'REGISTER_ACK':
+              win.webContents.send('heartbeat:launch-done', {
+                profile_id: profileId,
+                state:            'HANDSHAKE',
+                extension_loaded: false,
+              });
+              break;
+
+            // HANDSHAKE: PROFILE_CONNECTED del perfil activo → handshake de 3 fases completo.
+            // Brain lo emite cuando Chrome Host llama REGISTER_HOST y ProfileStateManager
+            // setea el perfil como ONLINE. Es la señal más sólida posible.
+            case 'HANDSHAKE':
+              log(`✅ [Synapse Bridge] PROFILE_CONNECTED recibido — handshake completo (${profileId})`);
+              win.webContents.send('heartbeat:validated', {
+                profile_id:       profileId,
+                state:            'RUNNING',
+                extension_loaded: true,
+              });
+              if (_installBridge) { _installBridge.destroy(); _installBridge = null; }
+              setTimeout(() => startHeartbeat(), 2000);
+              break;
+
+            // ERROR de conexión TCP
+            case 'ERROR':
+              error(`❌ [Synapse Bridge] Error TCP: ${payload.message}`);
+              // No abortar la UI; el bridge ya reintenta con backoff.
+              // Solo loguear para que el operador vea el problema sin mostrar error al usuario.
+              break;
+
+            // Otros eventos (HEARTBEAT, INTENT, ION, etc.) → ignorar en setup
+            default:
+              break;
+          }
+        });
+
+        // Conectar a Brain sin relanzar el perfil (el installer ya lo lanzó)
+        _installBridge.connectToBrain(profileId, result.launch_id || null);
       }
 
       return result;
@@ -1189,11 +1265,25 @@ app.whenReady().then(async () => {
 
   mainWindow = await createWindow();
 
+  // ── Synapse Bridge handlers ──────────────────────────────────────────────
+  // Expone synapse:seedAndLaunch y synapse:launch vía window.bloomSynapse.
+  // En install mode permite que el renderer (o código futuro) dispare un
+  // launch directamente desde la UI sin pasar por install:start.
+  // El install:start crea su propio bridge con connectToBrain() — no hay conflicto.
+  if (!IS_LAUNCH_MODE) {
+    const { registerSynapseHandlers } = require('./ipc/setup-synapse-handlers');
+    registerSynapseHandlers(() => mainWindow, {
+      nucleusBinary: NUCLEUS_EXE,
+      verbose:       IS_DEV,
+    });
+    log('🔗 Synapse handlers registered (setup mode)');
+  }
+
   if (IS_LAUNCH_MODE) {
     log('💓 Starting heartbeat (Launch Mode)');
     startHeartbeat();
   } else {
-    log('ℹ️ Heartbeat will start after installation completes');
+    log('ℹ️ Heartbeat will start after installation completes (via Synapse Bridge)');
   }
 });
 
@@ -1219,6 +1309,7 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   log('👋 Application closing...');
   stopHeartbeat();
+  if (_installBridge) { _installBridge.destroy(); _installBridge = null; }
 });
 
 process.on('uncaughtException', (error) => {

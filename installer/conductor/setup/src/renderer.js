@@ -157,15 +157,20 @@ class InstallationManager {
       if (sub) {
         const stateMsg = {
           // Fases reales del Discovery Protocol (del trace: initializing→searching→handshake→heartbeat→ready)
-          'LAUNCHING':  'Lanzando Chrome · Cargando extensión...',
-          'SEARCHING':  'Extensión activa · Buscando host nativo...',
-          'HANDSHAKE':  'Estableciendo handshake · Canal seguro...',
-          'HEARTBEAT':  'Verificando heartbeat · Casi listo...',
-          'READY':      'Sistema listo · Validando conexión...',
+          'LAUNCHING':    'Lanzando Chrome · Cargando extensión...',
+          'SEARCHING':    'Extensión activa · Buscando host nativo...',
+          'HANDSHAKE':    'Estableciendo handshake · Canal seguro...',
+          'HEARTBEAT':    'Verificando heartbeat · Casi listo...',
+          'READY':        'Sistema listo · Validando conexión...',
+          // Fases del Synapse Bridge (TCP)
+          'CONNECTING':   'Conectando a Brain · Abriendo canal...',
+          'CONNECTED':    'Brain conectado · Esperando handshake...',
+          'DISCONNECTED': 'Reconectando a Brain...',
+          'DEGRADED':     'Sin señal · Verificando estado...',
           // Estados de fallback del polling
-          'DISCOVERY':  'Descubriendo perfil · Sentinel activo...',
-          'CONNECTED':  'Conectado · Validando handshake...',
-          'UNKNOWN':    'Iniciando Sentinel...'
+          'DISCOVERY':    'Descubriendo perfil · Sentinel activo...',
+          'CONNECTED':    'Conectado · Validando handshake...',
+          'UNKNOWN':      'Iniciando Sentinel...'
         };
         sub.textContent = stateMsg[data.state] || `Conectando... (${data.state})`;
       }
@@ -188,6 +193,36 @@ class InstallationManager {
       if (ob) ob.disabled = false;
     });
 
+    // ── Synapse Bridge events (canal push directo vía window.bloomSynapse) ──
+    // Complementa los heartbeat:* de arriba. main.js ya traduce los eventos
+    // del bridge a heartbeat:* para mantener compatibilidad hacia atrás.
+    // Este listener sirve para reaccionar a eventos más granulares del protocolo
+    // (HOST_READY, INTENT, etc.) que los heartbeat:* no exponen.
+    if (window.bloomSynapse) {
+      this._synapseUnsub = window.bloomSynapse.onEvent((event) => {
+        switch (event.type) {
+          case 'HOST_READY':
+            console.log('🧠 [Synapse] Brain Host listo — esperando handshake...');
+            break;
+          case 'HANDSHAKE':
+            // main.js ya emitirá heartbeat:validated; solo loguear aquí
+            console.log(`✅ [Synapse] PROFILE_CONNECTED recibido (profileId: ${event._profileId})`);
+            break;
+          case 'HEARTBEAT':
+            console.log('💓 [Synapse] Heartbeat de Brain recibido');
+            break;
+          case 'ERROR':
+            // El bridge reintenta con backoff; solo mostrar en consola
+            console.warn(`⚠️ [Synapse] Error TCP: ${event.message}`);
+            break;
+          default:
+            break;
+        }
+      });
+    } else {
+      console.warn('⚠️ [Renderer] window.bloomSynapse no disponible — preload-synapse no integrado');
+    }
+
     try {
       // ── Lanzar instalación (bloqueante, los eventos ya están escuchando) ──
       const result = await this.api.installService();
@@ -200,6 +235,11 @@ class InstallationManager {
       this.profileId = result.profileId || result.profile_id || this.profileId;
 
       console.log("✅ [AUTO] installService() resolvió. Profile:", this.profileId);
+
+      // Limpiar suscripción Synapse cuando la instalación termina exitosamente.
+      // El listener de heartbeat:validated ya manejó la transición de UI;
+      // no necesitamos más eventos granulares desde el renderer.
+      if (this._synapseUnsub) { this._synapseUnsub(); this._synapseUnsub = null; }
 
       return { success: true };
 
