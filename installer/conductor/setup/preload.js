@@ -49,6 +49,7 @@ const API = {
   repairBridge: () => ipcRenderer.invoke('repair-bridge'),
   validateInstallation: () => ipcRenderer.invoke('validate-installation'),
   runDiagnostics: () => ipcRenderer.invoke('run-diagnostics'),
+  synapseStatusPoll: (profileId) => ipcRenderer.invoke('synapse:status-poll', profileId),
 
   // ==========================================
   // LAUNCH MODE HANDLERS (Existing)

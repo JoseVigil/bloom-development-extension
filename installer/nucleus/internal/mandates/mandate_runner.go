@@ -20,7 +20,7 @@ func HooksBaseDir() string {
 		return filepath.Join(os.Getenv("LOCALAPPDATA"), "BloomNucleus", "hooks")
 	case "darwin":
 		home, _ := os.UserHomeDir()
-		return filepath.Join(home, "Library", "Application Support", "BloomNucleus", "hooks")
+		return filepath.Join(home, "Library", "BloomNucleus", "hooks")
 	default:
 		home, _ := os.UserHomeDir()
 		return filepath.Join(home, ".local", "share", "BloomNucleus", "hooks")

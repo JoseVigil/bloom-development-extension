@@ -23,8 +23,7 @@ func nucleusBin() string {
 		)
 	case "darwin":
 		home, _ := os.UserHomeDir()
-		return filepath.Join(home, "Library", "Application Support",
-			"BloomNucleus", "bin", "nucleus", "nucleus")
+		return filepath.Join(home, "Library", "BloomNucleus", "bin", "nucleus", "nucleus")
 	default:
 		home, _ := os.UserHomeDir()
 		return filepath.Join(home, ".local", "share",
@@ -39,7 +38,7 @@ func logBaseDir() string {
 		return filepath.Join(os.Getenv("LOCALAPPDATA"), "BloomNucleus", "logs")
 	case "darwin":
 		home, _ := os.UserHomeDir()
-		return filepath.Join(home, "Library", "Application Support", "BloomNucleus", "logs")
+		return filepath.Join(home, "Library", "BloomNucleus", "logs")
 	default:
 		home, _ := os.UserHomeDir()
 		return filepath.Join(home, ".local", "share", "BloomNucleus", "logs")

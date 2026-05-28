@@ -41,7 +41,7 @@ func createHooksRunSubcommand(c *core.Core) *cobra.Command {
 
 Hooks are loaded from:
   Windows : %LOCALAPPDATA%\BloomNucleus\hooks\<event>\
-  macOS   : ~/Library/Application Support/BloomNucleus/hooks/<event>/
+  macOS   : ~/Library/BloomNucleus/hooks/<event>/
   Linux   : ~/.local/share/BloomNucleus/hooks/<event>/
 
 Scripts are executed in alphabetical order (00_, 01_, ...).

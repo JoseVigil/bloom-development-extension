@@ -1,6 +1,6 @@
 // main.js - REFACTORED: Nucleus Delegation
 // Heartbeat: nucleus --json health
-// Launch: nucleus --json synapse launch [profile_id]
+// Launch: nucleus --json synapse launch [profile_id] --mode discovery
 // Repair: nucleus --json health --fix
 // UTF-8 CONFIGURATION
 
@@ -42,10 +42,6 @@ function getBloomBasePathCLI() {
   }
 }
 
-/**
- * Carga build_info.json generado por bump-version.js en el prebuild.
- * Busca en __dirname (dev/asar root), CWD, y resourcesPath.
- */
 function loadBuildInfo() {
   const candidates = [
     path.join(__dirname, 'build_info.json'),
@@ -59,7 +55,6 @@ function loadBuildInfo() {
       if (fs.existsSync(c)) return JSON.parse(fs.readFileSync(c, 'utf8'));
     } catch { /* try next */ }
   }
-  // Safe fallback — nunca debería llegar aquí en un build correcto
   const pkg = (() => { try { return require('./package.json'); } catch { return {}; } })();
   return {
     name: pkg.name || 'bloom-nucleus-installer',
@@ -79,16 +74,7 @@ function loadBuildInfo() {
 
 // ============================================================================
 // CLI CONTRACT
-//
-// PROBLEMA EN ELECTRON EMPAQUETADO:
-//   process.exit() antes de require('electron') no funciona en producción.
-//   Deja procesos GPU huérfanos y no flusha stdout en Windows.
-//
-// SOLUCIÓN: Detectar flags aquí, pero ejecutar output + app.exit(0) dentro
-//   de app.whenReady(). Nunca llamamos createWindow() en modo CLI, por lo que
-//   no aparece ninguna ventana ni instancia visible en el task manager.
 // ============================================================================
-
 const CLI_FLAGS = ['--version', '--info', '--version-json', '--binaries', '--health'];
 const IS_CLI_MODE = process.argv.some(a => CLI_FLAGS.includes(a));
 
@@ -211,7 +197,7 @@ const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const { spawn } = require('child_process');
 const { paths } = require('./config/paths');
 
-// ── CLI MODE gate: salir limpiamente sin crear ninguna ventana ────────────────
+// ── CLI MODE gate ─────────────────────────────────────────────────────────────
 if (IS_CLI_MODE) {
   app.disableHardwareAcceleration();
   app.whenReady().then(() => {
@@ -455,21 +441,22 @@ async function checkHostStatus() {
   try {
     const result = await executeNucleusCommand(['--json', 'health']);
 
+    // Considerar "connected" si el state es saludable O si los componentes
+    // críticos (nucleus propio + al menos un worker) están OK.
+    // No exigir que TODOS los servicios estén perfectos.
+    const nucleusOk = result.state === 'HEALTHY' || result.state === 'OPERATIONAL' || result.success === true;
+    const hasProfiles = (result.components?.worker_manager?.profiles_count || 0) > 0;
+
     return {
-      connected: result.success || false,
+      connected: nucleusOk || hasProfiles,
       port: result.components?.brain_service?.port || null,
       services: result.components || {},
       profiles_registered: result.components?.worker_manager?.profiles_count || 0,
-      error: result.error
+      state: result.state || 'UNKNOWN',
+      error: (!nucleusOk && !hasProfiles) ? (result.error || result.state) : null
     };
   } catch (error) {
-    return {
-      connected: false,
-      port: null,
-      services: {},
-      profiles_registered: 0,
-      error: error.message
-    };
+    return { connected: false, port: null, services: {}, profiles_registered: 0, error: error.message };
   }
 }
 
@@ -516,11 +503,106 @@ function updateUIStatus(status) {
 }
 
 // ============================================================================
-// BRAIN COMMAND EXECUTION (Keep for backwards compatibility)
+// SYNAPSE POLL — Polling real post-instalación
+// Consulta nucleus --json synapse status <profileId> hasta que la extensión
+// haga handshake con el host, luego emite heartbeat:validated (real).
+// ============================================================================
+async function _pollSynapseUntilConnected(win, profileId) {
+  const MAX_ATTEMPTS = 40;  // 40 × 3s = 120s máximo
+  const INTERVAL_MS  = 3000;
+  let attempts = 0;
+
+  log(`💓 [Synapse Poll] Iniciando polling para perfil: ${profileId}`);
+
+  // Mostrar estados intermedios mientras esperamos el primer poll
+  const stages = [
+    { state: 'LAUNCHING',  delay: 0    },
+    { state: 'SEARCHING',  delay: 2000 },
+    { state: 'HANDSHAKE',  delay: 4000 },
+    { state: 'HEARTBEAT',  delay: 6000 },
+  ];
+
+  for (const stage of stages) {
+    setTimeout(() => {
+      if (!win || win.isDestroyed()) return;
+      win.webContents.send('heartbeat:launch-done', {
+        profile_id: profileId,
+        state: stage.state,
+        extension_loaded: false
+      });
+    }, stage.delay);
+  }
+
+  // Esperar que las animaciones empiecen antes de hacer el primer poll
+  await new Promise(r => setTimeout(r, 8000));
+
+  const poll = setInterval(async () => {
+    if (!win || win.isDestroyed()) { clearInterval(poll); return; }
+
+    attempts++;
+    try {
+      const result = await executeNucleusCommand([
+        '--json', 'synapse', 'status', profileId
+      ]);
+
+      // DESPUÉS:
+      const status = result.status || {};
+      const state = status.state || 'UNKNOWN';
+      const sentinelRunning = status.sentinel_running || false;
+      log(`💓 [Synapse Poll ${attempts}/${MAX_ATTEMPTS}] state=${state} sentinel_running=${sentinelRunning}`);
+
+      if (!win.isDestroyed()) {
+        win.webContents.send('heartbeat:launch-done', {
+          profile_id: profileId,
+          state,
+          extension_loaded: sentinelRunning
+        });
+      }
+
+      if (state === 'RUNNING' && sentinelRunning === true) {
+        clearInterval(poll);
+        log(`✅ [Synapse Poll] Perfil conectado: ${profileId}`);
+
+        if (!win.isDestroyed()) {
+          win.webContents.send('heartbeat:validated', {
+            profile_id: profileId,
+            state,
+            extension_loaded: true
+          });
+        }
+
+        // Ahora sí arrancar el heartbeat de infraestructura
+        setTimeout(() => startHeartbeat(), 2000);
+        return;
+      }
+
+    } catch (err) {
+      log(`⚠️ [Synapse Poll ${attempts}] Error: ${err.message}`);
+    }
+
+    if (attempts >= MAX_ATTEMPTS) {
+      clearInterval(poll);
+      error(`❌ [Synapse Poll] Timeout esperando conexión del perfil ${profileId}`);
+      if (!win.isDestroyed()) {
+        win.webContents.send('installation-error', {
+          error: `Timeout: el perfil ${profileId} no se conectó en ${MAX_ATTEMPTS * INTERVAL_MS / 1000}s`
+        });
+      }
+    }
+  }, INTERVAL_MS);
+}
+
+// ============================================================================
+// BRAIN COMMAND EXECUTION (Para launch mode - profile commands)
 // ============================================================================
 async function executeBrainCommand(args) {
   return new Promise((resolve, reject) => {
     const brainPath = getBrainExecutablePath();
+
+    if (!fs.existsSync(brainPath)) {
+      return reject(new Error(`Brain not found: ${brainPath}`));
+    }
+
     const child = spawn(brainPath, args, {
       cwd: getBrainWorkingDirectory(),
       env: {
@@ -739,29 +821,30 @@ function registerLaunchHandlers() {
 // ============================================================================
 function registerInstallHandlers() {
 
+  // ── Punto de entrada único del instalador ────────────────────────────────
   ipcMain.handle('install:start', async (event, options = {}) => {
     try {
       const { installService } = require('./install/installer');
-      const result = await installService(BrowserWindow.getAllWindows()[0]);
+      const win = BrowserWindow.getAllWindows()[0];
+      const result = await installService(win);
 
       if (result.success) {
-        // ── NUEVO: emitir los dos eventos que el renderer espera ──────────────
-        const win = BrowserWindow.getAllWindows()[0];
-        if (win && !win.isDestroyed()) {
-          win.webContents.send('heartbeat:starting', {
-            profile_id: result.profile_id
-          });
-          // Dar 500ms para que el renderer muestre la pantalla de heartbeat
-          await new Promise(r => setTimeout(r, 500));
-          win.webContents.send('heartbeat:validated', {
-            profile_id: result.profile_id
-          });
-        }
-        // ─────────────────────────────────────────────────────────────────────
+        const profileId = result.profile_id;
 
-        setTimeout(() => {
-          startHeartbeat();
-        }, 2000);
+        // installService() ya confirmó extension_loaded: true en el paso 11/11
+        // (nucleus --json synapse launch retorna el estado real del perfil lanzado).
+        // No hay nada que poll-ear: la información está en result ahora mismo.
+
+        if (win && !win.isDestroyed()) {
+          // Anunciar inicio — la pantalla heartbeat-screen muestra el círculo
+          win.webContents.send('heartbeat:starting', { profile_id: profileId });
+        }
+
+        // Siempre usar polling real — extension_loaded del launch solo confirma Chrome spawneó,
+        // NO confirma PROFILE_CONNECTED (handshake completo con el host).
+        // El log muestra que PROFILE_CONNECTED ocurre ~22s después del launch.
+        log(`💓 [install:start] Iniciando synapse poll para confirmar PROFILE_CONNECTED`);
+        await _pollSynapseUntilConnected(win, profileId);
       }
 
       return result;
@@ -770,50 +853,26 @@ function registerInstallHandlers() {
     }
   });
 
-  // ============================================================================
-  // PROFILE LAUNCH (Stateless UI - Async Command)
-  // ============================================================================
-  ipcMain.handle('brain:launch', async (event, profileIdOrObject) => {
+  // ── Synapse status poll (usado por renderer como fallback y por el polling interno) ──
+  ipcMain.handle('synapse:status-poll', async (event, profileId) => {
     try {
-      let profileId;
-
-      if (typeof profileIdOrObject === 'string') {
-        profileId = profileIdOrObject;
-      } else if (typeof profileIdOrObject === 'object' && profileIdOrObject !== null) {
-        profileId = profileIdOrObject.profileId
-                 || profileIdOrObject.id
-                 || profileIdOrObject.uuid
-                 || profileIdOrObject.data?.id
-                 || profileIdOrObject.data?.profileId;
-      }
-
-      if (!profileId || profileId === 'undefined' || profileId === 'null') {
-        const errorMsg = `Profile ID is missing or invalid. Received: ${JSON.stringify(profileIdOrObject)}`;
-        error(`❌ ${errorMsg}`);
-        return {
-          success: false,
-          error: errorMsg,
-          received: profileIdOrObject
-        };
-      }
-
-      log(`🚀 [Nucleus] Launching profile: ${profileId}`);
-
       const result = await executeNucleusCommand([
-        '--json', 'synapse', 'launch', profileId, '--mode', 'discovery'
+        '--json', 'synapse', 'status', profileId
       ]);
-
-      return result;
-    } catch (err) {
-      error("❌ Launch command failed:", err.message);
+      // result esperado: { success, state, extension_loaded, chrome_pid, ... }
       return {
-        success: false,
-        error: err.message,
-        stack: err.stack
+        success: result.success || false,
+        state: result.state || 'UNKNOWN',
+        extensionLoaded: result.extension_loaded || false,
+        chromePid: result.chrome_pid || null,
+        error: result.error || null
       };
+    } catch (err) {
+      return { success: false, state: 'ERROR', extensionLoaded: false, error: err.message };
     }
   });
 
+  // ── Heartbeat / estado del sistema ──────────────────────────────────────
   ipcMain.handle('extension:heartbeat', async () => {
     try {
       const status = await checkHostStatus();
@@ -833,10 +892,21 @@ function registerInstallHandlers() {
     }
   });
 
+  ipcMain.handle('check-brain-service-status', async () => {
+    const status = await checkHostStatus();
+    return {
+      running: status.connected,
+      registeredProfiles: status.profiles_registered || 0,
+      activeClients: 0,
+      services: status.services
+    };
+  });
+
+  // ── Abrir conductor (workspace) post-instalación ─────────────────────────
+  // El perfil ya fue lanzado por el installer en el paso 11/11.
+  // Este handler solo abre la UI del conductor, no relanza el perfil.
   ipcMain.handle('launcher:open', async (event, options = {}) => {
     try {
-      // Fuente de verdad: nucleus.json escrito por el instalador
-      // Fallback: paths.conductorExe de global_paths.js (cross-platform)
       let conductorExe = paths.conductorExe;
 
       if (fs.existsSync(paths.configFile)) {
@@ -853,9 +923,6 @@ function registerInstallHandlers() {
 
       log(`🚀 [launcher:open] Spawning conductor: ${conductorExe}`);
 
-      // Sin args — el conductor lee nucleus.json y decide solo:
-      // onboarding.completed === false → abre onboarding
-      // onboarding.completed === true  → abre workspace
       const child = spawn(conductorExe, [], {
         detached: true,
         stdio: 'ignore',
@@ -875,6 +942,7 @@ function registerInstallHandlers() {
     }
   });
 
+  // ── Checks y utilidades ──────────────────────────────────────────────────
   ipcMain.handle('install:check-requirements', async () => {
     return {
       platform: os.platform(),
@@ -894,28 +962,16 @@ function registerInstallHandlers() {
     }
   });
 
-  ipcMain.handle('check-brain-service-status', async () => {
-    const status = await checkHostStatus();
-    return {
-      running: status.connected,
-      registeredProfiles: status.profiles_registered || 0,
-      activeClients: 0,
-      services: status.services
-    };
-  });
-
   ipcMain.handle('preflight-checks', async () => {
     const nucleusExe = path.join(BLOOM_BASE, 'bin', 'nucleus', 'nucleus.exe');
-    
-    const checks = {
+
+    return {
       nucleusExists: fs.existsSync(nucleusExe),
       brainExists: fs.existsSync(BRAIN_EXE),
       bloomBaseExists: fs.existsSync(BLOOM_BASE),
       platform: os.platform(),
       adminRights: false
     };
-
-    return checks;
   });
 
   ipcMain.handle('repair-bridge', async (event) => {
@@ -969,7 +1025,7 @@ function registerInstallHandlers() {
 // WINDOW CREATION
 // ============================================================================
 async function isDevServerRunning() {
-  return false; // ← implement real check if needed (fetch + timeout)
+  return false;
 }
 
 async function checkOnboardingStatus() {
@@ -1112,13 +1168,12 @@ let mainWindow = null;
 app.whenReady().then(async () => {
   log('🚀 App ready, initializing...');
 
-  // Check admin SOLO en modo INSTALL
   if (!IS_LAUNCH_MODE && process.platform === 'win32') {
     const { isElevated, relaunchAsAdmin } = require('./core/admin-utils');
     if (!(await isElevated())) {
       log('⚠️ Admin privileges required - relaunching...');
       relaunchAsAdmin();
-      return; // Salir sin crear ventana
+      return;
     }
     log('✅ Running with admin privileges');
   }
@@ -1133,8 +1188,6 @@ app.whenReady().then(async () => {
   }
 
   mainWindow = await createWindow();
-
-  // Nucleus is stateless CLI — no daemon to start
 
   if (IS_LAUNCH_MODE) {
     log('💓 Starting heartbeat (Launch Mode)');

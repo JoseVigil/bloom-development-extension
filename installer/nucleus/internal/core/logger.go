@@ -70,10 +70,17 @@ func InitLogger(paths *Paths, category string, jsonMode bool, extraCategories ..
 		category:   category,
 	}
 
-	// Header via logger.Printf — el runtime antepone "2006/01/02 15:04:05"
-	// que parseLineTimestamp reconoce correctamente.
-	logger.logger.Printf("======================================== [%s] Logging session started ========================================", category)
-	logger.Flush()
+	// Banners de sesión son metadata del archivo de log, no output del proceso.
+	// En modo JSON se escriben SOLO al archivo para no contaminar ningún fd de consola
+	// (ni stdout ni stderr). En modo interactivo se emiten normalmente via MultiWriter.
+	banner := fmt.Sprintf("======================================== [%s] Logging session started ========================================", category)
+	if jsonMode {
+		fmt.Fprintf(file, "%s %s\n", time.Now().Format("2006/01/02 15:04:05"), banner)
+		file.Sync()
+	} else {
+		logger.logger.Printf("%s", banner)
+		logger.Flush()
+	}
 
 	// Construir slice de categorías: siempre incluye "nucleus" + extras
 	categories := append([]string{"nucleus"}, extraCategories...)
@@ -246,7 +253,12 @@ func (l *Logger) Close() error {
 	defer l.mu.Unlock()
 
 	if l.file != nil {
-		l.logger.Printf("======================================== [%s] Logging session ended ========================================", l.category)
+		banner := fmt.Sprintf("======================================== [%s] Logging session ended ========================================", l.category)
+		if l.isJSONMode {
+			fmt.Fprintf(l.file, "%s %s\n", time.Now().Format("2006/01/02 15:04:05"), banner)
+		} else {
+			l.logger.Printf("%s", banner)
+		}
 		l.file.Sync()
 
 		err := l.file.Close()
@@ -323,8 +335,14 @@ func InitServiceLogger(paths *Paths, jsonMode bool) (*Logger, error) {
 		category:   "SERVICE",
 	}
 
-	logger.logger.Printf("======================================== [SERVICE] Logging session started ========================================")
-	logger.Flush()
+	serviceBanner := "======================================== [SERVICE] Logging session started ========================================"
+	if jsonMode {
+		fmt.Fprintf(file, "%s %s\n", time.Now().Format("2006/01/02 15:04:05"), serviceBanner)
+		file.Sync()
+	} else {
+		logger.logger.Printf("%s", serviceBanner)
+		logger.Flush()
+	}
 
 	tm := GetTelemetryManager(paths.LogsDir, paths.LogsDir)
 	tm.RegisterStream(
@@ -380,8 +398,14 @@ func InitWorkerManagerLogger(paths *Paths, jsonMode bool) (*Logger, error) {
 		category:   "WORKER",
 	}
 
-	logger.logger.Printf("======================================== [WORKER MANAGER] Logging session started ========================================")
-	logger.Flush()
+	workerBanner := "======================================== [WORKER MANAGER] Logging session started ========================================"
+	if jsonMode {
+		fmt.Fprintf(file, "%s %s\n", time.Now().Format("2006/01/02 15:04:05"), workerBanner)
+		file.Sync()
+	} else {
+		logger.logger.Printf("%s", workerBanner)
+		logger.Flush()
+	}
 
 	tm := GetTelemetryManager(paths.LogsDir, paths.LogsDir)
 	tm.RegisterStream(

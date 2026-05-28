@@ -1127,23 +1127,32 @@ async function installService(win) {
     await installOllamaServiceStep(win);    // 8/12 - Arranca Ollama
     await installSessionSensor(win);        // 8/11 — non-critical, cannot abort
     await runCertification(win);            // 9/11 - Verifica Temporal ready
-    await seedMasterProfile(win);           // 10/11 - Usa Temporal
-    await launchMasterProfile(win);         // 11/11 - Heartbeat final
+    await seedMasterProfile(win);                         // 10/11 - Usa Temporal
+    const launchResult = await launchMasterProfile(win);  // 11/11 - Heartbeat final
 
     await nucleusManager.markInstallationComplete();
 
     logger.success('🎉 INSTALLATION COMPLETE');
+    logger.info(`   extension_loaded propagated: ${launchResult?.extension_loaded}`);
 
     if (win && win.webContents) {
       win.webContents.send('installation-complete', {
         success: true,
-        profile_id: nucleusManager.state.master_profile
+        profile_id: nucleusManager.state.master_profile,
+        extension_loaded: launchResult?.extension_loaded || false,
+        chrome_pid:       launchResult?.chrome_pid       || null,
+        launch_id:        launchResult?.launch_id        || null,
+        state:            launchResult?.state            || null,
       });
     }
 
     return {
-      success: true,
-      profile_id: nucleusManager.state.master_profile
+      success:          true,
+      profile_id:       nucleusManager.state.master_profile,
+      extension_loaded: launchResult?.extension_loaded || false,
+      chrome_pid:       launchResult?.chrome_pid       || null,
+      launch_id:        launchResult?.launch_id        || null,
+      state:            launchResult?.state            || null,
     };
 
   } catch (error) {

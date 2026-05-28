@@ -1,5 +1,6 @@
 bloom-development-extension/
 └── setup/
+    ├── .DS_Store
     ├── app.manifest
     ├── assets/
     │   ├── bloom.ico
@@ -15,8 +16,8 @@ bloom-development-extension/
     │   ├── admin-utils.js
     │   ├── menu-builder.js
     │   └── window-manager.js
-    ├── dist/ [... build output]
     ├── install/
+    │   ├── .DS_Store
     │   ├── chromium-installer.js
     │   ├── diagnose/
     │   │   ├── diagnose-service.js
@@ -60,11 +61,10 @@ bloom-development-extension/
     │   ├── uninstall-brain-service.bat
     │   └── uninstall-nucleus-service.bat
     ├── src/
+    │   ├── .DS_Store
     │   ├── index.html
     │   ├── renderer.js
     │   └── styles.css
-    ├── tree/
-    │   └── brain_tree.txt
     ├── utils/
     │   ├── exec-helper.js
     │   └── repair-tools.js

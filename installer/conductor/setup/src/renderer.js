@@ -1,9 +1,10 @@
-// renderer.js - REFACTORED: Adaptado para usar TCP heartbeat
-// ✅ Mantiene toda la lógica UI original
-// ✅ Solo actualiza llamadas API para compatibilidad TCP
+// renderer.js
+// Flujo de instalación: install:start → eventos heartbeat:* → launcher:open
+// El perfil es lanzado UNA SOLA VEZ por el installer en el paso 11/11.
+// El renderer nunca relanza el perfil, solo abre el conductor al finalizar.
 
 // ========================================================================
-// 1. UI MANAGER (Sin Cambios)
+// 1. UI MANAGER
 // ========================================================================
 class UIManager {
   constructor() {
@@ -23,7 +24,7 @@ class UIManager {
     const percentage = (step / total) * 100;
     const fillEl = document.getElementById('progress-fill');
     const textEl = document.getElementById('progress-text');
-    
+
     if (fillEl) fillEl.style.width = percentage + '%';
     if (textEl) textEl.textContent = `Paso ${step}/${total}: ${message}`;
   }
@@ -39,7 +40,7 @@ class UIManager {
   hideSpinner(containerId, contentId) {
     const container = document.getElementById(containerId);
     const content = document.getElementById(contentId);
-    
+
     if (container) container.style.display = 'none';
     if (content) content.style.display = 'block';
   }
@@ -90,7 +91,7 @@ class UIManager {
 }
 
 // ========================================================================
-// 2. INSTALLATION MANAGER (Lógica Original + TCP Compatible)
+// 2. INSTALLATION MANAGER
 // ========================================================================
 class InstallationManager {
   constructor(api, uiManager) {
@@ -111,8 +112,8 @@ class InstallationManager {
     console.log("🚀 [AUTO] Iniciando flujo automático...");
     this.ui.showScreen('installation-screen');
 
-    // ── Registrar listeners ANTES de llamar installService ──────────────────
-    // Así no perdemos ningún evento aunque lleguen durante la instalación.
+    // ── Registrar listeners ANTES de llamar install:start ──────────────────
+    // Así no perdemos eventos que lleguen durante la instalación.
 
     // 1. Progreso de instalación → barra de progreso
     window.api.on('installation-progress', (data) => {
@@ -133,27 +134,44 @@ class InstallationManager {
       }
     });
 
-    // 2. Heartbeat starting → mostrar pantalla heartbeat INMEDIATAMENTE
+    // 2. Heartbeat starting → mostrar pantalla heartbeat
     window.api.on('heartbeat:starting', (data) => {
       console.log("🔴 [Semáforo] heartbeat:starting → pantalla heartbeat");
       this.profileId = data.profile_id || this.profileId;
       this.ui.showScreen('heartbeat-screen');
     });
 
-    // 3. Launch done → círculo amarillo (Sentinel lanzado, esperando handshake)
+    // 3. Launch done → círculo amarillo con mensaje de estado real por cada etapa de Discovery
     window.api.on('heartbeat:launch-done', (data) => {
-      console.log("🟡 [Semáforo] heartbeat:launch-done → amarillo");
+      console.log(`🟡 [Discovery] state=${data.state} extension_loaded=${data.extension_loaded}`);
       this.profileId = data.profile_id || this.profileId;
+
       const circle = document.getElementById('heartbeat-circle');
-      if (circle) {
+      const sub = document.getElementById('heartbeat-sub');
+
+      // Solo poner amarillo si aún no está conectado (verde)
+      if (circle && !circle.classList.contains('connected')) {
         circle.classList.remove('synapse', 'connected');
         circle.classList.add('synapse');
       }
-      const sub = document.getElementById('heartbeat-sub');
-      if (sub) sub.textContent = 'Sentinel activo · Esperando handshake con extensión...';
+      if (sub) {
+        const stateMsg = {
+          // Fases reales del Discovery Protocol (del trace: initializing→searching→handshake→heartbeat→ready)
+          'LAUNCHING':  'Lanzando Chrome · Cargando extensión...',
+          'SEARCHING':  'Extensión activa · Buscando host nativo...',
+          'HANDSHAKE':  'Estableciendo handshake · Canal seguro...',
+          'HEARTBEAT':  'Verificando heartbeat · Casi listo...',
+          'READY':      'Sistema listo · Validando conexión...',
+          // Estados de fallback del polling
+          'DISCOVERY':  'Descubriendo perfil · Sentinel activo...',
+          'CONNECTED':  'Conectado · Validando handshake...',
+          'UNKNOWN':    'Iniciando Sentinel...'
+        };
+        sub.textContent = stateMsg[data.state] || `Conectando... (${data.state})`;
+      }
     });
 
-    // 4. Validated → círculo verde → avanzar
+    // 4. Validated → círculo verde → avanzar a pantalla de éxito
     window.api.on('heartbeat:validated', async (data) => {
       console.log("🟢 [Semáforo] heartbeat:validated → verde");
       this.profileId = data.profile_id || this.profileId;
@@ -183,12 +201,6 @@ class InstallationManager {
 
       console.log("✅ [AUTO] installService() resolvió. Profile:", this.profileId);
 
-      // Si heartbeat:validated ya llegó (y cambió la pantalla), no hacer nada más.
-      // Si por algún motivo no llegó, activar polling de respaldo.
-      if (this.ui.currentScreen !== 'connection-success-screen') {
-        this._startHeartbeatFallbackPoll();
-      }
-
       return { success: true };
 
     } catch (error) {
@@ -215,7 +227,6 @@ class InstallationManager {
 
         if (status && (status.running || status.registeredProfiles > 0)) {
           clearInterval(poll);
-          // Disparar verde manualmente
           const circle = document.getElementById('heartbeat-circle');
           if (circle) { circle.classList.remove('synapse'); circle.classList.add('connected'); }
           const sub = document.getElementById('heartbeat-sub');
@@ -228,7 +239,6 @@ class InstallationManager {
 
       if (attempts >= MAX) {
         clearInterval(poll);
-        // Timeout: mostrar botón reintentar
         const sub = document.getElementById('heartbeat-sub');
         if (sub) sub.textContent = 'Sin respuesta · Verifica los logs';
         const retry = document.getElementById('retry-heartbeat-btn');
@@ -236,11 +246,12 @@ class InstallationManager {
       }
     }, 3000);
   }
-
-} // ── end InstallationManager ──
+}
 
 // ========================================================================
-// 3. HEARTBEAT MANAGER (Adaptado para TCP)
+// 3. HEARTBEAT MANAGER
+// Usado solo si el renderer necesita polling manual independiente.
+// El flujo principal va por los eventos heartbeat:* emitidos desde main.js.
 // ========================================================================
 class HeartbeatManager {
   constructor(api, uiManager) {
@@ -255,32 +266,29 @@ class HeartbeatManager {
   start() {
     console.log('🔄 Iniciando polling de heartbeat (manual)...');
     this.attempts = 0;
-    
+
     this.interval = setInterval(async () => {
       this.attempts++;
-      
-      this.ui.updateText('heartbeat-status', 
+
+      this.ui.updateText('heartbeat-status',
         `Intento ${this.attempts}/${this.maxAttempts} - Esperando señal de Chrome...`
       );
-      
-      // ✅ REFACTORED: Usa TCP heartbeat
+
       const status = await this.api.checkExtensionHeartbeat();
-      
+
       if (status.chromeConnected) {
-        console.log('✅ ¡Conexión detectada via TCP!');
-        console.log(`   Latencia: ${status.latency}ms`);
+        console.log('✅ ¡Conexión detectada!');
         this.stop();
         return { success: true };
       }
-      
-      // Timeout
+
       if (this.attempts >= this.maxAttempts) {
         this.stop();
         const error = 'Timeout: La extensión no se conectó en 90 segundos.\n\n' +
                       'Verifica que:\n' +
                       '1. Instalaste la extensión en Chrome\n' +
                       '2. La extensión está habilitada\n' +
-                      '3. El Native Host está corriendo (puerto 5678)';
+                      '3. El Native Host está corriendo';
         this.ui.showError(error);
         return { success: false, error };
       }
@@ -288,46 +296,44 @@ class HeartbeatManager {
   }
 
   startHandshakePolling(onSuccess) {
-    console.log('🔄 Iniciando validación estricta de conexión (TCP)...');
+    console.log('🔄 Iniciando validación estricta de conexión...');
     this.attempts = 0;
     const MAX_ATTEMPTS = 30;
     const POLL_INTERVAL = 3000;
-    
+
     this.interval = setInterval(async () => {
       this.attempts++;
-      
+
       this.ui.animateHeartbeat('heartbeat-dot');
-      
+
       this.ui.updateHTML('step2-message', `
-        <p>Validando conexión con Chrome via TCP...</p>
+        <p>Validando conexión con Chrome...</p>
         <p style="font-size: 12px; color: #a0aec0; margin-top: 5px;">
           Intento ${this.attempts}/${MAX_ATTEMPTS}
         </p>
       `);
-      
-      // ✅ REFACTORED: Usa TCP heartbeat
+
       const status = await this.api.checkExtensionHeartbeat();
-      
+
       if (status.chromeConnected) {
         this.stop();
-        console.log('✅ Handshake TCP exitoso');
-        console.log(`   Latencia: ${status.latency}ms`);
-        
+        console.log('✅ Handshake exitoso');
+
         this.ui.setHeartbeatState('heartbeat-dot', true);
         this.ui.toggleElement('step-waiting-chrome', false);
         this.ui.toggleElement('step-success', true);
         this.ui.updateText('handshake-title', 'Sincronizado');
-        
+
         if (onSuccess) onSuccess();
         return;
       }
-      
+
       if (this.attempts >= MAX_ATTEMPTS) {
         this.stop();
         const error = `Timeout: Chrome no respondió después de ${MAX_ATTEMPTS * 3} segundos.\n` +
                       'Verifica:\n' +
                       '1. Chrome se cerró completamente antes de reabrir\n' +
-                      '2. El Native Host está corriendo (puerto 5678)\n' +
+                      '2. El Native Host está corriendo\n' +
                       '3. No hay políticas de dominio bloqueando extensiones';
         this.ui.showError(error);
       }
@@ -344,7 +350,7 @@ class HeartbeatManager {
 }
 
 // ========================================================================
-// 4. EXTENSION INSTALLER (Sin Cambios - No usa heartbeat directamente)
+// 4. EXTENSION INSTALLER
 // ========================================================================
 class ExtensionInstaller {
   constructor(api, uiManager) {
@@ -355,7 +361,7 @@ class ExtensionInstaller {
 
   async prepareCrxFile() {
     const result = await this.api.installExtension();
-    
+
     if (result.success) {
       this.currentCrxPath = result.crxPath;
       console.log('📦 Archivo listo en:', this.currentCrxPath);
@@ -368,7 +374,7 @@ class ExtensionInstaller {
 
   setupDragAndDrop(elementId) {
     const cardEl = document.getElementById(elementId);
-    
+
     if (!cardEl) {
       console.error(`❌ ERROR CRÍTICO: No encontré el elemento con ID '${elementId}'`);
       return;
@@ -384,7 +390,7 @@ class ExtensionInstaller {
 
     newElement.addEventListener('click', () => {
       console.log('🖱️ CLICK DETECTADO. Ruta actual:', this.currentCrxPath);
-      
+
       if (this.currentCrxPath && this.currentCrxPath.length > 0) {
         this.api.showItemInFolder(this.currentCrxPath);
       } else {
@@ -411,7 +417,7 @@ class ExtensionInstaller {
 
     button.addEventListener('click', async () => {
       const validation = this.validateExtensionId(input.value);
-      
+
       if (!validation.valid) {
         if (errorMsg) {
           errorMsg.style.display = 'block';
@@ -419,12 +425,12 @@ class ExtensionInstaller {
         }
         return;
       }
-      
+
       if (errorMsg) errorMsg.style.display = 'none';
       this.ui.setButtonState(buttonId, true, 'Configurando...');
 
       const updateResult = await this.api.updateExtensionId(validation.id);
-      
+
       if (!updateResult.success) {
         this.ui.showError("Error: " + updateResult.error);
         this.ui.setButtonState(buttonId, false, 'Conectar');
@@ -441,7 +447,7 @@ class ExtensionInstaller {
 }
 
 // ========================================================================
-// 5. EVENT LISTENERS (Sin Cambios - Lógica Original)
+// 5. EVENT LISTENERS
 // ========================================================================
 class EventListeners {
   constructor(api, uiManager, installationManager) {
@@ -459,7 +465,7 @@ class EventListeners {
   setupWelcomeScreen() {
     const startBtn = document.getElementById('start-button');
     if (!startBtn) return;
-    
+
     startBtn.addEventListener('click', async () => {
       console.log("👆 [UI] Usuario hizo clic en Instalar");
       await this.installation.startInstallation();
@@ -467,15 +473,27 @@ class EventListeners {
   }
 
   setupSuccessScreen() {
+    // ── Botón principal post-instalación ────────────────────────────────────
+    // El perfil ya fue lanzado por el installer en el paso 11/11.
+    // Aquí solo abrimos el conductor (workspace UI), sin relanzar el perfil.
     const launchBtn = document.getElementById('launch-bloom-btn');
     if (launchBtn) {
       launchBtn.addEventListener('click', async () => {
-        console.log("👆 [UI] Usuario hizo clic en LANZAR"); 
-        console.log("🔍 [Debug] API disponible:", !!this.api.launchGodMode);        
-        await this.installation.launchProfile();
+        console.log("👆 [UI] Abriendo conductor (workspace)...");
+        launchBtn.disabled = true;
+        launchBtn.textContent = 'Abriendo...';
+
+        const result = await this.api.launchBloomLauncher();
+
+        if (!result.success) {
+          console.error("❌ Error abriendo conductor:", result.error);
+          launchBtn.disabled = false;
+          launchBtn.textContent = 'Reintentar';
+        }
+        // Si tiene éxito, main.js cierra la ventana del installer tras 1.5s
       });
     }
-    
+
     const logsBtn = document.getElementById('final-view-logs-btn');
     if (logsBtn) {
       logsBtn.addEventListener('click', () => {
@@ -488,9 +506,9 @@ class EventListeners {
     if (onboardingBtn) {
       onboardingBtn.addEventListener('click', async () => {
         console.log("👆 [UI] Usuario inicia onboarding");
-        
+
         const result = await this.api.launchBloomLauncher(true);
-        
+
         if (result.success) {
           console.log("✅ Launcher abierto con onboarding");
           setTimeout(() => window.close(), 2000);
@@ -509,7 +527,7 @@ class EventListeners {
         location.reload();
       });
     }
-    
+
     const errorLogsBtn = document.getElementById('view-error-logs-btn');
     if (errorLogsBtn) {
       errorLogsBtn.addEventListener('click', () => {
@@ -520,7 +538,7 @@ class EventListeners {
 }
 
 // ========================================================================
-// 6. MAIN APP INITIALIZATION (Sin Cambios)
+// 6. MAIN APP INITIALIZATION
 // ========================================================================
 class BloomInstaller {
   constructor() {
@@ -537,22 +555,19 @@ class BloomInstaller {
 
       console.log("🔧 [Installer] Inicializando...");
 
-      // Instanciar managers
       this.ui = new UIManager();
       this.installation = new InstallationManager(window.api, this.ui);
       this.events = new EventListeners(window.api, this.ui, this.installation);
 
-      // Inicializar UI
       const result = await this.installation.initialize();
-      
+
       if (!result.success) {
         console.error("❌ [Installer] Inicialización falló:", result.error);
         return;
       }
 
-      // Setup listeners
       this.events.setupAll();
-      
+
       console.log("✅ [Installer] Sistema listo. Esperando acción del usuario.");
 
     } catch (error) {

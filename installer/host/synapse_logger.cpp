@@ -220,9 +220,9 @@ void SynapseLogManager::initialize(const std::string& p_profile_id,
             // Fallback legacy: solo para las primeras lineas antes de tener log_directory.
             if (!user_base_dir.empty()) {
 #ifdef _WIN32
-                target = user_base_dir + "\\logs\\nm_init_diag.log";
+                target = user_base_dir + "\\logs\\host\\nm_init_diag.log";
 #else
-                target = user_base_dir + "/logs/nm_init_diag.log";
+                target = user_base_dir + "/logs/host/nm_init_diag.log";
 #endif
             } else {
 #if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
@@ -230,8 +230,8 @@ void SynapseLogManager::initialize(const std::string& p_profile_id,
 #else
                 const char* home = std::getenv("HOME");
                 target = (home && home[0] != '\0')
-                    ? std::string(home) + "/Library/BloomNucleus/logs/nm_init_diag.log"
-                    : "/tmp/bloom-nucleus/nm_init_diag.log";
+                    ? std::string(home) + "/Library/BloomNucleus/logs/host/nm_init_diag.log"
+                    : "/tmp/bloom-nucleus/logs/host/nm_init_diag.log";
 #endif
             }
         }
@@ -347,6 +347,36 @@ void SynapseLogManager::initialize(const std::string& p_profile_id,
               << " launch="  << launch_id
               << " dir="     << log_directory << "\n";
     std::cerr.flush();
+
+    // ── Register telemetry streams with nucleus ───────────────────────────────
+    // On Windows, Brain calls nucleus.exe to register streams in telemetry.json
+    // before spawning the host. On macOS the host registers its own streams here
+    // because there is no separate Brain process owning that step.
+#if !defined(_WIN32) && !defined(__MINGW32__) && !defined(__MINGW64__)
+    {
+        std::string bloom_root = get_bloom_root();
+        if (!bloom_root.empty()) {
+            std::string nucleus_bin = bloom_root + "/bin/nucleus/nucleus";
+            // nucleus register-stream --launch-id <id> --stream-id host_<id>   --path <host_log>
+            //                         --stream-id cortex_<id> --path <ext_log>
+            std::string cmd = "\"" + nucleus_bin + "\""
+                + " register-stream"
+                + " --launch-id " + launch_id
+                + " --stream-id host_"   + launch_id + " --path \"" + host_log_path      + "\""
+                + " --stream-id cortex_" + launch_id + " --path \"" + extension_log_path + "\""
+                + " 2>/dev/null &";
+            int rc = std::system(cmd.c_str());
+            std::cerr << "[" << get_timestamp_ms() << "] [DEBUG] [HOST] "
+                      << "NUCLEUS_REGISTER_STREAM rc=" << rc
+                      << " bin=" << nucleus_bin << "\n";
+            std::cerr.flush();
+        } else {
+            std::cerr << "[" << get_timestamp_ms() << "] [WARN] [HOST] "
+                      << "NUCLEUS_REGISTER_STREAM skipped — bloom_root empty\n";
+            std::cerr.flush();
+        }
+    }
+#endif
 
     flush_pending_queue();
 }

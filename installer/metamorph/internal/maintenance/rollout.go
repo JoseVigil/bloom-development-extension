@@ -199,6 +199,7 @@ Use --only to deploy a single component instead of everything.`,
   "status": "success",
   "dry_run": false,
   "only": "",
+  "repo_root": "...",
   "deployed": [
     {"component": "Brain",   "source": "...", "destination": "...", "files_copied": 1},
     {"component": "Nucleus", "source": "...", "destination": "...", "files_copied": 1}
@@ -237,6 +238,7 @@ type rolloutResult struct {
 	Status   string          `json:"status"`
 	DryRun   bool            `json:"dry_run"`
 	Only     string          `json:"only"`
+	RepoRoot string          `json:"repo_root"`
 	Deployed []deployedEntry `json:"deployed"`
 	Skipped  []string        `json:"skipped"`
 	Errors   []string        `json:"errors"`
@@ -244,7 +246,18 @@ type rolloutResult struct {
 
 func runRollout(c *core.Core, dryRun bool, only string) error {
 	basePath := core.GetBaseAppDataPath()
-	repoRoot := resolveRepoRoot()
+
+	repoRoot, err := resolveRepoRoot()
+	if err != nil {
+		return fmt.Errorf("cannot determine repo root: %w\n\nHint: set BLOOM_REPO_ROOT to the repository root directory, e.g.:\n  export BLOOM_REPO_ROOT=$(pwd)", err)
+	}
+
+	// Validate that the resolved root looks like a real directory.
+	if info, statErr := os.Stat(repoRoot); statErr != nil || !info.IsDir() {
+		return fmt.Errorf("resolved repo root %q does not exist or is not a directory\n\nHint: set BLOOM_REPO_ROOT to the repository root directory, e.g.:\n  export BLOOM_REPO_ROOT=$(pwd)", repoRoot)
+	}
+
+	c.Logger.Info("📁 repo root: %s", repoRoot)
 
 	comps := activeComponents()
 
@@ -266,6 +279,7 @@ func runRollout(c *core.Core, dryRun bool, only string) error {
 		Status:   "success",
 		DryRun:   dryRun,
 		Only:     only,
+		RepoRoot: repoRoot,
 		Deployed: []deployedEntry{},
 		Skipped:  []string{},
 		Errors:   []string{},
@@ -344,20 +358,28 @@ func runRollout(c *core.Core, dryRun bool, only string) error {
 	return nil
 }
 
-// resolveRepoRoot resolves the repository root (today) or the standalone
-// installer root (production). Resolution order:
+// resolveRepoRoot resolves the repository root from multiple sources in priority order.
+// It returns an error only when all sources are exhausted or produce an empty path,
+// ensuring filepath.Join never receives an empty string (which would produce a
+// root-relative path like /installer/... instead of ./installer/...).
 //
-//  1. BLOOM_REPO_ROOT env var — CI / local override, no recompile needed.
-//  2. nucleus.json installation.origin_path — canonical source of truth.
+// Resolution order:
+//
+//  1. BLOOM_REPO_ROOT env var — explicit CI / local override.
+//  2. nucleus.json installation.origin_path — canonical production source of truth.
 //     origin_path points to installer/native/bin/<platform>/<component>; walking up
 //     5 levels yields the repo root. Mirrors the logic in
 //     internal/supervisor/dev_start.go:getBloomDir().
-//  3. BLOOM_DIR env var — last-resort fallback used by dev_start.go.
-func resolveRepoRoot() string {
-	if r := os.Getenv("BLOOM_REPO_ROOT"); r != "" {
-		return r
+//  3. BLOOM_DIR env var — legacy fallback used by dev_start.go.
+//  4. Current working directory — automatic fallback when running from inside
+//     the repo tree (the common developer workflow).
+func resolveRepoRoot() (string, error) {
+	// 1. Explicit override — highest priority, no validation needed here.
+	if r := strings.TrimSpace(os.Getenv("BLOOM_REPO_ROOT")); r != "" {
+		return filepath.Clean(r), nil
 	}
 
+	// 2. nucleus.json origin_path — walk up 5 levels from the binary location.
 	nucleusJSON := filepath.Join(core.GetBaseAppDataPath(), "config", "nucleus.json")
 	if data, err := os.ReadFile(nucleusJSON); err == nil {
 		var cfg struct {
@@ -365,16 +387,29 @@ func resolveRepoRoot() string {
 				OriginPath string `json:"origin_path"`
 			} `json:"installation"`
 		}
-		if json.Unmarshal(data, &cfg) == nil && cfg.Installation.OriginPath != "" {
-			p := cfg.Installation.OriginPath
-			for i := 0; i < 5; i++ {
-				p = filepath.Dir(p)
+		if json.Unmarshal(data, &cfg) == nil {
+			if p := strings.TrimSpace(cfg.Installation.OriginPath); p != "" {
+				for i := 0; i < 5; i++ {
+					p = filepath.Dir(p)
+				}
+				if p != "" && p != "." && p != string(filepath.Separator) {
+					return filepath.Clean(p), nil
+				}
 			}
-			return p
 		}
 	}
 
-	return os.Getenv("BLOOM_DIR")
+	// 3. Legacy BLOOM_DIR env var.
+	if r := strings.TrimSpace(os.Getenv("BLOOM_DIR")); r != "" {
+		return filepath.Clean(r), nil
+	}
+
+	// 4. Current working directory — safe fallback for interactive dev use.
+	if cwd, err := os.Getwd(); err == nil && cwd != "" {
+		return cwd, nil
+	}
+
+	return "", fmt.Errorf("all resolution strategies exhausted (BLOOM_REPO_ROOT, nucleus.json, BLOOM_DIR, os.Getwd)")
 }
 
 func titleCase(s string) string {

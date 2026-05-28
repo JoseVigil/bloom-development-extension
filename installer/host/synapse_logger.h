@@ -17,7 +17,7 @@
  *
  * Estructura de directorios:
  *   Windows: %LOCALAPPDATA%\BloomNucleus\logs\host\profiles\{profile_id}\{launch_id}\
- *   macOS:   /tmp/bloom-nucleus/logs/host/profiles/{profile_id}/{launch_id}/
+ *   macOS:   ~/Library/BloomNucleus/logs/host/profiles/{profile_id}/{launch_id}/
  *
  * Registro de telemetría:
  *   Responsabilidad exclusiva de Brain. bloom-host no llama a nucleus CLI.

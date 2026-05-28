@@ -625,7 +625,12 @@ type brainLaunch struct {
 func runBrainJSON(binDir string, dest interface{}, args ...string) error {
 	brainExe := filepath.Join(binDir, "brain", "brain.exe")
 	if _, err := os.Stat(brainExe); err != nil {
-		brainExe = "brain"
+		brainExeUnix := filepath.Join(binDir, "brain", "brain")
+		if _, errUnix := os.Stat(brainExeUnix); errUnix == nil {
+			brainExe = brainExeUnix  // path absoluto, no depende del PATH
+		} else {
+			brainExe = "brain"  
+		}
 	}
 	allArgs := append([]string{"--json"}, args...)
 	out, err := exec.Command(brainExe, allArgs...).Output()
@@ -656,7 +661,7 @@ Si hay más de un perfil te pregunta cuál usar.`,
 			}
 
 			// ── Step 1: obtener perfiles ──────────────────────────────────────
-			fmt.Fprintln(out, "🔍 Obteniendo perfiles via Brain CLI...")
+			fmt.Fprintln(out, "� Obteniendo perfiles via Brain CLI...")
 			var profileList brainProfileList
 			if err := runBrainJSON(c.Paths.BinDir, &profileList, "profile", "list"); err != nil {
 				return fmt.Errorf("no se pudo obtener la lista de perfiles: %w", err)
@@ -685,7 +690,7 @@ Si hay más de un perfil te pregunta cuál usar.`,
 			}
 
 			// ── Step 3: obtener último launch_id ──────────────────────────────
-			fmt.Fprintf(out, "🔍 Obteniendo launches del perfil %s...\n", chosen.Alias)
+			fmt.Fprintf(out, "� Obteniendo launches del perfil %s...\n", chosen.Alias)
 			var launchList brainLaunchList
 			if err := runBrainJSON(c.Paths.BinDir, &launchList, "profile", "launches", chosen.ID); err != nil {
 				return fmt.Errorf("no se pudo obtener los launches: %w", err)
@@ -716,7 +721,7 @@ Si hay más de un perfil te pregunta cuál usar.`,
 			}
 
 			// ── Step 4: correr el trace completo ──────────────────────────────
-			fmt.Fprintln(out, "🚀 Ejecutando trace completo de logs...")
+			fmt.Fprintln(out, "� Ejecutando trace completo de logs...")
 			return runLaunchTrace(c, launchID, chosen.ID, "", c.IsJSON, launchTime)
 		},
 	}
@@ -1010,7 +1015,12 @@ func collectWindowLines(tf *telemetryFile, launchID string, start, end time.Time
 func invokeBrainCLI(binDir string, args ...string) (string, string, error) {
 	brainExe := filepath.Join(binDir, "brain", "brain.exe")
 	if _, err := os.Stat(brainExe); err != nil {
-		brainExe = "brain"
+		brainExeUnix := filepath.Join(binDir, "brain", "brain")
+		if _, errUnix := os.Stat(brainExeUnix); errUnix == nil {
+			brainExe = brainExeUnix  // path absoluto, no depende del PATH
+		} else {
+			brainExe = "brain"  
+		}
 	}
 
 	allArgs := append([]string{"--json"}, args...)
@@ -1154,22 +1164,22 @@ func streamSymbol(stream, text string) string {
 		return "✅"
 	}
 	if strings.Contains(stream, "synapse") {
-		return "🚀"
+		return "�"
 	}
 	if strings.Contains(stream, "sentinel") {
-		return "🛡️ "
+		return "�️ "
 	}
 	if strings.Contains(stream, "cortex") {
-		return "🧠"
+		return "�"
 	}
 	if strings.Contains(stream, "host") || strings.Contains(stream, "nm_init_diag") {
-		return "🖥️ "
+		return "�️ "
 	}
 	if strings.Contains(stream, "telemetry") {
-		return "📡"
+		return "�"
 	}
 	if strings.Contains(stream, "brain") {
-		return "🧠"
+		return "�"
 	}
 	return "  "
 }
@@ -1267,7 +1277,7 @@ func runLaunchTrace(c *core.Core, launchID, profileID, outFilePath string, jsonO
 			chrome.readLog = readFileContents(readPath)
 			tm.RegisterStream(
 				"chrome_engine_read_"+shortID,
-				"🔍 CHROME ENGINE AUDIT ("+shortID+")",
+				"� CHROME ENGINE AUDIT ("+shortID+")",
 				2,
 				[]string{"synapse"},
 				"Chrome engine audit para launch "+launchID+" — detección de errores Chromium y bloqueos de seguridad",
@@ -1287,7 +1297,7 @@ func runLaunchTrace(c *core.Core, launchID, profileID, outFilePath string, jsonO
 			chrome.networkLog = readFileContents(netPath)
 			tm.RegisterStream(
 				"chrome_network_"+shortID,
-				"🌐 CHROME NETWORK ("+shortID+")",
+				"� CHROME NETWORK ("+shortID+")",
 				2,
 				[]string{"synapse"},
 				"Chrome network log para launch "+launchID+" — requests URL y sesiones HTTP/2",
@@ -1560,7 +1570,7 @@ func runLaunchTrace(c *core.Core, launchID, profileID, outFilePath string, jsonO
 	tm := core.GetTelemetryManager(c.Paths.LogsDir, c.Paths.LogsDir)
 	tm.RegisterStream(
 		fmt.Sprintf("synapse_trace_%s", launchID),
-		fmt.Sprintf("🔍 SYNAPSE TRACE (%s)", launchID),
+		fmt.Sprintf("� SYNAPSE TRACE (%s)", launchID),
 		2,
 		[]string{"nucleus", "synapse"},
 		fmt.Sprintf("Synapse trace log — correlación temporal de todos los streams activos para launch %s (profile: %s)", launchID, profileID),

@@ -434,7 +434,7 @@ Effects:  Read-only`,
 			if c.IsJSON {
 				jsonOutput = true
 			}
-
+			
 			logger, err := core.InitLogger(&c.Paths, "SYNAPSE", jsonOutput, "synapse")
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "[ERROR] Failed to initialize logger: %v\n", err)

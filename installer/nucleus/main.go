@@ -65,7 +65,7 @@ func main() {
 		Short: "Core CLI for Bloom Ecosystem",
 		Long:  "Nucleus is the governance layer for the Bloom organization, managing roles, identity, and authority.",
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
-			if jsonFlag, _ := cmd.Flags().GetBool("json"); jsonFlag {
+			if jsonFlag, _ := cmd.Root().PersistentFlags().GetBool("json"); jsonFlag {
 				c.SetJSONMode(true)
 			}
 		},
