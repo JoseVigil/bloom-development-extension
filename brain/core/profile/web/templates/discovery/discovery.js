@@ -79,8 +79,25 @@ class DiscoveryFlow {
     // Stage 2: Searching
     this.showStage(1);
     await this.delay(600);
-    
+
     this.setupStorageListener();
+
+    // Leer el estado actual de storage antes de arrancar el ping loop.
+    // Cubre el caso donde el handshake ya estaba confirmado cuando discovery
+    // abre (background completó el handshake antes del DOMContentLoaded).
+    // Sin este check, discovery queda esperando un cambio que nunca llega
+    // porque storage no dispara onChanged si el valor no cambia.
+    try {
+      const stored = await chrome.storage.local.get('synapseStatus');
+      if (stored?.synapseStatus?.command === 'system_ready') {
+        console.log('[Discovery] synapseStatus already system_ready — resolving immediately');
+        this.handleSystemReady(stored.synapseStatus.payload);
+        return;
+      }
+    } catch (e) {
+      console.warn('[Discovery] Initial storage read failed:', e);
+    }
+
     this.startPinging();
   }
 

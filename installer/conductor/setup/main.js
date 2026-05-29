@@ -197,6 +197,11 @@ const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const { spawn } = require('child_process');
 const { paths } = require('./config/paths');
 const { SynapseBridge } = require('../shared/synapse-bridge');
+const { getLogger }    = require('../shared/logger');
+
+// Logger persistente del stream conductor_setup → logs/conductor/setup/conductor_setup_YYYYMMDD.log
+// Es el mismo archivo que usa installer.js — todo el flujo setup queda en un único log cruzable.
+const _logger = getLogger('installer');
 
 // Bridge activo durante la fase post-instalación (conectToBrain → PROFILE_CONNECTED).
 // Una sola instancia a la vez; se destruye al recibir HANDSHAKE o ERROR.
@@ -294,6 +299,16 @@ const INSTALL_HTML_PATH = path.join(__dirname, 'src', 'index.html');
 function safeLog(emoji, ...args) {
   const prefix = useEmojis ? emoji : `[${getEmojiName(emoji)}]`;
   console.log(prefix, ...args);
+  // Persistir en conductor_setup_YYYYMMDD.log para cruzar con logs de Host y Brain
+  const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+  const emojiName = getEmojiName(emoji);
+  if (emojiName === 'ERROR') {
+    _logger.error(msg);
+  } else if (emojiName === 'WARN') {
+    _logger.warn(msg);
+  } else {
+    _logger.info(msg);
+  }
 }
 
 function getEmojiName(emoji) {
@@ -864,63 +879,87 @@ function registerInstallHandlers() {
           verbose:       IS_DEV,
         });
 
-        // Traducir eventos del bridge → canales heartbeat:* existentes en el renderer
+        // ── ÚNICA señal válida de handshake: PROFILE_CONNECTED push de Brain ──────
+        // nucleus synapse status devuelve state=RUNNING desde el momento del launch
+        // (Chrome existe como proceso). Eso NO indica que Cortex completó REGISTER_HOST.
+        // El catch-up en REGISTER_ACK es solo informativo — nunca dispara heartbeat:validated.
+
+        let _handshakeTimeout = setTimeout(() => {
+          if (!_installBridge) return;  // ya resolvió normalmente
+          error(`❌ [Synapse Bridge] Timeout 120s — PROFILE_CONNECTED nunca llegó (${profileId})`);
+          if (_installBridge) { _installBridge.destroy(); _installBridge = null; }
+          if (win && !win.isDestroyed()) {
+            win.webContents.send('installation-error', {
+              error: `Timeout: el perfil no completó el handshake en 120 segundos.\nVerificá que la extensión Cortex esté instalada en Chrome.`,
+            });
+          }
+        }, 120_000);
+
         _installBridge.on('synapse:event', (payload) => {
           if (!win || win.isDestroyed()) {
+            if (_handshakeTimeout) { clearTimeout(_handshakeTimeout); _handshakeTimeout = null; }
             if (_installBridge) { _installBridge.destroy(); _installBridge = null; }
             return;
           }
+
+          // ── Log de TODOS los eventos del bridge → trazable en conductor_setup.log ──
+          // Cruzar con: logs/host/<profile_id>/host_YYYYMMDD.log (HANDSHAKE_FASE3)
+          //             DevTools de Cortex (background.js HANDSHAKE_COMPLETADO)
+          _logger.debug(`[Bridge←Brain] type=${payload.type} phase=${payload.phase || '-'} raw_type=${payload._rawType || payload.type || '?'} ts=${payload._ts || Date.now()}`);
 
           switch (payload.type) {
 
             // Fases internas del bridge → mantener animación del heartbeat-screen
             case 'STATUS':
+              _logger.info(`[Bridge] STATUS phase=${payload.phase || 'CONNECTING'} → heartbeat:launch-done`);
               win.webContents.send('heartbeat:launch-done', {
-                profile_id: profileId,
-                state:            payload.phase    || 'CONNECTING',
+                profile_id:       profileId,
+                state:            payload.phase || 'CONNECTING',
                 extension_loaded: false,
               });
+              // REGISTER_ACK: solo loguear. nucleus status ya es RUNNING porque Chrome
+              // arrancó, pero eso no es el handshake de Cortex — no disparar validated.
+              if (payload.catch_up_needed) {
+                _logger.info(`[Bridge] REGISTER_ACK recibido — escuchando PROFILE_CONNECTED push de Brain (profileId=${profileId})`);
+                log(`🔍 [Synapse Bridge] REGISTER_ACK — esperando PROFILE_CONNECTED push de Brain`);
+              }
               break;
 
-            // REGISTER_ACK: Brain confirmó que somos un Sentinel activo
-            // (no es el handshake completo aún; solo mantener UI animada)
-            case 'REGISTER_ACK':
-              win.webContents.send('heartbeat:launch-done', {
-                profile_id: profileId,
-                state:            'HANDSHAKE',
-                extension_loaded: false,
-              });
-              break;
-
-            // HANDSHAKE: PROFILE_CONNECTED del perfil activo → handshake de 3 fases completo.
-            // Brain lo emite cuando Chrome Host llama REGISTER_HOST y ProfileStateManager
-            // setea el perfil como ONLINE. Es la señal más sólida posible.
+            // HANDSHAKE: PROFILE_CONNECTED del perfil activo → handshake real completo.
+            // Brain lo emite cuando Cortex hace REGISTER_HOST y ProfileStateManager
+            // setea el perfil como ONLINE. Es la ÚNICA señal válida.
             case 'HANDSHAKE':
+              _logger.success(`[Bridge] ✅ PROFILE_CONNECTED recibido → handshake completo (profileId=${profileId}) — emitiendo heartbeat:validated`);
               log(`✅ [Synapse Bridge] PROFILE_CONNECTED recibido — handshake completo (${profileId})`);
+              if (_handshakeTimeout) { clearTimeout(_handshakeTimeout); _handshakeTimeout = null; }
               win.webContents.send('heartbeat:validated', {
                 profile_id:       profileId,
                 state:            'RUNNING',
                 extension_loaded: true,
               });
+              _logger.info(`[Bridge] heartbeat:validated enviado al renderer`);
               if (_installBridge) { _installBridge.destroy(); _installBridge = null; }
               setTimeout(() => startHeartbeat(), 2000);
               break;
 
             // ERROR de conexión TCP
             case 'ERROR':
+              _logger.error(`[Bridge] Error TCP: ${payload.message}`);
               error(`❌ [Synapse Bridge] Error TCP: ${payload.message}`);
               // No abortar la UI; el bridge ya reintenta con backoff.
-              // Solo loguear para que el operador vea el problema sin mostrar error al usuario.
               break;
 
             // Otros eventos (HEARTBEAT, INTENT, ION, etc.) → ignorar en setup
             default:
+              _logger.debug(`[Bridge] Evento ignorado en setup: type=${payload.type}`);
               break;
           }
         });
 
         // Conectar a Brain sin relanzar el perfil (el installer ya lo lanzó)
-        _installBridge.connectToBrain(profileId, result.launch_id || null);
+        const _launchId = result.launch_id || null;
+        _logger.info(`[Bridge] connectToBrain → profileId=${profileId} launchId=${_launchId}`);
+        _installBridge.connectToBrain(profileId, _launchId);
       }
 
       return result;

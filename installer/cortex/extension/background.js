@@ -530,7 +530,8 @@ function scheduleReconnect() {
 // ============================================================================
 
 function handleHostMessage(msg) {
-  console.log('[Synapse] ← Host message received:', msg);
+  const label = msg.event || msg.command || msg.type || '(unknown)';
+  console.log(`[Host → Synapse] [${new Date().toISOString()}] ${label}`, msg);
 
   // � FASE 2: Host → Extension (host_ready)
   if (msg.command === 'host_ready' || msg.event === 'host_ready') {
@@ -1233,12 +1234,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResp) => {
 
 function sendToHost(msg) {
   if (nativePort && connectionState === 'CONNECTED') {
-    // � Validar handshake antes de enviar mensajes críticos
+    // Validar handshake antes de enviar mensajes críticos
     if (handshakeState !== 'CONFIRMED' && handshakeState !== 'HOST_READY') {
       console.warn('[Synapse] ⚠️ Message blocked - Handshake not confirmed:', msg.event || msg.type);
       return;
     }
-    
+
+    const label = msg.event || msg.command || msg.type || '(unknown)';
+    console.log(`[Synapse → Host] [${new Date().toISOString()}] ${label}`, msg);
     nativePort.postMessage(msg);
   } else {
     console.warn('[Synapse] ⚠ Cannot send - not connected:', msg.event || msg.type);
@@ -1261,7 +1264,7 @@ function setupKeepalive() {
   chrome.alarms.onAlarm.addListener((a) => {
     if (a.name !== 'keepalive') return;
 
-    console.log('[Synapse] � Keepalive tick - Handshake:', handshakeState, '| Connection:', connectionState);
+    console.log(`[Synapse] [${new Date().toISOString()}] Keepalive tick - Handshake: ${handshakeState} | Connection: ${connectionState}`);
 
     // Enviar heartbeat real al host solo si el canal está establecido.
     // El host (bloom-host / Sentinel) forwardea esto como SignalHeartbeat al workflow de Temporal.
@@ -1274,7 +1277,7 @@ function setupKeepalive() {
         timestamp: Date.now(),
         status: 'alive'
       });
-      console.log('[Synapse] � Heartbeat sent to host for profile:', config?.profileId);
+      console.log(`[Synapse] [${new Date().toISOString()}] Heartbeat sent — profile: ${config?.profileId}`);
     } else {
       console.warn('[Synapse] ⚠️ Heartbeat skipped - channel not ready (handshake:', handshakeState, ')');
     }

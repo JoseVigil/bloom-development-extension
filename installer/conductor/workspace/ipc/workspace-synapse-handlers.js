@@ -28,9 +28,10 @@ const _bridges = new Map();
  * @param {object}  [opts]
  * @param {string}  [opts.nucleusBinary='nucleus']
  * @param {boolean} [opts.verbose=false]
+ * @param {number}  [opts.nucleusTimeout=60000]  Timeout en ms para comandos nucleus
  */
 function registerSynapseHandlers(getWindow, opts = {}) {
-  const { nucleusBinary = 'nucleus', verbose = false } = opts;
+  const { nucleusBinary = 'nucleus', verbose = false, nucleusTimeout = 60_000 } = opts;
 
   // ── seed + launch ────────────────────────────────────────────────────────
   ipcMain.handle('synapse:seedAndLaunch', async (_event, { alias, options = {} }) => {
@@ -38,7 +39,7 @@ function registerSynapseHandlers(getWindow, opts = {}) {
     if (!win) return { success: false, error: 'No hay ventana activa' };
 
     _destroyBridgeForWindow(win);
-    const bridge = new SynapseBridge({ mainWindow: win, nucleusBinary, verbose });
+    const bridge = new SynapseBridge({ mainWindow: win, nucleusBinary, verbose, nucleusTimeout });
     _bridges.set(win.webContents.id, bridge);
     win.once('closed', () => _destroyBridgeForWindow(win));
 
@@ -52,17 +53,26 @@ function registerSynapseHandlers(getWindow, opts = {}) {
   });
 
   // ── launch de perfil existente ───────────────────────────────────────────
-  ipcMain.handle('synapse:launch', async (_event, { profileIdOrAlias, options = {} }) => {
+  // Acepta launchId opcional para que el bridge pueda correlacionar eventos
+  // con la sesión correcta (útil si el workspace recibe el launch_id del installer).
+  ipcMain.handle('synapse:launch', async (_event, { profileIdOrAlias, launchId = null, options = {} }) => {
     const win = getWindow();
     if (!win) return { success: false, error: 'No hay ventana activa' };
 
     _destroyBridgeForWindow(win);
-    const bridge = new SynapseBridge({ mainWindow: win, nucleusBinary, verbose });
+    const bridge = new SynapseBridge({ mainWindow: win, nucleusBinary, verbose, nucleusTimeout });
     _bridges.set(win.webContents.id, bridge);
     win.once('closed', () => _destroyBridgeForWindow(win));
 
     try {
       const result = await bridge.launch(profileIdOrAlias, options);
+
+      // Si el caller ya tiene el launch_id (ej: pasado desde el installer),
+      // sobreescribir el que nucleus devolvió para asegurar coherencia.
+      if (launchId && !result.launchId) {
+        bridge._launchId = launchId;
+      }
+
       return { success: true, ...result };
     } catch (err) {
       console.error('[workspace-synapse-handlers] launch:', err.message);

@@ -6,7 +6,7 @@
  * Puente entre Brain ServerManager (TCP puerto fijo) y cualquier ventana
  * Electron del ecosistema Bloom. Compartido entre setup/ y workspace/.
  *
- * PROTOCOLO CORREGIDO:
+ * PROTOCOLO:
  *   Brain ServerManager escucha en TCP 127.0.0.1:5678 (puerto FIJO).
  *   Wire format: [4 bytes UInt32 Big Endian = longitud][JSON payload UTF-8]
  *   Límite: 1 MB por mensaje (coincide con ServerManager).
@@ -14,32 +14,29 @@
  *   El bridge se registra como Sentinel (REGISTER_CLI) al conectar y recibe
  *   todos los broadcasts del EventBus de Brain.
  *
- * SEÑAL DE HANDSHAKE COMPLETADO (por qué ya no usamos polling):
+ * SEÑAL DE HANDSHAKE COMPLETADO:
  *   Cuando Chrome Host se registra en Brain con REGISTER_HOST, Brain:
  *     1. Llama ProfileStateManager.set_profile_online() → escribe ONLINE en profiles.json
  *     2. Emite PROFILE_CONNECTED al EventBus
  *     3. Hace broadcast de PROFILE_CONNECTED a todos los Sentinels registrados
  *   El bridge recibe ese broadcast y lo clasifica como 'HANDSHAKE' para el renderer.
- *   Es una señal push — no hay polling de archivo, no hay race condition.
+ *   Es una señal push — no hay polling, no hay race condition.
  *
- * CORRECCIONES RESPECTO A LA VERSIÓN ANTERIOR:
- *   1. Puerto: ephemeral port file (SynapseIPCServer, IonPump DOM) → puerto 5678 (ServerManager)
- *   2. Endianness: readUInt32LE → readUInt32BE (ServerManager usa Big Endian)
- *   3. Registro: se envía REGISTER_CLI al conectar para recibir broadcasts
- *   4. Clasificación: PROFILE_CONNECTED del perfil activo → tipo 'HANDSHAKE'
- *   5. Se eliminó toda la lógica de port file polling (era del servidor equivocado)
+ * CATCH-UP (race condition de timing):
+ *   Si PROFILE_CONNECTED ocurrió antes de que el bridge conectase (ej: el
+ *   instalador tardó en levantar el socket), Brain no re-emite el evento.
+ *   Al recibir REGISTER_ACK el bridge emite el flag `catch_up_needed: true`
+ *   para que el caller pueda hacer un poll CLI de seguridad (nucleus:status)
+ *   y así no quedarse esperando eternamente un evento que ya pasó.
+ *   Ver: connectToBrain() y el handler install:start en main.js.
  *
- * USO MÍNIMO (setup):
- *   const { SynapseBridge } = require('../../shared/synapse-bridge');
- *   const bridge = new SynapseBridge({ mainWindow: win });
- *   const { profileId, launchId } = await bridge.seedAndLaunch('alias', { mode: 'discovery' });
- *   // Los eventos llegan al renderer via window.bloomSynapse.onEvent()
- *   bridge.destroy(); // en el close de la ventana
- *
- * USO MÍNIMO (workspace):
- *   const bridge = new SynapseBridge({ mainWindow: win });
- *   await bridge.launch('profile_uuid', { mode: 'landing' });
- *   bridge.destroy();
+ * CAMBIOS v2 (sesión 2025-05):
+ *   1. _classifyMessage: maneja profile_id en top-level además de data.profile_id
+ *   2. connectToBrain: delay inicial 200ms en lugar de 1500ms (Brain ya está corriendo)
+ *   3. _nucleus: timeout configurable de 60s con kill limpio del proceso
+ *   4. REGISTER_ACK: emite catch_up_needed: true para que el caller haga poll de safety
+ *   5. Constantes del EventEmitter y del canal IPC separadas (naming clarity)
+ *   6. workspace-synapse-handlers: pasa launchId en synapse:launch
  */
 
 const { spawn }        = require('child_process');
@@ -48,21 +45,33 @@ const os               = require('os');
 const path             = require('path');
 const { EventEmitter } = require('events');
 
-// ─── Canal IPC Electron (main → renderer) ────────────────────────────────────
+// ─── Canal IPC Electron (main → renderer via webContents.send) ───────────────
 // Debe coincidir exactamente con el que usa preload-synapse.js.
 const SYNAPSE_IPC_CHANNEL = 'synapse:event';
+
+// ─── Canal del EventEmitter interno del main process ─────────────────────────
+// Mismo valor que SYNAPSE_IPC_CHANNEL para mantener compatibilidad con el
+// código existente en main.js que escucha con .on('synapse:event', ...).
+// Se separan en dos constantes para que quede claro qué corresponde a qué capa.
+const SYNAPSE_EMITTER_EVENT = 'synapse:event';
 
 // ─── Puerto fijo del ServerManager de Brain ──────────────────────────────────
 const BRAIN_SERVER_PORT = 5678;
 
 // ─── Timings ─────────────────────────────────────────────────────────────────
-const TCP_INITIAL_DELAY_MS  = 1_500;   // pausa antes del primer intento (Brain necesita arrancar)
+// connectToBrain: Brain ya está corriendo → delay mínimo
+const TCP_CONNECT_BRAIN_DELAY_MS = 200;
+// _doLaunch (seedAndLaunch/launch): Brain puede estar arrancando → delay mayor
+const TCP_INITIAL_DELAY_MS       = 1_500;
+
 const TCP_RECONNECT_BASE_MS = 2_000;
 const TCP_RECONNECT_MAX_MS  = 30_000;
-const HEARTBEAT_WATCHDOG_MS = 20_000;  // si no llega nada en 20s → fase DEGRADED
+const HEARTBEAT_WATCHDOG_MS = 20_000;  // sin actividad en 20s → fase DEGRADED
+
+// ─── Timeout del CLI nucleus ─────────────────────────────────────────────────
+const NUCLEUS_CMD_TIMEOUT_MS = 60_000;  // 60s; configurable por instancia
 
 // ─── Límite de mensaje ───────────────────────────────────────────────────────
-// Debe coincidir con el límite de 1 MB que aplica ServerManager.
 const MSG_MAX_BYTES = 1024 * 1024;
 
 // ─── Resolución del BloomRoot por plataforma ─────────────────────────────────
@@ -85,20 +94,29 @@ function getBloomRoot() {
 class SynapseBridge extends EventEmitter {
   /**
    * @param {object}                     opts
-   * @param {Electron.BrowserWindow}     opts.mainWindow      Ventana cuyo renderer recibirá los eventos
-   * @param {string}                    [opts.nucleusBinary]  Nombre o path del binario nucleus (default: 'nucleus')
-   * @param {number}                    [opts.brainPort]      Puerto del ServerManager (default: 5678)
-   * @param {string}                    [opts.bloomRoot]      Override del BloomRoot (útil en tests)
-   * @param {boolean}                   [opts.verbose]        Log detallado en consola del main process
+   * @param {Electron.BrowserWindow}     opts.mainWindow       Ventana cuyo renderer recibirá los eventos
+   * @param {string}                    [opts.nucleusBinary]   Nombre o path del binario nucleus (default: 'nucleus')
+   * @param {number}                    [opts.brainPort]       Puerto del ServerManager (default: 5678)
+   * @param {string}                    [opts.bloomRoot]       Override del BloomRoot (útil en tests)
+   * @param {boolean}                   [opts.verbose]         Log detallado en consola del main process
+   * @param {number}                    [opts.nucleusTimeout]  Timeout en ms para comandos nucleus (default: 60000)
    */
-  constructor({ mainWindow, nucleusBinary = 'nucleus', brainPort = BRAIN_SERVER_PORT, bloomRoot, verbose = false }) {
+  constructor({
+    mainWindow,
+    nucleusBinary  = 'nucleus',
+    brainPort      = BRAIN_SERVER_PORT,
+    bloomRoot,
+    verbose        = false,
+    nucleusTimeout = NUCLEUS_CMD_TIMEOUT_MS,
+  }) {
     super();
 
-    this._win       = mainWindow;
-    this._bin       = nucleusBinary;
-    this._port      = brainPort;
-    this._bloomRoot = bloomRoot || getBloomRoot();
-    this._verbose   = verbose;
+    this._win            = mainWindow;
+    this._bin            = nucleusBinary;
+    this._port           = brainPort;
+    this._bloomRoot      = bloomRoot || getBloomRoot();
+    this._verbose        = verbose;
+    this._nucleusTimeout = nucleusTimeout;
 
     // Estado de sesión
     this._profileId = null;
@@ -160,25 +178,28 @@ class SynapseBridge extends EventEmitter {
    * Conecta al ServerManager de Brain para un perfil ya lanzado externamente.
    * No ejecuta `nucleus` — solo establece la conexión TCP y espera broadcasts.
    *
-   * Cuándo usar esto:  el installer ya corrió `nucleus launch` y obtuvo un
+   * Cuándo usar esto: el installer ya corrió `nucleus launch` y obtuvo un
    * `profile_id` / `launch_id`. No queremos relanzar el perfil; solo queremos
    * recibir el evento PROFILE_CONNECTED (handshake completado) que Brain emite
    * cuando Cortex hace REGISTER_HOST exitosamente.
    *
-   * El bridge emite eventos al renderer via `window.bloomSynapse.onEvent()` y
-   * también en el EventEmitter del main process via `bridge.on('synapse:event')`.
+   * IMPORTANTE — race condition de timing:
+   *   Si PROFILE_CONNECTED ya ocurrió antes de que este bridge conecte, Brain
+   *   no re-emite el evento. En ese caso el bridge recibirá REGISTER_ACK y
+   *   emitirá un STATUS con catch_up_needed: true para que el caller dispare
+   *   un poll CLI como safety net (ver install:start en main.js).
    *
    * @param {string}  profileId
    * @param {string}  [launchId=null]
-   * @returns {this}  retorna la instancia para encadenamiento
+   * @returns {this}
    */
   connectToBrain(profileId, launchId = null) {
     this._profileId = profileId;
     this._launchId  = launchId;
     this._emit({ type: 'STATUS', phase: 'CONNECTING', message: 'Conectando a Brain ServerManager…' });
-    // Usamos el mismo delay inicial que _doLaunch() para darle tiempo a Brain
-    // de registrar el perfil antes de que intentemos conectar.
-    this._reconnectTimer = setTimeout(() => this._connectTCP(), TCP_INITIAL_DELAY_MS);
+    // Brain ya está corriendo cuando se llama connectToBrain → delay mínimo.
+    // (Contrasta con _doLaunch donde Brain puede estar arrancando → 1500ms.)
+    this._reconnectTimer = setTimeout(() => this._connectTCP(), TCP_CONNECT_BRAIN_DELAY_MS);
     return this;
   }
 
@@ -215,8 +236,7 @@ class SynapseBridge extends EventEmitter {
       debugPort: launchResult.debug_port,
     });
 
-    // Conectar a Brain ServerManager con delay inicial para que Brain
-    // tenga tiempo de levantar si no estaba corriendo.
+    // Conectar con delay mayor: Brain puede estar arrancando junto al perfil.
     this._reconnectTimer = setTimeout(() => this._connectTCP(), TCP_INITIAL_DELAY_MS);
 
     return { profileId: this._profileId, launchId: this._launchId };
@@ -224,7 +244,8 @@ class SynapseBridge extends EventEmitter {
 
   /**
    * Ejecuta `nucleus --json synapse <args>` y retorna el objeto JSON parseado.
-   * Rechaza si el proceso falla o si result.success === false.
+   * Rechaza si el proceso falla, no responde en `this._nucleusTimeout` ms,
+   * o si result.success === false.
    */
   _nucleus(args) {
     return new Promise((resolve, reject) => {
@@ -234,29 +255,47 @@ class SynapseBridge extends EventEmitter {
       const proc = spawn(this._bin, fullArgs);
       let stdout = '';
       let stderr = '';
+      let settled = false;
+
+      const settle = (fn) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(killTimer);
+        fn();
+      };
+
+      // Timeout: si nucleus no responde en _nucleusTimeout ms, lo matamos.
+      const killTimer = setTimeout(() => {
+        if (!proc.killed) proc.kill('SIGKILL');
+        settle(() => reject(new Error(
+          `nucleus timeout (${this._nucleusTimeout}ms): ${fullArgs.join(' ')}`
+        )));
+      }, this._nucleusTimeout);
 
       proc.stdout.on('data', d => (stdout += d.toString()));
       proc.stderr.on('data', d => (stderr += d.toString()));
 
       proc.on('close', code => {
-        this._log('← nucleus exit', code, '|', stdout.trim().slice(0, 120));
-        if (code !== 0) {
-          return reject(new Error(`nucleus exited ${code}: ${(stderr || stdout).trim()}`));
-        }
-        let result;
-        try {
-          result = JSON.parse(stdout.trim());
-        } catch {
-          return reject(new Error(`nucleus: JSON inválido: ${stdout.slice(0, 200)}`));
-        }
-        if (!result.success) {
-          return reject(new Error(result.error || 'nucleus command failed'));
-        }
-        resolve(result);
+        settle(() => {
+          this._log('← nucleus exit', code, '|', stdout.trim().slice(0, 120));
+          if (code !== 0) {
+            return reject(new Error(`nucleus exited ${code}: ${(stderr || stdout).trim()}`));
+          }
+          let result;
+          try {
+            result = JSON.parse(stdout.trim());
+          } catch {
+            return reject(new Error(`nucleus: JSON inválido: ${stdout.slice(0, 200)}`));
+          }
+          if (!result.success) {
+            return reject(new Error(result.error || 'nucleus command failed'));
+          }
+          resolve(result);
+        });
       });
 
       proc.on('error', err =>
-        reject(new Error(`No se pudo ejecutar nucleus: ${err.message}`))
+        settle(() => reject(new Error(`No se pudo ejecutar nucleus: ${err.message}`)))
       );
     });
   }
@@ -322,15 +361,13 @@ class SynapseBridge extends EventEmitter {
   /**
    * Envía un mensaje a Brain con framing de 4 bytes BigEndian.
    * Solo se puede llamar cuando el socket está conectado.
-   *
-   * @param {object} payload  Objeto que será serializado a JSON.
    */
   _sendMsg(payload) {
     if (!this._socket || this._socket.destroyed) return;
     try {
       const body   = Buffer.from(JSON.stringify(payload), 'utf-8');
       const header = Buffer.alloc(4);
-      header.writeUInt32BE(body.length, 0);  // ← BigEndian, igual que ServerManager
+      header.writeUInt32BE(body.length, 0);
       this._socket.write(Buffer.concat([header, body]));
       this._log('→ Brain:', JSON.stringify(payload).slice(0, 80));
     } catch (err) {
@@ -346,9 +383,8 @@ class SynapseBridge extends EventEmitter {
     this._buf = Buffer.concat([this._buf, chunk]);
 
     while (this._buf.length >= 4) {
-      const msgLen = this._buf.readUInt32BE(0);  // ← BigEndian corregido (era LE)
+      const msgLen = this._buf.readUInt32BE(0);
 
-      // Protección anti-corrupción: mismo límite que ServerManager (1 MB)
       if (msgLen > MSG_MAX_BYTES) {
         this._log(`Mensaje sospechoso (${msgLen} bytes), reseteando buffer`);
         this._buf = Buffer.alloc(0);
@@ -376,14 +412,16 @@ class SynapseBridge extends EventEmitter {
     this._log('← Brain:', JSON.stringify(msg).slice(0, 120));
     this._resetWatchdog();
 
-    const type = this._classifyMessage(msg);
+    const classified = this._classifyMessage(msg);
 
     const enriched = {
       ...msg,
-      type,
+      type:       classified.type,
       _ts:        Date.now(),
       _profileId: this._profileId,
       _launchId:  this._launchId,
+      // catch_up_needed solo se incluye si el clasificador lo señala
+      ...(classified.catch_up_needed ? { catch_up_needed: true } : {}),
     };
 
     this._emit(enriched);
@@ -393,10 +431,13 @@ class SynapseBridge extends EventEmitter {
   /**
    * Clasifica un mensaje entrante de Brain en un tipo semántico para el renderer.
    *
+   * Retorna { type: string, catch_up_needed?: boolean }
+   *
    * Maneja dos formatos de mensajes posibles:
    *
    * Formato A — EventBus broadcast (emitido por ServerManager):
    *   { type: 'PROFILE_CONNECTED', timestamp: <ns>, data: { profile_id: '...' } }
+   *   { type: 'PROFILE_CONNECTED', profile_id: '...' }    ← top-level (algunos builds)
    *   { type: 'PROFILE_DISCONNECTED', ... }
    *   { type: 'BRAIN_SERVICE_STATUS', ... }
    *   { type: 'REGISTER_ACK', conn_id: '...', role: 'cli' }
@@ -414,36 +455,40 @@ class SynapseBridge extends EventEmitter {
 
     // ── Formato A: EventBus broadcasts ──────────────────────────────────────
 
-    // PROFILE_CONNECTED del perfil activo = handshake de 3 fases completado.
-    // Brain lo emite cuando Chrome Host hace REGISTER_HOST exitosamente,
-    // justo después de llamar ProfileStateManager.set_profile_online().
-    // Es la señal física más sólida: es push, no polling.
     if (msgType === 'PROFILE_CONNECTED') {
-      const evProfileId = msg.data?.profile_id;
+      // El profile_id puede llegar en data.profile_id (formato canónico) o en
+      // el top-level del mensaje (variante observada en algunos builds de Brain).
+      const evProfileId = msg.data?.profile_id ?? msg.profile_id ?? null;
+
       // Si no trae profile_id o coincide con el nuestro → es nuestro handshake
       if (!evProfileId || evProfileId === this._profileId) {
-        return 'HANDSHAKE';
+        return { type: 'HANDSHAKE' };
       }
-      return 'PROFILE';  // PROFILE_CONNECTED de otro perfil en el mismo server → pass-through
+      // PROFILE_CONNECTED de otro perfil en el mismo server → pass-through
+      return { type: 'PROFILE' };
     }
 
-    if (msgType === 'PROFILE_DISCONNECTED') return 'PROFILE';
-    if (msgType === 'BRAIN_SERVICE_STATUS') return 'STATUS';
+    if (msgType === 'PROFILE_DISCONNECTED') return { type: 'PROFILE' };
+    if (msgType === 'BRAIN_SERVICE_STATUS') return { type: 'STATUS' };
 
-    // ACK de nuestro REGISTER_CLI: confirma que somos un Sentinel activo
-    if (msgType === 'REGISTER_ACK')         return 'STATUS';
+    // ACK de nuestro REGISTER_CLI: confirma que somos un Sentinel activo.
+    // Señalamos catch_up_needed para que el caller haga un poll de safety
+    // (PROFILE_CONNECTED podría haber ocurrido antes de que conectásemos).
+    if (msgType === 'REGISTER_ACK') {
+      return { type: 'STATUS', catch_up_needed: true };
+    }
 
     // ── Formato B: Chrome Native Messaging (reenviado por Chrome Host) ──────
-    if (cmd === 'HEARTBEAT' || event === 'HEARTBEAT') return 'HEARTBEAT';
-    if (event === 'HANDSHAKE_CONFIRMED')              return 'HANDSHAKE';
-    if (event === 'HOST_READY')                       return 'HOST_READY';
-    if (event.startsWith('INTENT_'))                  return 'INTENT';
-    if (event.startsWith('ION_'))                     return 'ION';
-    if (event.startsWith('PROFILE_'))                 return 'PROFILE';
+    if (cmd === 'HEARTBEAT' || event === 'HEARTBEAT') return { type: 'HEARTBEAT' };
+    if (event === 'HANDSHAKE_CONFIRMED')              return { type: 'HANDSHAKE' };
+    if (event === 'HOST_READY')                       return { type: 'HOST_READY' };
+    if (event.startsWith('INTENT_'))                  return { type: 'INTENT' };
+    if (event.startsWith('ION_'))                     return { type: 'ION' };
+    if (event.startsWith('PROFILE_'))                 return { type: 'PROFILE' };
 
     // ── Fallback ─────────────────────────────────────────────────────────────
-    if (msg.type) return msg.type;
-    return 'SYNAPSE_EVENT';
+    if (msg.type) return { type: msg.type };
+    return { type: 'SYNAPSE_EVENT' };
   }
 
   // ── Internals: heartbeat watchdog ───────────────────────────────────────────
@@ -475,9 +520,11 @@ class SynapseBridge extends EventEmitter {
    * del main process por si algún código en main.js también escucha.
    */
   _emit(payload) {
-    this.emit(SYNAPSE_IPC_CHANNEL, payload);
+    // EventEmitter del main process (constante separada para naming clarity)
+    this.emit(SYNAPSE_EMITTER_EVENT, payload);
     try {
       if (this._win && !this._win.isDestroyed()) {
+        // Canal IPC Electron → renderer (coincide con preload-synapse.js)
         this._win.webContents.send(SYNAPSE_IPC_CHANNEL, payload);
       }
     } catch {
@@ -492,4 +539,10 @@ class SynapseBridge extends EventEmitter {
 
 // ─── Exports ──────────────────────────────────────────────────────────────────
 
-module.exports = { SynapseBridge, SYNAPSE_IPC_CHANNEL, getBloomRoot, BRAIN_SERVER_PORT };
+module.exports = {
+  SynapseBridge,
+  SYNAPSE_IPC_CHANNEL,
+  SYNAPSE_EMITTER_EVENT,
+  getBloomRoot,
+  BRAIN_SERVER_PORT,
+};
