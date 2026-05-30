@@ -1,0 +1,223 @@
+# actions/generate_pat.ion
+# Action principal: genera un GitHub Personal Access Token (classic) para Bloom onboarding.
+#
+# Flows:
+#   bootstrap          — verifica sesión, navega a /settings/tokens, espera al usuario
+#   handle_pat_detected — el usuario copió un PAT al clipboard (flujo alternativo: bring-your-own)
+#   await_confirmation  — después de generar el token, espera confirmación de Brain
+#
+# Invocado por IonPump cuando Brain recibe:
+#   { domain: "github.com", action: "generate_pat" }
+
+version: 1.0.0
+site: github.com
+type: action
+description: "Genera un GitHub PAT classic para autenticación de Bloom"
+
+# Variables reutilizadas de pages/ — IonPump resuelve estos contra el contexto de página activo.
+# Mantenerlos aquí como referencia; la fuente de verdad está en new_token_page.page.ion.
+variables:
+  bloom_token_name:    "Bloom Nucleus"       # nombre fijo del token — no editable por el usuario
+  expiration_value:    "no_expiration"       # valor del dropdown; TODO: verificar opción real
+  # Scopes mínimos requeridos por Bloom:
+  #   repo  — para operaciones de Codespace y git
+  #   read:user + user:email — para identificación del usuario en Nucleus
+  required_scopes:
+    - repo
+    - read:user
+    - user:email
+
+# Prerequisito: sesión activa en GitHub
+requires:
+  - shared/session_guard.ion:check_session
+
+flows:
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # FLOW: bootstrap
+  # Triggered por: on_load (cuando la extension detecta activación del onboarding)
+  # Objetivo: llevar al usuario a la página de creación de PAT y pre-rellenar el formulario.
+  # ─────────────────────────────────────────────────────────────────────────────
+  bootstrap:
+    description: "Navega a GitHub tokens y pre-rellena el formulario de nuevo PAT"
+    steps:
+      # 1. Verificar sesión via session_guard (prerequisito ya resuelto, aquí solo el emit)
+      - wait_event:
+          event: "SESSION_OK"
+          timeout: 5s
+          on_timeout:
+            - emit:
+                event: "GENERATE_PAT_FAILED"
+                payload:
+                  reason: "session_required"
+                  instructions: "El usuario debe iniciar sesión en github.com primero"
+            - abort:
+                message: "GitHub session required before generating PAT"
+
+      # 2. Navegar a la página de nuevo token (classic)
+      # DOM_NAVIGATE: comando a registrar en SynapseManager Phase 2
+      # TODO: confirmar que DOM_NAVIGATE existe o si se usa click en un link existente
+      - navigate:
+          url: "https://github.com/settings/tokens/new"
+          wait_for: "NEW_TOKEN_PAGE_READY"
+          timeout: 15s
+
+      # 3. Esperar que el formulario esté disponible
+      # Selector de new_token_page.page.ion
+      - wait:
+          selector: "#oauth_access_description"    # TODO: verificar
+          timeout: 10s
+
+      # 4. Limpiar y rellenar el nombre del token
+      - clear:
+          selector: "#oauth_access_description"    # TODO: verificar
+      - type:
+          selector: "#oauth_access_description"    # TODO: verificar
+          text: "${bloom_token_name}"
+          delay: 30ms
+
+      # 5. Seleccionar expiración "No expiration"
+      # TODO: verificar el valor real del option en el select de GitHub.
+      # Históricamente era "0" o "no_expiration". Inspeccionar el HTML actual.
+      - select:
+          selector: "#oauth_access_expires_in"     # TODO: verificar
+          value: "0"                               # TODO: verificar valor "No expiration"
+
+      # 6. Activar scopes requeridos
+      # Cada check: si ya está marcado, skip. Si no, click.
+      - ensure_checked:
+          selector: "#repo"                        # TODO: verificar
+          label: "scope:repo"
+      - ensure_checked:
+          selector: "#read_user"                   # TODO: verificar — puede ser "#user" con sub-tree
+          label: "scope:read:user"
+      - ensure_checked:
+          selector: "#user_email"                  # TODO: verificar
+          label: "scope:user:email"
+
+      # 7. Emitir que el formulario está listo — Brain/Discovery puede mostrar instrucciones al usuario
+      - emit:
+          event: "PAT_FORM_READY"
+          payload:
+            domain: "github.com"
+            token_name: "${bloom_token_name}"
+            next_step: "click_generate_or_copy_existing"
+
+      # 8. Hacer click en "Generate token"
+      # DECISIÓN DE DISEÑO: IonPump hace el click automáticamente.
+      # Si se prefiere que el usuario confirme visualmente, reemplazar por emit + await_confirmation.
+      - click:
+          selector: "input[type='submit'][value*='Generate']"   # TODO: verificar
+          wait_for_navigation: true
+          timeout: 10s
+
+      # 9. Transicionar a await_confirmation para capturar el token resultante
+      - transition:
+          to: "await_confirmation"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # FLOW: handle_pat_detected
+  # Triggered por: on_pat_clipboard (clipboard_monitor detecta un string con formato PAT)
+  # Objetivo: el usuario ya tiene un PAT propio y lo copió — Bloom lo acepta directamente.
+  # ─────────────────────────────────────────────────────────────────────────────
+  handle_pat_detected:
+    description: "Acepta un PAT que el usuario copió manualmente al clipboard"
+    steps:
+      # 1. Leer el valor del clipboard
+      # DOM_CLIPBOARD_READ: comando a registrar en SynapseManager
+      # TODO: confirmar nombre exacto del comando Synapse
+      - read_clipboard:
+          save_to: "$CONTEXT.pat_value"
+
+      # 2. Validación básica de formato PAT
+      # GitHub PATs tienen prefijo: "ghp_" (classic) o "github_pat_" (fine-grained)
+      - validate:
+          value: "$CONTEXT.pat_value"
+          pattern: "^(ghp_|github_pat_)[A-Za-z0-9_]{36,}"
+          on_invalid:
+            - emit:
+                event: "PAT_INVALID_FORMAT"
+                payload:
+                  reason: "clipboard content does not match GitHub PAT pattern"
+            - abort:
+                message: "Clipboard value is not a valid GitHub PAT"
+
+      # 3. Emitir PAT válido hacia Brain para que lo persista
+      - emit:
+          event: "PAT_CAPTURED"
+          payload:
+            domain: "github.com"
+            source: "clipboard"
+            # pat_value se transmite via canal seguro — nunca en logs
+            pat: "$CONTEXT.pat_value"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # FLOW: await_confirmation
+  # Triggered por: transition desde bootstrap (después del submit del formulario)
+  # Objetivo: capturar el token mostrado por GitHub post-generación y enviarlo a Brain.
+  # ─────────────────────────────────────────────────────────────────────────────
+  await_confirmation:
+    description: "Captura el token generado de la página de confirmación de GitHub"
+    steps:
+      # 1. Esperar que aparezca el token en pantalla
+      # GitHub muestra el token UNA VEZ después de generarlo en un elemento destacado.
+      # TODO: verificar selector actual. Históricamente fue ".flash-full code" o similar.
+      # En GitHub actual puede ser un input con el token o un div con data-testid.
+      - wait:
+          selector: "[data-testid='new-token-value']"    # TODO: verificar — candidato más probable
+          timeout: 15s
+          on_timeout:
+            - emit:
+                event: "PAT_CAPTURE_FAILED"
+                payload:
+                  reason: "token_element_not_found"
+                  note: "GitHub may have changed the token display selector"
+            - abort:
+                message: "Could not find generated token on page"
+
+      # 2. Extraer el valor del token
+      - extract:
+          selector: "[data-testid='new-token-value']"    # TODO: verificar
+          attribute: "value"                              # puede ser "textContent" si es div
+          save_to: "$CONTEXT.pat_value"
+
+      # 3. Enviar el token capturado a Brain
+      - emit:
+          event: "PAT_CAPTURED"
+          payload:
+            domain: "github.com"
+            source: "generated"
+            pat: "$CONTEXT.pat_value"
+
+      # 4. Navegar fuera de la página del token (buena práctica de seguridad)
+      - navigate:
+          url: "https://github.com/settings/tokens"
+          wait_for: "TOKENS_PAGE_READY"
+          timeout: 10s
+
+      # 5. Confirmación final al sistema
+      - emit:
+          event: "GENERATE_PAT_COMPLETED"
+          payload:
+            domain: "github.com"
+            status: "success"
+
+error_handlers:
+  timeout:
+    retry: 2
+    fallback: "report_error"
+    emit_on_fallback:
+      event: "GENERATE_PAT_FAILED"
+      payload:
+        reason: "timeout"
+  selector_not_found:
+    retry: 1
+    fallback: "report_error"
+    emit_on_fallback:
+      event: "GENERATE_PAT_FAILED"
+      payload:
+        reason: "selector_not_found"
+        note: "GitHub UI may have changed — selector verification required"
+  navigation_failed:
+    retry: 1
+    fallback: "abort"

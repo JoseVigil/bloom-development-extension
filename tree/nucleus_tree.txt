@@ -66,8 +66,12 @@ bloom-development-extension/
     │   │   │   │   ├── helpers.go
     │   │   │   │   ├── lifecycle.go
     │   │   │   │   ├── pid.go
+    │   │   │   │   ├── pid_unix.go
+    │   │   │   │   ├── pid_windows.go
     │   │   │   │   ├── ports.go
     │   │   │   │   ├── process.go
+    │   │   │   │   ├── process_unix.go
+    │   │   │   │   ├── process_windows.go
     │   │   │   │   ├── schedule_bootstrap.go
     │   │   │   │   └── temporal_health.go
     │   │   │   ├── temporal_client.go

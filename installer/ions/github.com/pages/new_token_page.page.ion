@@ -1,0 +1,36 @@
+# pages/new_token_page.page.ion
+# Contexto de página: github.com/settings/tokens/new (classic PAT)
+# Define selectores del formulario de creación de PAT.
+
+version: 1.0.0
+site: github.com
+type: page
+description: "Página de creación de nuevo Personal Access Token (classic)"
+
+url_patterns:
+  - "https://github.com/settings/tokens/new"
+  - "https://github.com/settings/tokens/new?*"
+
+ready_condition:
+  # TODO: verificar — el campo "Token name" es el primer input del formulario
+  # Candidatos: "#oauth_access_description", "input[name='oauth_access[description]']"
+  selector: "#oauth_access_description"
+  timeout: 10s
+
+variables:
+  # TODO: TODOS estos selectores requieren verificación en GitHub actual.
+  # GitHub cambia su HTML frecuentemente. Verificar con DevTools en la página real.
+  token_name_input:    "#oauth_access_description"
+  expiration_select:   "#oauth_access_expires_in"            # dropdown de expiración
+  repo_scope_check:    "#repo"                                # checkbox scope "repo"
+  read_user_check:     "#read_user"                           # checkbox scope "read:user"  
+  user_email_check:    "#user_email"                          # checkbox scope "user:email"
+  generate_button:     "input[type='submit'][value*='Generate']"  # botón submit final
+  # El token generado aparece en un elemento destacado después del submit.
+  # Candidatos históricos: ".flash-full code", "#new-oauth-token", "[data-testid='new-token-value']"
+  token_result_field:  "[data-testid='new-token-value']"      # TODO: verificar
+
+page_events:
+  on_ready:
+    - emit:
+        event: "NEW_TOKEN_PAGE_READY"

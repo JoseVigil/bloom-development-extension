@@ -1,0 +1,36 @@
+{
+  "manifest_version": "1.0",
+  "type": "ion_recipes",
+  "release_channel": "bootstrap",
+  "description": "Bootstrap ions deployed by Conductor Setup before Batcave exists. These are provisional versions that Batcave will supersede once available.",
+  "ion_recipes": [
+    {
+      "site": "github.com",
+      "version": "1.0.0",
+      "download_url": "",
+      "sha256": "__GENERATED_AT_BUILD_TIME__",
+      "files": [
+        {
+          "path": "domain.manifest.json",
+          "sha256": "__GENERATED_AT_BUILD_TIME__"
+        },
+        {
+          "path": "actions/generate_pat.ion",
+          "sha256": "__GENERATED_AT_BUILD_TIME__"
+        },
+        {
+          "path": "pages/tokens_page.page.ion",
+          "sha256": "__GENERATED_AT_BUILD_TIME__"
+        },
+        {
+          "path": "pages/new_token_page.page.ion",
+          "sha256": "__GENERATED_AT_BUILD_TIME__"
+        },
+        {
+          "path": "shared/session_guard.ion",
+          "sha256": "__GENERATED_AT_BUILD_TIME__"
+        }
+      ]
+    }
+  ]
+}

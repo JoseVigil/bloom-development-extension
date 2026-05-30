@@ -47,6 +47,7 @@ bloom-development-extension/
     │   │   ├── service-installer-brain.js
     │   │   ├── service-installer-nucleus-darwin.js
     │   │   ├── service-installer-nucleus.js
+    │   │   ├── service-installer-ollama-darwin.js
     │   │   ├── service-installer-sensor-darwin.js
     │   │   └── service-installer-sensor.js
     │   ├── ipc/
@@ -102,6 +103,7 @@ bloom-development-extension/
         │   │   ├── health-handlers.js
         │   │   └── profiles-handlers.js
         │   └── preload_core.js
+        ├── entitlements.plist
         ├── main_conductor.js
         ├── node_modules/ [... dependencies]
         ├── onboarding/
